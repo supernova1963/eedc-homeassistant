@@ -3,8 +3,10 @@ import Layout from './components/layout/Layout'
 import Dashboard from './pages/Dashboard'
 import Anlagen from './pages/Anlagen'
 import Monatsdaten from './pages/Monatsdaten'
+import Strompreise from './pages/Strompreise'
 import Investitionen from './pages/Investitionen'
 import Auswertung from './pages/Auswertung'
+import ROIDashboard from './pages/ROIDashboard'
 import Import from './pages/Import'
 import Settings from './pages/Settings'
 
@@ -17,8 +19,10 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="anlagen" element={<Anlagen />} />
           <Route path="monatsdaten" element={<Monatsdaten />} />
+          <Route path="strompreise" element={<Strompreise />} />
           <Route path="investitionen" element={<Investitionen />} />
           <Route path="auswertung" element={<Auswertung />} />
+          <Route path="roi" element={<ROIDashboard />} />
           <Route path="import" element={<Import />} />
           <Route path="settings" element={<Settings />} />
         </Route>

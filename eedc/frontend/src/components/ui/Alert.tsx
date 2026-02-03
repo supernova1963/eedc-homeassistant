@@ -1,13 +1,14 @@
 import { ReactNode } from 'react'
-import { AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle, Info, XCircle, X } from 'lucide-react'
 
 interface AlertProps {
   type: 'info' | 'success' | 'warning' | 'error'
   title?: string
   children: ReactNode
+  onClose?: () => void
 }
 
-export default function Alert({ type, title, children }: AlertProps) {
+export default function Alert({ type, title, children, onClose }: AlertProps) {
   const styles = {
     info: {
       bg: 'bg-blue-50 dark:bg-blue-900/20',
@@ -38,10 +39,10 @@ export default function Alert({ type, title, children }: AlertProps) {
   const { bg, border, text, icon: Icon } = styles[type]
 
   return (
-    <div className={`${bg} ${border} border rounded-lg p-4`}>
+    <div className={`${bg} ${border} border rounded-lg p-4 relative`}>
       <div className="flex">
         <Icon className={`w-5 h-5 ${text} flex-shrink-0`} />
-        <div className="ml-3">
+        <div className="ml-3 flex-1">
           {title && (
             <h4 className={`text-sm font-medium ${text}`}>{title}</h4>
           )}
@@ -49,6 +50,14 @@ export default function Alert({ type, title, children }: AlertProps) {
             {children}
           </div>
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className={`ml-3 ${text} hover:opacity-70 transition-opacity`}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   )

@@ -2,7 +2,7 @@ import { Moon, Sun, Monitor } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 export default function Header() {
-  const { theme, setTheme, isDark } = useTheme()
+  const { theme, setTheme } = useTheme()
 
   const cycleTheme = () => {
     if (theme === 'light') setTheme('dark')

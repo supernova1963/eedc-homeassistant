@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, Zap, Battery, TrendingUp, ArrowRight } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
+import { Card, Button, LoadingSpinner } from '../components/ui'
 import { useAnlagen, useMonatsdaten, useMonatsdatenStats } from '../hooks'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']

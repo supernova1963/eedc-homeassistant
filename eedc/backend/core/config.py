@@ -10,6 +10,17 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
+def get_default_database_url() -> str:
+    """Gibt den Standard-Datenbankpfad zurück."""
+    # In HA Add-on: /data existiert
+    if Path("/data").exists():
+        return "sqlite+aiosqlite:////data/eedc.db"
+    # Lokale Entwicklung: data/ im eedc-Verzeichnis
+    local_data = Path(__file__).parent.parent.parent / "data"
+    local_data.mkdir(exist_ok=True)
+    return f"sqlite+aiosqlite:///{local_data}/eedc.db"
+
+
 class Settings(BaseSettings):
     """
     Anwendungs-Einstellungen.
@@ -19,7 +30,7 @@ class Settings(BaseSettings):
     """
 
     # Datenbank
-    database_url: str = "sqlite+aiosqlite:////data/eedc.db"
+    database_url: str = get_default_database_url()
 
     @property
     def database_path(self) -> Path:

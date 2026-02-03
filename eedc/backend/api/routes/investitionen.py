@@ -323,3 +323,213 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
         raise HTTPException(status_code=404, detail="Investition nicht gefunden")
 
     await db.delete(inv)
+
+
+# =============================================================================
+# ROI Berechnungen
+# =============================================================================
+
+class ROIBerechnung(BaseModel):
+    """Ergebnis einer ROI-Berechnung für eine Investition."""
+    investition_id: int
+    investition_bezeichnung: str
+    investition_typ: str
+    anschaffungskosten: float
+    anschaffungskosten_alternativ: float
+    relevante_kosten: float
+    jahres_einsparung: float
+    roi_prozent: Optional[float]
+    amortisation_jahre: Optional[float]
+    co2_einsparung_kg: Optional[float]
+    detail_berechnung: dict[str, Any]
+
+
+class ROIDashboardResponse(BaseModel):
+    """Gesamte ROI-Übersicht für eine Anlage."""
+    anlage_id: int
+    anlage_name: str
+    gesamt_investition: float
+    gesamt_relevante_kosten: float
+    gesamt_jahres_einsparung: float
+    gesamt_roi_prozent: Optional[float]
+    gesamt_amortisation_jahre: Optional[float]
+    gesamt_co2_einsparung_kg: float
+    berechnungen: list[ROIBerechnung]
+
+
+@router.get("/roi/{anlage_id}", response_model=ROIDashboardResponse)
+async def get_roi_dashboard(
+    anlage_id: int,
+    strompreis_cent: float = Query(30.0, description="Strompreis in Cent/kWh"),
+    einspeiseverguetung_cent: float = Query(8.2, description="Einspeisevergütung in Cent/kWh"),
+    benzinpreis_euro: float = Query(1.85, description="Benzinpreis in Euro/Liter"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Berechnet ROI für alle aktiven Investitionen einer Anlage.
+
+    Args:
+        anlage_id: ID der Anlage
+        strompreis_cent: Aktueller Strompreis für Berechnungen
+        einspeiseverguetung_cent: Aktuelle Einspeisevergütung
+        benzinpreis_euro: Aktueller Benzinpreis für E-Auto-Vergleich
+
+    Returns:
+        ROIDashboardResponse: Vollständige ROI-Übersicht
+    """
+    from backend.core.calculations import (
+        berechne_speicher_einsparung,
+        berechne_eauto_einsparung,
+        berechne_waermepumpe_einsparung,
+        berechne_roi,
+    )
+
+    # Anlage prüfen
+    anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = anlage_result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    # Investitionen laden
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.aktiv == True)
+        .order_by(Investition.typ)
+    )
+    investitionen = inv_result.scalars().all()
+
+    berechnungen: list[ROIBerechnung] = []
+    gesamt_investition = 0.0
+    gesamt_relevante = 0.0
+    gesamt_einsparung = 0.0
+    gesamt_co2 = 0.0
+
+    for inv in investitionen:
+        params = inv.parameter or {}
+        kosten = inv.anschaffungskosten_gesamt or 0
+        alternativ = inv.anschaffungskosten_alternativ or 0
+        relevante = kosten - alternativ
+        jahres_einsparung = 0.0
+        co2_einsparung = 0.0
+        detail = {}
+
+        if inv.typ == InvestitionTyp.SPEICHER.value:
+            # Speicher-Berechnung
+            kapazitaet = params.get('kapazitaet_kwh', 10)
+            wirkungsgrad = params.get('wirkungsgrad_prozent', 95)
+            nutzt_arbitrage = params.get('nutzt_arbitrage', False)
+            lade_preis = params.get('lade_durchschnittspreis_cent', 12)
+            entlade_preis = params.get('entlade_vermiedener_preis_cent', 35)
+
+            result = berechne_speicher_einsparung(
+                kapazitaet_kwh=kapazitaet,
+                wirkungsgrad_prozent=wirkungsgrad,
+                netzbezug_preis_cent=strompreis_cent,
+                einspeiseverguetung_cent=einspeiseverguetung_cent,
+                nutzt_arbitrage=nutzt_arbitrage,
+                lade_preis_cent=lade_preis,
+                entlade_preis_cent=entlade_preis,
+            )
+            jahres_einsparung = result.jahres_einsparung_euro
+            co2_einsparung = result.co2_einsparung_kg
+            detail = {
+                'nutzbare_speicherung_kwh': result.nutzbare_speicherung_kwh,
+                'pv_anteil_euro': result.pv_anteil_euro,
+                'arbitrage_anteil_euro': result.arbitrage_anteil_euro,
+            }
+
+        elif inv.typ == InvestitionTyp.E_AUTO.value:
+            # E-Auto-Berechnung
+            km_jahr = params.get('km_jahr', 15000)
+            verbrauch = params.get('verbrauch_kwh_100km', 18)
+            pv_anteil = params.get('pv_anteil_prozent', 60)
+            benzin_verbrauch = params.get('benzin_verbrauch_liter_100km', 7.0)
+            nutzt_v2h = params.get('nutzt_v2h', False)
+            v2h_entladung = params.get('v2h_entladung_kwh_jahr', 0)
+            v2h_preis = params.get('v2h_entlade_preis_cent', strompreis_cent)
+
+            result = berechne_eauto_einsparung(
+                km_jahr=km_jahr,
+                verbrauch_kwh_100km=verbrauch,
+                pv_anteil_prozent=pv_anteil,
+                strompreis_cent=strompreis_cent,
+                benzinpreis_euro_liter=benzinpreis_euro,
+                benzin_verbrauch_liter_100km=benzin_verbrauch,
+                nutzt_v2h=nutzt_v2h,
+                v2h_entladung_kwh_jahr=v2h_entladung,
+                v2h_preis_cent=v2h_preis,
+            )
+            jahres_einsparung = result.jahres_einsparung_euro
+            co2_einsparung = result.co2_einsparung_kg
+            detail = {
+                'strom_kosten_euro': result.strom_kosten_euro,
+                'benzin_kosten_alternativ_euro': result.benzin_kosten_alternativ_euro,
+                'v2h_einsparung_euro': result.v2h_einsparung_euro,
+            }
+
+        elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
+            # Wärmepumpen-Berechnung
+            jaz = params.get('jaz', 3.5)
+            waermebedarf = params.get('waermebedarf_kwh', 15000)
+            pv_anteil = params.get('pv_anteil_prozent', 30)
+            alter_energietraeger = params.get('alter_energietraeger', 'gas')
+            alter_preis = params.get('alter_preis_cent_kwh', 12)
+
+            result = berechne_waermepumpe_einsparung(
+                waermebedarf_kwh=waermebedarf,
+                jaz=jaz,
+                strompreis_cent=strompreis_cent,
+                pv_anteil_prozent=pv_anteil,
+                alter_energietraeger=alter_energietraeger,
+                alter_preis_cent_kwh=alter_preis,
+            )
+            jahres_einsparung = result.jahres_einsparung_euro
+            co2_einsparung = result.co2_einsparung_kg
+            detail = {
+                'wp_kosten_euro': result.wp_kosten_euro,
+                'alte_heizung_kosten_euro': result.alte_heizung_kosten_euro,
+            }
+
+        else:
+            # Für andere Typen: manuelle Einsparungsprognose verwenden
+            jahres_einsparung = inv.einsparung_prognose_jahr or 0
+            co2_einsparung = inv.co2_einsparung_prognose_kg or 0
+            detail = {'hinweis': 'Manuelle Prognose verwendet'}
+
+        # ROI berechnen
+        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ)
+
+        berechnungen.append(ROIBerechnung(
+            investition_id=inv.id,
+            investition_bezeichnung=inv.bezeichnung,
+            investition_typ=inv.typ,
+            anschaffungskosten=kosten,
+            anschaffungskosten_alternativ=alternativ,
+            relevante_kosten=relevante,
+            jahres_einsparung=jahres_einsparung,
+            roi_prozent=roi_result['roi_prozent'],
+            amortisation_jahre=roi_result['amortisation_jahre'],
+            co2_einsparung_kg=co2_einsparung,
+            detail_berechnung=detail,
+        ))
+
+        gesamt_investition += kosten
+        gesamt_relevante += relevante
+        gesamt_einsparung += jahres_einsparung
+        gesamt_co2 += co2_einsparung
+
+    # Gesamt-ROI
+    gesamt_roi = berechne_roi(gesamt_investition, gesamt_einsparung, gesamt_investition - gesamt_relevante)
+
+    return ROIDashboardResponse(
+        anlage_id=anlage_id,
+        anlage_name=anlage.anlagenname,
+        gesamt_investition=round(gesamt_investition, 2),
+        gesamt_relevante_kosten=round(gesamt_relevante, 2),
+        gesamt_jahres_einsparung=round(gesamt_einsparung, 2),
+        gesamt_roi_prozent=gesamt_roi['roi_prozent'],
+        gesamt_amortisation_jahre=gesamt_roi['amortisation_jahre'],
+        gesamt_co2_einsparung_kg=round(gesamt_co2, 1),
+        berechnungen=berechnungen,
+    )

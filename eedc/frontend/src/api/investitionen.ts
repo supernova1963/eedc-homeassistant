@@ -42,6 +42,32 @@ export interface InvestitionTypInfo {
   }>
 }
 
+export interface ROIBerechnung {
+  investition_id: number
+  investition_bezeichnung: string
+  investition_typ: string
+  anschaffungskosten: number
+  anschaffungskosten_alternativ: number
+  relevante_kosten: number
+  jahres_einsparung: number
+  roi_prozent: number | null
+  amortisation_jahre: number | null
+  co2_einsparung_kg: number | null
+  detail_berechnung: Record<string, unknown>
+}
+
+export interface ROIDashboardResponse {
+  anlage_id: number
+  anlage_name: string
+  gesamt_investition: number
+  gesamt_relevante_kosten: number
+  gesamt_jahres_einsparung: number
+  gesamt_roi_prozent: number | null
+  gesamt_amortisation_jahre: number | null
+  gesamt_co2_einsparung_kg: number
+  berechnungen: ROIBerechnung[]
+}
+
 export const investitionenApi = {
   /**
    * Verfügbare Investitionstypen mit Schema abrufen
@@ -88,5 +114,22 @@ export const investitionenApi = {
    */
   async delete(id: number): Promise<void> {
     return api.delete(`/investitionen/${id}`)
+  },
+
+  /**
+   * ROI-Dashboard für eine Anlage abrufen
+   */
+  async getROIDashboard(
+    anlageId: number,
+    strompreisCent?: number,
+    einspeiseverguetungCent?: number,
+    benzinpreisEuro?: number
+  ): Promise<ROIDashboardResponse> {
+    const params = new URLSearchParams()
+    if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
+    if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
+    if (benzinpreisEuro) params.append('benzinpreis_euro', benzinpreisEuro.toString())
+    const query = params.toString()
+    return api.get<ROIDashboardResponse>(`/investitionen/roi/${anlageId}${query ? '?' + query : ''}`)
   },
 }

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useAnlagen, useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import InvestitionForm from '../components/forms/InvestitionForm'
@@ -148,6 +148,7 @@ export default function Investitionen() {
       {/* Investitionen Liste */}
       {investitionen.length === 0 ? (
         <EmptyState
+          icon={PiggyBank}
           title="Keine Investitionen vorhanden"
           description="Erfasse deine Investitionen (E-Auto, Wärmepumpe, Speicher, etc.) um deren Wirtschaftlichkeit zu analysieren."
           action={

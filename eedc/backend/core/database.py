@@ -69,3 +69,28 @@ async def get_db() -> AsyncSession:
             raise
         finally:
             await session.close()
+
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_session():
+    """
+    Context Manager für Datenbank-Session.
+
+    Verwendung außerhalb von FastAPI Dependencies.
+
+    Verwendung:
+        async with get_session() as session:
+            result = await session.execute(...)
+
+    Yields:
+        AsyncSession: Datenbank-Session
+    """
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

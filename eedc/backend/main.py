@@ -14,9 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+from sqlalchemy import select, func
 from backend.core.config import settings
-from backend.core.database import init_db
+from backend.core.database import init_db, get_session
 from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration
+from backend.models.anlage import Anlage
+from backend.models.monatsdaten import Monatsdaten
+from backend.models.investition import Investition
+from backend.models.strompreis import Strompreis
 
 
 @asynccontextmanager
@@ -111,6 +116,63 @@ async def get_settings():
             "einspeisung": bool(settings.ha_sensor_einspeisung),
             "netzbezug": bool(settings.ha_sensor_netzbezug),
         }
+    }
+
+
+@app.get("/api/stats", tags=["System"])
+async def get_database_stats():
+    """
+    Gibt Datenbank-Statistiken zurück.
+
+    Returns:
+        dict: Anzahl der Datensätze pro Tabelle
+    """
+    async with get_session() as session:
+        # Anlagen zählen
+        anlagen_result = await session.execute(select(func.count()).select_from(Anlage))
+        anlagen_count = anlagen_result.scalar() or 0
+
+        # Monatsdaten zählen
+        monatsdaten_result = await session.execute(select(func.count()).select_from(Monatsdaten))
+        monatsdaten_count = monatsdaten_result.scalar() or 0
+
+        # Investitionen zählen
+        investitionen_result = await session.execute(select(func.count()).select_from(Investition))
+        investitionen_count = investitionen_result.scalar() or 0
+
+        # Strompreise zählen
+        strompreise_result = await session.execute(select(func.count()).select_from(Strompreis))
+        strompreise_count = strompreise_result.scalar() or 0
+
+        # Zusätzliche Infos
+        # Gesamte PV-Erzeugung
+        erzeugung_result = await session.execute(
+            select(func.sum(Monatsdaten.pv_erzeugung_kwh))
+        )
+        gesamt_erzeugung = erzeugung_result.scalar() or 0
+
+        # Zeitraum der Daten
+        zeitraum_result = await session.execute(
+            select(
+                func.min(Monatsdaten.jahr),
+                func.max(Monatsdaten.jahr)
+            )
+        )
+        zeitraum = zeitraum_result.one()
+        min_jahr = zeitraum[0]
+        max_jahr = zeitraum[1]
+
+    return {
+        "anlagen": anlagen_count,
+        "monatsdaten": monatsdaten_count,
+        "investitionen": investitionen_count,
+        "strompreise": strompreise_count,
+        "gesamt_erzeugung_kwh": round(gesamt_erzeugung, 0) if gesamt_erzeugung else 0,
+        "daten_zeitraum": {
+            "von": min_jahr,
+            "bis": max_jahr
+        } if min_jahr else None,
+        "database_path": str(settings.database_path),
     }
 
 

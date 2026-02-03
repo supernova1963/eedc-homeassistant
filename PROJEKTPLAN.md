@@ -713,52 +713,55 @@ def berechne_v2h_einsparung(
 
 | # | Paket | Beschreibung | Status |
 |---|-------|--------------|--------|
-| 0.1 | Repository | GitHub Repo erstellen | ⬜ |
-| 0.2 | Grundstruktur | Verzeichnisse, config.yaml, Dockerfile | ⬜ |
-| 0.3 | Backend Skeleton | FastAPI + SQLite + SQLAlchemy | ⬜ |
-| 0.4 | Frontend Skeleton | Vite + React + Tailwind + Dark Mode | ⬜ |
-| 0.5 | Docker Build | Multi-Stage Build funktional | ⬜ |
+| 0.1 | Repository | GitHub Repo erstellen | ✅ |
+| 0.2 | Grundstruktur | Verzeichnisse, config.yaml, Dockerfile | ✅ |
+| 0.3 | Backend Skeleton | FastAPI + SQLite + SQLAlchemy | ✅ |
+| 0.4 | Frontend Skeleton | Vite + React + Tailwind + Dark Mode | ✅ |
+| 0.5 | Docker Build | Multi-Stage Build funktional | ✅ |
 | 0.6 | Lokaler Test | In HA Dev-Environment testen | ⬜ |
 
 ### Phase 1: MVP
 
 | # | Paket | Beschreibung | Status |
 |---|-------|--------------|--------|
-| 1.1 | DB Schema | SQLite Tabellen anlegen | ⬜ |
-| 1.2 | API: Anlagen | CRUD Endpoints | ⬜ |
-| 1.3 | API: Strompreise | CRUD mit Zeiträumen | ⬜ |
-| 1.4 | API: Investitionen | CRUD alle Typen | ⬜ |
-| 1.5 | API: Monatsdaten | CRUD + Berechnungen | ⬜ |
-| 1.6 | API: CSV-Import | Upload + Validierung | ⬜ |
-| 1.7 | Berechnungs-Engine | Alle Basis-Kennzahlen | ⬜ |
-| 1.8 | UI: Layout | Sidebar, Routing, Dark Mode | ⬜ |
-| 1.9 | UI: Anlagen | Formular + Liste | ⬜ |
-| 1.10 | UI: Strompreise | Formular + Liste | ⬜ |
-| 1.11 | UI: Investitionen | Dynamisches Formular | ⬜ |
-| 1.12 | UI: Monatsdaten | Erfassungs-Formular | ⬜ |
-| 1.13 | UI: CSV-Import | Upload-Dialog | ⬜ |
-| 1.14 | UI: Übersicht | Monats-Tabelle | ⬜ |
-| 1.15 | UI: Dashboard | KPIs + Trend-Charts | ⬜ |
-| 1.16 | HA Ingress | Integration testen | ⬜ |
-| 1.17 | HA Backup | Daten in Snapshot | ⬜ |
+| 1.1 | DB Schema | SQLite Tabellen anlegen | ✅ |
+| 1.2 | API: Anlagen | CRUD Endpoints | ✅ |
+| 1.3 | API: Strompreise | CRUD mit Zeiträumen | ✅ |
+| 1.4 | API: Investitionen | CRUD alle Typen | ✅ |
+| 1.5 | API: Monatsdaten | CRUD + Berechnungen | ✅ |
+| 1.6 | API: CSV-Import | Upload + Validierung | ✅ |
+| 1.7 | Berechnungs-Engine | Alle Basis-Kennzahlen | ✅ |
+| 1.8 | UI: Layout | Sidebar, Routing, Dark Mode | ✅ |
+| 1.9 | UI: Anlagen | Formular + Liste | ✅ |
+| 1.10 | UI: Strompreise | Formular + Liste | ✅ |
+| 1.11 | UI: Investitionen | Dynamisches Formular | ✅ |
+| 1.12 | UI: Monatsdaten | Erfassungs-Formular | ✅ |
+| 1.13 | UI: CSV-Import | Upload-Dialog | ✅ |
+| 1.14 | UI: Übersicht | Monats-Tabelle | ✅ |
+| 1.15 | UI: Dashboard | KPIs + Trend-Charts | ✅ |
+| 1.16 | HA Ingress | Integration testen | ⬜ (benötigt echte HA-Umgebung) |
+| 1.17 | HA Backup | Daten in Snapshot | ⬜ (benötigt echte HA-Umgebung) |
+| 1.18 | API: System Stats | Health + DB-Statistiken | ✅ |
+| 1.19 | UI: Settings | Echte DB-Stats + HA-Status | ✅ |
 
 ### Phase 2: Erweitert
 
 | # | Paket | Beschreibung | Status |
 |---|-------|--------------|--------|
 | 2.1 | HA Energy | Sensor-Mapping + Import | ⬜ |
-| 2.2 | Arbitrage | Speicher-Berechnung | ⬜ |
-| 2.3 | V2H | E-Auto Rückspeisung | ⬜ |
+| 2.2 | Arbitrage | Speicher-Berechnung | ✅ (Backend) |
+| 2.3 | V2H | E-Auto Rückspeisung | ✅ (Backend) |
 | 2.4 | Dashboard: E-Auto | Auswertung | ⬜ |
 | 2.5 | Dashboard: WP | Auswertung | ⬜ |
 | 2.6 | Dashboard: Speicher | Auswertung | ⬜ |
 | 2.7 | Dashboard: Wallbox | Auswertung | ⬜ |
-| 2.8 | ROI-Dashboard | Amortisation | ⬜ |
+| 2.8 | ROI-Dashboard | Amortisation | ✅ |
 | 2.9 | Prognose vs IST | Vergleich | ⬜ |
-| 2.10 | Monats-Detail | Pie-Charts | ⬜ |
-| 2.11 | Jahres-Vergleich | Charts | ⬜ |
+| 2.10 | Monats-Detail | Pie-Charts | ✅ |
+| 2.11 | Jahres-Vergleich | Charts | ✅ |
 | 2.12 | PDF-Export | jsPDF Integration | ⬜ |
 | 2.13 | PVGIS | API Integration | ⬜ |
+| 2.14 | API: ROI-Berechnung | Endpoint für alle Investitionen | ✅ |
 
 ### Phase 3: Optimierung
 
@@ -860,5 +863,17 @@ docker run -p 8099:8099 -v $(pwd)/data:/data eedc-addon
 
 ---
 
+---
+
+## 8. ÄNDERUNGSHISTORIE
+
+| Datum | Version | Änderungen |
+|-------|---------|------------|
+| 2026-02-03 | 0.1.0 | Initiale MVP-Implementierung |
+| 2026-02-03 | 0.2.0 | ROI-Dashboard, System-Stats API, Settings-UI mit echten Daten |
+
+---
+
 *Erstellt: 2026-02-03*
+*Letzte Aktualisierung: 2026-02-03*
 *Basierend auf: eedc-webapp Analyse*

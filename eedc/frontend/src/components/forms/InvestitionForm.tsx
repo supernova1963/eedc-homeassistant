@@ -38,7 +38,8 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
 
   // Typ-spezifische Parameter
   const params = investition?.parameter || {}
-  const [paramData, setParamData] = useState<Record<string, string | boolean>>(() => {
+
+  const getInitialParamData = (): Record<string, string | boolean> => {
     switch (typ) {
       case 'e-auto':
         return {
@@ -46,7 +47,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           verbrauch_kwh_100km: params.verbrauch_kwh_100km?.toString() || '18',
           jahresfahrleistung_km: params.jahresfahrleistung_km?.toString() || '15000',
           pv_ladeanteil_prozent: params.pv_ladeanteil_prozent?.toString() || '60',
-          v2h_faehig: params.v2h_faehig ?? false,
+          v2h_faehig: (params.v2h_faehig as boolean) ?? false,
           v2h_entladeleistung_kw: params.v2h_entladeleistung_kw?.toString() || '',
         }
       case 'speicher':
@@ -56,7 +57,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '',
           max_entladeleistung_kw: params.max_entladeleistung_kw?.toString() || '',
           wirkungsgrad_prozent: params.wirkungsgrad_prozent?.toString() || '95',
-          arbitrage_faehig: params.arbitrage_faehig ?? false,
+          arbitrage_faehig: (params.arbitrage_faehig as boolean) ?? false,
         }
       case 'waermepumpe':
         return {
@@ -65,19 +66,19 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           jahresarbeitszahl: params.jahresarbeitszahl?.toString() || '3.0',
           heizwaermebedarf_kwh: params.heizwaermebedarf_kwh?.toString() || '',
           warmwasserbedarf_kwh: params.warmwasserbedarf_kwh?.toString() || '',
-          sg_ready: params.sg_ready ?? false,
+          sg_ready: (params.sg_ready as boolean) ?? false,
         }
       case 'wallbox':
         return {
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '11',
-          bidirektional: params.bidirektional ?? false,
-          pv_optimiert: params.pv_optimiert ?? true,
+          bidirektional: (params.bidirektional as boolean) ?? false,
+          pv_optimiert: (params.pv_optimiert as boolean) ?? true,
         }
       case 'wechselrichter':
         return {
           max_leistung_kw: params.max_leistung_kw?.toString() || '',
           wirkungsgrad_prozent: params.wirkungsgrad_prozent?.toString() || '97',
-          hybrid: params.hybrid ?? false,
+          hybrid: (params.hybrid as boolean) ?? false,
         }
       case 'pv-module':
       case 'balkonkraftwerk':
@@ -90,7 +91,9 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       default:
         return {}
     }
-  })
+  }
+
+  const [paramData, setParamData] = useState<Record<string, string | boolean>>(getInitialParamData)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target

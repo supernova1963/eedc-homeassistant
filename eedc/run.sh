@@ -17,8 +17,8 @@ else
     export LOG_LEVEL="info"
 fi
 
-# Datenbank-Pfad
-export DATABASE_URL="sqlite:////data/eedc.db"
+# Datenbank-Pfad (aiosqlite für async SQLAlchemy)
+export DATABASE_URL="sqlite+aiosqlite:////data/eedc.db"
 
 # Supervisor Token (für HA API Zugriff)
 # Wird automatisch von Home Assistant gesetzt
