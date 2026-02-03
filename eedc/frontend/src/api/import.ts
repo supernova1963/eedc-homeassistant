@@ -1,10 +1,12 @@
 /**
  * Import/Export API Client
+ * Verwendet relative Pfade für HA Ingress Kompatibilität.
  */
 
 import type { ImportResult } from '../types'
 
-const API_BASE = '/api'
+// Relative Basis-URL für HA Ingress Support
+const API_BASE = './api'
 
 export interface CSVTemplateInfo {
   spalten: string[]
