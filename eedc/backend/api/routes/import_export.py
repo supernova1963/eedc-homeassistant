@@ -205,8 +205,12 @@ async def import_csv(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Fehler beim Lesen der Datei: {e}")
 
-    # CSV parsen
-    reader = csv.DictReader(StringIO(text), delimiter=";")
+    # CSV parsen - automatische Trennzeichen-Erkennung (Semikolon oder Komma)
+    # Prüfe erste Zeile auf Trennzeichen
+    first_line = text.split('\n')[0] if text else ''
+    delimiter = ';' if ';' in first_line else ','
+
+    reader = csv.DictReader(StringIO(text), delimiter=delimiter)
 
     importiert = 0
     uebersprungen = 0
