@@ -1,0 +1,6 @@
+# Home Assistant Add-on Repository
+# https://developers.home-assistant.io/docs/add-ons/repository
+
+name: EEDC Add-ons
+url: https://github.com/supernova1963/eedc-homeassistant
+maintainer: supernova1963

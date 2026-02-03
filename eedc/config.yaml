@@ -1,0 +1,60 @@
+# Home Assistant Add-on Konfiguration
+# https://developers.home-assistant.io/docs/add-ons/configuration
+
+name: "EEDC - Energie Daten Center"
+description: "Lokale PV-Anlagen Auswertung und Wirtschaftlichkeitsanalyse"
+version: "0.1.0"
+slug: "eedc"
+url: "https://github.com/supernova1963/eedc-homeassistant"
+
+# Unterstützte Architekturen
+arch:
+  - aarch64
+  - amd64
+  - armv7
+
+# Container-Einstellungen
+init: false
+startup: application
+boot: auto
+
+# Home Assistant Integration
+homeassistant_api: true
+hassio_api: true
+
+# Ingress (nahtlose UI-Integration)
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+panel_icon: "mdi:solar-power"
+panel_title: "EEDC"
+
+# Benutzer-Optionen
+options:
+  log_level: info
+  ha_sensors:
+    pv_erzeugung: ""
+    einspeisung: ""
+    netzbezug: ""
+    batterie_ladung: ""
+    batterie_entladung: ""
+
+schema:
+  log_level: list(debug|info|warning|error)
+  ha_sensors:
+    pv_erzeugung: str?
+    einspeisung: str?
+    netzbezug: str?
+    batterie_ladung: str?
+    batterie_entladung: str?
+
+# Persistenter Speicher
+map:
+  - data:rw
+
+# Netzwerk (nur intern via Ingress)
+ports:
+  8099/tcp: null
+
+# Ressourcen-Labels
+image: "ghcr.io/supernova1963/eedc-{arch}"

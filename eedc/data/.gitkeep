@@ -1,0 +1,3 @@
+# Platzhalter für das Daten-Verzeichnis
+# Die SQLite Datenbank wird hier gespeichert (eedc.db)
+# Dieser Ordner wird als Docker Volume gemountet

@@ -1,0 +1,1 @@
+# EEDC Core Module
