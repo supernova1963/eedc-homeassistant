@@ -709,7 +709,7 @@ def berechne_v2h_einsparung(
 
 ## 5. ROADMAP / ARBEITSPAKETE
 
-### Phase 0: Projekt-Setup
+### Phase 0: Projekt-Setup ✅
 
 | # | Paket | Beschreibung | Status |
 |---|-------|--------------|--------|
@@ -718,9 +718,9 @@ def berechne_v2h_einsparung(
 | 0.3 | Backend Skeleton | FastAPI + SQLite + SQLAlchemy | ✅ |
 | 0.4 | Frontend Skeleton | Vite + React + Tailwind + Dark Mode | ✅ |
 | 0.5 | Docker Build | Multi-Stage Build funktional | ✅ |
-| 0.6 | Lokaler Test | In HA Dev-Environment testen | ⬜ |
+| 0.6 | Lokaler Test | In HA Dev-Environment testen | ✅ |
 
-### Phase 1: MVP
+### Phase 1: MVP ✅
 
 | # | Paket | Beschreibung | Status |
 |---|-------|--------------|--------|
@@ -736,11 +736,11 @@ def berechne_v2h_einsparung(
 | 1.10 | UI: Strompreise | Formular + Liste | ✅ |
 | 1.11 | UI: Investitionen | Dynamisches Formular | ✅ |
 | 1.12 | UI: Monatsdaten | Erfassungs-Formular | ✅ |
-| 1.13 | UI: CSV-Import | Upload-Dialog | ✅ |
+| 1.13 | UI: CSV-Import | Upload-Dialog + Auto-Delimiter | ✅ |
 | 1.14 | UI: Übersicht | Monats-Tabelle | ✅ |
 | 1.15 | UI: Dashboard | KPIs + Trend-Charts | ✅ |
-| 1.16 | HA Ingress | Integration testen | ⬜ (benötigt echte HA-Umgebung) |
-| 1.17 | HA Backup | Daten in Snapshot | ⬜ (benötigt echte HA-Umgebung) |
+| 1.16 | HA Ingress | Integration getestet | ✅ |
+| 1.17 | HA Backup | Daten in Snapshot (/data Volume) | ✅ |
 | 1.18 | API: System Stats | Health + DB-Statistiken | ✅ |
 | 1.19 | UI: Settings | Echte DB-Stats + HA-Status | ✅ |
 
@@ -871,6 +871,7 @@ docker run -p 8099:8099 -v $(pwd)/data:/data eedc-addon
 |-------|---------|------------|
 | 2026-02-03 | 0.1.0 | Initiale MVP-Implementierung |
 | 2026-02-03 | 0.2.0 | ROI-Dashboard, System-Stats API, Settings-UI mit echten Daten |
+| 2026-02-03 | 0.3.0 | **HA Ingress Integration erfolgreich getestet** - HashRouter, relative API-Pfade, CSV Auto-Delimiter |
 
 ---
 

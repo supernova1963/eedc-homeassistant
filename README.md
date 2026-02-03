@@ -17,19 +17,21 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 
 | Phase | Status | Fortschritt |
 |-------|--------|-------------|
-| Phase 0: Setup | ✅ | 5/6 |
-| Phase 1: MVP | ✅ | 17/19 |
+| Phase 0: Setup | ✅ | 6/6 |
+| Phase 1: MVP | ✅ | 19/19 |
 | Phase 2: Erweitert | 🔄 | 7/14 |
 
-**Was funktioniert:**
+**Was funktioniert (getestet in Home Assistant):**
 - ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
-- ✅ CSV-Import
+- ✅ CSV-Import (mit automatischer Trennzeichen-Erkennung)
 - ✅ Dashboard mit KPIs und Charts
 - ✅ Auswertung (4 Tabs: Übersicht, PV, Finanzen, CO2)
 - ✅ ROI-Dashboard mit Amortisationsberechnung
 - ✅ Settings mit echten DB-Stats
 - ✅ Dark Mode
 - ✅ Docker-Build
+- ✅ **HA Ingress Integration** (nahtlose Sidebar-Integration)
+- ✅ **HA Backup** (SQLite in /data Volume)
 
 ## Installation
 
@@ -150,9 +152,9 @@ eedc-homeassistant/
 
 Siehe [PROJEKTPLAN.md](PROJEKTPLAN.md) für Details.
 
-- [x] Phase 0: Projekt-Setup
-- [x] Phase 1: MVP (Grundfunktionen)
-- [ ] Phase 2: Erweiterte Features (HA Integration, Investitions-Dashboards)
+- [x] Phase 0: Projekt-Setup ✅
+- [x] Phase 1: MVP (Grundfunktionen) ✅
+- [ ] Phase 2: Erweiterte Features (HA Energy Import, Investitions-Dashboards, PDF-Export)
 - [ ] Phase 3: KI-Insights, PVGIS Integration
 
 ## Lizenz
