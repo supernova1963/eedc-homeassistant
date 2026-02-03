@@ -2,9 +2,12 @@
  * API Client für EEDC Backend
  *
  * Zentraler HTTP-Client mit Error Handling und TypeScript Support.
+ * Verwendet relative Pfade für HA Ingress Kompatibilität.
  */
 
-const API_BASE = '/api'
+// Relative Basis-URL für HA Ingress Support
+// './api' wird relativ zur aktuellen Seite aufgelöst
+const API_BASE = './api'
 
 interface ApiError {
   detail: string
