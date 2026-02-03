@@ -9,8 +9,27 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - **Monatsdaten Erfassung** - Manuell oder CSV-Import
 - **Umfassende Auswertungen** - Autarkie, Eigenverbrauch, Wirtschaftlichkeit
 - **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox
+- **ROI-Dashboard** - Amortisationsberechnung für alle Investitionen
 - **Home Assistant Integration** - Automatischer Import aus HA Energy Dashboard
 - **Dark Mode** - Vollständige Unterstützung
+
+## Aktueller Status
+
+| Phase | Status | Fortschritt |
+|-------|--------|-------------|
+| Phase 0: Setup | ✅ | 5/6 |
+| Phase 1: MVP | ✅ | 17/19 |
+| Phase 2: Erweitert | 🔄 | 7/14 |
+
+**Was funktioniert:**
+- ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
+- ✅ CSV-Import
+- ✅ Dashboard mit KPIs und Charts
+- ✅ Auswertung (4 Tabs: Übersicht, PV, Finanzen, CO2)
+- ✅ ROI-Dashboard mit Amortisationsberechnung
+- ✅ Settings mit echten DB-Stats
+- ✅ Dark Mode
+- ✅ Docker-Build
 
 ## Installation
 
@@ -24,9 +43,70 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 3. Klicke auf "Installieren"
 4. Starte das Add-on
 
-### Manuell (Development)
+---
 
-Siehe [DEVELOPMENT.md](docs/DEVELOPMENT.md)
+## Entwicklung
+
+### Voraussetzungen
+
+- Python 3.11+
+- Node.js 18+
+- Docker (optional)
+
+### Schnellstart
+
+```bash
+# 1. Repository klonen
+git clone git@github.com:supernova1963/eedc-homeassistant.git
+cd eedc-homeassistant
+
+# 2. Backend einrichten
+cd eedc/backend
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Frontend einrichten
+cd ../frontend
+npm install
+```
+
+### Entwicklungsserver starten
+
+**Terminal 1 - Backend:**
+```bash
+cd eedc/backend
+source venv/bin/activate
+uvicorn backend.main:app --reload --port 8099
+```
+
+**Terminal 2 - Frontend (Dev-Mode mit Hot-Reload):**
+```bash
+cd eedc/frontend
+npm run dev
+```
+
+Frontend: http://localhost:5173 (Proxy zu Backend)
+API Docs: http://localhost:8099/api/docs
+
+### Production Build
+
+```bash
+cd eedc/frontend
+npm run build
+```
+
+### Docker Build & Test
+
+```bash
+cd eedc
+docker build -t eedc-test .
+docker run -p 8099:8099 -v $(pwd)/data:/data eedc-test
+```
+
+App: http://localhost:8099
+
+---
 
 ## Konfiguration
 
@@ -41,20 +121,39 @@ ha_sensors:
   batterie_entladung: sensor.battery_discharge_energy
 ```
 
-## Screenshots
+## Projektstruktur
 
-*Folgen nach MVP Release*
+```
+eedc-homeassistant/
+├── PROJEKTPLAN.md          # Detaillierte Architektur & Roadmap
+├── README.md               # Diese Datei
+└── eedc/                   # Das Add-on
+    ├── config.yaml         # HA Add-on Konfiguration
+    ├── Dockerfile          # Multi-Stage Build
+    ├── run.sh              # Container Startscript
+    ├── backend/            # Python FastAPI Backend
+    │   ├── main.py
+    │   ├── requirements.txt
+    │   ├── api/routes/     # API Endpoints
+    │   ├── core/           # Config, DB, Calculations
+    │   └── models/         # SQLAlchemy Models
+    └── frontend/           # React Vite Frontend
+        ├── package.json
+        └── src/
+            ├── api/        # API Client
+            ├── components/ # UI Components
+            ├── pages/      # Seiten
+            └── hooks/      # React Hooks
+```
 
 ## Roadmap
 
+Siehe [PROJEKTPLAN.md](PROJEKTPLAN.md) für Details.
+
 - [x] Phase 0: Projekt-Setup
-- [ ] Phase 1: MVP (Grundfunktionen)
-- [ ] Phase 2: Erweiterte Features (HA Integration, Arbitrage, V2H)
+- [x] Phase 1: MVP (Grundfunktionen)
+- [ ] Phase 2: Erweiterte Features (HA Integration, Investitions-Dashboards)
 - [ ] Phase 3: KI-Insights, PVGIS Integration
-
-## Entwicklung
-
-Siehe [PROJEKTPLAN.md](PROJEKTPLAN.md) für detaillierte Architektur und Roadmap.
 
 ## Lizenz
 
