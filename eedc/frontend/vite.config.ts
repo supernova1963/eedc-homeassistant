@@ -5,6 +5,8 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Relative Pfade für HA Ingress Support
+  base: './',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
