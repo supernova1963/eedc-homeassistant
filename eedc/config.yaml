@@ -56,5 +56,6 @@ map:
 ports:
   8099/tcp: null
 
-# Ressourcen-Labels
-image: "ghcr.io/supernova1963/eedc-{arch}"
+# Lokaler Build (kein vorgebautes Image)
+# Wenn ein Image auf ghcr.io veröffentlicht ist, diese Zeile einkommentieren:
+# image: "ghcr.io/supernova1963/eedc-{arch}"
