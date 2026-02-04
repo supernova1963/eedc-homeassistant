@@ -331,6 +331,16 @@ export default function MonatsdatenPage() {
                 </div>
               </div>
 
+              {/* Hinweis wenn keine HA-Daten */}
+              {haPreview.ha_verbunden && haPreview.sensor_konfiguriert &&
+               !haPreview.monate.some(m => m.pv_erzeugung_ha !== null) && (
+                <Alert type="warning">
+                  Keine Statistiken in Home Assistant für {selectedHAYear} gefunden.
+                  Stelle sicher, dass der Sensor "Long-Term Statistics" aktiviert hat
+                  (state_class: total_increasing) und für den gewählten Zeitraum Daten vorhanden sind.
+                </Alert>
+              )}
+
               {/* Monatsliste */}
               {haPreview.monate.length > 0 ? (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
