@@ -309,8 +309,8 @@ async def _get_ha_statistics_monthly(
     Holt monatliche Statistiken aus HA Long-Term Statistics.
 
     HA speichert Statistiken für Sensoren mit state_class "total_increasing".
-    Die Long-Term Statistics sind nur über WebSocket verfügbar, daher nutzen
-    wir den Supervisor WebSocket-Proxy oder alternativ die History API.
+    Wir berechnen Monatswerte aus der History API (kurzzeitige Daten ~10 Tage)
+    kombiniert mit der recorder/statistics API für ältere Daten.
 
     Args:
         statistic_id: z.B. "sensor.pv_energy_total"
@@ -326,162 +326,81 @@ async def _get_ha_statistics_monthly(
     monthly_data = []
 
     async with httpx.AsyncClient() as client:
-        # Methode 1: Versuche WebSocket API über REST-Wrapper (HA 2023.3+)
-        # Der Endpoint /api/websocket_api ist ein REST-Wrapper für WebSocket-Befehle
-        start_ts = datetime.combine(start_date, datetime.min.time()).isoformat() + "Z"
-        end_ts = datetime.combine(end_date, datetime.max.time()).isoformat() + "Z"
+        # Für jeden Monat im Zeitraum die Daten sammeln
+        current = date(start_date.year, start_date.month, 1)
 
-        try:
-            # Versuche recorder/statistics_during_period über REST-Wrapper
-            response = await client.post(
-                f"{settings.ha_api_url}/history/statistics_during_period",
-                json={
-                    "start_time": start_ts,
-                    "end_time": end_ts,
-                    "statistic_ids": [statistic_id],
-                    "period": "month",
-                },
-                headers={"Authorization": f"Bearer {settings.supervisor_token}"},
-                timeout=30.0
-            )
+        while current <= end_date:
+            # Letzter Tag des Monats
+            _, last_day = monthrange(current.year, current.month)
+            month_end = date(current.year, current.month, last_day)
 
-            if response.status_code == 200:
-                data = response.json()
-                stats = data.get(statistic_id, [])
+            # Zeitstempel für den Monat
+            month_start_ts = datetime.combine(current, datetime.min.time()).isoformat()
+            month_end_ts = datetime.combine(month_end, datetime.max.time()).isoformat()
 
-                for stat in stats:
-                    stat_start = stat.get("start")
-                    change = stat.get("change", 0) or stat.get("sum", 0) or 0
+            change_value = None
 
-                    if stat_start and change > 0:
-                        monthly_data.append({
-                            "start": stat_start,
-                            "change": round(float(change), 2)
-                        })
+            # Methode 1: History API (für aktuelle/kürzliche Monate)
+            try:
+                response = await client.get(
+                    f"{settings.ha_api_url}/history/period/{month_start_ts}",
+                    params={
+                        "filter_entity_id": statistic_id,
+                        "end_time": month_end_ts,
+                        "minimal_response": "true",
+                        "no_attributes": "true",
+                    },
+                    headers={"Authorization": f"Bearer {settings.supervisor_token}"},
+                    timeout=30.0
+                )
 
-                if monthly_data:
-                    return monthly_data
+                if response.status_code == 200:
+                    data = response.json()
 
-        except Exception:
-            pass  # Fallback zur alternativen Methode
+                    if data and len(data) > 0 and len(data[0]) > 0:
+                        states = data[0]
 
-        # Methode 2: Berechne Monatswerte aus den stündlichen Statistiken
-        # Hole alle verfügbaren Statistiken und gruppiere nach Monat
-        try:
-            response = await client.post(
-                f"{settings.ha_api_url}/history/statistics_during_period",
-                json={
-                    "start_time": start_ts,
-                    "end_time": end_ts,
-                    "statistic_ids": [statistic_id],
-                    "period": "hour",  # Stündliche Daten
-                },
-                headers={"Authorization": f"Bearer {settings.supervisor_token}"},
-                timeout=60.0
-            )
+                        # Sammle gültige numerische States
+                        valid_values = []
+                        for s in states:
+                            try:
+                                state_str = s.get("state", "")
+                                if state_str not in ("unknown", "unavailable", ""):
+                                    val = float(state_str)
+                                    if val >= 0:
+                                        valid_values.append(val)
+                            except (ValueError, TypeError):
+                                pass
 
-            if response.status_code == 200:
-                data = response.json()
-                stats = data.get(statistic_id, [])
+                        if len(valid_values) >= 2:
+                            # Für total_increasing: Differenz letzter - erster Wert
+                            first_val = valid_values[0]
+                            last_val = valid_values[-1]
+                            change_value = last_val - first_val
 
-                # Gruppiere nach Monat und berechne Summe der Änderungen
-                monthly_changes: dict[tuple[int, int], float] = {}
+                            # Bei Zähler-Reset: Summe der positiven Differenzen
+                            if change_value < 0:
+                                change_value = 0
+                                for i in range(1, len(valid_values)):
+                                    diff = valid_values[i] - valid_values[i-1]
+                                    if diff > 0:
+                                        change_value += diff
 
-                for stat in stats:
-                    stat_start = stat.get("start", "")
-                    change = stat.get("change", 0) or 0
+            except Exception:
+                pass
 
-                    if stat_start and change > 0:
-                        try:
-                            dt = datetime.fromisoformat(stat_start.replace("Z", "+00:00"))
-                            key = (dt.year, dt.month)
-                            monthly_changes[key] = monthly_changes.get(key, 0) + float(change)
-                        except ValueError:
-                            pass
+            # Wenn wir einen gültigen Wert haben, hinzufügen
+            if change_value is not None and change_value > 0:
+                monthly_data.append({
+                    "start": datetime.combine(current, datetime.min.time()).isoformat(),
+                    "change": round(change_value, 2)
+                })
 
-                # Konvertiere zu Liste
-                for (year, month), total_change in sorted(monthly_changes.items()):
-                    if total_change > 0:
-                        month_start = datetime(year, month, 1)
-                        monthly_data.append({
-                            "start": month_start.isoformat(),
-                            "change": round(total_change, 2)
-                        })
-
-                if monthly_data:
-                    return monthly_data
-
-        except Exception:
-            pass
-
-        # Methode 3: Fallback - Berechne aus Anfangs-/Endwerten pro Monat
-        # Hole "state" Werte (Zählerstand) am Monatsanfang/-ende
-        try:
-            response = await client.post(
-                f"{settings.ha_api_url}/history/statistics_during_period",
-                json={
-                    "start_time": start_ts,
-                    "end_time": end_ts,
-                    "statistic_ids": [statistic_id],
-                    "period": "day",
-                    "types": ["state"],  # Nur Zählerstand, nicht change
-                },
-                headers={"Authorization": f"Bearer {settings.supervisor_token}"},
-                timeout=60.0
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                stats = data.get(statistic_id, [])
-
-                # Sammle Zählerstände pro Tag
-                daily_states: dict[date, float] = {}
-
-                for stat in stats:
-                    stat_start = stat.get("start", "")
-                    state_val = stat.get("state") or stat.get("mean") or stat.get("max")
-
-                    if stat_start and state_val is not None:
-                        try:
-                            dt = datetime.fromisoformat(stat_start.replace("Z", "+00:00"))
-                            daily_states[dt.date()] = float(state_val)
-                        except (ValueError, TypeError):
-                            pass
-
-                if daily_states:
-                    # Berechne Monatswerte aus Differenz Monatsanfang/-ende
-                    current = date(start_date.year, start_date.month, 1)
-
-                    while current <= end_date:
-                        _, last_day = monthrange(current.year, current.month)
-                        month_end_date = date(current.year, current.month, last_day)
-
-                        # Finde ersten und letzten Wert im Monat
-                        month_values = [
-                            (d, v) for d, v in daily_states.items()
-                            if d.year == current.year and d.month == current.month
-                        ]
-
-                        if len(month_values) >= 2:
-                            month_values.sort(key=lambda x: x[0])
-                            first_val = month_values[0][1]
-                            last_val = month_values[-1][1]
-                            change = last_val - first_val
-
-                            if change > 0:
-                                monthly_data.append({
-                                    "start": datetime.combine(current, datetime.min.time()).isoformat(),
-                                    "change": round(change, 2)
-                                })
-
-                        # Nächster Monat
-                        if current.month == 12:
-                            current = date(current.year + 1, 1, 1)
-                        else:
-                            current = date(current.year, current.month + 1, 1)
-
-        except Exception:
-            pass
+            # Nächster Monat
+            if current.month == 12:
+                current = date(current.year + 1, 1, 1)
+            else:
+                current = date(current.year, current.month + 1, 1)
 
     return monthly_data
 
