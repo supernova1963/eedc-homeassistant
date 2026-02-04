@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
-import { systemApi, type StatsResponse, type SettingsResponse } from '../api'
+import { systemApi, haApi, type StatsResponse, type SettingsResponse, type HASensor } from '../api'
 
 export default function Settings() {
   const { theme, setTheme } = useTheme()
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
+  const [haSensors, setHaSensors] = useState<HASensor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,6 +21,16 @@ export default function Settings() {
       ])
       setStats(statsData)
       setSettings(settingsData)
+
+      // Lade verfügbare HA-Sensoren wenn verbunden
+      if (settingsData.ha_integration_enabled) {
+        try {
+          const sensors = await haApi.getSensors()
+          setHaSensors(sensors)
+        } catch {
+          // HA nicht erreichbar - ignorieren
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden der Einstellungen')
     } finally {
@@ -101,6 +112,11 @@ export default function Settings() {
                 <span className="text-green-600 dark:text-green-400">
                   Verbunden
                 </span>
+                {haSensors.length > 0 && (
+                  <span className="text-gray-500 dark:text-gray-400 ml-2">
+                    ({haSensors.length} Energy-Sensoren verfügbar)
+                  </span>
+                )}
               </>
             ) : (
               <>
@@ -114,31 +130,83 @@ export default function Settings() {
         </div>
 
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Sensor-Zuordnung
+          Sensor-Zuordnung (Monatsdaten-Import)
         </h3>
         <div className="space-y-3">
           {[
-            { key: 'pv_erzeugung', label: 'PV-Erzeugung' },
-            { key: 'einspeisung', label: 'Einspeisung' },
-            { key: 'netzbezug', label: 'Netzbezug' },
-          ].map(({ key, label }) => (
-            <div key={key} className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-              {settings?.ha_sensors_configured[key as keyof typeof settings.ha_sensors_configured] ? (
-                <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
-                  <CheckCircle className="w-4 h-4" />
-                  Konfiguriert
-                </span>
-              ) : (
-                <span className="text-sm text-gray-400">Nicht konfiguriert</span>
-              )}
-            </div>
-          ))}
+            { key: 'pv_erzeugung', label: 'PV-Erzeugung', description: 'Gesamt PV-Ertrag' },
+            { key: 'einspeisung', label: 'Einspeisung', description: 'Ins Netz eingespeist' },
+            { key: 'netzbezug', label: 'Netzbezug', description: 'Aus Netz bezogen' },
+            { key: 'batterie_ladung', label: 'Batterie Ladung', description: 'In Batterie geladen' },
+            { key: 'batterie_entladung', label: 'Batterie Entladung', description: 'Aus Batterie entnommen' },
+          ].map(({ key, label, description }) => {
+            const configured = settings?.ha_sensors_configured[key as keyof typeof settings.ha_sensors_configured]
+            const sensorId = settings?.ha_sensors?.[key as keyof typeof settings.ha_sensors]
+
+            return (
+              <div key={key} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+                  </div>
+                  {configured ? (
+                    <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                      <CheckCircle className="w-4 h-4" />
+                      Konfiguriert
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">Nicht konfiguriert</span>
+                  )}
+                </div>
+                {sensorId && (
+                  <code className="mt-2 block text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded font-mono">
+                    {sensorId}
+                  </code>
+                )}
+              </div>
+            )
+          })}
         </div>
 
-        <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-          Die Sensor-Zuordnung wird über die Add-on-Konfiguration in Home Assistant vorgenommen.
-        </p>
+        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">
+          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-blue-700 dark:text-blue-300">
+            <p className="font-medium mb-1">Konfiguration über Add-on-Einstellungen</p>
+            <p>
+              Die Sensor-Zuordnung erfolgt in Home Assistant unter <strong>Einstellungen → Add-ons → EEDC → Konfiguration</strong>.
+              Dort können die Entity-IDs der Energy-Sensoren (state_class: total_increasing) eingetragen werden.
+            </p>
+          </div>
+        </div>
+
+        {haSensors.length > 0 && (
+          <details className="mt-4">
+            <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-primary-600">
+              Verfügbare Energy-Sensoren anzeigen
+            </summary>
+            <div className="mt-2 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                  <tr>
+                    <th className="text-left p-2 font-medium">Entity ID</th>
+                    <th className="text-left p-2 font-medium">Name</th>
+                    <th className="text-left p-2 font-medium">Einheit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {haSensors.map((sensor) => (
+                    <tr key={sensor.entity_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="p-2 font-mono text-gray-600 dark:text-gray-400">{sensor.entity_id}</td>
+                      <td className="p-2 text-gray-700 dark:text-gray-300">{sensor.friendly_name || '-'}</td>
+                      <td className="p-2 text-gray-500">{sensor.unit_of_measurement || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
       </div>
 
       {/* Database */}

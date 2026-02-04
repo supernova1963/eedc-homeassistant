@@ -109,13 +109,22 @@ async def get_settings():
         dict: Öffentliche Konfiguration
     """
     return {
-        "version": "0.1.0",
+        "version": "0.5.0",
         "database_path": str(settings.database_path),
         "ha_integration_enabled": bool(settings.supervisor_token),
         "ha_sensors_configured": {
             "pv_erzeugung": bool(settings.ha_sensor_pv),
             "einspeisung": bool(settings.ha_sensor_einspeisung),
             "netzbezug": bool(settings.ha_sensor_netzbezug),
+            "batterie_ladung": bool(settings.ha_sensor_batterie_ladung),
+            "batterie_entladung": bool(settings.ha_sensor_batterie_entladung),
+        },
+        "ha_sensors": {
+            "pv_erzeugung": settings.ha_sensor_pv,
+            "einspeisung": settings.ha_sensor_einspeisung,
+            "netzbezug": settings.ha_sensor_netzbezug,
+            "batterie_ladung": settings.ha_sensor_batterie_ladung,
+            "batterie_entladung": settings.ha_sensor_batterie_entladung,
         }
     }
 

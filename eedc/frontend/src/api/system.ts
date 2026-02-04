@@ -20,6 +20,15 @@ export interface SettingsResponse {
     pv_erzeugung: boolean
     einspeisung: boolean
     netzbezug: boolean
+    batterie_ladung: boolean
+    batterie_entladung: boolean
+  }
+  ha_sensors: {
+    pv_erzeugung: string
+    einspeisung: string
+    netzbezug: string
+    batterie_ladung: string
+    batterie_entladung: string
   }
 }
 
