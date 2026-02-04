@@ -119,8 +119,14 @@ export default function PrognoseVsIst() {
     setSavingPrognose(true)
     try {
       await pvgisApi.speicherePrognose(selectedAnlageId)
+      // Modul-Daten vom aktuellen State behalten (werden nicht in DB gespeichert)
+      const currentModule = prognose?.module
       // Neu laden um gespeicherte Prognose zu verwenden
       await loadData()
+      // Modul-Daten wieder hinzufügen falls vorhanden
+      if (currentModule && currentModule.length > 0) {
+        setPrognose(prev => prev ? { ...prev, module: currentModule } : null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
     } finally {
@@ -349,105 +355,7 @@ export default function PrognoseVsIst() {
             </div>
           </Card>
 
-          {/* Detailtabelle */}
-          <Card className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Monatliche Details
-            </h2>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-2 px-2">Monat</th>
-                    <th className="text-right py-2 px-2">PVGIS Prognose</th>
-                    <th className="text-right py-2 px-2">IST-Erzeugung</th>
-                    <th className="text-right py-2 px-2">Abweichung</th>
-                    <th className="text-right py-2 px-2">%</th>
-                    <th className="text-center py-2 px-2">Bewertung</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vergleichsDaten.map((d) => (
-                    <tr key={d.monat} className="border-b border-gray-100 dark:border-gray-800">
-                      <td className="py-2 px-2 font-medium">{d.monatName}</td>
-                      <td className="text-right py-2 px-2 text-yellow-600">
-                        {d.prognose.toFixed(0)} kWh
-                      </td>
-                      <td className="text-right py-2 px-2">
-                        {d.ist > 0 ? (
-                          <span className="text-green-600">{d.ist.toFixed(0)} kWh</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className={`text-right py-2 px-2 ${d.abweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {d.ist > 0 ? `${d.abweichung >= 0 ? '+' : ''}${d.abweichung.toFixed(0)} kWh` : '-'}
-                      </td>
-                      <td className={`text-right py-2 px-2 ${d.abweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {d.ist > 0 ? `${d.abweichungProzent >= 0 ? '+' : ''}${d.abweichungProzent.toFixed(1)}%` : '-'}
-                      </td>
-                      <td className="text-center py-2 px-2">
-                        {d.ist === 0 ? (
-                          <span className="text-gray-400">Keine Daten</span>
-                        ) : d.abweichungProzent >= 5 ? (
-                          <span className="inline-flex items-center gap-1 text-green-600">
-                            <TrendingUp className="h-4 w-4" />
-                            Übertroffen
-                          </span>
-                        ) : d.abweichungProzent >= -5 ? (
-                          <span className="text-blue-600">Im Plan</span>
-                        ) : d.abweichungProzent >= -15 ? (
-                          <span className="text-yellow-600">Leicht unter Plan</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-red-600">
-                            <TrendingDown className="h-4 w-4" />
-                            Unter Plan
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
-                    <td className="py-2 px-2">Gesamt</td>
-                    <td className="text-right py-2 px-2 text-yellow-600">
-                      {jahresPrognose.toFixed(0)} kWh
-                    </td>
-                    <td className="text-right py-2 px-2 text-green-600">
-                      {jahresIst.toFixed(0)} kWh
-                    </td>
-                    <td className={`text-right py-2 px-2 ${jahresAbweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {jahresAbweichung >= 0 ? '+' : ''}{jahresAbweichung.toFixed(0)} kWh
-                    </td>
-                    <td className={`text-right py-2 px-2 ${jahresAbweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {jahresAbweichungProzent >= 0 ? '+' : ''}{jahresAbweichungProzent.toFixed(1)}%
-                    </td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </Card>
-
-          {/* Erklärung */}
-          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-            <h3 className="font-medium text-purple-700 dark:text-purple-300 mb-2">
-              Interpretation der Abweichungen
-            </h3>
-            <ul className="text-sm text-purple-600 dark:text-purple-400 space-y-1 list-disc list-inside">
-              <li><strong>Übertroffen (&gt;5%):</strong> Die Anlage produziert mehr als erwartet - sehr gut!</li>
-              <li><strong>Im Plan (±5%):</strong> Die Anlage entspricht den Erwartungen von PVGIS.</li>
-              <li><strong>Leicht unter Plan (-5% bis -15%):</strong> Kleinere Abweichungen, z.B. durch lokale Wetterbedingungen.</li>
-              <li><strong>Unter Plan (&lt;-15%):</strong> Deutliche Minderleistung - Verschattung, Verschmutzung oder technische Probleme prüfen.</li>
-            </ul>
-            <p className="text-xs text-purple-500 dark:text-purple-400 mt-3">
-              Hinweis: PVGIS basiert auf langjährigen Mittelwerten. Einzelne Monate können stark abweichen.
-            </p>
-          </div>
-
-          {/* Modul-Übersicht (nur bei Live-Prognose mit Modul-Daten) */}
+          {/* Modul-Übersicht (direkt nach dem Chart für bessere Übersicht) */}
           {prognose.module && prognose.module.length > 1 && (
             <Card className="space-y-4">
               <div className="flex items-center gap-2">
@@ -553,6 +461,105 @@ export default function PrognoseVsIst() {
               </p>
             </Card>
           )}
+
+          {/* Detailtabelle */}
+          <Card className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Monatliche Details
+            </h2>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-2 px-2">Monat</th>
+                    <th className="text-right py-2 px-2">PVGIS Prognose</th>
+                    <th className="text-right py-2 px-2">IST-Erzeugung</th>
+                    <th className="text-right py-2 px-2">Abweichung</th>
+                    <th className="text-right py-2 px-2">%</th>
+                    <th className="text-center py-2 px-2">Bewertung</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vergleichsDaten.map((d) => (
+                    <tr key={d.monat} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="py-2 px-2 font-medium">{d.monatName}</td>
+                      <td className="text-right py-2 px-2 text-yellow-600">
+                        {d.prognose.toFixed(0)} kWh
+                      </td>
+                      <td className="text-right py-2 px-2">
+                        {d.ist > 0 ? (
+                          <span className="text-green-600">{d.ist.toFixed(0)} kWh</span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className={`text-right py-2 px-2 ${d.abweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {d.ist > 0 ? `${d.abweichung >= 0 ? '+' : ''}${d.abweichung.toFixed(0)} kWh` : '-'}
+                      </td>
+                      <td className={`text-right py-2 px-2 ${d.abweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {d.ist > 0 ? `${d.abweichungProzent >= 0 ? '+' : ''}${d.abweichungProzent.toFixed(1)}%` : '-'}
+                      </td>
+                      <td className="text-center py-2 px-2">
+                        {d.ist === 0 ? (
+                          <span className="text-gray-400">Keine Daten</span>
+                        ) : d.abweichungProzent >= 5 ? (
+                          <span className="inline-flex items-center gap-1 text-green-600">
+                            <TrendingUp className="h-4 w-4" />
+                            Übertroffen
+                          </span>
+                        ) : d.abweichungProzent >= -5 ? (
+                          <span className="text-blue-600">Im Plan</span>
+                        ) : d.abweichungProzent >= -15 ? (
+                          <span className="text-yellow-600">Leicht unter Plan</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-red-600">
+                            <TrendingDown className="h-4 w-4" />
+                            Unter Plan
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
+                    <td className="py-2 px-2">Gesamt</td>
+                    <td className="text-right py-2 px-2 text-yellow-600">
+                      {jahresPrognose.toFixed(0)} kWh
+                    </td>
+                    <td className="text-right py-2 px-2 text-green-600">
+                      {jahresIst.toFixed(0)} kWh
+                    </td>
+                    <td className={`text-right py-2 px-2 ${jahresAbweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {jahresAbweichung >= 0 ? '+' : ''}{jahresAbweichung.toFixed(0)} kWh
+                    </td>
+                    <td className={`text-right py-2 px-2 ${jahresAbweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {jahresAbweichungProzent >= 0 ? '+' : ''}{jahresAbweichungProzent.toFixed(1)}%
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Card>
+
+          {/* Erklärung */}
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+            <h3 className="font-medium text-purple-700 dark:text-purple-300 mb-2">
+              Interpretation der Abweichungen
+            </h3>
+            <ul className="text-sm text-purple-600 dark:text-purple-400 space-y-1 list-disc list-inside">
+              <li><strong>Übertroffen (&gt;5%):</strong> Die Anlage produziert mehr als erwartet - sehr gut!</li>
+              <li><strong>Im Plan (±5%):</strong> Die Anlage entspricht den Erwartungen von PVGIS.</li>
+              <li><strong>Leicht unter Plan (-5% bis -15%):</strong> Kleinere Abweichungen, z.B. durch lokale Wetterbedingungen.</li>
+              <li><strong>Unter Plan (&lt;-15%):</strong> Deutliche Minderleistung - Verschattung, Verschmutzung oder technische Probleme prüfen.</li>
+            </ul>
+            <p className="text-xs text-purple-500 dark:text-purple-400 mt-3">
+              Hinweis: PVGIS basiert auf langjährigen Mittelwerten. Einzelne Monate können stark abweichen.
+            </p>
+          </div>
+
         </>
       )}
     </div>
