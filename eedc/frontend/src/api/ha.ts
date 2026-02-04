@@ -37,6 +37,43 @@ export interface StringMonatsdatenCreate {
   pv_erzeugung_kwh: number
 }
 
+export interface HAImportResult {
+  erfolg: boolean
+  monate_importiert: number
+  fehler: string | null
+}
+
+export interface HAImportPreviewMonth {
+  monat: number
+  existiert_in_db: boolean
+  datenquelle: string | null
+  pv_erzeugung_db: number | null
+  pv_erzeugung_ha: number | null
+  kann_importieren: boolean
+  kann_aktualisieren: boolean
+}
+
+export interface HAImportPreview {
+  anlage_id: number
+  jahr: number
+  ha_verbunden: boolean
+  sensor_konfiguriert: boolean
+  monate: HAImportPreviewMonth[]
+}
+
+export interface MonthlyStatistic {
+  jahr: number
+  monat: number
+  summe_kwh: number
+  hat_daten: boolean
+}
+
+export interface HAMonthlyDataResponse {
+  statistic_id: string
+  monate: MonthlyStatistic[]
+  hinweis: string | null
+}
+
 export const haApi = {
   /**
    * HA-Verbindungsstatus prüfen
@@ -79,5 +116,50 @@ export const haApi = {
    */
   async deleteStringMonatsdaten(id: number): Promise<void> {
     return api.delete(`/ha/string-monatsdaten/${id}`)
+  },
+
+  /**
+   * Vorschau für HA-Import abrufen
+   * Zeigt welche Monate aus HA importiert werden können
+   */
+  async getImportPreview(anlageId: number, jahr: number): Promise<HAImportPreview> {
+    return api.get<HAImportPreview>(`/ha/import/preview/${anlageId}?jahr=${jahr}`)
+  },
+
+  /**
+   * Monatsdaten aus Home Assistant importieren
+   * Existierende manuelle Daten werden nicht überschrieben, es sei denn ueberschreiben=true
+   */
+  async importMonatsdaten(
+    anlageId: number,
+    jahr: number,
+    monat?: number,
+    ueberschreiben = false
+  ): Promise<HAImportResult> {
+    return api.post<HAImportResult>('/ha/import/monatsdaten', {
+      anlage_id: anlageId,
+      jahr,
+      monat: monat || null,
+      ueberschreiben
+    })
+  },
+
+  /**
+   * Monatliche Statistiken für einen Sensor abrufen
+   */
+  async getMonthlyStatistics(
+    statisticId: string,
+    startJahr: number,
+    startMonat = 1,
+    endJahr?: number,
+    endMonat?: number
+  ): Promise<HAMonthlyDataResponse> {
+    return api.post<HAMonthlyDataResponse>('/ha/statistics/monthly', {
+      statistic_id: statisticId,
+      start_jahr: startJahr,
+      start_monat: startMonat,
+      end_jahr: endJahr,
+      end_monat: endMonat
+    })
   },
 }

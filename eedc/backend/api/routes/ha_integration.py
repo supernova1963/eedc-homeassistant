@@ -7,15 +7,19 @@ Erweitert um String-basierte IST-Erfassung für PV-Module.
 
 from typing import Optional
 from datetime import datetime, date
-from fastapi import APIRouter, Depends, HTTPException, status
+from calendar import monthrange
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import httpx
 
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.string_monatsdaten import StringMonatsdaten
+from backend.models.monatsdaten import Monatsdaten
+from backend.models.anlage import Anlage
 
 
 # =============================================================================
@@ -87,6 +91,38 @@ class StringImportRequest(BaseModel):
     investition_id: int
     jahr: int
     monat: Optional[int] = None  # None = ganzes Jahr
+
+
+class MonthlyStatistic(BaseModel):
+    """Monatliche Statistik aus HA."""
+    jahr: int
+    monat: int
+    summe_kwh: float
+    hat_daten: bool = True
+
+
+class HAMonthlyDataRequest(BaseModel):
+    """Anfrage für monatliche Daten aus HA Long-Term Statistics."""
+    statistic_id: str = Field(..., description="HA Statistik-ID (z.B. sensor:pv_energy_total)")
+    start_jahr: int
+    start_monat: int = 1
+    end_jahr: Optional[int] = None
+    end_monat: Optional[int] = None
+
+
+class HAMonthlyDataResponse(BaseModel):
+    """Monatliche Statistik-Daten aus HA."""
+    statistic_id: str
+    monate: list[MonthlyStatistic]
+    hinweis: Optional[str] = None
+
+
+class HAImportMonatsdatenRequest(BaseModel):
+    """Anfrage für Import von Monatsdaten aus HA."""
+    anlage_id: int
+    jahr: int
+    monat: Optional[int] = None  # None = ganzes Jahr
+    ueberschreiben: bool = False  # Existierende Daten überschreiben?
 
 
 # =============================================================================
@@ -260,37 +296,366 @@ async def get_sensor_statistics(request: HAStatisticsRequest):
         raise HTTPException(status_code=502, detail=f"HA-Verbindungsfehler: {str(e)}")
 
 
-@router.post("/import/{anlage_id}", response_model=HAImportResult)
-async def import_from_ha(
+# =============================================================================
+# Long-Term Statistics API (Monatswerte aus Zählern)
+# =============================================================================
+
+async def _get_ha_statistics_monthly(
+    statistic_id: str,
+    start_date: date,
+    end_date: date
+) -> list[dict]:
+    """
+    Holt monatliche Statistiken aus HA Long-Term Statistics.
+
+    HA speichert Statistiken für Sensoren mit state_class "total_increasing".
+    Die API liefert "change" (Differenz) pro Periode.
+
+    Args:
+        statistic_id: z.B. "sensor.pv_energy_total"
+        start_date: Startdatum
+        end_date: Enddatum
+
+    Returns:
+        Liste von {start, change} pro Monat
+    """
+    if not settings.supervisor_token:
+        return []
+
+    async with httpx.AsyncClient() as client:
+        # HA WebSocket-ähnliche REST API für Statistiken
+        # Format: POST /api/history/statistics_during_period
+        start_ts = datetime.combine(start_date, datetime.min.time()).isoformat()
+        end_ts = datetime.combine(end_date, datetime.max.time()).isoformat()
+
+        response = await client.post(
+            f"{settings.ha_api_url}/history/statistics_during_period",
+            json={
+                "start_time": start_ts,
+                "end_time": end_ts,
+                "statistic_ids": [statistic_id],
+                "period": "month"
+            },
+            headers={"Authorization": f"Bearer {settings.supervisor_token}"},
+            timeout=30.0
+        )
+
+        if response.status_code != 200:
+            # Fallback: Versuche alternative API
+            response = await client.get(
+                f"{settings.ha_api_url}/history/period/{start_ts}",
+                params={
+                    "filter_entity_id": statistic_id,
+                    "end_time": end_ts,
+                },
+                headers={"Authorization": f"Bearer {settings.supervisor_token}"},
+                timeout=30.0
+            )
+
+            if response.status_code != 200:
+                return []
+
+            # History API gibt einzelne States zurück - müssen aggregiert werden
+            # Das ist komplexer, daher zunächst leere Liste
+            return []
+
+        data = response.json()
+        return data.get(statistic_id, [])
+
+
+@router.post("/statistics/monthly", response_model=HAMonthlyDataResponse)
+async def get_monthly_statistics(request: HAMonthlyDataRequest):
+    """
+    Holt monatliche Statistiken aus Home Assistant Long-Term Statistics.
+
+    Berechnet Monatswerte aus fortlaufenden Zählern (total_increasing).
+
+    Args:
+        request: Statistik-ID und Zeitraum
+
+    Returns:
+        HAMonthlyDataResponse: Monatliche Werte
+    """
+    if not settings.supervisor_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Keine Verbindung zu Home Assistant"
+        )
+
+    end_jahr = request.end_jahr or request.start_jahr
+    end_monat = request.end_monat or 12
+
+    start_date = date(request.start_jahr, request.start_monat, 1)
+    _, last_day = monthrange(end_jahr, end_monat)
+    end_date = date(end_jahr, end_monat, last_day)
+
+    try:
+        stats = await _get_ha_statistics_monthly(
+            request.statistic_id,
+            start_date,
+            end_date
+        )
+
+        monate = []
+        for stat in stats:
+            # HA gibt "start" als ISO-Timestamp und "change" als Differenz
+            start_str = stat.get("start", "")
+            change = stat.get("change", 0) or 0
+
+            if start_str:
+                try:
+                    dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    monate.append(MonthlyStatistic(
+                        jahr=dt.year,
+                        monat=dt.month,
+                        summe_kwh=round(change, 2),
+                        hat_daten=change > 0
+                    ))
+                except ValueError:
+                    pass
+
+        hinweis = None
+        if not monate:
+            hinweis = "Keine Statistiken verfügbar. Sensor muss state_class 'total_increasing' haben."
+
+        return HAMonthlyDataResponse(
+            statistic_id=request.statistic_id,
+            monate=monate,
+            hinweis=hinweis
+        )
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"HA-Verbindungsfehler: {str(e)}")
+
+
+@router.post("/import/monatsdaten", response_model=HAImportResult)
+async def import_monatsdaten_from_ha(
+    request: HAImportMonatsdatenRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Importiert Monatsdaten aus Home Assistant Long-Term Statistics.
+
+    Verwendet die konfigurierten Sensor-Mappings und berechnet
+    Monatswerte aus den fortlaufenden Zählern.
+
+    WICHTIG: Existierende manuelle Daten werden NICHT überschrieben,
+    es sei denn, ueberschreiben=True ist gesetzt.
+
+    Args:
+        request: Anlage-ID, Jahr und Optionen
+
+    Returns:
+        HAImportResult: Ergebnis des Imports
+    """
+    if not settings.supervisor_token:
+        return HAImportResult(
+            erfolg=False,
+            monate_importiert=0,
+            fehler="Keine Verbindung zu Home Assistant"
+        )
+
+    # Anlage prüfen
+    result = await db.execute(select(Anlage).where(Anlage.id == request.anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        return HAImportResult(
+            erfolg=False,
+            monate_importiert=0,
+            fehler=f"Anlage {request.anlage_id} nicht gefunden"
+        )
+
+    # Sensor-Mappings aus Settings
+    sensor_mapping = {
+        "pv_erzeugung": settings.ha_sensor_pv,
+        "einspeisung": settings.ha_sensor_einspeisung,
+        "netzbezug": settings.ha_sensor_netzbezug,
+        "batterie_ladung": settings.ha_sensor_batterie_ladung,
+        "batterie_entladung": settings.ha_sensor_batterie_entladung,
+    }
+
+    # Prüfen ob Mappings konfiguriert sind
+    configured_sensors = {k: v for k, v in sensor_mapping.items() if v}
+    if not configured_sensors:
+        return HAImportResult(
+            erfolg=False,
+            monate_importiert=0,
+            fehler="Keine HA-Sensoren konfiguriert. Bitte unter Einstellungen zuweisen."
+        )
+
+    # Zeitraum bestimmen
+    start_monat = request.monat or 1
+    end_monat = request.monat or 12
+    start_date = date(request.jahr, start_monat, 1)
+    _, last_day = monthrange(request.jahr, end_monat)
+    end_date = date(request.jahr, end_monat, last_day)
+
+    # Statistiken für alle konfigurierten Sensoren abrufen
+    sensor_data: dict[str, dict[tuple[int, int], float]] = {}
+
+    for field, sensor_id in configured_sensors.items():
+        try:
+            stats = await _get_ha_statistics_monthly(sensor_id, start_date, end_date)
+            sensor_data[field] = {}
+
+            for stat in stats:
+                start_str = stat.get("start", "")
+                change = stat.get("change", 0) or 0
+
+                if start_str and change > 0:
+                    try:
+                        dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                        sensor_data[field][(dt.year, dt.month)] = round(change, 2)
+                    except ValueError:
+                        pass
+        except Exception:
+            pass
+
+    # Monate importieren
+    monate_importiert = 0
+    monate_uebersprungen = 0
+
+    for monat in range(start_monat, end_monat + 1):
+        key = (request.jahr, monat)
+
+        # Existierende Daten prüfen
+        result = await db.execute(
+            select(Monatsdaten)
+            .where(Monatsdaten.anlage_id == request.anlage_id)
+            .where(Monatsdaten.jahr == request.jahr)
+            .where(Monatsdaten.monat == monat)
+        )
+        existing = result.scalar_one_or_none()
+
+        # Daten aus HA sammeln
+        ha_daten = {
+            "pv_erzeugung_kwh": sensor_data.get("pv_erzeugung", {}).get(key),
+            "einspeisung_kwh": sensor_data.get("einspeisung", {}).get(key),
+            "netzbezug_kwh": sensor_data.get("netzbezug", {}).get(key),
+            "batterie_ladung_kwh": sensor_data.get("batterie_ladung", {}).get(key),
+            "batterie_entladung_kwh": sensor_data.get("batterie_entladung", {}).get(key),
+        }
+
+        # Prüfen ob HA-Daten vorhanden
+        hat_ha_daten = any(v is not None for v in ha_daten.values())
+        if not hat_ha_daten:
+            continue
+
+        if existing and not request.ueberschreiben:
+            # Existierende Daten nicht überschreiben
+            monate_uebersprungen += 1
+            continue
+
+        if existing:
+            # Update nur Felder, die HA-Daten haben
+            for field, value in ha_daten.items():
+                if value is not None:
+                    setattr(existing, field, value)
+            existing.datenquelle = "home_assistant"
+            existing.updated_at = datetime.utcnow()
+        else:
+            # Neuen Eintrag erstellen
+            new_entry = Monatsdaten(
+                anlage_id=request.anlage_id,
+                jahr=request.jahr,
+                monat=monat,
+                pv_erzeugung_kwh=ha_daten.get("pv_erzeugung_kwh") or 0,
+                einspeisung_kwh=ha_daten.get("einspeisung_kwh") or 0,
+                netzbezug_kwh=ha_daten.get("netzbezug_kwh") or 0,
+                batterie_ladung_kwh=ha_daten.get("batterie_ladung_kwh"),
+                batterie_entladung_kwh=ha_daten.get("batterie_entladung_kwh"),
+                datenquelle="home_assistant"
+            )
+            db.add(new_entry)
+
+        monate_importiert += 1
+
+    await db.flush()
+
+    fehler = None
+    if monate_uebersprungen > 0:
+        fehler = f"{monate_uebersprungen} Monate übersprungen (bereits vorhanden). Setze ueberschreiben=true um zu aktualisieren."
+
+    return HAImportResult(
+        erfolg=monate_importiert > 0,
+        monate_importiert=monate_importiert,
+        fehler=fehler
+    )
+
+
+@router.get("/import/preview/{anlage_id}")
+async def preview_ha_import(
     anlage_id: int,
     jahr: int,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Importiert Monatsdaten aus Home Assistant für ein Jahr.
+    Zeigt Vorschau der verfügbaren HA-Daten für Import.
 
-    Verwendet die konfigurierten Sensor-Mappings um Daten aus der
-    HA History zu aggregieren.
+    Hilft dem Nutzer zu sehen, welche Monate aus HA importiert werden können
+    und welche bereits manuell erfasst wurden.
 
     Args:
         anlage_id: ID der Anlage
-        jahr: Jahr für den Import
+        jahr: Jahr
 
     Returns:
-        HAImportResult: Ergebnis des Imports
+        dict: Verfügbare HA-Daten und existierende Monatsdaten
     """
-    # TODO: Implementierung des tatsächlichen Imports
-    # Dies erfordert:
-    # 1. Sensor-Mapping laden
-    # 2. Für jeden Monat die HA-Statistiken abrufen
-    # 3. Werte aggregieren (sum für kWh)
-    # 4. Monatsdaten erstellen/aktualisieren
-
-    return HAImportResult(
-        erfolg=False,
-        monate_importiert=0,
-        fehler="HA-Import noch nicht implementiert. Bitte CSV-Import verwenden."
+    # Existierende Monatsdaten laden
+    result = await db.execute(
+        select(Monatsdaten)
+        .where(Monatsdaten.anlage_id == anlage_id)
+        .where(Monatsdaten.jahr == jahr)
     )
+    existierende = {m.monat: m for m in result.scalars().all()}
+
+    # HA-Daten abrufen (wenn verfügbar)
+    ha_verfuegbar = {}
+    if settings.supervisor_token and settings.ha_sensor_pv:
+        try:
+            start_date = date(jahr, 1, 1)
+            end_date = date(jahr, 12, 31)
+            stats = await _get_ha_statistics_monthly(
+                settings.ha_sensor_pv,
+                start_date,
+                end_date
+            )
+            for stat in stats:
+                start_str = stat.get("start", "")
+                change = stat.get("change", 0) or 0
+                if start_str:
+                    try:
+                        dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                        ha_verfuegbar[dt.month] = round(change, 2)
+                    except ValueError:
+                        pass
+        except Exception:
+            pass
+
+    # Vorschau erstellen
+    monate = []
+    for monat in range(1, 13):
+        existiert = monat in existierende
+        ha_wert = ha_verfuegbar.get(monat)
+
+        monate.append({
+            "monat": monat,
+            "existiert_in_db": existiert,
+            "datenquelle": existierende[monat].datenquelle if existiert else None,
+            "pv_erzeugung_db": existierende[monat].pv_erzeugung_kwh if existiert else None,
+            "pv_erzeugung_ha": ha_wert,
+            "kann_importieren": ha_wert is not None and not existiert,
+            "kann_aktualisieren": ha_wert is not None and existiert,
+        })
+
+    return {
+        "anlage_id": anlage_id,
+        "jahr": jahr,
+        "ha_verbunden": bool(settings.supervisor_token),
+        "sensor_konfiguriert": bool(settings.ha_sensor_pv),
+        "monate": monate
+    }
 
 
 # =============================================================================

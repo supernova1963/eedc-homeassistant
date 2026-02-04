@@ -20,4 +20,4 @@ export type { InvestitionCreate, InvestitionUpdate, InvestitionTypInfo, ROIBerec
 export type { StrompreisCreate, StrompreisUpdate } from './strompreise'
 export type { CSVTemplateInfo, DemoDataResult } from './import'
 export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from './pvgis'
-export type { HASensor, HAStatus, StringMonatsdaten, StringMonatsdatenCreate } from './ha'
+export type { HASensor, HAStatus, StringMonatsdaten, StringMonatsdatenCreate, HAImportResult, HAImportPreview, HAImportPreviewMonth, MonthlyStatistic, HAMonthlyDataResponse } from './ha'
