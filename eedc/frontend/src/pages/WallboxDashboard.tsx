@@ -1,20 +1,19 @@
 /**
  * Wallbox Dashboard
- * Zeigt Statistiken: Ladevorgänge, Gesamtladung, Durchschnitt pro Ladung
+ * Zeigt: Heimladung (aus E-Auto-Daten), PV-Anteil, Ersparnis vs. externe Ladung
+ * Die Wallbox ist Infrastruktur - ihr ROI entsteht durch günstiges Heimladen.
  */
 
 import { useState, useEffect } from 'react'
-import { Plug, Zap, Hash, TrendingUp } from 'lucide-react'
+import { Plug, Zap, Leaf, TrendingUp, Home, MapPin } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
 import type { WallboxDashboardResponse } from '../api/investitionen'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line
+  PieChart, Pie, Cell, Legend
 } from 'recharts'
-
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
 export default function WallboxDashboard() {
   const { anlagen, loading: anlagenLoading } = useAnlagen()
@@ -84,7 +83,7 @@ export default function WallboxDashboard() {
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <Plug className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>Keine Wallbox für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge eine Wallbox unter "Investitionen" hinzu.</p>
+            <p className="text-sm mt-2">Füge eine Wallbox unter "Einstellungen → Investitionen" hinzu.</p>
           </div>
         </Card>
       ) : (
@@ -97,18 +96,24 @@ export default function WallboxDashboard() {
 }
 
 function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
-  const { investition, monatsdaten, zusammenfassung } = dashboard
+  const { investition, zusammenfassung } = dashboard
   const z = zusammenfassung
 
-  const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
-    ladung: md.verbrauch_daten.ladung_kwh || 0,
-    vorgaenge: md.verbrauch_daten.ladevorgaenge || 0,
-  }))
+  // PieChart Daten: Heimladung vs Extern
+  const ladungPieData = [
+    { name: 'Heim: PV', value: z.ladung_pv_kwh || 0 },
+    { name: 'Heim: Netz', value: z.ladung_netz_kwh || 0 },
+    { name: 'Extern', value: z.extern_ladung_kwh || 0 },
+  ].filter(d => d.value > 0)
 
-  // Leistung aus Parameter
-  const params = investition.parameter as Record<string, number> | undefined
-  const leistungKw = params?.ladeleistung_kw || 11
+  // Kostenvergleich: Was die Heimladung extern gekostet hätte vs. tatsächliche Kosten
+  const kostenVergleichData = [
+    { name: 'Heimladung (tatsächlich)', value: z.heim_kosten_euro || 0, fill: '#22c55e' },
+    { name: 'Heimladung (als extern)', value: z.heim_als_extern_kosten_euro || 0, fill: '#ef4444' },
+  ]
+
+  const leistungKw = z.leistung_kw || 11
+  const hatDaten = (z.gesamt_heim_ladung_kwh || 0) > 0
 
   return (
     <Card className="space-y-6">
@@ -118,117 +123,181 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
             {investition.bezeichnung}
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {leistungKw} kW Ladeleistung • {z.anzahl_monate} Monate Daten
+            {leistungKw} kW Ladeleistung • {z.anzahl_monate || 0} Monate Daten
           </p>
         </div>
         <Plug className="h-10 w-10 text-purple-500" />
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard
-          title="Ladevorgänge"
-          value={z.gesamt_ladevorgaenge.toString()}
-          icon={Hash}
-          color="purple"
-        />
-        <KPICard
-          title="Gesamtladung"
-          value={(z.gesamt_ladung_kwh / 1000).toFixed(1)}
-          unit="MWh"
-          icon={Zap}
-          color="yellow"
-        />
-        <KPICard
-          title="Ø pro Ladung"
-          value={z.durchschnitt_kwh_pro_vorgang.toFixed(1)}
-          unit="kWh"
-          icon={TrendingUp}
-          color="blue"
-        />
-        <KPICard
-          title="Ø Vorgänge/Monat"
-          value={z.ladevorgaenge_pro_monat.toFixed(1)}
-          icon={Hash}
-          color="green"
-        />
-      </div>
-
-      {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Ladung pro Monat */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Ladung pro Monat (kWh)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="ladung" fill="#8b5cf6" name="Ladung (kWh)" />
-              </BarChart>
-            </ResponsiveContainer>
+      {!hatDaten ? (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
+          <p className="text-sm text-yellow-700 dark:text-yellow-400">
+            Noch keine Ladedaten vorhanden. Die Wallbox-Statistik wird aus den E-Auto-Monatsdaten berechnet.
+            Erfasse E-Auto-Daten unter "Einstellungen → Monatsdaten".
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KPICard
+              title="Heimladung"
+              value={((z.gesamt_heim_ladung_kwh || 0) / 1000).toFixed(2)}
+              unit="MWh"
+              subtitle="PV + Netz"
+              icon={Home}
+              color="purple"
+            />
+            <KPICard
+              title="PV-Anteil"
+              value={(z.pv_anteil_prozent || 0).toFixed(0)}
+              unit="%"
+              subtitle={`${(z.ladung_pv_kwh || 0).toFixed(0)} kWh`}
+              icon={Leaf}
+              color="green"
+            />
+            <KPICard
+              title="Ersparnis vs. Extern"
+              value={(z.ersparnis_vs_extern_euro || 0).toFixed(0)}
+              unit="€"
+              subtitle="Wallbox-ROI"
+              icon={TrendingUp}
+              color="green"
+              trend={(z.ersparnis_vs_extern_euro || 0) > 0 ? 'up' : undefined}
+            />
+            <KPICard
+              title="Ladevorgänge"
+              value={(z.gesamt_ladevorgaenge || 0).toString()}
+              subtitle={`Ø ${(z.ladevorgaenge_pro_monat || 0).toFixed(1)}/Monat`}
+              icon={Zap}
+              color="blue"
+            />
           </div>
-        </div>
 
-        {/* Ladevorgänge pro Monat */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Ladevorgänge pro Monat
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="vorgaenge" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Ladevorgänge" />
-              </LineChart>
-            </ResponsiveContainer>
+          {/* Charts */}
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Ladequelle */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+                Ladequelle
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={ladungPieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      <Cell fill="#22c55e" /> {/* PV: grün */}
+                      <Cell fill="#f97316" /> {/* Netz: orange */}
+                      <Cell fill="#ef4444" /> {/* Extern: rot */}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => `${v.toFixed(1)} kWh`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-center gap-4 text-sm flex-wrap">
+                <span className="flex items-center gap-2">
+                  <Home className="h-4 w-4 text-purple-500" />
+                  Heim: {(z.gesamt_heim_ladung_kwh || 0).toFixed(0)} kWh
+                </span>
+                {(z.extern_ladung_kwh || 0) > 0 && (
+                  <span className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-red-500" />
+                    Extern: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Kostenvergleich */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+                Kostenvergleich: Heimladung vs. Externe Preise
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={kostenVergleichData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" tickFormatter={(v) => `${v}€`} />
+                    <YAxis type="category" dataKey="name" width={150} />
+                    <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} />
+                    <Legend />
+                    <Bar dataKey="value" name="Kosten" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="text-center mt-2">
+                <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+                  Ersparnis durch Wallbox: {(z.ersparnis_vs_extern_euro || 0).toFixed(2)} €
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Info */}
-      <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-        <p className="text-sm text-purple-600 dark:text-purple-400">
-          Die Wallbox ist primär ein Enabler für die E-Auto-Ladung.
-          Die Ersparnis wird im E-Auto Dashboard berechnet.
-        </p>
-      </div>
+          {/* Erklärung */}
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+              Wallbox-ROI erklärt
+            </p>
+            <p className="text-sm text-purple-600 dark:text-purple-400">
+              Die Ersparnis errechnet sich aus dem Unterschied zwischen Heimladen und externem Laden:
+            </p>
+            <ul className="text-sm text-purple-600 dark:text-purple-400 list-disc list-inside">
+              <li>PV-Ladung zuhause: kostenlos ({(z.ladung_pv_kwh || 0).toFixed(0)} kWh)</li>
+              <li>Netz-Ladung zuhause: Haushaltsstrom ({(z.ladung_netz_kwh || 0).toFixed(0)} kWh = {(z.heim_kosten_euro || 0).toFixed(2)} €)</li>
+              <li>Vergleichspreis extern: {(z.extern_preis_kwh_euro || 0.50).toFixed(2)} €/kWh</li>
+            </ul>
+            {(z.extern_ladung_kwh || 0) > 0 && (
+              <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
+                Tatsächliche externe Ladung: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh für {(z.extern_kosten_euro || 0).toFixed(2)} €
+              </p>
+            )}
+          </div>
 
-      {/* Detail-Tabelle */}
-      <details className="border-t border-gray-200 dark:border-gray-700 pt-4">
-        <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-          Monatsdaten anzeigen
-        </summary>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-2">Monat</th>
-                <th className="text-right py-2 px-2">Ladung (kWh)</th>
-                <th className="text-right py-2 px-2">Ladevorgänge</th>
-                <th className="text-right py-2 px-2">Ø kWh/Ladung</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyData.map((md, idx) => (
-                <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2">{md.name}</td>
-                  <td className="text-right py-2 px-2 text-purple-600">{md.ladung.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2">{md.vorgaenge}</td>
-                  <td className="text-right py-2 px-2">{md.vorgaenge > 0 ? (md.ladung / md.vorgaenge).toFixed(1) : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+          {/* Anschaffungskosten und Amortisation */}
+          {investition.anschaffungskosten_gesamt && investition.anschaffungskosten_gesamt > 0 && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Anschaffungskosten</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {investition.anschaffungskosten_gesamt.toLocaleString('de-DE')} €
+                  </p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Ersparnis/Jahr (hochgerechnet)</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {(z.anzahl_monate && z.anzahl_monate > 0
+                      ? ((z.ersparnis_vs_extern_euro || 0) / z.anzahl_monate * 12).toFixed(0)
+                      : 0
+                    )} €
+                  </p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation (ca.)</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {(() => {
+                      const jahresErsparnis = z.anzahl_monate && z.anzahl_monate > 0
+                        ? ((z.ersparnis_vs_extern_euro || 0) / z.anzahl_monate * 12)
+                        : 0
+                      if (jahresErsparnis <= 0) return '∞'
+                      const jahre = investition.anschaffungskosten_gesamt! / jahresErsparnis
+                      return `${jahre.toFixed(1)} Jahre`
+                    })()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </Card>
   )
 }

@@ -86,15 +86,28 @@ export interface EAutoDashboardResponse {
     gesamt_km: number
     gesamt_verbrauch_kwh: number
     durchschnitt_verbrauch_kwh_100km: number
+    // Ladung aufgeschlüsselt
     gesamt_ladung_kwh: number
+    ladung_heim_kwh: number
     ladung_pv_kwh: number
     ladung_netz_kwh: number
-    pv_anteil_prozent: number
+    ladung_extern_kwh: number
+    ladung_extern_euro: number
+    // PV-Anteile
+    pv_anteil_heim_prozent: number
+    pv_anteil_gesamt_prozent: number
+    // V2H
     v2h_entladung_kwh: number
     v2h_ersparnis_euro: number
+    // Kosten-Vergleich
     benzin_kosten_alternativ_euro: number
-    strom_kosten_euro: number
+    strom_kosten_heim_euro: number
+    strom_kosten_extern_euro: number
+    strom_kosten_gesamt_euro: number
     ersparnis_vs_benzin_euro: number
+    // Wallbox-Ersparnis
+    wallbox_ersparnis_euro: number
+    // Gesamt
     gesamt_ersparnis_euro: number
     co2_ersparnis_kg: number
     anzahl_monate: number
@@ -137,9 +150,22 @@ export interface WallboxDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
   zusammenfassung: {
-    gesamt_ladung_kwh: number
+    // Heimladung (aus E-Auto-Daten)
+    gesamt_heim_ladung_kwh: number
+    ladung_pv_kwh: number
+    ladung_netz_kwh: number
+    pv_anteil_prozent: number
+    // Externe Ladung zum Vergleich
+    extern_ladung_kwh: number
+    extern_kosten_euro: number
+    extern_preis_kwh_euro: number
+    // Kostenvergleich
+    heim_kosten_euro: number
+    heim_als_extern_kosten_euro: number
+    ersparnis_vs_extern_euro: number
+    // Wallbox-Info
+    leistung_kw: number
     gesamt_ladevorgaenge: number
-    durchschnitt_kwh_pro_vorgang: number
     ladevorgaenge_pro_monat: number
     anzahl_monate: number
   }

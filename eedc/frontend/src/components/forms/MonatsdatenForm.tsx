@@ -36,11 +36,13 @@ interface InvestitionMonatsdaten {
   verbrauch_kwh?: number
   ladung_pv_kwh?: number
   ladung_netz_kwh?: number
+  ladung_extern_kwh?: number       // Externe Ladung (Autobahn, Arbeit, etc.)
+  ladung_extern_euro?: number      // Kosten externe Ladung
   entladung_v2h_kwh?: number
   // Speicher
   ladung_kwh?: number
   entladung_kwh?: number
-  // Wallbox
+  // Wallbox - nutzt E-Auto Heim-Ladung (ladung_pv_kwh + ladung_netz_kwh)
   ladevorgaenge?: number
   // Wärmepumpe
   stromverbrauch_kwh?: number
@@ -113,6 +115,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           verbrauch_kwh: '',
           ladung_pv_kwh: '',
           ladung_netz_kwh: '',
+          ladung_extern_kwh: '',
+          ladung_extern_euro: '',
           entladung_v2h_kwh: '',
         }
       } else if (inv.typ === 'speicher') {
@@ -201,6 +205,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (daten.verbrauch_kwh) parsed.verbrauch_kwh = parseFloat(daten.verbrauch_kwh)
           if (daten.ladung_pv_kwh) parsed.ladung_pv_kwh = parseFloat(daten.ladung_pv_kwh)
           if (daten.ladung_netz_kwh) parsed.ladung_netz_kwh = parseFloat(daten.ladung_netz_kwh)
+          if (daten.ladung_extern_kwh) parsed.ladung_extern_kwh = parseFloat(daten.ladung_extern_kwh)
+          if (daten.ladung_extern_euro) parsed.ladung_extern_euro = parseFloat(daten.ladung_extern_euro)
           if (daten.entladung_v2h_kwh) parsed.entladung_v2h_kwh = parseFloat(daten.entladung_v2h_kwh)
         } else if (inv.typ === 'speicher') {
           if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
@@ -368,9 +374,11 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           felder={[
             { key: 'km_gefahren', label: 'km gefahren', unit: 'km', placeholder: 'z.B. 1200' },
-            { key: 'verbrauch_kwh', label: 'Verbrauch', unit: 'kWh', placeholder: 'z.B. 216' },
-            { key: 'ladung_pv_kwh', label: 'Ladung PV', unit: 'kWh', placeholder: 'z.B. 130' },
-            { key: 'ladung_netz_kwh', label: 'Ladung Netz', unit: 'kWh', placeholder: 'z.B. 86' },
+            { key: 'verbrauch_kwh', label: 'Verbrauch gesamt', unit: 'kWh', placeholder: 'z.B. 216' },
+            { key: 'ladung_pv_kwh', label: 'Heim: PV', unit: 'kWh', placeholder: 'z.B. 130', hint: 'Wallbox mit PV-Strom' },
+            { key: 'ladung_netz_kwh', label: 'Heim: Netz', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Wallbox mit Netzstrom' },
+            { key: 'ladung_extern_kwh', label: 'Extern', unit: 'kWh', placeholder: 'z.B. 36', hint: 'Autobahn, Arbeit, etc.' },
+            { key: 'ladung_extern_euro', label: 'Extern Kosten', unit: '€', placeholder: 'z.B. 18.00' },
             { key: 'entladung_v2h_kwh', label: 'V2H Entladung', unit: 'kWh', placeholder: 'z.B. 25' },
           ]}
         />
@@ -474,7 +482,7 @@ interface InvestitionSectionProps {
   investitionen: Investition[]
   investitionsDaten: Record<string, Record<string, string>>
   onInvChange: (invId: number, field: string, value: string) => void
-  felder: { key: string; label: string; unit: string; placeholder: string }[]
+  felder: { key: string; label: string; unit: string; placeholder: string; hint?: string }[]
 }
 
 function InvestitionSection({
@@ -500,7 +508,7 @@ function InvestitionSection({
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
             {inv.bezeichnung}
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {felder.map((feld) => (
               <div key={feld.key}>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
@@ -514,7 +522,13 @@ function InvestitionSection({
                   onChange={(e) => onInvChange(inv.id, feld.key, e.target.value)}
                   placeholder={feld.placeholder}
                   className="input text-sm py-1.5"
+                  title={feld.hint}
                 />
+                {feld.hint && (
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={feld.hint}>
+                    {feld.hint}
+                  </p>
+                )}
               </div>
             ))}
           </div>

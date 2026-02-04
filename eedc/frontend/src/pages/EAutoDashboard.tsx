@@ -111,17 +111,20 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
     verbrauch: md.verbrauch_daten.verbrauch_kwh || 0,
     pv: md.verbrauch_daten.ladung_pv_kwh || 0,
     netz: md.verbrauch_daten.ladung_netz_kwh || 0,
+    extern: md.verbrauch_daten.ladung_extern_kwh || 0,
     v2h: md.verbrauch_daten.v2h_entladung_kwh || 0,
   }))
 
+  // Ladequelle: Heim (PV + Netz) vs Extern
   const ladungPieData = [
-    { name: 'PV-Ladung', value: z.ladung_pv_kwh },
-    { name: 'Netz-Ladung', value: z.ladung_netz_kwh },
-  ]
+    { name: 'Heim: PV', value: z.ladung_pv_kwh || 0 },
+    { name: 'Heim: Netz', value: z.ladung_netz_kwh || 0 },
+    { name: 'Extern', value: z.ladung_extern_kwh || 0 },
+  ].filter(d => d.value > 0)
 
   const kostenVergleichData = [
-    { name: 'E-Auto (Strom)', value: z.strom_kosten_euro, fill: '#22c55e' },
-    { name: 'Verbrenner (Benzin)', value: z.benzin_kosten_alternativ_euro, fill: '#ef4444' },
+    { name: 'E-Auto (Strom)', value: z.strom_kosten_gesamt_euro || 0, fill: '#22c55e' },
+    { name: 'Verbrenner (Benzin)', value: z.benzin_kosten_alternativ_euro || 0, fill: '#ef4444' },
   ]
 
   return (
@@ -143,32 +146,34 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           title="Gefahren"
-          value={z.gesamt_km.toLocaleString('de-DE')}
+          value={z.gesamt_km?.toLocaleString('de-DE') || '0'}
           unit="km"
           icon={Car}
           color="blue"
         />
         <KPICard
           title="Verbrauch"
-          value={z.durchschnitt_verbrauch_kwh_100km.toFixed(1)}
+          value={(z.durchschnitt_verbrauch_kwh_100km || 0).toFixed(1)}
           unit="kWh/100km"
           icon={Zap}
           color="yellow"
         />
         <KPICard
-          title="PV-Anteil"
-          value={z.pv_anteil_prozent.toFixed(0)}
+          title="PV-Anteil (Heim)"
+          value={(z.pv_anteil_heim_prozent || 0).toFixed(0)}
           unit="%"
+          subtitle={`Gesamt: ${(z.pv_anteil_gesamt_prozent || 0).toFixed(0)}%`}
           icon={Leaf}
           color="green"
         />
         <KPICard
-          title="Ersparnis"
-          value={z.gesamt_ersparnis_euro.toFixed(0)}
+          title="Ersparnis vs. Benzin"
+          value={(z.gesamt_ersparnis_euro || 0).toFixed(0)}
           unit="€"
+          subtitle={`+ Wallbox: ${(z.wallbox_ersparnis_euro || 0).toFixed(0)} €`}
           icon={TrendingUp}
           color="green"
-          trend={z.gesamt_ersparnis_euro > 0 ? 'up' : undefined}
+          trend={(z.gesamt_ersparnis_euro || 0) > 0 ? 'up' : undefined}
         />
       </div>
 
@@ -192,22 +197,29 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
                   dataKey="value"
                   label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                 >
-                  <Cell fill="#22c55e" />
-                  <Cell fill="#ef4444" />
+                  <Cell fill="#22c55e" /> {/* PV: grün */}
+                  <Cell fill="#f97316" /> {/* Netz: orange */}
+                  <Cell fill="#ef4444" /> {/* Extern: rot */}
                 </Pie>
                 <Tooltip formatter={(v: number) => `${v.toFixed(1)} kWh`} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex justify-center gap-6 text-sm">
+          <div className="flex justify-center gap-4 text-sm flex-wrap">
             <span className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-green-500"></span>
-              PV: {z.ladung_pv_kwh.toFixed(0)} kWh
+              PV: {(z.ladung_pv_kwh || 0).toFixed(0)} kWh
             </span>
             <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-red-500"></span>
-              Netz: {z.ladung_netz_kwh.toFixed(0)} kWh
+              <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+              Netz: {(z.ladung_netz_kwh || 0).toFixed(0)} kWh
             </span>
+            {(z.ladung_extern_kwh || 0) > 0 && (
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                Extern: {(z.ladung_extern_kwh || 0).toFixed(0)} kWh ({(z.ladung_extern_euro || 0).toFixed(2)} €)
+              </span>
+            )}
           </div>
         </div>
 
@@ -229,7 +241,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           </div>
           <div className="text-center mt-2">
             <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-              Ersparnis: {z.ersparnis_vs_benzin_euro.toFixed(2)} €
+              Ersparnis: {(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €
             </span>
           </div>
         </div>
@@ -268,8 +280,9 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="pv" stackId="a" fill="#22c55e" name="PV" />
-                <Bar dataKey="netz" stackId="a" fill="#ef4444" name="Netz" />
+                <Bar dataKey="pv" stackId="a" fill="#22c55e" name="Heim: PV" />
+                <Bar dataKey="netz" stackId="a" fill="#f97316" name="Heim: Netz" />
+                <Bar dataKey="extern" stackId="a" fill="#ef4444" name="Extern" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -277,7 +290,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
       </div>
 
       {/* V2H Section (wenn aktiv) */}
-      {z.v2h_entladung_kwh > 0 && (
+      {(z.v2h_entladung_kwh || 0) > 0 && (
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2">
             <Battery className="h-5 w-5 text-purple-500" />
@@ -287,19 +300,19 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
             <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
               <p className="text-sm text-purple-600 dark:text-purple-400">V2H Entladung</p>
               <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                {z.v2h_entladung_kwh.toFixed(1)} kWh
+                {(z.v2h_entladung_kwh || 0).toFixed(1)} kWh
               </p>
             </div>
             <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
               <p className="text-sm text-purple-600 dark:text-purple-400">V2H Ersparnis</p>
               <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                {z.v2h_ersparnis_euro.toFixed(2)} €
+                {(z.v2h_ersparnis_euro || 0).toFixed(2)} €
               </p>
             </div>
             <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
               <p className="text-sm text-green-600 dark:text-green-400">CO₂ Ersparnis</p>
               <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                {z.co2_ersparnis_kg.toFixed(0)} kg
+                {(z.co2_ersparnis_kg || 0).toFixed(0)} kg
               </p>
             </div>
           </div>

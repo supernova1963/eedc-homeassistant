@@ -676,6 +676,8 @@ async def get_eauto_dashboard(
         gesamt_verbrauch = 0
         gesamt_pv_ladung = 0
         gesamt_netz_ladung = 0
+        gesamt_extern_ladung = 0
+        gesamt_extern_kosten = 0
         gesamt_v2h = 0
 
         for md in monatsdaten:
@@ -684,21 +686,43 @@ async def get_eauto_dashboard(
             gesamt_verbrauch += d.get('verbrauch_kwh', 0)
             gesamt_pv_ladung += d.get('ladung_pv_kwh', 0)
             gesamt_netz_ladung += d.get('ladung_netz_kwh', 0)
+            gesamt_extern_ladung += d.get('ladung_extern_kwh', 0)
+            gesamt_extern_kosten += d.get('ladung_extern_euro', 0)
             gesamt_v2h += d.get('v2h_entladung_kwh', 0)
 
-        gesamt_ladung = gesamt_pv_ladung + gesamt_netz_ladung
-        pv_anteil = (gesamt_pv_ladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
+        # Heim-Ladung (Wallbox) = PV + Netz
+        gesamt_heim_ladung = gesamt_pv_ladung + gesamt_netz_ladung
+        # Gesamt-Ladung = Heim + Extern
+        gesamt_ladung = gesamt_heim_ladung + gesamt_extern_ladung
+        # PV-Anteil nur auf Heim-Ladung bezogen
+        pv_anteil_heim = (gesamt_pv_ladung / gesamt_heim_ladung * 100) if gesamt_heim_ladung > 0 else 0
+        # PV-Anteil auf Gesamt-Ladung
+        pv_anteil_gesamt = (gesamt_pv_ladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
 
-        # Vergleich mit Verbrenner
+        # Kosten-Berechnung
         params = eauto.parameter or {}
         benzin_verbrauch_100km = params.get('vergleich_verbrauch_l_100km', 7.5)
-        benzin_kosten = (gesamt_km / 100) * benzin_verbrauch_100km * benzinpreis_euro
-        strom_kosten = (gesamt_pv_ladung * 0 + gesamt_netz_ladung * strompreis_cent / 100)  # PV ist "kostenlos"
-        ersparnis = benzin_kosten - strom_kosten
 
-        # V2H Ersparnis
+        # Benzin-Kosten (Alternativ-Szenario)
+        benzin_kosten = (gesamt_km / 100) * benzin_verbrauch_100km * benzinpreis_euro
+
+        # E-Auto Kosten: PV = kostenlos, Netz = Strompreis, Extern = tatsächliche Kosten
+        heim_netz_kosten = gesamt_netz_ladung * strompreis_cent / 100
+        strom_kosten_gesamt = heim_netz_kosten + gesamt_extern_kosten
+
+        # Ersparnis vs. Verbrenner
+        ersparnis_vs_benzin = benzin_kosten - strom_kosten_gesamt
+
+        # V2H Ersparnis (Rückspeisung ins Haus)
         v2h_preis = params.get('v2h_entlade_preis_cent', strompreis_cent)
         v2h_ersparnis = gesamt_v2h * v2h_preis / 100
+
+        # Wallbox-Ersparnis: Was hätte externe Ladung gekostet?
+        # Durchschnittlicher externer Preis (wenn vorhanden) oder Annahme 50 ct/kWh
+        extern_preis_kwh = (gesamt_extern_kosten / gesamt_extern_ladung) if gesamt_extern_ladung > 0 else 0.50
+        heim_ladung_als_extern = gesamt_heim_ladung * extern_preis_kwh
+        heim_kosten_tatsaechlich = heim_netz_kosten  # PV ist kostenlos
+        wallbox_ersparnis = heim_ladung_als_extern - heim_kosten_tatsaechlich
 
         # CO2 Ersparnis (Benzin: ca. 2.37 kg CO2 pro Liter)
         benzin_co2 = (gesamt_km / 100) * benzin_verbrauch_100km * 2.37
@@ -709,16 +733,29 @@ async def get_eauto_dashboard(
             'gesamt_km': round(gesamt_km, 0),
             'gesamt_verbrauch_kwh': round(gesamt_verbrauch, 1),
             'durchschnitt_verbrauch_kwh_100km': round(gesamt_verbrauch / gesamt_km * 100, 1) if gesamt_km > 0 else 0,
+            # Ladung aufgeschlüsselt
             'gesamt_ladung_kwh': round(gesamt_ladung, 1),
+            'ladung_heim_kwh': round(gesamt_heim_ladung, 1),
             'ladung_pv_kwh': round(gesamt_pv_ladung, 1),
             'ladung_netz_kwh': round(gesamt_netz_ladung, 1),
-            'pv_anteil_prozent': round(pv_anteil, 1),
+            'ladung_extern_kwh': round(gesamt_extern_ladung, 1),
+            'ladung_extern_euro': round(gesamt_extern_kosten, 2),
+            # PV-Anteile
+            'pv_anteil_heim_prozent': round(pv_anteil_heim, 1),
+            'pv_anteil_gesamt_prozent': round(pv_anteil_gesamt, 1),
+            # V2H
             'v2h_entladung_kwh': round(gesamt_v2h, 1),
             'v2h_ersparnis_euro': round(v2h_ersparnis, 2),
+            # Kosten-Vergleich
             'benzin_kosten_alternativ_euro': round(benzin_kosten, 2),
-            'strom_kosten_euro': round(strom_kosten, 2),
-            'ersparnis_vs_benzin_euro': round(ersparnis, 2),
-            'gesamt_ersparnis_euro': round(ersparnis + v2h_ersparnis, 2),
+            'strom_kosten_heim_euro': round(heim_netz_kosten, 2),
+            'strom_kosten_extern_euro': round(gesamt_extern_kosten, 2),
+            'strom_kosten_gesamt_euro': round(strom_kosten_gesamt, 2),
+            'ersparnis_vs_benzin_euro': round(ersparnis_vs_benzin, 2),
+            # Wallbox-Ersparnis (durch Heimladen statt extern)
+            'wallbox_ersparnis_euro': round(wallbox_ersparnis, 2),
+            # Gesamt-Ersparnis
+            'gesamt_ersparnis_euro': round(ersparnis_vs_benzin + v2h_ersparnis, 2),
             'co2_ersparnis_kg': round(co2_ersparnis, 1),
             'anzahl_monate': len(monatsdaten),
         }
@@ -888,12 +925,14 @@ async def get_speicher_dashboard(
 @router.get("/dashboard/wallbox/{anlage_id}", response_model=list[WallboxDashboardResponse])
 async def get_wallbox_dashboard(
     anlage_id: int,
+    strompreis_cent: float = Query(30.0),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Wallbox Dashboard für eine Anlage.
 
-    Zeigt alle Wallboxen mit Ladevorgängen, Gesamtladung.
+    Zeigt Wallboxen mit Heimladung (aus E-Auto-Daten) und Ersparnis vs. externe Ladung.
+    Die Wallbox-Daten kommen primär aus den E-Auto-Monatsdaten (ladung_pv_kwh + ladung_netz_kwh).
     """
     inv_result = await db.execute(
         select(Investition)
@@ -906,8 +945,57 @@ async def get_wallbox_dashboard(
     if not wallboxen:
         return []
 
+    # E-Auto Monatsdaten für die Anlage laden (für Heimladung-Berechnung)
+    eauto_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.E_AUTO.value)
+        .where(Investition.aktiv == True)
+    )
+    eautos = eauto_result.scalars().all()
+
+    # Aggregiere E-Auto-Heimladung über alle E-Autos
+    gesamt_heim_pv = 0
+    gesamt_heim_netz = 0
+    gesamt_extern_kwh = 0
+    gesamt_extern_euro = 0
+    gesamt_ladevorgaenge = 0
+    monate_set = set()
+
+    for eauto in eautos:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == eauto.id)
+        )
+        for md in md_result.scalars().all():
+            d = md.verbrauch_daten or {}
+            gesamt_heim_pv += d.get('ladung_pv_kwh', 0)
+            gesamt_heim_netz += d.get('ladung_netz_kwh', 0)
+            gesamt_extern_kwh += d.get('ladung_extern_kwh', 0)
+            gesamt_extern_euro += d.get('ladung_extern_euro', 0)
+            gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
+            monate_set.add((md.jahr, md.monat))
+
+    gesamt_heim_ladung = gesamt_heim_pv + gesamt_heim_netz
+    anzahl_monate = len(monate_set)
+
+    # PV-Anteil der Heimladung
+    pv_anteil = (gesamt_heim_pv / gesamt_heim_ladung * 100) if gesamt_heim_ladung > 0 else 0
+
+    # Kosten Heimladung (nur Netzstrom, PV ist "kostenlos")
+    heim_kosten = gesamt_heim_netz * strompreis_cent / 100
+
+    # Was hätte externe Ladung gekostet?
+    # Durchschnittspreis extern (wenn vorhanden) oder Annahme 50 ct/kWh
+    extern_preis_kwh = (gesamt_extern_euro / gesamt_extern_kwh) if gesamt_extern_kwh > 0 else 0.50
+    heim_als_extern_kosten = gesamt_heim_ladung * extern_preis_kwh
+
+    # Ersparnis durch Heimladen (Wallbox-ROI)
+    ersparnis_vs_extern = heim_als_extern_kosten - heim_kosten
+
     dashboards = []
     for wallbox in wallboxen:
+        # Wallbox-eigene Monatsdaten (falls vorhanden)
         md_result = await db.execute(
             select(InvestitionMonatsdaten)
             .where(InvestitionMonatsdaten.investition_id == wallbox.id)
@@ -915,22 +1003,28 @@ async def get_wallbox_dashboard(
         )
         monatsdaten = md_result.scalars().all()
 
-        gesamt_ladung = 0
-        gesamt_vorgaenge = 0
-
-        for md in monatsdaten:
-            d = md.verbrauch_daten or {}
-            gesamt_ladung += d.get('ladung_kwh', 0)
-            gesamt_vorgaenge += d.get('ladevorgaenge', 0)
-
-        durchschnitt_pro_vorgang = gesamt_ladung / gesamt_vorgaenge if gesamt_vorgaenge > 0 else 0
+        params = wallbox.parameter or {}
+        leistung_kw = params.get('leistung_kw', 11)
 
         zusammenfassung = {
-            'gesamt_ladung_kwh': round(gesamt_ladung, 1),
-            'gesamt_ladevorgaenge': gesamt_vorgaenge,
-            'durchschnitt_kwh_pro_vorgang': round(durchschnitt_pro_vorgang, 1),
-            'ladevorgaenge_pro_monat': round(gesamt_vorgaenge / len(monatsdaten), 1) if monatsdaten else 0,
-            'anzahl_monate': len(monatsdaten),
+            # Heimladung (aus E-Auto-Daten)
+            'gesamt_heim_ladung_kwh': round(gesamt_heim_ladung, 1),
+            'ladung_pv_kwh': round(gesamt_heim_pv, 1),
+            'ladung_netz_kwh': round(gesamt_heim_netz, 1),
+            'pv_anteil_prozent': round(pv_anteil, 1),
+            # Externe Ladung zum Vergleich
+            'extern_ladung_kwh': round(gesamt_extern_kwh, 1),
+            'extern_kosten_euro': round(gesamt_extern_euro, 2),
+            'extern_preis_kwh_euro': round(extern_preis_kwh, 2),
+            # Kostenvergleich
+            'heim_kosten_euro': round(heim_kosten, 2),
+            'heim_als_extern_kosten_euro': round(heim_als_extern_kosten, 2),
+            'ersparnis_vs_extern_euro': round(ersparnis_vs_extern, 2),
+            # Wallbox-Info
+            'leistung_kw': leistung_kw,
+            'gesamt_ladevorgaenge': gesamt_ladevorgaenge,
+            'ladevorgaenge_pro_monat': round(gesamt_ladevorgaenge / anzahl_monate, 1) if anzahl_monate > 0 else 0,
+            'anzahl_monate': anzahl_monate,
         }
 
         dashboards.append(WallboxDashboardResponse(
