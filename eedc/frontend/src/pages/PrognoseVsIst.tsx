@@ -6,11 +6,11 @@
  */
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select } from '../components/ui'
+import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download } from 'lucide-react'
+import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
-import type { AktivePrognoseResponse } from '../api/pvgis'
+// AktivePrognoseResponse wird intern von pvgisApi verwendet
 import type { MonatsdatenMitKennzahlen } from '../api/monatsdaten'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -18,6 +18,13 @@ import {
 } from 'recharts'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+
+// Gemeinsamer Typ für Prognose-Daten (gespeichert oder live)
+interface PrognoseData {
+  jahresertrag_kwh: number
+  monatswerte: Array<{ monat: number; e_m: number }>
+  isLive?: boolean
+}
 
 interface VergleichsDaten {
   monat: number
@@ -32,9 +39,10 @@ export default function PrognoseVsIst() {
   const { anlagen, loading: anlagenLoading } = useAnlagen()
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
   const [selectedJahr, setSelectedJahr] = useState<number>(new Date().getFullYear())
-  const [prognose, setPrognose] = useState<AktivePrognoseResponse | null>(null)
+  const [prognose, setPrognose] = useState<PrognoseData | null>(null)
   const [monatsdaten, setMonatsdaten] = useState<MonatsdatenMitKennzahlen[]>([])
   const [loading, setLoading] = useState(false)
+  const [savingPrognose, setSavingPrognose] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Erste Anlage automatisch auswählen
@@ -58,12 +66,40 @@ export default function PrognoseVsIst() {
     setError(null)
 
     try {
-      const [prognoseData, monatsdatenData] = await Promise.all([
-        pvgisApi.getAktivePrognose(selectedAnlageId),
-        monatsdatenApi.list(selectedAnlageId)
-      ])
-      setPrognose(prognoseData)
+      // Zuerst Monatsdaten laden
+      const monatsdatenData = await monatsdatenApi.list(selectedAnlageId)
       setMonatsdaten(monatsdatenData as MonatsdatenMitKennzahlen[])
+
+      // Versuche gespeicherte Prognose zu laden
+      const gespeichertePrognose = await pvgisApi.getAktivePrognose(selectedAnlageId)
+
+      if (gespeichertePrognose) {
+        // Gespeicherte Prognose verwenden
+        setPrognose({
+          jahresertrag_kwh: gespeichertePrognose.jahresertrag_kwh,
+          monatswerte: gespeichertePrognose.monatswerte,
+          isLive: false
+        })
+      } else {
+        // Keine gespeicherte Prognose -> Live-Prognose abrufen
+        try {
+          const livePrognose = await pvgisApi.getPrognose(selectedAnlageId)
+          setPrognose({
+            jahresertrag_kwh: livePrognose.jahresertrag_kwh,
+            monatswerte: livePrognose.monatsdaten.map(m => ({
+              monat: m.monat,
+              e_m: m.e_m
+            })),
+            isLive: true
+          })
+        } catch (pvgisError) {
+          // PVGIS-Abruf fehlgeschlagen (z.B. keine PV-Module definiert)
+          setPrognose(null)
+          if (pvgisError instanceof Error && pvgisError.message.includes('PV-Module')) {
+            setError('Keine PV-Module für diese Anlage definiert. Bitte unter Einstellungen → Investitionen anlegen.')
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -71,8 +107,31 @@ export default function PrognoseVsIst() {
     }
   }
 
+  // Prognose speichern
+  const handleSavePrognose = async () => {
+    if (!selectedAnlageId) return
+
+    setSavingPrognose(true)
+    try {
+      await pvgisApi.speicherePrognose(selectedAnlageId)
+      // Neu laden um gespeicherte Prognose zu verwenden
+      await loadData()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
+    } finally {
+      setSavingPrognose(false)
+    }
+  }
+
   // Verfügbare Jahre aus Monatsdaten extrahieren
   const verfuegbareJahre = [...new Set(monatsdaten.map(m => m.jahr))].sort((a, b) => b - a)
+
+  // Jahr automatisch auf das neueste mit Daten setzen
+  useEffect(() => {
+    if (verfuegbareJahre.length > 0 && !verfuegbareJahre.includes(selectedJahr)) {
+      setSelectedJahr(verfuegbareJahre[0])
+    }
+  }, [verfuegbareJahre, selectedJahr])
 
   // Vergleichsdaten berechnen
   const vergleichsDaten: VergleichsDaten[] = []
@@ -165,9 +224,9 @@ export default function PrognoseVsIst() {
         <Card>
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <Sun className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Keine PVGIS Prognose für diese Anlage gespeichert.</p>
+            <p>Keine PVGIS Prognose verfügbar.</p>
             <p className="text-sm mt-2">
-              Rufe zuerst eine PVGIS Prognose unter "Einstellungen → PVGIS" ab.
+              Bitte definiere PV-Module unter "Einstellungen → Investitionen".
             </p>
           </div>
         </Card>
@@ -183,6 +242,23 @@ export default function PrognoseVsIst() {
         </Card>
       ) : (
         <>
+          {/* Hinweis bei Live-Prognose */}
+          {prognose.isLive && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-between gap-4">
+              <div className="text-blue-700 dark:text-blue-300">
+                <strong>Live-Prognose:</strong> Diese Prognose wurde gerade von PVGIS abgerufen und ist noch nicht gespeichert.
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSavePrognose}
+                disabled={savingPrognose}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                {savingPrognose ? 'Speichern...' : 'Speichern'}
+              </Button>
+            </div>
+          )}
+
           {/* Jahresübersicht KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4">
