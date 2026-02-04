@@ -22,7 +22,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 |-------|--------|-------------|
 | Phase 0: Setup | ✅ | 6/6 |
 | Phase 1: MVP | ✅ | 19/19 |
-| Phase 2: Erweitert | 🔄 | 11/16 |
+| Phase 2: Erweitert | 🔄 | 12/16 |
 
 **Was funktioniert (getestet in Home Assistant):**
 - ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
@@ -34,6 +34,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - ✅ **Prognose vs. IST** Vergleich
 - ✅ **PV-Module als Investitionen** (Multi-Dach-Unterstützung)
 - ✅ **HA Energy Import** (aktuelle Monate aus HA History)
+- ✅ **HA Auto-Discovery** (SMA, evcc, Smart, Wallbox erkennen)
 - ✅ Settings mit echten DB-Stats und Sensor-Mapping
 - ✅ Dark Mode
 - ✅ Docker-Build

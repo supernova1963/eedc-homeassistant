@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Plus, Edit, Trash2, Sun, MapPin } from 'lucide-react'
+import { Plus, Edit, Trash2, Sun, MapPin, Search } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import AnlageForm from '../components/forms/AnlageForm'
+import { DiscoveryDialog } from '../components/discovery'
 import { useAnlagen } from '../hooks'
 import type { Anlage, AnlageCreate } from '../types'
 
@@ -11,10 +12,13 @@ export default function Anlagen() {
   const [showForm, setShowForm] = useState(false)
   const [editingAnlage, setEditingAnlage] = useState<Anlage | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Anlage | null>(null)
+  const [discoveryAnlageId, setDiscoveryAnlageId] = useState<number | null>(null)
 
   const handleCreate = async (data: AnlageCreate) => {
-    await createAnlage(data)
+    const newAnlage = await createAnlage(data)
     setShowForm(false)
+    // Nach erfolgreicher Erstellung Discovery-Dialog anbieten
+    setDiscoveryAnlageId(newAnlage.id)
   }
 
   const handleUpdate = async (data: AnlageCreate) => {
@@ -112,6 +116,14 @@ export default function Anlagen() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setDiscoveryAnlageId(anlage.id)}
+                        title="HA-Geräte erkennen"
+                      >
+                        <Search className="h-4 w-4 text-amber-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setEditingAnlage(anlage)}
                       >
                         <Edit className="h-4 w-4" />
@@ -185,6 +197,15 @@ export default function Anlagen() {
           </div>
         </div>
       </Modal>
+
+      {/* Discovery Dialog */}
+      {discoveryAnlageId && (
+        <DiscoveryDialog
+          isOpen={true}
+          onClose={() => setDiscoveryAnlageId(null)}
+          anlageId={discoveryAnlageId}
+        />
+      )}
     </div>
   )
 }

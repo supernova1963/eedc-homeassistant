@@ -126,3 +126,20 @@ export interface HASensorMapping {
   batterie_ladung?: string
   batterie_entladung?: string
 }
+
+// Investition Create/Update
+export interface InvestitionCreate {
+  anlage_id: number
+  typ: InvestitionTyp
+  bezeichnung: string
+  hersteller?: string
+  kaufdatum?: string
+  kaufpreis?: number
+  aktiv?: boolean
+  // PV-Module spezifische Felder
+  leistung_kwp?: number
+  ausrichtung?: string
+  neigung_grad?: number
+  // E-Auto
+  batterie_kwh?: number
+}

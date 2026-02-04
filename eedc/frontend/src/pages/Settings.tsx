@@ -1,26 +1,38 @@
 import { useState, useEffect } from 'react'
-import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info } from 'lucide-react'
+import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info, Search } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
-import { systemApi, haApi, type StatsResponse, type SettingsResponse, type HASensor } from '../api'
+import { systemApi, haApi, anlagenApi, type StatsResponse, type SettingsResponse, type HASensor } from '../api'
+import { DiscoveryDialog } from '../components/discovery'
+import type { Anlage } from '../types'
 
 export default function Settings() {
   const { theme, setTheme } = useTheme()
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
   const [haSensors, setHaSensors] = useState<HASensor[]>([])
+  const [anlagen, setAnlagen] = useState<Anlage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showDiscovery, setShowDiscovery] = useState(false)
+  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
 
   const loadData = async () => {
     try {
       setLoading(true)
       setError(null)
-      const [statsData, settingsData] = await Promise.all([
+      const [statsData, settingsData, anlagenData] = await Promise.all([
         systemApi.getStats(),
         systemApi.getSettings(),
+        anlagenApi.list(),
       ])
       setStats(statsData)
       setSettings(settingsData)
+      setAnlagen(anlagenData)
+
+      // Erste Anlage als Standard auswählen
+      if (anlagenData.length > 0 && !selectedAnlageId) {
+        setSelectedAnlageId(anlagenData[0].id)
+      }
 
       // Lade verfügbare HA-Sensoren wenn verbunden
       if (settingsData.ha_integration_enabled) {
@@ -180,6 +192,45 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Discovery Button */}
+        {settings?.ha_integration_enabled && anlagen.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Auto-Discovery
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Durchsuche Home Assistant nach Geräten (SMA, evcc, Smart, Wallbox) und erstelle Investitionen.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {anlagen.length > 1 && (
+                  <select
+                    value={selectedAnlageId || ''}
+                    onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
+                    className="text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    {anlagen.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.anlagenname}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  onClick={() => setShowDiscovery(true)}
+                  disabled={!selectedAnlageId}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Search className="w-4 h-4" />
+                  Geräte erkennen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {haSensors.length > 0 && (
           <details className="mt-4">
             <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-primary-600">
@@ -281,6 +332,16 @@ export default function Settings() {
           </a>
         </div>
       </div>
+
+      {/* Discovery Dialog */}
+      {showDiscovery && selectedAnlageId && (
+        <DiscoveryDialog
+          isOpen={true}
+          onClose={() => setShowDiscovery(false)}
+          anlageId={selectedAnlageId}
+          onInvestitionenCreated={loadData}
+        />
+      )}
     </div>
   )
 }

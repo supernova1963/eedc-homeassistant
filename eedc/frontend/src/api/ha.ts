@@ -74,6 +74,60 @@ export interface HAMonthlyDataResponse {
   hinweis: string | null
 }
 
+// =============================================================================
+// Discovery Types
+// =============================================================================
+
+export interface DiscoveredSensor {
+  entity_id: string
+  friendly_name: string | null
+  unit_of_measurement: string | null
+  device_class: string | null
+  state_class: string | null
+  current_state: string | null
+  suggested_mapping: string | null  // pv_erzeugung, einspeisung, etc.
+  confidence: number
+}
+
+export interface DiscoveredDevice {
+  id: string
+  integration: string              // sma, evcc, smart, wallbox
+  device_type: string              // inverter, ev, wallbox, battery
+  suggested_investition_typ: string | null  // e-auto, wallbox, speicher
+  name: string
+  manufacturer: string | null
+  model: string | null
+  sensors: DiscoveredSensor[]
+  suggested_parameters: Record<string, unknown>
+  confidence: number
+  priority: number
+  already_configured: boolean
+}
+
+export interface SensorMappingSuggestions {
+  pv_erzeugung: DiscoveredSensor[]
+  einspeisung: DiscoveredSensor[]
+  netzbezug: DiscoveredSensor[]
+  batterie_ladung: DiscoveredSensor[]
+  batterie_entladung: DiscoveredSensor[]
+}
+
+export interface HASensorMapping {
+  pv_erzeugung: string | null
+  einspeisung: string | null
+  netzbezug: string | null
+  batterie_ladung: string | null
+  batterie_entladung: string | null
+}
+
+export interface DiscoveryResult {
+  ha_connected: boolean
+  devices: DiscoveredDevice[]
+  sensor_mappings: SensorMappingSuggestions
+  warnings: string[]
+  current_mappings: HASensorMapping
+}
+
 export const haApi = {
   /**
    * HA-Verbindungsstatus prüfen
@@ -161,5 +215,21 @@ export const haApi = {
       end_jahr: endJahr,
       end_monat: endMonat
     })
+  },
+
+  /**
+   * Auto-Discovery: Durchsucht Home Assistant nach Geräten und Sensoren
+   *
+   * Erkennt automatisch:
+   * - SMA Wechselrichter (Sensor-Mappings für PV, Grid, Batterie)
+   * - evcc Loadpoints (Wallbox) und Vehicles (E-Auto)
+   * - Smart E-Auto Integration
+   * - Wallbox Integration
+   *
+   * evcc hat Priorität für E-Auto und Wallbox Daten.
+   */
+  async discover(anlageId?: number): Promise<DiscoveryResult> {
+    const params = anlageId ? `?anlage_id=${anlageId}` : ''
+    return api.get<DiscoveryResult>(`/ha/discover${params}`)
   },
 }

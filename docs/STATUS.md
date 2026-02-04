@@ -68,6 +68,37 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 **Dateien:**
 - `frontend/src/pages/Monatsdaten.tsx`
 
+### Feature: HA Auto-Discovery
+**Status:** ✅ Implementiert
+
+Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
+
+**Funktionen:**
+- Erkennt SMA Wechselrichter (Sensor-Mappings für PV, Grid, Batterie)
+- Erkennt evcc Loadpoints (Wallbox) und Vehicles (E-Auto) - höchste Priorität
+- Erkennt Smart E-Auto Integration
+- Erkennt Wallbox Integration
+- Vorschläge für Sensor-Mappings (Monatsdaten-Import)
+- Vorschläge für Investitionen mit vorausgefüllten Parametern
+- Duplikat-Erkennung (bereits konfigurierte Geräte markiert)
+- evcc hat Priorität über native Wallbox/Smart Integrationen
+
+**Aufruf:**
+- Nach Anlage-Erstellung: Discovery-Dialog erscheint automatisch
+- Auf Anlagen-Seite: Such-Button (Lupe) neben jeder Anlage
+- In Settings: "Geräte erkennen" Button im HA-Bereich
+
+**API:**
+- `GET /api/ha/discover?anlage_id={id}` - Discovery-Endpoint
+
+**Dateien:**
+- `backend/api/routes/ha_integration.py` (Discovery-Schemas und Endpoint)
+- `frontend/src/api/ha.ts` (Discovery Types und API)
+- `frontend/src/hooks/useDiscovery.ts` (Discovery Hook)
+- `frontend/src/components/discovery/` (Dialog-Komponenten)
+- `frontend/src/pages/Anlagen.tsx` (Integration)
+- `frontend/src/pages/Settings.tsx` (Integration)
+
 ---
 
 ## Bekannte Einschränkungen
@@ -125,6 +156,7 @@ ff768e5 fix(ha): Revert to working History API implementation
 
 ### Phase 2 - Offen:
 - [ ] 2.1 HA Energy - Long-Term Statistics (WebSocket debuggen oder Alternative)
+- [x] 2.17 HA Auto-Discovery ✅
 - [ ] 2.4 Dashboard: E-Auto
 - [ ] 2.5 Dashboard: Wärmepumpe
 - [ ] 2.6 Dashboard: Speicher

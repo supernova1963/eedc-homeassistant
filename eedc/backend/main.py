@@ -109,7 +109,7 @@ async def get_settings():
         dict: Öffentliche Konfiguration
     """
     return {
-        "version": "0.5.0",
+        "version": "0.6.0",
         "database_path": str(settings.database_path),
         "ha_integration_enabled": bool(settings.supervisor_token),
         "ha_sensors_configured": {

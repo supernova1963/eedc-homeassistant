@@ -8,6 +8,7 @@ Erweitert um String-basierte IST-Erfassung für PV-Module.
 from typing import Optional
 from datetime import datetime, date
 from calendar import monthrange
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,6 +99,56 @@ class StringImportRequest(BaseModel):
     investition_id: int
     jahr: int
     monat: Optional[int] = None  # None = ganzes Jahr
+
+
+# =============================================================================
+# Discovery Schemas
+# =============================================================================
+
+class DiscoveredSensor(BaseModel):
+    """Ein entdeckter HA-Sensor mit Mapping-Vorschlag."""
+    entity_id: str
+    friendly_name: Optional[str] = None
+    unit_of_measurement: Optional[str] = None
+    device_class: Optional[str] = None
+    state_class: Optional[str] = None
+    current_state: Optional[str] = None
+    suggested_mapping: Optional[str] = None  # pv_erzeugung, einspeisung, etc.
+    confidence: int = 0  # 0-100
+
+
+class DiscoveredDevice(BaseModel):
+    """Ein entdecktes HA-Gerät mit Investitions-Vorschlag."""
+    id: str                           # z.B. "evcc_loadpoint_1"
+    integration: str                  # sma, evcc, smart, wallbox
+    device_type: str                  # inverter, ev, wallbox, battery
+    suggested_investition_typ: Optional[str] = None  # e-auto, wallbox, speicher, etc.
+    name: str
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    sensors: list[DiscoveredSensor] = []
+    suggested_parameters: dict = {}   # Vorgeschlagene Parameter für Investition
+    confidence: int = 0               # 0-100
+    priority: int = 0                 # Höher = bevorzugt (evcc > wallbox)
+    already_configured: bool = False  # Bereits als Investition vorhanden
+
+
+class SensorMappingSuggestions(BaseModel):
+    """Sensor-Mapping Vorschläge für alle 5 Felder."""
+    pv_erzeugung: list[DiscoveredSensor] = []
+    einspeisung: list[DiscoveredSensor] = []
+    netzbezug: list[DiscoveredSensor] = []
+    batterie_ladung: list[DiscoveredSensor] = []
+    batterie_entladung: list[DiscoveredSensor] = []
+
+
+class DiscoveryResult(BaseModel):
+    """Gesamtergebnis der Auto-Discovery."""
+    ha_connected: bool
+    devices: list[DiscoveredDevice] = []
+    sensor_mappings: SensorMappingSuggestions = SensorMappingSuggestions()
+    warnings: list[str] = []
+    current_mappings: HASensorMapping = HASensorMapping()
 
 
 class MonthlyStatistic(BaseModel):
@@ -952,6 +1003,455 @@ async def delete_string_monatsdaten(
 
     await db.delete(entry)
     return {"message": "Gelöscht", "id": id}
+
+
+# =============================================================================
+# Auto-Discovery Endpoint
+# =============================================================================
+
+# Integration-spezifische Erkennungsmuster
+INTEGRATION_PATTERNS = {
+    "sma": {
+        "prefix": "sensor.sma_",
+        "device_type": "inverter",
+        "pv_erzeugung": ["pv_gen", "total_yield", "solar_yield", "pv_power"],
+        "einspeisung": ["grid_export", "feed_in", "power_supplied", "metering_total_yield"],
+        "netzbezug": ["grid_import", "power_absorbed", "metering_total_absorbed"],
+        "batterie_ladung": ["battery_charge", "bat_charge"],
+        "batterie_entladung": ["battery_discharge", "bat_discharge"],
+    },
+    "evcc": {
+        "prefix": "sensor.evcc_",
+        "device_types": {
+            "loadpoint": "wallbox",
+            "vehicle": "ev",
+            "site": "site",
+        },
+        "pv_erzeugung": ["site_pv_power", "pv_power"],
+        "einspeisung": ["grid_export"],
+        "netzbezug": ["grid_power", "grid_import"],
+    },
+    "smart": {
+        "prefix": "sensor.smart_",
+        "device_type": "ev",
+        "ev_indicators": ["battery_level", "range", "charging", "soc", "odometer"],
+    },
+    "wallbox": {
+        "prefix": "sensor.wallbox_",
+        "device_type": "wallbox",
+        "wallbox_indicators": ["charging_power", "charged_energy", "charging_status"],
+    },
+}
+
+
+def _classify_sensor(entity_id: str, attrs: dict) -> tuple[str, str, int]:
+    """
+    Klassifiziert einen Sensor nach Integration und Mapping-Typ.
+
+    Returns:
+        tuple: (integration, suggested_mapping, confidence)
+    """
+    entity_lower = entity_id.lower()
+    friendly_name = (attrs.get("friendly_name") or "").lower()
+    device_class = attrs.get("device_class", "")
+    state_class = attrs.get("state_class", "")
+    unit = attrs.get("unit_of_measurement", "")
+
+    # SMA Sensoren
+    if entity_lower.startswith("sensor.sma_"):
+        patterns = INTEGRATION_PATTERNS["sma"]
+        for mapping_type in ["pv_erzeugung", "einspeisung", "netzbezug", "batterie_ladung", "batterie_entladung"]:
+            keywords = patterns.get(mapping_type, [])
+            for kw in keywords:
+                if kw in entity_lower or kw in friendly_name:
+                    # Höhere Confidence für state_class: total_increasing
+                    conf = 90 if state_class == "total_increasing" else 70
+                    return ("sma", mapping_type, conf)
+        return ("sma", None, 50)
+
+    # evcc Sensoren
+    if entity_lower.startswith("sensor.evcc_"):
+        patterns = INTEGRATION_PATTERNS["evcc"]
+        for mapping_type in ["pv_erzeugung", "einspeisung", "netzbezug"]:
+            keywords = patterns.get(mapping_type, [])
+            for kw in keywords:
+                if kw in entity_lower or kw in friendly_name:
+                    conf = 85 if state_class == "total_increasing" else 65
+                    return ("evcc", mapping_type, conf)
+        return ("evcc", None, 50)
+
+    # Smart Sensoren (E-Auto)
+    if entity_lower.startswith("sensor.smart_"):
+        return ("smart", None, 50)
+
+    # Wallbox Sensoren
+    if entity_lower.startswith("sensor.wallbox_"):
+        return ("wallbox", None, 50)
+
+    # Generische Energy-Sensoren
+    if device_class == "energy" and unit in ["kWh", "Wh"]:
+        # Versuche aus Namen zu erkennen
+        if any(kw in entity_lower or kw in friendly_name for kw in ["pv", "solar", "erzeugung"]):
+            return ("generic", "pv_erzeugung", 60)
+        if any(kw in entity_lower or kw in friendly_name for kw in ["export", "einspeisung", "feed"]):
+            return ("generic", "einspeisung", 60)
+        if any(kw in entity_lower or kw in friendly_name for kw in ["import", "netzbezug", "grid"]):
+            return ("generic", "netzbezug", 60)
+
+    return ("unknown", None, 0)
+
+
+def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]:
+    """
+    Extrahiert Geräte aus der Sensor-Liste und gruppiert sie.
+    """
+    devices: dict[str, DiscoveredDevice] = {}
+
+    for sensor in sensors:
+        entity_id = sensor["entity_id"]
+        attrs = sensor.get("attributes", {})
+        entity_lower = entity_id.lower()
+
+        # evcc Loadpoints (Wallbox) - HÖCHSTE Priorität
+        if entity_lower.startswith("sensor.evcc_") and "loadpoint" in entity_lower:
+            # Extrahiere Loadpoint-Nummer
+            match = re.search(r'loadpoint[_]?(\d+)?', entity_lower)
+            lp_num = match.group(1) if match and match.group(1) else "1"
+            device_id = f"evcc_loadpoint_{lp_num}"
+
+            if device_id not in devices:
+                devices[device_id] = DiscoveredDevice(
+                    id=device_id,
+                    integration="evcc",
+                    device_type="wallbox",
+                    suggested_investition_typ="wallbox",
+                    name=f"evcc Wallbox {lp_num}",
+                    manufacturer="evcc",
+                    sensors=[],
+                    suggested_parameters={
+                        "bezeichnung": f"Wallbox (evcc LP{lp_num})",
+                        "hersteller": "evcc managed",
+                    },
+                    confidence=95,
+                    priority=100,  # Höchste Priorität
+                )
+
+            devices[device_id].sensors.append(DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=attrs.get("unit_of_measurement"),
+                device_class=attrs.get("device_class"),
+                state_class=attrs.get("state_class"),
+                current_state=sensor.get("state"),
+            ))
+
+        # evcc Vehicles (E-Auto) - HÖCHSTE Priorität
+        elif entity_lower.startswith("sensor.evcc_") and "vehicle" in entity_lower:
+            match = re.search(r'vehicle[_]?(\d+)?', entity_lower)
+            v_num = match.group(1) if match and match.group(1) else "1"
+            device_id = f"evcc_vehicle_{v_num}"
+
+            if device_id not in devices:
+                # Versuche Fahrzeugname aus friendly_name zu extrahieren
+                friendly = attrs.get("friendly_name", "")
+                vehicle_name = friendly.split()[0] if friendly else f"Fahrzeug {v_num}"
+
+                devices[device_id] = DiscoveredDevice(
+                    id=device_id,
+                    integration="evcc",
+                    device_type="ev",
+                    suggested_investition_typ="e-auto",
+                    name=f"evcc {vehicle_name}",
+                    manufacturer="evcc",
+                    sensors=[],
+                    suggested_parameters={
+                        "bezeichnung": vehicle_name,
+                        "hersteller": "evcc managed",
+                    },
+                    confidence=95,
+                    priority=100,
+                )
+
+            devices[device_id].sensors.append(DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=attrs.get("unit_of_measurement"),
+                device_class=attrs.get("device_class"),
+                state_class=attrs.get("state_class"),
+                current_state=sensor.get("state"),
+            ))
+
+        # Smart E-Auto (nur wenn nicht durch evcc abgedeckt)
+        elif entity_lower.startswith("sensor.smart_"):
+            ev_keywords = ["battery", "range", "soc", "charging", "odometer"]
+            if any(kw in entity_lower for kw in ev_keywords):
+                device_id = "smart_ev"
+
+                if device_id not in devices:
+                    devices[device_id] = DiscoveredDevice(
+                        id=device_id,
+                        integration="smart",
+                        device_type="ev",
+                        suggested_investition_typ="e-auto",
+                        name="Smart #1",
+                        manufacturer="Smart",
+                        model="#1",
+                        sensors=[],
+                        suggested_parameters={
+                            "bezeichnung": "Smart #1",
+                            "hersteller": "Smart",
+                            "batterie_kwh": 66.0,  # Smart #1 Pro+
+                        },
+                        confidence=85,
+                        priority=50,  # Niedriger als evcc
+                    )
+
+                devices[device_id].sensors.append(DiscoveredSensor(
+                    entity_id=entity_id,
+                    friendly_name=attrs.get("friendly_name"),
+                    unit_of_measurement=attrs.get("unit_of_measurement"),
+                    device_class=attrs.get("device_class"),
+                    state_class=attrs.get("state_class"),
+                    current_state=sensor.get("state"),
+                ))
+
+        # Wallbox Integration (nur wenn nicht durch evcc abgedeckt)
+        elif entity_lower.startswith("sensor.wallbox_"):
+            device_id = "wallbox_native"
+
+            if device_id not in devices:
+                devices[device_id] = DiscoveredDevice(
+                    id=device_id,
+                    integration="wallbox",
+                    device_type="wallbox",
+                    suggested_investition_typ="wallbox",
+                    name="Wallbox",
+                    manufacturer="Wallbox",
+                    sensors=[],
+                    suggested_parameters={
+                        "bezeichnung": "Wallbox",
+                        "hersteller": "Wallbox",
+                    },
+                    confidence=80,
+                    priority=30,  # Niedriger als evcc
+                )
+
+            devices[device_id].sensors.append(DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=attrs.get("unit_of_measurement"),
+                device_class=attrs.get("device_class"),
+                state_class=attrs.get("state_class"),
+                current_state=sensor.get("state"),
+            ))
+
+        # SMA Wechselrichter
+        elif entity_lower.startswith("sensor.sma_"):
+            device_id = "sma_inverter"
+
+            if device_id not in devices:
+                devices[device_id] = DiscoveredDevice(
+                    id=device_id,
+                    integration="sma",
+                    device_type="inverter",
+                    suggested_investition_typ=None,  # Wechselrichter ist kein Investitionstyp
+                    name="SMA Wechselrichter",
+                    manufacturer="SMA",
+                    sensors=[],
+                    suggested_parameters={},
+                    confidence=90,
+                    priority=80,
+                )
+
+            # Sensor-Mapping klassifizieren
+            _, mapping, conf = _classify_sensor(entity_id, attrs)
+
+            devices[device_id].sensors.append(DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=attrs.get("unit_of_measurement"),
+                device_class=attrs.get("device_class"),
+                state_class=attrs.get("state_class"),
+                current_state=sensor.get("state"),
+                suggested_mapping=mapping,
+                confidence=conf,
+            ))
+
+    return list(devices.values())
+
+
+def _extract_sensor_mappings(sensors: list[dict]) -> SensorMappingSuggestions:
+    """
+    Extrahiert Sensor-Mapping-Vorschläge aus der Sensor-Liste.
+    """
+    mappings = SensorMappingSuggestions()
+
+    for sensor in sensors:
+        entity_id = sensor["entity_id"]
+        attrs = sensor.get("attributes", {})
+
+        integration, mapping_type, confidence = _classify_sensor(entity_id, attrs)
+
+        if mapping_type and confidence >= 50:
+            discovered = DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=attrs.get("unit_of_measurement"),
+                device_class=attrs.get("device_class"),
+                state_class=attrs.get("state_class"),
+                current_state=sensor.get("state"),
+                suggested_mapping=mapping_type,
+                confidence=confidence,
+            )
+
+            # Zu entsprechender Liste hinzufügen
+            if mapping_type == "pv_erzeugung":
+                mappings.pv_erzeugung.append(discovered)
+            elif mapping_type == "einspeisung":
+                mappings.einspeisung.append(discovered)
+            elif mapping_type == "netzbezug":
+                mappings.netzbezug.append(discovered)
+            elif mapping_type == "batterie_ladung":
+                mappings.batterie_ladung.append(discovered)
+            elif mapping_type == "batterie_entladung":
+                mappings.batterie_entladung.append(discovered)
+
+    # Nach Confidence sortieren (höchste zuerst)
+    mappings.pv_erzeugung.sort(key=lambda x: x.confidence, reverse=True)
+    mappings.einspeisung.sort(key=lambda x: x.confidence, reverse=True)
+    mappings.netzbezug.sort(key=lambda x: x.confidence, reverse=True)
+    mappings.batterie_ladung.sort(key=lambda x: x.confidence, reverse=True)
+    mappings.batterie_entladung.sort(key=lambda x: x.confidence, reverse=True)
+
+    return mappings
+
+
+@router.get("/discover", response_model=DiscoveryResult)
+async def discover_ha_devices(
+    anlage_id: Optional[int] = Query(None, description="Anlage-ID für Duplikat-Prüfung"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Durchsucht Home Assistant nach Geräten und Sensoren.
+
+    Erkennt automatisch:
+    - SMA Wechselrichter (Sensor-Mappings für PV, Grid, Batterie)
+    - evcc Loadpoints (Wallbox) und Vehicles (E-Auto)
+    - Smart E-Auto Integration
+    - Wallbox Integration
+
+    evcc hat Priorität für E-Auto und Wallbox Daten.
+
+    Args:
+        anlage_id: Optional - wenn angegeben, werden existierende Investitionen geprüft
+
+    Returns:
+        DiscoveryResult: Gefundene Geräte und Sensor-Mapping-Vorschläge
+    """
+    result = DiscoveryResult(
+        ha_connected=False,
+        current_mappings=HASensorMapping(
+            pv_erzeugung=settings.ha_sensor_pv or None,
+            einspeisung=settings.ha_sensor_einspeisung or None,
+            netzbezug=settings.ha_sensor_netzbezug or None,
+            batterie_ladung=settings.ha_sensor_batterie_ladung or None,
+            batterie_entladung=settings.ha_sensor_batterie_entladung or None,
+        )
+    )
+
+    if not settings.supervisor_token:
+        result.warnings.append("Kein Supervisor Token gefunden. EEDC läuft nicht als HA Add-on.")
+        return result
+
+    # Alle HA-States abrufen
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.ha_api_url}/states",
+                headers={"Authorization": f"Bearer {settings.supervisor_token}"},
+                timeout=15.0
+            )
+
+            if response.status_code != 200:
+                result.warnings.append(f"HA API Fehler: {response.status_code}")
+                return result
+
+            states = response.json()
+            result.ha_connected = True
+
+    except Exception as e:
+        result.warnings.append(f"HA Verbindungsfehler: {str(e)}")
+        return result
+
+    # Nur Sensoren filtern
+    sensors = [
+        {
+            "entity_id": s["entity_id"],
+            "state": s.get("state"),
+            "attributes": s.get("attributes", {}),
+        }
+        for s in states
+        if s["entity_id"].startswith("sensor.")
+    ]
+
+    # Geräte extrahieren
+    devices = _extract_devices_from_sensors(sensors)
+
+    # Bereits konfigurierte Investitionen prüfen
+    if anlage_id:
+        inv_result = await db.execute(
+            select(Investition).where(Investition.anlage_id == anlage_id)
+        )
+        existing_investitions = inv_result.scalars().all()
+
+        # Prüfe auf Duplikate basierend auf Typ und Bezeichnung
+        for device in devices:
+            for inv in existing_investitions:
+                # Typ-Matching
+                type_match = (
+                    (device.suggested_investition_typ == "e-auto" and inv.typ == InvestitionTyp.E_AUTO.value) or
+                    (device.suggested_investition_typ == "wallbox" and inv.typ == InvestitionTyp.WALLBOX.value) or
+                    (device.suggested_investition_typ == "speicher" and inv.typ == InvestitionTyp.SPEICHER.value)
+                )
+
+                # Name-Ähnlichkeit prüfen
+                if type_match:
+                    device_name_lower = device.name.lower()
+                    inv_name_lower = (inv.bezeichnung or "").lower()
+
+                    # Einfache Ähnlichkeitsprüfung
+                    if (device_name_lower in inv_name_lower or
+                        inv_name_lower in device_name_lower or
+                        device.integration in inv_name_lower):
+                        device.already_configured = True
+                        break
+
+    # Duplikate filtern: evcc hat Vorrang
+    evcc_wallbox = any(d.integration == "evcc" and d.device_type == "wallbox" for d in devices)
+    evcc_ev = any(d.integration == "evcc" and d.device_type == "ev" for d in devices)
+
+    filtered_devices = []
+    for device in devices:
+        # Wallbox native überspringen wenn evcc Wallbox vorhanden
+        if device.id == "wallbox_native" and evcc_wallbox:
+            result.warnings.append("Wallbox-Integration gefunden, aber evcc wird bevorzugt.")
+            continue
+
+        # Smart EV überspringen wenn evcc Vehicle vorhanden
+        if device.id == "smart_ev" and evcc_ev:
+            result.warnings.append("Smart #1 gefunden, aber evcc-Vehicle wird bevorzugt.")
+            continue
+
+        filtered_devices.append(device)
+
+    # Nach Priorität sortieren
+    filtered_devices.sort(key=lambda x: x.priority, reverse=True)
+    result.devices = filtered_devices
+
+    # Sensor-Mappings extrahieren
+    result.sensor_mappings = _extract_sensor_mappings(sensors)
+
+    return result
 
 
 @router.post("/string-monatsdaten/import")
