@@ -40,6 +40,13 @@ class Investition(Base):
             "nutzt_v2h": true,
             "v2h_entlade_preis_cent": 30
         }
+
+    Beispiel PV-Module Parameter:
+        {
+            "anzahl_module": 40,
+            "modul_typ": "Longi Hi-MO 5",
+            "modul_leistung_wp": 500
+        }
     """
 
     __tablename__ = "investitionen"
@@ -56,6 +63,11 @@ class Investition(Base):
     anschaffungskosten_gesamt: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     anschaffungskosten_alternativ: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # z.B. neuer Verbrenner
     betriebskosten_jahr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # PV-Module spezifische Felder (für PVGIS)
+    leistung_kwp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Leistung in kWp
+    ausrichtung: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Süd, Ost, West, etc.
+    neigung_grad: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Modulneigung in Grad
 
     # Typ-spezifische Parameter (JSON)
     parameter: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)

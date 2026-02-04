@@ -593,6 +593,65 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         aktiv=True,
     )
     db.add(wallbox)
+
+    # PV-Module (für PVGIS Prognose)
+    # Süddach - Hauptfläche
+    pv_sued = Investition(
+        anlage_id=anlage.id,
+        typ="pv-module",
+        bezeichnung="Süddach",
+        anschaffungsdatum=date(2023, 6, 1),
+        anschaffungskosten_gesamt=15000,
+        leistung_kwp=12.0,
+        ausrichtung="Süd",
+        neigung_grad=30,
+        parameter={
+            "anzahl_module": 24,
+            "modul_typ": "Longi Hi-MO 5",
+            "modul_leistung_wp": 500,
+        },
+        aktiv=True,
+    )
+    db.add(pv_sued)
+
+    # Ostdach
+    pv_ost = Investition(
+        anlage_id=anlage.id,
+        typ="pv-module",
+        bezeichnung="Ostdach",
+        anschaffungsdatum=date(2023, 6, 1),
+        anschaffungskosten_gesamt=5000,
+        leistung_kwp=5.0,
+        ausrichtung="Ost",
+        neigung_grad=25,
+        parameter={
+            "anzahl_module": 10,
+            "modul_typ": "Longi Hi-MO 5",
+            "modul_leistung_wp": 500,
+        },
+        aktiv=True,
+    )
+    db.add(pv_ost)
+
+    # Westdach
+    pv_west = Investition(
+        anlage_id=anlage.id,
+        typ="pv-module",
+        bezeichnung="Westdach",
+        anschaffungsdatum=date(2023, 6, 1),
+        anschaffungskosten_gesamt=4000,
+        leistung_kwp=3.0,
+        ausrichtung="West",
+        neigung_grad=25,
+        parameter={
+            "anzahl_module": 6,
+            "modul_typ": "Longi Hi-MO 5",
+            "modul_leistung_wp": 500,
+        },
+        aktiv=True,
+    )
+    db.add(pv_west)
+
     await db.flush()
 
     # 4. Monatsdaten erstellen
@@ -678,9 +737,9 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         anlage_id=anlage.id,
         anlage_name=anlage.anlagenname,
         monatsdaten_count=monatsdaten_count,
-        investitionen_count=4,
+        investitionen_count=7,  # Speicher, E-Auto, WP, Wallbox + 3 PV-Module
         strompreise_count=3,
-        message=f"Demo-Anlage '{anlage.anlagenname}' mit {monatsdaten_count} Monatsdaten, 4 Investitionen und 3 Strompreisen erstellt.",
+        message=f"Demo-Anlage '{anlage.anlagenname}' mit {monatsdaten_count} Monatsdaten, 7 Investitionen (inkl. 3 PV-Module) und 3 Strompreisen erstellt.",
     )
 
 

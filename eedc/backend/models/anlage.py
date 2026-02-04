@@ -16,15 +16,19 @@ class Anlage(Base):
     """
     PV-Anlage Stammdaten.
 
+    Die Anlage repräsentiert einen Standort mit PV-Modulen.
+    Die einzelnen PV-Module werden als Investitionen vom Typ "pv-module" erfasst,
+    wobei jedes Modul eigene Ausrichtung, Neigung und Leistung haben kann.
+
     Attributes:
         id: Primärschlüssel
         anlagenname: Bezeichnung der Anlage
-        leistung_kwp: Installierte Leistung in kWp
+        leistung_kwp: Gesamtleistung in kWp (Referenzwert, echte Leistung = Summe der PV-Module)
         installationsdatum: Datum der Inbetriebnahme
         standort_*: Adressdaten
-        latitude/longitude: Geokoordinaten für PVGIS
-        ausrichtung: Himmelsrichtung (Süd, Ost-West, etc.)
-        neigung_grad: Modulneigung in Grad
+        latitude/longitude: Geokoordinaten für PVGIS (gilt für alle PV-Module am Standort)
+        ausrichtung: DEPRECATED - jetzt bei PV-Modul Investitionen
+        neigung_grad: DEPRECATED - jetzt bei PV-Modul Investitionen
     """
 
     __tablename__ = "anlagen"

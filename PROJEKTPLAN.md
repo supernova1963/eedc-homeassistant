@@ -230,15 +230,21 @@ WECHSELRICHTER_PARAMS = {
 }
 
 PV_MODULE_PARAMS = {
-    "leistung_kwp": float,
+    # Direkte Felder am Investition-Model (für PVGIS):
+    "leistung_kwp": float,        # investition.leistung_kwp
+    "ausrichtung": str,           # investition.ausrichtung (Süd, Ost, West, Nord, etc.)
+    "neigung_grad": float,        # investition.neigung_grad (0-90°)
+    # Zusätzliche Parameter (JSON):
     "anzahl_module": int,
-    "ausrichtung": str,
-    "neigung_grad": float,
     "hersteller": str,
     "modell": str,
     "jahresertrag_prognose_kwh": float,
     "parent_wechselrichter_id": str  # Verknüpfung
 }
+
+# Hinweis: PV-Module werden als Investitionen erfasst.
+# Die Gesamtleistung einer Anlage ergibt sich aus Σ leistung_kwp aller PV-Module.
+# PVGIS ruft die Prognose pro Modul ab und aggregiert die Ergebnisse.
 ```
 
 ### 2.4 Projekt-Struktur
@@ -756,12 +762,13 @@ def berechne_v2h_einsparung(
 | 2.6 | Dashboard: Speicher | Auswertung | ⬜ |
 | 2.7 | Dashboard: Wallbox | Auswertung | ⬜ |
 | 2.8 | ROI-Dashboard | Amortisation | ✅ |
-| 2.9 | Prognose vs IST | Vergleich | ⬜ |
+| 2.9 | Prognose vs IST | Vergleich | ✅ |
 | 2.10 | Monats-Detail | Pie-Charts | ✅ |
 | 2.11 | Jahres-Vergleich | Charts | ✅ |
 | 2.12 | PDF-Export | jsPDF Integration | ⬜ |
-| 2.13 | PVGIS | API Integration | ⬜ |
+| 2.13 | PVGIS | API Integration | ✅ |
 | 2.14 | API: ROI-Berechnung | Endpoint für alle Investitionen | ✅ |
+| 2.15 | PV-Module als Investitionen | Multi-Modul-Unterstützung | ✅ |
 
 ### Phase 3: Optimierung
 
@@ -872,9 +879,10 @@ docker run -p 8099:8099 -v $(pwd)/data:/data eedc-addon
 | 2026-02-03 | 0.1.0 | Initiale MVP-Implementierung |
 | 2026-02-03 | 0.2.0 | ROI-Dashboard, System-Stats API, Settings-UI mit echten Daten |
 | 2026-02-03 | 0.3.0 | **HA Ingress Integration erfolgreich getestet** - HashRouter, relative API-Pfade, CSV Auto-Delimiter |
+| 2026-02-04 | 0.4.0 | **PVGIS Integration (2.13)** - EU PVGIS API v5.2, Prognose vs. IST, PV-Module als Investitionen mit individueller Ausrichtung |
 
 ---
 
 *Erstellt: 2026-02-03*
-*Letzte Aktualisierung: 2026-02-03*
+*Letzte Aktualisierung: 2026-02-04*
 *Basierend auf: eedc-webapp Analyse*

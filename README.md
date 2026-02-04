@@ -6,11 +6,14 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 
 - **Lokale Datenspeicherung** - Alle Daten bleiben auf deinem Home Assistant
 - **PV-Anlagen Verwaltung** - Stammdaten, Leistung, Standort
+- **Multi-Modul PV-Anlagen** - Verschiedene Dachflächen mit individueller Ausrichtung/Neigung
+- **PVGIS Integration** - Automatische Ertragsprognosen von der EU-Kommission
+- **Prognose vs. IST** - Vergleich der erwarteten mit tatsächlicher Erzeugung
 - **Monatsdaten Erfassung** - Manuell oder CSV-Import
 - **Umfassende Auswertungen** - Autarkie, Eigenverbrauch, Wirtschaftlichkeit
-- **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox
+- **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox, PV-Module
 - **ROI-Dashboard** - Amortisationsberechnung für alle Investitionen
-- **Home Assistant Integration** - Automatischer Import aus HA Energy Dashboard
+- **Home Assistant Integration** - Automatischer Import aus HA Energy Dashboard (geplant)
 - **Dark Mode** - Vollständige Unterstützung
 
 ## Aktueller Status
@@ -19,7 +22,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 |-------|--------|-------------|
 | Phase 0: Setup | ✅ | 6/6 |
 | Phase 1: MVP | ✅ | 19/19 |
-| Phase 2: Erweitert | 🔄 | 7/14 |
+| Phase 2: Erweitert | 🔄 | 10/15 |
 
 **Was funktioniert (getestet in Home Assistant):**
 - ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
@@ -27,6 +30,9 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - ✅ Dashboard mit KPIs und Charts
 - ✅ Auswertung (4 Tabs: Übersicht, PV, Finanzen, CO2)
 - ✅ ROI-Dashboard mit Amortisationsberechnung
+- ✅ **PVGIS Integration** (EU API für Ertragsprognosen)
+- ✅ **Prognose vs. IST** Vergleich
+- ✅ **PV-Module als Investitionen** (Multi-Dach-Unterstützung)
 - ✅ Settings mit echten DB-Stats
 - ✅ Dark Mode
 - ✅ Docker-Build
@@ -154,8 +160,8 @@ Siehe [PROJEKTPLAN.md](PROJEKTPLAN.md) für Details.
 
 - [x] Phase 0: Projekt-Setup ✅
 - [x] Phase 1: MVP (Grundfunktionen) ✅
-- [ ] Phase 2: Erweiterte Features (HA Energy Import, Investitions-Dashboards, PDF-Export)
-- [ ] Phase 3: KI-Insights, PVGIS Integration
+- [ ] Phase 2: Erweiterte Features (HA Energy Import, Investitions-Dashboards, PDF-Export, **PVGIS ✅**)
+- [ ] Phase 3: KI-Insights, Wetter-Integration
 
 ## Lizenz
 

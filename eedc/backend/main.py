@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from backend.core.config import settings
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, pvgis
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
@@ -78,6 +78,7 @@ app.include_router(investitionen.router, prefix="/api/investitionen", tags=["Inv
 app.include_router(strompreise.router, prefix="/api/strompreise", tags=["Strompreise"])
 app.include_router(import_export.router, prefix="/api/import", tags=["Import/Export"])
 app.include_router(ha_integration.router, prefix="/api/ha", tags=["Home Assistant"])
+app.include_router(pvgis.router, prefix="/api/pvgis", tags=["PVGIS"])
 
 
 # =============================================================================

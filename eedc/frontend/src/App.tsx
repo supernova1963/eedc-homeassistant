@@ -11,6 +11,7 @@ import WallboxDashboard from './pages/WallboxDashboard'
 // Auswertungen
 import Auswertung from './pages/Auswertung'
 import ROIDashboard from './pages/ROIDashboard'
+import PrognoseVsIst from './pages/PrognoseVsIst'
 
 // Einstellungen - Stammdaten
 import Anlagen from './pages/Anlagen'
@@ -23,6 +24,7 @@ import Import from './pages/Import'
 
 // Einstellungen - System
 import Settings from './pages/Settings'
+import PVGISSettings from './pages/PVGISSettings'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -43,7 +45,7 @@ function App() {
           {/* Auswertungen */}
           <Route path="auswertungen" element={<Auswertung />} />
           <Route path="auswertungen/roi" element={<ROIDashboard />} />
-          <Route path="auswertungen/prognose" element={<Auswertung />} /> {/* TODO: Prognose vs IST */}
+          <Route path="auswertungen/prognose" element={<PrognoseVsIst />} />
           <Route path="auswertungen/export" element={<Auswertung />} /> {/* TODO: PDF Export */}
 
           {/* Einstellungen - Stammdaten */}
@@ -57,7 +59,7 @@ function App() {
           <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
 
           {/* Einstellungen - System */}
-          <Route path="einstellungen/pvgis" element={<Settings />} /> {/* TODO: PVGIS Integration */}
+          <Route path="einstellungen/pvgis" element={<PVGISSettings />} />
           <Route path="einstellungen/ha-integration" element={<Settings />} /> {/* TODO: HA Integration */}
           <Route path="einstellungen/allgemein" element={<Settings />} />
 
