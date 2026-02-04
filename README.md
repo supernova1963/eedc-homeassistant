@@ -13,7 +13,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - **Umfassende Auswertungen** - Autarkie, Eigenverbrauch, Wirtschaftlichkeit
 - **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox, PV-Module
 - **ROI-Dashboard** - Amortisationsberechnung für alle Investitionen
-- **Home Assistant Integration** - Automatischer Import aus HA Energy Dashboard (geplant)
+- **Home Assistant Integration** - Import aus HA Energy Dashboard (aktuelle Monate)
 - **Dark Mode** - Vollständige Unterstützung
 
 ## Aktueller Status
@@ -22,7 +22,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 |-------|--------|-------------|
 | Phase 0: Setup | ✅ | 6/6 |
 | Phase 1: MVP | ✅ | 19/19 |
-| Phase 2: Erweitert | 🔄 | 10/15 |
+| Phase 2: Erweitert | 🔄 | 11/16 |
 
 **Was funktioniert (getestet in Home Assistant):**
 - ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
@@ -33,11 +33,15 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - ✅ **PVGIS Integration** (EU API für Ertragsprognosen)
 - ✅ **Prognose vs. IST** Vergleich
 - ✅ **PV-Module als Investitionen** (Multi-Dach-Unterstützung)
-- ✅ Settings mit echten DB-Stats
+- ✅ **HA Energy Import** (aktuelle Monate aus HA History)
+- ✅ Settings mit echten DB-Stats und Sensor-Mapping
 - ✅ Dark Mode
 - ✅ Docker-Build
 - ✅ **HA Ingress Integration** (nahtlose Sidebar-Integration)
 - ✅ **HA Backup** (SQLite in /data Volume)
+
+**Bekannte Einschränkung:**
+- ⚠️ HA-Import nur für aktuelle Monate (~10 Tage History) - ältere Daten via CSV importieren
 
 ## Installation
 

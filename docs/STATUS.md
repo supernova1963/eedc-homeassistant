@@ -28,13 +28,16 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 - `frontend/src/pages/PrognoseVsIst.tsx`
 
 ### Feature 2.1: HA Energy-Integration
-**Status:** ⚠️ Teilweise implementiert (siehe bekannte Probleme)
+**Status:** ✅ Funktioniert für aktuelle Monate
 
-- `_get_ha_statistics_monthly()` Helper-Funktion
+- `_get_ha_statistics_monthly()` Helper-Funktion (History API)
 - `POST /ha/statistics/monthly` Endpoint
 - `POST /ha/import/monatsdaten` Endpoint mit `ueberschreiben` Option
 - `GET /ha/import/preview/{anlage_id}` Endpoint
 - Frontend API-Funktionen
+- Import für aktuelle Monate (letzte ~10 Tage History) funktioniert
+
+**Einschränkung:** Ältere Monate (> 10 Tage) können nicht importiert werden, da die HA History API nur kurzzeitige Daten liefert.
 
 **Dateien:**
 - `backend/api/routes/ha_integration.py`
@@ -67,34 +70,30 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 
 ---
 
-## Bekannte Probleme
+## Bekannte Einschränkungen
 
-### ✅ GELÖST: HA Long-Term Statistics via WebSocket
+### ⚠️ HA Long-Term Statistics nicht abrufbar
 
-**Problem (vorher):**
-Die Home Assistant REST API (`/api/history/period/`) gibt nur **kurzfristige History-Daten** zurück (ca. 10 Tage). **Long-Term Statistics** waren nicht abrufbar.
+**Problem:**
+Die Home Assistant REST API (`/api/history/period/`) gibt nur **kurzfristige History-Daten** zurück (ca. 10 Tage, je nach Recorder-Konfiguration). **Long-Term Statistics** (die im Energy Dashboard sichtbar sind) sind **nur über die WebSocket API** zugänglich.
 
-**Lösung:**
-WebSocket-Client implementiert, der den HA-Befehl `recorder/statistics_during_period` nutzt.
+**Auswirkung:**
+- Import für aktuelle Monate (Jan/Feb 2026) funktioniert ✅
+- Import für ältere Monate (2025 und früher) nicht möglich ❌
 
-**Neue Dateien:**
-- `backend/services/ha_websocket.py` - WebSocket Client für Long-Term Statistics
+**Vorbereitete Lösung (derzeit deaktiviert):**
+WebSocket-Client implementiert in `backend/services/ha_websocket.py`, funktioniert aber noch nicht zuverlässig im Add-on-Container. Die WebSocket-URL für Add-ons muss noch recherchiert werden.
 
-**Funktionsweise:**
-1. Primär: WebSocket API für Long-Term Statistics (alle historischen Daten)
-2. Fallback: History API für aktuelle Monate (falls WebSocket fehlschlägt)
-
-**Status-Endpoint erweitert:**
-`GET /api/ha/status` zeigt jetzt:
-- REST API Verbindung
-- WebSocket Verbindung
-- HA Version
+**Mögliche zukünftige Lösungen:**
+1. WebSocket-Verbindung debuggen und aktivieren
+2. Direkter Datenbankzugriff auf HA SQLite (`statistics` Tabelle)
+3. Custom Component für REST-Zugriff auf Statistics
 
 ---
 
 ## Sensor-Konfiguration
 
-Die Sensoren werden korrekt mit `sensor.` Prefix in der Add-on-Konfiguration eingetragen:
+Die Sensoren werden in der Add-on-Konfiguration eingetragen:
 
 ```yaml
 ha_sensors:
@@ -109,33 +108,36 @@ Die Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term S
 
 ---
 
-## Nächste Schritte
-
-1. **Lösung für Long-Term Statistics implementieren**
-   - Empfehlung: Option 2 (Direkter Datenbankzugriff)
-   - HA-Datenbank unter `/homeassistant/home-assistant_v2.db` einbinden
-   - SQL-Abfragen für monatliche Aggregation der Statistics
-
-2. **String-Import aus HA vervollständigen**
-   - Aktuell Platzhalter-Antwort in `/ha/string-monatsdaten/import`
-   - Benötigt ebenfalls Long-Term Statistics Zugriff
-
----
-
-## Git Historie (relevant)
+## Git Historie (aktuell)
 
 ```
-xxxxxxx feat(ha): WebSocket client for Long-Term Statistics (NEU)
+2a477f3 fix(ha): Revert to History API, make WebSocket optional
+212a176 fix(ha): Correct WebSocket URL for HA Add-on environment
+01f0202 fix(ui): Add null-safety to formatKwh functions in Monatsdaten
+b4c197d feat(ha): Add WebSocket client for Long-Term Statistics
 d38d6ca docs: Add STATUS.md with current project state and known issues
 ff768e5 fix(ha): Revert to working History API implementation
-7bffdac fix(ha): Use Long-Term Statistics API with multiple fallbacks
-15e7977 fix(ha): Use History API to calculate monthly statistics
-fc8ae54 fix(ui): Show warning when HA has no statistics data
 ```
 
 ---
 
-## Lokale Entwicklung fortsetzen
+## Nächste Schritte (gemäß PROJEKTPLAN.md)
+
+### Phase 2 - Offen:
+- [ ] 2.1 HA Energy - Long-Term Statistics (WebSocket debuggen oder Alternative)
+- [ ] 2.4 Dashboard: E-Auto
+- [ ] 2.5 Dashboard: Wärmepumpe
+- [ ] 2.6 Dashboard: Speicher
+- [ ] 2.7 Dashboard: Wallbox
+- [ ] 2.12 PDF-Export
+
+### Optional für später:
+- [ ] WebSocket für Long-Term Statistics zum Laufen bringen
+- [ ] String-Import aus HA vervollständigen (benötigt Long-Term Statistics)
+
+---
+
+## Lokale Entwicklung
 
 ```bash
 # Repository klonen/aktualisieren
@@ -144,20 +146,13 @@ git pull
 
 # Backend starten
 cd eedc/backend
-source venv/bin/activate  # oder: python -m venv venv && pip install -r requirements.txt
+source venv/bin/activate
 uvicorn main:app --reload --port 8099
 
 # Frontend starten (in neuem Terminal)
 cd eedc/frontend
-npm install  # falls nötig
 npm run dev
 
-# Oder: Produktions-Build
+# Produktions-Build
 npm run build
 ```
-
----
-
-## Dateien mit ungespeicherten Änderungen
-
-Prüfen mit: `git status`

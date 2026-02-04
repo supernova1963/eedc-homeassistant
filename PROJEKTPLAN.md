@@ -754,7 +754,7 @@ def berechne_v2h_einsparung(
 
 | # | Paket | Beschreibung | Status |
 |---|-------|--------------|--------|
-| 2.1 | HA Energy | Sensor-Mapping + Import | ⬜ |
+| 2.1 | HA Energy | Sensor-Mapping + Import | ✅ (aktuelle Monate) |
 | 2.2 | Arbitrage | Speicher-Berechnung | ✅ (Backend) |
 | 2.3 | V2H | E-Auto Rückspeisung | ✅ (Backend) |
 | 2.4 | Dashboard: E-Auto | Auswertung | ⬜ |
@@ -769,7 +769,14 @@ def berechne_v2h_einsparung(
 | 2.13 | PVGIS | API Integration | ✅ |
 | 2.14 | API: ROI-Berechnung | Endpoint für alle Investitionen | ✅ |
 | 2.15 | PV-Module als Investitionen | Multi-Modul-Unterstützung | ✅ |
-| 2.16 | String-basierte IST-Erfassung | SOLL-IST pro PV-Modul via HA-Strings | ⬜ |
+| 2.16 | String-basierte IST-Erfassung | SOLL-IST pro PV-Modul via HA-Strings | ✅ (UI/API) |
+
+### Optional / Zurückgestellt
+
+| # | Paket | Beschreibung | Status |
+|---|-------|--------------|--------|
+| 2.1b | HA Long-Term Statistics | WebSocket für ältere Monate | 🔄 (vorbereitet, nicht aktiv) |
+| 2.16b | String-Import aus HA | Automatischer Import via HA API | ⬜ (benötigt 2.1b) |
 
 ### Phase 3: Optimierung
 
@@ -945,7 +952,8 @@ Home Assistant kann String/MPPT-Daten vom Wechselrichter erfassen. Diese werden 
 | 2026-02-03 | 0.2.0 | ROI-Dashboard, System-Stats API, Settings-UI mit echten Daten |
 | 2026-02-03 | 0.3.0 | **HA Ingress Integration erfolgreich getestet** - HashRouter, relative API-Pfade, CSV Auto-Delimiter |
 | 2026-02-04 | 0.4.0 | **PVGIS Integration (2.13)** - EU PVGIS API v5.2, Prognose vs. IST, PV-Module als Investitionen mit individueller Ausrichtung |
-| 2026-02-04 | - | Feature 2.16 (String-basierte IST-Erfassung) geplant |
+| 2026-02-04 | 0.5.0 | **Feature 2.16** - String-basierte IST-Erfassung UI/API implementiert |
+| 2026-02-04 | 0.6.0 | **Feature 2.1** - HA Energy Import (aktuelle Monate via History API), Sensor-Mapping in Settings, Import-Vorschau. WebSocket für Long-Term Statistics vorbereitet aber deaktiviert |
 
 ---
 
