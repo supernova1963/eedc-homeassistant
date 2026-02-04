@@ -20,6 +20,7 @@ from backend.models.investition import Investition, InvestitionTyp
 from backend.models.string_monatsdaten import StringMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
+from backend.services.ha_websocket import HAWebSocketClient
 
 
 # =============================================================================
@@ -135,7 +136,7 @@ router = APIRouter()
 @router.get("/status")
 async def get_ha_status():
     """
-    Prüft die Verbindung zu Home Assistant.
+    Prüft die Verbindung zu Home Assistant (REST + WebSocket).
 
     Returns:
         dict: Status der HA-Verbindung
@@ -143,12 +144,21 @@ async def get_ha_status():
     if not settings.supervisor_token:
         return {
             "connected": False,
+            "rest_api": False,
+            "websocket": False,
             "message": "Kein Supervisor Token gefunden. Läuft EEDC als HA Add-on?"
         }
 
-    # Versuche HA API zu erreichen
+    result = {
+        "connected": False,
+        "rest_api": False,
+        "websocket": False,
+        "ha_version": None,
+        "message": ""
+    }
+
+    # REST API testen
     try:
-        import httpx
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.ha_api_url}/",
@@ -156,20 +166,35 @@ async def get_ha_status():
                 timeout=5.0
             )
             if response.status_code == 200:
-                return {
-                    "connected": True,
-                    "message": "Verbindung zu Home Assistant erfolgreich"
-                }
-            else:
-                return {
-                    "connected": False,
-                    "message": f"HA API antwortet mit Status {response.status_code}"
-                }
+                result["rest_api"] = True
+                data = response.json()
+                result["ha_version"] = data.get("version")
     except Exception as e:
-        return {
-            "connected": False,
-            "message": f"Fehler bei HA-Verbindung: {str(e)}"
-        }
+        result["message"] = f"REST API Fehler: {str(e)}"
+
+    # WebSocket testen
+    try:
+        ws_client = HAWebSocketClient()
+        ws_status = await ws_client.test_connection()
+        result["websocket"] = ws_status.get("connected", False)
+        if ws_status.get("ha_version"):
+            result["ha_version"] = ws_status["ha_version"]
+        if not result["websocket"] and ws_status.get("error"):
+            result["message"] += f" WebSocket: {ws_status['error']}"
+    except Exception as e:
+        result["message"] += f" WebSocket Fehler: {str(e)}"
+
+    # Gesamtstatus
+    result["connected"] = result["rest_api"] or result["websocket"]
+    if result["connected"] and not result["message"]:
+        if result["rest_api"] and result["websocket"]:
+            result["message"] = "REST API und WebSocket verbunden"
+        elif result["rest_api"]:
+            result["message"] = "REST API verbunden, WebSocket nicht verfügbar"
+        else:
+            result["message"] = "WebSocket verbunden, REST API nicht verfügbar"
+
+    return result
 
 
 @router.get("/sensors", response_model=list[HASensor])
@@ -308,9 +333,8 @@ async def _get_ha_statistics_monthly(
     """
     Holt monatliche Statistiken aus HA Long-Term Statistics.
 
-    HA speichert Statistiken für Sensoren mit state_class "total_increasing".
-    Wir berechnen Monatswerte aus der History API (kurzzeitige Daten ~10 Tage)
-    kombiniert mit der recorder/statistics API für ältere Daten.
+    Verwendet WebSocket API für Long-Term Statistics (historische Daten).
+    Fällt zurück auf History API für aktuelle Daten falls WebSocket fehlschlägt.
 
     Args:
         statistic_id: z.B. "sensor.pv_energy_total"
@@ -325,22 +349,48 @@ async def _get_ha_statistics_monthly(
 
     monthly_data = []
 
+    # Methode 1: WebSocket API für Long-Term Statistics
+    try:
+        ws_client = HAWebSocketClient()
+        start_time = datetime.combine(start_date, datetime.min.time())
+        end_time = datetime.combine(end_date, datetime.max.time())
+
+        stats = await ws_client.get_statistics_safe(
+            [statistic_id], start_time, end_time, "month"
+        )
+
+        sensor_stats = stats.get(statistic_id, [])
+        if sensor_stats:
+            for entry in sensor_stats:
+                start_str = entry.get("start")
+                change = entry.get("change", 0) or 0
+
+                if start_str and change > 0:
+                    monthly_data.append({
+                        "start": start_str,
+                        "change": round(change, 2)
+                    })
+
+            # Wenn WebSocket Daten liefert, diese zurückgeben
+            if monthly_data:
+                return monthly_data
+
+    except Exception as e:
+        print(f"[HA Integration] WebSocket-Fehler: {e}, versuche History API...")
+
+    # Methode 2: Fallback auf History API (für aktuelle Monate)
     async with httpx.AsyncClient() as client:
-        # Für jeden Monat im Zeitraum die Daten sammeln
         current = date(start_date.year, start_date.month, 1)
 
         while current <= end_date:
-            # Letzter Tag des Monats
             _, last_day = monthrange(current.year, current.month)
             month_end = date(current.year, current.month, last_day)
 
-            # Zeitstempel für den Monat
             month_start_ts = datetime.combine(current, datetime.min.time()).isoformat()
             month_end_ts = datetime.combine(month_end, datetime.max.time()).isoformat()
 
             change_value = None
 
-            # Methode 1: History API (für aktuelle/kürzliche Monate)
             try:
                 response = await client.get(
                     f"{settings.ha_api_url}/history/period/{month_start_ts}",
@@ -360,7 +410,6 @@ async def _get_ha_statistics_monthly(
                     if data and len(data) > 0 and len(data[0]) > 0:
                         states = data[0]
 
-                        # Sammle gültige numerische States
                         valid_values = []
                         for s in states:
                             try:
@@ -373,12 +422,10 @@ async def _get_ha_statistics_monthly(
                                 pass
 
                         if len(valid_values) >= 2:
-                            # Für total_increasing: Differenz letzter - erster Wert
                             first_val = valid_values[0]
                             last_val = valid_values[-1]
                             change_value = last_val - first_val
 
-                            # Bei Zähler-Reset: Summe der positiven Differenzen
                             if change_value < 0:
                                 change_value = 0
                                 for i in range(1, len(valid_values)):
@@ -389,14 +436,12 @@ async def _get_ha_statistics_monthly(
             except Exception:
                 pass
 
-            # Wenn wir einen gültigen Wert haben, hinzufügen
             if change_value is not None and change_value > 0:
                 monthly_data.append({
                     "start": datetime.combine(current, datetime.min.time()).isoformat(),
                     "change": round(change_value, 2)
                 })
 
-            # Nächster Monat
             if current.month == 12:
                 current = date(current.year + 1, 1, 1)
             else:

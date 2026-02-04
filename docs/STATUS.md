@@ -1,7 +1,7 @@
 # EEDC Projekt Status
 
 **Stand:** 2026-02-04
-**Version:** 0.5.0
+**Version:** 0.6.0
 
 ## Übersicht
 
@@ -69,42 +69,26 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 
 ## Bekannte Probleme
 
-### 🔴 KRITISCH: HA Long-Term Statistics nicht abrufbar
+### ✅ GELÖST: HA Long-Term Statistics via WebSocket
 
-**Problem:**
-Die Home Assistant REST API (`/api/history/period/`) gibt nur **kurzfristige History-Daten** zurück (ca. 10 Tage, je nach Recorder-Konfiguration). **Long-Term Statistics** (die im Energy Dashboard und Statistik-Grafiken sichtbar sind) sind **nur über die WebSocket API** zugänglich.
+**Problem (vorher):**
+Die Home Assistant REST API (`/api/history/period/`) gibt nur **kurzfristige History-Daten** zurück (ca. 10 Tage). **Long-Term Statistics** waren nicht abrufbar.
 
-**Symptom:**
-- Import für aktuelle Monate (z.B. Januar/Februar 2026) funktioniert
-- Import für ältere Monate (z.B. 2025) zeigt "Keine Statistiken gefunden"
-- Die Daten existieren in HA (sichtbar im Energy Dashboard), sind aber nicht über REST abrufbar
+**Lösung:**
+WebSocket-Client implementiert, der den HA-Befehl `recorder/statistics_during_period` nutzt.
 
-**Ursache:**
-Home Assistant stellt keinen REST-Endpoint für Long-Term Statistics bereit. Der Endpoint `/api/history/statistics_during_period` existiert nicht als REST API, sondern nur als WebSocket-Befehl.
+**Neue Dateien:**
+- `backend/services/ha_websocket.py` - WebSocket Client für Long-Term Statistics
 
-**Referenzen:**
-- https://community.home-assistant.io/t/can-i-get-long-term-statistics-from-the-rest-api/761444
-- https://github.com/home-assistant/core/issues/56052
+**Funktionsweise:**
+1. Primär: WebSocket API für Long-Term Statistics (alle historischen Daten)
+2. Fallback: History API für aktuelle Monate (falls WebSocket fehlschlägt)
 
-**Mögliche Lösungen:**
-
-1. **WebSocket-Verbindung implementieren**
-   - Aufwand: Hoch
-   - Erfordert persistente WebSocket-Verbindung zu HA
-   - Vorteile: Vollständiger Zugriff auf Long-Term Statistics
-
-2. **Direkter Datenbankzugriff**
-   - Aufwand: Mittel
-   - Add-on liest HA SQLite-Datenbank (`home-assistant_v2.db`) direkt
-   - Tabelle: `statistics` und `statistics_meta`
-   - Vorteile: Schnell, alle Daten verfügbar
-   - Nachteile: Abhängig von HA-internem Schema
-
-3. **Custom Component**
-   - Aufwand: Mittel
-   - Separate HA-Integration die Statistics als REST-Service bereitstellt
-   - Vorteile: Saubere Trennung
-   - Nachteile: Zusätzliche Installation nötig
+**Status-Endpoint erweitert:**
+`GET /api/ha/status` zeigt jetzt:
+- REST API Verbindung
+- WebSocket Verbindung
+- HA Version
 
 ---
 
@@ -141,13 +125,12 @@ Die Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term S
 ## Git Historie (relevant)
 
 ```
+xxxxxxx feat(ha): WebSocket client for Long-Term Statistics (NEU)
+d38d6ca docs: Add STATUS.md with current project state and known issues
 ff768e5 fix(ha): Revert to working History API implementation
 7bffdac fix(ha): Use Long-Term Statistics API with multiple fallbacks
 15e7977 fix(ha): Use History API to calculate monthly statistics
 fc8ae54 fix(ui): Show warning when HA has no statistics data
-c54f1bc feat(ui): Add HA sensor mapping display and import preview
-46b0b04 feat(2.1): HA Long-Term Statistics API for monthly data import
-0cc2e4a feat(2.16): String-based IST data collection per PV module
 ```
 
 ---
