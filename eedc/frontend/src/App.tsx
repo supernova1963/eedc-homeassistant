@@ -1,17 +1,27 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+
+// Cockpit (Dashboards)
 import Dashboard from './pages/Dashboard'
-import Anlagen from './pages/Anlagen'
-import Monatsdaten from './pages/Monatsdaten'
-import Strompreise from './pages/Strompreise'
-import Investitionen from './pages/Investitionen'
-import Auswertung from './pages/Auswertung'
-import ROIDashboard from './pages/ROIDashboard'
 import EAutoDashboard from './pages/EAutoDashboard'
 import WaermepumpeDashboard from './pages/WaermepumpeDashboard'
 import SpeicherDashboard from './pages/SpeicherDashboard'
 import WallboxDashboard from './pages/WallboxDashboard'
+
+// Auswertungen
+import Auswertung from './pages/Auswertung'
+import ROIDashboard from './pages/ROIDashboard'
+
+// Einstellungen - Stammdaten
+import Anlagen from './pages/Anlagen'
+import Strompreise from './pages/Strompreise'
+import Investitionen from './pages/Investitionen'
+
+// Einstellungen - Daten
+import Monatsdaten from './pages/Monatsdaten'
 import Import from './pages/Import'
+
+// Einstellungen - System
 import Settings from './pages/Settings'
 
 function App() {
@@ -20,20 +30,51 @@ function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="anlagen" element={<Anlagen />} />
-          <Route path="monatsdaten" element={<Monatsdaten />} />
-          <Route path="strompreise" element={<Strompreise />} />
-          <Route path="investitionen" element={<Investitionen />} />
-          <Route path="auswertung" element={<Auswertung />} />
-          <Route path="roi" element={<ROIDashboard />} />
-          <Route path="e-auto" element={<EAutoDashboard />} />
-          <Route path="waermepumpe" element={<WaermepumpeDashboard />} />
-          <Route path="speicher" element={<SpeicherDashboard />} />
-          <Route path="wallbox" element={<WallboxDashboard />} />
-          <Route path="import" element={<Import />} />
-          <Route path="settings" element={<Settings />} />
+          {/* Redirect root to Cockpit */}
+          <Route index element={<Navigate to="/cockpit" replace />} />
+
+          {/* Cockpit (Dashboards) */}
+          <Route path="cockpit" element={<Dashboard />} />
+          <Route path="cockpit/e-auto" element={<EAutoDashboard />} />
+          <Route path="cockpit/waermepumpe" element={<WaermepumpeDashboard />} />
+          <Route path="cockpit/speicher" element={<SpeicherDashboard />} />
+          <Route path="cockpit/wallbox" element={<WallboxDashboard />} />
+
+          {/* Auswertungen */}
+          <Route path="auswertungen" element={<Auswertung />} />
+          <Route path="auswertungen/roi" element={<ROIDashboard />} />
+          <Route path="auswertungen/prognose" element={<Auswertung />} /> {/* TODO: Prognose vs IST */}
+          <Route path="auswertungen/export" element={<Auswertung />} /> {/* TODO: PDF Export */}
+
+          {/* Einstellungen - Stammdaten */}
+          <Route path="einstellungen/anlage" element={<Anlagen />} />
+          <Route path="einstellungen/strompreise" element={<Strompreise />} />
+          <Route path="einstellungen/investitionen" element={<Investitionen />} />
+
+          {/* Einstellungen - Daten */}
+          <Route path="einstellungen/monatsdaten" element={<Monatsdaten />} />
+          <Route path="einstellungen/import" element={<Import />} />
+          <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
+
+          {/* Einstellungen - System */}
+          <Route path="einstellungen/pvgis" element={<Settings />} /> {/* TODO: PVGIS Integration */}
+          <Route path="einstellungen/ha-integration" element={<Settings />} /> {/* TODO: HA Integration */}
+          <Route path="einstellungen/allgemein" element={<Settings />} />
+
+          {/* Legacy redirects für alte URLs */}
+          <Route path="dashboard" element={<Navigate to="/cockpit" replace />} />
+          <Route path="anlagen" element={<Navigate to="/einstellungen/anlage" replace />} />
+          <Route path="monatsdaten" element={<Navigate to="/einstellungen/monatsdaten" replace />} />
+          <Route path="strompreise" element={<Navigate to="/einstellungen/strompreise" replace />} />
+          <Route path="investitionen" element={<Navigate to="/einstellungen/investitionen" replace />} />
+          <Route path="auswertung" element={<Navigate to="/auswertungen" replace />} />
+          <Route path="roi" element={<Navigate to="/auswertungen/roi" replace />} />
+          <Route path="e-auto" element={<Navigate to="/cockpit/e-auto" replace />} />
+          <Route path="waermepumpe" element={<Navigate to="/cockpit/waermepumpe" replace />} />
+          <Route path="speicher" element={<Navigate to="/cockpit/speicher" replace />} />
+          <Route path="wallbox" element={<Navigate to="/cockpit/wallbox" replace />} />
+          <Route path="import" element={<Navigate to="/einstellungen/import" replace />} />
+          <Route path="settings" element={<Navigate to="/einstellungen/allgemein" replace />} />
         </Route>
       </Routes>
     </HashRouter>
