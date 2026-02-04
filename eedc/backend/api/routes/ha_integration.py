@@ -20,7 +20,13 @@ from backend.models.investition import Investition, InvestitionTyp
 from backend.models.string_monatsdaten import StringMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
-from backend.services.ha_websocket import HAWebSocketClient
+
+# WebSocket für Long-Term Statistics (optional, derzeit experimentell)
+try:
+    from backend.services.ha_websocket import HAWebSocketClient
+    HAS_WEBSOCKET = True
+except ImportError:
+    HAS_WEBSOCKET = False
 
 
 # =============================================================================
@@ -172,17 +178,18 @@ async def get_ha_status():
     except Exception as e:
         result["message"] = f"REST API Fehler: {str(e)}"
 
-    # WebSocket testen
-    try:
-        ws_client = HAWebSocketClient()
-        ws_status = await ws_client.test_connection()
-        result["websocket"] = ws_status.get("connected", False)
-        if ws_status.get("ha_version"):
-            result["ha_version"] = ws_status["ha_version"]
-        if not result["websocket"] and ws_status.get("error"):
-            result["message"] += f" WebSocket: {ws_status['error']}"
-    except Exception as e:
-        result["message"] += f" WebSocket Fehler: {str(e)}"
+    # WebSocket testen (optional)
+    if HAS_WEBSOCKET:
+        try:
+            ws_client = HAWebSocketClient()
+            ws_status = await ws_client.test_connection()
+            result["websocket"] = ws_status.get("connected", False)
+            if ws_status.get("ha_version"):
+                result["ha_version"] = ws_status["ha_version"]
+            if not result["websocket"] and ws_status.get("error"):
+                result["message"] += f" WebSocket: {ws_status['error']}"
+        except Exception as e:
+            result["message"] += f" WebSocket Fehler: {str(e)}"
 
     # Gesamtstatus
     result["connected"] = result["rest_api"] or result["websocket"]
@@ -331,10 +338,11 @@ async def _get_ha_statistics_monthly(
     end_date: date
 ) -> list[dict]:
     """
-    Holt monatliche Statistiken aus HA Long-Term Statistics.
+    Holt monatliche Statistiken aus HA.
 
-    Verwendet WebSocket API für Long-Term Statistics (historische Daten).
-    Fällt zurück auf History API für aktuelle Daten falls WebSocket fehlschlägt.
+    Verwendet die History API für kurzzeitige Daten (~10 Tage).
+    Für ältere Daten (Long-Term Statistics) ist WebSocket erforderlich,
+    was derzeit noch nicht zuverlässig funktioniert.
 
     Args:
         statistic_id: z.B. "sensor.pv_energy_total"
@@ -349,36 +357,7 @@ async def _get_ha_statistics_monthly(
 
     monthly_data = []
 
-    # Methode 1: WebSocket API für Long-Term Statistics
-    try:
-        ws_client = HAWebSocketClient()
-        start_time = datetime.combine(start_date, datetime.min.time())
-        end_time = datetime.combine(end_date, datetime.max.time())
-
-        stats = await ws_client.get_statistics_safe(
-            [statistic_id], start_time, end_time, "month"
-        )
-
-        sensor_stats = stats.get(statistic_id, [])
-        if sensor_stats:
-            for entry in sensor_stats:
-                start_str = entry.get("start")
-                change = entry.get("change", 0) or 0
-
-                if start_str and change > 0:
-                    monthly_data.append({
-                        "start": start_str,
-                        "change": round(change, 2)
-                    })
-
-            # Wenn WebSocket Daten liefert, diese zurückgeben
-            if monthly_data:
-                return monthly_data
-
-    except Exception as e:
-        print(f"[HA Integration] WebSocket-Fehler: {e}, versuche History API...")
-
-    # Methode 2: Fallback auf History API (für aktuelle Monate)
+    # History API (für aktuelle Monate mit kurzzeitigen Daten)
     async with httpx.AsyncClient() as client:
         current = date(start_date.year, start_date.month, 1)
 
