@@ -1,0 +1,53 @@
+﻿# CSV-Vorlage für Einfamilienhaus PV 2023  (12.32 kWp),,,,,,,,,,,,,,
+# Erstellt am: 31.1.2026,,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# PFLICHTFELDER: Jahr, Monat, Einspeisung, Netzbezug, PV-Erzeugung pro Wechselrichter,,,,,,,,,,
+# OPTIONAL: Alle anderen Spalten - einfach leer lassen wenn nicht relevant,,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# IHRE INVESTITIONEN:,,,,,,,,,,,,,,
+#   - Smart #1 (e-auto),,,,,,,,,,,,,,
+#   - BAUER 385 Glas/Glas (pv-module),,,,,,,,,,,,,,
+#   - BYD HVS (speicher),,,,,,,,,,,,,,
+#   - SMA EV CHARGER 22 (wallbox),,,,,,,,,,,,,,
+#   - SMA STP 10.0 SE (wechselrichter),,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# AUTOMATISCH BERECHNET WERDEN:,,,,,,,,,,,,,,
+#   - PV-Erzeugung (Summe aller Wechselrichter),,,,,,,,,,,,,,
+#   - Batterieladung/-entladung (Summe aller Speicher),,,,,,,,,,,,,,
+#   - Direktverbrauch = PV-Erzeugung - Einspeisung - Batterieladung,,,,,,,,,,,,,,
+#   - Eigenverbrauch = Direktverbrauch + Batterieentladung,,,,,,,,,,,,,,
+#   - Gesamtverbrauch = Eigenverbrauch + Netzbezug,,,,,,,,,,,,,,
+#   - Eigenverbrauchsquote, Autarkiegrad, kWh/kWp,,,,,,,,,,,,
+#   - Wetterdaten (Sonnenstunden, Globalstrahlung) via Open-Meteo API,,,,,,,,,,,,,
+#   - Kosten/Erlöse (aus hinterlegten Strompreisen),,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# HINWEISE:,,,,,,,,,,,,,,
+# - Strompreise werden aus Stammdaten für den jeweiligen Monat geholt,,,,,,,,,,,,,,
+# - Speicher-Spalten: Nur ausfüllen wenn Batteriespeicher vorhanden,,,,,,,,,,,,,,
+# - Die beiden Beispielzeilen können gelöscht oder überschrieben werden,,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+Jahr,Monat,Einspeisung (kWh),Netzbezug (kWh),Datenquelle,Notizen,Smart #1 - km gefahren,Smart #1 - Verbrauch (kWh),Smart #1 - Ladung PV (kWh),Smart #1 - Ladung Netz (kWh),BYD HVS - Ladung (kWh),BYD HVS - Entladung (kWh),SMA EV CHARGER 22 - Ladung (kWh),SMA EV CHARGER 22 - Ladevorgänge,SMA STP 10.0 SE - PV-Erzeugung (kWh)
+2024,1,"122,81","333,59",CSV-Import,,1186,"237,27",37,200,"165,3","148,69","237,27",20,"432,86"
+2024,2,"164,35","261,82",CSV-Import,,959,"191,81",91,100,"183,07","164,65","191,81",4,"476,23"
+2024,3,"461,1","122,08",CSV-Import,,1201,"240,35",200,41,"247,51","233,23","240,35",20,"979,25"
+2024,4,"564,72","25,45",CSV-Import,,1032,"206,55",201,6,"226,08","214,78","206,55",20,"1140,2"
+2024,5,"873,29","22,82",CSV-Import,,1002,"200,58",195,5,"225,59","212,61","200,58",20,"1475,49"
+2024,6,"1036,34","10,31",CSV-Import,,717,"143,43",140,3,"199,62","192,79","143,43",3,"1559,33"
+2024,7,"1120,43","12,1",CSV-Import,,851,"170,36",165,6,"194,21","183,88","170,36",5,"1657,77"
+2024,8,"1228,31","43,6",CSV-Import,,1119,"223,8",210,14,"195,89","184,81","223,8",20,"1772,38"
+2024,9,"781,13","10,48",CSV-Import,,659,"131,82",100,31,"202,86","191,13","131,82",4,"1244,02"
+2024,10,"262,54","88,54",CSV-Import,,876,"175,26",110,65,"271,57","257,8","175,26",20,"761,48"
+2024,11,"135,33","303,18",CSV-Import,,758,"151,69",52,100,"134,7","116,05","151,69",20,"379,7"
+2024,12,"35,29","357,37",CSV-Import,,564,"112,86",12,100,"88,81","68,01","112,86",20,"227,94"
+2025,1,"115,61","373,9",CSV-Import,,974,"194,96",24,170,"157,3","115,83","194,96",20,"383,3"
+2025,2,"319,24","165,63",CSV-Import,,1111,"222,29",32,190,"236,56","184,74","222,29",25,"781,89"
+2025,3,"1106,2","114,73",CSV-Import,,621,"124,23",74,50,"291,98","236,09","124,23",10,"1647,26"
+2025,4,"1115,4","46,09",CSV-Import,,1036,"207,35",167,41,"256,47","200,62","207,35",10,"1734,5"
+2025,5,"1171,87","16,82",CSV-Import,,193,"38,66",35,4,"254,87","205,58","38,66",3,"1837,58"
+2025,6,"1318,13","9,43",CSV-Import,,651,"130,25",115,15,"210,36","154,59","130,25",10,"1884,72"
+2025,7,"1051,23","9,73",CSV-Import,,801,"160,38",155,6,"233,19","189,15","160,38",10,"1642,45"
+2025,8,"1117,5","10,1",CSV-Import,,857,"171,53",160,11,"247,98","193,78","171,53",11,"1727,63"
+2025,9,"721,12","18,3",CSV-Import,,323,"64,61",64,1,"242,38","194,34","64,61",5,"1172,37"
+2025,10,"132,83","229,36",CSV-Import,,1118,"223,67",150,74,"247,04","205,23","223,67",15,"569,49"
+2025,11,"173,16","185,21",CSV-Import,,574,"114,94",40,75,"206,04","165,63","114,94",10,"541,48"
+2025,12,"125,91","405,5",CSV-Import,,1205,"241,17",21,220,"168,77","132,41","241,17",10,"432,72"

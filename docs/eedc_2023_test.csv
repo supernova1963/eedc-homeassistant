@@ -1,0 +1,36 @@
+﻿# CSV-Vorlage für Einfamilienhaus PV 2023  (12.32 kWp),,,,,,,,,,,,,,
+# Erstellt am: 31.1.2026,,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# PFLICHTFELDER: Jahr, Monat, Einspeisung, Netzbezug, PV-Erzeugung pro Wechselrichter,,,,,,,,,,
+# OPTIONAL: Alle anderen Spalten - einfach leer lassen wenn nicht relevant,,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# IHRE INVESTITIONEN:,,,,,,,,,,,,,,
+#   - Smart #1 (e-auto),,,,,,,,,,,,,,
+#   - BAUER 385 Glas/Glas (pv-module),,,,,,,,,,,,,,
+#   - BYD HVS (speicher),,,,,,,,,,,,,,
+#   - SMA EV CHARGER 22 (wallbox),,,,,,,,,,,,,,
+#   - SMA STP 10.0 SE (wechselrichter),,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# AUTOMATISCH BERECHNET WERDEN:,,,,,,,,,,,,,,
+#   - PV-Erzeugung (Summe aller Wechselrichter),,,,,,,,,,,,,,
+#   - Batterieladung/-entladung (Summe aller Speicher),,,,,,,,,,,,,,
+#   - Direktverbrauch = PV-Erzeugung - Einspeisung - Batterieladung,,,,,,,,,,,,,,
+#   - Eigenverbrauch = Direktverbrauch + Batterieentladung,,,,,,,,,,,,,,
+#   - Gesamtverbrauch = Eigenverbrauch + Netzbezug,,,,,,,,,,,,,,
+#   - Eigenverbrauchsquote, Autarkiegrad, kWh/kWp,,,,,,,,,,,,
+#   - Wetterdaten (Sonnenstunden, Globalstrahlung) via Open-Meteo API,,,,,,,,,,,,,
+#   - Kosten/Erlöse (aus hinterlegten Strompreisen),,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+# HINWEISE:,,,,,,,,,,,,,,
+# - Strompreise werden aus Stammdaten für den jeweiligen Monat geholt,,,,,,,,,,,,,,
+# - Speicher-Spalten: Nur ausfüllen wenn Batteriespeicher vorhanden,,,,,,,,,,,,,,
+# - Die beiden Beispielzeilen können gelöscht oder überschrieben werden,,,,,,,,,,,,,,
+#,,,,,,,,,,,,,,
+Jahr,Monat,Einspeisung (kWh),Netzbezug (kWh),Datenquelle,Notizen,Smart #1 - km gefahren,Smart #1 - Verbrauch (kWh),Smart #1 - Ladung PV (kWh),Smart #1 - Ladung Netz (kWh),BYD HVS - Ladung (kWh),BYD HVS - Entladung (kWh),SMA EV CHARGER 22 - Ladung (kWh),SMA EV CHARGER 22 - Ladevorgänge,SMA STP 10.0 SE - PV-Erzeugung (kWh)
+2023,6,"517,08","1,84",CSV-Import,Installation PV,0,0,0,0,"70,3","50,56",0,0,"668,54"
+2023,7,"1179,67","4,43",CSV-Import,,0,0,0,0,"176,82","151,21",0,0,"1571,53"
+2023,8,"1014,27","4,88",CSV-Import,,0,0,0,0,"194,34","166,74",0,0,"1400,24"
+2023,9,"1273,4","4,24",CSV-Import,,0,0,0,0,"194,61","167,49",0,0,"1622,29"
+2023,10,"471,98","38,65",CSV-Import,,0,0,0,0,"215,27","202,08",0,0,"804,61"
+2023,11,"82,14","154,84",CSV-Import,,0,0,0,0,"141,48","135,77",0,0,"294,28"
+2023,12,"10,92","364,96",CSV-Import,Anschaffung Smart #1,650,125,10,115,"85,01","73,92",125,4,"171,8"
