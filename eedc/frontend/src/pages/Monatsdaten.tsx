@@ -99,7 +99,10 @@ export default function MonatsdatenPage() {
     }
   }
 
-  const formatKwh = (val?: number) => val !== undefined ? val.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : '-'
+  const formatKwh = (val?: number | null) =>
+    (val !== undefined && val !== null && typeof val === 'number')
+      ? val.toLocaleString('de-DE', { maximumFractionDigits: 1 })
+      : '-'
 
   if (anlagenLoading || loading) {
     return <LoadingSpinner text="Lade Daten..." />
@@ -418,8 +421,10 @@ function HAImportRow({
   onImport: (ueberschreiben: boolean) => void
   importing: boolean
 }) {
-  const formatKwh = (val: number | null) =>
-    val !== null ? val.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' kWh' : '-'
+  const formatKwh = (val: number | null | undefined) =>
+    (val !== null && val !== undefined && typeof val === 'number')
+      ? val.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' kWh'
+      : '-'
 
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
