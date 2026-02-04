@@ -33,6 +33,11 @@ class InvestitionBase(BaseModel):
     parameter: Optional[dict[str, Any]] = None
     aktiv: bool = True
     parent_investition_id: Optional[int] = None
+    # PV-Module spezifische Felder
+    leistung_kwp: Optional[float] = Field(None, ge=0, description="Leistung in kWp (für PV-Module)")
+    ausrichtung: Optional[str] = Field(None, max_length=50, description="Ausrichtung (Süd, Ost, West, etc.)")
+    neigung_grad: Optional[float] = Field(None, ge=0, le=90, description="Modulneigung in Grad")
+    ha_entity_id: Optional[str] = Field(None, max_length=255, description="Home Assistant Entity-ID für String-Daten")
 
 
 class InvestitionCreate(InvestitionBase):
@@ -50,6 +55,11 @@ class InvestitionUpdate(BaseModel):
     parameter: Optional[dict[str, Any]] = None
     aktiv: Optional[bool] = None
     parent_investition_id: Optional[int] = None
+    # PV-Module spezifische Felder
+    leistung_kwp: Optional[float] = Field(None, ge=0)
+    ausrichtung: Optional[str] = Field(None, max_length=50)
+    neigung_grad: Optional[float] = Field(None, ge=0, le=90)
+    ha_entity_id: Optional[str] = Field(None, max_length=255)
 
 
 class InvestitionResponse(InvestitionBase):

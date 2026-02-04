@@ -1,7 +1,9 @@
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { Button, Input, Alert } from '../ui'
 import type { Investition, InvestitionTyp } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
+import { haApi } from '../../api'
+import type { HASensor } from '../../api'
 
 interface InvestitionFormProps {
   investition?: Investition | null
@@ -26,6 +28,8 @@ const typLabels: Record<InvestitionTyp, string> = {
 export default function InvestitionForm({ investition, anlageId, typ, onSubmit, onCancel }: InvestitionFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [stringSensors, setStringSensors] = useState<HASensor[]>([])
+  const [loadingSensors, setLoadingSensors] = useState(false)
 
   const [formData, setFormData] = useState({
     bezeichnung: investition?.bezeichnung || `Mein ${typLabels[typ]}`,
@@ -34,7 +38,23 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     anschaffungskosten_alternativ: investition?.anschaffungskosten_alternativ?.toString() || '',
     betriebskosten_jahr: investition?.betriebskosten_jahr?.toString() || '',
     aktiv: investition?.aktiv ?? true,
+    // PV-Module direkte Felder
+    leistung_kwp: investition?.leistung_kwp?.toString() || '',
+    ausrichtung: investition?.ausrichtung || 'Süd',
+    neigung_grad: investition?.neigung_grad?.toString() || '30',
+    ha_entity_id: investition?.ha_entity_id || '',
   })
+
+  // String-Sensoren laden für PV-Module
+  useEffect(() => {
+    if (typ === 'pv-module') {
+      setLoadingSensors(true)
+      haApi.getStringSensors()
+        .then(setStringSensors)
+        .catch(() => setStringSensors([]))
+        .finally(() => setLoadingSensors(false))
+    }
+  }, [typ])
 
   // Typ-spezifische Parameter
   const params = investition?.parameter || {}
@@ -143,6 +163,13 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         betriebskosten_jahr: formData.betriebskosten_jahr ? parseFloat(formData.betriebskosten_jahr) : undefined,
         aktiv: formData.aktiv,
         parameter: Object.keys(convertedParams).length > 0 ? convertedParams : undefined,
+        // PV-Module spezifische Felder
+        ...(typ === 'pv-module' && {
+          leistung_kwp: formData.leistung_kwp ? parseFloat(formData.leistung_kwp) : undefined,
+          ausrichtung: formData.ausrichtung || undefined,
+          neigung_grad: formData.neigung_grad ? parseFloat(formData.neigung_grad) : undefined,
+          ha_entity_id: formData.ha_entity_id || undefined,
+        }),
       }
 
       await onSubmit(data)
@@ -217,6 +244,79 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           <span className="text-gray-700 dark:text-gray-300">Aktiv (in Berechnungen berücksichtigen)</span>
         </label>
       </div>
+
+      {/* PV-Module spezifische Felder (direkte Felder, nicht in paramData) */}
+      {typ === 'pv-module' && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">PV-Modul Parameter</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Leistung (kWp)"
+              name="leistung_kwp"
+              type="number"
+              step="0.1"
+              min="0"
+              value={formData.leistung_kwp}
+              onChange={handleChange}
+              required
+              hint="Gesamtleistung dieses PV-Moduls/Strings"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Ausrichtung
+              </label>
+              <select
+                name="ausrichtung"
+                value={formData.ausrichtung}
+                onChange={(e) => setFormData(prev => ({ ...prev, ausrichtung: e.target.value }))}
+                className="input w-full"
+              >
+                <option value="Süd">Süd</option>
+                <option value="Südost">Südost</option>
+                <option value="Südwest">Südwest</option>
+                <option value="Ost">Ost</option>
+                <option value="West">West</option>
+                <option value="Ost-West">Ost-West</option>
+                <option value="Nord">Nord</option>
+              </select>
+            </div>
+            <Input
+              label="Neigung (Grad)"
+              name="neigung_grad"
+              type="number"
+              step="1"
+              min="0"
+              max="90"
+              value={formData.neigung_grad}
+              onChange={handleChange}
+              hint="0° = flach, 90° = senkrecht"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Home Assistant Sensor
+                {loadingSensors && <span className="text-xs text-gray-400 ml-2">(Laden...)</span>}
+              </label>
+              <select
+                name="ha_entity_id"
+                value={formData.ha_entity_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, ha_entity_id: e.target.value }))}
+                className="input w-full"
+              >
+                <option value="">Kein Sensor (manuell)</option>
+                {stringSensors.map(sensor => (
+                  <option key={sensor.entity_id} value={sensor.entity_id}>
+                    {sensor.friendly_name || sensor.entity_id}
+                    {sensor.state && ` (${sensor.state} ${sensor.unit_of_measurement || ''})`}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Verknüpfe dieses PV-Modul mit einem String-Sensor für automatische IST-Daten
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Typ-spezifische Parameter */}
       <TypSpecificFields typ={typ} paramData={paramData} onChange={handleChange} />
@@ -523,11 +623,14 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
       )
 
     case 'pv-module':
+      // PV-Module verwenden jetzt direkte Felder - werden extern gerendert
+      return null
+
     case 'balkonkraftwerk':
       return (
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-            {typ === 'balkonkraftwerk' ? 'Balkonkraftwerk' : 'PV-Module'} Parameter
+            Balkonkraftwerk Parameter
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input

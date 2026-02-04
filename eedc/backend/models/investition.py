@@ -69,6 +69,9 @@ class Investition(Base):
     ausrichtung: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Süd, Ost, West, etc.
     neigung_grad: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Modulneigung in Grad
 
+    # Home Assistant Integration (für String-basierte IST-Erfassung)
+    ha_entity_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # z.B. "sensor.fronius_string1_energy"
+
     # Typ-spezifische Parameter (JSON)
     parameter: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 

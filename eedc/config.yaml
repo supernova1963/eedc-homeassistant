@@ -3,7 +3,7 @@
 
 name: "EEDC - Energie Daten Center"
 description: "Lokale PV-Anlagen Auswertung und Wirtschaftlichkeitsanalyse"
-version: "0.4.1"
+version: "0.5.0"
 slug: "eedc"
 url: "https://github.com/supernova1963/eedc-homeassistant"
 

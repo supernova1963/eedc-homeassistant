@@ -6,15 +6,16 @@
  */
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download, Layers } from 'lucide-react'
+import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download, Layers, CheckCircle, XCircle } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useAnlagen } from '../hooks'
-import { pvgisApi, monatsdatenApi } from '../api'
+import { pvgisApi, monatsdatenApi, haApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
 import type { MonatsdatenMitKennzahlen } from '../api/monatsdaten'
+import type { StringMonatsdaten } from '../api/ha'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  ComposedChart, Line, ReferenceLine, Bar, PieChart, Pie, Cell
+  ComposedChart, Line, ReferenceLine, Bar
 } from 'recharts'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -45,6 +46,7 @@ export default function PrognoseVsIst() {
   const [selectedJahr, setSelectedJahr] = useState<number>(new Date().getFullYear())
   const [prognose, setPrognose] = useState<PrognoseData | null>(null)
   const [monatsdaten, setMonatsdaten] = useState<MonatsdatenMitKennzahlen[]>([])
+  const [stringMonatsdaten, setStringMonatsdaten] = useState<StringMonatsdaten[]>([])
   const [loading, setLoading] = useState(false)
   const [savingPrognose, setSavingPrognose] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +75,14 @@ export default function PrognoseVsIst() {
       // Zuerst Monatsdaten laden
       const monatsdatenData = await monatsdatenApi.list(selectedAnlageId)
       setMonatsdaten(monatsdatenData as MonatsdatenMitKennzahlen[])
+
+      // String-Monatsdaten laden (für SOLL-IST pro Modul)
+      try {
+        const stringData = await haApi.getStringMonatsdaten(selectedAnlageId, selectedJahr)
+        setStringMonatsdaten(stringData)
+      } catch {
+        setStringMonatsdaten([])
+      }
 
       // Versuche gespeicherte Prognose zu laden
       const gespeichertePrognose = await pvgisApi.getAktivePrognose(selectedAnlageId)
@@ -355,63 +365,54 @@ export default function PrognoseVsIst() {
             </div>
           </Card>
 
-          {/* Modul-Übersicht (direkt nach dem Chart für bessere Übersicht) */}
+          {/* Modul-Übersicht mit SOLL-IST Vergleich */}
           {prognose.module && prognose.module.length > 1 && (
             <Card className="space-y-4">
               <div className="flex items-center gap-2">
                 <Layers className="h-5 w-5 text-blue-500" />
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Prognose nach PV-Modul
+                  SOLL-IST Vergleich nach PV-Modul
                 </h2>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Aufschlüsselung der PVGIS-Prognose nach einzelnen PV-Modulen.
-                Hilft bei der Identifikation von Problemen bei bestimmten Dachflächen.
+                Vergleich der PVGIS-Prognose mit tatsächlichen Erträgen pro PV-Modul.
+                {stringMonatsdaten.length === 0 && (
+                  <span className="text-yellow-600 ml-1">
+                    (Keine String-Daten vorhanden - zeige nur Prognose)
+                  </span>
+                )}
               </p>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Pie Chart */}
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={prognose.module.map((m, i) => ({
-                          name: m.bezeichnung,
-                          value: m.jahresertrag_kwh,
-                          color: MODUL_COLORS[i % MODUL_COLORS.length]
-                        }))}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={40}
-                        outerRadius={80}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {prognose.module.map((_, i) => (
-                          <Cell key={`cell-${i}`} fill={MODUL_COLORS[i % MODUL_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => [`${value.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh/Jahr`, 'Prognose']} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+              {/* SOLL-IST Tabelle pro Modul */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-2 px-2">PV-Modul</th>
+                      <th className="text-right py-2 px-2">kWp</th>
+                      <th className="text-right py-2 px-2">Ausrichtung</th>
+                      <th className="text-right py-2 px-2">SOLL (PVGIS)</th>
+                      <th className="text-right py-2 px-2">IST {selectedJahr}</th>
+                      <th className="text-right py-2 px-2">Abweichung</th>
+                      <th className="text-center py-2 px-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prognose.module.map((m, i) => {
+                      // IST-Daten für dieses Modul summieren
+                      const modulIst = stringMonatsdaten
+                        .filter(s => s.investition_id === m.investition_id)
+                        .reduce((sum, s) => sum + s.pv_erzeugung_kwh, 0)
 
-                {/* Modul-Tabelle */}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="text-left py-2 px-2">Modul</th>
-                        <th className="text-right py-2 px-2">kWp</th>
-                        <th className="text-right py-2 px-2">Ausrichtung</th>
-                        <th className="text-right py-2 px-2">Neigung</th>
-                        <th className="text-right py-2 px-2">Prognose</th>
-                        <th className="text-right py-2 px-2">kWh/kWp</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {prognose.module.map((m, i) => (
+                      // Prognose für das Jahr (Summe der Monatswerte für dieses Modul)
+                      const modulPrognose = m.monatsdaten
+                        .reduce((sum, md) => sum + md.e_m, 0)
+
+                      const abweichung = modulIst - modulPrognose
+                      const abweichungProzent = modulPrognose > 0 ? (abweichung / modulPrognose) * 100 : 0
+                      const hasIstData = modulIst > 0
+
+                      return (
                         <tr key={m.investition_id} className="border-b border-gray-100 dark:border-gray-800">
                           <td className="py-2 px-2">
                             <div className="flex items-center gap-2">
@@ -424,40 +425,71 @@ export default function PrognoseVsIst() {
                           </td>
                           <td className="text-right py-2 px-2">{m.leistung_kwp.toFixed(1)}</td>
                           <td className="text-right py-2 px-2">{m.ausrichtung}</td>
-                          <td className="text-right py-2 px-2">{m.neigung_grad}°</td>
-                          <td className="text-right py-2 px-2 font-medium text-yellow-600">
-                            {m.jahresertrag_kwh.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                          <td className="text-right py-2 px-2 text-yellow-600">
+                            {modulPrognose.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
                           </td>
-                          <td className="text-right py-2 px-2 text-gray-500">
-                            {m.spezifischer_ertrag_kwh_kwp.toFixed(0)}
+                          <td className="text-right py-2 px-2">
+                            {hasIstData ? (
+                              <span className="text-green-600">
+                                {modulIst.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className={`text-right py-2 px-2 ${abweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {hasIstData ? (
+                              `${abweichung >= 0 ? '+' : ''}${abweichungProzent.toFixed(1)}%`
+                            ) : '-'}
+                          </td>
+                          <td className="text-center py-2 px-2">
+                            {!hasIstData ? (
+                              <span className="text-gray-400 text-xs">Keine Daten</span>
+                            ) : abweichungProzent >= -5 ? (
+                              <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
+                            ) : abweichungProzent >= -15 ? (
+                              <span className="text-yellow-500">⚠</span>
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-500 mx-auto" />
+                            )}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
-                        <td className="py-2 px-2">Gesamt</td>
-                        <td className="text-right py-2 px-2">
-                          {prognose.module.reduce((sum, m) => sum + m.leistung_kwp, 0).toFixed(1)}
-                        </td>
-                        <td colSpan={2}></td>
-                        <td className="text-right py-2 px-2 text-yellow-600">
-                          {jahresPrognose.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
-                        </td>
-                        <td className="text-right py-2 px-2 text-gray-500">
-                          {prognose.module.length > 0
-                            ? (jahresPrognose / prognose.module.reduce((sum, m) => sum + m.leistung_kwp, 0)).toFixed(0)
-                            : '-'}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
+                      <td className="py-2 px-2">Gesamt</td>
+                      <td className="text-right py-2 px-2">
+                        {prognose.module.reduce((sum, m) => sum + m.leistung_kwp, 0).toFixed(1)}
+                      </td>
+                      <td></td>
+                      <td className="text-right py-2 px-2 text-yellow-600">
+                        {jahresPrognose.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                      </td>
+                      <td className="text-right py-2 px-2 text-green-600">
+                        {stringMonatsdaten.length > 0
+                          ? stringMonatsdaten.reduce((sum, s) => sum + s.pv_erzeugung_kwh, 0).toLocaleString('de-DE', { maximumFractionDigits: 0 }) + ' kWh'
+                          : '-'}
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
 
+              {stringMonatsdaten.length === 0 && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <strong>Tipp:</strong> Um IST-Daten pro PV-Modul zu sehen, weise jedem PV-Modul unter
+                    "Einstellungen → Investitionen" einen Home Assistant String-Sensor zu.
+                  </p>
+                </div>
+              )}
+
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                <strong>Hinweis:</strong> Module mit niedrigerem spezifischem Ertrag (kWh/kWp) können auf ungünstige Ausrichtung,
-                Verschattung oder andere lokale Faktoren hindeuten. Ein Süd-Modul mit 30° Neigung sollte den höchsten Ertrag liefern.
+                <strong>Hinweis:</strong> Module mit deutlicher Unterperformance (&lt;-15%) sollten auf
+                Verschattung, Verschmutzung oder technische Probleme geprüft werden.
               </p>
             </Card>
           )}

@@ -16,6 +16,11 @@ export interface InvestitionCreate {
   parameter?: Record<string, unknown>
   aktiv?: boolean
   parent_investition_id?: number
+  // PV-Module Felder
+  leistung_kwp?: number
+  ausrichtung?: string
+  neigung_grad?: number
+  ha_entity_id?: string  // Home Assistant Sensor für String-Daten
 }
 
 export interface InvestitionUpdate {
@@ -27,6 +32,11 @@ export interface InvestitionUpdate {
   parameter?: Record<string, unknown>
   aktiv?: boolean
   parent_investition_id?: number
+  // PV-Module Felder
+  leistung_kwp?: number
+  ausrichtung?: string
+  neigung_grad?: number
+  ha_entity_id?: string
 }
 
 export interface InvestitionTypInfo {

@@ -10,6 +10,7 @@ export { strompreiseApi } from './strompreise'
 export { importApi } from './import'
 export { systemApi } from './system'
 export { pvgisApi } from './pvgis'
+export { haApi } from './ha'
 
 // Re-export types
 export type { ApiError } from './client'
@@ -19,3 +20,4 @@ export type { InvestitionCreate, InvestitionUpdate, InvestitionTypInfo, ROIBerec
 export type { StrompreisCreate, StrompreisUpdate } from './strompreise'
 export type { CSVTemplateInfo, DemoDataResult } from './import'
 export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from './pvgis'
+export type { HASensor, HAStatus, StringMonatsdaten, StringMonatsdatenCreate } from './ha'

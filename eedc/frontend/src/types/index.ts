@@ -81,6 +81,11 @@ export interface Investition {
   co2_einsparung_prognose_kg?: number
   aktiv: boolean
   parent_investition_id?: number
+  // PV-Module spezifische Felder
+  leistung_kwp?: number
+  ausrichtung?: string
+  neigung_grad?: number
+  ha_entity_id?: string  // Home Assistant Sensor für String-Daten
 }
 
 // Strompreise
