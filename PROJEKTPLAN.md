@@ -769,6 +769,7 @@ def berechne_v2h_einsparung(
 | 2.13 | PVGIS | API Integration | ✅ |
 | 2.14 | API: ROI-Berechnung | Endpoint für alle Investitionen | ✅ |
 | 2.15 | PV-Module als Investitionen | Multi-Modul-Unterstützung | ✅ |
+| 2.16 | String-basierte IST-Erfassung | SOLL-IST pro PV-Modul via HA-Strings | ⬜ |
 
 ### Phase 3: Optimierung
 
@@ -872,7 +873,71 @@ docker run -p 8099:8099 -v $(pwd)/data:/data eedc-addon
 
 ---
 
-## 8. ÄNDERUNGSHISTORIE
+## 8. GEPLANTE FEATURES (Details)
+
+### 2.16 String-basierte IST-Erfassung
+
+**Problem:**
+Aktuell wird nur die Gesamterzeugung der PV-Anlage erfasst (`pv_erzeugung_kwh`). Ein echter SOLL-IST Vergleich pro PV-Modul (z.B. Süd vs. Ost vs. West) ist nicht möglich.
+
+**Lösung:**
+Home Assistant kann String/MPPT-Daten vom Wechselrichter erfassen. Diese werden mit PV-Modulen verknüpft.
+
+**Datenmodell-Erweiterung:**
+
+```
+┌─────────────────────┐
+│   investitionen     │
+│   (PV-Module)       │
+├─────────────────────┤
+│ id (PK)             │
+│ ...                 │
+│ ha_entity_id (NEU)  │  ← z.B. "sensor.fronius_string1_energy"
+└──────────┬──────────┘
+           │ 1:n
+           ▼
+┌─────────────────────┐
+│ string_monatsdaten  │  (NEUE Tabelle)
+├─────────────────────┤
+│ id (PK)             │
+│ investition_id (FK) │  ← Verknüpfung zum PV-Modul
+│ monatsdaten_id (FK) │  ← Verknüpfung zum Monat
+│ pv_erzeugung_kwh    │  ← IST-Ertrag dieses Strings
+│ created_at          │
+└─────────────────────┘
+```
+
+**API-Erweiterungen:**
+- `GET /api/ha/string-sensors` - Verfügbare String-Sensoren aus HA
+- `PUT /api/investitionen/{id}/ha-entity` - HA-Entity zuweisen
+- `POST /api/monatsdaten/{id}/import-strings` - String-Daten aus HA importieren
+- `GET /api/pvgis/prognose-vs-ist/{anlage_id}/module` - SOLL-IST pro Modul
+
+**UI-Erweiterungen:**
+1. **Investitionen-Formular:** Neues Feld "Home Assistant Sensor" (Dropdown)
+2. **Monatsdaten-Import:** Option "String-Daten aus HA importieren"
+3. **Prognose vs. IST:** Neue Tabelle mit SOLL-IST pro PV-Modul
+
+**Beispiel-Ausgabe:**
+
+| PV-Modul | SOLL (PVGIS) | IST (HA) | Abweichung |
+|----------|--------------|----------|------------|
+| Süd 12kWp | 1.200 kWh | 1.150 kWh | -4.2% ✓ |
+| Ost 5kWp | 400 kWh | 320 kWh | -20.0% ⚠️ |
+| West 3kWp | 250 kWh | 245 kWh | -2.0% ✓ |
+
+**Nutzen:**
+- Schnelle Identifikation von Problemen auf einzelnen Dachflächen
+- Verschattung, Verschmutzung, Defekte früh erkennen
+- Optimierungspotenzial aufdecken
+
+**Voraussetzungen:**
+- Wechselrichter muss String-Daten liefern (Fronius, SMA, Huawei, etc.)
+- HA-Integration für Wechselrichter muss String-Sensoren bereitstellen
+
+---
+
+## 9. ÄNDERUNGSHISTORIE
 
 | Datum | Version | Änderungen |
 |-------|---------|------------|
@@ -880,6 +945,7 @@ docker run -p 8099:8099 -v $(pwd)/data:/data eedc-addon
 | 2026-02-03 | 0.2.0 | ROI-Dashboard, System-Stats API, Settings-UI mit echten Daten |
 | 2026-02-03 | 0.3.0 | **HA Ingress Integration erfolgreich getestet** - HashRouter, relative API-Pfade, CSV Auto-Delimiter |
 | 2026-02-04 | 0.4.0 | **PVGIS Integration (2.13)** - EU PVGIS API v5.2, Prognose vs. IST, PV-Module als Investitionen mit individueller Ausrichtung |
+| 2026-02-04 | - | Feature 2.16 (String-basierte IST-Erfassung) geplant |
 
 ---
 
