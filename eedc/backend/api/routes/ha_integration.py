@@ -309,7 +309,7 @@ async def _get_ha_statistics_monthly(
     Holt monatliche Statistiken aus HA Long-Term Statistics.
 
     HA speichert Statistiken für Sensoren mit state_class "total_increasing".
-    Die API liefert "change" (Differenz) pro Periode.
+    Wir berechnen Monatswerte aus den täglichen/stündlichen History-Daten.
 
     Args:
         statistic_id: z.B. "sensor.pv_energy_total"
@@ -322,45 +322,80 @@ async def _get_ha_statistics_monthly(
     if not settings.supervisor_token:
         return []
 
+    monthly_data = []
+
     async with httpx.AsyncClient() as client:
-        # HA WebSocket-ähnliche REST API für Statistiken
-        # Format: POST /api/history/statistics_during_period
-        start_ts = datetime.combine(start_date, datetime.min.time()).isoformat()
-        end_ts = datetime.combine(end_date, datetime.max.time()).isoformat()
+        # Für jeden Monat im Zeitraum den Anfangs- und Endwert ermitteln
+        current = date(start_date.year, start_date.month, 1)
 
-        response = await client.post(
-            f"{settings.ha_api_url}/history/statistics_during_period",
-            json={
-                "start_time": start_ts,
-                "end_time": end_ts,
-                "statistic_ids": [statistic_id],
-                "period": "month"
-            },
-            headers={"Authorization": f"Bearer {settings.supervisor_token}"},
-            timeout=30.0
-        )
+        while current <= end_date:
+            # Letzter Tag des Monats
+            _, last_day = monthrange(current.year, current.month)
+            month_end = date(current.year, current.month, last_day)
 
-        if response.status_code != 200:
-            # Fallback: Versuche alternative API
-            response = await client.get(
-                f"{settings.ha_api_url}/history/period/{start_ts}",
-                params={
-                    "filter_entity_id": statistic_id,
-                    "end_time": end_ts,
-                },
-                headers={"Authorization": f"Bearer {settings.supervisor_token}"},
-                timeout=30.0
-            )
+            # Anfang und Ende des Monats als Zeitstempel
+            month_start_ts = datetime.combine(current, datetime.min.time()).isoformat()
+            month_end_ts = datetime.combine(month_end, datetime.max.time()).isoformat()
 
-            if response.status_code != 200:
-                return []
+            try:
+                # History-Daten für den Monat abrufen
+                response = await client.get(
+                    f"{settings.ha_api_url}/history/period/{month_start_ts}",
+                    params={
+                        "filter_entity_id": statistic_id,
+                        "end_time": month_end_ts,
+                        "minimal_response": "true",
+                        "no_attributes": "true",
+                    },
+                    headers={"Authorization": f"Bearer {settings.supervisor_token}"},
+                    timeout=30.0
+                )
 
-            # History API gibt einzelne States zurück - müssen aggregiert werden
-            # Das ist komplexer, daher zunächst leere Liste
-            return []
+                if response.status_code == 200:
+                    data = response.json()
 
-        data = response.json()
-        return data.get(statistic_id, [])
+                    if data and len(data) > 0 and len(data[0]) > 0:
+                        states = data[0]
+
+                        # Filtere ungültige States
+                        valid_states = []
+                        for s in states:
+                            try:
+                                val = float(s.get("state", 0))
+                                if val >= 0:  # Ignoriere negative oder ungültige Werte
+                                    valid_states.append(val)
+                            except (ValueError, TypeError):
+                                pass
+
+                        if len(valid_states) >= 2:
+                            # Für total_increasing: Differenz zwischen max und min
+                            # (oder letztem und erstem Wert wenn monoton steigend)
+                            first_val = valid_states[0]
+                            last_val = valid_states[-1]
+
+                            # Bei total_increasing sollte der Wert steigen
+                            change = last_val - first_val
+
+                            # Falls negativ (Zähler-Reset), nehme den letzten Wert
+                            if change < 0:
+                                change = last_val
+
+                            if change > 0:
+                                monthly_data.append({
+                                    "start": datetime.combine(current, datetime.min.time()).isoformat(),
+                                    "change": round(change, 2)
+                                })
+
+            except Exception:
+                pass  # Fehler ignorieren, nächsten Monat versuchen
+
+            # Nächster Monat
+            if current.month == 12:
+                current = date(current.year + 1, 1, 1)
+            else:
+                current = date(current.year, current.month + 1, 1)
+
+    return monthly_data
 
 
 @router.post("/statistics/monthly", response_model=HAMonthlyDataResponse)
