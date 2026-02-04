@@ -14,6 +14,8 @@ from datetime import date
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.anlage import Anlage
+from backend.models.monatsdaten import Monatsdaten
+from backend.models.strompreis import Strompreis
 
 
 # =============================================================================
@@ -382,7 +384,9 @@ async def get_roi_dashboard(
         berechne_eauto_einsparung,
         berechne_waermepumpe_einsparung,
         berechne_roi,
+        CO2_FAKTOR_STROM_KG_KWH,
     )
+    from sqlalchemy import func
 
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -490,6 +494,58 @@ async def get_roi_dashboard(
                 'wp_kosten_euro': result.wp_kosten_euro,
                 'alte_heizung_kosten_euro': result.alte_heizung_kosten_euro,
             }
+
+        elif inv.typ == InvestitionTyp.PV_MODULE.value:
+            # PV-Module: ROI aus tatsächlichen Monatsdaten berechnen
+            # Lade alle Monatsdaten für diese Anlage
+            md_result = await db.execute(
+                select(
+                    func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
+                    func.sum(Monatsdaten.netzbezug_kwh).label('netzbezug'),
+                    func.sum(Monatsdaten.pv_erzeugung_kwh).label('erzeugung'),
+                    func.sum(Monatsdaten.eigenverbrauch_kwh).label('eigenverbrauch'),
+                    func.count(Monatsdaten.id).label('anzahl_monate')
+                ).where(Monatsdaten.anlage_id == anlage_id)
+            )
+            md_stats = md_result.one()
+
+            anzahl_monate = md_stats.anzahl_monate or 0
+
+            if anzahl_monate > 0:
+                # Berechne Jahres-Durchschnitt
+                faktor = 12.0 / anzahl_monate  # Hochrechnung auf 1 Jahr
+
+                einspeisung_jahr = (md_stats.einspeisung or 0) * faktor
+                erzeugung_jahr = (md_stats.erzeugung or 0) * faktor
+
+                # Eigenverbrauch berechnen (falls nicht direkt gespeichert)
+                eigenverbrauch_jahr = (md_stats.eigenverbrauch or 0) * faktor
+                if eigenverbrauch_jahr == 0 and erzeugung_jahr > 0:
+                    # Eigenverbrauch = Erzeugung - Einspeisung (vereinfacht)
+                    eigenverbrauch_jahr = erzeugung_jahr - einspeisung_jahr
+
+                # Netto-Ertrag = Einspeise-Erlös + Eigenverbrauch-Ersparnis
+                einspeise_erloes = einspeisung_jahr * einspeiseverguetung_cent / 100
+                ev_ersparnis = eigenverbrauch_jahr * strompreis_cent / 100
+                jahres_einsparung = einspeise_erloes + ev_ersparnis
+
+                # CO2-Einsparung
+                co2_einsparung = erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH
+
+                detail = {
+                    'einspeisung_kwh_jahr': round(einspeisung_jahr, 0),
+                    'eigenverbrauch_kwh_jahr': round(eigenverbrauch_jahr, 0),
+                    'erzeugung_kwh_jahr': round(erzeugung_jahr, 0),
+                    'einspeise_erloes_euro': round(einspeise_erloes, 2),
+                    'ev_ersparnis_euro': round(ev_ersparnis, 2),
+                    'anzahl_monate_daten': anzahl_monate,
+                    'hinweis': 'Berechnet aus tatsächlichen Monatsdaten'
+                }
+            else:
+                # Keine Monatsdaten - Fallback auf manuelle Prognose
+                jahres_einsparung = inv.einsparung_prognose_jahr or 0
+                co2_einsparung = inv.co2_einsparung_prognose_kg or 0
+                detail = {'hinweis': 'Keine Monatsdaten vorhanden - manuelle Prognose'}
 
         else:
             # Für andere Typen: manuelle Einsparungsprognose verwenden
