@@ -28,8 +28,8 @@ class HAWebSocketClient:
 
         # URL je nach Umgebung
         if self.supervisor_token:
-            # Im Add-on Container
-            self.ws_url = "ws://supervisor/core/websocket"
+            # Im Add-on Container - WICHTIG: /api/websocket nicht /websocket
+            self.ws_url = "ws://supervisor/core/api/websocket"
         else:
             # Lokale Entwicklung
             ha_host = os.environ.get("HA_HOST", "homeassistant.local")
@@ -223,7 +223,10 @@ class HAWebSocketClient:
 
         try:
             async with asyncio.timeout(10):
-                async with websockets.connect(self.ws_url) as ws:
+                async with websockets.connect(
+                    self.ws_url,
+                    additional_headers={"Authorization": f"Bearer {self.supervisor_token}"}
+                ) as ws:
                     # Auth-Required
                     msg = json.loads(await ws.recv())
                     if msg.get("type") != "auth_required":
