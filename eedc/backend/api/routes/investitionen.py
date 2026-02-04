@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from datetime import date
 
 from backend.api.deps import get_db
-from backend.models.investition import Investition, InvestitionTyp
+from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import Strompreis
@@ -589,3 +589,354 @@ async def get_roi_dashboard(
         gesamt_co2_einsparung_kg=round(gesamt_co2, 1),
         berechnungen=berechnungen,
     )
+
+
+# =============================================================================
+# Investitions-Dashboards
+# =============================================================================
+
+class InvestitionMonatsdatenResponse(BaseModel):
+    """Monatsdaten für eine Investition."""
+    id: int
+    investition_id: int
+    jahr: int
+    monat: int
+    verbrauch_daten: dict[str, Any]
+    einsparung_monat_euro: Optional[float]
+    co2_einsparung_kg: Optional[float]
+
+    class Config:
+        from_attributes = True
+
+
+class EAutoDashboardResponse(BaseModel):
+    """E-Auto Dashboard Daten."""
+    investition: InvestitionResponse
+    monatsdaten: list[InvestitionMonatsdatenResponse]
+    zusammenfassung: dict[str, Any]
+
+
+class WaermepumpeDashboardResponse(BaseModel):
+    """Wärmepumpe Dashboard Daten."""
+    investition: InvestitionResponse
+    monatsdaten: list[InvestitionMonatsdatenResponse]
+    zusammenfassung: dict[str, Any]
+
+
+class SpeicherDashboardResponse(BaseModel):
+    """Speicher Dashboard Daten."""
+    investition: InvestitionResponse
+    monatsdaten: list[InvestitionMonatsdatenResponse]
+    zusammenfassung: dict[str, Any]
+
+
+class WallboxDashboardResponse(BaseModel):
+    """Wallbox Dashboard Daten."""
+    investition: InvestitionResponse
+    monatsdaten: list[InvestitionMonatsdatenResponse]
+    zusammenfassung: dict[str, Any]
+
+
+@router.get("/dashboard/e-auto/{anlage_id}", response_model=list[EAutoDashboardResponse])
+async def get_eauto_dashboard(
+    anlage_id: int,
+    strompreis_cent: float = Query(30.0),
+    benzinpreis_euro: float = Query(1.65),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    E-Auto Dashboard für eine Anlage.
+
+    Zeigt alle E-Autos mit Monatsdaten, km-Statistik, PV-Anteil, Ersparnis.
+    """
+    # E-Autos laden
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.E_AUTO.value)
+        .where(Investition.aktiv == True)
+    )
+    eautos = inv_result.scalars().all()
+
+    if not eautos:
+        return []
+
+    dashboards = []
+    for eauto in eautos:
+        # Monatsdaten laden
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == eauto.id)
+            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+        )
+        monatsdaten = md_result.scalars().all()
+
+        # Zusammenfassung berechnen
+        gesamt_km = 0
+        gesamt_verbrauch = 0
+        gesamt_pv_ladung = 0
+        gesamt_netz_ladung = 0
+        gesamt_v2h = 0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_km += d.get('km_gefahren', 0)
+            gesamt_verbrauch += d.get('verbrauch_kwh', 0)
+            gesamt_pv_ladung += d.get('ladung_pv_kwh', 0)
+            gesamt_netz_ladung += d.get('ladung_netz_kwh', 0)
+            gesamt_v2h += d.get('v2h_entladung_kwh', 0)
+
+        gesamt_ladung = gesamt_pv_ladung + gesamt_netz_ladung
+        pv_anteil = (gesamt_pv_ladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
+
+        # Vergleich mit Verbrenner
+        params = eauto.parameter or {}
+        benzin_verbrauch_100km = params.get('vergleich_verbrauch_l_100km', 7.5)
+        benzin_kosten = (gesamt_km / 100) * benzin_verbrauch_100km * benzinpreis_euro
+        strom_kosten = (gesamt_pv_ladung * 0 + gesamt_netz_ladung * strompreis_cent / 100)  # PV ist "kostenlos"
+        ersparnis = benzin_kosten - strom_kosten
+
+        # V2H Ersparnis
+        v2h_preis = params.get('v2h_entlade_preis_cent', strompreis_cent)
+        v2h_ersparnis = gesamt_v2h * v2h_preis / 100
+
+        # CO2 Ersparnis (Benzin: ca. 2.37 kg CO2 pro Liter)
+        benzin_co2 = (gesamt_km / 100) * benzin_verbrauch_100km * 2.37
+        strom_co2 = gesamt_verbrauch * 0.38  # Strommix
+        co2_ersparnis = benzin_co2 - strom_co2
+
+        zusammenfassung = {
+            'gesamt_km': round(gesamt_km, 0),
+            'gesamt_verbrauch_kwh': round(gesamt_verbrauch, 1),
+            'durchschnitt_verbrauch_kwh_100km': round(gesamt_verbrauch / gesamt_km * 100, 1) if gesamt_km > 0 else 0,
+            'gesamt_ladung_kwh': round(gesamt_ladung, 1),
+            'ladung_pv_kwh': round(gesamt_pv_ladung, 1),
+            'ladung_netz_kwh': round(gesamt_netz_ladung, 1),
+            'pv_anteil_prozent': round(pv_anteil, 1),
+            'v2h_entladung_kwh': round(gesamt_v2h, 1),
+            'v2h_ersparnis_euro': round(v2h_ersparnis, 2),
+            'benzin_kosten_alternativ_euro': round(benzin_kosten, 2),
+            'strom_kosten_euro': round(strom_kosten, 2),
+            'ersparnis_vs_benzin_euro': round(ersparnis, 2),
+            'gesamt_ersparnis_euro': round(ersparnis + v2h_ersparnis, 2),
+            'co2_ersparnis_kg': round(co2_ersparnis, 1),
+            'anzahl_monate': len(monatsdaten),
+        }
+
+        dashboards.append(EAutoDashboardResponse(
+            investition=eauto,
+            monatsdaten=monatsdaten,
+            zusammenfassung=zusammenfassung,
+        ))
+
+    return dashboards
+
+
+@router.get("/dashboard/waermepumpe/{anlage_id}", response_model=list[WaermepumpeDashboardResponse])
+async def get_waermepumpe_dashboard(
+    anlage_id: int,
+    strompreis_cent: float = Query(30.0),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Wärmepumpe Dashboard für eine Anlage.
+
+    Zeigt alle Wärmepumpen mit COP, Heizkosten, Ersparnis vs. alte Heizung.
+    """
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.WAERMEPUMPE.value)
+        .where(Investition.aktiv == True)
+    )
+    waermepumpen = inv_result.scalars().all()
+
+    if not waermepumpen:
+        return []
+
+    dashboards = []
+    for wp in waermepumpen:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == wp.id)
+            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+        )
+        monatsdaten = md_result.scalars().all()
+
+        gesamt_strom = 0
+        gesamt_heizung = 0
+        gesamt_warmwasser = 0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_strom += d.get('stromverbrauch_kwh', 0)
+            gesamt_heizung += d.get('heizenergie_kwh', 0)
+            gesamt_warmwasser += d.get('warmwasser_kwh', 0)
+
+        gesamt_waerme = gesamt_heizung + gesamt_warmwasser
+        durchschnitt_cop = gesamt_waerme / gesamt_strom if gesamt_strom > 0 else 0
+
+        # Kosten WP
+        wp_kosten = gesamt_strom * strompreis_cent / 100
+
+        # Vergleich alte Heizung
+        params = wp.parameter or {}
+        gas_preis = params.get('gas_kwh_preis_cent', 12)
+        alte_heizung_kosten = gesamt_waerme * gas_preis / 100
+
+        ersparnis = alte_heizung_kosten - wp_kosten
+
+        # CO2 (Gas: ca. 0.2 kg/kWh, Strom: 0.38 kg/kWh)
+        gas_co2 = gesamt_waerme * 0.2
+        strom_co2 = gesamt_strom * 0.38
+        co2_ersparnis = gas_co2 - strom_co2
+
+        zusammenfassung = {
+            'gesamt_stromverbrauch_kwh': round(gesamt_strom, 1),
+            'gesamt_heizenergie_kwh': round(gesamt_heizung, 1),
+            'gesamt_warmwasser_kwh': round(gesamt_warmwasser, 1),
+            'gesamt_waerme_kwh': round(gesamt_waerme, 1),
+            'durchschnitt_cop': round(durchschnitt_cop, 2),
+            'wp_kosten_euro': round(wp_kosten, 2),
+            'alte_heizung_kosten_euro': round(alte_heizung_kosten, 2),
+            'ersparnis_euro': round(ersparnis, 2),
+            'co2_ersparnis_kg': round(co2_ersparnis, 1),
+            'anzahl_monate': len(monatsdaten),
+        }
+
+        dashboards.append(WaermepumpeDashboardResponse(
+            investition=wp,
+            monatsdaten=monatsdaten,
+            zusammenfassung=zusammenfassung,
+        ))
+
+    return dashboards
+
+
+@router.get("/dashboard/speicher/{anlage_id}", response_model=list[SpeicherDashboardResponse])
+async def get_speicher_dashboard(
+    anlage_id: int,
+    strompreis_cent: float = Query(30.0),
+    einspeiseverguetung_cent: float = Query(8.0),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Speicher Dashboard für eine Anlage.
+
+    Zeigt alle Speicher mit Zyklen, Effizienz, Eigenverbrauchserhöhung.
+    """
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.SPEICHER.value)
+        .where(Investition.aktiv == True)
+    )
+    speicher_list = inv_result.scalars().all()
+
+    if not speicher_list:
+        return []
+
+    dashboards = []
+    for speicher in speicher_list:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == speicher.id)
+            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+        )
+        monatsdaten = md_result.scalars().all()
+
+        gesamt_ladung = 0
+        gesamt_entladung = 0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_ladung += d.get('ladung_kwh', 0)
+            gesamt_entladung += d.get('entladung_kwh', 0)
+
+        # Effizienz
+        effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
+
+        # Zyklen (basierend auf Kapazität)
+        params = speicher.parameter or {}
+        kapazitaet = params.get('kapazitaet_kwh', 10)
+        vollzyklen = gesamt_ladung / kapazitaet if kapazitaet > 0 else 0
+
+        # Ersparnis: Entladung ersetzt Netzbezug (Spread zwischen Netzbezug und Einspeisung)
+        spread = strompreis_cent - einspeiseverguetung_cent
+        ersparnis = gesamt_entladung * spread / 100
+
+        zusammenfassung = {
+            'gesamt_ladung_kwh': round(gesamt_ladung, 1),
+            'gesamt_entladung_kwh': round(gesamt_entladung, 1),
+            'effizienz_prozent': round(effizienz, 1),
+            'vollzyklen': round(vollzyklen, 1),
+            'zyklen_pro_monat': round(vollzyklen / len(monatsdaten), 1) if monatsdaten else 0,
+            'kapazitaet_kwh': kapazitaet,
+            'ersparnis_euro': round(ersparnis, 2),
+            'anzahl_monate': len(monatsdaten),
+        }
+
+        dashboards.append(SpeicherDashboardResponse(
+            investition=speicher,
+            monatsdaten=monatsdaten,
+            zusammenfassung=zusammenfassung,
+        ))
+
+    return dashboards
+
+
+@router.get("/dashboard/wallbox/{anlage_id}", response_model=list[WallboxDashboardResponse])
+async def get_wallbox_dashboard(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Wallbox Dashboard für eine Anlage.
+
+    Zeigt alle Wallboxen mit Ladevorgängen, Gesamtladung.
+    """
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.WALLBOX.value)
+        .where(Investition.aktiv == True)
+    )
+    wallboxen = inv_result.scalars().all()
+
+    if not wallboxen:
+        return []
+
+    dashboards = []
+    for wallbox in wallboxen:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == wallbox.id)
+            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+        )
+        monatsdaten = md_result.scalars().all()
+
+        gesamt_ladung = 0
+        gesamt_vorgaenge = 0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_ladung += d.get('ladung_kwh', 0)
+            gesamt_vorgaenge += d.get('ladevorgaenge', 0)
+
+        durchschnitt_pro_vorgang = gesamt_ladung / gesamt_vorgaenge if gesamt_vorgaenge > 0 else 0
+
+        zusammenfassung = {
+            'gesamt_ladung_kwh': round(gesamt_ladung, 1),
+            'gesamt_ladevorgaenge': gesamt_vorgaenge,
+            'durchschnitt_kwh_pro_vorgang': round(durchschnitt_pro_vorgang, 1),
+            'ladevorgaenge_pro_monat': round(gesamt_vorgaenge / len(monatsdaten), 1) if monatsdaten else 0,
+            'anzahl_monate': len(monatsdaten),
+        }
+
+        dashboards.append(WallboxDashboardResponse(
+            investition=wallbox,
+            monatsdaten=monatsdaten,
+            zusammenfassung=zusammenfassung,
+        ))
+
+    return dashboards

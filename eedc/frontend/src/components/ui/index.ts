@@ -12,3 +12,4 @@ export { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '.
 export { default as EmptyState } from './EmptyState'
 export { default as LoadingSpinner } from './LoadingSpinner'
 export { default as FormelTooltip, SimpleTooltip, fmtCalc } from './FormelTooltip'
+export { KPICard } from './KPICard'

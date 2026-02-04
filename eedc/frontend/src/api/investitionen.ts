@@ -68,6 +68,83 @@ export interface ROIDashboardResponse {
   berechnungen: ROIBerechnung[]
 }
 
+// Investitions-Dashboard Types
+export interface InvestitionMonatsdaten {
+  id: number
+  investition_id: number
+  jahr: number
+  monat: number
+  verbrauch_daten: Record<string, number>
+  einsparung_monat_euro: number | null
+  co2_einsparung_kg: number | null
+}
+
+export interface EAutoDashboardResponse {
+  investition: Investition
+  monatsdaten: InvestitionMonatsdaten[]
+  zusammenfassung: {
+    gesamt_km: number
+    gesamt_verbrauch_kwh: number
+    durchschnitt_verbrauch_kwh_100km: number
+    gesamt_ladung_kwh: number
+    ladung_pv_kwh: number
+    ladung_netz_kwh: number
+    pv_anteil_prozent: number
+    v2h_entladung_kwh: number
+    v2h_ersparnis_euro: number
+    benzin_kosten_alternativ_euro: number
+    strom_kosten_euro: number
+    ersparnis_vs_benzin_euro: number
+    gesamt_ersparnis_euro: number
+    co2_ersparnis_kg: number
+    anzahl_monate: number
+  }
+}
+
+export interface WaermepumpeDashboardResponse {
+  investition: Investition
+  monatsdaten: InvestitionMonatsdaten[]
+  zusammenfassung: {
+    gesamt_stromverbrauch_kwh: number
+    gesamt_heizenergie_kwh: number
+    gesamt_warmwasser_kwh: number
+    gesamt_waerme_kwh: number
+    durchschnitt_cop: number
+    wp_kosten_euro: number
+    alte_heizung_kosten_euro: number
+    ersparnis_euro: number
+    co2_ersparnis_kg: number
+    anzahl_monate: number
+  }
+}
+
+export interface SpeicherDashboardResponse {
+  investition: Investition
+  monatsdaten: InvestitionMonatsdaten[]
+  zusammenfassung: {
+    gesamt_ladung_kwh: number
+    gesamt_entladung_kwh: number
+    effizienz_prozent: number
+    vollzyklen: number
+    zyklen_pro_monat: number
+    kapazitaet_kwh: number
+    ersparnis_euro: number
+    anzahl_monate: number
+  }
+}
+
+export interface WallboxDashboardResponse {
+  investition: Investition
+  monatsdaten: InvestitionMonatsdaten[]
+  zusammenfassung: {
+    gesamt_ladung_kwh: number
+    gesamt_ladevorgaenge: number
+    durchschnitt_kwh_pro_vorgang: number
+    ladevorgaenge_pro_monat: number
+    anzahl_monate: number
+  }
+}
+
 export const investitionenApi = {
   /**
    * Verfügbare Investitionstypen mit Schema abrufen
@@ -131,5 +208,44 @@ export const investitionenApi = {
     if (benzinpreisEuro) params.append('benzinpreis_euro', benzinpreisEuro.toString())
     const query = params.toString()
     return api.get<ROIDashboardResponse>(`/investitionen/roi/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * E-Auto Dashboard
+   */
+  async getEAutoDashboard(anlageId: number, strompreisCent?: number, benzinpreisEuro?: number): Promise<EAutoDashboardResponse[]> {
+    const params = new URLSearchParams()
+    if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
+    if (benzinpreisEuro) params.append('benzinpreis_euro', benzinpreisEuro.toString())
+    const query = params.toString()
+    return api.get<EAutoDashboardResponse[]>(`/investitionen/dashboard/e-auto/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * Wärmepumpe Dashboard
+   */
+  async getWaermepumpeDashboard(anlageId: number, strompreisCent?: number): Promise<WaermepumpeDashboardResponse[]> {
+    const params = new URLSearchParams()
+    if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
+    const query = params.toString()
+    return api.get<WaermepumpeDashboardResponse[]>(`/investitionen/dashboard/waermepumpe/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * Speicher Dashboard
+   */
+  async getSpeicherDashboard(anlageId: number, strompreisCent?: number, einspeiseverguetungCent?: number): Promise<SpeicherDashboardResponse[]> {
+    const params = new URLSearchParams()
+    if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
+    if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
+    const query = params.toString()
+    return api.get<SpeicherDashboardResponse[]>(`/investitionen/dashboard/speicher/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * Wallbox Dashboard
+   */
+  async getWallboxDashboard(anlageId: number): Promise<WallboxDashboardResponse[]> {
+    return api.get<WallboxDashboardResponse[]>(`/investitionen/dashboard/wallbox/${anlageId}`)
   },
 }
