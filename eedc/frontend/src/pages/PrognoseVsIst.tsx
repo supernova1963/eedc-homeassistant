@@ -6,24 +6,28 @@
  */
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download } from 'lucide-react'
+import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download, Layers } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
-// AktivePrognoseResponse wird intern von pvgisApi verwendet
+import type { PVModulPrognose } from '../api/pvgis'
 import type { MonatsdatenMitKennzahlen } from '../api/monatsdaten'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  ComposedChart, Line, ReferenceLine, Bar
+  ComposedChart, Line, ReferenceLine, Bar, PieChart, Pie, Cell
 } from 'recharts'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+
+// Farben für Module
+const MODUL_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4']
 
 // Gemeinsamer Typ für Prognose-Daten (gespeichert oder live)
 interface PrognoseData {
   jahresertrag_kwh: number
   monatswerte: Array<{ monat: number; e_m: number }>
   isLive?: boolean
+  module?: PVModulPrognose[]  // Modul-Details bei Live-Prognose
 }
 
 interface VergleichsDaten {
@@ -90,7 +94,8 @@ export default function PrognoseVsIst() {
               monat: m.monat,
               e_m: m.e_m
             })),
-            isLive: true
+            isLive: true,
+            module: livePrognose.module  // Modul-Details speichern
           })
         } catch (pvgisError) {
           // PVGIS-Abruf fehlgeschlagen (z.B. keine PV-Module definiert)
@@ -441,6 +446,113 @@ export default function PrognoseVsIst() {
               Hinweis: PVGIS basiert auf langjährigen Mittelwerten. Einzelne Monate können stark abweichen.
             </p>
           </div>
+
+          {/* Modul-Übersicht (nur bei Live-Prognose mit Modul-Daten) */}
+          {prognose.module && prognose.module.length > 1 && (
+            <Card className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Layers className="h-5 w-5 text-blue-500" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Prognose nach PV-Modul
+                </h2>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aufschlüsselung der PVGIS-Prognose nach einzelnen PV-Modulen.
+                Hilft bei der Identifikation von Problemen bei bestimmten Dachflächen.
+              </p>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Pie Chart */}
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={prognose.module.map((m, i) => ({
+                          name: m.bezeichnung,
+                          value: m.jahresertrag_kwh,
+                          color: MODUL_COLORS[i % MODUL_COLORS.length]
+                        }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={80}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {prognose.module.map((_, i) => (
+                          <Cell key={`cell-${i}`} fill={MODUL_COLORS[i % MODUL_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [`${value.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh/Jahr`, 'Prognose']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Modul-Tabelle */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-2 px-2">Modul</th>
+                        <th className="text-right py-2 px-2">kWp</th>
+                        <th className="text-right py-2 px-2">Ausrichtung</th>
+                        <th className="text-right py-2 px-2">Neigung</th>
+                        <th className="text-right py-2 px-2">Prognose</th>
+                        <th className="text-right py-2 px-2">kWh/kWp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prognose.module.map((m, i) => (
+                        <tr key={m.investition_id} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="py-2 px-2">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: MODUL_COLORS[i % MODUL_COLORS.length] }}
+                              />
+                              <span className="font-medium">{m.bezeichnung}</span>
+                            </div>
+                          </td>
+                          <td className="text-right py-2 px-2">{m.leistung_kwp.toFixed(1)}</td>
+                          <td className="text-right py-2 px-2">{m.ausrichtung}</td>
+                          <td className="text-right py-2 px-2">{m.neigung_grad}°</td>
+                          <td className="text-right py-2 px-2 font-medium text-yellow-600">
+                            {m.jahresertrag_kwh.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                          </td>
+                          <td className="text-right py-2 px-2 text-gray-500">
+                            {m.spezifischer_ertrag_kwh_kwp.toFixed(0)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
+                        <td className="py-2 px-2">Gesamt</td>
+                        <td className="text-right py-2 px-2">
+                          {prognose.module.reduce((sum, m) => sum + m.leistung_kwp, 0).toFixed(1)}
+                        </td>
+                        <td colSpan={2}></td>
+                        <td className="text-right py-2 px-2 text-yellow-600">
+                          {jahresPrognose.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                        </td>
+                        <td className="text-right py-2 px-2 text-gray-500">
+                          {prognose.module.length > 0
+                            ? (jahresPrognose / prognose.module.reduce((sum, m) => sum + m.leistung_kwp, 0)).toFixed(0)
+                            : '-'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                <strong>Hinweis:</strong> Module mit niedrigerem spezifischem Ertrag (kWh/kWp) können auf ungünstige Ausrichtung,
+                Verschattung oder andere lokale Faktoren hindeuten. Ein Süd-Modul mit 30° Neigung sollte den höchsten Ertrag liefern.
+              </p>
+            </Card>
+          )}
         </>
       )}
     </div>
