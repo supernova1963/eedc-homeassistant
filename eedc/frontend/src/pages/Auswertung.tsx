@@ -206,7 +206,9 @@ function UebersichtTab({ data, stats, anlage, strompreis }: TabProps) {
     const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
     const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
     const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
-    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis - netzbezugKosten
+    // Netto-Ertrag = Einspeiseerlös + Eigenverbrauch-Ersparnis
+    // OHNE Abzug Netzbezugskosten (diese wären auch ohne PV angefallen)
+    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag }
   }, [stats, strompreis])
 
@@ -470,7 +472,9 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
     const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
     const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
     const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
-    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis - netzbezugKosten
+    // Netto-Ertrag = Einspeiseerlös + Eigenverbrauch-Ersparnis
+    // OHNE Abzug Netzbezugskosten (diese wären auch ohne PV angefallen)
+    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag }
   }, [stats, strompreis])
 

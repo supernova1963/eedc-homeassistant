@@ -140,7 +140,11 @@ def berechne_monatskennzahlen(
     einspeise_erloes = einspeisung_kwh * einspeiseverguetung_cent / 100
     netzbezug_kosten = netzbezug_kwh * netzbezug_preis_cent / 100
     ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
-    netto_ertrag = einspeise_erloes + ev_ersparnis - netzbezug_kosten
+
+    # Netto-Ertrag der PV-Anlage:
+    # = Einspeise-Erlös + Eigenverbrauch-Ersparnis
+    # OHNE Abzug der Netzbezugskosten (diese wären auch ohne PV angefallen)
+    netto_ertrag = einspeise_erloes + ev_ersparnis
 
     # CO2-Einsparung
     co2_einsparung = pv_erzeugung_kwh * CO2_FAKTOR_STROM_KG_KWH
