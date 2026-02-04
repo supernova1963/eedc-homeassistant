@@ -1,19 +1,25 @@
 import { useState, useRef, DragEvent, ChangeEvent } from 'react'
-import { Upload, FileSpreadsheet, Home, Download, Check, AlertTriangle, X } from 'lucide-react'
+import { Upload, FileSpreadsheet, Home, Download, Check, AlertTriangle, X, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { importApi } from '../api'
 import type { ImportResult } from '../types'
+import type { DemoDataResult } from '../api'
 
 export default function Import() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
+  const { anlagen, loading: anlagenLoading, refresh: refreshAnlagen } = useAnlagen()
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ueberschreiben, setUeberschreiben] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoResult, setDemoResult] = useState<DemoDataResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Prüfen ob Demo-Anlage existiert
+  const hasDemoAnlage = anlagen.some(a => a.anlagenname === 'Demo-Anlage')
 
   // Automatisch erste Anlage auswählen
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
@@ -90,6 +96,37 @@ export default function Import() {
     window.location.href = importApi.getExportUrl(anlageId)
   }
 
+  const handleCreateDemoData = async () => {
+    setError(null)
+    setDemoResult(null)
+    setDemoLoading(true)
+
+    try {
+      const result = await importApi.createDemoData()
+      setDemoResult(result)
+      refreshAnlagen()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Erstellen der Demo-Daten')
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
+  const handleDeleteDemoData = async () => {
+    setError(null)
+    setDemoResult(null)
+    setDemoLoading(true)
+
+    try {
+      await importApi.deleteDemoData()
+      refreshAnlagen()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Löschen der Demo-Daten')
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
   if (anlagenLoading) {
     return <LoadingSpinner text="Lade..." />
   }
@@ -103,6 +140,35 @@ export default function Import() {
         <Alert type="warning">
           Bitte lege zuerst eine PV-Anlage an, bevor du Daten importierst.
         </Alert>
+
+        {/* Demo-Daten auch ohne Anlage verfügbar */}
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+              <Sparkles className="h-6 w-6 text-amber-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Demo-Daten
+            </h2>
+          </div>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">
+            Starte mit einer kompletten Demo-Anlage inkl. PV-System, Speicher, E-Auto, Wärmepumpe und 31 Monaten Testdaten.
+          </p>
+          <Button
+            onClick={handleCreateDemoData}
+            loading={demoLoading}
+            className="w-full"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Demo-Daten erstellen
+          </Button>
+          {demoResult && (
+            <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm text-green-700 dark:text-green-300">
+              <Check className="inline h-4 w-4 mr-1" />
+              {demoResult.message}
+            </div>
+          )}
+        </Card>
       </div>
     )
   }
@@ -237,6 +303,56 @@ export default function Import() {
           <Button variant="secondary" className="w-full" disabled>
             Aus Home Assistant importieren
           </Button>
+        </Card>
+
+        {/* Demo-Daten */}
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+              <Sparkles className="h-6 w-6 text-amber-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Demo-Daten
+            </h2>
+          </div>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">
+            {hasDemoAnlage
+              ? 'Demo-Anlage ist bereits vorhanden. Du kannst sie löschen, um sie neu zu erstellen.'
+              : 'Erstelle eine komplette Demo-Anlage mit PV-System, Speicher, E-Auto, Wärmepumpe und 31 Monaten Testdaten.'
+            }
+          </p>
+
+          {hasDemoAnlage ? (
+            <Button
+              variant="danger"
+              onClick={handleDeleteDemoData}
+              loading={demoLoading}
+              className="w-full"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Demo-Anlage löschen
+            </Button>
+          ) : (
+            <Button
+              onClick={handleCreateDemoData}
+              loading={demoLoading}
+              className="w-full"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Demo-Daten erstellen
+            </Button>
+          )}
+
+          {demoResult && (
+            <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm text-green-700 dark:text-green-300">
+              <Check className="inline h-4 w-4 mr-1" />
+              {demoResult.message}
+            </div>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+            <strong>Enthält:</strong> 20 kWp PV-Anlage, 15 kWh Speicher, Tesla Model 3 mit V2H, Wärmepumpe, Wallbox, Strompreise 2023-2025
+          </div>
         </Card>
       </div>
 

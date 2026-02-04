@@ -13,6 +13,16 @@ export interface CSVTemplateInfo {
   beschreibung: Record<string, string>
 }
 
+export interface DemoDataResult {
+  erfolg: boolean
+  anlage_id: number
+  anlage_name: string
+  monatsdaten_count: number
+  investitionen_count: number
+  strompreise_count: number
+  message: string
+}
+
 export const importApi = {
   /**
    * CSV Template Info abrufen
@@ -64,5 +74,38 @@ export const importApi = {
     if (jahr) params.append('jahr', jahr.toString())
     const query = params.toString()
     return `${API_BASE}/import/export/${anlageId}${query ? '?' + query : ''}`
+  },
+
+  /**
+   * Demo-Daten erstellen
+   * Erstellt eine komplette Demo-Anlage mit Investitionen, Strompreisen und Monatsdaten
+   */
+  async createDemoData(): Promise<DemoDataResult> {
+    const response = await fetch(`${API_BASE}/import/demo`, {
+      method: 'POST',
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Demo-Daten konnten nicht erstellt werden')
+    }
+
+    return response.json()
+  },
+
+  /**
+   * Demo-Daten löschen
+   */
+  async deleteDemoData(): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE}/import/demo`, {
+      method: 'DELETE',
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Demo-Daten konnten nicht gelöscht werden')
+    }
+
+    return response.json()
   },
 }
