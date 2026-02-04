@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, Zap, Battery, TrendingUp, ArrowRight } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Card, Button, LoadingSpinner } from '../components/ui'
+import { Card, Button, LoadingSpinner, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen, useMonatsdaten, useMonatsdatenStats } from '../hooks'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -68,6 +68,9 @@ export default function Dashboard() {
           icon={Sun}
           color="text-energy-solar"
           bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+          formel="Σ PV-Erzeugung aller Monate"
+          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
+          ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
         />
         <KPICard
           title="Eigenverbrauch"
@@ -77,6 +80,9 @@ export default function Dashboard() {
           icon={Zap}
           color="text-energy-consumption"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
+          formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
+          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
+          ergebnis={`= ${fmtCalc((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100, 1)} %`}
         />
         <KPICard
           title="Autarkie"
@@ -86,6 +92,9 @@ export default function Dashboard() {
           icon={Battery}
           color="text-energy-battery"
           bgColor="bg-blue-50 dark:bg-blue-900/20"
+          formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
+          berechnung="Durchschnitt aller Monate"
+          ergebnis={`= ${fmtCalc(stats.durchschnittAutarkie, 1)} %`}
         />
         <KPICard
           title="Netzbezug"
@@ -95,6 +104,9 @@ export default function Dashboard() {
           icon={TrendingUp}
           color="text-energy-grid"
           bgColor="bg-red-50 dark:bg-red-900/20"
+          formel="Σ Netzbezug aller Monate"
+          berechnung={`${fmtCalc(stats.gesamtNetzbezug, 0)} kWh`}
+          ergebnis={`= ${fmtCalc(stats.gesamtNetzbezug / 1000, 1)} MWh`}
         />
       </div>
 
@@ -169,17 +181,33 @@ interface KPICardProps {
   icon: React.ElementType
   color: string
   bgColor: string
+  // Tooltip-Props
+  formel?: string
+  berechnung?: string
+  ergebnis?: string
 }
 
-function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor }: KPICardProps) {
+function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, formel, berechnung, ergebnis }: KPICardProps) {
+  const valueContent = (
+    <span className="text-2xl font-bold text-gray-900 dark:text-white">
+      {value} <span className="text-sm font-normal">{unit}</span>
+    </span>
+  )
+
   return (
     <Card>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-            {value} <span className="text-sm font-normal">{unit}</span>
-          </p>
+          <div className="mt-1">
+            {formel ? (
+              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+                {valueContent}
+              </FormelTooltip>
+            ) : (
+              valueContent
+            )}
+          </div>
           {subtitle && (
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{subtitle}</p>
           )}

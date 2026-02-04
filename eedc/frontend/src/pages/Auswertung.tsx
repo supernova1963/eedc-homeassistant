@@ -7,7 +7,7 @@ import {
 import {
   Sun, Zap, Battery, TrendingUp, Leaf, Euro, Calendar, ArrowRight
 } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
+import { Card, Button, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis } from '../hooks'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -223,6 +223,9 @@ function UebersichtTab({ data, stats, anlage, strompreis }: TabProps) {
           icon={Sun}
           color="text-yellow-500"
           bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+          formel="Σ PV-Erzeugung aller Monate"
+          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
+          ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
         />
         <KPICard
           title="Eigenverbrauch"
@@ -232,6 +235,9 @@ function UebersichtTab({ data, stats, anlage, strompreis }: TabProps) {
           icon={Zap}
           color="text-purple-500"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
+          formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
+          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
+          ergebnis={`= ${fmtCalc((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100, 1)} %`}
         />
         <KPICard
           title="Autarkie"
@@ -241,6 +247,9 @@ function UebersichtTab({ data, stats, anlage, strompreis }: TabProps) {
           icon={Battery}
           color="text-blue-500"
           bgColor="bg-blue-50 dark:bg-blue-900/20"
+          formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
+          berechnung="Durchschnitt aller Monate"
+          ergebnis={`= ${fmtCalc(stats.durchschnittAutarkie, 1)} %`}
         />
         <KPICard
           title="Netto-Ertrag"
@@ -250,6 +259,9 @@ function UebersichtTab({ data, stats, anlage, strompreis }: TabProps) {
           icon={Euro}
           color="text-green-500"
           bgColor="bg-green-50 dark:bg-green-900/20"
+          formel="Einspeiseerlös + EV-Ersparnis"
+          berechnung={finanzen ? `${fmtCalc(finanzen.einspeiseErloes, 2)} € + ${fmtCalc(finanzen.eigenverbrauchErsparnis, 2)} €` : undefined}
+          ergebnis={finanzen ? `= ${fmtCalc(finanzen.nettoErtrag, 2)} €` : undefined}
         />
       </div>
 
@@ -490,6 +502,9 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
           icon={TrendingUp}
           color="text-green-500"
           bgColor="bg-green-50 dark:bg-green-900/20"
+          formel="Einspeisung × Einspeisevergütung"
+          berechnung={`${fmtCalc(stats.gesamtEinspeisung, 0)} kWh × ${fmtCalc(strompreis.einspeiseverguetung_cent_kwh, 2)} ct/kWh`}
+          ergebnis={`= ${fmtCalc(gesamt.einspeiseErloes, 2)} €`}
         />
         <KPICard
           title="EV-Ersparnis"
@@ -499,6 +514,9 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
           icon={Zap}
           color="text-purple-500"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
+          formel="Eigenverbrauch × Netzbezugspreis"
+          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh × ${fmtCalc(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh`}
+          ergebnis={`= ${fmtCalc(gesamt.eigenverbrauchErsparnis, 2)} €`}
         />
         <KPICard
           title="Netzbezug"
@@ -508,6 +526,9 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
           icon={Battery}
           color="text-red-500"
           bgColor="bg-red-50 dark:bg-red-900/20"
+          formel="Netzbezug × Netzbezugspreis"
+          berechnung={`${fmtCalc(stats.gesamtNetzbezug, 0)} kWh × ${fmtCalc(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh`}
+          ergebnis={`= ${fmtCalc(gesamt.netzbezugKosten, 2)} €`}
         />
         <KPICard
           title="Netto-Ertrag"
@@ -517,6 +538,9 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
           icon={Euro}
           color="text-blue-500"
           bgColor="bg-blue-50 dark:bg-blue-900/20"
+          formel="Einspeiseerlös + EV-Ersparnis"
+          berechnung={`${fmtCalc(gesamt.einspeiseErloes, 2)} € + ${fmtCalc(gesamt.eigenverbrauchErsparnis, 2)} €`}
+          ergebnis={`= ${fmtCalc(gesamt.nettoErtrag, 2)} €`}
         />
       </div>
 
@@ -579,6 +603,9 @@ function CO2Tab({ data, stats }: Omit<TabProps, 'anlage' | 'strompreis'>) {
           icon={Leaf}
           color="text-green-500"
           bgColor="bg-green-50 dark:bg-green-900/20"
+          formel="PV-Erzeugung × CO2-Faktor"
+          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh × ${CO2_FAKTOR * 1000} g/kWh`}
+          ergebnis={`= ${fmtCalc(gesamtCO2, 0)} kg = ${fmtCalc(gesamtCO2 / 1000, 2)} t`}
         />
         <KPICard
           title="Bäume äquivalent"
@@ -588,6 +615,9 @@ function CO2Tab({ data, stats }: Omit<TabProps, 'anlage' | 'strompreis'>) {
           icon={Leaf}
           color="text-emerald-500"
           bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+          formel="CO2-Einsparung ÷ 12,5 kg/Baum/Jahr"
+          berechnung={`${fmtCalc(gesamtCO2, 0)} kg ÷ 12,5 kg/Baum`}
+          ergebnis={`= ${fmtCalc(baeume, 0)} Bäume`}
         />
         <KPICard
           title="Auto-km vermieden"
@@ -597,6 +627,9 @@ function CO2Tab({ data, stats }: Omit<TabProps, 'anlage' | 'strompreis'>) {
           icon={Calendar}
           color="text-teal-500"
           bgColor="bg-teal-50 dark:bg-teal-900/20"
+          formel="CO2-Einsparung ÷ 120 g/km"
+          berechnung={`${fmtCalc(gesamtCO2 * 1000, 0)} g ÷ 120 g/km`}
+          ergebnis={`= ${fmtCalc(autoKm, 0)} km`}
         />
       </div>
 
@@ -639,17 +672,33 @@ interface KPICardProps {
   icon: React.ElementType
   color: string
   bgColor: string
+  // Tooltip-Props
+  formel?: string
+  berechnung?: string
+  ergebnis?: string
 }
 
-function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor }: KPICardProps) {
+function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, formel, berechnung, ergebnis }: KPICardProps) {
+  const valueContent = (
+    <span className="text-2xl font-bold text-gray-900 dark:text-white">
+      {value} <span className="text-sm font-normal">{unit}</span>
+    </span>
+  )
+
   return (
     <Card>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-            {value} <span className="text-sm font-normal">{unit}</span>
-          </p>
+          <div className="mt-1">
+            {formel ? (
+              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+                {valueContent}
+              </FormelTooltip>
+            ) : (
+              valueContent
+            )}
+          </div>
           {subtitle && (
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{subtitle}</p>
           )}

@@ -31,7 +31,7 @@ import {
   LineChart,
   Line,
 } from 'recharts'
-import { Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
+import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen, useAktuellerStrompreis } from '../hooks'
 import { investitionenApi, type ROIDashboardResponse } from '../api'
 
@@ -296,6 +296,9 @@ export default function ROIDashboard() {
               subtitle={`Relevant: ${roiData.gesamt_relevante_kosten.toLocaleString('de-DE')} €`}
               color="text-blue-500"
               bgColor="bg-blue-50 dark:bg-blue-900/20"
+              formel="Σ Anschaffungskosten aller Investitionen"
+              berechnung={`Relevant = Gesamt − Alternativkosten`}
+              ergebnis={`= ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} €`}
             />
             <KPICard
               icon={TrendingUp}
@@ -304,6 +307,9 @@ export default function ROIDashboard() {
               subtitle={roiData.gesamt_roi_prozent ? `ROI: ${roiData.gesamt_roi_prozent}%` : 'ROI: -'}
               color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Σ Einsparungen aller Investitionen"
+              berechnung={roiData.gesamt_relevante_kosten > 0 ? `ROI = Einsparung ÷ Kosten × 100` : undefined}
+              ergebnis={roiData.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent}% ROI` : undefined}
             />
             <KPICard
               icon={Clock}
@@ -312,6 +318,9 @@ export default function ROIDashboard() {
               subtitle="Bis zur Kostendeckung"
               color="text-orange-500"
               bgColor="bg-orange-50 dark:bg-orange-900/20"
+              formel="Relevante Kosten ÷ Jährliche Einsparung"
+              berechnung={roiData.gesamt_jahres_einsparung > 0 ? `${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined}
+              ergebnis={roiData.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre} Jahre` : undefined}
             />
             <KPICard
               icon={Leaf}
@@ -320,6 +329,9 @@ export default function ROIDashboard() {
               subtitle="pro Jahr"
               color="text-emerald-500"
               bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+              formel="Σ CO2-Einsparungen aller Investitionen"
+              berechnung="Je nach Investitionstyp unterschiedlich"
+              ergebnis={`= ${fmtCalc(roiData.gesamt_co2_einsparung_kg / 1000, 2)} t CO2/Jahr`}
             />
           </div>
 
@@ -576,9 +588,17 @@ interface KPICardProps {
   subtitle?: string
   color: string
   bgColor: string
+  // Tooltip-Props
+  formel?: string
+  berechnung?: string
+  ergebnis?: string
 }
 
-function KPICard({ icon: Icon, title, value, subtitle, color, bgColor }: KPICardProps) {
+function KPICard({ icon: Icon, title, value, subtitle, color, bgColor, formel, berechnung, ergebnis }: KPICardProps) {
+  const valueContent = (
+    <span className="text-2xl font-bold text-gray-900 dark:text-white">{value}</span>
+  )
+
   return (
     <Card>
       <div className="flex items-start gap-4">
@@ -587,7 +607,13 @@ function KPICard({ icon: Icon, title, value, subtitle, color, bgColor }: KPICard
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+          {formel ? (
+            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+              {valueContent}
+            </FormelTooltip>
+          ) : (
+            valueContent
+          )}
           {subtitle && (
             <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
           )}
