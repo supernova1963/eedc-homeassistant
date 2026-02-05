@@ -232,6 +232,7 @@ export default function DiscoveryDialog({
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
             <SensorMappingPanel
               suggestions={discoveryResult.sensor_mappings}
+              allEnergySensors={discoveryResult.all_energy_sensors}
               selectedMappings={selectedMappings}
               onMappingChange={setMapping}
               onApplyBest={applyBestMappings}

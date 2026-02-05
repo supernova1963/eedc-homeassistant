@@ -147,6 +147,7 @@ class DiscoveryResult(BaseModel):
     ha_connected: bool
     devices: list[DiscoveredDevice] = []
     sensor_mappings: SensorMappingSuggestions = SensorMappingSuggestions()
+    all_energy_sensors: list[DiscoveredSensor] = []  # Alle Energy-Sensoren für manuelle Auswahl
     warnings: list[str] = []
     current_mappings: HASensorMapping = HASensorMapping()
 
@@ -1557,8 +1558,35 @@ async def discover_ha_devices(
     filtered_devices.sort(key=lambda x: x.priority, reverse=True)
     result.devices = filtered_devices
 
-    # Sensor-Mappings extrahieren
+    # Sensor-Mappings extrahieren (nur empfohlene)
     result.sensor_mappings = _extract_sensor_mappings(sensors)
+
+    # Alle Energy-Sensoren für manuelle Auswahl sammeln
+    # (für Benutzer mit nicht-unterstützten Herstellern)
+    all_energy = []
+    for sensor in sensors:
+        entity_id = sensor["entity_id"]
+        attrs = sensor.get("attributes", {})
+        unit = attrs.get("unit_of_measurement", "")
+        state_class = attrs.get("state_class", "")
+        device_class = attrs.get("device_class", "")
+
+        # Nur Energy-Sensoren mit kWh und total_increasing
+        if state_class == "total_increasing" and unit == "kWh":
+            all_energy.append(DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=unit,
+                device_class=device_class,
+                state_class=state_class,
+                current_state=sensor.get("state"),
+                suggested_mapping=None,
+                confidence=0,
+            ))
+
+    # Nach Entity-ID sortieren
+    all_energy.sort(key=lambda x: x.entity_id)
+    result.all_energy_sensors = all_energy
 
     return result
 

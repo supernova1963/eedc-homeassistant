@@ -2,6 +2,7 @@
  * SensorMappingPanel - Sensor-Zuordnungs-Vorschläge
  */
 
+import { useState } from 'react'
 import { Sun, ArrowUpFromLine, ArrowDownToLine, Battery, BatteryCharging } from 'lucide-react'
 import type { SensorMappingSuggestions, DiscoveredSensor } from '../../api/ha'
 
@@ -15,6 +16,7 @@ interface SelectedMappings {
 
 interface SensorMappingPanelProps {
   suggestions: SensorMappingSuggestions
+  allEnergySensors: DiscoveredSensor[]
   selectedMappings: SelectedMappings
   onMappingChange: (field: keyof SelectedMappings, entityId: string | null) => void
   onApplyBest: () => void
@@ -25,12 +27,16 @@ interface MappingFieldProps {
   icon: typeof Sun
   field: keyof SelectedMappings
   suggestions: DiscoveredSensor[]
+  allSensors: DiscoveredSensor[]
+  showAll: boolean
   value: string | null
   onChange: (entityId: string | null) => void
 }
 
-function MappingField({ label, icon: Icon, suggestions, value, onChange }: MappingFieldProps) {
-  const hasSuggestions = suggestions.length > 0
+function MappingField({ label, icon: Icon, suggestions, allSensors, showAll, value, onChange }: MappingFieldProps) {
+  const sensors = showAll ? allSensors : suggestions
+  const hasSensors = sensors.length > 0
+  const hasRecommendation = suggestions.length > 0 && suggestions[0].confidence >= 70
 
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
@@ -52,14 +58,14 @@ function MappingField({ label, icon: Icon, suggestions, value, onChange }: Mappi
             border-gray-300 dark:border-gray-600
             text-gray-900 dark:text-white
             focus:ring-2 focus:ring-amber-500 focus:border-amber-500
-            ${!hasSuggestions ? 'opacity-50' : ''}
+            ${!hasSensors ? 'opacity-50' : ''}
           `}
-          disabled={!hasSuggestions}
+          disabled={!hasSensors}
         >
           <option value="">
-            {hasSuggestions ? '-- Nicht zugeordnet --' : '-- Kein Sensor gefunden --'}
+            {hasSensors ? '-- Nicht zugeordnet --' : '-- Kein Sensor gefunden --'}
           </option>
-          {suggestions.map((sensor) => (
+          {sensors.map((sensor) => (
             <option key={sensor.entity_id} value={sensor.entity_id}>
               {sensor.friendly_name || sensor.entity_id}
               {sensor.confidence >= 80 && ' ★'}
@@ -68,7 +74,7 @@ function MappingField({ label, icon: Icon, suggestions, value, onChange }: Mappi
         </select>
 
         {/* Bester Vorschlag Info */}
-        {hasSuggestions && suggestions[0].confidence >= 70 && !value && (
+        {!showAll && hasRecommendation && !value && (
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
             Empfehlung: {suggestions[0].friendly_name || suggestions[0].entity_id}
           </p>
@@ -87,10 +93,13 @@ function MappingField({ label, icon: Icon, suggestions, value, onChange }: Mappi
 
 export default function SensorMappingPanel({
   suggestions,
+  allEnergySensors,
   selectedMappings,
   onMappingChange,
   onApplyBest,
 }: SensorMappingPanelProps) {
+  const [showAll, setShowAll] = useState(false)
+
   const totalSuggestions =
     suggestions.pv_erzeugung.length +
     suggestions.einspeisung.length +
@@ -111,15 +120,48 @@ export default function SensorMappingPanel({
           </p>
         </div>
 
-        {totalSuggestions > 0 && (
-          <button
-            onClick={onApplyBest}
-            className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 transition-colors"
-          >
-            Beste übernehmen
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {totalSuggestions > 0 && !showAll && (
+            <button
+              onClick={onApplyBest}
+              className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 transition-colors"
+            >
+              Beste übernehmen
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Empfohlen / Alle Toggle */}
+      <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+        <button
+          onClick={() => setShowAll(false)}
+          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            !showAll
+              ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          Empfohlen ({totalSuggestions})
+        </button>
+        <button
+          onClick={() => setShowAll(true)}
+          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            showAll
+              ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          Alle ({allEnergySensors.length})
+        </button>
+      </div>
+
+      {/* Info bei "Alle" */}
+      {showAll && (
+        <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
+          Zeigt alle Energy-Sensoren (kWh, total_increasing) für manuelle Zuordnung.
+        </p>
+      )}
 
       {/* Mapping Fields */}
       <div className="space-y-3">
@@ -128,6 +170,8 @@ export default function SensorMappingPanel({
           icon={Sun}
           field="pv_erzeugung"
           suggestions={suggestions.pv_erzeugung}
+          allSensors={allEnergySensors}
+          showAll={showAll}
           value={selectedMappings.pv_erzeugung}
           onChange={(v) => onMappingChange('pv_erzeugung', v)}
         />
@@ -137,6 +181,8 @@ export default function SensorMappingPanel({
           icon={ArrowUpFromLine}
           field="einspeisung"
           suggestions={suggestions.einspeisung}
+          allSensors={allEnergySensors}
+          showAll={showAll}
           value={selectedMappings.einspeisung}
           onChange={(v) => onMappingChange('einspeisung', v)}
         />
@@ -146,6 +192,8 @@ export default function SensorMappingPanel({
           icon={ArrowDownToLine}
           field="netzbezug"
           suggestions={suggestions.netzbezug}
+          allSensors={allEnergySensors}
+          showAll={showAll}
           value={selectedMappings.netzbezug}
           onChange={(v) => onMappingChange('netzbezug', v)}
         />
@@ -155,6 +203,8 @@ export default function SensorMappingPanel({
           icon={BatteryCharging}
           field="batterie_ladung"
           suggestions={suggestions.batterie_ladung}
+          allSensors={allEnergySensors}
+          showAll={showAll}
           value={selectedMappings.batterie_ladung}
           onChange={(v) => onMappingChange('batterie_ladung', v)}
         />
@@ -164,6 +214,8 @@ export default function SensorMappingPanel({
           icon={Battery}
           field="batterie_entladung"
           suggestions={suggestions.batterie_entladung}
+          allSensors={allEnergySensors}
+          showAll={showAll}
           value={selectedMappings.batterie_entladung}
           onChange={(v) => onMappingChange('batterie_entladung', v)}
         />

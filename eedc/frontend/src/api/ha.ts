@@ -124,6 +124,7 @@ export interface DiscoveryResult {
   ha_connected: boolean
   devices: DiscoveredDevice[]
   sensor_mappings: SensorMappingSuggestions
+  all_energy_sensors: DiscoveredSensor[]  // Alle Energy-Sensoren für manuelle Auswahl
   warnings: string[]
   current_mappings: HASensorMapping
 }
