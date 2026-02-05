@@ -21,21 +21,25 @@ Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten
 3. **HA-Verbindung prüfen** - Automatische Prüfung, überspringbar
 4. **Strompreise konfigurieren** - Mit deutschen Standardwerten (30ct/8.2ct)
-5. **Auto-Discovery** - Geräte aus Home Assistant erkennen
-6. **Investitionen vervollständigen** - Kaufpreis, Datum, technische Daten
-7. **Zusammenfassung** - Übersicht und Abschluss
+5. **PV-Module/Strings** - Modulgruppen mit Ausrichtung/Neigung für PVGIS-Prognose (NEU v0.7.1)
+6. **Auto-Discovery** - Geräte aus Home Assistant erkennen
+7. **Investitionen vervollständigen** - Kaufpreis, Datum, technische Daten
+8. **Zusammenfassung** - Übersicht und Abschluss
 
 **Features:**
 - Automatischer Start bei erstem Besuch (keine Anlagen vorhanden)
 - Fortschrittsanzeige (Desktop: Schritte, Mobile: Balken)
 - Strompreis-Defaults basierend auf Anlagengröße (EEG-Vergütung)
+- PV-Module-Erfassung mit Leistung, Ausrichtung und Neigung für PVGIS
 - Integration der bestehenden Discovery-Logik
 - Investitionen mit Details statt Minimaldaten
 - State wird in LocalStorage gespeichert (Fortsetzung möglich)
+- Korrektur: Investitionsdaten werden jetzt korrekt gespeichert (Fix v0.7.1)
 
 **Dateien:**
 - `frontend/src/hooks/useSetupWizard.ts` (State-Management)
 - `frontend/src/components/setup-wizard/` (Wizard-Komponenten)
+- `frontend/src/components/setup-wizard/steps/PVModuleStep.tsx` (PV-Module Schritt)
 - `frontend/src/components/AppWithSetup.tsx` (App-Wrapper)
 - `frontend/src/main.tsx` (Integration)
 

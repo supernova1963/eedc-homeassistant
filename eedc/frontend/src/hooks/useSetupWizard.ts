@@ -14,8 +14,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
 import { haApi } from '../api/ha'
-import { investitionenApi } from '../api/investitionen'
-import type { Anlage, Strompreis, Investition, InvestitionCreate } from '../types'
+import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
+import type { Anlage, Strompreis, Investition } from '../types'
 import type { DiscoveryResult, DiscoveredDevice } from '../api/ha'
 
 // Wizard-Schritte
@@ -24,10 +24,21 @@ export type WizardStep =
   | 'anlage'
   | 'ha-connection'
   | 'strompreise'
+  | 'pv-module'
   | 'discovery'
   | 'investitionen'
   | 'summary'
   | 'complete'
+
+// PV-Modul Daten für Wizard
+export interface PVModulData {
+  id: string  // Temporäre ID für UI
+  bezeichnung: string
+  leistung_kwp: number
+  ausrichtung: string
+  neigung_grad: number
+  ha_entity_id?: string
+}
 
 // Wizard-State der in DB/LocalStorage gespeichert wird
 export interface WizardState {
@@ -37,6 +48,7 @@ export interface WizardState {
   strompreisId: number | null
   createdInvestitionen: number[]
   skippedSteps: WizardStep[]
+  pvModule: PVModulData[]
 }
 
 // Standard-Strompreise für Deutschland (2026)
@@ -99,6 +111,13 @@ interface UseSetupWizardReturn {
   updateInvestitionFormData: (deviceId: string, data: Partial<InvestitionFormData>) => void
   createInvestitionen: () => Promise<void>
 
+  // PV-Module
+  pvModule: PVModulData[]
+  addPVModul: (modul: Omit<PVModulData, 'id'>) => void
+  updatePVModul: (id: string, data: Partial<PVModulData>) => void
+  removePVModul: (id: string) => void
+  savePVModule: () => Promise<void>
+
   // Abschluss
   completeWizard: () => void
   resetWizard: () => void
@@ -153,6 +172,7 @@ const INITIAL_STATE: WizardState = {
   strompreisId: null,
   createdInvestitionen: [],
   skippedSteps: [],
+  pvModule: [],
 }
 
 // Schritt-Reihenfolge
@@ -161,6 +181,7 @@ const STEP_ORDER: WizardStep[] = [
   'anlage',
   'ha-connection',
   'strompreise',
+  'pv-module',
   'discovery',
   'investitionen',
   'summary',
@@ -436,15 +457,33 @@ export function useSetupWizard(): UseSetupWizardReturn {
         const formData = investitionFormData[deviceId]
         if (!formData) continue
 
+        // Parameter für typ-spezifische Felder
+        const parameter: Record<string, unknown> = {}
+
+        // E-Auto / Speicher: Batteriekapazität
+        if (formData.batterie_kwh) {
+          parameter.batterie_kwh = formData.batterie_kwh
+          if (device.suggested_investition_typ === 'speicher') {
+            parameter.kapazitaet_kwh = formData.batterie_kwh
+          }
+        }
+
+        // Wallbox / Wechselrichter: Leistung
+        if (formData.leistung_kw) {
+          parameter.leistung_kw = formData.leistung_kw
+          if (device.suggested_investition_typ === 'wechselrichter') {
+            parameter.leistung_ac_kw = formData.leistung_kw
+          }
+        }
+
         const investitionData: InvestitionCreate = {
           anlage_id: wizardState.anlageId,
           typ: device.suggested_investition_typ as InvestitionCreate['typ'],
           bezeichnung: formData.bezeichnung,
-          hersteller: device.manufacturer || undefined,
-          kaufdatum: formData.kaufdatum || undefined,
-          kaufpreis: formData.kaufpreis || undefined,
+          anschaffungsdatum: formData.kaufdatum || undefined,
+          anschaffungskosten_gesamt: formData.kaufpreis || undefined,
+          parameter: Object.keys(parameter).length > 0 ? parameter : undefined,
           aktiv: true,
-          batterie_kwh: formData.batterie_kwh,
         }
 
         const newInvestition = await investitionenApi.create(investitionData)
@@ -465,6 +504,86 @@ export function useSetupWizard(): UseSetupWizardReturn {
       setIsLoading(false)
     }
   }, [wizardState.anlageId, discoveryResult, selectedDevices, investitionFormData, nextStep])
+
+  // PV-Modul hinzufügen
+  const addPVModul = useCallback((modul: Omit<PVModulData, 'id'>) => {
+    const newModul: PVModulData = {
+      ...modul,
+      id: `pv-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    }
+    setWizardState(prev => ({
+      ...prev,
+      pvModule: [...prev.pvModule, newModul],
+    }))
+  }, [])
+
+  // PV-Modul aktualisieren
+  const updatePVModul = useCallback((id: string, data: Partial<PVModulData>) => {
+    setWizardState(prev => ({
+      ...prev,
+      pvModule: prev.pvModule.map(m =>
+        m.id === id ? { ...m, ...data } : m
+      ),
+    }))
+  }, [])
+
+  // PV-Modul entfernen
+  const removePVModul = useCallback((id: string) => {
+    setWizardState(prev => ({
+      ...prev,
+      pvModule: prev.pvModule.filter(m => m.id !== id),
+    }))
+  }, [])
+
+  // PV-Module als Investitionen speichern
+  const savePVModule = useCallback(async () => {
+    if (!wizardState.anlageId) {
+      setError('Keine Anlage vorhanden')
+      return
+    }
+
+    if (wizardState.pvModule.length === 0) {
+      // Keine Module, einfach weiter
+      nextStep()
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    const createdIds: number[] = []
+
+    try {
+      for (const modul of wizardState.pvModule) {
+        const investitionData: InvestitionCreate = {
+          anlage_id: wizardState.anlageId,
+          typ: 'pv-module',
+          bezeichnung: modul.bezeichnung,
+          ha_entity_id: modul.ha_entity_id,
+          parameter: {
+            leistung_kwp: modul.leistung_kwp,
+            ausrichtung: modul.ausrichtung,
+            neigung_grad: modul.neigung_grad,
+          },
+          aktiv: true,
+        }
+
+        const newInvestition = await investitionenApi.create(investitionData)
+        createdIds.push(newInvestition.id)
+      }
+
+      setWizardState(prev => ({
+        ...prev,
+        createdInvestitionen: [...prev.createdInvestitionen, ...createdIds],
+      }))
+
+      nextStep()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Speichern der PV-Module')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [wizardState.anlageId, wizardState.pvModule, nextStep])
 
   // Wizard abschließen
   const completeWizard = useCallback(() => {
@@ -501,6 +620,8 @@ export function useSetupWizard(): UseSetupWizardReturn {
         return true // Kann immer weitergehen (überspringen möglich)
       case 'strompreise':
         return !!wizardState.strompreisId
+      case 'pv-module':
+        return true // PV-Module sind optional aber empfohlen
       case 'discovery':
         return true // Kann weitergehen auch ohne Auswahl
       case 'investitionen':
@@ -556,6 +677,11 @@ export function useSetupWizard(): UseSetupWizardReturn {
     deselectAllDevices,
     updateInvestitionFormData,
     createInvestitionen,
+    pvModule: wizardState.pvModule,
+    addPVModul,
+    updatePVModul,
+    removePVModul,
+    savePVModule,
     completeWizard,
     resetWizard,
 

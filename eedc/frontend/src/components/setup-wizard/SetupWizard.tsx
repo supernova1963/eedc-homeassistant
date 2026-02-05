@@ -20,6 +20,7 @@ import WelcomeStep from './steps/WelcomeStep'
 import AnlageStep from './steps/AnlageStep'
 import HAConnectionStep from './steps/HAConnectionStep'
 import StrompreiseStep from './steps/StrompreiseStep'
+import PVModuleStep from './steps/PVModuleStep'
 import DiscoveryStep from './steps/DiscoveryStep'
 import InvestitionenStep from './steps/InvestitionenStep'
 import SummaryStep from './steps/SummaryStep'
@@ -35,6 +36,7 @@ const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
   { key: 'anlage', label: 'Anlage erstellen', shortLabel: 'Anlage' },
   { key: 'ha-connection', label: 'Home Assistant', shortLabel: 'HA' },
   { key: 'strompreise', label: 'Strompreise', shortLabel: 'Preise' },
+  { key: 'pv-module', label: 'PV-Module', shortLabel: 'Module' },
   { key: 'discovery', label: 'Geräte erkennen', shortLabel: 'Geräte' },
   { key: 'investitionen', label: 'Investitionen', shortLabel: 'Invest.' },
   { key: 'summary', label: 'Zusammenfassung', shortLabel: 'Fertig' },
@@ -220,6 +222,21 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               error={wizard.error}
               onSubmit={wizard.createStrompreis}
               onUseDefaults={wizard.useDefaultStrompreise}
+              onBack={wizard.prevStep}
+            />
+          )}
+
+          {wizard.step === 'pv-module' && wizard.anlage && (
+            <PVModuleStep
+              anlagenLeistungKwp={wizard.anlage.leistung_kwp}
+              pvModule={wizard.pvModule}
+              isLoading={wizard.isLoading}
+              error={wizard.error}
+              onAddModule={wizard.addPVModul}
+              onUpdateModule={wizard.updatePVModul}
+              onRemoveModule={wizard.removePVModul}
+              onNext={wizard.savePVModule}
+              onSkip={wizard.skipStep}
               onBack={wizard.prevStep}
             />
           )}
