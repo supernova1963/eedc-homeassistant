@@ -15,6 +15,7 @@ export interface Anlage {
   longitude?: number
   ausrichtung?: string
   neigung_grad?: number
+  wechselrichter_hersteller?: string
 }
 
 export type AnlageCreate = Omit<Anlage, 'id'>

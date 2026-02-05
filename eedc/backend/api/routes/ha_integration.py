@@ -1016,6 +1016,7 @@ INTEGRATION_PATTERNS = {
     "sma": {
         # SMA Sensoren beginnen mit sensor.sn_ gefolgt von Seriennummer
         "prefix_pattern": r"^sensor\.sn_\d+_",
+        "prefixes": ["sensor.sn_", "sensor.sma_"],
         "device_type": "inverter",
         # Sensor-Mappings für Monatsdaten
         "pv_erzeugung": ["pv_gen_meter", "pv_gen", "total_yield"],
@@ -1027,8 +1028,68 @@ INTEGRATION_PATTERNS = {
         "inverter_indicators": ["inverter_power_limit", "inverter_condition", "pv_power"],
         "battery_indicators": ["battery_soc", "battery_charge_total", "battery_discharge_total"],
     },
+    "fronius": {
+        "prefixes": ["sensor.fronius_", "sensor.symo_", "sensor.primo_", "sensor.gen24_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["energy_total", "total_energy", "pv_energy", "yield_total"],
+        "einspeisung": ["energy_real_ac_exported", "energy_exported"],
+        "netzbezug": ["energy_real_ac_imported", "energy_imported"],
+        "inverter_indicators": ["power_ac", "power_flow", "status"],
+    },
+    "kostal": {
+        "prefixes": ["sensor.kostal_", "sensor.plenticore_", "sensor.piko_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["total_yield", "home_own_consumption_from_pv", "dc_power"],
+        "einspeisung": ["grid_feed", "home_own_consumption_from_grid"],
+        "netzbezug": ["energy_from_grid"],
+        "inverter_indicators": ["total_dc_power", "ac_power"],
+    },
+    "huawei": {
+        "prefixes": ["sensor.sun2000_", "sensor.huawei_", "sensor.fusion_solar_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["total_yield", "daily_yield", "input_power"],
+        "einspeisung": ["grid_exported_energy", "export_power"],
+        "netzbezug": ["grid_consumption", "grid_imported_energy"],
+        "battery_indicators": ["battery_soc", "battery_power"],
+    },
+    "growatt": {
+        "prefixes": ["sensor.growatt_", "sensor.grott_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["total_energy", "today_energy", "pv_power"],
+        "einspeisung": ["export_to_grid_total", "grid_export"],
+        "netzbezug": ["import_from_grid_total", "grid_import"],
+    },
+    "solax": {
+        "prefixes": ["sensor.solax_", "sensor.x1_", "sensor.x3_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["total_yield", "today_yield", "pv_power"],
+        "einspeisung": ["feed_in_energy", "grid_export"],
+        "netzbezug": ["consumed_energy", "grid_import"],
+        "battery_indicators": ["battery_capacity", "battery_power"],
+    },
+    "sungrow": {
+        "prefixes": ["sensor.sungrow_", "sensor.sg_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["total_yield", "daily_pv_generation", "pv_power"],
+        "einspeisung": ["export_power", "daily_export"],
+        "netzbezug": ["import_power", "daily_import"],
+    },
+    "goodwe": {
+        "prefixes": ["sensor.goodwe_", "sensor.gw_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["total_energy", "e_total", "pv_power"],
+        "einspeisung": ["grid_export", "e_to_grid"],
+        "netzbezug": ["grid_import", "e_from_grid"],
+    },
+    "enphase": {
+        "prefixes": ["sensor.enphase_", "sensor.envoy_"],
+        "device_type": "inverter",
+        "pv_erzeugung": ["lifetime_energy_production", "current_power_production"],
+        "einspeisung": ["lifetime_energy_exported"],
+        "netzbezug": ["lifetime_energy_imported"],
+    },
     "evcc": {
-        "prefix": "sensor.evcc_",
+        "prefixes": ["sensor.evcc_"],
         "device_types": {
             "loadpoint": "wallbox",
             "vehicle": "ev",
@@ -1039,15 +1100,28 @@ INTEGRATION_PATTERNS = {
         "netzbezug": ["grid_power", "grid_import"],
     },
     "smart": {
-        "prefix": "sensor.smart_",
+        "prefixes": ["sensor.smart_"],
         "device_type": "ev",
         "ev_indicators": ["battery_level", "range", "charging", "soc", "odometer"],
     },
     "wallbox": {
-        "prefix": "sensor.wallbox_",
+        "prefixes": ["sensor.wallbox_"],
         "device_type": "wallbox",
         "wallbox_indicators": ["charging_power", "charged_energy", "charging_status"],
     },
+}
+
+# Hersteller-Konfiguration für Discovery-Filter
+MANUFACTURER_CONFIG = {
+    "sma": {"name": "SMA", "patterns": INTEGRATION_PATTERNS["sma"]},
+    "fronius": {"name": "Fronius", "patterns": INTEGRATION_PATTERNS["fronius"]},
+    "kostal": {"name": "Kostal", "patterns": INTEGRATION_PATTERNS["kostal"]},
+    "huawei": {"name": "Huawei", "patterns": INTEGRATION_PATTERNS["huawei"]},
+    "growatt": {"name": "Growatt", "patterns": INTEGRATION_PATTERNS["growatt"]},
+    "solax": {"name": "SolaX", "patterns": INTEGRATION_PATTERNS["solax"]},
+    "sungrow": {"name": "Sungrow", "patterns": INTEGRATION_PATTERNS["sungrow"]},
+    "goodwe": {"name": "GoodWe", "patterns": INTEGRATION_PATTERNS["goodwe"]},
+    "enphase": {"name": "Enphase", "patterns": INTEGRATION_PATTERNS["enphase"]},
 }
 
 
@@ -1056,9 +1130,40 @@ def _is_sma_sensor(entity_id: str) -> bool:
     return bool(re.match(r'^sensor\.sn_\d+_', entity_id.lower()))
 
 
-def _classify_sensor(entity_id: str, attrs: dict) -> tuple[str, str | None, int]:
+def _detect_manufacturer(entity_id: str) -> tuple[str | None, str]:
+    """
+    Erkennt den Hersteller basierend auf Entity-ID Prefix.
+
+    Returns:
+        tuple: (manufacturer_id, sensor_name_after_prefix)
+    """
+    entity_lower = entity_id.lower()
+
+    # SMA Spezialfall: sensor.sn_NUMMER_...
+    if _is_sma_sensor(entity_id):
+        match = re.match(r'^sensor\.sn_\d+_(.+)$', entity_lower)
+        return ("sma", match.group(1) if match else "")
+
+    # Alle anderen Hersteller nach Prefix prüfen
+    for mfr_id, patterns in INTEGRATION_PATTERNS.items():
+        prefixes = patterns.get("prefixes", [])
+        for prefix in prefixes:
+            if entity_lower.startswith(prefix):
+                # Sensor-Name nach Prefix extrahieren
+                sensor_name = entity_lower[len(prefix):]
+                return (mfr_id, sensor_name)
+
+    return (None, "")
+
+
+def _classify_sensor(entity_id: str, attrs: dict, manufacturer_filter: str | None = None) -> tuple[str, str | None, int]:
     """
     Klassifiziert einen Sensor nach Integration und Mapping-Typ.
+
+    Args:
+        entity_id: HA Entity-ID
+        attrs: Entity-Attribute
+        manufacturer_filter: Optional - nur diesen Hersteller berücksichtigen
 
     Returns:
         tuple: (integration, suggested_mapping, confidence)
@@ -1069,27 +1174,34 @@ def _classify_sensor(entity_id: str, attrs: dict) -> tuple[str, str | None, int]
     state_class = attrs.get("state_class", "")
     unit = attrs.get("unit_of_measurement", "")
 
-    # SMA Sensoren (sensor.sn_NUMMER_...)
-    if _is_sma_sensor(entity_id):
-        patterns = INTEGRATION_PATTERNS["sma"]
+    # Hersteller erkennen
+    detected_mfr, sensor_name = _detect_manufacturer(entity_id)
 
-        # Extrahiere den Sensor-Namen nach der Seriennummer (z.B. "pv_gen_meter" aus "sensor.sn_3012412676_pv_gen_meter")
-        match = re.match(r'^sensor\.sn_\d+_(.+)$', entity_lower)
-        sensor_name = match.group(1) if match else ""
+    # Wenn Hersteller-Filter gesetzt und nicht passend, niedrige Confidence
+    if manufacturer_filter and detected_mfr and detected_mfr != manufacturer_filter:
+        # Aber evcc, smart, wallbox immer durchlassen (sind keine Wechselrichter)
+        if detected_mfr not in ["evcc", "smart", "wallbox"]:
+            return (detected_mfr, None, 10)  # Niedrige Confidence für nicht-gewählte Hersteller
+
+    # Wechselrichter-Hersteller (SMA, Fronius, Kostal, etc.)
+    if detected_mfr and detected_mfr in MANUFACTURER_CONFIG:
+        patterns = INTEGRATION_PATTERNS[detected_mfr]
 
         for mapping_type in ["pv_erzeugung", "einspeisung", "netzbezug", "batterie_ladung", "batterie_entladung"]:
             keywords = patterns.get(mapping_type, [])
             for kw in keywords:
-                # Exakter Match auf Sensor-Namen
-                if sensor_name == kw or sensor_name.startswith(kw):
+                # Match auf Sensor-Namen oder friendly_name
+                if kw in sensor_name or kw in friendly_name:
                     # Höhere Confidence für state_class: total_increasing und kWh
+                    base_conf = 95 if manufacturer_filter == detected_mfr else 85
                     if state_class == "total_increasing" and unit == "kWh":
-                        return ("sma", mapping_type, 95)
+                        return (detected_mfr, mapping_type, base_conf)
                     elif state_class == "total_increasing":
-                        return ("sma", mapping_type, 90)
+                        return (detected_mfr, mapping_type, base_conf - 5)
                     else:
-                        return ("sma", mapping_type, 70)
-        return ("sma", None, 50)
+                        return (detected_mfr, mapping_type, base_conf - 25)
+
+        return (detected_mfr, None, 50)
 
     # evcc Sensoren
     if entity_lower.startswith("sensor.evcc_"):
@@ -1381,10 +1493,14 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
     return list(devices.values())
 
 
-def _extract_sensor_mappings(sensors: list[dict]) -> SensorMappingSuggestions:
+def _extract_sensor_mappings(sensors: list[dict], manufacturer_filter: str | None = None) -> SensorMappingSuggestions:
     """
     Extrahiert Sensor-Mapping-Vorschläge aus der Sensor-Liste.
-    Berücksichtigt SMA-Sensoren mit sensor.sn_NUMMER_ Prefix.
+    Berücksichtigt alle unterstützten Wechselrichter-Hersteller.
+
+    Args:
+        sensors: Liste der HA-Sensoren
+        manufacturer_filter: Optional - bevorzugter Hersteller
     """
     mappings = SensorMappingSuggestions()
 
@@ -1400,7 +1516,7 @@ def _extract_sensor_mappings(sensors: list[dict]) -> SensorMappingSuggestions:
         if state_class != "total_increasing" or unit != "kWh":
             continue
 
-        integration, mapping_type, confidence = _classify_sensor(entity_id, attrs)
+        integration, mapping_type, confidence = _classify_sensor(entity_id, attrs, manufacturer_filter)
 
         if mapping_type and confidence >= 50:
             discovered = DiscoveredSensor(
@@ -1436,16 +1552,31 @@ def _extract_sensor_mappings(sensors: list[dict]) -> SensorMappingSuggestions:
     return mappings
 
 
+@router.get("/manufacturers")
+async def list_supported_manufacturers():
+    """
+    Listet alle unterstützten Wechselrichter-Hersteller auf.
+
+    Returns:
+        list: Liste der Hersteller mit ID und Namen
+    """
+    return [
+        {"id": key, "name": config["name"]}
+        for key, config in MANUFACTURER_CONFIG.items()
+    ]
+
+
 @router.get("/discover", response_model=DiscoveryResult)
 async def discover_ha_devices(
     anlage_id: Optional[int] = Query(None, description="Anlage-ID für Duplikat-Prüfung"),
+    manufacturer: Optional[str] = Query(None, description="Wechselrichter-Hersteller für gezieltes Filtern"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Durchsucht Home Assistant nach Geräten und Sensoren.
 
     Erkennt automatisch:
-    - SMA Wechselrichter (Sensor-Mappings für PV, Grid, Batterie)
+    - SMA, Fronius, Kostal, Huawei, Growatt, SolaX, Sungrow, GoodWe, Enphase Wechselrichter
     - evcc Loadpoints (Wallbox) und Vehicles (E-Auto)
     - Smart E-Auto Integration
     - Wallbox Integration
@@ -1454,6 +1585,7 @@ async def discover_ha_devices(
 
     Args:
         anlage_id: Optional - wenn angegeben, werden existierende Investitionen geprüft
+        manufacturer: Optional - Wechselrichter-Hersteller für bessere Filterung
 
     Returns:
         DiscoveryResult: Gefundene Geräte und Sensor-Mapping-Vorschläge
@@ -1559,7 +1691,7 @@ async def discover_ha_devices(
     result.devices = filtered_devices
 
     # Sensor-Mappings extrahieren (nur empfohlene)
-    result.sensor_mappings = _extract_sensor_mappings(sensors)
+    result.sensor_mappings = _extract_sensor_mappings(sensors, manufacturer)
 
     # Alle Energy-Sensoren für manuelle Auswahl sammeln
     # (für Benutzer mit nicht-unterstützten Herstellern)

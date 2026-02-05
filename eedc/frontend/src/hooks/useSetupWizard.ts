@@ -360,7 +360,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setError(null)
 
     try {
-      const result = await haApi.discover(wizardState.anlageId)
+      // Hersteller aus Anlage-Daten für gezieltere Suche
+      const manufacturer = anlage?.wechselrichter_hersteller || undefined
+      const result = await haApi.discover(wizardState.anlageId, manufacturer)
       setDiscoveryResult(result)
 
       if (!result.ha_connected) {

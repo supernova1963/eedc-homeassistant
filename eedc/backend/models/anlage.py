@@ -52,6 +52,7 @@ class Anlage(Base):
     # Technische Daten
     ausrichtung: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Süd, Ost-West, etc.
     neigung_grad: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    wechselrichter_hersteller: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # sma, fronius, kostal, etc.
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

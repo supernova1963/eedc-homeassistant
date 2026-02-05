@@ -225,15 +225,21 @@ export const haApi = {
    * Auto-Discovery: Durchsucht Home Assistant nach Geräten und Sensoren
    *
    * Erkennt automatisch:
-   * - SMA Wechselrichter (Sensor-Mappings für PV, Grid, Batterie)
+   * - SMA, Fronius, Kostal, Huawei, Growatt, SolaX, Sungrow, GoodWe, Enphase Wechselrichter
    * - evcc Loadpoints (Wallbox) und Vehicles (E-Auto)
    * - Smart E-Auto Integration
    * - Wallbox Integration
    *
    * evcc hat Priorität für E-Auto und Wallbox Daten.
+   *
+   * @param anlageId - Optional: Anlage-ID für Duplikat-Prüfung
+   * @param manufacturer - Optional: Wechselrichter-Hersteller für bessere Filterung
    */
-  async discover(anlageId?: number): Promise<DiscoveryResult> {
-    const params = anlageId ? `?anlage_id=${anlageId}` : ''
-    return api.get<DiscoveryResult>(`/ha/discover${params}`)
+  async discover(anlageId?: number, manufacturer?: string): Promise<DiscoveryResult> {
+    const params = new URLSearchParams()
+    if (anlageId) params.append('anlage_id', anlageId.toString())
+    if (manufacturer) params.append('manufacturer', manufacturer)
+    const queryString = params.toString()
+    return api.get<DiscoveryResult>(`/ha/discover${queryString ? '?' + queryString : ''}`)
   },
 }

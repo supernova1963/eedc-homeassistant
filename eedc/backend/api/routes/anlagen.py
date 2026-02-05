@@ -31,6 +31,7 @@ class AnlageBase(BaseModel):
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     ausrichtung: Optional[str] = Field(None, max_length=50)
     neigung_grad: Optional[float] = Field(None, ge=0, le=90)
+    wechselrichter_hersteller: Optional[str] = Field(None, max_length=50, description="Wechselrichter-Hersteller für Discovery-Filter")
 
 
 class AnlageCreate(AnlageBase):
@@ -50,6 +51,7 @@ class AnlageUpdate(BaseModel):
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     ausrichtung: Optional[str] = Field(None, max_length=50)
     neigung_grad: Optional[float] = Field(None, ge=0, le=90)
+    wechselrichter_hersteller: Optional[str] = Field(None, max_length=50)
 
 
 class AnlageResponse(AnlageBase):

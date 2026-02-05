@@ -1,7 +1,7 @@
 # EEDC Projekt Status
 
 **Stand:** 2026-02-05
-**Version:** 0.7.0
+**Version:** 0.7.2
 
 ## Übersicht
 
@@ -18,11 +18,11 @@ Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 
 **Wizard-Schritte:**
 1. **Willkommen** - Einführung und Übersicht
-2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten
+2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten, Wechselrichter-Hersteller (NEU v0.7.2)
 3. **HA-Verbindung prüfen** - Automatische Prüfung, überspringbar
 4. **Strompreise konfigurieren** - Mit deutschen Standardwerten (30ct/8.2ct)
 5. **PV-Module/Strings** - Modulgruppen mit Ausrichtung/Neigung für PVGIS-Prognose (NEU v0.7.1)
-6. **Auto-Discovery** - Geräte aus Home Assistant erkennen
+6. **Auto-Discovery** - Geräte aus Home Assistant erkennen (verbessert mit Hersteller-Filter v0.7.2)
 7. **Investitionen vervollständigen** - Kaufpreis, Datum, technische Daten
 8. **Zusammenfassung** - Übersicht und Abschluss
 
@@ -31,10 +31,14 @@ Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 - Fortschrittsanzeige (Desktop: Schritte, Mobile: Balken)
 - Strompreis-Defaults basierend auf Anlagengröße (EEG-Vergütung)
 - PV-Module-Erfassung mit Leistung, Ausrichtung und Neigung für PVGIS
+- **Wechselrichter-Hersteller-Auswahl** für bessere Discovery (v0.7.2)
 - Integration der bestehenden Discovery-Logik
 - Investitionen mit Details statt Minimaldaten
 - State wird in LocalStorage gespeichert (Fortsetzung möglich)
 - Korrektur: Investitionsdaten werden jetzt korrekt gespeichert (Fix v0.7.1)
+
+**Unterstützte Wechselrichter-Hersteller (v0.7.2):**
+- SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
 
 **Dateien:**
 - `frontend/src/hooks/useSetupWizard.ts` (State-Management)

@@ -23,6 +23,7 @@ interface AnlageCreateData {
   longitude?: number
   ausrichtung?: string
   neigung_grad?: number
+  wechselrichter_hersteller?: string
 }
 
 const AUSRICHTUNG_OPTIONS = [
@@ -33,6 +34,19 @@ const AUSRICHTUNG_OPTIONS = [
   { value: 'Ost', label: 'Ost' },
   { value: 'West', label: 'West' },
   { value: 'Ost-West', label: 'Ost-West' },
+]
+
+const WECHSELRICHTER_HERSTELLER = [
+  { value: '', label: '-- Unbekannt / Andere --' },
+  { value: 'sma', label: 'SMA' },
+  { value: 'fronius', label: 'Fronius' },
+  { value: 'kostal', label: 'Kostal' },
+  { value: 'huawei', label: 'Huawei / FusionSolar' },
+  { value: 'growatt', label: 'Growatt' },
+  { value: 'solax', label: 'SolaX' },
+  { value: 'sungrow', label: 'Sungrow' },
+  { value: 'goodwe', label: 'GoodWe' },
+  { value: 'enphase', label: 'Enphase' },
 ]
 
 export default function AnlageStep({ isLoading, error, onSubmit, onBack }: AnlageStepProps) {
@@ -46,6 +60,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
     longitude: '',
     ausrichtung: '',
     neigung_grad: '',
+    wechselrichter_hersteller: '',
   })
 
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -81,6 +96,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
       longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
       ausrichtung: formData.ausrichtung || undefined,
       neigung_grad: formData.neigung_grad ? parseFloat(formData.neigung_grad) : undefined,
+      wechselrichter_hersteller: formData.wechselrichter_hersteller || undefined,
     })
   }
 
@@ -289,6 +305,36 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Typisch: 30-35° (Süd), 10-15° (Ost-West)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Wechselrichter-Hersteller */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+              Wechselrichter-Hersteller (optional)
+            </h3>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Hersteller
+                </label>
+                <select
+                  name="wechselrichter_hersteller"
+                  value={formData.wechselrichter_hersteller}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                >
+                  {WECHSELRICHTER_HERSTELLER.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Hilft bei der automatischen Erkennung von Home Assistant Sensoren
                 </p>
               </div>
             </div>
