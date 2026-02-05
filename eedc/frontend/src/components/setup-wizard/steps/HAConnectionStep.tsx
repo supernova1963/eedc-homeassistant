@@ -89,10 +89,6 @@ export default function HAConnectionStep({
                     <CheckCircle2 className="w-4 h-4" />
                     Sensor-Zuordnung für Energy-Daten
                   </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Monatsdaten-Import aus HA History
-                  </li>
                 </ul>
               </div>
             </div>
@@ -140,7 +136,7 @@ export default function HAConnectionStep({
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <p className="text-sm text-blue-700 dark:text-blue-300">
                 <strong>Hinweis:</strong> Sie können EEDC auch ohne Home Assistant nutzen.
-                Monatsdaten können manuell oder per CSV-Import erfasst werden.
+                Investitionen und Daten können manuell oder per CSV-Import erfasst werden.
                 Die HA-Integration kann jederzeit später aktiviert werden.
               </p>
             </div>

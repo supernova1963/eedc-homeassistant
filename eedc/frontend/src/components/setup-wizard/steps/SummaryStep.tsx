@@ -16,6 +16,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
+  ArrowRight,
+  Info,
 } from 'lucide-react'
 import type { Anlage, Strompreis, Investition, SensorConfig, InvestitionTyp } from '../../../types'
 
@@ -203,9 +205,6 @@ export default function SummaryStep({
                 <div className="text-gray-700 dark:text-gray-300">
                   {sensorCount} Sensor{sensorCount !== 1 ? 'en' : ''} zugeordnet
                 </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Monatsdaten können aus Home Assistant importiert werden
-                </div>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {sensorConfig.pv_erzeugung && (
                     <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
@@ -237,26 +236,13 @@ export default function SummaryStep({
           </SummaryCard>
         </div>
 
-        {/* Hinweise */}
-        <div className="mt-8 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-            Nächste Schritte nach der Einrichtung:
-          </h3>
-          <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-              <span>Monatsdaten aus Home Assistant importieren oder manuell erfassen</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-              <span>PVGIS-Prognose für Ihre Module abrufen (unter Auswertungen → Prognose)</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-              <span>Dashboard und Auswertungen erkunden</span>
-            </li>
-          </ul>
-        </div>
+        {/* Individualisierte nächste Schritte */}
+        <NextStepsSection
+          hasAnlage={hasAnlage}
+          hasInvestitionen={hasInvestitionen}
+          hasSensorConfig={hasSensorConfig}
+          investitionen={investitionen}
+        />
       </div>
 
       {/* Footer */}
@@ -328,6 +314,104 @@ function SummaryCard({
           {children}
         </div>
       </div>
+    </div>
+  )
+}
+
+// Individualisierte nächste Schritte basierend auf der Konfiguration
+function NextStepsSection({
+  hasAnlage,
+  investitionen,
+}: {
+  hasAnlage: boolean
+  hasInvestitionen: boolean
+  hasSensorConfig: boolean
+  investitionen: Investition[]
+}) {
+  // Fehlende Investitionstypen ermitteln
+  const hasWechselrichter = investitionen.some(i => i.typ === 'wechselrichter')
+  const hasPVModule = investitionen.some(i => i.typ === 'pv-module')
+
+  // Dynamische Schritte generieren
+  const steps: { text: string; priority: 'high' | 'medium' | 'low' }[] = []
+
+  // Hohe Priorität: Fehlende kritische Elemente
+  if (!hasPVModule) {
+    steps.push({
+      text: 'PV-Module unter Einstellungen → Investitionen anlegen (wichtig für PVGIS-Prognose)',
+      priority: 'high',
+    })
+  }
+
+  if (!hasWechselrichter && hasAnlage) {
+    steps.push({
+      text: 'Wechselrichter unter Einstellungen → Investitionen ergänzen',
+      priority: 'high',
+    })
+  }
+
+  // Mittlere Priorität: Datenerfassung
+  steps.push({
+    text: 'Monatsdaten unter Einstellungen → Monatsdaten erfassen oder CSV importieren',
+    priority: 'medium',
+  })
+
+  // Wenn PV-Module vorhanden
+  if (hasPVModule) {
+    steps.push({
+      text: 'PVGIS-Prognose unter Auswertungen → Prognose abrufen',
+      priority: 'medium',
+    })
+  }
+
+  // Niedrige Priorität: Allgemeine Hinweise
+  steps.push({
+    text: 'Dashboard und Auswertungen erkunden',
+    priority: 'low',
+  })
+
+  // Sortieren nach Priorität
+  const sortedSteps = steps.sort((a, b) => {
+    const order = { high: 0, medium: 1, low: 2 }
+    return order[a.priority] - order[b.priority]
+  })
+
+  return (
+    <div className="mt-8 space-y-3">
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+        <Info className="w-4 h-4 text-amber-500" />
+        Empfohlene nächste Schritte:
+      </h3>
+      <ul className="space-y-2 text-sm">
+        {sortedSteps.map((step, index) => (
+          <li key={index} className="flex items-start gap-2">
+            <ArrowRight className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+              step.priority === 'high'
+                ? 'text-amber-500'
+                : step.priority === 'medium'
+                  ? 'text-blue-500'
+                  : 'text-green-500'
+            }`} />
+            <span className={`${
+              step.priority === 'high'
+                ? 'text-gray-900 dark:text-white font-medium'
+                : 'text-gray-600 dark:text-gray-400'
+            }`}>
+              {step.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {(!hasPVModule || !hasWechselrichter) && (
+        <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            <strong>Hinweis:</strong> PV-Module werden nicht automatisch erkannt und müssen
+            manuell angelegt werden. Die Angaben zu Ausrichtung und Neigung sind wichtig
+            für die PVGIS-Ertragsprognose.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

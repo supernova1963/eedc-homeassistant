@@ -5,7 +5,7 @@
  * gruppiert nach Typ, mit Möglichkeit zum Hinzufügen und Löschen.
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Car,
   Battery,
@@ -66,14 +66,24 @@ function InvestitionForm({
   anlage,
   onUpdate,
   onDelete,
+  isNew = false,
 }: {
   investition: Investition
   allInvestitionen: Investition[]
   anlage: Anlage | null
   onUpdate: (data: Partial<Investition>) => void
   onDelete: () => void
+  isNew?: boolean
 }) {
-  const [expanded, setExpanded] = useState(true)
+  // Investitionen standardmäßig aufgeklappt, neue besonders hervorgehoben
+  const [expanded, setExpanded] = useState<boolean>(true)
+
+  // Bei neuen Investitionen sicherstellen, dass aufgeklappt
+  useEffect(() => {
+    if (isNew) {
+      setExpanded(true)
+    }
+  }, [isNew])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Mögliche Parents für diesen Typ
@@ -502,6 +512,18 @@ export default function InvestitionenStep({
   onBack,
 }: InvestitionenStepProps) {
   const [addingType, setAddingType] = useState<InvestitionTyp | null>(null)
+  const [newlyAddedId, setNewlyAddedId] = useState<number | null>(null)
+  const newInvestitionRef = useRef<HTMLDivElement>(null)
+
+  // Scroll zur neu hinzugefügten Investition
+  useEffect(() => {
+    if (newlyAddedId && newInvestitionRef.current) {
+      newInvestitionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Animation-Highlight nach kurzer Zeit zurücksetzen
+      const timer = setTimeout(() => setNewlyAddedId(null), 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [newlyAddedId])
 
   // Investitionen nach Typ gruppieren und sortieren
   const groupedInvestitionen = INVESTITION_TYP_ORDER.reduce((acc, typ) => {
@@ -516,7 +538,11 @@ export default function InvestitionenStep({
   const handleAdd = async (typ: InvestitionTyp) => {
     setAddingType(typ)
     try {
-      await onAddInvestition(typ)
+      const newInvestition = await onAddInvestition(typ)
+      // Markiere neue Investition für Scroll und Highlight
+      if (newInvestition?.id) {
+        setNewlyAddedId(newInvestition.id)
+      }
     } finally {
       setAddingType(null)
     }
@@ -625,14 +651,24 @@ export default function InvestitionenStep({
                 {/* Investitionen dieses Typs */}
                 <div className="space-y-3">
                   {items.map(inv => (
-                    <InvestitionForm
+                    <div
                       key={inv.id}
-                      investition={inv}
-                      allInvestitionen={investitionen}
-                      anlage={anlage}
-                      onUpdate={(data) => onUpdateInvestition(inv.id, data)}
-                      onDelete={() => onDeleteInvestition(inv.id)}
-                    />
+                      ref={inv.id === newlyAddedId ? newInvestitionRef : undefined}
+                      className={`transition-all duration-500 ${
+                        inv.id === newlyAddedId
+                          ? 'ring-2 ring-amber-500 ring-offset-2 dark:ring-offset-gray-900 rounded-xl'
+                          : ''
+                      }`}
+                    >
+                      <InvestitionForm
+                        investition={inv}
+                        allInvestitionen={investitionen}
+                        anlage={anlage}
+                        onUpdate={(data) => onUpdateInvestition(inv.id, data)}
+                        onDelete={() => onDeleteInvestition(inv.id)}
+                        isNew={inv.id === newlyAddedId}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

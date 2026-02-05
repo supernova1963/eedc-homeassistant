@@ -47,15 +47,15 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
         <ul className="space-y-3">
           <QuickTip
             number={1}
-            text="Monatsdaten erfassen oder aus HA importieren"
+            text="Fehlende Investitionen unter Einstellungen ergänzen"
           />
           <QuickTip
             number={2}
-            text="Dashboard und Kennzahlen erkunden"
+            text="Monatsdaten erfassen oder CSV importieren"
           />
           <QuickTip
             number={3}
-            text="ROI-Berechnungen für Investitionen prüfen"
+            text="Dashboard und ROI-Berechnungen erkunden"
           />
         </ul>
       </div>
