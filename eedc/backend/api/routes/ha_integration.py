@@ -71,6 +71,7 @@ class HAImportResult(BaseModel):
     erfolg: bool
     monate_importiert: int
     fehler: Optional[str] = None
+    details: Optional[str] = None  # Zusätzliche Details (welche Sensoren Daten lieferten)
 
 
 class StringMonatsdatenCreate(BaseModel):
@@ -694,10 +695,26 @@ async def import_monatsdaten_from_ha(
     if monate_uebersprungen > 0:
         fehler = f"{monate_uebersprungen} Monate übersprungen (bereits vorhanden). Setze ueberschreiben=true um zu aktualisieren."
 
+    # Details über gefundene Sensoren erstellen
+    details_parts = []
+    for field, data in sensor_data.items():
+        if data:
+            sensor_id = configured_sensors.get(field, "?")
+            months_found = len(data)
+            details_parts.append(f"{field}: {months_found} Monate ({sensor_id})")
+
+    # Warnung wenn Sensoren keine Daten lieferten
+    no_data_sensors = [f for f in configured_sensors if f not in sensor_data or not sensor_data[f]]
+    if no_data_sensors and monate_importiert > 0:
+        details_parts.append(f"Keine Daten für: {', '.join(no_data_sensors)}")
+
+    details = " | ".join(details_parts) if details_parts else None
+
     return HAImportResult(
         erfolg=monate_importiert > 0,
         monate_importiert=monate_importiert,
-        fehler=fehler
+        fehler=fehler,
+        details=details
     )
 
 

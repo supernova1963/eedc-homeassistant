@@ -60,7 +60,11 @@ export default function MonatsdatenPage() {
       setHaPreviewError(null)
       const result = await haApi.importMonatsdaten(selectedAnlageId, selectedHAYear, monat, ueberschreiben)
       if (result.erfolg) {
-        setHaImportSuccess(`${result.monate_importiert} Monat${result.monate_importiert !== 1 ? 'e' : ''} importiert`)
+        let successMsg = `${result.monate_importiert} Monat${result.monate_importiert !== 1 ? 'e' : ''} importiert`
+        if (result.details) {
+          successMsg += ` (${result.details})`
+        }
+        setHaImportSuccess(successMsg)
         await loadHAPreview() // Vorschau aktualisieren
         await refresh() // Monatsdaten neu laden
       } else {
@@ -303,7 +307,7 @@ export default function MonatsdatenPage() {
 
           {/* Preview */}
           {haPreview && !haPreviewLoading && (
-            <>
+            <div className="relative">
               {/* Connection Status */}
               <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                 <div className="flex items-center gap-2">
@@ -383,12 +387,32 @@ export default function MonatsdatenPage() {
                     onClick={() => handleHAImport(undefined, false)}
                     disabled={haImporting}
                   >
-                    <Download className="h-4 w-4 mr-2" />
-                    Alle fehlenden importieren
+                    {haImporting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Importiere...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Alle fehlenden importieren
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
-            </>
+
+              {/* Import Loading Overlay */}
+              {haImporting && (
+                <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 flex items-center justify-center rounded-lg z-10">
+                  <div className="text-center">
+                    <RefreshCw className="h-8 w-8 mx-auto text-amber-500 animate-spin mb-3" />
+                    <p className="text-gray-600 dark:text-gray-300 font-medium">Importiere aus Home Assistant...</p>
+                    <p className="text-sm text-gray-500 mt-1">Dies kann einige Sekunden dauern.</p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Nicht verbunden */}

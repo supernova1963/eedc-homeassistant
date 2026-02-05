@@ -44,6 +44,7 @@ export interface HAImportResult {
   erfolg: boolean
   monate_importiert: number
   fehler: string | null
+  details: string | null
 }
 
 export interface HAImportPreviewMonth {
