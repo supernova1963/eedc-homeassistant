@@ -1109,6 +1109,168 @@ INTEGRATION_PATTERNS = {
         "device_type": "wallbox",
         "wallbox_indicators": ["charging_power", "charged_energy", "charging_status"],
     },
+    # =========================================================================
+    # Balkonkraftwerke / Mikrowechselrichter
+    # =========================================================================
+    "ecoflow": {
+        "prefixes": ["sensor.ecoflow_", "sensor.powerstream_", "sensor.delta_"],
+        "device_type": "balkonkraftwerk",
+        "pv_erzeugung": ["solar_power", "pv_power", "pv1_power", "pv2_power", "solar_in_energy",
+                        "pv_input_watts", "solar_input_power", "pv_charging_power"],
+        "einspeisung": ["inv_output_watts", "inverter_output", "ac_output", "output_power",
+                       "grid_power", "feed_in"],
+        "balkon_indicators": ["solar_power", "inverter_power", "battery_level", "battery_soc",
+                             "charging_state", "output_watts", "input_watts"],
+    },
+    "hoymiles": {
+        "prefixes": ["sensor.hoymiles_", "sensor.hms_", "sensor.hmt_", "sensor.dtu_"],
+        "device_type": "balkonkraftwerk",
+        "pv_erzeugung": ["yield_total", "yield_today", "pv_power", "dc_power", "ac_power",
+                        "port_1_power", "port_2_power", "port_3_power", "port_4_power"],
+        "einspeisung": ["ac_power", "grid_power", "power"],
+        "balkon_indicators": ["yield_total", "ac_power", "temperature", "efficiency"],
+    },
+    "anker_solix": {
+        "prefixes": ["sensor.anker_", "sensor.solix_", "sensor.solarbank_"],
+        "device_type": "balkonkraftwerk",
+        "pv_erzeugung": ["solar_power", "solar_production", "pv_power", "daily_yield"],
+        "einspeisung": ["output_power", "home_usage", "output_to_home"],
+        "balkon_indicators": ["battery_soc", "solar_power", "output_power", "charging"],
+    },
+    "apsystems": {
+        "prefixes": ["sensor.apsystems_", "sensor.ecu_", "sensor.qs1_", "sensor.ds3_", "sensor.ez1_"],
+        "device_type": "balkonkraftwerk",
+        "pv_erzeugung": ["lifetime_energy", "today_energy", "power", "current_power"],
+        "einspeisung": ["power", "ac_output"],
+        "balkon_indicators": ["power", "lifetime_energy", "temperature"],
+    },
+    "deye": {
+        "prefixes": ["sensor.deye_", "sensor.sun_"],
+        "device_type": "balkonkraftwerk",
+        "pv_erzeugung": ["daily_production", "total_production", "pv_power", "dc_power"],
+        "einspeisung": ["grid_power", "ac_output_power"],
+        "balkon_indicators": ["pv_power", "battery_soc", "daily_production"],
+    },
+    "opensunny": {
+        # Open-Source DTU für Hoymiles, TSUN, etc.
+        "prefixes": ["sensor.opensunny_", "sensor.ahoy_", "sensor.opendtu_"],
+        "device_type": "balkonkraftwerk",
+        "pv_erzeugung": ["yield_total", "yield_day", "power_dc", "ch0_yield_total"],
+        "einspeisung": ["power", "power_ac", "ch0_power"],
+        "balkon_indicators": ["power", "yield_total", "efficiency", "temperature"],
+    },
+    # =========================================================================
+    # Wärmepumpen
+    # =========================================================================
+    "viessmann": {
+        "prefixes": ["sensor.viessmann_", "sensor.vitocal_", "sensor.vicare_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "heating", "hot_water", "temperature", "cop",
+                                   "power_consumption", "heat_production", "dhw_temperature",
+                                   "outside_temperature", "supply_temperature", "return_temperature"],
+        "stromverbrauch": ["power_consumption", "compressor_power", "energy_consumption",
+                          "electricity_consumption", "current_power"],
+        "waerme_erzeugung": ["heat_production", "heating_energy", "thermal_energy"],
+    },
+    "daikin": {
+        "prefixes": ["sensor.daikin_", "sensor.altherma_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor_frequency", "leaving_water_temperature",
+                                   "outdoor_temperature", "target_temperature", "power", "cop",
+                                   "energy_consumption", "heat_tank_temperature"],
+        "stromverbrauch": ["energy_consumption", "power_consumption", "current_power"],
+        "waerme_erzeugung": ["heat_energy", "heating_energy"],
+    },
+    "vaillant": {
+        "prefixes": ["sensor.vaillant_", "sensor.arotherm_", "sensor.mypvaillant_", "sensor.senso_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "flow_temperature", "return_temperature",
+                                   "domestic_hot_water", "outside_temperature", "heat_demand",
+                                   "cop", "heating_state"],
+        "stromverbrauch": ["power_consumption", "electricity", "energy_used"],
+        "waerme_erzeugung": ["heat_produced", "heating_energy"],
+    },
+    "bosch": {
+        "prefixes": ["sensor.bosch_", "sensor.ids_", "sensor.compress_", "sensor.nefit_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "supply_temperature", "dhw_temperature",
+                                   "outdoor_temperature", "heating", "cop"],
+        "stromverbrauch": ["power_consumption", "electricity_consumption"],
+        "waerme_erzeugung": ["heat_energy", "thermal_output"],
+    },
+    "mitsubishi_ecodan": {
+        "prefixes": ["sensor.ecodan_", "sensor.melcloud_", "sensor.mitsubishi_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor_frequency", "flow_temperature", "return_temperature",
+                                   "tank_temperature", "outdoor_temperature", "cop",
+                                   "defrost_mode", "heating_mode"],
+        "stromverbrauch": ["energy_consumed", "power", "electricity"],
+        "waerme_erzeugung": ["energy_produced", "heating_energy"],
+    },
+    "panasonic_aquarea": {
+        "prefixes": ["sensor.aquarea_", "sensor.panasonic_", "sensor.heishamon_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "water_inlet_temp", "water_outlet_temp",
+                                   "outdoor_temp", "tank_temp", "cop", "main_target_temp"],
+        "stromverbrauch": ["power_consumed", "watt", "energy"],
+        "waerme_erzeugung": ["heat_power", "dhw_energy"],
+    },
+    "stiebel_eltron": {
+        "prefixes": ["sensor.stiebel_", "sensor.wpl_", "sensor.isg_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["vorlauf", "ruecklauf", "aussentemperatur", "warmwasser",
+                                   "verdichter", "heizkreis", "cop"],
+        "stromverbrauch": ["verbrauch", "leistung", "strom"],
+        "waerme_erzeugung": ["waermemenge", "heizleistung"],
+    },
+    "nibe": {
+        "prefixes": ["sensor.nibe_", "sensor.s_series_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "supply_line", "return_line", "outdoor_temp",
+                                   "hot_water_top", "degree_minutes", "cop"],
+        "stromverbrauch": ["energy", "power", "current_power"],
+        "waerme_erzeugung": ["heat_meter", "energy_heat"],
+    },
+    "alpha_innotec": {
+        "prefixes": ["sensor.alpha_innotec_", "sensor.luxtronik_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["vorlauf", "ruecklauf", "aussentemperatur", "warmwasser",
+                                   "verdichter", "waermepumpe", "brauchwasser"],
+        "stromverbrauch": ["verbrauch", "leistung", "strom_waermepumpe"],
+        "waerme_erzeugung": ["waermemenge", "heizung_energie"],
+    },
+    "lambda": {
+        "prefixes": ["sensor.lambda_", "sensor.eu_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["vorlauf", "ruecklauf", "aussentemperatur", "warmwasser",
+                                   "cop", "kompressor", "leistung"],
+        "stromverbrauch": ["strom", "elektrische_leistung", "verbrauch"],
+        "waerme_erzeugung": ["waerme", "heizleistung"],
+    },
+    "idm": {
+        "prefixes": ["sensor.idm_", "sensor.navigator_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["vorlauftemperatur", "ruecklauftemperatur", "aussentemperatur",
+                                   "warmwassertemperatur", "verdichter", "arbeitszahl"],
+        "stromverbrauch": ["stromverbrauch", "leistungsaufnahme"],
+        "waerme_erzeugung": ["waermeertrag", "heizwaerme"],
+    },
+    "toshiba": {
+        "prefixes": ["sensor.toshiba_", "sensor.estia_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "water_temperature", "outdoor_temperature",
+                                   "cop", "dhw_temperature", "heating"],
+        "stromverbrauch": ["power_consumption", "energy"],
+        "waerme_erzeugung": ["heat_output", "thermal_energy"],
+    },
+    "lg_therma": {
+        "prefixes": ["sensor.lg_", "sensor.therma_v_"],
+        "device_type": "waermepumpe",
+        "waermepumpe_indicators": ["compressor", "water_in_temp", "water_out_temp",
+                                   "outdoor_temp", "dhw_temp", "cop"],
+        "stromverbrauch": ["power_usage", "energy_consumption"],
+        "waerme_erzeugung": ["heat_production"],
+    },
 }
 
 # Hersteller-Konfiguration für Discovery-Filter
@@ -1221,6 +1383,42 @@ def _classify_sensor(entity_id: str, attrs: dict, manufacturer_filter: str | Non
     # Wallbox Sensoren
     if entity_lower.startswith("sensor.wallbox_"):
         return ("wallbox", None, 50)
+
+    # Balkonkraftwerk Sensoren (EcoFlow, Hoymiles, Anker, APSystems, Deye, OpenDTU)
+    balkon_integrations = ["ecoflow", "hoymiles", "anker_solix", "apsystems", "deye", "opensunny"]
+    for integration in balkon_integrations:
+        patterns = INTEGRATION_PATTERNS.get(integration, {})
+        prefixes = patterns.get("prefixes", [])
+        for prefix in prefixes:
+            if entity_lower.startswith(prefix):
+                # Prüfe auf PV-Erzeugung Mapping
+                sensor_name = entity_lower[len(prefix):]
+                for mapping_type in ["pv_erzeugung", "einspeisung"]:
+                    keywords = patterns.get(mapping_type, [])
+                    for kw in keywords:
+                        if kw in sensor_name or kw in friendly_name:
+                            conf = 85 if state_class == "total_increasing" else 70
+                            return (integration, mapping_type, conf)
+                return (integration, None, 60)
+
+    # Wärmepumpen Sensoren
+    wp_integrations = ["viessmann", "daikin", "vaillant", "bosch", "mitsubishi_ecodan",
+                       "panasonic_aquarea", "stiebel_eltron", "nibe", "alpha_innotec",
+                       "lambda", "idm", "toshiba", "lg_therma"]
+    for integration in wp_integrations:
+        patterns = INTEGRATION_PATTERNS.get(integration, {})
+        prefixes = patterns.get("prefixes", [])
+        for prefix in prefixes:
+            if entity_lower.startswith(prefix):
+                sensor_name = entity_lower[len(prefix):]
+                # Prüfe auf Stromverbrauch oder Wärmeerzeugung
+                for mapping_type in ["stromverbrauch", "waerme_erzeugung"]:
+                    keywords = patterns.get(mapping_type, [])
+                    for kw in keywords:
+                        if kw in sensor_name or kw in friendly_name:
+                            conf = 80 if state_class == "total_increasing" else 65
+                            return (integration, mapping_type, conf)
+                return (integration, None, 55)
 
     # Generische Energy-Sensoren
     if device_class == "energy" and unit in ["kWh", "Wh"]:
@@ -1489,6 +1687,103 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                 state_class=attrs.get("state_class"),
                 current_state=sensor.get("state"),
             ))
+
+        # Balkonkraftwerke (EcoFlow, Hoymiles, Anker, APSystems, Deye, OpenDTU)
+        else:
+            balkon_configs = {
+                "ecoflow": {"name": "EcoFlow", "prefixes": ["sensor.ecoflow_", "sensor.powerstream_", "sensor.delta_"]},
+                "hoymiles": {"name": "Hoymiles", "prefixes": ["sensor.hoymiles_", "sensor.hms_", "sensor.hmt_", "sensor.dtu_"]},
+                "anker_solix": {"name": "Anker SOLIX", "prefixes": ["sensor.anker_", "sensor.solix_", "sensor.solarbank_"]},
+                "apsystems": {"name": "APSystems", "prefixes": ["sensor.apsystems_", "sensor.ecu_", "sensor.qs1_", "sensor.ds3_", "sensor.ez1_"]},
+                "deye": {"name": "Deye", "prefixes": ["sensor.deye_", "sensor.sun_"]},
+                "opensunny": {"name": "OpenDTU/AhoyDTU", "prefixes": ["sensor.opensunny_", "sensor.ahoy_", "sensor.opendtu_"]},
+            }
+
+            for integration, config in balkon_configs.items():
+                for prefix in config["prefixes"]:
+                    if entity_lower.startswith(prefix):
+                        device_id = f"{integration}_balkonkraftwerk"
+
+                        if device_id not in devices:
+                            devices[device_id] = DiscoveredDevice(
+                                id=device_id,
+                                integration=integration,
+                                device_type="balkonkraftwerk",
+                                suggested_investition_typ="balkonkraftwerk",
+                                name=f"{config['name']} Balkonkraftwerk",
+                                manufacturer=config["name"],
+                                sensors=[],
+                                suggested_parameters={
+                                    "bezeichnung": f"{config['name']} Balkonkraftwerk",
+                                    "hersteller": config["name"],
+                                },
+                                confidence=80,
+                                priority=60,
+                            )
+
+                        devices[device_id].sensors.append(DiscoveredSensor(
+                            entity_id=entity_id,
+                            friendly_name=attrs.get("friendly_name"),
+                            unit_of_measurement=attrs.get("unit_of_measurement"),
+                            device_class=attrs.get("device_class"),
+                            state_class=attrs.get("state_class"),
+                            current_state=sensor.get("state"),
+                        ))
+                        break
+
+            # Wärmepumpen
+            wp_configs = {
+                "viessmann": {"name": "Viessmann", "prefixes": ["sensor.viessmann_", "sensor.vitocal_", "sensor.vicare_"]},
+                "daikin": {"name": "Daikin", "prefixes": ["sensor.daikin_", "sensor.altherma_"]},
+                "vaillant": {"name": "Vaillant", "prefixes": ["sensor.vaillant_", "sensor.arotherm_", "sensor.mypvaillant_", "sensor.senso_"]},
+                "bosch": {"name": "Bosch", "prefixes": ["sensor.bosch_", "sensor.ids_", "sensor.compress_", "sensor.nefit_"]},
+                "mitsubishi_ecodan": {"name": "Mitsubishi Ecodan", "prefixes": ["sensor.ecodan_", "sensor.melcloud_", "sensor.mitsubishi_"]},
+                "panasonic_aquarea": {"name": "Panasonic Aquarea", "prefixes": ["sensor.aquarea_", "sensor.panasonic_", "sensor.heishamon_"]},
+                "stiebel_eltron": {"name": "Stiebel Eltron", "prefixes": ["sensor.stiebel_", "sensor.wpl_", "sensor.isg_"]},
+                "nibe": {"name": "Nibe", "prefixes": ["sensor.nibe_", "sensor.s_series_"]},
+                "alpha_innotec": {"name": "Alpha Innotec", "prefixes": ["sensor.alpha_innotec_", "sensor.luxtronik_"]},
+                "lambda": {"name": "Lambda", "prefixes": ["sensor.lambda_", "sensor.eu_"]},
+                "idm": {"name": "iDM", "prefixes": ["sensor.idm_", "sensor.navigator_"]},
+                "toshiba": {"name": "Toshiba", "prefixes": ["sensor.toshiba_", "sensor.estia_"]},
+                "lg_therma": {"name": "LG Therma V", "prefixes": ["sensor.lg_", "sensor.therma_v_"]},
+            }
+
+            for integration, config in wp_configs.items():
+                for prefix in config["prefixes"]:
+                    if entity_lower.startswith(prefix):
+                        # Prüfe ob wirklich WP-relevanter Sensor
+                        wp_indicators = ["compressor", "heating", "cop", "temperature", "dhw",
+                                        "verdichter", "heizung", "warmwasser", "vorlauf", "ruecklauf",
+                                        "heat", "power_consumption", "energy"]
+                        if any(ind in entity_lower for ind in wp_indicators):
+                            device_id = f"{integration}_waermepumpe"
+
+                            if device_id not in devices:
+                                devices[device_id] = DiscoveredDevice(
+                                    id=device_id,
+                                    integration=integration,
+                                    device_type="waermepumpe",
+                                    suggested_investition_typ="waermepumpe",
+                                    name=f"{config['name']} Wärmepumpe",
+                                    manufacturer=config["name"],
+                                    sensors=[],
+                                    suggested_parameters={
+                                        "bezeichnung": f"{config['name']} Wärmepumpe",
+                                        "hersteller": config["name"],
+                                    },
+                                    confidence=75,
+                                    priority=70,
+                                )
+
+                            devices[device_id].sensors.append(DiscoveredSensor(
+                                entity_id=entity_id,
+                                friendly_name=attrs.get("friendly_name"),
+                                unit_of_measurement=attrs.get("unit_of_measurement"),
+                                device_class=attrs.get("device_class"),
+                                state_class=attrs.get("state_class"),
+                                current_state=sensor.get("state"),
+                            ))
+                        break
 
     return list(devices.values())
 

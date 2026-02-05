@@ -24,7 +24,7 @@ export default function Layout() {
       {/* Footer */}
       <footer className="py-2 px-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-          EEDC v0.7.3 – Energie Effizienz Data Center
+          EEDC v0.7.4 – Energie Effizienz Data Center
         </p>
       </footer>
     </div>

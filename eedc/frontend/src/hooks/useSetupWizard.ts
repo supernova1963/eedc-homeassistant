@@ -158,7 +158,13 @@ export interface InvestitionFormData {
   // Typ-spezifische Felder (Namen müssen mit InvestitionForm.tsx übereinstimmen)
   batteriekapazitaet_kwh?: number  // E-Auto
   kapazitaet_kwh?: number // Speicher
-  leistung_kw?: number   // Wallbox, Wechselrichter
+  leistung_kw?: number   // Wallbox, Wechselrichter, Wärmepumpe
+  // Wärmepumpe
+  cop?: number
+  jahresarbeitszahl?: number
+  // Balkonkraftwerk
+  leistung_wp?: number
+  anzahl?: number
 }
 
 // LocalStorage Key
@@ -483,6 +489,19 @@ export function useSetupWizard(): UseSetupWizardReturn {
         // Wechselrichter: max_leistung_kw
         if (device.suggested_investition_typ === 'wechselrichter' && formData.leistung_kw) {
           parameter.max_leistung_kw = formData.leistung_kw
+        }
+
+        // Wärmepumpe: leistung_kw, cop, jahresarbeitszahl
+        if (device.suggested_investition_typ === 'waermepumpe') {
+          if (formData.leistung_kw) parameter.leistung_kw = formData.leistung_kw
+          if (formData.cop) parameter.cop = formData.cop
+          if (formData.jahresarbeitszahl) parameter.jahresarbeitszahl = formData.jahresarbeitszahl
+        }
+
+        // Balkonkraftwerk: leistung_wp, anzahl
+        if (device.suggested_investition_typ === 'balkonkraftwerk') {
+          if (formData.leistung_wp) parameter.leistung_wp = formData.leistung_wp
+          if (formData.anzahl) parameter.anzahl = formData.anzahl
         }
 
         const investitionData: InvestitionCreate = {

@@ -2,7 +2,7 @@
  * InvestitionenStep - Investitionen vervollständigen im Setup-Wizard
  */
 
-import { Car, Battery, Plug, Cpu, ArrowLeft, ArrowRight, SkipForward, Info } from 'lucide-react'
+import { Car, Battery, Plug, Cpu, ArrowLeft, ArrowRight, SkipForward, Info, Flame, Sun } from 'lucide-react'
 import type { DiscoveredDevice } from '../../../api/ha'
 import type { InvestitionFormData } from '../../../hooks/useSetupWizard'
 
@@ -28,6 +28,10 @@ function getDeviceIcon(typ: string | null) {
       return <Plug className="w-5 h-5" />
     case 'wechselrichter':
       return <Cpu className="w-5 h-5" />
+    case 'waermepumpe':
+      return <Flame className="w-5 h-5" />
+    case 'balkonkraftwerk':
+      return <Sun className="w-5 h-5" />
     default:
       return <Cpu className="w-5 h-5" />
   }
@@ -40,6 +44,8 @@ function getTypeLabel(typ: string | null): string {
     case 'speicher': return 'Speicher'
     case 'wallbox': return 'Wallbox'
     case 'wechselrichter': return 'Wechselrichter'
+    case 'waermepumpe': return 'Wärmepumpe'
+    case 'balkonkraftwerk': return 'Balkonkraftwerk'
     default: return 'Investition'
   }
 }
@@ -261,6 +267,75 @@ export default function InvestitionenStep({
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                       />
                     </div>
+                  )}
+
+                  {/* Typ-spezifische Felder - Wärmepumpe */}
+                  {device.suggested_investition_typ === 'waermepumpe' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Nennleistung (kW)
+                        </label>
+                        <input
+                          type="number"
+                          value={data.leistung_kw ?? ''}
+                          onChange={(e) => onUpdateFormData(device.id, { leistung_kw: parseFloat(e.target.value) || undefined })}
+                          placeholder="z.B. 9"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          COP (Leistungszahl)
+                        </label>
+                        <input
+                          type="number"
+                          value={data.cop ?? '3.5'}
+                          onChange={(e) => onUpdateFormData(device.id, { cop: parseFloat(e.target.value) || undefined })}
+                          placeholder="z.B. 3.5"
+                          min="1"
+                          max="10"
+                          step="0.1"
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Typ-spezifische Felder - Balkonkraftwerk */}
+                  {device.suggested_investition_typ === 'balkonkraftwerk' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Leistung (Wp)
+                        </label>
+                        <input
+                          type="number"
+                          value={data.leistung_wp ?? ''}
+                          onChange={(e) => onUpdateFormData(device.id, { leistung_wp: parseFloat(e.target.value) || undefined })}
+                          placeholder="z.B. 800"
+                          min="0"
+                          step="10"
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Anzahl Module
+                        </label>
+                        <input
+                          type="number"
+                          value={data.anzahl ?? ''}
+                          onChange={(e) => onUpdateFormData(device.id, { anzahl: parseInt(e.target.value) || undefined })}
+                          placeholder="z.B. 2"
+                          min="1"
+                          step="1"
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
