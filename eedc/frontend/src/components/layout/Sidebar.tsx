@@ -115,7 +115,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          EEDC v0.7.2
+          EEDC v0.7.3
         </p>
       </div>
     </aside>
