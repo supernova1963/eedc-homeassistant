@@ -1010,15 +1010,21 @@ async def delete_string_monatsdaten(
 # =============================================================================
 
 # Integration-spezifische Erkennungsmuster
+# SMA Sensoren haben das Prefix sensor.sn_SERIENNUMMER_ (z.B. sensor.sn_3012412676_pv_gen_meter)
 INTEGRATION_PATTERNS = {
     "sma": {
-        "prefix": "sensor.sma_",
+        # SMA Sensoren beginnen mit sensor.sn_ gefolgt von Seriennummer
+        "prefix_pattern": r"^sensor\.sn_\d+_",
         "device_type": "inverter",
-        "pv_erzeugung": ["pv_gen", "total_yield", "solar_yield", "pv_power"],
-        "einspeisung": ["grid_export", "feed_in", "power_supplied", "metering_total_yield"],
-        "netzbezug": ["grid_import", "power_absorbed", "metering_total_absorbed"],
-        "batterie_ladung": ["battery_charge", "bat_charge"],
-        "batterie_entladung": ["battery_discharge", "bat_discharge"],
+        # Sensor-Mappings für Monatsdaten
+        "pv_erzeugung": ["pv_gen_meter", "pv_gen", "total_yield"],
+        "einspeisung": ["metering_total_yield"],
+        "netzbezug": ["metering_total_absorbed"],
+        "batterie_ladung": ["battery_charge_total"],
+        "batterie_entladung": ["battery_discharge_total"],
+        # Geräteerkennung
+        "inverter_indicators": ["inverter_power_limit", "inverter_condition", "pv_power"],
+        "battery_indicators": ["battery_soc", "battery_charge_total", "battery_discharge_total"],
     },
     "evcc": {
         "prefix": "sensor.evcc_",
@@ -1044,7 +1050,12 @@ INTEGRATION_PATTERNS = {
 }
 
 
-def _classify_sensor(entity_id: str, attrs: dict) -> tuple[str, str, int]:
+def _is_sma_sensor(entity_id: str) -> bool:
+    """Prüft ob ein Sensor ein SMA-Sensor ist (sensor.sn_NUMMER_...)."""
+    return bool(re.match(r'^sensor\.sn_\d+_', entity_id.lower()))
+
+
+def _classify_sensor(entity_id: str, attrs: dict) -> tuple[str, str | None, int]:
     """
     Klassifiziert einen Sensor nach Integration und Mapping-Typ.
 
@@ -1057,16 +1068,26 @@ def _classify_sensor(entity_id: str, attrs: dict) -> tuple[str, str, int]:
     state_class = attrs.get("state_class", "")
     unit = attrs.get("unit_of_measurement", "")
 
-    # SMA Sensoren
-    if entity_lower.startswith("sensor.sma_"):
+    # SMA Sensoren (sensor.sn_NUMMER_...)
+    if _is_sma_sensor(entity_id):
         patterns = INTEGRATION_PATTERNS["sma"]
+
+        # Extrahiere den Sensor-Namen nach der Seriennummer (z.B. "pv_gen_meter" aus "sensor.sn_3012412676_pv_gen_meter")
+        match = re.match(r'^sensor\.sn_\d+_(.+)$', entity_lower)
+        sensor_name = match.group(1) if match else ""
+
         for mapping_type in ["pv_erzeugung", "einspeisung", "netzbezug", "batterie_ladung", "batterie_entladung"]:
             keywords = patterns.get(mapping_type, [])
             for kw in keywords:
-                if kw in entity_lower or kw in friendly_name:
-                    # Höhere Confidence für state_class: total_increasing
-                    conf = 90 if state_class == "total_increasing" else 70
-                    return ("sma", mapping_type, conf)
+                # Exakter Match auf Sensor-Namen
+                if sensor_name == kw or sensor_name.startswith(kw):
+                    # Höhere Confidence für state_class: total_increasing und kWh
+                    if state_class == "total_increasing" and unit == "kWh":
+                        return ("sma", mapping_type, 95)
+                    elif state_class == "total_increasing":
+                        return ("sma", mapping_type, 90)
+                    else:
+                        return ("sma", mapping_type, 70)
         return ("sma", None, 50)
 
     # evcc Sensoren
@@ -1107,14 +1128,126 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
     """
     devices: dict[str, DiscoveredDevice] = {}
 
+    # Erste Pass: Sammle alle SMA-Sensoren um Geräte zu identifizieren
+    sma_sensors: dict[str, list[dict]] = {}  # serial -> sensors
+    sma_inverter_power: dict[str, int] = {}  # serial -> power_limit in W
+    sma_has_battery: dict[str, bool] = {}    # serial -> has battery
+
+    for sensor in sensors:
+        entity_id = sensor["entity_id"]
+        entity_lower = entity_id.lower()
+
+        if _is_sma_sensor(entity_id):
+            # Extrahiere Seriennummer
+            match = re.match(r'^sensor\.sn_(\d+)_(.+)$', entity_lower)
+            if match:
+                serial = match.group(1)
+                sensor_name = match.group(2)
+
+                if serial not in sma_sensors:
+                    sma_sensors[serial] = []
+                sma_sensors[serial].append(sensor)
+
+                # Prüfe auf Wechselrichter-Leistung
+                if sensor_name == "inverter_power_limit":
+                    try:
+                        power = int(float(sensor.get("state", 0)))
+                        sma_inverter_power[serial] = power
+                    except (ValueError, TypeError):
+                        pass
+
+                # Prüfe auf Batterie
+                if "battery" in sensor_name and sensor_name not in ["battery_power_charge_total", "battery_power_discharge_total"]:
+                    sma_has_battery[serial] = True
+
+    # Zweite Pass: Erstelle SMA-Geräte
+    for serial, serial_sensors in sma_sensors.items():
+        # SMA Wechselrichter erstellen
+        inverter_power_w = sma_inverter_power.get(serial, 0)
+        inverter_power_kw = inverter_power_w / 1000 if inverter_power_w > 0 else None
+
+        device_id = f"sma_inverter_{serial}"
+        devices[device_id] = DiscoveredDevice(
+            id=device_id,
+            integration="sma",
+            device_type="inverter",
+            suggested_investition_typ="wechselrichter",
+            name=f"SMA Wechselrichter (SN: {serial})",
+            manufacturer="SMA",
+            model=f"SN: {serial}",
+            sensors=[],
+            suggested_parameters={
+                "bezeichnung": f"SMA Wechselrichter",
+                "hersteller": "SMA",
+                "leistung_kw": inverter_power_kw,
+            },
+            confidence=90,
+            priority=80,
+        )
+
+        # Sensoren zum Wechselrichter hinzufügen
+        for sensor in serial_sensors:
+            entity_id = sensor["entity_id"]
+            attrs = sensor.get("attributes", {})
+            _, mapping, conf = _classify_sensor(entity_id, attrs)
+
+            devices[device_id].sensors.append(DiscoveredSensor(
+                entity_id=entity_id,
+                friendly_name=attrs.get("friendly_name"),
+                unit_of_measurement=attrs.get("unit_of_measurement"),
+                device_class=attrs.get("device_class"),
+                state_class=attrs.get("state_class"),
+                current_state=sensor.get("state"),
+                suggested_mapping=mapping,
+                confidence=conf,
+            ))
+
+        # Wenn Batterie vorhanden, separates Speicher-Gerät erstellen
+        if sma_has_battery.get(serial, False):
+            battery_device_id = f"sma_battery_{serial}"
+            devices[battery_device_id] = DiscoveredDevice(
+                id=battery_device_id,
+                integration="sma",
+                device_type="battery",
+                suggested_investition_typ="speicher",
+                name=f"SMA Speicher (SN: {serial})",
+                manufacturer="SMA",
+                model=f"SN: {serial}",
+                sensors=[],
+                suggested_parameters={
+                    "bezeichnung": f"Batteriespeicher (SMA)",
+                    "hersteller": "SMA",
+                },
+                confidence=85,
+                priority=75,
+            )
+
+            # Batterie-Sensoren hinzufügen
+            for sensor in serial_sensors:
+                entity_lower = sensor["entity_id"].lower()
+                if "battery" in entity_lower:
+                    attrs = sensor.get("attributes", {})
+                    devices[battery_device_id].sensors.append(DiscoveredSensor(
+                        entity_id=sensor["entity_id"],
+                        friendly_name=attrs.get("friendly_name"),
+                        unit_of_measurement=attrs.get("unit_of_measurement"),
+                        device_class=attrs.get("device_class"),
+                        state_class=attrs.get("state_class"),
+                        current_state=sensor.get("state"),
+                    ))
+
+    # Dritte Pass: Andere Integrationen
     for sensor in sensors:
         entity_id = sensor["entity_id"]
         attrs = sensor.get("attributes", {})
         entity_lower = entity_id.lower()
 
+        # Überspringe SMA-Sensoren (bereits verarbeitet)
+        if _is_sma_sensor(entity_id):
+            continue
+
         # evcc Loadpoints (Wallbox) - HÖCHSTE Priorität
         if entity_lower.startswith("sensor.evcc_") and "loadpoint" in entity_lower:
-            # Extrahiere Loadpoint-Nummer
             match = re.search(r'loadpoint[_]?(\d+)?', entity_lower)
             lp_num = match.group(1) if match and match.group(1) else "1"
             device_id = f"evcc_loadpoint_{lp_num}"
@@ -1133,7 +1266,7 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                         "hersteller": "evcc managed",
                     },
                     confidence=95,
-                    priority=100,  # Höchste Priorität
+                    priority=100,
                 )
 
             devices[device_id].sensors.append(DiscoveredSensor(
@@ -1152,7 +1285,6 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
             device_id = f"evcc_vehicle_{v_num}"
 
             if device_id not in devices:
-                # Versuche Fahrzeugname aus friendly_name zu extrahieren
                 friendly = attrs.get("friendly_name", "")
                 vehicle_name = friendly.split()[0] if friendly else f"Fahrzeug {v_num}"
 
@@ -1181,7 +1313,7 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                 current_state=sensor.get("state"),
             ))
 
-        # Smart E-Auto (nur wenn nicht durch evcc abgedeckt)
+        # Smart E-Auto
         elif entity_lower.startswith("sensor.smart_"):
             ev_keywords = ["battery", "range", "soc", "charging", "odometer"]
             if any(kw in entity_lower for kw in ev_keywords):
@@ -1200,10 +1332,10 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                         suggested_parameters={
                             "bezeichnung": "Smart #1",
                             "hersteller": "Smart",
-                            "batterie_kwh": 66.0,  # Smart #1 Pro+
+                            "batterie_kwh": 66.0,
                         },
                         confidence=85,
-                        priority=50,  # Niedriger als evcc
+                        priority=50,
                     )
 
                 devices[device_id].sensors.append(DiscoveredSensor(
@@ -1215,7 +1347,7 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                     current_state=sensor.get("state"),
                 ))
 
-        # Wallbox Integration (nur wenn nicht durch evcc abgedeckt)
+        # Wallbox Integration
         elif entity_lower.startswith("sensor.wallbox_"):
             device_id = "wallbox_native"
 
@@ -1233,7 +1365,7 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                         "hersteller": "Wallbox",
                     },
                     confidence=80,
-                    priority=30,  # Niedriger als evcc
+                    priority=30,
                 )
 
             devices[device_id].sensors.append(DiscoveredSensor(
@@ -1243,38 +1375,6 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
                 device_class=attrs.get("device_class"),
                 state_class=attrs.get("state_class"),
                 current_state=sensor.get("state"),
-            ))
-
-        # SMA Wechselrichter
-        elif entity_lower.startswith("sensor.sma_"):
-            device_id = "sma_inverter"
-
-            if device_id not in devices:
-                devices[device_id] = DiscoveredDevice(
-                    id=device_id,
-                    integration="sma",
-                    device_type="inverter",
-                    suggested_investition_typ=None,  # Wechselrichter ist kein Investitionstyp
-                    name="SMA Wechselrichter",
-                    manufacturer="SMA",
-                    sensors=[],
-                    suggested_parameters={},
-                    confidence=90,
-                    priority=80,
-                )
-
-            # Sensor-Mapping klassifizieren
-            _, mapping, conf = _classify_sensor(entity_id, attrs)
-
-            devices[device_id].sensors.append(DiscoveredSensor(
-                entity_id=entity_id,
-                friendly_name=attrs.get("friendly_name"),
-                unit_of_measurement=attrs.get("unit_of_measurement"),
-                device_class=attrs.get("device_class"),
-                state_class=attrs.get("state_class"),
-                current_state=sensor.get("state"),
-                suggested_mapping=mapping,
-                confidence=conf,
             ))
 
     return list(devices.values())
@@ -1283,6 +1383,7 @@ def _extract_devices_from_sensors(sensors: list[dict]) -> list[DiscoveredDevice]
 def _extract_sensor_mappings(sensors: list[dict]) -> SensorMappingSuggestions:
     """
     Extrahiert Sensor-Mapping-Vorschläge aus der Sensor-Liste.
+    Berücksichtigt SMA-Sensoren mit sensor.sn_NUMMER_ Prefix.
     """
     mappings = SensorMappingSuggestions()
 
@@ -1290,15 +1391,23 @@ def _extract_sensor_mappings(sensors: list[dict]) -> SensorMappingSuggestions:
         entity_id = sensor["entity_id"]
         attrs = sensor.get("attributes", {})
 
+        # Nur Energy-Sensoren mit kWh für Mappings
+        unit = attrs.get("unit_of_measurement", "")
+        state_class = attrs.get("state_class", "")
+
+        # Für Monatsdaten-Import brauchen wir total_increasing Sensoren mit kWh
+        if state_class != "total_increasing" or unit != "kWh":
+            continue
+
         integration, mapping_type, confidence = _classify_sensor(entity_id, attrs)
 
         if mapping_type and confidence >= 50:
             discovered = DiscoveredSensor(
                 entity_id=entity_id,
                 friendly_name=attrs.get("friendly_name"),
-                unit_of_measurement=attrs.get("unit_of_measurement"),
+                unit_of_measurement=unit,
                 device_class=attrs.get("device_class"),
-                state_class=attrs.get("state_class"),
+                state_class=state_class,
                 current_state=sensor.get("state"),
                 suggested_mapping=mapping_type,
                 confidence=confidence,
