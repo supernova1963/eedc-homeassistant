@@ -1,6 +1,6 @@
 # EEDC Projekt Status
 
-**Stand:** 2026-02-04
+**Stand:** 2026-02-05
 **Version:** 0.6.0
 
 ## Übersicht
@@ -68,20 +68,26 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 **Dateien:**
 - `frontend/src/pages/Monatsdaten.tsx`
 
-### Feature: HA Auto-Discovery
+### Feature: HA Auto-Discovery (v0.6.0)
 **Status:** ✅ Implementiert
 
 Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
 
 **Funktionen:**
-- Erkennt SMA Wechselrichter (Sensor-Mappings für PV, Grid, Batterie)
+- Erkennt SMA Wechselrichter als Investitionstyp `wechselrichter` (mit Leistung aus `inverter_power_limit`)
+- Erkennt SMA Speicher aus Battery-Sensoren als Investitionstyp `speicher`
 - Erkennt evcc Loadpoints (Wallbox) und Vehicles (E-Auto) - höchste Priorität
 - Erkennt Smart E-Auto Integration
 - Erkennt Wallbox Integration
 - Vorschläge für Sensor-Mappings (Monatsdaten-Import)
+- **Empfohlen/Alle Toggle:** Benutzer können zwischen automatisch erkannten Sensoren und allen Energy-Sensoren wählen
 - Vorschläge für Investitionen mit vorausgefüllten Parametern
 - Duplikat-Erkennung (bereits konfigurierte Geräte markiert)
 - evcc hat Priorität über native Wallbox/Smart Integrationen
+
+**SMA Sensor-Erkennung:**
+- SMA Sensoren haben das Prefix `sensor.sn_SERIENNUMMER_` (z.B. `sensor.sn_3012412676_pv_gen_meter`)
+- Automatische Zuordnung: `pv_gen_meter` → PV, `metering_total_yield` → Einspeisung, `metering_total_absorbed` → Netzbezug
 
 **Aufruf:**
 - Nach Anlage-Erstellung: Discovery-Dialog erscheint automatisch
@@ -120,6 +126,20 @@ WebSocket-Client implementiert in `backend/services/ha_websocket.py`, funktionie
 2. Direkter Datenbankzugriff auf HA SQLite (`statistics` Tabelle)
 3. Custom Component für REST-Zugriff auf Statistics
 
+### ⚠️ Discovery: Erstellte Investitionen ohne Detaildaten
+
+**Problem:**
+Auto-Discovery erstellt Investitionen mit minimalen Daten (Name, Typ, Hersteller). Wichtige Felder fehlen:
+- Kaufpreis (für ROI-Berechnung)
+- Kaufdatum
+- Technische Parameter (Batteriekapazität bei E-Auto/Speicher, etc.)
+
+**Workaround:**
+Nach Discovery müssen Investitionen manuell unter "Investitionen" ergänzt werden.
+
+**Mögliche Verbesserung:**
+Nach dem Erstellen direkt zum Bearbeitungsdialog weiterleiten.
+
 ---
 
 ## Sensor-Konfiguration
@@ -142,12 +162,11 @@ Die Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term S
 ## Git Historie (aktuell)
 
 ```
+19d7901 feat(ha): Add Empfohlen/Alle toggle for sensor mappings
+ebf2e31 fix(ha): Improve Auto-Discovery for SMA devices
+c64dff1 feat(ha): Add Auto-Discovery for HA devices (v0.6.0)
+b8b32fb docs: Update documentation with current project state
 2a477f3 fix(ha): Revert to History API, make WebSocket optional
-212a176 fix(ha): Correct WebSocket URL for HA Add-on environment
-01f0202 fix(ui): Add null-safety to formatKwh functions in Monatsdaten
-b4c197d feat(ha): Add WebSocket client for Long-Term Statistics
-d38d6ca docs: Add STATUS.md with current project state and known issues
-ff768e5 fix(ha): Revert to working History API implementation
 ```
 
 ---
@@ -166,6 +185,7 @@ ff768e5 fix(ha): Revert to working History API implementation
 ### Optional für später:
 - [ ] WebSocket für Long-Term Statistics zum Laufen bringen
 - [ ] String-Import aus HA vervollständigen (benötigt Long-Term Statistics)
+- [ ] Nach Discovery → Investitions-Bearbeitungsdialog öffnen
 
 ---
 
@@ -188,3 +208,19 @@ npm run dev
 # Produktions-Build
 npm run build
 ```
+
+---
+
+## Test-Umgebung des Benutzers
+
+**Home Assistant Setup:**
+- SMA Wechselrichter (Sensoren: `sensor.sn_3012412676_*`)
+- evcc Integration (Wallbox + Fahrzeug)
+- Smart #1 E-Auto Integration
+- Wallbox Integration (wird durch evcc überdeckt)
+
+**Getestete Funktionen:**
+- ✅ Auto-Discovery erkennt alle 4 Geräte (SMA WR, SMA Speicher, evcc Wallbox, evcc E-Auto)
+- ✅ Sensor-Mappings werden korrekt vorgeschlagen
+- ✅ "Alle" Toggle zeigt alle Energy-Sensoren für manuelle Auswahl
+- ✅ Investitionen werden erstellt

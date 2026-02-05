@@ -770,6 +770,7 @@ def berechne_v2h_einsparung(
 | 2.14 | API: ROI-Berechnung | Endpoint für alle Investitionen | ✅ |
 | 2.15 | PV-Module als Investitionen | Multi-Modul-Unterstützung | ✅ |
 | 2.16 | String-basierte IST-Erfassung | SOLL-IST pro PV-Modul via HA-Strings | ✅ (UI/API) |
+| 2.17 | HA Auto-Discovery | Automatische Erkennung von HA-Geräten | ✅ |
 
 ### Optional / Zurückgestellt
 
@@ -954,9 +955,10 @@ Home Assistant kann String/MPPT-Daten vom Wechselrichter erfassen. Diese werden 
 | 2026-02-04 | 0.4.0 | **PVGIS Integration (2.13)** - EU PVGIS API v5.2, Prognose vs. IST, PV-Module als Investitionen mit individueller Ausrichtung |
 | 2026-02-04 | 0.5.0 | **Feature 2.16** - String-basierte IST-Erfassung UI/API implementiert |
 | 2026-02-04 | 0.6.0 | **Feature 2.1** - HA Energy Import (aktuelle Monate via History API), Sensor-Mapping in Settings, Import-Vorschau. WebSocket für Long-Term Statistics vorbereitet aber deaktiviert |
+| 2026-02-05 | 0.6.0 | **Feature 2.17** - HA Auto-Discovery für SMA, evcc, Smart, Wallbox. Empfohlen/Alle Toggle für Sensor-Mappings |
 
 ---
 
 *Erstellt: 2026-02-03*
-*Letzte Aktualisierung: 2026-02-04*
+*Letzte Aktualisierung: 2026-02-05*
 *Basierend auf: eedc-webapp Analyse*
