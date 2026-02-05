@@ -31,6 +31,35 @@ class Base(DeclarativeBase):
     pass
 
 
+async def run_migrations(conn):
+    """
+    Führt einfache Migrationen durch.
+
+    SQLite unterstützt keine nativen ALTER TABLE ADD COLUMN,
+    daher prüfen wir ob Spalten existieren und fügen sie hinzu.
+    """
+    from sqlalchemy import text, inspect
+
+    def _run_migrations(connection):
+        inspector = inspect(connection)
+
+        # v0.8.0: Neue ha_sensor_* Spalten zur anlagen Tabelle
+        if 'anlagen' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('anlagen')}
+            new_columns = [
+                ('ha_sensor_pv_erzeugung', 'VARCHAR(255)'),
+                ('ha_sensor_einspeisung', 'VARCHAR(255)'),
+                ('ha_sensor_netzbezug', 'VARCHAR(255)'),
+                ('ha_sensor_batterie_ladung', 'VARCHAR(255)'),
+                ('ha_sensor_batterie_entladung', 'VARCHAR(255)'),
+            ]
+            for col_name, col_type in new_columns:
+                if col_name not in existing_columns:
+                    connection.execute(text(f'ALTER TABLE anlagen ADD COLUMN {col_name} {col_type}'))
+
+    conn.run_sync(_run_migrations)
+
+
 async def init_db():
     """
     Initialisiert die Datenbank.
@@ -42,6 +71,8 @@ async def init_db():
     from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose
 
     async with engine.begin() as conn:
+        # Migrationen ausführen
+        await run_migrations(conn)
         # Erstelle alle Tabellen
         await conn.run_sync(Base.metadata.create_all)
 

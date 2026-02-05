@@ -1,7 +1,7 @@
 # EEDC Projekt Status
 
 **Stand:** 2026-02-05
-**Version:** 0.7.4
+**Version:** 0.8.0
 
 ## Übersicht
 
@@ -11,38 +11,48 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 
 ## Aktuell implementierte Features
 
-### Feature: Setup-Wizard (v0.7.0-0.7.4)
-**Status:** ✅ Implementiert
+### Feature: Setup-Wizard (v0.7.0-0.8.0)
+**Status:** ✅ Implementiert und verbessert
 
 Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 
-**Wizard-Schritte:**
+**v0.8.0 - Wizard Refactoring:**
+- **Auto-Start bei leerer Datenbank:** Wizard startet automatisch wenn keine Anlagen vorhanden (unabhängig von LocalStorage)
+- **Geocoding-Button:** Automatische Koordinatenermittlung aus PLZ/Ort via OpenStreetMap
+- **Vereinfachter Discovery-Schritt:** Alle erkannten Geräte werden automatisch als Investitionen angelegt
+- **Neuer Investitionen-Schritt:** Alle Investitionen auf einer Seite, gruppiert nach Typ
+  - Bearbeiten aller Investitionen (Kaufdatum, Kaufpreis, technische Details)
+  - Parent-Zuordnung (PV-Module → Wechselrichter, E-Auto → Wallbox)
+  - Manuelles Hinzufügen/Löschen von Investitionen
+- **Neuer Sensor-Config-Schritt:** Sensor-Zuordnung direkt im Wizard
+  - Ersetzt die bisherige config.yaml `ha_sensors` Konfiguration
+  - Vorschläge aus Discovery mit Umschaltung auf "Alle Sensoren"
+  - Wird in Anlage-Tabelle gespeichert
+- **PV-Module-Schritt entfernt:** PV-Module werden jetzt als Investitionen erfasst
+
+**Wizard-Schritte (neu v0.8.0):**
 1. **Willkommen** - Einführung und Übersicht
-2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten, Wechselrichter-Hersteller
+2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten (+ Geocoding-Button)
 3. **HA-Verbindung prüfen** - Automatische Prüfung, überspringbar
 4. **Strompreise konfigurieren** - Mit deutschen Standardwerten (30ct/8.2ct)
-5. **PV-Module/Strings** - Modulgruppen mit Ausrichtung/Neigung für PVGIS-Prognose
-6. **Auto-Discovery** - Geräte aus Home Assistant erkennen
-7. **Investitionen vervollständigen** - Kaufpreis, Datum, technische Daten
+5. **Auto-Discovery** - Geräte erkennen & automatisch als Investitionen anlegen
+6. **Investitionen vervollständigen** - Alle auf einer Seite bearbeiten/hinzufügen/löschen
+7. **Sensor-Konfiguration** - HA-Sensoren für Monatsdaten-Import zuordnen
 8. **Zusammenfassung** - Übersicht und Abschluss
 
 **Features:**
 - Automatischer Start bei erstem Besuch (keine Anlagen vorhanden)
 - Fortschrittsanzeige (Desktop: Schritte, Mobile: Balken)
 - Strompreis-Defaults basierend auf Anlagengröße (EEG-Vergütung)
-- PV-Module-Erfassung mit Leistung, Ausrichtung und Neigung für PVGIS
 - **Wechselrichter-Hersteller-Auswahl** für bessere Discovery
-- Integration der bestehenden Discovery-Logik
-- Investitionen mit Details statt Minimaldaten
 - State wird in LocalStorage gespeichert (Fortsetzung möglich)
-- **Fix v0.7.3:** Investitionsdaten werden jetzt korrekt gespeichert (Feldnamen-Konsistenz)
 
-**Unterstützte Geräte (v0.7.4):**
+**Unterstützte Geräte (v0.7.4+):**
 
 *Wechselrichter:*
 - SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
 
-*Balkonkraftwerke (NEU v0.7.4):*
+*Balkonkraftwerke:*
 - EcoFlow (PowerStream, Delta Pro)
 - Hoymiles (HMS, HMT)
 - Anker SOLIX (Solarbank)
@@ -50,7 +60,7 @@ Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 - Deye Mikrowechselrichter
 - OpenDTU/AhoyDTU (Open-Source)
 
-*Wärmepumpen (NEU v0.7.4):*
+*Wärmepumpen:*
 - Viessmann (Vitocal, ViCare)
 - Daikin (Altherma)
 - Vaillant (aroTHERM)
@@ -71,11 +81,16 @@ Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 - Wallbox (native Integration)
 
 **Dateien:**
-- `frontend/src/hooks/useSetupWizard.ts` (State-Management)
+- `frontend/src/hooks/useSetupWizard.ts` (State-Management - komplett überarbeitet)
 - `frontend/src/components/setup-wizard/` (Wizard-Komponenten)
-- `frontend/src/components/setup-wizard/steps/PVModuleStep.tsx` (PV-Module Schritt)
-- `frontend/src/components/AppWithSetup.tsx` (App-Wrapper)
-- `backend/api/routes/ha_integration.py` (INTEGRATION_PATTERNS)
+- `frontend/src/components/setup-wizard/steps/DiscoveryStep.tsx` (vereinfacht)
+- `frontend/src/components/setup-wizard/steps/InvestitionenStep.tsx` (komplett neu)
+- `frontend/src/components/setup-wizard/steps/SensorConfigStep.tsx` (neu)
+- `frontend/src/components/setup-wizard/steps/SummaryStep.tsx` (angepasst)
+- `frontend/src/components/setup-wizard/steps/AnlageStep.tsx` (Geocoding hinzugefügt)
+- `frontend/src/components/AppWithSetup.tsx` (DB-Check vor LocalStorage)
+- `backend/api/routes/anlagen.py` (Geocoding & Sensor-Config Endpoints)
+- `backend/models/anlage.py` (ha_sensor_* Felder)
 
 ---
 
@@ -136,7 +151,7 @@ Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
 **Dateien:**
 - `frontend/src/pages/Monatsdaten.tsx`
 
-### Feature: HA Auto-Discovery (v0.6.0 → v0.7.4)
+### Feature: HA Auto-Discovery (v0.6.0 → v0.8.0)
 **Status:** ✅ Implementiert und erweitert
 
 Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
@@ -161,13 +176,16 @@ Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
 **API:**
 - `GET /api/ha/discover?anlage_id={id}&manufacturer={filter}` - Discovery-Endpoint
 - `GET /api/ha/manufacturers` - Liste unterstützter Hersteller
+- `GET /api/anlagen/geocode/lookup?plz={plz}&ort={ort}` - Geocoding-Endpoint (neu)
+- `GET/PATCH /api/anlagen/{id}/sensors` - Sensor-Konfiguration (neu)
 
 **Dateien:**
 - `backend/api/routes/ha_integration.py` (INTEGRATION_PATTERNS, Discovery-Logik)
+- `backend/api/routes/anlagen.py` (Geocoding, Sensor-Config)
 - `frontend/src/api/ha.ts` (Discovery Types und API)
+- `frontend/src/api/anlagen.ts` (Geocode, SensorConfig)
 - `frontend/src/hooks/useDiscovery.ts` (Discovery Hook)
 - `frontend/src/components/discovery/` (Dialog-Komponenten)
-- `frontend/src/components/setup-wizard/steps/InvestitionenStep.tsx` (Wizard-Integration)
 
 ### Dashboards (Phase 2)
 **Status:** ✅ Implementiert
@@ -206,7 +224,9 @@ WebSocket-Client implementiert in `backend/services/ha_websocket.py`, funktionie
 
 ## Sensor-Konfiguration
 
-Die Sensoren werden in der Add-on-Konfiguration eingetragen:
+**Neu in v0.8.0:** Sensoren können jetzt im Setup-Wizard konfiguriert werden. Die Konfiguration wird in der Anlage-Tabelle gespeichert und ersetzt die config.yaml Einstellung.
+
+Alternativ können Sensoren weiterhin in der Add-on-Konfiguration eingetragen werden:
 
 ```yaml
 ha_sensors:
@@ -221,9 +241,12 @@ Die Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term S
 
 ---
 
-## Git Historie (Version 0.7.x)
+## Git Historie (Version 0.7.x - 0.8.x)
 
 ```
+xxxx feat(wizard): Refactor wizard with full investment capture and sensor config (v0.8.0)
+780a4c1 fix(wizard): Auto-start wizard when database is empty (v0.7.5)
+668f89f docs: Update documentation for v0.7.4 release
 1618457 feat(discovery): Add support for heat pumps and balcony power plants (v0.7.4)
 b3040a7 chore: Bump add-on version to 0.7.3
 f3a2d30 fix(wizard): Fix parameter field names for investments (v0.7.3)

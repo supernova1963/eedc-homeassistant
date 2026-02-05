@@ -1,5 +1,7 @@
 /**
  * SummaryStep - Zusammenfassung vor Abschluss des Setup-Wizards
+ *
+ * v0.8.0 - Angepasst für neuen Wizard-Flow mit Investitionen und SensorConfig
  */
 
 import {
@@ -9,24 +11,25 @@ import {
   Battery,
   Plug,
   Cpu,
+  Flame,
+  Package,
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react'
-import type { Anlage, Strompreis, Investition } from '../../../types'
-import type { DiscoveryResult } from '../../../api/ha'
+import type { Anlage, Strompreis, Investition, SensorConfig, InvestitionTyp } from '../../../types'
 
 interface SummaryStepProps {
   anlage: Anlage | null
   strompreis: Strompreis | null
-  createdInvestitionen: Investition[]
-  discoveryResult: DiscoveryResult | null
+  investitionen: Investition[]
+  sensorConfig: SensorConfig
   onComplete: () => void
   onBack: () => void
 }
 
 // Icon basierend auf Investitionstyp
-function getInvestitionIcon(typ: string) {
+function getInvestitionIcon(typ: InvestitionTyp) {
   switch (typ) {
     case 'e-auto':
       return <Car className="w-4 h-4" />
@@ -36,27 +39,41 @@ function getInvestitionIcon(typ: string) {
       return <Plug className="w-4 h-4" />
     case 'wechselrichter':
       return <Cpu className="w-4 h-4" />
+    case 'waermepumpe':
+      return <Flame className="w-4 h-4" />
+    case 'pv-module':
+    case 'balkonkraftwerk':
+      return <Sun className="w-4 h-4" />
     default:
-      return <Cpu className="w-4 h-4" />
+      return <Package className="w-4 h-4" />
   }
 }
 
 export default function SummaryStep({
   anlage,
   strompreis,
-  createdInvestitionen,
-  discoveryResult,
+  investitionen,
+  sensorConfig,
   onComplete,
   onBack,
 }: SummaryStepProps) {
   // Prüfen was konfiguriert wurde
   const hasAnlage = !!anlage
   const hasStrompreis = !!strompreis
-  const hasInvestitionen = createdInvestitionen.length > 0
-  const hasSensorMappings = discoveryResult?.current_mappings && (
-    discoveryResult.current_mappings.pv_erzeugung ||
-    discoveryResult.current_mappings.einspeisung ||
-    discoveryResult.current_mappings.netzbezug
+  const hasInvestitionen = investitionen.length > 0
+  const hasSensorConfig = !!(
+    sensorConfig.pv_erzeugung ||
+    sensorConfig.einspeisung ||
+    sensorConfig.netzbezug
+  )
+
+  // Anzahl konfigurierter Sensoren
+  const sensorCount = Object.values(sensorConfig).filter(v => v).length
+
+  // Gesamtinvestition berechnen
+  const totalInvestition = investitionen.reduce(
+    (sum, inv) => sum + (inv.anschaffungskosten_gesamt || 0),
+    0
   )
 
   return (
@@ -91,6 +108,11 @@ export default function SummaryStep({
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   {anlage.leistung_kwp} kWp
                   {anlage.standort_ort && ` • ${anlage.standort_ort}`}
+                  {anlage.latitude && anlage.longitude && (
+                    <span className="text-green-600 dark:text-green-400 ml-2">
+                      (Koordinaten gesetzt)
+                    </span>
+                  )}
                 </div>
               </div>
             ) : (
@@ -137,19 +159,31 @@ export default function SummaryStep({
           >
             {hasInvestitionen ? (
               <div className="space-y-2">
-                {createdInvestitionen.map((inv) => (
+                {investitionen.slice(0, 5).map((inv) => (
                   <div key={inv.id} className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                     <span className="text-gray-400 dark:text-gray-500">
                       {getInvestitionIcon(inv.typ)}
                     </span>
-                    <span>{inv.bezeichnung}</span>
+                    <span className="truncate">{inv.bezeichnung}</span>
                     {inv.anschaffungskosten_gesamt ? (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        ({inv.anschaffungskosten_gesamt.toLocaleString('de-DE')} €)
+                      <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto flex-shrink-0">
+                        {inv.anschaffungskosten_gesamt.toLocaleString('de-DE')} €
                       </span>
                     ) : null}
                   </div>
                 ))}
+                {investitionen.length > 5 && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    ... und {investitionen.length - 5} weitere
+                  </div>
+                )}
+                {totalInvestition > 0 && (
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      Gesamt: {totalInvestition.toLocaleString('de-DE')} €
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-gray-500 dark:text-gray-400">
@@ -158,18 +192,49 @@ export default function SummaryStep({
             )}
           </SummaryCard>
 
-          {/* Sensor-Mappings (falls vorhanden) */}
-          {hasSensorMappings && (
-            <SummaryCard
-              icon={<Zap className="w-5 h-5" />}
-              title="HA Sensor-Zuordnung"
-              status="success"
-            >
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                Sensoren wurden zugeordnet - Monatsdaten können aus HA importiert werden
+          {/* Sensor-Konfiguration */}
+          <SummaryCard
+            icon={<Zap className="w-5 h-5" />}
+            title="HA Sensor-Zuordnung"
+            status={hasSensorConfig ? 'success' : 'neutral'}
+          >
+            {hasSensorConfig ? (
+              <div className="space-y-1">
+                <div className="text-gray-700 dark:text-gray-300">
+                  {sensorCount} Sensor{sensorCount !== 1 ? 'en' : ''} zugeordnet
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Monatsdaten können aus Home Assistant importiert werden
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {sensorConfig.pv_erzeugung && (
+                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
+                      PV-Erzeugung
+                    </span>
+                  )}
+                  {sensorConfig.einspeisung && (
+                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
+                      Einspeisung
+                    </span>
+                  )}
+                  {sensorConfig.netzbezug && (
+                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
+                      Netzbezug
+                    </span>
+                  )}
+                  {sensorConfig.batterie_ladung && (
+                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
+                      Batterie
+                    </span>
+                  )}
+                </div>
               </div>
-            </SummaryCard>
-          )}
+            ) : (
+              <div className="text-gray-500 dark:text-gray-400">
+                Keine Sensoren zugeordnet - Import manuell möglich
+              </div>
+            )}
+          </SummaryCard>
         </div>
 
         {/* Hinweise */}

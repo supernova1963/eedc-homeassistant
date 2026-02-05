@@ -1,5 +1,8 @@
 /**
  * DiscoveryStep - Auto-Discovery im Setup-Wizard
+ *
+ * v0.8.0 - Vereinfacht: Führt Discovery aus und erstellt automatisch
+ * rudimentäre Investitionen für alle erkannten Geräte.
  */
 
 import {
@@ -16,6 +19,9 @@ import {
   Battery,
   Plug,
   Cpu,
+  Flame,
+  Sun,
+  Plus,
 } from 'lucide-react'
 import type { DiscoveryResult, DiscoveredDevice } from '../../../api/ha'
 
@@ -24,12 +30,7 @@ interface DiscoveryStepProps {
   error: string | null
   haConnected: boolean
   discoveryResult: DiscoveryResult | null
-  selectedDevices: Set<string>
-  onToggleDevice: (deviceId: string) => void
-  onSelectAll: () => void
-  onDeselectAll: () => void
-  onRetry: () => void
-  onNext: () => void
+  onRunDiscovery: () => Promise<void>
   onSkip: () => void
   onBack: () => void
 }
@@ -45,6 +46,10 @@ function getDeviceIcon(device: DiscoveredDevice) {
       return <Plug className="w-5 h-5" />
     case 'wechselrichter':
       return <Cpu className="w-5 h-5" />
+    case 'waermepumpe':
+      return <Flame className="w-5 h-5" />
+    case 'balkonkraftwerk':
+      return <Sun className="w-5 h-5" />
     default:
       return <Cpu className="w-5 h-5" />
   }
@@ -58,6 +63,8 @@ function getTypeLabel(typ: string | null): string {
     case 'wallbox': return 'Wallbox'
     case 'wechselrichter': return 'Wechselrichter'
     case 'pv-module': return 'PV-Module'
+    case 'waermepumpe': return 'Wärmepumpe'
+    case 'balkonkraftwerk': return 'Balkonkraftwerk'
     default: return 'Unbekannt'
   }
 }
@@ -67,20 +74,19 @@ export default function DiscoveryStep({
   error,
   haConnected,
   discoveryResult,
-  selectedDevices,
-  onToggleDevice,
-  onSelectAll,
-  onDeselectAll,
-  onRetry,
-  onNext,
+  onRunDiscovery,
   onSkip,
   onBack,
 }: DiscoveryStepProps) {
-  const selectableDevices = discoveryResult?.devices.filter(
+  // Neue erkannte Geräte (noch nicht konfiguriert)
+  const newDevices = discoveryResult?.devices.filter(
     d => !d.already_configured && d.suggested_investition_typ
   ) ?? []
 
-  const selectedCount = selectedDevices.size
+  // Bereits konfigurierte Geräte
+  const existingDevices = discoveryResult?.devices.filter(
+    d => d.already_configured
+  ) ?? []
 
   return (
     <div>
@@ -100,6 +106,33 @@ export default function DiscoveryStep({
           </div>
         </div>
 
+        {/* Initial State - Kein Discovery gestartet */}
+        {!isLoading && !discoveryResult && !error && haConnected && (
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full mb-6">
+              <Search className="w-10 h-10 text-amber-500" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              Geräte automatisch erkennen?
+            </h3>
+            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-6">
+              EEDC durchsucht Home Assistant nach Wechselrichtern, Speichern, Wallboxen,
+              E-Autos, Wärmepumpen und Balkonkraftwerken.
+            </p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mb-8">
+              Erkannte Geräte werden als Investitionen angelegt und können im nächsten
+              Schritt vervollständigt werden.
+            </p>
+            <button
+              onClick={onRunDiscovery}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 transition-colors shadow-lg hover:shadow-xl"
+            >
+              <Search className="w-5 h-5" />
+              Discovery starten
+            </button>
+          </div>
+        )}
+
         {/* Loading State */}
         {isLoading && (
           <div className="text-center py-12">
@@ -107,8 +140,11 @@ export default function DiscoveryStep({
               <Search className="w-16 h-16 text-amber-500 animate-pulse" />
               <div className="absolute inset-0 border-4 border-amber-500/30 rounded-full animate-ping" />
             </div>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-gray-600 dark:text-gray-400 mb-2">
               Durchsuche Home Assistant nach Geräten...
+            </p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">
+              Erkannte Geräte werden automatisch als Investitionen angelegt.
             </p>
           </div>
         )}
@@ -122,17 +158,21 @@ export default function DiscoveryStep({
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               Keine Home Assistant Verbindung
             </h3>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">
+            <p className="text-gray-500 dark:text-gray-400 mb-4">
               Die automatische Geräteerkennung ist ohne HA-Verbindung nicht möglich.
             </p>
-            <p className="text-sm text-gray-400 dark:text-gray-500">
-              Sie können Investitionen später manuell anlegen.
+            <p className="text-sm text-gray-400 dark:text-gray-500 mb-6">
+              Sie können Investitionen im nächsten Schritt manuell anlegen.
             </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg text-sm">
+              <Plus className="w-4 h-4" />
+              Manuelles Anlegen möglich im nächsten Schritt
+            </div>
           </div>
         )}
 
         {/* Error State */}
-        {!isLoading && haConnected && error && (
+        {!isLoading && error && (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
               <AlertTriangle className="w-8 h-8 text-red-500" />
@@ -142,7 +182,7 @@ export default function DiscoveryStep({
             </h3>
             <p className="text-red-600 dark:text-red-400 mb-6">{error}</p>
             <button
-              onClick={onRetry}
+              onClick={onRunDiscovery}
               className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
@@ -152,9 +192,9 @@ export default function DiscoveryStep({
         )}
 
         {/* Ergebnisse */}
-        {!isLoading && haConnected && discoveryResult && !error && (
+        {!isLoading && discoveryResult && !error && (
           <div className="space-y-6">
-            {/* HA Status */}
+            {/* Erfolg-Header */}
             <div className="flex items-center gap-2 text-sm">
               <Wifi className="w-4 h-4 text-green-500" />
               <span className="text-green-600 dark:text-green-400">
@@ -187,122 +227,85 @@ export default function DiscoveryStep({
                 <p className="text-gray-600 dark:text-gray-400 mb-2">
                   Keine unterstützten Geräte gefunden.
                 </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
-                  Unterstützt: SMA, evcc, Smart, Wallbox Integrationen
+                <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+                  Unterstützt: SMA, evcc, Smart, Wallbox, Wärmepumpen-Integrationen
                 </p>
-                <button
-                  onClick={onRetry}
-                  className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Erneut suchen
-                </button>
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={onRunDiscovery}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Erneut suchen
+                  </button>
+                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Manuelles Anlegen im nächsten Schritt möglich
+                  </span>
+                </div>
               </div>
             )}
 
-            {/* Geräte-Liste */}
-            {selectableDevices.length > 0 && (
+            {/* Neu erkannte Geräte (werden angelegt) */}
+            {newDevices.length > 0 && (
               <div>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Verfügbare Geräte ({selectableDevices.length})
+                    {newDevices.length} Investition{newDevices.length !== 1 ? 'en' : ''} angelegt
                   </h3>
-                  <div className="flex gap-2 text-xs">
-                    <button
-                      onClick={onDeselectAll}
-                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                    >
-                      Keine
-                    </button>
-                    <span className="text-gray-300 dark:text-gray-600">|</span>
-                    <button
-                      onClick={onSelectAll}
-                      className="text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-                    >
-                      Alle
-                    </button>
-                  </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {discoveryResult.devices.map((device) => {
-                    const isSelectable = !device.already_configured && device.suggested_investition_typ
-                    const isSelected = selectedDevices.has(device.id)
-
-                    return (
-                      <button
-                        key={device.id}
-                        type="button"
-                        onClick={() => isSelectable && onToggleDevice(device.id)}
-                        disabled={!isSelectable}
-                        className={`
-                          relative p-4 rounded-xl border-2 text-left transition-all
-                          ${device.already_configured
-                            ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 opacity-60 cursor-not-allowed'
-                            : isSelected
-                              ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-700'
-                          }
-                        `}
-                      >
-                        {/* Checkbox */}
-                        {isSelectable && (
-                          <div className={`
-                            absolute top-3 right-3 w-5 h-5 rounded-full border-2 flex items-center justify-center
-                            ${isSelected
-                              ? 'border-amber-500 bg-amber-500'
-                              : 'border-gray-300 dark:border-gray-600'
-                            }
-                          `}>
-                            {isSelected && (
-                              <CheckCircle2 className="w-4 h-4 text-white" />
-                            )}
+                  {newDevices.map((device) => (
+                    <div
+                      key={device.id}
+                      className="p-4 rounded-xl border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                          {getDeviceIcon(device)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-gray-900 dark:text-white truncate">
+                            {device.name}
                           </div>
-                        )}
-
-                        {/* Bereits konfiguriert Badge */}
-                        {device.already_configured && (
-                          <div className="absolute top-3 right-3 px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs rounded-full">
-                            Bereits vorhanden
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {device.manufacturer && `${device.manufacturer} • `}
+                            {getTypeLabel(device.suggested_investition_typ)}
                           </div>
-                        )}
-
-                        {/* Content */}
-                        <div className="flex items-start gap-3 pr-8">
-                          <div className={`
-                            w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0
-                            ${isSelected
-                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
-                              : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                            }
-                          `}>
-                            {getDeviceIcon(device)}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-medium text-gray-900 dark:text-white truncate">
-                              {device.name}
-                            </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400">
-                              {device.manufacturer && `${device.manufacturer} • `}
-                              {getTypeLabel(device.suggested_investition_typ)}
-                            </div>
-                            <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                              {device.integration}
-                            </div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                            {device.integration}
                           </div>
                         </div>
-                      </button>
-                    )
-                  })}
+                        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  Diese Investitionen können im nächsten Schritt vervollständigt werden
+                  (Kaufdatum, Kaufpreis, etc.).
+                </p>
               </div>
             )}
 
             {/* Bereits konfigurierte Geräte */}
-            {discoveryResult.devices.some(d => d.already_configured) && (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                <CheckCircle2 className="w-4 h-4 inline mr-1 text-green-500" />
-                {discoveryResult.devices.filter(d => d.already_configured).length} Gerät(e) bereits konfiguriert
+            {existingDevices.length > 0 && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-gray-400" />
+                {existingDevices.length} Gerät(e) bereits konfiguriert (übersprungen)
+              </div>
+            )}
+
+            {/* Hinweis für manuelle Ergänzungen */}
+            {discoveryResult.devices.length > 0 && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <strong>Hinweis:</strong> Im nächsten Schritt können Sie weitere Investitionen
+                  manuell hinzufügen (z.B. PV-Module) und alle Details vervollständigen.
+                </p>
               </div>
             )}
           </div>
@@ -321,11 +324,11 @@ export default function DiscoveryStep({
         </button>
 
         <div className="flex gap-3">
-          {selectedCount === 0 && (
+          {/* Überspringen wenn noch kein Discovery */}
+          {!discoveryResult && !isLoading && (
             <button
               type="button"
               onClick={onSkip}
-              disabled={isLoading}
               className="inline-flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
             >
               <SkipForward className="w-4 h-4" />
@@ -333,24 +336,17 @@ export default function DiscoveryStep({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={isLoading}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {selectedCount > 0 ? (
-              <>
-                Weiter ({selectedCount} ausgewählt)
-                <ArrowRight className="w-4 h-4" />
-              </>
-            ) : (
-              <>
-                Weiter
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
+          {/* Weiter nach Discovery */}
+          {discoveryResult && !isLoading && (
+            <button
+              type="button"
+              onClick={onSkip}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors"
+            >
+              Weiter
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

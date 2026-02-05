@@ -3,7 +3,7 @@
  */
 
 import { api } from './client'
-import type { Anlage, AnlageCreate, AnlageUpdate } from '../types'
+import type { Anlage, AnlageCreate, AnlageUpdate, SensorConfig, GeocodeResult } from '../types'
 
 export const anlagenApi = {
   /**
@@ -39,5 +39,28 @@ export const anlagenApi = {
    */
   async delete(id: number): Promise<void> {
     return api.delete(`/anlagen/${id}`)
+  },
+
+  /**
+   * Sensor-Konfiguration abrufen
+   */
+  async getSensorConfig(id: number): Promise<SensorConfig> {
+    return api.get<SensorConfig>(`/anlagen/${id}/sensors`)
+  },
+
+  /**
+   * Sensor-Konfiguration aktualisieren
+   */
+  async updateSensorConfig(id: number, config: SensorConfig): Promise<SensorConfig> {
+    return api.patch<SensorConfig>(`/anlagen/${id}/sensors`, config)
+  },
+
+  /**
+   * Koordinaten aus PLZ/Ort ermitteln
+   */
+  async geocode(plz: string, ort?: string): Promise<GeocodeResult> {
+    const params = new URLSearchParams({ plz })
+    if (ort) params.append('ort', ort)
+    return api.get<GeocodeResult>(`/anlagen/geocode/lookup?${params}`)
   },
 }

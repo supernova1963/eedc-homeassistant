@@ -16,6 +16,28 @@ export interface Anlage {
   ausrichtung?: string
   neigung_grad?: number
   wechselrichter_hersteller?: string
+  // Home Assistant Sensor-Konfiguration
+  ha_sensor_pv_erzeugung?: string
+  ha_sensor_einspeisung?: string
+  ha_sensor_netzbezug?: string
+  ha_sensor_batterie_ladung?: string
+  ha_sensor_batterie_entladung?: string
+}
+
+// Sensor-Konfiguration
+export interface SensorConfig {
+  pv_erzeugung?: string
+  einspeisung?: string
+  netzbezug?: string
+  batterie_ladung?: string
+  batterie_entladung?: string
+}
+
+// Geocoding
+export interface GeocodeResult {
+  latitude: number
+  longitude: number
+  display_name: string
 }
 
 export type AnlageCreate = Omit<Anlage, 'id'>

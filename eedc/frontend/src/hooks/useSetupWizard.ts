@@ -1,13 +1,18 @@
 /**
  * React Hook für den Setup-Wizard State Management
  *
- * Verwaltet den gesamten Einrichtungsprozess für neue Benutzer:
- * 1. Anlage erstellen
- * 2. HA-Verbindung prüfen
- * 3. Strompreise konfigurieren
- * 4. Auto-Discovery (Geräte erkennen)
- * 5. Investitionen vervollständigen
- * 6. Zusammenfassung
+ * v0.8.0 - Refactored Wizard mit vollständiger Investitions-Erfassung
+ *
+ * Neuer Ablauf:
+ * 1. Welcome
+ * 2. Anlage (+ Auto-Geocoding)
+ * 3. HA-Verbindung prüfen
+ * 4. Strompreise
+ * 5. Discovery → Alle Geräte rudimentär anlegen
+ * 6. Investitionen vervollständigen (eine Seite, alle Typen)
+ * 7. Sensor-Konfiguration
+ * 8. Summary
+ * 9. Complete
  */
 
 import { useState, useCallback, useEffect } from 'react'
@@ -15,32 +20,22 @@ import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
 import { haApi } from '../api/ha'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
-import type { Anlage, Strompreis, Investition } from '../types'
-import type { DiscoveryResult, DiscoveredDevice } from '../api/ha'
+import type { Anlage, Strompreis, Investition, SensorConfig, InvestitionTyp } from '../types'
+import type { DiscoveryResult, SensorMappingSuggestions, DiscoveredSensor } from '../api/ha'
 
-// Wizard-Schritte
+// Wizard-Schritte (NEU: pv-module entfernt, sensor-config hinzugefügt)
 export type WizardStep =
   | 'welcome'
   | 'anlage'
   | 'ha-connection'
   | 'strompreise'
-  | 'pv-module'
   | 'discovery'
   | 'investitionen'
+  | 'sensor-config'
   | 'summary'
   | 'complete'
 
-// PV-Modul Daten für Wizard
-export interface PVModulData {
-  id: string  // Temporäre ID für UI
-  bezeichnung: string
-  leistung_kwp: number
-  ausrichtung: string
-  neigung_grad: number
-  ha_entity_id?: string
-}
-
-// Wizard-State der in DB/LocalStorage gespeichert wird
+// Wizard-State der in LocalStorage gespeichert wird
 export interface WizardState {
   completed: boolean
   currentStep: WizardStep
@@ -48,7 +43,6 @@ export interface WizardState {
   strompreisId: number | null
   createdInvestitionen: number[]
   skippedSteps: WizardStep[]
-  pvModule: PVModulData[]
 }
 
 // Standard-Strompreise für Deutschland (2026)
@@ -65,69 +59,7 @@ export function getEinspeiseverguetung(leistungKwp: number): number {
   return 5.8
 }
 
-interface UseSetupWizardReturn {
-  // State
-  step: WizardStep
-  wizardState: WizardState
-  isLoading: boolean
-  error: string | null
-
-  // Daten
-  anlage: Anlage | null
-  strompreis: Strompreis | null
-  haConnected: boolean
-  haVersion: string | null
-  discoveryResult: DiscoveryResult | null
-  selectedDevices: Set<string>
-  createdInvestitionen: Investition[]
-
-  // Investitions-Bearbeitung
-  investitionenToEdit: DiscoveredDevice[]
-  investitionFormData: Record<string, InvestitionFormData>
-
-  // Actions
-  goToStep: (step: WizardStep) => void
-  nextStep: () => void
-  prevStep: () => void
-  skipStep: () => void
-
-  // Anlage
-  createAnlage: (data: AnlageCreateData) => Promise<void>
-
-  // HA-Verbindung
-  checkHAConnection: () => Promise<void>
-
-  // Strompreise
-  createStrompreis: (data: StrompreisCreateData) => Promise<void>
-  useDefaultStrompreise: () => Promise<void>
-
-  // Discovery
-  runDiscovery: () => Promise<void>
-  toggleDevice: (deviceId: string) => void
-  selectAllDevices: () => void
-  deselectAllDevices: () => void
-
-  // Investitionen
-  updateInvestitionFormData: (deviceId: string, data: Partial<InvestitionFormData>) => void
-  createInvestitionen: () => Promise<void>
-
-  // PV-Module
-  pvModule: PVModulData[]
-  addPVModul: (modul: Omit<PVModulData, 'id'>) => void
-  updatePVModul: (id: string, data: Partial<PVModulData>) => void
-  removePVModul: (id: string) => void
-  savePVModule: () => Promise<void>
-
-  // Abschluss
-  completeWizard: () => void
-  resetWizard: () => void
-
-  // Computed
-  canProceed: boolean
-  progress: number
-}
-
-// Anlage-Daten für Wizard (vereinfacht)
+// Anlage-Daten für Wizard
 interface AnlageCreateData {
   anlagenname: string
   leistung_kwp: number
@@ -138,6 +70,7 @@ interface AnlageCreateData {
   longitude?: number
   ausrichtung?: string
   neigung_grad?: number
+  wechselrichter_hersteller?: string
 }
 
 // Strompreis-Daten für Wizard
@@ -148,23 +81,6 @@ interface StrompreisCreateData {
   gueltig_ab: string
   tarifname?: string
   anbieter?: string
-}
-
-// Investition-Formular-Daten im Wizard
-export interface InvestitionFormData {
-  bezeichnung: string
-  kaufdatum: string
-  kaufpreis: number
-  // Typ-spezifische Felder (Namen müssen mit InvestitionForm.tsx übereinstimmen)
-  batteriekapazitaet_kwh?: number  // E-Auto
-  kapazitaet_kwh?: number // Speicher
-  leistung_kw?: number   // Wallbox, Wechselrichter, Wärmepumpe
-  // Wärmepumpe
-  cop?: number
-  jahresarbeitszahl?: number
-  // Balkonkraftwerk
-  leistung_wp?: number
-  anzahl?: number
 }
 
 // LocalStorage Key
@@ -178,21 +94,112 @@ const INITIAL_STATE: WizardState = {
   strompreisId: null,
   createdInvestitionen: [],
   skippedSteps: [],
-  pvModule: [],
 }
 
-// Schritt-Reihenfolge
+// Schritt-Reihenfolge (NEU)
 const STEP_ORDER: WizardStep[] = [
   'welcome',
   'anlage',
   'ha-connection',
   'strompreise',
-  'pv-module',
   'discovery',
   'investitionen',
+  'sensor-config',
   'summary',
   'complete',
 ]
+
+// Investition-Typ Reihenfolge für Anzeige
+export const INVESTITION_TYP_ORDER: InvestitionTyp[] = [
+  'wechselrichter',
+  'pv-module',
+  'speicher',
+  'wallbox',
+  'e-auto',
+  'waermepumpe',
+  'balkonkraftwerk',
+  'sonstiges',
+]
+
+// Labels für Investitions-Typen
+export const INVESTITION_TYP_LABELS: Record<InvestitionTyp, string> = {
+  'wechselrichter': 'Wechselrichter',
+  'pv-module': 'PV-Module',
+  'speicher': 'Speicher',
+  'wallbox': 'Wallbox',
+  'e-auto': 'E-Auto',
+  'waermepumpe': 'Wärmepumpe',
+  'balkonkraftwerk': 'Balkonkraftwerk',
+  'sonstiges': 'Sonstiges',
+}
+
+// Welche Typen können einem Parent zugeordnet werden?
+export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
+  'pv-module': 'wechselrichter',
+  'speicher': 'wechselrichter',
+  'e-auto': 'wallbox',
+}
+
+interface UseSetupWizardReturn {
+  // State
+  step: WizardStep
+  wizardState: WizardState
+  isLoading: boolean
+  error: string | null
+
+  // Daten
+  anlage: Anlage | null
+  strompreis: Strompreis | null
+  haConnected: boolean
+  haVersion: string | null
+  discoveryResult: DiscoveryResult | null
+
+  // Investitionen (NEU: alle Investitionen der Anlage)
+  investitionen: Investition[]
+  refreshInvestitionen: () => Promise<void>
+
+  // Sensor-Config (NEU)
+  sensorConfig: SensorConfig
+  sensorMappings: SensorMappingSuggestions | null
+  allEnergySensors: DiscoveredSensor[]
+
+  // Actions
+  goToStep: (step: WizardStep) => void
+  nextStep: () => void
+  prevStep: () => void
+  skipStep: () => void
+
+  // Anlage
+  createAnlage: (data: AnlageCreateData) => Promise<void>
+  geocodeAddress: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number } | null>
+
+  // HA-Verbindung
+  checkHAConnection: () => Promise<void>
+
+  // Strompreise
+  createStrompreis: (data: StrompreisCreateData) => Promise<void>
+  useDefaultStrompreise: () => Promise<void>
+
+  // Discovery (NEU: erstellt rudimentäre Investitionen)
+  runDiscoveryAndCreateInvestitionen: () => Promise<void>
+
+  // Investitionen bearbeiten (NEU)
+  updateInvestition: (id: number, data: Partial<Investition>) => Promise<void>
+  deleteInvestition: (id: number) => Promise<void>
+  addInvestition: (typ: InvestitionTyp) => Promise<Investition>
+
+  // Sensor-Config (NEU)
+  updateSensorConfig: (config: SensorConfig) => void
+  saveSensorConfig: () => Promise<void>
+
+  // Abschluss
+  completeWizard: () => void
+  resetWizard: () => void
+
+  // Computed
+  canProceed: boolean
+  progress: number
+}
 
 export function useSetupWizard(): UseSetupWizardReturn {
   // Persistierter State
@@ -219,11 +226,14 @@ export function useSetupWizard(): UseSetupWizardReturn {
   const [haConnected, setHaConnected] = useState(false)
   const [haVersion, setHaVersion] = useState<string | null>(null)
   const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult | null>(null)
-  const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set())
-  const [createdInvestitionen, setCreatedInvestitionen] = useState<Investition[]>([])
 
-  // Investitions-Bearbeitung
-  const [investitionFormData, setInvestitionFormData] = useState<Record<string, InvestitionFormData>>({})
+  // NEU: Alle Investitionen der Anlage
+  const [investitionen, setInvestitionen] = useState<Investition[]>([])
+
+  // NEU: Sensor-Config
+  const [sensorConfig, setSensorConfig] = useState<SensorConfig>({})
+  const [sensorMappings, setSensorMappings] = useState<SensorMappingSuggestions | null>(null)
+  const [allEnergySensors, setAllEnergySensors] = useState<DiscoveredSensor[]>([])
 
   // State in LocalStorage speichern
   useEffect(() => {
@@ -239,6 +249,22 @@ export function useSetupWizard(): UseSetupWizardReturn {
       anlagenApi.get(wizardState.anlageId).then(setAnlage).catch(() => {})
     }
   }, [wizardState.anlageId, anlage])
+
+  // Investitionen laden
+  const refreshInvestitionen = useCallback(async () => {
+    if (!wizardState.anlageId) return
+    try {
+      const all = await investitionenApi.list(wizardState.anlageId)
+      setInvestitionen(all)
+    } catch {
+      // Ignore
+    }
+  }, [wizardState.anlageId])
+
+  // Investitionen laden wenn Anlage vorhanden
+  useEffect(() => {
+    refreshInvestitionen()
+  }, [refreshInvestitionen])
 
   // Navigation
   const goToStep = useCallback((newStep: WizardStep) => {
@@ -267,6 +293,16 @@ export function useSetupWizard(): UseSetupWizardReturn {
     }))
     nextStep()
   }, [step, nextStep])
+
+  // Geocoding (NEU)
+  const geocodeAddress = useCallback(async (plz: string, ort?: string) => {
+    try {
+      const result = await anlagenApi.geocode(plz, ort)
+      return { latitude: result.latitude, longitude: result.longitude }
+    } catch {
+      return null
+    }
+  }, [])
 
   // Anlage erstellen
   const createAnlage = useCallback(async (data: AnlageCreateData) => {
@@ -301,7 +337,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
       if (!status.connected) {
         setError('Keine Verbindung zu Home Assistant. Sie können diesen Schritt überspringen und später konfigurieren.')
       }
-    } catch (e) {
+    } catch {
       setHaConnected(false)
       setError('Home Assistant nicht erreichbar. Läuft EEDC als Add-on?')
     } finally {
@@ -355,8 +391,8 @@ export function useSetupWizard(): UseSetupWizardReturn {
     })
   }, [wizardState.anlageId, anlage, createStrompreis])
 
-  // Discovery ausführen
-  const runDiscovery = useCallback(async () => {
+  // NEU: Discovery ausführen UND rudimentäre Investitionen erstellen
+  const runDiscoveryAndCreateInvestitionen = useCallback(async () => {
     if (!wizardState.anlageId) {
       setError('Keine Anlage vorhanden')
       return
@@ -366,252 +402,134 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setError(null)
 
     try {
-      // Hersteller aus Anlage-Daten für gezieltere Suche
+      // Discovery ausführen
       const manufacturer = anlage?.wechselrichter_hersteller || undefined
       const result = await haApi.discover(wizardState.anlageId, manufacturer)
       setDiscoveryResult(result)
 
+      // Sensor-Mappings speichern für später
+      if (result.sensor_mappings) {
+        setSensorMappings(result.sensor_mappings)
+        // Initiale Sensor-Config aus Vorschlägen
+        setSensorConfig({
+          pv_erzeugung: result.sensor_mappings.pv_erzeugung?.[0]?.entity_id,
+          einspeisung: result.sensor_mappings.einspeisung?.[0]?.entity_id,
+          netzbezug: result.sensor_mappings.netzbezug?.[0]?.entity_id,
+          batterie_ladung: result.sensor_mappings.batterie_ladung?.[0]?.entity_id,
+          batterie_entladung: result.sensor_mappings.batterie_entladung?.[0]?.entity_id,
+        })
+      }
+      if (result.all_energy_sensors) {
+        setAllEnergySensors(result.all_energy_sensors)
+      }
+
       if (!result.ha_connected) {
-        setError('Keine Verbindung zu Home Assistant')
+        // Kein HA, aber trotzdem weitermachen
+        nextStep()
         return
       }
 
-      // Automatisch alle nicht-konfigurierten Geräte auswählen
-      const autoSelected = new Set<string>()
-      const formData: Record<string, InvestitionFormData> = {}
+      // Rudimentäre Investitionen für alle erkannten Geräte erstellen
+      const createdIds: number[] = []
 
       for (const device of result.devices) {
-        if (!device.already_configured && device.suggested_investition_typ) {
-          autoSelected.add(device.id)
+        if (device.already_configured || !device.suggested_investition_typ) continue
 
-          // Initiale Formulardaten
-          formData[device.id] = {
-            bezeichnung: device.suggested_parameters.bezeichnung as string || device.name,
-            kaufdatum: new Date().toISOString().split('T')[0],
-            kaufpreis: 0,
-            // E-Auto: batteriekapazitaet_kwh (Name muss mit InvestitionForm.tsx übereinstimmen)
-            batteriekapazitaet_kwh: device.suggested_parameters.batterie_kwh as number,
-            // Speicher: kapazitaet_kwh
-            kapazitaet_kwh: device.suggested_parameters.kapazitaet_kwh as number,
-            leistung_kw: device.suggested_parameters.leistung_kw as number,
+        try {
+          const investitionData: InvestitionCreate = {
+            anlage_id: wizardState.anlageId,
+            typ: device.suggested_investition_typ as InvestitionCreate['typ'],
+            bezeichnung: device.name,
+            // Nur rudimentäre Daten, Rest wird in Schritt 6 vervollständigt
+            parameter: device.suggested_parameters || {},
+            aktiv: true,
           }
+
+          const newInvestition = await investitionenApi.create(investitionData)
+          createdIds.push(newInvestition.id)
+        } catch {
+          // Einzelne Fehler ignorieren, weitermachen
         }
       }
 
-      setSelectedDevices(autoSelected)
-      setInvestitionFormData(formData)
+      // State aktualisieren
+      setWizardState(prev => ({
+        ...prev,
+        createdInvestitionen: [...prev.createdInvestitionen, ...createdIds],
+      }))
 
+      // Investitionen neu laden
+      await refreshInvestitionen()
+
+      nextStep()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Discovery fehlgeschlagen')
     } finally {
       setIsLoading(false)
     }
-  }, [wizardState.anlageId])
+  }, [wizardState.anlageId, anlage, nextStep, refreshInvestitionen])
 
-  // Gerät auswählen/abwählen
-  const toggleDevice = useCallback((deviceId: string) => {
-    setSelectedDevices(prev => {
-      const next = new Set(prev)
-      if (next.has(deviceId)) {
-        next.delete(deviceId)
-      } else {
-        next.add(deviceId)
-      }
-      return next
-    })
-  }, [])
-
-  const selectAllDevices = useCallback(() => {
-    if (!discoveryResult) return
-    const all = new Set(
-      discoveryResult.devices
-        .filter(d => !d.already_configured && d.suggested_investition_typ)
-        .map(d => d.id)
-    )
-    setSelectedDevices(all)
-  }, [discoveryResult])
-
-  const deselectAllDevices = useCallback(() => {
-    setSelectedDevices(new Set())
-  }, [])
-
-  // Investitions-Formular aktualisieren
-  const updateInvestitionFormData = useCallback((deviceId: string, data: Partial<InvestitionFormData>) => {
-    setInvestitionFormData(prev => ({
-      ...prev,
-      [deviceId]: {
-        ...prev[deviceId],
-        ...data,
-      },
-    }))
-  }, [])
-
-  // Investitionen erstellen
-  const createInvestitionen = useCallback(async () => {
-    if (!wizardState.anlageId || !discoveryResult) {
-      setError('Keine Anlage oder Discovery-Daten vorhanden')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    const created: Investition[] = []
-    const createdIds: number[] = []
-
+  // NEU: Investition aktualisieren
+  const updateInvestition = useCallback(async (id: number, data: Partial<Investition>) => {
     try {
-      for (const deviceId of selectedDevices) {
-        const device = discoveryResult.devices.find(d => d.id === deviceId)
-        if (!device || device.already_configured || !device.suggested_investition_typ) continue
-
-        const formData = investitionFormData[deviceId]
-        if (!formData) continue
-
-        // Parameter für typ-spezifische Felder
-        // Feldnamen müssen mit InvestitionForm.tsx übereinstimmen!
-        const parameter: Record<string, unknown> = {}
-
-        // E-Auto: batteriekapazitaet_kwh
-        if (device.suggested_investition_typ === 'e-auto' && formData.batteriekapazitaet_kwh) {
-          parameter.batteriekapazitaet_kwh = formData.batteriekapazitaet_kwh
-        }
-
-        // Speicher: kapazitaet_kwh
-        if (device.suggested_investition_typ === 'speicher' && formData.kapazitaet_kwh) {
-          parameter.kapazitaet_kwh = formData.kapazitaet_kwh
-        }
-
-        // Wallbox: max_ladeleistung_kw (nicht leistung_kw!)
-        if (device.suggested_investition_typ === 'wallbox' && formData.leistung_kw) {
-          parameter.max_ladeleistung_kw = formData.leistung_kw
-        }
-
-        // Wechselrichter: max_leistung_kw
-        if (device.suggested_investition_typ === 'wechselrichter' && formData.leistung_kw) {
-          parameter.max_leistung_kw = formData.leistung_kw
-        }
-
-        // Wärmepumpe: leistung_kw, cop, jahresarbeitszahl
-        if (device.suggested_investition_typ === 'waermepumpe') {
-          if (formData.leistung_kw) parameter.leistung_kw = formData.leistung_kw
-          if (formData.cop) parameter.cop = formData.cop
-          if (formData.jahresarbeitszahl) parameter.jahresarbeitszahl = formData.jahresarbeitszahl
-        }
-
-        // Balkonkraftwerk: leistung_wp, anzahl
-        if (device.suggested_investition_typ === 'balkonkraftwerk') {
-          if (formData.leistung_wp) parameter.leistung_wp = formData.leistung_wp
-          if (formData.anzahl) parameter.anzahl = formData.anzahl
-        }
-
-        const investitionData: InvestitionCreate = {
-          anlage_id: wizardState.anlageId,
-          typ: device.suggested_investition_typ as InvestitionCreate['typ'],
-          bezeichnung: formData.bezeichnung,
-          anschaffungsdatum: formData.kaufdatum || undefined,
-          anschaffungskosten_gesamt: formData.kaufpreis || undefined,
-          parameter: Object.keys(parameter).length > 0 ? parameter : undefined,
-          aktiv: true,
-        }
-
-        const newInvestition = await investitionenApi.create(investitionData)
-        created.push(newInvestition)
-        createdIds.push(newInvestition.id)
-      }
-
-      setCreatedInvestitionen(created)
-      setWizardState(prev => ({
-        ...prev,
-        createdInvestitionen: [...prev.createdInvestitionen, ...createdIds],
-      }))
-
-      nextStep()
+      await investitionenApi.update(id, data)
+      await refreshInvestitionen()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Erstellen der Investitionen')
-    } finally {
-      setIsLoading(false)
+      setError(e instanceof Error ? e.message : 'Fehler beim Aktualisieren')
     }
-  }, [wizardState.anlageId, discoveryResult, selectedDevices, investitionFormData, nextStep])
+  }, [refreshInvestitionen])
 
-  // PV-Modul hinzufügen
-  const addPVModul = useCallback((modul: Omit<PVModulData, 'id'>) => {
-    const newModul: PVModulData = {
-      ...modul,
-      id: `pv-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+  // NEU: Investition löschen
+  const deleteInvestition = useCallback(async (id: number) => {
+    try {
+      await investitionenApi.delete(id)
+      await refreshInvestitionen()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Löschen')
     }
-    setWizardState(prev => ({
-      ...prev,
-      pvModule: [...prev.pvModule, newModul],
-    }))
+  }, [refreshInvestitionen])
+
+  // NEU: Investition manuell hinzufügen
+  const addInvestition = useCallback(async (typ: InvestitionTyp): Promise<Investition> => {
+    if (!wizardState.anlageId) {
+      throw new Error('Keine Anlage vorhanden')
+    }
+
+    const newInvestition = await investitionenApi.create({
+      anlage_id: wizardState.anlageId,
+      typ,
+      bezeichnung: `Neue ${INVESTITION_TYP_LABELS[typ]}`,
+      aktiv: true,
+    })
+
+    await refreshInvestitionen()
+    return newInvestition
+  }, [wizardState.anlageId, refreshInvestitionen])
+
+  // NEU: Sensor-Config aktualisieren (lokal)
+  const updateSensorConfig = useCallback((config: SensorConfig) => {
+    setSensorConfig(config)
   }, [])
 
-  // PV-Modul aktualisieren
-  const updatePVModul = useCallback((id: string, data: Partial<PVModulData>) => {
-    setWizardState(prev => ({
-      ...prev,
-      pvModule: prev.pvModule.map(m =>
-        m.id === id ? { ...m, ...data } : m
-      ),
-    }))
-  }, [])
-
-  // PV-Modul entfernen
-  const removePVModul = useCallback((id: string) => {
-    setWizardState(prev => ({
-      ...prev,
-      pvModule: prev.pvModule.filter(m => m.id !== id),
-    }))
-  }, [])
-
-  // PV-Module als Investitionen speichern
-  const savePVModule = useCallback(async () => {
+  // NEU: Sensor-Config speichern
+  const saveSensorConfig = useCallback(async () => {
     if (!wizardState.anlageId) {
       setError('Keine Anlage vorhanden')
       return
     }
 
-    if (wizardState.pvModule.length === 0) {
-      // Keine Module, einfach weiter
-      nextStep()
-      return
-    }
-
     setIsLoading(true)
     setError(null)
 
-    const createdIds: number[] = []
-
     try {
-      for (const modul of wizardState.pvModule) {
-        const investitionData: InvestitionCreate = {
-          anlage_id: wizardState.anlageId,
-          typ: 'pv-module',
-          bezeichnung: modul.bezeichnung,
-          ha_entity_id: modul.ha_entity_id,
-          parameter: {
-            leistung_kwp: modul.leistung_kwp,
-            ausrichtung: modul.ausrichtung,
-            neigung_grad: modul.neigung_grad,
-          },
-          aktiv: true,
-        }
-
-        const newInvestition = await investitionenApi.create(investitionData)
-        createdIds.push(newInvestition.id)
-      }
-
-      setWizardState(prev => ({
-        ...prev,
-        createdInvestitionen: [...prev.createdInvestitionen, ...createdIds],
-      }))
-
+      await anlagenApi.updateSensorConfig(wizardState.anlageId, sensorConfig)
       nextStep()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Speichern der PV-Module')
+      setError(e instanceof Error ? e.message : 'Fehler beim Speichern der Sensor-Konfiguration')
     } finally {
       setIsLoading(false)
     }
-  }, [wizardState.anlageId, wizardState.pvModule, nextStep])
+  }, [wizardState.anlageId, sensorConfig, nextStep])
 
   // Wizard abschließen
   const completeWizard = useCallback(() => {
@@ -631,9 +549,10 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setAnlage(null)
     setStrompreis(null)
     setDiscoveryResult(null)
-    setSelectedDevices(new Set())
-    setCreatedInvestitionen([])
-    setInvestitionFormData({})
+    setInvestitionen([])
+    setSensorConfig({})
+    setSensorMappings(null)
+    setAllEnergySensors([])
     setError(null)
   }, [])
 
@@ -648,12 +567,12 @@ export function useSetupWizard(): UseSetupWizardReturn {
         return true // Kann immer weitergehen (überspringen möglich)
       case 'strompreise':
         return !!wizardState.strompreisId
-      case 'pv-module':
-        return true // PV-Module sind optional aber empfohlen
       case 'discovery':
-        return true // Kann weitergehen auch ohne Auswahl
+        return true
       case 'investitionen':
-        return true // Investitionen sind optional
+        return true // Kann mit 0 Investitionen fortfahren
+      case 'sensor-config':
+        return true
       case 'summary':
         return true
       default:
@@ -663,11 +582,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
   // Computed: Fortschritt in Prozent
   const progress = Math.round((STEP_ORDER.indexOf(step) / (STEP_ORDER.length - 1)) * 100)
-
-  // Computed: Investitionen die bearbeitet werden sollen
-  const investitionenToEdit = discoveryResult?.devices.filter(
-    d => selectedDevices.has(d.id) && !d.already_configured && d.suggested_investition_typ
-  ) ?? []
 
   return {
     // State
@@ -682,12 +596,15 @@ export function useSetupWizard(): UseSetupWizardReturn {
     haConnected,
     haVersion,
     discoveryResult,
-    selectedDevices,
-    createdInvestitionen,
 
-    // Investitions-Bearbeitung
-    investitionenToEdit,
-    investitionFormData,
+    // Investitionen
+    investitionen,
+    refreshInvestitionen,
+
+    // Sensor-Config
+    sensorConfig,
+    sensorMappings,
+    allEnergySensors,
 
     // Actions
     goToStep,
@@ -696,20 +613,16 @@ export function useSetupWizard(): UseSetupWizardReturn {
     skipStep,
 
     createAnlage,
+    geocodeAddress,
     checkHAConnection,
     createStrompreis,
     useDefaultStrompreise,
-    runDiscovery,
-    toggleDevice,
-    selectAllDevices,
-    deselectAllDevices,
-    updateInvestitionFormData,
-    createInvestitionen,
-    pvModule: wizardState.pvModule,
-    addPVModul,
-    updatePVModul,
-    removePVModul,
-    savePVModule,
+    runDiscoveryAndCreateInvestitionen,
+    updateInvestition,
+    deleteInvestition,
+    addInvestition,
+    updateSensorConfig,
+    saveSensorConfig,
     completeWizard,
     resetWizard,
 

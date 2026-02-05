@@ -1,15 +1,17 @@
 /**
  * AnlageStep - Anlage erstellen im Setup-Wizard
+ * v0.8.0 - Mit Geocoding-Button
  */
 
 import { useState, FormEvent } from 'react'
-import { Sun, MapPin, Calendar, ArrowLeft, ArrowRight, Info } from 'lucide-react'
+import { Sun, MapPin, Calendar, ArrowLeft, ArrowRight, Info, Search, CheckCircle2 } from 'lucide-react'
 import { Alert } from '../../ui'
 
 interface AnlageStepProps {
   isLoading: boolean
   error: string | null
   onSubmit: (data: AnlageCreateData) => Promise<void>
+  onGeocode: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number } | null>
   onBack: () => void
 }
 
@@ -49,7 +51,7 @@ const WECHSELRICHTER_HERSTELLER = [
   { value: 'enphase', label: 'Enphase' },
 ]
 
-export default function AnlageStep({ isLoading, error, onSubmit, onBack }: AnlageStepProps) {
+export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBack }: AnlageStepProps) {
   const [formData, setFormData] = useState({
     anlagenname: '',
     leistung_kwp: '',
@@ -64,11 +66,46 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
   })
 
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [isGeocoding, setIsGeocoding] = useState(false)
+  const [geocodeSuccess, setGeocodeSuccess] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
     setValidationError(null)
+    // Reset geocode success wenn PLZ/Ort geändert wird
+    if (name === 'standort_plz' || name === 'standort_ort') {
+      setGeocodeSuccess(false)
+    }
+  }
+
+  const handleGeocode = async () => {
+    if (!formData.standort_plz) {
+      setValidationError('Bitte geben Sie eine PLZ ein')
+      return
+    }
+
+    setIsGeocoding(true)
+    setValidationError(null)
+    setGeocodeSuccess(false)
+
+    try {
+      const result = await onGeocode(formData.standort_plz, formData.standort_ort || undefined)
+      if (result) {
+        setFormData(prev => ({
+          ...prev,
+          latitude: result.latitude.toFixed(6),
+          longitude: result.longitude.toFixed(6),
+        }))
+        setGeocodeSuccess(true)
+      } else {
+        setValidationError('Koordinaten konnten nicht ermittelt werden. Bitte prüfen Sie PLZ/Ort.')
+      }
+    } catch {
+      setValidationError('Fehler beim Ermitteln der Koordinaten')
+    } finally {
+      setIsGeocoding(false)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -187,7 +224,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white mb-4">
               <MapPin className="w-4 h-4 text-gray-500" />
-              Standort (optional, für PVGIS-Prognose)
+              Standort (für PVGIS-Prognose)
             </h3>
 
             <div className="grid md:grid-cols-3 gap-4 mb-4">
@@ -219,6 +256,33 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
+            </div>
+
+            {/* Geocoding Button */}
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={handleGeocode}
+                disabled={isGeocoding || !formData.standort_plz}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeocoding ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                    Ermittle Koordinaten...
+                  </>
+                ) : geocodeSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    Koordinaten ermittelt
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    Koordinaten aus PLZ ermitteln
+                  </>
+                )}
+              </button>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -258,7 +322,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onBack }: Anlag
                 <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>
                   Die Koordinaten werden für die PVGIS-Ertragsprognose benötigt.
-                  Sie können diese später unter Einstellungen → PVGIS ergänzen.
+                  Klicken Sie auf "Koordinaten aus PLZ ermitteln" oder geben Sie sie manuell ein.
                 </span>
               </p>
             </div>

@@ -1,14 +1,17 @@
 /**
  * SetupWizard - Geführte Ersteinrichtung für EEDC
  *
- * Führt den Benutzer durch alle notwendigen Schritte:
+ * v0.8.0 - Refactored mit vollständiger Investitions-Erfassung
+ *
+ * Schritte:
  * 1. Willkommen
- * 2. Anlage erstellen
+ * 2. Anlage erstellen (+ Geocoding)
  * 3. Home Assistant Verbindung
  * 4. Strompreise konfigurieren
- * 5. Auto-Discovery
+ * 5. Discovery → Rudimentäre Investitionen
  * 6. Investitionen vervollständigen
- * 7. Zusammenfassung
+ * 7. Sensor-Konfiguration
+ * 8. Zusammenfassung
  */
 
 import { useEffect } from 'react'
@@ -20,9 +23,9 @@ import WelcomeStep from './steps/WelcomeStep'
 import AnlageStep from './steps/AnlageStep'
 import HAConnectionStep from './steps/HAConnectionStep'
 import StrompreiseStep from './steps/StrompreiseStep'
-import PVModuleStep from './steps/PVModuleStep'
 import DiscoveryStep from './steps/DiscoveryStep'
 import InvestitionenStep from './steps/InvestitionenStep'
+import SensorConfigStep from './steps/SensorConfigStep'
 import SummaryStep from './steps/SummaryStep'
 import CompleteStep from './steps/CompleteStep'
 
@@ -30,15 +33,15 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
-// Schritt-Konfiguration für Fortschrittsanzeige
+// Schritt-Konfiguration für Fortschrittsanzeige (NEU: pv-module entfernt, sensor-config hinzugefügt)
 const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
   { key: 'welcome', label: 'Willkommen', shortLabel: 'Start' },
   { key: 'anlage', label: 'Anlage erstellen', shortLabel: 'Anlage' },
   { key: 'ha-connection', label: 'Home Assistant', shortLabel: 'HA' },
   { key: 'strompreise', label: 'Strompreise', shortLabel: 'Preise' },
-  { key: 'pv-module', label: 'PV-Module', shortLabel: 'Module' },
   { key: 'discovery', label: 'Geräte erkennen', shortLabel: 'Geräte' },
   { key: 'investitionen', label: 'Investitionen', shortLabel: 'Invest.' },
+  { key: 'sensor-config', label: 'Sensoren', shortLabel: 'Sensoren' },
   { key: 'summary', label: 'Zusammenfassung', shortLabel: 'Fertig' },
 ]
 
@@ -51,13 +54,6 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       wizard.checkHAConnection()
     }
   }, [wizard.step])
-
-  // Discovery starten beim Erreichen des Schritts
-  useEffect(() => {
-    if (wizard.step === 'discovery' && !wizard.discoveryResult && wizard.haConnected) {
-      wizard.runDiscovery()
-    }
-  }, [wizard.step, wizard.haConnected])
 
   // Bei Abschluss Callback aufrufen
   useEffect(() => {
@@ -198,6 +194,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               isLoading={wizard.isLoading}
               error={wizard.error}
               onSubmit={wizard.createAnlage}
+              onGeocode={wizard.geocodeAddress}
               onBack={wizard.prevStep}
             />
           )}
@@ -226,47 +223,42 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             />
           )}
 
-          {wizard.step === 'pv-module' && wizard.anlage && (
-            <PVModuleStep
-              anlagenLeistungKwp={wizard.anlage.leistung_kwp}
-              pvModule={wizard.pvModule}
-              isLoading={wizard.isLoading}
-              error={wizard.error}
-              onAddModule={wizard.addPVModul}
-              onUpdateModule={wizard.updatePVModul}
-              onRemoveModule={wizard.removePVModul}
-              onNext={wizard.savePVModule}
-              onSkip={wizard.skipStep}
-              onBack={wizard.prevStep}
-            />
-          )}
-
           {wizard.step === 'discovery' && (
             <DiscoveryStep
               isLoading={wizard.isLoading}
               error={wizard.error}
               haConnected={wizard.haConnected}
               discoveryResult={wizard.discoveryResult}
-              selectedDevices={wizard.selectedDevices}
-              onToggleDevice={wizard.toggleDevice}
-              onSelectAll={wizard.selectAllDevices}
-              onDeselectAll={wizard.deselectAllDevices}
-              onRetry={wizard.runDiscovery}
-              onNext={wizard.nextStep}
-              onSkip={wizard.skipStep}
+              onRunDiscovery={wizard.runDiscoveryAndCreateInvestitionen}
+              onSkip={wizard.nextStep}
               onBack={wizard.prevStep}
             />
           )}
 
           {wizard.step === 'investitionen' && (
             <InvestitionenStep
-              devices={wizard.investitionenToEdit}
-              formData={wizard.investitionFormData}
+              investitionen={wizard.investitionen}
+              anlage={wizard.anlage}
               isLoading={wizard.isLoading}
               error={wizard.error}
-              onUpdateFormData={wizard.updateInvestitionFormData}
-              onSubmit={wizard.createInvestitionen}
-              onSkip={wizard.nextStep}
+              onUpdateInvestition={wizard.updateInvestition}
+              onDeleteInvestition={wizard.deleteInvestition}
+              onAddInvestition={wizard.addInvestition}
+              onNext={wizard.nextStep}
+              onBack={wizard.prevStep}
+            />
+          )}
+
+          {wizard.step === 'sensor-config' && (
+            <SensorConfigStep
+              sensorConfig={wizard.sensorConfig}
+              sensorMappings={wizard.sensorMappings}
+              allEnergySensors={wizard.allEnergySensors}
+              isLoading={wizard.isLoading}
+              error={wizard.error}
+              onUpdateConfig={wizard.updateSensorConfig}
+              onSave={wizard.saveSensorConfig}
+              onSkip={wizard.skipStep}
               onBack={wizard.prevStep}
             />
           )}
@@ -275,8 +267,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             <SummaryStep
               anlage={wizard.anlage}
               strompreis={wizard.strompreis}
-              createdInvestitionen={wizard.createdInvestitionen}
-              discoveryResult={wizard.discoveryResult}
+              investitionen={wizard.investitionen}
+              sensorConfig={wizard.sensorConfig}
               onComplete={wizard.completeWizard}
               onBack={wizard.prevStep}
             />

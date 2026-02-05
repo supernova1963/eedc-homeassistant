@@ -87,6 +87,14 @@ class ApiClient {
     return this.request<void>(endpoint, { method: 'DELETE' })
   }
 
+  // PATCH Request
+  async patch<T>(endpoint: string, data: unknown): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  }
+
   // File Upload
   async upload<T>(endpoint: string, file: File, fieldName: string = 'file'): Promise<T> {
     const formData = new FormData()

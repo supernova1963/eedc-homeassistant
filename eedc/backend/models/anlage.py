@@ -54,6 +54,13 @@ class Anlage(Base):
     neigung_grad: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     wechselrichter_hersteller: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # sma, fronius, kostal, etc.
 
+    # Home Assistant Sensor-Konfiguration (ersetzt config.yaml ha_sensors)
+    ha_sensor_pv_erzeugung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ha_sensor_einspeisung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ha_sensor_netzbezug: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ha_sensor_batterie_ladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ha_sensor_batterie_entladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

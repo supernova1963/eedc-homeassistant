@@ -5,6 +5,7 @@ CRUD Endpoints für PV-Anlagen.
 """
 
 from typing import Optional
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,12 @@ class AnlageBase(BaseModel):
     ausrichtung: Optional[str] = Field(None, max_length=50)
     neigung_grad: Optional[float] = Field(None, ge=0, le=90)
     wechselrichter_hersteller: Optional[str] = Field(None, max_length=50, description="Wechselrichter-Hersteller für Discovery-Filter")
+    # Home Assistant Sensor-Konfiguration
+    ha_sensor_pv_erzeugung: Optional[str] = Field(None, max_length=255)
+    ha_sensor_einspeisung: Optional[str] = Field(None, max_length=255)
+    ha_sensor_netzbezug: Optional[str] = Field(None, max_length=255)
+    ha_sensor_batterie_ladung: Optional[str] = Field(None, max_length=255)
+    ha_sensor_batterie_entladung: Optional[str] = Field(None, max_length=255)
 
 
 class AnlageCreate(AnlageBase):
@@ -52,6 +59,36 @@ class AnlageUpdate(BaseModel):
     ausrichtung: Optional[str] = Field(None, max_length=50)
     neigung_grad: Optional[float] = Field(None, ge=0, le=90)
     wechselrichter_hersteller: Optional[str] = Field(None, max_length=50)
+    ha_sensor_pv_erzeugung: Optional[str] = Field(None, max_length=255)
+    ha_sensor_einspeisung: Optional[str] = Field(None, max_length=255)
+    ha_sensor_netzbezug: Optional[str] = Field(None, max_length=255)
+    ha_sensor_batterie_ladung: Optional[str] = Field(None, max_length=255)
+    ha_sensor_batterie_entladung: Optional[str] = Field(None, max_length=255)
+
+
+class SensorConfigUpdate(BaseModel):
+    """Schema für Sensor-Konfiguration Update."""
+    pv_erzeugung: Optional[str] = Field(None, max_length=255)
+    einspeisung: Optional[str] = Field(None, max_length=255)
+    netzbezug: Optional[str] = Field(None, max_length=255)
+    batterie_ladung: Optional[str] = Field(None, max_length=255)
+    batterie_entladung: Optional[str] = Field(None, max_length=255)
+
+
+class SensorConfigResponse(BaseModel):
+    """Schema für Sensor-Konfiguration Response."""
+    pv_erzeugung: Optional[str] = None
+    einspeisung: Optional[str] = None
+    netzbezug: Optional[str] = None
+    batterie_ladung: Optional[str] = None
+    batterie_entladung: Optional[str] = None
+
+
+class GeocodeResponse(BaseModel):
+    """Schema für Geocoding Response."""
+    latitude: float
+    longitude: float
+    display_name: str
 
 
 class AnlageResponse(AnlageBase):
@@ -181,3 +218,148 @@ async def delete_anlage(anlage_id: int, db: AsyncSession = Depends(get_db)):
         )
 
     await db.delete(anlage)
+
+
+@router.get("/{anlage_id}/sensors", response_model=SensorConfigResponse)
+async def get_sensor_config(anlage_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Gibt die HA-Sensor-Konfiguration einer Anlage zurück.
+
+    Args:
+        anlage_id: ID der Anlage
+
+    Returns:
+        SensorConfigResponse: Die Sensor-Konfiguration
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+
+    if not anlage:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
+        )
+
+    return SensorConfigResponse(
+        pv_erzeugung=anlage.ha_sensor_pv_erzeugung,
+        einspeisung=anlage.ha_sensor_einspeisung,
+        netzbezug=anlage.ha_sensor_netzbezug,
+        batterie_ladung=anlage.ha_sensor_batterie_ladung,
+        batterie_entladung=anlage.ha_sensor_batterie_entladung,
+    )
+
+
+@router.patch("/{anlage_id}/sensors", response_model=SensorConfigResponse)
+async def update_sensor_config(
+    anlage_id: int,
+    data: SensorConfigUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Aktualisiert die HA-Sensor-Konfiguration einer Anlage.
+
+    Args:
+        anlage_id: ID der Anlage
+        data: Sensor-Konfiguration
+
+    Returns:
+        SensorConfigResponse: Die aktualisierte Konfiguration
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+
+    if not anlage:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
+        )
+
+    # Sensor-Felder aktualisieren
+    if data.pv_erzeugung is not None:
+        anlage.ha_sensor_pv_erzeugung = data.pv_erzeugung or None
+    if data.einspeisung is not None:
+        anlage.ha_sensor_einspeisung = data.einspeisung or None
+    if data.netzbezug is not None:
+        anlage.ha_sensor_netzbezug = data.netzbezug or None
+    if data.batterie_ladung is not None:
+        anlage.ha_sensor_batterie_ladung = data.batterie_ladung or None
+    if data.batterie_entladung is not None:
+        anlage.ha_sensor_batterie_entladung = data.batterie_entladung or None
+
+    await db.flush()
+    await db.refresh(anlage)
+
+    return SensorConfigResponse(
+        pv_erzeugung=anlage.ha_sensor_pv_erzeugung,
+        einspeisung=anlage.ha_sensor_einspeisung,
+        netzbezug=anlage.ha_sensor_netzbezug,
+        batterie_ladung=anlage.ha_sensor_batterie_ladung,
+        batterie_entladung=anlage.ha_sensor_batterie_entladung,
+    )
+
+
+@router.get("/geocode/lookup", response_model=GeocodeResponse)
+async def geocode_address(
+    plz: str,
+    ort: Optional[str] = None,
+    land: str = "Germany"
+):
+    """
+    Ermittelt Koordinaten aus PLZ/Ort via OpenStreetMap Nominatim.
+
+    Args:
+        plz: Postleitzahl
+        ort: Ortsname (optional, verbessert Genauigkeit)
+        land: Land (default: Germany)
+
+    Returns:
+        GeocodeResponse: Koordinaten und Anzeigename
+
+    Raises:
+        404: Keine Koordinaten gefunden
+        503: Geocoding-Service nicht erreichbar
+    """
+    # Nominatim API URL
+    base_url = "https://nominatim.openstreetmap.org/search"
+
+    # Query aufbauen
+    query_parts = [plz]
+    if ort:
+        query_parts.append(ort)
+    query_parts.append(land)
+
+    params = {
+        "q": ", ".join(query_parts),
+        "format": "json",
+        "limit": 1,
+        "addressdetails": 1,
+    }
+
+    headers = {
+        "User-Agent": "EEDC-HomeAssistant/0.8.0 (PV-Anlagen-Verwaltung)"
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(base_url, params=params, headers=headers, timeout=10.0)
+            response.raise_for_status()
+            results = response.json()
+
+        if not results:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Keine Koordinaten für PLZ {plz} gefunden"
+            )
+
+        result = results[0]
+        return GeocodeResponse(
+            latitude=float(result["lat"]),
+            longitude=float(result["lon"]),
+            display_name=result.get("display_name", f"{plz}, {land}")
+        )
+
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Geocoding-Service nicht erreichbar: {str(e)}"
+        )
