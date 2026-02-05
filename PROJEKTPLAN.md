@@ -42,6 +42,9 @@ Neuimplementierung der EEDC-WebApp als Home Assistant Add-on für lokale Nutzung
 | Jahres-Vergleich | Jahr-über-Jahr |
 | PDF-Export | Auswertungen drucken |
 | PVGIS-Integration | Automatische Ertragsprognose |
+| Setup-Wizard | Geführte Ersteinrichtung (8 Schritte) |
+| HA Auto-Discovery | Automatische Geräte-Erkennung |
+| Erweiterte Discovery | Wärmepumpen + Balkonkraftwerke |
 
 #### COULD (Phase 3)
 
@@ -757,10 +760,10 @@ def berechne_v2h_einsparung(
 | 2.1 | HA Energy | Sensor-Mapping + Import | ✅ (aktuelle Monate) |
 | 2.2 | Arbitrage | Speicher-Berechnung | ✅ (Backend) |
 | 2.3 | V2H | E-Auto Rückspeisung | ✅ (Backend) |
-| 2.4 | Dashboard: E-Auto | Auswertung | ⬜ |
+| 2.4 | Dashboard: E-Auto | Auswertung | ✅ |
 | 2.5 | Dashboard: WP | Auswertung | ⬜ |
-| 2.6 | Dashboard: Speicher | Auswertung | ⬜ |
-| 2.7 | Dashboard: Wallbox | Auswertung | ⬜ |
+| 2.6 | Dashboard: Speicher | Auswertung | ✅ |
+| 2.7 | Dashboard: Wallbox | Auswertung | ✅ |
 | 2.8 | ROI-Dashboard | Amortisation | ✅ |
 | 2.9 | Prognose vs IST | Vergleich | ✅ |
 | 2.10 | Monats-Detail | Pie-Charts | ✅ |
@@ -771,6 +774,8 @@ def berechne_v2h_einsparung(
 | 2.15 | PV-Module als Investitionen | Multi-Modul-Unterstützung | ✅ |
 | 2.16 | String-basierte IST-Erfassung | SOLL-IST pro PV-Modul via HA-Strings | ✅ (UI/API) |
 | 2.17 | HA Auto-Discovery | Automatische Erkennung von HA-Geräten | ✅ |
+| 2.18 | Setup-Wizard | Geführte Ersteinrichtung für neue Benutzer | ✅ |
+| 2.19 | Erweiterte Discovery | Wärmepumpen (13) + Balkonkraftwerke (6) | ✅ |
 
 ### Optional / Zurückgestellt
 
@@ -956,6 +961,9 @@ Home Assistant kann String/MPPT-Daten vom Wechselrichter erfassen. Diese werden 
 | 2026-02-04 | 0.5.0 | **Feature 2.16** - String-basierte IST-Erfassung UI/API implementiert |
 | 2026-02-04 | 0.6.0 | **Feature 2.1** - HA Energy Import (aktuelle Monate via History API), Sensor-Mapping in Settings, Import-Vorschau. WebSocket für Long-Term Statistics vorbereitet aber deaktiviert |
 | 2026-02-05 | 0.6.0 | **Feature 2.17** - HA Auto-Discovery für SMA, evcc, Smart, Wallbox. Empfohlen/Alle Toggle für Sensor-Mappings |
+| 2026-02-05 | 0.7.0-0.7.2 | **Feature 2.18** - Setup-Wizard mit 8 Schritten (Willkommen, Anlage, HA-Verbindung, Strompreise, PV-Module, Discovery, Investitionen, Zusammenfassung) |
+| 2026-02-05 | 0.7.3 | **Fix** - Investitions-Feldnamen korrigiert (batteriekapazitaet_kwh, max_ladeleistung_kw, max_leistung_kw) |
+| 2026-02-05 | 0.7.4 | **Feature 2.19** - Erweiterte Discovery: 13 Wärmepumpen-Hersteller (Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Alpha Innotec, Lambda, iDM, Toshiba, LG) + 6 Balkonkraftwerk-Hersteller (EcoFlow, Hoymiles, Anker SOLIX, APSystems, Deye, OpenDTU) |
 
 ---
 

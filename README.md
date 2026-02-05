@@ -4,6 +4,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 
 ## Features
 
+- **Setup-Wizard** - Geführte Ersteinrichtung für neue Benutzer (NEU v0.7.0)
 - **Lokale Datenspeicherung** - Alle Daten bleiben auf deinem Home Assistant
 - **PV-Anlagen Verwaltung** - Stammdaten, Leistung, Standort
 - **Multi-Modul PV-Anlagen** - Verschiedene Dachflächen mit individueller Ausrichtung/Neigung
@@ -11,9 +12,10 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - **Prognose vs. IST** - Vergleich der erwarteten mit tatsächlicher Erzeugung
 - **Monatsdaten Erfassung** - Manuell oder CSV-Import
 - **Umfassende Auswertungen** - Autarkie, Eigenverbrauch, Wirtschaftlichkeit
-- **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox, PV-Module
+- **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox, PV-Module, Balkonkraftwerk
 - **ROI-Dashboard** - Amortisationsberechnung für alle Investitionen
 - **Home Assistant Integration** - Import aus HA Energy Dashboard (aktuelle Monate)
+- **HA Auto-Discovery** - Automatische Erkennung von Geräten (Wechselrichter, Wärmepumpen, Balkonkraftwerke, E-Autos, Wallboxen)
 - **Dark Mode** - Vollständige Unterstützung
 
 ## Aktueller Status
@@ -25,6 +27,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 | Phase 2: Erweitert | 🔄 | 12/16 |
 
 **Was funktioniert (getestet in Home Assistant):**
+- ✅ **Setup-Wizard** (geführte Ersteinrichtung mit 8 Schritten)
 - ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
 - ✅ CSV-Import (mit automatischer Trennzeichen-Erkennung)
 - ✅ Dashboard mit KPIs und Charts
@@ -34,7 +37,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - ✅ **Prognose vs. IST** Vergleich
 - ✅ **PV-Module als Investitionen** (Multi-Dach-Unterstützung)
 - ✅ **HA Energy Import** (aktuelle Monate aus HA History)
-- ✅ **HA Auto-Discovery** (SMA, evcc, Smart, Wallbox erkennen)
+- ✅ **HA Auto-Discovery** (9 Wechselrichter, 13 Wärmepumpen, 6 Balkonkraftwerke, E-Autos, Wallboxen)
 - ✅ Settings mit echten DB-Stats und Sensor-Mapping
 - ✅ Dark Mode
 - ✅ Docker-Build
@@ -159,13 +162,23 @@ eedc-homeassistant/
             └── hooks/      # React Hooks
 ```
 
+## Unterstützte Geräte (Auto-Discovery v0.7.4)
+
+**Wechselrichter:** SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
+
+**Wärmepumpen:** Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Alpha Innotec, Lambda, iDM, Toshiba, LG
+
+**Balkonkraftwerke:** EcoFlow, Hoymiles, Anker SOLIX, APSystems, Deye, OpenDTU/AhoyDTU
+
+**E-Autos & Wallboxen:** evcc (höchste Priorität), Smart, Wallbox (native Integration)
+
 ## Roadmap
 
 Siehe [PROJEKTPLAN.md](PROJEKTPLAN.md) für Details.
 
 - [x] Phase 0: Projekt-Setup ✅
 - [x] Phase 1: MVP (Grundfunktionen) ✅
-- [ ] Phase 2: Erweiterte Features (HA Energy Import, Investitions-Dashboards, PDF-Export, **PVGIS ✅**)
+- [ ] Phase 2: Erweiterte Features (HA Energy Import ✅, Auto-Discovery ✅, Setup-Wizard ✅, PVGIS ✅, PDF-Export)
 - [ ] Phase 3: KI-Insights, Wetter-Integration
 
 ## Lizenz
