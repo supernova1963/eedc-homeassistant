@@ -191,17 +191,17 @@ export default function InvestitionenStep({
                     </p>
                   </div>
 
-                  {/* Typ-spezifische Felder */}
-                  {(device.suggested_investition_typ === 'e-auto' || device.suggested_investition_typ === 'speicher') && (
+                  {/* Typ-spezifische Felder - E-Auto */}
+                  {device.suggested_investition_typ === 'e-auto' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Batteriekapazität (kWh)
                       </label>
                       <input
                         type="number"
-                        value={data.batterie_kwh ?? (device.suggested_parameters.batterie_kwh as number | undefined) ?? ''}
-                        onChange={(e) => onUpdateFormData(device.id, { batterie_kwh: parseFloat(e.target.value) || undefined })}
-                        placeholder={device.suggested_investition_typ === 'e-auto' ? 'z.B. 66' : 'z.B. 10'}
+                        value={data.batteriekapazitaet_kwh ?? (device.suggested_parameters.batterie_kwh as number | undefined) ?? ''}
+                        onChange={(e) => onUpdateFormData(device.id, { batteriekapazitaet_kwh: parseFloat(e.target.value) || undefined })}
+                        placeholder="z.B. 66"
                         min="0"
                         step="0.1"
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -209,16 +209,53 @@ export default function InvestitionenStep({
                     </div>
                   )}
 
-                  {(device.suggested_investition_typ === 'wallbox' || device.suggested_investition_typ === 'wechselrichter') && (
+                  {/* Typ-spezifische Felder - Speicher */}
+                  {device.suggested_investition_typ === 'speicher' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Leistung (kW)
+                        Kapazität (kWh)
+                      </label>
+                      <input
+                        type="number"
+                        value={data.kapazitaet_kwh ?? (device.suggested_parameters.kapazitaet_kwh as number | undefined) ?? ''}
+                        onChange={(e) => onUpdateFormData(device.id, { kapazitaet_kwh: parseFloat(e.target.value) || undefined })}
+                        placeholder="z.B. 10"
+                        min="0"
+                        step="0.1"
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  {/* Typ-spezifische Felder - Wallbox */}
+                  {device.suggested_investition_typ === 'wallbox' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Max. Ladeleistung (kW)
                       </label>
                       <input
                         type="number"
                         value={data.leistung_kw ?? (device.suggested_parameters.leistung_kw as number | undefined) ?? ''}
                         onChange={(e) => onUpdateFormData(device.id, { leistung_kw: parseFloat(e.target.value) || undefined })}
-                        placeholder={device.suggested_investition_typ === 'wallbox' ? 'z.B. 11' : 'z.B. 10'}
+                        placeholder="z.B. 11"
+                        min="0"
+                        step="0.1"
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  {/* Typ-spezifische Felder - Wechselrichter */}
+                  {device.suggested_investition_typ === 'wechselrichter' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Max. Leistung (kW)
+                      </label>
+                      <input
+                        type="number"
+                        value={data.leistung_kw ?? (device.suggested_parameters.leistung_kw as number | undefined) ?? ''}
+                        onChange={(e) => onUpdateFormData(device.id, { leistung_kw: parseFloat(e.target.value) || undefined })}
+                        placeholder="z.B. 10"
                         min="0"
                         step="0.1"
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"

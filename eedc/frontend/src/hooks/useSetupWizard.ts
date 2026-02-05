@@ -155,10 +155,10 @@ export interface InvestitionFormData {
   bezeichnung: string
   kaufdatum: string
   kaufpreis: number
-  // Typ-spezifische Felder
-  batterie_kwh?: number  // E-Auto, Speicher
-  leistung_kw?: number   // Wallbox, Wechselrichter
+  // Typ-spezifische Felder (Namen müssen mit InvestitionForm.tsx übereinstimmen)
+  batteriekapazitaet_kwh?: number  // E-Auto
   kapazitaet_kwh?: number // Speicher
+  leistung_kw?: number   // Wallbox, Wechselrichter
 }
 
 // LocalStorage Key
@@ -383,9 +383,11 @@ export function useSetupWizard(): UseSetupWizardReturn {
             bezeichnung: device.suggested_parameters.bezeichnung as string || device.name,
             kaufdatum: new Date().toISOString().split('T')[0],
             kaufpreis: 0,
-            batterie_kwh: device.suggested_parameters.batterie_kwh as number,
-            leistung_kw: device.suggested_parameters.leistung_kw as number,
+            // E-Auto: batteriekapazitaet_kwh (Name muss mit InvestitionForm.tsx übereinstimmen)
+            batteriekapazitaet_kwh: device.suggested_parameters.batterie_kwh as number,
+            // Speicher: kapazitaet_kwh
             kapazitaet_kwh: device.suggested_parameters.kapazitaet_kwh as number,
+            leistung_kw: device.suggested_parameters.leistung_kw as number,
           }
         }
       }
@@ -460,22 +462,27 @@ export function useSetupWizard(): UseSetupWizardReturn {
         if (!formData) continue
 
         // Parameter für typ-spezifische Felder
+        // Feldnamen müssen mit InvestitionForm.tsx übereinstimmen!
         const parameter: Record<string, unknown> = {}
 
-        // E-Auto / Speicher: Batteriekapazität
-        if (formData.batterie_kwh) {
-          parameter.batterie_kwh = formData.batterie_kwh
-          if (device.suggested_investition_typ === 'speicher') {
-            parameter.kapazitaet_kwh = formData.batterie_kwh
-          }
+        // E-Auto: batteriekapazitaet_kwh
+        if (device.suggested_investition_typ === 'e-auto' && formData.batteriekapazitaet_kwh) {
+          parameter.batteriekapazitaet_kwh = formData.batteriekapazitaet_kwh
         }
 
-        // Wallbox / Wechselrichter: Leistung
-        if (formData.leistung_kw) {
-          parameter.leistung_kw = formData.leistung_kw
-          if (device.suggested_investition_typ === 'wechselrichter') {
-            parameter.leistung_ac_kw = formData.leistung_kw
-          }
+        // Speicher: kapazitaet_kwh
+        if (device.suggested_investition_typ === 'speicher' && formData.kapazitaet_kwh) {
+          parameter.kapazitaet_kwh = formData.kapazitaet_kwh
+        }
+
+        // Wallbox: max_ladeleistung_kw (nicht leistung_kw!)
+        if (device.suggested_investition_typ === 'wallbox' && formData.leistung_kw) {
+          parameter.max_ladeleistung_kw = formData.leistung_kw
+        }
+
+        // Wechselrichter: max_leistung_kw
+        if (device.suggested_investition_typ === 'wechselrichter' && formData.leistung_kw) {
+          parameter.max_leistung_kw = formData.leistung_kw
         }
 
         const investitionData: InvestitionCreate = {
