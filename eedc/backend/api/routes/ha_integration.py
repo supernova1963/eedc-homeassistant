@@ -583,13 +583,13 @@ async def import_monatsdaten_from_ha(
             fehler=f"Anlage {request.anlage_id} nicht gefunden"
         )
 
-    # Sensor-Mappings aus Settings
+    # Sensor-Mappings: Anlage-Konfiguration hat Priorität, dann config.yaml
     sensor_mapping = {
-        "pv_erzeugung": settings.ha_sensor_pv,
-        "einspeisung": settings.ha_sensor_einspeisung,
-        "netzbezug": settings.ha_sensor_netzbezug,
-        "batterie_ladung": settings.ha_sensor_batterie_ladung,
-        "batterie_entladung": settings.ha_sensor_batterie_entladung,
+        "pv_erzeugung": anlage.ha_sensor_pv_erzeugung or settings.ha_sensor_pv,
+        "einspeisung": anlage.ha_sensor_einspeisung or settings.ha_sensor_einspeisung,
+        "netzbezug": anlage.ha_sensor_netzbezug or settings.ha_sensor_netzbezug,
+        "batterie_ladung": anlage.ha_sensor_batterie_ladung or settings.ha_sensor_batterie_ladung,
+        "batterie_entladung": anlage.ha_sensor_batterie_entladung or settings.ha_sensor_batterie_entladung,
     }
 
     # Prüfen ob Mappings konfiguriert sind
@@ -598,7 +598,7 @@ async def import_monatsdaten_from_ha(
         return HAImportResult(
             erfolg=False,
             monate_importiert=0,
-            fehler="Keine HA-Sensoren konfiguriert. Bitte unter Einstellungen zuweisen."
+            fehler="Keine HA-Sensoren konfiguriert. Bitte im Wizard oder unter Einstellungen zuweisen."
         )
 
     # Zeitraum bestimmen
@@ -720,6 +720,17 @@ async def preview_ha_import(
     Returns:
         dict: Verfügbare HA-Daten und existierende Monatsdaten
     """
+    # Anlage laden um Sensor-Konfiguration zu prüfen
+    anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = anlage_result.scalar_one_or_none()
+
+    # Sensor-ID bestimmen: Anlage-Konfiguration hat Priorität, dann config.yaml
+    pv_sensor_id = None
+    if anlage and anlage.ha_sensor_pv_erzeugung:
+        pv_sensor_id = anlage.ha_sensor_pv_erzeugung
+    elif settings.ha_sensor_pv:
+        pv_sensor_id = settings.ha_sensor_pv
+
     # Existierende Monatsdaten laden
     result = await db.execute(
         select(Monatsdaten)
@@ -730,12 +741,12 @@ async def preview_ha_import(
 
     # HA-Daten abrufen (wenn verfügbar)
     ha_verfuegbar = {}
-    if settings.supervisor_token and settings.ha_sensor_pv:
+    if settings.supervisor_token and pv_sensor_id:
         try:
             start_date = date(jahr, 1, 1)
             end_date = date(jahr, 12, 31)
             stats = await _get_ha_statistics_monthly(
-                settings.ha_sensor_pv,
+                pv_sensor_id,
                 start_date,
                 end_date
             )
@@ -771,7 +782,7 @@ async def preview_ha_import(
         "anlage_id": anlage_id,
         "jahr": jahr,
         "ha_verbunden": bool(settings.supervisor_token),
-        "sensor_konfiguriert": bool(settings.ha_sensor_pv),
+        "sensor_konfiguriert": bool(pv_sensor_id),
         "monate": monate
     }
 
