@@ -16,6 +16,9 @@ export interface HASensor {
 
 export interface HAStatus {
   connected: boolean
+  rest_api?: boolean
+  websocket?: boolean
+  ha_version?: string
   message: string
 }
 

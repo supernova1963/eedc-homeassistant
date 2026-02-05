@@ -1,7 +1,7 @@
 # EEDC Entwickler-Handover
 
 **Stand:** 2026-02-05
-**Version:** 0.6.0
+**Version:** 0.7.0
 
 Dieses Dokument dient als Kontext für die Fortsetzung der Entwicklung auf einem neuen Rechner oder in einer neuen Session.
 
@@ -53,8 +53,13 @@ eedc-homeassistant/
 │   └── frontend/
 │       ├── src/
 │       │   ├── api/ha.ts           # HA API Client
-│       │   ├── components/discovery/  # Discovery UI
-│       │   ├── hooks/useDiscovery.ts
+│       │   ├── components/
+│       │   │   ├── discovery/      # Discovery UI
+│       │   │   ├── setup-wizard/   # Setup-Wizard (v0.7.0)
+│       │   │   └── AppWithSetup.tsx
+│       │   ├── hooks/
+│       │   │   ├── useDiscovery.ts
+│       │   │   └── useSetupWizard.ts
 │       │   └── pages/
 │       └── dist/                   # Build Output
 ```
@@ -63,7 +68,32 @@ eedc-homeassistant/
 
 ## Aktuell implementierte Features
 
-### Auto-Discovery (v0.6.0) - Zuletzt bearbeitet
+### Setup-Wizard (v0.7.0) - Zuletzt bearbeitet
+
+**Frontend:** `frontend/src/components/setup-wizard/`
+
+Der Setup-Wizard führt neue Benutzer durch die Ersteinrichtung:
+
+1. **WelcomeStep** - Einführung und Features
+2. **AnlageStep** - Name, Leistung, Standort, Koordinaten
+3. **HAConnectionStep** - HA-Verbindung prüfen (überspringbar)
+4. **StrompreiseStep** - Mit deutschen Standardwerten (EEG-Vergütung nach Anlagengröße)
+5. **DiscoveryStep** - Geräte aus Home Assistant erkennen
+6. **InvestitionenStep** - Kaufpreis, Datum, technische Details ergänzen
+7. **SummaryStep** - Übersicht vor Abschluss
+8. **CompleteStep** - Erfolgsmeldung
+
+**State-Management:** `frontend/src/hooks/useSetupWizard.ts`
+
+- State wird in LocalStorage gespeichert (Wizard kann fortgesetzt werden)
+- Strompreis-Defaults basierend auf Anlagengröße (≤10kWp: 8.2ct, 10-40kWp: 7.1ct, >40kWp: 5.8ct)
+
+**Integration:** `frontend/src/components/AppWithSetup.tsx`
+
+- Prüft beim Start ob Anlagen vorhanden sind
+- Zeigt Wizard wenn keine Anlage existiert und Wizard nicht abgeschlossen
+
+### Auto-Discovery (v0.6.0)
 
 **Backend:** `backend/api/routes/ha_integration.py`
 
@@ -112,21 +142,13 @@ GET /api/ha/discover?anlage_id={id}
 2. Direkter SQLite-Zugriff auf HA DB (`statistics` Tabelle)
 3. Custom Component für REST-Zugriff
 
-### 2. Discovery erstellt Investitionen mit Minimaldaten
+### 2. Discovery erkennt nur bestimmte Hersteller
 
-**Problem:** Nur Name, Typ, Hersteller werden gesetzt. Fehlend: Kaufpreis, Datum, technische Parameter.
+**Problem:** Nur SMA, evcc, Smart, Wallbox werden automatisch erkannt.
 
-**Workaround:** Investitionen nach Discovery manuell ergänzen.
+**Workaround:** "Empfohlen/Alle" Toggle zeigt alle Energy-Sensoren für manuelle Auswahl.
 
-**Mögliche Verbesserung:** Nach Erstellung direkt Bearbeitungsdialog öffnen.
-
-### 3. Sensor-Erkennung ist herstellerspezifisch
-
-**Problem:** Stark gefilterte Sensor-Vorschläge funktionieren nur für bekannte Hersteller (SMA, evcc).
-
-**Lösung implementiert:** "Empfohlen/Alle" Toggle in `SensorMappingPanel.tsx`
-- "Empfohlen" zeigt erkannte Sensoren
-- "Alle" zeigt alle Energy-Sensoren (kWh, `total_increasing`)
+**Mögliche Verbesserung:** Generischere Hersteller-Erkennung (Fronius, Huawei, Kostal, etc.)
 
 ---
 
@@ -151,16 +173,14 @@ GET /api/ha/discover?anlage_id={id}
 
 ### Offen in Phase 2
 
-1. **Dashboard: E-Auto (2.4)** - Auswertung für E-Auto-Investitionen
-2. **Dashboard: Speicher (2.6)** - Auswertung für Batteriespeicher
-3. **Dashboard: Wallbox (2.7)** - Auswertung für Wallbox
-4. **PDF-Export (2.12)** - jsPDF Integration
+1. **PDF-Export (2.12)** - jsPDF Integration (Dependencies vorhanden, keine Implementierung)
+2. **Dashboard: Wärmepumpe (2.5)** - Auswertung für Wärmepumpen
 
 ### Optional
 
 - WebSocket für Long-Term Statistics debuggen (2.1b)
 - String-Import aus HA vervollständigen (2.16b)
-- Nach Discovery → Bearbeitungsdialog öffnen
+- Generischere Hersteller-Erkennung
 
 ---
 
@@ -179,7 +199,7 @@ GET /api/ha/discover?anlage_id={id}
 
 ### Git Commits
 ```
-feat(ha): Add Auto-Discovery for HA devices
+feat(wizard): Add Setup-Wizard for first-time users
 fix(ha): Improve SMA sensor detection
 docs: Update handover documentation
 ```
@@ -190,9 +210,10 @@ docs: Update handover documentation
 
 1. **Architektur:** `PROJEKTPLAN.md`
 2. **Aktueller Stand:** `docs/STATUS.md`
-3. **Discovery-Logik:** `backend/api/routes/ha_integration.py` (Zeilen 50-300)
-4. **Discovery-UI:** `frontend/src/components/discovery/DiscoveryDialog.tsx`
-5. **API-Typen:** `frontend/src/api/ha.ts`
+3. **Setup-Wizard:** `frontend/src/hooks/useSetupWizard.ts`
+4. **Discovery-Logik:** `backend/api/routes/ha_integration.py` (Zeilen 50-300)
+5. **Discovery-UI:** `frontend/src/components/discovery/DiscoveryDialog.tsx`
+6. **API-Typen:** `frontend/src/api/ha.ts`
 
 ---
 

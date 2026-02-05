@@ -1,7 +1,7 @@
 # EEDC Projekt Status
 
 **Stand:** 2026-02-05
-**Version:** 0.6.0
+**Version:** 0.7.0
 
 ## Übersicht
 
@@ -10,6 +10,36 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 ---
 
 ## Aktuell implementierte Features
+
+### Feature: Setup-Wizard (v0.7.0) - NEU
+**Status:** ✅ Implementiert
+
+Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
+
+**Wizard-Schritte:**
+1. **Willkommen** - Einführung und Übersicht
+2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten
+3. **HA-Verbindung prüfen** - Automatische Prüfung, überspringbar
+4. **Strompreise konfigurieren** - Mit deutschen Standardwerten (30ct/8.2ct)
+5. **Auto-Discovery** - Geräte aus Home Assistant erkennen
+6. **Investitionen vervollständigen** - Kaufpreis, Datum, technische Daten
+7. **Zusammenfassung** - Übersicht und Abschluss
+
+**Features:**
+- Automatischer Start bei erstem Besuch (keine Anlagen vorhanden)
+- Fortschrittsanzeige (Desktop: Schritte, Mobile: Balken)
+- Strompreis-Defaults basierend auf Anlagengröße (EEG-Vergütung)
+- Integration der bestehenden Discovery-Logik
+- Investitionen mit Details statt Minimaldaten
+- State wird in LocalStorage gespeichert (Fortsetzung möglich)
+
+**Dateien:**
+- `frontend/src/hooks/useSetupWizard.ts` (State-Management)
+- `frontend/src/components/setup-wizard/` (Wizard-Komponenten)
+- `frontend/src/components/AppWithSetup.tsx` (App-Wrapper)
+- `frontend/src/main.tsx` (Integration)
+
+---
 
 ### Feature 2.16: String-basierte IST-Datenerfassung pro PV-Modul
 **Status:** ✅ Implementiert
@@ -90,6 +120,7 @@ Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
 - Automatische Zuordnung: `pv_gen_meter` → PV, `metering_total_yield` → Einspeisung, `metering_total_absorbed` → Netzbezug
 
 **Aufruf:**
+- **Beim ersten Start:** Setup-Wizard führt automatisch durch Discovery
 - Nach Anlage-Erstellung: Discovery-Dialog erscheint automatisch
 - Auf Anlagen-Seite: Such-Button (Lupe) neben jeder Anlage
 - In Settings: "Geräte erkennen" Button im HA-Bereich
@@ -104,6 +135,18 @@ Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
 - `frontend/src/components/discovery/` (Dialog-Komponenten)
 - `frontend/src/pages/Anlagen.tsx` (Integration)
 - `frontend/src/pages/Settings.tsx` (Integration)
+
+### Dashboards (Phase 2)
+**Status:** ✅ Implementiert
+
+- **E-Auto Dashboard (2.4):** KPIs, Ladequellen, Kostenvergleich, V2H-Sektion
+- **Speicher Dashboard (2.6):** Vollzyklen, Effizienz, Lade-/Entlade-Charts
+- **Wallbox Dashboard (2.7):** PV-Anteil, Heimladung vs. Extern, ROI
+
+**Dateien:**
+- `frontend/src/pages/EAutoDashboard.tsx`
+- `frontend/src/pages/SpeicherDashboard.tsx`
+- `frontend/src/pages/WallboxDashboard.tsx`
 
 ---
 
@@ -126,19 +169,19 @@ WebSocket-Client implementiert in `backend/services/ha_websocket.py`, funktionie
 2. Direkter Datenbankzugriff auf HA SQLite (`statistics` Tabelle)
 3. Custom Component für REST-Zugriff auf Statistics
 
-### ⚠️ Discovery: Erstellte Investitionen ohne Detaildaten
+### ⚠️ Discovery: Hersteller-spezifisch
 
 **Problem:**
-Auto-Discovery erstellt Investitionen mit minimalen Daten (Name, Typ, Hersteller). Wichtige Felder fehlen:
-- Kaufpreis (für ROI-Berechnung)
-- Kaufdatum
-- Technische Parameter (Batteriekapazität bei E-Auto/Speicher, etc.)
+Auto-Discovery erkennt nur bestimmte Integrationen:
+- SMA (Regex `sensor.sn_\d+_`)
+- evcc (`sensor.evcc_`)
+- Smart (`sensor.smart_`)
+- Wallbox (`sensor.wallbox_`)
+
+Andere Hersteller (Fronius, Huawei, Kostal, etc.) werden nicht automatisch erkannt.
 
 **Workaround:**
-Nach Discovery müssen Investitionen manuell unter "Investitionen" ergänzt werden.
-
-**Mögliche Verbesserung:**
-Nach dem Erstellen direkt zum Bearbeitungsdialog weiterleiten.
+"Empfohlen/Alle" Toggle im Setup-Wizard und Discovery-Dialog zeigt alle Energy-Sensoren für manuelle Auswahl.
 
 ---
 
@@ -162,11 +205,11 @@ Die Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term S
 ## Git Historie (aktuell)
 
 ```
+7d8273e docs: Update documentation with current project state
 19d7901 feat(ha): Add Empfohlen/Alle toggle for sensor mappings
 ebf2e31 fix(ha): Improve Auto-Discovery for SMA devices
 c64dff1 feat(ha): Add Auto-Discovery for HA devices (v0.6.0)
 b8b32fb docs: Update documentation with current project state
-2a477f3 fix(ha): Revert to History API, make WebSocket optional
 ```
 
 ---
@@ -174,18 +217,13 @@ b8b32fb docs: Update documentation with current project state
 ## Nächste Schritte (gemäß PROJEKTPLAN.md)
 
 ### Phase 2 - Offen:
-- [ ] 2.1 HA Energy - Long-Term Statistics (WebSocket debuggen oder Alternative)
-- [x] 2.17 HA Auto-Discovery ✅
-- [ ] 2.4 Dashboard: E-Auto
+- [ ] 2.12 PDF-Export (jsPDF Integration)
 - [ ] 2.5 Dashboard: Wärmepumpe
-- [ ] 2.6 Dashboard: Speicher
-- [ ] 2.7 Dashboard: Wallbox
-- [ ] 2.12 PDF-Export
 
 ### Optional für später:
 - [ ] WebSocket für Long-Term Statistics zum Laufen bringen
 - [ ] String-Import aus HA vervollständigen (benötigt Long-Term Statistics)
-- [ ] Nach Discovery → Investitions-Bearbeitungsdialog öffnen
+- [ ] Generischere Hersteller-Erkennung (Fronius, Huawei, etc.)
 
 ---
 
@@ -220,7 +258,9 @@ npm run build
 - Wallbox Integration (wird durch evcc überdeckt)
 
 **Getestete Funktionen:**
+- ✅ Setup-Wizard führt durch komplette Ersteinrichtung
+- ✅ Strompreise mit deutschen Standardwerten
 - ✅ Auto-Discovery erkennt alle 4 Geräte (SMA WR, SMA Speicher, evcc Wallbox, evcc E-Auto)
 - ✅ Sensor-Mappings werden korrekt vorgeschlagen
 - ✅ "Alle" Toggle zeigt alle Energy-Sensoren für manuelle Auswahl
-- ✅ Investitionen werden erstellt
+- ✅ Investitionen werden mit Details erstellt
