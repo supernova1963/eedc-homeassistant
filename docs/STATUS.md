@@ -1,7 +1,7 @@
 # EEDC Projekt Status
 
 **Stand:** 2026-02-05
-**Version:** 0.8.0
+**Version:** 0.8.1
 
 ## Übersicht
 
@@ -9,263 +9,161 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 
 ---
 
-## Aktuell implementierte Features
+## Aktueller Stand (v0.8.1)
 
-### Feature: Setup-Wizard (v0.7.0-0.8.0)
-**Status:** ✅ Implementiert und verbessert
+### Was funktioniert gut
 
-Geführte Ersteinrichtung für neue Benutzer mit maximalem Automatisierungsgrad.
+1. **Setup-Wizard mit Auto-Discovery**
+   - Automatische Erkennung von HA-Geräten (Wechselrichter, Speicher, E-Autos, Wallboxen)
+   - Sensor-Zuordnung für Energy-Daten
+   - Strompreis-Konfiguration mit deutschen Standardwerten
 
-**v0.8.0 - Wizard Refactoring:**
-- **Auto-Start bei leerer Datenbank:** Wizard startet automatisch wenn keine Anlagen vorhanden (unabhängig von LocalStorage)
-- **Geocoding-Button:** Automatische Koordinatenermittlung aus PLZ/Ort via OpenStreetMap
-- **Vereinfachter Discovery-Schritt:** Alle erkannten Geräte werden automatisch als Investitionen angelegt
-- **Neuer Investitionen-Schritt:** Alle Investitionen auf einer Seite, gruppiert nach Typ
-  - Bearbeiten aller Investitionen (Kaufdatum, Kaufpreis, technische Details)
-  - Parent-Zuordnung (PV-Module → Wechselrichter, E-Auto → Wallbox)
-  - Manuelles Hinzufügen/Löschen von Investitionen
-- **Neuer Sensor-Config-Schritt:** Sensor-Zuordnung direkt im Wizard
-  - Ersetzt die bisherige config.yaml `ha_sensors` Konfiguration
-  - Vorschläge aus Discovery mit Umschaltung auf "Alle Sensoren"
-  - Wird in Anlage-Tabelle gespeichert
-- **PV-Module-Schritt entfernt:** PV-Module werden jetzt als Investitionen erfasst
+2. **Investitionsverwaltung**
+   - Alle Investitionstypen: Wechselrichter, PV-Module, Speicher, Wallbox, E-Auto, Wärmepumpe, Balkonkraftwerk
+   - ROI-Berechnungen basierend auf Kaufpreis und Ertragsdaten
 
-**Wizard-Schritte (neu v0.8.0):**
-1. **Willkommen** - Einführung und Übersicht
-2. **Anlage erstellen** - Name, Leistung, Standort, Koordinaten (+ Geocoding-Button)
-3. **HA-Verbindung prüfen** - Automatische Prüfung, überspringbar
-4. **Strompreise konfigurieren** - Mit deutschen Standardwerten (30ct/8.2ct)
-5. **Auto-Discovery** - Geräte erkennen & automatisch als Investitionen anlegen
-6. **Investitionen vervollständigen** - Alle auf einer Seite bearbeiten/hinzufügen/löschen
-7. **Sensor-Konfiguration** - HA-Sensoren für Monatsdaten-Import zuordnen
-8. **Zusammenfassung** - Übersicht und Abschluss
+3. **Monatsdaten-Erfassung**
+   - Manuelle Eingabe
+   - CSV-Import
+   - HA-Import (mit Einschränkungen, siehe unten)
 
-**Features:**
-- Automatischer Start bei erstem Besuch (keine Anlagen vorhanden)
-- Fortschrittsanzeige (Desktop: Schritte, Mobile: Balken)
-- Strompreis-Defaults basierend auf Anlagengröße (EEG-Vergütung)
-- **Wechselrichter-Hersteller-Auswahl** für bessere Discovery
-- State wird in LocalStorage gespeichert (Fortsetzung möglich)
+4. **Dashboards und Auswertungen**
+   - Haupt-Dashboard mit KPIs
+   - E-Auto Dashboard
+   - Speicher Dashboard
+   - Wallbox Dashboard
+   - PVGIS-Prognose
 
-**Unterstützte Geräte (v0.7.4+):**
+### Bekannte Einschränkungen
 
-*Wechselrichter:*
-- SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
+#### HA-Datenimport begrenzt auf ~10 Tage
+Die Home Assistant REST API liefert nur kurzfristige History-Daten. Long-Term Statistics (die im HA Energy Dashboard sichtbar sind) sind nur über die WebSocket API zugänglich, die noch nicht stabil funktioniert.
 
-*Balkonkraftwerke:*
-- EcoFlow (PowerStream, Delta Pro)
-- Hoymiles (HMS, HMT)
-- Anker SOLIX (Solarbank)
-- APSystems (QS1, DS3, EZ1)
-- Deye Mikrowechselrichter
-- OpenDTU/AhoyDTU (Open-Source)
+**Praktische Auswirkung:**
+- Import für aktuelle Monate (letzte ~10 Tage) funktioniert
+- Import für ältere Monate nicht möglich
+- **Empfehlung:** Monatsdaten manuell oder per CSV importieren
 
-*Wärmepumpen:*
-- Viessmann (Vitocal, ViCare)
-- Daikin (Altherma)
-- Vaillant (aroTHERM)
-- Bosch (IDS, Compress)
-- Mitsubishi (Ecodan, MELCloud)
-- Panasonic (Aquarea, Heishamon)
-- Stiebel Eltron (WPL, ISG)
-- Nibe (S-Serie)
-- Alpha Innotec (Luxtronik)
-- Lambda
-- iDM (Navigator)
-- Toshiba (Estia)
-- LG (Therma V)
-
-*E-Autos & Wallboxen:*
-- evcc (höchste Priorität)
-- Smart #1
-- Wallbox (native Integration)
-
-**Dateien:**
-- `frontend/src/hooks/useSetupWizard.ts` (State-Management - komplett überarbeitet)
-- `frontend/src/components/setup-wizard/` (Wizard-Komponenten)
-- `frontend/src/components/setup-wizard/steps/DiscoveryStep.tsx` (vereinfacht)
-- `frontend/src/components/setup-wizard/steps/InvestitionenStep.tsx` (komplett neu)
-- `frontend/src/components/setup-wizard/steps/SensorConfigStep.tsx` (neu)
-- `frontend/src/components/setup-wizard/steps/SummaryStep.tsx` (angepasst)
-- `frontend/src/components/setup-wizard/steps/AnlageStep.tsx` (Geocoding hinzugefügt)
-- `frontend/src/components/AppWithSetup.tsx` (DB-Check vor LocalStorage)
-- `backend/api/routes/anlagen.py` (Geocoding & Sensor-Config Endpoints)
-- `backend/models/anlage.py` (ha_sensor_* Felder)
+#### PV-Module werden nicht automatisch erkannt
+PV-Module haben keine eigenen HA-Sensoren und müssen manuell als Investition angelegt werden. Die Angaben zu Ausrichtung und Neigung sind wichtig für die PVGIS-Ertragsprognose.
 
 ---
 
-### Feature 2.16: String-basierte IST-Datenerfassung pro PV-Modul
-**Status:** ✅ Implementiert
+## Änderungen in v0.8.x
 
-- `ha_entity_id` Feld zum Investition-Model hinzugefügt
-- Neues `StringMonatsdaten` Model/Tabelle erstellt
-- HA Integration API mit String-Sensor Endpoints erweitert
-- Frontend-Formulare und APIs aktualisiert
-- PrognoseVsIst-Seite mit Modul-SOLL-IST-Vergleich erweitert
+### v0.8.1 (2026-02-05)
+- **Wizard vereinfacht:** Monatsdaten-Fokus entfernt
+- **Individualisierte "Nächste Schritte":** Summary zeigt priorisierte Schritte basierend auf Konfiguration
+- **Verbessertes Hinzufügen von Investitionen:** Scroll und Highlight bei neuen Einträgen
+- **HA-Import UX verbessert:** Loading-Overlay und Detail-Feedback (welche Sensoren Daten lieferten)
 
-**Dateien:**
-- `backend/models/string_monatsdaten.py` (neu)
-- `backend/models/investition.py` (ha_entity_id hinzugefügt)
-- `backend/api/routes/ha_integration.py` (String-Endpoints)
-- `frontend/src/components/forms/InvestitionForm.tsx`
-- `frontend/src/pages/PrognoseVsIst.tsx`
-
-### Feature 2.1: HA Energy-Integration
-**Status:** ✅ Funktioniert für aktuelle Monate
-
-- `_get_ha_statistics_monthly()` Helper-Funktion (History API)
-- `POST /ha/statistics/monthly` Endpoint
-- `POST /ha/import/monatsdaten` Endpoint mit `ueberschreiben` Option
-- `GET /ha/import/preview/{anlage_id}` Endpoint
-- Frontend API-Funktionen
-- Import für aktuelle Monate (letzte ~10 Tage History) funktioniert
-
-**Einschränkung:** Ältere Monate (> 10 Tage) können nicht importiert werden, da die HA History API nur kurzzeitige Daten liefert.
-
-**Dateien:**
-- `backend/api/routes/ha_integration.py`
-- `frontend/src/api/ha.ts`
-
-### UI: Sensor-Mapping in Settings
-**Status:** ✅ Implementiert
-
-- Zeigt alle 5 Sensor-Zuordnungen (PV, Einspeisung, Netzbezug, Batterie Ladung/Entladung)
-- Zeigt konfigurierte Entity-IDs an
-- Aufklappbare Liste verfügbarer HA Energy-Sensoren
-- Info-Box zur Konfiguration über HA Add-on-Einstellungen
-
-**Dateien:**
-- `frontend/src/pages/Settings.tsx`
-- `frontend/src/api/system.ts`
-- `backend/main.py` (/api/settings erweitert)
-
-### UI: Import-Vorschau auf Monatsdaten-Seite
-**Status:** ✅ Implementiert
-
-- "Aus HA importieren" Button in Toolbar
-- Modal mit Jahr-Auswahl und Vorschau
-- Vergleich DB-Daten vs. HA-Daten für jeden Monat
-- Status-Anzeige: Vorhanden, Importierbar, Aktualisierbar
-- Import einzelner Monate oder alle fehlenden
-
-**Dateien:**
-- `frontend/src/pages/Monatsdaten.tsx`
-
-### Feature: HA Auto-Discovery (v0.6.0 → v0.8.0)
-**Status:** ✅ Implementiert und erweitert
-
-Automatische Erkennung von Home Assistant Geräten und Sensor-Mappings.
-
-**Funktionen:**
-- Erkennt Wechselrichter aller großen Hersteller (SMA, Fronius, Kostal, Huawei, etc.)
-- Erkennt Balkonkraftwerke (EcoFlow, Hoymiles, Anker, APSystems, Deye, OpenDTU)
-- Erkennt Wärmepumpen (Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Alpha Innotec, Lambda, iDM, Toshiba, LG)
-- Erkennt E-Autos und Wallboxen (evcc, Smart, Wallbox)
-- Vorschläge für Sensor-Mappings (Monatsdaten-Import)
-- **Empfohlen/Alle Toggle:** Benutzer können zwischen automatisch erkannten Sensoren und allen Energy-Sensoren wählen
-- Vorschläge für Investitionen mit vorausgefüllten Parametern
-- Duplikat-Erkennung (bereits konfigurierte Geräte markiert)
-- evcc hat Priorität über native Wallbox/Smart Integrationen
-
-**Aufruf:**
-- **Beim ersten Start:** Setup-Wizard führt automatisch durch Discovery
-- Nach Anlage-Erstellung: Discovery-Dialog erscheint automatisch
-- Auf Anlagen-Seite: Such-Button (Lupe) neben jeder Anlage
-- In Settings: "Geräte erkennen" Button im HA-Bereich
-
-**API:**
-- `GET /api/ha/discover?anlage_id={id}&manufacturer={filter}` - Discovery-Endpoint
-- `GET /api/ha/manufacturers` - Liste unterstützter Hersteller
-- `GET /api/anlagen/geocode/lookup?plz={plz}&ort={ort}` - Geocoding-Endpoint (neu)
-- `GET/PATCH /api/anlagen/{id}/sensors` - Sensor-Konfiguration (neu)
-
-**Dateien:**
-- `backend/api/routes/ha_integration.py` (INTEGRATION_PATTERNS, Discovery-Logik)
-- `backend/api/routes/anlagen.py` (Geocoding, Sensor-Config)
-- `frontend/src/api/ha.ts` (Discovery Types und API)
-- `frontend/src/api/anlagen.ts` (Geocode, SensorConfig)
-- `frontend/src/hooks/useDiscovery.ts` (Discovery Hook)
-- `frontend/src/components/discovery/` (Dialog-Komponenten)
-
-### Dashboards (Phase 2)
-**Status:** ✅ Implementiert
-
-- **E-Auto Dashboard (2.4):** KPIs, Ladequellen, Kostenvergleich, V2H-Sektion
-- **Speicher Dashboard (2.6):** Vollzyklen, Effizienz, Lade-/Entlade-Charts
-- **Wallbox Dashboard (2.7):** PV-Anteil, Heimladung vs. Extern, ROI
-
-**Dateien:**
-- `frontend/src/pages/EAutoDashboard.tsx`
-- `frontend/src/pages/SpeicherDashboard.tsx`
-- `frontend/src/pages/WallboxDashboard.tsx`
+### v0.8.0 (2026-02-05)
+- **Wizard Refactoring:** Komplett überarbeiteter Setup-Wizard
+- **Sensor-Konfiguration im Wizard:** Ersetzt config.yaml Einstellung
+- **Investitionen-Schritt:** Alle Investitionen auf einer Seite bearbeiten
+- **Auto-Start bei leerer DB:** Wizard startet automatisch wenn keine Anlagen vorhanden
 
 ---
 
-## Bekannte Einschränkungen
+## Wizard-Schritte (v0.8.1)
 
-### ⚠️ HA Long-Term Statistics nicht abrufbar
+1. **Willkommen** - Einführung
+2. **Anlage erstellen** - Name, Leistung, Standort (+ Geocoding)
+3. **HA-Verbindung prüfen** - Automatisch, überspringbar
+4. **Strompreise** - Mit deutschen Standardwerten
+5. **Auto-Discovery** - Geräte erkennen & als Investitionen anlegen
+6. **Investitionen vervollständigen** - Kaufpreis, Datum, Details
+7. **Sensor-Konfiguration** - HA-Sensoren zuordnen
+8. **Zusammenfassung** - Mit individualisierten nächsten Schritten
+9. **Abschluss** - Erfolgsmeldung
 
-**Problem:**
-Die Home Assistant REST API (`/api/history/period/`) gibt nur **kurzfristige History-Daten** zurück (ca. 10 Tage, je nach Recorder-Konfiguration). **Long-Term Statistics** (die im Energy Dashboard sichtbar sind) sind **nur über die WebSocket API** zugänglich.
+---
 
-**Auswirkung:**
-- Import für aktuelle Monate (Jan/Feb 2026) funktioniert ✅
-- Import für ältere Monate (2025 und früher) nicht möglich ❌
+## Unterstützte Geräte (Auto-Discovery)
 
-**Vorbereitete Lösung (derzeit deaktiviert):**
-WebSocket-Client implementiert in `backend/services/ha_websocket.py`, funktioniert aber noch nicht zuverlässig im Add-on-Container. Die WebSocket-URL für Add-ons muss noch recherchiert werden.
+### Wechselrichter
+SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
 
-**Mögliche zukünftige Lösungen:**
-1. WebSocket-Verbindung debuggen und aktivieren
-2. Direkter Datenbankzugriff auf HA SQLite (`statistics` Tabelle)
-3. Custom Component für REST-Zugriff auf Statistics
+### Balkonkraftwerke
+EcoFlow, Hoymiles, Anker SOLIX, APSystems, Deye, OpenDTU/AhoyDTU
+
+### Wärmepumpen
+Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Alpha Innotec, Lambda, iDM, Toshiba, LG
+
+### E-Autos & Wallboxen
+evcc (höchste Priorität), Smart, Wallbox
+
+---
+
+## Architektur
+
+```
+eedc-homeassistant/
+├── docs/
+│   ├── STATUS.md           # Dieses Dokument
+│   ├── STATUS_v0.7.md      # Archiv
+│   ├── HANDOVER.md         # Entwickler-Handover
+│   └── DEVELOPMENT.md      # Development Guide
+├── eedc/
+│   ├── config.yaml         # HA Add-on Konfiguration
+│   ├── backend/
+│   │   ├── main.py         # FastAPI Entry
+│   │   ├── api/routes/
+│   │   │   ├── ha_integration.py   # Discovery, Import
+│   │   │   └── anlagen.py          # Geocoding, Sensor-Config
+│   │   ├── models/
+│   │   └── services/
+│   └── frontend/
+│       ├── src/
+│       │   ├── components/
+│       │   │   ├── setup-wizard/   # Wizard-Komponenten
+│       │   │   └── forms/
+│       │   ├── hooks/
+│       │   │   └── useSetupWizard.ts
+│       │   └── pages/
+│       └── dist/               # Build (wird committed)
+```
+
+---
+
+## Nächste Schritte (Roadmap)
+
+### Priorität 1: Datenqualität verbessern
+- [ ] Monatsdaten-Seite: Bessere UX für manuelle Erfassung
+- [ ] CSV-Import: Validierung und Fehlerbehandlung verbessern
+- [ ] Investitionen-Seite: Direkter Zugang zu PV-Module hinzufügen
+
+### Priorität 2: Auswertungen ausbauen
+- [ ] Dashboard: Wärmepumpe (Backend vorbereitet)
+- [ ] PDF-Export (jsPDF vorhanden)
+- [ ] Jahresvergleich
+
+### Priorität 3 (Zukunftsvision): HA-Integration vertiefen
+- [ ] WebSocket für Long-Term Statistics aktivieren
+- [ ] **EEDC-Gerät in HA erstellen** mit berechneten KPIs:
+  - Eigenverbrauchsquote (%)
+  - Autarkiegrad (%)
+  - ROI-Status (%)
+  - Amortisationsprognose (Datum)
+  - CO2-Ersparnis (kg)
+- [ ] Sensoren am Wechselrichter-Gerät ablegen
 
 ---
 
 ## Sensor-Konfiguration
 
-**Neu in v0.8.0:** Sensoren können jetzt im Setup-Wizard konfiguriert werden. Die Konfiguration wird in der Anlage-Tabelle gespeichert und ersetzt die config.yaml Einstellung.
-
-Alternativ können Sensoren weiterhin in der Add-on-Konfiguration eingetragen werden:
+Sensoren können im Setup-Wizard oder in der Add-on-Konfiguration eingetragen werden:
 
 ```yaml
 ha_sensors:
-  pv_erzeugung: sensor.sn_3012412676_pv_gen_meter
-  einspeisung: sensor.sn_3012412676_metering_total_yield
-  netzbezug: sensor.sn_3012412676_metering_total_absorbed
-  batterie_ladung: sensor.sn_3012412676_battery_charge_total
-  batterie_entladung: sensor.sn_3012412676_battery_discharge_total
+  pv_erzeugung: sensor.xyz_pv_gen_meter
+  einspeisung: sensor.xyz_metering_total_yield
+  netzbezug: sensor.xyz_metering_total_absorbed
+  batterie_ladung: sensor.xyz_battery_charge_total
+  batterie_entladung: sensor.xyz_battery_discharge_total
 ```
 
-Die Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term Statistics speichert.
-
----
-
-## Git Historie (Version 0.7.x - 0.8.x)
-
-```
-xxxx feat(wizard): Refactor wizard with full investment capture and sensor config (v0.8.0)
-780a4c1 fix(wizard): Auto-start wizard when database is empty (v0.7.5)
-668f89f docs: Update documentation for v0.7.4 release
-1618457 feat(discovery): Add support for heat pumps and balcony power plants (v0.7.4)
-b3040a7 chore: Bump add-on version to 0.7.3
-f3a2d30 fix(wizard): Fix parameter field names for investments (v0.7.3)
-6b03258 fix: Update frontend version display to 0.7.2
-cbe7ebc chore: Include pre-built frontend in repository
-...
-```
-
----
-
-## Nächste Schritte (gemäß PROJEKTPLAN.md)
-
-### Phase 2 - Offen:
-- [ ] 2.12 PDF-Export (jsPDF Integration)
-- [ ] 2.5 Dashboard: Wärmepumpe (Backend für WP-Discovery jetzt vorbereitet)
-
-### Optional für später:
-- [ ] WebSocket für Long-Term Statistics zum Laufen bringen
-- [ ] String-Import aus HA vervollständigen (benötigt Long-Term Statistics)
+**Wichtig:** Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term Statistics speichert.
 
 ---
 
@@ -281,7 +179,7 @@ cd eedc/backend
 source venv/bin/activate
 uvicorn main:app --reload --port 8099
 
-# Frontend starten (in neuem Terminal)
+# Frontend starten (neues Terminal)
 cd eedc/frontend
 npm run dev
 
@@ -291,22 +189,15 @@ npm run build
 
 ---
 
-## Test-Umgebung des Benutzers
+## Git Historie (aktuelle Commits)
 
-**Home Assistant Setup:**
-- SMA Wechselrichter (Sensoren: `sensor.sn_3012412676_*`)
-- evcc Integration (Wallbox + Fahrzeug)
-- Smart #1 E-Auto Integration
-- Wallbox Integration (wird durch evcc überdeckt)
-
-**Getestete Funktionen:**
-- ✅ Setup-Wizard führt durch komplette Ersteinrichtung
-- ✅ Strompreise mit deutschen Standardwerten
-- ✅ Auto-Discovery erkennt alle 4 Geräte (SMA WR, SMA Speicher, evcc Wallbox, evcc E-Auto)
-- ✅ Sensor-Mappings werden korrekt vorgeschlagen
-- ✅ "Alle" Toggle zeigt alle Energy-Sensoren für manuelle Auswahl
-- ✅ Investitionen werden mit Details erstellt (Fix v0.7.3: Feldnamen-Konsistenz)
-- ✅ E-Auto Batteriekapazität wird korrekt gespeichert
+```
+cbcad51 refactor(wizard): Simplify wizard, remove Monatsdaten focus, add dynamic next steps
+59a1933 fix(import): Improve HA import UX with loading overlay and details feedback
+11888bf fix(import): Use anlage-based sensor config for HA import
+cc8a0c5 feat(wizard): Refactor wizard with full investment capture and sensor config (v0.8.0)
+780a4c1 fix(wizard): Auto-start wizard when database is empty (v0.7.5)
+```
 
 ---
 
