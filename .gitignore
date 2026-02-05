@@ -22,7 +22,7 @@ yarn-error.log*
 .npm
 
 # Build outputs
-eedc/frontend/dist/
+# eedc/frontend/dist/ - jetzt im Repo für schnellere Add-on Installation
 *.js.map
 
 # IDE
