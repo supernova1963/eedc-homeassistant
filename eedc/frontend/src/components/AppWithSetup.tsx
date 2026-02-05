@@ -27,20 +27,16 @@ export default function AppWithSetup({ children }: AppWithSetupProps) {
 
   const checkIfWizardNeeded = async () => {
     try {
-      // Prüfen ob Wizard bereits abgeschlossen
-      const wizardCompleted = localStorage.getItem(WIZARD_COMPLETED_KEY) === 'true'
-
-      if (wizardCompleted) {
-        setShowWizard(false)
-        setIsLoading(false)
-        return
-      }
-
-      // Prüfen ob Anlagen vorhanden
+      // WICHTIG: Datenbank hat Priorität über LocalStorage!
+      // Bei Neuinstallation (keine Anlagen) soll Wizard IMMER starten,
+      // auch wenn LocalStorage noch "completed" enthält.
       const anlagen = await anlagenApi.list()
 
       if (anlagen.length === 0) {
-        // Keine Anlagen -> Wizard anzeigen
+        // Keine Anlagen in DB -> Wizard anzeigen (LocalStorage ignorieren)
+        // LocalStorage zurücksetzen für konsistenten Zustand
+        localStorage.removeItem(WIZARD_COMPLETED_KEY)
+        localStorage.removeItem('eedc_setup_wizard_state')
         setShowWizard(true)
       } else {
         // Anlagen vorhanden -> Wizard als abgeschlossen markieren
