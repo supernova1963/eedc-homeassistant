@@ -15,7 +15,7 @@
  * 9. Complete
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
 import { haApi } from '../api/ha'
@@ -222,6 +222,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
   // Alle Investitionen der Anlage
   const [investitionen, setInvestitionen] = useState<Investition[]>([])
 
+  // Pending updates für Debouncing (verhindert Race Conditions)
+  const pendingUpdatesRef = useRef<Map<number, { data: Partial<Investition>; timer: ReturnType<typeof setTimeout> }>>(new Map())
+
   // State in LocalStorage speichern
   useEffect(() => {
     localStorage.setItem(WIZARD_STATE_KEY, JSON.stringify({
@@ -259,12 +262,35 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setError(null)
   }, [])
 
-  const nextStep = useCallback(() => {
+  // Alle pending updates sofort ausführen (flush)
+  const flushPendingUpdates = useCallback(async () => {
+    const pending = pendingUpdatesRef.current
+    if (pending.size === 0) return
+
+    const promises: Promise<unknown>[] = []
+    pending.forEach(({ data, timer }, id) => {
+      clearTimeout(timer)
+      promises.push(
+        investitionenApi.update(id, data).catch(e => {
+          console.error(`Fehler beim Update von Investition ${id}:`, e)
+        })
+      )
+    })
+    pending.clear()
+
+    await Promise.all(promises)
+    await refreshInvestitionen()
+  }, [refreshInvestitionen])
+
+  const nextStep = useCallback(async () => {
+    // Vor dem Wechsel: Alle pending updates ausführen
+    await flushPendingUpdates()
+
     const currentIndex = STEP_ORDER.indexOf(step)
     if (currentIndex < STEP_ORDER.length - 1) {
       goToStep(STEP_ORDER[currentIndex + 1])
     }
-  }, [step, goToStep])
+  }, [step, goToStep, flushPendingUpdates])
 
   const prevStep = useCallback(() => {
     const currentIndex = STEP_ORDER.indexOf(step)
@@ -440,14 +466,41 @@ export function useSetupWizard(): UseSetupWizardReturn {
     }
   }, [wizardState.anlageId, anlage, nextStep, refreshInvestitionen])
 
-  // NEU: Investition aktualisieren
+  // NEU: Investition aktualisieren mit Debouncing
+  // Verhindert Race Conditions bei schnellen Eingaben
   const updateInvestition = useCallback(async (id: number, data: Partial<Investition>) => {
-    try {
-      await investitionenApi.update(id, data)
-      await refreshInvestitionen()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Aktualisieren')
+    // Bestehenden Timer für diese Investition löschen
+    const existing = pendingUpdatesRef.current.get(id)
+    if (existing?.timer) {
+      clearTimeout(existing.timer)
     }
+
+    // Daten akkumulieren (merge mit vorherigen pending updates)
+    const mergedData = existing?.data
+      ? {
+          ...existing.data,
+          ...data,
+          // Parameter speziell mergen wenn beide vorhanden
+          parameter: data.parameter
+            ? { ...(existing.data.parameter || {}), ...data.parameter }
+            : existing.data.parameter,
+        }
+      : data
+
+    // Neuen Timer setzen (500ms Debounce)
+    const timer = setTimeout(async () => {
+      pendingUpdatesRef.current.delete(id)
+      try {
+        await investitionenApi.update(id, mergedData)
+        // Nicht sofort refreshen - nur bei Fehlern oder explizit
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Fehler beim Aktualisieren')
+        // Bei Fehler: Daten neu laden
+        await refreshInvestitionen()
+      }
+    }, 500)
+
+    pendingUpdatesRef.current.set(id, { data: mergedData, timer })
   }, [refreshInvestitionen])
 
   // NEU: Investition löschen
