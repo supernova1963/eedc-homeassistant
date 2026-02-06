@@ -271,11 +271,23 @@ async def import_csv(
             sonnenstunden = parse_float(row.get("Sonnenstunden", ""))
             notizen = row.get("Notizen", "").strip() or None
 
+            # Berechnete Felder vorbereiten
+            direktverbrauch = None
+            eigenverbrauch = None
+            gesamtverbrauch = None
+            if pv_erzeugung:
+                direktverbrauch = max(0, pv_erzeugung - einspeisung - (batterie_ladung or 0))
+                eigenverbrauch = direktverbrauch + (batterie_entladung or 0)
+                gesamtverbrauch = eigenverbrauch + netzbezug
+
             if existing_md:
                 # Update
                 existing_md.einspeisung_kwh = einspeisung
                 existing_md.netzbezug_kwh = netzbezug
                 existing_md.pv_erzeugung_kwh = pv_erzeugung
+                existing_md.direktverbrauch_kwh = direktverbrauch
+                existing_md.eigenverbrauch_kwh = eigenverbrauch
+                existing_md.gesamtverbrauch_kwh = gesamtverbrauch
                 existing_md.batterie_ladung_kwh = batterie_ladung
                 existing_md.batterie_entladung_kwh = batterie_entladung
                 existing_md.globalstrahlung_kwh_m2 = globalstrahlung
@@ -291,6 +303,9 @@ async def import_csv(
                     einspeisung_kwh=einspeisung,
                     netzbezug_kwh=netzbezug,
                     pv_erzeugung_kwh=pv_erzeugung,
+                    direktverbrauch_kwh=direktverbrauch,
+                    eigenverbrauch_kwh=eigenverbrauch,
+                    gesamtverbrauch_kwh=gesamtverbrauch,
                     batterie_ladung_kwh=batterie_ladung,
                     batterie_entladung_kwh=batterie_entladung,
                     globalstrahlung_kwh_m2=globalstrahlung,
@@ -298,13 +313,6 @@ async def import_csv(
                     notizen=notizen,
                     datenquelle="csv"
                 )
-
-                # Berechnete Felder
-                if pv_erzeugung:
-                    md.direktverbrauch_kwh = max(0, pv_erzeugung - einspeisung - (batterie_ladung or 0))
-                    md.eigenverbrauch_kwh = md.direktverbrauch_kwh + (batterie_entladung or 0)
-                    md.gesamtverbrauch_kwh = md.eigenverbrauch_kwh + netzbezug
-
                 db.add(md)
 
             importiert += 1
@@ -313,6 +321,9 @@ async def import_csv(
             fehler.append(f"Zeile {i}: Ungültiger Wert - {e}")
         except Exception as e:
             fehler.append(f"Zeile {i}: Fehler - {e}")
+
+    # Änderungen persistieren
+    await db.flush()
 
     return ImportResult(
         erfolg=len(fehler) == 0,
