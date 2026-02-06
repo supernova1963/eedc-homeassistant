@@ -334,7 +334,11 @@ async def _upsert_investition_monatsdaten(
     verbrauch_daten: dict,
     ueberschreiben: bool
 ):
-    """Erstellt oder aktualisiert InvestitionMonatsdaten."""
+    """Erstellt oder aktualisiert InvestitionMonatsdaten.
+
+    Bei existierenden Einträgen werden neue Felder IMMER ergänzt.
+    Bestehende Felder werden nur bei ueberschreiben=True überschrieben.
+    """
     existing = await db.execute(
         select(InvestitionMonatsdaten).where(
             InvestitionMonatsdaten.investition_id == investition_id,
@@ -345,12 +349,17 @@ async def _upsert_investition_monatsdaten(
     existing_imd = existing.scalar_one_or_none()
 
     if existing_imd:
-        if ueberschreiben:
-            # Merge mit bestehenden Daten
-            if existing_imd.verbrauch_daten:
+        # Immer mergen: Neue Felder ergänzen
+        if existing_imd.verbrauch_daten:
+            if ueberschreiben:
+                # Überschreiben: Neue Daten haben Priorität
                 existing_imd.verbrauch_daten = {**existing_imd.verbrauch_daten, **verbrauch_daten}
             else:
-                existing_imd.verbrauch_daten = verbrauch_daten
+                # Nicht überschreiben: Nur fehlende Felder ergänzen
+                merged = {**verbrauch_daten, **existing_imd.verbrauch_daten}
+                existing_imd.verbrauch_daten = merged
+        else:
+            existing_imd.verbrauch_daten = verbrauch_daten
     else:
         imd = InvestitionMonatsdaten(
             investition_id=investition_id,
