@@ -2,8 +2,20 @@ import { useState, useEffect, FormEvent } from 'react'
 import { Button, Input, Alert } from '../ui'
 import type { Investition, InvestitionTyp } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
-import { haApi } from '../../api'
+import { haApi, investitionenApi } from '../../api'
 import type { HASensor } from '../../api'
+import { AlertCircle } from 'lucide-react'
+
+// Parent-Kind Beziehungen (analog zu useSetupWizard.ts)
+const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
+  'pv-module': 'wechselrichter',  // Pflicht
+  'speicher': 'wechselrichter',    // Optional
+}
+const PARENT_REQUIRED: InvestitionTyp[] = ['pv-module']
+
+const PARENT_TYPE_LABELS: Record<string, string> = {
+  'wechselrichter': 'Wechselrichter',
+}
 
 interface InvestitionFormProps {
   investition?: Investition | null
@@ -30,6 +42,8 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
   const [error, setError] = useState<string | null>(null)
   const [stringSensors, setStringSensors] = useState<HASensor[]>([])
   const [loadingSensors, setLoadingSensors] = useState(false)
+  const [possibleParents, setPossibleParents] = useState<Investition[]>([])
+  const [loadingParents, setLoadingParents] = useState(false)
 
   const [formData, setFormData] = useState({
     bezeichnung: investition?.bezeichnung || `Mein ${typLabels[typ]}`,
@@ -38,12 +52,28 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     anschaffungskosten_alternativ: investition?.anschaffungskosten_alternativ?.toString() || '',
     betriebskosten_jahr: investition?.betriebskosten_jahr?.toString() || '',
     aktiv: investition?.aktiv ?? true,
+    parent_investition_id: investition?.parent_investition_id?.toString() || '',
     // PV-Module direkte Felder
     leistung_kwp: investition?.leistung_kwp?.toString() || '',
     ausrichtung: investition?.ausrichtung || 'Süd',
     neigung_grad: investition?.neigung_grad?.toString() || '30',
     ha_entity_id: investition?.ha_entity_id || '',
   })
+
+  // Parent-Typ für diesen Investitions-Typ ermitteln
+  const parentTyp = PARENT_MAPPING[typ]
+  const isParentRequired = PARENT_REQUIRED.includes(typ)
+
+  // Parent-Investitionen laden wenn nötig
+  useEffect(() => {
+    if (parentTyp) {
+      setLoadingParents(true)
+      investitionenApi.list(anlageId, parentTyp, true)
+        .then(parents => setPossibleParents(parents.filter(p => p.id !== investition?.id)))
+        .catch(() => setPossibleParents([]))
+        .finally(() => setLoadingParents(false))
+    }
+  }, [parentTyp, anlageId, investition?.id])
 
   // String-Sensoren laden für PV-Module
   useEffect(() => {
@@ -154,6 +184,12 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         }
       })
 
+      // Validierung: Parent erforderlich?
+      if (isParentRequired && possibleParents.length > 0 && !formData.parent_investition_id) {
+        setError(`${typLabels[typ]} müssen einem ${PARENT_TYPE_LABELS[parentTyp!] || parentTyp} zugeordnet werden`)
+        return
+      }
+
       const data: InvestitionCreate | InvestitionUpdate = {
         ...(investition ? {} : { anlage_id: anlageId, typ }),
         bezeichnung: formData.bezeichnung.trim(),
@@ -163,6 +199,8 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         betriebskosten_jahr: formData.betriebskosten_jahr ? parseFloat(formData.betriebskosten_jahr) : undefined,
         aktiv: formData.aktiv,
         parameter: Object.keys(convertedParams).length > 0 ? convertedParams : undefined,
+        // Parent-Zuordnung (PV-Module → Wechselrichter, etc.)
+        parent_investition_id: formData.parent_investition_id ? parseInt(formData.parent_investition_id) : undefined,
         // PV-Module spezifische Felder
         ...(typ === 'pv-module' && {
           leistung_kwp: formData.leistung_kwp ? parseFloat(formData.leistung_kwp) : undefined,
@@ -244,6 +282,63 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           <span className="text-gray-700 dark:text-gray-300">Aktiv (in Berechnungen berücksichtigen)</span>
         </label>
       </div>
+
+      {/* Parent-Zuordnung (z.B. PV-Module → Wechselrichter) */}
+      {parentTyp && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Zuordnung</h3>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Gehört zu ({PARENT_TYPE_LABELS[parentTyp] || parentTyp})
+              {isParentRequired ? ' *' : ' (optional)'}
+              {loadingParents && <span className="text-xs text-gray-400 ml-2">(Laden...)</span>}
+            </label>
+            {possibleParents.length > 0 ? (
+              <>
+                <select
+                  name="parent_investition_id"
+                  value={formData.parent_investition_id}
+                  onChange={(e) => setFormData(prev => ({ ...prev, parent_investition_id: e.target.value }))}
+                  className={`input w-full ${
+                    isParentRequired && !formData.parent_investition_id
+                      ? 'border-amber-500 dark:border-amber-500'
+                      : ''
+                  }`}
+                  required={isParentRequired}
+                >
+                  <option value="">{isParentRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}</option>
+                  {possibleParents.map(p => (
+                    <option key={p.id} value={p.id}>{p.bezeichnung}</option>
+                  ))}
+                </select>
+                {isParentRequired && !formData.parent_investition_id && (
+                  <p className="mt-1 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {typ === 'pv-module' ? 'PV-Module müssen einem Wechselrichter zugeordnet werden' : 'Pflichtfeld'}
+                  </p>
+                )}
+              </>
+            ) : !loadingParents ? (
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {isParentRequired ? (
+                    <span>
+                      Bitte legen Sie zuerst einen <strong>{PARENT_TYPE_LABELS[parentTyp] || parentTyp}</strong> an,
+                      bevor Sie {typLabels[typ]} erstellen können.
+                    </span>
+                  ) : (
+                    <span>
+                      Kein {PARENT_TYPE_LABELS[parentTyp] || parentTyp} vorhanden.
+                      Zuordnung ist optional.
+                    </span>
+                  )}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {/* PV-Module spezifische Felder (direkte Felder, nicht in paramData) */}
       {typ === 'pv-module' && (

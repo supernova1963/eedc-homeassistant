@@ -466,15 +466,23 @@ export function useSetupWizard(): UseSetupWizardReturn {
       throw new Error('Keine Anlage vorhanden')
     }
 
-    const newInvestition = await investitionenApi.create({
-      anlage_id: wizardState.anlageId,
-      typ,
-      bezeichnung: `Neue ${INVESTITION_TYP_LABELS[typ]}`,
-      aktiv: true,
-    })
+    setError(null)
 
-    await refreshInvestitionen()
-    return newInvestition
+    try {
+      const newInvestition = await investitionenApi.create({
+        anlage_id: wizardState.anlageId,
+        typ,
+        bezeichnung: `Neue ${INVESTITION_TYP_LABELS[typ]}`,
+        aktiv: true,
+      })
+
+      await refreshInvestitionen()
+      return newInvestition
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Fehler beim Hinzufügen'
+      setError(message)
+      throw e
+    }
   }, [wizardState.anlageId, refreshInvestitionen])
 
   // Wizard abschließen
