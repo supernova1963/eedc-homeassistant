@@ -469,13 +469,26 @@ export function useSetupWizard(): UseSetupWizardReturn {
   // NEU: Investition aktualisieren mit Debouncing
   // Verhindert Race Conditions bei schnellen Eingaben
   const updateInvestition = useCallback(async (id: number, data: Partial<Investition>) => {
-    // Bestehenden Timer für diese Investition löschen
+    // 1. Sofort lokalen State optimistisch aktualisieren (für UI-Reaktivität)
+    setInvestitionen(prev => prev.map(inv => {
+      if (inv.id !== id) return inv
+      return {
+        ...inv,
+        ...data,
+        // Parameter speziell mergen
+        parameter: data.parameter
+          ? { ...(inv.parameter || {}), ...data.parameter }
+          : inv.parameter,
+      }
+    }))
+
+    // 2. Bestehenden Timer für diese Investition löschen
     const existing = pendingUpdatesRef.current.get(id)
     if (existing?.timer) {
       clearTimeout(existing.timer)
     }
 
-    // Daten akkumulieren (merge mit vorherigen pending updates)
+    // 3. Daten akkumulieren (merge mit vorherigen pending updates)
     const mergedData = existing?.data
       ? {
           ...existing.data,
@@ -487,15 +500,15 @@ export function useSetupWizard(): UseSetupWizardReturn {
         }
       : data
 
-    // Neuen Timer setzen (500ms Debounce)
+    // 4. Neuen Timer setzen (500ms Debounce für API-Call)
     const timer = setTimeout(async () => {
       pendingUpdatesRef.current.delete(id)
       try {
         await investitionenApi.update(id, mergedData)
-        // Nicht sofort refreshen - nur bei Fehlern oder explizit
+        // Nicht sofort refreshen - nur bei Fehlern
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Fehler beim Aktualisieren')
-        // Bei Fehler: Daten neu laden
+        // Bei Fehler: Daten vom Server neu laden
         await refreshInvestitionen()
       }
     }, 500)
