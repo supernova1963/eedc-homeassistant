@@ -4,48 +4,45 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 
 ## Features
 
-- **Setup-Wizard** - Geführte Ersteinrichtung für neue Benutzer (NEU v0.7.0)
+- **Setup-Wizard** - Geführte Ersteinrichtung (7 Schritte, vereinfacht in v0.9)
 - **Lokale Datenspeicherung** - Alle Daten bleiben auf deinem Home Assistant
 - **PV-Anlagen Verwaltung** - Stammdaten, Leistung, Standort
 - **Multi-Modul PV-Anlagen** - Verschiedene Dachflächen mit individueller Ausrichtung/Neigung
-- **PVGIS Integration** - Automatische Ertragsprognosen von der EU-Kommission
+- **Parent-Child Beziehungen** - PV-Module → Wechselrichter, Speicher → Hybrid-WR (v0.9)
+- **PVGIS Integration** - Ertragsprognosen pro PV-Modul von der EU-Kommission
 - **Prognose vs. IST** - Vergleich der erwarteten mit tatsächlicher Erzeugung
 - **Monatsdaten Erfassung** - Manuell oder CSV-Import
+- **Personalisierte CSV-Vorlagen** - Dynamische Spalten basierend auf Investitionen (v0.9)
 - **Umfassende Auswertungen** - Autarkie, Eigenverbrauch, Wirtschaftlichkeit
 - **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox, PV-Module, Balkonkraftwerk
 - **ROI-Dashboard** - Amortisationsberechnung für alle Investitionen
-- **Home Assistant Integration** - Import aus HA Energy Dashboard (aktuelle Monate)
-- **HA Auto-Discovery** - Automatische Erkennung von Geräten (Wechselrichter, Wärmepumpen, Balkonkraftwerke, E-Autos, Wallboxen)
+- **HA Auto-Discovery** - Erkennung von Geräten (nur für Ersteinrichtung)
 - **Dark Mode** - Vollständige Unterstützung
 
-## Aktueller Status
+## Aktueller Status (v0.9.0)
 
-| Phase | Status | Fortschritt |
-|-------|--------|-------------|
-| Phase 0: Setup | ✅ | 6/6 |
-| Phase 1: MVP | ✅ | 19/19 |
-| Phase 2: Erweitert | 🔄 | 12/16 |
-
-**Was funktioniert (getestet in Home Assistant):**
-- ✅ **Setup-Wizard** (geführte Ersteinrichtung mit 8 Schritten)
+**Was funktioniert:**
+- ✅ **Setup-Wizard** (7 Schritte, vereinfacht)
 - ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
-- ✅ CSV-Import (mit automatischer Trennzeichen-Erkennung)
+- ✅ **CSV-Import/Export** (personalisierte Spalten basierend auf Investitionen)
 - ✅ Dashboard mit KPIs und Charts
 - ✅ Auswertung (4 Tabs: Übersicht, PV, Finanzen, CO2)
 - ✅ ROI-Dashboard mit Amortisationsberechnung
-- ✅ **PVGIS Integration** (EU API für Ertragsprognosen)
+- ✅ **PVGIS Integration** (Prognose pro PV-Modul)
 - ✅ **Prognose vs. IST** Vergleich
-- ✅ **PV-Module als Investitionen** (Multi-Dach-Unterstützung)
-- ✅ **HA Energy Import** (aktuelle Monate aus HA History)
-- ✅ **HA Auto-Discovery** (9 Wechselrichter, 13 Wärmepumpen, 6 Balkonkraftwerke, E-Autos, Wallboxen)
-- ✅ Settings mit echten DB-Stats und Sensor-Mapping
+- ✅ **Parent-Child Beziehungen** (PV-Module → Wechselrichter)
+- ✅ **HA Auto-Discovery** (nur für Ersteinrichtung)
+- ✅ Settings mit echten DB-Stats
 - ✅ Dark Mode
 - ✅ Docker-Build
 - ✅ **HA Ingress Integration** (nahtlose Sidebar-Integration)
 - ✅ **HA Backup** (SQLite in /data Volume)
 
-**Bekannte Einschränkung:**
-- ⚠️ HA-Import nur für aktuelle Monate (~10 Tage History) - ältere Daten via CSV importieren
+**v0.9 Änderungen:**
+- HA-Monatsdaten-Import entfernt (war zu unzuverlässig)
+- Datenerfassung nur noch via CSV oder manuell
+- Personalisierte CSV-Vorlagen (Spalten nach Investitions-Bezeichnung)
+- Parent-Child Validierung für PV-Module und Speicher
 
 ## Installation
 
