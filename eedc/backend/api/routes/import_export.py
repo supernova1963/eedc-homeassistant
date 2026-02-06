@@ -78,11 +78,13 @@ async def _import_investition_monatsdaten_v09(
         "batterie_entladung_sum": 0.0,
     }
 
-    # Mapping: sanitized name -> investition
-    inv_by_sanitized_name: dict[str, Investition] = {}
+    # Mapping: Verschiedene Varianten für flexibles Matching
+    # (sanitized, normalized, inv)
+    inv_variants: list[tuple[str, str, Investition]] = []
     for inv in investitionen:
         sanitized = _sanitize_column_name(inv.bezeichnung)
-        inv_by_sanitized_name[sanitized] = inv
+        normalized = _normalize_for_matching(inv.bezeichnung)
+        inv_variants.append((sanitized, normalized, inv))
 
     # Alle Spalten durchgehen und Investitionen matchen
     for col_name, value in row.items():
@@ -90,112 +92,151 @@ async def _import_investition_monatsdaten_v09(
             continue
 
         # Versuche Investition aus Spaltenname zu extrahieren
-        for sanitized_name, inv in inv_by_sanitized_name.items():
-            if not col_name.startswith(sanitized_name):
-                continue
+        matched_inv = None
+        suffix = ""
 
-            suffix = col_name[len(sanitized_name):].lstrip("_")
-            verbrauch_daten = {}
+        # Spaltenname normalisieren für Vergleich
+        col_sanitized = _sanitize_column_name(col_name.split('_')[0] if '_' in col_name else col_name)
 
-            # PV-Module
-            if inv.typ == "pv-module" and suffix == "kWh":
-                pv_val = parse_float(value)
-                if pv_val:
-                    verbrauch_daten["pv_erzeugung_kwh"] = pv_val
-                    summen["pv_erzeugung_sum"] += pv_val
+        for sanitized_name, normalized_name, inv in inv_variants:
+            # Strategie 1: Exaktes Match mit sanitized name
+            if col_name.startswith(sanitized_name + "_"):
+                suffix = col_name[len(sanitized_name):].lstrip("_")
+                matched_inv = inv
+                break
+            elif col_name == sanitized_name:
+                suffix = ""
+                matched_inv = inv
+                break
 
-            # Speicher
-            elif inv.typ == "speicher":
-                if suffix == "Ladung_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladung_kwh"] = val
-                        summen["batterie_ladung_sum"] += val
-                elif suffix == "Entladung_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["entladung_kwh"] = val
-                        summen["batterie_entladung_sum"] += val
+            # Strategie 2: Finde Präfix bis zum bekannten Suffix
+            # Bekannte Suffixe für jeden Typ
+            known_suffixes = [
+                "kWh", "km", "Verbrauch_kWh", "Ladung_PV_kWh", "Ladung_Netz_kWh",
+                "Ladung_Extern_kWh", "Ladung_Extern_Euro", "V2H_kWh",
+                "Ladung_kWh", "Entladung_kWh", "Ladevorgaenge",
+                "Strom_kWh", "Heizung_kWh", "Warmwasser_kWh",
+                "Speicher_Ladung_kWh", "Speicher_Entladung_kWh"
+            ]
 
-            # E-Auto
-            elif inv.typ == "e-auto":
-                if suffix == "km":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["km_gefahren"] = val
-                elif suffix == "Verbrauch_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["verbrauch_kwh"] = val
-                elif suffix == "Ladung_PV_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladung_pv_kwh"] = val
-                elif suffix == "Ladung_Netz_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladung_netz_kwh"] = val
-                elif suffix == "Ladung_Extern_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladung_extern_kwh"] = val
-                elif suffix == "Ladung_Extern_Euro":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladung_extern_euro"] = val
-                elif suffix == "V2H_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["v2h_entladung_kwh"] = val
+            for known_suffix in known_suffixes:
+                if col_name.endswith("_" + known_suffix):
+                    # Extrahiere Präfix
+                    prefix = col_name[:-len(known_suffix)-1]
+                    prefix_normalized = _normalize_for_matching(prefix)
 
-            # Wallbox
-            elif inv.typ == "wallbox":
-                if suffix == "Ladung_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladung_kwh"] = val
-                elif suffix == "Ladevorgaenge":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["ladevorgaenge"] = int(val)
+                    if prefix_normalized == normalized_name:
+                        suffix = known_suffix
+                        matched_inv = inv
+                        break
 
-            # Wärmepumpe
-            elif inv.typ == "waermepumpe":
-                if suffix == "Strom_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["stromverbrauch_kwh"] = val
-                elif suffix == "Heizung_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["heizenergie_kwh"] = val
-                elif suffix == "Warmwasser_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["warmwasser_kwh"] = val
+            if matched_inv:
+                break
 
-            # Balkonkraftwerk
-            elif inv.typ == "balkonkraftwerk":
-                if suffix == "kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["pv_erzeugung_kwh"] = val
-                        summen["pv_erzeugung_sum"] += val
-                elif suffix == "Speicher_Ladung_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["speicher_ladung_kwh"] = val
-                        summen["batterie_ladung_sum"] += val
-                elif suffix == "Speicher_Entladung_kWh":
-                    val = parse_float(value)
-                    if val:
-                        verbrauch_daten["speicher_entladung_kwh"] = val
-                        summen["batterie_entladung_sum"] += val
+        if not matched_inv:
+            continue
 
-            # Wenn Daten vorhanden, speichern
-            if verbrauch_daten:
-                await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
-            break  # Spalte wurde verarbeitet
+        inv = matched_inv
+        verbrauch_daten = {}
+
+        # PV-Module
+        if inv.typ == "pv-module" and suffix == "kWh":
+            pv_val = parse_float(value)
+            if pv_val:
+                verbrauch_daten["pv_erzeugung_kwh"] = pv_val
+                summen["pv_erzeugung_sum"] += pv_val
+
+        # Speicher
+        elif inv.typ == "speicher":
+            if suffix == "Ladung_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladung_kwh"] = val
+                    summen["batterie_ladung_sum"] += val
+            elif suffix == "Entladung_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["entladung_kwh"] = val
+                    summen["batterie_entladung_sum"] += val
+
+        # E-Auto
+        elif inv.typ == "e-auto":
+            if suffix == "km":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["km_gefahren"] = val
+            elif suffix == "Verbrauch_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["verbrauch_kwh"] = val
+            elif suffix == "Ladung_PV_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladung_pv_kwh"] = val
+            elif suffix == "Ladung_Netz_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladung_netz_kwh"] = val
+            elif suffix == "Ladung_Extern_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladung_extern_kwh"] = val
+            elif suffix == "Ladung_Extern_Euro":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladung_extern_euro"] = val
+            elif suffix == "V2H_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["v2h_entladung_kwh"] = val
+
+        # Wallbox
+        elif inv.typ == "wallbox":
+            if suffix == "Ladung_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladung_kwh"] = val
+            elif suffix == "Ladevorgaenge":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["ladevorgaenge"] = int(val)
+
+        # Wärmepumpe
+        elif inv.typ == "waermepumpe":
+            if suffix == "Strom_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["stromverbrauch_kwh"] = val
+            elif suffix == "Heizung_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["heizenergie_kwh"] = val
+            elif suffix == "Warmwasser_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["warmwasser_kwh"] = val
+
+        # Balkonkraftwerk
+        elif inv.typ == "balkonkraftwerk":
+            if suffix == "kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["pv_erzeugung_kwh"] = val
+                    summen["pv_erzeugung_sum"] += val
+            elif suffix == "Speicher_Ladung_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["speicher_ladung_kwh"] = val
+                    summen["batterie_ladung_sum"] += val
+            elif suffix == "Speicher_Entladung_kWh":
+                val = parse_float(value)
+                if val:
+                    verbrauch_daten["speicher_entladung_kwh"] = val
+                    summen["batterie_entladung_sum"] += val
+
+        # Wenn Daten vorhanden, speichern
+        if verbrauch_daten:
+            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
 
     return summen
 
@@ -340,6 +381,20 @@ def _sanitize_column_name(name: str) -> str:
     name = re.sub(r'_+', '_', name)
     # Unterstriche am Anfang/Ende entfernen
     return name.strip('_')
+
+
+def _normalize_for_matching(name: str) -> str:
+    """Normalisiert einen Namen für Vergleiche (lowercase, ohne Sonderzeichen)."""
+    import re
+    # Alles lowercase
+    name = name.lower()
+    # Umlaute ersetzen
+    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'ß': 'ss'}
+    for old, new in replacements.items():
+        name = name.replace(old, new)
+    # Nur alphanumerische Zeichen behalten
+    name = re.sub(r'[^a-z0-9]', '', name)
+    return name
 
 
 @router.get("/template/{anlage_id}", response_model=CSVTemplateInfo)
@@ -556,12 +611,28 @@ async def import_csv(
     reader = csv.DictReader(StringIO(text), delimiter=delimiter)
 
     # Prüfen ob personalisierte Spalten vorhanden (v0.9 Format)
+    # Flexibleres Matching: Normalisierte Namen vergleichen
     fieldnames = reader.fieldnames or []
-    has_personalized_columns = any(
-        _sanitize_column_name(inv.bezeichnung) in col
-        for col in fieldnames
-        for inv in investitionen
-    )
+    has_personalized_columns = False
+
+    for inv in investitionen:
+        sanitized = _sanitize_column_name(inv.bezeichnung)
+        normalized = _normalize_for_matching(inv.bezeichnung)
+
+        for col in fieldnames:
+            # Exaktes Match mit sanitized name
+            if sanitized in col:
+                has_personalized_columns = True
+                break
+
+            # Flexibles Match: Normalisierte Namen
+            col_normalized = _normalize_for_matching(col)
+            if col_normalized.startswith(normalized) and len(normalized) >= 3:
+                has_personalized_columns = True
+                break
+
+        if has_personalized_columns:
+            break
 
     importiert = 0
     uebersprungen = 0

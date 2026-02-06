@@ -105,6 +105,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             label="Installationsdatum"
             name="installationsdatum"
             type="date"
+            min="2000-01-01"
+            max="2099-12-31"
             value={formData.installationsdatum}
             onChange={handleChange}
           />

@@ -97,6 +97,8 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           verbrauch_kwh_100km: params.verbrauch_kwh_100km?.toString() || '18',
           jahresfahrleistung_km: params.jahresfahrleistung_km?.toString() || '15000',
           pv_ladeanteil_prozent: params.pv_ladeanteil_prozent?.toString() || '60',
+          vergleich_verbrauch_l_100km: params.vergleich_verbrauch_l_100km?.toString() || '7.5',
+          benzinpreis_euro: params.benzinpreis_euro?.toString() || '1.65',
           v2h_faehig: (params.v2h_faehig as boolean) ?? false,
           v2h_entladeleistung_kw: params.v2h_entladeleistung_kw?.toString() || '',
         }
@@ -237,6 +239,8 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             label="Anschaffungsdatum"
             name="anschaffungsdatum"
             type="date"
+            min="2000-01-01"
+            max="2099-12-31"
             value={formData.anschaffungsdatum}
             onChange={handleChange}
           />
@@ -481,7 +485,30 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               hint="Anteil der Ladung aus PV-Strom"
             />
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-4">Vergleich mit Verbrenner</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Verbrenner-Verbrauch (L/100km)"
+              name="param_vergleich_verbrauch_l_100km"
+              type="number"
+              step="0.1"
+              min="0"
+              value={paramData.vergleich_verbrauch_l_100km as string}
+              onChange={onChange}
+              hint="Verbrauch des alternativen Verbrenners"
+            />
+            <Input
+              label="Benzinpreis (€/L)"
+              name="param_benzinpreis_euro"
+              type="number"
+              step="0.01"
+              min="0"
+              value={paramData.benzinpreis_euro as string}
+              onChange={onChange}
+              hint="Aktueller Benzin/Diesel-Preis"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm mt-4">
             <input
               type="checkbox"
               name="param_v2h_faehig"

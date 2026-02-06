@@ -108,6 +108,8 @@ export default function StrompreisForm({ strompreis, anlageId, onSubmit, onCance
           label="Gültig ab"
           name="gueltig_ab"
           type="date"
+          min="2000-01-01"
+          max="2099-12-31"
           value={formData.gueltig_ab}
           onChange={handleChange}
           required
@@ -116,6 +118,8 @@ export default function StrompreisForm({ strompreis, anlageId, onSubmit, onCance
           label="Gültig bis"
           name="gueltig_bis"
           type="date"
+          min="2000-01-01"
+          max="2099-12-31"
           value={formData.gueltig_bis}
           onChange={handleChange}
           hint="Leer lassen für aktuell gültigen Tarif"

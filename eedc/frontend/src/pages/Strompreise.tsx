@@ -434,6 +434,8 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
             label="Gültig ab"
             name="gueltig_ab"
             type="date"
+            min="2000-01-01"
+            max="2099-12-31"
             value={formData.gueltig_ab}
             onChange={handleChange}
             required
@@ -442,6 +444,8 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
             label="Gültig bis"
             name="gueltig_bis"
             type="date"
+            min="2000-01-01"
+            max="2099-12-31"
             value={formData.gueltig_bis}
             onChange={handleChange}
             hint="Leer lassen für unbefristet"
