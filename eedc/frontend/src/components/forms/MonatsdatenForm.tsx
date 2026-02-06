@@ -391,18 +391,26 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
       {/* Speicher (falls vorhanden) */}
       {hatSpeicher && (
-        <InvestitionSection
-          title="Speicher"
-          icon={Battery}
-          iconColor="text-green-500"
-          investitionen={aktiveInvestitionen.filter(i => i.typ === 'speicher')}
-          investitionsDaten={investitionsDaten}
-          onInvChange={handleInvChange}
-          felder={[
-            { key: 'ladung_kwh', label: 'Ladung', unit: 'kWh', placeholder: 'z.B. 150' },
-            { key: 'entladung_kwh', label: 'Entladung', unit: 'kWh', placeholder: 'z.B. 140' },
-          ]}
-        />
+        <>
+          <InvestitionSection
+            title="Speicher"
+            icon={Battery}
+            iconColor="text-green-500"
+            investitionen={aktiveInvestitionen.filter(i => i.typ === 'speicher')}
+            investitionsDaten={investitionsDaten}
+            onInvChange={handleInvChange}
+            felder={[
+              { key: 'ladung_kwh', label: 'Ladung', unit: 'kWh', placeholder: 'z.B. 150' },
+              { key: 'entladung_kwh', label: 'Entladung', unit: 'kWh', placeholder: 'z.B. 140' },
+            ]}
+          />
+          {/* Summen-Anzeige wenn mehrere Speicher oder Daten vorhanden */}
+          {(berechneteWerte.batterieLadung > 0 || berechneteWerte.batterieEntladung > 0) && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 -mt-2 ml-7">
+              Summe: Ladung {berechneteWerte.batterieLadung.toFixed(1)} kWh | Entladung {berechneteWerte.batterieEntladung.toFixed(1)} kWh
+            </div>
+          )}
+        </>
       )}
 
       {/* E-Auto (falls vorhanden) */}
