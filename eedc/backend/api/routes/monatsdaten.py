@@ -212,11 +212,14 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
 
     md = Monatsdaten(**data.model_dump())
 
-    # Berechnete Felder
-    if md.pv_erzeugung_kwh:
+    # Berechnete Felder (werden berechnet wenn pv_erzeugung vorhanden)
+    if md.pv_erzeugung_kwh is not None:
         md.direktverbrauch_kwh = max(0, md.pv_erzeugung_kwh - md.einspeisung_kwh - (md.batterie_ladung_kwh or 0))
         md.eigenverbrauch_kwh = md.direktverbrauch_kwh + (md.batterie_entladung_kwh or 0)
         md.gesamtverbrauch_kwh = md.eigenverbrauch_kwh + md.netzbezug_kwh
+    elif md.einspeisung_kwh > 0 or md.netzbezug_kwh > 0:
+        # Fallback: Gesamtverbrauch kann geschätzt werden
+        md.gesamtverbrauch_kwh = md.netzbezug_kwh + md.einspeisung_kwh
 
     db.add(md)
     await db.flush()
@@ -253,11 +256,14 @@ async def update_monatsdaten(
     for field, value in update_data.items():
         setattr(md, field, value)
 
-    # Berechnete Felder aktualisieren
-    if md.pv_erzeugung_kwh:
+    # Berechnete Felder aktualisieren (werden berechnet wenn pv_erzeugung vorhanden)
+    if md.pv_erzeugung_kwh is not None:
         md.direktverbrauch_kwh = max(0, md.pv_erzeugung_kwh - md.einspeisung_kwh - (md.batterie_ladung_kwh or 0))
         md.eigenverbrauch_kwh = md.direktverbrauch_kwh + (md.batterie_entladung_kwh or 0)
         md.gesamtverbrauch_kwh = md.eigenverbrauch_kwh + md.netzbezug_kwh
+    elif md.einspeisung_kwh > 0 or md.netzbezug_kwh > 0:
+        # Fallback: Gesamtverbrauch kann geschätzt werden
+        md.gesamtverbrauch_kwh = md.netzbezug_kwh + md.einspeisung_kwh
 
     await db.flush()
     await db.refresh(md)

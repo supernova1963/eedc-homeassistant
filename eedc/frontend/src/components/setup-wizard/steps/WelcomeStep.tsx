@@ -17,7 +17,7 @@ export default function WelcomeStep({ onNext }: WelcomeStepProps) {
           <Sun className="w-10 h-10 text-white" />
         </div>
         <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-          Willkommen bei EEDC
+          Willkommen bei eedc
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
           Ihr persönliches Energie Effizienz Data Center für die Analyse

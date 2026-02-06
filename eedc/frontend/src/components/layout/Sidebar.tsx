@@ -15,6 +15,7 @@ import {
   Battery,
   Plug
 } from 'lucide-react'
+import { VERSION_STRING } from '../../config/version'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -45,7 +46,7 @@ export default function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
         <Sun className="h-8 w-8 text-energy-solar" />
         <span className="ml-3 text-xl font-bold text-gray-900 dark:text-white">
-          EEDC
+          eedc
         </span>
       </div>
 
@@ -115,7 +116,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          EEDC v0.7.5
+          {VERSION_STRING}
         </p>
       </div>
     </aside>

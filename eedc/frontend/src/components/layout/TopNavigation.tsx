@@ -98,7 +98,7 @@ export default function TopNavigation() {
                 <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
               <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-                EEDC
+                eedc
               </span>
             </div>
 

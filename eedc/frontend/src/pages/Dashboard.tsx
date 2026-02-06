@@ -243,7 +243,7 @@ function GettingStarted() {
   return (
     <Card className="bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800">
       <h2 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4">
-        Willkommen bei EEDC!
+        Willkommen bei eedc!
       </h2>
       <p className="text-primary-700 dark:text-primary-300 mb-4">
         Starte mit diesen Schritten, um deine PV-Anlage zu analysieren:

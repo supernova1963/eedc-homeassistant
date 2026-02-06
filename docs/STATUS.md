@@ -1,15 +1,44 @@
-# EEDC Projekt Status
+# eedc Projekt Status
 
 **Stand:** 2026-02-06
-**Version:** 0.9.0
+**Version:** 0.9.1 Beta
 
 ## Übersicht
 
-EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analyse mit Monatsdaten, Prognosen und Wirtschaftlichkeitsberechnungen.
+eedc (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analyse mit Monatsdaten, Prognosen und Wirtschaftlichkeitsberechnungen.
 
 ---
 
-## Aktueller Stand (v0.9.0)
+## Aktueller Stand (v0.9.1 Beta)
+
+### Änderungen in v0.9.1
+
+**Bugfixes und Verbesserungen:**
+
+1. **Zentrale Versionskonfiguration**
+   - Version nur noch an einer Stelle definiert (Frontend: `config/version.ts`, Backend: `core/config.py`)
+   - Alle UI-Elemente und API-Endpoints nutzen zentrale Version
+
+2. **Dynamische Formularfelder**
+   - MonatsdatenForm: V2H-Felder nur bei E-Autos mit v2h_faehig oder nutzt_v2h
+   - MonatsdatenForm: Arbitrage-Felder nur bei Speichern mit arbitrage_faehig
+   - PV-Module-Section korrekt angezeigt (nicht nur Wechselrichter)
+
+3. **PV-Module Detailangaben**
+   - Anzahl Module und Leistung pro Modul (Wp) in InvestitionForm
+   - Berechnung kWp = Anzahl × Wp / 1000
+   - Wichtig für KPI wie spezifischer Ertrag (kWh/kWp)
+
+4. **Monatsdaten-Tabelle**
+   - Konfigurierbare Spalten mit Toggle-Buttons
+   - Spaltenauswahl wird in localStorage gespeichert
+   - Neue Spalten: Direktverbrauch, Eigenverbrauch, Gesamtverbrauch, Autarkie, EV-Quote
+
+5. **Import/Export Fixes**
+   - 0-Werte werden jetzt korrekt importiert (z.B. E-Auto Extern 0 kWh)
+   - Berechnete Felder funktionieren auch bei pv_erzeugung=0
+   - V2H-Spalten nur wenn v2h_faehig ODER nutzt_v2h
+   - Arbitrage-Spalten in Template/Export/Import
 
 ### Änderungen in v0.9.0
 
@@ -107,34 +136,13 @@ PV-Module haben keine eigenen HA-Sensoren und müssen manuell als Investition an
 
 ## Nächste Schritte (Roadmap v0.9)
 
-### Phase 2: Parent-Child implementieren ✅
-- [x] Backend-Validierung: PV-Module müssen Wechselrichter haben (wenn vorhanden)
-- [x] Backend-Validierung: Speicher optional zu Wechselrichter (Hybrid-WR)
-- [x] Backend: `/parent-options/{anlage_id}` Endpoint
-- [x] Frontend: PARENT_MAPPING korrigiert (E-Auto → Wallbox entfernt)
-- [x] Frontend: PARENT_REQUIRED für Pflicht-Zuordnungen
-- [x] Frontend: Verbesserte UI für Parent-Dropdown (Pflicht/Optional-Labels, Warnungen)
+### Phase 2-5: Alle abgeschlossen ✅
 
-### Phase 3: Monatsdaten-Logik ✅
-- [x] Personalisierte CSV-Vorlage mit Investitions-Spalten (z.B. `Sueddach_kWh`, `Speicher_Keller_Ladung_kWh`)
-- [x] CSV-Import erkennt personalisierte Spalten und importiert zu passenden Investitionen
-- [x] Summenberechnung: pv_erzeugung aus PV-Modul-Summe wenn keine explizite Spalte
-- [x] Summenberechnung: batterie_ladung/entladung aus Speicher-Summe wenn keine explizite Spalte
-- [x] CSV-Export mit personalisierten Spalten und Investitions-Monatsdaten
-- [x] Legacy-Import für alte CSV-Formate bleibt erhalten
-
-### Phase 4: PVGIS ✅ (bereits implementiert)
-- [x] PVGIS-Abruf pro PV-Modul (`/api/pvgis/modul/{investition_id}`)
-- [x] Anlage-Prognose = Summe PV-Modul-Prognosen (`/api/pvgis/prognose/{anlage_id}`)
-- [x] Jedes PV-Modul mit eigener Ausrichtung und Neigung
-- [x] Prognosen speichern und verwalten
-- [ ] Dashboard: SOLL-IST Vergleich pro String (Frontend-Erweiterung)
-
-### Phase 5: Aufräumen ✅
-- [x] StringMonatsdaten-Model als deprecated markiert
-- [x] Dokumentation aktualisiert: PV-Daten jetzt über InvestitionMonatsdaten
-- [x] DB-Tabelle beibehalten für Rückwärtskompatibilität (bestehende Datenbanken)
-- [x] Batterie-Felder in Monatsdaten: Werden jetzt aus Speicher-Investitionen summiert
+Siehe v0.9.0 Changelog für Details. Alle geplanten Features implementiert:
+- Parent-Child Beziehungen (PV→WR, Speicher→WR)
+- Personalisierte CSV-Vorlagen
+- PVGIS pro PV-Modul
+- Dynamische Formulare
 
 ---
 
@@ -204,28 +212,23 @@ npm run build
 
 ## Änderungshistorie
 
+### v0.9.1 Beta (2026-02-06)
+- **Zentrale Version:** Config in Frontend und Backend
+- **Dynamische Formulare:** V2H und Arbitrage bedingt anzeigen
+- **PV-Module Details:** Anzahl und Wp pro Modul
+- **Spalten-Toggle:** Monatsdaten-Tabelle konfigurierbar
+- **Bugfixes:** 0-Wert Import, berechnete Felder
+
 ### v0.9.0 (2026-02-06)
 - **HA-Import entfernt:** Monatsdaten-Import aus HA deaktiviert
 - **Sensor-Config entfernt:** Wizard vereinfacht, Schritt entfernt
-- **Zielbild dokumentiert:** Klare Struktur für Parent-Child, CSV-Vorlagen
-- **Parent-Child Validierung:** Backend und Frontend implementiert
-  - PV-Module → Wechselrichter (Pflicht)
-  - Speicher → Wechselrichter (Optional, für Hybrid-WR)
-  - E-Auto nicht mehr Wallbox zugeordnet
-- **Personalisierte CSV-Vorlagen:** Spalten basierend auf Investitions-Bezeichnungen
-  - Template-Endpoint generiert dynamische Spalten
-  - Import erkennt automatisch personalisierte vs. Legacy-Format
-  - Export enthält alle Investitions-Monatsdaten
-- **Summenberechnung:** PV-Erzeugung und Batterie-Daten aus Investitionen
+- **Parent-Child Validierung:** PV→WR (Pflicht), Speicher→WR (Optional)
+- **Personalisierte CSV-Vorlagen:** Dynamische Spalten
+- **Summenberechnung:** PV und Batterie aus Investitionen
 
-### v0.8.1 (2026-02-05)
-- Wizard vereinfacht: Monatsdaten-Fokus entfernt
-- Individualisierte "Nächste Schritte" im Summary
-- HA-Import UX verbessert (nun deprecated)
-
-### v0.8.0 (2026-02-05)
-- Wizard Refactoring mit vollständiger Investitions-Erfassung
-- Sensor-Konfiguration im Wizard (nun entfernt)
+### v0.8.x (2026-02-05)
+- Wizard Refactoring mit Auto-Discovery
+- Investitions-Erfassung im Wizard
 
 ---
 

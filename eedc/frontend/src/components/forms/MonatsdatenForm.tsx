@@ -43,6 +43,8 @@ interface InvestitionMonatsdaten {
   // Speicher
   ladung_kwh?: number
   entladung_kwh?: number
+  speicher_ladung_netz_kwh?: number // Arbitrage: Laden aus Netz
+  speicher_ladepreis_cent?: number  // Arbitrage: Ø Ladepreis
   // Wallbox - nutzt E-Auto Heim-Ladung (ladung_pv_kwh + ladung_netz_kwh)
   ladevorgaenge?: number
   // Wärmepumpe
@@ -88,6 +90,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const hatWallbox = aktiveInvestitionen.some(i => i.typ === 'wallbox')
   const hatWaermepumpe = aktiveInvestitionen.some(i => i.typ === 'waermepumpe')
   const hatWechselrichter = aktiveInvestitionen.some(i => i.typ === 'wechselrichter')
+  const hatPVModule = aktiveInvestitionen.some(i => i.typ === 'pv-module')
 
   // Basis-Formulardaten
   const [formData, setFormData] = useState({
@@ -127,6 +130,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           initial[inv.id] = {
             ladung_kwh: '',
             entladung_kwh: '',
+            // Arbitrage-Felder (nur relevant wenn arbitrage_faehig)
+            speicher_ladung_netz_kwh: '',
+            speicher_ladepreis_cent: '',
           }
         } else if (inv.typ === 'wallbox') {
           initial[inv.id] = {
@@ -140,6 +146,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             warmwasser_kwh: '',
           }
         } else if (inv.typ === 'wechselrichter') {
+          initial[inv.id] = {
+            pv_erzeugung_kwh: '',
+          }
+        } else if (inv.typ === 'pv-module') {
           initial[inv.id] = {
             pv_erzeugung_kwh: '',
           }
@@ -214,7 +224,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       if (inv.typ === 'speicher') {
         batterieLadung += parseFloat(daten.ladung_kwh) || 0
         batterieEntladung += parseFloat(daten.entladung_kwh) || 0
-      } else if (inv.typ === 'wechselrichter') {
+      } else if (inv.typ === 'pv-module' || inv.typ === 'wechselrichter') {
+        // PV-Module haben Priorität, aber Wechselrichter als Fallback
         pvErzeugung += parseFloat(daten.pv_erzeugung_kwh) || 0
       }
     })
@@ -253,6 +264,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         } else if (inv.typ === 'speicher') {
           if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
           if (daten.entladung_kwh) parsed.entladung_kwh = parseFloat(daten.entladung_kwh)
+          // Arbitrage-Felder
+          if (daten.speicher_ladung_netz_kwh) parsed.speicher_ladung_netz_kwh = parseFloat(daten.speicher_ladung_netz_kwh)
+          if (daten.speicher_ladepreis_cent) parsed.speicher_ladepreis_cent = parseFloat(daten.speicher_ladepreis_cent)
         } else if (inv.typ === 'wallbox') {
           if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
           if (daten.ladevorgaenge) parsed.ladevorgaenge = parseInt(daten.ladevorgaenge)
@@ -261,6 +275,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (daten.heizenergie_kwh) parsed.heizenergie_kwh = parseFloat(daten.heizenergie_kwh)
           if (daten.warmwasser_kwh) parsed.warmwasser_kwh = parseFloat(daten.warmwasser_kwh)
         } else if (inv.typ === 'wechselrichter') {
+          if (daten.pv_erzeugung_kwh) parsed.pv_erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
+        } else if (inv.typ === 'pv-module') {
           if (daten.pv_erzeugung_kwh) parsed.pv_erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
         }
 
@@ -363,7 +379,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             required
           />
           <Input
-            label={hatWechselrichter ? "PV-Erzeugung (Summe oder manuell)" : "PV-Erzeugung (optional)"}
+            label={(hatPVModule || hatWechselrichter) ? "PV-Erzeugung (Summe oder manuell)" : "PV-Erzeugung (optional)"}
             name="pv_erzeugung_kwh"
             type="number"
             step="0.01"
@@ -371,13 +387,28 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             value={formData.pv_erzeugung_kwh}
             onChange={handleChange}
             placeholder={berechneteWerte.pvErzeugung > 0 ? `Summe: ${berechneteWerte.pvErzeugung.toFixed(1)}` : "z.B. 800"}
-            hint={berechneteWerte.pvErzeugung > 0 ? `Aus Wechselrichtern: ${berechneteWerte.pvErzeugung.toFixed(1)} kWh` : "Wird berechnet wenn leer"}
+            hint={berechneteWerte.pvErzeugung > 0 ? `Aus ${hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: ${berechneteWerte.pvErzeugung.toFixed(1)} kWh` : "Wird berechnet wenn leer"}
           />
         </div>
       </div>
 
-      {/* Wechselrichter (falls vorhanden) */}
-      {hatWechselrichter && (
+      {/* PV-Module (falls vorhanden) */}
+      {hatPVModule && (
+        <InvestitionSection
+          title="PV-Module"
+          icon={Sun}
+          iconColor="text-yellow-500"
+          investitionen={aktiveInvestitionen.filter(i => i.typ === 'pv-module')}
+          investitionsDaten={investitionsDaten}
+          onInvChange={handleInvChange}
+          felder={[
+            { key: 'pv_erzeugung_kwh', label: 'PV-Erzeugung', unit: 'kWh', placeholder: 'z.B. 800' },
+          ]}
+        />
+      )}
+
+      {/* Wechselrichter (falls vorhanden und keine PV-Module) */}
+      {hatWechselrichter && !hatPVModule && (
         <InvestitionSection
           title="Wechselrichter"
           icon={Sun}
@@ -394,17 +425,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       {/* Speicher (falls vorhanden) */}
       {hatSpeicher && (
         <>
-          <InvestitionSection
-            title="Speicher"
-            icon={Battery}
-            iconColor="text-green-500"
+          <SpeicherSection
             investitionen={aktiveInvestitionen.filter(i => i.typ === 'speicher')}
             investitionsDaten={investitionsDaten}
             onInvChange={handleInvChange}
-            felder={[
-              { key: 'ladung_kwh', label: 'Ladung', unit: 'kWh', placeholder: 'z.B. 150' },
-              { key: 'entladung_kwh', label: 'Entladung', unit: 'kWh', placeholder: 'z.B. 140' },
-            ]}
           />
           {/* Summen-Anzeige wenn mehrere Speicher oder Daten vorhanden */}
           {(berechneteWerte.batterieLadung > 0 || berechneteWerte.batterieEntladung > 0) && (
@@ -417,22 +441,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
       {/* E-Auto (falls vorhanden) */}
       {hatEAuto && (
-        <InvestitionSection
-          title="E-Auto"
-          icon={Car}
-          iconColor="text-blue-500"
+        <EAutoSection
           investitionen={aktiveInvestitionen.filter(i => i.typ === 'e-auto')}
           investitionsDaten={investitionsDaten}
           onInvChange={handleInvChange}
-          felder={[
-            { key: 'km_gefahren', label: 'km gefahren', unit: 'km', placeholder: 'z.B. 1200' },
-            { key: 'verbrauch_kwh', label: 'Verbrauch gesamt', unit: 'kWh', placeholder: 'z.B. 216' },
-            { key: 'ladung_pv_kwh', label: 'Heim: PV', unit: 'kWh', placeholder: 'z.B. 130', hint: 'Wallbox mit PV-Strom' },
-            { key: 'ladung_netz_kwh', label: 'Heim: Netz', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Wallbox mit Netzstrom' },
-            { key: 'ladung_extern_kwh', label: 'Extern', unit: 'kWh', placeholder: 'z.B. 36', hint: 'Autobahn, Arbeit, etc.' },
-            { key: 'ladung_extern_euro', label: 'Extern Kosten', unit: '€', placeholder: 'z.B. 18.00' },
-            { key: 'entladung_v2h_kwh', label: 'V2H Entladung', unit: 'kWh', placeholder: 'z.B. 25' },
-          ]}
         />
       )}
 
@@ -523,6 +535,147 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         </Button>
       </div>
     </form>
+  )
+}
+
+// Spezielle Speicher Sektion mit konditionellem Arbitrage pro Speicher
+interface SpeicherSectionProps {
+  investitionen: Investition[]
+  investitionsDaten: Record<string, Record<string, string>>
+  onInvChange: (invId: number, field: string, value: string) => void
+}
+
+function SpeicherSection({ investitionen, investitionsDaten, onInvChange }: SpeicherSectionProps) {
+  if (investitionen.length === 0) return null
+
+  type SpeicherFeld = { key: string; label: string; unit: string; placeholder: string; hint?: string }
+
+  const basisFelder: SpeicherFeld[] = [
+    { key: 'ladung_kwh', label: 'Ladung', unit: 'kWh', placeholder: 'z.B. 150' },
+    { key: 'entladung_kwh', label: 'Entladung', unit: 'kWh', placeholder: 'z.B. 140' },
+  ]
+
+  const arbitrageFelder: SpeicherFeld[] = [
+    { key: 'speicher_ladung_netz_kwh', label: 'Netzladung', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Arbitrage: Laden aus Netz' },
+    { key: 'speicher_ladepreis_cent', label: 'Ø Ladepreis', unit: 'ct/kWh', placeholder: 'z.B. 15', hint: 'Durchschnittl. Strompreis beim Netzladen' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Battery className="h-5 w-5 text-green-500" />
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Speicher</h3>
+      </div>
+
+      {investitionen.map((inv) => {
+        // Prüfe ob dieser Speicher Arbitrage-fähig ist
+        const hatArbitrage = inv.parameter?.arbitrage_faehig
+        const felder = hatArbitrage ? [...basisFelder, ...arbitrageFelder] : basisFelder
+
+        return (
+          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              {inv.bezeichnung}
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {felder.map((feld) => (
+                <div key={feld.key}>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {feld.label} {feld.unit && <span className="text-gray-400">({feld.unit})</span>}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={investitionsDaten[inv.id]?.[feld.key] || ''}
+                    onChange={(e) => onInvChange(inv.id, feld.key, e.target.value)}
+                    placeholder={feld.placeholder}
+                    className="input text-sm py-1.5"
+                    title={feld.hint}
+                  />
+                  {feld.hint && (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={feld.hint}>
+                      {feld.hint}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Spezielle E-Auto Sektion mit konditionellem V2H pro Fahrzeug
+interface EAutoSectionProps {
+  investitionen: Investition[]
+  investitionsDaten: Record<string, Record<string, string>>
+  onInvChange: (invId: number, field: string, value: string) => void
+}
+
+function EAutoSection({ investitionen, investitionsDaten, onInvChange }: EAutoSectionProps) {
+  if (investitionen.length === 0) return null
+
+  type EAutoFeld = { key: string; label: string; unit: string; placeholder: string; hint?: string }
+
+  const basisFelder: EAutoFeld[] = [
+    { key: 'km_gefahren', label: 'km gefahren', unit: 'km', placeholder: 'z.B. 1200' },
+    { key: 'verbrauch_kwh', label: 'Verbrauch gesamt', unit: 'kWh', placeholder: 'z.B. 216' },
+    { key: 'ladung_pv_kwh', label: 'Heim: PV', unit: 'kWh', placeholder: 'z.B. 130', hint: 'Wallbox mit PV-Strom' },
+    { key: 'ladung_netz_kwh', label: 'Heim: Netz', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Wallbox mit Netzstrom' },
+    { key: 'ladung_extern_kwh', label: 'Extern', unit: 'kWh', placeholder: 'z.B. 36', hint: 'Autobahn, Arbeit, etc.' },
+    { key: 'ladung_extern_euro', label: 'Extern Kosten', unit: '€', placeholder: 'z.B. 18.00' },
+  ]
+
+  const v2hFeld: EAutoFeld = { key: 'entladung_v2h_kwh', label: 'V2H Entladung', unit: 'kWh', placeholder: 'z.B. 25' }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Car className="h-5 w-5 text-blue-500" />
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">E-Auto</h3>
+      </div>
+
+      {investitionen.map((inv) => {
+        // Prüfe ob dieses E-Auto V2H-fähig ist
+        const hatV2H = inv.parameter?.v2h_faehig || inv.parameter?.nutzt_v2h
+        const felder = hatV2H ? [...basisFelder, v2hFeld] : basisFelder
+
+        return (
+          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              {inv.bezeichnung}
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {felder.map((feld) => (
+                <div key={feld.key}>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {feld.label} {feld.unit && <span className="text-gray-400">({feld.unit})</span>}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={investitionsDaten[inv.id]?.[feld.key] || ''}
+                    onChange={(e) => onInvChange(inv.id, feld.key, e.target.value)}
+                    placeholder={feld.placeholder}
+                    className="input text-sm py-1.5"
+                    title={feld.hint}
+                  />
+                  {feld.hint && (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={feld.hint}>
+                      {feld.hint}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

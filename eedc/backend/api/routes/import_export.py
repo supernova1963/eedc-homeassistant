@@ -67,16 +67,23 @@ async def _import_investition_monatsdaten_v09(
 
     Spalten werden nach Investitions-Bezeichnung gematcht, z.B.:
     - "Sueddach_kWh" -> PV-Modul "Süddach"
-    - "Speicher_Keller_Ladung_kWh" -> Speicher "Speicher Keller"
+    - "Smart_1_km" -> E-Auto "Smart #1"
+    - "BYD_HVS_12_8_Ladung_kWh" -> Speicher "BYD HVS 12.8"
 
     Returns:
         dict: Summen für Anlage-Monatsdaten (pv_sum, batterie_ladung_sum, batterie_entladung_sum)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     summen = {
         "pv_erzeugung_sum": 0.0,
         "batterie_ladung_sum": 0.0,
         "batterie_entladung_sum": 0.0,
     }
+
+    # Sammle alle Daten pro Investition, bevor wir speichern
+    collected_data: dict[int, dict] = {}
 
     # Mapping: Verschiedene Varianten für flexibles Matching
     # (sanitized, normalized, inv)
@@ -85,158 +92,208 @@ async def _import_investition_monatsdaten_v09(
         sanitized = _sanitize_column_name(inv.bezeichnung)
         normalized = _normalize_for_matching(inv.bezeichnung)
         inv_variants.append((sanitized, normalized, inv))
+        logger.debug(f"Investment variant: bezeichnung='{inv.bezeichnung}', sanitized='{sanitized}', normalized='{normalized}', typ={inv.typ}")
+
+    # Bekannte Suffixe für jeden Typ - sortiert nach Länge (längste zuerst für korrektes Matching)
+    known_suffixes = sorted([
+        "kWh", "km", "Verbrauch_kWh", "Ladung_PV_kWh", "Ladung_Netz_kWh",
+        "Ladung_Extern_kWh", "Ladung_Extern_Euro", "V2H_kWh",
+        "Ladung_kWh", "Entladung_kWh", "Ladevorgaenge",
+        "Netzladung_kWh", "Ladepreis_Cent",  # Speicher Arbitrage
+        "Strom_kWh", "Heizung_kWh", "Warmwasser_kWh",
+        "Speicher_Ladung_kWh", "Speicher_Entladung_kWh"
+    ], key=len, reverse=True)
 
     # Alle Spalten durchgehen und Investitionen matchen
     for col_name, value in row.items():
         if not value or not value.strip():
             continue
 
+        # Überspringe Basis-Spalten
+        if col_name in ("Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh",
+                        "PV_Erzeugung_kWh", "Batterie_Ladung_kWh", "Batterie_Entladung_kWh",
+                        "Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"):
+            continue
+
         # Versuche Investition aus Spaltenname zu extrahieren
         matched_inv = None
         suffix = ""
 
-        # Spaltenname normalisieren für Vergleich
-        col_sanitized = _sanitize_column_name(col_name.split('_')[0] if '_' in col_name else col_name)
-
         for sanitized_name, normalized_name, inv in inv_variants:
-            # Strategie 1: Exaktes Match mit sanitized name
+            # Strategie 1: Exaktes Match mit sanitized name als Präfix
             if col_name.startswith(sanitized_name + "_"):
-                suffix = col_name[len(sanitized_name):].lstrip("_")
+                suffix = col_name[len(sanitized_name) + 1:]  # +1 für den Unterstrich
                 matched_inv = inv
+                logger.debug(f"Strategie 1 Match: col='{col_name}' -> inv='{inv.bezeichnung}', suffix='{suffix}'")
                 break
             elif col_name == sanitized_name:
                 suffix = ""
                 matched_inv = inv
+                logger.debug(f"Strategie 1 exakt Match: col='{col_name}' -> inv='{inv.bezeichnung}'")
                 break
 
-            # Strategie 2: Finde Präfix bis zum bekannten Suffix
-            # Bekannte Suffixe für jeden Typ
-            known_suffixes = [
-                "kWh", "km", "Verbrauch_kWh", "Ladung_PV_kWh", "Ladung_Netz_kWh",
-                "Ladung_Extern_kWh", "Ladung_Extern_Euro", "V2H_kWh",
-                "Ladung_kWh", "Entladung_kWh", "Ladevorgaenge",
-                "Strom_kWh", "Heizung_kWh", "Warmwasser_kWh",
-                "Speicher_Ladung_kWh", "Speicher_Entladung_kWh"
-            ]
-
+        # Strategie 2: Falls Strategie 1 nicht gematcht hat, versuche Suffix-basiertes Matching
+        if not matched_inv:
             for known_suffix in known_suffixes:
                 if col_name.endswith("_" + known_suffix):
-                    # Extrahiere Präfix
-                    prefix = col_name[:-len(known_suffix)-1]
+                    # Extrahiere Präfix (alles vor dem Suffix)
+                    prefix = col_name[:-len(known_suffix) - 1]  # -1 für den Unterstrich
                     prefix_normalized = _normalize_for_matching(prefix)
 
-                    if prefix_normalized == normalized_name:
-                        suffix = known_suffix
-                        matched_inv = inv
+                    for sanitized_name, normalized_name, inv in inv_variants:
+                        if prefix_normalized == normalized_name or prefix == sanitized_name:
+                            suffix = known_suffix
+                            matched_inv = inv
+                            logger.debug(f"Strategie 2 Match: col='{col_name}', prefix='{prefix}' -> inv='{inv.bezeichnung}', suffix='{suffix}'")
+                            break
+
+                    if matched_inv:
                         break
 
-            if matched_inv:
-                break
-
         if not matched_inv:
+            logger.debug(f"Keine Investition gefunden für Spalte: '{col_name}'")
             continue
 
         inv = matched_inv
-        verbrauch_daten = {}
+        field_key = None
+        field_value = None
 
         # PV-Module
         if inv.typ == "pv-module" and suffix == "kWh":
             pv_val = parse_float(value)
-            if pv_val:
-                verbrauch_daten["pv_erzeugung_kwh"] = pv_val
+            if pv_val is not None:
+                field_key = "pv_erzeugung_kwh"
+                field_value = pv_val
                 summen["pv_erzeugung_sum"] += pv_val
 
         # Speicher
         elif inv.typ == "speicher":
             if suffix == "Ladung_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladung_kwh"] = val
+                if val is not None:
+                    field_key = "ladung_kwh"
+                    field_value = val
                     summen["batterie_ladung_sum"] += val
             elif suffix == "Entladung_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["entladung_kwh"] = val
+                if val is not None:
+                    field_key = "entladung_kwh"
+                    field_value = val
                     summen["batterie_entladung_sum"] += val
+            # Arbitrage-Felder
+            elif suffix == "Netzladung_kWh":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "speicher_ladung_netz_kwh"
+                    field_value = val
+            elif suffix == "Ladepreis_Cent":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "speicher_ladepreis_cent"
+                    field_value = val
 
         # E-Auto
         elif inv.typ == "e-auto":
             if suffix == "km":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["km_gefahren"] = val
+                if val is not None:
+                    field_key = "km_gefahren"
+                    field_value = val
             elif suffix == "Verbrauch_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["verbrauch_kwh"] = val
+                if val is not None:
+                    field_key = "verbrauch_kwh"
+                    field_value = val
             elif suffix == "Ladung_PV_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladung_pv_kwh"] = val
+                if val is not None:
+                    field_key = "ladung_pv_kwh"
+                    field_value = val
             elif suffix == "Ladung_Netz_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladung_netz_kwh"] = val
+                if val is not None:
+                    field_key = "ladung_netz_kwh"
+                    field_value = val
             elif suffix == "Ladung_Extern_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladung_extern_kwh"] = val
+                if val is not None:
+                    field_key = "ladung_extern_kwh"
+                    field_value = val
             elif suffix == "Ladung_Extern_Euro":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladung_extern_euro"] = val
+                if val is not None:
+                    field_key = "ladung_extern_euro"
+                    field_value = val
             elif suffix == "V2H_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["v2h_entladung_kwh"] = val
+                if val is not None:
+                    field_key = "v2h_entladung_kwh"
+                    field_value = val
 
         # Wallbox
         elif inv.typ == "wallbox":
             if suffix == "Ladung_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladung_kwh"] = val
+                if val is not None:
+                    field_key = "ladung_kwh"
+                    field_value = val
             elif suffix == "Ladevorgaenge":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["ladevorgaenge"] = int(val)
+                if val is not None:
+                    field_key = "ladevorgaenge"
+                    field_value = int(val)
 
         # Wärmepumpe
         elif inv.typ == "waermepumpe":
             if suffix == "Strom_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["stromverbrauch_kwh"] = val
+                if val is not None:
+                    field_key = "stromverbrauch_kwh"
+                    field_value = val
             elif suffix == "Heizung_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["heizenergie_kwh"] = val
+                if val is not None:
+                    field_key = "heizenergie_kwh"
+                    field_value = val
             elif suffix == "Warmwasser_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["warmwasser_kwh"] = val
+                if val is not None:
+                    field_key = "warmwasser_kwh"
+                    field_value = val
 
         # Balkonkraftwerk
         elif inv.typ == "balkonkraftwerk":
             if suffix == "kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["pv_erzeugung_kwh"] = val
+                if val is not None:
+                    field_key = "pv_erzeugung_kwh"
+                    field_value = val
                     summen["pv_erzeugung_sum"] += val
             elif suffix == "Speicher_Ladung_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["speicher_ladung_kwh"] = val
+                if val is not None:
+                    field_key = "speicher_ladung_kwh"
+                    field_value = val
                     summen["batterie_ladung_sum"] += val
             elif suffix == "Speicher_Entladung_kWh":
                 val = parse_float(value)
-                if val:
-                    verbrauch_daten["speicher_entladung_kwh"] = val
+                if val is not None:
+                    field_key = "speicher_entladung_kwh"
+                    field_value = val
                     summen["batterie_entladung_sum"] += val
 
-        # Wenn Daten vorhanden, speichern
+        # Sammle alle Daten für jede Investition
+        if field_key and field_value is not None:
+            if inv.id not in collected_data:
+                collected_data[inv.id] = {}
+            collected_data[inv.id][field_key] = field_value
+            logger.debug(f"Gesammelt: inv_id={inv.id}, {field_key}={field_value}")
+
+    # Alle gesammelten Daten auf einmal speichern
+    for inv_id, verbrauch_daten in collected_data.items():
         if verbrauch_daten:
-            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+            logger.debug(f"Speichere InvestitionMonatsdaten: inv_id={inv_id}, daten={verbrauch_daten}")
+            await _upsert_investition_monatsdaten(db, inv_id, jahr, monat, verbrauch_daten, ueberschreiben)
 
     return summen
 
@@ -462,6 +519,13 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
             spalten.extend([col_ladung, col_entladung])
             beschreibung[col_ladung] = f"Ladung {inv.bezeichnung} (kWh)"
             beschreibung[col_entladung] = f"Entladung {inv.bezeichnung} (kWh)"
+            # Arbitrage wenn aktiviert
+            if inv.parameter and inv.parameter.get("arbitrage_faehig"):
+                col_netz = f"{prefix}_Netzladung_kWh"
+                col_preis = f"{prefix}_Ladepreis_Cent"
+                spalten.extend([col_netz, col_preis])
+                beschreibung[col_netz] = f"Netzladung {inv.bezeichnung} (kWh) - Arbitrage"
+                beschreibung[col_preis] = f"Ø Ladepreis {inv.bezeichnung} (ct/kWh) - Arbitrage"
 
         elif inv.typ == "e-auto":
             # E-Auto: km, Verbrauch, Ladungen, optional V2H
@@ -473,8 +537,8 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
                 (f"{prefix}_Ladung_Extern_kWh", f"Externe Ladung {inv.bezeichnung} (kWh)"),
                 (f"{prefix}_Ladung_Extern_Euro", f"Externe Ladekosten {inv.bezeichnung} (€)"),
             ]
-            # V2H wenn aktiviert
-            if inv.parameter and inv.parameter.get("nutzt_v2h"):
+            # V2H wenn aktiviert (nutzt_v2h ODER v2h_faehig)
+            if inv.parameter and (inv.parameter.get("nutzt_v2h") or inv.parameter.get("v2h_faehig")):
                 cols.append((f"{prefix}_V2H_kWh", f"V2H-Entladung {inv.bezeichnung} (kWh)"))
 
             for col, desc in cols:
@@ -722,13 +786,18 @@ async def import_csv(
                 batterie_entladung = None
 
             # Berechnete Felder
+            # Werden berechnet wenn pv_erzeugung vorhanden ist (auch bei 0)
             direktverbrauch = None
             eigenverbrauch = None
             gesamtverbrauch = None
-            if pv_erzeugung:
+            if pv_erzeugung is not None:
                 direktverbrauch = max(0, pv_erzeugung - einspeisung - (batterie_ladung or 0))
                 eigenverbrauch = direktverbrauch + (batterie_entladung or 0)
                 gesamtverbrauch = eigenverbrauch + netzbezug
+            elif einspeisung > 0 or netzbezug > 0:
+                # Fallback: Wenn keine PV-Erzeugung aber Einspeisung/Netzbezug vorhanden,
+                # können wir zumindest gesamtverbrauch berechnen
+                gesamtverbrauch = netzbezug + einspeisung  # Einspeisung = min. Eigenproduktion
 
             if existing_md:
                 # Update
@@ -869,6 +938,11 @@ async def export_csv(
             inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
             inv_columns.append((inv, "Entladung_kWh", "entladung_kwh"))
             header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Entladung_kWh"])
+            # Arbitrage wenn aktiviert
+            if inv.parameter and inv.parameter.get("arbitrage_faehig"):
+                inv_columns.append((inv, "Netzladung_kWh", "speicher_ladung_netz_kwh"))
+                inv_columns.append((inv, "Ladepreis_Cent", "speicher_ladepreis_cent"))
+                header.extend([f"{prefix}_Netzladung_kWh", f"{prefix}_Ladepreis_Cent"])
 
         elif inv.typ == "e-auto":
             cols = [
@@ -879,7 +953,8 @@ async def export_csv(
                 ("Ladung_Extern_kWh", "ladung_extern_kwh"),
                 ("Ladung_Extern_Euro", "ladung_extern_euro"),
             ]
-            if inv.parameter and inv.parameter.get("nutzt_v2h"):
+            # V2H wenn aktiviert (nutzt_v2h ODER v2h_faehig)
+            if inv.parameter and (inv.parameter.get("nutzt_v2h") or inv.parameter.get("v2h_faehig")):
                 cols.append(("V2H_kWh", "v2h_entladung_kwh"))
             for suffix, key in cols:
                 inv_columns.append((inv, suffix, key))

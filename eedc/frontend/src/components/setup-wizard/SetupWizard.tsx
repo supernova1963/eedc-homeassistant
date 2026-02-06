@@ -77,7 +77,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-                  EEDC Einrichtung
+                  eedc Einrichtung
                 </h1>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Energie Effizienz Data Center
@@ -267,7 +267,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
       {/* Footer */}
       <footer className="text-center py-6 text-sm text-gray-400 dark:text-gray-500">
-        EEDC - Energie Effizienz Data Center
+        eedc – Energie Effizienz Data Center
       </footer>
     </div>
   )

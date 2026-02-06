@@ -1,9 +1,9 @@
 # Home Assistant Add-on Konfiguration
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
-name: "EEDC - Energie Daten Center"
+name: "eedc - Energie Effizienz Data Center"
 description: "Lokale PV-Anlagen Auswertung und Wirtschaftlichkeitsanalyse"
-version: "0.9.0"
+version: "0.9.1"
 slug: "eedc"
 url: "https://github.com/supernova1963/eedc-homeassistant"
 
@@ -27,7 +27,7 @@ ingress: true
 ingress_port: 8099
 ingress_stream: true
 panel_icon: "mdi:solar-power"
-panel_title: "EEDC"
+panel_title: "eedc"
 
 # Benutzer-Optionen
 options:

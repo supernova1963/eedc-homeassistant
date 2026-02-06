@@ -1,4 +1,4 @@
-# EEDC - Energie Effizienz Data Center
+# eedc - Energie Effizienz Data Center
 
 Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von PV-Anlagen.
 
@@ -19,7 +19,7 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - **HA Auto-Discovery** - Erkennung von Geräten (nur für Ersteinrichtung)
 - **Dark Mode** - Vollständige Unterstützung
 
-## Aktueller Status (v0.9.0)
+## Aktueller Status (v0.9.1 Beta)
 
 **Was funktioniert:**
 - ✅ **Setup-Wizard** (7 Schritte, vereinfacht)
@@ -32,13 +32,22 @@ Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von 
 - ✅ **Prognose vs. IST** Vergleich
 - ✅ **Parent-Child Beziehungen** (PV-Module → Wechselrichter)
 - ✅ **HA Auto-Discovery** (nur für Ersteinrichtung)
+- ✅ **Dynamische Formulare** (V2H/Arbitrage nur wenn aktiviert)
+- ✅ **Monatsdaten Spaltenkonfiguration** (Toggle-Buttons)
 - ✅ Settings mit echten DB-Stats
 - ✅ Dark Mode
 - ✅ Docker-Build
 - ✅ **HA Ingress Integration** (nahtlose Sidebar-Integration)
 - ✅ **HA Backup** (SQLite in /data Volume)
 
-**v0.9 Änderungen:**
+**v0.9.1 Änderungen:**
+- Zentrale Versionskonfiguration (Frontend + Backend)
+- Dynamische Formularfelder (V2H nur bei v2h_faehig, Arbitrage nur bei arbitrage_faehig)
+- PV-Module mit Anzahl/Leistung pro Modul für kWp-Berechnung
+- Monatsdaten-Tabelle mit konfigurierbaren Spalten (localStorage)
+- Fixes: 0-Wert Import, berechnete Felder bei pv_erzeugung=0
+
+**v0.9.0 Änderungen:**
 - HA-Monatsdaten-Import entfernt (war zu unzuverlässig)
 - Datenerfassung nur noch via CSV oder manuell
 - Personalisierte CSV-Vorlagen (Spalten nach Investitions-Bezeichnung)
@@ -159,7 +168,7 @@ eedc-homeassistant/
             └── hooks/      # React Hooks
 ```
 
-## Unterstützte Geräte (Auto-Discovery v0.7.4)
+## Unterstützte Geräte (Auto-Discovery)
 
 **Wechselrichter:** SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
 

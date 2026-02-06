@@ -6,6 +6,7 @@
 import { Outlet } from 'react-router-dom'
 import TopNavigation from './TopNavigation'
 import SubTabs from './SubTabs'
+import { FULL_VERSION_STRING } from '../../config/version'
 
 export default function Layout() {
   return (
@@ -24,7 +25,7 @@ export default function Layout() {
       {/* Footer */}
       <footer className="py-2 px-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-          EEDC v0.7.5 – Energie Effizienz Data Center
+          {FULL_VERSION_STRING}
         </p>
       </footer>
     </div>

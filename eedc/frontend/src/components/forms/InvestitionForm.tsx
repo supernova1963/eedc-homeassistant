@@ -133,6 +133,11 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           hybrid: (params.hybrid as boolean) ?? false,
         }
       case 'pv-module':
+        return {
+          anzahl_module: params.anzahl_module?.toString() || '',
+          modul_leistung_wp: params.modul_leistung_wp?.toString() || '',
+          modul_typ: params.modul_typ?.toString() || '',
+        }
       case 'balkonkraftwerk':
         return {
           leistung_wp: params.leistung_wp?.toString() || '',
@@ -745,8 +750,50 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
       )
 
     case 'pv-module':
-      // PV-Module verwenden jetzt direkte Felder - werden extern gerendert
-      return null
+      // PV-Module: Anzahl und Modulleistung für Berechnung kWp = Anzahl × Wp / 1000
+      return (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+            Modul-Details (optional)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Anzahl Module"
+              name="param_anzahl_module"
+              type="number"
+              step="1"
+              min="1"
+              value={paramData.anzahl_module as string}
+              onChange={onChange}
+              hint="Anzahl der PV-Module in diesem String"
+            />
+            <Input
+              label="Leistung pro Modul (Wp)"
+              name="param_modul_leistung_wp"
+              type="number"
+              step="1"
+              min="0"
+              value={paramData.modul_leistung_wp as string}
+              onChange={onChange}
+              hint="z.B. 400 Wp, 500 Wp"
+            />
+            <Input
+              label="Modul-Typ"
+              name="param_modul_typ"
+              type="text"
+              value={paramData.modul_typ as string}
+              onChange={onChange}
+              placeholder="z.B. Longi Hi-MO 5"
+              hint="Hersteller und Modell"
+            />
+          </div>
+          {paramData.anzahl_module && paramData.modul_leistung_wp && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Berechnete Leistung: {((parseInt(paramData.anzahl_module as string) || 0) * (parseInt(paramData.modul_leistung_wp as string) || 0) / 1000).toFixed(2)} kWp
+            </p>
+          )}
+        </div>
+      )
 
     case 'balkonkraftwerk':
       return (

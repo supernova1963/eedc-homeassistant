@@ -9,6 +9,13 @@ import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
+# =============================================================================
+# Zentrale Versionskonfiguration
+# =============================================================================
+APP_VERSION = "0.9.1"
+APP_NAME = "eedc"
+APP_FULL_NAME = "Energie Effizienz Data Center"
+
 
 def get_default_database_url() -> str:
     """Gibt den Standard-Datenbankpfad zurück."""

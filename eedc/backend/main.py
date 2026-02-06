@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from sqlalchemy import select, func
-from backend.core.config import settings
+from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME
 from backend.core.database import init_db, get_session
 from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, pvgis
 from backend.models.anlage import Anlage
@@ -48,9 +48,9 @@ async def lifespan(app: FastAPI):
 
 # FastAPI App erstellen
 app = FastAPI(
-    title="EEDC API",
-    description="Energie Effizienz Data Center - API für PV-Anlagen Auswertung",
-    version="0.1.0",
+    title=f"{APP_NAME.upper()} API",
+    description=f"{APP_FULL_NAME} - API für PV-Anlagen Auswertung",
+    version=APP_VERSION,
     lifespan=lifespan,
     docs_url="/api/docs",      # Swagger UI
     redoc_url="/api/redoc",    # ReDoc
@@ -95,7 +95,7 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "version": "0.1.0",
+        "version": APP_VERSION,
         "database": "connected"
     }
 
@@ -109,7 +109,7 @@ async def get_settings():
         dict: Öffentliche Konfiguration
     """
     return {
-        "version": "0.6.0",
+        "version": APP_VERSION,
         "database_path": str(settings.database_path),
         "ha_integration_enabled": bool(settings.supervisor_token),
         "ha_sensors_configured": {

@@ -63,7 +63,7 @@ export default function AppWithSetup({ children }: AppWithSetupProps) {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">Lade EEDC...</p>
+          <p className="text-gray-500 dark:text-gray-400">Lade eedc...</p>
         </div>
       </div>
     )
