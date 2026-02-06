@@ -158,15 +158,17 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
           // Merge vorhandene Daten in initial
           existingData.forEach(imd => {
-            if (initial[imd.investition_id] && imd.verbrauch_daten) {
+            // investition_id kann als Zahl oder String kommen, initial verwendet String-Keys
+            const invIdStr = String(imd.investition_id)
+            if (initial[invIdStr] && imd.verbrauch_daten) {
               // Konvertiere alle Werte zu Strings für die Formularfelder
               Object.entries(imd.verbrauch_daten).forEach(([key, value]) => {
-                if (initial[imd.investition_id][key] !== undefined) {
-                  initial[imd.investition_id][key] = value?.toString() || ''
+                if (initial[invIdStr][key] !== undefined) {
+                  initial[invIdStr][key] = value?.toString() || ''
                 }
                 // V2H Mapping: Backend speichert als v2h_entladung_kwh, Form erwartet entladung_v2h_kwh
-                if (key === 'v2h_entladung_kwh' && initial[imd.investition_id]['entladung_v2h_kwh'] !== undefined) {
-                  initial[imd.investition_id]['entladung_v2h_kwh'] = value?.toString() || ''
+                if (key === 'v2h_entladung_kwh' && initial[invIdStr]['entladung_v2h_kwh'] !== undefined) {
+                  initial[invIdStr]['entladung_v2h_kwh'] = value?.toString() || ''
                 }
               })
             }
