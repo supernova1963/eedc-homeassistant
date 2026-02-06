@@ -50,6 +50,135 @@ class CSVTemplateInfo(BaseModel):
 
 
 # =============================================================================
+# Helper Functions
+# =============================================================================
+
+async def _import_investition_monatsdaten(
+    db: AsyncSession,
+    row: dict,
+    parse_float,
+    inv_by_type: dict[str, "Investition"],
+    jahr: int,
+    monat: int,
+    ueberschreiben: bool
+):
+    """
+    Importiert Investitions-spezifische Monatsdaten aus einer CSV-Zeile.
+
+    Unterstützte Spalten:
+    - E-Auto: EAuto_km, EAuto_Verbrauch_kWh, EAuto_Ladung_PV_kWh, EAuto_Ladung_Netz_kWh
+    - Wallbox: Wallbox_Ladung_kWh, Wallbox_Ladevorgaenge
+    - Speicher: Batterie_Ladung_kWh, Batterie_Entladung_kWh (bereits in Monatsdaten)
+    - Wärmepumpe: WP_Strom_kWh, WP_Heizung_kWh, WP_Warmwasser_kWh
+    """
+    from typing import Callable
+
+    # E-Auto Daten
+    eauto_km = parse_float(row.get("EAuto_km", ""))
+    eauto_verbrauch = parse_float(row.get("EAuto_Verbrauch_kWh", ""))
+    eauto_pv = parse_float(row.get("EAuto_Ladung_PV_kWh", ""))
+    eauto_netz = parse_float(row.get("EAuto_Ladung_Netz_kWh", ""))
+
+    if "e-auto" in inv_by_type and (eauto_km or eauto_verbrauch):
+        inv = inv_by_type["e-auto"]
+        verbrauch_daten = {}
+        if eauto_km:
+            verbrauch_daten["km_gefahren"] = eauto_km
+        if eauto_verbrauch:
+            verbrauch_daten["verbrauch_kwh"] = eauto_verbrauch
+        if eauto_pv:
+            verbrauch_daten["ladung_pv_kwh"] = eauto_pv
+        if eauto_netz:
+            verbrauch_daten["ladung_netz_kwh"] = eauto_netz
+
+        if verbrauch_daten:
+            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+
+    # Wallbox Daten
+    wallbox_ladung = parse_float(row.get("Wallbox_Ladung_kWh", ""))
+    wallbox_vorgaenge = parse_float(row.get("Wallbox_Ladevorgaenge", ""))
+
+    if "wallbox" in inv_by_type and (wallbox_ladung or wallbox_vorgaenge):
+        inv = inv_by_type["wallbox"]
+        verbrauch_daten = {}
+        if wallbox_ladung:
+            verbrauch_daten["ladung_kwh"] = wallbox_ladung
+        if wallbox_vorgaenge:
+            verbrauch_daten["ladevorgaenge"] = int(wallbox_vorgaenge)
+
+        if verbrauch_daten:
+            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+
+    # Speicher Daten (werden bereits in Monatsdaten gespeichert, hier optional zusätzlich)
+    batt_ladung = parse_float(row.get("Batterie_Ladung_kWh", ""))
+    batt_entladung = parse_float(row.get("Batterie_Entladung_kWh", ""))
+
+    if "speicher" in inv_by_type and (batt_ladung or batt_entladung):
+        inv = inv_by_type["speicher"]
+        verbrauch_daten = {}
+        if batt_ladung:
+            verbrauch_daten["ladung_kwh"] = batt_ladung
+        if batt_entladung:
+            verbrauch_daten["entladung_kwh"] = batt_entladung
+
+        if verbrauch_daten:
+            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+
+    # Wärmepumpe Daten
+    wp_strom = parse_float(row.get("WP_Strom_kWh", ""))
+    wp_heizung = parse_float(row.get("WP_Heizung_kWh", ""))
+    wp_warmwasser = parse_float(row.get("WP_Warmwasser_kWh", ""))
+
+    if "waermepumpe" in inv_by_type and (wp_strom or wp_heizung or wp_warmwasser):
+        inv = inv_by_type["waermepumpe"]
+        verbrauch_daten = {}
+        if wp_strom:
+            verbrauch_daten["stromverbrauch_kwh"] = wp_strom
+        if wp_heizung:
+            verbrauch_daten["heizenergie_kwh"] = wp_heizung
+        if wp_warmwasser:
+            verbrauch_daten["warmwasser_kwh"] = wp_warmwasser
+
+        if verbrauch_daten:
+            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+
+
+async def _upsert_investition_monatsdaten(
+    db: AsyncSession,
+    investition_id: int,
+    jahr: int,
+    monat: int,
+    verbrauch_daten: dict,
+    ueberschreiben: bool
+):
+    """Erstellt oder aktualisiert InvestitionMonatsdaten."""
+    existing = await db.execute(
+        select(InvestitionMonatsdaten).where(
+            InvestitionMonatsdaten.investition_id == investition_id,
+            InvestitionMonatsdaten.jahr == jahr,
+            InvestitionMonatsdaten.monat == monat
+        )
+    )
+    existing_imd = existing.scalar_one_or_none()
+
+    if existing_imd:
+        if ueberschreiben:
+            # Merge mit bestehenden Daten
+            if existing_imd.verbrauch_daten:
+                existing_imd.verbrauch_daten = {**existing_imd.verbrauch_daten, **verbrauch_daten}
+            else:
+                existing_imd.verbrauch_daten = verbrauch_daten
+    else:
+        imd = InvestitionMonatsdaten(
+            investition_id=investition_id,
+            jahr=jahr,
+            monat=monat,
+            verbrauch_daten=verbrauch_daten
+        )
+        db.add(imd)
+
+
+# =============================================================================
 # Router
 # =============================================================================
 
@@ -197,6 +326,9 @@ async def import_csv(
     """
     Importiert Monatsdaten aus einer CSV-Datei.
 
+    Unterstützt sowohl Basis-Monatsdaten als auch Investitions-spezifische Daten
+    (E-Auto, Wallbox, Speicher, Wärmepumpe).
+
     Args:
         anlage_id: ID der Anlage
         file: CSV-Datei
@@ -209,6 +341,18 @@ async def import_csv(
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not anlage_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    # Investitionen laden für Investitions-Monatsdaten
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+    )
+    investitionen = inv_result.scalars().all()
+
+    # Investitionen nach Typ gruppieren (erste aktive je Typ)
+    inv_by_type: dict[str, Investition] = {}
+    for inv in investitionen:
+        if inv.typ not in inv_by_type:
+            inv_by_type[inv.typ] = inv
 
     # CSV lesen
     try:
@@ -314,6 +458,11 @@ async def import_csv(
                     datenquelle="csv"
                 )
                 db.add(md)
+
+            # Investitions-Monatsdaten verarbeiten
+            await _import_investition_monatsdaten(
+                db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben
+            )
 
             importiert += 1
 
