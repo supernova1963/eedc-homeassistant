@@ -24,7 +24,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import type { Investition, Anlage, InvestitionTyp } from '../../../types'
-import { INVESTITION_TYP_ORDER, INVESTITION_TYP_LABELS, PARENT_MAPPING } from '../../../hooks/useSetupWizard'
+import { INVESTITION_TYP_ORDER, INVESTITION_TYP_LABELS, PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
 
 interface InvestitionenStepProps {
   investitionen: Investition[]
@@ -180,21 +180,63 @@ function InvestitionForm({
           </div>
 
           {/* Parent-Zuordnung wenn möglich */}
-          {possibleParents.length > 0 && (
+          {parentTyp && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Gehört zu ({INVESTITION_TYP_LABELS[parentTyp!]})
-              </label>
-              <select
-                value={investition.parent_investition_id || ''}
-                onChange={(e) => onUpdate({ parent_investition_id: e.target.value ? parseInt(e.target.value) : undefined })}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              >
-                <option value="">-- Kein Parent --</option>
-                {possibleParents.map(p => (
-                  <option key={p.id} value={p.id}>{p.bezeichnung}</option>
-                ))}
-              </select>
+              {(() => {
+                const isRequired = PARENT_REQUIRED.includes(investition.typ)
+                const hasParents = possibleParents.length > 0
+                const missingParent = isRequired && !investition.parent_investition_id && hasParents
+
+                return (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Gehört zu ({INVESTITION_TYP_LABELS[parentTyp]})
+                      {isRequired ? ' *' : ' (optional)'}
+                    </label>
+                    {hasParents ? (
+                      <>
+                        <select
+                          value={investition.parent_investition_id || ''}
+                          onChange={(e) => onUpdate({ parent_investition_id: e.target.value ? parseInt(e.target.value) : undefined })}
+                          className={`w-full px-4 py-2.5 rounded-lg border bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent ${
+                            missingParent
+                              ? 'border-amber-500 dark:border-amber-500'
+                              : 'border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          <option value="">{isRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}</option>
+                          {possibleParents.map(p => (
+                            <option key={p.id} value={p.id}>{p.bezeichnung}</option>
+                          ))}
+                        </select>
+                        {missingParent && (
+                          <p className="mt-1 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <AlertCircle className="w-4 h-4" />
+                            PV-Module müssen einem Wechselrichter zugeordnet werden
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          {isRequired ? (
+                            <span>
+                              Bitte legen Sie zuerst einen <strong>Wechselrichter</strong> an,
+                              bevor Sie PV-Module zuordnen können.
+                            </span>
+                          ) : (
+                            <span>
+                              Kein {INVESTITION_TYP_LABELS[parentTyp]} vorhanden.
+                              Zuordnung ist optional.
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           )}
 

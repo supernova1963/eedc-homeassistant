@@ -132,11 +132,14 @@ export const INVESTITION_TYP_LABELS: Record<InvestitionTyp, string> = {
 }
 
 // Welche Typen können einem Parent zugeordnet werden?
+// v0.9: E-Auto ist eigenständig (keine Wallbox-Zuordnung)
 export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
-  'pv-module': 'wechselrichter',
-  'speicher': 'wechselrichter',
-  'e-auto': 'wallbox',
+  'pv-module': 'wechselrichter',  // Pflicht: PV-Module müssen einem Wechselrichter zugeordnet sein
+  'speicher': 'wechselrichter',    // Optional: Für Hybrid-Wechselrichter
 }
+
+// Welche Parent-Zuordnungen sind Pflicht?
+export const PARENT_REQUIRED: InvestitionTyp[] = ['pv-module']
 
 interface UseSetupWizardReturn {
   // State

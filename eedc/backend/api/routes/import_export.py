@@ -53,6 +53,153 @@ class CSVTemplateInfo(BaseModel):
 # Helper Functions
 # =============================================================================
 
+async def _import_investition_monatsdaten_v09(
+    db: AsyncSession,
+    row: dict,
+    parse_float,
+    investitionen: list["Investition"],
+    jahr: int,
+    monat: int,
+    ueberschreiben: bool
+) -> dict:
+    """
+    v0.9: Importiert Investitions-Monatsdaten aus personalisierten CSV-Spalten.
+
+    Spalten werden nach Investitions-Bezeichnung gematcht, z.B.:
+    - "Sueddach_kWh" -> PV-Modul "Süddach"
+    - "Speicher_Keller_Ladung_kWh" -> Speicher "Speicher Keller"
+
+    Returns:
+        dict: Summen für Anlage-Monatsdaten (pv_sum, batterie_ladung_sum, batterie_entladung_sum)
+    """
+    summen = {
+        "pv_erzeugung_sum": 0.0,
+        "batterie_ladung_sum": 0.0,
+        "batterie_entladung_sum": 0.0,
+    }
+
+    # Mapping: sanitized name -> investition
+    inv_by_sanitized_name: dict[str, Investition] = {}
+    for inv in investitionen:
+        sanitized = _sanitize_column_name(inv.bezeichnung)
+        inv_by_sanitized_name[sanitized] = inv
+
+    # Alle Spalten durchgehen und Investitionen matchen
+    for col_name, value in row.items():
+        if not value or not value.strip():
+            continue
+
+        # Versuche Investition aus Spaltenname zu extrahieren
+        for sanitized_name, inv in inv_by_sanitized_name.items():
+            if not col_name.startswith(sanitized_name):
+                continue
+
+            suffix = col_name[len(sanitized_name):].lstrip("_")
+            verbrauch_daten = {}
+
+            # PV-Module
+            if inv.typ == "pv-module" and suffix == "kWh":
+                pv_val = parse_float(value)
+                if pv_val:
+                    verbrauch_daten["pv_erzeugung_kwh"] = pv_val
+                    summen["pv_erzeugung_sum"] += pv_val
+
+            # Speicher
+            elif inv.typ == "speicher":
+                if suffix == "Ladung_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladung_kwh"] = val
+                        summen["batterie_ladung_sum"] += val
+                elif suffix == "Entladung_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["entladung_kwh"] = val
+                        summen["batterie_entladung_sum"] += val
+
+            # E-Auto
+            elif inv.typ == "e-auto":
+                if suffix == "km":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["km_gefahren"] = val
+                elif suffix == "Verbrauch_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["verbrauch_kwh"] = val
+                elif suffix == "Ladung_PV_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladung_pv_kwh"] = val
+                elif suffix == "Ladung_Netz_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladung_netz_kwh"] = val
+                elif suffix == "Ladung_Extern_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladung_extern_kwh"] = val
+                elif suffix == "Ladung_Extern_Euro":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladung_extern_euro"] = val
+                elif suffix == "V2H_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["v2h_entladung_kwh"] = val
+
+            # Wallbox
+            elif inv.typ == "wallbox":
+                if suffix == "Ladung_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladung_kwh"] = val
+                elif suffix == "Ladevorgaenge":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["ladevorgaenge"] = int(val)
+
+            # Wärmepumpe
+            elif inv.typ == "waermepumpe":
+                if suffix == "Strom_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["stromverbrauch_kwh"] = val
+                elif suffix == "Heizung_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["heizenergie_kwh"] = val
+                elif suffix == "Warmwasser_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["warmwasser_kwh"] = val
+
+            # Balkonkraftwerk
+            elif inv.typ == "balkonkraftwerk":
+                if suffix == "kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["pv_erzeugung_kwh"] = val
+                        summen["pv_erzeugung_sum"] += val
+                elif suffix == "Speicher_Ladung_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["speicher_ladung_kwh"] = val
+                        summen["batterie_ladung_sum"] += val
+                elif suffix == "Speicher_Entladung_kWh":
+                    val = parse_float(value)
+                    if val:
+                        verbrauch_daten["speicher_entladung_kwh"] = val
+                        summen["batterie_entladung_sum"] += val
+
+            # Wenn Daten vorhanden, speichern
+            if verbrauch_daten:
+                await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+            break  # Spalte wurde verarbeitet
+
+    return summen
+
+
 async def _import_investition_monatsdaten(
     db: AsyncSession,
     row: dict,
@@ -63,16 +210,11 @@ async def _import_investition_monatsdaten(
     ueberschreiben: bool
 ):
     """
-    Importiert Investitions-spezifische Monatsdaten aus einer CSV-Zeile.
+    LEGACY: Importiert Investitions-Monatsdaten aus generischen CSV-Spalten.
 
-    Unterstützte Spalten:
-    - E-Auto: EAuto_km, EAuto_Verbrauch_kWh, EAuto_Ladung_PV_kWh, EAuto_Ladung_Netz_kWh
-    - Wallbox: Wallbox_Ladung_kWh, Wallbox_Ladevorgaenge
-    - Speicher: Batterie_Ladung_kWh, Batterie_Entladung_kWh (bereits in Monatsdaten)
-    - Wärmepumpe: WP_Strom_kWh, WP_Heizung_kWh, WP_Warmwasser_kWh
+    Unterstützt alte Spaltenformate wie EAuto_km, Batterie_Ladung_kWh etc.
+    Wird für Rückwärtskompatibilität beibehalten.
     """
-    from typing import Callable
-
     # E-Auto Daten
     eauto_km = parse_float(row.get("EAuto_km", ""))
     eauto_verbrauch = parse_float(row.get("EAuto_Verbrauch_kWh", ""))
@@ -185,13 +327,28 @@ async def _upsert_investition_monatsdaten(
 router = APIRouter()
 
 
+def _sanitize_column_name(name: str) -> str:
+    """Bereinigt einen Namen für CSV-Spalten (keine Sonderzeichen, keine Leerzeichen)."""
+    import re
+    # Umlaute ersetzen
+    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss'}
+    for old, new in replacements.items():
+        name = name.replace(old, new)
+    # Nur alphanumerische Zeichen und Unterstriche
+    name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    # Mehrfache Unterstriche entfernen
+    name = re.sub(r'_+', '_', name)
+    # Unterstriche am Anfang/Ende entfernen
+    return name.strip('_')
+
+
 @router.get("/template/{anlage_id}", response_model=CSVTemplateInfo)
 async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_db)):
     """
-    Gibt Informationen über das CSV-Template für eine Anlage zurück.
+    Gibt Informationen über das personalisierte CSV-Template für eine Anlage zurück.
 
-    Das Template ist dynamisch und enthält zusätzliche Spalten basierend
-    auf den vorhandenen Investitionen.
+    v0.9: Template basiert auf angelegten Investitionen mit deren Bezeichnungen.
+    Spalten werden dynamisch generiert, z.B. "Speicher_Keller_Ladung_kWh".
 
     Args:
         anlage_id: ID der Anlage
@@ -208,72 +365,99 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
     # Basis-Spalten
-    spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh", "PV_Erzeugung_kWh"]
+    spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
     beschreibung = {
         "Jahr": "Jahr (z.B. 2024)",
         "Monat": "Monat (1-12)",
         "Einspeisung_kWh": "Ins Netz eingespeiste Energie",
         "Netzbezug_kWh": "Aus dem Netz bezogene Energie",
-        "PV_Erzeugung_kWh": "Gesamte PV-Erzeugung (optional, wird berechnet wenn leer)",
     }
 
-    # Investitionen laden
+    # Investitionen laden, nach Typ und ID sortiert
     inv_result = await db.execute(
-        select(Investition).where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+        .order_by(Investition.typ, Investition.id)
     )
     investitionen = inv_result.scalars().all()
 
-    # Dynamische Spalten je nach Investitionstyp
+    # Personalisierte Spalten je nach Investition (v0.9)
     for inv in investitionen:
-        if inv.typ == "speicher":
-            spalten.extend(["Batterie_Ladung_kWh", "Batterie_Entladung_kWh"])
-            beschreibung["Batterie_Ladung_kWh"] = "In Batterie geladene Energie"
-            beschreibung["Batterie_Entladung_kWh"] = "Aus Batterie entladene Energie"
+        prefix = _sanitize_column_name(inv.bezeichnung)
 
-            # Arbitrage-Spalten wenn aktiviert
-            if inv.parameter and inv.parameter.get("nutzt_arbitrage"):
-                spalten.extend(["Batterie_Ladung_Netz_kWh", "Batterie_Ladepreis_Cent"])
-                beschreibung["Batterie_Ladung_Netz_kWh"] = "Aus Netz geladene Energie (Arbitrage)"
-                beschreibung["Batterie_Ladepreis_Cent"] = "Durchschnittlicher Ladepreis"
+        if inv.typ == "pv-module":
+            # PV-Module: Erzeugung pro String
+            col = f"{prefix}_kWh"
+            spalten.append(col)
+            beschreibung[col] = f"PV-Erzeugung {inv.bezeichnung} (kWh)"
+
+        elif inv.typ == "speicher":
+            # Speicher: Ladung und Entladung
+            col_ladung = f"{prefix}_Ladung_kWh"
+            col_entladung = f"{prefix}_Entladung_kWh"
+            spalten.extend([col_ladung, col_entladung])
+            beschreibung[col_ladung] = f"Ladung {inv.bezeichnung} (kWh)"
+            beschreibung[col_entladung] = f"Entladung {inv.bezeichnung} (kWh)"
 
         elif inv.typ == "e-auto":
-            spalten.extend(["EAuto_km", "EAuto_Verbrauch_kWh", "EAuto_Ladung_PV_kWh", "EAuto_Ladung_Netz_kWh"])
-            beschreibung["EAuto_km"] = "Gefahrene Kilometer"
-            beschreibung["EAuto_Verbrauch_kWh"] = "Gesamtverbrauch"
-            beschreibung["EAuto_Ladung_PV_kWh"] = "Mit PV geladen"
-            beschreibung["EAuto_Ladung_Netz_kWh"] = "Mit Netzstrom geladen"
-
-            # V2H-Spalte wenn aktiviert
+            # E-Auto: km, Verbrauch, Ladungen, optional V2H
+            cols = [
+                (f"{prefix}_km", f"Gefahrene km {inv.bezeichnung}"),
+                (f"{prefix}_Verbrauch_kWh", f"Verbrauch {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Ladung_PV_kWh", f"PV-Ladung {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Ladung_Netz_kWh", f"Netz-Ladung {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Ladung_Extern_kWh", f"Externe Ladung {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Ladung_Extern_Euro", f"Externe Ladekosten {inv.bezeichnung} (€)"),
+            ]
+            # V2H wenn aktiviert
             if inv.parameter and inv.parameter.get("nutzt_v2h"):
-                spalten.append("EAuto_V2H_kWh")
-                beschreibung["EAuto_V2H_kWh"] = "V2H Entladung ins Haus"
+                cols.append((f"{prefix}_V2H_kWh", f"V2H-Entladung {inv.bezeichnung} (kWh)"))
 
-        elif inv.typ == "waermepumpe":
-            spalten.extend(["WP_Heizung_kWh", "WP_Warmwasser_kWh", "WP_Strom_kWh"])
-            beschreibung["WP_Heizung_kWh"] = "Erzeugte Heizenergie"
-            beschreibung["WP_Warmwasser_kWh"] = "Erzeugte Warmwasserenergie"
-            beschreibung["WP_Strom_kWh"] = "Stromverbrauch WP"
+            for col, desc in cols:
+                spalten.append(col)
+                beschreibung[col] = desc
 
         elif inv.typ == "wallbox":
-            spalten.extend(["Wallbox_Ladung_kWh", "Wallbox_Ladevorgaenge"])
-            beschreibung["Wallbox_Ladung_kWh"] = "Gesamte Ladung über Wallbox"
-            beschreibung["Wallbox_Ladevorgaenge"] = "Anzahl Ladevorgänge"
+            # Wallbox: Ladung und Ladevorgänge
+            cols = [
+                (f"{prefix}_Ladung_kWh", f"Ladung {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Ladevorgaenge", f"Ladevorgänge {inv.bezeichnung}"),
+            ]
+            for col, desc in cols:
+                spalten.append(col)
+                beschreibung[col] = desc
+
+        elif inv.typ == "waermepumpe":
+            # Wärmepumpe: Strom, Heizung, Warmwasser
+            cols = [
+                (f"{prefix}_Strom_kWh", f"Stromverbrauch {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Heizung_kWh", f"Heizenergie {inv.bezeichnung} (kWh)"),
+                (f"{prefix}_Warmwasser_kWh", f"Warmwasser {inv.bezeichnung} (kWh)"),
+            ]
+            for col, desc in cols:
+                spalten.append(col)
+                beschreibung[col] = desc
+
+        elif inv.typ == "balkonkraftwerk":
+            # Balkonkraftwerk: Erzeugung + optionaler Speicher
+            col_pv = f"{prefix}_kWh"
+            spalten.append(col_pv)
+            beschreibung[col_pv] = f"PV-Erzeugung {inv.bezeichnung} (kWh)"
+            # Optional: Speicher falls Parameter vorhanden
+            if inv.parameter and inv.parameter.get("hat_speicher"):
+                col_sp_l = f"{prefix}_Speicher_Ladung_kWh"
+                col_sp_e = f"{prefix}_Speicher_Entladung_kWh"
+                spalten.extend([col_sp_l, col_sp_e])
+                beschreibung[col_sp_l] = f"Speicher-Ladung {inv.bezeichnung} (kWh)"
+                beschreibung[col_sp_e] = f"Speicher-Entladung {inv.bezeichnung} (kWh)"
 
     # Optionale Spalten am Ende
     spalten.extend(["Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"])
-    beschreibung["Globalstrahlung_kWh_m2"] = "Globalstrahlung (optional)"
+    beschreibung["Globalstrahlung_kWh_m2"] = "Globalstrahlung (optional, kWh/m²)"
     beschreibung["Sonnenstunden"] = "Sonnenstunden (optional)"
     beschreibung["Notizen"] = "Notizen (optional)"
 
-    # Duplikate entfernen (falls mehrere gleiche Investitionen)
-    seen = set()
-    unique_spalten = []
-    for s in spalten:
-        if s not in seen:
-            seen.add(s)
-            unique_spalten.append(s)
-
-    return CSVTemplateInfo(spalten=unique_spalten, beschreibung=beschreibung)
+    return CSVTemplateInfo(spalten=spalten, beschreibung=beschreibung)
 
 
 @router.get("/template/{anlage_id}/download")
@@ -326,8 +510,12 @@ async def import_csv(
     """
     Importiert Monatsdaten aus einer CSV-Datei.
 
-    Unterstützt sowohl Basis-Monatsdaten als auch Investitions-spezifische Daten
-    (E-Auto, Wallbox, Speicher, Wärmepumpe).
+    v0.9: Unterstützt personalisierte Spalten basierend auf Investitions-Bezeichnungen.
+    Beispiel: "Sueddach_kWh", "Speicher_Keller_Ladung_kWh"
+
+    Summenberechnung:
+    - pv_erzeugung: Summe aus PV-Modul-Spalten wenn vorhanden
+    - batterie_ladung/entladung: Summe aus Speicher-Spalten wenn vorhanden
 
     Args:
         anlage_id: ID der Anlage
@@ -346,9 +534,9 @@ async def import_csv(
     inv_result = await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
     )
-    investitionen = inv_result.scalars().all()
+    investitionen = list(inv_result.scalars().all())
 
-    # Investitionen nach Typ gruppieren (erste aktive je Typ)
+    # Investitionen nach Typ gruppieren (erste aktive je Typ) - für Legacy-Import
     inv_by_type: dict[str, Investition] = {}
     for inv in investitionen:
         if inv.typ not in inv_by_type:
@@ -362,11 +550,18 @@ async def import_csv(
         raise HTTPException(status_code=400, detail=f"Fehler beim Lesen der Datei: {e}")
 
     # CSV parsen - automatische Trennzeichen-Erkennung (Semikolon oder Komma)
-    # Prüfe erste Zeile auf Trennzeichen
     first_line = text.split('\n')[0] if text else ''
     delimiter = ';' if ';' in first_line else ','
 
     reader = csv.DictReader(StringIO(text), delimiter=delimiter)
+
+    # Prüfen ob personalisierte Spalten vorhanden (v0.9 Format)
+    fieldnames = reader.fieldnames or []
+    has_personalized_columns = any(
+        _sanitize_column_name(inv.bezeichnung) in col
+        for col in fieldnames
+        for inv in investitionen
+    )
 
     importiert = 0
     uebersprungen = 0
@@ -408,14 +603,45 @@ async def import_csv(
 
             einspeisung = parse_float(row.get("Einspeisung_kWh", "")) or 0
             netzbezug = parse_float(row.get("Netzbezug_kWh", "")) or 0
-            pv_erzeugung = parse_float(row.get("PV_Erzeugung_kWh", ""))
-            batterie_ladung = parse_float(row.get("Batterie_Ladung_kWh", ""))
-            batterie_entladung = parse_float(row.get("Batterie_Entladung_kWh", ""))
             globalstrahlung = parse_float(row.get("Globalstrahlung_kWh_m2", ""))
             sonnenstunden = parse_float(row.get("Sonnenstunden", ""))
             notizen = row.get("Notizen", "").strip() or None
 
-            # Berechnete Felder vorbereiten
+            # v0.9: Personalisierte Spalten verarbeiten und Summen berechnen
+            summen = {"pv_erzeugung_sum": 0.0, "batterie_ladung_sum": 0.0, "batterie_entladung_sum": 0.0}
+            if has_personalized_columns and investitionen:
+                summen = await _import_investition_monatsdaten_v09(
+                    db, row, parse_float, investitionen, jahr, monat, ueberschreiben
+                )
+
+            # PV-Erzeugung: Expliziter Wert ODER Summe aus PV-Modulen
+            pv_erzeugung_explicit = parse_float(row.get("PV_Erzeugung_kWh", ""))
+            if pv_erzeugung_explicit is not None:
+                pv_erzeugung = pv_erzeugung_explicit
+            elif summen["pv_erzeugung_sum"] > 0:
+                pv_erzeugung = summen["pv_erzeugung_sum"]
+            else:
+                pv_erzeugung = None
+
+            # Batterie: Expliziter Wert ODER Summe aus Speicher-Investitionen
+            batterie_ladung_explicit = parse_float(row.get("Batterie_Ladung_kWh", ""))
+            batterie_entladung_explicit = parse_float(row.get("Batterie_Entladung_kWh", ""))
+
+            if batterie_ladung_explicit is not None:
+                batterie_ladung = batterie_ladung_explicit
+            elif summen["batterie_ladung_sum"] > 0:
+                batterie_ladung = summen["batterie_ladung_sum"]
+            else:
+                batterie_ladung = None
+
+            if batterie_entladung_explicit is not None:
+                batterie_entladung = batterie_entladung_explicit
+            elif summen["batterie_entladung_sum"] > 0:
+                batterie_entladung = summen["batterie_entladung_sum"]
+            else:
+                batterie_entladung = None
+
+            # Berechnete Felder
             direktverbrauch = None
             eigenverbrauch = None
             gesamtverbrauch = None
@@ -459,10 +685,11 @@ async def import_csv(
                 )
                 db.add(md)
 
-            # Investitions-Monatsdaten verarbeiten
-            await _import_investition_monatsdaten(
-                db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben
-            )
+            # Legacy: Generische Investitions-Spalten verarbeiten (falls keine personalisierten)
+            if not has_personalized_columns:
+                await _import_investition_monatsdaten(
+                    db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben
+                )
 
             importiert += 1
 
@@ -486,14 +713,18 @@ async def import_csv(
 async def export_csv(
     anlage_id: int,
     jahr: Optional[int] = Query(None, description="Filter nach Jahr"),
+    include_investitionen: bool = Query(True, description="Investitions-Monatsdaten einschließen"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Exportiert Monatsdaten als CSV.
 
+    v0.9: Unterstützt personalisierte Spalten basierend auf Investitions-Bezeichnungen.
+
     Args:
         anlage_id: ID der Anlage
         jahr: Optional - nur dieses Jahr exportieren
+        include_investitionen: Investitions-Monatsdaten einschließen (Standard: True)
 
     Returns:
         CSV-Datei als Download
@@ -513,17 +744,93 @@ async def export_csv(
     result = await db.execute(query)
     monatsdaten = result.scalars().all()
 
+    # Investitionen und deren Monatsdaten laden
+    investitionen = []
+    inv_monatsdaten_map: dict[tuple[int, int, int], dict] = {}  # (inv_id, jahr, monat) -> verbrauch_daten
+
+    if include_investitionen:
+        inv_result = await db.execute(
+            select(Investition)
+            .where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+            .order_by(Investition.typ, Investition.id)
+        )
+        investitionen = list(inv_result.scalars().all())
+
+        # Investitions-Monatsdaten laden
+        for inv in investitionen:
+            imd_query = select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id == inv.id
+            )
+            if jahr:
+                imd_query = imd_query.where(InvestitionMonatsdaten.jahr == jahr)
+
+            imd_result = await db.execute(imd_query)
+            for imd in imd_result.scalars().all():
+                inv_monatsdaten_map[(inv.id, imd.jahr, imd.monat)] = imd.verbrauch_daten or {}
+
     # CSV erstellen
     output = StringIO()
     writer = csv.writer(output, delimiter=";")
 
-    # Header
-    header = [
-        "Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh", "PV_Erzeugung_kWh",
-        "Direktverbrauch_kWh", "Eigenverbrauch_kWh", "Gesamtverbrauch_kWh",
-        "Batterie_Ladung_kWh", "Batterie_Entladung_kWh",
-        "Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"
-    ]
+    # Dynamische Header basierend auf Investitionen (v0.9)
+    header = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
+
+    # Investitions-Spalten nach Template-Logik hinzufügen
+    inv_columns: list[tuple[Investition, str, str]] = []  # (inv, suffix, data_key)
+
+    for inv in investitionen:
+        prefix = _sanitize_column_name(inv.bezeichnung)
+
+        if inv.typ == "pv-module":
+            inv_columns.append((inv, "kWh", "pv_erzeugung_kwh"))
+            header.append(f"{prefix}_kWh")
+
+        elif inv.typ == "speicher":
+            inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
+            inv_columns.append((inv, "Entladung_kWh", "entladung_kwh"))
+            header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Entladung_kWh"])
+
+        elif inv.typ == "e-auto":
+            cols = [
+                ("km", "km_gefahren"),
+                ("Verbrauch_kWh", "verbrauch_kwh"),
+                ("Ladung_PV_kWh", "ladung_pv_kwh"),
+                ("Ladung_Netz_kWh", "ladung_netz_kwh"),
+                ("Ladung_Extern_kWh", "ladung_extern_kwh"),
+                ("Ladung_Extern_Euro", "ladung_extern_euro"),
+            ]
+            if inv.parameter and inv.parameter.get("nutzt_v2h"):
+                cols.append(("V2H_kWh", "v2h_entladung_kwh"))
+            for suffix, key in cols:
+                inv_columns.append((inv, suffix, key))
+                header.append(f"{prefix}_{suffix}")
+
+        elif inv.typ == "wallbox":
+            inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
+            inv_columns.append((inv, "Ladevorgaenge", "ladevorgaenge"))
+            header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Ladevorgaenge"])
+
+        elif inv.typ == "waermepumpe":
+            cols = [
+                ("Strom_kWh", "stromverbrauch_kwh"),
+                ("Heizung_kWh", "heizenergie_kwh"),
+                ("Warmwasser_kWh", "warmwasser_kwh"),
+            ]
+            for suffix, key in cols:
+                inv_columns.append((inv, suffix, key))
+                header.append(f"{prefix}_{suffix}")
+
+        elif inv.typ == "balkonkraftwerk":
+            inv_columns.append((inv, "kWh", "pv_erzeugung_kwh"))
+            header.append(f"{prefix}_kWh")
+            if inv.parameter and inv.parameter.get("hat_speicher"):
+                inv_columns.append((inv, "Speicher_Ladung_kWh", "speicher_ladung_kwh"))
+                inv_columns.append((inv, "Speicher_Entladung_kWh", "speicher_entladung_kwh"))
+                header.extend([f"{prefix}_Speicher_Ladung_kWh", f"{prefix}_Speicher_Entladung_kWh"])
+
+    # Optionale Basis-Spalten am Ende
+    header.extend(["Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"])
+
     writer.writerow(header)
 
     # Daten
@@ -533,16 +840,21 @@ async def export_csv(
             md.monat,
             md.einspeisung_kwh,
             md.netzbezug_kwh,
-            md.pv_erzeugung_kwh or "",
-            md.direktverbrauch_kwh or "",
-            md.eigenverbrauch_kwh or "",
-            md.gesamtverbrauch_kwh or "",
-            md.batterie_ladung_kwh or "",
-            md.batterie_entladung_kwh or "",
+        ]
+
+        # Investitions-Daten hinzufügen
+        for inv, suffix, data_key in inv_columns:
+            inv_data = inv_monatsdaten_map.get((inv.id, md.jahr, md.monat), {})
+            value = inv_data.get(data_key, "")
+            row.append(value if value != "" else "")
+
+        # Optionale Felder
+        row.extend([
             md.globalstrahlung_kwh_m2 or "",
             md.sonnenstunden or "",
             md.notizen or ""
-        ]
+        ])
+
         writer.writerow(row)
 
     output.seek(0)

@@ -192,6 +192,67 @@ async def list_investition_typen():
     ]
 
 
+class ParentOption(BaseModel):
+    """Verfügbare Parent-Investition."""
+    id: int
+    bezeichnung: str
+    typ: str
+    required: bool = False
+
+
+@router.get("/parent-options/{anlage_id}", response_model=dict[str, list[ParentOption]])
+async def get_parent_options(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gibt verfügbare Parent-Optionen für jeden Typ zurück.
+
+    Returns:
+        dict: Typ -> Liste der möglichen Parents
+
+    Beispiel:
+        {
+            "pv-module": [{"id": 1, "bezeichnung": "Fronius GEN24", "typ": "wechselrichter", "required": true}],
+            "speicher": [{"id": 1, "bezeichnung": "Fronius GEN24", "typ": "wechselrichter", "required": false}]
+        }
+    """
+    # Wechselrichter der Anlage laden
+    wr_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.WECHSELRICHTER.value)
+        .where(Investition.aktiv == True)
+        .order_by(Investition.bezeichnung)
+    )
+    wechselrichter = wr_result.scalars().all()
+
+    wr_options = [
+        ParentOption(id=wr.id, bezeichnung=wr.bezeichnung, typ=wr.typ)
+        for wr in wechselrichter
+    ]
+
+    return {
+        # PV-Module: Wechselrichter ist Pflicht (wenn vorhanden)
+        "pv-module": [
+            ParentOption(id=o.id, bezeichnung=o.bezeichnung, typ=o.typ, required=len(wechselrichter) > 0)
+            for o in wr_options
+        ],
+        # Speicher: Wechselrichter ist optional (für Hybrid-WR)
+        "speicher": [
+            ParentOption(id=o.id, bezeichnung=o.bezeichnung, typ=o.typ, required=False)
+            for o in wr_options
+        ],
+        # Andere Typen: Keine Parent-Optionen
+        "wechselrichter": [],
+        "e-auto": [],
+        "wallbox": [],
+        "waermepumpe": [],
+        "balkonkraftwerk": [],
+        "sonstiges": [],
+    }
+
+
 @router.get("/", response_model=list[InvestitionResponse])
 async def list_investitionen(
     anlage_id: Optional[int] = Query(None, description="Filter nach Anlage"),
@@ -261,7 +322,7 @@ async def create_investition(data: InvestitionCreate, db: AsyncSession = Depends
 
     Raises:
         404: Anlage nicht gefunden
-        400: Ungültiger Typ
+        400: Ungültiger Typ oder fehlende Parent-Zuordnung
     """
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == data.anlage_id))
@@ -276,11 +337,94 @@ async def create_investition(data: InvestitionCreate, db: AsyncSession = Depends
             detail=f"Ungültiger Typ. Erlaubt: {valid_types}"
         )
 
+    # Parent-Child Validierung (v0.9)
+    await _validate_parent_child(db, data.anlage_id, data.typ, data.parent_investition_id)
+
     inv = Investition(**data.model_dump())
     db.add(inv)
     await db.flush()
     await db.refresh(inv)
     return inv
+
+
+async def _validate_parent_child(
+    db: AsyncSession,
+    anlage_id: int,
+    typ: str,
+    parent_id: Optional[int],
+    exclude_id: Optional[int] = None
+):
+    """
+    Validiert Parent-Child Beziehungen für Investitionen.
+
+    Regeln:
+    - PV-Module MÜSSEN einem Wechselrichter zugeordnet sein
+    - Speicher KÖNNEN optional einem Wechselrichter zugeordnet sein (Hybrid-WR)
+    - Andere Typen haben keinen Parent
+    """
+    # PV-Module: Parent (Wechselrichter) ist Pflicht
+    if typ == InvestitionTyp.PV_MODULE.value:
+        if not parent_id:
+            # Prüfen ob überhaupt Wechselrichter existieren
+            wr_result = await db.execute(
+                select(Investition)
+                .where(Investition.anlage_id == anlage_id)
+                .where(Investition.typ == InvestitionTyp.WECHSELRICHTER.value)
+            )
+            wechselrichter = wr_result.scalars().all()
+            if wechselrichter:
+                raise HTTPException(
+                    status_code=400,
+                    detail="PV-Module müssen einem Wechselrichter zugeordnet werden. "
+                           f"Verfügbare Wechselrichter: {[w.bezeichnung for w in wechselrichter]}"
+                )
+            # Kein Wechselrichter vorhanden - PV-Modul ohne Parent erlauben (Migration)
+            return
+
+        # Parent muss Wechselrichter sein
+        parent_result = await db.execute(
+            select(Investition).where(Investition.id == parent_id)
+        )
+        parent = parent_result.scalar_one_or_none()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Parent-Investition nicht gefunden")
+        if parent.typ != InvestitionTyp.WECHSELRICHTER.value:
+            raise HTTPException(
+                status_code=400,
+                detail=f"PV-Module können nur Wechselrichtern zugeordnet werden, nicht '{parent.typ}'"
+            )
+        if parent.anlage_id != anlage_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Parent-Investition gehört zu einer anderen Anlage"
+            )
+
+    # Speicher: Parent (Wechselrichter) ist optional
+    elif typ == InvestitionTyp.SPEICHER.value:
+        if parent_id:
+            parent_result = await db.execute(
+                select(Investition).where(Investition.id == parent_id)
+            )
+            parent = parent_result.scalar_one_or_none()
+            if not parent:
+                raise HTTPException(status_code=404, detail="Parent-Investition nicht gefunden")
+            if parent.typ != InvestitionTyp.WECHSELRICHTER.value:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Speicher können nur Wechselrichtern (Hybrid-WR) zugeordnet werden, nicht '{parent.typ}'"
+                )
+            if parent.anlage_id != anlage_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Parent-Investition gehört zu einer anderen Anlage"
+                )
+
+    # Andere Typen: Kein Parent erlaubt
+    elif parent_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Investitionen vom Typ '{typ}' können keinem Parent zugeordnet werden"
+        )
 
 
 @router.put("/{investition_id}", response_model=InvestitionResponse)
@@ -301,6 +445,7 @@ async def update_investition(
 
     Raises:
         404: Nicht gefunden
+        400: Ungültige Parent-Zuordnung
     """
     result = await db.execute(select(Investition).where(Investition.id == investition_id))
     inv = result.scalar_one_or_none()
@@ -309,6 +454,17 @@ async def update_investition(
         raise HTTPException(status_code=404, detail="Investition nicht gefunden")
 
     update_data = data.model_dump(exclude_unset=True)
+
+    # Parent-Child Validierung wenn parent_investition_id geändert wird
+    if 'parent_investition_id' in update_data:
+        await _validate_parent_child(
+            db,
+            inv.anlage_id,
+            inv.typ,
+            update_data['parent_investition_id'],
+            exclude_id=investition_id
+        )
+
     for field, value in update_data.items():
         setattr(inv, field, value)
 

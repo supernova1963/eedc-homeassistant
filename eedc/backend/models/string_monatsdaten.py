@@ -1,6 +1,16 @@
 """
 String-Monatsdaten Model
 
+DEPRECATED v0.9: Dieses Model wird durch InvestitionMonatsdaten ersetzt.
+PV-Modul Erträge werden jetzt in InvestitionMonatsdaten.verbrauch_daten gespeichert:
+  {"pv_erzeugung_kwh": 450.5}
+
+Das Model wird beibehalten, um bestehende Datenbanken nicht zu brechen.
+Neue Daten sollten über InvestitionMonatsdaten erfasst werden.
+
+---
+
+Legacy-Zweck:
 Speichert monatliche PV-Erträge pro String/MPPT.
 Ermöglicht SOLL-IST Vergleich pro PV-Modul.
 """
