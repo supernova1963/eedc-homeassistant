@@ -1,7 +1,7 @@
 /**
  * SummaryStep - Zusammenfassung vor Abschluss des Setup-Wizards
  *
- * v0.8.0 - Angepasst für neuen Wizard-Flow mit Investitionen und SensorConfig
+ * v0.9.0 - Vereinfacht (SensorConfig entfernt, kein HA-Import mehr)
  */
 
 import {
@@ -19,13 +19,12 @@ import {
   ArrowRight,
   Info,
 } from 'lucide-react'
-import type { Anlage, Strompreis, Investition, SensorConfig, InvestitionTyp } from '../../../types'
+import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../../../types'
 
 interface SummaryStepProps {
   anlage: Anlage | null
   strompreis: Strompreis | null
   investitionen: Investition[]
-  sensorConfig: SensorConfig
   onComplete: () => void
   onBack: () => void
 }
@@ -55,7 +54,6 @@ export default function SummaryStep({
   anlage,
   strompreis,
   investitionen,
-  sensorConfig,
   onComplete,
   onBack,
 }: SummaryStepProps) {
@@ -63,14 +61,6 @@ export default function SummaryStep({
   const hasAnlage = !!anlage
   const hasStrompreis = !!strompreis
   const hasInvestitionen = investitionen.length > 0
-  const hasSensorConfig = !!(
-    sensorConfig.pv_erzeugung ||
-    sensorConfig.einspeisung ||
-    sensorConfig.netzbezug
-  )
-
-  // Anzahl konfigurierter Sensoren
-  const sensorCount = Object.values(sensorConfig).filter(v => v).length
 
   // Gesamtinvestition berechnen
   const totalInvestition = investitionen.reduce(
@@ -193,54 +183,11 @@ export default function SummaryStep({
               </div>
             )}
           </SummaryCard>
-
-          {/* Sensor-Konfiguration */}
-          <SummaryCard
-            icon={<Zap className="w-5 h-5" />}
-            title="HA Sensor-Zuordnung"
-            status={hasSensorConfig ? 'success' : 'neutral'}
-          >
-            {hasSensorConfig ? (
-              <div className="space-y-1">
-                <div className="text-gray-700 dark:text-gray-300">
-                  {sensorCount} Sensor{sensorCount !== 1 ? 'en' : ''} zugeordnet
-                </div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {sensorConfig.pv_erzeugung && (
-                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
-                      PV-Erzeugung
-                    </span>
-                  )}
-                  {sensorConfig.einspeisung && (
-                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
-                      Einspeisung
-                    </span>
-                  )}
-                  {sensorConfig.netzbezug && (
-                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
-                      Netzbezug
-                    </span>
-                  )}
-                  {sensorConfig.batterie_ladung && (
-                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
-                      Batterie
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-gray-500 dark:text-gray-400">
-                Keine Sensoren zugeordnet - Import manuell möglich
-              </div>
-            )}
-          </SummaryCard>
         </div>
 
         {/* Individualisierte nächste Schritte */}
         <NextStepsSection
           hasAnlage={hasAnlage}
-          hasInvestitionen={hasInvestitionen}
-          hasSensorConfig={hasSensorConfig}
           investitionen={investitionen}
         />
       </div>
@@ -324,8 +271,6 @@ function NextStepsSection({
   investitionen,
 }: {
   hasAnlage: boolean
-  hasInvestitionen: boolean
-  hasSensorConfig: boolean
   investitionen: Investition[]
 }) {
   // Fehlende Investitionstypen ermitteln

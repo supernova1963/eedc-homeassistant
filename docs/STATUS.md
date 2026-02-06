@@ -1,7 +1,7 @@
 # EEDC Projekt Status
 
-**Stand:** 2026-02-05
-**Version:** 0.8.1
+**Stand:** 2026-02-06
+**Version:** 0.9.0
 
 ## Übersicht
 
@@ -9,13 +9,30 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 
 ---
 
-## Aktueller Stand (v0.8.1)
+## Aktueller Stand (v0.9.0)
+
+### Änderungen in v0.9.0
+
+**Datenmodell-Bereinigung und Vereinfachung:**
+
+1. **HA-Import Monatsdaten entfernt**
+   - War zu unzuverlässig (Long-Term Statistics Einschränkungen)
+   - Datenerfassung jetzt nur via CSV-Import oder manuell
+   - HA wird weiterhin für Discovery (Geräte-Erkennung) verwendet
+
+2. **Sensor-Konfiguration aus Wizard entfernt**
+   - Nicht mehr benötigt ohne HA-Import
+   - Wizard-Schritte reduziert von 8 auf 7
+
+3. **Neues Zielbild dokumentiert** (siehe `docs/ZIELBILD_v0.9.md`)
+   - Parent-Child Beziehungen: PV-Module → Wechselrichter (Pflicht), Speicher → Wechselrichter (Optional)
+   - Personalisierte CSV-Vorlagen basierend auf angelegten Investitionen
+   - Summenberechnung: Batterie-Felder aus Speicher-Investitionen, PV-Erzeugung aus PV-Modulen
 
 ### Was funktioniert gut
 
 1. **Setup-Wizard mit Auto-Discovery**
    - Automatische Erkennung von HA-Geräten (Wechselrichter, Speicher, E-Autos, Wallboxen)
-   - Sensor-Zuordnung für Energy-Daten
    - Strompreis-Konfiguration mit deutschen Standardwerten
 
 2. **Investitionsverwaltung**
@@ -24,8 +41,7 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
 
 3. **Monatsdaten-Erfassung**
    - Manuelle Eingabe
-   - CSV-Import
-   - HA-Import (mit Einschränkungen, siehe unten)
+   - CSV-Import (erweitert für Investitions-Monatsdaten)
 
 4. **Dashboards und Auswertungen**
    - Haupt-Dashboard mit KPIs
@@ -34,48 +50,81 @@ EEDC (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur PV-Analys
    - Wallbox Dashboard
    - PVGIS-Prognose
 
-### Bekannte Einschränkungen
+---
 
-#### HA-Datenimport begrenzt auf ~10 Tage
-Die Home Assistant REST API liefert nur kurzfristige History-Daten. Long-Term Statistics (die im HA Energy Dashboard sichtbar sind) sind nur über die WebSocket API zugänglich, die noch nicht stabil funktioniert.
+## Wizard-Schritte (v0.9.0)
 
-**Praktische Auswirkung:**
-- Import für aktuelle Monate (letzte ~10 Tage) funktioniert
-- Import für ältere Monate nicht möglich
-- **Empfehlung:** Monatsdaten manuell oder per CSV importieren
+1. **Willkommen** - Einführung
+2. **Anlage erstellen** - Name, Leistung, Standort (+ Geocoding)
+3. **HA-Verbindung prüfen** - Für Discovery, überspringbar
+4. **Strompreise** - Mit deutschen Standardwerten
+5. **Auto-Discovery** - Geräte erkennen & als Investitionen anlegen
+6. **Investitionen vervollständigen** - Kaufpreis, Datum, Details
+7. **Zusammenfassung** - Mit individualisierten nächsten Schritten
+
+---
+
+## Datenmodell (Zielbild v0.9)
+
+Siehe `docs/ZIELBILD_v0.9.md` für Details.
+
+### Kernkonzepte
+
+```
+ANLAGE (Summenfelder, berechnet wo Investitionsdaten vorhanden)
+  │
+  └── INVESTITIONEN (1:n)
+        │
+        ├── Wechselrichter
+        │     ├── PV-Module (Pflicht: Parent)
+        │     └── Speicher (Optional: Parent für Hybrid-WR)
+        │
+        ├── E-Auto (eigenständig)
+        ├── Wallbox (eigenständig)
+        ├── Wärmepumpe (eigenständig)
+        └── Balkonkraftwerk (All-in-One)
+```
+
+### Datenfluss
+
+```
+CSV Import → Monatsdaten (Basis-Werte: Einspeisung, Netzbezug)
+          → InvestitionMonatsdaten (E-Auto, Wallbox, Speicher, WP, PV-Module)
+
+Summenberechnung:
+  Monatsdaten.batterie_ladung_kwh = Σ(Speicher.ladung_kwh)
+  Monatsdaten.pv_erzeugung_kwh = Σ(PV-Modul.pv_erzeugung_kwh)
+```
+
+---
+
+## Bekannte Einschränkungen
 
 #### PV-Module werden nicht automatisch erkannt
 PV-Module haben keine eigenen HA-Sensoren und müssen manuell als Investition angelegt werden. Die Angaben zu Ausrichtung und Neigung sind wichtig für die PVGIS-Ertragsprognose.
 
 ---
 
-## Änderungen in v0.8.x
+## Nächste Schritte (Roadmap v0.9)
 
-### v0.8.1 (2026-02-05)
-- **Wizard vereinfacht:** Monatsdaten-Fokus entfernt
-- **Individualisierte "Nächste Schritte":** Summary zeigt priorisierte Schritte basierend auf Konfiguration
-- **Verbessertes Hinzufügen von Investitionen:** Scroll und Highlight bei neuen Einträgen
-- **HA-Import UX verbessert:** Loading-Overlay und Detail-Feedback (welche Sensoren Daten lieferten)
+### Phase 2: Parent-Child implementieren
+- [ ] Validierung aktivieren: PV-Modul braucht Wechselrichter
+- [ ] UI: Dropdown für Wechselrichter bei PV-Modul
+- [ ] Optional: Speicher → Wechselrichter Zuordnung
 
-### v0.8.0 (2026-02-05)
-- **Wizard Refactoring:** Komplett überarbeiteter Setup-Wizard
-- **Sensor-Konfiguration im Wizard:** Ersetzt config.yaml Einstellung
-- **Investitionen-Schritt:** Alle Investitionen auf einer Seite bearbeiten
-- **Auto-Start bei leerer DB:** Wizard startet automatisch wenn keine Anlagen vorhanden
+### Phase 3: Monatsdaten-Logik
+- [ ] Summenberechnung für Batterie-Felder implementieren
+- [ ] pv_erzeugung aus PV-Modul-Summe wenn vorhanden
+- [ ] Personalisierte CSV-Vorlage mit Investitions-Spalten
 
----
+### Phase 4: PVGIS
+- [ ] PVGIS-Abruf pro PV-Modul ermöglichen
+- [ ] Anlage-Prognose = Summe PV-Modul-Prognosen
+- [ ] Dashboard: SOLL-IST Vergleich pro String
 
-## Wizard-Schritte (v0.8.1)
-
-1. **Willkommen** - Einführung
-2. **Anlage erstellen** - Name, Leistung, Standort (+ Geocoding)
-3. **HA-Verbindung prüfen** - Automatisch, überspringbar
-4. **Strompreise** - Mit deutschen Standardwerten
-5. **Auto-Discovery** - Geräte erkennen & als Investitionen anlegen
-6. **Investitionen vervollständigen** - Kaufpreis, Datum, Details
-7. **Sensor-Konfiguration** - HA-Sensoren zuordnen
-8. **Zusammenfassung** - Mit individualisierten nächsten Schritten
-9. **Abschluss** - Erfolgsmeldung
+### Phase 5: Aufräumen
+- [ ] StringMonatsdaten-Tabelle entfernen (DB-Migration)
+- [ ] Batterie-Direktfelder in Monatsdaten deprecaten
 
 ---
 
@@ -101,69 +150,23 @@ evcc (höchste Priorität), Smart, Wallbox
 eedc-homeassistant/
 ├── docs/
 │   ├── STATUS.md           # Dieses Dokument
+│   ├── ZIELBILD_v0.9.md    # Datenmodell-Zielbild
+│   ├── DATENMODELL.md      # Analyse der Inkonsistenzen
 │   ├── STATUS_v0.7.md      # Archiv
-│   ├── HANDOVER.md         # Entwickler-Handover
-│   └── DEVELOPMENT.md      # Development Guide
+│   └── HANDOVER.md         # Entwickler-Handover
 ├── eedc/
-│   ├── config.yaml         # HA Add-on Konfiguration
 │   ├── backend/
-│   │   ├── main.py         # FastAPI Entry
 │   │   ├── api/routes/
-│   │   │   ├── ha_integration.py   # Discovery, Import
-│   │   │   └── anlagen.py          # Geocoding, Sensor-Config
-│   │   ├── models/
-│   │   └── services/
+│   │   │   ├── ha_integration.py   # Discovery (Import deprecated)
+│   │   │   └── import_export.py    # CSV-Import
+│   │   └── models/
 │   └── frontend/
 │       ├── src/
-│       │   ├── components/
-│       │   │   ├── setup-wizard/   # Wizard-Komponenten
-│       │   │   └── forms/
-│       │   ├── hooks/
-│       │   │   └── useSetupWizard.ts
-│       │   └── pages/
-│       └── dist/               # Build (wird committed)
+│       │   ├── components/setup-wizard/
+│       │   ├── hooks/useSetupWizard.ts
+│       │   └── pages/Monatsdaten.tsx
+│       └── dist/
 ```
-
----
-
-## Nächste Schritte (Roadmap)
-
-### Priorität 1: Datenqualität verbessern
-- [ ] Monatsdaten-Seite: Bessere UX für manuelle Erfassung
-- [ ] CSV-Import: Validierung und Fehlerbehandlung verbessern
-- [ ] Investitionen-Seite: Direkter Zugang zu PV-Module hinzufügen
-
-### Priorität 2: Auswertungen ausbauen
-- [ ] Dashboard: Wärmepumpe (Backend vorbereitet)
-- [ ] PDF-Export (jsPDF vorhanden)
-- [ ] Jahresvergleich
-
-### Priorität 3 (Zukunftsvision): HA-Integration vertiefen
-- [ ] WebSocket für Long-Term Statistics aktivieren
-- [ ] **EEDC-Gerät in HA erstellen** mit berechneten KPIs:
-  - Eigenverbrauchsquote (%)
-  - Autarkiegrad (%)
-  - ROI-Status (%)
-  - Amortisationsprognose (Datum)
-  - CO2-Ersparnis (kg)
-- [ ] Sensoren am Wechselrichter-Gerät ablegen
-
----
-
-## Sensor-Konfiguration
-
-Sensoren können im Setup-Wizard oder in der Add-on-Konfiguration eingetragen werden:
-
-```yaml
-ha_sensors:
-  pv_erzeugung: sensor.xyz_pv_gen_meter
-  einspeisung: sensor.xyz_metering_total_yield
-  netzbezug: sensor.xyz_metering_total_absorbed
-  batterie_ladung: sensor.xyz_battery_charge_total
-  batterie_entladung: sensor.xyz_battery_discharge_total
-```
-
-**Wichtig:** Sensoren müssen `state_class: total_increasing` haben, damit HA Long-Term Statistics speichert.
 
 ---
 
@@ -189,16 +192,22 @@ npm run build
 
 ---
 
-## Git Historie (aktuelle Commits)
+## Änderungshistorie
 
-```
-cbcad51 refactor(wizard): Simplify wizard, remove Monatsdaten focus, add dynamic next steps
-59a1933 fix(import): Improve HA import UX with loading overlay and details feedback
-11888bf fix(import): Use anlage-based sensor config for HA import
-cc8a0c5 feat(wizard): Refactor wizard with full investment capture and sensor config (v0.8.0)
-780a4c1 fix(wizard): Auto-start wizard when database is empty (v0.7.5)
-```
+### v0.9.0 (2026-02-06)
+- **HA-Import entfernt:** Monatsdaten-Import aus HA deaktiviert
+- **Sensor-Config entfernt:** Wizard vereinfacht, Schritt entfernt
+- **Zielbild dokumentiert:** Klare Struktur für Parent-Child, CSV-Vorlagen
+
+### v0.8.1 (2026-02-05)
+- Wizard vereinfacht: Monatsdaten-Fokus entfernt
+- Individualisierte "Nächste Schritte" im Summary
+- HA-Import UX verbessert (nun deprecated)
+
+### v0.8.0 (2026-02-05)
+- Wizard Refactoring mit vollständiger Investitions-Erfassung
+- Sensor-Konfiguration im Wizard (nun entfernt)
 
 ---
 
-*Letzte Aktualisierung: 2026-02-05*
+*Letzte Aktualisierung: 2026-02-06*

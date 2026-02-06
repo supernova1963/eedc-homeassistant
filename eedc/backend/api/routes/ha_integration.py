@@ -547,27 +547,28 @@ async def get_monthly_statistics(request: HAMonthlyDataRequest):
         raise HTTPException(status_code=502, detail=f"HA-Verbindungsfehler: {str(e)}")
 
 
-@router.post("/import/monatsdaten", response_model=HAImportResult)
+@router.post("/import/monatsdaten", response_model=HAImportResult, deprecated=True)
 async def import_monatsdaten_from_ha(
     request: HAImportMonatsdatenRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Importiert Monatsdaten aus Home Assistant Long-Term Statistics.
+    DEPRECATED: Diese Funktion wurde in v0.9 entfernt.
 
-    Verwendet die konfigurierten Sensor-Mappings und berechnet
-    Monatswerte aus den fortlaufenden Zählern.
+    Der HA-Import von Monatsdaten ist aufgrund von Einschränkungen der
+    Home Assistant Long-Term Statistics API nicht zuverlässig.
 
-    WICHTIG: Existierende manuelle Daten werden NICHT überschrieben,
-    es sei denn, ueberschreiben=True ist gesetzt.
-
-    Args:
-        request: Anlage-ID, Jahr und Optionen
-
-    Returns:
-        HAImportResult: Ergebnis des Imports
+    Bitte verwenden Sie stattdessen den CSV-Import oder die manuelle Eingabe.
     """
-    if not settings.supervisor_token:
+    # v0.9: HA-Import deaktiviert - zu unzuverlässig
+    return HAImportResult(
+        erfolg=False,
+        monate_importiert=0,
+        fehler="HA-Import wurde in v0.9 deaktiviert. Bitte verwenden Sie den CSV-Import oder manuelle Eingabe."
+    )
+
+    # --- Legacy Code (deaktiviert) ---
+    if False and not settings.supervisor_token:
         return HAImportResult(
             erfolg=False,
             monate_importiert=0,
@@ -718,25 +719,28 @@ async def import_monatsdaten_from_ha(
     )
 
 
-@router.get("/import/preview/{anlage_id}")
+@router.get("/import/preview/{anlage_id}", deprecated=True)
 async def preview_ha_import(
     anlage_id: int,
     jahr: int,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Zeigt Vorschau der verfügbaren HA-Daten für Import.
+    DEPRECATED: Diese Funktion wurde in v0.9 entfernt.
 
-    Hilft dem Nutzer zu sehen, welche Monate aus HA importiert werden können
-    und welche bereits manuell erfasst wurden.
-
-    Args:
-        anlage_id: ID der Anlage
-        jahr: Jahr
-
-    Returns:
-        dict: Verfügbare HA-Daten und existierende Monatsdaten
+    Der HA-Import von Monatsdaten ist aufgrund von Einschränkungen der
+    Home Assistant Long-Term Statistics API nicht zuverlässig.
     """
+    # v0.9: HA-Import deaktiviert
+    return {
+        "ha_verbunden": False,
+        "sensor_konfiguriert": False,
+        "monate": [],
+        "hinweis": "HA-Import wurde in v0.9 deaktiviert. Bitte verwenden Sie den CSV-Import."
+    }
+
+    # --- Legacy Code (deaktiviert) ---
+    if False:
     # Anlage laden um Sensor-Konfiguration zu prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()

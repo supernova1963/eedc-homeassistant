@@ -20,10 +20,10 @@ import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
 import { haApi } from '../api/ha'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
-import type { Anlage, Strompreis, Investition, SensorConfig, InvestitionTyp } from '../types'
-import type { DiscoveryResult, SensorMappingSuggestions, DiscoveredSensor } from '../api/ha'
+import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../types'
+import type { DiscoveryResult } from '../api/ha'
 
-// Wizard-Schritte (NEU: pv-module entfernt, sensor-config hinzugefügt)
+// Wizard-Schritte (v0.9: sensor-config entfernt - kein HA-Import mehr)
 export type WizardStep =
   | 'welcome'
   | 'anlage'
@@ -31,7 +31,6 @@ export type WizardStep =
   | 'strompreise'
   | 'discovery'
   | 'investitionen'
-  | 'sensor-config'
   | 'summary'
   | 'complete'
 
@@ -96,7 +95,7 @@ const INITIAL_STATE: WizardState = {
   skippedSteps: [],
 }
 
-// Schritt-Reihenfolge (NEU)
+// Schritt-Reihenfolge (v0.9: sensor-config entfernt)
 const STEP_ORDER: WizardStep[] = [
   'welcome',
   'anlage',
@@ -104,7 +103,6 @@ const STEP_ORDER: WizardStep[] = [
   'strompreise',
   'discovery',
   'investitionen',
-  'sensor-config',
   'summary',
   'complete',
 ]
@@ -154,14 +152,9 @@ interface UseSetupWizardReturn {
   haVersion: string | null
   discoveryResult: DiscoveryResult | null
 
-  // Investitionen (NEU: alle Investitionen der Anlage)
+  // Investitionen (alle Investitionen der Anlage)
   investitionen: Investition[]
   refreshInvestitionen: () => Promise<void>
-
-  // Sensor-Config (NEU)
-  sensorConfig: SensorConfig
-  sensorMappings: SensorMappingSuggestions | null
-  allEnergySensors: DiscoveredSensor[]
 
   // Actions
   goToStep: (step: WizardStep) => void
@@ -183,14 +176,10 @@ interface UseSetupWizardReturn {
   // Discovery (NEU: erstellt rudimentäre Investitionen)
   runDiscoveryAndCreateInvestitionen: () => Promise<void>
 
-  // Investitionen bearbeiten (NEU)
+  // Investitionen bearbeiten
   updateInvestition: (id: number, data: Partial<Investition>) => Promise<void>
   deleteInvestition: (id: number) => Promise<void>
   addInvestition: (typ: InvestitionTyp) => Promise<Investition>
-
-  // Sensor-Config (NEU)
-  updateSensorConfig: (config: SensorConfig) => void
-  saveSensorConfig: () => Promise<void>
 
   // Abschluss
   completeWizard: () => void
@@ -227,13 +216,8 @@ export function useSetupWizard(): UseSetupWizardReturn {
   const [haVersion, setHaVersion] = useState<string | null>(null)
   const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult | null>(null)
 
-  // NEU: Alle Investitionen der Anlage
+  // Alle Investitionen der Anlage
   const [investitionen, setInvestitionen] = useState<Investition[]>([])
-
-  // NEU: Sensor-Config
-  const [sensorConfig, setSensorConfig] = useState<SensorConfig>({})
-  const [sensorMappings, setSensorMappings] = useState<SensorMappingSuggestions | null>(null)
-  const [allEnergySensors, setAllEnergySensors] = useState<DiscoveredSensor[]>([])
 
   // State in LocalStorage speichern
   useEffect(() => {
@@ -407,22 +391,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
       const result = await haApi.discover(wizardState.anlageId, manufacturer)
       setDiscoveryResult(result)
 
-      // Sensor-Mappings speichern für später
-      if (result.sensor_mappings) {
-        setSensorMappings(result.sensor_mappings)
-        // Initiale Sensor-Config aus Vorschlägen
-        setSensorConfig({
-          pv_erzeugung: result.sensor_mappings.pv_erzeugung?.[0]?.entity_id,
-          einspeisung: result.sensor_mappings.einspeisung?.[0]?.entity_id,
-          netzbezug: result.sensor_mappings.netzbezug?.[0]?.entity_id,
-          batterie_ladung: result.sensor_mappings.batterie_ladung?.[0]?.entity_id,
-          batterie_entladung: result.sensor_mappings.batterie_entladung?.[0]?.entity_id,
-        })
-      }
-      if (result.all_energy_sensors) {
-        setAllEnergySensors(result.all_energy_sensors)
-      }
-
       if (!result.ha_connected) {
         // Kein HA, aber trotzdem weitermachen
         nextStep()
@@ -489,7 +457,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
     }
   }, [refreshInvestitionen])
 
-  // NEU: Investition manuell hinzufügen
+  // Investition manuell hinzufügen
   const addInvestition = useCallback(async (typ: InvestitionTyp): Promise<Investition> => {
     if (!wizardState.anlageId) {
       throw new Error('Keine Anlage vorhanden')
@@ -505,31 +473,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
     await refreshInvestitionen()
     return newInvestition
   }, [wizardState.anlageId, refreshInvestitionen])
-
-  // NEU: Sensor-Config aktualisieren (lokal)
-  const updateSensorConfig = useCallback((config: SensorConfig) => {
-    setSensorConfig(config)
-  }, [])
-
-  // NEU: Sensor-Config speichern
-  const saveSensorConfig = useCallback(async () => {
-    if (!wizardState.anlageId) {
-      setError('Keine Anlage vorhanden')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      await anlagenApi.updateSensorConfig(wizardState.anlageId, sensorConfig)
-      nextStep()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Speichern der Sensor-Konfiguration')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [wizardState.anlageId, sensorConfig, nextStep])
 
   // Wizard abschließen
   const completeWizard = useCallback(() => {
@@ -550,9 +493,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setStrompreis(null)
     setDiscoveryResult(null)
     setInvestitionen([])
-    setSensorConfig({})
-    setSensorMappings(null)
-    setAllEnergySensors([])
     setError(null)
   }, [])
 
@@ -571,8 +511,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
         return true
       case 'investitionen':
         return true // Kann mit 0 Investitionen fortfahren
-      case 'sensor-config':
-        return true
       case 'summary':
         return true
       default:
@@ -601,11 +539,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
     investitionen,
     refreshInvestitionen,
 
-    // Sensor-Config
-    sensorConfig,
-    sensorMappings,
-    allEnergySensors,
-
     // Actions
     goToStep,
     nextStep,
@@ -621,8 +554,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
     updateInvestition,
     deleteInvestition,
     addInvestition,
-    updateSensorConfig,
-    saveSensorConfig,
     completeWizard,
     resetWizard,
 

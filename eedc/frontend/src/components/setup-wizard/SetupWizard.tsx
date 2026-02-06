@@ -1,17 +1,16 @@
 /**
  * SetupWizard - Geführte Ersteinrichtung für EEDC
  *
- * v0.8.0 - Refactored mit vollständiger Investitions-Erfassung
+ * v0.9.0 - Vereinfacht (Sensor-Konfiguration entfernt, kein HA-Import mehr)
  *
  * Schritte:
  * 1. Willkommen
  * 2. Anlage erstellen (+ Geocoding)
- * 3. Home Assistant Verbindung
+ * 3. Home Assistant Verbindung (nur für Discovery)
  * 4. Strompreise konfigurieren
  * 5. Discovery → Rudimentäre Investitionen
  * 6. Investitionen vervollständigen
- * 7. Sensor-Konfiguration
- * 8. Zusammenfassung
+ * 7. Zusammenfassung
  */
 
 import { useEffect } from 'react'
@@ -25,7 +24,6 @@ import HAConnectionStep from './steps/HAConnectionStep'
 import StrompreiseStep from './steps/StrompreiseStep'
 import DiscoveryStep from './steps/DiscoveryStep'
 import InvestitionenStep from './steps/InvestitionenStep'
-import SensorConfigStep from './steps/SensorConfigStep'
 import SummaryStep from './steps/SummaryStep'
 import CompleteStep from './steps/CompleteStep'
 
@@ -33,7 +31,7 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
-// Schritt-Konfiguration für Fortschrittsanzeige (NEU: pv-module entfernt, sensor-config hinzugefügt)
+// Schritt-Konfiguration für Fortschrittsanzeige (v0.9: sensor-config entfernt)
 const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
   { key: 'welcome', label: 'Willkommen', shortLabel: 'Start' },
   { key: 'anlage', label: 'Anlage erstellen', shortLabel: 'Anlage' },
@@ -41,7 +39,6 @@ const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
   { key: 'strompreise', label: 'Strompreise', shortLabel: 'Preise' },
   { key: 'discovery', label: 'Geräte erkennen', shortLabel: 'Geräte' },
   { key: 'investitionen', label: 'Investitionen', shortLabel: 'Invest.' },
-  { key: 'sensor-config', label: 'Sensoren', shortLabel: 'Sensoren' },
   { key: 'summary', label: 'Zusammenfassung', shortLabel: 'Fertig' },
 ]
 
@@ -249,26 +246,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             />
           )}
 
-          {wizard.step === 'sensor-config' && (
-            <SensorConfigStep
-              sensorConfig={wizard.sensorConfig}
-              sensorMappings={wizard.sensorMappings}
-              allEnergySensors={wizard.allEnergySensors}
-              isLoading={wizard.isLoading}
-              error={wizard.error}
-              onUpdateConfig={wizard.updateSensorConfig}
-              onSave={wizard.saveSensorConfig}
-              onSkip={wizard.skipStep}
-              onBack={wizard.prevStep}
-            />
-          )}
-
           {wizard.step === 'summary' && (
             <SummaryStep
               anlage={wizard.anlage}
               strompreis={wizard.strompreis}
               investitionen={wizard.investitionen}
-              sensorConfig={wizard.sensorConfig}
               onComplete={wizard.completeWizard}
               onBack={wizard.prevStep}
             />
