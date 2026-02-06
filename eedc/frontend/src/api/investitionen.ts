@@ -284,4 +284,12 @@ export const investitionenApi = {
   async getWallboxDashboard(anlageId: number): Promise<WallboxDashboardResponse[]> {
     return api.get<WallboxDashboardResponse[]>(`/investitionen/dashboard/wallbox/${anlageId}`)
   },
+
+  /**
+   * InvestitionMonatsdaten für einen bestimmten Monat laden
+   * Wird vom MonatsdatenForm benötigt, um beim Bearbeiten die vorhandenen Daten zu laden
+   */
+  async getMonatsdatenByMonth(anlageId: number, jahr: number, monat: number): Promise<InvestitionMonatsdaten[]> {
+    return api.get<InvestitionMonatsdaten[]>(`/investitionen/monatsdaten/${anlageId}/${jahr}/${monat}`)
+  },
 }

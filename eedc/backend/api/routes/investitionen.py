@@ -1088,6 +1088,51 @@ async def get_speicher_dashboard(
     return dashboards
 
 
+@router.get("/monatsdaten/{anlage_id}/{jahr}/{monat}", response_model=list[InvestitionMonatsdatenResponse])
+async def get_investition_monatsdaten_by_month(
+    anlage_id: int,
+    jahr: int,
+    monat: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gibt alle InvestitionMonatsdaten für eine Anlage und einen bestimmten Monat zurück.
+
+    Dies wird vom MonatsdatenForm benötigt, um beim Bearbeiten eines Monats
+    die vorhandenen Investitionsdaten (E-Auto km, Speicher Ladung, etc.) zu laden.
+
+    Args:
+        anlage_id: ID der Anlage
+        jahr: Jahr
+        monat: Monat (1-12)
+
+    Returns:
+        list[InvestitionMonatsdatenResponse]: Liste der InvestitionMonatsdaten
+    """
+    # Alle aktiven Investitionen der Anlage laden
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.aktiv == True)
+    )
+    investitionen = inv_result.scalars().all()
+
+    # InvestitionMonatsdaten für diesen Monat laden
+    result = []
+    for inv in investitionen:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == inv.id)
+            .where(InvestitionMonatsdaten.jahr == jahr)
+            .where(InvestitionMonatsdaten.monat == monat)
+        )
+        imd = md_result.scalar_one_or_none()
+        if imd:
+            result.append(imd)
+
+    return result
+
+
 @router.get("/dashboard/wallbox/{anlage_id}", response_model=list[WallboxDashboardResponse])
 async def get_wallbox_dashboard(
     anlage_id: int,

@@ -756,11 +756,11 @@ async def import_csv(
                 )
                 db.add(md)
 
-            # Legacy: Generische Investitions-Spalten verarbeiten (falls keine personalisierten)
-            if not has_personalized_columns:
-                await _import_investition_monatsdaten(
-                    db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben
-                )
+            # Legacy: Generische Investitions-Spalten IMMER verarbeiten
+            # (auch wenn personalisierte Spalten vorhanden sind - sie ergänzen sich)
+            await _import_investition_monatsdaten(
+                db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben
+            )
 
             importiert += 1
 

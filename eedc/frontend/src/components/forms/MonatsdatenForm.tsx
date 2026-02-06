@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react'
 import { Button, Input, Alert, Select } from '../ui'
 import { useInvestitionen } from '../../hooks'
+import { investitionenApi } from '../../api'
 import type { Monatsdaten, Investition } from '../../types'
 import { Car, Battery, Plug, Sun, Flame } from 'lucide-react'
 
@@ -102,47 +103,86 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
   // Investitions-spezifische Daten
   const [investitionsDaten, setInvestitionsDaten] = useState<Record<string, Record<string, string>>>({})
+  const [loadingInvData, setLoadingInvData] = useState(false)
 
-  // Initialisiere Investitions-Daten wenn Investitionen geladen
+  // Initialisiere Investitions-Daten und lade vorhandene Daten beim Bearbeiten
   useEffect(() => {
     if (aktiveInvestitionen.length === 0) return
 
-    const initial: Record<string, Record<string, string>> = {}
-    aktiveInvestitionen.forEach(inv => {
-      if (inv.typ === 'e-auto') {
-        initial[inv.id] = {
-          km_gefahren: '',
-          verbrauch_kwh: '',
-          ladung_pv_kwh: '',
-          ladung_netz_kwh: '',
-          ladung_extern_kwh: '',
-          ladung_extern_euro: '',
-          entladung_v2h_kwh: '',
+    const initializeAndLoad = async () => {
+      // Initialisiere mit leeren Werten
+      const initial: Record<string, Record<string, string>> = {}
+      aktiveInvestitionen.forEach(inv => {
+        if (inv.typ === 'e-auto') {
+          initial[inv.id] = {
+            km_gefahren: '',
+            verbrauch_kwh: '',
+            ladung_pv_kwh: '',
+            ladung_netz_kwh: '',
+            ladung_extern_kwh: '',
+            ladung_extern_euro: '',
+            entladung_v2h_kwh: '',
+          }
+        } else if (inv.typ === 'speicher') {
+          initial[inv.id] = {
+            ladung_kwh: '',
+            entladung_kwh: '',
+          }
+        } else if (inv.typ === 'wallbox') {
+          initial[inv.id] = {
+            ladung_kwh: '',
+            ladevorgaenge: '',
+          }
+        } else if (inv.typ === 'waermepumpe') {
+          initial[inv.id] = {
+            stromverbrauch_kwh: '',
+            heizenergie_kwh: '',
+            warmwasser_kwh: '',
+          }
+        } else if (inv.typ === 'wechselrichter') {
+          initial[inv.id] = {
+            pv_erzeugung_kwh: '',
+          }
         }
-      } else if (inv.typ === 'speicher') {
-        initial[inv.id] = {
-          ladung_kwh: '',
-          entladung_kwh: '',
-        }
-      } else if (inv.typ === 'wallbox') {
-        initial[inv.id] = {
-          ladung_kwh: '',
-          ladevorgaenge: '',
-        }
-      } else if (inv.typ === 'waermepumpe') {
-        initial[inv.id] = {
-          stromverbrauch_kwh: '',
-          heizenergie_kwh: '',
-          warmwasser_kwh: '',
-        }
-      } else if (inv.typ === 'wechselrichter') {
-        initial[inv.id] = {
-          pv_erzeugung_kwh: '',
+      })
+
+      // Beim Bearbeiten: Lade vorhandene InvestitionMonatsdaten
+      if (monatsdaten?.jahr && monatsdaten?.monat) {
+        setLoadingInvData(true)
+        try {
+          const existingData = await investitionenApi.getMonatsdatenByMonth(
+            anlageId,
+            monatsdaten.jahr,
+            monatsdaten.monat
+          )
+
+          // Merge vorhandene Daten in initial
+          existingData.forEach(imd => {
+            if (initial[imd.investition_id] && imd.verbrauch_daten) {
+              // Konvertiere alle Werte zu Strings für die Formularfelder
+              Object.entries(imd.verbrauch_daten).forEach(([key, value]) => {
+                if (initial[imd.investition_id][key] !== undefined) {
+                  initial[imd.investition_id][key] = value?.toString() || ''
+                }
+                // V2H Mapping: Backend speichert als v2h_entladung_kwh, Form erwartet entladung_v2h_kwh
+                if (key === 'v2h_entladung_kwh' && initial[imd.investition_id]['entladung_v2h_kwh'] !== undefined) {
+                  initial[imd.investition_id]['entladung_v2h_kwh'] = value?.toString() || ''
+                }
+              })
+            }
+          })
+        } catch (e) {
+          console.error('Fehler beim Laden der InvestitionMonatsdaten:', e)
+        } finally {
+          setLoadingInvData(false)
         }
       }
-    })
-    setInvestitionsDaten(initial)
-  }, [aktiveInvestitionen])
+
+      setInvestitionsDaten(initial)
+    }
+
+    initializeAndLoad()
+  }, [aktiveInvestitionen, monatsdaten?.jahr, monatsdaten?.monat, anlageId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -257,8 +297,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     }
   }
 
-  if (invLoading) {
-    return <div className="text-center py-4 text-gray-500">Lade Investitionen...</div>
+  if (invLoading || loadingInvData) {
+    return <div className="text-center py-4 text-gray-500">
+      {loadingInvData ? 'Lade Investitionsdaten...' : 'Lade Investitionen...'}
+    </div>
   }
 
   return (
