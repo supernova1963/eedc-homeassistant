@@ -20,7 +20,7 @@ const COLORS = {
   feedin: '#10b981',
 }
 
-type TabType = 'uebersicht' | 'pv' | 'finanzen' | 'co2'
+type TabType = 'uebersicht' | 'pv' | 'jahresvergleich' | 'finanzen' | 'co2'
 
 export default function Auswertung() {
   const navigate = useNavigate()
@@ -92,6 +92,7 @@ export default function Auswertung() {
   const tabs: { key: TabType; label: string }[] = [
     { key: 'uebersicht', label: 'Übersicht' },
     { key: 'pv', label: 'PV-Anlage' },
+    { key: 'jahresvergleich', label: 'Jahresvergleich' },
     { key: 'finanzen', label: 'Finanzen' },
     { key: 'co2', label: 'CO2' },
   ]
@@ -158,6 +159,9 @@ export default function Auswertung() {
       )}
       {activeTab === 'pv' && (
         <PVTab data={filteredData} anlage={anlage} />
+      )}
+      {activeTab === 'jahresvergleich' && (
+        <JahresvergleichTab data={monatsdaten} anlage={anlage} strompreis={strompreis} />
       )}
       {activeTab === 'finanzen' && (
         <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} />
@@ -438,6 +442,316 @@ function PVTab({ data, anlage }: Omit<TabProps, 'strompreis' | 'stats'>) {
           </div>
         </Card>
       )}
+    </div>
+  )
+}
+
+// Jahresvergleich Tab
+const JAHR_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4']
+
+function JahresvergleichTab({ data, anlage, strompreis }: Omit<TabProps, 'stats'>) {
+  // Alle verfügbaren Jahre
+  const verfuegbareJahre = useMemo(() => {
+    return [...new Set(data.map(m => m.jahr))].sort((a, b) => a - b)
+  }, [data])
+
+  // Jahresstatistiken berechnen
+  const jahresStats = useMemo(() => {
+    const stats: Record<number, {
+      jahr: number
+      erzeugung: number
+      eigenverbrauch: number
+      einspeisung: number
+      netzbezug: number
+      gesamtverbrauch: number
+      autarkie: number
+      eigenverbrauchQuote: number
+      spezErtrag: number
+      monate: number
+      nettoErtrag: number
+    }> = {}
+
+    data.forEach(md => {
+      if (!stats[md.jahr]) {
+        stats[md.jahr] = {
+          jahr: md.jahr,
+          erzeugung: 0,
+          eigenverbrauch: 0,
+          einspeisung: 0,
+          netzbezug: 0,
+          gesamtverbrauch: 0,
+          autarkie: 0,
+          eigenverbrauchQuote: 0,
+          spezErtrag: 0,
+          monate: 0,
+          nettoErtrag: 0,
+        }
+      }
+      const s = stats[md.jahr]
+      const erzeugung = md.pv_erzeugung_kwh || (md.einspeisung_kwh + (md.eigenverbrauch_kwh || 0))
+      s.erzeugung += erzeugung
+      s.eigenverbrauch += md.eigenverbrauch_kwh || 0
+      s.einspeisung += md.einspeisung_kwh
+      s.netzbezug += md.netzbezug_kwh
+      s.gesamtverbrauch += md.gesamtverbrauch_kwh || 0
+      s.monate += 1
+    })
+
+    // Quoten berechnen
+    Object.values(stats).forEach(s => {
+      if (s.erzeugung > 0) {
+        s.eigenverbrauchQuote = (s.eigenverbrauch / s.erzeugung) * 100
+      }
+      if (s.gesamtverbrauch > 0) {
+        s.autarkie = (s.eigenverbrauch / s.gesamtverbrauch) * 100
+      }
+      if (anlage?.leistung_kwp) {
+        s.spezErtrag = s.erzeugung / anlage.leistung_kwp
+      }
+      if (strompreis) {
+        const einspeiseErloes = s.einspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
+        const evErsparnis = s.eigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+        s.nettoErtrag = einspeiseErloes + evErsparnis
+      }
+    })
+
+    return Object.values(stats).sort((a, b) => a.jahr - b.jahr)
+  }, [data, anlage, strompreis])
+
+  // Monatsvergleich-Daten (Jan-Dez für jedes Jahr)
+  const monatsVergleichData = useMemo(() => {
+    const result: Array<Record<string, string | number>> = []
+
+    for (let m = 1; m <= 12; m++) {
+      const row: Record<string, string | number> = {
+        monat: monatNamen[m],
+        monatNr: m,
+      }
+
+      verfuegbareJahre.forEach(jahr => {
+        const md = data.find(d => d.jahr === jahr && d.monat === m)
+        const erzeugung = md ? (md.pv_erzeugung_kwh || (md.einspeisung_kwh + (md.eigenverbrauch_kwh || 0))) : 0
+        row[`erzeugung_${jahr}`] = erzeugung
+        row[`autarkie_${jahr}`] = md && md.gesamtverbrauch_kwh ? ((md.eigenverbrauch_kwh || 0) / md.gesamtverbrauch_kwh) * 100 : 0
+      })
+
+      result.push(row)
+    }
+
+    return result
+  }, [data, verfuegbareJahre])
+
+  // Delta zum Vorjahr berechnen
+  const getDelta = (current: number, previous: number | undefined): { value: number; percent: number } | null => {
+    if (previous === undefined || previous === 0) return null
+    const value = current - previous
+    const percent = (value / previous) * 100
+    return { value, percent }
+  }
+
+  if (verfuegbareJahre.length < 2) {
+    return (
+      <Card className="text-center py-8">
+        <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Mindestens 2 Jahre erforderlich
+        </h3>
+        <p className="text-gray-500 dark:text-gray-400">
+          Für einen Jahresvergleich werden Daten aus mindestens 2 verschiedenen Jahren benötigt.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Jahres-KPIs mit Delta */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {jahresStats.slice(-2).reverse().map((js, idx) => {
+          const prevStats = jahresStats.find(s => s.jahr === js.jahr - 1)
+          const deltaErzeugung = getDelta(js.erzeugung, prevStats?.erzeugung)
+
+          return (
+            <Card key={js.jahr} className={idx === 0 ? 'ring-2 ring-primary-500' : ''}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-lg font-bold text-gray-900 dark:text-white">{js.jahr}</span>
+                {idx === 0 && (
+                  <span className="text-xs bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 px-2 py-1 rounded">
+                    Aktuell
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Erzeugung</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {(js.erzeugung / 1000).toFixed(1)} MWh
+                    {deltaErzeugung && (
+                      <span className={`ml-2 text-xs ${deltaErzeugung.percent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {deltaErzeugung.percent >= 0 ? '↑' : '↓'} {Math.abs(deltaErzeugung.percent).toFixed(0)}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Autarkie</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{js.autarkie.toFixed(0)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">EV-Quote</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{js.eigenverbrauchQuote.toFixed(0)}%</span>
+                </div>
+                {anlage?.leistung_kwp && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Spez. Ertrag</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{js.spezErtrag.toFixed(0)} kWh/kWp</span>
+                  </div>
+                )}
+                {strompreis && (
+                  <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-500">Netto-Ertrag</span>
+                    <span className="font-medium text-green-600">{js.nettoErtrag.toFixed(0)} €</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Monatsvergleich Erzeugung */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Monatliche Erzeugung im Jahresvergleich
+        </h3>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={monatsVergleichData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis dataKey="monat" tick={{ fontSize: 11 }} />
+              <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  const jahr = name.replace('erzeugung_', '')
+                  return [`${value.toFixed(0)} kWh`, `${jahr}`]
+                }}
+              />
+              <Legend formatter={(value) => value.replace('erzeugung_', '')} />
+              {verfuegbareJahre.map((jahr, idx) => (
+                <Bar
+                  key={jahr}
+                  dataKey={`erzeugung_${jahr}`}
+                  name={`erzeugung_${jahr}`}
+                  fill={JAHR_COLORS[idx % JAHR_COLORS.length]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Autarkie-Verlauf */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Autarkie im Jahresvergleich
+        </h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={monatsVergleichData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis dataKey="monat" tick={{ fontSize: 11 }} />
+              <YAxis unit="%" domain={[0, 100]} tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  const jahr = name.replace('autarkie_', '')
+                  return [`${value.toFixed(0)}%`, `${jahr}`]
+                }}
+              />
+              <Legend formatter={(value) => value.replace('autarkie_', '')} />
+              {verfuegbareJahre.map((jahr, idx) => (
+                <Line
+                  key={jahr}
+                  type="monotone"
+                  dataKey={`autarkie_${jahr}`}
+                  name={`autarkie_${jahr}`}
+                  stroke={JAHR_COLORS[idx % JAHR_COLORS.length]}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Jahresvergleich Tabelle */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Jahresübersicht
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jahr</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Erzeugung</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Δ</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Eigenverbr.</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Einspeisung</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Netzbezug</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Autarkie</th>
+                {strompreis && (
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Netto-Ertrag</th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {jahresStats.map((js, idx) => {
+                const prevStats = idx > 0 ? jahresStats[idx - 1] : undefined
+                const delta = getDelta(js.erzeugung, prevStats?.erzeugung)
+
+                return (
+                  <tr key={js.jahr} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                      {js.jahr}
+                      <span className="ml-2 text-xs text-gray-400">({js.monate} Mon.)</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {(js.erzeugung / 1000).toFixed(1)} MWh
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      {delta ? (
+                        <span className={delta.percent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          {delta.percent >= 0 ? '+' : ''}{delta.percent.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {js.eigenverbrauch.toFixed(0)} kWh
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {js.einspeisung.toFixed(0)} kWh
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {js.netzbezug.toFixed(0)} kWh
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {js.autarkie.toFixed(0)}%
+                    </td>
+                    {strompreis && (
+                      <td className="px-4 py-3 text-sm text-right font-medium text-green-600">
+                        {js.nettoErtrag.toFixed(0)} €
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   )
 }
