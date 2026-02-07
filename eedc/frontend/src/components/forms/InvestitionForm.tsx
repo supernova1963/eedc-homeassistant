@@ -141,9 +141,16 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       case 'balkonkraftwerk':
         return {
           leistung_wp: params.leistung_wp?.toString() || '',
-          anzahl: params.anzahl?.toString() || '',
+          anzahl: params.anzahl?.toString() || '2',
           ausrichtung: params.ausrichtung?.toString() || 'Süd',
           neigung_grad: params.neigung_grad?.toString() || '30',
+          hat_speicher: (params.hat_speicher as boolean) ?? false,
+          speicher_kapazitaet_wh: params.speicher_kapazitaet_wh?.toString() || '',
+        }
+      case 'sonstiges':
+        return {
+          kategorie: params.kategorie?.toString() || 'erzeuger',
+          beschreibung: params.beschreibung?.toString() || '',
         }
       default:
         return {}
@@ -197,6 +204,20 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         return
       }
 
+      // Balkonkraftwerk: leistung_kwp aus Anzahl × Wp berechnen
+      let balkonkraftwerkKwp: number | undefined
+      let balkonkraftwerkAusrichtung: string | undefined
+      let balkonkraftwerkNeigung: number | undefined
+      if (typ === 'balkonkraftwerk') {
+        const anzahl = parseInt(paramData.anzahl as string) || 0
+        const leistungWp = parseInt(paramData.leistung_wp as string) || 0
+        if (anzahl > 0 && leistungWp > 0) {
+          balkonkraftwerkKwp = (anzahl * leistungWp) / 1000
+        }
+        balkonkraftwerkAusrichtung = paramData.ausrichtung as string || undefined
+        balkonkraftwerkNeigung = paramData.neigung_grad ? parseFloat(paramData.neigung_grad as string) : undefined
+      }
+
       const data: InvestitionCreate | InvestitionUpdate = {
         ...(investition ? {} : { anlage_id: anlageId, typ }),
         bezeichnung: formData.bezeichnung.trim(),
@@ -214,6 +235,12 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           ausrichtung: formData.ausrichtung || undefined,
           neigung_grad: formData.neigung_grad ? parseFloat(formData.neigung_grad) : undefined,
           ha_entity_id: formData.ha_entity_id || undefined,
+        }),
+        // Balkonkraftwerk: leistung_kwp berechnet, Ausrichtung/Neigung aus Parametern
+        ...(typ === 'balkonkraftwerk' && {
+          leistung_kwp: balkonkraftwerkKwp,
+          ausrichtung: balkonkraftwerkAusrichtung,
+          neigung_grad: balkonkraftwerkNeigung,
         }),
       }
 
@@ -796,21 +823,13 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
       )
 
     case 'balkonkraftwerk':
+      const bkwLeistungKwp = ((parseInt(paramData.anzahl as string) || 0) * (parseInt(paramData.leistung_wp as string) || 0) / 1000)
       return (
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">
             Balkonkraftwerk Parameter
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Leistung pro Modul (Wp)"
-              name="param_leistung_wp"
-              type="number"
-              step="1"
-              min="0"
-              value={paramData.leistung_wp as string}
-              onChange={onChange}
-            />
             <Input
               label="Anzahl Module"
               name="param_anzahl"
@@ -821,12 +840,33 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               onChange={onChange}
             />
             <Input
-              label="Ausrichtung"
-              name="param_ausrichtung"
-              value={paramData.ausrichtung as string}
+              label="Leistung pro Modul (Wp)"
+              name="param_leistung_wp"
+              type="number"
+              step="1"
+              min="0"
+              value={paramData.leistung_wp as string}
               onChange={onChange}
-              hint="z.B. Süd, Ost-West"
+              hint={bkwLeistungKwp > 0 ? `= ${bkwLeistungKwp.toFixed(2)} kWp` : undefined}
             />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Ausrichtung
+              </label>
+              <select
+                name="param_ausrichtung"
+                value={paramData.ausrichtung as string}
+                onChange={(e) => onChange({ target: { name: 'param_ausrichtung', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
+                className="input w-full"
+              >
+                <option value="Süd">Süd</option>
+                <option value="Südost">Südost</option>
+                <option value="Südwest">Südwest</option>
+                <option value="Ost">Ost</option>
+                <option value="West">West</option>
+                <option value="Ost-West">Ost-West</option>
+              </select>
+            </div>
             <Input
               label="Neigung (Grad)"
               name="param_neigung_grad"
@@ -836,6 +876,66 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               max="90"
               value={paramData.neigung_grad as string}
               onChange={onChange}
+              hint="0° = flach, 90° = senkrecht"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm mt-4">
+            <input
+              type="checkbox"
+              name="param_hat_speicher"
+              checked={paramData.hat_speicher as boolean}
+              onChange={onChange}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-gray-700 dark:text-gray-300">Mit Speicher (z.B. Anker SOLIX)</span>
+          </label>
+          {paramData.hat_speicher && (
+            <Input
+              label="Speicher-Kapazität (Wh)"
+              name="param_speicher_kapazitaet_wh"
+              type="number"
+              step="1"
+              min="0"
+              value={paramData.speicher_kapazitaet_wh as string}
+              onChange={onChange}
+              hint="z.B. 1600 Wh für Anker SOLIX"
+            />
+          )}
+        </div>
+      )
+
+    case 'sonstiges':
+      return (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+            Sonstige Investition
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Kategorie
+              </label>
+              <select
+                name="param_kategorie"
+                value={paramData.kategorie as string}
+                onChange={(e) => onChange({ target: { name: 'param_kategorie', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
+                className="input w-full"
+              >
+                <option value="erzeuger">Erzeuger (z.B. Mini-BHKW, Mini-Wind)</option>
+                <option value="verbraucher">Verbraucher (z.B. Klimaanlage, Pool)</option>
+                <option value="speicher">Speicher (z.B. Wasserstoff)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Bestimmt welche Monatsdaten erfasst werden
+              </p>
+            </div>
+            <Input
+              label="Beschreibung"
+              name="param_beschreibung"
+              value={paramData.beschreibung as string}
+              onChange={onChange}
+              placeholder="z.B. Mini-Blockheizkraftwerk Viessmann"
+              hint="Kurze Beschreibung der Investition"
             />
           </div>
         </div>

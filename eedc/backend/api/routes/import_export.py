@@ -101,7 +101,9 @@ async def _import_investition_monatsdaten_v09(
         "Ladung_kWh", "Entladung_kWh", "Ladevorgaenge",
         "Netzladung_kWh", "Ladepreis_Cent",  # Speicher Arbitrage
         "Strom_kWh", "Heizung_kWh", "Warmwasser_kWh",
-        "Speicher_Ladung_kWh", "Speicher_Entladung_kWh"
+        "Speicher_Ladung_kWh", "Speicher_Entladung_kWh",
+        "Erzeugung_kWh",  # Sonstiges Erzeuger
+        "Sonderkosten_Euro", "Sonderkosten_Notiz",  # Sonderkosten für alle
     ], key=len, reverse=True)
 
     # Alle Spalten durchgehen und Investitionen matchen
@@ -281,6 +283,44 @@ async def _import_investition_monatsdaten_v09(
                     field_key = "speicher_entladung_kwh"
                     field_value = val
                     summen["batterie_entladung_sum"] += val
+
+        # Sonstiges (kategorie-abhängig)
+        elif inv.typ == "sonstiges":
+            kategorie = inv.parameter.get("kategorie", "erzeuger") if inv.parameter else "erzeuger"
+            if suffix == "Erzeugung_kWh" and kategorie == "erzeuger":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "erzeugung_kwh"
+                    field_value = val
+                    summen["pv_erzeugung_sum"] += val  # Zur Gesamt-Erzeugung addieren
+            elif suffix == "Verbrauch_kWh" and kategorie == "verbraucher":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "verbrauch_sonstig_kwh"
+                    field_value = val
+            elif suffix == "Ladung_kWh" and kategorie == "speicher":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "ladung_kwh"
+                    field_value = val
+                    summen["batterie_ladung_sum"] += val
+            elif suffix == "Entladung_kWh" and kategorie == "speicher":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "entladung_kwh"
+                    field_value = val
+                    summen["batterie_entladung_sum"] += val
+
+        # Sonderkosten (für alle Investitionstypen)
+        if suffix == "Sonderkosten_Euro":
+            val = parse_float(value)
+            if val is not None:
+                field_key = "sonderkosten_euro"
+                field_value = val
+        elif suffix == "Sonderkosten_Notiz":
+            if value and value.strip():
+                field_key = "sonderkosten_notiz"
+                field_value = value.strip()
 
         # Sammle alle Daten für jede Investition
         if field_key and field_value is not None:
@@ -578,6 +618,31 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
                 spalten.extend([col_sp_l, col_sp_e])
                 beschreibung[col_sp_l] = f"Speicher-Ladung {inv.bezeichnung} (kWh)"
                 beschreibung[col_sp_e] = f"Speicher-Entladung {inv.bezeichnung} (kWh)"
+
+        elif inv.typ == "sonstiges":
+            # Sonstiges: Kategorie-abhängig (erzeuger/verbraucher/speicher)
+            kategorie = inv.parameter.get("kategorie", "erzeuger") if inv.parameter else "erzeuger"
+            if kategorie == "erzeuger":
+                col = f"{prefix}_Erzeugung_kWh"
+                spalten.append(col)
+                beschreibung[col] = f"Erzeugung {inv.bezeichnung} (kWh)"
+            elif kategorie == "verbraucher":
+                col = f"{prefix}_Verbrauch_kWh"
+                spalten.append(col)
+                beschreibung[col] = f"Verbrauch {inv.bezeichnung} (kWh)"
+            elif kategorie == "speicher":
+                col_l = f"{prefix}_Ladung_kWh"
+                col_e = f"{prefix}_Entladung_kWh"
+                spalten.extend([col_l, col_e])
+                beschreibung[col_l] = f"Ladung {inv.bezeichnung} (kWh)"
+                beschreibung[col_e] = f"Entladung {inv.bezeichnung} (kWh)"
+
+        # Sonderkosten für alle Investitionen (optional)
+        col_sk = f"{prefix}_Sonderkosten_Euro"
+        col_skn = f"{prefix}_Sonderkosten_Notiz"
+        spalten.extend([col_sk, col_skn])
+        beschreibung[col_sk] = f"Sonderkosten {inv.bezeichnung} (€) - Reparatur, Wartung, etc."
+        beschreibung[col_skn] = f"Sonderkosten-Beschreibung {inv.bezeichnung}"
 
     # Optionale Spalten am Ende
     spalten.extend(["Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"])
@@ -983,6 +1048,24 @@ async def export_csv(
                 inv_columns.append((inv, "Speicher_Entladung_kWh", "speicher_entladung_kwh"))
                 header.extend([f"{prefix}_Speicher_Ladung_kWh", f"{prefix}_Speicher_Entladung_kWh"])
 
+        elif inv.typ == "sonstiges":
+            kategorie = inv.parameter.get("kategorie", "erzeuger") if inv.parameter else "erzeuger"
+            if kategorie == "erzeuger":
+                inv_columns.append((inv, "Erzeugung_kWh", "erzeugung_kwh"))
+                header.append(f"{prefix}_Erzeugung_kWh")
+            elif kategorie == "verbraucher":
+                inv_columns.append((inv, "Verbrauch_kWh", "verbrauch_sonstig_kwh"))
+                header.append(f"{prefix}_Verbrauch_kWh")
+            elif kategorie == "speicher":
+                inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
+                inv_columns.append((inv, "Entladung_kWh", "entladung_kwh"))
+                header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Entladung_kWh"])
+
+        # Sonderkosten für alle Investitionen
+        inv_columns.append((inv, "Sonderkosten_Euro", "sonderkosten_euro"))
+        inv_columns.append((inv, "Sonderkosten_Notiz", "sonderkosten_notiz"))
+        header.extend([f"{prefix}_Sonderkosten_Euro", f"{prefix}_Sonderkosten_Notiz"])
+
     # Optionale Basis-Spalten am Ende
     header.extend(["Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"])
 
@@ -1077,6 +1160,8 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     - E-Auto (Tesla Model 3) mit V2H
     - Wärmepumpe (Heizung + Warmwasser)
     - Wallbox (11 kW)
+    - Balkonkraftwerk (800 Wp mit Speicher)
+    - Sonstiges: Mini-BHKW (Erzeuger)
     - Strompreise (2023-2025)
     - 31 Monate Monatsdaten (Juni 2023 - Dezember 2025)
 
@@ -1279,6 +1364,41 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     )
     db.add(pv_west)
 
+    # Balkonkraftwerk mit Speicher
+    balkonkraftwerk = Investition(
+        anlage_id=anlage.id,
+        typ="balkonkraftwerk",
+        bezeichnung="Balkon Süd",
+        anschaffungsdatum=date(2024, 3, 1),
+        anschaffungskosten_gesamt=1200,
+        parameter={
+            "leistung_wp": 400,
+            "anzahl": 2,
+            "ausrichtung": "Süd",
+            "neigung_grad": 35,
+            "hat_speicher": True,
+            "speicher_kapazitaet_wh": 1024,
+        },
+        aktiv=True,
+    )
+    db.add(balkonkraftwerk)
+
+    # Sonstiges: Mini-BHKW (Erzeuger)
+    mini_bhkw = Investition(
+        anlage_id=anlage.id,
+        typ="sonstiges",
+        bezeichnung="Mini-BHKW",
+        anschaffungsdatum=date(2024, 10, 1),
+        anschaffungskosten_gesamt=8000,
+        betriebskosten_jahr=300,
+        parameter={
+            "kategorie": "erzeuger",
+            "beschreibung": "Blockheizkraftwerk für Strom und Wärme, Erdgas-betrieben",
+        },
+        aktiv=True,
+    )
+    db.add(mini_bhkw)
+
     await db.flush()
 
     # 4. Monatsdaten erstellen
@@ -1359,14 +1479,66 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             )
             db.add(wp_md)
 
+        # Balkonkraftwerk Monatsdaten (ab März 2024)
+        if jahr > 2024 or (jahr == 2024 and monat >= 3):
+            # Saisonale Erzeugung basierend auf PV-Daten (skaliert auf 800Wp)
+            bkw_skalierung = 0.04  # 800Wp / 20kWp
+            bkw_erzeugung = round(pv_erzeugung * bkw_skalierung, 1)
+            # Höhere Eigenverbrauchsquote beim Balkonkraftwerk (80%)
+            bkw_eigenverbrauch = round(bkw_erzeugung * 0.8, 1)
+            bkw_einspeisung = round(bkw_erzeugung * 0.2, 1)
+            # Speicher: ca. 30% der Erzeugung wird zwischengespeichert
+            bkw_speicher_ladung = round(bkw_erzeugung * 0.3, 1)
+            bkw_speicher_entladung = round(bkw_speicher_ladung * 0.92, 1)  # 92% Effizienz
+
+            bkw_md = InvestitionMonatsdaten(
+                investition_id=balkonkraftwerk.id,
+                jahr=jahr,
+                monat=monat,
+                verbrauch_daten={
+                    "erzeugung_kwh": bkw_erzeugung,
+                    "eigenverbrauch_kwh": bkw_eigenverbrauch,
+                    "einspeisung_kwh": bkw_einspeisung,
+                    "speicher_ladung_kwh": bkw_speicher_ladung,
+                    "speicher_entladung_kwh": bkw_speicher_entladung,
+                },
+            )
+            db.add(bkw_md)
+
+        # Mini-BHKW Monatsdaten (ab Oktober 2024 - Heizsaison)
+        if (jahr == 2024 and monat >= 10) or jahr > 2024:
+            # BHKW läuft primär in der Heizsaison
+            if monat in [1, 2, 3, 10, 11, 12]:
+                # Winter/Übergang: 100-200 kWh Stromerzeugung
+                bhkw_erzeugung = 120 + (monat % 3) * 30
+                bhkw_eigenverbrauch = round(bhkw_erzeugung * 0.85, 1)
+                bhkw_einspeisung = round(bhkw_erzeugung * 0.15, 1)
+            else:
+                # Sommer: Nur für Warmwasser, weniger Betrieb
+                bhkw_erzeugung = 30 + (monat % 2) * 10
+                bhkw_eigenverbrauch = round(bhkw_erzeugung * 0.9, 1)
+                bhkw_einspeisung = round(bhkw_erzeugung * 0.1, 1)
+
+            bhkw_md = InvestitionMonatsdaten(
+                investition_id=mini_bhkw.id,
+                jahr=jahr,
+                monat=monat,
+                verbrauch_daten={
+                    "erzeugung_kwh": bhkw_erzeugung,
+                    "eigenverbrauch_kwh": bhkw_eigenverbrauch,
+                    "einspeisung_kwh": bhkw_einspeisung,
+                },
+            )
+            db.add(bhkw_md)
+
     return DemoDataResult(
         erfolg=True,
         anlage_id=anlage.id,
         anlage_name=anlage.anlagenname,
         monatsdaten_count=monatsdaten_count,
-        investitionen_count=7,  # Speicher, E-Auto, WP, Wallbox + 3 PV-Module
+        investitionen_count=9,  # Speicher, E-Auto, WP, Wallbox, Balkonkraftwerk, Mini-BHKW + 3 PV-Module
         strompreise_count=3,
-        message=f"Demo-Anlage '{anlage.anlagenname}' mit {monatsdaten_count} Monatsdaten, 7 Investitionen (inkl. 3 PV-Module) und 3 Strompreisen erstellt.",
+        message=f"Demo-Anlage '{anlage.anlagenname}' mit {monatsdaten_count} Monatsdaten, 9 Investitionen (inkl. 3 PV-Module, Balkonkraftwerk, Mini-BHKW) und 3 Strompreisen erstellt.",
     )
 
 

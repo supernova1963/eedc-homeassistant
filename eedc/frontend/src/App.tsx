@@ -7,6 +7,8 @@ import EAutoDashboard from './pages/EAutoDashboard'
 import WaermepumpeDashboard from './pages/WaermepumpeDashboard'
 import SpeicherDashboard from './pages/SpeicherDashboard'
 import WallboxDashboard from './pages/WallboxDashboard'
+import BalkonkraftwerkDashboard from './pages/BalkonkraftwerkDashboard'
+import SonstigesDashboard from './pages/SonstigesDashboard'
 
 // Auswertungen
 import Auswertung from './pages/Auswertung'
@@ -41,6 +43,8 @@ function App() {
           <Route path="cockpit/waermepumpe" element={<WaermepumpeDashboard />} />
           <Route path="cockpit/speicher" element={<SpeicherDashboard />} />
           <Route path="cockpit/wallbox" element={<WallboxDashboard />} />
+          <Route path="cockpit/balkonkraftwerk" element={<BalkonkraftwerkDashboard />} />
+          <Route path="cockpit/sonstiges" element={<SonstigesDashboard />} />
 
           {/* Auswertungen */}
           <Route path="auswertungen" element={<Auswertung />} />
@@ -75,6 +79,8 @@ function App() {
           <Route path="waermepumpe" element={<Navigate to="/cockpit/waermepumpe" replace />} />
           <Route path="speicher" element={<Navigate to="/cockpit/speicher" replace />} />
           <Route path="wallbox" element={<Navigate to="/cockpit/wallbox" replace />} />
+          <Route path="balkonkraftwerk" element={<Navigate to="/cockpit/balkonkraftwerk" replace />} />
+          <Route path="sonstiges" element={<Navigate to="/cockpit/sonstiges" replace />} />
           <Route path="import" element={<Navigate to="/einstellungen/import" replace />} />
           <Route path="settings" element={<Navigate to="/einstellungen/allgemein" replace />} />
         </Route>

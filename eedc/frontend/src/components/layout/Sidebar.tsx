@@ -13,7 +13,8 @@ import {
   Car,
   Flame,
   Battery,
-  Plug
+  Plug,
+  Wrench
 } from 'lucide-react'
 import { VERSION_STRING } from '../../config/version'
 
@@ -32,6 +33,8 @@ const investitionsDashboards = [
   { name: 'Wärmepumpe', href: '/waermepumpe', icon: Flame },
   { name: 'Speicher', href: '/speicher', icon: Battery },
   { name: 'Wallbox', href: '/wallbox', icon: Plug },
+  { name: 'Balkonkraftwerk', href: '/balkonkraftwerk', icon: Sun },
+  { name: 'Sonstiges', href: '/sonstiges', icon: Wrench },
 ]
 
 const secondaryNavigation = [

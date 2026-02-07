@@ -803,6 +803,20 @@ class WallboxDashboardResponse(BaseModel):
     zusammenfassung: dict[str, Any]
 
 
+class BalkonkraftwerkDashboardResponse(BaseModel):
+    """Balkonkraftwerk Dashboard Daten."""
+    investition: InvestitionResponse
+    monatsdaten: list[InvestitionMonatsdatenResponse]
+    zusammenfassung: dict[str, Any]
+
+
+class SonstigesDashboardResponse(BaseModel):
+    """Sonstiges Dashboard Daten."""
+    investition: InvestitionResponse
+    monatsdaten: list[InvestitionMonatsdatenResponse]
+    zusammenfassung: dict[str, Any]
+
+
 @router.get("/dashboard/e-auto/{anlage_id}", response_model=list[EAutoDashboardResponse])
 async def get_eauto_dashboard(
     anlage_id: int,
@@ -1240,6 +1254,243 @@ async def get_wallbox_dashboard(
 
         dashboards.append(WallboxDashboardResponse(
             investition=wallbox,
+            monatsdaten=monatsdaten,
+            zusammenfassung=zusammenfassung,
+        ))
+
+    return dashboards
+
+
+@router.get("/dashboard/balkonkraftwerk/{anlage_id}", response_model=list[BalkonkraftwerkDashboardResponse])
+async def get_balkonkraftwerk_dashboard(
+    anlage_id: int,
+    strompreis_cent: float = Query(30.0),
+    einspeiseverguetung_cent: float = Query(8.0),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Balkonkraftwerk Dashboard für eine Anlage.
+
+    Zeigt Balkonkraftwerke mit Erzeugung, Eigenverbrauch, Ersparnis.
+    """
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.BALKONKRAFTWERK.value)
+        .where(Investition.aktiv == True)
+    )
+    balkonkraftwerke = inv_result.scalars().all()
+
+    if not balkonkraftwerke:
+        return []
+
+    dashboards = []
+    for bkw in balkonkraftwerke:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == bkw.id)
+            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+        )
+        monatsdaten = md_result.scalars().all()
+
+        gesamt_erzeugung = 0
+        gesamt_eigenverbrauch = 0
+        gesamt_einspeisung = 0
+        gesamt_speicher_ladung = 0
+        gesamt_speicher_entladung = 0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_erzeugung += d.get('erzeugung_kwh', 0)
+            gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0)
+            gesamt_einspeisung += d.get('einspeisung_kwh', 0)
+            gesamt_speicher_ladung += d.get('speicher_ladung_kwh', 0)
+            gesamt_speicher_entladung += d.get('speicher_entladung_kwh', 0)
+
+        # Parameter
+        params = bkw.parameter or {}
+        leistung_wp = params.get('leistung_wp', 0)
+        anzahl = params.get('anzahl', 2)
+        hat_speicher = params.get('hat_speicher', False)
+        speicher_kapazitaet = params.get('speicher_kapazitaet_wh', 0)
+
+        # Berechnungen
+        gesamt_leistung_wp = leistung_wp * anzahl if leistung_wp else (bkw.leistung_kwp or 0) * 1000
+
+        # Eigenverbrauchsquote
+        eigenverbrauch_quote = (gesamt_eigenverbrauch / gesamt_erzeugung * 100) if gesamt_erzeugung > 0 else 0
+
+        # Speicher-Effizienz
+        speicher_effizienz = (gesamt_speicher_entladung / gesamt_speicher_ladung * 100) if gesamt_speicher_ladung > 0 else 0
+
+        # Ersparnis: Eigenverbrauch spart Netzbezug, Einspeisung bringt Vergütung
+        ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
+        erloes_einspeisung = gesamt_einspeisung * einspeiseverguetung_cent / 100
+        gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung
+
+        # CO2-Einsparung (0.38 kg/kWh für Eigenverbrauch)
+        co2_ersparnis = gesamt_eigenverbrauch * 0.38
+
+        # Spezifischer Ertrag (kWh pro kWp)
+        spezifischer_ertrag = (gesamt_erzeugung / (gesamt_leistung_wp / 1000)) if gesamt_leistung_wp > 0 else 0
+
+        zusammenfassung = {
+            'gesamt_erzeugung_kwh': round(gesamt_erzeugung, 1),
+            'gesamt_eigenverbrauch_kwh': round(gesamt_eigenverbrauch, 1),
+            'gesamt_einspeisung_kwh': round(gesamt_einspeisung, 1),
+            'eigenverbrauch_quote_prozent': round(eigenverbrauch_quote, 1),
+            'spezifischer_ertrag_kwh_kwp': round(spezifischer_ertrag, 0),
+            # Leistung
+            'leistung_wp': gesamt_leistung_wp,
+            'anzahl_module': anzahl,
+            # Speicher (falls vorhanden)
+            'hat_speicher': hat_speicher,
+            'speicher_kapazitaet_wh': speicher_kapazitaet,
+            'speicher_ladung_kwh': round(gesamt_speicher_ladung, 1) if hat_speicher else 0,
+            'speicher_entladung_kwh': round(gesamt_speicher_entladung, 1) if hat_speicher else 0,
+            'speicher_effizienz_prozent': round(speicher_effizienz, 1) if hat_speicher else 0,
+            # Finanzen
+            'ersparnis_eigenverbrauch_euro': round(ersparnis_eigenverbrauch, 2),
+            'erloes_einspeisung_euro': round(erloes_einspeisung, 2),
+            'gesamt_ersparnis_euro': round(gesamt_ersparnis, 2),
+            # CO2
+            'co2_ersparnis_kg': round(co2_ersparnis, 1),
+            'anzahl_monate': len(monatsdaten),
+        }
+
+        dashboards.append(BalkonkraftwerkDashboardResponse(
+            investition=bkw,
+            monatsdaten=monatsdaten,
+            zusammenfassung=zusammenfassung,
+        ))
+
+    return dashboards
+
+
+@router.get("/dashboard/sonstiges/{anlage_id}", response_model=list[SonstigesDashboardResponse])
+async def get_sonstiges_dashboard(
+    anlage_id: int,
+    strompreis_cent: float = Query(30.0),
+    einspeiseverguetung_cent: float = Query(8.0),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sonstiges Dashboard für eine Anlage.
+
+    Zeigt sonstige Investitionen (Mini-BHKW, Pelletofen, etc.) mit kategorie-abhängigen Daten.
+    """
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.SONSTIGES.value)
+        .where(Investition.aktiv == True)
+    )
+    sonstige = inv_result.scalars().all()
+
+    if not sonstige:
+        return []
+
+    dashboards = []
+    for inv in sonstige:
+        md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == inv.id)
+            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+        )
+        monatsdaten = md_result.scalars().all()
+
+        params = inv.parameter or {}
+        kategorie = params.get('kategorie', 'erzeuger')
+        beschreibung = params.get('beschreibung', '')
+
+        # Aggregation basierend auf Kategorie
+        gesamt_erzeugung = 0
+        gesamt_eigenverbrauch = 0
+        gesamt_einspeisung = 0
+        gesamt_verbrauch = 0
+        gesamt_bezug_pv = 0
+        gesamt_bezug_netz = 0
+        gesamt_ladung = 0
+        gesamt_entladung = 0
+        gesamt_sonderkosten = 0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_sonderkosten += d.get('sonderkosten_euro', 0)
+
+            if kategorie == 'erzeuger':
+                gesamt_erzeugung += d.get('erzeugung_kwh', 0)
+                gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0)
+                gesamt_einspeisung += d.get('einspeisung_kwh', 0)
+            elif kategorie == 'verbraucher':
+                gesamt_verbrauch += d.get('verbrauch_kwh', 0)
+                gesamt_bezug_pv += d.get('bezug_pv_kwh', 0)
+                gesamt_bezug_netz += d.get('bezug_netz_kwh', 0)
+            elif kategorie == 'speicher':
+                gesamt_ladung += d.get('ladung_kwh', 0)
+                gesamt_entladung += d.get('entladung_kwh', 0)
+
+        # Berechnungen je nach Kategorie
+        if kategorie == 'erzeuger':
+            eigenverbrauch_quote = (gesamt_eigenverbrauch / gesamt_erzeugung * 100) if gesamt_erzeugung > 0 else 0
+            ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
+            erloes_einspeisung = gesamt_einspeisung * einspeiseverguetung_cent / 100
+            gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung
+            co2_ersparnis = gesamt_eigenverbrauch * 0.38
+
+            zusammenfassung = {
+                'kategorie': kategorie,
+                'beschreibung': beschreibung,
+                'gesamt_erzeugung_kwh': round(gesamt_erzeugung, 1),
+                'gesamt_eigenverbrauch_kwh': round(gesamt_eigenverbrauch, 1),
+                'gesamt_einspeisung_kwh': round(gesamt_einspeisung, 1),
+                'eigenverbrauch_quote_prozent': round(eigenverbrauch_quote, 1),
+                'ersparnis_eigenverbrauch_euro': round(ersparnis_eigenverbrauch, 2),
+                'erloes_einspeisung_euro': round(erloes_einspeisung, 2),
+                'gesamt_ersparnis_euro': round(gesamt_ersparnis, 2),
+                'co2_ersparnis_kg': round(co2_ersparnis, 1),
+                'sonderkosten_euro': round(gesamt_sonderkosten, 2),
+                'anzahl_monate': len(monatsdaten),
+            }
+
+        elif kategorie == 'verbraucher':
+            pv_anteil = (gesamt_bezug_pv / gesamt_verbrauch * 100) if gesamt_verbrauch > 0 else 0
+            kosten_netz = gesamt_bezug_netz * strompreis_cent / 100
+            # Ersparnis: PV-Strom statt Netzstrom
+            ersparnis_pv = gesamt_bezug_pv * strompreis_cent / 100
+
+            zusammenfassung = {
+                'kategorie': kategorie,
+                'beschreibung': beschreibung,
+                'gesamt_verbrauch_kwh': round(gesamt_verbrauch, 1),
+                'bezug_pv_kwh': round(gesamt_bezug_pv, 1),
+                'bezug_netz_kwh': round(gesamt_bezug_netz, 1),
+                'pv_anteil_prozent': round(pv_anteil, 1),
+                'kosten_netz_euro': round(kosten_netz, 2),
+                'ersparnis_pv_euro': round(ersparnis_pv, 2),
+                'sonderkosten_euro': round(gesamt_sonderkosten, 2),
+                'anzahl_monate': len(monatsdaten),
+            }
+
+        else:  # speicher
+            effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
+            # Ersparnis: Spread zwischen Netzbezug und Einspeisung
+            spread = strompreis_cent - einspeiseverguetung_cent
+            ersparnis = gesamt_entladung * spread / 100
+
+            zusammenfassung = {
+                'kategorie': kategorie,
+                'beschreibung': beschreibung,
+                'gesamt_ladung_kwh': round(gesamt_ladung, 1),
+                'gesamt_entladung_kwh': round(gesamt_entladung, 1),
+                'effizienz_prozent': round(effizienz, 1),
+                'ersparnis_euro': round(ersparnis, 2),
+                'sonderkosten_euro': round(gesamt_sonderkosten, 2),
+                'anzahl_monate': len(monatsdaten),
+            }
+
+        dashboards.append(SonstigesDashboardResponse(
+            investition=inv,
             monatsdaten=monatsdaten,
             zusammenfassung=zusammenfassung,
         ))

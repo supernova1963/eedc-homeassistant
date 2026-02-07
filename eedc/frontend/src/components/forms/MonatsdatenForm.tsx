@@ -8,7 +8,7 @@ import { Button, Input, Alert, Select } from '../ui'
 import { useInvestitionen } from '../../hooks'
 import { investitionenApi } from '../../api'
 import type { Monatsdaten, Investition } from '../../types'
-import { Car, Battery, Plug, Sun, Flame } from 'lucide-react'
+import { Car, Battery, Plug, Sun, Flame, Zap, MoreHorizontal } from 'lucide-react'
 
 interface MonatsdatenFormProps {
   monatsdaten?: Monatsdaten | null
@@ -51,8 +51,22 @@ interface InvestitionMonatsdaten {
   stromverbrauch_kwh?: number
   heizenergie_kwh?: number
   warmwasser_kwh?: number
-  // Wechselrichter
+  // Wechselrichter / PV-Module
   pv_erzeugung_kwh?: number
+  // Balkonkraftwerk / Sonstiges Erzeuger
+  erzeugung_kwh?: number
+  eigenverbrauch_kwh?: number
+  einspeisung_kwh?: number
+  // Balkonkraftwerk Speicher
+  speicher_ladung_kwh?: number
+  speicher_entladung_kwh?: number
+  // Sonstiges (Verbraucher)
+  verbrauch_sonstig_kwh?: number
+  bezug_pv_kwh?: number
+  bezug_netz_kwh?: number
+  // Sonderkosten (für alle Investitionstypen)
+  sonderkosten_euro?: number
+  sonderkosten_notiz?: string
 }
 
 const monatOptions = [
@@ -91,6 +105,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const hatWaermepumpe = aktiveInvestitionen.some(i => i.typ === 'waermepumpe')
   const hatWechselrichter = aktiveInvestitionen.some(i => i.typ === 'wechselrichter')
   const hatPVModule = aktiveInvestitionen.some(i => i.typ === 'pv-module')
+  const hatBalkonkraftwerk = aktiveInvestitionen.some(i => i.typ === 'balkonkraftwerk')
+  const hatSonstiges = aktiveInvestitionen.some(i => i.typ === 'sonstiges')
 
   // Basis-Formulardaten
   const [formData, setFormData] = useState({
@@ -153,6 +169,44 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           initial[inv.id] = {
             pv_erzeugung_kwh: '',
           }
+        } else if (inv.typ === 'balkonkraftwerk') {
+          const hatSpeicher = inv.parameter?.hat_speicher
+          const baseFields = {
+            pv_erzeugung_kwh: '',
+            eigenverbrauch_kwh: '',
+            einspeisung_kwh: '',
+          }
+          if (hatSpeicher) {
+            initial[inv.id] = {
+              ...baseFields,
+              speicher_ladung_kwh: '',
+              speicher_entladung_kwh: '',
+            }
+          } else {
+            initial[inv.id] = baseFields
+          }
+        } else if (inv.typ === 'sonstiges') {
+          const kategorie = inv.parameter?.kategorie || 'erzeuger'
+          if (kategorie === 'erzeuger') {
+            initial[inv.id] = {
+              erzeugung_kwh: '',
+              eigenverbrauch_kwh: '',
+              einspeisung_kwh: '',
+            }
+          } else if (kategorie === 'verbraucher') {
+            initial[inv.id] = {
+              verbrauch_sonstig_kwh: '',
+              bezug_pv_kwh: '',
+              bezug_netz_kwh: '',
+            }
+          } else if (kategorie === 'speicher') {
+            initial[inv.id] = { ladung_kwh: '', entladung_kwh: '' }
+          }
+        }
+        // Sonderkosten für alle Investitionstypen hinzufügen
+        if (initial[inv.id]) {
+          initial[inv.id].sonderkosten_euro = ''
+          initial[inv.id].sonderkosten_notiz = ''
         }
       })
 
@@ -179,6 +233,14 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
                 // V2H Mapping: Backend speichert als v2h_entladung_kwh, Form erwartet entladung_v2h_kwh
                 if (key === 'v2h_entladung_kwh' && initial[invIdStr]['entladung_v2h_kwh'] !== undefined) {
                   initial[invIdStr]['entladung_v2h_kwh'] = value?.toString() || ''
+                }
+                // Balkonkraftwerk Mapping: Backend speichert als erzeugung_kwh, Form erwartet pv_erzeugung_kwh
+                if (key === 'erzeugung_kwh' && initial[invIdStr]['pv_erzeugung_kwh'] !== undefined) {
+                  initial[invIdStr]['pv_erzeugung_kwh'] = value?.toString() || ''
+                }
+                // Sonstiges Verbraucher Mapping: Backend speichert als verbrauch_kwh, Form erwartet verbrauch_sonstig_kwh
+                if (key === 'verbrauch_kwh' && initial[invIdStr]['verbrauch_sonstig_kwh'] !== undefined) {
+                  initial[invIdStr]['verbrauch_sonstig_kwh'] = value?.toString() || ''
                 }
               })
             }
@@ -224,9 +286,17 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       if (inv.typ === 'speicher') {
         batterieLadung += parseFloat(daten.ladung_kwh) || 0
         batterieEntladung += parseFloat(daten.entladung_kwh) || 0
-      } else if (inv.typ === 'pv-module' || inv.typ === 'wechselrichter') {
-        // PV-Module haben Priorität, aber Wechselrichter als Fallback
+      } else if (inv.typ === 'pv-module' || inv.typ === 'wechselrichter' || inv.typ === 'balkonkraftwerk') {
+        // PV-Erzeugung aus allen Quellen summieren
         pvErzeugung += parseFloat(daten.pv_erzeugung_kwh) || 0
+        // Balkonkraftwerk mit Speicher
+        if (inv.typ === 'balkonkraftwerk' && inv.parameter?.hat_speicher) {
+          batterieLadung += parseFloat(daten.speicher_ladung_kwh) || 0
+          batterieEntladung += parseFloat(daten.speicher_entladung_kwh) || 0
+        }
+      } else if (inv.typ === 'sonstiges' && inv.parameter?.kategorie === 'erzeuger') {
+        // Sonstige Erzeuger zur PV-Erzeugung addieren
+        pvErzeugung += parseFloat(daten.erzeugung_kwh) || 0
       }
     })
 
@@ -260,7 +330,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (daten.ladung_netz_kwh) parsed.ladung_netz_kwh = parseFloat(daten.ladung_netz_kwh)
           if (daten.ladung_extern_kwh) parsed.ladung_extern_kwh = parseFloat(daten.ladung_extern_kwh)
           if (daten.ladung_extern_euro) parsed.ladung_extern_euro = parseFloat(daten.ladung_extern_euro)
-          if (daten.entladung_v2h_kwh) parsed.entladung_v2h_kwh = parseFloat(daten.entladung_v2h_kwh)
+          // V2H: Form verwendet entladung_v2h_kwh, Backend erwartet v2h_entladung_kwh
+          if (daten.entladung_v2h_kwh) (parsed as Record<string, number>).v2h_entladung_kwh = parseFloat(daten.entladung_v2h_kwh)
         } else if (inv.typ === 'speicher') {
           if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
           if (daten.entladung_kwh) parsed.entladung_kwh = parseFloat(daten.entladung_kwh)
@@ -278,7 +349,30 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (daten.pv_erzeugung_kwh) parsed.pv_erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
         } else if (inv.typ === 'pv-module') {
           if (daten.pv_erzeugung_kwh) parsed.pv_erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
+        } else if (inv.typ === 'balkonkraftwerk') {
+          // Balkonkraftwerk: Form verwendet pv_erzeugung_kwh, Backend erwartet erzeugung_kwh
+          if (daten.pv_erzeugung_kwh) (parsed as Record<string, number>).erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
+          if (daten.eigenverbrauch_kwh) parsed.eigenverbrauch_kwh = parseFloat(daten.eigenverbrauch_kwh)
+          if (daten.einspeisung_kwh) parsed.einspeisung_kwh = parseFloat(daten.einspeisung_kwh)
+          if (daten.speicher_ladung_kwh) parsed.speicher_ladung_kwh = parseFloat(daten.speicher_ladung_kwh)
+          if (daten.speicher_entladung_kwh) parsed.speicher_entladung_kwh = parseFloat(daten.speicher_entladung_kwh)
+        } else if (inv.typ === 'sonstiges') {
+          // Sonstiges Erzeuger
+          if (daten.erzeugung_kwh) parsed.erzeugung_kwh = parseFloat(daten.erzeugung_kwh)
+          if (daten.eigenverbrauch_kwh) parsed.eigenverbrauch_kwh = parseFloat(daten.eigenverbrauch_kwh)
+          if (daten.einspeisung_kwh) parsed.einspeisung_kwh = parseFloat(daten.einspeisung_kwh)
+          // Sonstiges Verbraucher: Form verwendet verbrauch_sonstig_kwh, Backend erwartet verbrauch_kwh
+          if (daten.verbrauch_sonstig_kwh) (parsed as Record<string, number>).verbrauch_kwh = parseFloat(daten.verbrauch_sonstig_kwh)
+          if (daten.bezug_pv_kwh) parsed.bezug_pv_kwh = parseFloat(daten.bezug_pv_kwh)
+          if (daten.bezug_netz_kwh) parsed.bezug_netz_kwh = parseFloat(daten.bezug_netz_kwh)
+          // Sonstiges Speicher
+          if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
+          if (daten.entladung_kwh) parsed.entladung_kwh = parseFloat(daten.entladung_kwh)
         }
+
+        // Sonderkosten für alle Investitionstypen
+        if (daten.sonderkosten_euro) parsed.sonderkosten_euro = parseFloat(daten.sonderkosten_euro)
+        if (daten.sonderkosten_notiz) parsed.sonderkosten_notiz = daten.sonderkosten_notiz
 
         if (Object.keys(parsed).length > 0) {
           invDaten[inv.id] = parsed
@@ -481,6 +575,24 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         />
       )}
 
+      {/* Balkonkraftwerk (falls vorhanden) */}
+      {hatBalkonkraftwerk && (
+        <BalkonkraftwerkSection
+          investitionen={aktiveInvestitionen.filter(i => i.typ === 'balkonkraftwerk')}
+          investitionsDaten={investitionsDaten}
+          onInvChange={handleInvChange}
+        />
+      )}
+
+      {/* Sonstiges (falls vorhanden) */}
+      {hatSonstiges && (
+        <SonstigesSection
+          investitionen={aktiveInvestitionen.filter(i => i.typ === 'sonstiges')}
+          investitionsDaten={investitionsDaten}
+          onInvChange={handleInvChange}
+        />
+      )}
+
       {/* Batterie manuell (falls kein Speicher als Investition) */}
       {!hatSpeicher && (
         <div className="space-y-4">
@@ -601,6 +713,12 @@ function SpeicherSection({ investitionen, investitionsDaten, onInvChange }: Spei
                 </div>
               ))}
             </div>
+            {/* Sonderkosten */}
+            <SonderkostenFields
+              invId={inv.id}
+              investitionsDaten={investitionsDaten}
+              onInvChange={onInvChange}
+            />
           </div>
         )
       })}
@@ -672,6 +790,12 @@ function EAutoSection({ investitionen, investitionsDaten, onInvChange }: EAutoSe
                 </div>
               ))}
             </div>
+            {/* Sonderkosten */}
+            <SonderkostenFields
+              invId={inv.id}
+              investitionsDaten={investitionsDaten}
+              onInvChange={onInvChange}
+            />
           </div>
         )
       })}
@@ -737,8 +861,358 @@ function InvestitionSection({
               </div>
             ))}
           </div>
+          {/* Sonderkosten */}
+          <SonderkostenFields
+            invId={inv.id}
+            investitionsDaten={investitionsDaten}
+            onInvChange={onInvChange}
+          />
         </div>
       ))}
+    </div>
+  )
+}
+
+// Balkonkraftwerk Sektion mit konditionellem Speicher
+interface BalkonkraftwerkSectionProps {
+  investitionen: Investition[]
+  investitionsDaten: Record<string, Record<string, string>>
+  onInvChange: (invId: number, field: string, value: string) => void
+}
+
+function BalkonkraftwerkSection({ investitionen, investitionsDaten, onInvChange }: BalkonkraftwerkSectionProps) {
+  if (investitionen.length === 0) return null
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Zap className="h-5 w-5 text-amber-500" />
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Balkonkraftwerk</h3>
+      </div>
+
+      {investitionen.map((inv) => {
+        const hatSpeicher = Boolean(inv.parameter?.hat_speicher)
+
+        return (
+          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              {inv.bezeichnung}
+              {inv.leistung_kwp && <span className="text-xs text-gray-500 ml-2">({inv.leistung_kwp} kWp)</span>}
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Erzeugung <span className="text-gray-400">(kWh)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={investitionsDaten[inv.id]?.pv_erzeugung_kwh || ''}
+                  onChange={(e) => onInvChange(inv.id, 'pv_erzeugung_kwh', e.target.value)}
+                  placeholder="z.B. 45"
+                  className="input text-sm py-1.5"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Eigenverbrauch <span className="text-gray-400">(kWh)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={investitionsDaten[inv.id]?.eigenverbrauch_kwh || ''}
+                  onChange={(e) => onInvChange(inv.id, 'eigenverbrauch_kwh', e.target.value)}
+                  placeholder="z.B. 35"
+                  className="input text-sm py-1.5"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Einspeisung <span className="text-gray-400">(kWh)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={investitionsDaten[inv.id]?.einspeisung_kwh || ''}
+                  onChange={(e) => onInvChange(inv.id, 'einspeisung_kwh', e.target.value)}
+                  placeholder="z.B. 10"
+                  className="input text-sm py-1.5"
+                />
+              </div>
+              {hatSpeicher && (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Speicher Ladung <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.speicher_ladung_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'speicher_ladung_kwh', e.target.value)}
+                      placeholder="z.B. 30"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Speicher Entladung <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.speicher_entladung_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'speicher_entladung_kwh', e.target.value)}
+                      placeholder="z.B. 28"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Sonderkosten */}
+            <SonderkostenFields
+              invId={inv.id}
+              investitionsDaten={investitionsDaten}
+              onInvChange={onInvChange}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Sonstiges Sektion - dynamisch basierend auf Kategorie
+interface SonstigesSectionProps {
+  investitionen: Investition[]
+  investitionsDaten: Record<string, Record<string, string>>
+  onInvChange: (invId: number, field: string, value: string) => void
+}
+
+function SonstigesSection({ investitionen, investitionsDaten, onInvChange }: SonstigesSectionProps) {
+  if (investitionen.length === 0) return null
+
+  const kategorieLabels: Record<string, string> = {
+    erzeuger: 'Erzeuger',
+    verbraucher: 'Verbraucher',
+    speicher: 'Speicher',
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <MoreHorizontal className="h-5 w-5 text-gray-500" />
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Sonstiges</h3>
+      </div>
+
+      {investitionen.map((inv) => {
+        const kategorie = (inv.parameter?.kategorie as string) || 'erzeuger'
+
+        return (
+          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              {inv.bezeichnung}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              {kategorieLabels[kategorie] || kategorie}
+              {inv.parameter?.beschreibung ? ` - ${String(inv.parameter.beschreibung)}` : ''}
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {kategorie === 'erzeuger' && (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Erzeugung <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.erzeugung_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'erzeugung_kwh', e.target.value)}
+                      placeholder="z.B. 100"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Eigenverbrauch <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.eigenverbrauch_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'eigenverbrauch_kwh', e.target.value)}
+                      placeholder="z.B. 85"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Einspeisung <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.einspeisung_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'einspeisung_kwh', e.target.value)}
+                      placeholder="z.B. 15"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                </>
+              )}
+              {kategorie === 'verbraucher' && (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Verbrauch <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.verbrauch_sonstig_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'verbrauch_sonstig_kwh', e.target.value)}
+                      placeholder="z.B. 50"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      davon PV <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.bezug_pv_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'bezug_pv_kwh', e.target.value)}
+                      placeholder="z.B. 30"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      davon Netz <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.bezug_netz_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'bezug_netz_kwh', e.target.value)}
+                      placeholder="z.B. 20"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                </>
+              )}
+              {kategorie === 'speicher' && (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Ladung <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.ladung_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'ladung_kwh', e.target.value)}
+                      placeholder="z.B. 20"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      Entladung <span className="text-gray-400">(kWh)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={investitionsDaten[inv.id]?.entladung_kwh || ''}
+                      onChange={(e) => onInvChange(inv.id, 'entladung_kwh', e.target.value)}
+                      placeholder="z.B. 18"
+                      className="input text-sm py-1.5"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Sonderkosten */}
+            <SonderkostenFields
+              invId={inv.id}
+              investitionsDaten={investitionsDaten}
+              onInvChange={onInvChange}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Sonderkosten-Felder für alle Investitionstypen
+interface SonderkostenFieldsProps {
+  invId: number
+  investitionsDaten: Record<string, Record<string, string>>
+  onInvChange: (invId: number, field: string, value: string) => void
+}
+
+function SonderkostenFields({ invId, investitionsDaten, onInvChange }: SonderkostenFieldsProps) {
+  const hasValue = investitionsDaten[invId]?.sonderkosten_euro || investitionsDaten[invId]?.sonderkosten_notiz
+  const [expanded, setExpanded] = useState(Boolean(hasValue))
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+      {!expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+        >
+          + Sonderkosten erfassen (Reparatur, Wartung, etc.)
+        </button>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              Sonderkosten <span className="text-gray-400">(€)</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={investitionsDaten[invId]?.sonderkosten_euro || ''}
+              onChange={(e) => onInvChange(invId, 'sonderkosten_euro', e.target.value)}
+              placeholder="z.B. 150"
+              className="input text-sm py-1.5"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              Beschreibung
+            </label>
+            <input
+              type="text"
+              value={investitionsDaten[invId]?.sonderkosten_notiz || ''}
+              onChange={(e) => onInvChange(invId, 'sonderkosten_notiz', e.target.value)}
+              placeholder="z.B. Wechselrichter-Reparatur"
+              className="input text-sm py-1.5"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

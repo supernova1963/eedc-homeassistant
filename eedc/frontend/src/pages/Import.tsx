@@ -152,7 +152,7 @@ export default function Import() {
             </h2>
           </div>
           <p className="text-gray-500 dark:text-gray-400 mb-4">
-            Starte mit einer kompletten Demo-Anlage inkl. PV-System, Speicher, E-Auto, Wärmepumpe und 31 Monaten Testdaten.
+            Starte mit einer kompletten Demo-Anlage inkl. PV-System, Speicher, E-Auto, Wärmepumpe, Balkonkraftwerk, Mini-BHKW und 31 Monaten Testdaten.
           </p>
           <Button
             onClick={handleCreateDemoData}
@@ -318,7 +318,7 @@ export default function Import() {
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             {hasDemoAnlage
               ? 'Demo-Anlage ist bereits vorhanden. Du kannst sie löschen, um sie neu zu erstellen.'
-              : 'Erstelle eine komplette Demo-Anlage mit PV-System, Speicher, E-Auto, Wärmepumpe und 31 Monaten Testdaten.'
+              : 'Erstelle eine komplette Demo-Anlage mit allen Investitionstypen und 31 Monaten Testdaten.'
             }
           </p>
 
@@ -351,7 +351,7 @@ export default function Import() {
           )}
 
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-            <strong>Enthält:</strong> 20 kWp PV-Anlage, 15 kWh Speicher, Tesla Model 3 mit V2H, Wärmepumpe, Wallbox, Strompreise 2023-2025
+            <strong>Enthält:</strong> 20 kWp PV-Anlage (3 Strings), 15 kWh Speicher, Tesla Model 3 mit V2H, Wärmepumpe, Wallbox, Balkonkraftwerk mit Speicher, Mini-BHKW, Strompreise 2023-2025
           </div>
         </Card>
       </div>

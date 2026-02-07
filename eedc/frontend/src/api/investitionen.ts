@@ -181,6 +181,67 @@ export interface WallboxDashboardResponse {
   }
 }
 
+export interface BalkonkraftwerkDashboardResponse {
+  investition: Investition
+  monatsdaten: InvestitionMonatsdaten[]
+  zusammenfassung: {
+    gesamt_erzeugung_kwh: number
+    gesamt_eigenverbrauch_kwh: number
+    gesamt_einspeisung_kwh: number
+    eigenverbrauch_quote_prozent: number
+    spezifischer_ertrag_kwh_kwp: number
+    // Leistung
+    leistung_wp: number
+    anzahl_module: number
+    // Speicher
+    hat_speicher: boolean
+    speicher_kapazitaet_wh: number
+    speicher_ladung_kwh: number
+    speicher_entladung_kwh: number
+    speicher_effizienz_prozent: number
+    // Finanzen
+    ersparnis_eigenverbrauch_euro: number
+    erloes_einspeisung_euro: number
+    gesamt_ersparnis_euro: number
+    // CO2
+    co2_ersparnis_kg: number
+    anzahl_monate: number
+  }
+}
+
+export interface SonstigesDashboardResponse {
+  investition: Investition
+  monatsdaten: InvestitionMonatsdaten[]
+  zusammenfassung: {
+    kategorie: 'erzeuger' | 'verbraucher' | 'speicher'
+    beschreibung: string
+    // Erzeuger-Felder
+    gesamt_erzeugung_kwh?: number
+    gesamt_eigenverbrauch_kwh?: number
+    gesamt_einspeisung_kwh?: number
+    eigenverbrauch_quote_prozent?: number
+    ersparnis_eigenverbrauch_euro?: number
+    erloes_einspeisung_euro?: number
+    // Verbraucher-Felder
+    gesamt_verbrauch_kwh?: number
+    bezug_pv_kwh?: number
+    bezug_netz_kwh?: number
+    pv_anteil_prozent?: number
+    kosten_netz_euro?: number
+    ersparnis_pv_euro?: number
+    // Speicher-Felder
+    gesamt_ladung_kwh?: number
+    gesamt_entladung_kwh?: number
+    effizienz_prozent?: number
+    ersparnis_euro?: number
+    // Gemeinsame Felder
+    gesamt_ersparnis_euro?: number
+    co2_ersparnis_kg?: number
+    sonderkosten_euro: number
+    anzahl_monate: number
+  }
+}
+
 export const investitionenApi = {
   /**
    * Verfügbare Investitionstypen mit Schema abrufen
@@ -283,6 +344,28 @@ export const investitionenApi = {
    */
   async getWallboxDashboard(anlageId: number): Promise<WallboxDashboardResponse[]> {
     return api.get<WallboxDashboardResponse[]>(`/investitionen/dashboard/wallbox/${anlageId}`)
+  },
+
+  /**
+   * Balkonkraftwerk Dashboard
+   */
+  async getBalkonkraftwerkDashboard(anlageId: number, strompreisCent?: number, einspeiseverguetungCent?: number): Promise<BalkonkraftwerkDashboardResponse[]> {
+    const params = new URLSearchParams()
+    if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
+    if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
+    const query = params.toString()
+    return api.get<BalkonkraftwerkDashboardResponse[]>(`/investitionen/dashboard/balkonkraftwerk/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * Sonstiges Dashboard
+   */
+  async getSonstigesDashboard(anlageId: number, strompreisCent?: number, einspeiseverguetungCent?: number): Promise<SonstigesDashboardResponse[]> {
+    const params = new URLSearchParams()
+    if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
+    if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
+    const query = params.toString()
+    return api.get<SonstigesDashboardResponse[]>(`/investitionen/dashboard/sonstiges/${anlageId}${query ? '?' + query : ''}`)
   },
 
   /**
