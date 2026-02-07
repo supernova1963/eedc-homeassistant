@@ -183,6 +183,16 @@ export interface MQTTConfig {
   password?: string
 }
 
+export interface MQTTConfigFromAddon {
+  enabled: boolean
+  host: string
+  port: number
+  username: string
+  password: string  // Maskiert wenn gesetzt
+  auto_publish: boolean
+  publish_interval_minutes: number
+}
+
 export interface MQTTTestResult {
   connected: boolean
   broker?: string
@@ -325,6 +335,13 @@ export const haApi = {
   // ===========================================================================
   // HA Export API
   // ===========================================================================
+
+  /**
+   * MQTT-Konfiguration aus Add-on Optionen abrufen
+   */
+  async getMqttConfig(): Promise<MQTTConfigFromAddon> {
+    return api.get<MQTTConfigFromAddon>('/ha/export/mqtt/config')
+  },
 
   /**
    * Alle exportierbaren Sensoren abrufen

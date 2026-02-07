@@ -30,7 +30,8 @@ import type {
   SensorExportItem,
   MQTTTestResult,
   MQTTPublishResult,
-  HAYamlSnippet
+  HAYamlSnippet,
+  MQTTConfigFromAddon
 } from '../api/ha'
 import type { Anlage } from '../types'
 
@@ -44,7 +45,8 @@ export default function HAExportSettings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // MQTT State
+  // MQTT State - wird aus Add-on Config geladen
+  const [mqttConfig, setMqttConfig] = useState<MQTTConfigFromAddon | null>(null)
   const [mqttHost, setMqttHost] = useState('core-mosquitto')
   const [mqttPort, setMqttPort] = useState(1883)
   const [mqttUser, setMqttUser] = useState('')
@@ -66,13 +68,23 @@ export default function HAExportSettings() {
       setLoading(true)
       setError(null)
 
-      const [anlagenData, exportDataResult] = await Promise.all([
+      const [anlagenData, exportDataResult, mqttConfigResult] = await Promise.all([
         anlagenApi.list(),
-        haApi.getExportSensors()
+        haApi.getExportSensors(),
+        haApi.getMqttConfig().catch(() => null)  // Optional, falls Endpoint nicht erreichbar
       ])
 
       setAnlagen(anlagenData)
       setExportData(exportDataResult)
+
+      // MQTT-Config aus Add-on Optionen laden
+      if (mqttConfigResult) {
+        setMqttConfig(mqttConfigResult)
+        setMqttHost(mqttConfigResult.host)
+        setMqttPort(mqttConfigResult.port)
+        setMqttUser(mqttConfigResult.username)
+        // Passwort nicht übernehmen (ist maskiert), Benutzer muss es neu eingeben
+      }
 
       // Erste Anlage auswählen
       if (anlagenData.length > 0 && !selectedAnlageId) {
@@ -350,9 +362,16 @@ export default function HAExportSettings() {
         <div className="space-y-6">
           {/* MQTT Konfiguration */}
           <div className="card p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              MQTT-Broker Konfiguration
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                MQTT-Broker Konfiguration
+              </h2>
+              {mqttConfig && (
+                <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
+                  Aus Add-on Optionen geladen
+                </span>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
@@ -498,13 +517,29 @@ export default function HAExportSettings() {
             </div>
           </div>
 
-          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-700 dark:text-amber-300">
+          <div className={`p-4 rounded-lg flex gap-3 ${
+            mqttConfig?.auto_publish
+              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+              : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+          }`}>
+            {mqttConfig?.auto_publish ? (
+              <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            )}
+            <div className={`text-sm ${
+              mqttConfig?.auto_publish
+                ? 'text-green-700 dark:text-green-300'
+                : 'text-amber-700 dark:text-amber-300'
+            }`}>
               <p className="font-medium mb-1">MQTT Discovery</p>
               <p>
                 Die Sensoren erscheinen automatisch in Home Assistant unter <strong>Einstellungen → Geräte & Dienste → MQTT</strong>.
-                Um die Werte aktuell zu halten, muss die Publizierung regelmäßig erfolgen (manuell oder via Automatisierung).
+                {mqttConfig?.auto_publish ? (
+                  <> Die automatische Publizierung ist aktiviert (alle {mqttConfig.publish_interval_minutes} Minuten).</>
+                ) : (
+                  <> Um die Werte aktuell zu halten, muss die Publizierung regelmäßig erfolgen (manuell oder via Automatisierung). Aktiviere <strong>auto_publish</strong> in den Add-on Optionen für automatische Updates.</>
+                )}
               </p>
             </div>
           </div>

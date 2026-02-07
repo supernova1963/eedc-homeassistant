@@ -86,6 +86,17 @@ class HAYamlSnippet(BaseModel):
     hinweis: str
 
 
+class MQTTConfigResponse(BaseModel):
+    """MQTT-Konfiguration aus Add-on Optionen."""
+    enabled: bool
+    host: str
+    port: int
+    username: str
+    password: str  # Wird als Maske zurückgegeben wenn gesetzt
+    auto_publish: bool
+    publish_interval_minutes: int
+
+
 # =============================================================================
 # Hilfsfunktionen für Berechnungen
 # =============================================================================
@@ -215,6 +226,30 @@ async def calculate_investition_sensors(
 # =============================================================================
 # API Endpoints
 # =============================================================================
+
+@router.get("/mqtt/config", response_model=MQTTConfigResponse)
+async def get_mqtt_config():
+    """
+    Gibt die MQTT-Konfiguration aus den Add-on Optionen zurück.
+
+    Diese Werte werden in der HA Add-on Konfiguration gesetzt und
+    können im Frontend für die MQTT-Einstellungen vorausgefüllt werden.
+    """
+    from backend.core.config import settings
+
+    # Passwort als Maske zurückgeben wenn gesetzt
+    password_masked = "••••••" if settings.mqtt_password else ""
+
+    return MQTTConfigResponse(
+        enabled=settings.mqtt_enabled,
+        host=settings.mqtt_host,
+        port=settings.mqtt_port,
+        username=settings.mqtt_username,
+        password=password_masked,
+        auto_publish=settings.mqtt_auto_publish,
+        publish_interval_minutes=settings.mqtt_publish_interval,
+    )
+
 
 @router.get("/sensors", response_model=FullExportResponse)
 async def get_all_sensors(db: AsyncSession = Depends(get_db)):
