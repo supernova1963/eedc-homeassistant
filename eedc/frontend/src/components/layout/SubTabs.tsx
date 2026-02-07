@@ -10,6 +10,8 @@ import {
   Flame,
   Battery,
   Plug,
+  Sun,
+  Wrench,
   BarChart3,
   TrendingUp,
   FileText
@@ -22,6 +24,8 @@ const cockpitTabs = [
   { name: 'Wärmepumpe', href: '/cockpit/waermepumpe', icon: Flame },
   { name: 'Speicher', href: '/cockpit/speicher', icon: Battery },
   { name: 'Wallbox', href: '/cockpit/wallbox', icon: Plug },
+  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk', icon: Sun },
+  { name: 'Sonstiges', href: '/cockpit/sonstiges', icon: Wrench },
 ]
 
 // Sub-Tabs für Auswertungen
