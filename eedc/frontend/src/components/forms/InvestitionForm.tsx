@@ -414,13 +414,15 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
                 onChange={(e) => setFormData(prev => ({ ...prev, ausrichtung: e.target.value }))}
                 className="input w-full"
               >
-                <option value="Süd">Süd</option>
-                <option value="Südost">Südost</option>
-                <option value="Südwest">Südwest</option>
-                <option value="Ost">Ost</option>
-                <option value="West">West</option>
-                <option value="Ost-West">Ost-West</option>
-                <option value="Nord">Nord</option>
+                <option value="Süd">Süd (0°)</option>
+                <option value="Südost">Südost (-45°)</option>
+                <option value="Ost">Ost (-90°)</option>
+                <option value="Nordost">Nordost (-135°)</option>
+                <option value="Nord">Nord (180°)</option>
+                <option value="Nordwest">Nordwest (135°)</option>
+                <option value="West">West (90°)</option>
+                <option value="Südwest">Südwest (45°)</option>
+                <option value="Ost-West">Ost-West (gemischt)</option>
               </select>
             </div>
             <Input
@@ -871,12 +873,15 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                 onChange={(e) => onChange({ target: { name: 'param_ausrichtung', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
                 className="input w-full"
               >
-                <option value="Süd">Süd</option>
-                <option value="Südost">Südost</option>
-                <option value="Südwest">Südwest</option>
-                <option value="Ost">Ost</option>
-                <option value="West">West</option>
-                <option value="Ost-West">Ost-West</option>
+                <option value="Süd">Süd (0°)</option>
+                <option value="Südost">Südost (-45°)</option>
+                <option value="Ost">Ost (-90°)</option>
+                <option value="Nordost">Nordost (-135°)</option>
+                <option value="Nord">Nord (180°)</option>
+                <option value="Nordwest">Nordwest (135°)</option>
+                <option value="West">West (90°)</option>
+                <option value="Südwest">Südwest (45°)</option>
+                <option value="Ost-West">Ost-West (gemischt)</option>
               </select>
             </div>
             <Input

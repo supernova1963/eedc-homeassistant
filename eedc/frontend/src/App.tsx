@@ -65,7 +65,6 @@ function App() {
 
           {/* Einstellungen - System */}
           <Route path="einstellungen/pvgis" element={<PVGISSettings />} />
-          <Route path="einstellungen/ha-integration" element={<Settings />} />
           <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
 

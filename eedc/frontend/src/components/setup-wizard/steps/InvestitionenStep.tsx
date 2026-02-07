@@ -288,13 +288,15 @@ function InvestitionForm({
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 >
                   <option value="">-- Wählen --</option>
-                  <option value="Süd">Süd</option>
-                  <option value="Südost">Südost</option>
-                  <option value="Südwest">Südwest</option>
-                  <option value="Ost">Ost</option>
-                  <option value="West">West</option>
-                  <option value="Nord">Nord</option>
-                  <option value="Ost-West">Ost-West</option>
+                  <option value="Süd">Süd (0°)</option>
+                  <option value="Südost">Südost (-45°)</option>
+                  <option value="Ost">Ost (-90°)</option>
+                  <option value="Nordost">Nordost (-135°)</option>
+                  <option value="Nord">Nord (180°)</option>
+                  <option value="Nordwest">Nordwest (135°)</option>
+                  <option value="West">West (90°)</option>
+                  <option value="Südwest">Südwest (45°)</option>
+                  <option value="Ost-West">Ost-West (gemischt)</option>
                 </select>
               </div>
               <div>
