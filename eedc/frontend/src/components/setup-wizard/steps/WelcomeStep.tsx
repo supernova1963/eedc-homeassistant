@@ -2,13 +2,30 @@
  * WelcomeStep - Willkommens-Bildschirm des Setup-Wizards
  */
 
-import { Sun, Zap, PiggyBank, BarChart3, ArrowRight } from 'lucide-react'
+import { useState } from 'react'
+import { Sun, Zap, PiggyBank, BarChart3, ArrowRight, Play, Loader2 } from 'lucide-react'
 
 interface WelcomeStepProps {
   onNext: () => void
+  onLoadDemo?: () => Promise<void>
 }
 
-export default function WelcomeStep({ onNext }: WelcomeStepProps) {
+export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoError, setDemoError] = useState<string | null>(null)
+
+  const handleLoadDemo = async () => {
+    if (!onLoadDemo) return
+    setDemoLoading(true)
+    setDemoError(null)
+    try {
+      await onLoadDemo()
+    } catch (e) {
+      setDemoError(e instanceof Error ? e.message : 'Fehler beim Laden der Demo-Daten')
+      setDemoLoading(false)
+    }
+  }
+
   return (
     <div className="p-8 md:p-12">
       {/* Hero */}
@@ -59,7 +76,7 @@ export default function WelcomeStep({ onNext }: WelcomeStepProps) {
       </div>
 
       {/* CTA */}
-      <div className="text-center">
+      <div className="text-center space-y-4">
         <button
           onClick={onNext}
           className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-amber-600 hover:to-orange-600 transition-all"
@@ -67,9 +84,41 @@ export default function WelcomeStep({ onNext }: WelcomeStepProps) {
           Einrichtung starten
           <ArrowRight className="w-5 h-5" />
         </button>
-        <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           Die Einrichtung dauert etwa 2-3 Minuten
         </p>
+
+        {/* Demo-Daten Option */}
+        {onLoadDemo && (
+          <div className="pt-6 border-t border-gray-200 dark:border-gray-700 mt-6">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              Oder erkunden Sie die App mit vorbereiteten Demo-Daten:
+            </p>
+            <button
+              onClick={handleLoadDemo}
+              disabled={demoLoading}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all disabled:opacity-50"
+            >
+              {demoLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Demo wird geladen...
+                </>
+              ) : (
+                <>
+                  <Play className="w-5 h-5" />
+                  Demo-Anlage laden
+                </>
+              )}
+            </button>
+            {demoError && (
+              <p className="mt-2 text-sm text-red-500">{demoError}</p>
+            )}
+            <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+              Enthält 31 Monate Beispieldaten, 9 Investitionen inkl. E-Auto, Speicher, Wärmepumpe u.v.m.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -16,6 +16,7 @@
 import { useEffect } from 'react'
 import { Sun, CheckCircle2 } from 'lucide-react'
 import { useSetupWizard, type WizardStep } from '../../hooks/useSetupWizard'
+import { importApi } from '../../api'
 
 // Schritt-Komponenten
 import WelcomeStep from './steps/WelcomeStep'
@@ -44,6 +45,13 @@ const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const wizard = useSetupWizard()
+
+  // Demo-Daten laden Handler
+  const handleLoadDemo = async () => {
+    await importApi.createDemoData()
+    // Nach erfolgreichem Laden direkt zum Dashboard
+    onComplete()
+  }
 
   // HA-Verbindung beim Erreichen des Schritts prüfen
   useEffect(() => {
@@ -183,7 +191,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           {/* Schritt-Inhalt */}
           {wizard.step === 'welcome' && (
-            <WelcomeStep onNext={wizard.nextStep} />
+            <WelcomeStep onNext={wizard.nextStep} onLoadDemo={handleLoadDemo} />
           )}
 
           {wizard.step === 'anlage' && (
