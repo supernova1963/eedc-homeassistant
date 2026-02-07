@@ -126,6 +126,7 @@ async def calculate_anlage_sensors(
 
     # Summen berechnen
     pv_erzeugung = sum(m.pv_erzeugung_kwh or (m.einspeisung_kwh + (m.eigenverbrauch_kwh or 0)) for m in monatsdaten)
+    direktverbrauch = sum(m.direktverbrauch_kwh or 0 for m in monatsdaten)
     eigenverbrauch = sum(m.eigenverbrauch_kwh or 0 for m in monatsdaten)
     einspeisung = sum(m.einspeisung_kwh for m in monatsdaten)
     netzbezug = sum(m.netzbezug_kwh for m in monatsdaten)
@@ -158,12 +159,18 @@ async def calculate_anlage_sensors(
         if sensor.key == "pv_erzeugung_gesamt_kwh":
             value = round(pv_erzeugung, 1)
             berechnung = f"Summe aus {len(monatsdaten)} Monaten"
+        elif sensor.key == "direktverbrauch_gesamt_kwh":
+            value = round(direktverbrauch, 1)
+            berechnung = f"PV direkt verbraucht (ohne Speicher)"
         elif sensor.key == "eigenverbrauch_gesamt_kwh":
             value = round(eigenverbrauch, 1)
         elif sensor.key == "einspeisung_gesamt_kwh":
             value = round(einspeisung, 1)
         elif sensor.key == "netzbezug_gesamt_kwh":
             value = round(netzbezug, 1)
+        elif sensor.key == "gesamtverbrauch_kwh":
+            value = round(gesamtverbrauch, 1)
+            berechnung = f"{eigenverbrauch:.0f} + {netzbezug:.0f}"
         elif sensor.key == "autarkie_prozent":
             value = round(autarkie, 1)
             berechnung = f"{eigenverbrauch:.0f} ÷ {gesamtverbrauch:.0f} × 100"
