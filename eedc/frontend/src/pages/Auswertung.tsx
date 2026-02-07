@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import {
-  Sun, Zap, Battery, TrendingUp, Leaf, Euro, Calendar, ArrowRight
+  Sun, Zap, Battery, TrendingUp, Leaf, Euro, Calendar, ArrowRight,
+  PiggyBank, Wallet
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../components/ui'
-import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis } from '../hooks'
+import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis, useInvestitionen } from '../hooks'
+import { investitionenApi, type ROIDashboardResponse } from '../api'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -20,7 +22,31 @@ const COLORS = {
   feedin: '#10b981',
 }
 
-type TabType = 'uebersicht' | 'pv' | 'jahresvergleich' | 'finanzen' | 'co2'
+const JAHR_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4']
+
+const TYP_COLORS: Record<string, string> = {
+  'pv-module': '#f59e0b',
+  'wechselrichter': '#eab308',
+  'speicher': '#3b82f6',
+  'e-auto': '#8b5cf6',
+  'wallbox': '#06b6d4',
+  'waermepumpe': '#ef4444',
+  'balkonkraftwerk': '#10b981',
+  'sonstiges': '#6b7280',
+}
+
+const TYP_LABELS: Record<string, string> = {
+  'pv-module': 'PV-Module',
+  'wechselrichter': 'Wechselrichter',
+  'speicher': 'Speicher',
+  'e-auto': 'E-Auto',
+  'wallbox': 'Wallbox',
+  'waermepumpe': 'Wärmepumpe',
+  'balkonkraftwerk': 'Balkonkraftwerk',
+  'sonstiges': 'Sonstiges',
+}
+
+type TabType = 'uebersicht' | 'pv' | 'investitionen' | 'finanzen' | 'co2'
 
 export default function Auswertung() {
   const navigate = useNavigate()
@@ -33,7 +59,6 @@ export default function Auswertung() {
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
   const anlage = anlagen.find(a => a.id === anlageId)
   const { monatsdaten, loading: mdLoading } = useMonatsdaten(anlageId)
-  useMonatsdatenStats(monatsdaten) // Für gefilterte Stats verwendet
   const { strompreis } = useAktuellerStrompreis(anlageId ?? null)
 
   // Verfügbare Jahre
@@ -92,7 +117,7 @@ export default function Auswertung() {
   const tabs: { key: TabType; label: string }[] = [
     { key: 'uebersicht', label: 'Übersicht' },
     { key: 'pv', label: 'PV-Anlage' },
-    { key: 'jahresvergleich', label: 'Jahresvergleich' },
+    { key: 'investitionen', label: 'Investitionen' },
     { key: 'finanzen', label: 'Finanzen' },
     { key: 'co2', label: 'CO2' },
   ]
@@ -102,17 +127,19 @@ export default function Auswertung() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auswertung</h1>
         <div className="flex items-center gap-3">
-          {/* Jahr-Filter */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            className="input w-auto"
-          >
-            <option value="all">Alle Jahre</option>
-            {verfuegbareJahre.map(j => (
-              <option key={j} value={j}>{j}</option>
-            ))}
-          </select>
+          {/* Jahr-Filter - nicht für Übersicht (Jahresvergleich braucht alle Jahre) */}
+          {activeTab !== 'uebersicht' && (
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="input w-auto"
+            >
+              <option value="all">Alle Jahre</option>
+              {verfuegbareJahre.map(j => (
+                <option key={j} value={j}>{j}</option>
+              ))}
+            </select>
+          )}
 
           {/* Anlagen-Filter */}
           {anlagen.length > 1 && (
@@ -150,18 +177,13 @@ export default function Auswertung() {
 
       {/* Tab Content */}
       {activeTab === 'uebersicht' && (
-        <UebersichtTab
-          data={filteredData}
-          stats={filteredStats}
-          anlage={anlage}
-          strompreis={strompreis}
-        />
+        <UebersichtTab data={monatsdaten} anlage={anlage} strompreis={strompreis} />
       )}
       {activeTab === 'pv' && (
-        <PVTab data={filteredData} anlage={anlage} />
+        <PVTab data={filteredData} stats={filteredStats} anlage={anlage} strompreis={strompreis} />
       )}
-      {activeTab === 'jahresvergleich' && (
-        <JahresvergleichTab data={monatsdaten} anlage={anlage} strompreis={strompreis} />
+      {activeTab === 'investitionen' && anlageId && (
+        <InvestitionenTab anlageId={anlageId} strompreis={strompreis} />
       )}
       {activeTab === 'finanzen' && (
         <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} />
@@ -173,7 +195,7 @@ export default function Auswertung() {
   )
 }
 
-// Übersicht Tab
+// Tab Props
 interface TabProps {
   data: ReturnType<typeof useMonatsdaten>['monatsdaten']
   stats: ReturnType<typeof useMonatsdatenStats>
@@ -181,275 +203,10 @@ interface TabProps {
   strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
 }
 
-function UebersichtTab({ data, stats, anlage, strompreis }: TabProps) {
-  // Chart-Daten
-  const chartData = useMemo(() => {
-    const sorted = [...data].sort((a, b) => {
-      if (a.jahr !== b.jahr) return a.jahr - b.jahr
-      return a.monat - b.monat
-    })
-
-    return sorted.map(md => ({
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(-2)}`,
-      Erzeugung: md.pv_erzeugung_kwh || 0,
-      Eigenverbrauch: md.eigenverbrauch_kwh || 0,
-      Einspeisung: md.einspeisung_kwh,
-      Netzbezug: md.netzbezug_kwh,
-    }))
-  }, [data])
-
-  // Pie Chart Daten
-  const pieData = useMemo(() => [
-    { name: 'Eigenverbrauch', value: stats.gesamtEigenverbrauch, color: COLORS.consumption },
-    { name: 'Einspeisung', value: stats.gesamtEinspeisung, color: COLORS.feedin },
-  ], [stats])
-
-  // Finanzielle Berechnung
-  const finanzen = useMemo(() => {
-    if (!strompreis) return null
-    const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
-    const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
-    const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
-    // Netto-Ertrag = Einspeiseerlös + Eigenverbrauch-Ersparnis
-    // OHNE Abzug Netzbezugskosten (diese wären auch ohne PV angefallen)
-    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag }
-  }, [stats, strompreis])
-
-  return (
-    <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard
-          title="PV-Erzeugung"
-          value={(stats.gesamtErzeugung / 1000).toFixed(1)}
-          unit="MWh"
-          icon={Sun}
-          color="text-yellow-500"
-          bgColor="bg-yellow-50 dark:bg-yellow-900/20"
-          formel="Σ PV-Erzeugung aller Monate"
-          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
-          ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
-        />
-        <KPICard
-          title="Eigenverbrauch"
-          value={stats.gesamtErzeugung > 0 ? ((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100).toFixed(0) : '0'}
-          unit="%"
-          subtitle={`${(stats.gesamtEigenverbrauch / 1000).toFixed(1)} MWh`}
-          icon={Zap}
-          color="text-purple-500"
-          bgColor="bg-purple-50 dark:bg-purple-900/20"
-          formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
-          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
-          ergebnis={`= ${fmtCalc((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100, 1)} %`}
-        />
-        <KPICard
-          title="Autarkie"
-          value={stats.durchschnittAutarkie.toFixed(0)}
-          unit="%"
-          subtitle="Durchschnitt"
-          icon={Battery}
-          color="text-blue-500"
-          bgColor="bg-blue-50 dark:bg-blue-900/20"
-          formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
-          berechnung="Durchschnitt aller Monate"
-          ergebnis={`= ${fmtCalc(stats.durchschnittAutarkie, 1)} %`}
-        />
-        <KPICard
-          title="Netto-Ertrag"
-          value={finanzen ? finanzen.nettoErtrag.toFixed(0) : '---'}
-          unit="€"
-          subtitle={finanzen ? `${stats.anzahlMonate} Monate` : 'Strompreis fehlt'}
-          icon={Euro}
-          color="text-green-500"
-          bgColor="bg-green-50 dark:bg-green-900/20"
-          formel="Einspeiseerlös + EV-Ersparnis"
-          berechnung={finanzen ? `${fmtCalc(finanzen.einspeiseErloes, 2)} € + ${fmtCalc(finanzen.eigenverbrauchErsparnis, 2)} €` : undefined}
-          ergebnis={finanzen ? `= ${fmtCalc(finanzen.nettoErtrag, 2)} €` : undefined}
-        />
-      </div>
-
-      {/* Charts */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Bar Chart */}
-        <Card className="md:col-span-2">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Monatlicher Verlauf
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} />
-                <Legend />
-                <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} stackId="a" />
-                <Bar dataKey="Einspeisung" fill={COLORS.feedin} stackId="a" />
-                <Bar dataKey="Netzbezug" fill={COLORS.grid} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        {/* Pie Chart */}
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Verteilung PV-Strom
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => [`${(value / 1000).toFixed(1)} MWh`, '']} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
-
-      {/* Kennzahlen-Tabelle */}
-      <Card>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Zusammenfassung
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <p className="text-gray-500 dark:text-gray-400">Zeitraum</p>
-            <p className="font-medium text-gray-900 dark:text-white">{stats.anzahlMonate} Monate</p>
-          </div>
-          <div>
-            <p className="text-gray-500 dark:text-gray-400">Anlagenleistung</p>
-            <p className="font-medium text-gray-900 dark:text-white">{anlage?.leistung_kwp || '---'} kWp</p>
-          </div>
-          <div>
-            <p className="text-gray-500 dark:text-gray-400">Spez. Ertrag</p>
-            <p className="font-medium text-gray-900 dark:text-white">
-              {anlage?.leistung_kwp ? (stats.gesamtErzeugung / anlage.leistung_kwp).toFixed(0) : '---'} kWh/kWp
-            </p>
-          </div>
-          <div>
-            <p className="text-gray-500 dark:text-gray-400">CO2 eingespart</p>
-            <p className="font-medium text-green-600 dark:text-green-400">
-              {(stats.gesamtErzeugung * 0.38 / 1000).toFixed(1)} t
-            </p>
-          </div>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-// PV Tab
-function PVTab({ data, anlage }: Omit<TabProps, 'strompreis' | 'stats'>) {
-  const chartData = useMemo(() => {
-    const sorted = [...data].sort((a, b) => {
-      if (a.jahr !== b.jahr) return a.jahr - b.jahr
-      return a.monat - b.monat
-    })
-
-    return sorted.map(md => ({
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(-2)}`,
-      Erzeugung: md.pv_erzeugung_kwh || (md.einspeisung_kwh + (md.eigenverbrauch_kwh || 0)),
-      SpezErtrag: anlage?.leistung_kwp
-        ? ((md.pv_erzeugung_kwh || md.einspeisung_kwh) / anlage.leistung_kwp)
-        : 0,
-    }))
-  }, [data, anlage])
-
-  // Jahresvergleich
-  const jahresVergleich = useMemo(() => {
-    const byYear: Record<number, number> = {}
-    data.forEach(md => {
-      const erzeugung = md.pv_erzeugung_kwh || (md.einspeisung_kwh + (md.eigenverbrauch_kwh || 0))
-      byYear[md.jahr] = (byYear[md.jahr] || 0) + erzeugung
-    })
-    return Object.entries(byYear)
-      .map(([jahr, erzeugung]) => ({ jahr: Number(jahr), erzeugung }))
-      .sort((a, b) => a.jahr - b.jahr)
-  }, [data])
-
-  return (
-    <div className="space-y-6">
-      {/* PV Erzeugung Chart */}
-      <Card>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          PV-Erzeugung
-        </h3>
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} />
-              <Legend />
-              <Line type="monotone" dataKey="Erzeugung" stroke={COLORS.solar} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      {/* Jahresvergleich */}
-      {jahresVergleich.length > 1 && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Jahresvergleich
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={jahresVergleich}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis dataKey="jahr" />
-                <YAxis unit=" kWh" />
-                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} />
-                <Bar dataKey="erzeugung" name="Erzeugung" fill={COLORS.solar} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      )}
-
-      {/* Spez. Ertrag */}
-      {anlage?.leistung_kwp && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Spezifischer Ertrag (kWh/kWp)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis unit=" kWh/kWp" tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(value: number) => [`${value.toFixed(1)} kWh/kWp`, '']} />
-                <Bar dataKey="SpezErtrag" name="Spez. Ertrag" fill={COLORS.solar} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-// Jahresvergleich Tab
-const JAHR_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4']
-
-function JahresvergleichTab({ data, anlage, strompreis }: Omit<TabProps, 'stats'>) {
+// ============================================================================
+// ÜBERSICHT TAB - Jahresvergleich (ehemals JahresvergleichTab)
+// ============================================================================
+function UebersichtTab({ data, anlage, strompreis }: Omit<TabProps, 'stats'>) {
   // Alle verfügbaren Jahre
   const verfuegbareJahre = useMemo(() => {
     return [...new Set(data.map(m => m.jahr))].sort((a, b) => a - b)
@@ -550,16 +307,64 @@ function JahresvergleichTab({ data, anlage, strompreis }: Omit<TabProps, 'stats'
   }
 
   if (verfuegbareJahre.length < 2) {
+    // Fallback: Zeige einfache Jahresübersicht wenn nur 1 Jahr
+    const stats = jahresStats[0]
+    if (!stats) {
+      return (
+        <Card className="text-center py-8">
+          <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Keine Daten vorhanden
+          </h3>
+        </Card>
+      )
+    }
+
     return (
-      <Card className="text-center py-8">
-        <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          Mindestens 2 Jahre erforderlich
-        </h3>
-        <p className="text-gray-500 dark:text-gray-400">
-          Für einen Jahresvergleich werden Daten aus mindestens 2 verschiedenen Jahren benötigt.
-        </p>
-      </Card>
+      <div className="space-y-6">
+        <Alert type="info">
+          Für einen detaillierten Jahresvergleich werden Daten aus mindestens 2 Jahren benötigt.
+          Aktuell: {verfuegbareJahre[0] || 'Keine Daten'}
+        </Alert>
+
+        {/* Einfache KPI-Übersicht für 1 Jahr */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="Erzeugung"
+            value={(stats.erzeugung / 1000).toFixed(1)}
+            unit="MWh"
+            icon={Sun}
+            color="text-yellow-500"
+            bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+          />
+          <KPICard
+            title="Autarkie"
+            value={stats.autarkie.toFixed(0)}
+            unit="%"
+            icon={Battery}
+            color="text-blue-500"
+            bgColor="bg-blue-50 dark:bg-blue-900/20"
+          />
+          <KPICard
+            title="EV-Quote"
+            value={stats.eigenverbrauchQuote.toFixed(0)}
+            unit="%"
+            icon={Zap}
+            color="text-purple-500"
+            bgColor="bg-purple-50 dark:bg-purple-900/20"
+          />
+          {strompreis && (
+            <KPICard
+              title="Netto-Ertrag"
+              value={stats.nettoErtrag.toFixed(0)}
+              unit="€"
+              icon={Euro}
+              color="text-green-500"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+            />
+          )}
+        </div>
+      </div>
     )
   }
 
@@ -567,7 +372,7 @@ function JahresvergleichTab({ data, anlage, strompreis }: Omit<TabProps, 'stats'
     <div className="space-y-6">
       {/* Jahres-KPIs mit Delta */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {jahresStats.slice(-2).reverse().map((js, idx) => {
+        {jahresStats.slice(-4).reverse().map((js, idx) => {
           const prevStats = jahresStats.find(s => s.jahr === js.jahr - 1)
           const deltaErzeugung = getDelta(js.erzeugung, prevStats?.erzeugung)
 
@@ -756,7 +561,535 @@ function JahresvergleichTab({ data, anlage, strompreis }: Omit<TabProps, 'stats'
   )
 }
 
-// Finanzen Tab
+// ============================================================================
+// PV-ANLAGE TAB - Kombiniert bisherige Übersicht + PV-Details
+// ============================================================================
+function PVTab({ data, stats, anlage, strompreis }: TabProps) {
+  // Chart-Daten für monatlichen Verlauf
+  const chartData = useMemo(() => {
+    const sorted = [...data].sort((a, b) => {
+      if (a.jahr !== b.jahr) return a.jahr - b.jahr
+      return a.monat - b.monat
+    })
+
+    return sorted.map(md => ({
+      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(-2)}`,
+      Erzeugung: md.pv_erzeugung_kwh || 0,
+      Eigenverbrauch: md.eigenverbrauch_kwh || 0,
+      Einspeisung: md.einspeisung_kwh,
+      Netzbezug: md.netzbezug_kwh,
+      SpezErtrag: anlage?.leistung_kwp
+        ? ((md.pv_erzeugung_kwh || md.einspeisung_kwh) / anlage.leistung_kwp)
+        : 0,
+    }))
+  }, [data, anlage])
+
+  // Pie Chart Daten
+  const pieData = useMemo(() => [
+    { name: 'Eigenverbrauch', value: stats.gesamtEigenverbrauch, color: COLORS.consumption },
+    { name: 'Einspeisung', value: stats.gesamtEinspeisung, color: COLORS.feedin },
+  ], [stats])
+
+  // Finanzielle Berechnung
+  const finanzen = useMemo(() => {
+    if (!strompreis) return null
+    const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
+    const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+    const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag }
+  }, [stats, strompreis])
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard
+          title="PV-Erzeugung"
+          value={(stats.gesamtErzeugung / 1000).toFixed(1)}
+          unit="MWh"
+          icon={Sun}
+          color="text-yellow-500"
+          bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+          formel="Σ PV-Erzeugung aller Monate"
+          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
+          ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
+        />
+        <KPICard
+          title="Eigenverbrauch"
+          value={stats.gesamtErzeugung > 0 ? ((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100).toFixed(0) : '0'}
+          unit="%"
+          subtitle={`${(stats.gesamtEigenverbrauch / 1000).toFixed(1)} MWh`}
+          icon={Zap}
+          color="text-purple-500"
+          bgColor="bg-purple-50 dark:bg-purple-900/20"
+          formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
+          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
+          ergebnis={`= ${fmtCalc((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100, 1)} %`}
+        />
+        <KPICard
+          title="Autarkie"
+          value={stats.durchschnittAutarkie.toFixed(0)}
+          unit="%"
+          subtitle="Durchschnitt"
+          icon={Battery}
+          color="text-blue-500"
+          bgColor="bg-blue-50 dark:bg-blue-900/20"
+          formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
+          berechnung="Durchschnitt aller Monate"
+          ergebnis={`= ${fmtCalc(stats.durchschnittAutarkie, 1)} %`}
+        />
+        <KPICard
+          title="Netto-Ertrag"
+          value={finanzen ? finanzen.nettoErtrag.toFixed(0) : '---'}
+          unit="€"
+          subtitle={finanzen ? `${stats.anzahlMonate} Monate` : 'Strompreis fehlt'}
+          icon={Euro}
+          color="text-green-500"
+          bgColor="bg-green-50 dark:bg-green-900/20"
+          formel="Einspeiseerlös + EV-Ersparnis"
+          berechnung={finanzen ? `${fmtCalc(finanzen.einspeiseErloes, 2)} € + ${fmtCalc(finanzen.eigenverbrauchErsparnis, 2)} €` : undefined}
+          ergebnis={finanzen ? `= ${fmtCalc(finanzen.nettoErtrag, 2)} €` : undefined}
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Bar Chart - Monatlicher Verlauf */}
+        <Card className="md:col-span-2">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Monatlicher Verlauf
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} />
+                <Legend />
+                <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} stackId="a" />
+                <Bar dataKey="Einspeisung" fill={COLORS.feedin} stackId="a" />
+                <Bar dataKey="Netzbezug" fill={COLORS.grid} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        {/* Pie Chart */}
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Verteilung PV-Strom
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={80}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => [`${(value / 1000).toFixed(1)} MWh`, '']} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+
+      {/* PV Erzeugung Line Chart */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          PV-Erzeugung Verlauf
+        </h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} />
+              <Legend />
+              <Line type="monotone" dataKey="Erzeugung" stroke={COLORS.solar} strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Spez. Ertrag */}
+      {anlage?.leistung_kwp && (
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Spezifischer Ertrag (kWh/kWp)
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis unit=" kWh/kWp" tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(1)} kWh/kWp`, '']} />
+                <Bar dataKey="SpezErtrag" name="Spez. Ertrag" fill={COLORS.solar} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
+
+      {/* Kennzahlen-Tabelle */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Zusammenfassung
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-gray-500 dark:text-gray-400">Zeitraum</p>
+            <p className="font-medium text-gray-900 dark:text-white">{stats.anzahlMonate} Monate</p>
+          </div>
+          <div>
+            <p className="text-gray-500 dark:text-gray-400">Anlagenleistung</p>
+            <p className="font-medium text-gray-900 dark:text-white">{anlage?.leistung_kwp || '---'} kWp</p>
+          </div>
+          <div>
+            <p className="text-gray-500 dark:text-gray-400">Spez. Ertrag</p>
+            <p className="font-medium text-gray-900 dark:text-white">
+              {anlage?.leistung_kwp ? (stats.gesamtErzeugung / anlage.leistung_kwp).toFixed(0) : '---'} kWh/kWp
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-500 dark:text-gray-400">CO2 eingespart</p>
+            <p className="font-medium text-green-600 dark:text-green-400">
+              {(stats.gesamtErzeugung * 0.38 / 1000).toFixed(1)} t
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ============================================================================
+// INVESTITIONEN TAB - NEU
+// ============================================================================
+interface InvestitionenTabProps {
+  anlageId: number
+  strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
+}
+
+function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
+  const { investitionen, loading: invLoading } = useInvestitionen(anlageId)
+  const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(null)
+  const [roiLoading, setRoiLoading] = useState(true)
+
+  useEffect(() => {
+    const loadROI = async () => {
+      try {
+        setRoiLoading(true)
+        const data = await investitionenApi.getROIDashboard(
+          anlageId,
+          strompreis?.netzbezug_arbeitspreis_cent_kwh,
+          strompreis?.einspeiseverguetung_cent_kwh
+        )
+        setRoiData(data)
+      } catch (e) {
+        console.error('ROI-Dashboard Fehler:', e)
+      } finally {
+        setRoiLoading(false)
+      }
+    }
+    loadROI()
+  }, [anlageId, strompreis])
+
+  // Investitionen nach Typ gruppieren
+  const invByTyp = useMemo(() => {
+    const grouped: Record<string, typeof investitionen> = {}
+    investitionen.forEach(inv => {
+      if (!grouped[inv.typ]) grouped[inv.typ] = []
+      grouped[inv.typ].push(inv)
+    })
+    return grouped
+  }, [investitionen])
+
+  // Investitionskosten nach Typ
+  const kostenByTyp = useMemo(() => {
+    return Object.entries(invByTyp).map(([typ, invs]) => ({
+      typ,
+      label: TYP_LABELS[typ] || typ,
+      kosten: invs.reduce((sum, inv) => sum + (inv.anschaffungskosten_gesamt || 0), 0),
+      color: TYP_COLORS[typ] || '#6b7280',
+    })).filter(t => t.kosten > 0).sort((a, b) => b.kosten - a.kosten)
+  }, [invByTyp])
+
+  // Amortisationskurve berechnen
+  const amortisationData = useMemo(() => {
+    if (!roiData || !roiData.gesamt_jahres_einsparung) return []
+
+    const gesamtInvestition = roiData.gesamt_relevante_kosten
+    const jahresErsparnis = roiData.gesamt_jahres_einsparung
+    const result = []
+
+    for (let jahr = 0; jahr <= 25; jahr++) {
+      const kumulierteErsparnis = jahr * jahresErsparnis
+      result.push({
+        jahr,
+        investition: gesamtInvestition,
+        ersparnis: kumulierteErsparnis,
+        bilanz: kumulierteErsparnis - gesamtInvestition,
+      })
+    }
+    return result
+  }, [roiData])
+
+  if (invLoading || roiLoading) {
+    return <LoadingSpinner text="Lade Investitionsdaten..." />
+  }
+
+  if (investitionen.length === 0) {
+    return (
+      <Card className="text-center py-8">
+        <PiggyBank className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Keine Investitionen erfasst
+        </h3>
+        <p className="text-gray-500 dark:text-gray-400">
+          Erfasse Investitionen in den Einstellungen, um die ROI-Auswertung zu sehen.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Gesamt-KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard
+          title="Gesamtinvestition"
+          value={(roiData?.gesamt_relevante_kosten || 0).toFixed(0)}
+          unit="€"
+          subtitle={`${investitionen.length} Komponenten`}
+          icon={Wallet}
+          color="text-blue-500"
+          bgColor="bg-blue-50 dark:bg-blue-900/20"
+        />
+        <KPICard
+          title="Jahresersparnis"
+          value={(roiData?.gesamt_jahres_einsparung || 0).toFixed(0)}
+          unit="€/Jahr"
+          icon={TrendingUp}
+          color="text-green-500"
+          bgColor="bg-green-50 dark:bg-green-900/20"
+        />
+        <KPICard
+          title="ROI"
+          value={roiData?.gesamt_roi_prozent?.toFixed(1) || '---'}
+          unit="%"
+          subtitle="pro Jahr"
+          icon={TrendingUp}
+          color="text-purple-500"
+          bgColor="bg-purple-50 dark:bg-purple-900/20"
+        />
+        <KPICard
+          title="Amortisation"
+          value={roiData?.gesamt_amortisation_jahre?.toFixed(1) || '---'}
+          unit="Jahre"
+          icon={Calendar}
+          color="text-amber-500"
+          bgColor="bg-amber-50 dark:bg-amber-900/20"
+        />
+      </div>
+
+      {/* Investitionen nach Typ - Pie Chart */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Investitionen nach Kategorie
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={kostenByTyp}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  dataKey="kosten"
+                  nameKey="label"
+                  label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {kostenByTyp.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        {/* Investitionen Bar Chart */}
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Kosten nach Kategorie
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={kostenByTyp} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis type="number" unit=" €" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} width={100} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} />
+                <Bar dataKey="kosten" name="Kosten">
+                  {kostenByTyp.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+
+      {/* Amortisationskurve */}
+      {amortisationData.length > 0 && (
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Amortisationsverlauf
+          </h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={amortisationData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis dataKey="jahr" unit=" J." tick={{ fontSize: 11 }} />
+                <YAxis unit=" €" tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} />
+                <Legend />
+                <Area
+                  type="monotone"
+                  dataKey="investition"
+                  name="Investition"
+                  stroke={COLORS.grid}
+                  fill={COLORS.grid}
+                  fillOpacity={0.3}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="ersparnis"
+                  name="Kum. Ersparnis"
+                  stroke={COLORS.feedin}
+                  fill={COLORS.feedin}
+                  fillOpacity={0.3}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          {roiData?.gesamt_amortisation_jahre && (
+            <p className="text-sm text-gray-500 mt-2">
+              Break-Even nach ca. {roiData.gesamt_amortisation_jahre.toFixed(1)} Jahren
+            </p>
+          )}
+        </Card>
+      )}
+
+      {/* ROI pro Investition */}
+      {roiData?.berechnungen && roiData.berechnungen.length > 0 && (
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            ROI pro Investition
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bezeichnung</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Typ</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Kosten</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ersparnis/Jahr</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">ROI</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amortisation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {roiData.berechnungen.map((b) => (
+                  <tr key={b.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                      {b.investition_bezeichnung}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || '#6b7280'}20`, color: TYP_COLORS[b.investition_typ] || '#6b7280' }}
+                      >
+                        {TYP_LABELS[b.investition_typ] || b.investition_typ}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {b.relevante_kosten.toFixed(0)} €
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-green-600">
+                      {b.jahres_einsparung.toFixed(0)} €
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {b.roi_prozent?.toFixed(1) || '---'}%
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                      {b.amortisation_jahre?.toFixed(1) || '---'} J.
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Investitionen-Liste */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Alle Investitionen
+        </h3>
+        <div className="grid gap-3">
+          {Object.entries(invByTyp).map(([typ, invs]) => (
+            <div key={typ} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: TYP_COLORS[typ] || '#6b7280' }}
+                />
+                <h4 className="font-medium text-gray-900 dark:text-white">
+                  {TYP_LABELS[typ] || typ}
+                </h4>
+                <span className="text-sm text-gray-500">({invs.length})</span>
+              </div>
+              <div className="grid gap-2">
+                {invs.map(inv => (
+                  <div key={inv.id} className="flex justify-between items-center text-sm py-1">
+                    <span className="text-gray-700 dark:text-gray-300">{inv.bezeichnung}</span>
+                    <span className="text-gray-900 dark:text-white font-medium">
+                      {inv.anschaffungskosten_gesamt?.toFixed(0) || '0'} €
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ============================================================================
+// FINANZEN TAB
+// ============================================================================
 function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
   if (!strompreis) {
     return (
@@ -798,8 +1131,6 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
     const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
     const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
     const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
-    // Netto-Ertrag = Einspeiseerlös + Eigenverbrauch-Ersparnis
-    // OHNE Abzug Netzbezugskosten (diese wären auch ohne PV angefallen)
     const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag }
   }, [stats, strompreis])
@@ -882,7 +1213,9 @@ function FinanzenTab({ data, stats, strompreis }: Omit<TabProps, 'anlage'>) {
   )
 }
 
-// CO2 Tab
+// ============================================================================
+// CO2 TAB
+// ============================================================================
 function CO2Tab({ data, stats }: Omit<TabProps, 'anlage' | 'strompreis'>) {
   const CO2_FAKTOR = 0.38 // kg CO2 pro kWh (deutscher Strommix)
 
@@ -977,7 +1310,9 @@ function CO2Tab({ data, stats }: Omit<TabProps, 'anlage' | 'strompreis'>) {
   )
 }
 
-// KPI Card Component
+// ============================================================================
+// KPI CARD COMPONENT
+// ============================================================================
 interface KPICardProps {
   title: string
   value: string
