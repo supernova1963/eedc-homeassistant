@@ -13,6 +13,15 @@ if [ -f "$CONFIG_PATH" ]; then
     export HA_SENSOR_NETZBEZUG=$(jq -r '.ha_sensors.netzbezug // ""' $CONFIG_PATH)
     export HA_SENSOR_BATTERIE_LADUNG=$(jq -r '.ha_sensors.batterie_ladung // ""' $CONFIG_PATH)
     export HA_SENSOR_BATTERIE_ENTLADUNG=$(jq -r '.ha_sensors.batterie_entladung // ""' $CONFIG_PATH)
+
+    # MQTT Export Konfiguration
+    export MQTT_ENABLED=$(jq -r '.mqtt.enabled // false' $CONFIG_PATH)
+    export MQTT_HOST=$(jq -r '.mqtt.host // "core-mosquitto"' $CONFIG_PATH)
+    export MQTT_PORT=$(jq -r '.mqtt.port // 1883' $CONFIG_PATH)
+    export MQTT_USER=$(jq -r '.mqtt.username // ""' $CONFIG_PATH)
+    export MQTT_PASSWORD=$(jq -r '.mqtt.password // ""' $CONFIG_PATH)
+    export MQTT_AUTO_PUBLISH=$(jq -r '.mqtt.auto_publish // false' $CONFIG_PATH)
+    export MQTT_PUBLISH_INTERVAL=$(jq -r '.mqtt.publish_interval_minutes // 60' $CONFIG_PATH)
 else
     export LOG_LEVEL="info"
 fi
@@ -25,10 +34,13 @@ export DATABASE_URL="sqlite+aiosqlite:////data/eedc.db"
 
 echo "==================================="
 echo "  EEDC - Energie Daten Center"
-echo "  Version: 0.9.0"
+echo "  Version: 0.9.3"
 echo "==================================="
 echo "Log Level: $LOG_LEVEL"
 echo "Database: /data/eedc.db"
+if [ "$MQTT_ENABLED" = "true" ]; then
+    echo "MQTT Export: enabled ($MQTT_HOST:$MQTT_PORT)"
+fi
 echo ""
 
 # FastAPI Server starten

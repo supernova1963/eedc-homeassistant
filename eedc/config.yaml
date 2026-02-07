@@ -3,7 +3,7 @@
 
 name: "eedc - Energie Effizienz Data Center"
 description: "Lokale PV-Anlagen Auswertung und Wirtschaftlichkeitsanalyse"
-version: "0.9.1"
+version: "0.9.3"
 slug: "eedc"
 url: "https://github.com/supernova1963/eedc-homeassistant"
 
@@ -38,6 +38,14 @@ options:
     netzbezug: ""
     batterie_ladung: ""
     batterie_entladung: ""
+  mqtt:
+    enabled: false
+    host: "core-mosquitto"
+    port: 1883
+    username: ""
+    password: ""
+    auto_publish: false
+    publish_interval_minutes: 60
 
 schema:
   log_level: list(debug|info|warning|error)
@@ -47,6 +55,14 @@ schema:
     netzbezug: str?
     batterie_ladung: str?
     batterie_entladung: str?
+  mqtt:
+    enabled: bool?
+    host: str?
+    port: int(1,65535)?
+    username: str?
+    password: password?
+    auto_publish: bool?
+    publish_interval_minutes: int(5,1440)?
 
 # Persistenter Speicher
 map:

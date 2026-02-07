@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings
 # =============================================================================
 # Zentrale Versionskonfiguration
 # =============================================================================
-APP_VERSION = "0.9.2"
+APP_VERSION = "0.9.3"
 APP_NAME = "eedc"
 APP_FULL_NAME = "Energie Effizienz Data Center"
 
@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     ha_api_url: str = "http://supervisor/core/api"
     pvgis_api_url: str = "https://re.jrc.ec.europa.eu/api/v5_2"
     open_meteo_api_url: str = "https://api.open-meteo.com/v1"
+
+    # MQTT Export Settings
+    mqtt_enabled: bool = os.environ.get("MQTT_ENABLED", "").lower() == "true"
+    mqtt_host: str = os.environ.get("MQTT_HOST", "core-mosquitto")
+    mqtt_port: int = int(os.environ.get("MQTT_PORT", "1883"))
+    mqtt_username: str = os.environ.get("MQTT_USER", "")
+    mqtt_password: str = os.environ.get("MQTT_PASSWORD", "")
+    mqtt_auto_publish: bool = os.environ.get("MQTT_AUTO_PUBLISH", "").lower() == "true"
+    mqtt_publish_interval: int = int(os.environ.get("MQTT_PUBLISH_INTERVAL", "60"))
 
     class Config:
         env_file = ".env"

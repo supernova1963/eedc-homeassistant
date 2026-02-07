@@ -4,7 +4,7 @@
 
 **eedc** (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur lokalen PV-Anlagen-Auswertung.
 
-**Version:** 0.9.2 Beta
+**Version:** 0.9.3 Beta
 **Status:** Beta-ready für Tests
 
 ## Tech-Stack
@@ -104,7 +104,23 @@ cd eedc && docker build -t eedc-test .
 - [ ] KI-Insights
 - [ ] SOLL-IST Vergleich pro String (Frontend)
 
-## Letzte Änderungen (v0.9.2)
+## Letzte Änderungen (v0.9.3)
+
+1. **HA Sensor Export**: Berechnete KPIs können an HA zurückgegeben werden
+   - REST API: `/api/ha/export/sensors/{anlage_id}` für HA rest platform
+   - MQTT Discovery: Native HA-Entitäten via MQTT Auto-Discovery
+   - YAML-Generator: `/api/ha/export/yaml/{anlage_id}` für configuration.yaml
+2. **Auswertungen Tabs neu strukturiert**:
+   - Übersicht = Jahresvergleich (Monats-Charts, Δ%-Indikatoren, Jahrestabelle)
+   - PV-Anlage = Kombinierte Übersicht + PV-Details (Charts, KPIs, Spez. Ertrag)
+   - Investitionen = NEU: ROI-Dashboard, Amortisationskurve, Kosten nach Kategorie
+   - Finanzen & CO2 unverändert
+3. **Sensor-Definitionen zentralisiert**:
+   - `backend/services/ha_sensors_export.py` - Alle KPIs mit Formeln
+   - Attribute für HA: formel, berechnung, kategorie
+4. **MQTT-Konfiguration**: Addon config.yaml erweitert um mqtt-Sektion
+
+## Änderungen (v0.9.2)
 
 1. **Balkonkraftwerk Dashboard**: Erzeugung, Eigenverbrauch, Einspeisung, opt. Speicher
 2. **Sonstiges Dashboard**: Flexible Kategorie (Erzeuger/Verbraucher/Speicher)

@@ -19,6 +19,9 @@ aiohttp>=3.9.0
 # WebSocket Client (für HA Long-Term Statistics)
 websockets>=12.0
 
+# MQTT Client (für HA Sensor Export)
+aiomqtt>=2.0.0
+
 # Utilities
 python-multipart>=0.0.6  # File Uploads
 python-dateutil>=2.8.2
