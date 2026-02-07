@@ -14,8 +14,11 @@ from pydantic import BaseModel
 from typing import Optional, Any
 import os
 
-from backend.database import get_db
-from backend.models import Anlage, Monatsdaten, Investition, Strompreis
+from backend.api.deps import get_db
+from backend.models.anlage import Anlage
+from backend.models.monatsdaten import Monatsdaten
+from backend.models.investition import Investition
+from backend.models.strompreis import Strompreis
 from backend.services.ha_sensors_export import (
     SensorDefinition, SensorValue, SensorCategory,
     ANLAGE_SENSOREN, INVESTITION_SENSOREN, E_AUTO_SENSOREN,
