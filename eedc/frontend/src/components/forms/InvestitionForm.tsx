@@ -37,6 +37,18 @@ const typLabels: Record<InvestitionTyp, string> = {
   'sonstiges': 'Sonstiges',
 }
 
+// Kontextabhängige Hints für Alternative Kosten
+const alternativkostenHints: Record<InvestitionTyp, string> = {
+  'e-auto': 'Kosten eines vergleichbaren Verbrenners (für ROI-Berechnung)',
+  'waermepumpe': 'Kosten einer neuen Gas-/Ölheizung (für ROI-Berechnung)',
+  'speicher': 'Meist 0 - es gibt keine echte Alternative',
+  'wallbox': 'Meist 0 - es gibt keine echte Alternative',
+  'wechselrichter': 'Meist 0 - es gibt keine echte Alternative',
+  'pv-module': 'Meist 0 - es gibt keine echte Alternative',
+  'balkonkraftwerk': 'Meist 0 - es gibt keine echte Alternative',
+  'sonstiges': 'Kosten einer Alternative (falls vorhanden)',
+}
+
 export default function InvestitionForm({ investition, anlageId, typ, onSubmit, onCancel }: InvestitionFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -294,7 +306,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             min="0"
             value={formData.anschaffungskosten_alternativ}
             onChange={handleChange}
-            hint="z.B. Verbrenner-Kosten bei E-Auto"
+            hint={alternativkostenHints[typ]}
           />
           <Input
             label="Betriebskosten/Jahr (€)"
