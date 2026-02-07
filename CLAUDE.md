@@ -4,7 +4,7 @@
 
 **eedc** (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur lokalen PV-Anlagen-Auswertung.
 
-**Version:** 0.9.1 Beta
+**Version:** 0.9.2 Beta
 **Status:** Beta-ready für Tests
 
 ## Tech-Stack
@@ -57,6 +57,8 @@ Typ-spezifische Felder werden in `parameter` JSON gespeichert:
 - E-Auto: `v2h_faehig`, `nutzt_v2h`
 - Speicher: `arbitrage_faehig`, `kapazitaet_kwh`
 - PV-Module: `anzahl_module`, `modul_leistung_wp`, `ausrichtung`, `neigung_grad`
+- Balkonkraftwerk: `leistung_wp`, `anzahl`, `hat_speicher`, `speicher_kapazitaet_wh`
+- Sonstiges: `kategorie` (erzeuger/verbraucher/speicher), `beschreibung`
 
 ### CSV Import/Export
 - Dynamische Spalten basierend auf Investitions-Bezeichnungen
@@ -90,14 +92,28 @@ npm run build
 cd eedc && docker build -t eedc-test .
 ```
 
+## UI-Struktur
+
+- **TopNavigation.tsx**: Horizontale Hauptnavigation (Cockpit, Auswertungen, Einstellungen)
+- **SubTabs.tsx**: Kontextabhängige Sub-Tabs unter der Hauptnavigation
+- **Layout.tsx**: Kombiniert TopNavigation + SubTabs (kein Sidebar!)
+
 ## Offene Features / Roadmap
 
 - [ ] PDF-Export
-- [ ] Wärmepumpen-Dashboard
 - [ ] KI-Insights
 - [ ] SOLL-IST Vergleich pro String (Frontend)
 
-## Letzte Änderungen (v0.9.1)
+## Letzte Änderungen (v0.9.2)
+
+1. **Balkonkraftwerk Dashboard**: Erzeugung, Eigenverbrauch, Einspeisung, opt. Speicher
+2. **Sonstiges Dashboard**: Flexible Kategorie (Erzeuger/Verbraucher/Speicher)
+3. **Sonderkosten-Felder**: Für alle Investitionstypen (Reparatur, Wartung)
+4. **Demo-Daten erweitert**: Balkonkraftwerk (800Wp + Speicher) + Mini-BHKW
+5. **Navigation korrigiert**: SubTabs statt veralteter Sidebar
+6. **Feldnamen-Mappings**: Frontend/Backend Konsistenz
+
+## Änderungen (v0.9.1)
 
 1. Zentrale Versionskonfiguration
 2. Dynamische Formulare (V2H/Arbitrage bedingt)
