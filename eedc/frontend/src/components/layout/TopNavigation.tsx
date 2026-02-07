@@ -37,6 +37,7 @@ const settingsMenu = [
     items: [
       { name: 'PVGIS', href: '/einstellungen/pvgis' },
       { name: 'HA Integration', href: '/einstellungen/ha-integration' },
+      { name: 'HA Export', href: '/einstellungen/ha-export' },
       { name: 'Allgemein', href: '/einstellungen/allgemein' },
     ],
   },

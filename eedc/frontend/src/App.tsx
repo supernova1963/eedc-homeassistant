@@ -27,6 +27,7 @@ import Import from './pages/Import'
 // Einstellungen - System
 import Settings from './pages/Settings'
 import PVGISSettings from './pages/PVGISSettings'
+import HAExportSettings from './pages/HAExportSettings'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -64,7 +65,8 @@ function App() {
 
           {/* Einstellungen - System */}
           <Route path="einstellungen/pvgis" element={<PVGISSettings />} />
-          <Route path="einstellungen/ha-integration" element={<Settings />} /> {/* TODO: HA Integration */}
+          <Route path="einstellungen/ha-integration" element={<Settings />} />
+          <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
 
           {/* Legacy redirects für alte URLs */}

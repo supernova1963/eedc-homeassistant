@@ -4,6 +4,7 @@
  */
 
 import { NavLink, useLocation } from 'react-router-dom'
+import type { LucideIcon } from 'lucide-react'
 import {
   LayoutDashboard,
   Car,
@@ -14,11 +15,25 @@ import {
   Wrench,
   BarChart3,
   TrendingUp,
-  FileText
+  FileText,
+  Home,
+  Zap,
+  PiggyBank,
+  Database,
+  Upload,
+  Settings,
+  Send
 } from 'lucide-react'
 
+interface TabItem {
+  name: string
+  href: string
+  icon: LucideIcon
+  exact?: boolean
+}
+
 // Sub-Tabs für Cockpit
-const cockpitTabs = [
+const cockpitTabs: TabItem[] = [
   { name: 'Übersicht', href: '/cockpit', icon: LayoutDashboard, exact: true },
   { name: 'E-Auto', href: '/cockpit/e-auto', icon: Car },
   { name: 'Wärmepumpe', href: '/cockpit/waermepumpe', icon: Flame },
@@ -29,11 +44,24 @@ const cockpitTabs = [
 ]
 
 // Sub-Tabs für Auswertungen
-const auswertungenTabs = [
+const auswertungenTabs: TabItem[] = [
   { name: 'Jahresvergleich', href: '/auswertungen', icon: BarChart3, exact: true },
   { name: 'ROI-Analyse', href: '/auswertungen/roi', icon: TrendingUp },
   { name: 'Prognose vs. IST', href: '/auswertungen/prognose', icon: TrendingUp },
   { name: 'PDF-Export', href: '/auswertungen/export', icon: FileText },
+]
+
+// Sub-Tabs für Einstellungen
+const einstellungenTabs: TabItem[] = [
+  { name: 'Anlage', href: '/einstellungen/anlage', icon: Home },
+  { name: 'Strompreise', href: '/einstellungen/strompreise', icon: Zap },
+  { name: 'Investitionen', href: '/einstellungen/investitionen', icon: PiggyBank },
+  { name: 'Monatsdaten', href: '/einstellungen/monatsdaten', icon: Database },
+  { name: 'Import/Export', href: '/einstellungen/import', icon: Upload },
+  { name: 'PVGIS', href: '/einstellungen/pvgis', icon: Sun },
+  { name: 'HA-Integration', href: '/einstellungen/ha-integration', icon: Home },
+  { name: 'HA-Export', href: '/einstellungen/ha-export', icon: Send },
+  { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
 ]
 
 export default function SubTabs() {
@@ -43,12 +71,13 @@ export default function SubTabs() {
   const getTabs = () => {
     if (location.pathname.startsWith('/cockpit')) return cockpitTabs
     if (location.pathname.startsWith('/auswertungen')) return auswertungenTabs
+    if (location.pathname.startsWith('/einstellungen')) return einstellungenTabs
     return null
   }
 
   const tabs = getTabs()
 
-  // Keine Sub-Tabs für Einstellungen
+  // Keine Sub-Tabs für andere Seiten
   if (!tabs) return null
 
   return (
