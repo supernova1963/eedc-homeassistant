@@ -32,12 +32,6 @@ panel_title: "eedc"
 # Benutzer-Optionen
 options:
   log_level: info
-  ha_sensors:
-    pv_erzeugung: ""
-    einspeisung: ""
-    netzbezug: ""
-    batterie_ladung: ""
-    batterie_entladung: ""
   mqtt:
     enabled: false
     host: "core-mosquitto"
@@ -49,12 +43,6 @@ options:
 
 schema:
   log_level: list(debug|info|warning|error)
-  ha_sensors:
-    pv_erzeugung: str?
-    einspeisung: str?
-    netzbezug: str?
-    batterie_ladung: str?
-    batterie_entladung: str?
   mqtt:
     enabled: bool?
     host: str?

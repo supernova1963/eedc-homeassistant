@@ -142,52 +142,15 @@ export default function Settings() {
         </div>
 
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Sensor-Zuordnung (Monatsdaten-Import)
+          Datenerfassung
         </h3>
-        <div className="space-y-3">
-          {[
-            { key: 'pv_erzeugung', label: 'PV-Erzeugung', description: 'Gesamt PV-Ertrag' },
-            { key: 'einspeisung', label: 'Einspeisung', description: 'Ins Netz eingespeist' },
-            { key: 'netzbezug', label: 'Netzbezug', description: 'Aus Netz bezogen' },
-            { key: 'batterie_ladung', label: 'Batterie Ladung', description: 'In Batterie geladen' },
-            { key: 'batterie_entladung', label: 'Batterie Entladung', description: 'Aus Batterie entnommen' },
-          ].map(({ key, label, description }) => {
-            const configured = settings?.ha_sensors_configured[key as keyof typeof settings.ha_sensors_configured]
-            const sensorId = settings?.ha_sensors?.[key as keyof typeof settings.ha_sensors]
-
-            return (
-              <div key={key} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
-                  </div>
-                  {configured ? (
-                    <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
-                      <CheckCircle className="w-4 h-4" />
-                      Konfiguriert
-                    </span>
-                  ) : (
-                    <span className="text-sm text-gray-400">Nicht konfiguriert</span>
-                  )}
-                </div>
-                {sensorId && (
-                  <code className="mt-2 block text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded font-mono">
-                    {sensorId}
-                  </code>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">
           <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-blue-700 dark:text-blue-300">
-            <p className="font-medium mb-1">Konfiguration über Add-on-Einstellungen</p>
+            <p className="font-medium mb-1">Monatsdaten via CSV-Import</p>
             <p>
-              Die Sensor-Zuordnung erfolgt in Home Assistant unter <strong>Einstellungen → Add-ons → EEDC → Konfiguration</strong>.
-              Dort können die Entity-IDs der Energy-Sensoren (state_class: total_increasing) eingetragen werden.
+              Die Erfassung der Monatsdaten erfolgt über <strong>CSV-Import</strong> oder <strong>manuelle Eingabe</strong>.
+              Gehe zu <strong>Einstellungen → Import/Export</strong> um deine Daten zu importieren.
             </p>
           </div>
         </div>

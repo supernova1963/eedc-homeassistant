@@ -8,11 +8,6 @@ CONFIG_PATH=/data/options.json
 
 if [ -f "$CONFIG_PATH" ]; then
     export LOG_LEVEL=$(jq -r '.log_level // "info"' $CONFIG_PATH)
-    export HA_SENSOR_PV=$(jq -r '.ha_sensors.pv_erzeugung // ""' $CONFIG_PATH)
-    export HA_SENSOR_EINSPEISUNG=$(jq -r '.ha_sensors.einspeisung // ""' $CONFIG_PATH)
-    export HA_SENSOR_NETZBEZUG=$(jq -r '.ha_sensors.netzbezug // ""' $CONFIG_PATH)
-    export HA_SENSOR_BATTERIE_LADUNG=$(jq -r '.ha_sensors.batterie_ladung // ""' $CONFIG_PATH)
-    export HA_SENSOR_BATTERIE_ENTLADUNG=$(jq -r '.ha_sensors.batterie_entladung // ""' $CONFIG_PATH)
 
     # MQTT Export Konfiguration
     export MQTT_ENABLED=$(jq -r '.mqtt.enabled // false' $CONFIG_PATH)
