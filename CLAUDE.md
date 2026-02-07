@@ -12,7 +12,7 @@
 ### Backend (Python)
 - FastAPI + SQLAlchemy 2.0 + SQLite
 - Pfad: `eedc/backend/`
-- Start: `uvicorn backend.main:app --reload --port 8099`
+- Start: `cd eedc && source backend/venv/bin/activate && uvicorn backend.main:app --reload --port 8099`
 - API Docs: http://localhost:8099/api/docs
 
 ### Frontend (TypeScript/React)
@@ -27,21 +27,29 @@
 ```
 Frontend: eedc/frontend/src/config/version.ts
 Backend:  eedc/backend/core/config.py (APP_VERSION, APP_NAME)
+Add-on:   eedc/config.yaml (version)
 ```
 
 ### Kernkomponenten
 ```
 Backend:
-  - main.py                    # FastAPI App, Health/Settings/Stats
-  - api/routes/import_export.py # CSV Import/Export (dynamische Spalten)
-  - api/routes/monatsdaten.py   # Monatsdaten CRUD + Berechnungen
-  - api/routes/investitionen.py # Investitionen mit Parent-Child
-  - core/config.py              # Settings + Version
+  - main.py                      # FastAPI App, Health/Settings/Stats
+  - api/routes/import_export.py  # CSV Import/Export (dynamische Spalten)
+  - api/routes/monatsdaten.py    # Monatsdaten CRUD + Berechnungen
+  - api/routes/investitionen.py  # Investitionen mit Parent-Child
+  - api/routes/ha_export.py      # HA Sensor Export (REST + MQTT)
+  - core/config.py               # Settings + Version
+  - services/ha_sensors_export.py # Sensor-Definitionen mit Formeln
+  - services/mqtt_client.py      # MQTT Discovery Client
 
 Frontend:
   - components/forms/MonatsdatenForm.tsx  # Dynamische Felder (V2H, Arbitrage)
   - components/forms/InvestitionForm.tsx  # Investitions-Parameter
   - pages/Monatsdaten.tsx                 # Tabelle mit Spalten-Toggle
+  - pages/Auswertung.tsx                  # 5 Tabs (Jahresvergleich, PV, Investitionen, Finanzen, CO2)
+  - pages/HAExportSettings.tsx            # HA Export Konfiguration (MQTT/REST)
+  - components/layout/SubTabs.tsx         # Kontextabhängige Sub-Navigation
+  - components/layout/TopNavigation.tsx   # Hauptnavigation + Einstellungen-Dropdown
   - components/setup-wizard/              # 7-Schritt Wizard
 ```
 
@@ -76,9 +84,9 @@ Typ-spezifische Felder werden in `parameter` JSON gespeichert:
 ## Entwicklungs-Workflow
 
 ```bash
-# Backend starten
-cd eedc/backend
-source venv/bin/activate
+# Backend starten (aus eedc/ Verzeichnis!)
+cd eedc
+source backend/venv/bin/activate
 uvicorn backend.main:app --reload --port 8099
 
 # Frontend starten (neues Terminal)
@@ -88,14 +96,18 @@ npm run dev
 # Build für Production
 npm run build
 
-# Docker Build
+# Docker/Podman Build
 cd eedc && docker build -t eedc-test .
+# oder: podman build -t eedc-test .
 ```
 
 ## UI-Struktur
 
 - **TopNavigation.tsx**: Horizontale Hauptnavigation (Cockpit, Auswertungen, Einstellungen)
 - **SubTabs.tsx**: Kontextabhängige Sub-Tabs unter der Hauptnavigation
+  - Cockpit: Übersicht, E-Auto, Wärmepumpe, Speicher, Wallbox, Balkonkraftwerk, Sonstiges
+  - Auswertungen: Jahresvergleich, ROI-Analyse, Prognose vs. IST, PDF-Export
+  - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, HA-Integration, HA-Export, Allgemein
 - **Layout.tsx**: Kombiniert TopNavigation + SubTabs (kein Sidebar!)
 
 ## Offene Features / Roadmap
@@ -110,6 +122,7 @@ cd eedc && docker build -t eedc-test .
    - REST API: `/api/ha/export/sensors/{anlage_id}` für HA rest platform
    - MQTT Discovery: Native HA-Entitäten via MQTT Auto-Discovery
    - YAML-Generator: `/api/ha/export/yaml/{anlage_id}` für configuration.yaml
+   - Frontend: HAExportSettings.tsx mit MQTT-Config, Test, Publish
 2. **Auswertungen Tabs neu strukturiert**:
    - Übersicht = Jahresvergleich (Monats-Charts, Δ%-Indikatoren, Jahrestabelle)
    - PV-Anlage = Kombinierte Übersicht + PV-Details (Charts, KPIs, Spez. Ertrag)
@@ -119,6 +132,7 @@ cd eedc && docker build -t eedc-test .
    - `backend/services/ha_sensors_export.py` - Alle KPIs mit Formeln
    - Attribute für HA: formel, berechnung, kategorie
 4. **MQTT-Konfiguration**: Addon config.yaml erweitert um mqtt-Sektion
+5. **SubTabs für Einstellungen**: Bessere Navigation zwischen allen Settings-Seiten
 
 ## Änderungen (v0.9.2)
 
@@ -136,3 +150,14 @@ cd eedc && docker build -t eedc-test .
 3. PV-Module mit Anzahl/Wp
 4. Monatsdaten-Spalten konfigurierbar
 5. Bugfixes: 0-Wert Import, berechnete Felder
+
+## API Endpoints (HA Export)
+
+```
+GET  /api/ha/export/sensors              # Alle Sensor-Definitionen
+GET  /api/ha/export/sensors/{anlage_id}  # Sensoren einer Anlage mit Werten
+GET  /api/ha/export/yaml/{anlage_id}     # YAML-Snippet für configuration.yaml
+POST /api/ha/export/mqtt/test            # MQTT-Verbindung testen
+POST /api/ha/export/mqtt/publish/{id}    # Sensoren via MQTT publizieren
+DELETE /api/ha/export/mqtt/remove/{id}   # Sensoren aus HA entfernen
+```
