@@ -124,6 +124,14 @@ async def calculate_anlage_sensors(
     )
     strompreis = result.scalar_one_or_none()
 
+    # Investitionen laden für ROI-Berechnung
+    result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage.id)
+        .where(Investition.aktiv == True)
+    )
+    investitionen = result.scalars().all()
+
     # Summen berechnen
     pv_erzeugung = sum(m.pv_erzeugung_kwh or (m.einspeisung_kwh + (m.eigenverbrauch_kwh or 0)) for m in monatsdaten)
     direktverbrauch = sum(m.direktverbrauch_kwh or 0 for m in monatsdaten)
@@ -131,6 +139,10 @@ async def calculate_anlage_sensors(
     einspeisung = sum(m.einspeisung_kwh for m in monatsdaten)
     netzbezug = sum(m.netzbezug_kwh for m in monatsdaten)
     gesamtverbrauch = sum(m.gesamtverbrauch_kwh or 0 for m in monatsdaten)
+
+    # Speicher-Summen
+    batterie_ladung = sum(m.batterie_ladung_kwh or 0 for m in monatsdaten)
+    batterie_entladung = sum(m.batterie_entladung_kwh or 0 for m in monatsdaten)
 
     # Quoten
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
@@ -147,6 +159,42 @@ async def calculate_anlage_sensors(
 
     # CO2
     co2_ersparnis = pv_erzeugung * 0.38  # kg CO2/kWh
+
+    # Investitions-KPIs berechnen
+    investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
+    alternativ_gesamt = sum(i.anschaffungskosten_alternativ or 0 for i in investitionen)
+    relevante_kosten = investition_gesamt - alternativ_gesamt
+
+    # Jahresersparnis aus Monatsdaten berechnen (annualisiert)
+    anzahl_monate = len(monatsdaten)
+    if anzahl_monate > 0:
+        jahres_ersparnis = (netto_ertrag / anzahl_monate) * 12
+    else:
+        jahres_ersparnis = 0
+
+    # ROI und Amortisation
+    roi_prozent = None
+    amortisation_jahre = None
+    if relevante_kosten > 0 and jahres_ersparnis > 0:
+        roi_prozent = (jahres_ersparnis / relevante_kosten) * 100
+        amortisation_jahre = relevante_kosten / jahres_ersparnis
+
+    # Speicher-KPIs berechnen
+    speicher_effizienz = None
+    speicher_zyklen = None
+
+    # Speicher-Kapazität aus Investitionen ermitteln
+    speicher_kapazitaet = 0
+    for inv in investitionen:
+        if inv.typ == 'speicher' and inv.parameter:
+            kap = inv.parameter.get('kapazitaet_kwh') or inv.parameter.get('nutzbare_kapazitaet_kwh')
+            if kap:
+                speicher_kapazitaet += float(kap)
+
+    if batterie_ladung > 0:
+        speicher_effizienz = (batterie_entladung / batterie_ladung) * 100
+    if speicher_kapazitaet > 0 and batterie_entladung > 0:
+        speicher_zyklen = batterie_entladung / speicher_kapazitaet
 
     # Sensor-Werte erstellen
     sensor_values = []
@@ -202,6 +250,57 @@ async def calculate_anlage_sensors(
                 value=value,
                 berechnung=berechnung
             ))
+
+    # Investitions-Sensoren
+    for sensor in INVESTITION_SENSOREN:
+        value = None
+        berechnung = None
+
+        if sensor.key == "investition_gesamt_euro":
+            if investition_gesamt > 0:
+                value = round(investition_gesamt, 2)
+                berechnung = f"Summe aus {len(investitionen)} Investitionen"
+        elif sensor.key == "jahres_ersparnis_euro":
+            if jahres_ersparnis > 0:
+                value = round(jahres_ersparnis, 2)
+                berechnung = f"({netto_ertrag:.2f} ÷ {anzahl_monate}) × 12"
+        elif sensor.key == "roi_prozent":
+            if roi_prozent is not None:
+                value = round(roi_prozent, 1)
+                berechnung = f"{jahres_ersparnis:.2f} ÷ {relevante_kosten:.2f} × 100"
+        elif sensor.key == "amortisation_jahre":
+            if amortisation_jahre is not None:
+                value = round(amortisation_jahre, 1)
+                berechnung = f"{relevante_kosten:.2f} ÷ {jahres_ersparnis:.2f}"
+
+        if value is not None:
+            sensor_values.append(SensorValue(
+                definition=sensor,
+                value=value,
+                berechnung=berechnung
+            ))
+
+    # Speicher-Sensoren (nur wenn Speicher vorhanden)
+    if speicher_kapazitaet > 0 or batterie_ladung > 0:
+        for sensor in SPEICHER_SENSOREN:
+            value = None
+            berechnung = None
+
+            if sensor.key == "speicher_zyklen":
+                if speicher_zyklen is not None:
+                    value = round(speicher_zyklen, 0)
+                    berechnung = f"{batterie_entladung:.0f} ÷ {speicher_kapazitaet:.1f}"
+            elif sensor.key == "speicher_effizienz_prozent":
+                if speicher_effizienz is not None:
+                    value = round(speicher_effizienz, 1)
+                    berechnung = f"{batterie_entladung:.0f} ÷ {batterie_ladung:.0f} × 100"
+
+            if value is not None:
+                sensor_values.append(SensorValue(
+                    definition=sensor,
+                    value=value,
+                    berechnung=berechnung
+                ))
 
     return sensor_values
 
