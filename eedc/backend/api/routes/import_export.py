@@ -526,12 +526,13 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
     # Basis-Spalten
-    spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
+    spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh", "PV_Erzeugung_kWh"]
     beschreibung = {
         "Jahr": "Jahr (z.B. 2024)",
         "Monat": "Monat (1-12)",
         "Einspeisung_kWh": "Ins Netz eingespeiste Energie",
         "Netzbezug_kWh": "Aus dem Netz bezogene Energie",
+        "PV_Erzeugung_kWh": "Gesamt-PV-Erzeugung (optional, alternativ zu Einzelwerten pro PV-Modul/Balkonkraftwerk)",
     }
 
     # Investitionen laden, nach Typ und ID sortiert
@@ -987,7 +988,7 @@ async def export_csv(
     writer = csv.writer(output, delimiter=";")
 
     # Dynamische Header basierend auf Investitionen (v0.9)
-    header = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
+    header = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh", "PV_Erzeugung_kWh"]
 
     # Investitions-Spalten nach Template-Logik hinzufügen
     inv_columns: list[tuple[Investition, str, str]] = []  # (inv, suffix, data_key)
@@ -1078,6 +1079,7 @@ async def export_csv(
             md.monat,
             md.einspeisung_kwh,
             md.netzbezug_kwh,
+            md.pv_erzeugung_kwh or "",
         ]
 
         # Investitions-Daten hinzufügen
