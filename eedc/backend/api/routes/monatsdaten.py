@@ -4,7 +4,7 @@ Monatsdaten API Routes
 CRUD Endpoints für monatliche Energiedaten.
 """
 
-from typing import Optional
+from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
+from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
 
 
@@ -41,12 +42,16 @@ class MonatsdatenBase(BaseModel):
 class MonatsdatenCreate(MonatsdatenBase):
     """Schema für Monatsdaten-Erstellung."""
     anlage_id: int
+    # Investitions-spezifische Monatsdaten (E-Auto km, Speicher Ladung, WP Verbrauch, etc.)
+    investitionen_daten: Optional[dict[str, dict[str, Any]]] = None
 
 
 class MonatsdatenUpdate(BaseModel):
     """Schema für Monatsdaten-Update."""
     einspeisung_kwh: Optional[float] = Field(None, ge=0)
     netzbezug_kwh: Optional[float] = Field(None, ge=0)
+    # Investitions-spezifische Monatsdaten
+    investitionen_daten: Optional[dict[str, dict[str, Any]]] = None
     pv_erzeugung_kwh: Optional[float] = Field(None, ge=0)
     batterie_ladung_kwh: Optional[float] = Field(None, ge=0)
     batterie_entladung_kwh: Optional[float] = Field(None, ge=0)
@@ -210,7 +215,10 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
             detail=f"Monatsdaten für {data.monat}/{data.jahr} existieren bereits"
         )
 
-    md = Monatsdaten(**data.model_dump())
+    # investitionen_daten separat extrahieren (nicht Teil des Monatsdaten-Models)
+    investitionen_daten = data.investitionen_daten
+    md_data = data.model_dump(exclude={'investitionen_daten'})
+    md = Monatsdaten(**md_data)
 
     # Berechnete Felder (werden berechnet wenn pv_erzeugung vorhanden)
     if md.pv_erzeugung_kwh is not None:
@@ -224,7 +232,63 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
     db.add(md)
     await db.flush()
     await db.refresh(md)
+
+    # Investitions-Monatsdaten speichern (E-Auto km, Speicher Ladung, WP Verbrauch, etc.)
+    if investitionen_daten:
+        await _save_investitionen_monatsdaten(db, investitionen_daten, data.jahr, data.monat)
+
     return md
+
+
+async def _save_investitionen_monatsdaten(
+    db: AsyncSession,
+    investitionen_daten: dict[str, dict[str, Any]],
+    jahr: int,
+    monat: int
+) -> None:
+    """
+    Speichert Investitions-spezifische Monatsdaten (E-Auto km, Speicher Ladung, etc.).
+
+    Args:
+        db: Datenbank-Session
+        investitionen_daten: Dict mit investition_id als Key und verbrauch_daten als Value
+        jahr: Jahr
+        monat: Monat
+    """
+    for inv_id_str, verbrauch_daten in investitionen_daten.items():
+        try:
+            inv_id = int(inv_id_str)
+        except ValueError:
+            continue
+
+        # Prüfen ob Investition existiert
+        inv_result = await db.execute(select(Investition).where(Investition.id == inv_id))
+        if not inv_result.scalar_one_or_none():
+            continue
+
+        # Existierende InvestitionMonatsdaten für diesen Monat suchen
+        existing_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == inv_id)
+            .where(InvestitionMonatsdaten.jahr == jahr)
+            .where(InvestitionMonatsdaten.monat == monat)
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            # Update existierende Daten
+            existing.verbrauch_daten = verbrauch_daten
+        else:
+            # Neue Daten erstellen
+            imd = InvestitionMonatsdaten(
+                investition_id=inv_id,
+                jahr=jahr,
+                monat=monat,
+                verbrauch_daten=verbrauch_daten
+            )
+            db.add(imd)
+
+    await db.flush()
 
 
 @router.put("/{monatsdaten_id}", response_model=MonatsdatenResponse)
@@ -252,7 +316,9 @@ async def update_monatsdaten(
     if not md:
         raise HTTPException(status_code=404, detail="Monatsdaten nicht gefunden")
 
-    update_data = data.model_dump(exclude_unset=True)
+    # investitionen_daten separat behandeln
+    investitionen_daten = data.investitionen_daten
+    update_data = data.model_dump(exclude_unset=True, exclude={'investitionen_daten'})
     for field, value in update_data.items():
         setattr(md, field, value)
 
@@ -267,6 +333,11 @@ async def update_monatsdaten(
 
     await db.flush()
     await db.refresh(md)
+
+    # Investitions-Monatsdaten speichern
+    if investitionen_daten:
+        await _save_investitionen_monatsdaten(db, investitionen_daten, md.jahr, md.monat)
+
     return md
 
 
