@@ -531,6 +531,7 @@ async def get_roi_dashboard(
     strompreis_cent: float = Query(30.0, description="Strompreis in Cent/kWh"),
     einspeiseverguetung_cent: float = Query(8.2, description="Einspeisevergütung in Cent/kWh"),
     benzinpreis_euro: float = Query(1.85, description="Benzinpreis in Euro/Liter"),
+    jahr: Optional[int] = Query(None, description="Jahr für Auswertung (None = alle Jahre)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -541,6 +542,7 @@ async def get_roi_dashboard(
         strompreis_cent: Aktueller Strompreis für Berechnungen
         einspeiseverguetung_cent: Aktuelle Einspeisevergütung
         benzinpreis_euro: Aktueller Benzinpreis für E-Auto-Vergleich
+        jahr: Optionales Jahr für die Auswertung (None = alle Jahre)
 
     Returns:
         ROIDashboardResponse: Vollständige ROI-Übersicht
@@ -663,18 +665,22 @@ async def get_roi_dashboard(
 
         elif inv.typ == InvestitionTyp.PV_MODULE.value:
             # PV-Module: ROI aus tatsächlichen Monatsdaten berechnen
-            # Lade alle Monatsdaten für diese Anlage mit Monatsnummern
+            # Lade Monatsdaten für diese Anlage (optional gefiltert nach Jahr)
             from backend.models.pvgis_prognose import PVGISPrognose
 
-            md_result = await db.execute(
-                select(
-                    Monatsdaten.monat,
-                    func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
-                    func.sum(Monatsdaten.pv_erzeugung_kwh).label('erzeugung'),
-                    func.sum(Monatsdaten.eigenverbrauch_kwh).label('eigenverbrauch'),
-                ).where(Monatsdaten.anlage_id == anlage_id)
-                .group_by(Monatsdaten.monat)
-            )
+            md_query = select(
+                Monatsdaten.monat,
+                func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
+                func.sum(Monatsdaten.pv_erzeugung_kwh).label('erzeugung'),
+                func.sum(Monatsdaten.eigenverbrauch_kwh).label('eigenverbrauch'),
+            ).where(Monatsdaten.anlage_id == anlage_id)
+
+            # Jahr-Filter anwenden wenn angegeben
+            if jahr is not None:
+                md_query = md_query.where(Monatsdaten.jahr == jahr)
+
+            md_query = md_query.group_by(Monatsdaten.monat)
+            md_result = await db.execute(md_query)
             md_by_month = {r.monat: r for r in md_result.all()}
 
             # Gesamtsummen berechnen
@@ -758,13 +764,19 @@ async def get_roi_dashboard(
                     'hochrechnungs_methode': hochrechnungs_methode,
                 }
 
+                # Jahr-Info für Hinweis
+                jahr_info = f' für {jahr}' if jahr else ''
+
                 if hochrechnungs_methode == 'pvgis' and pvgis_anteil:
                     detail['pvgis_anteil_prozent'] = round(pvgis_anteil * 100, 1)
-                    detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung ({anzahl_monate} Monate = {round(pvgis_anteil * 100, 1)}% des Jahresertrags)'
+                    detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung{jahr_info} ({anzahl_monate} Monate = {round(pvgis_anteil * 100, 1)}% des Jahresertrags)'
                 elif anzahl_monate >= 12:
-                    detail['hinweis'] = f'Berechnet aus {anzahl_monate} Monaten (vollständiges Jahr)'
+                    detail['hinweis'] = f'Berechnet aus {anzahl_monate} Monaten{jahr_info} (vollständiges Jahr)'
                 else:
-                    detail['hinweis'] = f'Lineare Hochrechnung aus {anzahl_monate} Monaten (PVGIS-Prognose nicht verfügbar)'
+                    detail['hinweis'] = f'Lineare Hochrechnung{jahr_info} aus {anzahl_monate} Monaten (PVGIS-Prognose nicht verfügbar)'
+
+                if jahr:
+                    detail['gefiltertes_jahr'] = jahr
             else:
                 # Keine Monatsdaten - Fallback auf manuelle Prognose
                 jahres_einsparung = inv.einsparung_prognose_jahr or 0

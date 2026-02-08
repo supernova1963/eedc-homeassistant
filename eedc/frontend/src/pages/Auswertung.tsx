@@ -183,7 +183,7 @@ export default function Auswertung() {
         <PVTab data={filteredData} stats={filteredStats} anlage={anlage} strompreis={strompreis} />
       )}
       {activeTab === 'investitionen' && anlageId && (
-        <InvestitionenTab anlageId={anlageId} strompreis={strompreis} />
+        <InvestitionenTab anlageId={anlageId} strompreis={strompreis} selectedYear={selectedYear} />
       )}
       {activeTab === 'finanzen' && (
         <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} />
@@ -782,9 +782,10 @@ function PVTab({ data, stats, anlage, strompreis }: TabProps) {
 interface InvestitionenTabProps {
   anlageId: number
   strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
+  selectedYear?: number | 'all'
 }
 
-function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
+function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }: InvestitionenTabProps) {
   const { investitionen, loading: invLoading } = useInvestitionen(anlageId)
   const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(null)
   const [roiLoading, setRoiLoading] = useState(true)
@@ -796,7 +797,9 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
         const data = await investitionenApi.getROIDashboard(
           anlageId,
           strompreis?.netzbezug_arbeitspreis_cent_kwh,
-          strompreis?.einspeiseverguetung_cent_kwh
+          strompreis?.einspeiseverguetung_cent_kwh,
+          undefined, // benzinpreisEuro
+          selectedYear
         )
         setRoiData(data)
       } catch (e) {
@@ -806,7 +809,7 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
       }
     }
     loadROI()
-  }, [anlageId, strompreis])
+  }, [anlageId, strompreis, selectedYear])
 
   // Investitionen nach Typ gruppieren
   const invByTyp = useMemo(() => {

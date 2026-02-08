@@ -297,12 +297,14 @@ export const investitionenApi = {
     anlageId: number,
     strompreisCent?: number,
     einspeiseverguetungCent?: number,
-    benzinpreisEuro?: number
+    benzinpreisEuro?: number,
+    jahr?: number | 'all'
   ): Promise<ROIDashboardResponse> {
     const params = new URLSearchParams()
     if (strompreisCent) params.append('strompreis_cent', strompreisCent.toString())
     if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
     if (benzinpreisEuro) params.append('benzinpreis_euro', benzinpreisEuro.toString())
+    if (jahr && jahr !== 'all') params.append('jahr', jahr.toString())
     const query = params.toString()
     return api.get<ROIDashboardResponse>(`/investitionen/roi/${anlageId}${query ? '?' + query : ''}`)
   },
