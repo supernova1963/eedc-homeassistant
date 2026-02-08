@@ -679,64 +679,117 @@ async def get_roi_dashboard(
             if jahr is not None:
                 md_query = md_query.where(Monatsdaten.jahr == jahr)
 
-            md_query = md_query.group_by(Monatsdaten.monat)
-            md_result = await db.execute(md_query)
-            md_by_month = {r.monat: r for r in md_result.all()}
+            # Bei "Alle Jahre" (jahr=None): Berechne Jahresdurchschnitt
+            # Bei einzelnem Jahr: Berechne/hochrechne auf das Jahr
+            if jahr is None:
+                # Alle Jahre: Zähle tatsächliche Datenpunkte (Jahr+Monat Kombinationen)
+                md_count_query = select(
+                    func.count().label('total_records'),
+                    func.count(func.distinct(Monatsdaten.jahr)).label('anzahl_jahre')
+                ).where(Monatsdaten.anlage_id == anlage_id)
+                count_result = await db.execute(md_count_query)
+                count_row = count_result.one()
+                total_records = count_row.total_records
+                anzahl_jahre = count_row.anzahl_jahre or 1
 
-            # Gesamtsummen berechnen
-            total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-            total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
-            total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
-            anzahl_monate = len(md_by_month)
-            vorhandene_monate = sorted(md_by_month.keys())
+                # Summen über alle Monate (gruppiert)
+                md_query = md_query.group_by(Monatsdaten.monat)
+                md_result = await db.execute(md_query)
+                md_by_month = {r.monat: r for r in md_result.all()}
 
-            if anzahl_monate > 0:
-                # Versuche PVGIS-gewichtete Hochrechnung
-                pvgis_result = await db.execute(
-                    select(PVGISPrognose)
-                    .where(PVGISPrognose.anlage_id == anlage_id)
-                    .where(PVGISPrognose.ist_aktiv == True)
-                    .order_by(PVGISPrognose.abgerufen_am.desc())
-                    .limit(1)
-                )
-                pvgis_prognose = pvgis_result.scalar_one_or_none()
+                total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+                total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
+                total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
+                anzahl_monate = len(md_by_month)
+                vorhandene_monate = sorted(md_by_month.keys())
 
-                hochrechnungs_methode = 'linear'
-                pvgis_anteil = None
+                # Jahresdurchschnitt: Summen durch Anzahl Jahre teilen
+                # Dann ggf. auf 12 Monate hochrechnen wenn nicht alle Monate abgedeckt
+                if anzahl_monate > 0 and anzahl_jahre > 0:
+                    # Durchschnitt pro Jahr berechnen
+                    avg_einspeisung = total_einspeisung / anzahl_jahre
+                    avg_erzeugung = total_erzeugung / anzahl_jahre
+                    avg_eigenverbrauch = total_eigenverbrauch / anzahl_jahre
+                    avg_monate_pro_jahr = total_records / anzahl_jahre
 
-                if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
-                    # PVGIS-gewichtete Hochrechnung
-                    # Berechne, welchen Anteil die vorhandenen Monate am PVGIS-Jahresertrag haben
-                    pvgis_monatswerte = pvgis_prognose.monatswerte
-                    pvgis_jahres_summe = sum(m.get('E_m', 0) for m in pvgis_monatswerte)
+                    # Hochrechnung auf 12 Monate wenn nötig
+                    if avg_monate_pro_jahr < 12:
+                        faktor = 12.0 / avg_monate_pro_jahr
+                        hochrechnungs_methode = 'durchschnitt_hochgerechnet'
+                    else:
+                        faktor = 1.0
+                        hochrechnungs_methode = 'durchschnitt'
 
-                    if pvgis_jahres_summe > 0:
-                        # Summe der PVGIS-Werte für vorhandene Monate
-                        pvgis_vorhandene_summe = sum(
-                            m.get('E_m', 0) for m in pvgis_monatswerte
-                            if m.get('month', 0) in vorhandene_monate
-                        )
+                    einspeisung_jahr = avg_einspeisung * faktor
+                    erzeugung_jahr = avg_erzeugung * faktor
+                    eigenverbrauch_jahr = avg_eigenverbrauch * faktor
+                else:
+                    einspeisung_jahr = 0
+                    erzeugung_jahr = 0
+                    eigenverbrauch_jahr = 0
+                    hochrechnungs_methode = 'keine_daten'
+                    faktor = 1.0
 
-                        if pvgis_vorhandene_summe > 0:
-                            # PVGIS-Anteil: Wie viel % des Jahresertrags repräsentieren die Monate?
-                            pvgis_anteil = pvgis_vorhandene_summe / pvgis_jahres_summe
+            else:
+                # Einzelnes Jahr: Gruppieren nach Monat
+                md_query = md_query.group_by(Monatsdaten.monat)
+                md_result = await db.execute(md_query)
+                md_by_month = {r.monat: r for r in md_result.all()}
 
-                            # Hochrechnung: IST-Werte / PVGIS-Anteil = geschätzter Jahreswert
-                            faktor = 1.0 / pvgis_anteil
-                            hochrechnungs_methode = 'pvgis'
+                total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+                total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
+                total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
+                anzahl_monate = len(md_by_month)
+                vorhandene_monate = sorted(md_by_month.keys())
+                anzahl_jahre = 1
+
+                if anzahl_monate > 0:
+                    # Versuche PVGIS-gewichtete Hochrechnung
+                    pvgis_result = await db.execute(
+                        select(PVGISPrognose)
+                        .where(PVGISPrognose.anlage_id == anlage_id)
+                        .where(PVGISPrognose.ist_aktiv == True)
+                        .order_by(PVGISPrognose.abgerufen_am.desc())
+                        .limit(1)
+                    )
+                    pvgis_prognose = pvgis_result.scalar_one_or_none()
+
+                    hochrechnungs_methode = 'linear'
+                    pvgis_anteil = None
+
+                    if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
+                        # PVGIS-gewichtete Hochrechnung
+                        pvgis_monatswerte = pvgis_prognose.monatswerte
+                        pvgis_jahres_summe = sum(m.get('E_m', 0) for m in pvgis_monatswerte)
+
+                        if pvgis_jahres_summe > 0:
+                            pvgis_vorhandene_summe = sum(
+                                m.get('E_m', 0) for m in pvgis_monatswerte
+                                if m.get('month', 0) in vorhandene_monate
+                            )
+
+                            if pvgis_vorhandene_summe > 0:
+                                pvgis_anteil = pvgis_vorhandene_summe / pvgis_jahres_summe
+                                faktor = 1.0 / pvgis_anteil
+                                hochrechnungs_methode = 'pvgis'
+                            else:
+                                faktor = 12.0 / anzahl_monate
                         else:
                             faktor = 12.0 / anzahl_monate
                     else:
                         faktor = 12.0 / anzahl_monate
+
+                    einspeisung_jahr = total_einspeisung * faktor
+                    erzeugung_jahr = total_erzeugung * faktor
+                    eigenverbrauch_jahr = total_eigenverbrauch * faktor
                 else:
-                    # Lineare Hochrechnung (vollständige Jahre oder kein PVGIS)
-                    faktor = 12.0 / anzahl_monate
+                    einspeisung_jahr = 0
+                    erzeugung_jahr = 0
+                    eigenverbrauch_jahr = 0
+                    hochrechnungs_methode = 'keine_daten'
+                    faktor = 1.0
 
-                einspeisung_jahr = total_einspeisung * faktor
-                erzeugung_jahr = total_erzeugung * faktor
-
-                # Eigenverbrauch berechnen (falls nicht direkt gespeichert)
-                eigenverbrauch_jahr = total_eigenverbrauch * faktor
+            if anzahl_monate > 0:
                 if eigenverbrauch_jahr == 0 and erzeugung_jahr > 0:
                     # Eigenverbrauch = Erzeugung - Einspeisung (vereinfacht)
                     eigenverbrauch_jahr = erzeugung_jahr - einspeisung_jahr
@@ -764,19 +817,29 @@ async def get_roi_dashboard(
                     'hochrechnungs_methode': hochrechnungs_methode,
                 }
 
-                # Jahr-Info für Hinweis
-                jahr_info = f' für {jahr}' if jahr else ''
+                # Hinweis je nach Methode
+                if jahr:
+                    detail['gefiltertes_jahr'] = jahr
+                    jahr_info = f' für {jahr}'
+                else:
+                    detail['anzahl_jahre'] = anzahl_jahre
+                    jahr_info = f' (Ø aus {anzahl_jahre} Jahren)'
 
-                if hochrechnungs_methode == 'pvgis' and pvgis_anteil:
-                    detail['pvgis_anteil_prozent'] = round(pvgis_anteil * 100, 1)
-                    detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung{jahr_info} ({anzahl_monate} Monate = {round(pvgis_anteil * 100, 1)}% des Jahresertrags)'
+                if hochrechnungs_methode == 'durchschnitt':
+                    detail['hinweis'] = f'Jahresdurchschnitt{jahr_info}'
+                elif hochrechnungs_methode == 'durchschnitt_hochgerechnet':
+                    detail['hinweis'] = f'Jahresdurchschnitt{jahr_info}, hochgerechnet auf 12 Monate'
+                elif hochrechnungs_methode == 'pvgis':
+                    # pvgis_anteil wird nur im einzelnen Jahr-Block gesetzt
+                    if 'pvgis_anteil' in dir() and pvgis_anteil is not None:
+                        detail['pvgis_anteil_prozent'] = round(pvgis_anteil * 100, 1)
+                        detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung{jahr_info} ({anzahl_monate} Monate = {round(pvgis_anteil * 100, 1)}% des Jahresertrags)'
+                    else:
+                        detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung{jahr_info}'
                 elif anzahl_monate >= 12:
                     detail['hinweis'] = f'Berechnet aus {anzahl_monate} Monaten{jahr_info} (vollständiges Jahr)'
                 else:
-                    detail['hinweis'] = f'Lineare Hochrechnung{jahr_info} aus {anzahl_monate} Monaten (PVGIS-Prognose nicht verfügbar)'
-
-                if jahr:
-                    detail['gefiltertes_jahr'] = jahr
+                    detail['hinweis'] = f'Lineare Hochrechnung{jahr_info} aus {anzahl_monate} Monaten'
             else:
                 # Keine Monatsdaten - Fallback auf manuelle Prognose
                 jahres_einsparung = inv.einsparung_prognose_jahr or 0
