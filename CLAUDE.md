@@ -145,6 +145,10 @@ cd eedc && docker build -t eedc-test .
    - Jahr-Filter für Investitionen ROI-Dashboard funktionsfähig
    - Unterjährigkeits-Problem bei "Alle Jahre" durch Jahresmittelung gelöst
    - PV_Erzeugung_kWh Spalte in CSV-Template für Balkonkraftwerk+PV-Module
+   - **Investitions-Monatsdaten werden jetzt korrekt gespeichert** (kritisch!)
+     - MonatsdatenCreate/Update Schemas um `investitionen_daten` Feld erweitert
+     - Neue Helper-Funktion `_save_investitionen_monatsdaten()` in monatsdaten.py
+     - Behebt: Wärmepumpe, Speicher, E-Auto Dashboards zeigten leere Daten
 
 ## Änderungen (v0.9.4)
 

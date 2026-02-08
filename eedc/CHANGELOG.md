@@ -12,6 +12,88 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.9.5] - 2026-02-08
+
+### Hinzugefügt
+- **PV-System ROI-Aggregation** - Realistische ROI-Berechnung auf Systemebene
+  - Wechselrichter + PV-Module + DC-Speicher als "PV-System" aggregiert
+  - ROI auf Systemebene statt pro Einzelkomponente (realistischer!)
+  - Aufklappbare Komponenten-Zeilen im Frontend (Chevron-Icon)
+  - Einsparung proportional nach kWp auf Module verteilt
+  - Backend: Zwei-Pass-Gruppierung in `get_roi_dashboard()`
+  - Neuer Typ `pv-system` mit `komponenten[]` Array
+- **Konfigurationswarnungen im ROI-Dashboard**
+  - Warnsymbol (⚠) bei PV-Modulen ohne Wechselrichter-Zuordnung
+  - Warnsymbol bei Wechselrichtern ohne zugeordnete PV-Module
+  - Zusammenfassende Warnbox mit Handlungsempfehlungen
+- **ROI-Tabelle mit Tooltips** - Formeln und Berechnungen per Hover sichtbar
+
+### Behoben
+- Jahr-Filter für Investitionen ROI-Dashboard funktionsfähig
+- Unterjährigkeits-Problem bei "Alle Jahre" durch Jahresmittelung gelöst
+- PV_Erzeugung_kWh Spalte in CSV-Template für Balkonkraftwerk+PV-Module
+- **Investitions-Monatsdaten werden jetzt korrekt gespeichert** (kritisch!)
+  - MonatsdatenCreate/Update Schemas um `investitionen_daten` Feld erweitert
+  - Neue Helper-Funktion `_save_investitionen_monatsdaten()` in monatsdaten.py
+  - Behebt: Wärmepumpe, Speicher, E-Auto Dashboards zeigten leere Daten
+
+---
+
+## [0.9.4] - 2026-02-07
+
+### Behoben
+- Jahr-Filter für ROI-Dashboard
+- Unterjährigkeits-Korrektur bei Jahresvergleich
+- PV_Erzeugung_kWh in CSV-Template
+
+---
+
+## [0.9.3] - 2026-02-06
+
+### Hinzugefügt
+- **HA Sensor Export** - Berechnete KPIs an Home Assistant exportieren
+  - REST API: `/api/ha/export/sensors/{anlage_id}` für HA rest platform
+  - MQTT Discovery: Native HA-Entitäten via MQTT Auto-Discovery
+  - YAML-Generator: `/api/ha/export/yaml/{anlage_id}` für configuration.yaml
+  - Frontend: HAExportSettings.tsx mit MQTT-Config, Test, Publish
+- **Auswertungen Tabs neu strukturiert**
+  - Übersicht = Jahresvergleich (Monats-Charts, Δ%-Indikatoren, Jahrestabelle)
+  - PV-Anlage = Kombinierte Übersicht + PV-Details
+  - Investitionen = ROI-Dashboard, Amortisationskurve, Kosten nach Kategorie
+- **Sensor-Definitionen zentralisiert** in `ha_sensors_export.py`
+- **MQTT-Konfiguration** in Addon config.yaml
+- **SubTabs für Einstellungen** - Bessere Navigation
+
+---
+
+## [0.9.2] - 2026-02-05
+
+### Hinzugefügt
+- **Balkonkraftwerk Dashboard** - Erzeugung, Eigenverbrauch, Einspeisung, opt. Speicher
+- **Sonstiges Dashboard** - Flexible Kategorie (Erzeuger/Verbraucher/Speicher)
+- **Sonderkosten-Felder** - Für alle Investitionstypen (Reparatur, Wartung)
+- **Demo-Daten erweitert** - Balkonkraftwerk (800Wp + Speicher) + Mini-BHKW
+
+### Behoben
+- Navigation korrigiert: SubTabs statt veralteter Sidebar
+- Feldnamen-Mappings: Frontend/Backend Konsistenz
+
+---
+
+## [0.9.1] - 2026-02-05
+
+### Hinzugefügt
+- Zentrale Versionskonfiguration
+- Dynamische Formulare (V2H/Arbitrage bedingt)
+- PV-Module mit Anzahl/Wp
+- Monatsdaten-Spalten konfigurierbar
+
+### Behoben
+- 0-Wert Import
+- Berechnete Felder
+
+---
+
 ## [0.4.0] - 2026-02-04
 
 ### Hinzugefügt
