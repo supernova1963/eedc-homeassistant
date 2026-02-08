@@ -1030,40 +1030,88 @@ function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }: Invest
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bezeichnung</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Typ</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Kosten</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Mehrkosten</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ersparnis/Jahr</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">ROI</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amortisation</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {roiData.berechnungen.map((b) => (
-                  <tr key={b.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                      {b.investition_bezeichnung}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                        style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || '#6b7280'}20`, color: TYP_COLORS[b.investition_typ] || '#6b7280' }}
-                      >
-                        {TYP_LABELS[b.investition_typ] || b.investition_typ}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                      {b.relevante_kosten.toFixed(0)} €
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-green-600">
-                      {b.jahres_einsparung.toFixed(0)} €
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                      {b.roi_prozent?.toFixed(1) || '---'}%
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                      {b.amortisation_jahre?.toFixed(1) || '---'} J.
-                    </td>
-                  </tr>
-                ))}
+                {roiData.berechnungen.map((b) => {
+                  // Tooltip-Inhalte für Kosten
+                  const hasAlternativ = b.anschaffungskosten_alternativ > 0
+                  const kostenFormel = hasAlternativ
+                    ? 'Anschaffung − Alternativkosten'
+                    : 'Anschaffungskosten (keine Alternative)'
+                  const kostenBerechnung = hasAlternativ
+                    ? `${fmtCalc(b.anschaffungskosten, 0)} € − ${fmtCalc(b.anschaffungskosten_alternativ, 0)} €`
+                    : `${fmtCalc(b.anschaffungskosten, 0)} €`
+                  const kostenErgebnis = `= ${fmtCalc(b.relevante_kosten, 0)} € Mehrkosten`
+
+                  // Tooltip für Ersparnis aus detail_berechnung
+                  const detail = b.detail_berechnung || {}
+                  const hinweis = detail.hinweis as string | undefined
+
+                  return (
+                    <tr key={b.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                        {b.investition_bezeichnung}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || '#6b7280'}20`, color: TYP_COLORS[b.investition_typ] || '#6b7280' }}
+                        >
+                          {TYP_LABELS[b.investition_typ] || b.investition_typ}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                        <FormelTooltip
+                          formel={kostenFormel}
+                          berechnung={kostenBerechnung}
+                          ergebnis={kostenErgebnis}
+                        >
+                          <span className="cursor-help border-b border-dotted border-gray-400">
+                            {b.relevante_kosten.toFixed(0)} €
+                          </span>
+                        </FormelTooltip>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-green-600">
+                        <FormelTooltip
+                          formel={`Jahresersparnis ${TYP_LABELS[b.investition_typ] || b.investition_typ}`}
+                          berechnung={hinweis || 'Berechnet aus Verbrauchsdaten'}
+                          ergebnis={`= ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
+                        >
+                          <span className="cursor-help border-b border-dotted border-green-400">
+                            {b.jahres_einsparung.toFixed(0)} €
+                          </span>
+                        </FormelTooltip>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                        <FormelTooltip
+                          formel="Ersparnis ÷ Mehrkosten × 100"
+                          berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
+                          ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)}% p.a.` : 'nicht berechenbar'}
+                        >
+                          <span className="cursor-help border-b border-dotted border-gray-400">
+                            {b.roi_prozent?.toFixed(1) || '---'}%
+                          </span>
+                        </FormelTooltip>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                        <FormelTooltip
+                          formel="Mehrkosten ÷ Ersparnis"
+                          berechnung={`${fmtCalc(b.relevante_kosten, 0)} € ÷ ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
+                          ergebnis={b.amortisation_jahre ? `= ${b.amortisation_jahre.toFixed(1)} Jahre` : 'nicht berechenbar'}
+                        >
+                          <span className="cursor-help border-b border-dotted border-gray-400">
+                            {b.amortisation_jahre?.toFixed(1) || '---'} J.
+                          </span>
+                        </FormelTooltip>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
