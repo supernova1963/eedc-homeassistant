@@ -497,11 +497,24 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
 # ROI Berechnungen
 # =============================================================================
 
-class ROIBerechnung(BaseModel):
-    """Ergebnis einer ROI-Berechnung für eine Investition."""
+class ROIKomponente(BaseModel):
+    """Eine Komponente innerhalb eines PV-Systems."""
     investition_id: int
+    bezeichnung: str
+    typ: str  # pv-module, wechselrichter, speicher
+    kosten: float
+    kosten_alternativ: float
+    relevante_kosten: float
+    einsparung: Optional[float]  # Nur für PV-Module/Speicher, None für WR
+    co2_einsparung_kg: Optional[float]
+    detail: dict[str, Any]
+
+
+class ROIBerechnung(BaseModel):
+    """Ergebnis einer ROI-Berechnung für eine Investition oder ein PV-System."""
+    investition_id: int  # Bei System: ID des Wechselrichters
     investition_bezeichnung: str
-    investition_typ: str
+    investition_typ: str  # "pv-system" für aggregiert, sonst normal
     anschaffungskosten: float
     anschaffungskosten_alternativ: float
     relevante_kosten: float
@@ -510,6 +523,7 @@ class ROIBerechnung(BaseModel):
     amortisation_jahre: Optional[float]
     co2_einsparung_kg: Optional[float]
     detail_berechnung: dict[str, Any]
+    komponenten: Optional[list[ROIKomponente]] = None  # Für PV-Systeme
 
 
 class ROIDashboardResponse(BaseModel):
@@ -537,6 +551,9 @@ async def get_roi_dashboard(
     """
     Berechnet ROI für alle aktiven Investitionen einer Anlage.
 
+    PV-Systeme (Wechselrichter + zugeordnete PV-Module + DC-Speicher) werden
+    als aggregierte Einheit berechnet, da der ROI nur auf System-Ebene sinnvoll ist.
+
     Args:
         anlage_id: ID der Anlage
         strompreis_cent: Aktueller Strompreis für Berechnungen
@@ -555,6 +572,7 @@ async def get_roi_dashboard(
         CO2_FAKTOR_STROM_KG_KWH,
     )
     from sqlalchemy import func
+    from backend.models.pvgis_prognose import PVGISPrognose
 
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -567,9 +585,182 @@ async def get_roi_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.aktiv == True)
-        .order_by(Investition.typ)
+        .order_by(Investition.typ, Investition.id)
     )
-    investitionen = inv_result.scalars().all()
+    investitionen = list(inv_result.scalars().all())
+
+    # ==========================================================================
+    # Phase 1: Gruppiere Investitionen nach PV-Systemen und Standalone
+    # ==========================================================================
+
+    # PV-Systeme: Wechselrichter mit zugeordneten PV-Modulen und DC-Speichern
+    pv_systeme: dict[int, dict] = {}  # wr_id -> {wr, pv_module[], speicher[]}
+
+    # Standalone: Investitionen die nicht zu einem PV-System gehören
+    standalone: list[Investition] = []
+
+    # Orphans: PV-Module/Speicher ohne Wechselrichter-Zuordnung (Altdaten)
+    orphan_pv_module: list[Investition] = []
+
+    # Zwei-Pass-Ansatz: Erst alle Wechselrichter sammeln, damit parent_investition_id
+    # korrekt aufgelöst werden kann (unabhängig von der Sortierung)
+    for inv in investitionen:
+        if inv.typ == InvestitionTyp.WECHSELRICHTER.value:
+            pv_systeme[inv.id] = {"wr": inv, "pv_module": [], "speicher": []}
+
+    # Zweiter Pass: PV-Module und Speicher zuordnen
+    for inv in investitionen:
+        if inv.typ == InvestitionTyp.WECHSELRICHTER.value:
+            continue  # bereits verarbeitet
+        elif inv.typ == InvestitionTyp.PV_MODULE.value:
+            if inv.parent_investition_id and inv.parent_investition_id in pv_systeme:
+                pv_systeme[inv.parent_investition_id]["pv_module"].append(inv)
+            else:
+                # PV-Modul ohne Wechselrichter-Zuordnung
+                orphan_pv_module.append(inv)
+        elif inv.typ == InvestitionTyp.SPEICHER.value:
+            if inv.parent_investition_id and inv.parent_investition_id in pv_systeme:
+                # DC-gekoppelter Speicher am Hybrid-WR
+                pv_systeme[inv.parent_investition_id]["speicher"].append(inv)
+            else:
+                # AC-gekoppelter Speicher - eigenständig
+                standalone.append(inv)
+        else:
+            # E-Auto, Wärmepumpe, Wallbox, Balkonkraftwerk, Sonstiges
+            standalone.append(inv)
+
+    # ==========================================================================
+    # Phase 2: Hilfsfunktion für PV-Erzeugungsdaten
+    # ==========================================================================
+
+    async def berechne_pv_einsparung_aus_monatsdaten() -> tuple[float, float, dict]:
+        """Berechnet PV-Einsparung aus Monatsdaten (für alle PV-Module gemeinsam)."""
+        md_query = select(
+            Monatsdaten.monat,
+            func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
+            func.sum(Monatsdaten.pv_erzeugung_kwh).label('erzeugung'),
+            func.sum(Monatsdaten.eigenverbrauch_kwh).label('eigenverbrauch'),
+        ).where(Monatsdaten.anlage_id == anlage_id)
+
+        if jahr is not None:
+            md_query = md_query.where(Monatsdaten.jahr == jahr)
+
+        if jahr is None:
+            # Alle Jahre: Jahresdurchschnitt
+            md_count_query = select(
+                func.count().label('total_records'),
+                func.count(func.distinct(Monatsdaten.jahr)).label('anzahl_jahre')
+            ).where(Monatsdaten.anlage_id == anlage_id)
+            count_result = await db.execute(md_count_query)
+            count_row = count_result.one()
+            total_records = count_row.total_records
+            anzahl_jahre = count_row.anzahl_jahre or 1
+
+            md_query = md_query.group_by(Monatsdaten.monat)
+            md_result = await db.execute(md_query)
+            md_by_month = {r.monat: r for r in md_result.all()}
+
+            total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+            total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
+            total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
+            anzahl_monate = len(md_by_month)
+
+            if anzahl_monate > 0 and anzahl_jahre > 0:
+                avg_einspeisung = total_einspeisung / anzahl_jahre
+                avg_erzeugung = total_erzeugung / anzahl_jahre
+                avg_eigenverbrauch = total_eigenverbrauch / anzahl_jahre
+                avg_monate_pro_jahr = total_records / anzahl_jahre
+
+                if avg_monate_pro_jahr < 12:
+                    faktor = 12.0 / avg_monate_pro_jahr
+                    methode = 'durchschnitt_hochgerechnet'
+                else:
+                    faktor = 1.0
+                    methode = 'durchschnitt'
+
+                einspeisung_jahr = avg_einspeisung * faktor
+                erzeugung_jahr = avg_erzeugung * faktor
+                eigenverbrauch_jahr = avg_eigenverbrauch * faktor
+                hinweis = f'Jahresdurchschnitt (Ø aus {anzahl_jahre} Jahren)'
+                if methode == 'durchschnitt_hochgerechnet':
+                    hinweis += ', hochgerechnet auf 12 Monate'
+            else:
+                return 0, 0, {'hinweis': 'Keine Monatsdaten vorhanden'}
+        else:
+            # Einzelnes Jahr
+            md_query = md_query.group_by(Monatsdaten.monat)
+            md_result = await db.execute(md_query)
+            md_by_month = {r.monat: r for r in md_result.all()}
+
+            total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+            total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
+            total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
+            anzahl_monate = len(md_by_month)
+            vorhandene_monate = sorted(md_by_month.keys())
+
+            if anzahl_monate > 0:
+                # PVGIS-Hochrechnung versuchen
+                pvgis_result = await db.execute(
+                    select(PVGISPrognose)
+                    .where(PVGISPrognose.anlage_id == anlage_id)
+                    .where(PVGISPrognose.ist_aktiv == True)
+                    .order_by(PVGISPrognose.abgerufen_am.desc())
+                    .limit(1)
+                )
+                pvgis_prognose = pvgis_result.scalar_one_or_none()
+
+                methode = 'linear'
+                faktor = 12.0 / anzahl_monate
+
+                if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
+                    pvgis_monatswerte = pvgis_prognose.monatswerte
+                    pvgis_jahres_summe = sum(m.get('E_m', 0) for m in pvgis_monatswerte)
+                    if pvgis_jahres_summe > 0:
+                        pvgis_vorhandene_summe = sum(
+                            m.get('E_m', 0) for m in pvgis_monatswerte
+                            if m.get('month', 0) in vorhandene_monate
+                        )
+                        if pvgis_vorhandene_summe > 0:
+                            faktor = 1.0 / (pvgis_vorhandene_summe / pvgis_jahres_summe)
+                            methode = 'pvgis'
+
+                einspeisung_jahr = total_einspeisung * faktor
+                erzeugung_jahr = total_erzeugung * faktor
+                eigenverbrauch_jahr = total_eigenverbrauch * faktor
+
+                if methode == 'pvgis':
+                    hinweis = f'PVGIS-gewichtete Hochrechnung für {jahr} ({anzahl_monate} Monate)'
+                elif anzahl_monate >= 12:
+                    hinweis = f'Berechnet aus {anzahl_monate} Monaten für {jahr}'
+                else:
+                    hinweis = f'Lineare Hochrechnung für {jahr} aus {anzahl_monate} Monaten'
+            else:
+                return 0, 0, {'hinweis': f'Keine Monatsdaten für {jahr}'}
+
+        # Eigenverbrauch ableiten wenn nicht vorhanden
+        if eigenverbrauch_jahr == 0 and erzeugung_jahr > 0:
+            eigenverbrauch_jahr = erzeugung_jahr - einspeisung_jahr
+
+        # Einsparung berechnen
+        einspeise_erloes = einspeisung_jahr * einspeiseverguetung_cent / 100
+        ev_ersparnis = eigenverbrauch_jahr * strompreis_cent / 100
+        jahres_einsparung = einspeise_erloes + ev_ersparnis
+        co2 = erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH
+
+        detail = {
+            'einspeisung_kwh_jahr': round(einspeisung_jahr, 0),
+            'eigenverbrauch_kwh_jahr': round(eigenverbrauch_jahr, 0),
+            'erzeugung_kwh_jahr': round(erzeugung_jahr, 0),
+            'einspeise_erloes_euro': round(einspeise_erloes, 2),
+            'ev_ersparnis_euro': round(ev_ersparnis, 2),
+            'hinweis': hinweis,
+        }
+
+        return jahres_einsparung, co2, detail
+
+    # ==========================================================================
+    # Phase 3: Berechne ROI für PV-Systeme (aggregiert)
+    # ==========================================================================
 
     berechnungen: list[ROIBerechnung] = []
     gesamt_investition = 0.0
@@ -577,17 +768,211 @@ async def get_roi_dashboard(
     gesamt_einsparung = 0.0
     gesamt_co2 = 0.0
 
-    for inv in investitionen:
+    # PV-Einsparung einmal berechnen (wird auf Module verteilt)
+    pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()
+
+    # Gesamt-kWp aller PV-Module für proportionale Verteilung
+    gesamt_kwp = sum(
+        inv.leistung_kwp or 0
+        for system in pv_systeme.values()
+        for inv in system["pv_module"]
+    )
+    gesamt_kwp += sum(inv.leistung_kwp or 0 for inv in orphan_pv_module)
+
+    for wr_id, system in pv_systeme.items():
+        wr = system["wr"]
+        pv_module = system["pv_module"]
+        dc_speicher = system["speicher"]
+
+        # Nur Systeme mit PV-Modulen anzeigen
+        if not pv_module and not dc_speicher:
+            # Wechselrichter ohne zugeordnete Komponenten - als Hinweis zeigen
+            standalone.append(wr)
+            continue
+
+        # Kosten summieren
+        system_kosten = (wr.anschaffungskosten_gesamt or 0)
+        system_alternativ = (wr.anschaffungskosten_alternativ or 0)
+
+        komponenten: list[ROIKomponente] = []
+
+        # Wechselrichter als Komponente
+        wr_kosten = wr.anschaffungskosten_gesamt or 0
+        wr_alternativ = wr.anschaffungskosten_alternativ or 0
+        komponenten.append(ROIKomponente(
+            investition_id=wr.id,
+            bezeichnung=wr.bezeichnung,
+            typ=wr.typ,
+            kosten=wr_kosten,
+            kosten_alternativ=wr_alternativ,
+            relevante_kosten=wr_kosten - wr_alternativ,
+            einsparung=None,  # WR hat keine eigene Einsparung
+            co2_einsparung_kg=None,
+            detail={'hinweis': 'Wechselrichter - Einsparung über PV-Module'}
+        ))
+
+        # PV-Module Einsparung proportional nach kWp verteilen
+        system_kwp = sum(inv.leistung_kwp or 0 for inv in pv_module)
+        system_einsparung = 0.0
+        system_co2 = 0.0
+
+        for inv in pv_module:
+            inv_kosten = inv.anschaffungskosten_gesamt or 0
+            inv_alternativ = inv.anschaffungskosten_alternativ or 0
+            system_kosten += inv_kosten
+            system_alternativ += inv_alternativ
+
+            # Einsparung proportional nach kWp
+            inv_kwp = inv.leistung_kwp or 0
+            if gesamt_kwp > 0 and inv_kwp > 0:
+                anteil = inv_kwp / gesamt_kwp
+                inv_einsparung = pv_jahres_einsparung * anteil
+                inv_co2 = pv_co2 * anteil
+            else:
+                inv_einsparung = 0
+                inv_co2 = 0
+
+            system_einsparung += inv_einsparung
+            system_co2 += inv_co2
+
+            komponenten.append(ROIKomponente(
+                investition_id=inv.id,
+                bezeichnung=f"{inv.bezeichnung} ({inv_kwp} kWp)",
+                typ=inv.typ,
+                kosten=inv_kosten,
+                kosten_alternativ=inv_alternativ,
+                relevante_kosten=inv_kosten - inv_alternativ,
+                einsparung=round(inv_einsparung, 2),
+                co2_einsparung_kg=round(inv_co2, 1),
+                detail={
+                    'anteil_prozent': round(anteil * 100, 1) if gesamt_kwp > 0 else 0,
+                    'leistung_kwp': inv_kwp,
+                }
+            ))
+
+        # DC-Speicher (am Hybrid-WR)
+        for inv in dc_speicher:
+            inv_kosten = inv.anschaffungskosten_gesamt or 0
+            inv_alternativ = inv.anschaffungskosten_alternativ or 0
+            system_kosten += inv_kosten
+            system_alternativ += inv_alternativ
+
+            params = inv.parameter or {}
+            kapazitaet = params.get('kapazitaet_kwh', 10)
+            wirkungsgrad = params.get('wirkungsgrad_prozent', 95)
+            nutzt_arbitrage = params.get('nutzt_arbitrage', False)
+
+            result = berechne_speicher_einsparung(
+                kapazitaet_kwh=kapazitaet,
+                wirkungsgrad_prozent=wirkungsgrad,
+                netzbezug_preis_cent=strompreis_cent,
+                einspeiseverguetung_cent=einspeiseverguetung_cent,
+                nutzt_arbitrage=nutzt_arbitrage,
+            )
+            inv_einsparung = result.jahres_einsparung_euro
+            inv_co2 = result.co2_einsparung_kg
+            system_einsparung += inv_einsparung
+            system_co2 += inv_co2
+
+            komponenten.append(ROIKomponente(
+                investition_id=inv.id,
+                bezeichnung=f"{inv.bezeichnung} ({kapazitaet} kWh)",
+                typ=inv.typ,
+                kosten=inv_kosten,
+                kosten_alternativ=inv_alternativ,
+                relevante_kosten=inv_kosten - inv_alternativ,
+                einsparung=round(inv_einsparung, 2),
+                co2_einsparung_kg=round(inv_co2, 1),
+                detail={'kapazitaet_kwh': kapazitaet, 'dc_gekoppelt': True}
+            ))
+
+        # System-ROI berechnen
+        system_relevante = system_kosten - system_alternativ
+        roi_result = berechne_roi(system_kosten, system_einsparung, system_alternativ)
+
+        berechnungen.append(ROIBerechnung(
+            investition_id=wr.id,  # WR-ID als System-ID
+            investition_bezeichnung=f"PV-System {wr.bezeichnung}",
+            investition_typ="pv-system",
+            anschaffungskosten=system_kosten,
+            anschaffungskosten_alternativ=system_alternativ,
+            relevante_kosten=system_relevante,
+            jahres_einsparung=round(system_einsparung, 2),
+            roi_prozent=roi_result['roi_prozent'],
+            amortisation_jahre=roi_result['amortisation_jahre'],
+            co2_einsparung_kg=round(system_co2, 1),
+            detail_berechnung={
+                **pv_detail,
+                'komponenten_count': len(komponenten),
+                'system_kwp': system_kwp,
+            },
+            komponenten=komponenten,
+        ))
+
+        gesamt_investition += system_kosten
+        gesamt_relevante += system_relevante
+        gesamt_einsparung += system_einsparung
+        gesamt_co2 += system_co2
+
+    # ==========================================================================
+    # Phase 4: Orphan PV-Module (ohne Wechselrichter-Zuordnung)
+    # ==========================================================================
+
+    for inv in orphan_pv_module:
+        kosten = inv.anschaffungskosten_gesamt or 0
+        alternativ = inv.anschaffungskosten_alternativ or 0
+        relevante = kosten - alternativ
+
+        # Einsparung proportional nach kWp
+        inv_kwp = inv.leistung_kwp or 0
+        if gesamt_kwp > 0 and inv_kwp > 0:
+            anteil = inv_kwp / gesamt_kwp
+            jahres_einsparung = pv_jahres_einsparung * anteil
+            co2_einsparung = pv_co2 * anteil
+        else:
+            jahres_einsparung = 0
+            co2_einsparung = 0
+
+        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ)
+
+        berechnungen.append(ROIBerechnung(
+            investition_id=inv.id,
+            investition_bezeichnung=f"{inv.bezeichnung} (ohne WR)",
+            investition_typ=inv.typ,
+            anschaffungskosten=kosten,
+            anschaffungskosten_alternativ=alternativ,
+            relevante_kosten=relevante,
+            jahres_einsparung=round(jahres_einsparung, 2),
+            roi_prozent=roi_result['roi_prozent'],
+            amortisation_jahre=roi_result['amortisation_jahre'],
+            co2_einsparung_kg=round(co2_einsparung, 1),
+            detail_berechnung={
+                **pv_detail,
+                'hinweis': 'PV-Modul ohne Wechselrichter-Zuordnung - bitte zuordnen',
+                'anteil_prozent': round(anteil * 100, 1) if gesamt_kwp > 0 else 0,
+            },
+        ))
+
+        gesamt_investition += kosten
+        gesamt_relevante += relevante
+        gesamt_einsparung += jahres_einsparung
+        gesamt_co2 += co2_einsparung
+
+    # ==========================================================================
+    # Phase 5: Standalone-Investitionen (wie bisher)
+    # ==========================================================================
+
+    for inv in standalone:
         params = inv.parameter or {}
         kosten = inv.anschaffungskosten_gesamt or 0
         alternativ = inv.anschaffungskosten_alternativ or 0
         relevante = kosten - alternativ
         jahres_einsparung = 0.0
         co2_einsparung = 0.0
-        detail = {}
+        detail: dict[str, Any] = {}
 
         if inv.typ == InvestitionTyp.SPEICHER.value:
-            # Speicher-Berechnung
+            # AC-gekoppelter Speicher
             kapazitaet = params.get('kapazitaet_kwh', 10)
             wirkungsgrad = params.get('wirkungsgrad_prozent', 95)
             nutzt_arbitrage = params.get('nutzt_arbitrage', False)
@@ -609,10 +994,10 @@ async def get_roi_dashboard(
                 'nutzbare_speicherung_kwh': result.nutzbare_speicherung_kwh,
                 'pv_anteil_euro': result.pv_anteil_euro,
                 'arbitrage_anteil_euro': result.arbitrage_anteil_euro,
+                'hinweis': 'AC-gekoppelter Speicher',
             }
 
         elif inv.typ == InvestitionTyp.E_AUTO.value:
-            # E-Auto-Berechnung
             km_jahr = params.get('km_jahr', 15000)
             verbrauch = params.get('verbrauch_kwh_100km', 18)
             pv_anteil = params.get('pv_anteil_prozent', 60)
@@ -638,10 +1023,10 @@ async def get_roi_dashboard(
                 'strom_kosten_euro': result.strom_kosten_euro,
                 'benzin_kosten_alternativ_euro': result.benzin_kosten_alternativ_euro,
                 'v2h_einsparung_euro': result.v2h_einsparung_euro,
+                'hinweis': f'E-Auto: {km_jahr} km/Jahr',
             }
 
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
-            # Wärmepumpen-Berechnung
             jaz = params.get('jaz', 3.5)
             waermebedarf = params.get('waermebedarf_kwh', 15000)
             pv_anteil = params.get('pv_anteil_prozent', 30)
@@ -661,198 +1046,42 @@ async def get_roi_dashboard(
             detail = {
                 'wp_kosten_euro': result.wp_kosten_euro,
                 'alte_heizung_kosten_euro': result.alte_heizung_kosten_euro,
+                'hinweis': f'Wärmepumpe: JAZ {jaz}',
             }
 
-        elif inv.typ == InvestitionTyp.PV_MODULE.value:
-            # PV-Module: ROI aus tatsächlichen Monatsdaten berechnen
-            # Lade Monatsdaten für diese Anlage (optional gefiltert nach Jahr)
-            from backend.models.pvgis_prognose import PVGISPrognose
+        elif inv.typ == InvestitionTyp.BALKONKRAFTWERK.value:
+            # Balkonkraftwerk hat eigenen Mikro-WR integriert
+            leistung_wp = params.get('leistung_wp', 800)
+            # Vereinfachte Berechnung: ca. 0.9 kWh/Wp/Jahr in Deutschland
+            jahres_ertrag = leistung_wp * 0.9
+            # 80% Eigenverbrauch typisch bei Balkonkraftwerk
+            eigenverbrauch = jahres_ertrag * 0.8
+            einspeisung = jahres_ertrag * 0.2
 
-            md_query = select(
-                Monatsdaten.monat,
-                func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
-                func.sum(Monatsdaten.pv_erzeugung_kwh).label('erzeugung'),
-                func.sum(Monatsdaten.eigenverbrauch_kwh).label('eigenverbrauch'),
-            ).where(Monatsdaten.anlage_id == anlage_id)
+            einspeise_erloes = einspeisung * einspeiseverguetung_cent / 100
+            ev_ersparnis = eigenverbrauch * strompreis_cent / 100
+            jahres_einsparung = einspeise_erloes + ev_ersparnis
+            co2_einsparung = jahres_ertrag * CO2_FAKTOR_STROM_KG_KWH
 
-            # Jahr-Filter anwenden wenn angegeben
-            if jahr is not None:
-                md_query = md_query.where(Monatsdaten.jahr == jahr)
+            detail = {
+                'leistung_wp': leistung_wp,
+                'jahres_ertrag_kwh': round(jahres_ertrag, 0),
+                'eigenverbrauch_kwh': round(eigenverbrauch, 0),
+                'hinweis': f'Balkonkraftwerk {leistung_wp} Wp',
+            }
 
-            # Bei "Alle Jahre" (jahr=None): Berechne Jahresdurchschnitt
-            # Bei einzelnem Jahr: Berechne/hochrechne auf das Jahr
-            if jahr is None:
-                # Alle Jahre: Zähle tatsächliche Datenpunkte (Jahr+Monat Kombinationen)
-                md_count_query = select(
-                    func.count().label('total_records'),
-                    func.count(func.distinct(Monatsdaten.jahr)).label('anzahl_jahre')
-                ).where(Monatsdaten.anlage_id == anlage_id)
-                count_result = await db.execute(md_count_query)
-                count_row = count_result.one()
-                total_records = count_row.total_records
-                anzahl_jahre = count_row.anzahl_jahre or 1
-
-                # Summen über alle Monate (gruppiert)
-                md_query = md_query.group_by(Monatsdaten.monat)
-                md_result = await db.execute(md_query)
-                md_by_month = {r.monat: r for r in md_result.all()}
-
-                total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-                total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
-                total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
-                anzahl_monate = len(md_by_month)
-                vorhandene_monate = sorted(md_by_month.keys())
-
-                # Jahresdurchschnitt: Summen durch Anzahl Jahre teilen
-                # Dann ggf. auf 12 Monate hochrechnen wenn nicht alle Monate abgedeckt
-                if anzahl_monate > 0 and anzahl_jahre > 0:
-                    # Durchschnitt pro Jahr berechnen
-                    avg_einspeisung = total_einspeisung / anzahl_jahre
-                    avg_erzeugung = total_erzeugung / anzahl_jahre
-                    avg_eigenverbrauch = total_eigenverbrauch / anzahl_jahre
-                    avg_monate_pro_jahr = total_records / anzahl_jahre
-
-                    # Hochrechnung auf 12 Monate wenn nötig
-                    if avg_monate_pro_jahr < 12:
-                        faktor = 12.0 / avg_monate_pro_jahr
-                        hochrechnungs_methode = 'durchschnitt_hochgerechnet'
-                    else:
-                        faktor = 1.0
-                        hochrechnungs_methode = 'durchschnitt'
-
-                    einspeisung_jahr = avg_einspeisung * faktor
-                    erzeugung_jahr = avg_erzeugung * faktor
-                    eigenverbrauch_jahr = avg_eigenverbrauch * faktor
-                else:
-                    einspeisung_jahr = 0
-                    erzeugung_jahr = 0
-                    eigenverbrauch_jahr = 0
-                    hochrechnungs_methode = 'keine_daten'
-                    faktor = 1.0
-
-            else:
-                # Einzelnes Jahr: Gruppieren nach Monat
-                md_query = md_query.group_by(Monatsdaten.monat)
-                md_result = await db.execute(md_query)
-                md_by_month = {r.monat: r for r in md_result.all()}
-
-                total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-                total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
-                total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
-                anzahl_monate = len(md_by_month)
-                vorhandene_monate = sorted(md_by_month.keys())
-                anzahl_jahre = 1
-
-                if anzahl_monate > 0:
-                    # Versuche PVGIS-gewichtete Hochrechnung
-                    pvgis_result = await db.execute(
-                        select(PVGISPrognose)
-                        .where(PVGISPrognose.anlage_id == anlage_id)
-                        .where(PVGISPrognose.ist_aktiv == True)
-                        .order_by(PVGISPrognose.abgerufen_am.desc())
-                        .limit(1)
-                    )
-                    pvgis_prognose = pvgis_result.scalar_one_or_none()
-
-                    hochrechnungs_methode = 'linear'
-                    pvgis_anteil = None
-
-                    if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
-                        # PVGIS-gewichtete Hochrechnung
-                        pvgis_monatswerte = pvgis_prognose.monatswerte
-                        pvgis_jahres_summe = sum(m.get('E_m', 0) for m in pvgis_monatswerte)
-
-                        if pvgis_jahres_summe > 0:
-                            pvgis_vorhandene_summe = sum(
-                                m.get('E_m', 0) for m in pvgis_monatswerte
-                                if m.get('month', 0) in vorhandene_monate
-                            )
-
-                            if pvgis_vorhandene_summe > 0:
-                                pvgis_anteil = pvgis_vorhandene_summe / pvgis_jahres_summe
-                                faktor = 1.0 / pvgis_anteil
-                                hochrechnungs_methode = 'pvgis'
-                            else:
-                                faktor = 12.0 / anzahl_monate
-                        else:
-                            faktor = 12.0 / anzahl_monate
-                    else:
-                        faktor = 12.0 / anzahl_monate
-
-                    einspeisung_jahr = total_einspeisung * faktor
-                    erzeugung_jahr = total_erzeugung * faktor
-                    eigenverbrauch_jahr = total_eigenverbrauch * faktor
-                else:
-                    einspeisung_jahr = 0
-                    erzeugung_jahr = 0
-                    eigenverbrauch_jahr = 0
-                    hochrechnungs_methode = 'keine_daten'
-                    faktor = 1.0
-
-            if anzahl_monate > 0:
-                if eigenverbrauch_jahr == 0 and erzeugung_jahr > 0:
-                    # Eigenverbrauch = Erzeugung - Einspeisung (vereinfacht)
-                    eigenverbrauch_jahr = erzeugung_jahr - einspeisung_jahr
-
-                # Netto-Ertrag = Einspeise-Erlös + Eigenverbrauch-Ersparnis
-                einspeise_erloes = einspeisung_jahr * einspeiseverguetung_cent / 100
-                ev_ersparnis = eigenverbrauch_jahr * strompreis_cent / 100
-                jahres_einsparung = einspeise_erloes + ev_ersparnis
-
-                # CO2-Einsparung
-                co2_einsparung = erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH
-
-                # Detail-Informationen für Transparenz
-                detail = {
-                    'einspeisung_kwh_jahr': round(einspeisung_jahr, 0),
-                    'eigenverbrauch_kwh_jahr': round(eigenverbrauch_jahr, 0),
-                    'erzeugung_kwh_jahr': round(erzeugung_jahr, 0),
-                    'einspeise_erloes_euro': round(einspeise_erloes, 2),
-                    'ev_ersparnis_euro': round(ev_ersparnis, 2),
-                    'strompreis_cent': strompreis_cent,
-                    'einspeiseverguetung_cent': einspeiseverguetung_cent,
-                    'anzahl_monate_daten': anzahl_monate,
-                    'vorhandene_monate': vorhandene_monate,
-                    'hochrechnungs_faktor': round(faktor, 3),
-                    'hochrechnungs_methode': hochrechnungs_methode,
-                }
-
-                # Hinweis je nach Methode
-                if jahr:
-                    detail['gefiltertes_jahr'] = jahr
-                    jahr_info = f' für {jahr}'
-                else:
-                    detail['anzahl_jahre'] = anzahl_jahre
-                    jahr_info = f' (Ø aus {anzahl_jahre} Jahren)'
-
-                if hochrechnungs_methode == 'durchschnitt':
-                    detail['hinweis'] = f'Jahresdurchschnitt{jahr_info}'
-                elif hochrechnungs_methode == 'durchschnitt_hochgerechnet':
-                    detail['hinweis'] = f'Jahresdurchschnitt{jahr_info}, hochgerechnet auf 12 Monate'
-                elif hochrechnungs_methode == 'pvgis':
-                    # pvgis_anteil wird nur im einzelnen Jahr-Block gesetzt
-                    if 'pvgis_anteil' in dir() and pvgis_anteil is not None:
-                        detail['pvgis_anteil_prozent'] = round(pvgis_anteil * 100, 1)
-                        detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung{jahr_info} ({anzahl_monate} Monate = {round(pvgis_anteil * 100, 1)}% des Jahresertrags)'
-                    else:
-                        detail['hinweis'] = f'PVGIS-gewichtete Hochrechnung{jahr_info}'
-                elif anzahl_monate >= 12:
-                    detail['hinweis'] = f'Berechnet aus {anzahl_monate} Monaten{jahr_info} (vollständiges Jahr)'
-                else:
-                    detail['hinweis'] = f'Lineare Hochrechnung{jahr_info} aus {anzahl_monate} Monaten'
-            else:
-                # Keine Monatsdaten - Fallback auf manuelle Prognose
-                jahres_einsparung = inv.einsparung_prognose_jahr or 0
-                co2_einsparung = inv.co2_einsparung_prognose_kg or 0
-                detail = {'hinweis': 'Keine Monatsdaten vorhanden - manuelle Prognose'}
+        elif inv.typ == InvestitionTyp.WECHSELRICHTER.value:
+            # Wechselrichter ohne zugeordnete PV-Module
+            detail = {
+                'hinweis': 'Wechselrichter ohne zugeordnete PV-Module - bitte PV-Module zuordnen',
+            }
 
         else:
-            # Für andere Typen: manuelle Einsparungsprognose verwenden
+            # Wallbox, Sonstiges
             jahres_einsparung = inv.einsparung_prognose_jahr or 0
             co2_einsparung = inv.co2_einsparung_prognose_kg or 0
             detail = {'hinweis': 'Manuelle Prognose verwendet'}
 
-        # ROI berechnen
         roi_result = berechne_roi(kosten, jahres_einsparung, alternativ)
 
         berechnungen.append(ROIBerechnung(
@@ -862,10 +1091,10 @@ async def get_roi_dashboard(
             anschaffungskosten=kosten,
             anschaffungskosten_alternativ=alternativ,
             relevante_kosten=relevante,
-            jahres_einsparung=jahres_einsparung,
+            jahres_einsparung=round(jahres_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
-            co2_einsparung_kg=co2_einsparung,
+            co2_einsparung_kg=round(co2_einsparung, 1) if co2_einsparung else None,
             detail_berechnung=detail,
         ))
 

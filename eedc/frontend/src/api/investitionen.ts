@@ -52,10 +52,25 @@ export interface InvestitionTypInfo {
   }>
 }
 
+/**
+ * Eine Komponente innerhalb eines PV-Systems (WR, PV-Module, DC-Speicher)
+ */
+export interface ROIKomponente {
+  investition_id: number
+  bezeichnung: string
+  typ: string  // pv-module, wechselrichter, speicher
+  kosten: number
+  kosten_alternativ: number
+  relevante_kosten: number
+  einsparung: number | null  // Nur für PV-Module/Speicher, null für WR
+  co2_einsparung_kg: number | null
+  detail: Record<string, unknown>
+}
+
 export interface ROIBerechnung {
   investition_id: number
   investition_bezeichnung: string
-  investition_typ: string
+  investition_typ: string  // "pv-system" für aggregiert, sonst normal
   anschaffungskosten: number
   anschaffungskosten_alternativ: number
   relevante_kosten: number
@@ -64,6 +79,7 @@ export interface ROIBerechnung {
   amortisation_jahre: number | null
   co2_einsparung_kg: number | null
   detail_berechnung: Record<string, unknown>
+  komponenten?: ROIKomponente[]  // Für PV-Systeme: aufklappbare Unterkomponenten
 }
 
 export interface ROIDashboardResponse {

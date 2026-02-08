@@ -4,7 +4,7 @@
 
 **eedc** (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur lokalen PV-Anlagen-Auswertung.
 
-**Version:** 0.9.3 Beta
+**Version:** 0.9.5 Beta
 **Status:** Beta-ready für Tests
 
 ## Tech-Stack
@@ -55,10 +55,18 @@ Frontend:
 
 ## Datenmodell-Konzepte
 
-### Parent-Child Beziehungen
-- **PV-Module → Wechselrichter** (Pflicht wenn WR vorhanden)
-- **Speicher → Wechselrichter** (Optional, für Hybrid-WR)
-- E-Auto, Wallbox, Wärmepumpe: eigenständig
+### Parent-Child Beziehungen & PV-System Aggregation
+- **PV-Module → Wechselrichter** (Pflicht! Ohne WR-Zuordnung = Warnung)
+- **DC-Speicher → Wechselrichter** (Optional, für Hybrid-WR)
+- **AC-Speicher**: eigenständig (keine WR-Zuordnung)
+- E-Auto, Wallbox, Wärmepumpe, Balkonkraftwerk: eigenständig
+
+**PV-System ROI-Aggregation (v0.9.5):**
+- Wechselrichter + zugeordnete PV-Module + DC-Speicher werden als "PV-System" aggregiert
+- ROI wird auf System-Ebene berechnet (WR-Kosten enthalten!)
+- Einzelkomponenten in aufklappbaren Unterzeilen mit anteiligen Einsparungen
+- PV-Einsparungen werden proportional nach kWp auf Module verteilt
+- Orphan PV-Module (ohne WR) zeigen Warnung im Frontend
 
 ### Investitions-Parameter (JSON)
 Typ-spezifische Felder werden in `parameter` JSON gespeichert:
@@ -116,7 +124,35 @@ cd eedc && docker build -t eedc-test .
 - [ ] KI-Insights
 - [ ] SOLL-IST Vergleich pro String (Frontend)
 
-## Letzte Änderungen (v0.9.3)
+## Letzte Änderungen (v0.9.5)
+
+1. **PV-System ROI-Aggregation**: Strukturelle Verbesserung der ROI-Berechnung
+   - Wechselrichter + PV-Module + DC-Speicher als "PV-System" aggregiert
+   - ROI auf Systemebene statt pro Einzelkomponente (realistischer!)
+   - Aufklappbare Komponenten-Zeilen im Frontend (Chevron-Icon)
+   - Einsparung proportional nach kWp auf Module verteilt
+   - Backend: Zwei-Pass-Gruppierung in `get_roi_dashboard()`
+   - Neuer Typ `pv-system` mit `komponenten[]` Array
+
+2. **Konfigurationswarnungen im ROI-Dashboard**:
+   - Warnsymbol (⚠) bei PV-Modulen ohne Wechselrichter-Zuordnung
+   - Warnsymbol bei Wechselrichtern ohne zugeordnete PV-Module
+   - Zusammenfassende Warnbox mit Handlungsempfehlungen
+
+3. **ROI-Tabelle mit Tooltips**: Formeln und Berechnungen per Hover sichtbar
+
+4. **Bugfixes**:
+   - Jahr-Filter für Investitionen ROI-Dashboard funktionsfähig
+   - Unterjährigkeits-Problem bei "Alle Jahre" durch Jahresmittelung gelöst
+   - PV_Erzeugung_kWh Spalte in CSV-Template für Balkonkraftwerk+PV-Module
+
+## Änderungen (v0.9.4)
+
+1. Jahr-Filter für ROI-Dashboard
+2. Unterjährigkeits-Korrektur bei Jahresvergleich
+3. PV_Erzeugung_kWh in CSV-Template
+
+## Änderungen (v0.9.3)
 
 1. **HA Sensor Export**: Berechnete KPIs können an HA zurückgegeben werden
    - REST API: `/api/ha/export/sensors/{anlage_id}` für HA rest platform

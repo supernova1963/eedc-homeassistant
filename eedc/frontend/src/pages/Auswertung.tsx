@@ -6,11 +6,11 @@ import {
 } from 'recharts'
 import {
   Sun, Zap, Battery, TrendingUp, Leaf, Euro, Calendar, ArrowRight,
-  PiggyBank, Wallet
+  PiggyBank, Wallet, ChevronDown, ChevronRight, AlertTriangle
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis, useInvestitionen } from '../hooks'
-import { investitionenApi, type ROIDashboardResponse } from '../api'
+import { investitionenApi, type ROIDashboardResponse, type ROIKomponente } from '../api'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -33,6 +33,7 @@ const TYP_COLORS: Record<string, string> = {
   'waermepumpe': '#ef4444',
   'balkonkraftwerk': '#10b981',
   'sonstiges': '#6b7280',
+  'pv-system': '#f97316',  // Orange für aggregiertes PV-System
 }
 
 const TYP_LABELS: Record<string, string> = {
@@ -44,6 +45,7 @@ const TYP_LABELS: Record<string, string> = {
   'waermepumpe': 'Wärmepumpe',
   'balkonkraftwerk': 'Balkonkraftwerk',
   'sonstiges': 'Sonstiges',
+  'pv-system': 'PV-System',  // Aggregiertes System (WR + Module + Speicher)
 }
 
 type TabType = 'uebersicht' | 'pv' | 'investitionen' | 'finanzen' | 'co2'
@@ -789,6 +791,7 @@ function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }: Invest
   const { investitionen, loading: invLoading } = useInvestitionen(anlageId)
   const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(null)
   const [roiLoading, setRoiLoading] = useState(true)
+  const [expandedSystems, setExpandedSystems] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     const loadROI = async () => {
@@ -1019,11 +1022,55 @@ function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }: Invest
       )}
 
       {/* ROI pro Investition */}
-      {roiData?.berechnungen && roiData.berechnungen.length > 0 && (
+      {roiData?.berechnungen && roiData.berechnungen.length > 0 && (() => {
+        // Prüfe auf Konfigurationsprobleme
+        const orphanModules = roiData.berechnungen.filter(b =>
+          b.investition_typ === 'pv-module' &&
+          typeof b.detail_berechnung?.hinweis === 'string' &&
+          b.detail_berechnung.hinweis.includes('ohne Wechselrichter')
+        )
+        const emptyWRs = roiData.berechnungen.filter(b =>
+          b.investition_typ === 'wechselrichter' &&
+          typeof b.detail_berechnung?.hinweis === 'string' &&
+          b.detail_berechnung.hinweis.includes('ohne zugeordnete PV-Module')
+        )
+        const hasConfigIssues = orphanModules.length > 0 || emptyWRs.length > 0
+
+        return (
         <Card>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             ROI pro Investition
           </h3>
+
+          {/* Konfigurationswarnungen */}
+          {hasConfigIssues && (
+            <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-800 dark:text-amber-200">Konfiguration unvollständig</p>
+                  <ul className="mt-1 text-amber-700 dark:text-amber-300 list-disc list-inside">
+                    {orphanModules.length > 0 && (
+                      <li>
+                        {orphanModules.length} PV-Modul{orphanModules.length > 1 ? 'e' : ''} ohne Wechselrichter-Zuordnung
+                        → Bitte unter Einstellungen → Investitionen zuordnen
+                      </li>
+                    )}
+                    {emptyWRs.length > 0 && (
+                      <li>
+                        {emptyWRs.length} Wechselrichter ohne PV-Module
+                        → Bitte PV-Module zuordnen oder Wechselrichter entfernen
+                      </li>
+                    )}
+                  </ul>
+                  <p className="mt-2 text-amber-600 dark:text-amber-400 text-xs">
+                    Ohne korrekte Zuordnung kann der ROI nicht korrekt auf Systemebene berechnet werden.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead>
@@ -1052,71 +1099,158 @@ function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }: Invest
                   const detail = b.detail_berechnung || {}
                   const hinweis = detail.hinweis as string | undefined
 
+                  // Prüfen ob PV-System mit Komponenten
+                  const isPVSystem = b.investition_typ === 'pv-system' && b.komponenten && b.komponenten.length > 0
+                  const isExpanded = expandedSystems.has(b.investition_id)
+
+                  // Prüfen ob PV-Modul ohne Wechselrichter-Zuordnung (Konfigurationsproblem)
+                  const isOrphanPVModule = b.investition_typ === 'pv-module' &&
+                    typeof hinweis === 'string' && hinweis.includes('ohne Wechselrichter')
+                  // Prüfen ob Wechselrichter ohne PV-Module
+                  const isEmptyWR = b.investition_typ === 'wechselrichter' &&
+                    typeof hinweis === 'string' && hinweis.includes('ohne zugeordnete PV-Module')
+
+                  const toggleExpanded = () => {
+                    setExpandedSystems(prev => {
+                      const next = new Set(prev)
+                      if (next.has(b.investition_id)) {
+                        next.delete(b.investition_id)
+                      } else {
+                        next.add(b.investition_id)
+                      }
+                      return next
+                    })
+                  }
+
                   return (
-                    <tr key={b.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                        {b.investition_bezeichnung}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        <span
-                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                          style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || '#6b7280'}20`, color: TYP_COLORS[b.investition_typ] || '#6b7280' }}
-                        >
-                          {TYP_LABELS[b.investition_typ] || b.investition_typ}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                        <FormelTooltip
-                          formel={kostenFormel}
-                          berechnung={kostenBerechnung}
-                          ergebnis={kostenErgebnis}
-                        >
-                          <span className="cursor-help border-b border-dotted border-gray-400">
-                            {b.relevante_kosten.toFixed(0)} €
+                    <>
+                      <tr
+                        key={b.investition_id}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-800 ${isPVSystem ? 'cursor-pointer' : ''}`}
+                        onClick={isPVSystem ? toggleExpanded : undefined}
+                      >
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                          <div className="flex items-center gap-2">
+                            {isPVSystem && (
+                              isExpanded
+                                ? <ChevronDown className="h-4 w-4 text-gray-400" />
+                                : <ChevronRight className="h-4 w-4 text-gray-400" />
+                            )}
+                            {(isOrphanPVModule || isEmptyWR) && (
+                              <span title={isOrphanPVModule ? 'PV-Modul ohne Wechselrichter-Zuordnung' : 'Wechselrichter ohne PV-Module'}>
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              </span>
+                            )}
+                            {b.investition_bezeichnung}
+                            {isPVSystem && (
+                              <span className="text-xs text-gray-400">
+                                ({b.komponenten!.length} Komponenten)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || '#6b7280'}20`, color: TYP_COLORS[b.investition_typ] || '#6b7280' }}
+                          >
+                            {TYP_LABELS[b.investition_typ] || b.investition_typ}
                           </span>
-                        </FormelTooltip>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-green-600">
-                        <FormelTooltip
-                          formel={`Jahresersparnis ${TYP_LABELS[b.investition_typ] || b.investition_typ}`}
-                          berechnung={hinweis || 'Berechnet aus Verbrauchsdaten'}
-                          ergebnis={`= ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                          <FormelTooltip
+                            formel={kostenFormel}
+                            berechnung={kostenBerechnung}
+                            ergebnis={kostenErgebnis}
+                          >
+                            <span className="cursor-help border-b border-dotted border-gray-400">
+                              {b.relevante_kosten.toFixed(0)} €
+                            </span>
+                          </FormelTooltip>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-green-600">
+                          <FormelTooltip
+                            formel={`Jahresersparnis ${TYP_LABELS[b.investition_typ] || b.investition_typ}`}
+                            berechnung={hinweis || 'Berechnet aus Verbrauchsdaten'}
+                            ergebnis={`= ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
+                          >
+                            <span className="cursor-help border-b border-dotted border-green-400">
+                              {b.jahres_einsparung.toFixed(0)} €
+                            </span>
+                          </FormelTooltip>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                          <FormelTooltip
+                            formel="Ersparnis ÷ Mehrkosten × 100"
+                            berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
+                            ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)}% p.a.` : 'nicht berechenbar'}
+                          >
+                            <span className="cursor-help border-b border-dotted border-gray-400">
+                              {b.roi_prozent?.toFixed(1) || '---'}%
+                            </span>
+                          </FormelTooltip>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                          <FormelTooltip
+                            formel="Mehrkosten ÷ Ersparnis"
+                            berechnung={`${fmtCalc(b.relevante_kosten, 0)} € ÷ ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
+                            ergebnis={b.amortisation_jahre ? `= ${b.amortisation_jahre.toFixed(1)} Jahre` : 'nicht berechenbar'}
+                          >
+                            <span className="cursor-help border-b border-dotted border-gray-400">
+                              {b.amortisation_jahre?.toFixed(1) || '---'} J.
+                            </span>
+                          </FormelTooltip>
+                        </td>
+                      </tr>
+                      {/* Komponenten-Zeilen für PV-Systeme */}
+                      {isPVSystem && isExpanded && b.komponenten!.map((komp: ROIKomponente) => (
+                        <tr
+                          key={`komp-${komp.investition_id}`}
+                          className="bg-gray-50 dark:bg-gray-800/50"
                         >
-                          <span className="cursor-help border-b border-dotted border-green-400">
-                            {b.jahres_einsparung.toFixed(0)} €
-                          </span>
-                        </FormelTooltip>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                        <FormelTooltip
-                          formel="Ersparnis ÷ Mehrkosten × 100"
-                          berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
-                          ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)}% p.a.` : 'nicht berechenbar'}
-                        >
-                          <span className="cursor-help border-b border-dotted border-gray-400">
-                            {b.roi_prozent?.toFixed(1) || '---'}%
-                          </span>
-                        </FormelTooltip>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                        <FormelTooltip
-                          formel="Mehrkosten ÷ Ersparnis"
-                          berechnung={`${fmtCalc(b.relevante_kosten, 0)} € ÷ ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
-                          ergebnis={b.amortisation_jahre ? `= ${b.amortisation_jahre.toFixed(1)} Jahre` : 'nicht berechenbar'}
-                        >
-                          <span className="cursor-help border-b border-dotted border-gray-400">
-                            {b.amortisation_jahre?.toFixed(1) || '---'} J.
-                          </span>
-                        </FormelTooltip>
-                      </td>
-                    </tr>
+                          <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 pl-10">
+                            <span className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: TYP_COLORS[komp.typ] || '#6b7280' }} />
+                              {komp.bezeichnung}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-500">
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              style={{ backgroundColor: `${TYP_COLORS[komp.typ] || '#6b7280'}15`, color: TYP_COLORS[komp.typ] || '#6b7280' }}
+                            >
+                              {TYP_LABELS[komp.typ] || komp.typ}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right text-gray-500">
+                            {komp.relevante_kosten.toFixed(0)} €
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right text-gray-500">
+                            {komp.einsparung !== null ? (
+                              <span className="text-green-500">{komp.einsparung.toFixed(0)} €</span>
+                            ) : (
+                              <span className="text-gray-400 italic text-xs">via Module</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right text-gray-400" colSpan={2}>
+                            {typeof komp.detail?.anteil_prozent === 'number' && (
+                              <span className="text-xs">{komp.detail.anteil_prozent.toFixed(0)}% Anteil</span>
+                            )}
+                            {typeof komp.detail?.hinweis === 'string' && (
+                              <span className="text-xs italic">{komp.detail.hinweis}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </>
                   )
                 })}
               </tbody>
             </table>
           </div>
         </Card>
-      )}
+        )
+      })()}
 
       {/* Investitionen-Liste */}
       <Card>
