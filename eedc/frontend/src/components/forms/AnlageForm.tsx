@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
-import { Button, Input, Select, Alert } from '../ui'
+import { Info } from 'lucide-react'
+import { Button, Input, Alert } from '../ui'
 import type { Anlage, AnlageCreate } from '../../types'
 
 interface AnlageFormProps {
@@ -7,15 +8,6 @@ interface AnlageFormProps {
   onSubmit: (data: AnlageCreate) => Promise<void>
   onCancel: () => void
 }
-
-const ausrichtungOptions = [
-  { value: 'Süd', label: 'Süd' },
-  { value: 'Südost', label: 'Südost' },
-  { value: 'Südwest', label: 'Südwest' },
-  { value: 'Ost', label: 'Ost' },
-  { value: 'West', label: 'West' },
-  { value: 'Ost-West', label: 'Ost-West' },
-]
 
 export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormProps) {
   const [loading, setLoading] = useState(false)
@@ -30,8 +22,6 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     standort_strasse: anlage?.standort_strasse || '',
     latitude: anlage?.latitude?.toString() || '',
     longitude: anlage?.longitude?.toString() || '',
-    ausrichtung: anlage?.ausrichtung || '',
-    neigung_grad: anlage?.neigung_grad?.toString() || '',
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -64,8 +54,6 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         standort_strasse: formData.standort_strasse || undefined,
         latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
         longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
-        ausrichtung: formData.ausrichtung || undefined,
-        neigung_grad: formData.neigung_grad ? parseFloat(formData.neigung_grad) : undefined,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -113,29 +101,15 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         </div>
       </div>
 
-      {/* Technische Daten */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Technische Daten</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select
-            label="Ausrichtung"
-            name="ausrichtung"
-            value={formData.ausrichtung}
-            onChange={handleChange}
-            options={ausrichtungOptions}
-            placeholder="-- Auswählen --"
-          />
-          <Input
-            label="Neigung (Grad)"
-            name="neigung_grad"
-            type="number"
-            step="1"
-            min="0"
-            max="90"
-            value={formData.neigung_grad}
-            onChange={handleChange}
-            placeholder="z.B. 30"
-          />
+      {/* Hinweis zu technischen Daten */}
+      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">
+        <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+        <div className="text-xs text-blue-700 dark:text-blue-300">
+          <p className="font-medium mb-1">Ausrichtung & Neigung</p>
+          <p>
+            Diese Werte werden pro <strong>PV-Modul</strong> unter <strong>Einstellungen → Investitionen</strong> gepflegt.
+            So können auch Anlagen mit mehreren Dachflächen korrekt abgebildet werden.
+          </p>
         </div>
       </div>
 
