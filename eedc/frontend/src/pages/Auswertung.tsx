@@ -866,6 +866,10 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
     )
   }
 
+  // Berechnungsdetails für Tooltips extrahieren
+  const pvModulDetails = roiData?.berechnungen.find(b => b.investition_typ === 'pv-module')?.detail_berechnung as Record<string, unknown> | undefined
+  const hochrechnungsHinweis = pvModulDetails?.hinweis as string | undefined
+
   return (
     <div className="space-y-6">
       {/* Gesamt-KPIs */}
@@ -878,6 +882,9 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
           icon={Wallet}
           color="text-blue-500"
           bgColor="bg-blue-50 dark:bg-blue-900/20"
+          formel="Σ Anschaffungskosten − Alternativkosten"
+          berechnung={roiData ? `${fmtCalc(roiData.gesamt_investition, 0)} € − ${fmtCalc(roiData.gesamt_investition - roiData.gesamt_relevante_kosten, 0)} € Alternativ` : undefined}
+          ergebnis={roiData ? `= ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € relevante Kosten` : undefined}
         />
         <KPICard
           title="Jahresersparnis"
@@ -886,6 +893,9 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
           icon={TrendingUp}
           color="text-green-500"
           bgColor="bg-green-50 dark:bg-green-900/20"
+          formel="Einspeiseerlös + Eigenverbrauch-Ersparnis"
+          berechnung={pvModulDetails ? `${fmtCalc(pvModulDetails.einspeise_erloes_euro as number, 2)} € + ${fmtCalc(pvModulDetails.ev_ersparnis_euro as number, 2)} €` : 'Σ aller Investitions-Einsparungen'}
+          ergebnis={hochrechnungsHinweis || (roiData ? `= ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined)}
         />
         <KPICard
           title="ROI"
@@ -895,6 +905,9 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
           icon={TrendingUp}
           color="text-purple-500"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
+          formel="Jahresersparnis ÷ Relevante Kosten × 100"
+          berechnung={roiData && roiData.gesamt_relevante_kosten > 0 ? `${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € ÷ ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € × 100` : undefined}
+          ergebnis={roiData?.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent}% ROI p.a.` : undefined}
         />
         <KPICard
           title="Amortisation"
@@ -903,6 +916,9 @@ function InvestitionenTab({ anlageId, strompreis }: InvestitionenTabProps) {
           icon={Calendar}
           color="text-amber-500"
           bgColor="bg-amber-50 dark:bg-amber-900/20"
+          formel="Relevante Kosten ÷ Jahresersparnis"
+          berechnung={roiData && roiData.gesamt_jahres_einsparung > 0 ? `${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined}
+          ergebnis={roiData?.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre} Jahre bis zur Kostendeckung` : undefined}
         />
       </div>
 
