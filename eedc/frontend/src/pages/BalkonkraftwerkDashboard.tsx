@@ -139,6 +139,9 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           unit="kWh"
           icon={Zap}
           color="yellow"
+          formel="Σ Erzeugung alle Monate"
+          berechnung={`${z.anzahl_monate} Monate`}
+          ergebnis={`= ${z.gesamt_erzeugung_kwh.toFixed(0)} kWh`}
         />
         <KPICard
           title="Eigenverbrauch"
@@ -146,6 +149,9 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           unit="%"
           icon={Home}
           color="green"
+          formel="EV-Quote = Eigenverbrauch ÷ Erzeugung × 100"
+          berechnung={`${z.gesamt_eigenverbrauch_kwh.toFixed(0)} kWh ÷ ${z.gesamt_erzeugung_kwh.toFixed(0)} kWh × 100`}
+          ergebnis={`= ${z.eigenverbrauch_quote_prozent.toFixed(1)} %`}
         />
         <KPICard
           title="Ersparnis"
@@ -154,6 +160,9 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           icon={TrendingUp}
           color="green"
           trend={z.gesamt_ersparnis_euro > 0 ? 'up' : undefined}
+          formel="Ersparnis = Eigenverbrauch × Strompreis"
+          berechnung={`${z.gesamt_eigenverbrauch_kwh.toFixed(0)} kWh × Strompreis`}
+          ergebnis={`= ${z.gesamt_ersparnis_euro.toFixed(2)} €`}
         />
         <KPICard
           title="CO₂ gespart"
@@ -161,6 +170,9 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           unit="kg"
           icon={Leaf}
           color="green"
+          formel="CO₂ = Eigenverbrauch × 0.4 kg/kWh"
+          berechnung={`${z.gesamt_eigenverbrauch_kwh.toFixed(0)} kWh × 0.4`}
+          ergebnis={`= ${z.co2_ersparnis_kg.toFixed(0)} kg`}
         />
       </div>
 

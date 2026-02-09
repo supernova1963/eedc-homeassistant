@@ -133,6 +133,9 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
           value={z.vollzyklen.toFixed(0)}
           icon={RotateCw}
           color="blue"
+          formel="Vollzyklen = Ladung ÷ Kapazität"
+          berechnung={`${z.gesamt_ladung_kwh.toFixed(0)} kWh ÷ ${z.kapazitaet_kwh} kWh`}
+          ergebnis={`= ${z.vollzyklen.toFixed(1)} Zyklen`}
         />
         <KPICard
           title="Effizienz"
@@ -140,6 +143,9 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
           unit="%"
           icon={Activity}
           color="green"
+          formel="Effizienz = Entladung ÷ Ladung × 100"
+          berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh ÷ ${z.gesamt_ladung_kwh.toFixed(0)} kWh × 100`}
+          ergebnis={`= ${z.effizienz_prozent.toFixed(1)} %`}
         />
         <KPICard
           title="Durchsatz"
@@ -147,6 +153,9 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
           unit="MWh"
           icon={Zap}
           color="yellow"
+          formel="Durchsatz = Σ Entladung"
+          berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh`}
+          ergebnis={`= ${(z.gesamt_entladung_kwh / 1000).toFixed(2)} MWh`}
         />
         <KPICard
           title="Ersparnis"
@@ -155,6 +164,9 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
           icon={TrendingUp}
           color="green"
           trend={z.ersparnis_euro > 0 ? 'up' : undefined}
+          formel="Ersparnis = Entladung × Strompreis"
+          berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh × Strompreis`}
+          ergebnis={`= ${z.ersparnis_euro.toFixed(2)} €`}
         />
       </div>
 

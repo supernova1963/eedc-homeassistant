@@ -147,6 +147,9 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
               subtitle="PV + Netz"
               icon={Home}
               color="purple"
+              formel="Heimladung = PV + Netz"
+              berechnung={`${(z.ladung_pv_kwh || 0).toFixed(0)} + ${(z.ladung_netz_kwh || 0).toFixed(0)} kWh`}
+              ergebnis={`= ${(z.gesamt_heim_ladung_kwh || 0).toFixed(0)} kWh`}
             />
             <KPICard
               title="PV-Anteil"
@@ -155,6 +158,9 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
               subtitle={`${(z.ladung_pv_kwh || 0).toFixed(0)} kWh`}
               icon={Leaf}
               color="green"
+              formel="PV-Anteil = PV ÷ Heimladung × 100"
+              berechnung={`${(z.ladung_pv_kwh || 0).toFixed(0)} kWh ÷ ${(z.gesamt_heim_ladung_kwh || 0).toFixed(0)} kWh × 100`}
+              ergebnis={`= ${(z.pv_anteil_prozent || 0).toFixed(1)} %`}
             />
             <KPICard
               title="Ersparnis vs. Extern"
@@ -164,6 +170,9 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
               icon={TrendingUp}
               color="green"
               trend={(z.ersparnis_vs_extern_euro || 0) > 0 ? 'up' : undefined}
+              formel="Ersparnis = Extern-Kosten − Heim-Kosten"
+              berechnung={`${(z.heim_als_extern_kosten_euro || 0).toFixed(0)} € − ${(z.heim_kosten_euro || 0).toFixed(0)} €`}
+              ergebnis={`= ${(z.ersparnis_vs_extern_euro || 0).toFixed(2)} €`}
             />
             <KPICard
               title="Ladevorgänge"
@@ -171,6 +180,9 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
               subtitle={`Ø ${(z.ladevorgaenge_pro_monat || 0).toFixed(1)}/Monat`}
               icon={Zap}
               color="blue"
+              formel="Σ Ladevorgänge"
+              berechnung={`${z.anzahl_monate || 0} Monate`}
+              ergebnis={`= ${z.gesamt_ladevorgaenge || 0} Vorgänge`}
             />
           </div>
 

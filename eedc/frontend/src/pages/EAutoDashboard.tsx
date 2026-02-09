@@ -150,6 +150,9 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           unit="km"
           icon={Car}
           color="blue"
+          formel="Σ km gefahren"
+          berechnung={`${z.anzahl_monate} Monate`}
+          ergebnis={`= ${(z.gesamt_km || 0).toLocaleString('de-DE')} km`}
         />
         <KPICard
           title="Verbrauch"
@@ -157,6 +160,9 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           unit="kWh/100km"
           icon={Zap}
           color="yellow"
+          formel="Verbrauch = kWh ÷ km × 100"
+          berechnung={`${(z.gesamt_verbrauch_kwh || 0).toFixed(0)} kWh ÷ ${z.gesamt_km || 0} km × 100`}
+          ergebnis={`= ${(z.durchschnitt_verbrauch_kwh_100km || 0).toFixed(1)} kWh/100km`}
         />
         <KPICard
           title="PV-Anteil (Heim)"
@@ -165,6 +171,9 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           subtitle={`Gesamt: ${(z.pv_anteil_gesamt_prozent || 0).toFixed(0)}%`}
           icon={Leaf}
           color="green"
+          formel="PV-Anteil = PV-Ladung ÷ Heimladung × 100"
+          berechnung={`${(z.ladung_pv_kwh || 0).toFixed(0)} kWh ÷ ${(z.ladung_heim_kwh || 0).toFixed(0)} kWh × 100`}
+          ergebnis={`= ${(z.pv_anteil_heim_prozent || 0).toFixed(1)} %`}
         />
         <KPICard
           title="Ersparnis vs. Benzin"
@@ -174,6 +183,9 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           icon={TrendingUp}
           color="green"
           trend={(z.gesamt_ersparnis_euro || 0) > 0 ? 'up' : undefined}
+          formel="Ersparnis = Benzinkosten − Stromkosten"
+          berechnung={`${(z.benzin_kosten_alternativ_euro || 0).toFixed(0)} € − ${(z.strom_kosten_gesamt_euro || 0).toFixed(0)} €`}
+          ergebnis={`= ${(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €`}
         />
       </div>
 

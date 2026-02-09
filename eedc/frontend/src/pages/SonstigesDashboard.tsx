@@ -166,6 +166,9 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="kWh"
           icon={Zap}
           color="yellow"
+          formel="Σ Erzeugung alle Monate"
+          berechnung={`${z.anzahl_monate} Monate`}
+          ergebnis={`= ${(z.gesamt_erzeugung_kwh || 0).toFixed(0)} kWh`}
         />
         <KPICard
           title="Eigenverbrauch"
@@ -173,6 +176,9 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="%"
           icon={Home}
           color="green"
+          formel="EV-Quote = Eigenverbrauch ÷ Erzeugung × 100"
+          berechnung={`${(z.gesamt_eigenverbrauch_kwh || 0).toFixed(0)} ÷ ${(z.gesamt_erzeugung_kwh || 0).toFixed(0)} × 100`}
+          ergebnis={`= ${(z.eigenverbrauch_quote_prozent || 0).toFixed(1)} %`}
         />
         <KPICard
           title="Ersparnis"
@@ -181,6 +187,9 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
           icon={TrendingUp}
           color="green"
           trend={(z.gesamt_ersparnis_euro || 0) > 0 ? 'up' : undefined}
+          formel="Ersparnis = Eigenverbrauch × Strompreis"
+          berechnung={`${(z.gesamt_eigenverbrauch_kwh || 0).toFixed(0)} kWh × Strompreis`}
+          ergebnis={`= ${(z.gesamt_ersparnis_euro || 0).toFixed(2)} €`}
         />
         <KPICard
           title="CO₂ gespart"
@@ -188,6 +197,9 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="kg"
           icon={Leaf}
           color="green"
+          formel="CO₂ = Eigenverbrauch × 0.4 kg/kWh"
+          berechnung={`${(z.gesamt_eigenverbrauch_kwh || 0).toFixed(0)} kWh × 0.4`}
+          ergebnis={`= ${(z.co2_ersparnis_kg || 0).toFixed(0)} kg`}
         />
       </div>
 
@@ -333,6 +345,9 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="kWh"
           icon={Zap}
           color="blue"
+          formel="Σ Verbrauch alle Monate"
+          berechnung={`${z.anzahl_monate} Monate`}
+          ergebnis={`= ${(z.gesamt_verbrauch_kwh || 0).toFixed(0)} kWh`}
         />
         <KPICard
           title="PV-Anteil"
@@ -340,6 +355,9 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="%"
           icon={Home}
           color="green"
+          formel="PV-Anteil = PV-Bezug ÷ Verbrauch × 100"
+          berechnung={`${(z.bezug_pv_kwh || 0).toFixed(0)} ÷ ${(z.gesamt_verbrauch_kwh || 0).toFixed(0)} × 100`}
+          ergebnis={`= ${(z.pv_anteil_prozent || 0).toFixed(1)} %`}
         />
         <KPICard
           title="Netzkosten"
@@ -347,6 +365,9 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="€"
           icon={TrendingUp}
           color="red"
+          formel="Netzkosten = Netzbezug × Strompreis"
+          berechnung={`${(z.bezug_netz_kwh || 0).toFixed(0)} kWh × Strompreis`}
+          ergebnis={`= ${(z.kosten_netz_euro || 0).toFixed(2)} €`}
         />
         <KPICard
           title="PV-Ersparnis"
@@ -355,6 +376,9 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
           icon={Leaf}
           color="green"
           trend={(z.ersparnis_pv_euro || 0) > 0 ? 'up' : undefined}
+          formel="PV-Ersparnis = PV-Bezug × Strompreis"
+          berechnung={`${(z.bezug_pv_kwh || 0).toFixed(0)} kWh × Strompreis`}
+          ergebnis={`= ${(z.ersparnis_pv_euro || 0).toFixed(2)} €`}
         />
       </div>
 
@@ -494,6 +518,9 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="kWh"
           icon={Battery}
           color="purple"
+          formel="Σ Ladung alle Monate"
+          berechnung={`${z.anzahl_monate} Monate`}
+          ergebnis={`= ${(z.gesamt_ladung_kwh || 0).toFixed(0)} kWh`}
         />
         <KPICard
           title="Entladung"
@@ -501,6 +528,9 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="kWh"
           icon={Zap}
           color="green"
+          formel="Σ Entladung alle Monate"
+          berechnung={`${z.anzahl_monate} Monate`}
+          ergebnis={`= ${(z.gesamt_entladung_kwh || 0).toFixed(0)} kWh`}
         />
         <KPICard
           title="Effizienz"
@@ -508,6 +538,9 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
           unit="%"
           icon={TrendingUp}
           color="blue"
+          formel="Effizienz = Entladung ÷ Ladung × 100"
+          berechnung={`${(z.gesamt_entladung_kwh || 0).toFixed(0)} ÷ ${(z.gesamt_ladung_kwh || 0).toFixed(0)} × 100`}
+          ergebnis={`= ${(z.effizienz_prozent || 0).toFixed(1)} %`}
         />
         <KPICard
           title="Ersparnis"
@@ -516,6 +549,9 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
           icon={TrendingUp}
           color="green"
           trend={(z.ersparnis_euro || 0) > 0 ? 'up' : undefined}
+          formel="Ersparnis = Entladung × Strompreis"
+          berechnung={`${(z.gesamt_entladung_kwh || 0).toFixed(0)} kWh × Strompreis`}
+          ergebnis={`= ${(z.ersparnis_euro || 0).toFixed(2)} €`}
         />
       </div>
 

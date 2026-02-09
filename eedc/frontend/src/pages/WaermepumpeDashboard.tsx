@@ -140,6 +140,9 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           value={z.durchschnitt_cop.toFixed(2)}
           icon={Thermometer}
           color="orange"
+          formel="COP = Wärme ÷ Strom"
+          berechnung={`${z.gesamt_waerme_kwh.toFixed(0)} kWh ÷ ${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
+          ergebnis={`= ${z.durchschnitt_cop.toFixed(2)}`}
         />
         <KPICard
           title="Wärme erzeugt"
@@ -147,6 +150,9 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           unit="MWh"
           icon={Flame}
           color="red"
+          formel="Wärme = Heizung + Warmwasser"
+          berechnung={`${z.gesamt_heizenergie_kwh.toFixed(0)} + ${z.gesamt_warmwasser_kwh.toFixed(0)} kWh`}
+          ergebnis={`= ${z.gesamt_waerme_kwh.toFixed(0)} kWh`}
         />
         <KPICard
           title="Strom verbraucht"
@@ -154,6 +160,9 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           unit="MWh"
           icon={Zap}
           color="yellow"
+          formel="Σ Stromverbrauch WP"
+          berechnung={`${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
+          ergebnis={`= ${(z.gesamt_stromverbrauch_kwh / 1000).toFixed(2)} MWh`}
         />
         <KPICard
           title="Ersparnis"
@@ -162,6 +171,9 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           icon={TrendingUp}
           color="green"
           trend={z.ersparnis_euro > 0 ? 'up' : undefined}
+          formel="Ersparnis = Gas/Öl-Kosten − WP-Kosten"
+          berechnung={`${z.alte_heizung_kosten_euro.toFixed(0)} € − ${z.wp_kosten_euro.toFixed(0)} €`}
+          ergebnis={`= ${z.ersparnis_euro.toFixed(2)} €`}
         />
       </div>
 
