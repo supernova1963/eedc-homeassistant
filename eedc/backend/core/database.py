@@ -43,7 +43,7 @@ async def run_migrations(conn):
     def _run_migrations(connection):
         inspector = inspect(connection)
 
-        # v0.8.0: Neue ha_sensor_* Spalten zur anlagen Tabelle
+        # v0.8.0+: Neue Spalten zur anlagen Tabelle
         if 'anlagen' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('anlagen')}
             new_columns = [
@@ -52,12 +52,26 @@ async def run_migrations(conn):
                 ('ha_sensor_netzbezug', 'VARCHAR(255)'),
                 ('ha_sensor_batterie_ladung', 'VARCHAR(255)'),
                 ('ha_sensor_batterie_entladung', 'VARCHAR(255)'),
+                ('wechselrichter_hersteller', 'VARCHAR(50)'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE anlagen ADD COLUMN {col_name} {col_type}'))
 
-    conn.run_sync(_run_migrations)
+        # v0.9.5+: Neue Spalten zur investitionen Tabelle (PV-Module spezifisch)
+        if 'investitionen' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('investitionen')}
+            new_columns = [
+                ('leistung_kwp', 'FLOAT'),
+                ('ausrichtung', 'VARCHAR(50)'),
+                ('neigung_grad', 'FLOAT'),
+                ('ha_entity_id', 'VARCHAR(255)'),
+            ]
+            for col_name, col_type in new_columns:
+                if col_name not in existing_columns:
+                    connection.execute(text(f'ALTER TABLE investitionen ADD COLUMN {col_name} {col_type}'))
+
+    await conn.run_sync(_run_migrations)
 
 
 async def init_db():

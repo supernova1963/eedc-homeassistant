@@ -11,6 +11,7 @@ export { importApi } from './import'
 export { systemApi } from './system'
 export { pvgisApi } from './pvgis'
 export { haApi } from './ha'
+export { cockpitApi } from './cockpit'
 
 // Re-export types
 export type { ApiError } from './client'
@@ -21,3 +22,4 @@ export type { StrompreisCreate, StrompreisUpdate } from './strompreise'
 export type { CSVTemplateInfo, DemoDataResult } from './import'
 export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from './pvgis'
 export type { HASensor, HAStatus, StringMonatsdaten, StringMonatsdatenCreate, HAImportResult, HAImportPreview, HAImportPreviewMonth, MonthlyStatistic, HAMonthlyDataResponse } from './ha'
+export type { CockpitUebersicht } from './cockpit'

@@ -1,6 +1,116 @@
-# Plan: Cockpit Übersicht - Vollständige Investitionsaggregation
+# Plan: Cockpit & Auswertungen - Strukturierung
 
-## Zielsetzung
+## Grundlegende Abgrenzung
+
+### Cockpit vs. Auswertungen
+
+| Dimension | **Cockpit** | **Auswertungen** |
+|-----------|-------------|------------------|
+| **Fokus** | Status & Gesamt-KPIs | Trends, Vergleiche, Details |
+| **Zeitbezug** | Kumulierte Werte (Lifetime, YTD) | Zeitreihen (Monat/Jahr) |
+| **Interaktion** | Lesen/Überwachen (passiv) | Erkunden/Analysieren (aktiv) |
+| **Use-Case** | "Wie steht meine Anlage?" (30 Sek.) | "Warum? Was optimieren?" (10+ Min.) |
+| **Charts** | Kompakte Donuts/Gauges | Vollständige Zeitreihen |
+| **Daten** | Nur Anzeige | + Download (CSV/JSON/Excel) |
+
+### Leitfragen
+
+- **Cockpit**: "Wo stehe ich?" → Aggregierte Lifetime-Werte, schnelle Orientierung
+- **Auswertungen**: "Wie entwickelt sich was?" → Zeitreihen, Drill-down, Export
+
+---
+
+## Cockpit-Struktur
+
+### Tabs
+| Tab | Inhalt |
+|-----|--------|
+| **Übersicht** | Aggregierte KPIs aller Komponenten (siehe unten) |
+| **PV-Anlage** | WR + Module + DC-Speicher, String-Vergleich |
+| **E-Auto** | Ladung, km, PV-Anteil, V2H |
+| **Wärmepumpe** | COP, Wärme, Stromverbrauch |
+| **Speicher** | Zyklen, Effizienz, Ladung/Entladung |
+| **Wallbox** | Ladevorgänge, PV-Anteil |
+| **Balkonkraftwerk** | Erzeugung, Eigenverbrauch |
+| **Sonstiges** | Flexible Kategorien |
+
+---
+
+## Auswertungen-Struktur
+
+### Tabs
+| Tab | Inhalt | Datenexport |
+|-----|--------|-------------|
+| **Jahresvergleich** | Mehrjahres-Charts, Δ%-Indikatoren, Monatstabelle | CSV/Excel |
+| **ROI-Analyse** | Amortisation, Payback, Komponenten-ROI | CSV/Excel |
+| **Prognose vs. IST** | PVGIS-Prognose vs. reale Erzeugung pro String | CSV/Excel |
+| **Nachhaltigkeit** | CO₂-Bilanz, Autarkie-Entwicklung, Umwelt-Impact | CSV/Excel |
+| **KI-Insights** | Optimierungsvorschläge, Anomalie-Erkennung | - |
+
+### Jahresvergleich (existiert)
+- Monats-Balkendiagramme (Erzeugung, Verbrauch, Autarkie)
+- Jahr-über-Jahr Δ%-Indikatoren
+- Jahres-Summentabelle mit Export
+
+### ROI-Analyse (existiert)
+- Amortisationskurve pro Komponente
+- Aggregierte PV-System-ROI
+- Break-Even-Prognose
+- Kosten nach Kategorie
+
+### Prognose vs. IST (neu)
+- PVGIS-Prognosewerte (falls hinterlegt)
+- Reale Monatswerte im Vergleich
+- Abweichungs-Heatmap pro String/Monat
+- Performance-Ratio Berechnung
+
+### Nachhaltigkeit (neu)
+- CO₂-Einsparung kumuliert über Zeit
+- Autarkie-Entwicklung als Zeitreihe
+- Äquivalente (Bäume, km Auto, etc.)
+- Umwelt-Zertifikat zum Download
+
+### KI-Insights (Roadmap)
+- Anomalie-Erkennung (ungewöhnliche Verbräuche)
+- Optimierungsvorschläge (Lastverschiebung)
+- Prognose nächster Monat
+- Vergleich mit ähnlichen Anlagen (anonymisiert)
+
+---
+
+## PDF-Export (Querschnittsfunktion)
+
+PDF-Export ist **kein eigener Tab**, sondern eine Funktion auf relevanten Seiten.
+
+### Strategie (Priorisiert)
+
+| Priorität | Ansatz | Aufwand | Beschreibung |
+|-----------|--------|---------|--------------|
+| **1. Kurzfristig** | Print-Styles | Gering | CSS `@media print` für alle Seiten |
+| **2. Mittelfristig** | Button pro Seite | Mittel | "Als PDF exportieren" auf ROI, Jahresvergleich |
+| **3. Optional** | Jahresbericht | Hoch | Generator nur wenn User-Bedarf besteht |
+
+### Print-Styles (Sofort umsetzbar)
+- Gute `@media print` CSS-Regeln
+- User nutzt Browser Strg+P → "Als PDF speichern"
+- Kein zusätzlicher Code nötig
+- Funktioniert auf allen Seiten
+
+### PDF-Button (Bei Bedarf)
+- Nur auf Seiten wo sinnvoll: ROI-Analyse, Jahresvergleich, Cockpit-Übersicht
+- Bibliothek: `html2pdf.js` oder `jspdf` + `html2canvas`
+- Exportiert aktuell sichtbare Ansicht inkl. Charts
+
+### Jahresbericht-Generator (Optional/Roadmap)
+- Nur implementieren wenn echter User-Bedarf
+- Problem: Muss bei jeder Änderung mitgepflegt werden
+- Alternative: Gute Print-Styles + Anleitung für User
+
+---
+
+## Cockpit Übersicht - Detail-Design
+
+### Zielsetzung
 
 Die **Übersicht** im Cockpit soll eine **vollständige Zusammenfassung aller Investitionen** bieten - auf einen Blick alle wichtigen KPIs aggregiert.
 
@@ -221,3 +331,45 @@ Die Übersicht soll einen **Jahr-Filter** haben (wie ROI-Dashboard):
 - etc.
 
 Alle aggregierten Werte werden dann für den gewählten Zeitraum berechnet.
+
+---
+
+## Implementierungsreihenfolge (Gesamt)
+
+### Phase 1: Cockpit Übersicht (Priorität hoch)
+1. Backend: `/api/cockpit/uebersicht/{anlage_id}`
+2. Frontend: Dashboard.tsx Redesign
+3. Navigation: Klick-Navigation zu Detail-Dashboards
+
+### Phase 2: Auswertungen Basis (Priorität hoch)
+4. Jahresvergleich: Datenexport-Buttons (CSV/Excel)
+5. ROI-Analyse: Datenexport-Buttons
+
+### Phase 3: Auswertungen Erweiterung (Priorität mittel)
+6. Prognose vs. IST Tab (PVGIS-Vergleich)
+7. Nachhaltigkeit Tab (CO₂-Zeitreihe)
+
+### Phase 4: Advanced Features (Priorität niedrig)
+8. KI-Insights (Roadmap)
+
+---
+
+## Zusammenfassung
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        eedc                                 │
+├─────────────────────────┬───────────────────────────────────┤
+│       COCKPIT           │         AUSWERTUNGEN              │
+│  "Wo stehe ich?"        │  "Wie entwickelt sich was?"       │
+├─────────────────────────┼───────────────────────────────────┤
+│ • Aggregierte KPIs      │ • Zeitreihen-Charts               │
+│ • Lifetime-Werte        │ • Jahr-für-Jahr Vergleiche        │
+│ • Schnelle Orientierung │ • Drill-down & Filter             │
+│ • Komponenten-Status    │ • Datenexport (CSV/Excel)         │
+│ • Klick → Detail        │ • ROI-Analysen                    │
+│                         │ • Prognose vs. IST                │
+│                         │ • Nachhaltigkeit                  │
+│                         │ • KI-Insights (Roadmap)           │
+└─────────────────────────┴───────────────────────────────────┘
+```

@@ -13,9 +13,6 @@ import {
   Plug,
   Sun,
   Wrench,
-  BarChart3,
-  TrendingUp,
-  FileText,
   Home,
   Zap,
   PiggyBank,
@@ -44,13 +41,8 @@ const cockpitTabs: TabItem[] = [
   { name: 'Sonstiges', href: '/cockpit/sonstiges', icon: Wrench },
 ]
 
-// Sub-Tabs für Auswertungen
-const auswertungenTabs: TabItem[] = [
-  { name: 'Jahresvergleich', href: '/auswertungen', icon: BarChart3, exact: true },
-  { name: 'ROI-Analyse', href: '/auswertungen/roi', icon: TrendingUp },
-  { name: 'Prognose vs. IST', href: '/auswertungen/prognose', icon: TrendingUp },
-  { name: 'PDF-Export', href: '/auswertungen/export', icon: FileText },
-]
+// Sub-Tabs für Auswertungen (leer, da Auswertung.tsx eigene Inline-Tabs hat)
+const auswertungenTabs: TabItem[] = []
 
 // Sub-Tabs für Einstellungen
 const einstellungenTabs: TabItem[] = [

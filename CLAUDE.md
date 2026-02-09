@@ -4,7 +4,7 @@
 
 **eedc** (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur lokalen PV-Anlagen-Auswertung.
 
-**Version:** 0.9.6 Beta
+**Version:** 0.9.7 Beta
 **Status:** Beta-ready für Tests
 
 ## Tech-Stack
@@ -34,6 +34,7 @@ Add-on:   eedc/config.yaml (version)
 ```
 Backend:
   - main.py                      # FastAPI App, Health/Settings/Stats
+  - api/routes/cockpit.py        # NEU: Aggregierte Cockpit-Übersicht
   - api/routes/import_export.py  # CSV Import/Export (dynamische Spalten)
   - api/routes/monatsdaten.py    # Monatsdaten CRUD + Berechnungen
   - api/routes/investitionen.py  # Investitionen mit Parent-Child
@@ -43,10 +44,13 @@ Backend:
   - services/mqtt_client.py      # MQTT Discovery Client
 
 Frontend:
+  - pages/Dashboard.tsx                   # Cockpit-Übersicht (7 Sektionen, Jahr-Filter)
+  - pages/Auswertung.tsx                  # 5 Tabs + CSV-Export (Jahresvergleich, PV, ROI, Finanzen, CO2)
+  - api/cockpit.ts                        # NEU: Cockpit-API Client
+  - utils/export.ts                       # NEU: CSV/JSON Export Utilities
   - components/forms/MonatsdatenForm.tsx  # Dynamische Felder (V2H, Arbitrage)
   - components/forms/InvestitionForm.tsx  # Investitions-Parameter
   - pages/Monatsdaten.tsx                 # Tabelle mit Spalten-Toggle
-  - pages/Auswertung.tsx                  # 5 Tabs (Jahresvergleich, PV, Investitionen, Finanzen, CO2)
   - pages/HAExportSettings.tsx            # HA Export Konfiguration (MQTT/REST)
   - components/layout/SubTabs.tsx         # Kontextabhängige Sub-Navigation
   - components/layout/TopNavigation.tsx   # Hauptnavigation + Einstellungen-Dropdown
@@ -123,8 +127,66 @@ cd eedc && docker build -t eedc-test .
 - [ ] PDF-Export
 - [ ] KI-Insights
 - [ ] SOLL-IST Vergleich pro String (Frontend)
+- [ ] PV-String-Vergleich Endpoint `/api/cockpit/pv-strings/{anlage_id}`
+- [ ] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen)
+- [ ] Sonderkosten in Finanzen-Tab integrieren
 
-## Letzte Änderungen (v0.9.6)
+## Letzte Änderungen (v0.9.8) - IN ARBEIT
+
+### Große Daten-Bereinigung: Monatsdaten vs. InvestitionMonatsdaten
+
+**Problem gelöst:** Cockpit-Endpoints mischten inkonsistent zwei Datenquellen.
+
+**Neue Architektur:**
+- `Monatsdaten` = NUR Anlagen-Energiebilanz (Einspeisung, Netzbezug)
+- `InvestitionMonatsdaten` = ALLE Komponenten-Details
+
+**Korrigierte Endpoints:**
+- `get_cockpit_uebersicht`: Speicher jetzt aus InvestitionMonatsdaten
+- `get_nachhaltigkeit`: Zeitreihe aus InvestitionMonatsdaten
+- `get_komponenten_zeitreihe`: Erweitert mit neuen Feldern
+
+**Neue Auswertungsfelder (Backend + Frontend):**
+- **Speicher:** Arbitrage (Netzladung), Ladepreis
+- **E-Auto:** V2H-Entladung, Ladequellen (PV/Netz/Extern), Externe Kosten
+- **Wärmepumpe:** Heizung vs. Warmwasser getrennt
+- **Balkonkraftwerk:** Speicher-Ladung/Entladung
+- **Alle:** Sonderkosten aggregiert, Feature-Flags (hat_arbitrage, hat_v2h)
+
+**Frontend KomponentenTab erweitert:**
+- Speicher: Arbitrage-Badge + KPI + Chart
+- E-Auto: V2H-Badge, Ladequellen-Breakdown, gestapeltes Chart
+- Wärmepumpe: Heizung/Warmwasser getrennt (KPIs + gestapeltes Chart)
+- Balkonkraftwerk: "mit Speicher"-Badge + Speicher-KPIs
+
+**Dokumentation:** Siehe `PLAN_AUSWERTUNGEN_BEREINIGUNG.md`
+
+## Änderungen (v0.9.7)
+
+1. **Cockpit-Übersicht komplett neu**:
+   - Neuer Backend-Endpoint: `/api/cockpit/uebersicht/{anlage_id}`
+   - 7 aggregierte Sektionen:
+     - Energie-Bilanz (PV, Verbrauch, Netzbezug, Einspeisung)
+     - Effizienz-Quoten (Autarkie, EV-Quote, Direktverbrauch, Spez. Ertrag)
+     - Speicher (wenn vorhanden, mit Klick-Navigation)
+     - Wärmepumpe (wenn vorhanden, mit COP + Ersparnis)
+     - E-Mobilität (wenn vorhanden, km + PV-Anteil)
+     - Finanzen (Erlös, Ersparnis, ROI-Fortschritt)
+     - CO₂-Bilanz (PV, WP, E-Auto, Gesamt)
+   - Jahr-Filter für Zeitraum-Auswahl
+   - Alle KPIs mit Formel-Tooltips
+
+2. **Datenexport in Auswertungen**:
+   - CSV-Export für Jahresvergleich
+   - CSV-Export für ROI-Analyse
+   - Deutsche Notation (Semikolon, Komma-Dezimal)
+   - UTF-8 BOM für Excel-Kompatibilität
+
+3. **Abgrenzung Cockpit vs. Auswertungen** (siehe PLAN_COCKPIT_UEBERSICHT.md):
+   - Cockpit = "Wo stehe ich?" (aggregierte Lifetime-Werte)
+   - Auswertungen = "Wie entwickelt sich was?" (Zeitreihen + Export)
+
+## Änderungen (v0.9.6)
 
 1. **Cockpit-Struktur verbessert**:
    - Neuer Tab "PV-Anlage" mit detaillierter PV-System-Übersicht

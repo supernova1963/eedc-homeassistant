@@ -1234,18 +1234,39 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         db.add(sp)
 
     # 3. Investitionen erstellen
-    # Speicher
+    # Wechselrichter (muss zuerst erstellt werden für Parent-Verknüpfungen)
+    wechselrichter = Investition(
+        anlage_id=anlage.id,
+        typ="wechselrichter",
+        bezeichnung="Fronius Symo GEN24 10.0 Plus",
+        anschaffungsdatum=date(2023, 6, 1),
+        anschaffungskosten_gesamt=3500,
+        parameter={
+            "hersteller": "fronius",
+            "max_leistung_kw": 10,
+            "hybrid": True,
+            "notstromfaehig": True,
+            "phasen": 3,
+        },
+        aktiv=True,
+    )
+    db.add(wechselrichter)
+    await db.flush()  # ID für Verknüpfungen generieren
+
+    # DC-Speicher (am Wechselrichter angeschlossen)
     speicher = Investition(
         anlage_id=anlage.id,
         typ="speicher",
         bezeichnung="BYD HVS 15.4",
         anschaffungsdatum=date(2023, 6, 1),
         anschaffungskosten_gesamt=12000,
+        parent_investition_id=wechselrichter.id,  # DC-seitig am WR
         parameter={
             "kapazitaet_kwh": 15.4,
             "max_ladeleistung_kw": 10,
             "max_entladeleistung_kw": 10,
             "wirkungsgrad_prozent": 95,
+            "typ": "dc",  # DC-gekoppelt
         },
         aktiv=True,
     )
@@ -1308,8 +1329,8 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     )
     db.add(wallbox)
 
-    # PV-Module (für PVGIS Prognose)
-    # Süddach - Hauptfläche
+    # PV-Module (für PVGIS Prognose) - alle am Wechselrichter angeschlossen
+    # Süddach - Hauptfläche (String 1)
     pv_sued = Investition(
         anlage_id=anlage.id,
         typ="pv-module",
@@ -1319,6 +1340,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         leistung_kwp=12.0,
         ausrichtung="Süd",
         neigung_grad=30,
+        parent_investition_id=wechselrichter.id,
         parameter={
             "anzahl_module": 24,
             "modul_typ": "Longi Hi-MO 5",
@@ -1328,7 +1350,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     )
     db.add(pv_sued)
 
-    # Ostdach
+    # Ostdach (String 2)
     pv_ost = Investition(
         anlage_id=anlage.id,
         typ="pv-module",
@@ -1338,6 +1360,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         leistung_kwp=5.0,
         ausrichtung="Ost",
         neigung_grad=25,
+        parent_investition_id=wechselrichter.id,
         parameter={
             "anzahl_module": 10,
             "modul_typ": "Longi Hi-MO 5",
@@ -1347,7 +1370,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     )
     db.add(pv_ost)
 
-    # Westdach
+    # Westdach (String 3)
     pv_west = Investition(
         anlage_id=anlage.id,
         typ="pv-module",
@@ -1357,6 +1380,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         leistung_kwp=3.0,
         ausrichtung="West",
         neigung_grad=25,
+        parent_investition_id=wechselrichter.id,
         parameter={
             "anzahl_module": 6,
             "modul_typ": "Longi Hi-MO 5",
@@ -1538,9 +1562,9 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         anlage_id=anlage.id,
         anlage_name=anlage.anlagenname,
         monatsdaten_count=monatsdaten_count,
-        investitionen_count=9,  # Speicher, E-Auto, WP, Wallbox, Balkonkraftwerk, Mini-BHKW + 3 PV-Module
+        investitionen_count=10,  # WR, Speicher, E-Auto, WP, Wallbox, Balkonkraftwerk, Mini-BHKW + 3 PV-Module
         strompreise_count=3,
-        message=f"Demo-Anlage '{anlage.anlagenname}' mit {monatsdaten_count} Monatsdaten, 9 Investitionen (inkl. 3 PV-Module, Balkonkraftwerk, Mini-BHKW) und 3 Strompreisen erstellt.",
+        message=f"Demo-Anlage '{anlage.anlagenname}' mit {monatsdaten_count} Monatsdaten, 10 Investitionen (WR + DC-Speicher + 3 PV-Module + E-Auto + WP + Wallbox + BKW + BHKW) und 3 Strompreisen erstellt.",
     )
 
 

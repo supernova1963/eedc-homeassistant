@@ -1,157 +1,73 @@
 /**
  * Dashboard (Cockpit Übersicht)
- * Zeigt aggregierte Übersicht ALLER Komponenten: PV, Wärmepumpe, Speicher, E-Auto, Balkonkraftwerk
+ *
+ * Zeigt aggregierte Übersicht ALLER Komponenten in strukturierten Sektionen:
+ * - Energie-Bilanz
+ * - Effizienz-Quoten
+ * - Speicher (aggregiert)
+ * - Wärmepumpe (aggregiert)
+ * - E-Mobilität (aggregiert)
+ * - Finanzen
+ * - Umwelt (CO2)
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, Zap, Battery, TrendingUp, ArrowRight, Flame, Car, Home } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import {
+  Sun, Zap, Battery, TrendingUp, ArrowRight, Flame, Car, Home,
+  ArrowDownToLine, ArrowUpFromLine, Percent, Gauge, Euro, Leaf,
+  ChevronRight, Calendar
+} from 'lucide-react'
 import { Card, Button, LoadingSpinner, FormelTooltip, fmtCalc } from '../components/ui'
-import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useInvestitionen } from '../hooks'
-import { investitionenApi } from '../api'
-import type {
-  WaermepumpeDashboardResponse,
-  SpeicherDashboardResponse,
-  EAutoDashboardResponse,
-  BalkonkraftwerkDashboardResponse
-} from '../api/investitionen'
-
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+import { useAnlagen } from '../hooks'
+import { cockpitApi } from '../api'
+import type { CockpitUebersicht } from '../api/cockpit'
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const { anlagen, loading: anlagenLoading } = useAnlagen()
 
-  // Erste Anlage für Dashboard
+  const [data, setData] = useState<CockpitUebersicht | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+
   const erstesAnlageId = anlagen[0]?.id
-  const { monatsdaten, loading: mdLoading } = useMonatsdaten(erstesAnlageId)
-  const { loading: invLoading } = useInvestitionen(erstesAnlageId)
-  const stats = useMonatsdatenStats(monatsdaten)
 
-  // Investitions-Dashboards laden
-  const [wpData, setWpData] = useState<WaermepumpeDashboardResponse[]>([])
-  const [spData, setSpData] = useState<SpeicherDashboardResponse[]>([])
-  const [eaData, setEaData] = useState<EAutoDashboardResponse[]>([])
-  const [bkData, setBkData] = useState<BalkonkraftwerkDashboardResponse[]>([])
-  const [, setCompLoading] = useState(false)
-
+  // Lade Cockpit-Daten
   useEffect(() => {
     if (!erstesAnlageId) return
 
-    const loadComponentData = async () => {
-      setCompLoading(true)
+    const loadData = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        const [wp, sp, ea, bk] = await Promise.all([
-          investitionenApi.getWaermepumpeDashboard(erstesAnlageId).catch(() => []),
-          investitionenApi.getSpeicherDashboard(erstesAnlageId).catch(() => []),
-          investitionenApi.getEAutoDashboard(erstesAnlageId).catch(() => []),
-          investitionenApi.getBalkonkraftwerkDashboard(erstesAnlageId).catch(() => []),
-        ])
-        setWpData(wp)
-        setSpData(sp)
-        setEaData(ea)
-        setBkData(bk)
+        const result = await cockpitApi.getUebersicht(erstesAnlageId, selectedYear)
+        setData(result)
+
+        // Jahre aus Zeitraum extrahieren (für Filter)
+        if (result.zeitraum_von && result.zeitraum_bis) {
+          const vonJahr = parseInt(result.zeitraum_von.split('-')[0])
+          const bisJahr = parseInt(result.zeitraum_bis.split('-')[0])
+          const years: number[] = []
+          for (let y = vonJahr; y <= bisJahr; y++) {
+            years.push(y)
+          }
+          setAvailableYears(years)
+        }
+      } catch (err) {
+        setError('Fehler beim Laden der Daten')
+        console.error(err)
       } finally {
-        setCompLoading(false)
+        setLoading(false)
       }
     }
 
-    loadComponentData()
-  }, [erstesAnlageId])
+    loadData()
+  }, [erstesAnlageId, selectedYear])
 
-  // Chart-Daten vorbereiten
-  const chartData = useMemo(() => {
-    const sorted = [...monatsdaten].sort((a, b) => {
-      if (a.jahr !== b.jahr) return a.jahr - b.jahr
-      return a.monat - b.monat
-    })
-
-    return sorted.slice(-12).map(md => ({
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(-2)}`,
-      Einspeisung: md.einspeisung_kwh,
-      Eigenverbrauch: md.eigenverbrauch_kwh || 0,
-      Netzbezug: md.netzbezug_kwh,
-    }))
-  }, [monatsdaten])
-
-  // Komponenten-Zusammenfassung
-  const komponenten = useMemo(() => {
-    const result: {
-      name: string
-      icon: React.ElementType
-      color: string
-      value: string
-      unit: string
-      subtitle: string
-      href: string
-    }[] = []
-
-    // Wärmepumpe
-    if (wpData.length > 0) {
-      const gesamt = wpData.reduce((sum, wp) => sum + wp.zusammenfassung.gesamt_stromverbrauch_kwh, 0)
-      const cop = wpData.reduce((sum, wp) => sum + (wp.zusammenfassung.durchschnitt_cop || 0), 0) / wpData.length
-      result.push({
-        name: 'Wärmepumpe',
-        icon: Flame,
-        color: 'text-red-500',
-        value: (gesamt / 1000).toFixed(1),
-        unit: 'MWh',
-        subtitle: cop > 0 ? `COP Ø ${cop.toFixed(1)}` : 'Stromverbrauch',
-        href: '/cockpit/waermepumpe'
-      })
-    }
-
-    // Speicher
-    if (spData.length > 0) {
-      const zyklen = spData.reduce((sum, sp) => sum + sp.zusammenfassung.vollzyklen, 0)
-      const ladung = spData.reduce((sum, sp) => sum + sp.zusammenfassung.gesamt_ladung_kwh, 0)
-      result.push({
-        name: 'Speicher',
-        icon: Battery,
-        color: 'text-green-500',
-        value: (ladung / 1000).toFixed(1),
-        unit: 'MWh',
-        subtitle: `${zyklen.toFixed(0)} Zyklen`,
-        href: '/cockpit/speicher'
-      })
-    }
-
-    // E-Auto
-    if (eaData.length > 0) {
-      const km = eaData.reduce((sum, ea) => sum + ea.zusammenfassung.gesamt_km, 0)
-      const pvAnteil = eaData.reduce((sum, ea) => sum + ea.zusammenfassung.pv_anteil_gesamt_prozent, 0) / eaData.length
-      result.push({
-        name: 'E-Auto',
-        icon: Car,
-        color: 'text-purple-500',
-        value: (km / 1000).toFixed(1),
-        unit: 'Tkm',
-        subtitle: `${pvAnteil.toFixed(0)}% PV-Anteil`,
-        href: '/cockpit/e-auto'
-      })
-    }
-
-    // Balkonkraftwerk
-    if (bkData.length > 0) {
-      const erzeugung = bkData.reduce((sum, bk) => sum + bk.zusammenfassung.gesamt_erzeugung_kwh, 0)
-      result.push({
-        name: 'Balkonkraftwerk',
-        icon: Sun,
-        color: 'text-orange-500',
-        value: erzeugung.toFixed(0),
-        unit: 'kWh',
-        subtitle: 'Erzeugung',
-        href: '/cockpit/balkonkraftwerk'
-      })
-    }
-
-    return result
-  }, [wpData, spData, eaData, bkData])
-
-  const loading = anlagenLoading || mdLoading || invLoading
-
-  if (loading) {
+  if (anlagenLoading || loading) {
     return <LoadingSpinner text="Lade Dashboard..." />
   }
 
@@ -165,142 +81,438 @@ export default function Dashboard() {
     )
   }
 
+  if (error || !data) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Übersicht</h1>
+        <Card>
+          <p className="text-red-500">{error || 'Keine Daten verfügbar'}</p>
+          <Button onClick={() => navigate('/einstellungen/monatsdaten')} className="mt-4">
+            Monatsdaten erfassen
+          </Button>
+        </Card>
+      </div>
+    )
+  }
+
   const anlage = anlagen[0]
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <Home className="h-8 w-8 text-primary-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Übersicht</h1>
-        </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          Anlage: <span className="font-medium text-gray-900 dark:text-white">{anlage.anlagenname}</span> ({anlage.leistung_kwp} kWp)
-        </div>
-      </div>
-
-      {/* Haupt-KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard
-          title="PV-Erzeugung"
-          value={stats.gesamtErzeugung > 0 ? (stats.gesamtErzeugung / 1000).toFixed(1) : '---'}
-          unit="MWh"
-          subtitle={stats.anzahlMonate > 0 ? `${stats.anzahlMonate} Monate` : undefined}
-          icon={Sun}
-          color="text-energy-solar"
-          bgColor="bg-yellow-50 dark:bg-yellow-900/20"
-          onClick={() => navigate('/cockpit/pv-anlage')}
-          formel="Σ PV-Erzeugung aller Monate"
-          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
-          ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
-        />
-        <KPICard
-          title="Eigenverbrauch"
-          value={stats.gesamtErzeugung > 0 ? ((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100).toFixed(1) : '---'}
-          unit="%"
-          subtitle={`${(stats.gesamtEigenverbrauch / 1000).toFixed(1)} MWh`}
-          icon={Zap}
-          color="text-energy-consumption"
-          bgColor="bg-purple-50 dark:bg-purple-900/20"
-          formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
-          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
-          ergebnis={`= ${fmtCalc((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100, 1)} %`}
-        />
-        <KPICard
-          title="Autarkie"
-          value={stats.durchschnittAutarkie > 0 ? stats.durchschnittAutarkie.toFixed(1) : '---'}
-          unit="%"
-          subtitle="Durchschnitt"
-          icon={Battery}
-          color="text-energy-battery"
-          bgColor="bg-blue-50 dark:bg-blue-900/20"
-          formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
-          berechnung="Durchschnitt aller Monate"
-          ergebnis={`= ${fmtCalc(stats.durchschnittAutarkie, 1)} %`}
-        />
-        <KPICard
-          title="Netzbezug"
-          value={stats.gesamtNetzbezug > 0 ? (stats.gesamtNetzbezug / 1000).toFixed(1) : '---'}
-          unit="MWh"
-          subtitle={`${stats.gesamtEinspeisung.toFixed(0)} kWh eingespeist`}
-          icon={TrendingUp}
-          color="text-energy-grid"
-          bgColor="bg-red-50 dark:bg-red-900/20"
-          formel="Σ Netzbezug aller Monate"
-          berechnung={`${fmtCalc(stats.gesamtNetzbezug, 0)} kWh`}
-          ergebnis={`= ${fmtCalc(stats.gesamtNetzbezug / 1000, 1)} MWh`}
-        />
-      </div>
-
-      {/* Komponenten-Kacheln */}
-      {komponenten.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {komponenten.map((komp) => (
-            <button
-              key={komp.name}
-              onClick={() => navigate(komp.href)}
-              className="card p-4 text-left hover:shadow-md transition-shadow group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-800`}>
-                    <komp.icon className={`h-5 w-5 ${komp.color}`} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{komp.name}</p>
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {komp.value} <span className="text-sm font-normal">{komp.unit}</span>
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{komp.subtitle}</p>
-                  </div>
-                </div>
-                <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Chart */}
-      {chartData.length > 0 ? (
-        <Card>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Monatlicher Verlauf
-          </h2>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis dataKey="name" className="text-xs" />
-                <YAxis unit=" kWh" className="text-xs" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--tooltip-bg, #fff)',
-                    borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  }}
-                  formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']}
-                />
-                <Legend />
-                <Bar dataKey="Eigenverbrauch" fill="#8b5cf6" stackId="a" />
-                <Bar dataKey="Einspeisung" fill="#10b981" stackId="a" />
-                <Bar dataKey="Netzbezug" fill="#ef4444" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      ) : (
-        <Card>
-          <div className="text-center py-8">
-            <p className="text-gray-500 dark:text-gray-400 mb-4">
-              Noch keine Monatsdaten vorhanden. Erfasse deine ersten Daten!
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Übersicht</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {anlage.anlagenname} • {data.anlagenleistung_kwp.toFixed(1)} kWp
             </p>
-            <Button onClick={() => navigate('/einstellungen/monatsdaten')}>
-              Monatsdaten erfassen
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
           </div>
-        </Card>
+        </div>
+
+        {/* Jahr-Filter */}
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-gray-400" />
+          <select
+            value={selectedYear || ''}
+            onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : undefined)}
+            className="input py-1.5 text-sm"
+          >
+            <option value="">Alle Jahre</option>
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Zeitraum-Info */}
+      {data.zeitraum_von && data.zeitraum_bis && (
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          Zeitraum: {data.zeitraum_von} bis {data.zeitraum_bis} ({data.anzahl_monate} Monate)
+        </p>
       )}
+
+      {/* Sektion 1: Energie-Bilanz */}
+      <Section title="Energie-Bilanz" icon={Zap}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="PV-Erzeugung"
+            value={(data.pv_erzeugung_kwh / 1000).toFixed(1)}
+            unit="MWh"
+            icon={Sun}
+            color="text-energy-solar"
+            bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+            onClick={() => navigate('/cockpit/pv-anlage')}
+            formel="Σ PV-Erzeugung aller Monate"
+            berechnung={`${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh`}
+            ergebnis={`= ${fmtCalc(data.pv_erzeugung_kwh / 1000, 1)} MWh`}
+          />
+          <KPICard
+            title="Gesamtverbrauch"
+            value={(data.gesamtverbrauch_kwh / 1000).toFixed(1)}
+            unit="MWh"
+            icon={Home}
+            color="text-energy-consumption"
+            bgColor="bg-purple-50 dark:bg-purple-900/20"
+            formel="Eigenverbrauch + Netzbezug"
+            berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} + ${fmtCalc(data.netzbezug_kwh, 0)} kWh`}
+            ergebnis={`= ${fmtCalc(data.gesamtverbrauch_kwh / 1000, 1)} MWh`}
+          />
+          <KPICard
+            title="Netzbezug"
+            value={(data.netzbezug_kwh / 1000).toFixed(1)}
+            unit="MWh"
+            icon={ArrowDownToLine}
+            color="text-energy-grid"
+            bgColor="bg-red-50 dark:bg-red-900/20"
+            formel="Σ Netzbezug aller Monate"
+            berechnung={`${fmtCalc(data.netzbezug_kwh, 0)} kWh`}
+            ergebnis={`= ${fmtCalc(data.netzbezug_kwh / 1000, 1)} MWh`}
+          />
+          <KPICard
+            title="Einspeisung"
+            value={(data.einspeisung_kwh / 1000).toFixed(1)}
+            unit="MWh"
+            icon={ArrowUpFromLine}
+            color="text-green-500"
+            bgColor="bg-green-50 dark:bg-green-900/20"
+            formel="Σ Einspeisung aller Monate"
+            berechnung={`${fmtCalc(data.einspeisung_kwh, 0)} kWh`}
+            ergebnis={`= ${fmtCalc(data.einspeisung_kwh / 1000, 1)} MWh`}
+          />
+        </div>
+      </Section>
+
+      {/* Sektion 2: Effizienz-Quoten */}
+      <Section title="Effizienz-Quoten" icon={Percent}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="Autarkie"
+            value={data.autarkie_prozent.toFixed(1)}
+            unit="%"
+            subtitle="Unabhängigkeit vom Netz"
+            icon={Gauge}
+            color="text-blue-500"
+            bgColor="bg-blue-50 dark:bg-blue-900/20"
+            formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
+            berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} ÷ ${fmtCalc(data.gesamtverbrauch_kwh, 0)} × 100`}
+            ergebnis={`= ${fmtCalc(data.autarkie_prozent, 1)} %`}
+          />
+          <KPICard
+            title="Eigenverbrauchsquote"
+            value={data.eigenverbrauch_quote_prozent.toFixed(1)}
+            unit="%"
+            subtitle="Selbst genutzte PV"
+            icon={Zap}
+            color="text-purple-500"
+            bgColor="bg-purple-50 dark:bg-purple-900/20"
+            formel="Eigenverbrauch ÷ Erzeugung × 100"
+            berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} ÷ ${fmtCalc(data.pv_erzeugung_kwh, 0)} × 100`}
+            ergebnis={`= ${fmtCalc(data.eigenverbrauch_quote_prozent, 1)} %`}
+          />
+          <KPICard
+            title="Direktverbrauchsquote"
+            value={data.direktverbrauch_quote_prozent.toFixed(1)}
+            unit="%"
+            subtitle="Ohne Speicher-Umweg"
+            icon={TrendingUp}
+            color="text-orange-500"
+            bgColor="bg-orange-50 dark:bg-orange-900/20"
+            formel="Direktverbrauch ÷ Erzeugung × 100"
+            berechnung={`${fmtCalc(data.direktverbrauch_kwh, 0)} ÷ ${fmtCalc(data.pv_erzeugung_kwh, 0)} × 100`}
+            ergebnis={`= ${fmtCalc(data.direktverbrauch_quote_prozent, 1)} %`}
+          />
+          <KPICard
+            title="Spez. Ertrag"
+            value={data.spezifischer_ertrag_kwh_kwp?.toFixed(0) || '---'}
+            unit="kWh/kWp"
+            subtitle="Anlageneffizienz"
+            icon={Sun}
+            color="text-yellow-600"
+            bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+            formel="Erzeugung ÷ Anlagenleistung"
+            berechnung={`${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.anlagenleistung_kwp, 2)} kWp`}
+            ergebnis={`= ${fmtCalc(data.spezifischer_ertrag_kwh_kwp || 0, 0)} kWh/kWp`}
+          />
+        </div>
+      </Section>
+
+      {/* Sektion 3: Speicher (wenn vorhanden) */}
+      {data.hat_speicher && (
+        <SectionLink
+          title="Speicher"
+          icon={Battery}
+          onClick={() => navigate('/cockpit/speicher')}
+        >
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KPICard
+              title="Ladung gesamt"
+              value={(data.speicher_ladung_kwh / 1000).toFixed(2)}
+              unit="MWh"
+              icon={ArrowDownToLine}
+              color="text-green-500"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Σ Speicher-Ladung"
+              berechnung={`${fmtCalc(data.speicher_ladung_kwh, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(data.speicher_ladung_kwh / 1000, 2)} MWh`}
+            />
+            <KPICard
+              title="Entladung gesamt"
+              value={(data.speicher_entladung_kwh / 1000).toFixed(2)}
+              unit="MWh"
+              icon={ArrowUpFromLine}
+              color="text-blue-500"
+              bgColor="bg-blue-50 dark:bg-blue-900/20"
+              formel="Σ Speicher-Entladung"
+              berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(data.speicher_entladung_kwh / 1000, 2)} MWh`}
+            />
+            <KPICard
+              title="Ø Effizienz"
+              value={data.speicher_effizienz_prozent?.toFixed(1) || '---'}
+              unit="%"
+              icon={Gauge}
+              color="text-teal-500"
+              bgColor="bg-teal-50 dark:bg-teal-900/20"
+              formel="Entladung ÷ Ladung × 100"
+              berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} ÷ ${fmtCalc(data.speicher_ladung_kwh, 0)} × 100`}
+              ergebnis={`= ${fmtCalc(data.speicher_effizienz_prozent || 0, 1)} %`}
+            />
+            <KPICard
+              title="Vollzyklen"
+              value={data.speicher_vollzyklen?.toFixed(0) || '---'}
+              unit=""
+              subtitle={`${data.speicher_kapazitaet_kwh.toFixed(1)} kWh Kapazität`}
+              icon={Battery}
+              color="text-green-600"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Ladung ÷ Kapazität"
+              berechnung={`${fmtCalc(data.speicher_ladung_kwh, 0)} kWh ÷ ${fmtCalc(data.speicher_kapazitaet_kwh, 1)} kWh`}
+              ergebnis={`= ${fmtCalc(data.speicher_vollzyklen || 0, 0)} Zyklen`}
+            />
+          </div>
+        </SectionLink>
+      )}
+
+      {/* Sektion 4: Wärmepumpe (wenn vorhanden) */}
+      {data.hat_waermepumpe && (
+        <SectionLink
+          title="Wärmepumpe"
+          icon={Flame}
+          onClick={() => navigate('/cockpit/waermepumpe')}
+        >
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KPICard
+              title="Wärme erzeugt"
+              value={(data.wp_waerme_kwh / 1000).toFixed(2)}
+              unit="MWh"
+              icon={Flame}
+              color="text-red-500"
+              bgColor="bg-red-50 dark:bg-red-900/20"
+              formel="Σ Heizung + Warmwasser"
+              berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(data.wp_waerme_kwh / 1000, 2)} MWh`}
+            />
+            <KPICard
+              title="Strom verbraucht"
+              value={(data.wp_strom_kwh / 1000).toFixed(2)}
+              unit="MWh"
+              icon={Zap}
+              color="text-purple-500"
+              bgColor="bg-purple-50 dark:bg-purple-900/20"
+              formel="Σ WP-Stromverbrauch"
+              berechnung={`${fmtCalc(data.wp_strom_kwh, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(data.wp_strom_kwh / 1000, 2)} MWh`}
+            />
+            <KPICard
+              title="Ø COP"
+              value={data.wp_cop?.toFixed(1) || '---'}
+              unit=""
+              icon={Gauge}
+              color="text-orange-500"
+              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              formel="Wärme ÷ Strom"
+              berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} ÷ ${fmtCalc(data.wp_strom_kwh, 0)}`}
+              ergebnis={`= ${fmtCalc(data.wp_cop || 0, 1)}`}
+            />
+            <KPICard
+              title="Ersparnis vs. Gas"
+              value={data.wp_ersparnis_euro.toFixed(0)}
+              unit="€"
+              icon={Euro}
+              color="text-green-600"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Gaskosten - Stromkosten"
+              berechnung={`(${fmtCalc(data.wp_waerme_kwh, 0)} kWh ÷ 0.9 × 10ct) - (${fmtCalc(data.wp_strom_kwh, 0)} kWh × Strompreis)`}
+              ergebnis={`= ${fmtCalc(data.wp_ersparnis_euro, 0)} €`}
+            />
+          </div>
+        </SectionLink>
+      )}
+
+      {/* Sektion 5: E-Mobilität (wenn vorhanden) */}
+      {data.hat_emobilitaet && (
+        <SectionLink
+          title="E-Mobilität"
+          icon={Car}
+          onClick={() => navigate('/cockpit/e-auto')}
+        >
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KPICard
+              title="Gefahrene km"
+              value={(data.emob_km / 1000).toFixed(1)}
+              unit="Tkm"
+              icon={Car}
+              color="text-purple-500"
+              bgColor="bg-purple-50 dark:bg-purple-900/20"
+              formel="Σ gefahrene Kilometer"
+              berechnung={`${fmtCalc(data.emob_km, 0)} km`}
+              ergebnis={`= ${fmtCalc(data.emob_km / 1000, 1)} Tkm`}
+            />
+            <KPICard
+              title="Ladung gesamt"
+              value={(data.emob_ladung_kwh / 1000).toFixed(2)}
+              unit="MWh"
+              icon={Zap}
+              color="text-blue-500"
+              bgColor="bg-blue-50 dark:bg-blue-900/20"
+              formel="Σ Heim + Extern Ladung"
+              berechnung={`${fmtCalc(data.emob_ladung_kwh, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(data.emob_ladung_kwh / 1000, 2)} MWh`}
+            />
+            <KPICard
+              title="PV-Anteil"
+              value={data.emob_pv_anteil_prozent?.toFixed(0) || '---'}
+              unit="%"
+              icon={Sun}
+              color="text-yellow-500"
+              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+              formel="PV-Ladung ÷ Heimladung × 100"
+              berechnung="PV-geladene kWh ÷ Gesamt-Ladung"
+              ergebnis={`= ${fmtCalc(data.emob_pv_anteil_prozent || 0, 0)} %`}
+            />
+            <KPICard
+              title="Ersparnis vs. Benzin"
+              value={data.emob_ersparnis_euro.toFixed(0)}
+              unit="€"
+              icon={Euro}
+              color="text-green-600"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Benzinkosten - Stromkosten"
+              berechnung={`Benzin (7L/100km × 1.80€) - Strom`}
+              ergebnis={`= ${fmtCalc(data.emob_ersparnis_euro, 0)} €`}
+            />
+          </div>
+        </SectionLink>
+      )}
+
+      {/* Sektion 6: Finanzen */}
+      <Section title="Finanzen" icon={Euro}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="Einspeiseerlös"
+            value={data.einspeise_erloes_euro.toFixed(0)}
+            unit="€"
+            icon={ArrowUpFromLine}
+            color="text-green-500"
+            bgColor="bg-green-50 dark:bg-green-900/20"
+            formel="Einspeisung × Vergütung"
+            berechnung={`${fmtCalc(data.einspeisung_kwh, 0)} kWh × 8.2 ct/kWh`}
+            ergebnis={`= ${fmtCalc(data.einspeise_erloes_euro, 0)} €`}
+          />
+          <KPICard
+            title="EV-Ersparnis"
+            value={data.ev_ersparnis_euro.toFixed(0)}
+            unit="€"
+            icon={Zap}
+            color="text-purple-500"
+            bgColor="bg-purple-50 dark:bg-purple-900/20"
+            formel="Eigenverbrauch × Strompreis"
+            berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh × Strompreis`}
+            ergebnis={`= ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
+          />
+          <KPICard
+            title="Netto-Ertrag"
+            value={data.netto_ertrag_euro.toFixed(0)}
+            unit="€"
+            icon={TrendingUp}
+            color="text-blue-600"
+            bgColor="bg-blue-50 dark:bg-blue-900/20"
+            formel="Erlös + Ersparnis"
+            berechnung={`${fmtCalc(data.einspeise_erloes_euro, 0)} + ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
+            ergebnis={`= ${fmtCalc(data.netto_ertrag_euro, 0)} €`}
+          />
+          <KPICard
+            title="ROI-Fortschritt"
+            value={data.roi_fortschritt_prozent?.toFixed(1) || '---'}
+            unit="%"
+            subtitle={`von ${data.investition_gesamt_euro.toFixed(0)} € Invest`}
+            icon={Gauge}
+            color="text-emerald-600"
+            bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+            onClick={() => navigate('/auswertungen/roi')}
+            formel="Kum. Ersparnis ÷ Investition × 100"
+            berechnung={`Netto-Ertrag ÷ ${fmtCalc(data.investition_gesamt_euro, 0)} €`}
+            ergebnis={`= ${fmtCalc(data.roi_fortschritt_prozent || 0, 1)} %`}
+          />
+        </div>
+      </Section>
+
+      {/* Sektion 7: Umwelt */}
+      <Section title="CO₂-Bilanz" icon={Leaf}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="CO₂ PV"
+            value={(data.co2_pv_kg / 1000).toFixed(1)}
+            unit="t"
+            subtitle="Vermiedene Emissionen"
+            icon={Sun}
+            color="text-green-500"
+            bgColor="bg-green-50 dark:bg-green-900/20"
+            formel="Eigenverbrauch × CO₂-Faktor"
+            berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh × 0.38 kg/kWh`}
+            ergebnis={`= ${fmtCalc(data.co2_pv_kg, 0)} kg`}
+          />
+          <KPICard
+            title="CO₂ Wärmepumpe"
+            value={(data.co2_wp_kg / 1000).toFixed(2)}
+            unit="t"
+            subtitle="vs. Gas-Heizung"
+            icon={Flame}
+            color="text-teal-500"
+            bgColor="bg-teal-50 dark:bg-teal-900/20"
+            formel="CO₂ Gas - CO₂ Strom"
+            berechnung="Gasverbrauch × 0.201 - WP-Strom × 0.38"
+            ergebnis={`= ${fmtCalc(data.co2_wp_kg, 0)} kg`}
+          />
+          <KPICard
+            title="CO₂ E-Mobilität"
+            value={(data.co2_emob_kg / 1000).toFixed(2)}
+            unit="t"
+            subtitle="vs. Verbrenner"
+            icon={Car}
+            color="text-blue-500"
+            bgColor="bg-blue-50 dark:bg-blue-900/20"
+            formel="CO₂ Benzin - CO₂ Strom"
+            berechnung="Benzinverbrauch × 2.37 - Stromverbrauch × 0.38"
+            ergebnis={`= ${fmtCalc(data.co2_emob_kg, 0)} kg`}
+          />
+          <KPICard
+            title="CO₂ gesamt"
+            value={(data.co2_gesamt_kg / 1000).toFixed(1)}
+            unit="t"
+            subtitle="Gesamte Einsparung"
+            icon={Leaf}
+            color="text-emerald-600"
+            bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+            formel="Σ aller CO₂-Einsparungen"
+            berechnung={`${fmtCalc(data.co2_pv_kg, 0)} + ${fmtCalc(data.co2_wp_kg, 0)} + ${fmtCalc(data.co2_emob_kg, 0)} kg`}
+            ergebnis={`= ${fmtCalc(data.co2_gesamt_kg / 1000, 1)} t`}
+          />
+        </div>
+      </Section>
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -311,18 +523,64 @@ export default function Dashboard() {
         />
         <QuickLink
           title="Auswertungen"
-          description="Detaillierte Analysen und Kennzahlen"
+          description="Detaillierte Analysen und Zeitverläufe"
           onClick={() => navigate('/auswertungen')}
         />
         <QuickLink
           title="Investitionen"
-          description="E-Auto, Speicher, Wärmepumpe verwalten"
+          description="Komponenten verwalten"
           onClick={() => navigate('/einstellungen/investitionen')}
         />
       </div>
     </div>
   )
 }
+
+// =============================================================================
+// Section Components
+// =============================================================================
+
+interface SectionProps {
+  title: string
+  icon: React.ElementType
+  children: React.ReactNode
+}
+
+function Section({ title, icon: Icon, children }: SectionProps) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Icon className="h-5 w-5 text-gray-500" />
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+interface SectionLinkProps extends SectionProps {
+  onClick: () => void
+}
+
+function SectionLink({ title, icon: Icon, onClick, children }: SectionLinkProps) {
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={onClick}
+        className="flex items-center gap-2 group hover:opacity-80 transition-opacity"
+      >
+        <Icon className="h-5 w-5 text-gray-500" />
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
+        <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-primary-500 transition-colors" />
+      </button>
+      {children}
+    </div>
+  )
+}
+
+// =============================================================================
+// KPI Card
+// =============================================================================
 
 interface KPICardProps {
   title: string
@@ -333,24 +591,35 @@ interface KPICardProps {
   color: string
   bgColor: string
   onClick?: () => void
-  // Tooltip-Props
   formel?: string
   berechnung?: string
   ergebnis?: string
 }
 
-function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, onClick, formel, berechnung, ergebnis }: KPICardProps) {
+function KPICard({
+  title,
+  value,
+  unit,
+  subtitle,
+  icon: Icon,
+  color,
+  bgColor,
+  onClick,
+  formel,
+  berechnung,
+  ergebnis
+}: KPICardProps) {
   const valueContent = (
-    <span className="text-2xl font-bold text-gray-900 dark:text-white">
-      {value} <span className="text-sm font-normal">{unit}</span>
+    <span className="text-xl font-bold text-gray-900 dark:text-white">
+      {value} <span className="text-sm font-normal text-gray-500">{unit}</span>
     </span>
   )
 
   const content = (
     <div className="flex items-start justify-between">
-      <div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-        <div className="mt-1">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{title}</p>
+        <div className="mt-0.5">
           {formel ? (
             <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
               {valueContent}
@@ -360,25 +629,29 @@ function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, onC
           )}
         </div>
         {subtitle && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{subtitle}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{subtitle}</p>
         )}
       </div>
-      <div className={`p-3 rounded-xl ${bgColor}`}>
-        <Icon className={`h-6 w-6 ${color}`} />
+      <div className={`p-2 rounded-lg ${bgColor} ml-2 flex-shrink-0`}>
+        <Icon className={`h-5 w-5 ${color}`} />
       </div>
     </div>
   )
 
   if (onClick) {
     return (
-      <button onClick={onClick} className="card p-4 text-left hover:shadow-md transition-shadow">
+      <button onClick={onClick} className="card p-3 text-left hover:shadow-md transition-shadow w-full">
         {content}
       </button>
     )
   }
 
-  return <Card>{content}</Card>
+  return <Card className="p-3">{content}</Card>
 }
+
+// =============================================================================
+// Quick Link
+// =============================================================================
 
 function QuickLink({ title, description, onClick }: { title: string; description: string; onClick: () => void }) {
   return (
@@ -396,6 +669,10 @@ function QuickLink({ title, description, onClick }: { title: string; description
     </button>
   )
 }
+
+// =============================================================================
+// Getting Started
+// =============================================================================
 
 function GettingStarted() {
   const navigate = useNavigate()
