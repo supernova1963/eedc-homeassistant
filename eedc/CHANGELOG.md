@@ -12,6 +12,33 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.9.6] - 2026-02-09
+
+### Hinzugefügt
+- **Cockpit-Struktur verbessert**
+  - Neuer Tab "PV-Anlage" mit detaillierter PV-System-Übersicht
+    - Wechselrichter mit zugeordneten PV-Modulen und DC-Speichern
+    - kWp-Gesamtleistung pro Wechselrichter
+    - Spezifischer Ertrag (kWh/kWp) pro String
+    - String-Vergleich nach Ausrichtung (Süd, Ost, West)
+  - Tab "Übersicht" zeigt jetzt ALLE Komponenten aggregiert
+    - PV-Erzeugung mit Klick-Navigation zu PV-Anlage
+    - Wärmepumpe, Speicher, E-Auto, Wallbox, Balkonkraftwerk
+    - Komponenten-Kacheln mit Schnellstatus
+- **Tooltips für alle Cockpit-KPIs**
+  - Alle Dashboards: formel, berechnung, ergebnis per Hover sichtbar
+  - SpeicherDashboard: Vollzyklen, Effizienz, Durchsatz, Ersparnis
+  - WaermepumpeDashboard: COP, Wärme, Strom, Ersparnis
+  - EAutoDashboard: km, Verbrauch, PV-Anteil, Ersparnis
+  - BalkonkraftwerkDashboard: Erzeugung, Eigenverbrauch, Ersparnis, CO₂
+  - WallboxDashboard: Heimladung, PV-Anteil, Ersparnis, Ladevorgänge
+  - SonstigesDashboard: Erzeuger/Verbraucher/Speicher-spezifische KPIs
+
+### Geändert
+- Navigation: PV-Anlage als eigenständiger Cockpit-Tab (vorher in Auswertungen)
+
+---
+
 ## [0.9.5] - 2026-02-08
 
 ### Hinzugefügt

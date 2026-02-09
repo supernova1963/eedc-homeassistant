@@ -4,7 +4,7 @@
 
 **eedc** (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur lokalen PV-Anlagen-Auswertung.
 
-**Version:** 0.9.5 Beta
+**Version:** 0.9.6 Beta
 **Status:** Beta-ready für Tests
 
 ## Tech-Stack
@@ -113,7 +113,7 @@ cd eedc && docker build -t eedc-test .
 
 - **TopNavigation.tsx**: Horizontale Hauptnavigation (Cockpit, Auswertungen, Einstellungen)
 - **SubTabs.tsx**: Kontextabhängige Sub-Tabs unter der Hauptnavigation
-  - Cockpit: Übersicht, E-Auto, Wärmepumpe, Speicher, Wallbox, Balkonkraftwerk, Sonstiges
+  - Cockpit: Übersicht, PV-Anlage, E-Auto, Wärmepumpe, Speicher, Wallbox, Balkonkraftwerk, Sonstiges
   - Auswertungen: Jahresvergleich, ROI-Analyse, Prognose vs. IST, PDF-Export
   - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, HA-Integration, HA-Export, Allgemein
 - **Layout.tsx**: Kombiniert TopNavigation + SubTabs (kein Sidebar!)
@@ -124,31 +124,39 @@ cd eedc && docker build -t eedc-test .
 - [ ] KI-Insights
 - [ ] SOLL-IST Vergleich pro String (Frontend)
 
-## Letzte Änderungen (v0.9.5)
+## Letzte Änderungen (v0.9.6)
+
+1. **Cockpit-Struktur verbessert**:
+   - Neuer Tab "PV-Anlage" mit detaillierter PV-System-Übersicht
+     - Wechselrichter mit zugeordneten PV-Modulen und DC-Speichern
+     - kWp-Gesamtleistung pro Wechselrichter
+     - Spezifischer Ertrag (kWh/kWp) pro String
+     - String-Vergleich nach Ausrichtung (Süd, Ost, West)
+   - Tab "Übersicht" zeigt jetzt ALLE Komponenten aggregiert
+     - PV-Erzeugung mit Klick-Navigation zu PV-Anlage
+     - Wärmepumpe, Speicher, E-Auto, Wallbox, Balkonkraftwerk
+     - Komponenten-Kacheln mit Schnellstatus
+
+2. **Tooltips für alle Cockpit-KPIs**:
+   - Alle Dashboards zeigen formel, berechnung, ergebnis per Hover
+   - SpeicherDashboard, WaermepumpeDashboard, EAutoDashboard
+   - BalkonkraftwerkDashboard, WallboxDashboard, SonstigesDashboard
+
+## Änderungen (v0.9.5)
 
 1. **PV-System ROI-Aggregation**: Strukturelle Verbesserung der ROI-Berechnung
    - Wechselrichter + PV-Module + DC-Speicher als "PV-System" aggregiert
    - ROI auf Systemebene statt pro Einzelkomponente (realistischer!)
    - Aufklappbare Komponenten-Zeilen im Frontend (Chevron-Icon)
    - Einsparung proportional nach kWp auf Module verteilt
-   - Backend: Zwei-Pass-Gruppierung in `get_roi_dashboard()`
-   - Neuer Typ `pv-system` mit `komponenten[]` Array
 
 2. **Konfigurationswarnungen im ROI-Dashboard**:
-   - Warnsymbol (⚠) bei PV-Modulen ohne Wechselrichter-Zuordnung
+   - Warnsymbol bei PV-Modulen ohne Wechselrichter-Zuordnung
    - Warnsymbol bei Wechselrichtern ohne zugeordnete PV-Module
-   - Zusammenfassende Warnbox mit Handlungsempfehlungen
 
-3. **ROI-Tabelle mit Tooltips**: Formeln und Berechnungen per Hover sichtbar
-
-4. **Bugfixes**:
+3. **Bugfixes**:
    - Jahr-Filter für Investitionen ROI-Dashboard funktionsfähig
-   - Unterjährigkeits-Problem bei "Alle Jahre" durch Jahresmittelung gelöst
-   - PV_Erzeugung_kWh Spalte in CSV-Template für Balkonkraftwerk+PV-Module
-   - **Investitions-Monatsdaten werden jetzt korrekt gespeichert** (kritisch!)
-     - MonatsdatenCreate/Update Schemas um `investitionen_daten` Feld erweitert
-     - Neue Helper-Funktion `_save_investitionen_monatsdaten()` in monatsdaten.py
-     - Behebt: Wärmepumpe, Speicher, E-Auto Dashboards zeigten leere Daten
+   - **Investitions-Monatsdaten werden jetzt korrekt gespeichert**
 
 ## Änderungen (v0.9.4)
 
