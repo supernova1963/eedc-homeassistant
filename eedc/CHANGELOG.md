@@ -12,7 +12,41 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [0.9.6] - 2026-02-09
+## [0.9.7] - 2026-02-09
+
+### Hinzugefügt
+- **Große Daten-Bereinigung: InvestitionMonatsdaten als primäre Quelle**
+  - `Monatsdaten` = NUR Anlagen-Energiebilanz (Einspeisung, Netzbezug)
+  - `InvestitionMonatsdaten` = ALLE Komponenten-Details
+- **Backend-Änderungen**
+  - `get_cockpit_uebersicht`: Speicher jetzt aus InvestitionMonatsdaten
+  - `get_nachhaltigkeit`: Zeitreihe aus InvestitionMonatsdaten
+  - `get_komponenten_zeitreihe`: Erweiterte Felder für alle Komponenten
+  - `get_speicher_dashboard`: Arbitrage-Auswertung hinzugefügt
+- **Neue Auswertungsfelder**
+  - Speicher: Arbitrage (Netzladung), Ladepreis, Arbitrage-Gewinn
+  - E-Auto: V2H-Entladung, Ladequellen (PV/Netz/Extern), Externe Kosten
+  - Wärmepumpe: Heizung vs. Warmwasser getrennt
+  - Balkonkraftwerk: Speicher-Ladung/Entladung
+  - Alle: Sonderkosten aggregiert
+- **Frontend-Erweiterungen**
+  - KomponentenTab (Auswertungen): Arbitrage, V2H, Ladequellen, gestapelte Charts
+  - SpeicherDashboard (Cockpit): Arbitrage-Sektion mit KPIs und gestapeltem Chart
+  - Monatsdaten: Migrations-Warnung bei Legacy-Daten
+  - MonatsdatenForm: Auto-Migration von Legacy-Speicherdaten
+- **Demo-Daten erweitert**
+  - PV-Module mit saisonaler Verteilung pro String (Süd/Ost/West)
+  - Speicher mit Arbitrage-Daten (ab 2025)
+  - Wallbox mit Ladedaten
+
+### Migration
+- Warnung wenn Legacy-Daten (Monatsdaten.batterie_*) vorhanden
+- Beim Bearbeiten werden Legacy-Werte automatisch ins Formular übernommen
+- Speichern migriert die Daten zu InvestitionMonatsdaten
+
+---
+
+## [0.9.6] - 2026-02-08
 
 ### Hinzugefügt
 - **Cockpit-Struktur verbessert**
