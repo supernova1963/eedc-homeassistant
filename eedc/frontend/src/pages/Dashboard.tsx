@@ -1,9 +1,21 @@
-import { useMemo } from 'react'
+/**
+ * Dashboard (Cockpit Übersicht)
+ * Zeigt aggregierte Übersicht ALLER Komponenten: PV, Wärmepumpe, Speicher, E-Auto, Balkonkraftwerk
+ */
+
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, Zap, Battery, TrendingUp, ArrowRight } from 'lucide-react'
+import { Sun, Zap, Battery, TrendingUp, ArrowRight, Flame, Car, Home } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Card, Button, LoadingSpinner, FormelTooltip, fmtCalc } from '../components/ui'
-import { useAnlagen, useMonatsdaten, useMonatsdatenStats } from '../hooks'
+import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useInvestitionen } from '../hooks'
+import { investitionenApi } from '../api'
+import type {
+  WaermepumpeDashboardResponse,
+  SpeicherDashboardResponse,
+  EAutoDashboardResponse,
+  BalkonkraftwerkDashboardResponse
+} from '../api/investitionen'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -14,7 +26,39 @@ export default function Dashboard() {
   // Erste Anlage für Dashboard
   const erstesAnlageId = anlagen[0]?.id
   const { monatsdaten, loading: mdLoading } = useMonatsdaten(erstesAnlageId)
+  const { loading: invLoading } = useInvestitionen(erstesAnlageId)
   const stats = useMonatsdatenStats(monatsdaten)
+
+  // Investitions-Dashboards laden
+  const [wpData, setWpData] = useState<WaermepumpeDashboardResponse[]>([])
+  const [spData, setSpData] = useState<SpeicherDashboardResponse[]>([])
+  const [eaData, setEaData] = useState<EAutoDashboardResponse[]>([])
+  const [bkData, setBkData] = useState<BalkonkraftwerkDashboardResponse[]>([])
+  const [, setCompLoading] = useState(false)
+
+  useEffect(() => {
+    if (!erstesAnlageId) return
+
+    const loadComponentData = async () => {
+      setCompLoading(true)
+      try {
+        const [wp, sp, ea, bk] = await Promise.all([
+          investitionenApi.getWaermepumpeDashboard(erstesAnlageId).catch(() => []),
+          investitionenApi.getSpeicherDashboard(erstesAnlageId).catch(() => []),
+          investitionenApi.getEAutoDashboard(erstesAnlageId).catch(() => []),
+          investitionenApi.getBalkonkraftwerkDashboard(erstesAnlageId).catch(() => []),
+        ])
+        setWpData(wp)
+        setSpData(sp)
+        setEaData(ea)
+        setBkData(bk)
+      } finally {
+        setCompLoading(false)
+      }
+    }
+
+    loadComponentData()
+  }, [erstesAnlageId])
 
   // Chart-Daten vorbereiten
   const chartData = useMemo(() => {
@@ -31,7 +75,81 @@ export default function Dashboard() {
     }))
   }, [monatsdaten])
 
-  const loading = anlagenLoading || mdLoading
+  // Komponenten-Zusammenfassung
+  const komponenten = useMemo(() => {
+    const result: {
+      name: string
+      icon: React.ElementType
+      color: string
+      value: string
+      unit: string
+      subtitle: string
+      href: string
+    }[] = []
+
+    // Wärmepumpe
+    if (wpData.length > 0) {
+      const gesamt = wpData.reduce((sum, wp) => sum + wp.zusammenfassung.gesamt_stromverbrauch_kwh, 0)
+      const cop = wpData.reduce((sum, wp) => sum + (wp.zusammenfassung.durchschnitt_cop || 0), 0) / wpData.length
+      result.push({
+        name: 'Wärmepumpe',
+        icon: Flame,
+        color: 'text-red-500',
+        value: (gesamt / 1000).toFixed(1),
+        unit: 'MWh',
+        subtitle: cop > 0 ? `COP Ø ${cop.toFixed(1)}` : 'Stromverbrauch',
+        href: '/cockpit/waermepumpe'
+      })
+    }
+
+    // Speicher
+    if (spData.length > 0) {
+      const zyklen = spData.reduce((sum, sp) => sum + sp.zusammenfassung.vollzyklen, 0)
+      const ladung = spData.reduce((sum, sp) => sum + sp.zusammenfassung.gesamt_ladung_kwh, 0)
+      result.push({
+        name: 'Speicher',
+        icon: Battery,
+        color: 'text-green-500',
+        value: (ladung / 1000).toFixed(1),
+        unit: 'MWh',
+        subtitle: `${zyklen.toFixed(0)} Zyklen`,
+        href: '/cockpit/speicher'
+      })
+    }
+
+    // E-Auto
+    if (eaData.length > 0) {
+      const km = eaData.reduce((sum, ea) => sum + ea.zusammenfassung.gesamt_km, 0)
+      const pvAnteil = eaData.reduce((sum, ea) => sum + ea.zusammenfassung.pv_anteil_gesamt_prozent, 0) / eaData.length
+      result.push({
+        name: 'E-Auto',
+        icon: Car,
+        color: 'text-purple-500',
+        value: (km / 1000).toFixed(1),
+        unit: 'Tkm',
+        subtitle: `${pvAnteil.toFixed(0)}% PV-Anteil`,
+        href: '/cockpit/e-auto'
+      })
+    }
+
+    // Balkonkraftwerk
+    if (bkData.length > 0) {
+      const erzeugung = bkData.reduce((sum, bk) => sum + bk.zusammenfassung.gesamt_erzeugung_kwh, 0)
+      result.push({
+        name: 'Balkonkraftwerk',
+        icon: Sun,
+        color: 'text-orange-500',
+        value: erzeugung.toFixed(0),
+        unit: 'kWh',
+        subtitle: 'Erzeugung',
+        href: '/cockpit/balkonkraftwerk'
+      })
+    }
+
+    return result
+  }, [wpData, spData, eaData, bkData])
+
+  const loading = anlagenLoading || mdLoading || invLoading
 
   if (loading) {
     return <LoadingSpinner text="Lade Dashboard..." />
@@ -41,7 +159,7 @@ export default function Dashboard() {
   if (anlagen.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Übersicht</h1>
         <GettingStarted />
       </div>
     )
@@ -52,13 +170,16 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <Home className="h-8 w-8 text-primary-500" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Übersicht</h1>
+        </div>
         <div className="text-sm text-gray-500 dark:text-gray-400">
           Anlage: <span className="font-medium text-gray-900 dark:text-white">{anlage.anlagenname}</span> ({anlage.leistung_kwp} kWp)
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Haupt-KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           title="PV-Erzeugung"
@@ -68,6 +189,7 @@ export default function Dashboard() {
           icon={Sun}
           color="text-energy-solar"
           bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+          onClick={() => navigate('/cockpit/pv-anlage')}
           formel="Σ PV-Erzeugung aller Monate"
           berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
           ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
@@ -110,6 +232,35 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Komponenten-Kacheln */}
+      {komponenten.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {komponenten.map((komp) => (
+            <button
+              key={komp.name}
+              onClick={() => navigate(komp.href)}
+              className="card p-4 text-left hover:shadow-md transition-shadow group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-800`}>
+                    <komp.icon className={`h-5 w-5 ${komp.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{komp.name}</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">
+                      {komp.value} <span className="text-sm font-normal">{komp.unit}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{komp.subtitle}</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Chart */}
       {chartData.length > 0 ? (
         <Card>
@@ -143,7 +294,7 @@ export default function Dashboard() {
             <p className="text-gray-500 dark:text-gray-400 mb-4">
               Noch keine Monatsdaten vorhanden. Erfasse deine ersten Daten!
             </p>
-            <Button onClick={() => navigate('/monatsdaten')}>
+            <Button onClick={() => navigate('/einstellungen/monatsdaten')}>
               Monatsdaten erfassen
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
@@ -156,17 +307,17 @@ export default function Dashboard() {
         <QuickLink
           title="Monatsdaten"
           description="Neue Daten erfassen oder CSV importieren"
-          onClick={() => navigate('/monatsdaten')}
+          onClick={() => navigate('/einstellungen/monatsdaten')}
         />
         <QuickLink
           title="Auswertungen"
           description="Detaillierte Analysen und Kennzahlen"
-          onClick={() => navigate('/auswertung')}
+          onClick={() => navigate('/auswertungen')}
         />
         <QuickLink
           title="Investitionen"
           description="E-Auto, Speicher, Wärmepumpe verwalten"
-          onClick={() => navigate('/investitionen')}
+          onClick={() => navigate('/einstellungen/investitionen')}
         />
       </div>
     </div>
@@ -181,43 +332,52 @@ interface KPICardProps {
   icon: React.ElementType
   color: string
   bgColor: string
+  onClick?: () => void
   // Tooltip-Props
   formel?: string
   berechnung?: string
   ergebnis?: string
 }
 
-function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, formel, berechnung, ergebnis }: KPICardProps) {
+function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, onClick, formel, berechnung, ergebnis }: KPICardProps) {
   const valueContent = (
     <span className="text-2xl font-bold text-gray-900 dark:text-white">
       {value} <span className="text-sm font-normal">{unit}</span>
     </span>
   )
 
-  return (
-    <Card>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          <div className="mt-1">
-            {formel ? (
-              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
-                {valueContent}
-              </FormelTooltip>
-            ) : (
-              valueContent
-            )}
-          </div>
-          {subtitle && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{subtitle}</p>
+  const content = (
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
+        <div className="mt-1">
+          {formel ? (
+            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+              {valueContent}
+            </FormelTooltip>
+          ) : (
+            valueContent
           )}
         </div>
-        <div className={`p-3 rounded-xl ${bgColor}`}>
-          <Icon className={`h-6 w-6 ${color}`} />
-        </div>
+        {subtitle && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{subtitle}</p>
+        )}
       </div>
-    </Card>
+      <div className={`p-3 rounded-xl ${bgColor}`}>
+        <Icon className={`h-6 w-6 ${color}`} />
+      </div>
+    </div>
   )
+
+  if (onClick) {
+    return (
+      <button onClick={onClick} className="card p-4 text-left hover:shadow-md transition-shadow">
+        {content}
+      </button>
+    )
+  }
+
+  return <Card>{content}</Card>
 }
 
 function QuickLink({ title, description, onClick }: { title: string; description: string; onClick: () => void }) {
@@ -254,7 +414,7 @@ function GettingStarted() {
         <li>Erfasse Monatsdaten oder importiere eine CSV</li>
         <li>Analysiere deine Ergebnisse in den Auswertungen</li>
       </ol>
-      <Button onClick={() => navigate('/anlagen')}>
+      <Button onClick={() => navigate('/einstellungen/anlage')}>
         Jetzt starten
         <ArrowRight className="h-4 w-4 ml-2" />
       </Button>

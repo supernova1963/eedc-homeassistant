@@ -35,6 +35,7 @@ interface TabItem {
 // Sub-Tabs für Cockpit
 const cockpitTabs: TabItem[] = [
   { name: 'Übersicht', href: '/cockpit', icon: LayoutDashboard, exact: true },
+  { name: 'PV-Anlage', href: '/cockpit/pv-anlage', icon: Sun },
   { name: 'E-Auto', href: '/cockpit/e-auto', icon: Car },
   { name: 'Wärmepumpe', href: '/cockpit/waermepumpe', icon: Flame },
   { name: 'Speicher', href: '/cockpit/speicher', icon: Battery },

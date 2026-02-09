@@ -3,6 +3,7 @@ import Layout from './components/layout/Layout'
 
 // Cockpit (Dashboards)
 import Dashboard from './pages/Dashboard'
+import PVAnlageDashboard from './pages/PVAnlageDashboard'
 import EAutoDashboard from './pages/EAutoDashboard'
 import WaermepumpeDashboard from './pages/WaermepumpeDashboard'
 import SpeicherDashboard from './pages/SpeicherDashboard'
@@ -40,6 +41,7 @@ function App() {
 
           {/* Cockpit (Dashboards) */}
           <Route path="cockpit" element={<Dashboard />} />
+          <Route path="cockpit/pv-anlage" element={<PVAnlageDashboard />} />
           <Route path="cockpit/e-auto" element={<EAutoDashboard />} />
           <Route path="cockpit/waermepumpe" element={<WaermepumpeDashboard />} />
           <Route path="cockpit/speicher" element={<SpeicherDashboard />} />
