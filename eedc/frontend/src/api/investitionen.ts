@@ -169,6 +169,11 @@ export interface SpeicherDashboardResponse {
     kapazitaet_kwh: number
     ersparnis_euro: number
     anzahl_monate: number
+    // Arbitrage-Daten
+    arbitrage_faehig: boolean
+    arbitrage_kwh: number
+    arbitrage_avg_preis_cent: number | null
+    arbitrage_gewinn_euro: number
   }
 }
 

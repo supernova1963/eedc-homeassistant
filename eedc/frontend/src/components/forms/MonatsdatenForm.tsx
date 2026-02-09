@@ -245,6 +245,43 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               })
             }
           })
+
+          // =================================================================
+          // Auto-Migration: Legacy Monatsdaten.batterie_* → InvestitionMonatsdaten
+          // Wenn Speicher-Investitionen existieren, aber keine InvestitionMonatsdaten
+          // für sie vorhanden sind UND Legacy-Daten in Monatsdaten existieren,
+          // dann übernehme die Legacy-Daten in die Speicher-Investitionsfelder.
+          // =================================================================
+          const speicherInvs = aktiveInvestitionen.filter(i => i.typ === 'speicher')
+          const speicherMdIds = new Set(existingData.filter(imd =>
+            speicherInvs.some(s => s.id === imd.investition_id)
+          ).map(imd => imd.investition_id))
+
+          // Prüfe ob Legacy-Daten existieren
+          const legacyLadung = monatsdaten?.batterie_ladung_kwh || 0
+          const legacyEntladung = monatsdaten?.batterie_entladung_kwh || 0
+
+          if (speicherInvs.length > 0 && (legacyLadung > 0 || legacyEntladung > 0)) {
+            // Finde Speicher ohne InvestitionMonatsdaten
+            const speicherOhneDaten = speicherInvs.filter(s => !speicherMdIds.has(s.id))
+
+            if (speicherOhneDaten.length > 0) {
+              // Verteile Legacy-Daten auf Speicher ohne Daten
+              // Bei mehreren Speichern: gleichmäßig verteilen (vereinfachte Annahme)
+              const anteil = 1 / speicherOhneDaten.length
+              speicherOhneDaten.forEach(speicher => {
+                const invIdStr = String(speicher.id)
+                if (initial[invIdStr]) {
+                  initial[invIdStr].ladung_kwh = (legacyLadung * anteil).toFixed(1)
+                  initial[invIdStr].entladung_kwh = (legacyEntladung * anteil).toFixed(1)
+                }
+              })
+              console.info(
+                `Migration: Legacy-Speicherdaten (${legacyLadung}/${legacyEntladung} kWh) ` +
+                `auf ${speicherOhneDaten.length} Speicher übertragen`
+              )
+            }
+          }
         } catch (e) {
           console.error('Fehler beim Laden der InvestitionMonatsdaten:', e)
         } finally {

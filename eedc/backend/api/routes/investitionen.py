@@ -1426,11 +1426,22 @@ async def get_speicher_dashboard(
 
         gesamt_ladung = 0
         gesamt_entladung = 0
+        gesamt_arbitrage_kwh = 0
+        arbitrage_preis_sum = 0
+        arbitrage_count = 0
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             gesamt_ladung += d.get('ladung_kwh', 0)
             gesamt_entladung += d.get('entladung_kwh', 0)
+            # Arbitrage (Netzladung zu günstigen Zeiten)
+            netzladung = d.get('speicher_ladung_netz_kwh', 0) or 0
+            if netzladung > 0:
+                gesamt_arbitrage_kwh += netzladung
+                preis = d.get('speicher_ladepreis_cent', 0) or 0
+                if preis > 0:
+                    arbitrage_preis_sum += preis * netzladung
+                    arbitrage_count += netzladung
 
         # Effizienz
         effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
@@ -1438,11 +1449,16 @@ async def get_speicher_dashboard(
         # Zyklen (basierend auf Kapazität)
         params = speicher.parameter or {}
         kapazitaet = params.get('kapazitaet_kwh', 10)
+        arbitrage_faehig = params.get('arbitrage_faehig', False)
         vollzyklen = gesamt_ladung / kapazitaet if kapazitaet > 0 else 0
 
         # Ersparnis: Entladung ersetzt Netzbezug (Spread zwischen Netzbezug und Einspeisung)
         spread = strompreis_cent - einspeiseverguetung_cent
         ersparnis = gesamt_entladung * spread / 100
+
+        # Arbitrage-Gewinn: (Strompreis - Ladepreis) * Netzladung
+        arbitrage_avg_preis = (arbitrage_preis_sum / arbitrage_count) if arbitrage_count > 0 else 0
+        arbitrage_gewinn = gesamt_arbitrage_kwh * (strompreis_cent - arbitrage_avg_preis) / 100 if gesamt_arbitrage_kwh > 0 else 0
 
         zusammenfassung = {
             'gesamt_ladung_kwh': round(gesamt_ladung, 1),
@@ -1453,6 +1469,11 @@ async def get_speicher_dashboard(
             'kapazitaet_kwh': kapazitaet,
             'ersparnis_euro': round(ersparnis, 2),
             'anzahl_monate': len(monatsdaten),
+            # Arbitrage-Daten
+            'arbitrage_faehig': arbitrage_faehig,
+            'arbitrage_kwh': round(gesamt_arbitrage_kwh, 1),
+            'arbitrage_avg_preis_cent': round(arbitrage_avg_preis, 1) if arbitrage_avg_preis > 0 else None,
+            'arbitrage_gewinn_euro': round(arbitrage_gewinn, 2),
         }
 
         dashboards.append(SpeicherDashboardResponse(

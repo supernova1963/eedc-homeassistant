@@ -131,9 +131,9 @@ cd eedc && docker build -t eedc-test .
 - [ ] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen)
 - [ ] Sonderkosten in Finanzen-Tab integrieren
 
-## Letzte Änderungen (v0.9.8) - IN ARBEIT
+## Letzte Änderungen (v0.9.7)
 
-### Große Daten-Bereinigung: Monatsdaten vs. InvestitionMonatsdaten
+### Große Daten-Bereinigung: InvestitionMonatsdaten als primäre Quelle
 
 **Problem gelöst:** Cockpit-Endpoints mischten inkonsistent zwei Datenquellen.
 
@@ -145,46 +145,25 @@ cd eedc && docker build -t eedc-test .
 - `get_cockpit_uebersicht`: Speicher jetzt aus InvestitionMonatsdaten
 - `get_nachhaltigkeit`: Zeitreihe aus InvestitionMonatsdaten
 - `get_komponenten_zeitreihe`: Erweitert mit neuen Feldern
+- `get_speicher_dashboard`: Arbitrage-Auswertung hinzugefügt
 
 **Neue Auswertungsfelder (Backend + Frontend):**
-- **Speicher:** Arbitrage (Netzladung), Ladepreis
+- **Speicher:** Arbitrage (Netzladung), Ladepreis, Arbitrage-Gewinn
 - **E-Auto:** V2H-Entladung, Ladequellen (PV/Netz/Extern), Externe Kosten
 - **Wärmepumpe:** Heizung vs. Warmwasser getrennt
 - **Balkonkraftwerk:** Speicher-Ladung/Entladung
 - **Alle:** Sonderkosten aggregiert, Feature-Flags (hat_arbitrage, hat_v2h)
 
-**Frontend KomponentenTab erweitert:**
-- Speicher: Arbitrage-Badge + KPI + Chart
-- E-Auto: V2H-Badge, Ladequellen-Breakdown, gestapeltes Chart
-- Wärmepumpe: Heizung/Warmwasser getrennt (KPIs + gestapeltes Chart)
-- Balkonkraftwerk: "mit Speicher"-Badge + Speicher-KPIs
+**Frontend erweitert:**
+- KomponentenTab (Auswertungen): Arbitrage, V2H, Ladequellen, gestapelte Charts
+- SpeicherDashboard (Cockpit): Arbitrage-Sektion mit KPIs und gestapeltem Chart
+- Monatsdaten: Migrations-Warnung bei Legacy-Daten
+- MonatsdatenForm: Auto-Migration von Legacy-Speicherdaten
 
-**Dokumentation:** Siehe `PLAN_AUSWERTUNGEN_BEREINIGUNG.md`
-
-## Änderungen (v0.9.7)
-
-1. **Cockpit-Übersicht komplett neu**:
-   - Neuer Backend-Endpoint: `/api/cockpit/uebersicht/{anlage_id}`
-   - 7 aggregierte Sektionen:
-     - Energie-Bilanz (PV, Verbrauch, Netzbezug, Einspeisung)
-     - Effizienz-Quoten (Autarkie, EV-Quote, Direktverbrauch, Spez. Ertrag)
-     - Speicher (wenn vorhanden, mit Klick-Navigation)
-     - Wärmepumpe (wenn vorhanden, mit COP + Ersparnis)
-     - E-Mobilität (wenn vorhanden, km + PV-Anteil)
-     - Finanzen (Erlös, Ersparnis, ROI-Fortschritt)
-     - CO₂-Bilanz (PV, WP, E-Auto, Gesamt)
-   - Jahr-Filter für Zeitraum-Auswahl
-   - Alle KPIs mit Formel-Tooltips
-
-2. **Datenexport in Auswertungen**:
-   - CSV-Export für Jahresvergleich
-   - CSV-Export für ROI-Analyse
-   - Deutsche Notation (Semikolon, Komma-Dezimal)
-   - UTF-8 BOM für Excel-Kompatibilität
-
-3. **Abgrenzung Cockpit vs. Auswertungen** (siehe PLAN_COCKPIT_UEBERSICHT.md):
-   - Cockpit = "Wo stehe ich?" (aggregierte Lifetime-Werte)
-   - Auswertungen = "Wie entwickelt sich was?" (Zeitreihen + Export)
+**Migration für bestehende Installationen:**
+- Warnung wenn Legacy-Daten (Monatsdaten.batterie_*) vorhanden
+- Beim Bearbeiten werden Legacy-Werte automatisch ins Formular übernommen
+- Speichern migriert die Daten zu InvestitionMonatsdaten
 
 ## Änderungen (v0.9.6)
 

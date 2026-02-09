@@ -1267,6 +1267,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "max_entladeleistung_kw": 10,
             "wirkungsgrad_prozent": 95,
             "typ": "dc",  # DC-gekoppelt
+            "arbitrage_faehig": True,  # Kann Netzstrom zu günstigen Zeiten laden
         },
         aktiv=True,
     )
@@ -1478,16 +1479,25 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             )
             db.add(eauto_md)
 
-        # Speicher Monatsdaten
+        # Speicher Monatsdaten (mit Arbitrage ab 2025)
         if batt_ladung > 0:
+            speicher_daten = {
+                "ladung_kwh": batt_ladung,
+                "entladung_kwh": batt_entladung,
+            }
+            # Arbitrage ab 2025: Ca. 15-25% der Ladung aus dem Netz zu günstigen Zeiten
+            if jahr >= 2025:
+                arbitrage_anteil = 0.15 + (monat % 3) * 0.05
+                netzladung = round(batt_ladung * arbitrage_anteil, 1)
+                ladepreis = round(18 + (monat % 4) * 2, 1)  # 18-24 ct/kWh
+                speicher_daten["speicher_ladung_netz_kwh"] = netzladung
+                speicher_daten["speicher_ladepreis_cent"] = ladepreis
+
             speicher_md = InvestitionMonatsdaten(
                 investition_id=speicher.id,
                 jahr=jahr,
                 monat=monat,
-                verbrauch_daten={
-                    "ladung_kwh": batt_ladung,
-                    "entladung_kwh": batt_entladung,
-                },
+                verbrauch_daten=speicher_daten,
             )
             db.add(speicher_md)
 
@@ -1556,6 +1566,43 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 },
             )
             db.add(bhkw_md)
+
+        # PV-Module InvestitionMonatsdaten (Verteilung der Gesamterzeugung auf Strings)
+        if pv_erzeugung > 0:
+            # Verteilung nach kWp und Ausrichtung:
+            # Süd (12 kWp): Beste Erträge, dominiert im Winter
+            # Ost (5 kWp): Morgenertrag
+            # West (3 kWp): Abendertrag
+            if monat in [5, 6, 7]:  # Sommer - Ost/West profitieren
+                sued_anteil, ost_anteil, west_anteil = 0.55, 0.27, 0.18
+            elif monat in [11, 12, 1, 2]:  # Winter - Süd dominiert
+                sued_anteil, ost_anteil, west_anteil = 0.70, 0.18, 0.12
+            else:  # Übergang
+                sued_anteil, ost_anteil, west_anteil = 0.60, 0.24, 0.16
+
+            for pv_inv, anteil in [(pv_sued, sued_anteil), (pv_ost, ost_anteil), (pv_west, west_anteil)]:
+                pv_md = InvestitionMonatsdaten(
+                    investition_id=pv_inv.id,
+                    jahr=jahr,
+                    monat=monat,
+                    verbrauch_daten={"pv_erzeugung_kwh": round(pv_erzeugung * anteil, 1)},
+                )
+                db.add(pv_md)
+
+        # Wallbox InvestitionMonatsdaten (Heimladung = PV + Netz)
+        if eauto_km > 0:
+            heimladung = eauto_pv + eauto_netz
+            wallbox_md = InvestitionMonatsdaten(
+                investition_id=wallbox.id,
+                jahr=jahr,
+                monat=monat,
+                verbrauch_daten={
+                    "ladung_kwh": heimladung,
+                    "ladung_pv_kwh": eauto_pv,
+                    "ladevorgaenge": max(4, int(heimladung / 25)),
+                },
+            )
+            db.add(wallbox_md)
 
     return DemoDataResult(
         erfolg=True,

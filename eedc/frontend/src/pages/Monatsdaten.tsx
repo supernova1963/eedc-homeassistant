@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Calendar, Edit, Trash2, AlertCircle, Columns } from 'lucide-react'
+import { Plus, Calendar, Edit, Trash2, AlertCircle, Columns, AlertTriangle } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert, Select } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { MonatsdatenForm } from '../components/forms'
-import { useAnlagen, useMonatsdaten } from '../hooks'
+import { useAnlagen, useMonatsdaten, useInvestitionen } from '../hooks'
 import type { Monatsdaten } from '../types'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -120,6 +120,7 @@ export default function MonatsdatenPage() {
   const { anlagen, loading: anlagenLoading } = useAnlagen()
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>(undefined)
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(selectedAnlageId)
+  const { investitionen } = useInvestitionen(selectedAnlageId)
 
   const [showForm, setShowForm] = useState(false)
   const [editingData, setEditingData] = useState<Monatsdaten | null>(null)
@@ -163,6 +164,24 @@ export default function MonatsdatenPage() {
   if (!selectedAnlageId && anlagen.length > 0 && !anlagenLoading) {
     setSelectedAnlageId(anlagen[0].id)
   }
+
+  // Prüfe ob Legacy-Speicherdaten existieren die migriert werden müssen
+  const legacyMigrationNeeded = useMemo(() => {
+    // Hat die Anlage einen Speicher als Investition?
+    const hatSpeicher = investitionen.some(i => i.typ === 'speicher' && i.aktiv)
+    if (!hatSpeicher) return { needed: false, count: 0 }
+
+    // Zähle Monate mit Legacy-Daten (batterie_ladung_kwh > 0)
+    const monateWithLegacy = monatsdaten.filter(md =>
+      (md.batterie_ladung_kwh && md.batterie_ladung_kwh > 0) ||
+      (md.batterie_entladung_kwh && md.batterie_entladung_kwh > 0)
+    )
+
+    return {
+      needed: monateWithLegacy.length > 0,
+      count: monateWithLegacy.length
+    }
+  }, [monatsdaten, investitionen])
 
   const handleCreate = async (data: Parameters<typeof createMonatsdaten>[0]) => {
     await createMonatsdaten(data)
@@ -242,6 +261,21 @@ export default function MonatsdatenPage() {
       </div>
 
       {error && <Alert type="error">{error}</Alert>}
+
+      {/* Migrations-Hinweis für Legacy-Speicherdaten */}
+      {legacyMigrationNeeded.needed && (
+        <Alert type="warning" className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Speicher-Daten Migration erforderlich</p>
+            <p className="text-sm mt-1">
+              {legacyMigrationNeeded.count} Monat{legacyMigrationNeeded.count > 1 ? 'e' : ''} enthält
+              {legacyMigrationNeeded.count > 1 ? 'en' : ''} Speicher-Daten im alten Format.
+              Bitte jeden betroffenen Monat einmal öffnen und speichern, um die Daten zu migrieren.
+            </p>
+          </div>
+        </Alert>
+      )}
 
       {monatsdaten.length === 0 ? (
         <Card>

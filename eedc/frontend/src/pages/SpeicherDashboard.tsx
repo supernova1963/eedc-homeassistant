@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Battery, Zap, TrendingUp, Activity, RotateCw } from 'lucide-react'
+import { Battery, Zap, TrendingUp, Activity, RotateCw, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
@@ -103,10 +103,13 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
   const monthlyData = monatsdaten.map(md => {
     const ladung = md.verbrauch_daten.ladung_kwh || 0
     const entladung = md.verbrauch_daten.entladung_kwh || 0
+    const arbitrage = md.verbrauch_daten.speicher_ladung_netz_kwh || 0
     return {
       name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
       ladung,
       entladung,
+      arbitrage,
+      pvLadung: ladung - arbitrage,
       zyklen: z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0,
       effizienz: ladung > 0 ? (entladung / ladung) * 100 : 0,
     }
@@ -198,6 +201,42 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
         </div>
       </div>
 
+      {/* Arbitrage Section (wenn aktiv) */}
+      {z.arbitrage_faehig && z.arbitrage_kwh > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 mb-3">
+            <DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            <h3 className="font-medium text-amber-800 dark:text-amber-200">Arbitrage (Netzladung)</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-sm text-amber-600 dark:text-amber-400">Netzladung</p>
+              <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
+                {z.arbitrage_kwh.toFixed(0)} kWh
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-amber-600 dark:text-amber-400">Ø Ladepreis</p>
+              <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
+                {z.arbitrage_avg_preis_cent?.toFixed(1) || '-'} ct/kWh
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-amber-600 dark:text-amber-400">Anteil an Ladung</p>
+              <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
+                {((z.arbitrage_kwh / z.gesamt_ladung_kwh) * 100).toFixed(0)} %
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-amber-600 dark:text-amber-400">Arbitrage-Gewinn</p>
+              <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                +{z.arbitrage_gewinn_euro.toFixed(0)} €
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Charts */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Ladung/Entladung pro Monat */}
@@ -213,7 +252,14 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="ladung" fill="#3b82f6" name="Ladung" />
+                {z.arbitrage_faehig && z.arbitrage_kwh > 0 ? (
+                  <>
+                    <Bar dataKey="pvLadung" stackId="ladung" fill="#3b82f6" name="PV-Ladung" />
+                    <Bar dataKey="arbitrage" stackId="ladung" fill="#f59e0b" name="Netz-Ladung" />
+                  </>
+                ) : (
+                  <Bar dataKey="ladung" fill="#3b82f6" name="Ladung" />
+                )}
                 <Bar dataKey="entladung" fill="#22c55e" name="Entladung" />
               </BarChart>
             </ResponsiveContainer>
