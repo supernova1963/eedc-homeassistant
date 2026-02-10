@@ -19,6 +19,29 @@ export interface SensorFeld {
   unit: string
   required: boolean
   hint?: string
+  // v0.9.9: Erweiterte Optionen
+  optional?: boolean // Kann "nicht erfassen" gewählt werden
+  berechenbar?: boolean // Kann aus anderen Sensoren berechnet werden
+  berechnung_formel?: string // z.B. "evcc_solar_pv" für EVCC-Berechnung
+  manuell_only?: boolean // Nur manuelle Eingabe möglich
+}
+
+// v0.9.9: Mapping-Typen
+export type MappingTyp = 'sensor' | 'berechnet' | 'nicht_erfassen' | 'manuell'
+
+export interface FeldMapping {
+  typ: MappingTyp
+  sensor?: string // Sensor-ID bei typ='sensor'
+  formel?: string // Formel-ID bei typ='berechnet'
+  quell_sensoren?: Record<string, string> // Quell-Sensoren für Berechnung
+}
+
+export interface BerechnungsFormel {
+  beschreibung: string
+  quell_sensoren: string[]
+  template: string
+  unit?: string
+  hinweis?: string
 }
 
 export interface InvestitionMitSensorFeldern {
@@ -31,7 +54,7 @@ export interface InvestitionMitSensorFeldern {
 
 export interface SensorMapping {
   investition_id: number
-  mappings: Record<string, string>
+  mappings: Record<string, string | FeldMapping>
 }
 
 export interface SensorMappingRequest {
@@ -162,12 +185,34 @@ export const haImportApi = {
 
   /**
    * Ruft verfügbare Sensoren aus Home Assistant ab.
+   * v0.9.9: Erweiterte Filter für EVCC-Kompatibilität
    */
-  async getHASensors(filterTotalIncreasing = true, filterEnergy = true): Promise<HASensorsResponse> {
+  async getHASensors(
+    filterTotalIncreasing = true,
+    filterEnergy = true,
+    includePercentage = false,
+    includeCounter = false
+  ): Promise<HASensorsResponse> {
     const params = new URLSearchParams()
     params.append('filter_total_increasing', String(filterTotalIncreasing))
     params.append('filter_energy', String(filterEnergy))
+    params.append('include_percentage', String(includePercentage))
+    params.append('include_counter', String(includeCounter))
     return api.get<HASensorsResponse>(`/ha-import/ha-sensors?${params}`)
+  },
+
+  /**
+   * Ruft ALLE Sensoren aus HA ab (ohne Filter).
+   */
+  async getAllHASensors(): Promise<HASensorsResponse> {
+    return api.get<HASensorsResponse>('/ha-import/ha-sensors/all')
+  },
+
+  /**
+   * Ruft verfügbare Berechnungsformeln ab.
+   */
+  async getBerechnungsFormeln(): Promise<{ formeln: Record<string, BerechnungsFormel>; hinweis: string }> {
+    return api.get('/ha-import/berechnungs-formeln')
   },
 
   /**

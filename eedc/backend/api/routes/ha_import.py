@@ -39,6 +39,11 @@ class SensorFeld(BaseModel):
     unit: str
     required: bool = False
     hint: str | None = None
+    # v0.9.9: Erweiterte Optionen
+    optional: bool = False  # Kann "nicht erfassen" gewählt werden
+    berechenbar: bool = False  # Kann aus anderen Sensoren berechnet werden
+    berechnung_formel: str | None = None  # z.B. "evcc_solar_percent" für EVCC-Berechnung
+    manuell_only: bool = False  # Nur manuelle Eingabe möglich (z.B. externe Kosten)
 
 
 class InvestitionMitSensorFeldern(BaseModel):
@@ -50,12 +55,24 @@ class InvestitionMitSensorFeldern(BaseModel):
     parameter: dict | None = None
 
 
+class FeldMapping(BaseModel):
+    """Mapping-Konfiguration für ein einzelnes Feld."""
+    typ: str = Field(
+        ...,
+        description="Art des Mappings: 'sensor', 'berechnet', 'nicht_erfassen', 'manuell'"
+    )
+    sensor: str | None = Field(None, description="Sensor-ID bei typ='sensor'")
+    # Für berechnete Felder (typ='berechnet')
+    formel: str | None = Field(None, description="Formel-ID: 'evcc_solar_pv', 'evcc_solar_netz', 'verbrauch_aus_km'")
+    quell_sensoren: dict[str, str] | None = Field(None, description="Quell-Sensoren für Berechnung")
+
+
 class SensorMapping(BaseModel):
     """Zuordnung von HA-Sensoren zu Investitions-Feldern."""
     investition_id: int
-    mappings: dict[str, str] = Field(
+    mappings: dict[str, str | FeldMapping] = Field(
         ...,
-        description="Mapping von Feldname zu HA entity_id, z.B. {'km_gefahren': 'sensor.car_km_monthly'}"
+        description="Mapping von Feldname zu Sensor-ID oder FeldMapping-Objekt"
     )
 
 
@@ -126,20 +143,70 @@ class AnlageSensorMappingRequest(BaseModel):
 # =============================================================================
 
 def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorFeld]:
-    """Gibt die erwarteten Felder für einen Investitionstyp zurück."""
+    """
+    Gibt die erwarteten Felder für einen Investitionstyp zurück.
+
+    v0.9.9: Erweitert um optionale Felder, berechenbare Felder und manuelle Eingaben.
+    """
 
     if typ == "e-auto":
         felder = [
-            SensorFeld(key="km_gefahren", label="Gefahrene km", unit="km"),
-            SensorFeld(key="verbrauch_kwh", label="Verbrauch", unit="kWh"),
-            SensorFeld(key="ladung_pv_kwh", label="Ladung aus PV", unit="kWh"),
-            SensorFeld(key="ladung_netz_kwh", label="Ladung aus Netz", unit="kWh"),
-            SensorFeld(key="ladung_extern_kwh", label="Externe Ladung", unit="kWh", hint="Öffentliche Ladesäulen"),
-            SensorFeld(key="ladung_extern_euro", label="Externe Kosten", unit="€"),
+            SensorFeld(
+                key="km_gefahren",
+                label="Gefahrene km",
+                unit="km",
+                hint="Tacho/Odometer Sensor"
+            ),
+            SensorFeld(
+                key="verbrauch_kwh",
+                label="Verbrauch",
+                unit="kWh",
+                optional=True,
+                berechenbar=True,
+                berechnung_formel="verbrauch_aus_ladung_km",
+                hint="Optional: Wird aus Ladung/km berechnet wenn leer"
+            ),
+            SensorFeld(
+                key="ladung_pv_kwh",
+                label="Ladung aus PV",
+                unit="kWh",
+                berechenbar=True,
+                berechnung_formel="evcc_solar_pv",
+                hint="EVCC: Gesamt × Solar%"
+            ),
+            SensorFeld(
+                key="ladung_netz_kwh",
+                label="Ladung aus Netz",
+                unit="kWh",
+                berechenbar=True,
+                berechnung_formel="evcc_solar_netz",
+                hint="EVCC: Gesamt × (100 - Solar%)"
+            ),
+            SensorFeld(
+                key="ladung_extern_kwh",
+                label="Externe Ladung",
+                unit="kWh",
+                optional=True,
+                manuell_only=True,
+                hint="Öffentliche Ladesäulen - nur manuelle Eingabe"
+            ),
+            SensorFeld(
+                key="ladung_extern_euro",
+                label="Externe Kosten",
+                unit="€",
+                optional=True,
+                manuell_only=True,
+                hint="Kosten öffentliches Laden - nur manuelle Eingabe"
+            ),
         ]
         # V2H wenn aktiviert
         if parameter and (parameter.get("nutzt_v2h") or parameter.get("v2h_faehig")):
-            felder.append(SensorFeld(key="v2h_entladung_kwh", label="V2H Entladung", unit="kWh"))
+            felder.append(SensorFeld(
+                key="v2h_entladung_kwh",
+                label="V2H Entladung",
+                unit="kWh",
+                optional=True
+            ))
         return felder
 
     elif typ == "speicher":
@@ -150,22 +217,53 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
         # Arbitrage wenn aktiviert
         if parameter and parameter.get("arbitrage_faehig"):
             felder.extend([
-                SensorFeld(key="speicher_ladung_netz_kwh", label="Netzladung", unit="kWh", hint="Arbitrage"),
-                SensorFeld(key="speicher_ladepreis_cent", label="Ø Ladepreis", unit="ct/kWh", hint="Arbitrage"),
+                SensorFeld(
+                    key="speicher_ladung_netz_kwh",
+                    label="Netzladung",
+                    unit="kWh",
+                    optional=True,
+                    hint="Arbitrage - Ladung aus Netz"
+                ),
+                SensorFeld(
+                    key="speicher_ladepreis_cent",
+                    label="Ø Ladepreis",
+                    unit="ct/kWh",
+                    optional=True,
+                    manuell_only=True,
+                    hint="Arbitrage - nur manuelle Eingabe"
+                ),
             ])
         return felder
 
     elif typ == "wallbox":
         return [
             SensorFeld(key="ladung_kwh", label="Heimladung", unit="kWh", required=True),
-            SensorFeld(key="ladevorgaenge", label="Ladevorgänge", unit="Anzahl"),
+            SensorFeld(
+                key="ladevorgaenge",
+                label="Ladevorgänge",
+                unit="Anzahl",
+                optional=True,
+                hint="EVCC: sensor.evcc_charging_sessions (Counter)"
+            ),
         ]
 
     elif typ == "waermepumpe":
         return [
             SensorFeld(key="stromverbrauch_kwh", label="Stromverbrauch", unit="kWh", required=True),
-            SensorFeld(key="heizenergie_kwh", label="Heizenergie", unit="kWh"),
-            SensorFeld(key="warmwasser_kwh", label="Warmwasser", unit="kWh"),
+            SensorFeld(
+                key="heizenergie_kwh",
+                label="Heizenergie",
+                unit="kWh",
+                optional=True,
+                hint="Falls von WP geliefert"
+            ),
+            SensorFeld(
+                key="warmwasser_kwh",
+                label="Warmwasser",
+                unit="kWh",
+                optional=True,
+                hint="Falls getrennt erfasst"
+            ),
         ]
 
     elif typ == "pv-module":
@@ -180,8 +278,8 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
         # Speicher wenn vorhanden
         if parameter and parameter.get("hat_speicher"):
             felder.extend([
-                SensorFeld(key="speicher_ladung_kwh", label="Speicher Ladung", unit="kWh"),
-                SensorFeld(key="speicher_entladung_kwh", label="Speicher Entladung", unit="kWh"),
+                SensorFeld(key="speicher_ladung_kwh", label="Speicher Ladung", unit="kWh", optional=True),
+                SensorFeld(key="speicher_entladung_kwh", label="Speicher Entladung", unit="kWh", optional=True),
             ])
         return felder
 
@@ -202,6 +300,30 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
             ]
 
     return []
+
+
+# =============================================================================
+# Berechnungsformeln
+# =============================================================================
+
+BERECHNUNGS_FORMELN = {
+    "evcc_solar_pv": {
+        "beschreibung": "EVCC: Ladung PV = Gesamt-Ladung × Solar-Anteil%",
+        "quell_sensoren": ["evcc_total_charged", "evcc_solar_percentage"],
+        "template": "{{ (states('{evcc_total_charged}') | float(0)) * (states('{evcc_solar_percentage}') | float(0)) / 100 }}",
+    },
+    "evcc_solar_netz": {
+        "beschreibung": "EVCC: Ladung Netz = Gesamt-Ladung × (100 - Solar-Anteil%)",
+        "quell_sensoren": ["evcc_total_charged", "evcc_solar_percentage"],
+        "template": "{{ (states('{evcc_total_charged}') | float(0)) * (100 - (states('{evcc_solar_percentage}') | float(0))) / 100 }}",
+    },
+    "verbrauch_aus_ladung_km": {
+        "beschreibung": "Verbrauch = (Ladung PV + Ladung Netz + Extern) / km × 100",
+        "quell_sensoren": ["ladung_pv", "ladung_netz", "ladung_extern", "km_gefahren"],
+        "template": "{{ ((states('{ladung_pv}') | float(0)) + (states('{ladung_netz}') | float(0)) + (states('{ladung_extern}') | float(0))) / (states('{km_gefahren}') | float(1)) * 100 }}",
+        "hinweis": "Ergebnis in kWh/100km"
+    },
+}
 
 
 # =============================================================================
@@ -252,13 +374,17 @@ def _match_sensor_score(entity_id: str, friendly_name: str | None, keywords: lis
 @router.get("/ha-sensors", response_model=HASensorsResponse)
 async def get_ha_sensors(
     filter_total_increasing: bool = Query(True, description="Nur Sensoren mit state_class: total_increasing"),
-    filter_energy: bool = Query(True, description="Nur Energie-Sensoren (kWh, Wh)"),
+    filter_energy: bool = Query(True, description="Nur Energie-Sensoren (kWh, Wh, km)"),
+    include_percentage: bool = Query(False, description="Auch Prozent-Sensoren einschließen (für EVCC Solar%)"),
+    include_counter: bool = Query(False, description="Auch Counter-Sensoren einschließen (für Ladevorgänge)"),
 ):
     """
     Ruft verfügbare Sensoren aus Home Assistant ab.
 
     Nutzt die HA REST API über den Supervisor oder direkte URL.
     Filtert standardmäßig nach state_class: total_increasing für Utility Meter.
+
+    v0.9.9: Erweiterte Filter für EVCC-Kompatibilität (Prozent, Counter).
     """
     sensoren: list[HASensor] = []
     ha_url = None
@@ -315,13 +441,35 @@ async def get_ha_sensors(
                         friendly_name = attributes.get("friendly_name")
 
                         # Filter: state_class
-                        if filter_total_increasing and state_class != "total_increasing":
+                        valid_state_class = False
+                        if filter_total_increasing:
+                            if state_class == "total_increasing":
+                                valid_state_class = True
+                            elif include_counter and state_class == "total":
+                                # Counter wie charging_sessions haben oft state_class: total
+                                valid_state_class = True
+                            elif include_percentage and state_class == "measurement":
+                                # Prozent-Sensoren haben oft state_class: measurement
+                                valid_state_class = True
+                        else:
+                            valid_state_class = True
+
+                        if not valid_state_class:
                             continue
 
-                        # Filter: Energie-Einheiten
+                        # Filter: Einheiten
                         if filter_energy:
                             energy_units = ["kWh", "Wh", "MWh", "km", "mi"]
-                            if unit not in energy_units:
+                            percentage_units = ["%"]
+                            counter_units = ["", None]  # Counter haben oft keine Einheit
+
+                            valid_unit = unit in energy_units
+                            if include_percentage and unit in percentage_units:
+                                valid_unit = True
+                            if include_counter and (unit in counter_units or "session" in entity_id.lower()):
+                                valid_unit = True
+
+                            if not valid_unit:
                                 continue
 
                         sensoren.append(HASensor(
@@ -351,6 +499,34 @@ async def get_ha_sensors(
         connected=len(sensoren) > 0,
         fehler=fehler if not sensoren else None,
     )
+
+
+@router.get("/ha-sensors/all")
+async def get_all_ha_sensors():
+    """
+    Ruft ALLE Sensoren aus HA ab (ohne Filter).
+
+    Nützlich für die Auswahl von Spezial-Sensoren wie EVCC Solar%.
+    """
+    return await get_ha_sensors(
+        filter_total_increasing=False,
+        filter_energy=False,
+        include_percentage=True,
+        include_counter=True,
+    )
+
+
+@router.get("/berechnungs-formeln")
+async def get_berechnungs_formeln():
+    """
+    Gibt alle verfügbaren Berechnungsformeln zurück.
+
+    Diese können für berechnete Felder verwendet werden.
+    """
+    return {
+        "formeln": BERECHNUNGS_FORMELN,
+        "hinweis": "Quell-Sensoren müssen als Template-Sensoren oder direkt konfiguriert werden"
+    }
 
 
 @router.get("/ha-sensors/suggestions/{anlage_id}")

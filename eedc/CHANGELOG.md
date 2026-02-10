@@ -19,7 +19,14 @@
     - Suchbare Dropdowns mit Sensor-Details (Einheit, Friendly Name)
     - Persistente Speicherung der Sensor-Zuordnungen in Investitions-Parametern
     - Generiertes YAML verwendet echte Sensor-IDs statt Platzhalter
+  - **Erweiterte Mapping-Optionen (EVCC-Kompatibilität)**
+    - Mapping-Typen: Sensor, Berechnen, Nicht erfassen, Nur manuell
+    - EVCC-Berechnungen: Solar% → Ladung PV/Netz (Template-Sensoren)
+    - Optionale Felder können übersprungen werden
+    - Manuelle Felder (externe Ladung/Kosten) werden gekennzeichnet
+    - Erweiterte Sensor-Filter: Auch Counter und Prozent-Sensoren
   - YAML-Generator erstellt komplette Home Assistant Konfiguration:
+    - `template` Sensoren für berechnete Felder (EVCC Solar%)
     - `utility_meter` für monatliche Aggregation
     - `rest_command` für Daten-Import zu EEDC
     - `automation` für monatliches Auslösen

@@ -2,9 +2,12 @@
 Home Assistant YAML Generator
 
 Generiert YAML-Konfiguration für:
+- Template Sensoren (für berechnete Felder wie EVCC Solar%)
 - Utility Meter (monatliche Aggregation)
 - REST Command (EEDC Import Endpoint)
 - Automation (monatlicher Import)
+
+v0.9.9: Erweitert um Template-Sensoren für EVCC-Berechnungen.
 """
 
 from typing import TYPE_CHECKING
@@ -12,6 +15,34 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from backend.models.anlage import Anlage
     from backend.models.investition import Investition
+
+
+# Berechnungsformeln für Template-Sensoren
+BERECHNUNGS_FORMELN = {
+    "evcc_solar_pv": {
+        "beschreibung": "EVCC: Ladung PV = Gesamt-Ladung × Solar-Anteil%",
+        "quell_sensoren": ["evcc_total_charged", "evcc_solar_percentage"],
+        "template": "{{ (states('{evcc_total_charged}') | float(0)) * (states('{evcc_solar_percentage}') | float(0)) / 100 }}",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+    },
+    "evcc_solar_netz": {
+        "beschreibung": "EVCC: Ladung Netz = Gesamt-Ladung × (100 - Solar-Anteil%)",
+        "quell_sensoren": ["evcc_total_charged", "evcc_solar_percentage"],
+        "template": "{{ (states('{evcc_total_charged}') | float(0)) * (100 - (states('{evcc_solar_percentage}') | float(0))) / 100 }}",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+    },
+    "verbrauch_aus_ladung_km": {
+        "beschreibung": "Verbrauch = (Ladung PV + Ladung Netz + Extern) / km × 100",
+        "quell_sensoren": ["ladung_pv", "ladung_netz", "km_gefahren"],
+        "template": "{{ ((states('{ladung_pv}') | float(0)) + (states('{ladung_netz}') | float(0))) / max((states('{km_gefahren}') | float(1)), 1) * 100 }}",
+        "unit": "kWh/100km",
+        "state_class": "measurement",
+    },
+}
 
 
 def _sanitize_name(name: str) -> str:
@@ -116,17 +147,79 @@ def generate_ha_yaml(
 
     Returns:
         YAML-String für configuration.yaml
+
+    v0.9.9: Erweitert um Template-Sensoren für berechnete Felder (EVCC).
     """
     anlage_name = _sanitize_name(anlage.anlagenname)
     lines = []
     basis_sensors = basis_sensors or {}
+    template_sensors = []  # Sammelt berechnete Sensoren
 
     # Header
     lines.append(f"# EEDC Import Konfiguration für {anlage.anlagenname}")
     lines.append(f"# Generiert für Anlage ID: {anlage.id}")
     lines.append("")
 
-    # Basis-Sensoren (PV, Einspeisung, Netzbezug)
+    # =========================================================================
+    # Template-Sensoren für berechnete Felder (EVCC etc.)
+    # =========================================================================
+    for inv in investitionen:
+        ha_sensors = (inv.parameter or {}).get("ha_sensors", {})
+        inv_name = _sanitize_name(inv.bezeichnung)
+
+        for field_key, mapping in ha_sensors.items():
+            # Prüfen ob es ein berechnetes Feld ist
+            if isinstance(mapping, dict) and mapping.get("typ") == "berechnet":
+                formel_key = mapping.get("formel")
+                quell_sensoren = mapping.get("quell_sensoren", {})
+
+                if formel_key and formel_key in BERECHNUNGS_FORMELN:
+                    formel = BERECHNUNGS_FORMELN[formel_key]
+                    template = formel["template"]
+
+                    # Quell-Sensoren in Template einsetzen
+                    for quelle_key, quelle_sensor in quell_sensoren.items():
+                        template = template.replace(f"{{{quelle_key}}}", quelle_sensor)
+
+                    template_sensors.append({
+                        "name": f"EEDC {inv.bezeichnung} {field_key}",
+                        "unique_id": f"eedc_{anlage_name}_{inv_name}_{field_key}_calculated",
+                        "template": template,
+                        "unit": formel.get("unit", ""),
+                        "device_class": formel.get("device_class"),
+                        "state_class": formel.get("state_class"),
+                        "field_key": field_key,
+                        "inv_name": inv_name,
+                    })
+
+    # Template-Sensoren ausgeben (wenn vorhanden)
+    if template_sensors:
+        lines.append("# =============================================================================")
+        lines.append("# Template-Sensoren für berechnete Felder (EVCC etc.)")
+        lines.append("# =============================================================================")
+        lines.append("")
+        lines.append("template:")
+        lines.append("  - sensor:")
+
+        for ts in template_sensors:
+            lines.append(f"      # {ts['name']}")
+            lines.append(f"      - name: \"{ts['name']}\"")
+            lines.append(f"        unique_id: \"{ts['unique_id']}\"")
+            if ts.get("unit"):
+                lines.append(f"        unit_of_measurement: \"{ts['unit']}\"")
+            if ts.get("device_class"):
+                lines.append(f"        device_class: {ts['device_class']}")
+            if ts.get("state_class"):
+                lines.append(f"        state_class: {ts['state_class']}")
+            lines.append(f"        state: >")
+            lines.append(f"          {ts['template']}")
+            lines.append("")
+
+        lines.append("")
+
+    # =========================================================================
+    # Utility Meter
+    # =========================================================================
     lines.append("# =============================================================================")
     lines.append("# Utility Meter für Basis-Energiedaten")
     lines.append("# =============================================================================")
@@ -180,12 +273,34 @@ def generate_ha_yaml(
         ha_sensors = (inv.parameter or {}).get("ha_sensors", {})
 
         for field_key, label, unit in fields:
+            mapping = ha_sensors.get(field_key)
+
+            # Mapping-Typ bestimmen
+            if isinstance(mapping, dict):
+                mapping_typ = mapping.get("typ", "sensor")
+                sensor_id = mapping.get("sensor")
+            elif isinstance(mapping, str):
+                # Einfaches String-Mapping (Rückwärtskompatibilität)
+                mapping_typ = "sensor"
+                sensor_id = mapping
+            else:
+                mapping_typ = None
+                sensor_id = None
+
+            # "nicht_erfassen" oder "manuell" überspringen
+            if mapping_typ in ("nicht_erfassen", "manuell"):
+                lines.append(f"  # {field_key}: {mapping_typ} (kein Utility Meter)")
+                continue
+
             sensor_name = f"eedc_{anlage_name}_{inv_name}_{field_key}_monthly"
 
-            # Echten Sensor oder Platzhalter verwenden
-            source_sensor = ha_sensors.get(field_key)
-            if source_sensor:
+            # Source bestimmen
+            if mapping_typ == "berechnet":
+                # Berechneter Sensor - verwende den generierten Template-Sensor
+                source_sensor = f"sensor.eedc_{anlage_name}_{inv_name}_{field_key}_calculated"
                 source_line = f"    source: {source_sensor}"
+            elif sensor_id:
+                source_line = f"    source: {sensor_id}"
             else:
                 placeholder = f"sensor.DEIN_{inv_name.upper()}_{field_key.upper()}_SENSOR"
                 source_line = f"    source: {placeholder}  # TODO: Anpassen!"
