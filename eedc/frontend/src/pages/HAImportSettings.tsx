@@ -25,8 +25,7 @@ import {
   Info,
   AlertTriangle,
   Link,
-  LinkOff,
-  Search,
+  Link2Off,
 } from 'lucide-react'
 import { haImportApi, anlagenApi } from '../api'
 import type {
@@ -550,7 +549,7 @@ export default function HAImportSettings() {
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400">
-                      <LinkOff className="w-4 h-4" />
+                      <Link2Off className="w-4 h-4" />
                       Nicht verbunden
                     </span>
                   )}
