@@ -1,17 +1,5 @@
 # Changelog
 
-Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
-
-Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
-und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
-
-## [Unreleased]
-
-### Hinzugefügt
-- Nichts geplant
-
----
-
 ## [0.9.8] - 2026-02-10
 
 ### Hinzugefügt
