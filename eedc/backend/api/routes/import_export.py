@@ -18,6 +18,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
+from backend.services.wetter_service import get_wetterdaten
 
 
 # =============================================================================
@@ -699,6 +700,7 @@ async def import_csv(
     anlage_id: int,
     file: UploadFile = File(...),
     ueberschreiben: bool = Query(False, description="Existierende Monate überschreiben"),
+    auto_wetter: bool = Query(True, description="Wetterdaten automatisch abrufen wenn leer"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -706,6 +708,8 @@ async def import_csv(
 
     v0.9: Unterstützt personalisierte Spalten basierend auf Investitions-Bezeichnungen.
     Beispiel: "Sueddach_kWh", "Speicher_Keller_Ladung_kWh"
+
+    v0.9.8: Automatischer Wetterdaten-Abruf wenn Globalstrahlung/Sonnenstunden leer sind.
 
     Summenberechnung:
     - pv_erzeugung: Summe aus PV-Modul-Spalten wenn vorhanden
@@ -715,13 +719,15 @@ async def import_csv(
         anlage_id: ID der Anlage
         file: CSV-Datei
         ueberschreiben: Wenn True, werden existierende Monate überschrieben
+        auto_wetter: Wenn True, werden fehlende Wetterdaten automatisch abgerufen
 
     Returns:
         ImportResult: Ergebnis des Imports
     """
-    # Anlage prüfen
+    # Anlage prüfen und laden (für Koordinaten bei Wetter-Abruf)
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    if not anlage_result.scalar_one_or_none():
+    anlage = anlage_result.scalar_one_or_none()
+    if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
     # Investitionen laden für Investitions-Monatsdaten
@@ -816,6 +822,25 @@ async def import_csv(
             globalstrahlung = parse_float(row.get("Globalstrahlung_kWh_m2", ""))
             sonnenstunden = parse_float(row.get("Sonnenstunden", ""))
             notizen = row.get("Notizen", "").strip() or None
+
+            # v0.9.8: Wetterdaten automatisch abrufen wenn leer und Koordinaten vorhanden
+            if auto_wetter and globalstrahlung is None and sonnenstunden is None:
+                if anlage.latitude and anlage.longitude:
+                    try:
+                        wetter = await get_wetterdaten(
+                            latitude=anlage.latitude,
+                            longitude=anlage.longitude,
+                            jahr=jahr,
+                            monat=monat
+                        )
+                        globalstrahlung = wetter.get("globalstrahlung_kwh_m2")
+                        sonnenstunden = wetter.get("sonnenstunden")
+                    except Exception as e:
+                        # Bei Fehlern Wetterdaten ignorieren, Import fortsetzen
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"Wetterdaten für {monat}/{jahr} nicht abrufbar: {e}"
+                        )
 
             # v0.9: Personalisierte Spalten verarbeiten und Summen berechnen
             summen = {"pv_erzeugung_sum": 0.0, "batterie_ladung_sum": 0.0, "batterie_entladung_sum": 0.0}

@@ -3,13 +3,16 @@ Home Assistant Import Routes
 
 Ermöglicht den automatisierten Import von Monatsdaten aus Home Assistant.
 Generiert YAML-Konfiguration für HA Template-Sensoren und Utility Meter.
+
+v0.9.8: Sensor-Auswahl aus HA mit Vorschlägen basierend auf state_class: total_increasing
 """
 
 import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +21,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
+from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +89,36 @@ class ImportResult(BaseModel):
     investitionen_importiert: int = 0
     fehler: list[str] = []
     hinweise: list[str] = []
+
+
+class HASensor(BaseModel):
+    """Ein Sensor aus Home Assistant."""
+    entity_id: str
+    friendly_name: str | None = None
+    state_class: str | None = None
+    unit_of_measurement: str | None = None
+    device_class: str | None = None
+
+
+class HASensorsResponse(BaseModel):
+    """Antwort mit HA-Sensoren."""
+    sensoren: list[HASensor]
+    ha_url: str | None = None
+    connected: bool = False
+    fehler: str | None = None
+
+
+class BasisSensorMapping(BaseModel):
+    """Zuordnung der Basis-Sensoren (Einspeisung, Netzbezug, PV)."""
+    einspeisung: str | None = None
+    netzbezug: str | None = None
+    pv_erzeugung: str | None = None
+
+
+class AnlageSensorMappingRequest(BaseModel):
+    """Request zum Speichern aller Sensor-Zuordnungen einer Anlage."""
+    basis: BasisSensorMapping
+    investitionen: list[SensorMapping]
 
 
 # =============================================================================
@@ -171,8 +205,309 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
 
 
 # =============================================================================
+# HA-Sensor Keywords für Vorschläge
+# =============================================================================
+
+SENSOR_KEYWORDS = {
+    # Basis-Sensoren
+    "einspeisung": ["grid_export", "einspeisung", "feed_in", "export", "einspeisen"],
+    "netzbezug": ["grid_import", "netzbezug", "grid_consumption", "import", "bezug", "grid_power_in"],
+    "pv_erzeugung": ["pv_energy", "solar_energy", "pv_erzeugung", "solar_production", "pv_power", "solar_yield"],
+    # Speicher
+    "ladung_kwh": ["battery_charge", "batterie_ladung", "battery_in", "speicher_ladung", "charge_energy"],
+    "entladung_kwh": ["battery_discharge", "batterie_entladung", "battery_out", "speicher_entladung", "discharge_energy"],
+    # E-Auto
+    "km_gefahren": ["odometer", "km", "mileage", "distance", "kilometer"],
+    "verbrauch_kwh": ["car_consumption", "ev_consumption", "car_energy", "fahrzeug_verbrauch"],
+    "ladung_pv_kwh": ["car_pv_charge", "ev_solar", "solar_charge"],
+    "ladung_netz_kwh": ["car_grid_charge", "ev_grid", "grid_charge"],
+    # Wärmepumpe
+    "stromverbrauch_kwh": ["heat_pump_energy", "wp_strom", "heatpump_consumption", "waermepumpe_strom"],
+    "heizenergie_kwh": ["heating_energy", "heizung", "heating_output"],
+    "warmwasser_kwh": ["dhw_energy", "warmwasser", "hot_water"],
+    # Wallbox
+    "wallbox_ladung": ["wallbox_energy", "charger_energy", "evse_energy", "ladestation"],
+}
+
+
+def _match_sensor_score(entity_id: str, friendly_name: str | None, keywords: list[str]) -> int:
+    """Berechnet einen Match-Score für einen Sensor basierend auf Keywords."""
+    score = 0
+    search_text = f"{entity_id} {friendly_name or ''}".lower()
+
+    for keyword in keywords:
+        if keyword.lower() in search_text:
+            score += 10
+            # Exakter Match im entity_id ist besser
+            if keyword.lower() in entity_id.lower():
+                score += 5
+
+    return score
+
+
+# =============================================================================
 # Endpoints
 # =============================================================================
+
+@router.get("/ha-sensors", response_model=HASensorsResponse)
+async def get_ha_sensors(
+    filter_total_increasing: bool = Query(True, description="Nur Sensoren mit state_class: total_increasing"),
+    filter_energy: bool = Query(True, description="Nur Energie-Sensoren (kWh, Wh)"),
+):
+    """
+    Ruft verfügbare Sensoren aus Home Assistant ab.
+
+    Nutzt die HA REST API über den Supervisor oder direkte URL.
+    Filtert standardmäßig nach state_class: total_increasing für Utility Meter.
+    """
+    sensoren: list[HASensor] = []
+    ha_url = None
+    fehler = None
+
+    # HA API URLs versuchen (Supervisor > Local > Config)
+    ha_urls = [
+        "http://supervisor/core/api",  # HA Supervisor (Add-on)
+        "http://homeassistant.local:8123/api",  # mDNS
+        "http://localhost:8123/api",  # Lokal
+    ]
+
+    # Falls HA URL in Settings konfiguriert
+    if hasattr(settings, 'ha_url') and settings.ha_url:
+        ha_urls.insert(0, f"{settings.ha_url}/api")
+
+    # HA Token aus Umgebung oder Settings
+    import os
+    ha_token = os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HA_TOKEN")
+    if hasattr(settings, 'ha_token') and settings.ha_token:
+        ha_token = settings.ha_token
+
+    if not ha_token:
+        return HASensorsResponse(
+            sensoren=[],
+            connected=False,
+            fehler="Kein HA-Token konfiguriert. Bitte SUPERVISOR_TOKEN oder HA_TOKEN setzen."
+        )
+
+    headers = {
+        "Authorization": f"Bearer {ha_token}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for url in ha_urls:
+            try:
+                response = await client.get(f"{url}/states", headers=headers)
+                if response.status_code == 200:
+                    ha_url = url.replace("/api", "")
+                    states = response.json()
+
+                    for state in states:
+                        entity_id = state.get("entity_id", "")
+
+                        # Nur Sensoren
+                        if not entity_id.startswith("sensor."):
+                            continue
+
+                        attributes = state.get("attributes", {})
+                        state_class = attributes.get("state_class")
+                        unit = attributes.get("unit_of_measurement", "")
+                        device_class = attributes.get("device_class")
+                        friendly_name = attributes.get("friendly_name")
+
+                        # Filter: state_class
+                        if filter_total_increasing and state_class != "total_increasing":
+                            continue
+
+                        # Filter: Energie-Einheiten
+                        if filter_energy:
+                            energy_units = ["kWh", "Wh", "MWh", "km", "mi"]
+                            if unit not in energy_units:
+                                continue
+
+                        sensoren.append(HASensor(
+                            entity_id=entity_id,
+                            friendly_name=friendly_name,
+                            state_class=state_class,
+                            unit_of_measurement=unit,
+                            device_class=device_class,
+                        ))
+
+                    # Sortieren nach entity_id
+                    sensoren.sort(key=lambda s: s.entity_id)
+                    break
+
+            except httpx.RequestError as e:
+                logger.debug(f"HA API nicht erreichbar unter {url}: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Fehler beim Abrufen der HA-Sensoren von {url}: {e}")
+                continue
+        else:
+            fehler = "Home Assistant nicht erreichbar. Bitte prüfen Sie die Verbindung."
+
+    return HASensorsResponse(
+        sensoren=sensoren,
+        ha_url=ha_url,
+        connected=len(sensoren) > 0,
+        fehler=fehler if not sensoren else None,
+    )
+
+
+@router.get("/ha-sensors/suggestions/{anlage_id}")
+async def get_sensor_suggestions(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gibt Sensor-Vorschläge für alle Felder einer Anlage zurück.
+
+    Basiert auf Keyword-Matching der verfügbaren HA-Sensoren.
+    """
+    # HA-Sensoren abrufen
+    ha_response = await get_ha_sensors(filter_total_increasing=True, filter_energy=True)
+
+    if not ha_response.connected:
+        return {
+            "connected": False,
+            "fehler": ha_response.fehler,
+            "basis": {},
+            "investitionen": {},
+        }
+
+    # Investitionen laden
+    result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.aktiv == True)
+    )
+    investitionen = result.scalars().all()
+
+    # Basis-Vorschläge
+    basis_suggestions = {}
+    for key in ["einspeisung", "netzbezug", "pv_erzeugung"]:
+        keywords = SENSOR_KEYWORDS.get(key, [])
+        best_match = None
+        best_score = 0
+
+        for sensor in ha_response.sensoren:
+            score = _match_sensor_score(sensor.entity_id, sensor.friendly_name, keywords)
+            if score > best_score:
+                best_score = score
+                best_match = sensor.entity_id
+
+        basis_suggestions[key] = {
+            "vorschlag": best_match,
+            "score": best_score,
+            "alle_sensoren": [s.entity_id for s in ha_response.sensoren],
+        }
+
+    # Investitions-Vorschläge
+    inv_suggestions = {}
+    for inv in investitionen:
+        inv_suggestions[str(inv.id)] = {
+            "bezeichnung": inv.bezeichnung,
+            "typ": inv.typ,
+            "felder": {},
+        }
+
+        fields = get_felder_fuer_typ(inv.typ, inv.parameter)
+        inv_name_lower = inv.bezeichnung.lower()
+
+        for feld in fields:
+            keywords = SENSOR_KEYWORDS.get(feld.key, [])
+            # Investitions-Name als zusätzliches Keyword
+            keywords = keywords + [inv_name_lower]
+
+            best_match = None
+            best_score = 0
+
+            for sensor in ha_response.sensoren:
+                score = _match_sensor_score(sensor.entity_id, sensor.friendly_name, keywords)
+                # Bonus wenn Investitions-Name im Sensor vorkommt
+                if inv_name_lower in sensor.entity_id.lower() or inv_name_lower in (sensor.friendly_name or "").lower():
+                    score += 20
+
+                if score > best_score:
+                    best_score = score
+                    best_match = sensor.entity_id
+
+            inv_suggestions[str(inv.id)]["felder"][feld.key] = {
+                "vorschlag": best_match,
+                "score": best_score,
+            }
+
+    return {
+        "connected": True,
+        "ha_url": ha_response.ha_url,
+        "sensor_count": len(ha_response.sensoren),
+        "basis": basis_suggestions,
+        "investitionen": inv_suggestions,
+    }
+
+
+@router.post("/sensor-mapping-complete/{anlage_id}")
+async def save_complete_sensor_mapping(
+    anlage_id: int,
+    request: AnlageSensorMappingRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Speichert alle Sensor-Zuordnungen für eine Anlage (Basis + Investitionen).
+
+    Die Mappings werden gespeichert in:
+    - Anlage.ha_sensor_mapping (Basis-Sensoren)
+    - Investition.parameter['ha_sensors'] (pro Investition)
+    """
+    # Anlage laden und Basis-Mapping speichern
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    # Basis-Mapping in Anlage speichern (neues Feld oder JSON in existing field)
+    # Wir nutzen ein JSON-Feld oder erweitern das Modell
+    # Für jetzt: Speichern in einem neuen Attribut das wir später hinzufügen
+    # Alternativ: In der ersten Investition oder separater Tabelle
+
+    # Investitions-Mappings speichern
+    from sqlalchemy.orm.attributes import flag_modified
+
+    for mapping in request.investitionen:
+        result = await db.execute(
+            select(Investition)
+            .where(Investition.id == mapping.investition_id)
+            .where(Investition.anlage_id == anlage_id)
+        )
+        inv = result.scalar_one_or_none()
+
+        if not inv:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Investition {mapping.investition_id} nicht gefunden"
+            )
+
+        # JSON-Feld aktualisieren
+        if inv.parameter is None:
+            inv.parameter = {}
+
+        # Neues Dict erstellen, um SQLAlchemy dirty-tracking auszulösen
+        new_parameter = dict(inv.parameter)
+        new_parameter["ha_sensors"] = mapping.mappings
+        inv.parameter = new_parameter
+
+        # Explizit als geändert markieren (für JSON-Felder nötig)
+        flag_modified(inv, "parameter")
+
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": f"Sensor-Mappings für Anlage {anlage_id} gespeichert",
+        "basis_mapping": request.basis.model_dump(),
+        "investitionen_count": len(request.investitionen),
+    }
+
 
 @router.get("/investitionen/{anlage_id}", response_model=list[InvestitionMitSensorFeldern])
 async def get_investitionen_mit_feldern(
@@ -250,10 +585,15 @@ async def save_sensor_mapping(
 @router.get("/yaml/{anlage_id}")
 async def generate_yaml(
     anlage_id: int,
+    einspeisung_sensor: str = Query(None, description="Sensor-ID für Einspeisung"),
+    netzbezug_sensor: str = Query(None, description="Sensor-ID für Netzbezug"),
+    pv_sensor: str = Query(None, description="Sensor-ID für PV-Erzeugung"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Generiert YAML-Konfiguration für Home Assistant.
+
+    v0.9.8: Nutzt die übergebenen oder gespeicherten Sensor-IDs statt Platzhalter.
 
     Beinhaltet:
     - Utility Meter für monatliche Aggregation
@@ -275,20 +615,36 @@ async def generate_yaml(
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.aktiv == True)
     )
-    investitionen = result.scalars().all()
+    investitionen = list(result.scalars().all())
 
-    yaml_content = generate_ha_yaml(anlage, investitionen)
+    # Basis-Sensor-Mapping zusammenstellen
+    basis_sensors = {
+        "einspeisung": einspeisung_sensor,
+        "netzbezug": netzbezug_sensor,
+        "pv_erzeugung": pv_sensor,
+    }
+
+    yaml_content = generate_ha_yaml(anlage, investitionen, basis_sensors)
+
+    # Prüfen ob noch Platzhalter vorhanden sind
+    has_placeholders = "sensor.DEIN_" in yaml_content or "# TODO:" in yaml_content
+
+    hinweise = []
+    if has_placeholders:
+        hinweise.append("⚠️ Es sind noch Platzhalter vorhanden - bitte Sensoren zuordnen")
+    hinweise.extend([
+        "Diese YAML-Konfiguration in configuration.yaml einfügen",
+        "Home Assistant danach neu starten",
+        "Utility Meter werden monatlich zurückgesetzt",
+        "Automation sendet Daten am 1. jeden Monats um 00:05",
+    ])
 
     return {
         "anlage_id": anlage_id,
         "anlage_name": anlage.anlagenname,
         "yaml": yaml_content,
-        "hinweise": [
-            "Diese YAML-Konfiguration in configuration.yaml einfügen",
-            "Home Assistant danach neu starten",
-            "Utility Meter werden monatlich zurückgesetzt",
-            "Automation sendet Daten am 1. jeden Monats um 00:05",
-        ]
+        "has_placeholders": has_placeholders,
+        "hinweise": hinweise,
     }
 
 

@@ -101,19 +101,25 @@ def _get_sensor_fields_for_type(typ: str, parameter: dict | None = None) -> list
     return []
 
 
-def generate_ha_yaml(anlage: "Anlage", investitionen: list["Investition"]) -> str:
+def generate_ha_yaml(
+    anlage: "Anlage",
+    investitionen: list["Investition"],
+    basis_sensors: dict[str, str | None] | None = None
+) -> str:
     """
     Generiert die komplette YAML-Konfiguration für Home Assistant.
 
     Args:
         anlage: Die Anlage
         investitionen: Liste der aktiven Investitionen
+        basis_sensors: Optional - Dict mit Basis-Sensor-IDs {'einspeisung': 'sensor.xxx', ...}
 
     Returns:
         YAML-String für configuration.yaml
     """
     anlage_name = _sanitize_name(anlage.anlagenname)
     lines = []
+    basis_sensors = basis_sensors or {}
 
     # Header
     lines.append(f"# EEDC Import Konfiguration für {anlage.anlagenname}")
@@ -124,20 +130,32 @@ def generate_ha_yaml(anlage: "Anlage", investitionen: list["Investition"]) -> st
     lines.append("# =============================================================================")
     lines.append("# Utility Meter für Basis-Energiedaten")
     lines.append("# =============================================================================")
-    lines.append("# Hinweis: Ersetze 'sensor.DEIN_SENSOR' mit deinen tatsächlichen Sensor-IDs")
+
+    # Prüfen ob Platzhalter nötig sind
+    has_real_sensors = any(basis_sensors.get(k) for k in ["einspeisung", "netzbezug", "pv_erzeugung"])
+    if not has_real_sensors:
+        lines.append("# Hinweis: Ersetze 'sensor.DEIN_SENSOR' mit deinen tatsächlichen Sensor-IDs")
     lines.append("")
     lines.append("utility_meter:")
 
     basis_sensoren = [
-        ("einspeisung", "sensor.DEIN_EINSPEISUNG_SENSOR", "Einspeisung"),
-        ("netzbezug", "sensor.DEIN_NETZBEZUG_SENSOR", "Netzbezug"),
-        ("pv_erzeugung", "sensor.DEIN_PV_SENSOR", "PV Erzeugung"),
+        ("einspeisung", "Einspeisung"),
+        ("netzbezug", "Netzbezug"),
+        ("pv_erzeugung", "PV Erzeugung"),
     ]
 
-    for key, placeholder, label in basis_sensoren:
+    for key, label in basis_sensoren:
         sensor_name = f"eedc_{anlage_name}_{key}_monthly"
+        # Echten Sensor oder Platzhalter verwenden
+        source_sensor = basis_sensors.get(key)
+        if source_sensor:
+            source_line = f"    source: {source_sensor}"
+        else:
+            placeholder = f"sensor.DEIN_{key.upper()}_SENSOR"
+            source_line = f"    source: {placeholder}  # TODO: Anpassen!"
+
         lines.append(f"  {sensor_name}:")
-        lines.append(f"    source: {placeholder}  # TODO: Anpassen!")
+        lines.append(source_line)
         lines.append(f"    name: 'EEDC {label} Monat'")
         lines.append("    cycle: monthly")
         lines.append("")
@@ -158,12 +176,22 @@ def generate_ha_yaml(anlage: "Anlage", investitionen: list["Investition"]) -> st
 
         lines.append(f"  # {inv.bezeichnung} ({inv.typ})")
 
+        # Gespeicherte Sensor-Mappings aus inv.parameter['ha_sensors'] laden
+        ha_sensors = (inv.parameter or {}).get("ha_sensors", {})
+
         for field_key, label, unit in fields:
             sensor_name = f"eedc_{anlage_name}_{inv_name}_{field_key}_monthly"
-            placeholder = f"sensor.DEIN_{inv_name.upper()}_{field_key.upper()}_SENSOR"
+
+            # Echten Sensor oder Platzhalter verwenden
+            source_sensor = ha_sensors.get(field_key)
+            if source_sensor:
+                source_line = f"    source: {source_sensor}"
+            else:
+                placeholder = f"sensor.DEIN_{inv_name.upper()}_{field_key.upper()}_SENSOR"
+                source_line = f"    source: {placeholder}  # TODO: Anpassen!"
 
             lines.append(f"  {sensor_name}:")
-            lines.append(f"    source: {placeholder}  # TODO: Anpassen!")
+            lines.append(source_line)
             lines.append(f"    name: 'EEDC {inv.bezeichnung} {label} Monat'")
             lines.append("    cycle: monthly")
         lines.append("")

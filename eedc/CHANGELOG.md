@@ -24,15 +24,26 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
   - Frontend: Auto-Fill Button in MonatsdatenForm für Wetterdaten
 
 - **HA-Import Wizard für automatisierte Monatsdaten-Erfassung**
-  - 3-Schritt-Wizard: Investitionen → YAML → Anleitung
+  - 4-Schritt-Wizard: Investitionen → Sensoren zuordnen → YAML → Anleitung
+  - **HA-Sensor-Auswahl mit intelligenten Vorschlägen**
+    - Abruf aller `total_increasing` Sensoren aus Home Assistant
+    - Keyword-basierte Vorschläge pro Feld (z.B. "battery", "charge" für Speicher-Ladung)
+    - Suchbare Dropdowns mit Sensor-Details (Einheit, Friendly Name)
+    - Persistente Speicherung der Sensor-Zuordnungen in Investitions-Parametern
+    - Generiertes YAML verwendet echte Sensor-IDs statt Platzhalter
   - YAML-Generator erstellt komplette Home Assistant Konfiguration:
     - `utility_meter` für monatliche Aggregation
     - `rest_command` für Daten-Import zu EEDC
     - `automation` für monatliches Auslösen
   - Sensor-Feld-Mapping pro Investitionstyp (PV-Module, E-Auto, Wärmepumpe, etc.)
   - Backend: `services/ha_yaml_generator.py`, `api/routes/ha_import.py`
-  - Frontend: `pages/HAImportSettings.tsx` mit YAML-Anzeige und Kopier-Funktion
+  - Frontend: `pages/HAImportSettings.tsx` mit Sensor-Auswahl und YAML-Anzeige
   - Neuer Tab "HA-Import" unter Einstellungen
+
+- **Automatische Wetterdaten bei CSV-Import**
+  - Globalstrahlung und Sonnenstunden werden automatisch abgerufen wenn leer
+  - Nutzt Anlage-Koordinaten für Open-Meteo/PVGIS-Abfrage
+  - Neuer Parameter `auto_wetter` (default: true) im Import-Endpoint
 
 - **Demo-Daten korrigiert und erweitert**
   - Wallbox: `ladung_pv_kwh` entfernt (gehört zu E-Auto)

@@ -1,13 +1,16 @@
 /**
  * HAImportSettings - Wizard für automatisierten HA-Datenimport
  *
- * Ermöglicht:
- * - Übersicht der Investitionen mit erwarteten Sensor-Feldern
- * - YAML-Generierung für Utility Meter + REST Command + Automation
- * - Anleitung für HA-Konfiguration
+ * v0.9.8: Erweitert um Sensor-Auswahl aus Home Assistant
+ *
+ * Schritte:
+ * 1. Investitionen - Übersicht der erwarteten Felder
+ * 2. Sensoren - Zuordnung von HA-Sensoren zu Feldern
+ * 3. YAML - Generierte Konfiguration
+ * 4. Anleitung - Setup-Guide
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Home,
   RefreshCw,
@@ -15,18 +18,142 @@ import {
   Copy,
   CheckCircle,
   ChevronRight,
+  ChevronLeft,
   FileCode,
   Settings,
   Zap,
   Info,
   AlertTriangle,
+  Link,
+  LinkOff,
+  Search,
 } from 'lucide-react'
 import { haImportApi, anlagenApi } from '../api'
-import type { InvestitionMitSensorFeldern, YamlResponse } from '../api/haImport'
+import type {
+  InvestitionMitSensorFeldern,
+  YamlResponse,
+  HASensor,
+  BasisSensorMapping,
+  SensorMapping,
+  SensorSuggestionsResponse,
+} from '../api/haImport'
 import type { Anlage } from '../types'
 
 // Wizard Steps
-type WizardStep = 'investitionen' | 'yaml' | 'anleitung'
+type WizardStep = 'investitionen' | 'sensoren' | 'yaml' | 'anleitung'
+
+// Sensor-Dropdown Komponente
+interface SensorSelectProps {
+  value: string
+  onChange: (value: string) => void
+  sensoren: HASensor[]
+  suggestion?: string
+  label: string
+  placeholder?: string
+}
+
+function SensorSelect({ value, onChange, sensoren, suggestion, label, placeholder }: SensorSelectProps) {
+  const [search, setSearch] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+
+  const filteredSensoren = useMemo(() => {
+    if (!search) return sensoren
+    const searchLower = search.toLowerCase()
+    return sensoren.filter(
+      s => s.entity_id.toLowerCase().includes(searchLower) ||
+           (s.friendly_name || '').toLowerCase().includes(searchLower)
+    )
+  }, [sensoren, search])
+
+  const selectedSensor = sensoren.find(s => s.entity_id === value)
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          type="text"
+          value={isOpen ? search : (value || '')}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setIsOpen(true)
+          }}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+          placeholder={placeholder || 'Sensor auswählen...'}
+          className="input w-full pr-20"
+        />
+        {suggestion && !value && (
+          <button
+            type="button"
+            onClick={() => onChange(suggestion)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded hover:bg-blue-200 dark:hover:bg-blue-800"
+          >
+            Vorschlag
+          </button>
+        )}
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      {isOpen && filteredSensoren.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {suggestion && (
+            <div
+              className="px-3 py-2 bg-blue-50 dark:bg-blue-900/30 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50"
+              onClick={() => {
+                onChange(suggestion)
+                setIsOpen(false)
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-blue-500" />
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  Vorschlag: {suggestion}
+                </span>
+              </div>
+            </div>
+          )}
+          {filteredSensoren.map((sensor) => (
+            <div
+              key={sensor.entity_id}
+              className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                sensor.entity_id === value ? 'bg-gray-100 dark:bg-gray-700' : ''
+              }`}
+              onClick={() => {
+                onChange(sensor.entity_id)
+                setIsOpen(false)
+                setSearch('')
+              }}
+            >
+              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                {sensor.entity_id}
+              </div>
+              {sensor.friendly_name && (
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {sensor.friendly_name}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {selectedSensor && selectedSensor.friendly_name && (
+        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          {selectedSensor.friendly_name} ({selectedSensor.unit_of_measurement || 'N/A'})
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function HAImportSettings() {
   // State
@@ -40,6 +167,16 @@ export default function HAImportSettings() {
   // Wizard State
   const [currentStep, setCurrentStep] = useState<WizardStep>('investitionen')
   const [copiedYaml, setCopiedYaml] = useState(false)
+
+  // HA-Sensoren State
+  const [haSensors, setHaSensors] = useState<HASensor[]>([])
+  const [haConnected, setHaConnected] = useState(false)
+  const [haError, setHaError] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<SensorSuggestionsResponse | null>(null)
+
+  // Sensor-Mapping State
+  const [basisMapping, setBasisMapping] = useState<BasisSensorMapping>({})
+  const [invMappings, setInvMappings] = useState<Record<number, Record<string, string>>>({})
 
   // Daten laden
   const loadAnlagen = async () => {
@@ -64,6 +201,15 @@ export default function HAImportSettings() {
       setLoading(true)
       const data = await haImportApi.getInvestitionenMitFeldern(selectedAnlageId)
       setInvestitionen(data)
+
+      // Existierende Mappings aus parameter['ha_sensors'] laden
+      const existingMappings: Record<number, Record<string, string>> = {}
+      data.forEach(inv => {
+        if (inv.parameter?.ha_sensors) {
+          existingMappings[inv.id] = inv.parameter.ha_sensors as Record<string, string>
+        }
+      })
+      setInvMappings(existingMappings)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden der Investitionen')
     } finally {
@@ -71,11 +217,56 @@ export default function HAImportSettings() {
     }
   }
 
-  const generateYaml = async () => {
+  const loadHASensors = async () => {
+    try {
+      const response = await haImportApi.getHASensors()
+      setHaSensors(response.sensoren)
+      setHaConnected(response.connected)
+      setHaError(response.fehler || null)
+
+      // Vorschläge laden wenn verbunden
+      if (response.connected && selectedAnlageId) {
+        const suggestionsData = await haImportApi.getSensorSuggestions(selectedAnlageId)
+        setSuggestions(suggestionsData)
+
+        // Vorschläge als initiale Werte setzen wenn noch keine Mappings
+        if (Object.keys(basisMapping).length === 0) {
+          const newBasisMapping: BasisSensorMapping = {}
+          if (suggestionsData.basis.einspeisung?.vorschlag) {
+            newBasisMapping.einspeisung = suggestionsData.basis.einspeisung.vorschlag
+          }
+          if (suggestionsData.basis.netzbezug?.vorschlag) {
+            newBasisMapping.netzbezug = suggestionsData.basis.netzbezug.vorschlag
+          }
+          if (suggestionsData.basis.pv_erzeugung?.vorschlag) {
+            newBasisMapping.pv_erzeugung = suggestionsData.basis.pv_erzeugung.vorschlag
+          }
+          setBasisMapping(newBasisMapping)
+        }
+      }
+    } catch (e) {
+      setHaError(e instanceof Error ? e.message : 'Fehler beim Laden der HA-Sensoren')
+    }
+  }
+
+  const saveMappingsAndGenerateYaml = async () => {
     if (!selectedAnlageId) return
     try {
       setLoading(true)
-      const data = await haImportApi.generateYaml(selectedAnlageId)
+
+      // Mappings speichern
+      const invMappingsList: SensorMapping[] = Object.entries(invMappings).map(([id, mappings]) => ({
+        investition_id: parseInt(id),
+        mappings,
+      }))
+
+      await haImportApi.saveCompleteSensorMapping(selectedAnlageId, {
+        basis: basisMapping,
+        investitionen: invMappingsList,
+      })
+
+      // YAML generieren mit Basis-Sensoren
+      const data = await haImportApi.generateYaml(selectedAnlageId, basisMapping)
       setYamlData(data)
       setCurrentStep('yaml')
     } catch (e) {
@@ -94,6 +285,9 @@ export default function HAImportSettings() {
       loadInvestitionen()
       setYamlData(null)
       setCurrentStep('investitionen')
+      setSuggestions(null)
+      setBasisMapping({})
+      setInvMappings({})
     }
   }, [selectedAnlageId])
 
@@ -103,7 +297,6 @@ export default function HAImportSettings() {
       setCopiedYaml(true)
       setTimeout(() => setCopiedYaml(false), 2000)
     } catch {
-      // Fallback für ältere Browser
       const textarea = document.createElement('textarea')
       textarea.value = text
       document.body.appendChild(textarea)
@@ -128,6 +321,37 @@ export default function HAImportSettings() {
     }
     return mapping[typ] || { label: typ, color: 'bg-gray-100 text-gray-800' }
   }
+
+  const updateInvMapping = (invId: number, field: string, value: string) => {
+    setInvMappings(prev => ({
+      ...prev,
+      [invId]: {
+        ...prev[invId],
+        [field]: value,
+      },
+    }))
+  }
+
+  // Zähle zugeordnete Sensoren
+  const mappedCount = useMemo(() => {
+    let count = 0
+    if (basisMapping.einspeisung) count++
+    if (basisMapping.netzbezug) count++
+    if (basisMapping.pv_erzeugung) count++
+    Object.values(invMappings).forEach(mapping => {
+      count += Object.values(mapping).filter(v => v).length
+    })
+    return count
+  }, [basisMapping, invMappings])
+
+  // Zähle erwartete Felder
+  const totalFields = useMemo(() => {
+    let count = 3 // Basis: einspeisung, netzbezug, pv
+    investitionen.forEach(inv => {
+      count += inv.felder.length
+    })
+    return count
+  }, [investitionen])
 
   if (loading && anlagen.length === 0) {
     return (
@@ -190,24 +414,27 @@ export default function HAImportSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
         {/* Step Navigation */}
         <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 overflow-x-auto">
             {[
               { key: 'investitionen', label: 'Investitionen', icon: Settings },
-              { key: 'yaml', label: 'YAML-Konfiguration', icon: FileCode },
+              { key: 'sensoren', label: 'Sensoren zuordnen', icon: Link },
+              { key: 'yaml', label: 'YAML', icon: FileCode },
               { key: 'anleitung', label: 'Anleitung', icon: Info },
             ].map((step, idx) => (
               <button
                 key={step.key}
                 onClick={() => {
-                  if (step.key === 'yaml' && !yamlData) {
-                    generateYaml()
-                  } else {
-                    setCurrentStep(step.key as WizardStep)
+                  if (step.key === 'sensoren' && !haConnected) {
+                    loadHASensors()
                   }
+                  setCurrentStep(step.key as WizardStep)
                 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                disabled={step.key === 'yaml' && !yamlData}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
                   currentStep === step.key
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
+                    : step.key === 'yaml' && !yamlData
+                    ? 'text-gray-400 cursor-not-allowed'
                     : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
                 }`}
               >
@@ -287,8 +514,141 @@ export default function HAImportSettings() {
 
               <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={generateYaml}
+                  onClick={() => {
+                    loadHASensors()
+                    setCurrentStep('sensoren')
+                  }}
                   disabled={loading || investitionen.length === 0}
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  Sensoren zuordnen
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Sensoren zuordnen */}
+          {currentStep === 'sensoren' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  HA-Sensoren zuordnen
+                </h2>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-500">
+                    {mappedCount} / {totalFields} zugeordnet
+                  </span>
+                  {haConnected ? (
+                    <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                      <Link className="w-4 h-4" />
+                      HA verbunden
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400">
+                      <LinkOff className="w-4 h-4" />
+                      Nicht verbunden
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {haError && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-yellow-700 dark:text-yellow-300">{haError}</p>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+                        Sie können die Sensor-IDs auch manuell eingeben.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Basis-Sensoren */}
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <h3 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-yellow-500" />
+                  Basis-Energiedaten
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <SensorSelect
+                    label="Einspeisung (kWh)"
+                    value={basisMapping.einspeisung || ''}
+                    onChange={(v) => setBasisMapping(prev => ({ ...prev, einspeisung: v }))}
+                    sensoren={haSensors}
+                    suggestion={suggestions?.basis.einspeisung?.vorschlag}
+                    placeholder="sensor.grid_export_energy"
+                  />
+                  <SensorSelect
+                    label="Netzbezug (kWh)"
+                    value={basisMapping.netzbezug || ''}
+                    onChange={(v) => setBasisMapping(prev => ({ ...prev, netzbezug: v }))}
+                    sensoren={haSensors}
+                    suggestion={suggestions?.basis.netzbezug?.vorschlag}
+                    placeholder="sensor.grid_import_energy"
+                  />
+                  <SensorSelect
+                    label="PV-Erzeugung (kWh)"
+                    value={basisMapping.pv_erzeugung || ''}
+                    onChange={(v) => setBasisMapping(prev => ({ ...prev, pv_erzeugung: v }))}
+                    sensoren={haSensors}
+                    suggestion={suggestions?.basis.pv_erzeugung?.vorschlag}
+                    placeholder="sensor.pv_energy_total"
+                  />
+                </div>
+              </div>
+
+              {/* Investitions-Sensoren */}
+              {investitionen.map((inv) => {
+                const typInfo = getTypInfo(inv.typ)
+                const invSuggestions = suggestions?.investitionen[String(inv.id)]
+
+                return (
+                  <div
+                    key={inv.id}
+                    className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                  >
+                    <h3 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${typInfo.color}`}>
+                        {typInfo.label}
+                      </span>
+                      {inv.bezeichnung}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {inv.felder.map((feld) => (
+                        <SensorSelect
+                          key={feld.key}
+                          label={`${feld.label} (${feld.unit})`}
+                          value={invMappings[inv.id]?.[feld.key] || ''}
+                          onChange={(v) => updateInvMapping(inv.id, feld.key, v)}
+                          sensoren={haSensors}
+                          suggestion={invSuggestions?.felder[feld.key]?.vorschlag}
+                          placeholder={`sensor.${inv.bezeichnung.toLowerCase().replace(/\s+/g, '_')}_${feld.key}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+
+              <div className="flex justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setCurrentStep('investitionen')}
+                  className="btn btn-secondary flex items-center gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Zurück
+                </button>
+                <button
+                  onClick={saveMappingsAndGenerateYaml}
+                  disabled={loading}
                   className="btn btn-primary flex items-center gap-2"
                 >
                   {loading ? (
@@ -302,13 +662,20 @@ export default function HAImportSettings() {
             </div>
           )}
 
-          {/* Step 2: YAML */}
+          {/* Step 3: YAML */}
           {currentStep === 'yaml' && yamlData && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  YAML-Konfiguration für {yamlData.anlage_name}
-                </h2>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    YAML-Konfiguration für {yamlData.anlage_name}
+                  </h2>
+                  {yamlData.has_placeholders && (
+                    <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+                      ⚠️ Enthält noch Platzhalter - bitte in Schritt 2 zuordnen
+                    </p>
+                  )}
+                </div>
                 <button
                   onClick={() => copyToClipboard(yamlData.yaml)}
                   className="btn btn-secondary flex items-center gap-2"
@@ -342,10 +709,11 @@ export default function HAImportSettings() {
 
               <div className="flex justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={() => setCurrentStep('investitionen')}
-                  className="btn btn-secondary"
+                  onClick={() => setCurrentStep('sensoren')}
+                  className="btn btn-secondary flex items-center gap-2"
                 >
-                  Zurück
+                  <ChevronLeft className="w-4 h-4" />
+                  Sensoren bearbeiten
                 </button>
                 <button
                   onClick={() => setCurrentStep('anleitung')}
@@ -358,7 +726,7 @@ export default function HAImportSettings() {
             </div>
           )}
 
-          {/* Step 3: Anleitung */}
+          {/* Step 4: Anleitung */}
           {currentStep === 'anleitung' && (
             <div className="space-y-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -374,23 +742,23 @@ export default function HAImportSettings() {
                   },
                   {
                     step: 2,
-                    title: 'Sensoren anpassen',
-                    description: 'Ersetze alle "sensor.DEIN_*_SENSOR" Platzhalter mit deinen tatsächlichen Sensor-IDs aus Home Assistant.',
+                    title: 'In configuration.yaml einfügen',
+                    description: 'Füge die Konfiguration am Ende deiner configuration.yaml Datei ein. Falls du noch Platzhalter hast, ersetze diese mit deinen Sensor-IDs.',
                   },
                   {
                     step: 3,
-                    title: 'In configuration.yaml einfügen',
-                    description: 'Füge die Konfiguration am Ende deiner configuration.yaml Datei ein.',
-                  },
-                  {
-                    step: 4,
                     title: 'Home Assistant neu starten',
                     description: 'Starte Home Assistant neu, damit die neuen Sensoren und die Automation aktiv werden.',
                   },
                   {
+                    step: 4,
+                    title: 'Utility Meter prüfen',
+                    description: 'Prüfe unter Entwicklerwerkzeuge → Zustände, ob die neuen eedc_* Sensoren existieren.',
+                  },
+                  {
                     step: 5,
-                    title: 'Utility Meter beobachten',
-                    description: 'Die Utility Meter aggregieren die Werte monatlich. Am 1. des Monats werden die Daten automatisch an EEDC gesendet.',
+                    title: 'Automation testen (optional)',
+                    description: 'Du kannst die Automation manuell auslösen oder auf den 1. des Monats warten.',
                   },
                 ].map((item) => (
                   <div
@@ -423,14 +791,16 @@ export default function HAImportSettings() {
                   <li>Die Quell-Sensoren müssen Gesamtzähler sein (state_class: total_increasing)</li>
                   <li>Die Automation wird am 1. jeden Monats um 00:05 ausgeführt</li>
                   <li>Falls der Import fehlschlägt, prüfe das Home Assistant Log</li>
+                  <li>EEDC muss unter der konfigurierten URL erreichbar sein</li>
                 </ul>
               </div>
 
               <div className="flex justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={() => setCurrentStep('yaml')}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
+                  <ChevronLeft className="w-4 h-4" />
                   Zurück zur YAML
                 </button>
                 <button
