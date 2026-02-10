@@ -12,6 +12,53 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.9.8] - 2026-02-10
+
+### Hinzugefügt
+- **Wetter-API für automatische Globalstrahlung/Sonnenstunden**
+  - Open-Meteo Archive API für historische Wetterdaten (kostenlos, ohne API-Key)
+  - PVGIS TMY (Typical Meteorological Year) als Fallback für aktuelle/zukünftige Monate
+  - Automatische Umrechnung: MJ/m² → kWh/m², Sekunden → Stunden
+  - Backend: `services/wetter_service.py` mit `fetch_open_meteo_archive()`, `fetch_pvgis_tmy_monat()`
+  - Neue Endpoints: `GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}`, `GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat}`
+  - Frontend: Auto-Fill Button in MonatsdatenForm für Wetterdaten
+
+- **HA-Import Wizard für automatisierte Monatsdaten-Erfassung**
+  - 3-Schritt-Wizard: Investitionen → YAML → Anleitung
+  - YAML-Generator erstellt komplette Home Assistant Konfiguration:
+    - `utility_meter` für monatliche Aggregation
+    - `rest_command` für Daten-Import zu EEDC
+    - `automation` für monatliches Auslösen
+  - Sensor-Feld-Mapping pro Investitionstyp (PV-Module, E-Auto, Wärmepumpe, etc.)
+  - Backend: `services/ha_yaml_generator.py`, `api/routes/ha_import.py`
+  - Frontend: `pages/HAImportSettings.tsx` mit YAML-Anzeige und Kopier-Funktion
+  - Neuer Tab "HA-Import" unter Einstellungen
+
+- **Demo-Daten korrigiert und erweitert**
+  - Wallbox: `ladung_pv_kwh` entfernt (gehört zu E-Auto)
+  - Balkonkraftwerk: `erzeugung_kwh` → `pv_erzeugung_kwh` korrigiert
+  - Mini-BHKW (Sonstiges): Extra-Felder entfernt
+  - Sonderkosten hinzugefügt für Wärmepumpe, Speicher, E-Auto
+  - Globalstrahlung und Sonnenstunden zu Monatsdaten hinzugefügt
+
+### Neue Dateien
+- `backend/services/wetter_service.py` - Open-Meteo + PVGIS TMY Client
+- `backend/api/routes/wetter.py` - Wetter-API Endpoints
+- `backend/api/routes/ha_import.py` - HA Import Endpoints
+- `backend/services/ha_yaml_generator.py` - YAML Generator für HA
+- `frontend/src/api/wetter.ts` - Wetter API Client
+- `frontend/src/api/haImport.ts` - HA Import API Client
+- `frontend/src/pages/HAImportSettings.tsx` - HA Import Wizard Seite
+
+### Geändert
+- `backend/main.py` - Neue Router registriert: `/api/wetter`, `/api/ha-import`
+- `frontend/src/components/forms/MonatsdatenForm.tsx` - Wetter Auto-Fill Button
+- `frontend/src/components/layout/SubTabs.tsx` - Neuer Tab "HA-Import"
+- `frontend/src/App.tsx` - Route für HAImportSettings registriert
+- `backend/api/routes/import_export.py` - Demo-Daten Korrekturen
+
+---
+
 ## [0.9.7] - 2026-02-09
 
 ### Hinzugefügt

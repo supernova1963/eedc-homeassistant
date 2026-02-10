@@ -4,7 +4,7 @@
 
 **eedc** (Energie Effizienz Data Center) ist ein Home Assistant Add-on zur lokalen PV-Anlagen-Auswertung.
 
-**Version:** 0.9.7 Beta
+**Version:** 0.9.8 Beta
 **Status:** Beta-ready für Tests
 
 ## Tech-Stack
@@ -39,19 +39,26 @@ Backend:
   - api/routes/monatsdaten.py    # Monatsdaten CRUD + Berechnungen
   - api/routes/investitionen.py  # Investitionen mit Parent-Child
   - api/routes/ha_export.py      # HA Sensor Export (REST + MQTT)
+  - api/routes/ha_import.py      # HA Import Wizard (YAML Generator)
+  - api/routes/wetter.py         # Wetter-API (Open-Meteo, PVGIS TMY)
   - core/config.py               # Settings + Version
   - services/ha_sensors_export.py # Sensor-Definitionen mit Formeln
+  - services/ha_yaml_generator.py # YAML Generator für HA Import
+  - services/wetter_service.py   # Open-Meteo + PVGIS TMY Client
   - services/mqtt_client.py      # MQTT Discovery Client
 
 Frontend:
   - pages/Dashboard.tsx                   # Cockpit-Übersicht (7 Sektionen, Jahr-Filter)
   - pages/Auswertung.tsx                  # 5 Tabs + CSV-Export (Jahresvergleich, PV, ROI, Finanzen, CO2)
   - api/cockpit.ts                        # NEU: Cockpit-API Client
+  - api/wetter.ts                         # Wetter-API Client (Open-Meteo, PVGIS)
+  - api/haImport.ts                       # HA Import Wizard API Client
   - utils/export.ts                       # NEU: CSV/JSON Export Utilities
-  - components/forms/MonatsdatenForm.tsx  # Dynamische Felder (V2H, Arbitrage)
+  - components/forms/MonatsdatenForm.tsx  # Dynamische Felder (V2H, Arbitrage) + Wetter Auto-Fill
   - components/forms/InvestitionForm.tsx  # Investitions-Parameter
   - pages/Monatsdaten.tsx                 # Tabelle mit Spalten-Toggle
   - pages/HAExportSettings.tsx            # HA Export Konfiguration (MQTT/REST)
+  - pages/HAImportSettings.tsx            # HA Import Wizard (3 Schritte)
   - components/layout/SubTabs.tsx         # Kontextabhängige Sub-Navigation
   - components/layout/TopNavigation.tsx   # Hauptnavigation + Einstellungen-Dropdown
   - components/setup-wizard/              # 7-Schritt Wizard
@@ -88,10 +95,11 @@ Typ-spezifische Felder werden in `parameter` JSON gespeichert:
 
 ## Bekannte Design-Entscheidungen
 
-1. **HA-Import deaktiviert** (v0.9): Long-Term Statistics zu unzuverlässig
-2. **Datenerfassung:** Nur CSV oder manuell
-3. **0-Werte:** Prüfung mit `is not None` statt `if val:`
-4. **Berechnete Felder:** `direktverbrauch`, `eigenverbrauch`, `gesamtverbrauch`
+1. **HA-Import via YAML-Generator** (v0.9.8): Nutzer generiert YAML für HA utility_meter + automation
+2. **Wetter-Daten via Open-Meteo** (v0.9.8): Kostenlose API, PVGIS TMY als Fallback
+3. **Datenerfassung:** CSV, manuell, oder automatisch via HA-Import
+4. **0-Werte:** Prüfung mit `is not None` statt `if val:`
+5. **Berechnete Felder:** `direktverbrauch`, `eigenverbrauch`, `gesamtverbrauch`
 
 ## Entwicklungs-Workflow
 
@@ -119,7 +127,7 @@ cd eedc && docker build -t eedc-test .
 - **SubTabs.tsx**: Kontextabhängige Sub-Tabs unter der Hauptnavigation
   - Cockpit: Übersicht, PV-Anlage, E-Auto, Wärmepumpe, Speicher, Wallbox, Balkonkraftwerk, Sonstiges
   - Auswertungen: Jahresvergleich, ROI-Analyse, Prognose vs. IST, PDF-Export
-  - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, HA-Integration, HA-Export, Allgemein
+  - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, HA-Import, HA-Export, Allgemein
 - **Layout.tsx**: Kombiniert TopNavigation + SubTabs (kein Sidebar!)
 
 ## Offene Features / Roadmap
@@ -131,7 +139,43 @@ cd eedc && docker build -t eedc-test .
 - [ ] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen)
 - [ ] Sonderkosten in Finanzen-Tab integrieren
 
-## Letzte Änderungen (v0.9.7)
+## Letzte Änderungen (v0.9.8)
+
+### Wetter-API für automatische Globalstrahlung/Sonnenstunden
+
+**Neue Endpoints:**
+- `GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}` - Wetterdaten per Anlage-Koordinaten
+- `GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat}` - Wetterdaten per Koordinaten
+
+**Datenquellen:**
+- **Open-Meteo Archive API**: Historische Daten (kostenlos, ohne API-Key)
+- **PVGIS TMY**: Fallback für aktuelle/zukünftige Monate (Typical Meteorological Year)
+
+**Frontend-Integration:**
+- Auto-Fill Button in MonatsdatenForm für Globalstrahlung + Sonnenstunden
+- Zeigt Datenquelle an (Open-Meteo oder PVGIS TMY)
+
+### HA-Import Wizard für automatisierte Monatsdaten
+
+**3-Schritt-Wizard unter Einstellungen → HA-Import:**
+1. **Investitionen**: Zeigt alle Investitionen mit erwarteten Sensor-Feldern
+2. **YAML generieren**: Erstellt komplette HA-Konfiguration
+3. **Anleitung**: Schritt-für-Schritt Setup-Guide
+
+**Generiertes YAML enthält:**
+- `utility_meter`: Monatliche Aggregation für jeden Sensor
+- `rest_command`: Import-Aufruf zu EEDC
+- `automation`: Monatlicher Trigger am 1. des Monats
+
+**Neue Backend-Dateien:**
+- `services/wetter_service.py` - Open-Meteo + PVGIS TMY Client
+- `services/ha_yaml_generator.py` - YAML Generator für HA
+- `api/routes/wetter.py` - Wetter-API Endpoints
+- `api/routes/ha_import.py` - HA Import Wizard Endpoints
+
+---
+
+## Änderungen (v0.9.7)
 
 ### Große Daten-Bereinigung: InvestitionMonatsdaten als primäre Quelle
 
@@ -249,4 +293,20 @@ GET  /api/ha/export/yaml/{anlage_id}     # YAML-Snippet für configuration.yaml
 POST /api/ha/export/mqtt/test            # MQTT-Verbindung testen
 POST /api/ha/export/mqtt/publish/{id}    # Sensoren via MQTT publizieren
 DELETE /api/ha/export/mqtt/remove/{id}   # Sensoren aus HA entfernen
+```
+
+## API Endpoints (HA Import)
+
+```
+GET  /api/ha-import/investitionen/{anlage_id}  # Investitionen mit erwarteten Feldern
+POST /api/ha-import/sensor-mapping/{anlage_id} # Sensor-Zuordnung speichern
+GET  /api/ha-import/yaml/{anlage_id}           # YAML für configuration.yaml generieren
+POST /api/ha-import/from-ha/{anlage_id}        # Import-Endpoint für HA Automation
+```
+
+## API Endpoints (Wetter)
+
+```
+GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}           # Wetterdaten per Anlage
+GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat} # Wetterdaten per Koordinaten
 ```

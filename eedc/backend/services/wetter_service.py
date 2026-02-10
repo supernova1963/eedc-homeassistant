@@ -1,0 +1,330 @@
+"""
+Wetter-Service für automatische Globalstrahlung und Sonnenstunden.
+
+Nutzt:
+- Open-Meteo Archive API für historische Daten (vergangene Monate)
+- PVGIS TMY (Typical Meteorological Year) als Fallback für aktuelle/zukünftige Monate
+
+Konvertierungen:
+- Open-Meteo: shortwave_radiation_sum (MJ/m²) → kWh/m² (÷ 3.6)
+- Open-Meteo: sunshine_duration (Sekunden) → Stunden (÷ 3600)
+"""
+
+import logging
+from datetime import date, datetime
+from calendar import monthrange
+from typing import Optional
+
+import httpx
+
+from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Konstanten
+OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+MJ_TO_KWH = 1 / 3.6  # 1 MJ = 0.2778 kWh
+SECONDS_TO_HOURS = 1 / 3600
+
+# PVGIS TMY Durchschnittswerte für verschiedene Breitengrade (Fallback)
+# Basierend auf typischen Werten für Mitteleuropa (45-55°N)
+PVGIS_TMY_DEFAULTS = {
+    # Monat: (globalstrahlung_kwh_m2, sonnenstunden)
+    1: (28, 55),
+    2: (50, 85),
+    3: (95, 145),
+    4: (130, 195),
+    5: (160, 235),
+    6: (170, 260),
+    7: (175, 275),
+    8: (150, 250),
+    9: (110, 180),
+    10: (65, 120),
+    11: (32, 55),
+    12: (22, 40),
+}
+
+
+async def fetch_open_meteo_archive(
+    latitude: float,
+    longitude: float,
+    jahr: int,
+    monat: int,
+    timeout: float = 30.0
+) -> Optional[dict]:
+    """
+    Ruft historische Wetterdaten von Open-Meteo Archive API ab.
+
+    Args:
+        latitude: Breitengrad
+        longitude: Längengrad
+        jahr: Jahr
+        monat: Monat (1-12)
+        timeout: Timeout in Sekunden
+
+    Returns:
+        dict mit globalstrahlung_kwh_m2 und sonnenstunden oder None bei Fehler
+    """
+    # Datumsgrenzen für den Monat berechnen
+    _, last_day = monthrange(jahr, monat)
+    start_date = f"{jahr}-{monat:02d}-01"
+    end_date = f"{jahr}-{monat:02d}-{last_day:02d}"
+
+    # Prüfen ob Datum in der Vergangenheit liegt
+    today = date.today()
+    request_end = date(jahr, monat, last_day)
+
+    if request_end >= today:
+        logger.debug(f"Open-Meteo: Monat {monat}/{jahr} liegt nicht vollständig in Vergangenheit")
+        return None
+
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": start_date,
+        "end_date": end_date,
+        "daily": "shortwave_radiation_sum,sunshine_duration",
+        "timezone": "Europe/Berlin",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(OPEN_METEO_ARCHIVE_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            daily = data.get("daily", {})
+            radiation_values = daily.get("shortwave_radiation_sum", [])
+            sunshine_values = daily.get("sunshine_duration", [])
+
+            if not radiation_values or not sunshine_values:
+                logger.warning(f"Open-Meteo: Keine Daten für {monat}/{jahr}")
+                return None
+
+            # Summe über alle Tage des Monats (None-Werte herausfiltern)
+            radiation_sum = sum(v for v in radiation_values if v is not None)
+            sunshine_sum = sum(v for v in sunshine_values if v is not None)
+
+            # Konvertierung
+            globalstrahlung_kwh = round(radiation_sum * MJ_TO_KWH, 1)
+            sonnenstunden = round(sunshine_sum * SECONDS_TO_HOURS, 0)
+
+            logger.info(
+                f"Open-Meteo: {monat}/{jahr} @ ({latitude}, {longitude}) - "
+                f"Globalstrahlung: {globalstrahlung_kwh} kWh/m², "
+                f"Sonnenstunden: {sonnenstunden}h"
+            )
+
+            return {
+                "globalstrahlung_kwh_m2": globalstrahlung_kwh,
+                "sonnenstunden": sonnenstunden,
+                "tage_mit_daten": len([v for v in radiation_values if v is not None]),
+                "tage_gesamt": last_day,
+            }
+
+    except httpx.TimeoutException:
+        logger.error(f"Open-Meteo: Timeout für {monat}/{jahr}")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Open-Meteo: HTTP-Fehler {e.response.status_code} für {monat}/{jahr}")
+        return None
+    except Exception as e:
+        logger.error(f"Open-Meteo: Fehler für {monat}/{jahr}: {e}")
+        return None
+
+
+async def fetch_pvgis_tmy_monat(
+    latitude: float,
+    longitude: float,
+    monat: int,
+    timeout: float = 30.0
+) -> Optional[dict]:
+    """
+    Ruft PVGIS TMY (Typical Meteorological Year) Daten für einen Monat ab.
+
+    TMY-Daten sind langjährige Durchschnittswerte und eignen sich für:
+    - Aktuelle Monate (noch nicht abgeschlossen)
+    - Zukünftige Monate (Prognose)
+    - Als Fallback wenn Open-Meteo nicht verfügbar
+
+    Args:
+        latitude: Breitengrad
+        longitude: Längengrad
+        monat: Monat (1-12)
+        timeout: Timeout in Sekunden
+
+    Returns:
+        dict mit globalstrahlung_kwh_m2 und sonnenstunden oder None bei Fehler
+    """
+    # PVGIS TMY Endpoint
+    url = f"{settings.pvgis_api_url}/tmy"
+    params = {
+        "lat": latitude,
+        "lon": longitude,
+        "outputformat": "json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # TMY liefert stündliche Daten für ein typisches Jahr
+            # Wir müssen die Stundenwerte für den Monat aggregieren
+            hourly_data = data.get("outputs", {}).get("tmy_hourly", [])
+
+            if not hourly_data:
+                logger.warning(f"PVGIS TMY: Keine Daten für Monat {monat}")
+                return None
+
+            # Filtern nach Monat und aggregieren
+            month_radiation = 0.0
+            month_sunshine_hours = 0.0
+
+            for hour in hourly_data:
+                # Format: "20050101:0010" (YYYYMMDD:HHMM)
+                time_str = hour.get("time", "")
+                if len(time_str) >= 6:
+                    hour_month = int(time_str[4:6])
+                    if hour_month == monat:
+                        # G(i) = Globalstrahlung auf geneigter Ebene (W/m²)
+                        # Für horizontale Strahlung: Gb(n) + Gd(h) verwenden
+                        ghi = hour.get("G(h)", 0)  # Horizontal Global Irradiance
+                        if ghi and ghi > 0:
+                            # W/m² für 1 Stunde → Wh/m² → kWh/m² (÷1000)
+                            month_radiation += ghi / 1000
+
+                            # Sonnenstunde zählen wenn Strahlung > 120 W/m²
+                            # (WMO Definition: Sonnenschein wenn Direktstrahlung > 120 W/m²)
+                            if ghi > 120:
+                                month_sunshine_hours += 1
+
+            globalstrahlung_kwh = round(month_radiation, 1)
+            sonnenstunden = round(month_sunshine_hours, 0)
+
+            logger.info(
+                f"PVGIS TMY: Monat {monat} @ ({latitude}, {longitude}) - "
+                f"Globalstrahlung: {globalstrahlung_kwh} kWh/m², "
+                f"Sonnenstunden: {sonnenstunden}h"
+            )
+
+            return {
+                "globalstrahlung_kwh_m2": globalstrahlung_kwh,
+                "sonnenstunden": sonnenstunden,
+            }
+
+    except httpx.TimeoutException:
+        logger.error(f"PVGIS TMY: Timeout für Monat {monat}")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"PVGIS TMY: HTTP-Fehler {e.response.status_code}")
+        return None
+    except Exception as e:
+        logger.error(f"PVGIS TMY: Fehler für Monat {monat}: {e}")
+        return None
+
+
+def get_pvgis_tmy_defaults(monat: int, latitude: float = 48.0) -> dict:
+    """
+    Gibt statische TMY-Durchschnittswerte zurück (Fallback).
+
+    Verwendet vordefinierte Werte für Mitteleuropa.
+    Werte werden leicht angepasst basierend auf Breitengrad.
+
+    Args:
+        monat: Monat (1-12)
+        latitude: Breitengrad (für leichte Anpassung)
+
+    Returns:
+        dict mit globalstrahlung_kwh_m2 und sonnenstunden
+    """
+    base_values = PVGIS_TMY_DEFAULTS.get(monat, (100, 150))
+
+    # Leichte Anpassung nach Breitengrad
+    # Südlichere Standorte: mehr Strahlung
+    # Nördlichere Standorte: weniger Strahlung
+    lat_factor = 1.0 + (48.0 - latitude) * 0.01  # ±1% pro Grad
+
+    return {
+        "globalstrahlung_kwh_m2": round(base_values[0] * lat_factor, 1),
+        "sonnenstunden": round(base_values[1] * lat_factor, 0),
+    }
+
+
+async def get_wetterdaten(
+    latitude: float,
+    longitude: float,
+    jahr: int,
+    monat: int
+) -> dict:
+    """
+    Hauptfunktion: Holt Wetterdaten mit automatischer Quellenauswahl.
+
+    Strategie:
+    1. Vergangene Monate → Open-Meteo Archive (echte historische Daten)
+    2. Aktueller/Zukünftiger Monat → PVGIS TMY (Durchschnittswerte)
+    3. Fallback bei Fehlern → Statische Defaults
+
+    Args:
+        latitude: Breitengrad
+        longitude: Längengrad
+        jahr: Jahr
+        monat: Monat (1-12)
+
+    Returns:
+        dict mit:
+            - globalstrahlung_kwh_m2
+            - sonnenstunden
+            - datenquelle: "open-meteo" | "pvgis-tmy" | "defaults"
+            - standort: {latitude, longitude}
+    """
+    today = date.today()
+    request_date = date(jahr, monat, 1)
+
+    result = {
+        "jahr": jahr,
+        "monat": monat,
+        "standort": {
+            "latitude": latitude,
+            "longitude": longitude,
+        },
+    }
+
+    # Strategie 1: Vergangene Monate → Open-Meteo
+    if request_date < date(today.year, today.month, 1):
+        logger.debug(f"Wetterdaten: Versuche Open-Meteo für {monat}/{jahr}")
+        data = await fetch_open_meteo_archive(latitude, longitude, jahr, monat)
+
+        if data:
+            result.update({
+                "globalstrahlung_kwh_m2": data["globalstrahlung_kwh_m2"],
+                "sonnenstunden": data["sonnenstunden"],
+                "datenquelle": "open-meteo",
+                "abdeckung_prozent": round(data["tage_mit_daten"] / data["tage_gesamt"] * 100, 0),
+            })
+            return result
+
+    # Strategie 2: PVGIS TMY (für aktuelle/zukünftige oder als Fallback)
+    logger.debug(f"Wetterdaten: Versuche PVGIS TMY für Monat {monat}")
+    data = await fetch_pvgis_tmy_monat(latitude, longitude, monat)
+
+    if data:
+        result.update({
+            "globalstrahlung_kwh_m2": data["globalstrahlung_kwh_m2"],
+            "sonnenstunden": data["sonnenstunden"],
+            "datenquelle": "pvgis-tmy",
+        })
+        return result
+
+    # Strategie 3: Statische Defaults als letzter Fallback
+    logger.warning(f"Wetterdaten: Verwende Defaults für {monat}/{jahr}")
+    defaults = get_pvgis_tmy_defaults(monat, latitude)
+    result.update({
+        "globalstrahlung_kwh_m2": defaults["globalstrahlung_kwh_m2"],
+        "sonnenstunden": defaults["sonnenstunden"],
+        "datenquelle": "defaults",
+        "hinweis": "Durchschnittswerte für Mitteleuropa",
+    })
+
+    return result

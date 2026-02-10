@@ -28,6 +28,7 @@ import Import from './pages/Import'
 // Einstellungen - System
 import Settings from './pages/Settings'
 import PVGISSettings from './pages/PVGISSettings'
+import HAImportSettings from './pages/HAImportSettings'
 import HAExportSettings from './pages/HAExportSettings'
 
 function App() {
@@ -67,6 +68,7 @@ function App() {
 
           {/* Einstellungen - System */}
           <Route path="einstellungen/pvgis" element={<PVGISSettings />} />
+          <Route path="einstellungen/ha-import" element={<HAImportSettings />} />
           <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
 

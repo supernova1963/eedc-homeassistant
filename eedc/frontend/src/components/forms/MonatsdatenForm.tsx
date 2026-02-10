@@ -6,9 +6,9 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react'
 import { Button, Input, Alert, Select } from '../ui'
 import { useInvestitionen } from '../../hooks'
-import { investitionenApi } from '../../api'
+import { investitionenApi, wetterApi } from '../../api'
 import type { Monatsdaten, Investition } from '../../types'
-import { Car, Battery, Plug, Sun, Flame, Zap, MoreHorizontal } from 'lucide-react'
+import { Car, Battery, Plug, Sun, Flame, Zap, MoreHorizontal, Cloud, Loader2 } from 'lucide-react'
 
 interface MonatsdatenFormProps {
   monatsdaten?: Monatsdaten | null
@@ -26,6 +26,8 @@ export interface MonatsdatenSubmitData {
   pv_erzeugung_kwh?: number
   batterie_ladung_kwh?: number
   batterie_entladung_kwh?: number
+  globalstrahlung_kwh_m2?: number
+  sonnenstunden?: number
   notizen?: string
   // Investitions-spezifische Daten
   investitionen_daten?: Record<string, InvestitionMonatsdaten>
@@ -117,8 +119,14 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     pv_erzeugung_kwh: monatsdaten?.pv_erzeugung_kwh?.toString() || '',
     batterie_ladung_kwh: monatsdaten?.batterie_ladung_kwh?.toString() || '',
     batterie_entladung_kwh: monatsdaten?.batterie_entladung_kwh?.toString() || '',
+    globalstrahlung_kwh_m2: monatsdaten?.globalstrahlung_kwh_m2?.toString() || '',
+    sonnenstunden: monatsdaten?.sonnenstunden?.toString() || '',
     notizen: monatsdaten?.notizen || '',
   })
+
+  // Wetter-Daten Auto-Fill
+  const [wetterLoading, setWetterLoading] = useState(false)
+  const [wetterInfo, setWetterInfo] = useState<string | null>(null)
 
   // Investitions-spezifische Daten
   const [investitionsDaten, setInvestitionsDaten] = useState<Record<string, Record<string, string>>>({})
@@ -340,6 +348,45 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     return { batterieLadung, batterieEntladung, pvErzeugung }
   }, [aktiveInvestitionen, investitionsDaten])
 
+  // Wetterdaten automatisch abrufen
+  const fetchWetterdaten = async () => {
+    if (!formData.jahr || !formData.monat) {
+      setError('Bitte zuerst Jahr und Monat auswählen')
+      return
+    }
+
+    setWetterLoading(true)
+    setWetterInfo(null)
+    setError(null)
+
+    try {
+      const data = await wetterApi.getMonatsdaten(
+        anlageId,
+        parseInt(formData.jahr),
+        parseInt(formData.monat)
+      )
+
+      setFormData(prev => ({
+        ...prev,
+        globalstrahlung_kwh_m2: data.globalstrahlung_kwh_m2.toString(),
+        sonnenstunden: data.sonnenstunden.toString(),
+      }))
+
+      // Info-Text über Datenquelle
+      const quellenText = data.datenquelle === 'open-meteo'
+        ? `Historische Daten von Open-Meteo${data.abdeckung_prozent ? ` (${data.abdeckung_prozent}% Abdeckung)` : ''}`
+        : data.datenquelle === 'pvgis-tmy'
+        ? 'Durchschnittswerte von PVGIS (TMY)'
+        : 'Geschätzte Durchschnittswerte'
+
+      setWetterInfo(quellenText)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Wetterdaten konnten nicht abgerufen werden')
+    } finally {
+      setWetterLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -436,6 +483,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         pv_erzeugung_kwh: pvErz,
         batterie_ladung_kwh: battLadung,
         batterie_entladung_kwh: battEntladung,
+        globalstrahlung_kwh_m2: formData.globalstrahlung_kwh_m2 ? parseFloat(formData.globalstrahlung_kwh_m2) : undefined,
+        sonnenstunden: formData.sonnenstunden ? parseFloat(formData.sonnenstunden) : undefined,
         notizen: formData.notizen || undefined,
         investitionen_daten: Object.keys(invDaten).length > 0 ? invDaten : undefined,
       })
@@ -658,6 +707,58 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           </div>
         </div>
       )}
+
+      {/* Wetterdaten */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Cloud className="w-4 h-4" />
+            Wetterdaten (optional)
+          </h3>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={fetchWetterdaten}
+            disabled={wetterLoading}
+          >
+            {wetterLoading ? (
+              <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Lade...</>
+            ) : (
+              <><Cloud className="w-4 h-4 mr-1" /> Auto-Fill</>
+            )}
+          </Button>
+        </div>
+        {wetterInfo && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded">
+            {wetterInfo}
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Globalstrahlung"
+            name="globalstrahlung_kwh_m2"
+            type="number"
+            step="0.1"
+            min="0"
+            value={formData.globalstrahlung_kwh_m2}
+            onChange={handleChange}
+            placeholder="z.B. 152"
+            hint="kWh/m²"
+          />
+          <Input
+            label="Sonnenstunden"
+            name="sonnenstunden"
+            type="number"
+            step="1"
+            min="0"
+            value={formData.sonnenstunden}
+            onChange={handleChange}
+            placeholder="z.B. 245"
+            hint="Stunden"
+          />
+        </div>
+      </div>
 
       {/* Notizen */}
       <div>
