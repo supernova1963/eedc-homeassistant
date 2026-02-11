@@ -436,6 +436,8 @@ async def _upsert_investition_monatsdaten(
     Bei existierenden Einträgen werden neue Felder IMMER ergänzt.
     Bestehende Felder werden nur bei ueberschreiben=True überschrieben.
     """
+    from sqlalchemy.orm.attributes import flag_modified
+
     existing = await db.execute(
         select(InvestitionMonatsdaten).where(
             InvestitionMonatsdaten.investition_id == investition_id,
@@ -457,6 +459,8 @@ async def _upsert_investition_monatsdaten(
                 existing_imd.verbrauch_daten = merged
         else:
             existing_imd.verbrauch_daten = verbrauch_daten
+        # WICHTIG: SQLAlchemy erkennt JSON-Änderungen nicht automatisch!
+        flag_modified(existing_imd, "verbrauch_daten")
     else:
         imd = InvestitionMonatsdaten(
             investition_id=investition_id,
