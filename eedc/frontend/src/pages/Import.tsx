@@ -1,5 +1,5 @@
 import { useState, useRef, DragEvent, ChangeEvent } from 'react'
-import { Upload, FileSpreadsheet, Home, Download, Check, AlertTriangle, X, Sparkles, Trash2 } from 'lucide-react'
+import { Upload, FileSpreadsheet, Download, Check, AlertTriangle, X, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { importApi } from '../api'
@@ -281,28 +281,6 @@ export default function Import() {
               Daten exportieren
             </Button>
           </div>
-        </Card>
-
-        {/* HA Import */}
-        <Card>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-cyan-50 dark:bg-cyan-900/20">
-              <Home className="h-6 w-6 text-cyan-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Home Assistant Import
-            </h2>
-          </div>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">
-            Importiere Daten direkt aus deinem Home Assistant Energy Dashboard.
-          </p>
-          <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm text-yellow-700 dark:text-yellow-300 mb-4">
-            <strong>Phase 2:</strong> Diese Funktion wird in einer zukünftigen Version verfügbar sein.
-            Konfiguriere zuerst die Sensor-Zuordnung in den Einstellungen.
-          </div>
-          <Button variant="secondary" className="w-full" disabled>
-            Aus Home Assistant importieren
-          </Button>
         </Card>
 
         {/* Demo-Daten */}
