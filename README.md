@@ -1,243 +1,223 @@
 # eedc - Energie Effizienz Data Center
 
-Home Assistant Add-on zur lokalen Auswertung und Wirtschaftlichkeitsanalyse von PV-Anlagen.
+**Version 1.0.0-beta.1** | Standalone PV-Analyse mit optionaler Home Assistant Integration
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
+## Was ist eedc?
+
+**eedc** (Energie Effizienz Data Center) ist eine lokale Anwendung zur umfassenden Auswertung und Wirtschaftlichkeitsanalyse von Photovoltaik-Anlagen. Die Software läuft standalone oder als Home Assistant Add-on und speichert alle Daten lokal.
+
+### Warum eedc?
+
+- **Keine Cloud-Abhängigkeit** – Alle Daten bleiben auf deinem Server
+- **Standalone-fähig** – Funktioniert ohne Home Assistant
+- **Umfassende Analyse** – Von Energiebilanz bis ROI-Berechnung
+- **Flexibler Datenimport** – CSV-Import mit dynamischen Spalten
+- **Multi-Komponenten** – PV-Anlage, Speicher, E-Auto, Wärmepumpe, Wallbox, Balkonkraftwerk
+
+---
 
 ## Features
 
-- **Setup-Wizard** - Geführte Ersteinrichtung (7 Schritte)
-- **Lokale Datenspeicherung** - Alle Daten bleiben auf deinem Home Assistant
-- **PV-Anlagen Verwaltung** - Stammdaten, Leistung, Standort
-- **Multi-Modul PV-Anlagen** - Verschiedene Dachflächen mit individueller Ausrichtung/Neigung
-- **Parent-Child Beziehungen** - PV-Module → Wechselrichter, Speicher → Hybrid-WR
-- **PVGIS Integration** - Ertragsprognosen pro PV-Modul von der EU-Kommission
-- **Prognose vs. IST** - Vergleich der erwarteten mit tatsächlicher Erzeugung
-- **Monatsdaten Erfassung** - Manuell oder CSV-Import
-- **Personalisierte CSV-Vorlagen** - Dynamische Spalten basierend auf Investitionen
-- **Umfassende Auswertungen** - Autarkie, Eigenverbrauch, Wirtschaftlichkeit, Jahresvergleich
-- **Investitions-Tracking** - E-Auto, Wärmepumpe, Speicher, Wallbox, PV-Module, Balkonkraftwerk
-- **ROI-Dashboard** - Amortisationsberechnung für alle Investitionen
-- **HA Sensor Export** - Berechnete KPIs zurück an Home Assistant (REST API oder MQTT Discovery)
-- **HA Auto-Discovery** - Erkennung von Geräten (nur für Ersteinrichtung)
-- **Dark Mode** - Vollständige Unterstützung
+### Cockpit & Dashboards
+- **Aggregierte Übersicht** mit 7 Sektionen (Energie, Effizienz, Speicher, E-Auto, Wärmepumpe, Finanzen, CO2)
+- **8 spezialisierte Dashboards** für jede Komponente
+- **Formel-Tooltips** zeigen Berechnungsgrundlagen per Hover
+- **Jahr-Filter** für mehrjährige Auswertungen
 
-## Aktueller Status (v0.9.3 Beta)
+### Auswertungen & Reporting
+- **6 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen
+- **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
+- **SOLL-IST Vergleich** gegen PVGIS-Prognosen
+- **CSV/JSON Export** für externe Weiterverarbeitung
 
-**Was funktioniert:**
-- ✅ **Setup-Wizard** (7 Schritte)
-- ✅ Anlagen, Monatsdaten, Strompreise, Investitionen (CRUD)
-- ✅ **CSV-Import/Export** (personalisierte Spalten basierend auf Investitionen)
-- ✅ Dashboard mit KPIs und Charts
-- ✅ **Auswertungen** (5 Tabs: Jahresvergleich, PV-Anlage, Investitionen, Finanzen, CO2)
-- ✅ **Jahresvergleich** mit Delta-Indikatoren und Monatsvergleichs-Charts
-- ✅ **Investitionen-Tab** mit ROI-Dashboard und Amortisationskurve
-- ✅ ROI-Dashboard mit Amortisationsberechnung
-- ✅ **PVGIS Integration** (Prognose pro PV-Modul)
-- ✅ **Prognose vs. IST** Vergleich
-- ✅ **HA Sensor Export** (REST API + MQTT Discovery)
-- ✅ **Parent-Child Beziehungen** (PV-Module → Wechselrichter)
-- ✅ **HA Auto-Discovery** (nur für Ersteinrichtung)
-- ✅ **Dynamische Formulare** (V2H/Arbitrage nur wenn aktiviert)
-- ✅ **Monatsdaten Spaltenkonfiguration** (Toggle-Buttons)
-- ✅ Settings mit echten DB-Stats
-- ✅ Dark Mode
-- ✅ Docker-Build
-- ✅ **HA Ingress Integration** (nahtlose Sidebar-Integration)
-- ✅ **HA Backup** (SQLite in /data Volume)
+### Datenerfassung
+- **Manuelles Formular** mit dynamischen Komponenten-Feldern
+- **CSV-Import** mit personalisierten Spalten basierend auf deinen Investitionen
+- **Wetter-Auto-Fill** via Open-Meteo / PVGIS TMY
+- **Demo-Daten** zum Ausprobieren
 
-### v0.9.3 Änderungen
+### Investitions-Management
+- **Parent-Child Beziehungen**: PV-Module → Wechselrichter, DC-Speicher → Hybrid-WR
+- **Typ-spezifische Parameter**: V2H, Arbitrage, kWp, Ausrichtung, Neigung
+- **ROI-Berechnung** pro Komponente und aggregiert
 
-1. **HA Sensor Export** - Berechnete KPIs können an Home Assistant zurückgegeben werden:
-   - REST API: Sensoren über `rest` Platform in configuration.yaml
-   - MQTT Discovery: Native HA-Entitäten via MQTT Auto-Discovery
-   - YAML-Generator für einfache Integration
-   - Sensor-Übersicht mit Formeln und aktuellen Werten
+### Optionale Home Assistant Integration
+- **MQTT Discovery** für native HA-Sensoren
+- **REST API** für configuration.yaml
+- **Berechnete KPIs** zurück an HA exportieren
 
-2. **Auswertungen neu strukturiert**:
-   - Jahresvergleich (Übersicht): Monats-Charts, Δ%-Indikatoren, Jahrestabelle
-   - PV-Anlage: Kombinierte Übersicht + PV-Details
-   - Investitionen (NEU): ROI-Dashboard, Amortisationskurve, Kosten nach Kategorie
-   - Finanzen & CO2: unverändert
+---
 
-3. **SubTabs für Einstellungen**: Bessere Navigation zwischen allen Einstellungs-Seiten
+## Schnellstart
 
-### v0.9.2 Änderungen
+### Option 1: Home Assistant Add-on
 
-- Balkonkraftwerk Dashboard mit optionalem Speicher
-- Sonstiges Dashboard (flexible Kategorie: Erzeuger/Verbraucher/Speicher)
-- Sonderkosten-Felder für alle Investitionstypen
-- Demo-Daten erweitert
-
-### v0.9.1 Änderungen
-
-- Zentrale Versionskonfiguration
-- Dynamische Formularfelder
-- PV-Module mit Anzahl/Leistung
-- Monatsdaten-Spalten konfigurierbar
-
-## Installation
-
-### Über Home Assistant Add-on Store
-
-1. Füge dieses Repository zu deinen Add-on Repositories hinzu:
+1. Repository zu HA Add-ons hinzufügen:
    ```
    https://github.com/supernova1963/eedc-homeassistant
    ```
-2. Suche nach "EEDC" im Add-on Store
-3. Klicke auf "Installieren"
-4. Starte das Add-on
+2. Add-on "EEDC" installieren und starten
+3. Über die Sidebar öffnen
 
----
-
-## Konfiguration
-
-### Sensor-Import (optional)
-
-In den Add-on Optionen können Home Assistant Sensoren für den Datenimport zugeordnet werden:
-
-```yaml
-ha_sensors:
-  pv_erzeugung: sensor.fronius_pv_energy_total
-  einspeisung: sensor.grid_export_energy
-  netzbezug: sensor.grid_import_energy
-  batterie_ladung: sensor.battery_charge_energy
-  batterie_entladung: sensor.battery_discharge_energy
-```
-
-### MQTT Export (optional)
-
-Für den Export berechneter KPIs an Home Assistant via MQTT:
-
-```yaml
-mqtt:
-  enabled: true
-  host: core-mosquitto
-  port: 1883
-  username: ""
-  password: ""
-  auto_publish: false
-  publish_interval_minutes: 60
-```
-
----
-
-## Entwicklung
-
-### Voraussetzungen
-
-- Python 3.11+
-- Node.js 18+
-- Docker/Podman (optional, für Container-Tests)
-
-### Schnellstart
+### Option 2: Standalone mit Docker
 
 ```bash
-# 1. Repository klonen
-git clone git@github.com:supernova1963/eedc-homeassistant.git
-cd eedc-homeassistant
-
-# 2. Backend einrichten
-cd eedc/backend
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# 3. Frontend einrichten
-cd ../frontend
-npm install
-```
-
-### Entwicklungsserver starten
-
-**Terminal 1 - Backend:**
-```bash
-cd eedc/backend
-source venv/bin/activate
-uvicorn backend.main:app --reload --port 8099
-```
-
-**Terminal 2 - Frontend (Dev-Mode mit Hot-Reload):**
-```bash
-cd eedc/frontend
-npm run dev
-```
-
-Frontend: http://localhost:5173 (Proxy zu Backend)
-API Docs: http://localhost:8099/api/docs
-
-### Production Build
-
-```bash
-cd eedc/frontend
-npm run build
-```
-
-### Docker/Podman Build & Test
-
-```bash
+# Image bauen
 cd eedc
+docker build -t eedc .
 
-# Build
-docker build -t eedc-test .
-# oder: podman build -t eedc-test .
+# Container starten
+docker run -p 8099:8099 -v $(pwd)/data:/data eedc
 
-# Run
-docker run -p 8099:8099 -v $(pwd)/data:/data eedc-test
-# oder: podman run -p 8099:8099 -v $(pwd)/data:/data eedc-test
+# Browser öffnen
+open http://localhost:8099
 ```
 
-App: http://localhost:8099
+### Option 3: Lokale Entwicklung
+
+```bash
+# Backend starten
+cd eedc && source backend/venv/bin/activate
+uvicorn backend.main:app --reload --port 8099
+
+# Frontend starten (neues Terminal)
+cd eedc/frontend && npm run dev
+
+# Browser öffnen
+open http://localhost:5173
+```
 
 ---
 
-## Projektstruktur
+## Dokumentation
+
+| Dokument | Beschreibung |
+|----------|--------------|
+| [Benutzerhandbuch](docs/BENUTZERHANDBUCH.md) | Vollständige Anleitung für Endbenutzer |
+| [Architektur](docs/ARCHITEKTUR.md) | Technische Dokumentation für Entwickler |
+| [Changelog](CHANGELOG.md) | Versionshistorie und Änderungen |
+| [Entwicklung](docs/DEVELOPMENT.md) | Setup für lokale Entwicklung |
+
+---
+
+## Screenshots
+
+### Cockpit Übersicht
+Die Hauptansicht zeigt alle wichtigen KPIs auf einen Blick:
+- Energiebilanz (Erzeugung, Verbrauch, Einspeisung)
+- Effizienz-Kennzahlen (Autarkie, Eigenverbrauchsquote)
+- Komponenten-Status (Speicher, E-Auto, Wärmepumpe)
+- Finanzielle Auswertung (Einsparungen, ROI)
+
+### Auswertungen
+Detaillierte Analysen in 6 Kategorien:
+- Jahresvergleich mit Delta-Indikatoren
+- PV-String-Performance nach Ausrichtung
+- Arbitrage-Analyse für Speicher
+- Amortisationskurven für alle Investitionen
+
+---
+
+## Architektur-Überblick
 
 ```
-eedc-homeassistant/
-├── CLAUDE.md               # Kontext für Claude Code (KI-Entwicklung)
-├── README.md               # Diese Datei
-├── docs/
-│   └── DEVELOPMENT.md      # Entwickler-Dokumentation
-└── eedc/                   # Das Add-on
-    ├── config.yaml         # HA Add-on Konfiguration
-    ├── Dockerfile          # Multi-Stage Build
-    ├── run.sh              # Container Startscript
-    ├── backend/            # Python FastAPI Backend
-    │   ├── main.py
-    │   ├── requirements.txt
-    │   ├── api/routes/     # API Endpoints
-    │   ├── core/           # Config, DB, Calculations
-    │   ├── models/         # SQLAlchemy Models
-    │   └── services/       # HA Export, MQTT Client
-    └── frontend/           # React Vite Frontend
-        ├── package.json
-        └── src/
-            ├── api/        # API Client
-            ├── components/ # UI Components
-            ├── pages/      # Seiten
-            └── hooks/      # React Hooks
+┌─────────────────────────────────────────────────────────┐
+│                    Frontend (React)                      │
+│  Vite + TypeScript + Tailwind CSS + Recharts            │
+├─────────────────────────────────────────────────────────┤
+│                    Backend (Python)                      │
+│  FastAPI + SQLAlchemy 2.0 + SQLite                      │
+├─────────────────────────────────────────────────────────┤
+│              Externe APIs (optional)                     │
+│  Open-Meteo (Wetter) │ PVGIS (Prognose) │ HA (Export)   │
+└─────────────────────────────────────────────────────────┘
 ```
+
+### Datenmodell
+
+```
+Anlage (PV-Anlage mit Standort, Ausrichtung)
+  │
+  ├── Monatsdaten (Zählerwerte: Einspeisung, Netzbezug)
+  │
+  ├── Strompreise (Bezug, Einspeisung, zeitliche Gültigkeit)
+  │
+  └── Investitionen (Komponenten)
+        │
+        ├── Wechselrichter
+        │     ├── PV-Module (Pflicht-Zuordnung)
+        │     └── DC-Speicher (optional)
+        │
+        ├── AC-Speicher (eigenständig)
+        ├── E-Auto (mit optionalem V2H)
+        ├── Wärmepumpe
+        ├── Wallbox
+        ├── Balkonkraftwerk
+        └── Sonstiges
+```
+
+---
 
 ## Unterstützte Geräte (Auto-Discovery)
 
-**Wechselrichter:** SMA, Fronius, Kostal, Huawei/FusionSolar, Growatt, SolaX, Sungrow, GoodWe, Enphase
+Bei Nutzung mit Home Assistant können diese Geräte automatisch erkannt werden:
 
-**Wärmepumpen:** Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Alpha Innotec, Lambda, iDM, Toshiba, LG
+| Kategorie | Hersteller |
+|-----------|------------|
+| **Wechselrichter** | SMA, Fronius, Kostal, Huawei, Growatt, SolaX, Sungrow, GoodWe, Enphase |
+| **Wärmepumpen** | Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Lambda, iDM |
+| **Balkonkraftwerke** | EcoFlow, Hoymiles, Anker SOLIX, APSystems, Deye, OpenDTU/AhoyDTU |
+| **E-Autos & Wallboxen** | evcc (bevorzugt), Smart, Wallbox |
 
-**Balkonkraftwerke:** EcoFlow, Hoymiles, Anker SOLIX, APSystems, Deye, OpenDTU/AhoyDTU
-
-**E-Autos & Wallboxen:** evcc (höchste Priorität), Smart, Wallbox (native Integration)
+---
 
 ## Roadmap
 
-- [x] Phase 0: Projekt-Setup ✅
-- [x] Phase 1: MVP (Grundfunktionen) ✅
-- [x] Phase 2: Erweiterte Features (HA Energy Import, Auto-Discovery, Setup-Wizard, PVGIS, HA Export) ✅
-- [ ] Phase 3: PDF-Export, KI-Insights, Wetter-Integration
+- [x] Cockpit mit aggregierter Übersicht
+- [x] 8 spezialisierte Dashboards
+- [x] ROI-Dashboard mit Amortisationskurve
+- [x] SOLL-IST Vergleich gegen PVGIS
+- [x] CSV-Import mit dynamischen Spalten
+- [x] Wetter-API Integration (Open-Meteo)
+- [x] MQTT Export zu Home Assistant
+- [ ] PDF-Export
+- [ ] KI-gestützte Insights
+
+---
+
+## Beitragen
+
+Beiträge sind willkommen! Bitte lies zuerst die [Entwickler-Dokumentation](docs/DEVELOPMENT.md).
+
+```bash
+# Fork erstellen und klonen
+git clone git@github.com:YOUR_USERNAME/eedc-homeassistant.git
+
+# Feature-Branch erstellen
+git checkout -b feature/mein-feature
+
+# Änderungen committen
+git commit -m "feat: Beschreibung der Änderung"
+
+# Pull Request erstellen
+```
+
+---
 
 ## Lizenz
 
 MIT License - siehe [LICENSE](LICENSE)
 
+---
+
 ## Ursprung
 
-Basiert auf dem Konzept der [EEDC-WebApp](https://github.com/supernova1963/eedc-webapp), reimplementiert als lokale Home Assistant Lösung.
+Basiert auf dem Konzept der [EEDC-WebApp](https://github.com/supernova1963/eedc-webapp), reimplementiert als lokale Lösung mit optionaler Home Assistant Integration.
+
+---
+
+*Erstellt mit ❤️ für die Energiewende*

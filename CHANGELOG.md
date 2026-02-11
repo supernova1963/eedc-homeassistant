@@ -1,6 +1,114 @@
 # Changelog
 
-Alle wesentlichen Änderungen am eedc-Projekt werden hier dokumentiert.
+Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
+
+Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
+und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
+
+---
+
+## [1.0.0-beta.1] - 2026-02-11
+
+### Kritische Bugfixes
+
+Diese Version behebt kritische Bugs im SOLL-IST Vergleich und der Datenpersistenz.
+
+#### SOLL-IST Vergleich zeigte falsche Werte
+
+**Problem:** Der SOLL-IST Vergleich im Cockpit → PV-Anlage zeigte falsche IST-Werte (z.B. 0.3 MWh statt ~14 MWh).
+
+**Ursachen und Fixes:**
+
+1. **Legacy-Feld entfernt** - `Monatsdaten.pv_erzeugung_kwh` wurde noch verwendet statt `InvestitionMonatsdaten.verbrauch_daten.pv_erzeugung_kwh`
+   - Betroffen: `cockpit.py`, `investitionen.py`, `ha_export.py`, `main.py`
+
+2. **SQLAlchemy flag_modified()** - JSON-Feld-Updates wurden nicht persistiert
+   - SQLAlchemy erkennt Änderungen an JSON-Feldern nicht automatisch
+   - Fix: `flag_modified(obj, "verbrauch_daten")` nach Änderung
+   - Betroffen: `import_export.py`
+
+3. **Jahr-Parameter fehlte** - `PVStringVergleich` erhielt kein `jahr` und verwendete 2026 statt 2025
+   - Fix: `latestYear` aus Monatsdaten berechnen und übergeben
+   - Betroffen: `PVAnlageDashboard.tsx`
+
+### Geändert
+
+- **CSV-Template bereinigt**
+  - Entfernt: `PV_Erzeugung_kWh` (Legacy), `Globalstrahlung_kWh_m2`, `Sonnenstunden` (auto-generiert)
+  - Import akzeptiert Legacy-Spalten weiterhin als Fallback
+
+- **run.sh Version korrigiert** - War hardcoded auf 0.9.3
+
+### Dokumentation
+
+- **Vollständige Dokumentation erstellt**
+  - `README.md` komplett überarbeitet für v1.0.0
+  - `docs/BENUTZERHANDBUCH.md` - Umfassendes Benutzerhandbuch
+  - `docs/ARCHITEKTUR.md` - Technische Architektur-Dokumentation
+  - `CHANGELOG.md` - Vollständige Versionshistorie
+  - `docs/DEVELOPMENT.md` - Entwickler-Setup aktualisiert
+
+### Datenarchitektur-Klarstellung
+
+```
+Monatsdaten (Tabelle):
+  - einspeisung_kwh      ✓ Primär (Zählerwert)
+  - netzbezug_kwh        ✓ Primär (Zählerwert)
+  - pv_erzeugung_kwh     ✗ LEGACY - nicht mehr verwenden!
+  - batterie_*           ✗ LEGACY - nicht mehr verwenden!
+
+InvestitionMonatsdaten (Tabelle):
+  - verbrauch_daten (JSON):
+    - pv_erzeugung_kwh   ✓ Primär für PV-Module
+    - ladung_kwh         ✓ Primär für Speicher
+    - entladung_kwh      ✓ Primär für Speicher
+```
+
+---
+
+## [0.9.9] - 2026-02-10
+
+### Architektur-Änderung: Standalone-Fokus
+
+**EEDC ist jetzt primär Standalone ohne HA-Abhängigkeit für die Datenerfassung.**
+
+### Entfernt
+
+- Komplexer HA-Import Wizard (YAML-Generator, Template-Sensoren, Utility Meter, Automationen)
+- HA-Sensor-Auswahl und Mapping-Logik
+- EVCC-Berechnungen (spezielle Template-Sensoren)
+- REST Command / Automation für automatischen Import
+
+### Beibehalten
+
+- CSV-Import (volle Funktionalität)
+- Manuelles Formular für Monatsdaten
+- Wetter-API (Open-Meteo/PVGIS - HA-unabhängig!)
+- HA-Export via MQTT (optional)
+
+### Begründung
+
+Die komplexe HA-Integration erwies sich als zu kompliziert:
+- EVCC liefert andere Datenstrukturen als erwartet
+- Utility Meter können nicht programmatisch Geräten zugeordnet werden
+- Jede Haus-Automatisierung ist anders → Kein "One Size Fits All"
+
+---
+
+## [0.9.8] - 2026-02-09
+
+### Hinzugefügt
+
+- **Wetter-API für automatische Globalstrahlung/Sonnenstunden**
+  - `GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}`
+  - `GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat}`
+  - Datenquellen: Open-Meteo Archive API (historisch), PVGIS TMY (Fallback)
+
+- **Auto-Fill Button im Monatsdaten-Formular**
+  - Globalstrahlung und Sonnenstunden werden automatisch gefüllt
+  - Zeigt Datenquelle an (Open-Meteo oder PVGIS TMY)
+
+---
 
 ## [0.9.7] - 2026-02-09
 

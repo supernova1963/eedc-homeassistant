@@ -1,395 +1,150 @@
-# CLAUDE.md - Projekt-Kontext für Claude Code
+# CLAUDE.md - Entwickler-Kontext für Claude Code
+
+> **Hinweis:** Dies ist der Kontext für KI-gestützte Entwicklung. Für Benutzer-Dokumentation siehe [docs/BENUTZERHANDBUCH.md](docs/BENUTZERHANDBUCH.md), für Architektur siehe [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
 
 ## Projektübersicht
 
-**eedc** (Energie Effizienz Data Center) ist eine **Standalone-Anwendung** zur lokalen PV-Anlagen-Auswertung.
-Kann als Home Assistant Add-on oder standalone betrieben werden.
+**eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.1
-**Status:** Feature-complete Beta für Tests
+**Version:** 1.0.0-beta.1 | **Status:** Feature-complete Beta
 
-**Architektur-Prinzip (v0.9.9):** EEDC ist primär Standalone ohne HA-Abhängigkeit für die Datenerfassung.
-- Datenerfassung: CSV-Import oder manuelles Formular
-- Wetter-Daten: Open-Meteo/PVGIS (keine HA-Abhängigkeit)
-- Optional: MQTT-Export für berechnete KPIs nach HA
+## Quick Reference
 
-## Tech-Stack
-
-### Backend (Python)
-- FastAPI + SQLAlchemy 2.0 + SQLite
-- Pfad: `eedc/backend/`
-- Start: `cd eedc && source backend/venv/bin/activate && uvicorn backend.main:app --reload --port 8099`
-- API Docs: http://localhost:8099/api/docs
-
-### Frontend (TypeScript/React)
-- Vite + React 18 + Tailwind CSS + Recharts
-- Pfad: `eedc/frontend/`
-- Dev: `npm run dev` (Port 5173, Proxy zu 8099)
-- Build: `npm run build`
-
-## Wichtige Dateien
-
-### Versionskonfiguration (zentral!)
-```
-Frontend: eedc/frontend/src/config/version.ts
-Backend:  eedc/backend/core/config.py (APP_VERSION, APP_NAME)
-Add-on:   eedc/config.yaml (version)
-```
-
-### Kernkomponenten
-```
-Backend:
-  - main.py                      # FastAPI App, Health/Settings/Stats
-  - api/routes/cockpit.py        # NEU: Aggregierte Cockpit-Übersicht
-  - api/routes/import_export.py  # CSV Import/Export (dynamische Spalten)
-  - api/routes/monatsdaten.py    # Monatsdaten CRUD + Berechnungen
-  - api/routes/investitionen.py  # Investitionen mit Parent-Child
-  - api/routes/ha_export.py      # HA Sensor Export (REST + MQTT) - OPTIONAL
-  - api/routes/ha_import.py      # Investitions-Felder für CSV-Template (vereinfacht in v0.9.9)
-  - api/routes/wetter.py         # Wetter-API (Open-Meteo, PVGIS TMY) - HA-unabhängig!
-  - core/config.py               # Settings + Version
-  - services/ha_sensors_export.py # Sensor-Definitionen mit Formeln
-  - services/wetter_service.py   # Open-Meteo + PVGIS TMY Client
-  - services/mqtt_client.py      # MQTT Discovery Client
-
-Frontend:
-  - pages/Dashboard.tsx                   # Cockpit-Übersicht (7 Sektionen, Jahr-Filter)
-  - pages/Auswertung.tsx                  # 6 Tabs + CSV-Export (Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen)
-  - pages/auswertung/PVAnlageTab.tsx      # PV-String Performance über Zeit (v1.0.0)
-  - api/cockpit.ts                        # NEU: Cockpit-API Client
-  - api/wetter.ts                         # Wetter-API Client (Open-Meteo, PVGIS)
-  - api/haImport.ts                       # Investitions-Felder API (vereinfacht)
-  - utils/export.ts                       # NEU: CSV/JSON Export Utilities
-  - components/forms/MonatsdatenForm.tsx  # Dynamische Felder (V2H, Arbitrage) + Wetter Auto-Fill
-  - components/forms/InvestitionForm.tsx  # Investitions-Parameter
-  - pages/Monatsdaten.tsx                 # Tabelle mit Spalten-Toggle
-  - pages/HAExportSettings.tsx            # HA Export Konfiguration (MQTT/REST)
-  - pages/HAImportSettings.tsx            # Datenerfassung Info-Seite (v0.9.9 vereinfacht)
-  - components/layout/SubTabs.tsx         # Kontextabhängige Sub-Navigation
-  - components/layout/TopNavigation.tsx   # Hauptnavigation + Einstellungen-Dropdown
-  - components/setup-wizard/              # 7-Schritt Wizard
-```
-
-## Datenmodell-Konzepte
-
-### Parent-Child Beziehungen & PV-System Aggregation
-- **PV-Module → Wechselrichter** (Pflicht! Ohne WR-Zuordnung = Warnung)
-- **DC-Speicher → Wechselrichter** (Optional, für Hybrid-WR)
-- **AC-Speicher**: eigenständig (keine WR-Zuordnung)
-- E-Auto, Wallbox, Wärmepumpe, Balkonkraftwerk: eigenständig
-
-**PV-System ROI-Aggregation (v0.9.5):**
-- Wechselrichter + zugeordnete PV-Module + DC-Speicher werden als "PV-System" aggregiert
-- ROI wird auf System-Ebene berechnet (WR-Kosten enthalten!)
-- Einzelkomponenten in aufklappbaren Unterzeilen mit anteiligen Einsparungen
-- PV-Einsparungen werden proportional nach kWp auf Module verteilt
-- Orphan PV-Module (ohne WR) zeigen Warnung im Frontend
-
-### Investitions-Parameter (JSON)
-Typ-spezifische Felder werden in `parameter` JSON gespeichert:
-- E-Auto: `v2h_faehig`, `nutzt_v2h`
-- Speicher: `arbitrage_faehig`, `kapazitaet_kwh`
-- PV-Module: `anzahl_module`, `modul_leistung_wp`, `ausrichtung`, `neigung_grad`
-- Balkonkraftwerk: `leistung_wp`, `anzahl`, `hat_speicher`, `speicher_kapazitaet_wh`
-- Sonstiges: `kategorie` (erzeuger/verbraucher/speicher), `beschreibung`
-
-### CSV Import/Export
-- Dynamische Spalten basierend auf Investitions-Bezeichnungen
-- Template-Endpoint: `/api/import/template/{anlage_id}`
-- V2H-Spalten nur wenn `v2h_faehig` oder `nutzt_v2h`
-- Arbitrage-Spalten nur wenn `arbitrage_faehig`
-
-## Bekannte Design-Entscheidungen
-
-1. **Standalone-First (v0.9.9):** EEDC funktioniert ohne Home Assistant
-2. **Datenerfassung:** CSV-Import oder manuelles Formular (kein automatischer HA-Import)
-3. **Wetter-Daten via Open-Meteo** (v0.9.8): Kostenlose API, PVGIS TMY als Fallback, HA-unabhängig
-4. **HA-Export (optional):** Berechnete KPIs können per MQTT an HA gesendet werden
-5. **0-Werte:** Prüfung mit `is not None` statt `if val:`
-6. **Berechnete Felder:** `direktverbrauch`, `eigenverbrauch`, `gesamtverbrauch`
-
-## Entwicklungs-Workflow
-
+### Entwicklungsserver starten
 ```bash
-# Backend starten (aus eedc/ Verzeichnis!)
-cd eedc
-source backend/venv/bin/activate
+# Backend (Terminal 1)
+cd eedc && source backend/venv/bin/activate
 uvicorn backend.main:app --reload --port 8099
 
-# Frontend starten (neues Terminal)
-cd eedc/frontend
-npm run dev
+# Frontend (Terminal 2)
+cd eedc/frontend && npm run dev
 
-# Build für Production
-npm run build
-
-# Docker/Podman Build
-cd eedc && docker build -t eedc-test .
-# oder: podman build -t eedc-test .
+# URLs
+# Frontend: http://localhost:5173
+# API Docs: http://localhost:8099/api/docs
 ```
 
-## UI-Struktur
+### Versionierung (bei Releases aktualisieren!)
+```
+eedc/backend/core/config.py      → APP_VERSION
+eedc/frontend/src/config/version.ts → APP_VERSION
+eedc/config.yaml                 → version
+eedc/run.sh                      → Echo-Statement
+```
 
-- **TopNavigation.tsx**: Horizontale Hauptnavigation (Cockpit, Auswertungen, Einstellungen-Dropdown)
-- **SubTabs.tsx**: Kontextabhängige Sub-Tabs unter der Hauptnavigation
-  - Cockpit: Übersicht, PV-Anlage, E-Auto, Wärmepumpe, Speicher, Wallbox, Balkonkraftwerk, Sonstiges
-  - Auswertungen: (keine SubTabs, eigene Inline-Tabs in Auswertung.tsx)
-  - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, Allgemein
-- **Einstellungen-Dropdown** (TopNavigation):
-  - Stammdaten: Anlage, Strompreise, Investitionen
-  - Daten: Monatsdaten, Import, Demo-Daten
-  - System: PVGIS, Allgemein
-  - Optional: HA-Export (MQTT)
-- **Layout.tsx**: Kombiniert TopNavigation + SubTabs (kein Sidebar!)
+## Architektur-Prinzipien
 
-## Offene Features / Roadmap
+1. **Standalone-First:** Keine HA-Abhängigkeit für Kernfunktionen
+2. **Datenquellen getrennt:**
+   - `Monatsdaten` = Zählerwerte (Einspeisung, Netzbezug)
+   - `InvestitionMonatsdaten` = Komponenten-Details (PV, Speicher, E-Auto, etc.)
+3. **Legacy-Felder NICHT verwenden:**
+   - `Monatsdaten.pv_erzeugung_kwh` → Nutze `InvestitionMonatsdaten`
+   - `Monatsdaten.batterie_*` → Nutze `InvestitionMonatsdaten`
+
+## Kritische Code-Patterns
+
+### SQLAlchemy JSON-Felder
+```python
+from sqlalchemy.orm.attributes import flag_modified
+
+# WICHTIG: Nach Änderung an JSON-Feldern immer flag_modified aufrufen!
+obj.verbrauch_daten["key"] = value
+flag_modified(obj, "verbrauch_daten")  # Ohne das wird die Änderung NICHT persistiert!
+db.commit()
+```
+
+### 0-Werte prüfen
+```python
+# FALSCH - 0 wird als False gewertet
+if val:
+    ...
+
+# RICHTIG
+if val is not None:
+    ...
+```
+
+## Dateistruktur (wichtigste Dateien)
+
+```
+eedc/
+├── backend/
+│   ├── main.py                    # FastAPI Entry + /stats
+│   ├── api/routes/
+│   │   ├── cockpit.py             # Dashboard-Aggregation
+│   │   ├── import_export.py       # CSV Import (flag_modified!)
+│   │   ├── monatsdaten.py         # CRUD + Berechnungen
+│   │   └── investitionen.py       # Parent-Child, ROI
+│   ├── core/config.py             # APP_VERSION
+│   └── services/
+│       ├── wetter_service.py      # Open-Meteo + PVGIS TMY
+│       └── mqtt_client.py         # HA Export
+│
+└── frontend/src/
+    ├── pages/
+    │   ├── Dashboard.tsx          # Cockpit-Übersicht
+    │   ├── Auswertung.tsx         # 6 Analyse-Tabs
+    │   └── PVAnlageDashboard.tsx  # String-Vergleich (Jahr-Parameter!)
+    ├── components/
+    │   ├── forms/MonatsdatenForm.tsx  # Dynamische Felder
+    │   └── pv/PVStringVergleich.tsx   # SOLL-IST
+    └── config/version.ts          # APP_VERSION
+```
+
+## Datenmodell (Kurzfassung)
+
+### Parent-Child Beziehungen
+```
+Wechselrichter (Parent)
+├── PV-Module (Child) [PFLICHT]
+└── DC-Speicher (Child) [optional, Hybrid-WR]
+
+AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
+```
+
+### InvestitionMonatsdaten.verbrauch_daten (JSON)
+```json
+// PV-Module
+{ "pv_erzeugung_kwh": 450.5 }
+
+// Speicher
+{ "ladung_kwh": 200, "entladung_kwh": 185, "ladung_netz_kwh": 50 }
+
+// E-Auto
+{ "km_gefahren": 1200, "ladung_pv_kwh": 130, "ladung_netz_kwh": 86, "v2h_entladung_kwh": 25 }
+```
+
+## API Endpoints (häufig verwendet)
+
+```
+GET  /api/cockpit/uebersicht/{anlage_id}?jahr=2025   # Dashboard-Daten
+GET  /api/cockpit/pv-strings/{anlage_id}?jahr=2025   # SOLL-IST Vergleich
+POST /api/import/csv/{anlage_id}                     # CSV Import
+GET  /api/import/template/{anlage_id}                # CSV Template-Info
+GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
+```
+
+## Bekannte Fallstricke
+
+| Problem | Lösung |
+|---------|--------|
+| JSON-Änderungen werden nicht gespeichert | `flag_modified(obj, "field_name")` aufrufen |
+| 0-Werte verschwinden | `is not None` statt `if val` |
+| SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
+| Legacy pv_erzeugung_kwh wird verwendet | InvestitionMonatsdaten abfragen |
+
+## Offene Features
 
 - [ ] PDF-Export
 - [ ] KI-Insights
-- [x] SOLL-IST Vergleich pro String (Frontend) - in v1.0.0
-- [x] PV-String-Vergleich Endpoint `/api/cockpit/pv-strings/{anlage_id}` - in v1.0.0
-- [x] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen) - in v0.9.7
-- [x] Sonderkosten in Finanzen-Tab integrieren - in v1.0.0
 
----
+## Letzte Änderungen (v1.0.0-beta.1)
 
-## Änderungen (v1.0.0-beta.1) - 11.02.2026
+Kritische Fixes für SOLL-IST Vergleich:
+1. Legacy `pv_erzeugung_kwh` → `InvestitionMonatsdaten`
+2. `flag_modified()` für JSON-Persistenz
+3. Jahr-Parameter in PVStringVergleich
+4. CSV-Template bereinigt (Legacy-Spalten entfernt)
 
-### Kritische Bugfixes für SOLL-IST Vergleich
-
-**Problem:** Der SOLL-IST Vergleich im Cockpit → PV-Anlage zeigte falsche IST-Werte (0.3 MWh statt ~14 MWh).
-
-**Ursachen und Fixes:**
-
-1. **Legacy-Feld `Monatsdaten.pv_erzeugung_kwh` entfernt (Backend)**
-   - Alle Endpoints nutzen jetzt `InvestitionMonatsdaten.verbrauch_daten.pv_erzeugung_kwh`
-   - Betroffen: `cockpit.py`, `investitionen.py`, `ha_export.py`, `main.py`
-
-2. **SQLAlchemy `flag_modified()` für JSON-Felder (Backend)**
-   - SQLAlchemy erkennt Änderungen an JSON-Feldern nicht automatisch
-   - Ohne `flag_modified()` wurden Updates an `verbrauch_daten` nicht persistiert
-   - Fix in: `import_export.py` → `_upsert_investition_monatsdaten()`
-
-3. **Jahr-Parameter im Cockpit fehlte (Frontend)**
-   - `PVStringVergleich` Komponente erhielt kein `jahr` → Backend nutzte 2026
-   - Daten waren aber für 2025 vorhanden
-   - Fix: `latestYear` aus Monatsdaten berechnen und übergeben
-   - Fix in: `PVAnlageDashboard.tsx`
-
-4. **CSV-Template bereinigt**
-   - Legacy-Spalte `PV_Erzeugung_kWh` aus Template/Export entfernt
-   - `Globalstrahlung_kWh_m2` und `Sonnenstunden` entfernt (auto-generiert via Wetter-API)
-   - Import akzeptiert Legacy-Spalten weiterhin als Fallback
-
-5. **run.sh Version korrigiert**
-   - Hardcoded Version 0.9.3 → 1.0.0-beta.1
-
-### Datenarchitektur (Wichtig!)
-
-```
-Monatsdaten (Tabelle):
-  - einspeisung_kwh      ✓ Primär (Zählerwert)
-  - netzbezug_kwh        ✓ Primär (Zählerwert)
-  - pv_erzeugung_kwh     ✗ LEGACY - nicht mehr verwenden!
-  - batterie_*           ✗ LEGACY - nicht mehr verwenden!
-
-InvestitionMonatsdaten (Tabelle):
-  - verbrauch_daten (JSON):
-    - pv_erzeugung_kwh   ✓ Primär für PV-Module
-    - ladung_kwh         ✓ Primär für Speicher
-    - entladung_kwh      ✓ Primär für Speicher
-    - ... (typ-spezifische Felder)
-```
-
-### Betroffene Dateien
-
-```
-Backend:
-  - api/routes/cockpit.py        # Legacy pv_erzeugung_kwh → InvestitionMonatsdaten
-  - api/routes/investitionen.py  # berechne_pv_einsparung_aus_monatsdaten()
-  - api/routes/ha_export.py      # calculate_anlage_sensors()
-  - api/routes/import_export.py  # flag_modified(), CSV-Template bereinigt
-  - main.py                      # /stats Endpoint
-
-Frontend:
-  - pages/PVAnlageDashboard.tsx  # latestYear für PVStringVergleich
-```
-
-## Letzte Änderungen (v0.9.9)
-
-### Architektur-Änderung: Standalone-Fokus
-
-**EEDC ist jetzt primär Standalone ohne HA-Abhängigkeit für die Datenerfassung.**
-
-**Entfernt (aus v0.9.8):**
-- Komplexer HA-Import Wizard (YAML-Generator, Template-Sensoren, Utility Meter, Automationen)
-- HA-Sensor-Auswahl und Mapping-Logik
-- EVCC-Berechnungen (spezielle Template-Sensoren)
-- REST Command / Automation für automatischen Import
-
-**Beibehalten:**
-- CSV-Import (volle Funktionalität)
-- Manuelles Formular für Monatsdaten
-- Wetter-API (Open-Meteo/PVGIS - HA-unabhängig!)
-- HA-Export via MQTT (optional)
-
-**Begründung:**
-Die komplexe HA-Integration erwies sich als zu kompliziert:
-- EVCC liefert andere Datenstrukturen als erwartet
-- Utility Meter können nicht programmatisch Geräten zugeordnet werden
-- Jede Haus-Automatisierung ist anders → Kein "One Size Fits All"
-
----
-
-## Änderungen (v0.9.8)
-
-### Wetter-API für automatische Globalstrahlung/Sonnenstunden
-
-**Endpoints:**
-- `GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}` - Wetterdaten per Anlage-Koordinaten
-- `GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat}` - Wetterdaten per Koordinaten
-
-**Datenquellen:**
-- **Open-Meteo Archive API**: Historische Daten (kostenlos, ohne API-Key)
-- **PVGIS TMY**: Fallback für aktuelle/zukünftige Monate (Typical Meteorological Year)
-
-**Frontend-Integration:**
-- Auto-Fill Button in MonatsdatenForm für Globalstrahlung + Sonnenstunden
-- Zeigt Datenquelle an (Open-Meteo oder PVGIS TMY)
-
----
-
-## Änderungen (v0.9.7)
-
-### Große Daten-Bereinigung: InvestitionMonatsdaten als primäre Quelle
-
-**Problem gelöst:** Cockpit-Endpoints mischten inkonsistent zwei Datenquellen.
-
-**Neue Architektur:**
-- `Monatsdaten` = NUR Anlagen-Energiebilanz (Einspeisung, Netzbezug)
-- `InvestitionMonatsdaten` = ALLE Komponenten-Details
-
-**Korrigierte Endpoints:**
-- `get_cockpit_uebersicht`: Speicher jetzt aus InvestitionMonatsdaten
-- `get_nachhaltigkeit`: Zeitreihe aus InvestitionMonatsdaten
-- `get_komponenten_zeitreihe`: Erweitert mit neuen Feldern
-- `get_speicher_dashboard`: Arbitrage-Auswertung hinzugefügt
-
-**Neue Auswertungsfelder (Backend + Frontend):**
-- **Speicher:** Arbitrage (Netzladung), Ladepreis, Arbitrage-Gewinn
-- **E-Auto:** V2H-Entladung, Ladequellen (PV/Netz/Extern), Externe Kosten
-- **Wärmepumpe:** Heizung vs. Warmwasser getrennt
-- **Balkonkraftwerk:** Speicher-Ladung/Entladung
-- **Alle:** Sonderkosten aggregiert, Feature-Flags (hat_arbitrage, hat_v2h)
-
-**Frontend erweitert:**
-- KomponentenTab (Auswertungen): Arbitrage, V2H, Ladequellen, gestapelte Charts
-- SpeicherDashboard (Cockpit): Arbitrage-Sektion mit KPIs und gestapeltem Chart
-- Monatsdaten: Migrations-Warnung bei Legacy-Daten
-- MonatsdatenForm: Auto-Migration von Legacy-Speicherdaten
-
-**Migration für bestehende Installationen:**
-- Warnung wenn Legacy-Daten (Monatsdaten.batterie_*) vorhanden
-- Beim Bearbeiten werden Legacy-Werte automatisch ins Formular übernommen
-- Speichern migriert die Daten zu InvestitionMonatsdaten
-
-## Änderungen (v0.9.6)
-
-1. **Cockpit-Struktur verbessert**:
-   - Neuer Tab "PV-Anlage" mit detaillierter PV-System-Übersicht
-     - Wechselrichter mit zugeordneten PV-Modulen und DC-Speichern
-     - kWp-Gesamtleistung pro Wechselrichter
-     - Spezifischer Ertrag (kWh/kWp) pro String
-     - String-Vergleich nach Ausrichtung (Süd, Ost, West)
-   - Tab "Übersicht" zeigt jetzt ALLE Komponenten aggregiert
-     - PV-Erzeugung mit Klick-Navigation zu PV-Anlage
-     - Wärmepumpe, Speicher, E-Auto, Wallbox, Balkonkraftwerk
-     - Komponenten-Kacheln mit Schnellstatus
-
-2. **Tooltips für alle Cockpit-KPIs**:
-   - Alle Dashboards zeigen formel, berechnung, ergebnis per Hover
-   - SpeicherDashboard, WaermepumpeDashboard, EAutoDashboard
-   - BalkonkraftwerkDashboard, WallboxDashboard, SonstigesDashboard
-
-## Änderungen (v0.9.5)
-
-1. **PV-System ROI-Aggregation**: Strukturelle Verbesserung der ROI-Berechnung
-   - Wechselrichter + PV-Module + DC-Speicher als "PV-System" aggregiert
-   - ROI auf Systemebene statt pro Einzelkomponente (realistischer!)
-   - Aufklappbare Komponenten-Zeilen im Frontend (Chevron-Icon)
-   - Einsparung proportional nach kWp auf Module verteilt
-
-2. **Konfigurationswarnungen im ROI-Dashboard**:
-   - Warnsymbol bei PV-Modulen ohne Wechselrichter-Zuordnung
-   - Warnsymbol bei Wechselrichtern ohne zugeordnete PV-Module
-
-3. **Bugfixes**:
-   - Jahr-Filter für Investitionen ROI-Dashboard funktionsfähig
-   - **Investitions-Monatsdaten werden jetzt korrekt gespeichert**
-
-## Änderungen (v0.9.4)
-
-1. Jahr-Filter für ROI-Dashboard
-2. Unterjährigkeits-Korrektur bei Jahresvergleich
-3. PV_Erzeugung_kWh in CSV-Template
-
-## Änderungen (v0.9.3)
-
-1. **HA Sensor Export**: Berechnete KPIs können an HA zurückgegeben werden
-   - REST API: `/api/ha/export/sensors/{anlage_id}` für HA rest platform
-   - MQTT Discovery: Native HA-Entitäten via MQTT Auto-Discovery
-   - YAML-Generator: `/api/ha/export/yaml/{anlage_id}` für configuration.yaml
-   - Frontend: HAExportSettings.tsx mit MQTT-Config, Test, Publish
-2. **Auswertungen Tabs neu strukturiert**:
-   - Übersicht = Jahresvergleich (Monats-Charts, Δ%-Indikatoren, Jahrestabelle)
-   - PV-Anlage = Kombinierte Übersicht + PV-Details (Charts, KPIs, Spez. Ertrag)
-   - Investitionen = NEU: ROI-Dashboard, Amortisationskurve, Kosten nach Kategorie
-   - Finanzen & CO2 unverändert
-3. **Sensor-Definitionen zentralisiert**:
-   - `backend/services/ha_sensors_export.py` - Alle KPIs mit Formeln
-   - Attribute für HA: formel, berechnung, kategorie
-4. **MQTT-Konfiguration**: Addon config.yaml erweitert um mqtt-Sektion
-5. **SubTabs für Einstellungen**: Bessere Navigation zwischen allen Settings-Seiten
-
-## Änderungen (v0.9.2)
-
-1. **Balkonkraftwerk Dashboard**: Erzeugung, Eigenverbrauch, Einspeisung, opt. Speicher
-2. **Sonstiges Dashboard**: Flexible Kategorie (Erzeuger/Verbraucher/Speicher)
-3. **Sonderkosten-Felder**: Für alle Investitionstypen (Reparatur, Wartung)
-4. **Demo-Daten erweitert**: Balkonkraftwerk (800Wp + Speicher) + Mini-BHKW
-5. **Navigation korrigiert**: SubTabs statt veralteter Sidebar
-6. **Feldnamen-Mappings**: Frontend/Backend Konsistenz
-
-## Änderungen (v0.9.1)
-
-1. Zentrale Versionskonfiguration
-2. Dynamische Formulare (V2H/Arbitrage bedingt)
-3. PV-Module mit Anzahl/Wp
-4. Monatsdaten-Spalten konfigurierbar
-5. Bugfixes: 0-Wert Import, berechnete Felder
-
-## API Endpoints (HA Export)
-
-```
-GET  /api/ha/export/sensors              # Alle Sensor-Definitionen
-GET  /api/ha/export/sensors/{anlage_id}  # Sensoren einer Anlage mit Werten
-GET  /api/ha/export/yaml/{anlage_id}     # YAML-Snippet für configuration.yaml
-POST /api/ha/export/mqtt/test            # MQTT-Verbindung testen
-POST /api/ha/export/mqtt/publish/{id}    # Sensoren via MQTT publizieren
-DELETE /api/ha/export/mqtt/remove/{id}   # Sensoren aus HA entfernen
-```
-
-## API Endpoints (Investitions-Felder - für CSV-Template)
-
-```
-GET  /api/ha-import/investitionen/{anlage_id}  # Investitionen mit erwarteten Feldern (für CSV-Template)
-```
-
-*Hinweis: Die komplexen HA-Import Endpoints (sensor-mapping, yaml, from-ha) wurden in v0.9.9 entfernt.*
-
-## API Endpoints (Wetter)
-
-```
-GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}           # Wetterdaten per Anlage
-GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat} # Wetterdaten per Koordinaten
-```
+Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.
