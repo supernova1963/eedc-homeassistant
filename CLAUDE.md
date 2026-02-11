@@ -129,11 +129,16 @@ cd eedc && docker build -t eedc-test .
 
 ## UI-Struktur
 
-- **TopNavigation.tsx**: Horizontale Hauptnavigation (Cockpit, Auswertungen, Einstellungen)
+- **TopNavigation.tsx**: Horizontale Hauptnavigation (Cockpit, Auswertungen, Einstellungen-Dropdown)
 - **SubTabs.tsx**: Kontextabhängige Sub-Tabs unter der Hauptnavigation
   - Cockpit: Übersicht, PV-Anlage, E-Auto, Wärmepumpe, Speicher, Wallbox, Balkonkraftwerk, Sonstiges
-  - Auswertungen: Jahresvergleich, ROI-Analyse, Prognose vs. IST, PDF-Export
-  - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, Datenerfassung, HA-Export, Allgemein
+  - Auswertungen: (keine SubTabs, eigene Inline-Tabs in Auswertung.tsx)
+  - Einstellungen: Anlage, Strompreise, Investitionen, Monatsdaten, Import/Export, PVGIS, Allgemein
+- **Einstellungen-Dropdown** (TopNavigation):
+  - Stammdaten: Anlage, Strompreise, Investitionen
+  - Daten: Monatsdaten, Import, Demo-Daten
+  - System: PVGIS, Allgemein
+  - Optional: HA-Export (MQTT)
 - **Layout.tsx**: Kombiniert TopNavigation + SubTabs (kein Sidebar!)
 
 ## Offene Features / Roadmap

@@ -18,9 +18,7 @@ import {
   PiggyBank,
   Database,
   Upload,
-  Settings,
-  Send,
-  FileSpreadsheet
+  Settings
 } from 'lucide-react'
 
 interface TabItem {
@@ -46,15 +44,17 @@ const cockpitTabs: TabItem[] = [
 const auswertungenTabs: TabItem[] = []
 
 // Sub-Tabs für Einstellungen
+// Logische Gruppierung: Stammdaten → Daten → System
 const einstellungenTabs: TabItem[] = [
+  // Stammdaten
   { name: 'Anlage', href: '/einstellungen/anlage', icon: Home },
   { name: 'Strompreise', href: '/einstellungen/strompreise', icon: Zap },
   { name: 'Investitionen', href: '/einstellungen/investitionen', icon: PiggyBank },
+  // Daten
   { name: 'Monatsdaten', href: '/einstellungen/monatsdaten', icon: Database },
   { name: 'Import/Export', href: '/einstellungen/import', icon: Upload },
+  // System
   { name: 'PVGIS', href: '/einstellungen/pvgis', icon: Sun },
-  { name: 'Datenerfassung', href: '/einstellungen/ha-import', icon: FileSpreadsheet },
-  { name: 'HA-Export', href: '/einstellungen/ha-export', icon: Send },
   { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
 ]
 
