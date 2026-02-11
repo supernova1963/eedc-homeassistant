@@ -286,7 +286,7 @@ export default function Settings() {
 
         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <a
-            href="/api/docs"
+            href="./api/docs"
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-secondary text-sm"
