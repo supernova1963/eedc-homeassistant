@@ -29,6 +29,7 @@ const settingsMenu = [
     items: [
       { name: 'Monatsdaten', href: '/einstellungen/monatsdaten' },
       { name: 'Import', href: '/einstellungen/import' },
+      { name: 'Datenerfassung (HA)', href: '/einstellungen/ha-import' },
       { name: 'Demo-Daten', href: '/einstellungen/demo' },
     ],
   },
