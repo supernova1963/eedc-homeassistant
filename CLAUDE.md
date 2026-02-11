@@ -151,6 +151,70 @@ cd eedc && docker build -t eedc-test .
 - [x] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen) - in v0.9.7
 - [x] Sonderkosten in Finanzen-Tab integrieren - in v1.0.0
 
+---
+
+## Änderungen (v1.0.0-beta.1) - 11.02.2026
+
+### Kritische Bugfixes für SOLL-IST Vergleich
+
+**Problem:** Der SOLL-IST Vergleich im Cockpit → PV-Anlage zeigte falsche IST-Werte (0.3 MWh statt ~14 MWh).
+
+**Ursachen und Fixes:**
+
+1. **Legacy-Feld `Monatsdaten.pv_erzeugung_kwh` entfernt (Backend)**
+   - Alle Endpoints nutzen jetzt `InvestitionMonatsdaten.verbrauch_daten.pv_erzeugung_kwh`
+   - Betroffen: `cockpit.py`, `investitionen.py`, `ha_export.py`, `main.py`
+
+2. **SQLAlchemy `flag_modified()` für JSON-Felder (Backend)**
+   - SQLAlchemy erkennt Änderungen an JSON-Feldern nicht automatisch
+   - Ohne `flag_modified()` wurden Updates an `verbrauch_daten` nicht persistiert
+   - Fix in: `import_export.py` → `_upsert_investition_monatsdaten()`
+
+3. **Jahr-Parameter im Cockpit fehlte (Frontend)**
+   - `PVStringVergleich` Komponente erhielt kein `jahr` → Backend nutzte 2026
+   - Daten waren aber für 2025 vorhanden
+   - Fix: `latestYear` aus Monatsdaten berechnen und übergeben
+   - Fix in: `PVAnlageDashboard.tsx`
+
+4. **CSV-Template bereinigt**
+   - Legacy-Spalte `PV_Erzeugung_kWh` aus Template/Export entfernt
+   - `Globalstrahlung_kWh_m2` und `Sonnenstunden` entfernt (auto-generiert via Wetter-API)
+   - Import akzeptiert Legacy-Spalten weiterhin als Fallback
+
+5. **run.sh Version korrigiert**
+   - Hardcoded Version 0.9.3 → 1.0.0-beta.1
+
+### Datenarchitektur (Wichtig!)
+
+```
+Monatsdaten (Tabelle):
+  - einspeisung_kwh      ✓ Primär (Zählerwert)
+  - netzbezug_kwh        ✓ Primär (Zählerwert)
+  - pv_erzeugung_kwh     ✗ LEGACY - nicht mehr verwenden!
+  - batterie_*           ✗ LEGACY - nicht mehr verwenden!
+
+InvestitionMonatsdaten (Tabelle):
+  - verbrauch_daten (JSON):
+    - pv_erzeugung_kwh   ✓ Primär für PV-Module
+    - ladung_kwh         ✓ Primär für Speicher
+    - entladung_kwh      ✓ Primär für Speicher
+    - ... (typ-spezifische Felder)
+```
+
+### Betroffene Dateien
+
+```
+Backend:
+  - api/routes/cockpit.py        # Legacy pv_erzeugung_kwh → InvestitionMonatsdaten
+  - api/routes/investitionen.py  # berechne_pv_einsparung_aus_monatsdaten()
+  - api/routes/ha_export.py      # calculate_anlage_sensors()
+  - api/routes/import_export.py  # flag_modified(), CSV-Template bereinigt
+  - main.py                      # /stats Endpoint
+
+Frontend:
+  - pages/PVAnlageDashboard.tsx  # latestYear für PVStringVergleich
+```
+
 ## Letzte Änderungen (v0.9.9)
 
 ### Architektur-Änderung: Standalone-Fokus
