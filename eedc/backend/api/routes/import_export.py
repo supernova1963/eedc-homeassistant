@@ -165,12 +165,10 @@ async def _import_investition_monatsdaten_v09(
         # PV-Module
         if inv.typ == "pv-module" and suffix == "kWh":
             pv_val = parse_float(value)
-            logger.warning(f"PV-Modul Match: inv='{inv.bezeichnung}', suffix='{suffix}', value='{value}', parsed={pv_val}")
             if pv_val is not None:
                 field_key = "pv_erzeugung_kwh"
                 field_value = pv_val
                 summen["pv_erzeugung_sum"] += pv_val
-                logger.warning(f"PV-Modul Summe: +{pv_val} -> gesamt={summen['pv_erzeugung_sum']}")
 
         # Speicher
         elif inv.typ == "speicher":
@@ -333,10 +331,8 @@ async def _import_investition_monatsdaten_v09(
             collected_data[inv.id][field_key] = field_value
 
     # Alle gesammelten Daten auf einmal speichern
-    logger.warning(f"Collected data für {jahr}/{monat}: {collected_data}")
     for inv_id, verbrauch_daten in collected_data.items():
         if verbrauch_daten:
-            logger.warning(f"Speichere InvestitionMonatsdaten: inv_id={inv_id}, daten={verbrauch_daten}")
             await _upsert_investition_monatsdaten(db, inv_id, jahr, monat, verbrauch_daten, ueberschreiben)
 
     return summen
@@ -762,35 +758,24 @@ async def import_csv(
     fieldnames = reader.fieldnames or []
     has_personalized_columns = False
 
-    import logging
-    logger = logging.getLogger(__name__)
-    # WARNING level damit es sicher in den Logs erscheint
-    logger.warning(f"CSV-Import: Gefundene Spalten: {fieldnames}")
-    logger.warning(f"CSV-Import: Investitionen: {[(inv.id, inv.bezeichnung, inv.typ) for inv in investitionen]}")
-
     for inv in investitionen:
         sanitized = _sanitize_column_name(inv.bezeichnung)
         normalized = _normalize_for_matching(inv.bezeichnung)
-        logger.warning(f"CSV-Import: Investition '{inv.bezeichnung}' -> sanitized='{sanitized}', normalized='{normalized}'")
 
         for col in fieldnames:
             # Exaktes Match mit sanitized name
             if sanitized in col:
                 has_personalized_columns = True
-                logger.warning(f"CSV-Import: MATCH gefunden: Spalte '{col}' matcht Investition '{inv.bezeichnung}'")
                 break
 
             # Flexibles Match: Normalisierte Namen
             col_normalized = _normalize_for_matching(col)
             if col_normalized.startswith(normalized) and len(normalized) >= 3:
                 has_personalized_columns = True
-                logger.warning(f"CSV-Import: FLEX-MATCH gefunden: Spalte '{col}' matcht Investition '{inv.bezeichnung}'")
                 break
 
         if has_personalized_columns:
             break
-
-    logger.warning(f"CSV-Import: has_personalized_columns={has_personalized_columns}")
 
     importiert = 0
     uebersprungen = 0
