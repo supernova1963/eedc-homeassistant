@@ -165,10 +165,12 @@ async def _import_investition_monatsdaten_v09(
         # PV-Module
         if inv.typ == "pv-module" and suffix == "kWh":
             pv_val = parse_float(value)
+            logger.warning(f"PV-Modul Match: inv='{inv.bezeichnung}', suffix='{suffix}', value='{value}', parsed={pv_val}")
             if pv_val is not None:
                 field_key = "pv_erzeugung_kwh"
                 field_value = pv_val
                 summen["pv_erzeugung_sum"] += pv_val
+                logger.warning(f"PV-Modul Summe: +{pv_val} -> gesamt={summen['pv_erzeugung_sum']}")
 
         # Speicher
         elif inv.typ == "speicher":
@@ -329,12 +331,12 @@ async def _import_investition_monatsdaten_v09(
             if inv.id not in collected_data:
                 collected_data[inv.id] = {}
             collected_data[inv.id][field_key] = field_value
-            logger.debug(f"Gesammelt: inv_id={inv.id}, {field_key}={field_value}")
 
     # Alle gesammelten Daten auf einmal speichern
+    logger.warning(f"Collected data für {jahr}/{monat}: {collected_data}")
     for inv_id, verbrauch_daten in collected_data.items():
         if verbrauch_daten:
-            logger.debug(f"Speichere InvestitionMonatsdaten: inv_id={inv_id}, daten={verbrauch_daten}")
+            logger.warning(f"Speichere InvestitionMonatsdaten: inv_id={inv_id}, daten={verbrauch_daten}")
             await _upsert_investition_monatsdaten(db, inv_id, jahr, monat, verbrauch_daten, ueberschreiben)
 
     return summen
