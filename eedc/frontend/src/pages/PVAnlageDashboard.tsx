@@ -90,6 +90,12 @@ export default function PVAnlageDashboard() {
   // Spezifischer Ertrag
   const spezifischerErtrag = gesamtKwp > 0 ? stats.gesamtErzeugung / gesamtKwp : 0
 
+  // Neuestes Jahr aus Monatsdaten für SOLL-IST Vergleich
+  const latestYear = useMemo(() => {
+    if (monatsdaten.length === 0) return new Date().getFullYear()
+    return Math.max(...monatsdaten.map(md => md.jahr))
+  }, [monatsdaten])
+
   // Chart-Daten: Monatliche Erzeugung
   const chartData = useMemo(() => {
     const sorted = [...monatsdaten].sort((a, b) => {
@@ -415,7 +421,7 @@ export default function PVAnlageDashboard() {
             <GitCompare className="h-5 w-5 text-blue-500" />
             SOLL-IST Vergleich pro String
           </h2>
-          <PVStringVergleich anlageId={selectedAnlageId} />
+          <PVStringVergleich anlageId={selectedAnlageId} jahr={latestYear} />
         </Card>
       )}
     </div>
