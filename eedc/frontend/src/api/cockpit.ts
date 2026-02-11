@@ -190,6 +190,61 @@ export interface KomponentenZeitreihe {
 }
 
 // =============================================================================
+// PV-String-Vergleich Types
+// =============================================================================
+
+export interface PVStringMonat {
+  monat: number
+  monat_name: string
+  prognose_kwh: number
+  ist_kwh: number
+  abweichung_kwh: number
+  abweichung_prozent: number | null
+  performance_ratio: number | null
+}
+
+export interface PVStringDaten {
+  investition_id: number
+  bezeichnung: string
+  leistung_kwp: number
+  ausrichtung: string | null
+  neigung_grad: number | null
+  wechselrichter_id: number | null
+  wechselrichter_name: string | null
+
+  // Jahressummen
+  prognose_jahr_kwh: number
+  ist_jahr_kwh: number
+  abweichung_jahr_kwh: number
+  abweichung_jahr_prozent: number | null
+  performance_ratio_jahr: number | null
+  spezifischer_ertrag_kwh_kwp: number | null
+
+  // Monatswerte
+  monatswerte: PVStringMonat[]
+}
+
+export interface PVStringsResponse {
+  anlage_id: number
+  jahr: number
+  hat_prognose: boolean
+  anlagen_leistung_kwp: number
+
+  // Gesamt-Summen
+  prognose_gesamt_kwh: number
+  ist_gesamt_kwh: number
+  abweichung_gesamt_kwh: number
+  abweichung_gesamt_prozent: number | null
+
+  // Einzelne Strings
+  strings: PVStringDaten[]
+
+  // Beste/schlechteste Performance
+  bester_string: string | null
+  schlechtester_string: string | null
+}
+
+// =============================================================================
 // API Functions
 // =============================================================================
 
@@ -222,5 +277,14 @@ export const cockpitApi = {
    */
   async getKomponentenZeitreihe(anlageId: number): Promise<KomponentenZeitreihe> {
     return api.get<KomponentenZeitreihe>(`/cockpit/komponenten-zeitreihe/${anlageId}`)
+  },
+
+  /**
+   * Holt PV-String-Vergleich (SOLL vs IST pro PV-Modul).
+   * Vergleicht PVGIS-Prognose (anteilig nach kWp) mit tatsächlichen Erträgen.
+   */
+  async getPVStrings(anlageId: number, jahr?: number): Promise<PVStringsResponse> {
+    const params = jahr ? `?jahr=${jahr}` : ''
+    return api.get<PVStringsResponse>(`/cockpit/pv-strings/${anlageId}${params}`)
   },
 }

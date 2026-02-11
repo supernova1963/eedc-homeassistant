@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis } from '../hooks'
-import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab } from './auswertung'
+import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab } from './auswertung'
 
-type TabType = 'energie' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen'
+type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen'
 
 export default function Auswertung() {
   const navigate = useNavigate()
@@ -76,6 +76,7 @@ export default function Auswertung() {
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'energie', label: 'Energie' },
+    { key: 'pv', label: 'PV-Anlage' },
     { key: 'komponenten', label: 'Komponenten' },
     { key: 'finanzen', label: 'Finanzen' },
     { key: 'co2', label: 'CO2' },
@@ -137,11 +138,14 @@ export default function Auswertung() {
       {activeTab === 'energie' && (
         <EnergieTab data={filteredData} stats={filteredStats} anlage={anlage} strompreis={strompreis} />
       )}
+      {activeTab === 'pv' && anlageId && (
+        <PVAnlageTab anlageId={anlageId} selectedYear={selectedYear} verfuegbareJahre={verfuegbareJahre} />
+      )}
       {activeTab === 'komponenten' && (
         <KomponentenTab anlage={anlage} strompreis={strompreis} />
       )}
       {activeTab === 'finanzen' && (
-        <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} />
+        <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} anlageId={anlageId} />
       )}
       {activeTab === 'co2' && (
         <CO2Tab data={filteredData} stats={filteredStats} />

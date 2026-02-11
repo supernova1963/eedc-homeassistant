@@ -18,6 +18,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
+from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 from backend.services.wetter_service import get_wetterdaten
 
 
@@ -1644,6 +1645,52 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 },
             )
             db.add(wallbox_md)
+
+    # 5. PVGIS Prognose erstellen (realistische Werte für Wien, 48.2°N)
+    # Typische Monatserträge für eine 20 kWp Anlage in Wien (kWh)
+    # Basierend auf: Süd 12kWp (30°), Ost 5kWp (25°), West 3kWp (25°)
+    pvgis_monatswerte = [
+        {"monat": 1, "e_m": 680, "h_m": 32.5, "sd_m": 85},
+        {"monat": 2, "e_m": 1020, "h_m": 52.8, "sd_m": 115},
+        {"monat": 3, "e_m": 1650, "h_m": 95.2, "sd_m": 145},
+        {"monat": 4, "e_m": 2150, "h_m": 128.5, "sd_m": 165},
+        {"monat": 5, "e_m": 2480, "h_m": 158.2, "sd_m": 175},
+        {"monat": 6, "e_m": 2620, "h_m": 168.5, "sd_m": 155},
+        {"monat": 7, "e_m": 2750, "h_m": 175.8, "sd_m": 160},
+        {"monat": 8, "e_m": 2450, "h_m": 152.5, "sd_m": 145},
+        {"monat": 9, "e_m": 1850, "h_m": 112.8, "sd_m": 125},
+        {"monat": 10, "e_m": 1180, "h_m": 68.5, "sd_m": 105},
+        {"monat": 11, "e_m": 680, "h_m": 35.2, "sd_m": 75},
+        {"monat": 12, "e_m": 490, "h_m": 25.5, "sd_m": 65},
+    ]
+    jahresertrag = sum(m["e_m"] for m in pvgis_monatswerte)  # ~20.000 kWh
+    spezifischer_ertrag = jahresertrag / 20.0  # ~1000 kWh/kWp
+
+    pvgis_prognose = PVGISPrognoseModel(
+        anlage_id=anlage.id,
+        latitude=48.2,
+        longitude=16.4,
+        neigung_grad=28.0,  # Gewichteter Durchschnitt
+        ausrichtung_grad=-10.0,  # Leicht nach Osten (Gewichtung Ost/West)
+        system_losses=14.0,
+        jahresertrag_kwh=jahresertrag,
+        spezifischer_ertrag_kwh_kwp=spezifischer_ertrag,
+        monatswerte=pvgis_monatswerte,
+        ist_aktiv=True,
+    )
+    db.add(pvgis_prognose)
+    await db.flush()
+
+    # Normalisierte Monatsprognosen
+    for m in pvgis_monatswerte:
+        monats_prognose = PVGISMonatsprognose(
+            prognose_id=pvgis_prognose.id,
+            monat=m["monat"],
+            ertrag_kwh=m["e_m"],
+            einstrahlung_kwh_m2=m["h_m"],
+            standardabweichung_kwh=m["sd_m"],
+        )
+        db.add(monats_prognose)
 
     return DemoDataResult(
         erfolg=True,

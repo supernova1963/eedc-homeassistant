@@ -5,8 +5,8 @@
 **eedc** (Energie Effizienz Data Center) ist eine **Standalone-Anwendung** zur lokalen PV-Anlagen-Auswertung.
 Kann als Home Assistant Add-on oder standalone betrieben werden.
 
-**Version:** 0.9.9 Beta
-**Status:** Beta-ready für Tests
+**Version:** 1.0.0-beta.1
+**Status:** Feature-complete Beta für Tests
 
 **Architektur-Prinzip (v0.9.9):** EEDC ist primär Standalone ohne HA-Abhängigkeit für die Datenerfassung.
 - Datenerfassung: CSV-Import oder manuelles Formular
@@ -54,7 +54,8 @@ Backend:
 
 Frontend:
   - pages/Dashboard.tsx                   # Cockpit-Übersicht (7 Sektionen, Jahr-Filter)
-  - pages/Auswertung.tsx                  # 5 Tabs + CSV-Export (Jahresvergleich, PV, ROI, Finanzen, CO2)
+  - pages/Auswertung.tsx                  # 6 Tabs + CSV-Export (Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen)
+  - pages/auswertung/PVAnlageTab.tsx      # PV-String Performance über Zeit (v1.0.0)
   - api/cockpit.ts                        # NEU: Cockpit-API Client
   - api/wetter.ts                         # Wetter-API Client (Open-Meteo, PVGIS)
   - api/haImport.ts                       # Investitions-Felder API (vereinfacht)
@@ -145,10 +146,10 @@ cd eedc && docker build -t eedc-test .
 
 - [ ] PDF-Export
 - [ ] KI-Insights
-- [ ] SOLL-IST Vergleich pro String (Frontend)
-- [ ] PV-String-Vergleich Endpoint `/api/cockpit/pv-strings/{anlage_id}`
-- [ ] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen)
-- [ ] Sonderkosten in Finanzen-Tab integrieren
+- [x] SOLL-IST Vergleich pro String (Frontend) - in v1.0.0
+- [x] PV-String-Vergleich Endpoint `/api/cockpit/pv-strings/{anlage_id}` - in v1.0.0
+- [x] Arbitrage-Erlös berechnen (speicher_ladepreis_cent nutzen) - in v0.9.7
+- [x] Sonderkosten in Finanzen-Tab integrieren - in v1.0.0
 
 ## Letzte Änderungen (v0.9.9)
 

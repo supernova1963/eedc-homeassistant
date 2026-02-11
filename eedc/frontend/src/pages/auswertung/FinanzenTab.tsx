@@ -1,22 +1,34 @@
 // Finanzen Tab - Monatszeitreihen für Erlöse und Ersparnisse
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import {
   BarChart, Bar, ComposedChart, AreaChart, Area, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
-import { Euro, TrendingUp, Download } from 'lucide-react'
+import { Euro, TrendingUp, Download, Wrench } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, COLORS, createMonatsZeitreihe } from './types'
+import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
 
 interface FinanzenTabProps {
   data: TabProps['data']
   stats: TabProps['stats']
   strompreis: TabProps['strompreis']
+  anlageId?: number
 }
 
-export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
+export function FinanzenTab({ data, stats, strompreis, anlageId }: FinanzenTabProps) {
+  // Lade Sonderkosten aus Komponenten-Zeitreihe
+  const [sonderkostenData, setSonderkostenData] = useState<KomponentenZeitreihe | null>(null)
+
+  useEffect(() => {
+    if (!anlageId) return
+    cockpitApi.getKomponentenZeitreihe(anlageId)
+      .then(setSonderkostenData)
+      .catch(console.error)
+  }, [anlageId])
+
   if (!strompreis) {
     return (
       <Card className="text-center py-8">
@@ -37,36 +49,52 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
     [data, strompreis]
   )
 
-  // Kumulierte Werte berechnen
+  // Sonderkosten nach Jahr/Monat mappen
+  const sonderkostenByMonth = useMemo(() => {
+    const map = new Map<string, number>()
+    sonderkostenData?.monatswerte?.forEach(m => {
+      const key = `${m.jahr}-${m.monat}`
+      map.set(key, m.sonderkosten_euro || 0)
+    })
+    return map
+  }, [sonderkostenData])
+
+  // Kumulierte Werte berechnen (inkl. Sonderkosten)
   const chartDataWithKumuliert = useMemo(() => {
     let kumuliert = 0
     return zeitreihe.map(z => {
-      kumuliert += z.netto_ertrag
+      const sonderkosten = sonderkostenByMonth.get(`${z.jahr}-${z.monat}`) || 0
+      const nettoMitSonderkosten = z.netto_ertrag - sonderkosten
+      kumuliert += nettoMitSonderkosten
       return {
         ...z,
+        sonderkosten,
+        netto_nach_sonderkosten: nettoMitSonderkosten,
         kumuliert_ertrag: kumuliert
       }
     })
-  }, [zeitreihe])
+  }, [zeitreihe, sonderkostenByMonth])
 
-  // Gesamt-Finanzen
+  // Gesamt-Finanzen (inkl. Sonderkosten)
   const gesamt = useMemo(() => {
     const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
     const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
     const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+    const sonderkosten = chartDataWithKumuliert.reduce((sum, z) => sum + (z.sonderkosten || 0), 0)
     const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag }
-  }, [stats, strompreis])
+    const nettoNachSonderkosten = nettoErtrag - sonderkosten
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag, sonderkosten, nettoNachSonderkosten }
+  }, [stats, strompreis, chartDataWithKumuliert])
 
   // CSV Export
   const handleExportCSV = () => {
     const headers = [
       'Monat', 'Einspeiseerlös (€)', 'EV-Ersparnis (€)', 'Netzbezug-Kosten (€)',
-      'Netto-Ertrag (€)', 'Kumulierter Ertrag (€)'
+      'Netto-Ertrag (€)', 'Sonderkosten (€)', 'Netto nach Sonderkosten (€)', 'Kumulierter Ertrag (€)'
     ]
     const rows = chartDataWithKumuliert.map(z => [
       z.name, z.einspeise_erloes, z.ev_ersparnis, z.netzbezug_kosten,
-      z.netto_ertrag, z.kumuliert_ertrag
+      z.netto_ertrag, z.sonderkosten, z.netto_nach_sonderkosten, z.kumuliert_ertrag
     ])
     exportToCSV(headers, rows, `finanzen_export.csv`)
   }
@@ -124,17 +152,36 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
         />
         <KPICard
           title="Netto-Ertrag"
-          value={gesamt.nettoErtrag.toFixed(0)}
+          value={gesamt.nettoNachSonderkosten.toFixed(0)}
           unit="€"
-          subtitle="Gesamt"
+          subtitle={gesamt.sonderkosten > 0 ? `nach ${gesamt.sonderkosten.toFixed(0)} € Sonderkosten` : 'Gesamt'}
           icon={Euro}
           color="text-blue-500"
           bgColor="bg-blue-50 dark:bg-blue-900/20"
-          formel="Einspeiseerlös + EV-Ersparnis"
-          berechnung={`${fmtCalc(gesamt.einspeiseErloes, 2)} € + ${fmtCalc(gesamt.eigenverbrauchErsparnis, 2)} €`}
-          ergebnis={`= ${fmtCalc(gesamt.nettoErtrag, 2)} €`}
+          formel={gesamt.sonderkosten > 0 ? "Einspeiseerlös + EV-Ersparnis − Sonderkosten" : "Einspeiseerlös + EV-Ersparnis"}
+          berechnung={gesamt.sonderkosten > 0
+            ? `${fmtCalc(gesamt.einspeiseErloes, 2)} € + ${fmtCalc(gesamt.eigenverbrauchErsparnis, 2)} € − ${fmtCalc(gesamt.sonderkosten, 2)} €`
+            : `${fmtCalc(gesamt.einspeiseErloes, 2)} € + ${fmtCalc(gesamt.eigenverbrauchErsparnis, 2)} €`}
+          ergebnis={`= ${fmtCalc(gesamt.nettoNachSonderkosten, 2)} €`}
         />
       </div>
+
+      {/* Sonderkosten-Hinweis wenn vorhanden */}
+      {gesamt.sonderkosten > 0 && (
+        <Card className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-3">
+            <Wrench className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <div>
+              <h4 className="font-medium text-amber-800 dark:text-amber-200">
+                Sonderkosten im Zeitraum: {gesamt.sonderkosten.toFixed(2)} €
+              </h4>
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Reparaturen, Wartung und sonstige Kosten werden vom Netto-Ertrag abgezogen.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Chart 1: Finanzielle Bilanz pro Monat */}
       <Card>
@@ -144,7 +191,7 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
         </h3>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <BarChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
@@ -156,6 +203,9 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
               <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
               <Bar dataKey="netzbezug_kosten" name="Netzbezug (negativ)" fill={COLORS.grid} />
+              {gesamt.sonderkosten > 0 && (
+                <Bar dataKey="sonderkosten" name="Sonderkosten" fill="#f59e0b" />
+              )}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -191,28 +241,31 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
         <div className="mt-4 flex items-center justify-center gap-4 text-sm">
           <span className="text-gray-500">Gesamt nach {stats.anzahlMonate} Monaten:</span>
           <span className="text-lg font-bold text-green-600">
-            {gesamt.nettoErtrag.toFixed(0)} €
+            {gesamt.nettoNachSonderkosten.toFixed(0)} €
           </span>
+          {gesamt.sonderkosten > 0 && (
+            <span className="text-gray-400 text-xs">(nach {gesamt.sonderkosten.toFixed(0)} € Sonderkosten)</span>
+          )}
         </div>
       </Card>
 
       {/* Chart 3: Netto-Ertrag pro Monat (Line) */}
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Netto-Ertrag pro Monat
+          Netto-Ertrag pro Monat {gesamt.sonderkosten > 0 && '(nach Sonderkosten)'}
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <ComposedChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
               <Tooltip
-                formatter={(value: number) => [`${value.toFixed(2)} €`, 'Netto-Ertrag']}
+                formatter={(value: number, name: string) => [`${value.toFixed(2)} €`, name]}
                 contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
               />
-              <Bar dataKey="netto_ertrag" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
-              <Line type="monotone" dataKey="netto_ertrag" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
+              <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
+              <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -223,7 +276,7 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Durchschnittswerte
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className={`grid grid-cols-2 gap-4 text-sm ${gesamt.sonderkosten > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
           <div>
             <p className="text-gray-500 dark:text-gray-400">Ø Einspeiseerlös/Monat</p>
             <p className="font-medium text-green-600">{(gesamt.einspeiseErloes / stats.anzahlMonate).toFixed(0)} €</p>
@@ -236,9 +289,15 @@ export function FinanzenTab({ data, stats, strompreis }: FinanzenTabProps) {
             <p className="text-gray-500 dark:text-gray-400">Ø Netzbezug-Kosten/Monat</p>
             <p className="font-medium text-red-600">{(gesamt.netzbezugKosten / stats.anzahlMonate).toFixed(0)} €</p>
           </div>
+          {gesamt.sonderkosten > 0 && (
+            <div>
+              <p className="text-gray-500 dark:text-gray-400">Ø Sonderkosten/Monat</p>
+              <p className="font-medium text-amber-600">{(gesamt.sonderkosten / stats.anzahlMonate).toFixed(0)} €</p>
+            </div>
+          )}
           <div>
             <p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag/Monat</p>
-            <p className="font-medium text-blue-600">{(gesamt.nettoErtrag / stats.anzahlMonate).toFixed(0)} €</p>
+            <p className="font-medium text-blue-600">{(gesamt.nettoNachSonderkosten / stats.anzahlMonate).toFixed(0)} €</p>
           </div>
         </div>
       </Card>

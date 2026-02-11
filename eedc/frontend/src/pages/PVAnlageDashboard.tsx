@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle } from 'lucide-react'
+import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle, GitCompare } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc } from '../components/ui'
 import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useInvestitionen } from '../hooks'
 import {
@@ -13,6 +13,7 @@ import {
   AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts'
 import type { Investition } from '../types'
+import { PVStringVergleich } from '../components/pv'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -404,6 +405,17 @@ export default function PVAnlageDashboard() {
           <p className="text-gray-500 dark:text-gray-400">
             Erfasse Monatsdaten, um Erzeugungsdaten zu sehen.
           </p>
+        </Card>
+      )}
+
+      {/* SOLL-IST String-Vergleich */}
+      {hasPVSystem && hasData && selectedAnlageId && (
+        <Card>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-blue-500" />
+            SOLL-IST Vergleich pro String
+          </h2>
+          <PVStringVergleich anlageId={selectedAnlageId} />
         </Card>
       )}
     </div>
