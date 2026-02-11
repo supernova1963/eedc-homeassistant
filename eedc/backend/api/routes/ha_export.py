@@ -22,7 +22,7 @@ from backend.models.strompreis import Strompreis
 from backend.services.ha_sensors_export import (
     SensorDefinition, SensorValue, SensorCategory,
     ANLAGE_SENSOREN, INVESTITION_SENSOREN, E_AUTO_SENSOREN,
-    WAERMEPUMPE_SENSOREN, SPEICHER_SENSOREN,
+    WAERMEPUMPE_SENSOREN, SPEICHER_SENSOREN, LETZTER_IMPORT_SENSOREN,
     get_all_sensor_definitions
 )
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
@@ -294,6 +294,43 @@ async def calculate_anlage_sensors(
                 if speicher_effizienz is not None:
                     value = round(speicher_effizienz, 1)
                     berechnung = f"{batterie_entladung:.0f} ÷ {batterie_ladung:.0f} × 100"
+
+            if value is not None:
+                sensor_values.append(SensorValue(
+                    definition=sensor,
+                    value=value,
+                    berechnung=berechnung
+                ))
+
+    # Letzter Import Sensoren (Status)
+    if monatsdaten:
+        # Finde den neuesten Monat (sortiert nach Jahr, dann Monat)
+        sorted_md = sorted(monatsdaten, key=lambda m: (m.jahr, m.monat), reverse=True)
+        letzter = sorted_md[0]
+
+        # Monatsnamen
+        monatsnamen = [
+            "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+            "Juli", "August", "September", "Oktober", "November", "Dezember"
+        ]
+        monatsname = monatsnamen[letzter.monat] if 1 <= letzter.monat <= 12 else str(letzter.monat)
+
+        for sensor in LETZTER_IMPORT_SENSOREN:
+            value = None
+            berechnung = None
+
+            if sensor.key == "letzter_import_jahr":
+                value = letzter.jahr
+                berechnung = f"Neuester Datensatz: {monatsname} {letzter.jahr}"
+            elif sensor.key == "letzter_import_monat":
+                value = letzter.monat
+                berechnung = f"Monat {letzter.monat} ({monatsname})"
+            elif sensor.key == "letzter_import_monat_name":
+                value = f"{monatsname} {letzter.jahr}"
+                berechnung = f"Formatiert aus {letzter.monat}/{letzter.jahr}"
+            elif sensor.key == "anzahl_monate_erfasst":
+                value = len(monatsdaten)
+                berechnung = f"Erfasste Monatsdaten in der Datenbank"
 
             if value is not None:
                 sensor_values.append(SensorValue(

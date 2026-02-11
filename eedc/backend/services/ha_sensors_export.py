@@ -24,6 +24,7 @@ class SensorCategory(str, Enum):
     WAERMEPUMPE = "waermepumpe" # Wärmepumpe spezifisch
     SPEICHER = "speicher"       # Speicher spezifisch
     WALLBOX = "wallbox"         # Wallbox spezifisch
+    STATUS = "status"           # Status-Informationen (letzter Import, etc.)
 
 
 @dataclass
@@ -318,6 +319,47 @@ SPEICHER_SENSOREN = [
 ]
 
 # =============================================================================
+# SENSOR-DEFINITIONEN - Letzter Import (Status)
+# =============================================================================
+LETZTER_IMPORT_SENSOREN = [
+    SensorDefinition(
+        key="letzter_import_jahr",
+        name="Letzter Import - Jahr",
+        unit="",
+        icon="mdi:calendar",
+        category=SensorCategory.STATUS,
+        formel="Jahr des zuletzt erfassten Monats",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="letzter_import_monat",
+        name="Letzter Import - Monat",
+        unit="",
+        icon="mdi:calendar-month",
+        category=SensorCategory.STATUS,
+        formel="Monat des zuletzt erfassten Datensatzes (1-12)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="letzter_import_monat_name",
+        name="Letzter Import - Monatsname",
+        unit="",
+        icon="mdi:calendar-text",
+        category=SensorCategory.STATUS,
+        formel="Monatsname (z.B. 'Dezember 2025')",
+    ),
+    SensorDefinition(
+        key="anzahl_monate_erfasst",
+        name="Erfasste Monate",
+        unit="",
+        icon="mdi:counter",
+        category=SensorCategory.STATUS,
+        formel="Anzahl der erfassten Monatsdaten",
+        state_class="total",
+    ),
+]
+
+# =============================================================================
 # ALLE SENSOREN ZUSAMMENGEFASST
 # =============================================================================
 ALL_SENSOR_DEFINITIONS = {
@@ -326,6 +368,7 @@ ALL_SENSOR_DEFINITIONS = {
     "e_auto": E_AUTO_SENSOREN,
     "waermepumpe": WAERMEPUMPE_SENSOREN,
     "speicher": SPEICHER_SENSOREN,
+    "status": LETZTER_IMPORT_SENSOREN,
 }
 
 
