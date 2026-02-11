@@ -858,23 +858,20 @@ async def import_csv(
             else:
                 pv_erzeugung = None
 
-            # Batterie: Expliziter Wert ODER Summe aus Speicher-Investitionen
+            # Batterie: NUR expliziter Wert aus Batterie_*_kWh Spalten
+            # WICHTIG: Summen aus Speicher-Investitionen werden NICHT in Legacy-Felder geschrieben!
+            # Die Daten sind bereits in InvestitionMonatsdaten gespeichert (v0.9.7+)
+            # Legacy-Felder nur bei expliziter Batterie_*_kWh Spalte befüllen (Rückwärtskompatibilität)
             batterie_ladung_explicit = parse_float(row.get("Batterie_Ladung_kWh", ""))
             batterie_entladung_explicit = parse_float(row.get("Batterie_Entladung_kWh", ""))
 
-            if batterie_ladung_explicit is not None:
-                batterie_ladung = batterie_ladung_explicit
-            elif summen["batterie_ladung_sum"] > 0:
-                batterie_ladung = summen["batterie_ladung_sum"]
-            else:
-                batterie_ladung = None
+            # Legacy-Felder nur bei explizitem Wert setzen
+            batterie_ladung = batterie_ladung_explicit  # None wenn nicht explizit angegeben
+            batterie_entladung = batterie_entladung_explicit  # None wenn nicht explizit angegeben
 
-            if batterie_entladung_explicit is not None:
-                batterie_entladung = batterie_entladung_explicit
-            elif summen["batterie_entladung_sum"] > 0:
-                batterie_entladung = summen["batterie_entladung_sum"]
-            else:
-                batterie_entladung = None
+            # Für Berechnungen (Direktverbrauch, Eigenverbrauch) die Summen verwenden
+            batterie_ladung_for_calc = batterie_ladung if batterie_ladung is not None else summen["batterie_ladung_sum"] if summen["batterie_ladung_sum"] > 0 else 0
+            batterie_entladung_for_calc = batterie_entladung if batterie_entladung is not None else summen["batterie_entladung_sum"] if summen["batterie_entladung_sum"] > 0 else 0
 
             # Berechnete Felder
             # Werden berechnet wenn pv_erzeugung vorhanden ist (auch bei 0)
@@ -882,8 +879,9 @@ async def import_csv(
             eigenverbrauch = None
             gesamtverbrauch = None
             if pv_erzeugung is not None:
-                direktverbrauch = max(0, pv_erzeugung - einspeisung - (batterie_ladung or 0))
-                eigenverbrauch = direktverbrauch + (batterie_entladung or 0)
+                # Für Berechnungen die _for_calc Werte verwenden (inkl. InvestitionMonatsdaten-Summen)
+                direktverbrauch = max(0, pv_erzeugung - einspeisung - batterie_ladung_for_calc)
+                eigenverbrauch = direktverbrauch + batterie_entladung_for_calc
                 gesamtverbrauch = eigenverbrauch + netzbezug
             elif einspeisung > 0 or netzbezug > 0:
                 # Fallback: Wenn keine PV-Erzeugung aber Einspeisung/Netzbezug vorhanden,
