@@ -634,16 +634,52 @@ async def get_roi_dashboard(
     # ==========================================================================
 
     async def berechne_pv_einsparung_aus_monatsdaten() -> tuple[float, float, dict]:
-        """Berechnet PV-Einsparung aus Monatsdaten (für alle PV-Module gemeinsam)."""
+        """
+        Berechnet PV-Einsparung für alle PV-Module gemeinsam.
+
+        WICHTIG: Die PV-Erzeugung kommt aus InvestitionMonatsdaten (pro PV-Modul),
+        NICHT aus Monatsdaten.pv_erzeugung_kwh (Legacy-Feld!).
+        Einspeisung/Netzbezug kommen weiterhin aus Monatsdaten (Zählerwerte).
+        """
+        # 1. PV-Module IDs ermitteln
+        pv_ids_result = await db.execute(
+            select(Investition.id)
+            .where(Investition.anlage_id == anlage_id)
+            .where(Investition.typ == "pv-module")
+            .where(Investition.aktiv == True)
+        )
+        pv_module_ids = [row[0] for row in pv_ids_result.all()]
+
+        # 2. Einspeisung aus Monatsdaten (Zählerwert)
         md_query = select(
             Monatsdaten.monat,
+            Monatsdaten.jahr,
             func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
-            func.sum(Monatsdaten.pv_erzeugung_kwh).label('erzeugung'),
-            func.sum(Monatsdaten.eigenverbrauch_kwh).label('eigenverbrauch'),
         ).where(Monatsdaten.anlage_id == anlage_id)
 
         if jahr is not None:
             md_query = md_query.where(Monatsdaten.jahr == jahr)
+
+        # 3. PV-Erzeugung aus InvestitionMonatsdaten aggregieren
+        async def get_pv_erzeugung(filter_jahr: int = None) -> dict[tuple[int, int], float]:
+            """Holt PV-Erzeugung aus InvestitionMonatsdaten."""
+            if not pv_module_ids:
+                return {}
+
+            imd_query = select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_(pv_module_ids)
+            )
+            if filter_jahr is not None:
+                imd_query = imd_query.where(InvestitionMonatsdaten.jahr == filter_jahr)
+
+            imd_result = await db.execute(imd_query)
+            erzeugung_by_monat: dict[tuple[int, int], float] = {}
+            for imd in imd_result.scalars().all():
+                data = imd.verbrauch_daten or {}
+                pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
+                key = (imd.jahr, imd.monat)
+                erzeugung_by_monat[key] = erzeugung_by_monat.get(key, 0) + pv_kwh
+            return erzeugung_by_monat
 
         if jahr is None:
             # Alle Jahre: Jahresdurchschnitt
@@ -660,15 +696,16 @@ async def get_roi_dashboard(
             md_result = await db.execute(md_query)
             md_by_month = {r.monat: r for r in md_result.all()}
 
+            # PV-Erzeugung aus InvestitionMonatsdaten
+            pv_erzeugung_data = await get_pv_erzeugung()
+            total_erzeugung = sum(pv_erzeugung_data.values())
+
             total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-            total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
-            total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
             anzahl_monate = len(md_by_month)
 
             if anzahl_monate > 0 and anzahl_jahre > 0:
                 avg_einspeisung = total_einspeisung / anzahl_jahre
                 avg_erzeugung = total_erzeugung / anzahl_jahre
-                avg_eigenverbrauch = total_eigenverbrauch / anzahl_jahre
                 avg_monate_pro_jahr = total_records / anzahl_jahre
 
                 if avg_monate_pro_jahr < 12:
@@ -680,7 +717,8 @@ async def get_roi_dashboard(
 
                 einspeisung_jahr = avg_einspeisung * faktor
                 erzeugung_jahr = avg_erzeugung * faktor
-                eigenverbrauch_jahr = avg_eigenverbrauch * faktor
+                # Eigenverbrauch = Erzeugung - Einspeisung
+                eigenverbrauch_jahr = max(0, erzeugung_jahr - einspeisung_jahr)
                 hinweis = f'Jahresdurchschnitt (Ø aus {anzahl_jahre} Jahren)'
                 if methode == 'durchschnitt_hochgerechnet':
                     hinweis += ', hochgerechnet auf 12 Monate'
@@ -692,9 +730,11 @@ async def get_roi_dashboard(
             md_result = await db.execute(md_query)
             md_by_month = {r.monat: r for r in md_result.all()}
 
+            # PV-Erzeugung aus InvestitionMonatsdaten für dieses Jahr
+            pv_erzeugung_data = await get_pv_erzeugung(jahr)
+            total_erzeugung = sum(pv_erzeugung_data.values())
+
             total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-            total_erzeugung = sum(r.erzeugung or 0 for r in md_by_month.values())
-            total_eigenverbrauch = sum(r.eigenverbrauch or 0 for r in md_by_month.values())
             anzahl_monate = len(md_by_month)
             vorhandene_monate = sorted(md_by_month.keys())
 
@@ -726,7 +766,8 @@ async def get_roi_dashboard(
 
                 einspeisung_jahr = total_einspeisung * faktor
                 erzeugung_jahr = total_erzeugung * faktor
-                eigenverbrauch_jahr = total_eigenverbrauch * faktor
+                # Eigenverbrauch = Erzeugung - Einspeisung
+                eigenverbrauch_jahr = max(0, erzeugung_jahr - einspeisung_jahr)
 
                 if methode == 'pvgis':
                     hinweis = f'PVGIS-gewichtete Hochrechnung für {jahr} ({anzahl_monate} Monate)'

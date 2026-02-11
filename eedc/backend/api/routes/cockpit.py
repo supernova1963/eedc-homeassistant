@@ -464,17 +464,34 @@ async def get_prognose_vs_ist(
     )
     prognose = prognose_result.scalar_one_or_none()
 
-    # IST-Daten für das Jahr laden
-    md_result = await db.execute(
-        select(Monatsdaten)
-        .where(Monatsdaten.anlage_id == anlage_id)
-        .where(Monatsdaten.jahr == jahr)
-        .order_by(Monatsdaten.monat)
-    )
-    monatsdaten_list = md_result.scalars().all()
+    # IST-Daten für das Jahr laden aus InvestitionMonatsdaten (PV-Module)
+    # WICHTIG: Monatsdaten.pv_erzeugung_kwh ist LEGACY und wird nicht mehr gepflegt!
+    # PV-Erzeugung wird pro PV-Modul in InvestitionMonatsdaten.verbrauch_daten gespeichert
 
-    # Monatsdaten in Dict umwandeln
-    ist_pro_monat = {m.monat: m.pv_erzeugung_kwh or 0 for m in monatsdaten_list}
+    # Alle PV-Module der Anlage laden
+    pv_result = await db.execute(
+        select(Investition.id)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == "pv-module")
+        .where(Investition.aktiv == True)
+    )
+    pv_ids = [row[0] for row in pv_result.all()]
+
+    # PV-Erzeugung aus InvestitionMonatsdaten aggregieren
+    ist_pro_monat: dict[int, float] = {}
+    if pv_ids:
+        imd_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
+            .where(InvestitionMonatsdaten.jahr == jahr)
+        )
+        for imd in imd_result.scalars().all():
+            data = imd.verbrauch_daten or {}
+            pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
+            if imd.monat in ist_pro_monat:
+                ist_pro_monat[imd.monat] += pv_kwh
+            else:
+                ist_pro_monat[imd.monat] = pv_kwh
 
     # Prognose-Monatswerte extrahieren
     prognose_pro_monat = {}
@@ -1188,6 +1205,7 @@ async def get_pv_strings(
 
     # InvestitionMonatsdaten für alle PV-Module laden
     pv_ids = [m.id for m in pv_module]
+
     result = await db.execute(
         select(InvestitionMonatsdaten)
         .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
@@ -1212,9 +1230,10 @@ async def get_pv_strings(
         modul_kwp = modul.leistung_kwp or 0
         kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
 
+        # Ausrichtung/Neigung: Direkte Felder haben Vorrang vor parameter
         params = modul.parameter or {}
-        ausrichtung = params.get("ausrichtung")
-        neigung = params.get("neigung_grad")
+        ausrichtung = modul.ausrichtung or params.get("ausrichtung")
+        neigung = modul.neigung_grad or params.get("neigung_grad")
 
         monatswerte = []
         prognose_jahr = 0

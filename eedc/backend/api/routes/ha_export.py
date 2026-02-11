@@ -17,7 +17,7 @@ import os
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.investition import Investition
+from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 from backend.services.ha_sensors_export import (
     SensorDefinition, SensorValue, SensorCategory,
@@ -105,8 +105,14 @@ async def calculate_anlage_sensors(
     db: AsyncSession,
     anlage: Anlage
 ) -> list[SensorValue]:
-    """Berechnet alle Sensor-Werte für eine Anlage."""
-    # Monatsdaten laden
+    """
+    Berechnet alle Sensor-Werte für eine Anlage.
+
+    WICHTIG: PV-Erzeugung kommt aus InvestitionMonatsdaten (pro PV-Modul),
+    NICHT aus Monatsdaten.pv_erzeugung_kwh (Legacy-Feld!).
+    Einspeisung/Netzbezug kommen aus Monatsdaten (Zählerwerte).
+    """
+    # Monatsdaten laden (für Zählerwerte: einspeisung, netzbezug)
     result = await db.execute(
         select(Monatsdaten).where(Monatsdaten.anlage_id == anlage.id)
     )
@@ -132,17 +138,49 @@ async def calculate_anlage_sensors(
     )
     investitionen = result.scalars().all()
 
-    # Summen berechnen
-    pv_erzeugung = sum(m.pv_erzeugung_kwh or (m.einspeisung_kwh + (m.eigenverbrauch_kwh or 0)) for m in monatsdaten)
+    # PV-Module IDs für InvestitionMonatsdaten
+    pv_module_ids = [inv.id for inv in investitionen if inv.typ == "pv-module"]
+
+    # PV-Erzeugung aus InvestitionMonatsdaten aggregieren
+    pv_erzeugung = 0.0
+    if pv_module_ids:
+        imd_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(pv_module_ids))
+        )
+        for imd in imd_result.scalars().all():
+            data = imd.verbrauch_daten or {}
+            pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
+
+    # Fallback: Falls keine InvestitionMonatsdaten vorhanden, berechne aus Einspeisung
+    einspeisung = sum(m.einspeisung_kwh or 0 for m in monatsdaten)
+    if pv_erzeugung == 0:
+        # Schätzung: Erzeugung ≈ Einspeisung + geschätzter Eigenverbrauch
+        pv_erzeugung = einspeisung + sum(m.eigenverbrauch_kwh or 0 for m in monatsdaten)
+
     direktverbrauch = sum(m.direktverbrauch_kwh or 0 for m in monatsdaten)
     eigenverbrauch = sum(m.eigenverbrauch_kwh or 0 for m in monatsdaten)
-    einspeisung = sum(m.einspeisung_kwh for m in monatsdaten)
-    netzbezug = sum(m.netzbezug_kwh for m in monatsdaten)
+    netzbezug = sum(m.netzbezug_kwh or 0 for m in monatsdaten)
     gesamtverbrauch = sum(m.gesamtverbrauch_kwh or 0 for m in monatsdaten)
 
-    # Speicher-Summen
-    batterie_ladung = sum(m.batterie_ladung_kwh or 0 for m in monatsdaten)
-    batterie_entladung = sum(m.batterie_entladung_kwh or 0 for m in monatsdaten)
+    # Speicher-Summen aus InvestitionMonatsdaten (korrekt) statt Legacy Monatsdaten
+    speicher_ids = [inv.id for inv in investitionen if inv.typ == "speicher"]
+    batterie_ladung = 0.0
+    batterie_entladung = 0.0
+    if speicher_ids:
+        sp_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(speicher_ids))
+        )
+        for imd in sp_result.scalars().all():
+            data = imd.verbrauch_daten or {}
+            batterie_ladung += data.get("ladung_kwh", 0) or 0
+            batterie_entladung += data.get("entladung_kwh", 0) or 0
+
+    # Fallback auf Legacy wenn keine InvestitionMonatsdaten
+    if batterie_ladung == 0 and batterie_entladung == 0:
+        batterie_ladung = sum(m.batterie_ladung_kwh or 0 for m in monatsdaten)
+        batterie_entladung = sum(m.batterie_entladung_kwh or 0 for m in monatsdaten)
 
     # Quoten
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0

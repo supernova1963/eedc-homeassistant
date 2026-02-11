@@ -20,7 +20,7 @@ from backend.core.database import init_db, get_session
 from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, ha_export, ha_import, pvgis, cockpit, wetter
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.investition import Investition
+from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 
 
@@ -159,11 +159,24 @@ async def get_database_stats():
         strompreise_count = strompreise_result.scalar() or 0
 
         # Zusätzliche Infos
-        # Gesamte PV-Erzeugung
-        erzeugung_result = await session.execute(
-            select(func.sum(Monatsdaten.pv_erzeugung_kwh))
+        # Gesamte PV-Erzeugung aus InvestitionMonatsdaten (pro PV-Modul)
+        # WICHTIG: Monatsdaten.pv_erzeugung_kwh ist LEGACY und wird nicht mehr gepflegt!
+
+        # PV-Module IDs ermitteln
+        pv_ids_result = await session.execute(
+            select(Investition.id).where(Investition.typ == "pv-module")
         )
-        gesamt_erzeugung = erzeugung_result.scalar() or 0
+        pv_ids = [row[0] for row in pv_ids_result.all()]
+
+        gesamt_erzeugung = 0.0
+        if pv_ids:
+            imd_result = await session.execute(
+                select(InvestitionMonatsdaten)
+                .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
+            )
+            for imd in imd_result.scalars().all():
+                data = imd.verbrauch_daten or {}
+                gesamt_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
 
         # Zeitraum der Daten
         zeitraum_result = await session.execute(
