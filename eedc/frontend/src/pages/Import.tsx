@@ -339,21 +339,37 @@ export default function Import() {
         <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
           CSV-Format
         </h3>
-        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-          <p>Das CSV muss folgende Pflichtspalten enthalten:</p>
+        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-3">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">💡 Tipp: Template herunterladen</p>
+            <p className="text-blue-700 dark:text-blue-300">
+              Das Template enthält automatisch alle Spalten passend zu deinen angelegten Investitionen
+              (z.B. <code className="text-xs bg-blue-100 dark:bg-blue-800 px-1 rounded">Sueddach_kWh</code>,{' '}
+              <code className="text-xs bg-blue-100 dark:bg-blue-800 px-1 rounded">BYD_HVS_Ladung_kWh</code>).
+            </p>
+          </div>
+
+          <p><strong>Pflichtspalten:</strong></p>
           <ul className="list-disc list-inside ml-2 space-y-1">
             <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Jahr</code> - Jahr (z.B. 2024)</li>
             <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Monat</code> - Monat (1-12)</li>
             <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Einspeisung_kWh</code> - Einspeisung ins Netz</li>
             <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Netzbezug_kWh</code> - Bezug aus dem Netz</li>
           </ul>
-          <p className="mt-2">Optionale Spalten für erweiterte Auswertungen:</p>
+
+          <p><strong>Investitions-Spalten (automatisch im Template):</strong></p>
           <ul className="list-disc list-inside ml-2 space-y-1">
-            <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">PV_Erzeugung_kWh</code> - Gesamte PV-Erzeugung</li>
-            <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Direktverbrauch_kWh</code> - Direkter Eigenverbrauch</li>
-            <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Batterie_Ladung_kWh</code> - Batterieladung</li>
-            <li><code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">Batterie_Entladung_kWh</code> - Batterieentladung</li>
+            <li>PV-Module: <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_kWh</code></li>
+            <li>Speicher: <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Ladung_kWh</code>, <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Entladung_kWh</code></li>
+            <li>E-Auto: <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_km</code>, <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Verbrauch_kWh</code>, etc.</li>
+            <li>Wärmepumpe: <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Strom_kWh</code>, <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Heizung_kWh</code></li>
           </ul>
+
+          <p className="text-xs text-gray-500 dark:text-gray-500">
+            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">PV_Erzeugung_kWh</code> und{' '}
+            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Batterie_*_kWh</code> werden automatisch
+            aus den Investitions-Spalten berechnet, können aber auch manuell angegeben werden.
+          </p>
         </div>
       </Card>
     </div>
