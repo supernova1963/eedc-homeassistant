@@ -762,32 +762,33 @@ async def import_csv(
 
     import logging
     logger = logging.getLogger(__name__)
-    logger.info(f"CSV-Import: Gefundene Spalten: {fieldnames}")
-    logger.info(f"CSV-Import: Investitionen: {[(inv.id, inv.bezeichnung, inv.typ) for inv in investitionen]}")
+    # WARNING level damit es sicher in den Logs erscheint
+    logger.warning(f"CSV-Import: Gefundene Spalten: {fieldnames}")
+    logger.warning(f"CSV-Import: Investitionen: {[(inv.id, inv.bezeichnung, inv.typ) for inv in investitionen]}")
 
     for inv in investitionen:
         sanitized = _sanitize_column_name(inv.bezeichnung)
         normalized = _normalize_for_matching(inv.bezeichnung)
-        logger.info(f"CSV-Import: Investition '{inv.bezeichnung}' -> sanitized='{sanitized}', normalized='{normalized}'")
+        logger.warning(f"CSV-Import: Investition '{inv.bezeichnung}' -> sanitized='{sanitized}', normalized='{normalized}'")
 
         for col in fieldnames:
             # Exaktes Match mit sanitized name
             if sanitized in col:
                 has_personalized_columns = True
-                logger.info(f"CSV-Import: MATCH gefunden: Spalte '{col}' matcht Investition '{inv.bezeichnung}'")
+                logger.warning(f"CSV-Import: MATCH gefunden: Spalte '{col}' matcht Investition '{inv.bezeichnung}'")
                 break
 
             # Flexibles Match: Normalisierte Namen
             col_normalized = _normalize_for_matching(col)
             if col_normalized.startswith(normalized) and len(normalized) >= 3:
                 has_personalized_columns = True
-                logger.info(f"CSV-Import: FLEX-MATCH gefunden: Spalte '{col}' matcht Investition '{inv.bezeichnung}'")
+                logger.warning(f"CSV-Import: FLEX-MATCH gefunden: Spalte '{col}' matcht Investition '{inv.bezeichnung}'")
                 break
 
         if has_personalized_columns:
             break
 
-    logger.info(f"CSV-Import: has_personalized_columns={has_personalized_columns}")
+    logger.warning(f"CSV-Import: has_personalized_columns={has_personalized_columns}")
 
     importiert = 0
     uebersprungen = 0
