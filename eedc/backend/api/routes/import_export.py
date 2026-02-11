@@ -527,14 +527,15 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     if not anlage_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    # Basis-Spalten
-    spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh", "PV_Erzeugung_kWh"]
+    # Basis-Spalten (nur Zählerwerte!)
+    # WICHTIG: PV_Erzeugung_kWh ist LEGACY - PV-Erzeugung wird pro PV-Modul erfasst
+    # Globalstrahlung/Sonnenstunden werden automatisch via Wetter-API gefüllt
+    spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
     beschreibung = {
         "Jahr": "Jahr (z.B. 2024)",
         "Monat": "Monat (1-12)",
-        "Einspeisung_kWh": "Ins Netz eingespeiste Energie",
-        "Netzbezug_kWh": "Aus dem Netz bezogene Energie",
-        "PV_Erzeugung_kWh": "Gesamt-PV-Erzeugung (optional, alternativ zu Einzelwerten pro PV-Modul/Balkonkraftwerk)",
+        "Einspeisung_kWh": "Ins Netz eingespeiste Energie (Zählerwert)",
+        "Netzbezug_kWh": "Aus dem Netz bezogene Energie (Zählerwert)",
     }
 
     # Investitionen laden, nach Typ und ID sortiert
@@ -647,10 +648,8 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         beschreibung[col_sk] = f"Sonderkosten {inv.bezeichnung} (€) - Reparatur, Wartung, etc."
         beschreibung[col_skn] = f"Sonderkosten-Beschreibung {inv.bezeichnung}"
 
-    # Optionale Spalten am Ende
-    spalten.extend(["Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"])
-    beschreibung["Globalstrahlung_kWh_m2"] = "Globalstrahlung (optional, kWh/m²)"
-    beschreibung["Sonnenstunden"] = "Sonnenstunden (optional)"
+    # Optionale Spalte am Ende (nur Notizen - Wetterdaten werden automatisch gefüllt)
+    spalten.append("Notizen")
     beschreibung["Notizen"] = "Notizen (optional)"
 
     return CSVTemplateInfo(spalten=spalten, beschreibung=beschreibung)
@@ -850,12 +849,16 @@ async def import_csv(
                     db, row, parse_float, investitionen, jahr, monat, ueberschreiben
                 )
 
-            # PV-Erzeugung: Expliziter Wert ODER Summe aus PV-Modulen
+            # PV-Erzeugung: Summe aus PV-Modulen (InvestitionMonatsdaten) ist primär
+            # LEGACY: PV_Erzeugung_kWh Spalte wird nur als Fallback akzeptiert
+            # Die Summe wird für Berechnungen (Direktverbrauch, Eigenverbrauch) benötigt
             pv_erzeugung_explicit = parse_float(row.get("PV_Erzeugung_kWh", ""))
-            if pv_erzeugung_explicit is not None:
-                pv_erzeugung = pv_erzeugung_explicit
-            elif summen["pv_erzeugung_sum"] > 0:
+            if summen["pv_erzeugung_sum"] > 0:
+                # Primär: Summe aus individuellen PV-Modul-Spalten
                 pv_erzeugung = summen["pv_erzeugung_sum"]
+            elif pv_erzeugung_explicit is not None:
+                # Fallback: Legacy-Spalte PV_Erzeugung_kWh (für alte CSV-Dateien)
+                pv_erzeugung = pv_erzeugung_explicit
             else:
                 pv_erzeugung = None
 
@@ -1012,7 +1015,9 @@ async def export_csv(
     writer = csv.writer(output, delimiter=";")
 
     # Dynamische Header basierend auf Investitionen (v0.9)
-    header = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh", "PV_Erzeugung_kWh"]
+    # WICHTIG: PV_Erzeugung_kWh ist LEGACY - wird aus PV-Modul-Spalten aggregiert
+    # Globalstrahlung/Sonnenstunden werden automatisch via Wetter-API gefüllt
+    header = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
 
     # Investitions-Spalten nach Template-Logik hinzufügen
     inv_columns: list[tuple[Investition, str, str]] = []  # (inv, suffix, data_key)
@@ -1091,8 +1096,8 @@ async def export_csv(
         inv_columns.append((inv, "Sonderkosten_Notiz", "sonderkosten_notiz"))
         header.extend([f"{prefix}_Sonderkosten_Euro", f"{prefix}_Sonderkosten_Notiz"])
 
-    # Optionale Basis-Spalten am Ende
-    header.extend(["Globalstrahlung_kWh_m2", "Sonnenstunden", "Notizen"])
+    # Optionale Spalte am Ende (Wetterdaten werden automatisch gefüllt)
+    header.append("Notizen")
 
     writer.writerow(header)
 
@@ -1103,7 +1108,6 @@ async def export_csv(
             md.monat,
             md.einspeisung_kwh,
             md.netzbezug_kwh,
-            md.pv_erzeugung_kwh or "",
         ]
 
         # Investitions-Daten hinzufügen
@@ -1112,12 +1116,8 @@ async def export_csv(
             value = inv_data.get(data_key, "")
             row.append(value if value != "" else "")
 
-        # Optionale Felder
-        row.extend([
-            md.globalstrahlung_kwh_m2 or "",
-            md.sonnenstunden or "",
-            md.notizen or ""
-        ])
+        # Optionale Felder (Wetterdaten werden automatisch gefüllt)
+        row.append(md.notizen or "")
 
         writer.writerow(row)
 
