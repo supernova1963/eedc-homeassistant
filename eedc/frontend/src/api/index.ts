@@ -26,4 +26,4 @@ export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGIS
 export type { HASensor, HAStatus, StringMonatsdaten, StringMonatsdatenCreate, HAImportResult, HAImportPreview, HAImportPreviewMonth, MonthlyStatistic, HAMonthlyDataResponse } from './ha'
 export type { CockpitUebersicht } from './cockpit'
 export type { WetterDaten, StandortInfo } from './wetter'
-export type { InvestitionMitSensorFeldern, SensorFeld, SensorMapping, YamlResponse, ImportResult } from './haImport'
+export type { InvestitionMitFeldern, SensorFeld } from './haImport'

@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.9.9] - 2026-02-11
+
+### Architektur-Änderung: Standalone-Fokus
+
+EEDC ist jetzt primär eine **Standalone-Anwendung** ohne Home Assistant Abhängigkeit für die Datenerfassung.
+
+### Entfernt
+- **Komplexer HA-Import Wizard** - YAML-Generator, Template-Sensoren, Utility Meter, Automationen entfernt
+- **HA-Sensor-Auswahl** - Sensor-Abruf aus HA und Mapping-Logik entfernt
+- **EVCC-Berechnungen** - Spezielle Template-Sensoren für EVCC Solar% entfernt
+- **REST Command / Automation** - Automatischer Import von HA entfernt
+
+### Geändert
+- **"HA-Import" → "Datenerfassung"** - Tab umbenannt, jetzt Info-Seite zu Datenerfassungs-Optionen
+- **Vereinfachte API** - `/api/ha-import/investitionen/{id}` bleibt für CSV-Template-Generierung
+- **Dokumentation** - Klarere Trennung: EEDC = Standalone, HA-Export = Optional
+
+### Beibehalten
+- **CSV-Import** - Volle Funktionalität für Monatsdaten-Upload
+- **Manuelles Formular** - Monatsdaten direkt eingeben
+- **Wetter-API** - Open-Meteo/PVGIS für automatische Globalstrahlung/Sonnenstunden (HA-unabhängig!)
+- **HA-Export (MQTT)** - Optional: Berechnete KPIs nach HA senden
+
+### Begründung
+Die komplexe HA-Integration (v0.9.8) erwies sich als zu kompliziert:
+- EVCC liefert andere Datenstrukturen als erwartet
+- Utility Meter können nicht programmatisch Geräten zugeordnet werden
+- Jede Haus-Automatisierung ist anders → Kein "One Size Fits All"
+
+EEDC funktioniert besser als Standalone-Tool mit optionalem HA-Export.
+
+---
+
 ## [0.9.8] - 2026-02-10
 
 ### Hinzugefügt

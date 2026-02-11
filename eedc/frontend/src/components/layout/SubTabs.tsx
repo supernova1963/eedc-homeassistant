@@ -20,7 +20,7 @@ import {
   Upload,
   Settings,
   Send,
-  Download
+  FileSpreadsheet
 } from 'lucide-react'
 
 interface TabItem {
@@ -53,7 +53,7 @@ const einstellungenTabs: TabItem[] = [
   { name: 'Monatsdaten', href: '/einstellungen/monatsdaten', icon: Database },
   { name: 'Import/Export', href: '/einstellungen/import', icon: Upload },
   { name: 'PVGIS', href: '/einstellungen/pvgis', icon: Sun },
-  { name: 'HA-Import', href: '/einstellungen/ha-import', icon: Download },
+  { name: 'Datenerfassung', href: '/einstellungen/ha-import', icon: FileSpreadsheet },
   { name: 'HA-Export', href: '/einstellungen/ha-export', icon: Send },
   { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
 ]
