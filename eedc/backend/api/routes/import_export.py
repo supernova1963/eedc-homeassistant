@@ -1322,7 +1322,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     )
     db.add(eauto)
 
-    # Wärmepumpe
+    # Wärmepumpe (mit getrennten COPs als Demo)
     waermepumpe = Investition(
         anlage_id=anlage.id,
         typ="waermepumpe",
@@ -1332,11 +1332,17 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         anschaffungskosten_alternativ=8000,  # Gas-/Ölheizung
         betriebskosten_jahr=200,
         parameter={
-            "heizlast_kw": 12,
-            "cop_durchschnitt": 4.0,
-            "warmwasser_anteil_prozent": 15,
-            "gas_kwh_preis_cent": 12,
-            "gas_verbrauch_alt_kwh": 18000,
+            "leistung_kw": 12,
+            # NEU: Modus-Auswahl für Effizienz-Berechnung
+            "effizienz_modus": "getrennte_cops",  # Demo zeigt getrennten Modus
+            "cop_heizung": 3.9,
+            "cop_warmwasser": 3.0,
+            "heizwaermebedarf_kwh": 12000,
+            "warmwasserbedarf_kwh": 3000,
+            "pv_anteil_prozent": 35,
+            "alter_energietraeger": "gas",
+            "alter_preis_cent_kwh": 12,
+            "sg_ready": True,
         },
         aktiv=True,
     )

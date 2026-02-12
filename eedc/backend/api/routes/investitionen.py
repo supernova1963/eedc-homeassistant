@@ -117,12 +117,53 @@ async def list_investition_typen():
             label="Wärmepumpe",
             beschreibung="Wärmepumpe für Heizung/Warmwasser",
             parameter_schema={
-                "jaz": {"type": "number", "label": "Jahresarbeitszahl (JAZ)", "required": True},
-                "waermebedarf_kwh": {"type": "number", "label": "Wärmebedarf (kWh/Jahr)", "required": True},
+                # Modus-Auswahl
+                "effizienz_modus": {
+                    "type": "select",
+                    "label": "Berechnungsmodus",
+                    "options": ["gesamt_jaz", "getrennte_cops"],
+                    "default": "gesamt_jaz",
+                },
+                # Für Modus "gesamt_jaz"
+                "jaz": {
+                    "type": "number",
+                    "label": "Jahresarbeitszahl (JAZ)",
+                    "default": 3.5,
+                    "conditional": {"effizienz_modus": "gesamt_jaz"},
+                },
+                # Für Modus "getrennte_cops"
+                "cop_heizung": {
+                    "type": "number",
+                    "label": "COP Heizung",
+                    "default": 3.9,
+                    "conditional": {"effizienz_modus": "getrennte_cops"},
+                },
+                "cop_warmwasser": {
+                    "type": "number",
+                    "label": "COP Warmwasser",
+                    "default": 3.0,
+                    "conditional": {"effizienz_modus": "getrennte_cops"},
+                },
+                # Wärmebedarf (getrennt für bessere Gewichtung)
+                "heizwaermebedarf_kwh": {
+                    "type": "number",
+                    "label": "Heizwärmebedarf (kWh/Jahr)",
+                    "default": 12000,
+                },
+                "warmwasserbedarf_kwh": {
+                    "type": "number",
+                    "label": "Warmwasserbedarf (kWh/Jahr)",
+                    "default": 3000,
+                },
+                # Vergleich mit alter Heizung
                 "pv_anteil_prozent": {"type": "number", "label": "PV-Anteil (%)", "default": 30},
-                "alter_energietraeger": {"type": "select", "label": "Alter Energieträger",
-                                         "options": ["gas", "oel", "strom"]},
-                "alter_preis_cent_kwh": {"type": "number", "label": "Alter Preis (ct/kWh)"},
+                "alter_energietraeger": {
+                    "type": "select",
+                    "label": "Alter Energieträger",
+                    "options": ["gas", "oel", "strom"],
+                    "default": "gas",
+                },
+                "alter_preis_cent_kwh": {"type": "number", "label": "Alter Preis (ct/kWh)", "default": 12},
             }
         ),
         InvestitionTypInfo(
@@ -1068,26 +1109,59 @@ async def get_roi_dashboard(
             }
 
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
-            jaz = params.get('jaz', 3.5)
-            waermebedarf = params.get('waermebedarf_kwh', 15000)
+            # Modus-Auswahl: gesamt_jaz (Standard) oder getrennte_cops
+            effizienz_modus = params.get('effizienz_modus', 'gesamt_jaz')
             pv_anteil = params.get('pv_anteil_prozent', 30)
             alter_energietraeger = params.get('alter_energietraeger', 'gas')
             alter_preis = params.get('alter_preis_cent_kwh', 12)
 
-            result = berechne_waermepumpe_einsparung(
-                waermebedarf_kwh=waermebedarf,
-                jaz=jaz,
-                strompreis_cent=strompreis_cent,
-                pv_anteil_prozent=pv_anteil,
-                alter_energietraeger=alter_energietraeger,
-                alter_preis_cent_kwh=alter_preis,
-            )
+            if effizienz_modus == 'getrennte_cops':
+                # Getrennte COPs für Heizung und Warmwasser
+                cop_heizung = params.get('cop_heizung', 3.9)
+                cop_warmwasser = params.get('cop_warmwasser', 3.0)
+                heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
+                warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
+
+                result = berechne_waermepumpe_einsparung(
+                    heizwaermebedarf_kwh=heizwaermebedarf,
+                    warmwasserbedarf_kwh=warmwasserbedarf,
+                    cop_heizung=cop_heizung,
+                    cop_warmwasser=cop_warmwasser,
+                    effizienz_modus='getrennte_cops',
+                    strompreis_cent=strompreis_cent,
+                    pv_anteil_prozent=pv_anteil,
+                    alter_energietraeger=alter_energietraeger,
+                    alter_preis_cent_kwh=alter_preis,
+                )
+                hinweis = f'WP: COP Heizung {cop_heizung}, Warmwasser {cop_warmwasser}'
+            else:
+                # Standard: Ein JAZ für alles
+                jaz = params.get('jaz', 3.5)
+                # Wärmebedarf: explizit oder aus Komponenten
+                waermebedarf = params.get('waermebedarf_kwh')
+                if waermebedarf is None:
+                    heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
+                    warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
+                    waermebedarf = heizwaermebedarf + warmwasserbedarf
+
+                result = berechne_waermepumpe_einsparung(
+                    waermebedarf_kwh=waermebedarf,
+                    jaz=jaz,
+                    effizienz_modus='gesamt_jaz',
+                    strompreis_cent=strompreis_cent,
+                    pv_anteil_prozent=pv_anteil,
+                    alter_energietraeger=alter_energietraeger,
+                    alter_preis_cent_kwh=alter_preis,
+                )
+                hinweis = f'Wärmepumpe: JAZ {jaz}'
+
             jahres_einsparung = result.jahres_einsparung_euro
             co2_einsparung = result.co2_einsparung_kg
             detail = {
                 'wp_kosten_euro': result.wp_kosten_euro,
                 'alte_heizung_kosten_euro': result.alte_heizung_kosten_euro,
-                'hinweis': f'Wärmepumpe: JAZ {jaz}',
+                'effizienz_modus': effizienz_modus,
+                'hinweis': hinweis,
             }
 
         elif inv.typ == InvestitionTyp.BALKONKRAFTWERK.value:

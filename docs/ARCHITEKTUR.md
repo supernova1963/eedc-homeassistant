@@ -280,7 +280,7 @@ eedc-homeassistant/
 | `pv-module` | anzahl_module, modul_leistung_wp, ausrichtung, neigung_grad |
 | `speicher` | kapazitaet_kwh, arbitrage_faehig |
 | `e-auto` | v2h_faehig, nutzt_v2h |
-| `waermepumpe` | cop_durchschnitt, heizlast_kw |
+| `waermepumpe` | effizienz_modus, jaz, cop_heizung, cop_warmwasser, heizwaermebedarf_kwh, warmwasserbedarf_kwh, leistung_kw, pv_anteil_prozent, alter_energietraeger, alter_preis_cent_kwh, sg_ready |
 | `wallbox` | - |
 | `balkonkraftwerk` | leistung_wp, anzahl, hat_speicher, speicher_kapazitaet_wh |
 | `sonstiges` | kategorie (erzeuger/verbraucher/speicher), beschreibung |

@@ -126,10 +126,20 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       case 'waermepumpe':
         return {
           leistung_kw: params.leistung_kw?.toString() || '',
-          cop: params.cop?.toString() || '3.5',
-          jahresarbeitszahl: params.jahresarbeitszahl?.toString() || '3.0',
-          heizwaermebedarf_kwh: params.heizwaermebedarf_kwh?.toString() || '',
-          warmwasserbedarf_kwh: params.warmwasserbedarf_kwh?.toString() || '',
+          // Modus-Auswahl: gesamt_jaz (Standard) oder getrennte_cops
+          effizienz_modus: params.effizienz_modus?.toString() || 'gesamt_jaz',
+          // Für Modus "gesamt_jaz"
+          jaz: params.jaz?.toString() || '3.5',
+          // Für Modus "getrennte_cops"
+          cop_heizung: params.cop_heizung?.toString() || '3.9',
+          cop_warmwasser: params.cop_warmwasser?.toString() || '3.0',
+          // Wärmebedarf (getrennt)
+          heizwaermebedarf_kwh: params.heizwaermebedarf_kwh?.toString() || '12000',
+          warmwasserbedarf_kwh: params.warmwasserbedarf_kwh?.toString() || '3000',
+          // Vergleich mit alter Heizung
+          pv_anteil_prozent: params.pv_anteil_prozent?.toString() || '30',
+          alter_energietraeger: params.alter_energietraeger?.toString() || 'gas',
+          alter_preis_cent_kwh: params.alter_preis_cent_kwh?.toString() || '12',
           sg_ready: (params.sg_ready as boolean) ?? false,
         }
       case 'wallbox':
@@ -644,10 +654,52 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
         </div>
       )
 
-    case 'waermepumpe':
+    case 'waermepumpe': {
+      const istGetrennterModus = paramData.effizienz_modus === 'getrennte_cops'
       return (
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">Wärmepumpe Parameter</h3>
+
+          {/* Modus-Auswahl */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Berechnungsmodus für Effizienz
+            </label>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="param_effizienz_modus"
+                  value="gesamt_jaz"
+                  checked={!istGetrennterModus}
+                  onChange={onChange}
+                  className="text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  Jahresarbeitszahl (JAZ) - Empfohlen
+                </span>
+              </label>
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="param_effizienz_modus"
+                  value="getrennte_cops"
+                  checked={istGetrennterModus}
+                  onChange={onChange}
+                  className="text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  Getrennte COPs (Heizung/Warmwasser)
+                </span>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {istGetrennterModus
+                ? 'Separate COPs für Heizung (~3,9) und Warmwasser (~3,0) - präziser bei unterschiedlichen Betriebspunkten'
+                : 'Ein JAZ-Wert (~3,5) für den gesamten Wärmebedarf - einfacher und meist ausreichend'}
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Nennleistung (kW)"
@@ -657,28 +709,56 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               min="0"
               value={paramData.leistung_kw as string}
               onChange={onChange}
+              hint="Thermische Leistung"
             />
-            <Input
-              label="COP (Leistungszahl)"
-              name="param_cop"
-              type="number"
-              step="0.1"
-              min="1"
-              max="10"
-              value={paramData.cop as string}
-              onChange={onChange}
-              hint="Typisch 3-5 bei Luft-WP"
-            />
-            <Input
-              label="Jahresarbeitszahl"
-              name="param_jahresarbeitszahl"
-              type="number"
-              step="0.1"
-              min="1"
-              max="10"
-              value={paramData.jahresarbeitszahl as string}
-              onChange={onChange}
-            />
+
+            {/* Modus: gesamt_jaz */}
+            {!istGetrennterModus && (
+              <Input
+                label="Jahresarbeitszahl (JAZ)"
+                name="param_jaz"
+                type="number"
+                step="0.1"
+                min="1"
+                max="10"
+                value={paramData.jaz as string}
+                onChange={onChange}
+                hint="Typisch 3-4 für Luft-WP, 4-5 für Sole-WP"
+                required
+              />
+            )}
+
+            {/* Modus: getrennte_cops */}
+            {istGetrennterModus && (
+              <>
+                <Input
+                  label="COP Heizung"
+                  name="param_cop_heizung"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="10"
+                  value={paramData.cop_heizung as string}
+                  onChange={onChange}
+                  hint="Typisch 3,5-4,5 (Vorlauf 35°C)"
+                  required
+                />
+                <Input
+                  label="COP Warmwasser"
+                  name="param_cop_warmwasser"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="10"
+                  value={paramData.cop_warmwasser as string}
+                  onChange={onChange}
+                  hint="Typisch 2,5-3,5 (Vorlauf 55°C)"
+                  required
+                />
+              </>
+            )}
+
+            {/* Wärmebedarf (immer anzeigen) */}
             <Input
               label="Heizwärmebedarf (kWh/Jahr)"
               name="param_heizwaermebedarf_kwh"
@@ -687,6 +767,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               min="0"
               value={paramData.heizwaermebedarf_kwh as string}
               onChange={onChange}
+              hint="Aus Energieausweis oder Schätzung"
             />
             <Input
               label="Warmwasserbedarf (kWh/Jahr)"
@@ -696,8 +777,53 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               min="0"
               value={paramData.warmwasserbedarf_kwh as string}
               onChange={onChange}
+              hint="~500 kWh/Person/Jahr typisch"
             />
           </div>
+
+          {/* Vergleich mit alter Heizung */}
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            Vergleich mit alter Heizung (für ROI-Berechnung)
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Alter Energieträger
+              </label>
+              <select
+                name="param_alter_energietraeger"
+                value={paramData.alter_energietraeger as string}
+                onChange={(e) => onChange({ target: { name: 'param_alter_energietraeger', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
+                className="input w-full"
+              >
+                <option value="gas">Erdgas</option>
+                <option value="oel">Heizöl</option>
+                <option value="strom">Strom (Direktheizung)</option>
+              </select>
+            </div>
+            <Input
+              label="Alter Preis (ct/kWh)"
+              name="param_alter_preis_cent_kwh"
+              type="number"
+              step="0.1"
+              min="0"
+              value={paramData.alter_preis_cent_kwh as string}
+              onChange={onChange}
+              hint="Gas ~12 ct, Öl ~10 ct"
+            />
+            <Input
+              label="PV-Anteil (%)"
+              name="param_pv_anteil_prozent"
+              type="number"
+              step="1"
+              min="0"
+              max="100"
+              value={paramData.pv_anteil_prozent as string}
+              onChange={onChange}
+              hint="Anteil des WP-Stroms aus PV"
+            />
+          </div>
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -710,6 +836,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
           </label>
         </div>
       )
+    }
 
     case 'wallbox':
       return (

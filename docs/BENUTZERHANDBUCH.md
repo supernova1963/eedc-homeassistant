@@ -162,8 +162,16 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 - Optional: V2H-fähig (Vehicle-to-Home)
 - Optional: Nutzt V2H aktiv
 
+#### Wärmepumpe
+- **Berechnungsmodus:** Wähle zwischen JAZ (ein Wert für alles) oder getrennte COPs
+- **JAZ (Jahresarbeitszahl):** Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP
+- **COP Heizung:** Effizienz bei Heizungsbetrieb (Vorlauf ~35°C), typisch 3,5-4,5
+- **COP Warmwasser:** Effizienz bei WW-Bereitung (Vorlauf ~55°C), typisch 2,5-3,5
+- **Wärmebedarf:** Heiz- und Warmwasserbedarf in kWh/Jahr (aus Energieausweis)
+- **Vergleich:** Alter Energieträger (Gas/Öl/Strom) und Preis für ROI-Berechnung
+
 #### Weitere Komponenten
-- Wärmepumpe, Wallbox, Balkonkraftwerk, Sonstiges
+- Wallbox, Balkonkraftwerk, Sonstiges
 
 ### Schritt 7: Zusammenfassung
 
@@ -534,8 +542,13 @@ Jahr, Monat, Einspeisung_kWh, Netzbezug_kWh
 [Investitions-Name]_km                   (für E-Auto)
 [Investitions-Name]_Ladung_PV_kWh        (für E-Auto)
 [Investitions-Name]_Ladung_Netz_kWh      (für E-Auto)
+[Investitions-Name]_Strom_kWh            (für Wärmepumpe)
+[Investitions-Name]_Heizung_kWh          (für Wärmepumpe)
+[Investitions-Name]_Warmwasser_kWh       (für Wärmepumpe)
 ...
 ```
+
+> **Hinweis Wärmepumpe:** Die JAZ/COP-Werte werden über das Investitions-Formular konfiguriert, nicht über CSV. Die CSV enthält nur die gemessenen Monatswerte (Strom, Heizung, Warmwasser).
 
 **Beispiel:** Wenn dein E-Auto "Smart #1" heißt:
 ```

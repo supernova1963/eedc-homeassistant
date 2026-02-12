@@ -130,6 +130,18 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
 
 // E-Auto
 { "km_gefahren": 1200, "ladung_pv_kwh": 130, "ladung_netz_kwh": 86, "v2h_entladung_kwh": 25 }
+
+// Wärmepumpe
+{ "stromverbrauch_kwh": 450, "heizenergie_kwh": 1800, "warmwasser_kwh": 200 }
+```
+
+### Wärmepumpe: Effizienz-Parameter (Investition.parameter)
+```json
+// Modus A: Gesamt-JAZ (Standard, einfacher)
+{ "effizienz_modus": "gesamt_jaz", "jaz": 3.5, "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000 }
+
+// Modus B: Getrennte COPs (präziser)
+{ "effizienz_modus": "getrennte_cops", "cop_heizung": 3.9, "cop_warmwasser": 3.0, "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000 }
 ```
 
 ## API Endpoints (häufig verwendet)

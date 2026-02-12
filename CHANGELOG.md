@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.2] - 2026-02-12
+
+### Hinzugefügt
+
+- **Wärmepumpe: Erweiterte Effizienz-Konfiguration**
+  - Modus-Auswahl zwischen JAZ und getrennten COPs für Heizung/Warmwasser
+  - JAZ (Jahresarbeitszahl): Ein Wert für alles - einfacher (Standard)
+  - Getrennte COPs: Separate Werte für Heizung (~3,9) und Warmwasser (~3,0) - präziser
+  - Automatische Migration: Bestehende Anlagen nutzen JAZ-Modus
+
+### Geändert
+
+- **ROI-Berechnung Wärmepumpe** berücksichtigt jetzt den gewählten Effizienz-Modus
+- **Demo-Daten** zeigen Wärmepumpe mit getrennten COPs als Beispiel
+
+### Dokumentation
+
+- CLAUDE.md: WP-Datenmodell-Beispiele ergänzt
+- ARCHITEKTUR.md: WP-Parameter aktualisiert
+- BENUTZERHANDBUCH.md: WP-Konfiguration und CSV-Spalten dokumentiert
+
+---
+
 ## [1.0.0-beta.1] - 2026-02-11
 
 ### Kritische Bugfixes

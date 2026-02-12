@@ -287,19 +287,37 @@ def berechne_eauto_einsparung(
 
 
 def berechne_waermepumpe_einsparung(
-    waermebedarf_kwh: float,
-    jaz: float,
-    strompreis_cent: float,
-    pv_anteil_prozent: float,
-    alter_energietraeger: str,  # "gas", "oel", "strom"
-    alter_preis_cent_kwh: float,
+    # Für Modus "gesamt_jaz" (Standard)
+    waermebedarf_kwh: float = None,
+    jaz: float = None,
+    # Für Modus "getrennte_cops"
+    heizwaermebedarf_kwh: float = None,
+    warmwasserbedarf_kwh: float = None,
+    cop_heizung: float = None,
+    cop_warmwasser: float = None,
+    # Modus-Auswahl
+    effizienz_modus: str = "gesamt_jaz",
+    # Gemeinsame Parameter
+    strompreis_cent: float = 30.0,
+    pv_anteil_prozent: float = 30.0,
+    alter_energietraeger: str = "gas",  # "gas", "oel", "strom"
+    alter_preis_cent_kwh: float = 12.0,
 ) -> WaermepumpeEinsparung:
     """
     Berechnet jährliche Wärmepumpen-Einsparung vs. alte Heizung.
 
+    Modi:
+        - gesamt_jaz: Ein JAZ-Wert für den gesamten Wärmebedarf (Standard)
+        - getrennte_cops: Separate COPs für Heizung und Warmwasser
+
     Args:
-        waermebedarf_kwh: Jährlicher Wärmebedarf in kWh
-        jaz: Jahresarbeitszahl der Wärmepumpe
+        waermebedarf_kwh: Jährlicher Gesamtwärmebedarf in kWh (für gesamt_jaz)
+        jaz: Jahresarbeitszahl der Wärmepumpe (für gesamt_jaz)
+        heizwaermebedarf_kwh: Jährlicher Heizwärmebedarf in kWh (für getrennte_cops)
+        warmwasserbedarf_kwh: Jährlicher Warmwasserbedarf in kWh (für getrennte_cops)
+        cop_heizung: COP für Heizung, typisch 3.5-4.5 (für getrennte_cops)
+        cop_warmwasser: COP für Warmwasser, typisch 2.5-3.5 (für getrennte_cops)
+        effizienz_modus: "gesamt_jaz" oder "getrennte_cops"
         strompreis_cent: Strompreis in Cent
         pv_anteil_prozent: Anteil PV-Strom am WP-Verbrauch
         alter_energietraeger: "gas", "oel" oder "strom"
@@ -308,15 +326,42 @@ def berechne_waermepumpe_einsparung(
     Returns:
         WaermepumpeEinsparung: Berechnete Werte
     """
-    # WP-Stromverbrauch
-    wp_strom_kwh = waermebedarf_kwh / jaz
+    # Berechnung je nach Modus
+    if effizienz_modus == "getrennte_cops":
+        # Getrennte COPs für Heizung und Warmwasser
+        heiz = heizwaermebedarf_kwh if heizwaermebedarf_kwh is not None else 12000
+        ww = warmwasserbedarf_kwh if warmwasserbedarf_kwh is not None else 3000
+        cop_h = cop_heizung if cop_heizung is not None else 3.9
+        cop_w = cop_warmwasser if cop_warmwasser is not None else 3.0
+
+        gesamt_waermebedarf = heiz + ww
+
+        # Stromverbrauch pro Komponente
+        strom_heizung = heiz / cop_h
+        strom_warmwasser = ww / cop_w
+        wp_strom_kwh = strom_heizung + strom_warmwasser
+    else:
+        # Standard: Ein JAZ für alles
+        verwendete_jaz = jaz if jaz is not None else 3.5
+
+        # Gesamtwärmebedarf: explizit oder aus Komponenten
+        if waermebedarf_kwh is not None:
+            gesamt_waermebedarf = waermebedarf_kwh
+        else:
+            heiz = heizwaermebedarf_kwh if heizwaermebedarf_kwh is not None else 12000
+            ww = warmwasserbedarf_kwh if warmwasserbedarf_kwh is not None else 3000
+            gesamt_waermebedarf = heiz + ww
+
+        wp_strom_kwh = gesamt_waermebedarf / verwendete_jaz
+
+    # Gemeinsame Berechnungen
     pv_anteil = pv_anteil_prozent / 100
     netz_anteil = 1 - pv_anteil
 
     wp_kosten = wp_strom_kwh * netz_anteil * strompreis_cent / 100
 
     # Alte Heizung Kosten
-    alte_kosten = waermebedarf_kwh * alter_preis_cent_kwh / 100
+    alte_kosten = gesamt_waermebedarf * alter_preis_cent_kwh / 100
 
     # CO2-Einsparung
     co2_faktoren = {
@@ -324,7 +369,7 @@ def berechne_waermepumpe_einsparung(
         "oel": CO2_FAKTOR_OEL_KG_KWH,
         "strom": CO2_FAKTOR_STROM_KG_KWH,
     }
-    co2_alt = waermebedarf_kwh * co2_faktoren.get(alter_energietraeger, 0)
+    co2_alt = gesamt_waermebedarf * co2_faktoren.get(alter_energietraeger, 0)
     co2_wp = wp_strom_kwh * netz_anteil * CO2_FAKTOR_STROM_KG_KWH
     co2_einsparung = co2_alt - co2_wp
 
