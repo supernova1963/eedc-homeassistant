@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.1 | **Status:** Feature-complete Beta
+**Version:** 1.0.0-beta.3 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -133,6 +133,12 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
 
 // Wärmepumpe
 { "stromverbrauch_kwh": 450, "heizenergie_kwh": 1800, "warmwasser_kwh": 200 }
+
+// Balkonkraftwerk (mit optionalem Speicher)
+{ "pv_erzeugung_kwh": 65.0, "eigenverbrauch_kwh": 60.0, "speicher_ladung_kwh": 15, "speicher_entladung_kwh": 14 }
+
+// Wallbox
+{ "ladung_kwh": 180 }
 ```
 
 ### Wärmepumpe: Effizienz-Parameter (Investition.parameter)
@@ -152,6 +158,7 @@ GET  /api/cockpit/pv-strings/{anlage_id}?jahr=2025   # SOLL-IST Vergleich
 POST /api/import/csv/{anlage_id}                     # CSV Import
 GET  /api/import/template/{anlage_id}                # CSV Template-Info
 GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
+GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten (NEU)
 ```
 
 ## Bekannte Fallstricke
@@ -168,12 +175,20 @@ GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.1)
+## Letzte Änderungen (Unreleased → v1.0.0-beta.4)
 
-Kritische Fixes für SOLL-IST Vergleich:
-1. Legacy `pv_erzeugung_kwh` → `InvestitionMonatsdaten`
-2. `flag_modified()` für JSON-Persistenz
-3. Jahr-Parameter in PVStringVergleich
-4. CSV-Template bereinigt (Legacy-Spalten entfernt)
+**Monatsdaten-Seite: Aggregierte Darstellung**
+1. Neuer Endpoint `/api/monatsdaten/aggregiert/{anlage_id}` summiert alle Komponenten
+2. Spaltengruppen: Zählerwerte | Komponenten (PV, Speicher, WP, E-Auto, Wallbox) | Berechnungen
+3. Gruppierte Spaltenauswahl (toggle per Gruppe oder einzeln)
+
+**BKW Eigenverbrauch**
+1. Neues Feld `eigenverbrauch_kwh` für Balkonkraftwerk
+2. Einspeisung = Erzeugung - Eigenverbrauch (automatisch)
+3. CSV-Spalte: `{BKW}_Eigenverbrauch_kWh`
+
+**Demo-Daten bereinigt**
+- Keine Legacy-Felder mehr in Monatsdaten (pv_erzeugung, batterie_*)
+- Strikte Trennung: Monatsdaten = Zählerwerte, InvestitionMonatsdaten = Komponenten
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

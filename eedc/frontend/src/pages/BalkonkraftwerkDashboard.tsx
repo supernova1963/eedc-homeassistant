@@ -191,15 +191,21 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           </p>
         </div>
         <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
-          <p className="text-sm text-orange-600 dark:text-orange-400">Einspeisung</p>
+          <p className="text-sm text-orange-600 dark:text-orange-400">
+            Einspeisung
+            <span className="text-xs ml-1 opacity-70">(unvergütet)</span>
+          </p>
           <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">
             {z.gesamt_einspeisung_kwh.toFixed(0)} kWh
           </p>
         </div>
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-          <p className="text-sm text-blue-600 dark:text-blue-400">Erlös Einspeisung</p>
-          <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-            {z.erloes_einspeisung_euro.toFixed(2)} €
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Entgangener Erlös
+            <span className="text-xs ml-1 opacity-70">(8 ct/kWh)</span>
+          </p>
+          <p className="text-2xl font-bold text-gray-500 dark:text-gray-400">
+            {(z.gesamt_einspeisung_kwh * 0.08).toFixed(2)} €
           </p>
         </div>
       </div>

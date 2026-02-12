@@ -39,6 +39,43 @@ export interface MonatsdatenMitKennzahlen extends Monatsdaten {
   kennzahlen?: MonatsKennzahlen
 }
 
+/**
+ * Aggregierte Monatsdaten mit Werten aus InvestitionMonatsdaten
+ */
+export interface AggregierteMonatsdaten {
+  id: number
+  anlage_id: number
+  jahr: number
+  monat: number
+  // Zählerwerte (aus Monatsdaten)
+  einspeisung_kwh: number
+  netzbezug_kwh: number
+  globalstrahlung_kwh_m2: number | null
+  sonnenstunden: number | null
+  // Aggregiert aus InvestitionMonatsdaten - PV
+  pv_erzeugung_kwh: number
+  // Aggregiert aus InvestitionMonatsdaten - Speicher
+  speicher_ladung_kwh: number
+  speicher_entladung_kwh: number
+  // Aggregiert aus InvestitionMonatsdaten - Wärmepumpe
+  wp_strom_kwh: number
+  wp_heizung_kwh: number
+  wp_warmwasser_kwh: number
+  // Aggregiert aus InvestitionMonatsdaten - E-Auto
+  eauto_ladung_kwh: number
+  eauto_km: number
+  // Aggregiert aus InvestitionMonatsdaten - Wallbox
+  wallbox_ladung_kwh: number
+  // Berechnet
+  direktverbrauch_kwh: number
+  eigenverbrauch_kwh: number
+  gesamtverbrauch_kwh: number
+  autarkie_prozent: number
+  eigenverbrauchsquote_prozent: number
+  // Legacy-Marker
+  hat_legacy_daten: boolean
+}
+
 export const monatsdatenApi = {
   /**
    * Monatsdaten abrufen (optional gefiltert)
@@ -77,5 +114,14 @@ export const monatsdatenApi = {
    */
   async delete(id: number): Promise<void> {
     return api.delete(`/monatsdaten/${id}`)
+  },
+
+  /**
+   * Aggregierte Monatsdaten abrufen
+   * PV-Erzeugung und Speicher-Daten werden aus InvestitionMonatsdaten summiert
+   */
+  async listAggregiert(anlageId: number, jahr?: number): Promise<AggregierteMonatsdaten[]> {
+    const params = jahr ? `?jahr=${jahr}` : ''
+    return api.get<AggregierteMonatsdaten[]>(`/monatsdaten/aggregiert/${anlageId}${params}`)
   },
 }

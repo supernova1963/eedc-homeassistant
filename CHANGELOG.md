@@ -7,6 +7,41 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Hinzugefügt
+
+- **Monatsdaten-Seite: Aggregierte Darstellung mit allen Komponenten**
+  - Neuer API-Endpoint `/api/monatsdaten/aggregiert/{anlage_id}`
+  - Zählerwerte (Einspeisung, Netzbezug) aus Monatsdaten
+  - Komponenten-Daten (PV, Speicher, WP, E-Auto, Wallbox) aus InvestitionMonatsdaten aggregiert
+  - Berechnete Felder (Direktverbrauch, Eigenverbrauch, Autarkie, EV-Quote)
+  - Gruppierte Spaltenauswahl mit Ein-/Ausblenden pro Gruppe
+  - Farbcodierung: Zählerwerte (blau), Komponenten (amber), Berechnungen (grün)
+
+- **Balkonkraftwerk: Eigenverbrauch-Erfassung**
+  - Neues Feld `eigenverbrauch_kwh` in InvestitionMonatsdaten
+  - CSV-Template erweitert: `{BKW}_Eigenverbrauch_kWh`
+  - Einspeisung wird automatisch berechnet (Erzeugung - Eigenverbrauch)
+  - Dashboard zeigt Einspeisung als "unvergütet"
+
+### Geändert
+
+- **Demo-Daten bereinigt (Architektur-Konsistenz)**
+  - `Monatsdaten.pv_erzeugung_kwh` entfernt (war Legacy)
+  - `batterie_ladung_kwh`, `batterie_entladung_kwh` entfernt (Legacy)
+  - Berechnete Felder entfernt (werden dynamisch berechnet)
+  - **Prinzip:** Monatsdaten = NUR Zählerwerte; InvestitionMonatsdaten = ALLE Komponenten
+
+- **BKW-Dashboard: Feldnamen-Kompatibilität**
+  - Akzeptiert sowohl `pv_erzeugung_kwh` als auch `erzeugung_kwh`
+
+### Dokumentation
+
+- Übergabe-Status für Fortsetzung auf anderem Rechner vorbereitet
+
+---
+
 ## [1.0.0-beta.3] - 2026-02-12
 
 ### Bugfixes

@@ -1799,11 +1799,12 @@ async def get_balkonkraftwerk_dashboard(
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_erzeugung += d.get('erzeugung_kwh', 0)
-            gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0)
-            gesamt_einspeisung += d.get('einspeisung_kwh', 0)
-            gesamt_speicher_ladung += d.get('speicher_ladung_kwh', 0)
-            gesamt_speicher_entladung += d.get('speicher_entladung_kwh', 0)
+            # Akzeptiere beide Feldnamen für Rückwärtskompatibilität
+            gesamt_erzeugung += d.get('pv_erzeugung_kwh', 0) or d.get('erzeugung_kwh', 0) or 0
+            gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0) or 0
+            gesamt_einspeisung += d.get('einspeisung_kwh', 0) or 0
+            gesamt_speicher_ladung += d.get('speicher_ladung_kwh', 0) or 0
+            gesamt_speicher_entladung += d.get('speicher_entladung_kwh', 0) or 0
 
         # Parameter
         params = bkw.parameter or {}
@@ -1815,16 +1816,23 @@ async def get_balkonkraftwerk_dashboard(
         # Berechnungen
         gesamt_leistung_wp = leistung_wp * anzahl if leistung_wp else (bkw.leistung_kwp or 0) * 1000
 
+        # Einspeisung berechnen falls nicht explizit erfasst
+        # Einspeisung = Erzeugung - Eigenverbrauch (unvergütet ins Netz)
+        if gesamt_einspeisung == 0 and gesamt_erzeugung > 0 and gesamt_eigenverbrauch > 0:
+            gesamt_einspeisung = max(0, gesamt_erzeugung - gesamt_eigenverbrauch)
+
         # Eigenverbrauchsquote
         eigenverbrauch_quote = (gesamt_eigenverbrauch / gesamt_erzeugung * 100) if gesamt_erzeugung > 0 else 0
 
         # Speicher-Effizienz
         speicher_effizienz = (gesamt_speicher_entladung / gesamt_speicher_ladung * 100) if gesamt_speicher_ladung > 0 else 0
 
-        # Ersparnis: Eigenverbrauch spart Netzbezug, Einspeisung bringt Vergütung
+        # Ersparnis: Eigenverbrauch spart Netzbezug
         ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
-        erloes_einspeisung = gesamt_einspeisung * einspeiseverguetung_cent / 100
-        gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung
+        # Einspeisung bei BKW ist i.d.R. unvergütet (keine Einspeisevergütung ohne Anmeldung)
+        # Wird nur als Info angezeigt, nicht als Erlös
+        erloes_einspeisung = 0  # BKW-Einspeisung ist unvergütet
+        gesamt_ersparnis = ersparnis_eigenverbrauch
 
         # CO2-Einsparung (0.38 kg/kWh für Eigenverbrauch)
         co2_ersparnis = gesamt_eigenverbrauch * 0.38
@@ -1835,7 +1843,7 @@ async def get_balkonkraftwerk_dashboard(
         zusammenfassung = {
             'gesamt_erzeugung_kwh': round(gesamt_erzeugung, 1),
             'gesamt_eigenverbrauch_kwh': round(gesamt_eigenverbrauch, 1),
-            'gesamt_einspeisung_kwh': round(gesamt_einspeisung, 1),
+            'gesamt_einspeisung_kwh': round(gesamt_einspeisung, 1),  # Berechnet: unvergütet ins Netz
             'eigenverbrauch_quote_prozent': round(eigenverbrauch_quote, 1),
             'spezifischer_ertrag_kwh_kwp': round(spezifischer_ertrag, 0),
             # Leistung
@@ -1849,7 +1857,7 @@ async def get_balkonkraftwerk_dashboard(
             'speicher_effizienz_prozent': round(speicher_effizienz, 1) if hat_speicher else 0,
             # Finanzen
             'ersparnis_eigenverbrauch_euro': round(ersparnis_eigenverbrauch, 2),
-            'erloes_einspeisung_euro': round(erloes_einspeisung, 2),
+            'erloes_einspeisung_euro': round(erloes_einspeisung, 2),  # 0 bei BKW (unvergütet)
             'gesamt_ersparnis_euro': round(gesamt_ersparnis, 2),
             # CO2
             'co2_ersparnis_kg': round(co2_ersparnis, 1),

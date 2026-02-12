@@ -101,6 +101,187 @@ class MonatsdatenMitKennzahlen(MonatsdatenResponse):
 router = APIRouter()
 
 
+# =============================================================================
+# Aggregierte Monatsdaten (Zählerwerte + InvestitionMonatsdaten)
+# =============================================================================
+
+class AggregierteMonatsdatenResponse(BaseModel):
+    """Monatsdaten mit aggregierten Werten aus InvestitionMonatsdaten."""
+    id: int
+    anlage_id: int
+    jahr: int
+    monat: int
+    # Zählerwerte (aus Monatsdaten)
+    einspeisung_kwh: float
+    netzbezug_kwh: float
+    globalstrahlung_kwh_m2: Optional[float]
+    sonnenstunden: Optional[float]
+    # Aggregiert aus InvestitionMonatsdaten - PV
+    pv_erzeugung_kwh: float  # Summe PV-Module + BKW
+    # Aggregiert aus InvestitionMonatsdaten - Speicher
+    speicher_ladung_kwh: float  # Summe alle Speicher
+    speicher_entladung_kwh: float  # Summe alle Speicher
+    # Aggregiert aus InvestitionMonatsdaten - Wärmepumpe
+    wp_strom_kwh: float
+    wp_heizung_kwh: float
+    wp_warmwasser_kwh: float
+    # Aggregiert aus InvestitionMonatsdaten - E-Auto
+    eauto_ladung_kwh: float  # Summe PV + Netz
+    eauto_km: float
+    # Aggregiert aus InvestitionMonatsdaten - Wallbox
+    wallbox_ladung_kwh: float
+    # Berechnet
+    direktverbrauch_kwh: float
+    eigenverbrauch_kwh: float
+    gesamtverbrauch_kwh: float
+    autarkie_prozent: float
+    eigenverbrauchsquote_prozent: float
+    # Legacy-Felder (für Migration-Warnung)
+    hat_legacy_daten: bool
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/aggregiert/{anlage_id}", response_model=list[AggregierteMonatsdatenResponse])
+async def list_monatsdaten_aggregiert(
+    anlage_id: int,
+    jahr: Optional[int] = Query(None, description="Filter nach Jahr"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gibt Monatsdaten mit aggregierten Werten aus InvestitionMonatsdaten zurück.
+
+    Die PV-Erzeugung und Speicher-Daten werden aus den InvestitionMonatsdaten
+    der jeweiligen Komponenten summiert, nicht aus den Legacy-Feldern.
+    """
+    # Monatsdaten laden
+    md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+    if jahr:
+        md_query = md_query.where(Monatsdaten.jahr == jahr)
+    md_query = md_query.order_by(Monatsdaten.jahr.desc(), Monatsdaten.monat.desc())
+
+    md_result = await db.execute(md_query)
+    monatsdaten_list = md_result.scalars().all()
+
+    if not monatsdaten_list:
+        return []
+
+    # Investitionen laden
+    inv_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.aktiv == True)
+    )
+    investitionen = inv_result.scalars().all()
+    inv_ids = [i.id for i in investitionen]
+    inv_by_id = {i.id: i for i in investitionen}
+
+    # InvestitionMonatsdaten laden
+    if inv_ids:
+        imd_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
+        )
+        inv_monatsdaten = imd_result.scalars().all()
+    else:
+        inv_monatsdaten = []
+
+    # Gruppieren nach (jahr, monat)
+    inv_data_by_month: dict[tuple[int, int], list[tuple[Investition, dict]]] = {}
+    for imd in inv_monatsdaten:
+        key = (imd.jahr, imd.monat)
+        if key not in inv_data_by_month:
+            inv_data_by_month[key] = []
+        inv = inv_by_id.get(imd.investition_id)
+        if inv:
+            inv_data_by_month[key].append((inv, imd.verbrauch_daten or {}))
+
+    # Aggregierte Daten erstellen
+    result = []
+    for md in monatsdaten_list:
+        key = (md.jahr, md.monat)
+        inv_data = inv_data_by_month.get(key, [])
+
+        # Aggregieren - alle Komponenten
+        pv_erzeugung = 0.0
+        speicher_ladung = 0.0
+        speicher_entladung = 0.0
+        wp_strom = 0.0
+        wp_heizung = 0.0
+        wp_warmwasser = 0.0
+        eauto_ladung = 0.0
+        eauto_km = 0.0
+        wallbox_ladung = 0.0
+
+        for inv, data in inv_data:
+            if inv.typ == "pv-module":
+                pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
+            elif inv.typ == "balkonkraftwerk":
+                pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+                # BKW-Speicher
+                speicher_ladung += data.get("speicher_ladung_kwh", 0) or 0
+                speicher_entladung += data.get("speicher_entladung_kwh", 0) or 0
+            elif inv.typ == "speicher":
+                speicher_ladung += data.get("ladung_kwh", 0) or 0
+                speicher_entladung += data.get("entladung_kwh", 0) or 0
+            elif inv.typ == "waermepumpe":
+                wp_strom += data.get("stromverbrauch_kwh", 0) or 0
+                wp_heizung += data.get("heizenergie_kwh", 0) or 0
+                wp_warmwasser += data.get("warmwasser_kwh", 0) or 0
+            elif inv.typ == "e-auto":
+                eauto_ladung += (data.get("ladung_pv_kwh", 0) or 0) + (data.get("ladung_netz_kwh", 0) or 0)
+                eauto_km += data.get("km_gefahren", 0) or 0
+            elif inv.typ == "wallbox":
+                wallbox_ladung += data.get("ladung_kwh", 0) or 0
+
+        # Berechnungen
+        einspeisung = md.einspeisung_kwh or 0
+        netzbezug = md.netzbezug_kwh or 0
+
+        direktverbrauch = max(0, pv_erzeugung - einspeisung - speicher_ladung)
+        eigenverbrauch = direktverbrauch + speicher_entladung
+        gesamtverbrauch = eigenverbrauch + netzbezug
+
+        autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
+        ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
+
+        # Legacy-Daten prüfen
+        hat_legacy = bool(
+            (md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0) or
+            (md.batterie_ladung_kwh and md.batterie_ladung_kwh > 0) or
+            (md.batterie_entladung_kwh and md.batterie_entladung_kwh > 0)
+        )
+
+        result.append(AggregierteMonatsdatenResponse(
+            id=md.id,
+            anlage_id=md.anlage_id,
+            jahr=md.jahr,
+            monat=md.monat,
+            einspeisung_kwh=round(einspeisung, 1),
+            netzbezug_kwh=round(netzbezug, 1),
+            globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
+            sonnenstunden=md.sonnenstunden,
+            pv_erzeugung_kwh=round(pv_erzeugung, 1),
+            speicher_ladung_kwh=round(speicher_ladung, 1),
+            speicher_entladung_kwh=round(speicher_entladung, 1),
+            wp_strom_kwh=round(wp_strom, 1),
+            wp_heizung_kwh=round(wp_heizung, 1),
+            wp_warmwasser_kwh=round(wp_warmwasser, 1),
+            eauto_ladung_kwh=round(eauto_ladung, 1),
+            eauto_km=round(eauto_km, 1),
+            wallbox_ladung_kwh=round(wallbox_ladung, 1),
+            direktverbrauch_kwh=round(direktverbrauch, 1),
+            eigenverbrauch_kwh=round(eigenverbrauch, 1),
+            gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
+            autarkie_prozent=round(autarkie, 1),
+            eigenverbrauchsquote_prozent=round(ev_quote, 1),
+            hat_legacy_daten=hat_legacy,
+        ))
+
+    return result
+
+
 @router.get("/", response_model=list[MonatsdatenResponse])
 async def list_monatsdaten(
     anlage_id: Optional[int] = Query(None, description="Filter nach Anlage"),

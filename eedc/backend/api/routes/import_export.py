@@ -267,12 +267,17 @@ async def _import_investition_monatsdaten_v09(
 
         # Balkonkraftwerk
         elif inv.typ == "balkonkraftwerk":
-            if suffix == "kWh":
+            if suffix == "Erzeugung_kWh" or suffix == "kWh":  # kWh für Rückwärtskompatibilität
                 val = parse_float(value)
                 if val is not None:
                     field_key = "pv_erzeugung_kwh"
                     field_value = val
                     summen["pv_erzeugung_sum"] += val
+            elif suffix == "Eigenverbrauch_kWh":
+                val = parse_float(value)
+                if val is not None:
+                    field_key = "eigenverbrauch_kwh"
+                    field_value = val
             elif suffix == "Speicher_Ladung_kWh":
                 val = parse_float(value)
                 if val is not None:
@@ -613,10 +618,12 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
                 beschreibung[col] = desc
 
         elif inv.typ == "balkonkraftwerk":
-            # Balkonkraftwerk: Erzeugung + optionaler Speicher
-            col_pv = f"{prefix}_kWh"
-            spalten.append(col_pv)
+            # Balkonkraftwerk: Erzeugung, Eigenverbrauch + optionaler Speicher
+            col_pv = f"{prefix}_Erzeugung_kWh"
+            col_ev = f"{prefix}_Eigenverbrauch_kWh"
+            spalten.extend([col_pv, col_ev])
             beschreibung[col_pv] = f"PV-Erzeugung {inv.bezeichnung} (kWh)"
+            beschreibung[col_ev] = f"Eigenverbrauch {inv.bezeichnung} (kWh) - Anteil der direkt genutzten Erzeugung"
             # Optional: Speicher falls Parameter vorhanden
             if inv.parameter and inv.parameter.get("hat_speicher"):
                 col_sp_l = f"{prefix}_Speicher_Ladung_kWh"
@@ -1073,8 +1080,9 @@ async def export_csv(
                 header.append(f"{prefix}_{suffix}")
 
         elif inv.typ == "balkonkraftwerk":
-            inv_columns.append((inv, "kWh", "pv_erzeugung_kwh"))
-            header.append(f"{prefix}_kWh")
+            inv_columns.append((inv, "Erzeugung_kWh", "pv_erzeugung_kwh"))
+            inv_columns.append((inv, "Eigenverbrauch_kWh", "eigenverbrauch_kwh"))
+            header.extend([f"{prefix}_Erzeugung_kWh", f"{prefix}_Eigenverbrauch_kWh"])
             if inv.parameter and inv.parameter.get("hat_speicher"):
                 inv_columns.append((inv, "Speicher_Ladung_kWh", "speicher_ladung_kwh"))
                 inv_columns.append((inv, "Speicher_Entladung_kWh", "speicher_entladung_kwh"))
@@ -1468,23 +1476,20 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
          eauto_km, eauto_verbrauch, eauto_pv, eauto_netz, eauto_extern_kwh, eauto_extern_euro, v2h,
          wp_strom, wp_heizung, wp_warmwasser, globalstrahlung, sonnenstunden) = row
 
-        # Berechnete Felder
-        direktverbrauch = max(0, pv_erzeugung - einspeisung - batt_ladung)
-        eigenverbrauch = direktverbrauch + batt_entladung
-        gesamtverbrauch = eigenverbrauch + netzbezug
+        # pv_erzeugung, batt_ladung, batt_entladung werden für InvestitionMonatsdaten verwendet,
+        # NICHT für Monatsdaten (dort nur Zählerwerte)
 
+        # WICHTIG: Monatsdaten enthält NUR Zählerwerte (Einspeisung, Netzbezug)
+        # PV-Erzeugung kommt aus InvestitionMonatsdaten (pro PV-Modul/BKW)
+        # Berechnete Felder (direktverbrauch, eigenverbrauch, etc.) werden NICHT vorbelegt
         md = Monatsdaten(
             anlage_id=anlage.id,
             jahr=jahr,
             monat=monat,
             einspeisung_kwh=einspeisung,
             netzbezug_kwh=netzbezug,
-            pv_erzeugung_kwh=pv_erzeugung,
-            direktverbrauch_kwh=direktverbrauch,
-            eigenverbrauch_kwh=eigenverbrauch,
-            gesamtverbrauch_kwh=gesamtverbrauch,
-            batterie_ladung_kwh=batt_ladung if batt_ladung > 0 else None,
-            batterie_entladung_kwh=batt_entladung if batt_entladung > 0 else None,
+            # pv_erzeugung_kwh: NICHT setzen - kommt aus InvestitionMonatsdaten
+            # direktverbrauch_kwh, eigenverbrauch_kwh, gesamtverbrauch_kwh: werden berechnet
             globalstrahlung_kwh_m2=globalstrahlung,
             sonnenstunden=sonnenstunden,
             datenquelle="demo",
@@ -1574,9 +1579,9 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             # Saisonale Erzeugung basierend auf PV-Daten (skaliert auf 800Wp)
             bkw_skalierung = 0.04  # 800Wp / 20kWp
             bkw_erzeugung = round(pv_erzeugung * bkw_skalierung, 1)
-            # Höhere Eigenverbrauchsquote beim Balkonkraftwerk (80%)
-            bkw_eigenverbrauch = round(bkw_erzeugung * 0.8, 1)
-            bkw_einspeisung = round(bkw_erzeugung * 0.2, 1)
+            # Mit Speicher: Hohe Eigenverbrauchsquote durch Nulleinspeisung (~95%)
+            # Ohne Speicher wäre dies typischerweise nur 30-40%
+            bkw_eigenverbrauch = round(bkw_erzeugung * 0.95, 1)
             # Speicher: ca. 30% der Erzeugung wird zwischengespeichert
             bkw_speicher_ladung = round(bkw_erzeugung * 0.3, 1)
             bkw_speicher_entladung = round(bkw_speicher_ladung * 0.92, 1)  # 92% Effizienz
@@ -1587,6 +1592,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 monat=monat,
                 verbrauch_daten={
                     "pv_erzeugung_kwh": bkw_erzeugung,
+                    "eigenverbrauch_kwh": bkw_eigenverbrauch,
                     "speicher_ladung_kwh": bkw_speicher_ladung,
                     "speicher_entladung_kwh": bkw_speicher_entladung,
                 },

@@ -1033,9 +1033,15 @@ function BalkonkraftwerkSection({ investitionen, investitionsDaten, onInvChange 
 
         return (
           <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {inv.bezeichnung}
               {inv.leistung_kwp && <span className="text-xs text-gray-500 ml-2">({inv.leistung_kwp} kWp)</span>}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              {hatSpeicher
+                ? 'Mit Speicher: Bei Nulleinspeisung entspricht Eigenverbrauch meist der Erzeugung.'
+                : 'Ohne Speicher: Eigenverbrauch ist der direkt genutzte Anteil (typisch 30-40% der Erzeugung).'
+              }
             </p>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               <div>
@@ -1062,24 +1068,11 @@ function BalkonkraftwerkSection({ investitionen, investitionsDaten, onInvChange 
                   min="0"
                   value={investitionsDaten[inv.id]?.eigenverbrauch_kwh || ''}
                   onChange={(e) => onInvChange(inv.id, 'eigenverbrauch_kwh', e.target.value)}
-                  placeholder="z.B. 35"
+                  placeholder={hatSpeicher ? 'z.B. 43 (≈Erzeugung)' : 'z.B. 15 (30-40%)'}
                   className="input text-sm py-1.5"
                 />
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  Einspeisung <span className="text-gray-400">(kWh)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={investitionsDaten[inv.id]?.einspeisung_kwh || ''}
-                  onChange={(e) => onInvChange(inv.id, 'einspeisung_kwh', e.target.value)}
-                  placeholder="z.B. 10"
-                  className="input text-sm py-1.5"
-                />
-              </div>
+              {/* Einspeisung wird berechnet: Erzeugung - Eigenverbrauch */}
               {hatSpeicher && (
                 <>
                   <div>
