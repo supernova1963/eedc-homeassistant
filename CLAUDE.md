@@ -32,6 +32,23 @@ eedc/config.yaml                 → version
 eedc/run.sh                      → Echo-Statement
 ```
 
+### Release-Checkliste
+```bash
+# 1. Version in allen Dateien aktualisieren (siehe oben)
+# 2. CHANGELOG.md aktualisieren
+# 3. Git Tag erstellen und pushen
+git tag -a vX.Y.Z -m "Version X.Y.Z - Beschreibung"
+git push origin vX.Y.Z
+
+# 4. GitHub Release erstellen
+gh release create vX.Y.Z \
+  --title "vX.Y.Z - Titel" \
+  --prerelease \  # nur für Beta/Alpha
+  --notes "Release Notes hier..."
+
+# Releases: https://github.com/supernova1963/eedc-homeassistant/releases
+```
+
 ## Architektur-Prinzipien
 
 1. **Standalone-First:** Keine HA-Abhängigkeit für Kernfunktionen
