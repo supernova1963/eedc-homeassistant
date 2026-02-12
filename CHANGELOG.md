@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.3] - 2026-02-12
+
+### Bugfixes
+
+- **Jahr-Filter in Auswertungen → Komponenten funktioniert jetzt**
+  - Problem: Jahr-Auswahl hatte keine Auswirkung auf angezeigte Daten
+  - Fix: Jahr-Parameter wird jetzt durch alle Schichten durchgereicht (Backend API → Frontend API → KomponentenTab)
+  - Betroffen: `cockpit.py`, `cockpit.ts`, `KomponentenTab.tsx`, `Auswertung.tsx`
+
+---
+
 ## [1.0.0-beta.2] - 2026-02-12
 
 ### Hinzugefügt
