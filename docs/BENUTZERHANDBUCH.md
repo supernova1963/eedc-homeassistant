@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.1** | Stand: Februar 2026
+**Version 1.0.0-beta.4** | Stand: Februar 2026
 
 ---
 
@@ -319,9 +319,10 @@ Detailansicht für deine Photovoltaik:
 
 ### 5.7 Balkonkraftwerk Dashboard
 
-- **Erzeugung** (kWh)
-- **Eigenverbrauch** vs. Einspeisung
-- **Optional**: Speicher-Nutzung
+- **Erzeugung** (kWh) - Stromerzeugung des BKW
+- **Eigenverbrauch** (kWh) - Selbst genutzter BKW-Strom (NEU)
+- **Einspeisung** (kWh) - Unvergütete Einspeisung (= Erzeugung - Eigenverbrauch)
+- **Optional**: Speicher-Nutzung (Ladung/Entladung)
 
 ### KPI-Tooltips
 
@@ -470,6 +471,22 @@ Tabelle aller erfassten Monatsdaten mit:
 - **Inline-Bearbeitung**: Direkt in der Tabelle ändern
 - **Modal-Bearbeitung**: Für alle Details
 
+#### Aggregierte Darstellung (NEU in beta.3)
+
+Die Monatsdaten-Seite zeigt jetzt alle Daten aggregiert:
+
+| Spaltengruppe | Inhalt | Farbe |
+|---------------|--------|-------|
+| **Zählerwerte** | Einspeisung, Netzbezug | Blau |
+| **PV-Erzeugung** | Summe aller PV-Module | Amber |
+| **Speicher** | Ladung, Entladung | Amber |
+| **Wärmepumpe** | Strom, Heizung, Warmwasser | Amber |
+| **E-Auto** | km, Ladung (PV/Netz) | Amber |
+| **Wallbox** | Ladung | Amber |
+| **Berechnungen** | Direktverbrauch, Eigenverbrauch, Autarkie | Grün |
+
+**Gruppierte Spaltenauswahl**: Du kannst ganze Gruppen ein-/ausblenden oder einzelne Spalten wählen.
+
 #### Migrations-Warnung
 
 Bei älteren Daten (vor v0.9.7) erscheint eine Warnung:
@@ -549,6 +566,13 @@ Jahr, Monat, Einspeisung_kWh, Netzbezug_kWh
 ```
 
 > **Hinweis Wärmepumpe:** Die JAZ/COP-Werte werden über das Investitions-Formular konfiguriert, nicht über CSV. Die CSV enthält nur die gemessenen Monatswerte (Strom, Heizung, Warmwasser).
+
+**Balkonkraftwerk-Spalten (NEU):**
+```
+[BKW-Name]_Erzeugung_kWh        (PV-Erzeugung)
+[BKW-Name]_Eigenverbrauch_kWh   (Selbst genutzt)
+```
+Die Einspeisung wird automatisch berechnet (Erzeugung - Eigenverbrauch).
 
 **Beispiel:** Wenn dein E-Auto "Smart #1" heißt:
 ```

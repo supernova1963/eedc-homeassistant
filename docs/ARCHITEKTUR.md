@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.1** | Stand: Februar 2026
+**Version 1.0.0-beta.4** | Stand: Februar 2026
 
 ---
 
@@ -327,8 +327,8 @@ eedc-homeassistant/
 
 // Wärmepumpe
 {
-  "strom_kwh": 450.0,
-  "heizung_kwh": 1800.0,
+  "stromverbrauch_kwh": 450.0,
+  "heizenergie_kwh": 1800.0,
   "warmwasser_kwh": 200.0
 }
 
@@ -338,9 +338,9 @@ eedc-homeassistant/
   "ladevorgaenge": 10
 }
 
-// Balkonkraftwerk
+// Balkonkraftwerk (mit optionalem Speicher)
 {
-  "erzeugung_kwh": 45.0,
+  "pv_erzeugung_kwh": 45.0,
   "eigenverbrauch_kwh": 40.0,
   "speicher_ladung_kwh": 10.0,
   "speicher_entladung_kwh": 8.0
@@ -415,6 +415,19 @@ Liefert aggregierte Daten für alle Dashboard-Sektionen:
 **Datenquellen:**
 - Monatsdaten: Einspeisung, Netzbezug
 - InvestitionMonatsdaten: Alle Komponenten-Details
+
+#### Aggregierte Monatsdaten (NEU)
+
+```
+GET /api/monatsdaten/aggregiert/{anlage_id}?jahr=2025
+```
+
+Liefert Monatsdaten mit allen Komponenten-Summen:
+- Zählerwerte aus Monatsdaten (Einspeisung, Netzbezug)
+- PV-Erzeugung aggregiert aus allen PV-Modulen
+- Speicher-Daten (Ladung, Entladung)
+- WP/E-Auto/Wallbox-Daten
+- Berechnete Kennzahlen (Direktverbrauch, Eigenverbrauch, Autarkie)
 
 #### CSV Import
 

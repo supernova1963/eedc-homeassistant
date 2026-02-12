@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.0-beta.4] - 2026-02-12
+
 ### Hinzugefügt
 
 - **Monatsdaten-Seite: Aggregierte Darstellung mit allen Komponenten**
@@ -38,7 +42,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Dokumentation
 
-- Übergabe-Status für Fortsetzung auf anderem Rechner vorbereitet
+- BENUTZERHANDBUCH.md: Aggregierte Monatsdaten und BKW-Eigenverbrauch dokumentiert
+- ARCHITEKTUR.md: Datenstrukturen korrigiert (WP: stromverbrauch_kwh, BKW: pv_erzeugung_kwh)
+- Alle Dokumente auf Version 1.0.0-beta.4 aktualisiert
 
 ---
 

@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.3 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.4 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -175,7 +175,7 @@ GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten (
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (Unreleased → v1.0.0-beta.4)
+## Letzte Änderungen (v1.0.0-beta.4)
 
 **Monatsdaten-Seite: Aggregierte Darstellung**
 1. Neuer Endpoint `/api/monatsdaten/aggregiert/{anlage_id}` summiert alle Komponenten
