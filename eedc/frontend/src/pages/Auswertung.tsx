@@ -142,7 +142,7 @@ export default function Auswertung() {
         <PVAnlageTab anlageId={anlageId} selectedYear={selectedYear} verfuegbareJahre={verfuegbareJahre} />
       )}
       {activeTab === 'komponenten' && (
-        <KomponentenTab anlage={anlage} strompreis={strompreis} />
+        <KomponentenTab anlage={anlage} strompreis={strompreis} selectedYear={selectedYear} />
       )}
       {activeTab === 'finanzen' && (
         <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} anlageId={anlageId} />

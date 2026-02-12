@@ -275,8 +275,9 @@ export const cockpitApi = {
    * Holt Komponenten-Zeitreihe für Auswertungen.
    * Enthält Monatswerte für Speicher, WP, E-Auto, BKW, Sonstiges.
    */
-  async getKomponentenZeitreihe(anlageId: number): Promise<KomponentenZeitreihe> {
-    return api.get<KomponentenZeitreihe>(`/cockpit/komponenten-zeitreihe/${anlageId}`)
+  async getKomponentenZeitreihe(anlageId: number, jahr?: number): Promise<KomponentenZeitreihe> {
+    const params = jahr ? `?jahr=${jahr}` : ''
+    return api.get<KomponentenZeitreihe>(`/cockpit/komponenten-zeitreihe/${anlageId}${params}`)
   },
 
   /**

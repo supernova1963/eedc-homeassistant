@@ -11,12 +11,16 @@ import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, monatNamen } from './types'
 import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
 
-export function KomponentenTab({ anlage, strompreis }: Pick<TabProps, 'anlage' | 'strompreis'>) {
+interface KomponentenTabProps extends Pick<TabProps, 'anlage' | 'strompreis'> {
+  selectedYear?: number | 'all' | null
+}
+
+export function KomponentenTab({ anlage, strompreis, selectedYear }: KomponentenTabProps) {
   const [komponenten, setKomponenten] = useState<KomponentenZeitreihe | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Lade Komponenten-Zeitreihe vom Backend
+  // Lade Komponenten-Zeitreihe vom Backend (mit Jahr-Filter)
   useEffect(() => {
     if (!anlage?.id) return
 
@@ -24,7 +28,9 @@ export function KomponentenTab({ anlage, strompreis }: Pick<TabProps, 'anlage' |
       setLoading(true)
       setError(null)
       try {
-        const result = await cockpitApi.getKomponentenZeitreihe(anlage.id)
+        // Jahr übergeben: null/undefined/'all' = alle Jahre, sonst spezifisches Jahr
+        const jahrParam = (selectedYear && selectedYear !== 'all') ? selectedYear : undefined
+        const result = await cockpitApi.getKomponentenZeitreihe(anlage.id, jahrParam)
         setKomponenten(result)
       } catch (err) {
         setError('Fehler beim Laden der Komponentendaten')
@@ -35,7 +41,7 @@ export function KomponentenTab({ anlage, strompreis }: Pick<TabProps, 'anlage' |
     }
 
     loadData()
-  }, [anlage?.id])
+  }, [anlage?.id, selectedYear])
 
   // Chart-Daten mit Namen für X-Achse
   const chartData = useMemo(() => {

@@ -840,6 +840,7 @@ class KomponentenZeitreiheResponse(BaseModel):
 @router.get("/komponenten-zeitreihe/{anlage_id}", response_model=KomponentenZeitreiheResponse)
 async def get_komponenten_zeitreihe(
     anlage_id: int,
+    jahr: Optional[int] = Query(None, description="Jahr filtern (None = alle Jahre)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -886,12 +887,16 @@ async def get_komponenten_zeitreihe(
             anzahl_monate=0,
         )
 
-    # Alle InvestitionMonatsdaten laden
-    imd_result = await db.execute(
+    # Alle InvestitionMonatsdaten laden (optional nach Jahr filtern)
+    imd_query = (
         select(InvestitionMonatsdaten)
         .where(InvestitionMonatsdaten.investition_id.in_(all_inv_ids))
-        .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
     )
+    if jahr is not None:
+        imd_query = imd_query.where(InvestitionMonatsdaten.jahr == jahr)
+    imd_query = imd_query.order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+
+    imd_result = await db.execute(imd_query)
     all_imd = imd_result.scalars().all()
 
     inv_by_id = {i.id: i for i in investitionen}
