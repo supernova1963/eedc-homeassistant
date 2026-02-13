@@ -246,12 +246,22 @@ async def list_monatsdaten_aggregiert(
         autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
         ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
 
-        # Legacy-Daten prüfen
-        hat_legacy = bool(
-            (md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0) or
+        # Legacy-Daten prüfen - nur warnen wenn:
+        # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)
+        # 2. UND keine entsprechenden InvestitionMonatsdaten existieren
+        # (d.h. die Daten wären "verloren" wenn wir nur die neuen Quellen nutzen)
+        hat_legacy_pv = bool(md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0)
+        hat_legacy_speicher = bool(
             (md.batterie_ladung_kwh and md.batterie_ladung_kwh > 0) or
             (md.batterie_entladung_kwh and md.batterie_entladung_kwh > 0)
         )
+
+        # Prüfen ob InvestitionMonatsdaten existieren
+        hat_inv_pv = pv_erzeugung > 0
+        hat_inv_speicher = speicher_ladung > 0 or speicher_entladung > 0
+
+        # Nur warnen wenn Legacy-Daten da sind ABER keine InvestitionMonatsdaten
+        hat_legacy = (hat_legacy_pv and not hat_inv_pv) or (hat_legacy_speicher and not hat_inv_speicher)
 
         result.append(AggregierteMonatsdatenResponse(
             id=md.id,
