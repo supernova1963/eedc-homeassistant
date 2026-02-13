@@ -3,6 +3,7 @@ Wetter-Service für automatische Globalstrahlung und Sonnenstunden.
 
 Nutzt:
 - Open-Meteo Archive API für historische Daten (vergangene Monate)
+- Open-Meteo Forecast API für Wettervorhersagen (bis 16 Tage)
 - PVGIS TMY (Typical Meteorological Year) als Fallback für aktuelle/zukünftige Monate
 
 Konvertierungen:
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Konstanten
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 MJ_TO_KWH = 1 / 3.6  # 1 MJ = 0.2778 kWh
 SECONDS_TO_HOURS = 1 / 3600
 
@@ -328,3 +330,140 @@ async def get_wetterdaten(
     })
 
     return result
+
+
+async def fetch_open_meteo_forecast(
+    latitude: float,
+    longitude: float,
+    days: int = 16,
+    timeout: float = 30.0
+) -> Optional[dict]:
+    """
+    Ruft Wettervorhersage von Open-Meteo Forecast API ab (bis 16 Tage).
+
+    Args:
+        latitude: Breitengrad
+        longitude: Längengrad
+        days: Anzahl Tage (max 16)
+        timeout: Timeout in Sekunden
+
+    Returns:
+        dict mit täglichen Vorhersagedaten oder None bei Fehler:
+        {
+            "tage": [
+                {
+                    "datum": "2026-02-13",
+                    "globalstrahlung_kwh_m2": 2.1,
+                    "sonnenstunden": 5.2,
+                    "temperatur_max_c": 8.5,
+                    "temperatur_min_c": 2.1,
+                    "niederschlag_mm": 0.0,
+                    "bewoelkung_prozent": 45,
+                    "wetter_code": 2
+                },
+                ...
+            ],
+            "abgerufen_am": "2026-02-13T10:30:00",
+            "standort": {"latitude": 48.0, "longitude": 11.5}
+        }
+    """
+    days = min(days, 16)  # Open-Meteo Maximum
+
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "daily": ",".join([
+            "shortwave_radiation_sum",
+            "sunshine_duration",
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "precipitation_sum",
+            "cloud_cover_mean",
+            "weather_code"
+        ]),
+        "timezone": "Europe/Berlin",
+        "forecast_days": days,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(OPEN_METEO_FORECAST_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            daily = data.get("daily", {})
+            dates = daily.get("time", [])
+
+            if not dates:
+                logger.warning("Open-Meteo Forecast: Keine Daten erhalten")
+                return None
+
+            tage = []
+            for i, datum in enumerate(dates):
+                radiation = daily.get("shortwave_radiation_sum", [])[i]
+                sunshine = daily.get("sunshine_duration", [])[i]
+
+                tage.append({
+                    "datum": datum,
+                    "globalstrahlung_kwh_m2": round(radiation * MJ_TO_KWH, 2) if radiation is not None else None,
+                    "sonnenstunden": round(sunshine * SECONDS_TO_HOURS, 1) if sunshine is not None else None,
+                    "temperatur_max_c": daily.get("temperature_2m_max", [])[i],
+                    "temperatur_min_c": daily.get("temperature_2m_min", [])[i],
+                    "niederschlag_mm": daily.get("precipitation_sum", [])[i],
+                    "bewoelkung_prozent": daily.get("cloud_cover_mean", [])[i],
+                    "wetter_code": daily.get("weather_code", [])[i],
+                })
+
+            logger.info(
+                f"Open-Meteo Forecast: {len(tage)} Tage @ ({latitude}, {longitude})"
+            )
+
+            return {
+                "tage": tage,
+                "abgerufen_am": datetime.now().isoformat(),
+                "standort": {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                },
+            }
+
+    except httpx.TimeoutException:
+        logger.error("Open-Meteo Forecast: Timeout")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Open-Meteo Forecast: HTTP-Fehler {e.response.status_code}")
+        return None
+    except Exception as e:
+        logger.error(f"Open-Meteo Forecast: Fehler: {e}")
+        return None
+
+
+def wetter_code_zu_symbol(code: Optional[int]) -> str:
+    """
+    Konvertiert WMO Weather Code zu einfachem Symbol-String.
+
+    WMO Weather Codes: https://open-meteo.com/en/docs
+    """
+    if code is None:
+        return "unknown"
+
+    if code == 0:
+        return "sunny"
+    elif code in (1, 2, 3):
+        return "partly_cloudy"
+    elif code in (45, 48):
+        return "foggy"
+    elif code in (51, 53, 55, 56, 57):
+        return "drizzle"
+    elif code in (61, 63, 65, 66, 67):
+        return "rainy"
+    elif code in (71, 73, 75, 77):
+        return "snowy"
+    elif code in (80, 81, 82):
+        return "showers"
+    elif code in (85, 86):
+        return "snow_showers"
+    elif code in (95, 96, 99):
+        return "thunderstorm"
+    else:
+        return "cloudy"

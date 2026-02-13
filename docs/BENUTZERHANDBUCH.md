@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.4** | Stand: Februar 2026
+**Version 1.0.0-beta.5** | Stand: Februar 2026
 
 ---
 
@@ -12,11 +12,12 @@
 4. [Navigation & Menüstruktur](#4-navigation--menüstruktur)
 5. [Cockpit (Dashboards)](#5-cockpit-dashboards)
 6. [Auswertungen](#6-auswertungen)
-7. [Einstellungen](#7-einstellungen)
-8. [Datenerfassung](#8-datenerfassung)
-9. [Home Assistant Integration](#9-home-assistant-integration-optional)
-10. [Tipps & Best Practices](#10-tipps--best-practices)
-11. [Fehlerbehebung](#11-fehlerbehebung)
+7. [Aussichten (Prognosen)](#7-aussichten-prognosen)
+8. [Einstellungen](#8-einstellungen)
+9. [Datenerfassung](#9-datenerfassung)
+10. [Home Assistant Integration](#10-home-assistant-integration-optional)
+11. [Tipps & Best Practices](#11-tipps--best-practices)
+12. [Fehlerbehebung](#12-fehlerbehebung)
 
 ---
 
@@ -416,21 +417,77 @@ Tabelle mit:
 
 ---
 
-## 7. Einstellungen
+## 7. Aussichten (Prognosen)
 
-### 7.1 Anlage
+Die **Aussichten**-Seite bietet 4 Prognose-Tabs für zukunftsorientierte Analysen.
+
+### 7.1 Kurzfristig (7 Tage)
+
+Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
+
+- **Datenquelle**: Open-Meteo Wetterprognose
+- **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung
+- **Wettersymbole**: Sonnig, bewölkt, regnerisch
+
+### 7.2 Langfristig (12 Monate)
+
+PVGIS-basierte Jahresprognose:
+
+- **Datenquelle**: PVGIS-Erwartungswerte oder TMY
+- **Performance-Ratio**: Historischer Vergleich IST vs. SOLL
+- **Monatliche Aufschlüsselung**: Erwartete Erzeugung pro Monat
+
+### 7.3 Trend-Analyse
+
+Langfristige Entwicklung und Degradation:
+
+- **Jahresvergleich**: Alle bisherigen Jahre im Vergleich
+- **Saisonale Muster**: Beste und schlechteste Monate identifizieren
+- **Degradation**: Geschätzter Leistungsrückgang pro Jahr
+  - Primär: Nur vollständige Jahre (12 Monate)
+  - Fallback: TMY-Auffüllung für unvollständige Jahre
+
+### 7.4 Finanzen
+
+Amortisations-Prognose und Komponenten-Beiträge:
+
+**Amortisations-Fortschritt:**
+- Zeigt wie viel % der Investition bereits amortisiert ist
+- **Wichtig**: Dies ist der *kumulierte* Fortschritt, nicht die Jahres-Rendite!
+
+**Mehrkosten-Ansatz für Investitionen:**
+- **PV-System**: Volle Kosten (keine Alternative)
+- **Wärmepumpe**: Kosten minus Gasheizung (konfigurierbar über `alternativ_kosten_euro`)
+- **E-Auto**: Kosten minus Verbrenner (konfigurierbar über `alternativ_kosten_euro`)
+
+**Komponenten-Beiträge:**
+- Speicher: Eigenverbrauchserhöhung
+- E-Auto (V2H): Rückspeisung ins Haus
+- E-Auto (vs. Benzin): Ersparnis gegenüber Verbrenner
+- Wärmepumpe (PV): Direktverbrauch aus PV
+- Wärmepumpe (vs. Gas): Ersparnis gegenüber Gasheizung
+
+> **Hinweis:** Die Finanz-Prognose zeigt den **Amortisations-Fortschritt** (kumulierte Erträge / Investition).
+> Im Cockpit und in Auswertung/Investitionen wird dagegen die **Jahres-Rendite** (Jahres-Ertrag / Investition) angezeigt.
+> Beide Metriken sind korrekt, aber für unterschiedliche Zwecke gedacht.
+
+---
+
+## 8. Einstellungen
+
+### 8.1 Anlage
 
 Bearbeite die Stammdaten deiner PV-Anlage:
 - Name, Adresse, Koordinaten
 - Ausrichtung und Neigung (für PVGIS-Prognosen)
 
-### 7.2 Strompreise
+### 8.2 Strompreise
 
 Verwalte deine Stromtarife:
 - Mehrere Tarife mit Gültigkeitszeitraum möglich
 - Wichtig für korrekte Einsparungsberechnung
 
-### 7.3 Investitionen
+### 8.3 Investitionen
 
 Alle Komponenten im Überblick:
 
@@ -464,7 +521,7 @@ Alle Komponenten im Überblick:
 - V2H-fähig (Ja/Nein)
 - Nutzt V2H aktiv (Ja/Nein)
 
-### 7.4 Monatsdaten
+### 8.4 Monatsdaten
 
 Tabelle aller erfassten Monatsdaten mit:
 - **Spalten-Toggle**: Wähle welche Spalten angezeigt werden
@@ -494,12 +551,12 @@ Bei älteren Daten (vor v0.9.7) erscheint eine Warnung:
 - Beim Bearbeiten werden Werte automatisch migriert
 - Nach dem Speichern sind die Daten aktuell
 
-### 7.5 PVGIS Einstellungen
+### 8.5 PVGIS Einstellungen
 
 - **Systemverluste**: Standard 14% (für Deutschland typisch)
 - **TMY-Daten**: Typical Meteorological Year als Referenz
 
-### 7.6 Allgemein
+### 8.6 Allgemein
 
 - **Version**: Aktuelle Software-Version
 - **API-Status**: Backend-Verbindung prüfen
@@ -507,11 +564,11 @@ Bei älteren Daten (vor v0.9.7) erscheint eine Warnung:
 
 ---
 
-## 8. Datenerfassung
+## 9. Datenerfassung
 
 Es gibt drei Wege, Daten in eedc zu bekommen:
 
-### 8.1 Manuelles Formular
+### 9.1 Manuelles Formular
 
 **Pfad**: Einstellungen → Monatsdaten → "Neu" Button
 
@@ -535,7 +592,7 @@ Das Formular zeigt dynamisch die relevanten Felder:
 - Globalstrahlung und Sonnenstunden werden automatisch gefüllt
 - Datenquelle: Open-Meteo (historisch) oder PVGIS TMY (aktuell/Zukunft)
 
-### 8.2 CSV-Import
+### 9.2 CSV-Import
 
 **Pfad**: Einstellungen → Import
 
@@ -586,7 +643,7 @@ Smart #1_km, Smart #1_Ladung_PV_kWh, Smart #1_Ladung_Netz_kWh
 3. Wähle die Datei aus
 4. Duplikate werden automatisch überschrieben
 
-### 8.3 Demo-Daten
+### 9.3 Demo-Daten
 
 Zum Ausprobieren ohne echte Daten:
 
@@ -598,16 +655,16 @@ Zum Ausprobieren ohne echte Daten:
 
 ---
 
-## 9. Home Assistant Integration (optional)
+## 10. Home Assistant Integration (optional)
 
 EEDC kann berechnete KPIs an Home Assistant exportieren.
 
-### 9.1 Voraussetzungen
+### 10.1 Voraussetzungen
 
 - Home Assistant mit MQTT-Broker (Mosquitto)
 - MQTT-Benutzer und Passwort
 
-### 9.2 MQTT konfigurieren
+### 10.2 MQTT konfigurieren
 
 **Pfad**: Einstellungen → HA-Export
 
@@ -619,7 +676,7 @@ EEDC kann berechnete KPIs an Home Assistant exportieren.
 3. **Verbindung testen**: Klicke "Test"
 4. **Sensoren publizieren**: Klicke "Publizieren"
 
-### 9.3 Verfügbare Sensoren
+### 10.3 Verfügbare Sensoren
 
 Nach dem Publizieren erscheinen in HA neue Sensoren:
 
@@ -632,7 +689,7 @@ Nach dem Publizieren erscheinen in HA neue Sensoren:
 | `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
 | `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
 
-### 9.4 Alternative: REST API
+### 10.4 Alternative: REST API
 
 Statt MQTT kannst du auch die REST API nutzen:
 
@@ -649,7 +706,7 @@ rest:
 
 ---
 
-## 10. Tipps & Best Practices
+## 11. Tipps & Best Practices
 
 ### Datenqualität
 
@@ -677,7 +734,7 @@ rest:
 
 ---
 
-## 11. Fehlerbehebung
+## 12. Fehlerbehebung
 
 ### SOLL-IST Vergleich zeigt 0 kWh
 

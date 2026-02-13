@@ -57,7 +57,7 @@ export interface CockpitUebersicht {
   einspeise_erloes_euro: number
   ev_ersparnis_euro: number
   netto_ertrag_euro: number
-  roi_fortschritt_prozent: number | null
+  jahres_rendite_prozent: number | null  // Jahres-Ertrag / Investition (Rendite p.a.)
   investition_gesamt_euro: number
 
   // Umwelt (kg CO2)

@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.4** | Stand: Februar 2026
+**Version 1.0.0-beta.5** | Stand: Februar 2026
 
 ---
 
@@ -388,9 +388,10 @@ Sonstiges [Eigenständig]
 |--------|-------|--------------|
 | `/api/anlagen` | anlagen.py | PV-Anlagen CRUD, Geocoding |
 | `/api/monatsdaten` | monatsdaten.py | Monatsdaten CRUD, Berechnungen |
-| `/api/investitionen` | investitionen.py | Komponenten CRUD, ROI |
+| `/api/investitionen` | investitionen.py | Komponenten CRUD, ROI (Jahres-Rendite) |
 | `/api/strompreise` | strompreise.py | Stromtarife CRUD |
-| `/api/cockpit` | cockpit.py | Aggregierte Dashboard-Daten |
+| `/api/cockpit` | cockpit.py | Aggregierte Dashboard-Daten (Jahres-Rendite) |
+| `/api/aussichten` | aussichten.py | **Prognosen: Kurzfristig, Langfristig, Trend, Finanzen** |
 | `/api/import` | import_export.py | CSV Import/Export, Demo-Daten |
 | `/api/wetter` | wetter.py | Wetter-API (Open-Meteo, PVGIS TMY) |
 | `/api/pvgis` | pvgis.py | PVGIS Ertragsprognosen |
@@ -410,11 +411,29 @@ Liefert aggregierte Daten für alle Dashboard-Sektionen:
 - Energiebilanz (Erzeugung, Verbrauch, Einspeisung)
 - Effizienz (Autarkie, EV-Quote)
 - Komponenten-Status
-- Finanzen, CO2
+- Finanzen (inkl. `jahres_rendite_prozent` = Jahres-Ertrag / Investition), CO2
 
 **Datenquellen:**
 - Monatsdaten: Einspeisung, Netzbezug
 - InvestitionMonatsdaten: Alle Komponenten-Details
+
+#### Aussichten (Prognosen)
+
+```
+GET /api/aussichten/kurzfristig/{anlage_id}   # 7-Tage Wetterprognose
+GET /api/aussichten/langfristig/{anlage_id}   # 12-Monats-Prognose (PVGIS)
+GET /api/aussichten/trend/{anlage_id}         # Trend-Analyse + Degradation
+GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation
+```
+
+**4 Prognose-Tabs:**
+- **Kurzfristig**: 7-Tage Wetterprognose (Open-Meteo) mit Erzeugungsschätzung
+- **Langfristig**: 12-Monats-Prognose basierend auf PVGIS und Performance-Ratio
+- **Trend**: Jahresvergleich, saisonale Muster, Degradationsberechnung
+- **Finanzen**: Amortisations-Fortschritt, Komponenten-Beiträge, Mehrkosten-Ansatz
+
+**ROI-Metrik**: `amortisations_fortschritt_prozent` = Kumulierte Erträge / Investition
+(Unterscheidet sich von Cockpit `jahres_rendite_prozent`!)
 
 #### Aggregierte Monatsdaten (NEU)
 
@@ -482,8 +501,14 @@ class MonatsdatenResponse(MonatsdatenCreate):
 │   └── /sonstiges      → SonstigesDashboard
 │
 ├── /auswertungen       → Auswertung.tsx (6 Tabs)
-│   ├── /roi            → ROIDashboard
+│   ├── /roi            → ROIDashboard (Jahres-Rendite p.a.)
 │   └── /prognose       → PrognoseVsIst
+│
+├── /aussichten         → Aussichten.tsx (4 Tabs) [NEU]
+│   ├── /kurzfristig    → KurzfristigTab (7-Tage Wetter)
+│   ├── /langfristig    → LangfristigTab (12-Monats PVGIS)
+│   ├── /trend          → TrendTab (Jahresvergleich, Degradation)
+│   └── /finanzen       → FinanzenTab (Amortisations-Fortschritt)
 │
 └── /einstellungen
     ├── /anlage         → Anlagen.tsx

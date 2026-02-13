@@ -16,6 +16,9 @@ import Auswertung from './pages/Auswertung'
 import ROIDashboard from './pages/ROIDashboard'
 import PrognoseVsIst from './pages/PrognoseVsIst'
 
+// Aussichten (Prognosen)
+import Aussichten from './pages/Aussichten'
+
 // Einstellungen - Stammdaten
 import Anlagen from './pages/Anlagen'
 import Strompreise from './pages/Strompreise'
@@ -55,6 +58,9 @@ function App() {
           <Route path="auswertungen/roi" element={<ROIDashboard />} />
           <Route path="auswertungen/prognose" element={<PrognoseVsIst />} />
           <Route path="auswertungen/export" element={<Auswertung />} /> {/* TODO: PDF Export */}
+
+          {/* Aussichten (Prognosen) */}
+          <Route path="aussichten" element={<Aussichten />} />
 
           {/* Einstellungen - Stammdaten */}
           <Route path="einstellungen/anlage" element={<Anlagen />} />

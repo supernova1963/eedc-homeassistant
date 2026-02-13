@@ -12,6 +12,7 @@ import { useTheme } from '../../context/ThemeContext'
 const mainTabs = [
   { name: 'Cockpit', basePath: '/cockpit' },
   { name: 'Auswertungen', basePath: '/auswertungen' },
+  { name: 'Aussichten', basePath: '/aussichten' },
 ]
 
 // Einstellungen-Menü Struktur
@@ -58,6 +59,7 @@ export default function TopNavigation() {
   const getActiveMainTab = () => {
     if (location.pathname.startsWith('/cockpit')) return 'Cockpit'
     if (location.pathname.startsWith('/auswertungen')) return 'Auswertungen'
+    if (location.pathname.startsWith('/aussichten')) return 'Aussichten'
     if (location.pathname.startsWith('/einstellungen')) return null
     // Default: Cockpit
     return 'Cockpit'

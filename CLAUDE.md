@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.4 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.5 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -89,19 +89,22 @@ eedc/
 ├── backend/
 │   ├── main.py                    # FastAPI Entry + /stats
 │   ├── api/routes/
-│   │   ├── cockpit.py             # Dashboard-Aggregation
+│   │   ├── cockpit.py             # Dashboard-Aggregation (jahres_rendite_prozent)
+│   │   ├── aussichten.py          # Prognosen: Kurzfristig, Langfristig, Trend, Finanzen
 │   │   ├── import_export.py       # CSV Import (flag_modified!)
 │   │   ├── monatsdaten.py         # CRUD + Berechnungen
-│   │   └── investitionen.py       # Parent-Child, ROI
+│   │   └── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
 │   ├── core/config.py             # APP_VERSION
 │   └── services/
 │       ├── wetter_service.py      # Open-Meteo + PVGIS TMY
+│       ├── prognose_service.py    # Prognose-Berechnungen
 │       └── mqtt_client.py         # HA Export
 │
 └── frontend/src/
     ├── pages/
     │   ├── Dashboard.tsx          # Cockpit-Übersicht
     │   ├── Auswertung.tsx         # 6 Analyse-Tabs
+    │   ├── Aussichten.tsx         # 4 Prognose-Tabs
     │   └── PVAnlageDashboard.tsx  # String-Vergleich (Jahr-Parameter!)
     ├── components/
     │   ├── forms/MonatsdatenForm.tsx  # Dynamische Felder
@@ -158,8 +161,27 @@ GET  /api/cockpit/pv-strings/{anlage_id}?jahr=2025   # SOLL-IST Vergleich
 POST /api/import/csv/{anlage_id}                     # CSV Import
 GET  /api/import/template/{anlage_id}                # CSV Template-Info
 GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
-GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten (NEU)
+GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten
+
+# Aussichten (Prognosen)
+GET  /api/aussichten/kurzfristig/{anlage_id}         # 7-Tage Wetterprognose
+GET  /api/aussichten/langfristig/{anlage_id}         # 12-Monats-Prognose (PVGIS)
+GET  /api/aussichten/trend/{anlage_id}               # Trend-Analyse + Degradation
+GET  /api/aussichten/finanzen/{anlage_id}            # Finanz-Prognose + Amortisation
 ```
+
+## ROI-Metriken (WICHTIG: Unterschiedliche Bedeutungen!)
+
+| Metrik | Wo | Formel | Bedeutung |
+|--------|-----|--------|-----------|
+| **Jahres-Rendite** | Cockpit, Auswertung/Investitionen | `Jahres-Ertrag / Investition × 100` | Rendite pro Jahr (p.a.) |
+| **Amortisations-Fortschritt** | Aussichten/Finanzen | `Kum. Erträge / Investition × 100` | Wie viel % bereits abbezahlt |
+
+### Mehrkosten-Ansatz für Investitionen
+Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksichtigt:
+- **PV-System**: Volle Kosten (keine Alternative)
+- **Wärmepumpe**: Kosten minus Gasheizung (`alternativ_kosten_euro` Parameter)
+- **E-Auto**: Kosten minus Verbrenner (`alternativ_kosten_euro` Parameter)
 
 ## Bekannte Fallstricke
 
@@ -169,6 +191,7 @@ GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten (
 | 0-Werte verschwinden | `is not None` statt `if val` |
 | SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
 | Legacy pv_erzeugung_kwh wird verwendet | InvestitionMonatsdaten abfragen |
+| ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
 
 ## Offene Features
 

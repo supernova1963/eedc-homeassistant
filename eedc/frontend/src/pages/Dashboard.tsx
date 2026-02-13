@@ -445,17 +445,17 @@ export default function Dashboard() {
             ergebnis={`= ${fmtCalc(data.netto_ertrag_euro, 0)} €`}
           />
           <KPICard
-            title="ROI-Fortschritt"
-            value={data.roi_fortschritt_prozent?.toFixed(1) || '---'}
+            title="Jahres-Rendite"
+            value={data.jahres_rendite_prozent?.toFixed(1) || '---'}
             unit="%"
             subtitle={`von ${data.investition_gesamt_euro.toFixed(0)} € Invest`}
             icon={Gauge}
             color="text-emerald-600"
             bgColor="bg-emerald-50 dark:bg-emerald-900/20"
             onClick={() => navigate('/auswertungen/roi')}
-            formel="Kum. Ersparnis ÷ Investition × 100"
-            berechnung={`Netto-Ertrag ÷ ${fmtCalc(data.investition_gesamt_euro, 0)} €`}
-            ergebnis={`= ${fmtCalc(data.roi_fortschritt_prozent || 0, 1)} %`}
+            formel="Jahres-Ertrag ÷ Investition × 100"
+            berechnung={`${fmtCalc(data.netto_ertrag_euro, 0)} € ÷ ${fmtCalc(data.investition_gesamt_euro, 0)} €`}
+            ergebnis={`= ${fmtCalc(data.jahres_rendite_prozent || 0, 1)} % p.a.`}
           />
         </div>
       </Section>

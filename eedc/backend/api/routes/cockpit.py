@@ -73,7 +73,7 @@ class CockpitUebersichtResponse(BaseModel):
     einspeise_erloes_euro: float
     ev_ersparnis_euro: float
     netto_ertrag_euro: float
-    roi_fortschritt_prozent: Optional[float]
+    jahres_rendite_prozent: Optional[float]  # Jahres-Ertrag / Investition (Rendite p.a.)
     investition_gesamt_euro: float
 
     # Umwelt (kg CO2)
@@ -387,7 +387,7 @@ async def get_cockpit_uebersicht(
         einspeise_erloes_euro=round(einspeise_erloes, 2),
         ev_ersparnis_euro=round(ev_ersparnis, 2),
         netto_ertrag_euro=round(netto_ertrag, 2),
-        roi_fortschritt_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
+        jahres_rendite_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
         investition_gesamt_euro=round(investition_gesamt, 2),
 
         # Umwelt

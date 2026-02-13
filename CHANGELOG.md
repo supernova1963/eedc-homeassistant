@@ -7,7 +7,42 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [1.0.0-beta.5] - 2026-02-13
+
+### Hinzugefügt
+
+- **Aussichten: 4 neue Prognose-Tabs**
+  - **Kurzfristig (7 Tage)**: Wetterbasierte Ertragsschätzung mit Open-Meteo
+  - **Langfristig (12 Monate)**: PVGIS-basierte Jahresprognose mit Performance-Ratio
+  - **Trend-Analyse**: Jahresvergleich, saisonale Muster, Degradationsberechnung
+  - **Finanzen**: Amortisations-Fortschritt, Komponenten-Beiträge, Mehrkosten-Ansatz
+
+- **Mehrkosten-Ansatz für ROI-Berechnung**
+  - Wärmepumpe: Kosten minus Gasheizung (`alternativ_kosten_euro` Parameter)
+  - E-Auto: Kosten minus Verbrenner (`alternativ_kosten_euro` Parameter)
+  - PV-System: Volle Kosten (keine Alternative)
+  - Alternativkosten-Einsparungen als zusätzliche Erträge (WP vs. Gas, E-Auto vs. Benzin)
+
+### Geändert
+
+- **ROI-Metriken klarer benannt**
+  - Cockpit/Auswertung: `jahres_rendite_prozent` (Jahres-Ertrag / Investition)
+  - Aussichten/Finanzen: `amortisations_fortschritt_prozent` (Kum. Erträge / Investition)
+  - Unterschiedliche Metriken für unterschiedliche Zwecke klar dokumentiert
+
+- **API-Endpoints für Aussichten**
+  - `GET /api/aussichten/kurzfristig/{anlage_id}` - 7-Tage Wetterprognose
+  - `GET /api/aussichten/langfristig/{anlage_id}` - 12-Monats-Prognose
+  - `GET /api/aussichten/trend/{anlage_id}` - Trend-Analyse
+  - `GET /api/aussichten/finanzen/{anlage_id}` - Finanz-Prognose
+
+### Dokumentation
+
+- README.md: Aussichten-Feature dokumentiert
+- CLAUDE.md: ROI-Metriken erklärt, Aussichten-Endpoints hinzugefügt
+- ARCHITEKTUR.md: Aussichten-Modul dokumentiert
+- BENUTZERHANDBUCH.md: Aussichten-Tabs erklärt
+- DEVELOPMENT.md: Aussichten-API dokumentiert
 
 ---
 

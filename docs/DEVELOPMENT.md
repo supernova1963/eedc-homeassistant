@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 1.0.0-beta.4** | Stand: Februar 2026
+**Version 1.0.0-beta.5** | Stand: Februar 2026
 
 ---
 
@@ -195,17 +195,33 @@ eedc-homeassistant/
     │   ├── main.py              # FastAPI Entry Point
     │   ├── requirements.txt
     │   ├── api/routes/          # API Endpoints
+    │   │   ├── cockpit.py       # Dashboard-Aggregation
+    │   │   ├── aussichten.py    # Prognosen (NEU)
+    │   │   └── ...              # monatsdaten, investitionen, etc.
     │   ├── core/                # Config, DB, Calculations
     │   ├── models/              # SQLAlchemy Models
-    │   └── services/            # Business Logic
+    │   └── services/
+    │       ├── wetter_service.py    # Open-Meteo + PVGIS
+    │       ├── prognose_service.py  # Prognose-Berechnungen (NEU)
+    │       └── mqtt_client.py       # HA Export
     │
     └── frontend/
         ├── package.json
         ├── vite.config.ts
         ├── src/
         │   ├── api/             # API Client
+        │   │   ├── cockpit.ts   # Cockpit/Dashboard
+        │   │   └── aussichten.ts # Prognosen
         │   ├── components/      # UI Components
         │   ├── pages/           # Seiten
+        │   │   ├── Dashboard.tsx      # Cockpit
+        │   │   ├── Auswertung.tsx     # Analysen
+        │   │   ├── Aussichten.tsx     # Prognosen (4 Tabs)
+        │   │   └── aussichten/        # Tab-Komponenten
+        │   │       ├── KurzfristTab.tsx
+        │   │       ├── LangfristTab.tsx
+        │   │       ├── TrendTab.tsx
+        │   │       └── FinanzenTab.tsx
         │   ├── hooks/           # React Hooks
         │   └── config/          # Version, etc.
         └── dist/                # Production Build
@@ -248,6 +264,26 @@ Nach dem Start des Backends verfügbar unter:
 | Swagger UI | http://localhost:8099/api/docs |
 | ReDoc | http://localhost:8099/api/redoc |
 | OpenAPI JSON | http://localhost:8099/api/openapi.json |
+
+### Wichtige API-Routen
+
+| Modul | Endpoints | Beschreibung |
+|-------|-----------|--------------|
+| **Cockpit** | `/api/cockpit/*` | Dashboard-Aggregation, KPIs |
+| **Aussichten** | `/api/aussichten/*` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
+| **Monatsdaten** | `/api/monatsdaten/*` | CRUD + Berechnungen |
+| **Investitionen** | `/api/investitionen/*` | Komponenten, ROI |
+| **Import/Export** | `/api/import/*` | CSV Import/Export |
+| **Wetter** | `/api/wetter/*` | Open-Meteo + PVGIS TMY |
+
+### Aussichten API (NEU)
+
+```
+GET /api/aussichten/kurzfristig/{anlage_id}     # 7-Tage Wetter-Prognose
+GET /api/aussichten/langfristig/{anlage_id}     # 12-Monats PVGIS-Prognose
+GET /api/aussichten/trend/{anlage_id}           # Historische Trend-Analyse
+GET /api/aussichten/finanzen/{anlage_id}        # Amortisations-Prognose
+```
 
 ---
 

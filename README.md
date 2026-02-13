@@ -34,6 +34,13 @@
 - **SOLL-IST Vergleich** gegen PVGIS-Prognosen
 - **CSV/JSON Export** für externe Weiterverarbeitung
 
+### Aussichten (Prognosen)
+- **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
+- **Kurzfrist-Prognose** mit Wetter-Daten (Open-Meteo)
+- **Langfrist-Prognose** mit PVGIS-Daten und Performance-Ratio
+- **Trend-Analyse** mit Degradationsberechnung und saisonalen Mustern
+- **Finanz-Prognose** mit Amortisations-Fortschritt und Mehrkosten-Ansatz
+
 ### Datenerfassung
 - **Manuelles Formular** mit dynamischen Komponenten-Feldern
 - **CSV-Import** mit personalisierten Spalten basierend auf deinen Investitionen
@@ -184,6 +191,7 @@ Bei Nutzung mit Home Assistant können diese Geräte automatisch erkannt werden:
 - [x] CSV-Import mit dynamischen Spalten
 - [x] Wetter-API Integration (Open-Meteo)
 - [x] MQTT Export zu Home Assistant
+- [x] **Aussichten** mit 4 Prognose-Tabs (Kurzfristig, Langfristig, Trend, Finanzen)
 - [ ] PDF-Export
 - [ ] KI-gestützte Insights
 
