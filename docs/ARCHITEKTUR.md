@@ -31,20 +31,20 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Browser                               │
-│                    (React Frontend)                          │
+│                        Browser                              │
+│                    (React Frontend)                         │
 └────────────────────────┬────────────────────────────────────┘
                          │ HTTP/REST
 ┌────────────────────────┴────────────────────────────────────┐
-│                     FastAPI Backend                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │  Routes  │  │ Services │  │  Models  │  │   Core   │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
+│                     FastAPI Backend                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
+│  │  Routes  │  │ Services │  │  Models  │  │   Core   │     │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘     │
 └────────────────────────┬────────────────────────────────────┘
                          │ SQLAlchemy
 ┌────────────────────────┴────────────────────────────────────┐
-│                      SQLite Database                         │
-│                      (/data/eedc.db)                         │
+│                      SQLite Database                        │
+│                      (/data/eedc.db)                        │
 └─────────────────────────────────────────────────────────────┘
 
 Externe APIs (optional):
@@ -195,8 +195,8 @@ eedc-homeassistant/
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                          Anlage                              │
-│  id, name, adresse, koordinaten, ausrichtung, neigung        │
+│                          Anlage                             │
+│  id, name, adresse, koordinaten, ausrichtung, neigung       │
 └────────────┬──────────────────────┬────────────────┬────────┘
              │                      │                │
              │ 1:n                  │ 1:n            │ 1:n
@@ -444,17 +444,6 @@ file: [CSV-Datei]
 3. Investitions-Felder → InvestitionMonatsdaten-Tabelle
 4. Duplikate: Upsert (überschreiben)
 5. `flag_modified()` für JSON-Felder
-
-#### MQTT Export
-
-```
-POST /api/ha/export/mqtt/publish/{anlage_id}
-```
-
-1. Alle Sensoren berechnen
-2. MQTT Discovery Messages senden
-3. State/Attributes publizieren
-
 ### Request/Response Pattern
 
 ```python

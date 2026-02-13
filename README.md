@@ -126,13 +126,13 @@ Detaillierte Analysen in 6 Kategorien:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Frontend (React)                      │
+│                    Frontend (React)                     │
 │  Vite + TypeScript + Tailwind CSS + Recharts            │
 ├─────────────────────────────────────────────────────────┤
-│                    Backend (Python)                      │
+│                    Backend (Python)                     │
 │  FastAPI + SQLAlchemy 2.0 + SQLite                      │
 ├─────────────────────────────────────────────────────────┤
-│              Externe APIs (optional)                     │
+│              Externe APIs (optional)                    │
 │  Open-Meteo (Wetter) │ PVGIS (Prognose) │ HA (Export)   │
 └─────────────────────────────────────────────────────────┘
 ```
