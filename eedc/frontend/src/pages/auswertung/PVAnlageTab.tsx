@@ -24,9 +24,10 @@ interface PVAnlageTabProps {
   anlageId: number
   selectedYear: number | 'all'
   verfuegbareJahre: number[]
+  zeitraumLabel?: string
 }
 
-export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnlageTabProps) {
+export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraumLabel }: PVAnlageTabProps) {
   const [data, setData] = useState<PVStringsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,19 +35,104 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
   // Für Jahresvergleich: Daten für alle Jahre laden
   const [multiYearData, setMultiYearData] = useState<Map<number, PVStringsResponse>>(new Map())
 
-  // Aktuelles Jahr für die Anzeige
-  const displayYear = selectedYear === 'all'
-    ? (verfuegbareJahre[0] || new Date().getFullYear())
-    : selectedYear
 
-  // Daten für ausgewähltes Jahr laden
+  // Daten für ein spezifisches Jahr oder alle Jahre laden
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
       setError(null)
+
       try {
-        const result = await cockpitApi.getPVStrings(anlageId, displayYear)
-        setData(result)
+        if (selectedYear === 'all') {
+          // Alle Jahre laden und aggregieren
+          const dataMap = new Map<number, PVStringsResponse>()
+          for (const jahr of verfuegbareJahre) {
+            try {
+              const result = await cockpitApi.getPVStrings(anlageId, jahr)
+              dataMap.set(jahr, result)
+            } catch (err) {
+              console.error(`Fehler beim Laden Jahr ${jahr}:`, err)
+            }
+          }
+          setMultiYearData(dataMap)
+
+          // Aggregieren: SOLL und IST über alle Jahre summieren
+          if (dataMap.size > 0) {
+            const firstYearData = dataMap.get(verfuegbareJahre[0])
+            if (firstYearData) {
+              // Aggregierte Daten erstellen
+              const aggStrings = firstYearData.strings.map(s => {
+                let totalPrognose = 0
+                let totalIst = 0
+
+                // Über alle Jahre summieren
+                dataMap.forEach((yearData) => {
+                  const stringData = yearData.strings.find(ys => ys.investition_id === s.investition_id)
+                  if (stringData) {
+                    totalPrognose += stringData.prognose_jahr_kwh
+                    totalIst += stringData.ist_jahr_kwh
+                  }
+                })
+
+                const abweichung = totalPrognose > 0 ? ((totalIst - totalPrognose) / totalPrognose) * 100 : null
+                const perfRatio = totalPrognose > 0 ? totalIst / totalPrognose : null
+
+                return {
+                  ...s,
+                  prognose_jahr_kwh: totalPrognose,
+                  ist_jahr_kwh: totalIst,
+                  abweichung_jahr_prozent: abweichung,
+                  abweichung_jahr_kwh: totalIst - totalPrognose,
+                  performance_ratio_jahr: perfRatio,
+                  spezifischer_ertrag_kwh_kwp: s.leistung_kwp > 0 ? totalIst / s.leistung_kwp : null,
+                  // Monatswerte aggregieren
+                  monatswerte: s.monatswerte.map((m, mIdx) => {
+                    let monthPrognose = 0
+                    let monthIst = 0
+                    dataMap.forEach((yearData) => {
+                      const stringData = yearData.strings.find(ys => ys.investition_id === s.investition_id)
+                      if (stringData && stringData.monatswerte[mIdx]) {
+                        monthPrognose += stringData.monatswerte[mIdx].prognose_kwh
+                        monthIst += stringData.monatswerte[mIdx].ist_kwh
+                      }
+                    })
+                    return {
+                      ...m,
+                      prognose_kwh: monthPrognose,
+                      ist_kwh: monthIst,
+                    }
+                  })
+                }
+              })
+
+              // Gesamt aggregieren
+              const totalPrognoseGesamt = aggStrings.reduce((sum, s) => sum + s.prognose_jahr_kwh, 0)
+              const totalIstGesamt = aggStrings.reduce((sum, s) => sum + s.ist_jahr_kwh, 0)
+
+              // Bester/Schlechtester String bestimmen
+              const sortedByPerf = [...aggStrings].filter(s => s.performance_ratio_jahr !== null)
+                .sort((a, b) => (b.performance_ratio_jahr || 0) - (a.performance_ratio_jahr || 0))
+
+              const aggregated: PVStringsResponse = {
+                ...firstYearData,
+                strings: aggStrings,
+                prognose_gesamt_kwh: totalPrognoseGesamt,
+                ist_gesamt_kwh: totalIstGesamt,
+                abweichung_gesamt_kwh: totalIstGesamt - totalPrognoseGesamt,
+                abweichung_gesamt_prozent: totalPrognoseGesamt > 0
+                  ? ((totalIstGesamt - totalPrognoseGesamt) / totalPrognoseGesamt) * 100
+                  : null,
+                bester_string: sortedByPerf[0]?.bezeichnung || null,
+                schlechtester_string: sortedByPerf[sortedByPerf.length - 1]?.bezeichnung || null,
+              }
+              setData(aggregated)
+            }
+          }
+        } else {
+          // Einzelnes Jahr laden
+          const result = await cockpitApi.getPVStrings(anlageId, selectedYear)
+          setData(result)
+        }
       } catch (err) {
         setError('Fehler beim Laden der String-Daten')
         console.error(err)
@@ -55,25 +141,6 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
       }
     }
     loadData()
-  }, [anlageId, displayYear])
-
-  // Für "Alle Jahre": Performance-Vergleich über Jahre laden
-  useEffect(() => {
-    if (selectedYear !== 'all' || verfuegbareJahre.length <= 1) return
-
-    const loadMultiYear = async () => {
-      const dataMap = new Map<number, PVStringsResponse>()
-      for (const jahr of verfuegbareJahre) {
-        try {
-          const result = await cockpitApi.getPVStrings(anlageId, jahr)
-          dataMap.set(jahr, result)
-        } catch (err) {
-          console.error(`Fehler beim Laden Jahr ${jahr}:`, err)
-        }
-      }
-      setMultiYearData(dataMap)
-    }
-    loadMultiYear()
   }, [anlageId, selectedYear, verfuegbareJahre])
 
   // Jahresvergleich Chart-Daten
@@ -122,7 +189,8 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
       s.performance_ratio_jahr ? (s.performance_ratio_jahr * 100).toFixed(1) + '%' : '-',
       s.spezifischer_ertrag_kwh_kwp ?? '-'
     ])
-    exportToCSV(headers, rows, `pv_strings_${displayYear}.csv`)
+    const exportName = selectedYear === 'all' ? 'alle_jahre' : selectedYear.toString()
+    exportToCSV(headers, rows, `pv_strings_${exportName}.csv`)
   }
 
   if (loading) return <LoadingSpinner text="Lade PV-String Daten..." />
@@ -166,10 +234,11 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
 
   return (
     <div className="space-y-6">
-      {/* Header mit Export */}
+      {/* Header mit Zeitraum und Export */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {data.strings.length} Strings • {data.anlagen_leistung_kwp.toFixed(1)} kWp • Jahr {displayYear}
+          <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
+          {' '}&bull;{' '}{data.strings.length} Strings &bull; {data.anlagen_leistung_kwp.toFixed(1)} kWp
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />
@@ -195,7 +264,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
           title="IST (Erzeugt)"
           value={(data.ist_gesamt_kwh / 1000).toFixed(1)}
           unit="MWh"
-          subtitle={`${displayYear}`}
+          subtitle={zeitraumLabel}
           icon={TrendingUp}
           color="text-amber-500"
           bgColor="bg-amber-50 dark:bg-amber-900/20"
@@ -219,7 +288,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
           title="Spez. Ertrag Ø"
           value={(data.ist_gesamt_kwh / data.anlagen_leistung_kwp).toFixed(0)}
           unit="kWh/kWp"
-          subtitle={`${displayYear}`}
+          subtitle={zeitraumLabel}
           icon={GitCompare}
           color="text-purple-500"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
@@ -257,7 +326,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <GitCompare className="h-5 w-5 text-blue-500" />
-          SOLL vs IST pro String ({displayYear})
+          SOLL vs IST pro String
         </h3>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
@@ -285,7 +354,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre }: PVAnla
       {/* Chart: Monatsverlauf (aggregiert) */}
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Monatsverlauf SOLL vs IST ({displayYear})
+          Monatsverlauf SOLL vs IST {selectedYear === 'all' ? '(Summe aller Jahre)' : ''}
         </h3>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">

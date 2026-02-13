@@ -19,6 +19,7 @@ interface InvestitionenTabProps {
   anlageId: number
   strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
   selectedYear?: number | 'all'
+  zeitraumLabel?: string
 }
 
 export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }: InvestitionenTabProps) {

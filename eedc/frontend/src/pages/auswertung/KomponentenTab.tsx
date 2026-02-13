@@ -11,11 +11,11 @@ import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, monatNamen } from './types'
 import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
 
-interface KomponentenTabProps extends Pick<TabProps, 'anlage' | 'strompreis'> {
+interface KomponentenTabProps extends Pick<TabProps, 'anlage' | 'strompreis' | 'zeitraumLabel'> {
   selectedYear?: number | 'all' | null
 }
 
-export function KomponentenTab({ anlage, strompreis, selectedYear }: KomponentenTabProps) {
+export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel }: KomponentenTabProps) {
   const [komponenten, setKomponenten] = useState<KomponentenZeitreihe | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -192,10 +192,11 @@ export function KomponentenTab({ anlage, strompreis, selectedYear }: Komponenten
 
   return (
     <div className="space-y-6">
-      {/* Header mit Export */}
+      {/* Header mit Zeitraum und Export */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {komponenten?.anzahl_monate || 0} Monate Daten
+          <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
+          {' '}&bull;{' '}{komponenten?.anzahl_monate || 0} Monate
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />

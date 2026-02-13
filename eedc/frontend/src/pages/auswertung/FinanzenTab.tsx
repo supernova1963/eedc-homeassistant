@@ -16,9 +16,10 @@ interface FinanzenTabProps {
   stats: TabProps['stats']
   strompreis: TabProps['strompreis']
   anlageId?: number
+  zeitraumLabel?: string
 }
 
-export function FinanzenTab({ data, stats, strompreis, anlageId }: FinanzenTabProps) {
+export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }: FinanzenTabProps) {
   // Lade Sonderkosten aus Komponenten-Zeitreihe
   const [sonderkostenData, setSonderkostenData] = useState<KomponentenZeitreihe | null>(null)
 
@@ -101,10 +102,11 @@ export function FinanzenTab({ data, stats, strompreis, anlageId }: FinanzenTabPr
 
   return (
     <div className="space-y-6">
-      {/* Header mit Export */}
+      {/* Header mit Zeitraum und Export */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {stats.anzahlMonate} Monate Daten
+          <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
+          {' '}&bull;{' '}{stats.anzahlMonate} Monate
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />

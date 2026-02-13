@@ -73,6 +73,7 @@ export interface TabProps {
   stats: ReturnType<typeof useMonatsdatenStats>
   anlage?: ReturnType<typeof useAnlagen>['anlagen'][0]
   strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
+  zeitraumLabel?: string  // z.B. "2025" oder "2023–2025"
 }
 
 // Interface für Monatsdaten-Zeitreihen

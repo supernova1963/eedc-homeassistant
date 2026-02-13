@@ -15,9 +15,10 @@ const CO2_FAKTOR = 0.38 // kg CO2 pro kWh (deutscher Strommix)
 interface CO2TabProps {
   data: TabProps['data']
   stats: TabProps['stats']
+  zeitraumLabel?: string
 }
 
-export function CO2Tab({ data, stats }: CO2TabProps) {
+export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
   // Monatszeitreihen erstellen
   const zeitreihe = useMemo(
     () => createMonatsZeitreihe(data),
@@ -53,10 +54,11 @@ export function CO2Tab({ data, stats }: CO2TabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header mit Export */}
+      {/* Header mit Zeitraum und Export */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {stats.anzahlMonate} Monate Daten
+          <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
+          {' '}&bull;{' '}{stats.anzahlMonate} Monate
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />

@@ -10,7 +10,7 @@ import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
 
-export function EnergieTab({ data, stats, anlage, strompreis }: TabProps) {
+export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: TabProps) {
   // Monatszeitreihen erstellen
   const zeitreihe = useMemo(
     () => createMonatsZeitreihe(data, anlage, strompreis),
@@ -40,10 +40,11 @@ export function EnergieTab({ data, stats, anlage, strompreis }: TabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header mit Export */}
+      {/* Header mit Zeitraum und Export */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {stats.anzahlMonate} Monate Daten
+          <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
+          {' '}&bull;{' '}{stats.anzahlMonate} Monate
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />
