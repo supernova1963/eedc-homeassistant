@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.7] - 2026-02-13
+
+### Bugfixes
+
+- **Kritisch: Datenbank-Migration für beta.6 Spalten fehlte**
+  - Problem: Nach Update auf beta.6 fehlte die Migration für `mastr_id` und `versorger_daten`
+  - Fehler: `no such column: anlagen.mastr_id` - Anlage wurde nicht mehr angezeigt
+  - Fix: `run_migrations()` in `database.py` ergänzt um fehlende Spalten
+  - Bestehende Daten bleiben erhalten, Spalten werden automatisch hinzugefügt
+
+---
+
 ## [1.0.0-beta.6] - 2026-02-13
 
 ### Hinzugefügt

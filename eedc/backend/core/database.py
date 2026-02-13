@@ -63,6 +63,9 @@ async def run_migrations(conn):
                 ('ha_sensor_batterie_ladung', 'VARCHAR(255)'),
                 ('ha_sensor_batterie_entladung', 'VARCHAR(255)'),
                 ('wechselrichter_hersteller', 'VARCHAR(50)'),
+                # v1.0.0-beta.6: Versorger-Stammdaten
+                ('mastr_id', 'VARCHAR(20)'),
+                ('versorger_daten', 'JSON'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
