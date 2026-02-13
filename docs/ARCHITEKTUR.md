@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.6** | Stand: Februar 2026
+**Version 1.0.0-beta.8** | Stand: Februar 2026
 
 ---
 
@@ -439,7 +439,7 @@ Sonstiges [Eigenständig]
 | `/api/strompreise` | strompreise.py | Stromtarife CRUD |
 | `/api/cockpit` | cockpit.py | Aggregierte Dashboard-Daten (Jahres-Rendite) |
 | `/api/aussichten` | aussichten.py | **Prognosen: Kurzfristig, Langfristig, Trend, Finanzen** |
-| `/api/import` | import_export.py | CSV Import/Export, Demo-Daten |
+| `/api/import` | import_export.py | CSV Import/Export, JSON-Export, Demo-Daten |
 | `/api/wetter` | wetter.py | Wetter-API (Open-Meteo, PVGIS TMY) |
 | `/api/pvgis` | pvgis.py | PVGIS Ertragsprognosen |
 | `/api/ha/export` | ha_export.py | HA Sensor Export (REST, MQTT) |
@@ -510,6 +510,27 @@ file: [CSV-Datei]
 3. Investitions-Felder → InvestitionMonatsdaten-Tabelle
 4. Duplikate: Upsert (überschreiben)
 5. `flag_modified()` für JSON-Felder
+
+**Plausibilitätsprüfungen (NEU in beta.8):**
+- Legacy-Spalten (`PV_Erzeugung_kWh`, `Batterie_*_kWh`) werden validiert
+- Fehler wenn NUR Legacy und PV-Module/Speicher existieren
+- Fehler bei Mismatch Legacy vs. Summe Komponenten-Werte
+- Warnung wenn redundant (±0.5 kWh Toleranz)
+- Negative Werte werden blockiert
+- Plausibilitätswarnungen (Sonnenstunden > 400h, Globalstrahlung > 250)
+
+#### JSON Export (NEU in beta.8)
+
+```
+GET /api/import/export/{anlage_id}/full
+```
+
+Exportiert vollständige Anlage mit allen verknüpften Daten:
+- Anlage-Stammdaten (inkl. versorger_daten, mastr_id)
+- Strompreise
+- Investitionen (hierarchisch mit Children)
+- Monatsdaten mit InvestitionMonatsdaten
+- PVGIS-Prognosen
 ### Request/Response Pattern
 
 ```python

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Edit, Trash2, Sun, MapPin, Search } from 'lucide-react'
+import { Plus, Edit, Trash2, Sun, MapPin, Search, Download } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import AnlageForm from '../components/forms/AnlageForm'
@@ -120,6 +120,16 @@ export default function Anlagen() {
                         title="HA-Geräte erkennen"
                       >
                         <Search className="h-4 w-4 text-amber-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          window.location.href = `/api/import/export/${anlage.id}/full`
+                        }}
+                        title="Export (JSON)"
+                      >
+                        <Download className="h-4 w-4 text-blue-500" />
                       </Button>
                       <Button
                         variant="ghost"

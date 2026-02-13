@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.6** | Stand: Februar 2026
+**Version 1.0.0-beta.8** | Stand: Februar 2026
 
 ---
 
@@ -673,6 +673,26 @@ Smart #1_km, Smart #1_Ladung_PV_kWh, Smart #1_Ladung_Netz_kWh
 3. Wähle die Datei aus
 4. Duplikate werden automatisch überschrieben
 
+#### Plausibilitätsprüfungen (NEU in beta.8)
+
+Der Import prüft deine Daten auf Konsistenz:
+
+**Fehler (Import wird abgebrochen):**
+- Negative Werte in kWh/km/€-Feldern
+- Legacy-Spalten (`PV_Erzeugung_kWh`) ohne passende PV-Module-Investitionen
+- Mismatch zwischen Legacy-Wert und Summe der individuellen Komponenten
+
+**Warnungen (Import wird fortgesetzt):**
+- Redundante Legacy-Spalten (gleiche Werte wie Komponenten)
+- Unplausible Wetterwerte (Sonnenstunden > 400h/Monat)
+
+#### JSON-Export für Support (NEU in beta.8)
+
+In der Anlagen-Übersicht findest du einen Download-Button für den vollständigen JSON-Export:
+- Enthält alle Anlage-Daten, Investitionen, Monatsdaten, Strompreise
+- Nützlich für Support-Anfragen oder Backup
+- Hierarchische Struktur mit allen verknüpften Daten
+
 ### 9.3 Demo-Daten
 
 Zum Ausprobieren ohne echte Daten:
@@ -783,6 +803,8 @@ rest:
 1. Template neu herunterladen (Spalten können sich ändern)
 2. Spaltentrennzeichen prüfen (Semikolon `;` oder Komma `,`)
 3. Dezimaltrennzeichen prüfen (Punkt `.` verwenden)
+4. Bei Legacy-Spalten-Fehlern: Verwende die individuellen Komponenten-Spalten statt `PV_Erzeugung_kWh`
+5. Prüfe ob negative Werte in den Daten sind (nicht erlaubt)
 
 ### Wetter-Daten nicht verfügbar
 

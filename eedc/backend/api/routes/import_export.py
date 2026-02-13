@@ -32,6 +32,7 @@ class ImportResult(BaseModel):
     importiert: int
     uebersprungen: int
     fehler: list[str]
+    warnungen: list[str] = []
 
 
 class DemoDataResult(BaseModel):
@@ -74,9 +75,19 @@ async def _import_investition_monatsdaten_v09(
 
     Returns:
         dict: Summen für Anlage-Monatsdaten (pv_sum, batterie_ladung_sum, batterie_entladung_sum)
+
+    Raises:
+        ValueError: Bei negativen Werten in kWh/km/€-Feldern
     """
     import logging
     logger = logging.getLogger(__name__)
+
+    def parse_float_positive(val: str, spaltenname: str):
+        """Wrapper für parse_float mit Negativ-Prüfung."""
+        result = parse_float(val)
+        if result is not None and result < 0:
+            raise ValueError(f"Spalte '{spaltenname}': Wert darf nicht negativ sein ({result})")
+        return result
 
     summen = {
         "pv_erzeugung_sum": 0.0,
@@ -164,7 +175,7 @@ async def _import_investition_monatsdaten_v09(
 
         # PV-Module
         if inv.typ == "pv-module" and suffix == "kWh":
-            pv_val = parse_float(value)
+            pv_val = parse_float_positive(value, col)
             if pv_val is not None:
                 field_key = "pv_erzeugung_kwh"
                 field_value = pv_val
@@ -173,25 +184,25 @@ async def _import_investition_monatsdaten_v09(
         # Speicher
         elif inv.typ == "speicher":
             if suffix == "Ladung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_kwh"
                     field_value = val
                     summen["batterie_ladung_sum"] += val
             elif suffix == "Entladung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "entladung_kwh"
                     field_value = val
                     summen["batterie_entladung_sum"] += val
             # Arbitrage-Felder
             elif suffix == "Netzladung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "speicher_ladung_netz_kwh"
                     field_value = val
             elif suffix == "Ladepreis_Cent":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "speicher_ladepreis_cent"
                     field_value = val
@@ -199,37 +210,37 @@ async def _import_investition_monatsdaten_v09(
         # E-Auto
         elif inv.typ == "e-auto":
             if suffix == "km":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "km_gefahren"
                     field_value = val
             elif suffix == "Verbrauch_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "verbrauch_kwh"
                     field_value = val
             elif suffix == "Ladung_PV_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_pv_kwh"
                     field_value = val
             elif suffix == "Ladung_Netz_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_netz_kwh"
                     field_value = val
             elif suffix == "Ladung_Extern_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_extern_kwh"
                     field_value = val
             elif suffix == "Ladung_Extern_Euro":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_extern_euro"
                     field_value = val
             elif suffix == "V2H_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "v2h_entladung_kwh"
                     field_value = val
@@ -237,12 +248,12 @@ async def _import_investition_monatsdaten_v09(
         # Wallbox
         elif inv.typ == "wallbox":
             if suffix == "Ladung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_kwh"
                     field_value = val
             elif suffix == "Ladevorgaenge":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladevorgaenge"
                     field_value = int(val)
@@ -250,17 +261,17 @@ async def _import_investition_monatsdaten_v09(
         # Wärmepumpe
         elif inv.typ == "waermepumpe":
             if suffix == "Strom_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "stromverbrauch_kwh"
                     field_value = val
             elif suffix == "Heizung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "heizenergie_kwh"
                     field_value = val
             elif suffix == "Warmwasser_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "warmwasser_kwh"
                     field_value = val
@@ -268,24 +279,24 @@ async def _import_investition_monatsdaten_v09(
         # Balkonkraftwerk
         elif inv.typ == "balkonkraftwerk":
             if suffix == "Erzeugung_kWh" or suffix == "kWh":  # kWh für Rückwärtskompatibilität
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "pv_erzeugung_kwh"
                     field_value = val
                     summen["pv_erzeugung_sum"] += val
             elif suffix == "Eigenverbrauch_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "eigenverbrauch_kwh"
                     field_value = val
             elif suffix == "Speicher_Ladung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "speicher_ladung_kwh"
                     field_value = val
                     summen["batterie_ladung_sum"] += val
             elif suffix == "Speicher_Entladung_kWh":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "speicher_entladung_kwh"
                     field_value = val
@@ -295,24 +306,24 @@ async def _import_investition_monatsdaten_v09(
         elif inv.typ == "sonstiges":
             kategorie = inv.parameter.get("kategorie", "erzeuger") if inv.parameter else "erzeuger"
             if suffix == "Erzeugung_kWh" and kategorie == "erzeuger":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "erzeugung_kwh"
                     field_value = val
                     summen["pv_erzeugung_sum"] += val  # Zur Gesamt-Erzeugung addieren
             elif suffix == "Verbrauch_kWh" and kategorie == "verbraucher":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "verbrauch_sonstig_kwh"
                     field_value = val
             elif suffix == "Ladung_kWh" and kategorie == "speicher":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "ladung_kwh"
                     field_value = val
                     summen["batterie_ladung_sum"] += val
             elif suffix == "Entladung_kWh" and kategorie == "speicher":
-                val = parse_float(value)
+                val = parse_float_positive(value, col)
                 if val is not None:
                     field_key = "entladung_kwh"
                     field_value = val
@@ -320,7 +331,7 @@ async def _import_investition_monatsdaten_v09(
 
         # Sonderkosten (für alle Investitionstypen)
         if suffix == "Sonderkosten_Euro":
-            val = parse_float(value)
+            val = parse_float_positive(value, col)
             if val is not None:
                 field_key = "sonderkosten_euro"
                 field_value = val
@@ -791,6 +802,11 @@ async def import_csv(
     importiert = 0
     uebersprungen = 0
     fehler = []
+    warnungen = []
+
+    # Prüfe ob PV-Module existieren (für Legacy-Validierung)
+    pv_module_vorhanden = any(inv.typ == "pv-module" for inv in investitionen)
+    speicher_vorhanden = any(inv.typ == "speicher" for inv in investitionen)
 
     for i, row in enumerate(reader, start=2):  # Zeile 2 (nach Header)
         try:
@@ -826,11 +842,28 @@ async def import_csv(
                 val = val.strip().replace(",", ".")
                 return float(val)
 
-            einspeisung = parse_float(row.get("Einspeisung_kWh", "")) or 0
-            netzbezug = parse_float(row.get("Netzbezug_kWh", "")) or 0
-            globalstrahlung = parse_float(row.get("Globalstrahlung_kWh_m2", ""))
-            sonnenstunden = parse_float(row.get("Sonnenstunden", ""))
+            def parse_float_positive(val: str, feldname: str) -> Optional[float]:
+                """Parst Float-Wert und prüft auf negative Werte."""
+                result = parse_float(val)
+                if result is not None and result < 0:
+                    raise ValueError(f"{feldname} darf nicht negativ sein ({result})")
+                return result
+
+            # Basis-Felder mit Negativ-Prüfung
+            einspeisung_raw = parse_float_positive(row.get("Einspeisung_kWh", ""), "Einspeisung_kWh")
+            netzbezug_raw = parse_float_positive(row.get("Netzbezug_kWh", ""), "Netzbezug_kWh")
+            einspeisung = einspeisung_raw or 0
+            netzbezug = netzbezug_raw or 0
+
+            globalstrahlung = parse_float_positive(row.get("Globalstrahlung_kWh_m2", ""), "Globalstrahlung")
+            sonnenstunden = parse_float_positive(row.get("Sonnenstunden", ""), "Sonnenstunden")
             notizen = row.get("Notizen", "").strip() or None
+
+            # Plausibilitäts-Warnungen für Basis-Felder
+            if sonnenstunden is not None and sonnenstunden > 400:
+                warnungen.append(f"Zeile {i}: Sonnenstunden ({sonnenstunden}) ungewöhnlich hoch (max ~400h/Monat)")
+            if globalstrahlung is not None and globalstrahlung > 250:
+                warnungen.append(f"Zeile {i}: Globalstrahlung ({globalstrahlung}) ungewöhnlich hoch")
 
             # v0.9.8: Wetterdaten automatisch abrufen wenn leer und Koordinaten vorhanden
             if auto_wetter and globalstrahlung is None and sonnenstunden is None:
@@ -858,29 +891,116 @@ async def import_csv(
                     db, row, parse_float, investitionen, jahr, monat, ueberschreiben
                 )
 
-            # PV-Erzeugung: Summe aus PV-Modulen (InvestitionMonatsdaten) ist primär
-            # LEGACY: PV_Erzeugung_kWh Spalte wird nur als Fallback akzeptiert
-            # Die Summe wird für Berechnungen (Direktverbrauch, Eigenverbrauch) benötigt
-            pv_erzeugung_explicit = parse_float(row.get("PV_Erzeugung_kWh", ""))
-            if summen["pv_erzeugung_sum"] > 0:
-                # Primär: Summe aus individuellen PV-Modul-Spalten
-                pv_erzeugung = summen["pv_erzeugung_sum"]
-            elif pv_erzeugung_explicit is not None:
-                # Fallback: Legacy-Spalte PV_Erzeugung_kWh (für alte CSV-Dateien)
-                pv_erzeugung = pv_erzeugung_explicit
-            else:
-                pv_erzeugung = None
+            # =================================================================
+            # LEGACY-SPALTEN VALIDIERUNG (v1.0.0-beta.8)
+            # =================================================================
+            # Legacy-Spalten werden NICHT mehr unterstützt wenn PV-Module/Speicher
+            # als Investitionen angelegt sind. Benutzer müssen individuelle Spalten
+            # verwenden (z.B. "Süddach_kWh" statt "PV_Erzeugung_kWh").
+            # =================================================================
 
-            # Batterie: NUR expliziter Wert aus Batterie_*_kWh Spalten
-            # WICHTIG: Summen aus Speicher-Investitionen werden NICHT in Legacy-Felder geschrieben!
-            # Die Daten sind bereits in InvestitionMonatsdaten gespeichert (v0.9.7+)
-            # Legacy-Felder nur bei expliziter Batterie_*_kWh Spalte befüllen (Rückwärtskompatibilität)
+            pv_erzeugung_explicit = parse_float(row.get("PV_Erzeugung_kWh", ""))
             batterie_ladung_explicit = parse_float(row.get("Batterie_Ladung_kWh", ""))
             batterie_entladung_explicit = parse_float(row.get("Batterie_Entladung_kWh", ""))
 
-            # Legacy-Felder nur bei explizitem Wert setzen
-            batterie_ladung = batterie_ladung_explicit  # None wenn nicht explizit angegeben
-            batterie_entladung = batterie_entladung_explicit  # None wenn nicht explizit angegeben
+            # --- PV-Erzeugung Validierung ---
+            pv_erzeugung = None
+            if summen["pv_erzeugung_sum"] > 0:
+                # Primär: Summe aus individuellen PV-Modul-Spalten
+                pv_erzeugung = summen["pv_erzeugung_sum"]
+
+                # Prüfe ob Legacy-Spalte auch vorhanden ist
+                if pv_erzeugung_explicit is not None:
+                    # Toleranz für Rundungsfehler (0.5 kWh)
+                    if abs(pv_erzeugung_explicit - pv_erzeugung) <= 0.5:
+                        # Werte stimmen überein - nur Warnung
+                        if f"Legacy-Spalte 'PV_Erzeugung_kWh' ist redundant" not in [w for w in warnungen]:
+                            warnungen.append(
+                                "Legacy-Spalte 'PV_Erzeugung_kWh' ist redundant und wird ignoriert. "
+                                "Verwende nur die individuellen PV-Modul-Spalten."
+                            )
+                    else:
+                        # Werte weichen ab - Fehler
+                        fehler.append(
+                            f"Zeile {i}: PV_Erzeugung_kWh ({pv_erzeugung_explicit:.1f}) weicht von "
+                            f"Summe der PV-Module ({pv_erzeugung:.1f}) ab. Bitte korrigieren oder "
+                            f"Legacy-Spalte entfernen."
+                        )
+                        continue
+
+            elif pv_erzeugung_explicit is not None:
+                # NUR Legacy-Spalte vorhanden
+                if pv_module_vorhanden:
+                    # Fehler: PV-Module existieren, aber keine individuellen Spalten
+                    fehler.append(
+                        f"Zeile {i}: Spalte 'PV_Erzeugung_kWh' wird nicht mehr unterstützt. "
+                        f"Bitte individuelle PV-Modul-Spalten verwenden (siehe CSV-Template)."
+                    )
+                    continue
+                else:
+                    # Keine PV-Module angelegt - Legacy akzeptieren mit Warnung
+                    pv_erzeugung = pv_erzeugung_explicit
+                    if "Keine PV-Module als Investitionen angelegt" not in [w for w in warnungen]:
+                        warnungen.append(
+                            "Keine PV-Module als Investitionen angelegt. "
+                            "Legacy-Spalte 'PV_Erzeugung_kWh' wird akzeptiert, aber Daten werden "
+                            "nicht den Komponenten zugeordnet."
+                        )
+
+            # --- Batterie Validierung ---
+            batterie_ladung = None
+            batterie_entladung = None
+
+            if summen["batterie_ladung_sum"] > 0 or summen["batterie_entladung_sum"] > 0:
+                # Speicher-Daten aus individuellen Spalten vorhanden
+
+                # Prüfe Legacy-Ladung
+                if batterie_ladung_explicit is not None:
+                    if abs(batterie_ladung_explicit - summen["batterie_ladung_sum"]) <= 0.5:
+                        if f"Legacy-Spalte 'Batterie_Ladung_kWh' ist redundant" not in [w for w in warnungen]:
+                            warnungen.append(
+                                "Legacy-Spalte 'Batterie_Ladung_kWh' ist redundant und wird ignoriert."
+                            )
+                    else:
+                        fehler.append(
+                            f"Zeile {i}: Batterie_Ladung_kWh ({batterie_ladung_explicit:.1f}) weicht von "
+                            f"Summe der Speicher ({summen['batterie_ladung_sum']:.1f}) ab."
+                        )
+                        continue
+
+                # Prüfe Legacy-Entladung
+                if batterie_entladung_explicit is not None:
+                    if abs(batterie_entladung_explicit - summen["batterie_entladung_sum"]) <= 0.5:
+                        if f"Legacy-Spalte 'Batterie_Entladung_kWh' ist redundant" not in [w for w in warnungen]:
+                            warnungen.append(
+                                "Legacy-Spalte 'Batterie_Entladung_kWh' ist redundant und wird ignoriert."
+                            )
+                    else:
+                        fehler.append(
+                            f"Zeile {i}: Batterie_Entladung_kWh ({batterie_entladung_explicit:.1f}) weicht von "
+                            f"Summe der Speicher ({summen['batterie_entladung_sum']:.1f}) ab."
+                        )
+                        continue
+
+            elif batterie_ladung_explicit is not None or batterie_entladung_explicit is not None:
+                # NUR Legacy-Spalten vorhanden
+                if speicher_vorhanden:
+                    # Fehler: Speicher existieren, aber keine individuellen Spalten
+                    fehler.append(
+                        f"Zeile {i}: Spalten 'Batterie_Ladung_kWh'/'Batterie_Entladung_kWh' werden "
+                        f"nicht mehr unterstützt. Bitte individuelle Speicher-Spalten verwenden."
+                    )
+                    continue
+                else:
+                    # Keine Speicher angelegt - Legacy akzeptieren mit Warnung
+                    batterie_ladung = batterie_ladung_explicit
+                    batterie_entladung = batterie_entladung_explicit
+                    if "Keine Speicher als Investitionen angelegt" not in [w for w in warnungen]:
+                        warnungen.append(
+                            "Keine Speicher als Investitionen angelegt. "
+                            "Legacy-Spalten 'Batterie_*_kWh' werden akzeptiert, aber Daten werden "
+                            "nicht den Komponenten zugeordnet."
+                        )
 
             # Für Berechnungen (Direktverbrauch, Eigenverbrauch) die Summen verwenden
             batterie_ladung_for_calc = batterie_ladung if batterie_ladung is not None else summen["batterie_ladung_sum"] if summen["batterie_ladung_sum"] > 0 else 0
@@ -956,7 +1076,8 @@ async def import_csv(
         erfolg=len(fehler) == 0,
         importiert=importiert,
         uebersprungen=uebersprungen,
-        fehler=fehler[:20]  # Max 20 Fehler anzeigen
+        fehler=fehler[:20],  # Max 20 Fehler anzeigen
+        warnungen=warnungen[:10]  # Max 10 Warnungen anzeigen
     )
 
 
@@ -1739,3 +1860,343 @@ async def delete_demo_data(db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"message": "Demo-Anlage und alle zugehörigen Daten gelöscht"}
+
+
+# =============================================================================
+# Vollständiger Anlagen-Export (JSON) für Support-Zwecke
+# =============================================================================
+
+from datetime import datetime, date
+from typing import List, Optional, Any
+from fastapi.responses import JSONResponse
+from backend.core.config import APP_VERSION
+
+
+class InvestitionMonatsdatenExport(BaseModel):
+    """Export-Schema für Investitions-Monatsdaten."""
+    jahr: int
+    monat: int
+    verbrauch_daten: Optional[dict] = None
+    einsparung_monat_euro: Optional[float] = None
+    co2_einsparung_kg: Optional[float] = None
+    sonderkosten_euro: Optional[float] = None
+    sonderkosten_notiz: Optional[str] = None
+
+
+class InvestitionExport(BaseModel):
+    """Export-Schema für Investitionen (hierarchisch mit Children)."""
+    typ: str
+    bezeichnung: str
+    anschaffungskosten_gesamt: Optional[float] = None
+    anschaffungskosten_alternativ: Optional[float] = None
+    betriebskosten_jahr: Optional[float] = None
+    anschaffungsdatum: Optional[date] = None
+    leistung_kwp: Optional[float] = None
+    ausrichtung: Optional[str] = None
+    neigung_grad: Optional[float] = None
+    ha_entity_id: Optional[str] = None
+    parameter: Optional[dict] = None
+    aktiv: bool = True
+    children: List["InvestitionExport"] = []
+    monatsdaten: List[InvestitionMonatsdatenExport] = []
+
+
+class StrompreisExport(BaseModel):
+    """Export-Schema für Strompreise."""
+    tarifname: Optional[str] = None
+    anbieter: Optional[str] = None
+    netzbezug_arbeitspreis_cent_kwh: float
+    einspeiseverguetung_cent_kwh: float
+    grundpreis_euro_monat: Optional[float] = None
+    gueltig_ab: date
+    gueltig_bis: Optional[date] = None
+    vertragsart: Optional[str] = None
+
+
+class MonatsdatenExport(BaseModel):
+    """Export-Schema für Monatsdaten (Zählerwerte)."""
+    jahr: int
+    monat: int
+    einspeisung_kwh: Optional[float] = None
+    netzbezug_kwh: Optional[float] = None
+    globalstrahlung_kwh_m2: Optional[float] = None
+    sonnenstunden: Optional[float] = None
+    datenquelle: Optional[str] = None
+    notizen: Optional[str] = None
+
+
+class PVGISMonatsprognoseExport(BaseModel):
+    """Export-Schema für PVGIS Monatsprognosen."""
+    monat: int
+    ertrag_kwh: float
+    einstrahlung_kwh_m2: Optional[float] = None
+    standardabweichung_kwh: Optional[float] = None
+
+
+class PVGISPrognoseExport(BaseModel):
+    """Export-Schema für PVGIS Prognosen."""
+    latitude: float
+    longitude: float
+    neigung_grad: float
+    ausrichtung_grad: float
+    jahresertrag_kwh: float
+    spezifischer_ertrag_kwh_kwp: Optional[float] = None
+    system_losses: Optional[float] = None
+    monatsprognosen: List[PVGISMonatsprognoseExport] = []
+
+
+class AnlageExport(BaseModel):
+    """Export-Schema für Anlagen-Stammdaten."""
+    anlagenname: str
+    leistung_kwp: float
+    installationsdatum: Optional[date] = None
+    standort_plz: Optional[str] = None
+    standort_ort: Optional[str] = None
+    standort_strasse: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    ausrichtung: Optional[str] = None
+    neigung_grad: Optional[float] = None
+    mastr_id: Optional[str] = None
+    versorger_daten: Optional[dict] = None
+
+
+class FullAnlageExport(BaseModel):
+    """Vollständiger Export einer Anlage mit allen verknüpften Daten."""
+    export_version: str = "1.0"
+    export_datum: datetime
+    eedc_version: str
+    anlage: AnlageExport
+    strompreise: List[StrompreisExport] = []
+    investitionen: List[InvestitionExport] = []
+    monatsdaten: List[MonatsdatenExport] = []
+    pvgis_prognosen: List[PVGISPrognoseExport] = []
+
+
+# Forward reference für rekursive Typen
+InvestitionExport.model_rebuild()
+
+
+@router.get("/export/{anlage_id}/full")
+async def export_anlage_full(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Exportiert eine vollständige Anlage mit allen Daten als JSON.
+
+    Enthält:
+    - Anlage-Stammdaten (inkl. mastr_id, versorger_daten)
+    - Alle Strompreise
+    - Alle Investitionen (hierarchisch mit Parent-Child)
+    - InvestitionMonatsdaten pro Komponente
+    - Monatsdaten (Zählerwerte)
+    - PVGIS-Prognosen mit Monatswerten
+
+    Verwendung: Support-Anfragen, Backup, Debugging
+
+    Returns:
+        JSON-Datei zum Download
+    """
+    # Anlage laden
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    # Anlage-Daten exportieren
+    anlage_export = AnlageExport(
+        anlagenname=anlage.anlagenname,
+        leistung_kwp=anlage.leistung_kwp,
+        installationsdatum=anlage.installationsdatum,
+        standort_plz=anlage.standort_plz,
+        standort_ort=anlage.standort_ort,
+        standort_strasse=anlage.standort_strasse,
+        latitude=anlage.latitude,
+        longitude=anlage.longitude,
+        ausrichtung=anlage.ausrichtung,
+        neigung_grad=anlage.neigung_grad,
+        mastr_id=anlage.mastr_id,
+        versorger_daten=anlage.versorger_daten,
+    )
+
+    # Strompreise laden
+    strompreise_result = await db.execute(
+        select(Strompreis)
+        .where(Strompreis.anlage_id == anlage_id)
+        .order_by(Strompreis.gueltig_ab)
+    )
+    strompreise = strompreise_result.scalars().all()
+
+    strompreise_export = [
+        StrompreisExport(
+            tarifname=sp.tarifname,
+            anbieter=sp.anbieter,
+            netzbezug_arbeitspreis_cent_kwh=sp.netzbezug_arbeitspreis_cent_kwh,
+            einspeiseverguetung_cent_kwh=sp.einspeiseverguetung_cent_kwh,
+            grundpreis_euro_monat=sp.grundpreis_euro_monat,
+            gueltig_ab=sp.gueltig_ab,
+            gueltig_bis=sp.gueltig_bis,
+            vertragsart=sp.vertragsart,
+        )
+        for sp in strompreise
+    ]
+
+    # Investitionen laden
+    investitionen_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .order_by(Investition.id)
+    )
+    investitionen = investitionen_result.scalars().all()
+
+    # InvestitionMonatsdaten laden (alle auf einmal für Performance)
+    inv_ids = [inv.id for inv in investitionen]
+    imd_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
+        .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    all_imd = imd_result.scalars().all()
+
+    # Gruppiere Monatsdaten nach Investition
+    imd_by_inv: dict[int, list] = {}
+    for imd in all_imd:
+        if imd.investition_id not in imd_by_inv:
+            imd_by_inv[imd.investition_id] = []
+        # sonderkosten sind im verbrauch_daten JSON gespeichert
+        vd = imd.verbrauch_daten or {}
+        imd_by_inv[imd.investition_id].append(
+            InvestitionMonatsdatenExport(
+                jahr=imd.jahr,
+                monat=imd.monat,
+                verbrauch_daten=imd.verbrauch_daten,
+                einsparung_monat_euro=imd.einsparung_monat_euro,
+                co2_einsparung_kg=imd.co2_einsparung_kg,
+                sonderkosten_euro=vd.get("sonderkosten_euro"),
+                sonderkosten_notiz=vd.get("sonderkosten_notiz"),
+            )
+        )
+
+    # Hierarchie aufbauen (Parent-Child)
+    inv_by_id = {inv.id: inv for inv in investitionen}
+    children_by_parent: dict[int, list] = {}
+
+    for inv in investitionen:
+        if inv.parent_investition_id:
+            if inv.parent_investition_id not in children_by_parent:
+                children_by_parent[inv.parent_investition_id] = []
+            children_by_parent[inv.parent_investition_id].append(inv)
+
+    def build_investition_export(inv: Investition) -> InvestitionExport:
+        """Baut ein InvestitionExport-Objekt rekursiv auf."""
+        children_export = []
+        if inv.id in children_by_parent:
+            for child in children_by_parent[inv.id]:
+                children_export.append(build_investition_export(child))
+
+        return InvestitionExport(
+            typ=inv.typ,
+            bezeichnung=inv.bezeichnung,
+            anschaffungskosten_gesamt=inv.anschaffungskosten_gesamt,
+            anschaffungskosten_alternativ=inv.anschaffungskosten_alternativ,
+            betriebskosten_jahr=inv.betriebskosten_jahr,
+            anschaffungsdatum=inv.anschaffungsdatum,
+            leistung_kwp=inv.leistung_kwp,
+            ausrichtung=inv.ausrichtung,
+            neigung_grad=inv.neigung_grad,
+            ha_entity_id=inv.ha_entity_id,
+            parameter=inv.parameter,
+            aktiv=inv.aktiv,
+            children=children_export,
+            monatsdaten=imd_by_inv.get(inv.id, []),
+        )
+
+    # Nur Top-Level Investitionen (ohne Parent)
+    investitionen_export = [
+        build_investition_export(inv)
+        for inv in investitionen
+        if inv.parent_investition_id is None
+    ]
+
+    # Monatsdaten laden
+    monatsdaten_result = await db.execute(
+        select(Monatsdaten)
+        .where(Monatsdaten.anlage_id == anlage_id)
+        .order_by(Monatsdaten.jahr, Monatsdaten.monat)
+    )
+    monatsdaten = monatsdaten_result.scalars().all()
+
+    monatsdaten_export = [
+        MonatsdatenExport(
+            jahr=md.jahr,
+            monat=md.monat,
+            einspeisung_kwh=md.einspeisung_kwh,
+            netzbezug_kwh=md.netzbezug_kwh,
+            globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
+            sonnenstunden=md.sonnenstunden,
+            datenquelle=md.datenquelle,
+            notizen=md.notizen,
+        )
+        for md in monatsdaten
+    ]
+
+    # PVGIS Prognosen laden
+    pvgis_result = await db.execute(
+        select(PVGISPrognoseModel)
+        .where(PVGISPrognoseModel.anlage_id == anlage_id)
+    )
+    pvgis_prognosen = pvgis_result.scalars().all()
+
+    pvgis_export = []
+    for prognose in pvgis_prognosen:
+        # Monatsprognosen laden
+        mp_result = await db.execute(
+            select(PVGISMonatsprognose)
+            .where(PVGISMonatsprognose.prognose_id == prognose.id)
+            .order_by(PVGISMonatsprognose.monat)
+        )
+        monatsprognosen = mp_result.scalars().all()
+
+        pvgis_export.append(
+            PVGISPrognoseExport(
+                latitude=prognose.latitude,
+                longitude=prognose.longitude,
+                neigung_grad=prognose.neigung_grad,
+                ausrichtung_grad=prognose.ausrichtung_grad,
+                jahresertrag_kwh=prognose.jahresertrag_kwh,
+                spezifischer_ertrag_kwh_kwp=prognose.spezifischer_ertrag_kwh_kwp,
+                system_losses=prognose.system_losses,
+                monatsprognosen=[
+                    PVGISMonatsprognoseExport(
+                        monat=mp.monat,
+                        ertrag_kwh=mp.ertrag_kwh,
+                        einstrahlung_kwh_m2=mp.einstrahlung_kwh_m2,
+                        standardabweichung_kwh=mp.standardabweichung_kwh,
+                    )
+                    for mp in monatsprognosen
+                ],
+            )
+        )
+
+    # Vollständigen Export erstellen
+    full_export = FullAnlageExport(
+        export_datum=datetime.now(),
+        eedc_version=APP_VERSION,
+        anlage=anlage_export,
+        strompreise=strompreise_export,
+        investitionen=investitionen_export,
+        monatsdaten=monatsdaten_export,
+        pvgis_prognosen=pvgis_export,
+    )
+
+    # JSON-Response mit Download-Header
+    filename = f"eedc_export_{anlage.anlagenname.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.json"
+
+    return JSONResponse(
+        content=full_export.model_dump(mode="json"),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )

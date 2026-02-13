@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.6 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.8 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -228,6 +228,7 @@ GET  /api/cockpit/uebersicht/{anlage_id}?jahr=2025   # Dashboard-Daten
 GET  /api/cockpit/pv-strings/{anlage_id}?jahr=2025   # SOLL-IST Vergleich
 POST /api/import/csv/{anlage_id}                     # CSV Import
 GET  /api/import/template/{anlage_id}                # CSV Template-Info
+GET  /api/import/export/{anlage_id}/full             # Vollständiger JSON-Export
 GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
 GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten
 
@@ -266,22 +267,24 @@ Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksich
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.6)
+## Letzte Änderungen (v1.0.0-beta.8)
 
-**Erweiterte Stammdaten für Anlagen**
-- `mastr_id`: MaStR-ID der Anlage mit Link zum Marktstammdatenregister
-- `versorger_daten`: JSON mit Versorgern (Strom, Gas, Wasser) und Zählern
-- Neue Komponente `VersorgerSection` für dynamische Verwaltung
+**Vollständiger JSON-Export**
+- Neuer Endpoint `GET /api/import/export/{anlage_id}/full`
+- Export mit hierarchischer Struktur: Anlage → Strompreise → Investitionen (Children) → Monatsdaten → PVGIS
+- Download-Button in Anlagen-Übersicht
 
-**Erweiterte Stammdaten für Investitionen**
-- Gerätedaten: Hersteller, Modell, Seriennummer, Garantie, typ-spezifische Felder
-- Ansprechpartner: Firma, Name, Telefon, E-Mail, Ticketsystem
-- Wartungsvertrag: Vertragsnummer, Anbieter, Gültigkeit, Leistungsumfang
-- Neue Komponente `InvestitionStammdatenSection` mit klappbaren Sektionen
+**CSV-Import: Plausibilitätsprüfungen**
+- Legacy-Spalten-Validierung (`PV_Erzeugung_kWh`, `Batterie_*_kWh`)
+- Fehler bei NUR Legacy UND vorhandenen PV-Modulen/Speichern
+- Fehler bei Mismatch Legacy vs. Summe Komponenten
+- Warnung wenn redundant (±0.5 kWh Toleranz)
+- Negative Werte werden blockiert
+- Plausibilitätswarnungen (Sonnenstunden > 400h, Globalstrahlung > 250)
 
-**Vererbungslogik**
-- PV-Module und DC-Speicher erben Ansprechpartner/Wartung vom Wechselrichter
-- Nur bei Children mit `parent_investition_id` aktiv
-- Wechselrichter selbst ist eigenständig (keine Vererbung)
+**Import-Feedback**
+- `ImportResult.warnungen` Feld hinzugefügt
+- Frontend zeigt Warnungen in amber/gelb an
+- Hilfetext zu Legacy-Spalten
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

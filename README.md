@@ -1,6 +1,6 @@
 # eedc - Energie Effizienz Data Center
 
-**Version 1.0.0-beta.6** | Standalone PV-Analyse mit optionaler Home Assistant Integration
+**Version 1.0.0-beta.8** | Standalone PV-Analyse mit optionaler Home Assistant Integration
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -33,6 +33,7 @@
 - **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
 - **SOLL-IST Vergleich** gegen PVGIS-Prognosen
 - **CSV/JSON Export** für externe Weiterverarbeitung
+- **Vollständiger JSON-Export** für Support und Backup (NEU)
 
 ### Aussichten (Prognosen)
 - **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
@@ -43,7 +44,7 @@
 
 ### Datenerfassung
 - **Manuelles Formular** mit dynamischen Komponenten-Feldern
-- **CSV-Import** mit personalisierten Spalten basierend auf deinen Investitionen
+- **CSV-Import** mit personalisierten Spalten und Plausibilitätsprüfung (NEU)
 - **Wetter-Auto-Fill** via Open-Meteo / PVGIS TMY
 - **Demo-Daten** zum Ausprobieren
 

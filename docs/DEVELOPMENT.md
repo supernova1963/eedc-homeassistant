@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 1.0.0-beta.6** | Stand: Februar 2026
+**Version 1.0.0-beta.8** | Stand: Februar 2026
 
 ---
 
@@ -285,16 +285,24 @@ Nach dem Start des Backends verfügbar unter:
 | **Aussichten** | `/api/aussichten/*` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
 | **Monatsdaten** | `/api/monatsdaten/*` | CRUD + Berechnungen |
 | **Investitionen** | `/api/investitionen/*` | Komponenten, ROI |
-| **Import/Export** | `/api/import/*` | CSV Import/Export |
+| **Import/Export** | `/api/import/*` | CSV Import/Export, JSON-Export |
 | **Wetter** | `/api/wetter/*` | Open-Meteo + PVGIS TMY |
 
-### Aussichten API (NEU)
+### Aussichten API
 
 ```
 GET /api/aussichten/kurzfristig/{anlage_id}     # 7-Tage Wetter-Prognose
 GET /api/aussichten/langfristig/{anlage_id}     # 12-Monats PVGIS-Prognose
 GET /api/aussichten/trend/{anlage_id}           # Historische Trend-Analyse
 GET /api/aussichten/finanzen/{anlage_id}        # Amortisations-Prognose
+```
+
+### Import/Export API (erweitert in beta.8)
+
+```
+POST /api/import/csv/{anlage_id}                # CSV Import (mit Plausibilitätsprüfung)
+GET  /api/import/export/{anlage_id}/full        # Vollständiger JSON-Export
+GET  /api/import/template/{anlage_id}           # CSV Template herunterladen
 ```
 
 ---

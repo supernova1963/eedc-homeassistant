@@ -156,6 +156,7 @@ export interface ImportResult {
   importiert: number
   uebersprungen: number
   fehler: string[]
+  warnungen?: string[]
 }
 
 // Home Assistant

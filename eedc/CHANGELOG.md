@@ -7,6 +7,37 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.8] - 2026-02-13
+
+### Hinzugefügt
+
+- **Vollständiger JSON-Export für Support/Backup**
+  - Neuer Endpoint `GET /api/import/export/{anlage_id}/full`
+  - Exportiert komplette Anlage mit allen verknüpften Daten
+  - Hierarchische Struktur: Anlage → Strompreise → Investitionen (mit Children) → Monatsdaten → PVGIS
+  - Download-Button in der Anlagen-Übersicht (neben Bearbeiten/Löschen)
+
+- **CSV-Import: Erweiterte Plausibilitätsprüfungen**
+  - **Legacy-Spalten-Validierung:**
+    - `PV_Erzeugung_kWh`, `Batterie_Ladung_kWh`, `Batterie_Entladung_kWh` sind Legacy
+    - Fehler wenn NUR Legacy-Spalte vorhanden UND PV-Module/Speicher als Investitionen existieren
+    - Fehler bei Mismatch zwischen Legacy-Wert und Summe der individuellen Komponenten
+    - Warnung wenn redundant (gleiche Werte ±0.5 kWh Toleranz)
+  - **Negative Werte blockiert:** Alle kWh/km/€-Felder müssen ≥ 0 sein
+  - **Plausibilitätswarnungen:** Sonnenstunden > 400h/Monat, Globalstrahlung > 250 kWh/m²
+
+- **Import-Feedback verbessert**
+  - Warnungen werden jetzt zusätzlich zu Fehlern angezeigt
+  - Unterschiedliche Farben: Grün (Erfolg), Gelb (mit Hinweisen), Rot (mit Fehlern)
+  - Hilfetext zu Legacy-Spalten im Import-Bereich
+
+### Geändert
+
+- **ImportResult Schema erweitert** um `warnungen: list[str]`
+- **Frontend Import.tsx** zeigt Warnungen in amber/gelber Farbe
+
+---
+
 ## [1.0.0-beta.7] - 2026-02-13
 
 ### Bugfixes

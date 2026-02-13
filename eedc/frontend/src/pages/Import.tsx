@@ -365,11 +365,15 @@ export default function Import() {
             <li>Wärmepumpe: <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Strom_kWh</code>, <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">[Name]_Heizung_kWh</code></li>
           </ul>
 
-          <p className="text-xs text-gray-500 dark:text-gray-500">
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">PV_Erzeugung_kWh</code> und{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Batterie_*_kWh</code> werden automatisch
-            aus den Investitions-Spalten berechnet, können aber auch manuell angegeben werden.
-          </p>
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg mt-2">
+            <p className="font-medium text-amber-800 dark:text-amber-200 mb-1">⚠️ Hinweis zu Legacy-Spalten</p>
+            <p className="text-amber-700 dark:text-amber-300 text-xs">
+              Die Spalten <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">PV_Erzeugung_kWh</code> und{' '}
+              <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">Batterie_*_kWh</code> werden nicht mehr
+              unterstützt, wenn PV-Module/Speicher als Investitionen angelegt sind. Verwende stattdessen die
+              individuellen Investitions-Spalten.
+            </p>
+          </div>
         </div>
       </Card>
     </div>
@@ -382,16 +386,30 @@ interface ImportResultCardProps {
 }
 
 function ImportResultCard({ result, onClose }: ImportResultCardProps) {
-  const isSuccess = result.erfolg && result.fehler.length === 0
+  const hasErrors = result.fehler.length > 0
+  const hasWarnings = result.warnungen && result.warnungen.length > 0
+
+  // Farbe basierend auf Status
+  const getColorClass = () => {
+    if (hasErrors) return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+    if (hasWarnings) return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+    return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+  }
+
+  const getTextColorClass = () => {
+    if (hasErrors) return 'text-red-800 dark:text-red-200'
+    if (hasWarnings) return 'text-yellow-800 dark:text-yellow-200'
+    return 'text-green-800 dark:text-green-200'
+  }
+
+  const getSubTextColorClass = () => {
+    if (hasErrors) return 'text-red-700 dark:text-red-300'
+    if (hasWarnings) return 'text-yellow-700 dark:text-yellow-300'
+    return 'text-green-700 dark:text-green-300'
+  }
 
   return (
-    <div className={`
-      relative p-4 rounded-lg border
-      ${isSuccess
-        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-      }
-    `}>
+    <div className={`relative p-4 rounded-lg border ${getColorClass()}`}>
       <button
         onClick={onClose}
         className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600"
@@ -400,29 +418,56 @@ function ImportResultCard({ result, onClose }: ImportResultCardProps) {
       </button>
 
       <div className="flex items-start gap-3">
-        {isSuccess ? (
-          <Check className="h-5 w-5 text-green-500 mt-0.5" />
-        ) : (
+        {hasErrors ? (
+          <X className="h-5 w-5 text-red-500 mt-0.5" />
+        ) : hasWarnings ? (
           <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+        ) : (
+          <Check className="h-5 w-5 text-green-500 mt-0.5" />
         )}
-        <div>
-          <h4 className={`font-medium ${isSuccess ? 'text-green-800 dark:text-green-200' : 'text-yellow-800 dark:text-yellow-200'}`}>
-            {isSuccess ? 'Import erfolgreich' : 'Import mit Warnungen'}
+        <div className="flex-1">
+          <h4 className={`font-medium ${getTextColorClass()}`}>
+            {hasErrors
+              ? 'Import mit Fehlern'
+              : hasWarnings
+                ? 'Import erfolgreich (mit Hinweisen)'
+                : 'Import erfolgreich'
+            }
           </h4>
-          <div className="text-sm mt-1 space-y-1">
-            <p className={isSuccess ? 'text-green-700 dark:text-green-300' : 'text-yellow-700 dark:text-yellow-300'}>
+          <div className="text-sm mt-1 space-y-2">
+            <p className={getSubTextColorClass()}>
               {result.importiert} Datensätze importiert
               {result.uebersprungen > 0 && `, ${result.uebersprungen} übersprungen`}
             </p>
-            {result.fehler.length > 0 && (
-              <ul className="list-disc list-inside text-yellow-700 dark:text-yellow-300">
-                {result.fehler.slice(0, 5).map((f, i) => (
-                  <li key={i}>{f}</li>
-                ))}
-                {result.fehler.length > 5 && (
-                  <li>... und {result.fehler.length - 5} weitere Fehler</li>
-                )}
-              </ul>
+
+            {/* Fehler anzeigen */}
+            {hasErrors && (
+              <div>
+                <p className="font-medium text-red-700 dark:text-red-300 mt-2">Fehler:</p>
+                <ul className="list-disc list-inside text-red-700 dark:text-red-300 ml-2">
+                  {result.fehler.slice(0, 5).map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                  {result.fehler.length > 5 && (
+                    <li>... und {result.fehler.length - 5} weitere Fehler</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Warnungen anzeigen */}
+            {hasWarnings && (
+              <div>
+                <p className="font-medium text-amber-700 dark:text-amber-300 mt-2">Hinweise:</p>
+                <ul className="list-disc list-inside text-amber-700 dark:text-amber-300 ml-2">
+                  {result.warnungen!.slice(0, 5).map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                  {result.warnungen!.length > 5 && (
+                    <li>... und {result.warnungen!.length - 5} weitere Hinweise</li>
+                  )}
+                </ul>
+              </div>
             )}
           </div>
         </div>
