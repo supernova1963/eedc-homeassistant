@@ -1736,5 +1736,6 @@ async def delete_demo_data(db: AsyncSession = Depends(get_db)):
 
     # Cascade Delete löscht alle verknüpften Daten
     await db.delete(anlage)
+    await db.commit()
 
     return {"message": "Demo-Anlage und alle zugehörigen Daten gelöscht"}

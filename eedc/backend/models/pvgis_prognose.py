@@ -66,8 +66,9 @@ class PVGISPrognose(Base):
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationship
-    anlage = relationship("Anlage", backref="pvgis_prognosen")
+    # Relationships
+    anlage = relationship("Anlage", back_populates="pvgis_prognosen")
+    monatsprognosen_detail = relationship("PVGISMonatsprognose", back_populates="prognose", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<PVGISPrognose(id={self.id}, anlage_id={self.anlage_id}, kwh={self.jahresertrag_kwh})>"
@@ -92,7 +93,7 @@ class PVGISMonatsprognose(Base):
     standardabweichung_kwh: Mapped[float] = mapped_column(Float, default=0)  # SD_m
 
     # Relationship
-    prognose = relationship("PVGISPrognose", backref="monatsprognosen_detail")
+    prognose = relationship("PVGISPrognose", back_populates="monatsprognosen_detail")
 
     def __repr__(self) -> str:
         return f"<PVGISMonatsprognose(prognose_id={self.prognose_id}, monat={self.monat}, kwh={self.ertrag_kwh})>"

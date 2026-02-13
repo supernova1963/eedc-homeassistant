@@ -6,6 +6,7 @@ SQLite Datenbank mit SQLAlchemy 2.0 (async).
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import event
 
 from backend.core.config import settings
 
@@ -16,6 +17,15 @@ engine = create_async_engine(
     echo=settings.log_level == "debug",  # SQL Logging nur im Debug-Modus
     future=True,
 )
+
+
+# SQLite Foreign Keys aktivieren (WICHTIG für CASCADE DELETE)
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """Aktiviert SQLite Foreign Key Constraints."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 # Session Factory
 async_session_maker = async_sessionmaker(
