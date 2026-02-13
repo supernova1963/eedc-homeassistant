@@ -35,12 +35,26 @@ eedc/run.sh                      → Echo-Statement
 ### Release-Checkliste
 ```bash
 # 1. Version in allen Dateien aktualisieren (siehe oben)
-# 2. CHANGELOG.md aktualisieren
-# 3. Git Tag erstellen und pushen
-git tag -a vX.Y.Z -m "Version X.Y.Z - Beschreibung"
-git push origin vX.Y.Z
 
-# 4. GitHub Release erstellen
+# 2. CHANGELOG.md aktualisieren - WICHTIG: BEIDE Dateien!
+#    - /CHANGELOG.md (Repository-Root)
+#    - /eedc/CHANGELOG.md (Home Assistant Add-on liest diese!)
+#    Am einfachsten: Root-Changelog pflegen, dann kopieren:
+cp CHANGELOG.md eedc/CHANGELOG.md
+
+# 3. Dokumentationen Version aktualisieren
+#    - CLAUDE.md, BENUTZERHANDBUCH.md, ARCHITEKTUR.md, DEVELOPMENT.md
+
+# 4. Frontend Build erstellen
+cd eedc/frontend && npm run build
+
+# 5. Git Commit, Tag erstellen und pushen
+git add -A
+git commit -m "feat: Version X.Y.Z - Beschreibung"
+git tag -a vX.Y.Z -m "Version X.Y.Z - Beschreibung"
+git push && git push origin vX.Y.Z
+
+# 6. GitHub Release erstellen
 gh release create vX.Y.Z \
   --title "vX.Y.Z - Titel" \
   --prerelease \  # nur für Beta/Alpha
@@ -48,6 +62,9 @@ gh release create vX.Y.Z \
 
 # Releases: https://github.com/supernova1963/eedc-homeassistant/releases
 ```
+
+> **WICHTIG:** Home Assistant Add-ons lesen das Changelog aus `eedc/CHANGELOG.md`,
+> nicht aus dem Repository-Root! Bei Releases immer beide Dateien synchron halten.
 
 ## Architektur-Prinzipien
 
@@ -198,20 +215,21 @@ Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksich
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.4)
+## Letzte Änderungen (v1.0.0-beta.5)
 
-**Monatsdaten-Seite: Aggregierte Darstellung**
-1. Neuer Endpoint `/api/monatsdaten/aggregiert/{anlage_id}` summiert alle Komponenten
-2. Spaltengruppen: Zählerwerte | Komponenten (PV, Speicher, WP, E-Auto, Wallbox) | Berechnungen
-3. Gruppierte Spaltenauswahl (toggle per Gruppe oder einzeln)
+**Aussichten (Prognosen) - Neues Modul mit 4 Tabs**
+1. **Kurzfristig**: 7-Tage Wetterprognose (Open-Meteo)
+2. **Langfristig**: 12-Monats PVGIS-Prognose mit Performance-Ratio
+3. **Trend**: Jahresvergleich, saisonale Muster, Degradationsberechnung
+4. **Finanzen**: Amortisations-Fortschritt mit Mehrkosten-Ansatz
 
-**BKW Eigenverbrauch**
-1. Neues Feld `eigenverbrauch_kwh` für Balkonkraftwerk
-2. Einspeisung = Erzeugung - Eigenverbrauch (automatisch)
-3. CSV-Spalte: `{BKW}_Eigenverbrauch_kWh`
+**Mehrkosten-Ansatz für ROI**
+- WP: Kosten minus Gasheizung (`alternativ_kosten_euro`)
+- E-Auto: Kosten minus Verbrenner (`alternativ_kosten_euro`)
+- PV-System: Volle Kosten
 
-**Demo-Daten bereinigt**
-- Keine Legacy-Felder mehr in Monatsdaten (pv_erzeugung, batterie_*)
-- Strikte Trennung: Monatsdaten = Zählerwerte, InvestitionMonatsdaten = Komponenten
+**ROI-Metriken klarer benannt**
+- Cockpit/Auswertung: `jahres_rendite_prozent`
+- Aussichten/Finanzen: `amortisations_fortschritt_prozent`
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.
