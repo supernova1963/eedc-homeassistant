@@ -33,6 +33,7 @@ export default function Investitionen() {
   const [error, setError] = useState<string | null>(null)
 
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
+  const currentAnlage = anlagen.find(a => a.id === anlageId) ?? null
   const { investitionen, loading, createInvestition, updateInvestition, deleteInvestition } = useInvestitionen(anlageId)
   const groupedByTyp = useInvestitionenByTyp(investitionen)
 
@@ -212,6 +213,7 @@ export default function Investitionen() {
             investition={editingInvestition}
             anlageId={anlageId}
             typ={selectedTyp}
+            anlage={currentAnlage}
             onSubmit={handleSubmit}
             onCancel={() => {
               setShowForm(false)

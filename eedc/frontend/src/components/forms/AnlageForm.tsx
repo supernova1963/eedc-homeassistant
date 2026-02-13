@@ -1,7 +1,8 @@
 import { useState, FormEvent } from 'react'
-import { Info } from 'lucide-react'
+import { Info, ExternalLink } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
-import type { Anlage, AnlageCreate } from '../../types'
+import VersorgerSection from './VersorgerSection'
+import type { Anlage, AnlageCreate, VersorgerDaten } from '../../types'
 
 interface AnlageFormProps {
   anlage?: Anlage | null
@@ -22,7 +23,12 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     standort_strasse: anlage?.standort_strasse || '',
     latitude: anlage?.latitude?.toString() || '',
     longitude: anlage?.longitude?.toString() || '',
+    mastr_id: anlage?.mastr_id || '',
   })
+
+  const [versorgerDaten, setVersorgerDaten] = useState<VersorgerDaten>(
+    anlage?.versorger_daten || {}
+  )
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -54,6 +60,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         standort_strasse: formData.standort_strasse || undefined,
         latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
         longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
+        mastr_id: formData.mastr_id || undefined,
+        versorger_daten: Object.keys(versorgerDaten).length > 0 ? versorgerDaten : undefined,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -170,6 +178,39 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
           />
         </div>
       </div>
+
+      {/* Erweiterte Stammdaten */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+          Erweiterte Stammdaten
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Input
+              label="MaStR-ID"
+              name="mastr_id"
+              value={formData.mastr_id}
+              onChange={handleChange}
+              placeholder="z.B. SEE123456789"
+              hint="Marktstammdatenregister-ID der Anlage"
+            />
+            {formData.mastr_id && (
+              <a
+                href={`https://www.marktstammdatenregister.de/MaStR/Einheit/Detail/IndexOeffentlich/${formData.mastr_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Im MaStR öffnen
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Versorger & Zähler */}
+      <VersorgerSection value={versorgerDaten} onChange={setVersorgerDaten} />
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

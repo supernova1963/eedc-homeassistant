@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.5** | Stand: Februar 2026
+**Version 1.0.0-beta.6** | Stand: Februar 2026
 
 ---
 
@@ -481,6 +481,13 @@ Bearbeite die Stammdaten deiner PV-Anlage:
 - Name, Adresse, Koordinaten
 - Ausrichtung und Neigung (für PVGIS-Prognosen)
 
+**Erweiterte Stammdaten (NEU in beta.6):**
+- **MaStR-ID**: Marktstammdatenregister-ID der Anlage mit direktem Link zum MaStR
+- **Versorger & Zähler**: Strom-, Gas- und Wasserversorger mit beliebig vielen Zählern
+  - Klicke auf "+ Strom-Versorger hinzufügen" etc.
+  - Erfasse Versorger-Name, Kundennummer, Portal-URL
+  - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
+
 ### 8.2 Strompreise
 
 Verwalte deine Stromtarife:
@@ -504,6 +511,29 @@ Alle Komponenten im Überblick:
 | Balkonkraftwerk | - | - |
 
 **Warnung**: PV-Module ohne Wechselrichter-Zuordnung zeigen ein Warnsymbol!
+
+#### Erweiterte Stammdaten (NEU in beta.6)
+
+Jede Investition kann zusätzlich mit detaillierten Stammdaten versehen werden:
+
+**Gerätedaten:**
+- Hersteller, Modell, Seriennummer
+- Garantie-Datum
+- MaStR-ID (nur für Wechselrichter)
+- Typ-spezifische Felder (z.B. Garantie-Zyklen für Speicher, Kennzeichen für E-Auto)
+
+**Ansprechpartner (klappbare Sektion):**
+- Firma, Name, Telefon, E-Mail
+- Ticketsystem/Support-Portal mit direktem Link
+- Kundennummer, Vertragsnummer
+
+**Wartungsvertrag (klappbare Sektion):**
+- Vertragsnummer, Anbieter
+- Gültig bis, Kündigungsfrist
+- Leistungsumfang
+
+**Vererbung für PV-System:**
+PV-Module und DC-Speicher (mit Parent = Wechselrichter) erben automatisch Ansprechpartner und Wartungsvertrag vom Wechselrichter. Leere Felder zeigen "(erbt von Wechselrichter)". Nur bei Abweichung ausfüllen.
 
 #### Typ-spezifische Parameter
 

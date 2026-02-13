@@ -1,10 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { Button, Input, Alert } from '../ui'
-import type { Investition, InvestitionTyp } from '../../types'
+import type { Investition, InvestitionTyp, Anlage } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
 import { haApi, investitionenApi } from '../../api'
 import type { HASensor } from '../../api'
 import { AlertCircle } from 'lucide-react'
+import InvestitionStammdatenSection from './InvestitionStammdatenSection'
 
 // Parent-Kind Beziehungen (analog zu useSetupWizard.ts)
 const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
@@ -21,6 +22,7 @@ interface InvestitionFormProps {
   investition?: Investition | null
   anlageId: number
   typ: InvestitionTyp
+  anlage?: Anlage | null
   onSubmit: (data: InvestitionCreate | InvestitionUpdate) => Promise<void>
   onCancel: () => void
 }
@@ -49,7 +51,7 @@ const alternativkostenHints: Record<InvestitionTyp, string> = {
   'sonstiges': 'Kosten einer Alternative (falls vorhanden)',
 }
 
-export default function InvestitionForm({ investition, anlageId, typ, onSubmit, onCancel }: InvestitionFormProps) {
+export default function InvestitionForm({ investition, anlageId, typ, anlage, onSubmit, onCancel }: InvestitionFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [stringSensors, setStringSensors] = useState<HASensor[]>([])
@@ -101,10 +103,49 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
   // Typ-spezifische Parameter
   const params = investition?.parameter || {}
 
+  // Gemeinsame Stammdaten-Felder (für alle Typen)
+  const getStammdatenFields = (): Record<string, string | boolean> => ({
+    // Gerätedaten
+    stamm_hersteller: params.stamm_hersteller?.toString() || '',
+    stamm_modell: params.stamm_modell?.toString() || '',
+    stamm_seriennummer: params.stamm_seriennummer?.toString() || '',
+    stamm_garantie_bis: params.stamm_garantie_bis?.toString() || '',
+    stamm_notizen: params.stamm_notizen?.toString() || '',
+    // Typ-spezifisch (werden nur bei relevantem Typ angezeigt)
+    stamm_mastr_id: params.stamm_mastr_id?.toString() || '',
+    stamm_garantie_zyklen: params.stamm_garantie_zyklen?.toString() || '',
+    stamm_garantie_leistung_prozent: params.stamm_garantie_leistung_prozent?.toString() || '',
+    stamm_kennzeichen: params.stamm_kennzeichen?.toString() || '',
+    stamm_fahrgestellnummer: params.stamm_fahrgestellnummer?.toString() || '',
+    stamm_erstzulassung: params.stamm_erstzulassung?.toString() || '',
+    stamm_garantie_batterie_km: params.stamm_garantie_batterie_km?.toString() || '',
+    stamm_foerderung_aktenzeichen: params.stamm_foerderung_aktenzeichen?.toString() || '',
+    stamm_foerderung_betrag_euro: params.stamm_foerderung_betrag_euro?.toString() || '',
+    stamm_anmeldung_netzbetreiber: params.stamm_anmeldung_netzbetreiber?.toString() || '',
+    stamm_anmeldung_marktstammdaten: params.stamm_anmeldung_marktstammdaten?.toString() || '',
+    // Ansprechpartner
+    ansprechpartner_firma: params.ansprechpartner_firma?.toString() || '',
+    ansprechpartner_name: params.ansprechpartner_name?.toString() || '',
+    ansprechpartner_telefon: params.ansprechpartner_telefon?.toString() || '',
+    ansprechpartner_email: params.ansprechpartner_email?.toString() || '',
+    ansprechpartner_ticketsystem: params.ansprechpartner_ticketsystem?.toString() || '',
+    ansprechpartner_kundennummer: params.ansprechpartner_kundennummer?.toString() || '',
+    ansprechpartner_vertragsnummer: params.ansprechpartner_vertragsnummer?.toString() || '',
+    ansprechpartner_notizen: params.ansprechpartner_notizen?.toString() || '',
+    // Wartungsvertrag
+    wartung_vertragsnummer: params.wartung_vertragsnummer?.toString() || '',
+    wartung_anbieter: params.wartung_anbieter?.toString() || '',
+    wartung_gueltig_bis: params.wartung_gueltig_bis?.toString() || '',
+    wartung_kuendigungsfrist: params.wartung_kuendigungsfrist?.toString() || '',
+    wartung_leistungsumfang: params.wartung_leistungsumfang?.toString() || '',
+  })
+
   const getInitialParamData = (): Record<string, string | boolean> => {
+    const stammdaten = getStammdatenFields()
     switch (typ) {
       case 'e-auto':
         return {
+          ...stammdaten,
           batteriekapazitaet_kwh: params.batteriekapazitaet_kwh?.toString() || '',
           verbrauch_kwh_100km: params.verbrauch_kwh_100km?.toString() || '18',
           jahresfahrleistung_km: params.jahresfahrleistung_km?.toString() || '15000',
@@ -116,6 +157,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         }
       case 'speicher':
         return {
+          ...stammdaten,
           kapazitaet_kwh: params.kapazitaet_kwh?.toString() || '',
           nutzbare_kapazitaet_kwh: params.nutzbare_kapazitaet_kwh?.toString() || '',
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '',
@@ -125,6 +167,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         }
       case 'waermepumpe':
         return {
+          ...stammdaten,
           leistung_kw: params.leistung_kw?.toString() || '',
           // Modus-Auswahl: gesamt_jaz (Standard) oder getrennte_cops
           effizienz_modus: params.effizienz_modus?.toString() || 'gesamt_jaz',
@@ -144,24 +187,28 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         }
       case 'wallbox':
         return {
+          ...stammdaten,
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '11',
           bidirektional: (params.bidirektional as boolean) ?? false,
           pv_optimiert: (params.pv_optimiert as boolean) ?? true,
         }
       case 'wechselrichter':
         return {
+          ...stammdaten,
           max_leistung_kw: params.max_leistung_kw?.toString() || '',
           wirkungsgrad_prozent: params.wirkungsgrad_prozent?.toString() || '97',
           hybrid: (params.hybrid as boolean) ?? false,
         }
       case 'pv-module':
         return {
+          ...stammdaten,
           anzahl_module: params.anzahl_module?.toString() || '',
           modul_leistung_wp: params.modul_leistung_wp?.toString() || '',
           modul_typ: params.modul_typ?.toString() || '',
         }
       case 'balkonkraftwerk':
         return {
+          ...stammdaten,
           leistung_wp: params.leistung_wp?.toString() || '',
           anzahl: params.anzahl?.toString() || '2',
           ausrichtung: params.ausrichtung?.toString() || 'Süd',
@@ -171,11 +218,12 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         }
       case 'sonstiges':
         return {
+          ...stammdaten,
           kategorie: params.kategorie?.toString() || 'erzeuger',
           beschreibung: params.beschreibung?.toString() || '',
         }
       default:
-        return {}
+        return stammdaten
     }
   }
 
@@ -475,6 +523,15 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
 
       {/* Typ-spezifische Parameter */}
       <TypSpecificFields typ={typ} paramData={paramData} onChange={handleChange} />
+
+      {/* Erweiterte Stammdaten (Gerätedaten, Ansprechpartner, Wartung) */}
+      <InvestitionStammdatenSection
+        typ={typ}
+        paramData={paramData}
+        onChange={handleChange}
+        anlage={anlage}
+        hasParent={!!formData.parent_investition_id}
+      />
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

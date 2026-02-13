@@ -1,6 +1,6 @@
 # eedc - Energie Effizienz Data Center
 
-**Version 1.0.0-beta.4** | Standalone PV-Analyse mit optionaler Home Assistant Integration
+**Version 1.0.0-beta.6** | Standalone PV-Analyse mit optionaler Home Assistant Integration
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -51,6 +51,12 @@
 - **Parent-Child Beziehungen**: PV-Module → Wechselrichter, DC-Speicher → Hybrid-WR
 - **Typ-spezifische Parameter**: V2H, Arbitrage, kWp, Ausrichtung, Neigung
 - **ROI-Berechnung** pro Komponente und aggregiert
+- **Erweiterte Stammdaten**: Gerätedaten, Ansprechpartner, Wartungsverträge
+
+### Anlagen-Verwaltung
+- **MaStR-ID** mit direktem Link zum Marktstammdatenregister
+- **Versorger & Zähler**: Strom, Gas, Wasser mit beliebig vielen Zählern
+- **Klappbare Sektionen** für übersichtliche Formulare
 
 ### Optionale Home Assistant Integration
 - **MQTT Discovery** für native HA-Sensoren
@@ -192,6 +198,7 @@ Bei Nutzung mit Home Assistant können diese Geräte automatisch erkannt werden:
 - [x] Wetter-API Integration (Open-Meteo)
 - [x] MQTT Export zu Home Assistant
 - [x] **Aussichten** mit 4 Prognose-Tabs (Kurzfristig, Langfristig, Trend, Finanzen)
+- [x] **Erweiterte Stammdaten** für Anlagen und Investitionen
 - [ ] PDF-Export
 - [ ] KI-gestützte Insights
 

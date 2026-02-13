@@ -2,6 +2,28 @@
  * EEDC TypeScript Type Definitions
  */
 
+// Versorger & Zähler Typen
+export interface Zaehler {
+  bezeichnung: string
+  nummer: string
+  notizen?: string
+}
+
+export interface Versorger {
+  name: string
+  kundennummer: string
+  portal_url?: string
+  notizen?: string
+  zaehler: Zaehler[]
+}
+
+export interface VersorgerDaten {
+  strom?: Versorger
+  gas?: Versorger
+  wasser?: Versorger
+  [key: string]: Versorger | undefined  // Für weitere Versorgertypen
+}
+
 // Anlage
 export interface Anlage {
   id: number
@@ -22,6 +44,9 @@ export interface Anlage {
   ha_sensor_netzbezug?: string
   ha_sensor_batterie_ladung?: string
   ha_sensor_batterie_entladung?: string
+  // Erweiterte Stammdaten
+  mastr_id?: string
+  versorger_daten?: VersorgerDaten
 }
 
 // Sensor-Konfiguration

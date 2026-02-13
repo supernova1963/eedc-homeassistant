@@ -5,8 +5,8 @@ Repräsentiert eine PV-Anlage mit Stammdaten.
 """
 
 from datetime import date, datetime
-from typing import Optional
-from sqlalchemy import String, Float, Date, DateTime
+from typing import Optional, Any
+from sqlalchemy import String, Float, Date, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
@@ -60,6 +60,13 @@ class Anlage(Base):
     ha_sensor_netzbezug: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     ha_sensor_batterie_ladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     ha_sensor_batterie_entladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # Erweiterte Stammdaten
+    mastr_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # MaStR-ID der Anlage
+
+    # Versorger und Zähler (JSON-Struktur)
+    # Struktur: {"strom": {"name": "...", "kundennummer": "...", "portal_url": "...", "notizen": "", "zaehler": [...]}, ...}
+    versorger_daten: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -7,6 +7,49 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.6] - 2026-02-13
+
+### Hinzugefügt
+
+- **Erweiterte Stammdaten für Anlagen**
+  - MaStR-ID (Marktstammdatenregister-ID) mit direktem Link zum MaStR
+  - Versorger & Zähler als JSON-Struktur (Strom, Gas, Wasser)
+  - Beliebig viele Zähler pro Versorger mit Bezeichnung und Nummer
+  - Neue Komponente `VersorgerSection` für dynamische Verwaltung
+
+- **Erweiterte Stammdaten für Investitionen**
+  - **Gerätedaten:** Hersteller, Modell, Seriennummer, Garantie, MaStR-ID (nur WR)
+  - **Ansprechpartner:** Firma, Name, Telefon, E-Mail, Ticketsystem, Kundennummer, Vertragsnummer
+  - **Wartungsvertrag:** Vertragsnummer, Anbieter, Gültig bis, Kündigungsfrist, Leistungsumfang
+  - Typ-spezifische Zusatzfelder (Garantie-Zyklen für Speicher, Kennzeichen für E-Auto, etc.)
+  - Neue Komponente `InvestitionStammdatenSection` mit klappbaren Sektionen
+
+- **Vererbungslogik für PV-System**
+  - PV-Module und DC-Speicher erben Ansprechpartner/Wartung vom Wechselrichter
+  - Hinweis "(erbt von Wechselrichter)" bei leeren Feldern
+  - Nur bei Children mit `parent_investition_id` aktiv
+
+### Geändert
+
+- **Anlage-Datenmodell erweitert**
+  - `mastr_id: Optional[str]` - MaStR-ID der Anlage
+  - `versorger_daten: Optional[dict]` - JSON mit Versorgern und Zählern
+
+- **Investition.parameter JSON erweitert**
+  - Neue Felder: `stamm_*`, `ansprechpartner_*`, `wartung_*`
+  - Alle Stammdaten im bestehenden `parameter` JSON gespeichert
+
+### Dokumentation
+
+- CHANGELOG.md: Stammdaten-Erweiterung dokumentiert
+- README.md: Version aktualisiert
+- CLAUDE.md: Datenstrukturen für Versorger/Investition-Stammdaten
+- ARCHITEKTUR.md: JSON-Strukturen dokumentiert
+- BENUTZERHANDBUCH.md: Neue Formularsektionen erklärt
+- DEVELOPMENT.md: DB-Migration dokumentiert
+
+---
+
 ## [1.0.0-beta.5] - 2026-02-13
 
 ### Hinzugefügt

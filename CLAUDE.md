@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.5 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.6 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -170,6 +170,57 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
 { "effizienz_modus": "getrennte_cops", "cop_heizung": 3.9, "cop_warmwasser": 3.0, "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000 }
 ```
 
+### Anlage.versorger_daten (JSON) - NEU in beta.6
+```json
+{
+  "strom": {
+    "name": "Stadtwerke München",
+    "kundennummer": "12345678",
+    "portal_url": "https://kundenportal.swm.de",
+    "notizen": "",
+    "zaehler": [
+      {"bezeichnung": "Einspeisung", "nummer": "1EMH0012345678", "notizen": ""},
+      {"bezeichnung": "Bezug", "nummer": "1EMH0087654321", "notizen": ""}
+    ]
+  },
+  "gas": { "name": "...", "kundennummer": "...", "zaehler": [...] },
+  "wasser": { "name": "...", "kundennummer": "...", "zaehler": [...] }
+}
+```
+
+### Investition.parameter: Stammdaten-Felder (NEU in beta.6)
+```json
+{
+  // Bestehende technische Parameter...
+
+  // Gerätedaten
+  "stamm_hersteller": "Fronius",
+  "stamm_modell": "Symo GEN24 10.0",
+  "stamm_seriennummer": "12345678",
+  "stamm_garantie_bis": "2032-06-15",
+  "stamm_mastr_id": "SEE123456789",  // Nur Wechselrichter
+  "stamm_notizen": "",
+
+  // Ansprechpartner
+  "ansprechpartner_firma": "Solar Mustermann GmbH",
+  "ansprechpartner_name": "Max Mustermann",
+  "ansprechpartner_telefon": "+49 123 456789",
+  "ansprechpartner_email": "service@solar-mustermann.de",
+  "ansprechpartner_ticketsystem": "https://portal.solar-mustermann.de",
+  "ansprechpartner_kundennummer": "K-12345",
+  "ansprechpartner_vertragsnummer": "V-2024-001",
+
+  // Wartungsvertrag
+  "wartung_vertragsnummer": "WV-2024-001",
+  "wartung_anbieter": "Solar Mustermann GmbH",
+  "wartung_gueltig_bis": "2026-12-31",
+  "wartung_kuendigungsfrist": "3 Monate",
+  "wartung_leistungsumfang": "Jährliche Inspektion, Reinigung"
+}
+```
+
+**Vererbung:** PV-Module und DC-Speicher (mit `parent_investition_id`) erben Ansprechpartner/Wartung vom Wechselrichter. Leere Felder zeigen "(erbt von Wechselrichter)".
+
 ## API Endpoints (häufig verwendet)
 
 ```
@@ -215,21 +266,22 @@ Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksich
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.5)
+## Letzte Änderungen (v1.0.0-beta.6)
 
-**Aussichten (Prognosen) - Neues Modul mit 4 Tabs**
-1. **Kurzfristig**: 7-Tage Wetterprognose (Open-Meteo)
-2. **Langfristig**: 12-Monats PVGIS-Prognose mit Performance-Ratio
-3. **Trend**: Jahresvergleich, saisonale Muster, Degradationsberechnung
-4. **Finanzen**: Amortisations-Fortschritt mit Mehrkosten-Ansatz
+**Erweiterte Stammdaten für Anlagen**
+- `mastr_id`: MaStR-ID der Anlage mit Link zum Marktstammdatenregister
+- `versorger_daten`: JSON mit Versorgern (Strom, Gas, Wasser) und Zählern
+- Neue Komponente `VersorgerSection` für dynamische Verwaltung
 
-**Mehrkosten-Ansatz für ROI**
-- WP: Kosten minus Gasheizung (`alternativ_kosten_euro`)
-- E-Auto: Kosten minus Verbrenner (`alternativ_kosten_euro`)
-- PV-System: Volle Kosten
+**Erweiterte Stammdaten für Investitionen**
+- Gerätedaten: Hersteller, Modell, Seriennummer, Garantie, typ-spezifische Felder
+- Ansprechpartner: Firma, Name, Telefon, E-Mail, Ticketsystem
+- Wartungsvertrag: Vertragsnummer, Anbieter, Gültigkeit, Leistungsumfang
+- Neue Komponente `InvestitionStammdatenSection` mit klappbaren Sektionen
 
-**ROI-Metriken klarer benannt**
-- Cockpit/Auswertung: `jahres_rendite_prozent`
-- Aussichten/Finanzen: `amortisations_fortschritt_prozent`
+**Vererbungslogik**
+- PV-Module und DC-Speicher erben Ansprechpartner/Wartung vom Wechselrichter
+- Nur bei Children mit `parent_investition_id` aktiv
+- Wechselrichter selbst ist eigenständig (keine Vererbung)
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

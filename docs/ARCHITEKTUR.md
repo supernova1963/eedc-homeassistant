@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.5** | Stand: Februar 2026
+**Version 1.0.0-beta.6** | Stand: Februar 2026
 
 ---
 
@@ -230,6 +230,8 @@ eedc-homeassistant/
 | ausrichtung | VARCHAR | Himmelsrichtung |
 | neigung_grad | FLOAT | Dachneigung |
 | leistung_kwp | FLOAT | Anlagenleistung |
+| mastr_id | VARCHAR(20) | MaStR-ID der Anlage (NEU) |
+| versorger_daten | JSON | Versorger & Zähler (NEU) |
 | created_at | DATETIME | Erstellungsdatum |
 
 #### Monatsdaten
@@ -284,6 +286,24 @@ eedc-homeassistant/
 | `wallbox` | - |
 | `balkonkraftwerk` | leistung_wp, anzahl, hat_speicher, speicher_kapazitaet_wh |
 | `sonstiges` | kategorie (erzeuger/verbraucher/speicher), beschreibung |
+
+**Stammdaten-Felder (NEU in beta.6):**
+
+Alle Investitionstypen können zusätzlich folgende Felder im `parameter` JSON enthalten:
+
+| Gruppe | Felder |
+|--------|--------|
+| **Gerätedaten** | `stamm_hersteller`, `stamm_modell`, `stamm_seriennummer`, `stamm_garantie_bis`, `stamm_notizen` |
+| **Ansprechpartner** | `ansprechpartner_firma`, `ansprechpartner_name`, `ansprechpartner_telefon`, `ansprechpartner_email`, `ansprechpartner_ticketsystem`, `ansprechpartner_kundennummer`, `ansprechpartner_vertragsnummer` |
+| **Wartung** | `wartung_vertragsnummer`, `wartung_anbieter`, `wartung_gueltig_bis`, `wartung_kuendigungsfrist`, `wartung_leistungsumfang` |
+
+Typ-spezifische Zusatzfelder:
+- **Wechselrichter:** `stamm_mastr_id`
+- **Speicher:** `stamm_garantie_zyklen`
+- **PV-Module:** `stamm_garantie_leistung_prozent`
+- **E-Auto:** `stamm_kennzeichen`, `stamm_fahrgestellnummer`, `stamm_erstzulassung`, `stamm_garantie_batterie_km`, `stamm_foerderung_*`
+- **Wärmepumpe:** `stamm_foerderung_aktenzeichen`, `stamm_foerderung_betrag_euro`
+- **Balkonkraftwerk:** `stamm_anmeldung_netzbetreiber`, `stamm_anmeldung_marktstammdaten`
 
 #### InvestitionMonatsdaten
 
@@ -344,6 +364,33 @@ eedc-homeassistant/
   "eigenverbrauch_kwh": 40.0,
   "speicher_ladung_kwh": 10.0,
   "speicher_entladung_kwh": 8.0
+}
+```
+
+**versorger_daten Struktur (Anlage, NEU in beta.6):**
+
+```json
+{
+  "strom": {
+    "name": "Stadtwerke München",
+    "kundennummer": "12345678",
+    "portal_url": "https://kundenportal.swm.de",
+    "notizen": "",
+    "zaehler": [
+      {"bezeichnung": "Einspeisung", "nummer": "1EMH0012345678", "notizen": ""},
+      {"bezeichnung": "Bezug", "nummer": "1EMH0087654321", "notizen": "Zweirichtungszähler"}
+    ]
+  },
+  "gas": {
+    "name": "Stadtwerke München",
+    "kundennummer": "G-98765",
+    "zaehler": [{"bezeichnung": "Erdgas", "nummer": "G12345678", "notizen": ""}]
+  },
+  "wasser": {
+    "name": "Wasserwerke XY",
+    "kundennummer": "W-11111",
+    "zaehler": [{"bezeichnung": "Kaltwasser", "nummer": "WZ-123", "notizen": ""}]
+  }
 }
 ```
 

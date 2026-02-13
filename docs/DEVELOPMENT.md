@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 1.0.0-beta.5** | Stand: Februar 2026
+**Version 1.0.0-beta.6** | Stand: Februar 2026
 
 ---
 
@@ -238,6 +238,18 @@ eedc-homeassistant/
 Für Schema-Änderungen:
 1. Model in `backend/models/` anpassen
 2. Backend neu starten (Schema wird automatisch aktualisiert)
+
+**Hinweis für bestehende Installationen (z.B. nach Update auf beta.6):**
+
+SQLAlchemy fügt neue Spalten nicht automatisch zu bestehenden Tabellen hinzu. Bei neuen Spalten manuell ausführen:
+
+```sql
+-- Beispiel für beta.6 Stammdaten-Erweiterung:
+ALTER TABLE anlagen ADD COLUMN mastr_id VARCHAR(20);
+ALTER TABLE anlagen ADD COLUMN versorger_daten JSON;
+```
+
+Die `parameter` JSON-Spalte in `investitionen` wird automatisch erweitert (kein ALTER TABLE nötig).
 
 ---
 

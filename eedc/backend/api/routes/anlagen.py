@@ -4,7 +4,7 @@ Anlagen API Routes
 CRUD Endpoints für PV-Anlagen.
 """
 
-from typing import Optional
+from typing import Optional, Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -39,6 +39,9 @@ class AnlageBase(BaseModel):
     ha_sensor_netzbezug: Optional[str] = Field(None, max_length=255)
     ha_sensor_batterie_ladung: Optional[str] = Field(None, max_length=255)
     ha_sensor_batterie_entladung: Optional[str] = Field(None, max_length=255)
+    # Erweiterte Stammdaten
+    mastr_id: Optional[str] = Field(None, max_length=20, description="Marktstammdatenregister-ID der Anlage")
+    versorger_daten: Optional[dict[str, Any]] = Field(None, description="Versorger und Zähler als JSON")
 
 
 class AnlageCreate(AnlageBase):
@@ -64,6 +67,8 @@ class AnlageUpdate(BaseModel):
     ha_sensor_netzbezug: Optional[str] = Field(None, max_length=255)
     ha_sensor_batterie_ladung: Optional[str] = Field(None, max_length=255)
     ha_sensor_batterie_entladung: Optional[str] = Field(None, max_length=255)
+    mastr_id: Optional[str] = Field(None, max_length=20)
+    versorger_daten: Optional[dict[str, Any]] = None
 
 
 class SensorConfigUpdate(BaseModel):
