@@ -5,6 +5,7 @@ import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '.
 import AnlageForm from '../components/forms/AnlageForm'
 import { DiscoveryDialog } from '../components/discovery'
 import { useAnlagen } from '../hooks'
+import { importApi } from '../api/import'
 import type { Anlage, AnlageCreate } from '../types'
 
 export default function Anlagen() {
@@ -125,7 +126,7 @@ export default function Anlagen() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          window.location.href = `/api/import/export/${anlage.id}/full`
+                          window.location.href = importApi.getFullExportUrl(anlage.id)
                         }}
                         title="Export (JSON)"
                       >

@@ -5,14 +5,15 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown } from 'lucide-react'
+import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
-// Haupttabs
-const mainTabs = [
-  { name: 'Cockpit', basePath: '/cockpit' },
-  { name: 'Auswertungen', basePath: '/auswertungen' },
-  { name: 'Aussichten', basePath: '/aussichten' },
+// Haupttabs mit Icons
+const mainTabs: { name: string; basePath: string; icon: LucideIcon }[] = [
+  { name: 'Cockpit', basePath: '/cockpit', icon: LayoutDashboard },
+  { name: 'Auswertungen', basePath: '/auswertungen', icon: BarChart3 },
+  { name: 'Aussichten', basePath: '/aussichten', icon: TrendingUp },
 ]
 
 // Einstellungen-Menü Struktur
@@ -112,21 +113,25 @@ export default function TopNavigation() {
 
             {/* Haupttabs */}
             <nav className="ml-10 flex space-x-1">
-              {mainTabs.map((tab) => (
-                <NavLink
-                  key={tab.name}
-                  to={tab.basePath}
-                  className={() =>
-                    `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeMainTab === tab.name
-                        ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-                    }`
-                  }
-                >
-                  {tab.name}
-                </NavLink>
-              ))}
+              {mainTabs.map((tab) => {
+                const Icon = tab.icon
+                return (
+                  <NavLink
+                    key={tab.name}
+                    to={tab.basePath}
+                    className={() =>
+                      `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeMainTab === tab.name
+                          ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                      }`
+                    }
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.name}
+                  </NavLink>
+                )
+              })}
             </nav>
           </div>
 

@@ -159,6 +159,15 @@ export interface ImportResult {
   warnungen?: string[]
 }
 
+export interface JSONImportResult {
+  erfolg: boolean
+  anlage_id?: number
+  anlage_name?: string
+  importiert: Record<string, number>
+  warnungen: string[]
+  fehler: string[]
+}
+
 // Home Assistant
 export interface HASensor {
   entity_id: string

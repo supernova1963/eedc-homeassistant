@@ -258,13 +258,23 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
       setLoading(true)
 
       // Parameter konvertieren
+      // Datumsfelder, die als String bleiben sollen
+      const dateFields = [
+        'stamm_garantie_bis', 'stamm_erstzulassung', 'wartung_gueltig_bis',
+        'stamm_anmeldung_netzbetreiber', 'stamm_anmeldung_marktstammdaten'
+      ]
       const convertedParams: Record<string, unknown> = {}
       Object.entries(paramData).forEach(([key, value]) => {
         if (typeof value === 'boolean') {
           convertedParams[key] = value
         } else if (value !== '') {
-          const num = parseFloat(value)
-          convertedParams[key] = isNaN(num) ? value : num
+          // Datumsfelder als String behalten
+          if (dateFields.includes(key)) {
+            convertedParams[key] = value
+          } else {
+            const num = parseFloat(value)
+            convertedParams[key] = isNaN(num) ? value : num
+          }
         }
       })
 

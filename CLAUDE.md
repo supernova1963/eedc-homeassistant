@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.8 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.9 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -108,7 +108,7 @@ eedc/
 │   ├── api/routes/
 │   │   ├── cockpit.py             # Dashboard-Aggregation (jahres_rendite_prozent)
 │   │   ├── aussichten.py          # Prognosen: Kurzfristig, Langfristig, Trend, Finanzen
-│   │   ├── import_export.py       # CSV Import (flag_modified!)
+│   │   ├── import_export/         # Import/Export Package (CSV, JSON, Demo)
 │   │   ├── monatsdaten.py         # CRUD + Berechnungen
 │   │   └── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
 │   ├── core/config.py             # APP_VERSION
@@ -267,24 +267,17 @@ Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksich
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.8)
+## Letzte Änderungen (v1.0.0-beta.9)
 
-**Vollständiger JSON-Export**
-- Neuer Endpoint `GET /api/import/export/{anlage_id}/full`
-- Export mit hierarchischer Struktur: Anlage → Strompreise → Investitionen (Children) → Monatsdaten → PVGIS
-- Download-Button in Anlagen-Übersicht
+**Icons im Hauptmenü**
+- Cockpit, Auswertungen und Aussichten mit passenden Icons
 
-**CSV-Import: Plausibilitätsprüfungen**
-- Legacy-Spalten-Validierung (`PV_Erzeugung_kWh`, `Batterie_*_kWh`)
-- Fehler bei NUR Legacy UND vorhandenen PV-Modulen/Speichern
-- Fehler bei Mismatch Legacy vs. Summe Komponenten
-- Warnung wenn redundant (±0.5 kWh Toleranz)
-- Negative Werte werden blockiert
-- Plausibilitätswarnungen (Sonnenstunden > 400h, Globalstrahlung > 250)
+**Import/Export-Modul refaktoriert**
+- Modulare Package-Struktur statt einer großen Datei (2500+ Zeilen)
+- Bessere Wartbarkeit: `import_export/csv_operations.py`, `json_operations.py`, `demo_data.py`
 
-**Import-Feedback**
-- `ImportResult.warnungen` Feld hinzugefügt
-- Frontend zeigt Warnungen in amber/gelb an
-- Hilfetext zu Legacy-Spalten
+**Bugfixes**
+- Garantiedatum-Felder werden jetzt korrekt als Strings gespeichert
+- JSON-Export URL für HA Ingress-Modus korrigiert (relativer Pfad)
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

@@ -7,6 +7,38 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.9] - 2026-02-14
+
+### Hinzugefügt
+
+- **Icons im Hauptmenü**
+  - Cockpit, Auswertungen und Aussichten zeigen jetzt passende Icons
+  - LayoutDashboard für Cockpit, BarChart3 für Auswertungen, TrendingUp für Aussichten
+
+- **JSON-Import-Vorbereitung**
+  - Import-Modul refaktoriert für JSON-Import (lokale Variante)
+
+### Geändert
+
+- **Import/Export-Modul refaktoriert**
+  - Aufgeteilt von einer großen Datei (2500+ Zeilen) in modulares Package
+  - Neue Struktur: `import_export/` mit separaten Dateien für CSV, JSON, Demo-Daten
+  - Bessere Wartbarkeit und Testbarkeit
+
+### Bugfixes
+
+- **Garantiedatum wurde nicht gespeichert**
+  - Problem: Datumsfelder wie `stamm_garantie_bis` wurden durch `parseFloat()` in Zahlen konvertiert
+  - Lösung: Datumsfelder werden jetzt explizit als Strings behandelt
+  - Betrifft: `stamm_garantie_bis`, `wartung_gueltig_bis`, `stamm_erstzulassung`, etc.
+
+- **JSON-Export 404 in Home Assistant**
+  - Problem: Download-Button verwendete absoluten Pfad `/api/...` statt relativen `./api/...`
+  - Im HA Ingress-Modus führte das zu 404-Fehlern
+  - Lösung: Verwendung von `importApi.getFullExportUrl()` mit korrektem relativen Pfad
+
+---
+
 ## [1.0.0-beta.8] - 2026-02-13
 
 ### Hinzugefügt

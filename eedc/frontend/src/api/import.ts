@@ -3,7 +3,7 @@
  * Verwendet relative Pfade für HA Ingress Kompatibilität.
  */
 
-import type { ImportResult } from '../types'
+import type { ImportResult, JSONImportResult } from '../types'
 
 // Relative Basis-URL für HA Ingress Support
 const API_BASE = './api'
@@ -104,6 +104,39 @@ export const importApi = {
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.detail || 'Demo-Daten konnten nicht gelöscht werden')
+    }
+
+    return response.json()
+  },
+
+  /**
+   * Vollständigen JSON-Export einer Anlage herunterladen
+   */
+  getFullExportUrl(anlageId: number): string {
+    return `${API_BASE}/import/export/${anlageId}/full`
+  },
+
+  /**
+   * JSON-Datei importieren (erstellt neue Anlage)
+   */
+  async importJSON(file: File, ueberschreiben: boolean = false): Promise<JSONImportResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const params = new URLSearchParams()
+    if (ueberschreiben) params.append('ueberschreiben', 'true')
+
+    const response = await fetch(
+      `${API_BASE}/import/json?${params.toString()}`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'JSON-Import fehlgeschlagen')
     }
 
     return response.json()

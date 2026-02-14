@@ -1,9 +1,9 @@
 import { useState, useRef, DragEvent, ChangeEvent } from 'react'
-import { Upload, FileSpreadsheet, Download, Check, AlertTriangle, X, Sparkles, Trash2 } from 'lucide-react'
+import { Upload, FileSpreadsheet, Download, Check, AlertTriangle, X, Sparkles, Trash2, FileJson } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { importApi } from '../api'
-import type { ImportResult } from '../types'
+import type { ImportResult, JSONImportResult } from '../types'
 import type { DemoDataResult } from '../api'
 
 export default function Import() {
@@ -17,6 +17,13 @@ export default function Import() {
   const [demoLoading, setDemoLoading] = useState(false)
   const [demoResult, setDemoResult] = useState<DemoDataResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // JSON Import States
+  const [jsonIsDragging, setJsonIsDragging] = useState(false)
+  const [jsonImporting, setJsonImporting] = useState(false)
+  const [jsonResult, setJsonResult] = useState<JSONImportResult | null>(null)
+  const [jsonUeberschreiben, setJsonUeberschreiben] = useState(false)
+  const jsonFileInputRef = useRef<HTMLInputElement>(null)
 
   // Prüfen ob Demo-Anlage existiert
   const hasDemoAnlage = anlagen.some(a => a.anlagenname === 'Demo-Anlage')
@@ -124,6 +131,60 @@ export default function Import() {
       setError(e instanceof Error ? e.message : 'Fehler beim Löschen der Demo-Daten')
     } finally {
       setDemoLoading(false)
+    }
+  }
+
+  // JSON Import Handler
+  const handleJsonDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    setJsonIsDragging(true)
+  }
+
+  const handleJsonDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    setJsonIsDragging(false)
+  }
+
+  const handleJsonDrop = async (e: DragEvent) => {
+    e.preventDefault()
+    setJsonIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      await handleJsonFile(files[0])
+    }
+  }
+
+  const handleJsonFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      await handleJsonFile(files[0])
+    }
+    if (jsonFileInputRef.current) {
+      jsonFileInputRef.current.value = ''
+    }
+  }
+
+  const handleJsonFile = async (file: File) => {
+    if (!file.name.endsWith('.json')) {
+      setError('Bitte eine JSON-Datei auswählen')
+      return
+    }
+
+    setError(null)
+    setJsonResult(null)
+    setJsonImporting(true)
+
+    try {
+      const importResult = await importApi.importJSON(file, jsonUeberschreiben)
+      setJsonResult(importResult)
+      if (importResult.erfolg) {
+        refreshAnlagen()
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'JSON-Import fehlgeschlagen')
+    } finally {
+      setJsonImporting(false)
     }
   }
 
@@ -334,6 +395,81 @@ export default function Import() {
         </Card>
       </div>
 
+      {/* JSON Import */}
+      <Card>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+            <FileJson className="h-6 w-6 text-purple-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            JSON Import (Anlage wiederherstellen)
+          </h2>
+        </div>
+        <p className="text-gray-500 dark:text-gray-400 mb-4">
+          Importiere eine komplette Anlage aus einer JSON-Export-Datei. Alle Investitionen, Monatsdaten, Strompreise und PVGIS-Prognosen werden importiert.
+        </p>
+
+        {jsonResult && (
+          <JSONImportResultCard result={jsonResult} onClose={() => setJsonResult(null)} />
+        )}
+
+        <div className="space-y-4">
+          <div
+            onDragOver={handleJsonDragOver}
+            onDragLeave={handleJsonDragLeave}
+            onDrop={handleJsonDrop}
+            onClick={() => jsonFileInputRef.current?.click()}
+            className={`
+              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              ${jsonIsDragging
+                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                : 'border-gray-300 dark:border-gray-600 hover:border-purple-500'
+              }
+              ${jsonImporting ? 'opacity-50 pointer-events-none' : ''}
+            `}
+          >
+            {jsonImporting ? (
+              <div className="flex flex-col items-center">
+                <LoadingSpinner size="sm" />
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  Importiere...
+                </p>
+              </div>
+            ) : (
+              <>
+                <FileJson className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  JSON-Datei hierher ziehen oder klicken zum Auswählen
+                </p>
+              </>
+            )}
+          </div>
+
+          <input
+            ref={jsonFileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleJsonFileSelect}
+            className="hidden"
+          />
+
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <input
+              type="checkbox"
+              checked={jsonUeberschreiben}
+              onChange={(e) => setJsonUeberschreiben(e.target.checked)}
+              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+            Existierende Anlage mit gleichem Namen überschreiben
+          </label>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+          <strong>Hinweis:</strong> JSON-Dateien können über den "Export (JSON)"-Button in der Anlagen-Übersicht erstellt werden.
+          Bei Namenskonflikt wird automatisch ein Suffix hinzugefügt, es sei denn "Überschreiben" ist aktiviert.
+        </div>
+      </Card>
+
       {/* Hilfe */}
       <Card>
         <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
@@ -376,6 +512,130 @@ export default function Import() {
           </div>
         </div>
       </Card>
+    </div>
+  )
+}
+
+interface JSONImportResultCardProps {
+  result: JSONImportResult
+  onClose: () => void
+}
+
+function JSONImportResultCard({ result, onClose }: JSONImportResultCardProps) {
+  const hasErrors = result.fehler.length > 0
+  const hasWarnings = result.warnungen.length > 0
+
+  const getColorClass = () => {
+    if (hasErrors) return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+    if (hasWarnings) return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+    return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+  }
+
+  const getTextColorClass = () => {
+    if (hasErrors) return 'text-red-800 dark:text-red-200'
+    if (hasWarnings) return 'text-yellow-800 dark:text-yellow-200'
+    return 'text-green-800 dark:text-green-200'
+  }
+
+  const getSubTextColorClass = () => {
+    if (hasErrors) return 'text-red-700 dark:text-red-300'
+    if (hasWarnings) return 'text-yellow-700 dark:text-yellow-300'
+    return 'text-green-700 dark:text-green-300'
+  }
+
+  // Anzahl der importierten Datensätze berechnen
+  const totalImported = Object.values(result.importiert).reduce((sum, count) => sum + count, 0)
+
+  // Lesbare Bezeichnungen für die Import-Kategorien
+  const categoryLabels: Record<string, string> = {
+    strompreise: 'Strompreise',
+    investitionen: 'Investitionen',
+    investition_monatsdaten: 'Investition-Monatsdaten',
+    monatsdaten: 'Monatsdaten',
+    pvgis_prognosen: 'PVGIS-Prognosen',
+    pvgis_monatsprognosen: 'PVGIS-Monatsprognosen'
+  }
+
+  return (
+    <div className={`relative p-4 rounded-lg border mb-4 ${getColorClass()}`}>
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600"
+      >
+        <X className="h-4 w-4" />
+      </button>
+
+      <div className="flex items-start gap-3">
+        {hasErrors ? (
+          <X className="h-5 w-5 text-red-500 mt-0.5" />
+        ) : hasWarnings ? (
+          <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+        ) : (
+          <Check className="h-5 w-5 text-green-500 mt-0.5" />
+        )}
+        <div className="flex-1">
+          <h4 className={`font-medium ${getTextColorClass()}`}>
+            {hasErrors
+              ? 'Import fehlgeschlagen'
+              : hasWarnings
+                ? 'Import erfolgreich (mit Hinweisen)'
+                : 'Import erfolgreich'
+            }
+          </h4>
+          <div className="text-sm mt-1 space-y-2">
+            {result.erfolg && result.anlage_name && (
+              <p className={getSubTextColorClass()}>
+                <strong>Anlage:</strong> {result.anlage_name}
+              </p>
+            )}
+
+            {totalImported > 0 && (
+              <div className={getSubTextColorClass()}>
+                <p className="font-medium">Importierte Datensätze:</p>
+                <ul className="list-disc list-inside ml-2">
+                  {Object.entries(result.importiert)
+                    .filter(([, count]) => count > 0)
+                    .map(([key, count]) => (
+                      <li key={key}>
+                        {categoryLabels[key] || key}: {count}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Fehler anzeigen */}
+            {hasErrors && (
+              <div>
+                <p className="font-medium text-red-700 dark:text-red-300 mt-2">Fehler:</p>
+                <ul className="list-disc list-inside text-red-700 dark:text-red-300 ml-2">
+                  {result.fehler.slice(0, 5).map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                  {result.fehler.length > 5 && (
+                    <li>... und {result.fehler.length - 5} weitere Fehler</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Warnungen anzeigen */}
+            {hasWarnings && (
+              <div>
+                <p className="font-medium text-amber-700 dark:text-amber-300 mt-2">Hinweise:</p>
+                <ul className="list-disc list-inside text-amber-700 dark:text-amber-300 ml-2">
+                  {result.warnungen.slice(0, 5).map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                  {result.warnungen.length > 5 && (
+                    <li>... und {result.warnungen.length - 5} weitere Hinweise</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -3,7 +3,7 @@
  * Hier wird die Version nur einmal definiert und überall verwendet
  */
 
-export const APP_VERSION = '1.0.0-beta.8'
+export const APP_VERSION = '1.0.0-beta.9'
 export const APP_NAME = 'eedc'
 export const APP_FULL_NAME = 'Energie Effizienz Data Center'
 

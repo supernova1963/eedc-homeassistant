@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.8** | Stand: Februar 2026
+**Version 1.0.0-beta.9** | Stand: Februar 2026
 
 ---
 
@@ -124,7 +124,13 @@ eedc-homeassistant/
     │   │       ├── investitionen.py
     │   │       ├── strompreise.py
     │   │       ├── cockpit.py
-    │   │       ├── import_export.py
+    │   │       ├── import_export/     # Modulares Package (NEU)
+    │   │       │   ├── __init__.py   # Router-Kombination
+    │   │       │   ├── schemas.py    # Pydantic-Modelle
+    │   │       │   ├── helpers.py    # Hilfsfunktionen
+    │   │       │   ├── csv_operations.py
+    │   │       │   ├── json_operations.py
+    │   │       │   └── demo_data.py
     │   │       ├── wetter.py
     │   │       ├── pvgis.py
     │   │       ├── ha_export.py

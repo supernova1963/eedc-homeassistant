@@ -1,6 +1,6 @@
 # eedc - Energie Effizienz Data Center
 
-**Version 1.0.0-beta.8** | Standalone PV-Analyse mit optionaler Home Assistant Integration
+**Version 1.0.0-beta.9** | Standalone PV-Analyse mit optionaler Home Assistant Integration
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -126,6 +126,7 @@ Die Hauptansicht zeigt alle wichtigen KPIs auf einen Blick:
 - Effizienz-Kennzahlen (Autarkie, Eigenverbrauchsquote)
 - Komponenten-Status (Speicher, E-Auto, Wärmepumpe)
 - Finanzielle Auswertung (Einsparungen, ROI)
+![Cockpit Übersicht](./docs/images/cockpit_main.png)
 
 ### Auswertungen
 Detaillierte Analysen in 6 Kategorien:
@@ -133,7 +134,7 @@ Detaillierte Analysen in 6 Kategorien:
 - PV-String-Performance nach Ausrichtung
 - Arbitrage-Analyse für Speicher
 - Amortisationskurven für alle Investitionen
-
+![Auswertungen - Komponenten](./docs/images/auswertungen_komponenten.png)
 ---
 
 ## Architektur-Überblick
