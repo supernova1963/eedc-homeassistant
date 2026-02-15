@@ -36,6 +36,8 @@ class StandortInfo(BaseModel):
     """Standort-Informationen."""
     latitude: float
     longitude: float
+    land: str | None = None
+    in_deutschland: bool = False
 
 
 class ProviderInfo(BaseModel):
@@ -273,10 +275,21 @@ async def get_wetter_provider(
     # Aktuellen Provider der Anlage ermitteln
     aktueller_provider = getattr(anlage, "wetter_provider", None) or "auto"
 
+    # Standort bestimmen: Deutschland wenn Bright Sky verfügbar und empfohlen
+    in_deutschland = any(
+        p.get("id") == "brightsky" and p.get("verfuegbar") and p.get("empfohlen")
+        for p in providers
+    )
+
+    # Land-Name basierend auf Standort (vereinfacht: nur DE erkennen)
+    land = "Deutschland" if in_deutschland else anlage.standort_ort or None
+
     return WetterProviderListResponse(
         standort=StandortInfo(
             latitude=anlage.latitude,
-            longitude=anlage.longitude
+            longitude=anlage.longitude,
+            land=land,
+            in_deutschland=in_deutschland
         ),
         provider=[WetterProviderSchema(**p) for p in providers],
         aktueller_provider=aktueller_provider

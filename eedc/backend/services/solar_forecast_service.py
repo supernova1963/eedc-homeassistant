@@ -271,6 +271,7 @@ async def get_solar_prognose(
 
     # Nach Tagen gruppieren und Ertrag berechnen
     daily_data = {}
+    cloud_values = hourly.get("cloud_cover", [])
 
     for i, timestamp in enumerate(timestamps):
         tag = timestamp[:10]
@@ -282,6 +283,7 @@ async def get_solar_prognose(
                 "ertrag_sum_kwh": 0,
                 "temp_max": None,
                 "snow_sum": 0,
+                "cloud_values": [],  # Für Durchschnittsberechnung
             }
 
         day = daily_data[tag]
@@ -300,6 +302,11 @@ async def get_solar_prognose(
 
         if snow is not None:
             day["snow_sum"] += snow
+
+        # Bewölkung sammeln für Tagesdurchschnitt
+        cloud = cloud_values[i] if i < len(cloud_values) else None
+        if cloud is not None:
+            day["cloud_values"].append(cloud)
 
         # Stündlichen Ertrag berechnen
         if gti is not None and gti > 0:
@@ -356,7 +363,10 @@ async def get_solar_prognose(
             sonnenstunden=round(sonnenstunden, 1),
             temperatur_max_c=daily_temp_max[i] if i < len(daily_temp_max) else None,
             temperatur_min_c=daily_temp_min[i] if i < len(daily_temp_min) else None,
-            bewoelkung_prozent=None,  # Nicht in daily verfügbar
+            bewoelkung_prozent=(
+                round(sum(day.get("cloud_values", [])) / len(day["cloud_values"]))
+                if day.get("cloud_values") else None
+            ),
             niederschlag_mm=daily_precip[i] if i < len(daily_precip) else None,
             schnee_cm=daily_snow[i] if i < len(daily_snow) else None,
         ))

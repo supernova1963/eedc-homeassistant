@@ -54,7 +54,7 @@ const einstellungenTabs: TabItem[] = [
   { name: 'Monatsdaten', href: '/einstellungen/monatsdaten', icon: Database },
   { name: 'Import/Export', href: '/einstellungen/import', icon: Upload },
   // System
-  { name: 'PVGIS', href: '/einstellungen/pvgis', icon: Sun },
+  { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Sun },
   { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
 ]
 
