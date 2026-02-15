@@ -32,9 +32,12 @@ export function PVStringVergleich({ anlageId, jahr }: Props) {
       try {
         const result = await cockpitApi.getPVStrings(anlageId, jahr)
         setData(result)
-      } catch (err) {
-        setError('Fehler beim Laden der String-Daten')
-        console.error(err)
+      } catch (err: unknown) {
+        const errorDetail = err && typeof err === 'object' && 'detail' in err
+          ? (err as { detail: string }).detail
+          : 'Fehler beim Laden der String-Daten'
+        setError(errorDetail)
+        console.error('PVStringVergleich Fehler:', err)
       } finally {
         setLoading(false)
       }
