@@ -1187,11 +1187,12 @@ async def get_pv_strings(
         for wr in result.scalars().all():
             wechselrichter_map[wr.id] = wr.bezeichnung
 
-    # PVGIS-Prognose laden
+    # PVGIS-Prognose laden (neueste nehmen, falls mehrere existieren)
     result = await db.execute(
         select(PVGISPrognoseModel)
         .where(PVGISPrognoseModel.anlage_id == anlage_id)
         .order_by(PVGISPrognoseModel.abgerufen_am.desc())
+        .limit(1)
     )
     prognose = result.scalar_one_or_none()
     hat_prognose = prognose is not None
