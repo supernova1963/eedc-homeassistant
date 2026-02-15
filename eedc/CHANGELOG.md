@@ -64,6 +64,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Feld wird jetzt korrekt im JSON-Export mitgeliefert
   - Import setzt Provider-Einstellung der Anlage
 
+- **Bewölkungswerte in Kurzfrist-Prognose**
+  - Problem: Spalte "Bewölkung" zeigte nur "- %" statt Werte
+  - Ursache: Stündliche cloud_cover-Daten wurden nicht aggregiert
+  - Fix: Tagesdurchschnitt aus stündlichen Werten berechnet
+
+- **Standort-Info auf Solarprognose-Seite**
+  - Problem: "Standort: Unbekannt" obwohl Koordinaten vorhanden
+  - Fix: land/in_deutschland Felder zur StandortInfo hinzugefügt
+
+- **SOLL-IST Vergleich bei mehreren PVGIS-Prognosen**
+  - Problem: 500-Fehler wenn mehrere Prognosen für eine Anlage existieren
+  - Ursache: `scalar_one_or_none()` bei mehreren Ergebnissen
+  - Fix: `.limit(1)` um nur die neueste Prognose zu verwenden
+
 ---
 
 ## [1.0.0-beta.9] - 2026-02-14
