@@ -73,7 +73,8 @@ function App() {
           <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
 
           {/* Einstellungen - System */}
-          <Route path="einstellungen/pvgis" element={<PVGISSettings />} />
+          <Route path="einstellungen/solarprognose" element={<PVGISSettings />} />
+          <Route path="einstellungen/pvgis" element={<Navigate to="/einstellungen/solarprognose" replace />} />
           <Route path="einstellungen/ha-import" element={<HAImportSettings />} />
           <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />

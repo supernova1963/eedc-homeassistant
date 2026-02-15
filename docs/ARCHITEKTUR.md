@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.9** | Stand: Februar 2026
+**Version 1.0.0-beta.10** | Stand: Februar 2026
 
 ---
 
@@ -48,10 +48,10 @@
 └─────────────────────────────────────────────────────────────┘
 
 Externe APIs (optional):
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Open-Meteo │  │    PVGIS    │  │ Home Asst.  │
-│  (Wetter)   │  │  (Prognose) │  │   (MQTT)    │
-└─────────────┘  └─────────────┘  └─────────────┘
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│  Open-Meteo │  │ Bright Sky  │  │    PVGIS    │  │ Home Asst.  │
+│  (Wetter)   │  │   (DWD)     │  │  (Prognose) │  │   (MQTT)    │
+└─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
 ---
@@ -236,8 +236,9 @@ eedc-homeassistant/
 | ausrichtung | VARCHAR | Himmelsrichtung |
 | neigung_grad | FLOAT | Dachneigung |
 | leistung_kwp | FLOAT | Anlagenleistung |
-| mastr_id | VARCHAR(20) | MaStR-ID der Anlage (NEU) |
-| versorger_daten | JSON | Versorger & Zähler (NEU) |
+| mastr_id | VARCHAR(20) | MaStR-ID der Anlage |
+| versorger_daten | JSON | Versorger & Zähler |
+| wetter_provider | VARCHAR(30) | Bevorzugter Wetter-Provider (auto, open-meteo, brightsky, open-meteo-solar) |
 | created_at | DATETIME | Erstellungsdatum |
 
 #### Monatsdaten
@@ -446,7 +447,8 @@ Sonstiges [Eigenständig]
 | `/api/cockpit` | cockpit.py | Aggregierte Dashboard-Daten (Jahres-Rendite) |
 | `/api/aussichten` | aussichten.py | **Prognosen: Kurzfristig, Langfristig, Trend, Finanzen** |
 | `/api/import` | import_export.py | CSV Import/Export, JSON-Export, Demo-Daten |
-| `/api/wetter` | wetter.py | Wetter-API (Open-Meteo, PVGIS TMY) |
+| `/api/wetter` | wetter.py | Wetter-API (Multi-Provider: Open-Meteo, Bright Sky, PVGIS) |
+| `/api/solar-prognose` | solar_prognose.py | GTI-basierte PV-Ertragsprognose |
 | `/api/pvgis` | pvgis.py | PVGIS Ertragsprognosen |
 | `/api/ha/export` | ha_export.py | HA Sensor Export (REST, MQTT) |
 | `/api/ha-import` | ha_import.py | Investitions-Felder (CSV-Template) |
@@ -660,26 +662,43 @@ useEffect(() => {
 
 ## 7. Services
 
-### Wetter-Service
+### Wetter-Service (Multi-Provider)
 
-**Datei:** `backend/services/wetter_service.py`
+**Dateien:**
+- `backend/services/wetter_service.py` – Multi-Provider Orchestrierung
+- `backend/services/brightsky_service.py` – DWD-Daten via Bright Sky API
+- `backend/services/solar_forecast_service.py` – Open-Meteo Solar mit GTI
 
-**Funktion:** Wetterdaten für Globalstrahlung und Sonnenstunden.
+**Funktion:** Wetterdaten für Globalstrahlung und Sonnenstunden aus verschiedenen Quellen.
 
-**Datenquellen-Priorität:**
-1. **Open-Meteo Archive API** – Historische Daten (vergangene Monate)
-2. **PVGIS TMY** – Fallback für aktuelle/zukünftige Monate
-3. **Statische Defaults** – Mitteleuropa-Durchschnitt
+**Verfügbare Provider:**
 
-```python
-async def get_wetterdaten(lat: float, lon: float, jahr: int, monat: int) -> dict:
-    # 1. Prüfe ob Monat vollständig in Vergangenheit
-    if monat_abgeschlossen:
-        return await fetch_openmeteo(lat, lon, jahr, monat)
+| Provider | Region | Beschreibung |
+|----------|--------|--------------|
+| **auto** (Standard) | - | Automatische Auswahl basierend auf Standort |
+| **brightsky** | Deutschland | DWD-Daten via Bright Sky REST API (höchste Qualität) |
+| **open-meteo** | Weltweit | Open-Meteo Archive API |
+| **open-meteo-solar** | Weltweit | Open-Meteo Solar mit GTI für geneigte Module |
 
-    # 2. Fallback auf PVGIS TMY
-    return get_pvgis_tmy(monat)
+**Fallback-Kette:**
+1. Gewählter Provider
+2. Alternative (z.B. Open-Meteo wenn Bright Sky fehlschlägt)
+3. PVGIS TMY (langjährige Durchschnittswerte)
+4. Statische Defaults (Mitteleuropa-Durchschnitt)
+
+**API-Endpoints:**
 ```
+GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}?provider=auto
+GET /api/wetter/provider/{anlage_id}           # Verfügbare Provider
+GET /api/wetter/vergleich/{anlage_id}/{jahr}/{monat}  # Provider-Vergleich
+GET /api/solar-prognose/{anlage_id}?tage=7     # GTI-basierte PV-Prognose
+```
+
+**GTI (Global Tilted Irradiance):**
+Open-Meteo Solar berechnet Strahlung für geneigte PV-Module:
+- Neigung und Ausrichtung aus PV-Modul-Konfiguration
+- Temperaturkorrektur (Wirkungsgradminderung bei Hitze)
+- Multi-String-Unterstützung für verschiedene Ausrichtungen
 
 ### Sensor-Export Service
 

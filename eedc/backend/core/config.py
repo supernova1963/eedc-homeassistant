@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings
 # =============================================================================
 # Zentrale Versionskonfiguration
 # =============================================================================
-APP_VERSION = "1.0.0-beta.9"
+APP_VERSION = "1.0.0-beta.10"
 APP_NAME = "eedc"
 APP_FULL_NAME = "Energie Effizienz Data Center"
 
@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     mqtt_password: str = os.environ.get("MQTT_PASSWORD", "")
     mqtt_auto_publish: bool = os.environ.get("MQTT_AUTO_PUBLISH", "").lower() == "true"
     mqtt_publish_interval: int = int(os.environ.get("MQTT_PUBLISH_INTERVAL", "60"))
+
+    # Wetterdienst-Einstellungen
+    # Provider: "auto", "open-meteo", "brightsky", "open-meteo-solar"
+    wetter_provider: str = os.environ.get("WETTER_PROVIDER", "auto")
+
+    # Bright Sky API (DWD-Daten als REST-API)
+    brightsky_api_url: str = "https://api.brightsky.dev"
+    brightsky_enabled: bool = os.environ.get("BRIGHTSKY_ENABLED", "true").lower() == "true"
+
+    # Open-Meteo Solar API (GTI + PV-Prognose)
+    open_meteo_solar_enabled: bool = os.environ.get("OPEN_METEO_SOLAR_ENABLED", "true").lower() == "true"
+    open_meteo_solar_api_url: str = "https://api.open-meteo.com/v1/forecast"
 
     class Config:
         env_file = ".env"

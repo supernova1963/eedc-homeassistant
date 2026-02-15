@@ -2,12 +2,17 @@
  * PV-Anlage Dashboard
  * Zeigt aggregierte PV-System-Daten: Wechselrichter + PV-Module + DC-Speicher
  * Inkl. Erzeugung, spezifischer Ertrag, String-Vergleich, PVGIS-Abweichung
+ *
+ * Datenquellen:
+ * - Cockpit-API: Aggregierte KPIs (pv_erzeugung aus InvestitionMonatsdaten)
+ * - Prognose-vs-IST-API: Monatliche Werte aus InvestitionMonatsdaten
  */
 
 import { useState, useEffect, useMemo } from 'react'
 import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle, GitCompare } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc } from '../components/ui'
-import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useInvestitionen } from '../hooks'
+import { useAnlagen, useInvestitionen, useMonatsdaten } from '../hooks'
+import { cockpitApi, type CockpitUebersicht, type PrognoseVsIst } from '../api/cockpit'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell
@@ -37,6 +42,11 @@ export default function PVAnlageDashboard() {
   const { anlagen, loading: anlagenLoading } = useAnlagen()
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
 
+  // Cockpit-Daten (aggregierte KPIs aus InvestitionMonatsdaten)
+  const [cockpitData, setCockpitData] = useState<CockpitUebersicht | null>(null)
+  const [prognoseData, setPrognoseData] = useState<PrognoseVsIst | null>(null)
+  const [cockpitLoading, setCockpitLoading] = useState(true)
+
   useEffect(() => {
     if (anlagen.length > 0 && !selectedAnlageId) {
       setSelectedAnlageId(anlagen[0].id)
@@ -44,8 +54,38 @@ export default function PVAnlageDashboard() {
   }, [anlagen, selectedAnlageId])
 
   const { investitionen, loading: invLoading } = useInvestitionen(selectedAnlageId)
+  // Monatsdaten nur für verfügbare Jahre und latestYear
   const { monatsdaten, loading: mdLoading } = useMonatsdaten(selectedAnlageId)
-  const stats = useMonatsdatenStats(monatsdaten)
+
+  // Neuestes Jahr aus Monatsdaten für SOLL-IST Vergleich
+  const latestYear = useMemo(() => {
+    if (monatsdaten.length === 0) return new Date().getFullYear()
+    return Math.max(...monatsdaten.map(md => md.jahr))
+  }, [monatsdaten])
+
+  // Cockpit-Daten laden (aggregierte Werte aus InvestitionMonatsdaten)
+  useEffect(() => {
+    if (!selectedAnlageId) return
+
+    const loadCockpitData = async () => {
+      setCockpitLoading(true)
+      try {
+        // Cockpit-Übersicht für das aktuellste Jahr laden
+        const cockpit = await cockpitApi.getUebersicht(selectedAnlageId, latestYear)
+        setCockpitData(cockpit)
+
+        // Prognose-vs-IST für monatliche Chart-Daten
+        const prognose = await cockpitApi.getPrognoseVsIst(selectedAnlageId, latestYear)
+        setPrognoseData(prognose)
+      } catch (err) {
+        console.error('Fehler beim Laden der Cockpit-Daten:', err)
+      } finally {
+        setCockpitLoading(false)
+      }
+    }
+
+    loadCockpitData()
+  }, [selectedAnlageId, latestYear])
 
   // PV-Systeme gruppieren (Wechselrichter + zugeordnete Module + Speicher)
   const { pvSysteme, orphanModule } = useMemo(() => {
@@ -81,44 +121,57 @@ export default function PVAnlageDashboard() {
     return { pvSysteme: systeme, orphanModule: orphanMod }
   }, [investitionen])
 
-  // Gesamt-kWp berechnen
-  const gesamtKwp = useMemo(() => {
-    return pvSysteme.reduce((sum, sys) => sum + sys.gesamtKwp, 0) +
-           orphanModule.reduce((sum, m) => sum + (m.leistung_kwp || 0), 0)
-  }, [pvSysteme, orphanModule])
+  // Gesamt-kWp aus Cockpit-Daten (oder Investitionen als Fallback)
+  const gesamtKwp = cockpitData?.anlagenleistung_kwp || (
+    pvSysteme.reduce((sum, sys) => sum + sys.gesamtKwp, 0) +
+    orphanModule.reduce((sum, m) => sum + (m.leistung_kwp || 0), 0)
+  )
 
-  // Spezifischer Ertrag
-  const spezifischerErtrag = gesamtKwp > 0 ? stats.gesamtErzeugung / gesamtKwp : 0
+  // Daten aus Cockpit-API (aus InvestitionMonatsdaten aggregiert)
+  const gesamtErzeugung = cockpitData?.pv_erzeugung_kwh || 0
+  const gesamtEigenverbrauch = cockpitData?.eigenverbrauch_kwh || 0
+  const gesamtEinspeisung = cockpitData?.einspeisung_kwh || 0
+  const spezifischerErtrag = cockpitData?.spezifischer_ertrag_kwh_kwp || 0
+  const eigenverbrauchsQuote = cockpitData?.eigenverbrauch_quote_prozent || 0
+  const anzahlMonate = cockpitData?.anzahl_monate || 0
 
-  // Neuestes Jahr aus Monatsdaten für SOLL-IST Vergleich
-  const latestYear = useMemo(() => {
-    if (monatsdaten.length === 0) return new Date().getFullYear()
-    return Math.max(...monatsdaten.map(md => md.jahr))
-  }, [monatsdaten])
-
-  // Chart-Daten: Monatliche Erzeugung
+  // Chart-Daten: Kombiniere PV-Erzeugung aus Prognose-vs-IST mit Einspeisung aus Monatsdaten
   const chartData = useMemo(() => {
-    const sorted = [...monatsdaten].sort((a, b) => {
-      if (a.jahr !== b.jahr) return a.jahr - b.jahr
-      return a.monat - b.monat
-    })
+    if (!prognoseData || monatsdaten.length === 0) return []
 
-    return sorted.slice(-12).map(md => ({
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(-2)}`,
-      Erzeugung: md.pv_erzeugung_kwh,
-      Eigenverbrauch: md.eigenverbrauch_kwh || 0,
-      Einspeisung: md.einspeisung_kwh,
-    }))
-  }, [monatsdaten])
+    // Monatsdaten für das aktuelle Jahr filtern
+    const mdByMonth = new Map<number, { einspeisung: number; netzbezug: number }>()
+    monatsdaten
+      .filter(m => m.jahr === latestYear)
+      .forEach(m => mdByMonth.set(m.monat, {
+        einspeisung: m.einspeisung_kwh,
+        netzbezug: m.netzbezug_kwh
+      }))
+
+    return prognoseData.monatswerte
+      .filter(m => m.ist_kwh > 0) // Nur Monate mit Daten
+      .map(m => {
+        const md = mdByMonth.get(m.monat)
+        const einspeisung = md?.einspeisung || 0
+        // Eigenverbrauch = Erzeugung - Einspeisung (vereinfacht)
+        const eigenverbrauch = Math.max(0, m.ist_kwh - einspeisung)
+        return {
+          name: `${monatNamen[m.monat]}`,
+          Erzeugung: m.ist_kwh,
+          Eigenverbrauch: eigenverbrauch,
+          Einspeisung: einspeisung,
+        }
+      })
+  }, [prognoseData, monatsdaten, latestYear])
 
   // Energieverteilung Pie-Chart
   const verteilungData = useMemo(() => {
-    if (stats.gesamtErzeugung === 0) return []
+    if (gesamtErzeugung === 0) return []
     return [
-      { name: 'Eigenverbrauch', value: stats.gesamtEigenverbrauch, color: COLORS.consumption },
-      { name: 'Einspeisung', value: stats.gesamtEinspeisung, color: COLORS.feedin },
+      { name: 'Eigenverbrauch', value: gesamtEigenverbrauch, color: COLORS.consumption },
+      { name: 'Einspeisung', value: gesamtEinspeisung, color: COLORS.feedin },
     ]
-  }, [stats])
+  }, [gesamtErzeugung, gesamtEigenverbrauch, gesamtEinspeisung])
 
   // String-Vergleich (wenn mehrere PV-Module mit unterschiedlicher Ausrichtung)
   const stringVergleich = useMemo(() => {
@@ -142,7 +195,7 @@ export default function PVAnlageDashboard() {
     }))
   }, [pvSysteme, orphanModule])
 
-  const loading = anlagenLoading || invLoading || mdLoading
+  const loading = anlagenLoading || invLoading || mdLoading || cockpitLoading
 
   if (loading) return <LoadingSpinner text="Lade PV-Anlage..." />
 
@@ -155,7 +208,7 @@ export default function PVAnlageDashboard() {
     )
   }
 
-  const hasData = monatsdaten.length > 0
+  const hasData = gesamtErzeugung > 0
   const hasPVSystem = pvSysteme.length > 0 || orphanModule.length > 0
 
   return (
@@ -194,7 +247,7 @@ export default function PVAnlageDashboard() {
         </Alert>
       )}
 
-      {/* KPI Cards */}
+      {/* KPI Cards - Daten aus Cockpit-API (InvestitionMonatsdaten) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           title="Anlagenleistung"
@@ -206,9 +259,9 @@ export default function PVAnlageDashboard() {
         />
         <KPICard
           title="Gesamterzeugung"
-          value={stats.gesamtErzeugung > 0 ? (stats.gesamtErzeugung / 1000).toFixed(1) : '---'}
+          value={gesamtErzeugung > 0 ? (gesamtErzeugung / 1000).toFixed(1) : '---'}
           unit="MWh"
-          subtitle={stats.anzahlMonate > 0 ? `${stats.anzahlMonate} Monate` : undefined}
+          subtitle={anzahlMonate > 0 ? `${anzahlMonate} Monate (${latestYear})` : undefined}
           icon={Zap}
           color="green"
         />
@@ -216,23 +269,23 @@ export default function PVAnlageDashboard() {
           title="Spez. Ertrag"
           value={spezifischerErtrag > 0 ? spezifischerErtrag.toFixed(0) : '---'}
           unit="kWh/kWp"
-          subtitle={stats.anzahlMonate >= 12 ? 'Jahreswert' : `${stats.anzahlMonate} Monate`}
+          subtitle={anzahlMonate >= 12 ? 'Jahreswert' : `${anzahlMonate} Monate`}
           icon={TrendingUp}
           color="blue"
           formel="Spez. Ertrag = Erzeugung ÷ Leistung"
-          berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh ÷ ${fmtCalc(gesamtKwp, 1)} kWp`}
+          berechnung={`${fmtCalc(gesamtErzeugung, 0)} kWh ÷ ${fmtCalc(gesamtKwp, 1)} kWp`}
           ergebnis={`= ${fmtCalc(spezifischerErtrag, 0)} kWh/kWp`}
         />
         <KPICard
           title="Eigenverbrauch"
-          value={stats.gesamtErzeugung > 0 ? ((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100).toFixed(1) : '---'}
+          value={eigenverbrauchsQuote > 0 ? eigenverbrauchsQuote.toFixed(1) : '---'}
           unit="%"
-          subtitle={`${(stats.gesamtEigenverbrauch / 1000).toFixed(1)} MWh`}
+          subtitle={gesamtEigenverbrauch > 0 ? `${(gesamtEigenverbrauch / 1000).toFixed(1)} MWh` : undefined}
           icon={Activity}
           color="purple"
           formel="Eigenverbrauchsquote = Eigenverbrauch ÷ Erzeugung × 100"
-          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
-          ergebnis={`= ${fmtCalc(stats.gesamtErzeugung > 0 ? (stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100 : 0, 1)} %`}
+          berechnung={`${fmtCalc(gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(gesamtErzeugung, 0)} kWh × 100`}
+          ergebnis={`= ${fmtCalc(eigenverbrauchsQuote, 1)} %`}
         />
       </div>
 
@@ -337,7 +390,7 @@ export default function PVAnlageDashboard() {
           {/* Monatlicher Verlauf */}
           <Card className="lg:col-span-2">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Monatlicher Verlauf
+              Monatlicher Verlauf ({latestYear})
             </h2>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -391,11 +444,11 @@ export default function PVAnlageDashboard() {
             <div className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Eigenverbrauch:</span>
-                <span className="font-medium">{(stats.gesamtEigenverbrauch / 1000).toFixed(1)} MWh</span>
+                <span className="font-medium">{(gesamtEigenverbrauch / 1000).toFixed(1)} MWh</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Einspeisung:</span>
-                <span className="font-medium">{(stats.gesamtEinspeisung / 1000).toFixed(1)} MWh</span>
+                <span className="font-medium">{(gesamtEinspeisung / 1000).toFixed(1)} MWh</span>
               </div>
             </div>
           </Card>

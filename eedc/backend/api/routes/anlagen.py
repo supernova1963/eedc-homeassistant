@@ -42,6 +42,8 @@ class AnlageBase(BaseModel):
     # Erweiterte Stammdaten
     mastr_id: Optional[str] = Field(None, max_length=20, description="Marktstammdatenregister-ID der Anlage")
     versorger_daten: Optional[dict[str, Any]] = Field(None, description="Versorger und Zähler als JSON")
+    # Wetterdaten-Provider
+    wetter_provider: Optional[str] = Field(None, max_length=30, description="Wetterdaten-Provider (auto, brightsky, open-meteo, open-meteo-solar)")
 
 
 class AnlageCreate(AnlageBase):
@@ -69,6 +71,7 @@ class AnlageUpdate(BaseModel):
     ha_sensor_batterie_entladung: Optional[str] = Field(None, max_length=255)
     mastr_id: Optional[str] = Field(None, max_length=20)
     versorger_daten: Optional[dict[str, Any]] = None
+    wetter_provider: Optional[str] = Field(None, max_length=30)
 
 
 class SensorConfigUpdate(BaseModel):

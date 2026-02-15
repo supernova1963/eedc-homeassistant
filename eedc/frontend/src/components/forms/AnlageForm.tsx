@@ -1,7 +1,8 @@
-import { useState, FormEvent } from 'react'
-import { Info, ExternalLink } from 'lucide-react'
+import { useState, useEffect, FormEvent } from 'react'
+import { Info, ExternalLink, Cloud, Sun } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
 import VersorgerSection from './VersorgerSection'
+import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
 import type { Anlage, AnlageCreate, VersorgerDaten } from '../../types'
 
 interface AnlageFormProps {
@@ -24,11 +25,26 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     latitude: anlage?.latitude?.toString() || '',
     longitude: anlage?.longitude?.toString() || '',
     mastr_id: anlage?.mastr_id || '',
+    wetter_provider: (anlage as any)?.wetter_provider || 'auto',
   })
 
   const [versorgerDaten, setVersorgerDaten] = useState<VersorgerDaten>(
     anlage?.versorger_daten || {}
   )
+
+  const [wetterProviderOptions, setWetterProviderOptions] = useState<WetterProviderOption[]>([])
+  const [loadingProvider, setLoadingProvider] = useState(false)
+
+  // Wetter-Provider laden wenn Anlage existiert und Koordinaten hat
+  useEffect(() => {
+    if (anlage?.id && anlage.latitude && anlage.longitude) {
+      setLoadingProvider(true)
+      wetterApi.getProvider(anlage.id)
+        .then(data => setWetterProviderOptions(data.provider))
+        .catch(err => console.warn('Wetter-Provider laden fehlgeschlagen:', err))
+        .finally(() => setLoadingProvider(false))
+    }
+  }, [anlage?.id, anlage?.latitude, anlage?.longitude])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -62,7 +78,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
         mastr_id: formData.mastr_id || undefined,
         versorger_daten: Object.keys(versorgerDaten).length > 0 ? versorgerDaten : undefined,
-      })
+        wetter_provider: formData.wetter_provider as WetterProvider,
+      } as AnlageCreate)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
     } finally {
@@ -207,6 +224,77 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             )}
           </div>
         </div>
+      </div>
+
+      {/* Wetterdaten-Quelle */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+          <Cloud className="w-4 h-4 text-blue-500" />
+          Wetterdaten-Quelle
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="w-full">
+            <label
+              htmlFor="wetter_provider"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Bevorzugter Provider
+            </label>
+            <select
+              id="wetter_provider"
+              name="wetter_provider"
+              value={formData.wetter_provider}
+              onChange={handleChange}
+              disabled={loadingProvider}
+              className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed border-gray-300 dark:border-gray-600"
+            >
+              {wetterProviderOptions.length > 0 ? (
+                wetterProviderOptions.map(p => (
+                  <option
+                    key={p.id}
+                    value={p.id}
+                    disabled={!p.verfuegbar}
+                  >
+                    {p.name}
+                    {p.empfohlen ? ' (empfohlen)' : ''}
+                    {!p.verfuegbar ? ' (nicht verfügbar)' : ''}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="auto">Automatisch (empfohlen)</option>
+                  <option value="open-meteo">Open-Meteo</option>
+                  <option value="brightsky">Bright Sky (DWD)</option>
+                  <option value="open-meteo-solar">Open-Meteo Solar</option>
+                </>
+              )}
+            </select>
+          </div>
+          <div className="flex items-end pb-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {formData.wetter_provider === 'auto' && (
+                <span>Automatische Auswahl: Bright Sky für DE, Open-Meteo sonst</span>
+              )}
+              {formData.wetter_provider === 'brightsky' && (
+                <span>DWD-Daten über Bright Sky API (nur Deutschland)</span>
+              )}
+              {formData.wetter_provider === 'open-meteo' && (
+                <span>Open-Meteo Archive API (weltweit verfügbar)</span>
+              )}
+              {formData.wetter_provider === 'open-meteo-solar' && (
+                <span>GTI-Berechnung für geneigte PV-Module</span>
+              )}
+            </div>
+          </div>
+        </div>
+        {!anlage?.latitude && !anlage?.longitude && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
+            <Sun className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Bitte zuerst Geokoordinaten eintragen, um die verfügbaren Provider zu sehen.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Versorger & Zähler */}

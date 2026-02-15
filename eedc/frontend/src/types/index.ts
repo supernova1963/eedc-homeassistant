@@ -24,6 +24,9 @@ export interface VersorgerDaten {
   [key: string]: Versorger | undefined  // Für weitere Versorgertypen
 }
 
+// Wetter-Provider
+export type WetterProvider = 'auto' | 'open-meteo' | 'brightsky' | 'open-meteo-solar'
+
 // Anlage
 export interface Anlage {
   id: number
@@ -47,6 +50,8 @@ export interface Anlage {
   // Erweiterte Stammdaten
   mastr_id?: string
   versorger_daten?: VersorgerDaten
+  // Wetterdaten-Provider
+  wetter_provider?: WetterProvider
 }
 
 // Sensor-Konfiguration

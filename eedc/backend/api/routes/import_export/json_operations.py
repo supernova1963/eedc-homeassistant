@@ -122,6 +122,7 @@ class AnlageExport(BaseModel):
     neigung_grad: Optional[float] = None
     mastr_id: Optional[str] = None
     versorger_daten: Optional[dict] = None
+    wetter_provider: Optional[str] = None
 
 
 class FullAnlageExport(BaseModel):
@@ -216,6 +217,7 @@ async def export_anlage_full(
         neigung_grad=anlage.neigung_grad,
         mastr_id=anlage.mastr_id,
         versorger_daten=anlage.versorger_daten,
+        wetter_provider=anlage.wetter_provider,
     )
 
     # Strompreise laden
@@ -481,6 +483,7 @@ async def import_json(
             neigung_grad=anlage_data.get("neigung_grad"),
             mastr_id=anlage_data.get("mastr_id"),
             versorger_daten=anlage_data.get("versorger_daten"),
+            wetter_provider=anlage_data.get("wetter_provider", "auto"),
         )
         db.add(new_anlage)
         await db.flush()

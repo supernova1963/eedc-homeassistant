@@ -117,21 +117,41 @@ async def list_investition_typen():
             label="Wärmepumpe",
             beschreibung="Wärmepumpe für Heizung/Warmwasser",
             parameter_schema={
-                # Modus-Auswahl
+                # Modus-Auswahl: JAZ (gemessen), SCOP (EU-Label), COPs (präzise)
                 "effizienz_modus": {
                     "type": "select",
                     "label": "Berechnungsmodus",
-                    "options": ["gesamt_jaz", "getrennte_cops"],
+                    "options": ["gesamt_jaz", "scop", "getrennte_cops"],
                     "default": "gesamt_jaz",
                 },
-                # Für Modus "gesamt_jaz"
+                # Für Modus "gesamt_jaz" - gemessene Jahresarbeitszahl
                 "jaz": {
                     "type": "number",
                     "label": "Jahresarbeitszahl (JAZ)",
                     "default": 3.5,
                     "conditional": {"effizienz_modus": "gesamt_jaz"},
                 },
-                # Für Modus "getrennte_cops"
+                # Für Modus "scop" - EU-Label SCOP-Werte
+                "scop_heizung": {
+                    "type": "number",
+                    "label": "SCOP Heizung",
+                    "default": 4.5,
+                    "conditional": {"effizienz_modus": "scop"},
+                },
+                "scop_warmwasser": {
+                    "type": "number",
+                    "label": "SCOP Warmwasser",
+                    "default": 3.2,
+                    "conditional": {"effizienz_modus": "scop"},
+                },
+                "vorlauftemperatur": {
+                    "type": "select",
+                    "label": "Vorlauftemperatur (EU-Label)",
+                    "options": ["35", "55"],
+                    "default": "35",
+                    "conditional": {"effizienz_modus": "scop"},
+                },
+                # Für Modus "getrennte_cops" - präzise Betriebspunkte
                 "cop_heizung": {
                     "type": "number",
                     "label": "COP Heizung",
@@ -1109,18 +1129,18 @@ async def get_roi_dashboard(
             }
 
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
-            # Modus-Auswahl: gesamt_jaz (Standard) oder getrennte_cops
+            # Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
             effizienz_modus = params.get('effizienz_modus', 'gesamt_jaz')
             pv_anteil = params.get('pv_anteil_prozent', 30)
             alter_energietraeger = params.get('alter_energietraeger', 'gas')
             alter_preis = params.get('alter_preis_cent_kwh', 12)
+            heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
+            warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
 
             if effizienz_modus == 'getrennte_cops':
                 # Getrennte COPs für Heizung und Warmwasser
                 cop_heizung = params.get('cop_heizung', 3.9)
                 cop_warmwasser = params.get('cop_warmwasser', 3.0)
-                heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
-                warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
 
                 result = berechne_waermepumpe_einsparung(
                     heizwaermebedarf_kwh=heizwaermebedarf,
@@ -1134,14 +1154,32 @@ async def get_roi_dashboard(
                     alter_preis_cent_kwh=alter_preis,
                 )
                 hinweis = f'WP: COP Heizung {cop_heizung}, Warmwasser {cop_warmwasser}'
+
+            elif effizienz_modus == 'scop':
+                # EU-Label SCOP-Werte (saisonale Effizienz)
+                scop_heizung = params.get('scop_heizung', 4.5)
+                scop_warmwasser = params.get('scop_warmwasser', 3.2)
+                vorlauftemperatur = params.get('vorlauftemperatur', '35')
+
+                result = berechne_waermepumpe_einsparung(
+                    heizwaermebedarf_kwh=heizwaermebedarf,
+                    warmwasserbedarf_kwh=warmwasserbedarf,
+                    scop_heizung=scop_heizung,
+                    scop_warmwasser=scop_warmwasser,
+                    effizienz_modus='scop',
+                    strompreis_cent=strompreis_cent,
+                    pv_anteil_prozent=pv_anteil,
+                    alter_energietraeger=alter_energietraeger,
+                    alter_preis_cent_kwh=alter_preis,
+                )
+                hinweis = f'WP: SCOP {scop_heizung} (VL {vorlauftemperatur}°C)'
+
             else:
-                # Standard: Ein JAZ für alles
+                # Standard: Ein JAZ für alles (gemessene Jahresarbeitszahl)
                 jaz = params.get('jaz', 3.5)
                 # Wärmebedarf: explizit oder aus Komponenten
                 waermebedarf = params.get('waermebedarf_kwh')
                 if waermebedarf is None:
-                    heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
-                    warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
                     waermebedarf = heizwaermebedarf + warmwasserbedarf
 
                 result = berechne_waermepumpe_einsparung(

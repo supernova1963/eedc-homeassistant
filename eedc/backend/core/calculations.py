@@ -295,6 +295,9 @@ def berechne_waermepumpe_einsparung(
     warmwasserbedarf_kwh: float = None,
     cop_heizung: float = None,
     cop_warmwasser: float = None,
+    # Für Modus "scop" (EU-Label)
+    scop_heizung: float = None,       # SCOP für gewählte Vorlauftemperatur
+    scop_warmwasser: float = None,    # SCOP für Warmwasser (55°C)
     # Modus-Auswahl
     effizienz_modus: str = "gesamt_jaz",
     # Gemeinsame Parameter
@@ -308,16 +311,27 @@ def berechne_waermepumpe_einsparung(
 
     Modi:
         - gesamt_jaz: Ein JAZ-Wert für den gesamten Wärmebedarf (Standard)
-        - getrennte_cops: Separate COPs für Heizung und Warmwasser
+        - getrennte_cops: Separate COPs für Heizung und Warmwasser (Momentanwerte)
+        - scop: EU-Label SCOP-Werte (Seasonal COP, realistischer als COP)
+
+    Begriffserklärung:
+        - COP (Coefficient of Performance): Momentane Effizienz bei definierten
+          Bedingungen (z.B. A7/W35 = 7°C Außentemp, 35°C Vorlauf)
+        - SCOP (Seasonal COP): EU-genormter Wert über die Heizperiode, berechnet
+          aus verschiedenen Teillast-COPs. Realistischer als COP.
+        - JAZ (Jahresarbeitszahl): Tatsächlich gemessene Effizienz über ein Jahr
+          am konkreten Standort. Kann vom SCOP abweichen.
 
     Args:
         waermebedarf_kwh: Jährlicher Gesamtwärmebedarf in kWh (für gesamt_jaz)
         jaz: Jahresarbeitszahl der Wärmepumpe (für gesamt_jaz)
-        heizwaermebedarf_kwh: Jährlicher Heizwärmebedarf in kWh (für getrennte_cops)
-        warmwasserbedarf_kwh: Jährlicher Warmwasserbedarf in kWh (für getrennte_cops)
+        heizwaermebedarf_kwh: Jährlicher Heizwärmebedarf in kWh
+        warmwasserbedarf_kwh: Jährlicher Warmwasserbedarf in kWh
         cop_heizung: COP für Heizung, typisch 3.5-4.5 (für getrennte_cops)
         cop_warmwasser: COP für Warmwasser, typisch 2.5-3.5 (für getrennte_cops)
-        effizienz_modus: "gesamt_jaz" oder "getrennte_cops"
+        scop_heizung: SCOP für Heizung vom EU-Label (für scop)
+        scop_warmwasser: SCOP für Warmwasser vom EU-Label (für scop)
+        effizienz_modus: "gesamt_jaz", "getrennte_cops" oder "scop"
         strompreis_cent: Strompreis in Cent
         pv_anteil_prozent: Anteil PV-Strom am WP-Verbrauch
         alter_energietraeger: "gas", "oel" oder "strom"
@@ -326,11 +340,25 @@ def berechne_waermepumpe_einsparung(
     Returns:
         WaermepumpeEinsparung: Berechnete Werte
     """
+    # Wärmebedarf vorbereiten
+    heiz = heizwaermebedarf_kwh if heizwaermebedarf_kwh is not None else 12000
+    ww = warmwasserbedarf_kwh if warmwasserbedarf_kwh is not None else 3000
+
     # Berechnung je nach Modus
-    if effizienz_modus == "getrennte_cops":
-        # Getrennte COPs für Heizung und Warmwasser
-        heiz = heizwaermebedarf_kwh if heizwaermebedarf_kwh is not None else 12000
-        ww = warmwasserbedarf_kwh if warmwasserbedarf_kwh is not None else 3000
+    if effizienz_modus == "scop":
+        # SCOP-Modus: EU-Label-Werte (realistischer als momentane COPs)
+        scop_h = scop_heizung if scop_heizung is not None else 4.0
+        scop_w = scop_warmwasser if scop_warmwasser is not None else 2.8
+
+        gesamt_waermebedarf = heiz + ww
+
+        # Stromverbrauch mit SCOP berechnen
+        strom_heizung = heiz / scop_h
+        strom_warmwasser = ww / scop_w
+        wp_strom_kwh = strom_heizung + strom_warmwasser
+
+    elif effizienz_modus == "getrennte_cops":
+        # Getrennte COPs für Heizung und Warmwasser (Momentanwerte)
         cop_h = cop_heizung if cop_heizung is not None else 3.9
         cop_w = cop_warmwasser if cop_warmwasser is not None else 3.0
 
@@ -340,16 +368,15 @@ def berechne_waermepumpe_einsparung(
         strom_heizung = heiz / cop_h
         strom_warmwasser = ww / cop_w
         wp_strom_kwh = strom_heizung + strom_warmwasser
+
     else:
-        # Standard: Ein JAZ für alles
+        # Standard: Ein JAZ für alles (gemessene Jahresarbeitszahl)
         verwendete_jaz = jaz if jaz is not None else 3.5
 
         # Gesamtwärmebedarf: explizit oder aus Komponenten
         if waermebedarf_kwh is not None:
             gesamt_waermebedarf = waermebedarf_kwh
         else:
-            heiz = heizwaermebedarf_kwh if heizwaermebedarf_kwh is not None else 12000
-            ww = warmwasserbedarf_kwh if warmwasserbedarf_kwh is not None else 3000
             gesamt_waermebedarf = heiz + ww
 
         wp_strom_kwh = gesamt_waermebedarf / verwendete_jaz

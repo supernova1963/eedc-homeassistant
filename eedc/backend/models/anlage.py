@@ -68,6 +68,10 @@ class Anlage(Base):
     # Struktur: {"strom": {"name": "...", "kundennummer": "...", "portal_url": "...", "notizen": "", "zaehler": [...]}, ...}
     versorger_daten: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
+    # Wetterdaten-Provider (für Globalstrahlung/Sonnenstunden)
+    # Optionen: "auto", "open-meteo", "brightsky", "open-meteo-solar"
+    wetter_provider: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="auto")
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.9 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.10 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -113,7 +113,9 @@ eedc/
 │   │   └── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
 │   ├── core/config.py             # APP_VERSION
 │   └── services/
-│       ├── wetter_service.py      # Open-Meteo + PVGIS TMY
+│       ├── wetter_service.py      # Multi-Provider Wetterdaten
+│       ├── brightsky_service.py   # DWD-Daten via Bright Sky API
+│       ├── solar_forecast_service.py  # Open-Meteo Solar GTI
 │       ├── prognose_service.py    # Prognose-Berechnungen
 │       └── mqtt_client.py         # HA Export
 │
@@ -163,12 +165,20 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
 
 ### Wärmepumpe: Effizienz-Parameter (Investition.parameter)
 ```json
-// Modus A: Gesamt-JAZ (Standard, einfacher)
+// Modus A: Gesamt-JAZ (gemessen vor Ort - genauester Wert wenn verfügbar)
 { "effizienz_modus": "gesamt_jaz", "jaz": 3.5, "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000 }
 
-// Modus B: Getrennte COPs (präziser)
+// Modus B: SCOP (EU-Energielabel - realistischer als Hersteller-COP) - NEU in beta.10
+{ "effizienz_modus": "scop", "scop_heizung": 4.5, "scop_warmwasser": 3.2, "vorlauftemperatur": "35", "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000 }
+
+// Modus C: Getrennte COPs (präzise Betriebspunkte)
 { "effizienz_modus": "getrennte_cops", "cop_heizung": 3.9, "cop_warmwasser": 3.0, "heizwaermebedarf_kwh": 12000, "warmwasserbedarf_kwh": 3000 }
 ```
+
+**Effizienz-Modi im Vergleich:**
+- **JAZ (Jahresarbeitszahl):** Tatsächlich gemessener Wert am Standort - der genaueste Wert
+- **SCOP (Seasonal COP):** EU-genormter saisonaler COP vom Energielabel - realistischer als momentane COPs
+- **Getrennte COPs:** Separate Werte für Heizung und Warmwasser - präziser bei unterschiedlichen Vorlauftemperaturen
 
 ### Anlage.versorger_daten (JSON) - NEU in beta.6
 ```json
@@ -230,6 +240,9 @@ POST /api/import/csv/{anlage_id}                     # CSV Import
 GET  /api/import/template/{anlage_id}                # CSV Template-Info
 GET  /api/import/export/{anlage_id}/full             # Vollständiger JSON-Export
 GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
+GET  /api/wetter/provider/{anlage_id}                # Verfügbare Wetter-Provider
+GET  /api/wetter/vergleich/{anlage_id}/{jahr}/{monat} # Provider-Vergleich
+GET  /api/solar-prognose/{anlage_id}?tage=7          # GTI-basierte PV-Prognose
 GET  /api/monatsdaten/aggregiert/{anlage_id}         # Aggregierte Monatsdaten
 
 # Aussichten (Prognosen)
@@ -262,22 +275,62 @@ Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksich
 | Legacy pv_erzeugung_kwh wird verwendet | InvestitionMonatsdaten abfragen |
 | ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
 
+## Wetterdienst-Integration
+
+### Multi-Provider Architektur
+EEDC unterstützt mehrere Wetterdatenquellen mit automatischer Provider-Auswahl:
+
+| Provider | Beschreibung | Region | Daten |
+|----------|-------------|--------|-------|
+| **auto** (Standard) | Automatische Auswahl | - | - |
+| **brightsky** | DWD-Daten via Bright Sky REST API | Deutschland | Historisch + MOSMIX |
+| **open-meteo** | Open-Meteo Archive API | Weltweit | Historisch + Forecast |
+| **open-meteo-solar** | Open-Meteo Solar mit GTI | Weltweit | Forecast + GTI |
+
+### Fallback-Kette
+1. Gewählter Provider → 2. Alternative → 3. PVGIS TMY → 4. Statische Defaults
+
+### Anlage.wetter_provider
+Neues Feld zur Provider-Auswahl pro Anlage. Migration wird automatisch bei Startup ausgeführt.
+
+### API-Endpoints
+```
+GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}?provider=auto
+GET /api/wetter/provider/{anlage_id}           # Verfügbare Provider
+GET /api/wetter/vergleich/{anlage_id}/{jahr}/{monat}  # Provider-Vergleich
+GET /api/solar-prognose/{anlage_id}?tage=7&pro_string=false  # GTI-Prognose
+```
+
+### GTI (Global Tilted Irradiance)
+Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
+- Neigung und Ausrichtung aus PV-Modul-Konfiguration
+- Temperaturkorrektur (Wirkungsgradminderung bei Hitze)
+- Systemverluste aus PVGIS-Einstellungen
+
 ## Offene Features
 
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.9)
+## Letzte Änderungen (v1.0.0-beta.10)
 
-**Icons im Hauptmenü**
-- Cockpit, Auswertungen und Aussichten mit passenden Icons
+**Multi-Provider Wetterdienst-Integration**
+- Bright Sky (DWD): Hochwertige Daten für Deutschland
+- Open-Meteo: Historische und Forecast-Daten weltweit
+- Open-Meteo Solar: GTI-basierte Berechnung für geneigte PV-Module
+- Automatische Fallback-Kette bei Nichtverfügbarkeit
 
-**Import/Export-Modul refaktoriert**
-- Modulare Package-Struktur statt einer großen Datei (2500+ Zeilen)
-- Bessere Wartbarkeit: `import_export/csv_operations.py`, `json_operations.py`, `demo_data.py`
+**GTI-basierte Solarprognose**
+- Global Tilted Irradiance statt horizontaler Globalstrahlung
+- 7-Tage Prognose mit stündlichen/täglichen Werten pro PV-String
+- Temperaturkorrektur für Wirkungsgradminderung
 
-**Bugfixes**
-- Garantiedatum-Felder werden jetzt korrekt als Strings gespeichert
-- JSON-Export URL für HA Ingress-Modus korrigiert (relativer Pfad)
+**SCOP-Modus für Wärmepumpe**
+- Neuer dritter Effizienz-Modus neben JAZ und COP
+- EU-Energielabel SCOP-Werte mit Vorlauftemperatur-Auswahl
+
+**Solarprognose-Seite (vormals PVGIS)**
+- Kombiniert PVGIS-Langfrist mit Wetter-Provider-Info
+- Zeigt verfügbare Provider und deren Status
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

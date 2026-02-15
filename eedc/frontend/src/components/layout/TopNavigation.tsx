@@ -38,7 +38,7 @@ const settingsMenu = [
   {
     category: 'System',
     items: [
-      { name: 'PVGIS', href: '/einstellungen/pvgis' },
+      { name: 'Solarprognose', href: '/einstellungen/solarprognose' },
       { name: 'Allgemein', href: '/einstellungen/allgemein' },
     ],
   },

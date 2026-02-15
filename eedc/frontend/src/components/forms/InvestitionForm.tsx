@@ -169,10 +169,14 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         return {
           ...stammdaten,
           leistung_kw: params.leistung_kw?.toString() || '',
-          // Modus-Auswahl: gesamt_jaz (Standard) oder getrennte_cops
+          // Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
           effizienz_modus: params.effizienz_modus?.toString() || 'gesamt_jaz',
           // Für Modus "gesamt_jaz"
           jaz: params.jaz?.toString() || '3.5',
+          // Für Modus "scop" (EU-Label)
+          scop_heizung: params.scop_heizung?.toString() || '4.5',
+          scop_warmwasser: params.scop_warmwasser?.toString() || '3.2',
+          vorlauftemperatur: params.vorlauftemperatur?.toString() || '35',
           // Für Modus "getrennte_cops"
           cop_heizung: params.cop_heizung?.toString() || '3.9',
           cop_warmwasser: params.cop_warmwasser?.toString() || '3.0',
@@ -722,7 +726,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
       )
 
     case 'waermepumpe': {
-      const istGetrennterModus = paramData.effizienz_modus === 'getrennte_cops'
+      const effizienzModus = paramData.effizienz_modus as string
       return (
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">Wärmepumpe Parameter</h3>
@@ -732,18 +736,31 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Berechnungsmodus für Effizienz
             </label>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-2">
               <label className="inline-flex items-center cursor-pointer">
                 <input
                   type="radio"
                   name="param_effizienz_modus"
                   value="gesamt_jaz"
-                  checked={!istGetrennterModus}
+                  checked={effizienzModus === 'gesamt_jaz'}
                   onChange={onChange}
                   className="text-primary-600 focus:ring-primary-500"
                 />
                 <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                  Jahresarbeitszahl (JAZ) - Empfohlen
+                  Jahresarbeitszahl (JAZ) - Gemessen vor Ort
+                </span>
+              </label>
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="param_effizienz_modus"
+                  value="scop"
+                  checked={effizienzModus === 'scop'}
+                  onChange={onChange}
+                  className="text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  SCOP (EU-Energielabel) - Aus Datenblatt
                 </span>
               </label>
               <label className="inline-flex items-center cursor-pointer">
@@ -751,7 +768,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                   type="radio"
                   name="param_effizienz_modus"
                   value="getrennte_cops"
-                  checked={istGetrennterModus}
+                  checked={effizienzModus === 'getrennte_cops'}
                   onChange={onChange}
                   className="text-primary-600 focus:ring-primary-500"
                 />
@@ -761,9 +778,11 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               </label>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {istGetrennterModus
+              {effizienzModus === 'getrennte_cops'
                 ? 'Separate COPs für Heizung (~3,9) und Warmwasser (~3,0) - präziser bei unterschiedlichen Betriebspunkten'
-                : 'Ein JAZ-Wert (~3,5) für den gesamten Wärmebedarf - einfacher und meist ausreichend'}
+                : effizienzModus === 'scop'
+                ? 'EU-genormter SCOP vom Energielabel - realistischer als Hersteller-COP, aber standortunabhängig'
+                : 'Gemessene Jahresarbeitszahl am eigenen Standort - der genaueste Wert, wenn verfügbar'}
             </p>
           </div>
 
@@ -780,7 +799,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
             />
 
             {/* Modus: gesamt_jaz */}
-            {!istGetrennterModus && (
+            {effizienzModus === 'gesamt_jaz' && (
               <Input
                 label="Jahresarbeitszahl (JAZ)"
                 name="param_jaz"
@@ -795,8 +814,53 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               />
             )}
 
+            {/* Modus: scop (EU-Label) */}
+            {effizienzModus === 'scop' && (
+              <>
+                <Input
+                  label="SCOP Heizung"
+                  name="param_scop_heizung"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="10"
+                  value={paramData.scop_heizung as string}
+                  onChange={onChange}
+                  hint="Vom EU-Energielabel (z.B. 4,5)"
+                  required
+                />
+                <Input
+                  label="SCOP Warmwasser"
+                  name="param_scop_warmwasser"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="10"
+                  value={paramData.scop_warmwasser as string}
+                  onChange={onChange}
+                  hint="Typisch 2,8-3,5"
+                  required
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Vorlauftemperatur (EU-Label)
+                  </label>
+                  <select
+                    name="param_vorlauftemperatur"
+                    value={paramData.vorlauftemperatur as string}
+                    onChange={(e) => onChange({ target: { name: 'param_vorlauftemperatur', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
+                    className="input w-full"
+                  >
+                    <option value="35">35°C (Fußbodenheizung)</option>
+                    <option value="55">55°C (Heizkörper)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">SCOP-Wert muss zur Vorlauftemperatur passen</p>
+                </div>
+              </>
+            )}
+
             {/* Modus: getrennte_cops */}
-            {istGetrennterModus && (
+            {effizienzModus === 'getrennte_cops' && (
               <>
                 <Input
                   label="COP Heizung"

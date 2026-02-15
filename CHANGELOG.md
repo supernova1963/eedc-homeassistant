@@ -7,6 +7,65 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.10] - 2026-02-15
+
+### Hinzugefügt
+
+- **Multi-Provider Wetterdienst-Integration**
+  - **Bright Sky (DWD):** Hochwertige Wetterdaten für Deutschland via DWD Open Data
+  - **Open-Meteo:** Historische und Forecast-Daten weltweit
+  - **Open-Meteo Solar:** GTI-basierte Berechnung für geneigte PV-Module
+  - Automatische Provider-Auswahl: Bright Sky für DE, Open-Meteo sonst
+  - Fallback-Kette bei Nichtverfügbarkeit → PVGIS TMY → Statische Defaults
+
+- **GTI-basierte Solarprognose**
+  - Global Tilted Irradiance (GTI) statt horizontaler Globalstrahlung
+  - Berücksichtigt Neigung und Ausrichtung der PV-Module
+  - Temperaturkorrektur für Wirkungsgradminderung bei Hitze
+  - 7-Tage Prognose mit stündlichen/täglichen Werten pro PV-String
+
+- **SCOP-Modus für Wärmepumpe**
+  - Neuer dritter Effizienz-Modus neben JAZ und COP
+  - EU-Energielabel SCOP-Werte (realistischer als Hersteller-COP)
+  - Separate Eingabe für Heiz-SCOP und Warmwasser-SCOP
+  - Vorlauftemperatur-Auswahl (35°C/55°C) passend zum EU-Label
+
+- **Kurzfrist-Tab erweitert**
+  - Umschalter zwischen Standard-Prognose und GTI-basierter Solarprognose
+  - Visualisierung der erwarteten PV-Erträge pro String
+  - Integration mit Open-Meteo Solar Forecast API
+
+### Geändert
+
+- **Einstellungen: PVGIS → Solarprognose**
+  - Menüpunkt umbenannt von "PVGIS" zu "Solarprognose"
+  - Zeigt verfügbare Wetter-Provider und deren Status
+  - Kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Info
+  - Redirect von `/einstellungen/pvgis` zu `/einstellungen/solarprognose`
+
+- **Demo-Daten aktualisiert**
+  - Standort von Wien auf München geändert (für Bright Sky/DWD-Verfügbarkeit)
+  - PV-Module mit GTI-Parametern (ausrichtung_grad, neigung_grad)
+  - Balkonkraftwerk mit GTI-kompatiblen Parametern
+
+- **API: Wetter-Endpoints erweitert**
+  - `GET /api/wetter/provider/{anlage_id}` - Verfügbare Provider mit Status
+  - `GET /api/wetter/vergleich/{anlage_id}/{jahr}/{monat}` - Provider-Vergleich
+  - `GET /api/solar-prognose/{anlage_id}` - GTI-basierte PV-Prognose
+
+### Bugfixes
+
+- **GTI-Berechnung korrigiert**
+  - Problem: Unrealistische Werte (z.B. 8845 kWh/Tag für 20 kWp)
+  - Ursache: Fehlerhafte Einheitenumrechnung Wh→kWh
+  - Fix: Korrekte Division durch 1000 in allen Berechnungspfaden
+
+- **wetter_provider in Export/Import**
+  - Feld wird jetzt korrekt im JSON-Export mitgeliefert
+  - Import setzt Provider-Einstellung der Anlage
+
+---
+
 ## [1.0.0-beta.9] - 2026-02-14
 
 ### Hinzugefügt

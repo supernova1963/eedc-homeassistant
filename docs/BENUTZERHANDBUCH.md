@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.9** | Stand: Februar 2026
+**Version 1.0.0-beta.10** | Stand: Februar 2026
 
 ---
 
@@ -164,10 +164,10 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 - Optional: Nutzt V2H aktiv
 
 #### Wärmepumpe
-- **Berechnungsmodus:** Wähle zwischen JAZ (ein Wert für alles) oder getrennte COPs
-- **JAZ (Jahresarbeitszahl):** Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP
-- **COP Heizung:** Effizienz bei Heizungsbetrieb (Vorlauf ~35°C), typisch 3,5-4,5
-- **COP Warmwasser:** Effizienz bei WW-Bereitung (Vorlauf ~55°C), typisch 2,5-3,5
+- **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi (NEU: SCOP in beta.10):
+  - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP.
+  - **SCOP (EU-Label):** Saisonaler COP vom EU-Energielabel - realistischer als Hersteller-COP, aber standortunabhängig. Wähle die passende Vorlauftemperatur (35°C für Fußbodenheizung, 55°C für Heizkörper).
+  - **Getrennte COPs:** Separate Werte für Heizung (~3,5-4,5 bei 35°C) und Warmwasser (~2,5-3,5 bei 55°C) - präziser bei unterschiedlichen Betriebspunkten.
 - **Wärmebedarf:** Heiz- und Warmwasserbedarf in kWh/Jahr (aus Energieausweis)
 - **Vergleich:** Alter Energieträger (Gas/Öl/Strom) und Preis für ROI-Berechnung
 
@@ -210,7 +210,7 @@ Das Dropdown-Menü ist in vier Kategorien unterteilt:
 - Demo-Daten – Testdaten laden
 
 **System:**
-- PVGIS – Prognose-Einstellungen
+- Solarprognose – PVGIS-Prognose und Wetter-Provider
 - Allgemein – Version, Status
 
 **Optional:**
@@ -224,7 +224,7 @@ Unter der Hauptnavigation erscheinen kontextabhängige Tabs:
 - Übersicht | PV-Anlage | E-Auto | Wärmepumpe | Speicher | Wallbox | Balkonkraftwerk | Sonstiges
 
 **Einstellungen Sub-Tabs:**
-- Anlage | Strompreise | Investitionen | Monatsdaten | Import/Export | PVGIS | Allgemein
+- Anlage | Strompreise | Investitionen | Monatsdaten | Import/Export | Solarprognose | Allgemein
 
 ---
 
@@ -581,10 +581,23 @@ Bei älteren Daten (vor v0.9.7) erscheint eine Warnung:
 - Beim Bearbeiten werden Werte automatisch migriert
 - Nach dem Speichern sind die Daten aktuell
 
-### 8.5 PVGIS Einstellungen
+### 8.5 Solarprognose (vormals PVGIS)
 
+Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen:
+
+**PVGIS-Prognose:**
 - **Systemverluste**: Standard 14% (für Deutschland typisch)
 - **TMY-Daten**: Typical Meteorological Year als Referenz
+- **Optimale Ausrichtung**: Berechnet optimale Neigung/Azimut für deinen Standort
+
+**Wetter-Provider (NEU in beta.10):**
+- Zeigt verfügbare Wetter-Datenquellen für deinen Standort
+- Der aktuelle Provider wird in den Anlagen-Stammdaten eingestellt
+- Verfügbare Provider:
+  - **Auto**: Automatische Auswahl (Bright Sky für DE, sonst Open-Meteo)
+  - **Bright Sky (DWD)**: Hochwertige Daten für Deutschland
+  - **Open-Meteo**: Historische und Forecast-Daten weltweit
+  - **Open-Meteo Solar**: GTI-basierte Prognose für geneigte Module
 
 ### 8.6 Allgemein
 
@@ -859,7 +872,9 @@ rest:
 | **kWp** | Kilowatt Peak (Nennleistung der PV-Anlage) |
 | **kWh** | Kilowattstunde (Energiemenge) |
 | **ROI** | Return on Investment (Kapitalrendite) |
-| **COP** | Coefficient of Performance (Wärmepumpen-Effizienz) |
+| **COP** | Coefficient of Performance (momentane Wärmepumpen-Effizienz) |
+| **SCOP** | Seasonal COP (saisonale Effizienz vom EU-Energielabel) |
+| **JAZ** | Jahresarbeitszahl (gemessene Effizienz am Standort) |
 | **V2H** | Vehicle-to-Home (E-Auto als Stromspeicher) |
 | **Arbitrage** | Speicher-Strategie: Billig laden, teuer nutzen |
 | **PVGIS** | EU-Dienst für PV-Ertragsprognosen |

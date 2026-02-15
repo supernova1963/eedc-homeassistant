@@ -87,17 +87,19 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             detail="Demo-Anlage existiert bereits. Bitte zuerst löschen."
         )
 
-    # 1. Anlage erstellen
+    # 1. Anlage erstellen (Standort: München - für DWD/Bright Sky Verfügbarkeit)
     anlage = Anlage(
         anlagenname="Demo-Anlage",
         leistung_kwp=20.0,
         installationsdatum=date(2023, 6, 1),
-        standort_plz="1220",
-        standort_ort="Wien",
+        standort_plz="80331",
+        standort_ort="München",
+        standort_strasse="Marienplatz 1",
         ausrichtung="Süd",
         neigung_grad=30.0,
-        latitude=48.2,
-        longitude=16.4,
+        latitude=48.137,  # München Zentrum
+        longitude=11.575,
+        wetter_provider="auto",  # Wird automatisch Bright Sky (DWD) wählen
     )
     db.add(anlage)
     await db.flush()
@@ -107,32 +109,32 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         Strompreis(
             anlage_id=anlage.id,
             netzbezug_arbeitspreis_cent_kwh=28.5,
-            einspeiseverguetung_cent_kwh=7.5,
+            einspeiseverguetung_cent_kwh=8.2,  # EEG-Vergütung für Anlagen <10kWp
             grundpreis_euro_monat=12.0,
             gueltig_ab=date(2023, 6, 1),
             gueltig_bis=date(2024, 3, 31),
             tarifname="Standardtarif 2023",
-            anbieter="Wien Energie",
+            anbieter="Stadtwerke München",
         ),
         Strompreis(
             anlage_id=anlage.id,
             netzbezug_arbeitspreis_cent_kwh=32.0,
-            einspeiseverguetung_cent_kwh=8.0,
+            einspeiseverguetung_cent_kwh=8.2,
             grundpreis_euro_monat=13.5,
             gueltig_ab=date(2024, 4, 1),
             gueltig_bis=date(2024, 12, 31),
             tarifname="Standardtarif 2024",
-            anbieter="Wien Energie",
+            anbieter="Stadtwerke München",
         ),
         Strompreis(
             anlage_id=anlage.id,
             netzbezug_arbeitspreis_cent_kwh=30.0,
-            einspeiseverguetung_cent_kwh=7.0,
+            einspeiseverguetung_cent_kwh=8.1,
             grundpreis_euro_monat=14.0,
             gueltig_ab=date(2025, 1, 1),
             gueltig_bis=None,
-            tarifname="Dynamischer Tarif 2025",
-            anbieter="Wien Energie",
+            tarifname="M-Strom Privat",
+            anbieter="Stadtwerke München",
         ),
     ]
     for sp in strompreise:
@@ -255,6 +257,8 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "anzahl_module": 24,
             "modul_typ": "Longi Hi-MO 5",
             "modul_leistung_wp": 500,
+            "ausrichtung_grad": 0,    # Süd = 0° für GTI
+            "neigung_grad": 30,
         },
         aktiv=True,
     )
@@ -274,6 +278,8 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "anzahl_module": 10,
             "modul_typ": "Longi Hi-MO 5",
             "modul_leistung_wp": 500,
+            "ausrichtung_grad": -90,  # Ost = -90° für GTI
+            "neigung_grad": 25,
         },
         aktiv=True,
     )
@@ -293,6 +299,8 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "anzahl_module": 6,
             "modul_typ": "Longi Hi-MO 5",
             "modul_leistung_wp": 500,
+            "ausrichtung_grad": 90,   # West = 90° für GTI
+            "neigung_grad": 25,
         },
         aktiv=True,
     )
@@ -305,10 +313,11 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
         bezeichnung="Balkon Süd",
         anschaffungsdatum=date(2024, 3, 1),
         anschaffungskosten_gesamt=1200,
+        leistung_kwp=0.8,  # 2x 400Wp = 800Wp = 0.8 kWp
         parameter={
             "leistung_wp": 400,
             "anzahl": 2,
-            "ausrichtung": "Süd",
+            "ausrichtung_grad": 0,    # Süd = 0° für GTI-Berechnung
             "neigung_grad": 35,
             "hat_speicher": True,
             "speicher_kapazitaet_wh": 1024,
@@ -342,7 +351,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
          eauto_km, eauto_verbrauch, eauto_pv, eauto_netz, eauto_extern_kwh, eauto_extern_euro, v2h,
          wp_strom, wp_heizung, wp_warmwasser, globalstrahlung, sonnenstunden) = row
 
-        # Monatsdaten (nur Zählerwerte)
+        # Monatsdaten (nur Zählerwerte - PV-Erzeugung kommt aus InvestitionMonatsdaten)
         md = Monatsdaten(
             anlage_id=anlage.id,
             jahr=jahr,

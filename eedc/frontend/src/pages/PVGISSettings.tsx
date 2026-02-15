@@ -1,16 +1,19 @@
 /**
- * PVGIS Einstellungen
+ * Solarprognose Einstellungen (vormals PVGIS Settings)
  *
- * Ermöglicht das Abrufen und Speichern von PVGIS Ertragsprognosen.
- * Zeigt gespeicherte Prognosen und optimale Ausrichtung an.
+ * Kombiniert:
+ * - PVGIS Ertragsprognosen (TMY-Daten)
+ * - Wetter-Provider Konfiguration für Ist-Daten
+ * - Optimale Ausrichtung
  */
 
 import { useState, useEffect } from 'react'
-import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle } from 'lucide-react'
+import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useAnlagen } from '../hooks'
-import { pvgisApi } from '../api'
+import { pvgisApi, wetterApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from '../api/pvgis'
+import type { WetterProviderList } from '../api/wetter'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
@@ -24,6 +27,7 @@ export default function PVGISSettings() {
   const [gespeichertePrognosen, setGespeichertePrognosen] = useState<GespeichertePrognose[]>([])
   const [previewPrognose, setPreviewPrognose] = useState<PVGISPrognose | null>(null)
   const [optimum, setOptimum] = useState<PVGISOptimum | null>(null)
+  const [wetterProvider, setWetterProvider] = useState<WetterProviderList | null>(null)
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [optimumLoading, setOptimumLoading] = useState(false)
@@ -55,12 +59,14 @@ export default function PVGISSettings() {
     setSuccess(null)
 
     try {
-      const [aktive, gespeicherte] = await Promise.all([
+      const [aktive, gespeicherte, provider] = await Promise.all([
         pvgisApi.getAktivePrognose(selectedAnlageId),
-        pvgisApi.listeGespeichertePrognosen(selectedAnlageId)
+        pvgisApi.listeGespeichertePrognosen(selectedAnlageId),
+        wetterApi.getProvider(selectedAnlageId).catch(() => null)
       ])
       setAktivePrognose(aktive)
       setGespeichertePrognosen(gespeicherte)
+      setWetterProvider(provider)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -152,7 +158,7 @@ export default function PVGISSettings() {
   if (anlagen.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PVGIS Prognose</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Solarprognose</h1>
         <Alert type="warning">Bitte zuerst eine Anlage anlegen.</Alert>
       </div>
     )
@@ -164,7 +170,7 @@ export default function PVGISSettings() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <Sun className="h-8 w-8 text-yellow-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PVGIS Prognose</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Solarprognose</h1>
         </div>
         <div className="flex items-center gap-3">
           {anlagen.length > 1 && (
@@ -510,16 +516,86 @@ export default function PVGISSettings() {
             </Card>
           )}
 
+          {/* Wetter-Provider Info */}
+          {wetterProvider && (
+            <Card className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Cloud className="h-5 w-5" />
+                Wetterdaten-Provider
+              </h2>
+
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Der Wetter-Provider bestimmt die Quelle für Globalstrahlungsdaten bei der Ist-Erfassung
+                und der Kurzfrist-Prognose. Die Einstellung kann in den Anlagen-Stammdaten geändert werden.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Aktueller Provider</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {wetterProvider.aktueller_provider === 'auto' ? 'Automatisch' :
+                     wetterProvider.aktueller_provider === 'brightsky' ? 'Bright Sky (DWD)' :
+                     wetterProvider.aktueller_provider === 'open-meteo' ? 'Open-Meteo' :
+                     wetterProvider.aktueller_provider === 'open-meteo-solar' ? 'Open-Meteo Solar (GTI)' :
+                     wetterProvider.aktueller_provider}
+                  </p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Standort</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {wetterProvider.standort.land || 'Unbekannt'}
+                    {wetterProvider.standort.in_deutschland && ' (DWD verfügbar)'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Verfügbare Provider</h4>
+                <div className="grid gap-2">
+                  {wetterProvider.provider.map(p => (
+                    <div
+                      key={p.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        p.verfuegbar
+                          ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-60'
+                      }`}
+                    >
+                      <div>
+                        <p className={`font-medium ${p.verfuegbar ? 'text-green-700 dark:text-green-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                          {p.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {p.beschreibung}
+                        </p>
+                      </div>
+                      <div className="text-sm">
+                        {p.verfuegbar ? (
+                          <span className="text-green-600 dark:text-green-400">✓ Verfügbar</span>
+                        ) : (
+                          <span className="text-gray-400">Nicht verfügbar</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Info-Box */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-700 dark:text-blue-300">
-                <p className="font-medium mb-1">Über PVGIS</p>
+                <p className="font-medium mb-1">Über Solarprognose</p>
+                <p className="mb-2">
+                  <strong>PVGIS</strong> (Langfrist): EU-Tool für Ertragsprognosen basierend auf Satellitendaten
+                  und Klimamodellen. Nutzt historische TMY-Daten (Typical Meteorological Year).
+                </p>
                 <p>
-                  PVGIS (Photovoltaic Geographical Information System) ist ein Tool der EU-Kommission,
-                  das PV-Ertragsprognosen basierend auf Satellitendaten und Klimamodellen berechnet.
-                  Die Prognosen berücksichtigen Standort, Modulneigung, Ausrichtung und Systemverluste.
+                  <strong>Wetter-Provider</strong> (Kurzfrist): Aktuelle und historische Wetterdaten für
+                  SOLL-IST-Vergleiche. Bright Sky liefert DWD-Daten (Deutschland), Open-Meteo weltweit.
                 </p>
                 <a
                   href="https://re.jrc.ec.europa.eu/pvg_tools/en/"
@@ -527,7 +603,7 @@ export default function PVGISSettings() {
                   rel="noopener noreferrer"
                   className="text-blue-600 dark:text-blue-400 hover:underline mt-2 inline-block"
                 >
-                  Mehr erfahren →
+                  PVGIS-Dokumentation →
                 </a>
               </div>
             </div>
