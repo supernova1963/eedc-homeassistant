@@ -1,9 +1,10 @@
 /**
  * SummaryStep - Zusammenfassung vor Abschluss des Setup-Wizards
  *
- * v0.9.0 - Vereinfacht (SensorConfig entfernt, kein HA-Import mehr)
+ * v1.0.0 - Mit PVGIS-Integration und Monatsdaten-CTA
  */
 
+import { useState } from 'react'
 import {
   Sun,
   Zap,
@@ -16,15 +17,23 @@ import {
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
-  ArrowRight,
   Info,
+  CloudSun,
+  FileSpreadsheet,
+  Loader2,
 } from 'lucide-react'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../../../types'
+import type { GespeichertePrognose } from '../../../api/pvgis'
 
 interface SummaryStepProps {
   anlage: Anlage | null
   strompreis: Strompreis | null
   investitionen: Investition[]
+  pvgisPrognose: GespeichertePrognose | null
+  pvgisError: string | null
+  canFetchPvgis: boolean
+  isLoading: boolean
+  onFetchPvgis: () => Promise<void>
   onComplete: () => void
   onBack: () => void
 }
@@ -54,19 +63,37 @@ export default function SummaryStep({
   anlage,
   strompreis,
   investitionen,
+  pvgisPrognose,
+  pvgisError,
+  canFetchPvgis,
+  isLoading,
+  onFetchPvgis,
   onComplete,
   onBack,
 }: SummaryStepProps) {
+  const [isFetchingPvgis, setIsFetchingPvgis] = useState(false)
+
   // Prüfen was konfiguriert wurde
   const hasAnlage = !!anlage
   const hasStrompreis = !!strompreis
   const hasInvestitionen = investitionen.length > 0
+  const hasPvgis = !!pvgisPrognose
 
   // Gesamtinvestition berechnen
   const totalInvestition = investitionen.reduce(
     (sum, inv) => sum + (inv.anschaffungskosten_gesamt || 0),
     0
   )
+
+  // PVGIS abrufen Handler
+  const handleFetchPvgis = async () => {
+    setIsFetchingPvgis(true)
+    try {
+      await onFetchPvgis()
+    } finally {
+      setIsFetchingPvgis(false)
+    }
+  }
 
   return (
     <div>
@@ -183,11 +210,67 @@ export default function SummaryStep({
               </div>
             )}
           </SummaryCard>
+
+          {/* PVGIS Prognose */}
+          <SummaryCard
+            icon={<CloudSun className="w-5 h-5" />}
+            title="PVGIS Ertragsprognose"
+            status={hasPvgis ? 'success' : canFetchPvgis ? 'neutral' : 'warning'}
+          >
+            {hasPvgis ? (
+              <div className="space-y-1">
+                <div className="font-medium text-gray-900 dark:text-white">
+                  {Math.round(pvgisPrognose.jahresertrag_kwh).toLocaleString('de-DE')} kWh/Jahr
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {pvgisPrognose.spezifischer_ertrag_kwh_kwp.toFixed(0)} kWh/kWp
+                  <span className="text-green-600 dark:text-green-400 ml-2">
+                    (PVGIS-Daten gespeichert)
+                  </span>
+                </div>
+              </div>
+            ) : canFetchPvgis ? (
+              <div className="space-y-3">
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
+                  Ertragsprognose von PVGIS abrufen für SOLL-IST Vergleiche
+                </p>
+                {pvgisError && (
+                  <p className="text-red-600 dark:text-red-400 text-sm">
+                    {pvgisError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleFetchPvgis}
+                  disabled={isFetchingPvgis || isLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50"
+                >
+                  {isFetchingPvgis ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Rufe PVGIS ab...
+                    </>
+                  ) : (
+                    <>
+                      <CloudSun className="w-4 h-4" />
+                      PVGIS-Prognose abrufen
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="text-amber-600 dark:text-amber-400 text-sm">
+                {!anlage?.latitude || !anlage?.longitude
+                  ? 'Koordinaten fehlen - bitte Standort mit PLZ ermitteln'
+                  : 'PV-Module fehlen - bitte unter Komponenten anlegen'}
+              </div>
+            )}
+          </SummaryCard>
         </div>
 
         {/* Individualisierte nächste Schritte */}
         <NextStepsSection
-          hasAnlage={hasAnlage}
+          hasPvgis={hasPvgis}
           investitionen={investitionen}
         />
       </div>
@@ -208,8 +291,8 @@ export default function SummaryStep({
           onClick={onComplete}
           className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-green-600 hover:to-emerald-600 transition-all"
         >
-          Einrichtung abschließen
-          <CheckCircle2 className="w-5 h-5" />
+          <FileSpreadsheet className="w-5 h-5" />
+          Weiter zur Datenerfassung
         </button>
       </div>
     </div>
@@ -267,93 +350,58 @@ function SummaryCard({
 
 // Individualisierte nächste Schritte basierend auf der Konfiguration
 function NextStepsSection({
-  hasAnlage,
+  hasPvgis,
   investitionen,
 }: {
-  hasAnlage: boolean
+  hasPvgis: boolean
   investitionen: Investition[]
 }) {
   // Fehlende Investitionstypen ermitteln
   const hasWechselrichter = investitionen.some(i => i.typ === 'wechselrichter')
   const hasPVModule = investitionen.some(i => i.typ === 'pv-module')
 
-  // Dynamische Schritte generieren
-  const steps: { text: string; priority: 'high' | 'medium' | 'low' }[] = []
-
-  // Hohe Priorität: Fehlende kritische Elemente
-  if (!hasPVModule) {
-    steps.push({
-      text: 'PV-Module unter Einstellungen → Investitionen anlegen (wichtig für PVGIS-Prognose)',
-      priority: 'high',
-    })
-  }
-
-  if (!hasWechselrichter && hasAnlage) {
-    steps.push({
-      text: 'Wechselrichter unter Einstellungen → Investitionen ergänzen',
-      priority: 'high',
-    })
-  }
-
-  // Mittlere Priorität: Datenerfassung
-  steps.push({
-    text: 'Monatsdaten unter Einstellungen → Monatsdaten erfassen oder CSV importieren',
-    priority: 'medium',
-  })
-
-  // Wenn PV-Module vorhanden
-  if (hasPVModule) {
-    steps.push({
-      text: 'PVGIS-Prognose unter Auswertungen → Prognose abrufen',
-      priority: 'medium',
-    })
-  }
-
-  // Niedrige Priorität: Allgemeine Hinweise
-  steps.push({
-    text: 'Dashboard und Auswertungen erkunden',
-    priority: 'low',
-  })
-
-  // Sortieren nach Priorität
-  const sortedSteps = steps.sort((a, b) => {
-    const order = { high: 0, medium: 1, low: 2 }
-    return order[a.priority] - order[b.priority]
-  })
-
   return (
-    <div className="mt-8 space-y-3">
+    <div className="mt-8 space-y-4">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-        <Info className="w-4 h-4 text-amber-500" />
-        Empfohlene nächste Schritte:
+        <Info className="w-4 h-4 text-blue-500" />
+        Wie geht es weiter?
       </h3>
-      <ul className="space-y-2 text-sm">
-        {sortedSteps.map((step, index) => (
-          <li key={index} className="flex items-start gap-2">
-            <ArrowRight className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-              step.priority === 'high'
-                ? 'text-amber-500'
-                : step.priority === 'medium'
-                  ? 'text-blue-500'
-                  : 'text-green-500'
-            }`} />
-            <span className={`${
-              step.priority === 'high'
-                ? 'text-gray-900 dark:text-white font-medium'
-                : 'text-gray-600 dark:text-gray-400'
-            }`}>
-              {step.text}
-            </span>
-          </li>
-        ))}
-      </ul>
 
+      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+        <div className="flex items-start gap-3">
+          <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white mb-1">
+              Monatsdaten erfassen
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Erfassen Sie Ihre monatlichen Zählerstände (Einspeisung, Netzbezug) und
+              Verbrauchsdaten der Komponenten. Sie können die Daten manuell eingeben
+              oder eine CSV-Datei importieren.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Warnungen bei fehlenden Komponenten */}
       {(!hasPVModule || !hasWechselrichter) && (
-        <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
           <p className="text-sm text-amber-700 dark:text-amber-300">
-            <strong>Hinweis:</strong> PV-Module werden nicht automatisch erkannt und müssen
-            manuell angelegt werden. Die Angaben zu Ausrichtung und Neigung sind wichtig
-            für die PVGIS-Ertragsprognose.
+            <strong>Hinweis:</strong> {!hasPVModule && !hasWechselrichter
+              ? 'Wechselrichter und PV-Module fehlen noch.'
+              : !hasPVModule
+                ? 'PV-Module fehlen noch.'
+                : 'Wechselrichter fehlt noch.'
+            } Diese können Sie jederzeit unter Einstellungen → Investitionen ergänzen.
+          </p>
+        </div>
+      )}
+
+      {!hasPvgis && hasPVModule && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            <strong>Tipp:</strong> Rufen Sie oben die PVGIS-Prognose ab, um später
+            SOLL-IST Vergleiche Ihrer PV-Erträge zu sehen.
           </p>
         </div>
       )}

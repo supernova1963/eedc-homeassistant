@@ -1,16 +1,14 @@
 /**
  * SetupWizard - Geführte Ersteinrichtung für EEDC
  *
- * v0.9.0 - Vereinfacht (Sensor-Konfiguration entfernt, kein HA-Import mehr)
+ * v1.0.0 - Standalone-Version (ohne HA-Abhängigkeit)
  *
  * Schritte:
  * 1. Willkommen
  * 2. Anlage erstellen (+ Geocoding)
- * 3. Home Assistant Verbindung (nur für Discovery)
- * 4. Strompreise konfigurieren
- * 5. Discovery → Rudimentäre Investitionen
- * 6. Investitionen vervollständigen
- * 7. Zusammenfassung
+ * 3. Strompreise konfigurieren
+ * 4. Investitionen erfassen (PV-System, optional Speicher, BKW, WP, E-Auto)
+ * 5. Zusammenfassung
  */
 
 import { useEffect } from 'react'
@@ -21,9 +19,7 @@ import { importApi } from '../../api'
 // Schritt-Komponenten
 import WelcomeStep from './steps/WelcomeStep'
 import AnlageStep from './steps/AnlageStep'
-import HAConnectionStep from './steps/HAConnectionStep'
 import StrompreiseStep from './steps/StrompreiseStep'
-import DiscoveryStep from './steps/DiscoveryStep'
 import InvestitionenStep from './steps/InvestitionenStep'
 import SummaryStep from './steps/SummaryStep'
 import CompleteStep from './steps/CompleteStep'
@@ -32,14 +28,12 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
-// Schritt-Konfiguration für Fortschrittsanzeige (v0.9: sensor-config entfernt)
+// Schritt-Konfiguration für Fortschrittsanzeige (v1.0: ohne HA)
 const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
   { key: 'welcome', label: 'Willkommen', shortLabel: 'Start' },
   { key: 'anlage', label: 'Anlage erstellen', shortLabel: 'Anlage' },
-  { key: 'ha-connection', label: 'Home Assistant', shortLabel: 'HA' },
   { key: 'strompreise', label: 'Strompreise', shortLabel: 'Preise' },
-  { key: 'discovery', label: 'Geräte erkennen', shortLabel: 'Geräte' },
-  { key: 'investitionen', label: 'Investitionen', shortLabel: 'Invest.' },
+  { key: 'investitionen', label: 'Komponenten', shortLabel: 'Komp.' },
   { key: 'summary', label: 'Zusammenfassung', shortLabel: 'Fertig' },
 ]
 
@@ -52,13 +46,6 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     // Nach erfolgreichem Laden direkt zum Dashboard
     onComplete()
   }
-
-  // HA-Verbindung beim Erreichen des Schritts prüfen
-  useEffect(() => {
-    if (wizard.step === 'ha-connection' && !wizard.haConnected) {
-      wizard.checkHAConnection()
-    }
-  }, [wizard.step])
 
   // Bei Abschluss Callback aufrufen
   useEffect(() => {
@@ -204,19 +191,6 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             />
           )}
 
-          {wizard.step === 'ha-connection' && (
-            <HAConnectionStep
-              isLoading={wizard.isLoading}
-              error={wizard.error}
-              haConnected={wizard.haConnected}
-              haVersion={wizard.haVersion}
-              onRetry={wizard.checkHAConnection}
-              onNext={wizard.nextStep}
-              onSkip={wizard.skipStep}
-              onBack={wizard.prevStep}
-            />
-          )}
-
           {wizard.step === 'strompreise' && (
             <StrompreiseStep
               anlage={wizard.anlage}
@@ -224,18 +198,6 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               error={wizard.error}
               onSubmit={wizard.createStrompreis}
               onUseDefaults={wizard.useDefaultStrompreise}
-              onBack={wizard.prevStep}
-            />
-          )}
-
-          {wizard.step === 'discovery' && (
-            <DiscoveryStep
-              isLoading={wizard.isLoading}
-              error={wizard.error}
-              haConnected={wizard.haConnected}
-              discoveryResult={wizard.discoveryResult}
-              onRunDiscovery={wizard.runDiscoveryAndCreateInvestitionen}
-              onSkip={wizard.nextStep}
               onBack={wizard.prevStep}
             />
           )}
@@ -249,6 +211,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               onUpdateInvestition={wizard.updateInvestition}
               onDeleteInvestition={wizard.deleteInvestition}
               onAddInvestition={wizard.addInvestition}
+              onCreateDefaultPVSystem={wizard.createDefaultPVSystem}
               onNext={wizard.nextStep}
               onBack={wizard.prevStep}
             />
@@ -259,6 +222,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               anlage={wizard.anlage}
               strompreis={wizard.strompreis}
               investitionen={wizard.investitionen}
+              pvgisPrognose={wizard.pvgisPrognose}
+              pvgisError={wizard.pvgisError}
+              canFetchPvgis={wizard.canFetchPvgis}
+              isLoading={wizard.isLoading}
+              onFetchPvgis={wizard.fetchPvgisPrognose}
               onComplete={wizard.completeWizard}
               onBack={wizard.prevStep}
             />

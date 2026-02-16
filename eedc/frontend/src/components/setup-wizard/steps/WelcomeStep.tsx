@@ -1,9 +1,11 @@
 /**
  * WelcomeStep - Willkommens-Bildschirm des Setup-Wizards
+ *
+ * v1.0.0 - Standalone-Version (ohne HA-Abhängigkeit)
  */
 
 import { useState } from 'react'
-import { Sun, Zap, PiggyBank, BarChart3, ArrowRight, Play, Loader2 } from 'lucide-react'
+import { Sun, TrendingUp, PiggyBank, BarChart3, ArrowRight, Play, Loader2 } from 'lucide-react'
 
 interface WelcomeStepProps {
   onNext: () => void
@@ -55,9 +57,9 @@ export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
           description="ROI-Berechnungen für alle Ihre Energie-Investitionen"
         />
         <FeatureCard
-          icon={<Zap className="w-6 h-6" />}
-          title="Home Assistant"
-          description="Automatischer Datenimport direkt aus Ihrem Smart Home"
+          icon={<TrendingUp className="w-6 h-6" />}
+          title="Prognosen"
+          description="Wetterbasierte Vorhersagen und PVGIS-Vergleiche"
         />
       </div>
 
@@ -68,10 +70,9 @@ export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
         </h2>
         <ul className="space-y-3">
           <SetupItem number={1} text="PV-Anlage mit Leistung und Standort anlegen" />
-          <SetupItem number={2} text="Home Assistant Verbindung prüfen" />
-          <SetupItem number={3} text="Stromtarif konfigurieren (mit Vorschlägen)" />
-          <SetupItem number={4} text="Geräte automatisch aus HA erkennen" />
-          <SetupItem number={5} text="Investitionen vervollständigen" />
+          <SetupItem number={2} text="Stromtarif konfigurieren (mit Vorschlägen)" />
+          <SetupItem number={3} text="Wechselrichter und PV-Module erfassen" />
+          <SetupItem number={4} text="Optional: Speicher, Wärmepumpe, E-Auto hinzufügen" />
         </ul>
       </div>
 
@@ -115,7 +116,7 @@ export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
               <p className="mt-2 text-sm text-red-500">{demoError}</p>
             )}
             <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-              Enthält 31 Monate Beispieldaten, 9 Investitionen inkl. E-Auto, Speicher, Wärmepumpe u.v.m.
+              Enthält 24 Monate Beispieldaten, Wechselrichter, PV-Module, Speicher, Wärmepumpe u.v.m.
             </p>
           </div>
         )}

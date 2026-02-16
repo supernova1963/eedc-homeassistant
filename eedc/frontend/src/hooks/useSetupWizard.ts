@@ -1,35 +1,29 @@
 /**
  * React Hook für den Setup-Wizard State Management
  *
- * v0.8.0 - Refactored Wizard mit vollständiger Investitions-Erfassung
+ * v1.0.0 - Standalone-Version (ohne HA-Abhängigkeit)
  *
- * Neuer Ablauf:
+ * Ablauf:
  * 1. Welcome
  * 2. Anlage (+ Auto-Geocoding)
- * 3. HA-Verbindung prüfen
- * 4. Strompreise
- * 5. Discovery → Alle Geräte rudimentär anlegen
- * 6. Investitionen vervollständigen (eine Seite, alle Typen)
- * 7. Sensor-Konfiguration
- * 8. Summary
- * 9. Complete
+ * 3. Strompreise
+ * 4. Investitionen (PV-System mit Wechselrichter + Module, optional weitere)
+ * 5. Summary
+ * 6. Complete
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
-import { haApi } from '../api/ha'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
+import { pvgisApi, type GespeichertePrognose } from '../api/pvgis'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../types'
-import type { DiscoveryResult } from '../api/ha'
 
-// Wizard-Schritte (v0.9: sensor-config entfernt - kein HA-Import mehr)
+// Wizard-Schritte (v1.0: ohne HA)
 export type WizardStep =
   | 'welcome'
   | 'anlage'
-  | 'ha-connection'
   | 'strompreise'
-  | 'discovery'
   | 'investitionen'
   | 'summary'
   | 'complete'
@@ -67,9 +61,6 @@ interface AnlageCreateData {
   standort_ort?: string
   latitude?: number
   longitude?: number
-  ausrichtung?: string
-  neigung_grad?: number
-  wechselrichter_hersteller?: string
 }
 
 // Strompreis-Daten für Wizard
@@ -95,13 +86,11 @@ const INITIAL_STATE: WizardState = {
   skippedSteps: [],
 }
 
-// Schritt-Reihenfolge (v0.9: sensor-config entfernt)
+// Schritt-Reihenfolge (v1.0: ohne HA)
 const STEP_ORDER: WizardStep[] = [
   'welcome',
   'anlage',
-  'ha-connection',
   'strompreise',
-  'discovery',
   'investitionen',
   'summary',
   'complete',
@@ -112,10 +101,10 @@ export const INVESTITION_TYP_ORDER: InvestitionTyp[] = [
   'wechselrichter',
   'pv-module',
   'speicher',
-  'wallbox',
-  'e-auto',
-  'waermepumpe',
   'balkonkraftwerk',
+  'waermepumpe',
+  'e-auto',
+  'wallbox',
   'sonstiges',
 ]
 
@@ -132,7 +121,6 @@ export const INVESTITION_TYP_LABELS: Record<InvestitionTyp, string> = {
 }
 
 // Welche Typen können einem Parent zugeordnet werden?
-// v0.9: E-Auto ist eigenständig (keine Wallbox-Zuordnung)
 export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
   'pv-module': 'wechselrichter',  // Pflicht: PV-Module müssen einem Wechselrichter zugeordnet sein
   'speicher': 'wechselrichter',    // Optional: Für Hybrid-Wechselrichter
@@ -151,9 +139,8 @@ interface UseSetupWizardReturn {
   // Daten
   anlage: Anlage | null
   strompreis: Strompreis | null
-  haConnected: boolean
-  haVersion: string | null
-  discoveryResult: DiscoveryResult | null
+  pvgisPrognose: GespeichertePrognose | null
+  pvgisError: string | null
 
   // Investitionen (alle Investitionen der Anlage)
   investitionen: Investition[]
@@ -169,20 +156,18 @@ interface UseSetupWizardReturn {
   createAnlage: (data: AnlageCreateData) => Promise<void>
   geocodeAddress: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number } | null>
 
-  // HA-Verbindung
-  checkHAConnection: () => Promise<void>
-
   // Strompreise
   createStrompreis: (data: StrompreisCreateData) => Promise<void>
   useDefaultStrompreise: () => Promise<void>
-
-  // Discovery (NEU: erstellt rudimentäre Investitionen)
-  runDiscoveryAndCreateInvestitionen: () => Promise<void>
 
   // Investitionen bearbeiten
   updateInvestition: (id: number, data: Partial<Investition>) => Promise<void>
   deleteInvestition: (id: number) => Promise<void>
   addInvestition: (typ: InvestitionTyp) => Promise<Investition>
+  createDefaultPVSystem: () => Promise<void>
+
+  // PVGIS
+  fetchPvgisPrognose: () => Promise<void>
 
   // Abschluss
   completeWizard: () => void
@@ -191,6 +176,7 @@ interface UseSetupWizardReturn {
   // Computed
   canProceed: boolean
   progress: number
+  canFetchPvgis: boolean
 }
 
 export function useSetupWizard(): UseSetupWizardReturn {
@@ -215,12 +201,13 @@ export function useSetupWizard(): UseSetupWizardReturn {
   // Daten
   const [anlage, setAnlage] = useState<Anlage | null>(null)
   const [strompreis, setStrompreis] = useState<Strompreis | null>(null)
-  const [haConnected, setHaConnected] = useState(false)
-  const [haVersion, setHaVersion] = useState<string | null>(null)
-  const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult | null>(null)
 
   // Alle Investitionen der Anlage
   const [investitionen, setInvestitionen] = useState<Investition[]>([])
+
+  // PVGIS Prognose
+  const [pvgisPrognose, setPvgisPrognose] = useState<GespeichertePrognose | null>(null)
+  const [pvgisError, setPvgisError] = useState<string | null>(null)
 
   // Pending updates für Debouncing (verhindert Race Conditions)
   const pendingUpdatesRef = useRef<Map<number, { data: Partial<Investition>; timer: ReturnType<typeof setTimeout> }>>(new Map())
@@ -307,7 +294,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
     nextStep()
   }, [step, nextStep])
 
-  // Geocoding (NEU)
+  // Geocoding
   const geocodeAddress = useCallback(async (plz: string, ort?: string) => {
     try {
       const result = await anlagenApi.geocode(plz, ort)
@@ -336,27 +323,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
       setIsLoading(false)
     }
   }, [nextStep])
-
-  // HA-Verbindung prüfen
-  const checkHAConnection = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const status = await haApi.getStatus()
-      setHaConnected(status.connected)
-      setHaVersion(status.ha_version || null)
-
-      if (!status.connected) {
-        setError('Keine Verbindung zu Home Assistant. Sie können diesen Schritt überspringen und später konfigurieren.')
-      }
-    } catch {
-      setHaConnected(false)
-      setError('Home Assistant nicht erreichbar. Läuft EEDC als Add-on?')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
 
   // Strompreis erstellen
   const createStrompreis = useCallback(async (data: StrompreisCreateData) => {
@@ -404,70 +370,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
     })
   }, [wizardState.anlageId, anlage, createStrompreis])
 
-  // NEU: Discovery ausführen UND rudimentäre Investitionen erstellen
-  const runDiscoveryAndCreateInvestitionen = useCallback(async () => {
-    if (!wizardState.anlageId) {
-      setError('Keine Anlage vorhanden')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      // Discovery ausführen
-      const manufacturer = anlage?.wechselrichter_hersteller || undefined
-      const result = await haApi.discover(wizardState.anlageId, manufacturer)
-      setDiscoveryResult(result)
-
-      if (!result.ha_connected) {
-        // Kein HA, aber trotzdem weitermachen
-        nextStep()
-        return
-      }
-
-      // Rudimentäre Investitionen für alle erkannten Geräte erstellen
-      const createdIds: number[] = []
-
-      for (const device of result.devices) {
-        if (device.already_configured || !device.suggested_investition_typ) continue
-
-        try {
-          const investitionData: InvestitionCreate = {
-            anlage_id: wizardState.anlageId,
-            typ: device.suggested_investition_typ as InvestitionCreate['typ'],
-            bezeichnung: device.name,
-            // Nur rudimentäre Daten, Rest wird in Schritt 6 vervollständigt
-            parameter: device.suggested_parameters || {},
-            aktiv: true,
-          }
-
-          const newInvestition = await investitionenApi.create(investitionData)
-          createdIds.push(newInvestition.id)
-        } catch {
-          // Einzelne Fehler ignorieren, weitermachen
-        }
-      }
-
-      // State aktualisieren
-      setWizardState(prev => ({
-        ...prev,
-        createdInvestitionen: [...prev.createdInvestitionen, ...createdIds],
-      }))
-
-      // Investitionen neu laden
-      await refreshInvestitionen()
-
-      nextStep()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Discovery fehlgeschlagen')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [wizardState.anlageId, anlage, nextStep, refreshInvestitionen])
-
-  // NEU: Investition aktualisieren mit Debouncing
-  // Verhindert Race Conditions bei schnellen Eingaben
+  // Investition aktualisieren mit Debouncing
   const updateInvestition = useCallback(async (id: number, data: Partial<Investition>) => {
     // 1. Sofort lokalen State optimistisch aktualisieren (für UI-Reaktivität)
     setInvestitionen(prev => prev.map(inv => {
@@ -516,7 +419,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
     pendingUpdatesRef.current.set(id, { data: mergedData, timer })
   }, [refreshInvestitionen])
 
-  // NEU: Investition löschen
+  // Investition löschen
   const deleteInvestition = useCallback(async (id: number) => {
     try {
       await investitionenApi.delete(id)
@@ -551,6 +454,84 @@ export function useSetupWizard(): UseSetupWizardReturn {
     }
   }, [wizardState.anlageId, refreshInvestitionen])
 
+  // Standard-PV-System erstellen (Wechselrichter + PV-Module)
+  const createDefaultPVSystem = useCallback(async () => {
+    if (!wizardState.anlageId || !anlage) {
+      setError('Keine Anlage vorhanden')
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // 1. Wechselrichter erstellen
+      const wechselrichter = await investitionenApi.create({
+        anlage_id: wizardState.anlageId,
+        typ: 'wechselrichter',
+        bezeichnung: 'Wechselrichter',
+        aktiv: true,
+        anschaffungsdatum: anlage.installationsdatum,
+      } as InvestitionCreate)
+
+      // 2. PV-Module erstellen und dem Wechselrichter zuordnen
+      await investitionenApi.create({
+        anlage_id: wizardState.anlageId,
+        typ: 'pv-module',
+        bezeichnung: 'PV-Module',
+        leistung_kwp: anlage.leistung_kwp,
+        ausrichtung: anlage.ausrichtung,
+        neigung_grad: anlage.neigung_grad,
+        parent_investition_id: wechselrichter.id,
+        aktiv: true,
+        anschaffungsdatum: anlage.installationsdatum,
+      } as InvestitionCreate)
+
+      // State aktualisieren
+      setWizardState(prev => ({
+        ...prev,
+        createdInvestitionen: [...prev.createdInvestitionen, wechselrichter.id],
+      }))
+
+      await refreshInvestitionen()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Erstellen des PV-Systems')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [wizardState.anlageId, anlage, refreshInvestitionen])
+
+  // PVGIS Prognose abrufen und speichern
+  const fetchPvgisPrognose = useCallback(async () => {
+    if (!wizardState.anlageId || !anlage) return
+
+    // Prüfen ob Koordinaten vorhanden
+    if (!anlage.latitude || !anlage.longitude) {
+      setPvgisError('Keine Koordinaten vorhanden')
+      return
+    }
+
+    // Prüfen ob PV-Module vorhanden
+    const hasPVModules = investitionen.some(i => i.typ === 'pv-module')
+    if (!hasPVModules) {
+      setPvgisError('Keine PV-Module vorhanden')
+      return
+    }
+
+    setIsLoading(true)
+    setPvgisError(null)
+
+    try {
+      const prognose = await pvgisApi.speicherePrognose(wizardState.anlageId)
+      setPvgisPrognose(prognose)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Fehler beim Abrufen der PVGIS-Prognose'
+      setPvgisError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [wizardState.anlageId, anlage, investitionen])
+
   // Wizard abschließen
   const completeWizard = useCallback(() => {
     setWizardState(prev => ({
@@ -568,7 +549,6 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setStep('welcome')
     setAnlage(null)
     setStrompreis(null)
-    setDiscoveryResult(null)
     setInvestitionen([])
     setError(null)
   }, [])
@@ -580,12 +560,8 @@ export function useSetupWizard(): UseSetupWizardReturn {
         return true
       case 'anlage':
         return !!wizardState.anlageId
-      case 'ha-connection':
-        return true // Kann immer weitergehen (überspringen möglich)
       case 'strompreise':
         return !!wizardState.strompreisId
-      case 'discovery':
-        return true
       case 'investitionen':
         return true // Kann mit 0 Investitionen fortfahren
       case 'summary':
@@ -598,6 +574,13 @@ export function useSetupWizard(): UseSetupWizardReturn {
   // Computed: Fortschritt in Prozent
   const progress = Math.round((STEP_ORDER.indexOf(step) / (STEP_ORDER.length - 1)) * 100)
 
+  // Computed: Kann PVGIS abgerufen werden?
+  const canFetchPvgis = !!(
+    anlage?.latitude &&
+    anlage?.longitude &&
+    investitionen.some(i => i.typ === 'pv-module')
+  )
+
   return {
     // State
     step,
@@ -608,9 +591,8 @@ export function useSetupWizard(): UseSetupWizardReturn {
     // Daten
     anlage,
     strompreis,
-    haConnected,
-    haVersion,
-    discoveryResult,
+    pvgisPrognose,
+    pvgisError,
 
     // Investitionen
     investitionen,
@@ -624,18 +606,19 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
     createAnlage,
     geocodeAddress,
-    checkHAConnection,
     createStrompreis,
     useDefaultStrompreise,
-    runDiscoveryAndCreateInvestitionen,
     updateInvestition,
     deleteInvestition,
     addInvestition,
+    createDefaultPVSystem,
+    fetchPvgisPrognose,
     completeWizard,
     resetWizard,
 
     // Computed
     canProceed,
     progress,
+    canFetchPvgis,
   }
 }

@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.10 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.11 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -312,25 +312,22 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - [ ] PDF-Export
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.10)
+## Letzte Änderungen (v1.0.0-beta.11)
 
-**Multi-Provider Wetterdienst-Integration**
-- Bright Sky (DWD): Hochwertige Daten für Deutschland
-- Open-Meteo: Historische und Forecast-Daten weltweit
-- Open-Meteo Solar: GTI-basierte Berechnung für geneigte PV-Module
-- Automatische Fallback-Kette bei Nichtverfügbarkeit
+**Setup-Wizard komplett überarbeitet**
+- Standalone-First: Alle Home Assistant Abhängigkeiten entfernt
+- Neuer 4-Schritte-Flow: Anlage → Strompreise → Komponenten → Zusammenfassung
+- PVGIS-Integration: Prognose direkt im Wizard abrufbar
+- Nach Abschluss direkt zur Monatsdaten-Erfassung
 
-**GTI-basierte Solarprognose**
-- Global Tilted Irradiance statt horizontaler Globalstrahlung
-- 7-Tage Prognose mit stündlichen/täglichen Werten pro PV-String
-- Temperaturkorrektur für Wirkungsgradminderung
+**Erweiterte Komponenten-Felder im Wizard**
+- Speicher: Arbitrage-Checkbox
+- E-Auto/Wallbox: V2H-fähig Checkbox
+- Balkonkraftwerk: Ausrichtung, Neigung, Mit Speicher
+- Alle technischen Felder als Pflichtfelder markiert
 
-**SCOP-Modus für Wärmepumpe**
-- Neuer dritter Effizienz-Modus neben JAZ und COP
-- EU-Energielabel SCOP-Werte mit Vorlauftemperatur-Auswahl
-
-**Solarprognose-Seite (vormals PVGIS)**
-- Kombiniert PVGIS-Langfrist mit Wetter-Provider-Info
-- Zeigt verfügbare Provider und deren Status
+**Schnellstart-Buttons für Komponenten**
+- Nach PV-System-Erstellung: Speicher, Wallbox, Wärmepumpe, E-Auto, Balkonkraftwerk
+- Bereits vorhandene Typen werden grün mit ✓ markiert
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

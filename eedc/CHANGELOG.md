@@ -7,6 +7,56 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.11] - 2026-02-16
+
+### Hinzugefügt
+
+- **Setup-Wizard komplett überarbeitet**
+  - Standalone-First: Alle Home Assistant Abhängigkeiten entfernt
+  - Neuer 4-Schritte-Flow: Anlage → Strompreise → Komponenten → Zusammenfassung
+  - **PVGIS-Integration:** Prognose direkt im Wizard abrufbar
+  - **Direkte Navigation:** Nach Abschluss zur Monatsdaten-Erfassung statt Cockpit
+  - Komponenten können nach PV-System-Erstellung weiter hinzugefügt werden
+
+- **Erweiterte Komponenten-Felder im Wizard**
+  - **Speicher:** Arbitrage-Checkbox (Netzstrom günstig laden, teuer einspeisen)
+  - **E-Auto:** V2H-fähig Checkbox (Vehicle-to-Home)
+  - **Wallbox:** V2H-fähig Checkbox (Bidirektionales Laden)
+  - **Balkonkraftwerk:** Ausrichtung, Neigung, Mit Speicher (z.B. Anker SOLIX)
+  - Alle technischen Felder als Pflichtfelder markiert
+
+- **Schnellstart-Buttons für Komponenten**
+  - Nach PV-System-Erstellung: Speicher, Wallbox, Wärmepumpe, E-Auto, Balkonkraftwerk
+  - Bereits vorhandene Typen werden grün mit ✓ markiert
+  - "Investition hinzufügen"-Dropdown für alle Typen weiterhin verfügbar
+
+### Geändert
+
+- **AnlageStep vereinfacht**
+  - Entfernt: "Technische Daten (optional)" mit Ausrichtung/Neigung (jetzt in PV-Modulen)
+  - Entfernt: "Wechselrichter-Hersteller" mit veraltetem HA-Hinweis
+  - Fokus auf Grunddaten: Name, Leistung, Datum, Standort
+
+- **SummaryStep verbessert**
+  - PVGIS-Prognose Card mit Button zum Abrufen
+  - Zeigt Jahresertrag wenn PVGIS abgerufen
+  - "Wie geht es weiter?" Sektion mit Monatsdaten-Hinweis
+  - CTA "Weiter zur Datenerfassung" statt "Einrichtung abschließen"
+
+- **CompleteStep aktualisiert**
+  - Hauptbutton "Monatsdaten erfassen" → navigiert zu /einstellungen/monatsdaten
+  - Sekundärbutton "Zum Cockpit" für alternative Navigation
+
+### Entfernt
+
+- **Home Assistant Integration aus Setup-Wizard**
+  - HAConnectionStep entfernt
+  - DiscoveryStep entfernt
+  - Automatische Sensor-Erkennung entfernt
+  - Keine HA-Referenzen mehr in WelcomeStep
+
+---
+
 ## [1.0.0-beta.10] - 2026-02-15
 
 ### Hinzugefügt

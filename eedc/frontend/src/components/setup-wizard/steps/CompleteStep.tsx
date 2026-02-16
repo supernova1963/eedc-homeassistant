@@ -1,8 +1,10 @@
 /**
  * CompleteStep - Abschluss-Bildschirm des Setup-Wizards
+ *
+ * v1.0.0 - Leitet zur Monatsdaten-Erfassung weiter
  */
 
-import { Sun, ArrowRight, PartyPopper } from 'lucide-react'
+import { Sun, PartyPopper, FileSpreadsheet, LayoutDashboard } from 'lucide-react'
 import type { Anlage } from '../../../types'
 
 interface CompleteStepProps {
@@ -11,6 +13,16 @@ interface CompleteStepProps {
 }
 
 export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepProps) {
+  // Navigation zur Monatsdaten-Seite
+  const handleGoToMonatsdaten = () => {
+    // Wizard als abgeschlossen markieren (wird von onGoToDashboard gemacht)
+    onGoToDashboard()
+    // Nach kurzem Delay zur Monatsdaten-Seite navigieren
+    setTimeout(() => {
+      window.location.href = '/einstellungen/monatsdaten'
+    }, 100)
+  }
+
   return (
     <div className="p-8 md:p-12 text-center">
       {/* Celebration Animation */}
@@ -39,46 +51,40 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
         )}
       </p>
 
-      {/* Quick Start Tips */}
-      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6 mb-8 max-w-md mx-auto text-left">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-          Erste Schritte:
-        </h3>
-        <ul className="space-y-3">
-          <QuickTip
-            number={1}
-            text="Fehlende Investitionen unter Einstellungen ergänzen"
-          />
-          <QuickTip
-            number={2}
-            text="Monatsdaten erfassen oder CSV importieren"
-          />
-          <QuickTip
-            number={3}
-            text="Dashboard und ROI-Berechnungen erkunden"
-          />
-        </ul>
+      {/* Info Box */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 mb-8 max-w-md mx-auto text-left border border-blue-200 dark:border-blue-800">
+        <div className="flex items-start gap-3">
+          <FileSpreadsheet className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+              Nächster Schritt: Monatsdaten erfassen
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Erfassen Sie Ihre monatlichen Zählerstände (Einspeisung, Netzbezug) und
+              Verbrauchsdaten. Die Daten können manuell eingegeben oder per CSV importiert werden.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* CTA */}
-      <button
-        onClick={onGoToDashboard}
-        className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-amber-600 hover:to-orange-600 transition-all"
-      >
-        Zum Dashboard
-        <ArrowRight className="w-5 h-5" />
-      </button>
-    </div>
-  )
-}
+      {/* CTAs */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <button
+          onClick={handleGoToMonatsdaten}
+          className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl hover:from-amber-600 hover:to-orange-600 transition-all"
+        >
+          <FileSpreadsheet className="w-5 h-5" />
+          Monatsdaten erfassen
+        </button>
 
-function QuickTip({ number, text }: { number: number; text: string }) {
-  return (
-    <li className="flex items-center gap-3">
-      <span className="flex-shrink-0 w-6 h-6 bg-amber-500 text-white text-sm font-medium rounded-full flex items-center justify-center">
-        {number}
-      </span>
-      <span className="text-gray-700 dark:text-gray-300">{text}</span>
-    </li>
+        <button
+          onClick={onGoToDashboard}
+          className="inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+        >
+          <LayoutDashboard className="w-5 h-5" />
+          Zum Cockpit
+        </button>
+      </div>
+    </div>
   )
 }
