@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.10** | Stand: Februar 2026
+**Version 1.0.0-beta.12** | Stand: Februar 2026
 
 ---
 
@@ -699,12 +699,39 @@ Der Import prüft deine Daten auf Konsistenz:
 - Redundante Legacy-Spalten (gleiche Werte wie Komponenten)
 - Unplausible Wetterwerte (Sonnenstunden > 400h/Monat)
 
-#### JSON-Export für Support (NEU in beta.8)
+#### JSON-Export für Support
 
-In der Anlagen-Übersicht findest du einen Download-Button für den vollständigen JSON-Export:
+In der Anlagen-Übersicht findest du einen Download-Button (blaues Download-Icon) für den vollständigen JSON-Export:
 - Enthält alle Anlage-Daten, Investitionen, Monatsdaten, Strompreise
 - Nützlich für Support-Anfragen oder Backup
 - Hierarchische Struktur mit allen verknüpften Daten
+
+#### PDF-Dokumentation (NEU in beta.12)
+
+Neben dem JSON-Export gibt es jetzt einen **PDF-Export** (orangefarbenes Dokument-Icon):
+
+**Inhalt der PDF-Dokumentation:**
+- **Stammdaten**: Anlagenname, Standort, Koordinaten, MaStR-ID
+- **Versorger-Daten**: Stromversorger, Kundennummern, Zählernummern mit Zählpunkten
+- **Stromtarif**: Aktueller Tarif mit Preisen
+- **Investitionen**: Alle Komponenten mit vollständigen Details:
+  - Technische Daten (Leistung, Kapazität, etc.)
+  - Gerätedaten (Hersteller, Modell, Seriennummer, Garantie)
+  - Ansprechpartner (Service-Firma, Kontaktdaten)
+  - Wartungsverträge (Vertragsnummer, Leistungsumfang)
+- **Jahresübersicht**: Alle KPIs (Energie, Autarkie, Finanzen, CO2)
+- **Diagramme**: PV-Erzeugung, Energie-Fluss, Autarkie-Verlauf
+- **Monatstabellen**: Energie, Speicher, Wärmepumpe, E-Mobilität, Finanzen
+- **PV-String Vergleich**: SOLL (PVGIS) vs. IST mit Abweichung
+
+**Layout:**
+- Kopfzeile (ab Seite 2): Anlagenname | Titel | eedc-Logo
+- Fußzeile: Erstellungsdatum | GitHub-Repository | "Seite X von Y"
+- Wiederholende Tabellenköpfe bei Seitenumbrüchen
+
+**Zeitraum:**
+- Standard: Gesamtzeitraum (alle Jahre seit Installation)
+- Der Export erfolgt direkt über die Anlagen-Seite
 
 ### 9.3 Demo-Daten
 

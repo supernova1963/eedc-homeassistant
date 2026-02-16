@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.10** | Stand: Februar 2026
+**Version 1.0.0-beta.12** | Stand: Februar 2026
 
 ---
 
@@ -124,12 +124,13 @@ eedc-homeassistant/
     │   │       ├── investitionen.py
     │   │       ├── strompreise.py
     │   │       ├── cockpit.py
-    │   │       ├── import_export/     # Modulares Package (NEU)
+    │   │       ├── import_export/     # Modulares Package
     │   │       │   ├── __init__.py   # Router-Kombination
     │   │       │   ├── schemas.py    # Pydantic-Modelle
     │   │       │   ├── helpers.py    # Hilfsfunktionen
     │   │       │   ├── csv_operations.py
     │   │       │   ├── json_operations.py
+    │   │       │   ├── pdf_operations.py  # PDF-Export (NEU beta.12)
     │   │       │   └── demo_data.py
     │   │       ├── wetter.py
     │   │       ├── pvgis.py
@@ -152,6 +153,7 @@ eedc-homeassistant/
     │   │
     │   └── services/            # Business Logic
     │       ├── wetter_service.py
+    │       ├── pdf_service.py       # PDF-Generierung (NEU beta.12)
     │       ├── ha_sensors_export.py
     │       ├── mqtt_client.py
     │       └── ha_yaml_generator.py
@@ -446,7 +448,7 @@ Sonstiges [Eigenständig]
 | `/api/strompreise` | strompreise.py | Stromtarife CRUD |
 | `/api/cockpit` | cockpit.py | Aggregierte Dashboard-Daten (Jahres-Rendite) |
 | `/api/aussichten` | aussichten.py | **Prognosen: Kurzfristig, Langfristig, Trend, Finanzen** |
-| `/api/import` | import_export.py | CSV Import/Export, JSON-Export, Demo-Daten |
+| `/api/import` | import_export/ | CSV Import/Export, JSON-Export, **PDF-Export**, Demo-Daten |
 | `/api/wetter` | wetter.py | Wetter-API (Multi-Provider: Open-Meteo, Bright Sky, PVGIS) |
 | `/api/solar-prognose` | solar_prognose.py | GTI-basierte PV-Ertragsprognose |
 | `/api/pvgis` | pvgis.py | PVGIS Ertragsprognosen |

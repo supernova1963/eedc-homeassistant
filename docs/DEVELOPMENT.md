@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 1.0.0-beta.9** | Stand: Februar 2026
+**Version 1.0.0-beta.12** | Stand: Februar 2026
 
 ---
 
@@ -202,7 +202,8 @@ eedc-homeassistant/
     │   ├── models/              # SQLAlchemy Models
     │   └── services/
     │       ├── wetter_service.py    # Open-Meteo + PVGIS
-    │       ├── prognose_service.py  # Prognose-Berechnungen (NEU)
+    │       ├── prognose_service.py  # Prognose-Berechnungen
+    │       ├── pdf_service.py       # PDF-Export (NEU beta.12)
     │       └── mqtt_client.py       # HA Export
     │
     └── frontend/

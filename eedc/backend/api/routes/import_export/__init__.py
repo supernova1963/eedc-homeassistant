@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from .csv_operations import router as csv_router
 from .json_operations import router as json_router
 from .demo_data import router as demo_router
+from .pdf_operations import router as pdf_router
 
 # Re-export schemas for backwards compatibility
 from .schemas import (
@@ -34,6 +35,9 @@ router.include_router(json_router)
 
 # Demo-Daten
 router.include_router(demo_router)
+
+# PDF-Export
+router.include_router(pdf_router)
 
 __all__ = [
     "router",

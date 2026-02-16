@@ -7,6 +7,45 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.12] - 2026-02-16
+
+### Hinzugefügt
+
+- **PDF-Export: Vollständige Anlagen-Dokumentation**
+  - Neuer PDF-Export-Button auf der Anlagen-Seite (orangefarbenes Dokument-Icon)
+  - **Gesamtzeitraum als Standard:** Ohne Jahr-Parameter werden alle Jahre exportiert
+  - **Vollständige Stammdaten:** Alle Komponenten mit Hersteller, Modell, Seriennummer, Garantie
+  - **Ansprechpartner & Wartung:** Service-Kontakte und Wartungsverträge pro Komponente
+  - **Versorger-Daten:** Stromversorger, Kundennummern, Zähler mit Zählpunkten
+  - **Home Assistant Sensoren:** Konfigurierte Sensor-Mappings
+
+- **PDF-Layout & Design**
+  - **Kopfzeile (ab Seite 2):** Anlagenname | "EEDC Anlagenbericht [Zeitraum]" | eedc-Logo
+  - **Fußzeile (alle Seiten):** Erstellungsdatum | GitHub-Repository | "Seite X von Y"
+  - **Farbschema:** Darkblue-Hintergrund für Kapitel, Orangered für Unterüberschriften
+  - **Wiederholende Tabellenköpfe:** Bei Seitenumbrüchen werden Spaltenüberschriften wiederholt
+
+- **PDF-Inhalte**
+  - Jahresübersicht mit allen KPIs (Energie, Autarkie, Finanzen, CO2)
+  - Drei Diagramme: PV-Erzeugung (Balken + PVGIS-Linie), Energie-Fluss (gestapelt), Autarkie-Verlauf
+  - Monatstabellen: Energie, Speicher, Wärmepumpe, E-Mobilität, Finanzen
+  - PV-String Vergleich: SOLL (PVGIS) vs. IST mit Abweichung
+  - Finanz-Prognose & Amortisations-Fortschritt
+
+- **Erweiterte Demo-Daten**
+  - Alle Investitionen mit vollständigen Stammdaten (Hersteller, Seriennummer, Garantie)
+  - Ansprechpartner für Wechselrichter, E-Auto, Wärmepumpe
+  - Wartungsverträge für Wechselrichter und Wärmepumpe
+  - Versorger-Daten mit Zählernummern und Zählpunkten
+  - Home Assistant Sensor-Mappings
+
+### Geändert
+
+- **PDF-Button verschoben:** Von Auswertung zu Anlagen-Seite (bei Stammdaten)
+- **API-Endpoint `/api/import/pdf/{anlage_id}`:** `jahr`-Parameter ist jetzt optional
+
+---
+
 ## [1.0.0-beta.11] - 2026-02-16
 
 ### Hinzugefügt

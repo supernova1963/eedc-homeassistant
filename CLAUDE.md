@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.11 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.0.0-beta.12 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -309,25 +309,27 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 
 ## Offene Features
 
-- [ ] PDF-Export
+- [x] PDF-Export ✓ (beta.12)
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.11)
+## Letzte Änderungen (v1.0.0-beta.12)
 
-**Setup-Wizard komplett überarbeitet**
-- Standalone-First: Alle Home Assistant Abhängigkeiten entfernt
-- Neuer 4-Schritte-Flow: Anlage → Strompreise → Komponenten → Zusammenfassung
-- PVGIS-Integration: Prognose direkt im Wizard abrufbar
-- Nach Abschluss direkt zur Monatsdaten-Erfassung
+**PDF-Export: Vollständige Anlagen-Dokumentation**
+- Neuer PDF-Export-Button auf der Anlagen-Seite (Stammdaten)
+- Gesamtzeitraum als Standard (alle Jahre seit Installation)
+- Vollständige Stammdaten: Hersteller, Modell, Seriennummer, Garantie
+- Ansprechpartner & Wartungsverträge pro Komponente
+- Versorger-Daten mit Zählernummern und Zählpunkten
 
-**Erweiterte Komponenten-Felder im Wizard**
-- Speicher: Arbitrage-Checkbox
-- E-Auto/Wallbox: V2H-fähig Checkbox
-- Balkonkraftwerk: Ausrichtung, Neigung, Mit Speicher
-- Alle technischen Felder als Pflichtfelder markiert
+**PDF-Layout & Design**
+- Kopfzeile (ab Seite 2): Anlagenname | Titel | eedc-Logo
+- Fußzeile: Erstellungsdatum | GitHub-Repository | "Seite X von Y"
+- Farbschema: Darkblue-Hintergrund, Orangered-Überschriften
+- Wiederholende Tabellenköpfe bei Seitenumbrüchen
 
-**Schnellstart-Buttons für Komponenten**
-- Nach PV-System-Erstellung: Speicher, Wallbox, Wärmepumpe, E-Auto, Balkonkraftwerk
-- Bereits vorhandene Typen werden grün mit ✓ markiert
+**Erweiterte Demo-Daten**
+- Alle Investitionen mit vollständigen Stammdaten
+- Ansprechpartner und Wartungsverträge
+- Versorger-Daten mit Zählern
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

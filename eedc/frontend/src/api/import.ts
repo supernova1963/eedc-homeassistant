@@ -141,4 +141,19 @@ export const importApi = {
 
     return response.json()
   },
+
+  /**
+   * PDF-Bericht URL generieren
+   * Vollstaendiger Bericht mit Stammdaten, KPIs, Diagrammen, Monatswerten
+   *
+   * @param anlageId - ID der Anlage
+   * @param jahr - Jahr fuer Jahresbericht, oder undefined/null fuer Gesamtzeitraum
+   */
+  getPdfExportUrl(anlageId: number, jahr?: number | null): string {
+    if (jahr) {
+      return `${API_BASE}/import/pdf/${anlageId}?jahr=${jahr}`
+    }
+    // Ohne Jahr-Parameter: Gesamtzeitraum
+    return `${API_BASE}/import/pdf/${anlageId}`
+  },
 }
