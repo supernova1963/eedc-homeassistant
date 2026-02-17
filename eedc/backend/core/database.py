@@ -75,6 +75,19 @@ async def run_migrations(conn):
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE anlagen ADD COLUMN {col_name} {col_type}'))
 
+        # v1.1.0: Neue Spalten zur monatsdaten Tabelle
+        if 'monatsdaten' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('monatsdaten')}
+            new_columns = [
+                ('durchschnittstemperatur', 'FLOAT'),
+                ('sonderkosten_euro', 'FLOAT'),
+                ('sonderkosten_beschreibung', 'VARCHAR(500)'),
+                ('notizen', 'VARCHAR(1000)'),
+            ]
+            for col_name, col_type in new_columns:
+                if col_name not in existing_columns:
+                    connection.execute(text(f'ALTER TABLE monatsdaten ADD COLUMN {col_name} {col_type}'))
+
         # v0.9.5+: Neue Spalten zur investitionen Tabelle (PV-Module spezifisch)
         if 'investitionen' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('investitionen')}
