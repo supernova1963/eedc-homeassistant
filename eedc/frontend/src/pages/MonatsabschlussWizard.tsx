@@ -227,7 +227,7 @@ export default function MonatsabschlussWizard() {
       const input: MonatsabschlussInput = {
         einspeisung_kwh: values.basis.einspeisung_kwh,
         netzbezug_kwh: values.basis.netzbezug_kwh,
-        direktverbrauch_kwh: values.basis.direktverbrauch_kwh,
+        // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung)
         globalstrahlung_kwh_m2: values.basis.globalstrahlung_kwh_m2,
         sonnenstunden: values.basis.sonnenstunden,
         durchschnittstemperatur: values.basis.durchschnittstemperatur,
@@ -441,7 +441,8 @@ function BasisStep({
   onChange: (feld: string, wert: number | null) => void
 }) {
   // Nur die wichtigsten Felder anzeigen
-  const wichtigeFelder = ['einspeisung_kwh', 'netzbezug_kwh', 'direktverbrauch_kwh']
+  // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung), daher nicht hier
+  const wichtigeFelder = ['einspeisung_kwh', 'netzbezug_kwh']
   const wetterdatenFelder = ['globalstrahlung_kwh_m2', 'sonnenstunden', 'durchschnittstemperatur']
 
   return (
@@ -543,7 +544,8 @@ function SummaryStep({
   let gesamt = 0
 
   for (const feld of data.basis_felder) {
-    if (['einspeisung_kwh', 'netzbezug_kwh', 'direktverbrauch_kwh'].includes(feld.feld)) {
+    // direktverbrauch_kwh wird automatisch berechnet, daher nicht zählen
+    if (['einspeisung_kwh', 'netzbezug_kwh'].includes(feld.feld)) {
       gesamt++
       if (values.basis[feld.feld] !== null && values.basis[feld.feld] !== undefined) {
         gefuellt++
@@ -585,7 +587,7 @@ function SummaryStep({
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-700">
           {data.basis_felder
-            .filter(f => ['einspeisung_kwh', 'netzbezug_kwh', 'direktverbrauch_kwh'].includes(f.feld))
+            .filter(f => ['einspeisung_kwh', 'netzbezug_kwh'].includes(f.feld))
             .map(feld => (
               <SummaryRow
                 key={feld.feld}

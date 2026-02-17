@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.services.vorschlag_service import VorschlagService, Vorschlag, PlausibilitaetsWarnung
+from backend.services.vorschlag_service import VorschlagService, Vorschlag, VorschlagQuelle, PlausibilitaetsWarnung
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
+from backend.services.ha_state_service import get_ha_state_service
 
 
 router = APIRouter(prefix="/monatsabschluss", tags=["Monatsabschluss"])
@@ -252,6 +253,9 @@ async def get_monatsabschluss(
     )
     monatsdaten = md_result.scalar_one_or_none()
 
+    # HA State Service für MQTT-Sensor-Vorschläge
+    ha_state_service = get_ha_state_service()
+
     # Basis-Felder aufbereiten
     basis_felder: list[FeldStatus] = []
     for feld_config in BASIS_FELDER:
@@ -264,10 +268,22 @@ async def get_monatsabschluss(
         strategie = mapping_info.get("strategie") if mapping_info else None
         sensor_id = mapping_info.get("sensor_id") if mapping_info else None
 
-        # Vorschläge holen
+        # Vorschläge holen (historische Daten)
         vorschlaege = await vorschlag_service.get_vorschlaege(
             anlage_id, feld, jahr, monat
         )
+
+        # Bei konfiguriertem Sensor: MQTT-Monatssensor-Wert als Vorschlag hinzufügen
+        if strategie == "sensor" and sensor_mapping.get("mqtt_setup_complete"):
+            mwd_wert = await ha_state_service.get_mwd_sensor_value(anlage_id, mapping_key)
+            if mwd_wert is not None:
+                # Als höchste Konfidenz einfügen (kommt aus Live-Sensor)
+                vorschlaege.insert(0, Vorschlag(
+                    wert=round(mwd_wert, 1),
+                    quelle=VorschlagQuelle.HA_SENSOR,
+                    konfidenz=95,
+                    beschreibung="Aus HA-Sensor (aktueller Monatswert)",
+                ))
 
         # Warnungen prüfen (nur wenn Wert vorhanden)
         warnungen = []

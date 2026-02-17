@@ -68,7 +68,7 @@ export interface InvestitionWerte {
 export interface MonatsabschlussInput {
   einspeisung_kwh?: number | null
   netzbezug_kwh?: number | null
-  direktverbrauch_kwh?: number | null
+  // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung)
   globalstrahlung_kwh_m2?: number | null
   sonnenstunden?: number | null
   durchschnittstemperatur?: number | null
