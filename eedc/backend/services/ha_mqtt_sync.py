@@ -5,6 +5,7 @@ Synchronisiert Monatsdaten zwischen Home Assistant und EEDC via MQTT.
 Erstellt automatisch die benötigten MQTT Entities für die Monatswert-Berechnung.
 """
 
+import os
 from datetime import datetime
 from typing import Optional, Any
 from dataclasses import dataclass
@@ -14,6 +15,16 @@ from sqlalchemy import select
 
 from backend.models.anlage import Anlage
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
+
+
+def _get_mqtt_config_from_env() -> MQTTConfig:
+    """Lädt MQTT-Konfiguration aus Umgebungsvariablen."""
+    return MQTTConfig(
+        host=os.environ.get("MQTT_HOST", "core-mosquitto"),
+        port=int(os.environ.get("MQTT_PORT", "1883")),
+        username=os.environ.get("MQTT_USER") or None,
+        password=os.environ.get("MQTT_PASSWORD") or None,
+    )
 
 
 @dataclass
@@ -113,7 +124,12 @@ class HAMqttSyncService:
     """Synchronisiert Monatsdaten zwischen HA und EEDC via MQTT."""
 
     def __init__(self, mqtt_client: Optional[MQTTClient] = None):
-        self.mqtt = mqtt_client or MQTTClient()
+        if mqtt_client:
+            self.mqtt = mqtt_client
+        else:
+            # MQTT-Konfiguration aus Umgebungsvariablen laden
+            config = _get_mqtt_config_from_env()
+            self.mqtt = MQTTClient(config)
 
     async def setup_sensors_for_anlage(
         self,
@@ -162,7 +178,11 @@ class HAMqttSyncService:
         # Investition-Sensoren
         investitionen = mapping.get("investitionen", {})
         for inv_id, inv_config in investitionen.items():
-            felder = inv_config if isinstance(inv_config, dict) else {}
+            # inv_config hat Struktur {"felder": {...}} - extrahiere die Felder
+            if isinstance(inv_config, dict):
+                felder = inv_config.get("felder", inv_config)  # Fallback auf inv_config selbst
+            else:
+                felder = {}
             for feld, config in felder.items():
                 if config and config.get("strategie") == "sensor" and config.get("sensor_id"):
                     # Eindeutiger Key mit Investition-ID
@@ -348,7 +368,11 @@ class HAMqttSyncService:
         # Investition-Sensoren
         investitionen = anlage.sensor_mapping.get("investitionen", {})
         for inv_id, inv_config in investitionen.items():
-            felder = inv_config if isinstance(inv_config, dict) else {}
+            # inv_config hat Struktur {"felder": {...}} - extrahiere die Felder
+            if isinstance(inv_config, dict):
+                felder = inv_config.get("felder", inv_config)  # Fallback auf inv_config selbst
+            else:
+                felder = {}
             for feld, config in felder.items():
                 if config and config.get("strategie") == "sensor":
                     keys_to_remove.append(f"inv{inv_id}_{feld}")
