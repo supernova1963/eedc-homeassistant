@@ -58,11 +58,13 @@ class FeldStatus(BaseModel):
     label: str
     einheit: str
     aktueller_wert: Optional[float] = None
+    aktueller_text: Optional[str] = None  # Für Textfelder wie Beschreibung, Notizen
     quelle: Optional[str] = None  # ha_sensor, snapshot, manuell, berechnet
     vorschlaege: list[VorschlagResponse] = []
     warnungen: list[WarnungResponse] = []
     strategie: Optional[str] = None  # Aus sensor_mapping
     sensor_id: Optional[str] = None  # Wenn strategie=sensor
+    typ: str = "number"  # number oder text
 
 
 class InvestitionStatus(BaseModel):
@@ -84,6 +86,9 @@ class MonatsabschlussResponse(BaseModel):
 
     # Basis-Felder (Zählerdaten)
     basis_felder: list[FeldStatus]
+
+    # Optionale Felder (Sonderkosten, Notizen - nicht aus HA)
+    optionale_felder: list[FeldStatus] = []
 
     # Investition-Felder
     investitionen: list[InvestitionStatus]
@@ -110,8 +115,11 @@ class MonatsabschlussInput(BaseModel):
     globalstrahlung_kwh_m2: Optional[float] = None
     sonnenstunden: Optional[float] = None
     durchschnittstemperatur: Optional[float] = None
+
+    # Optionale manuelle Felder (nicht aus HA)
     sonderkosten_euro: Optional[float] = None
     sonderkosten_beschreibung: Optional[str] = None
+    notizen: Optional[str] = None
 
     # Investitionen
     investitionen: list[InvestitionWerte] = []
@@ -153,6 +161,13 @@ BASIS_FELDER = [
     {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung"},
     {"feld": "sonnenstunden", "label": "Sonnenstunden", "einheit": "h", "mapping_key": "sonnenstunden"},
     {"feld": "durchschnittstemperatur", "label": "Ø Temperatur", "einheit": "°C", "mapping_key": "temperatur"},
+]
+
+# Optionale Felder die nicht aus HA kommen (manuelle Eingabe)
+OPTIONALE_FELDER = [
+    {"feld": "sonderkosten_euro", "label": "Sonderkosten", "einheit": "€"},
+    {"feld": "sonderkosten_beschreibung", "label": "Beschreibung", "einheit": "", "typ": "text"},
+    {"feld": "notizen", "label": "Notizen", "einheit": "", "typ": "text"},
 ]
 
 # Investition-Felder nach Typ
@@ -381,6 +396,33 @@ async def get_monatsabschluss(
             felder=felder,
         ))
 
+    # Optionale Felder aufbereiten (manuelle Eingaben, nicht aus HA)
+    optionale_felder: list[FeldStatus] = []
+    for feld_config in OPTIONALE_FELDER:
+        feld = feld_config["feld"]
+        feld_typ = feld_config.get("typ", "number")
+
+        if feld_typ == "text":
+            aktueller_text = getattr(monatsdaten, feld, None) if monatsdaten else None
+            optionale_felder.append(FeldStatus(
+                feld=feld,
+                label=feld_config["label"],
+                einheit=feld_config["einheit"],
+                aktueller_text=aktueller_text,
+                quelle="manuell" if aktueller_text else None,
+                typ="text",
+            ))
+        else:
+            aktueller_wert = getattr(monatsdaten, feld, None) if monatsdaten else None
+            optionale_felder.append(FeldStatus(
+                feld=feld,
+                label=feld_config["label"],
+                einheit=feld_config["einheit"],
+                aktueller_wert=aktueller_wert,
+                quelle="manuell" if aktueller_wert is not None else None,
+                typ="number",
+            ))
+
     return MonatsabschlussResponse(
         anlage_id=anlage_id,
         anlage_name=anlage.anlagenname,
@@ -389,6 +431,7 @@ async def get_monatsabschluss(
         ist_abgeschlossen=monatsdaten is not None,
         ha_mapping_konfiguriert=sensor_mapping.get("mqtt_setup_complete", False),
         basis_felder=basis_felder,
+        optionale_felder=optionale_felder,
         investitionen=investitionen_status,
     )
 
@@ -465,6 +508,8 @@ async def save_monatsabschluss(
         monatsdaten.sonderkosten_euro = daten.sonderkosten_euro
     if daten.sonderkosten_beschreibung is not None:
         monatsdaten.sonderkosten_beschreibung = daten.sonderkosten_beschreibung
+    if daten.notizen is not None:
+        monatsdaten.notizen = daten.notizen
 
     await db.flush()
     monatsdaten_id = monatsdaten.id

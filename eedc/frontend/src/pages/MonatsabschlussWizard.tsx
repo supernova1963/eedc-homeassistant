@@ -24,6 +24,7 @@ import {
   Car,
   Settings,
   Loader2,
+  FileText,
 } from 'lucide-react'
 import { anlagenApi, monatsabschlussApi } from '../api'
 import type {
@@ -50,6 +51,7 @@ const TYP_ICONS: Record<string, React.ReactNode> = {
 
 interface WizardState {
   basis: Record<string, number | null>
+  optionale: Record<string, number | string | null>  // Sonderkosten, Notizen
   investitionen: Record<number, Record<string, number | null>>
 }
 
@@ -71,6 +73,7 @@ export default function MonatsabschlussWizard() {
   const [currentStep, setCurrentStep] = useState(0)
   const [values, setValues] = useState<WizardState>({
     basis: {},
+    optionale: {},
     investitionen: {},
   })
 
@@ -134,6 +137,16 @@ export default function MonatsabschlussWizard() {
           basisValues[feld.feld] = feld.aktueller_wert
         }
 
+        // Optionale Felder (Sonderkosten, Notizen)
+        const optionaleValues: Record<string, number | string | null> = {}
+        for (const feld of response.optionale_felder || []) {
+          if (feld.typ === 'text') {
+            optionaleValues[feld.feld] = feld.aktueller_text
+          } else {
+            optionaleValues[feld.feld] = feld.aktueller_wert
+          }
+        }
+
         const invValues: Record<number, Record<string, number | null>> = {}
         for (const inv of response.investitionen) {
           invValues[inv.id] = {}
@@ -142,7 +155,7 @@ export default function MonatsabschlussWizard() {
           }
         }
 
-        setValues({ basis: basisValues, investitionen: invValues })
+        setValues({ basis: basisValues, optionale: optionaleValues, investitionen: invValues })
       } catch (e) {
         setError('Fehler beim Laden der Monatsdaten')
         console.error(e)
@@ -184,6 +197,11 @@ export default function MonatsabschlussWizard() {
       })
     }
 
+    // Optionale Felder Step (Sonderkosten, Notizen)
+    if (data.optionale_felder && data.optionale_felder.length > 0) {
+      s.push({ id: 'optionale', title: 'Sonstiges', icon: <FileText className="w-4 h-4" /> })
+    }
+
     s.push({ id: 'summary', title: 'Zusammenfassung', icon: <CheckCircle className="w-4 h-4" /> })
 
     return s
@@ -216,6 +234,16 @@ export default function MonatsabschlussWizard() {
     }
   }
 
+  const handleOptionalChange = (feld: string, wert: number | string | null) => {
+    setValues(prev => ({
+      ...prev,
+      optionale: {
+        ...prev.optionale,
+        [feld]: wert,
+      },
+    }))
+  }
+
   const handleSave = async () => {
     if (!data || !anlageId) return
 
@@ -231,6 +259,16 @@ export default function MonatsabschlussWizard() {
         globalstrahlung_kwh_m2: values.basis.globalstrahlung_kwh_m2,
         sonnenstunden: values.basis.sonnenstunden,
         durchschnittstemperatur: values.basis.durchschnittstemperatur,
+        // Optionale Felder
+        sonderkosten_euro: typeof values.optionale.sonderkosten_euro === 'number'
+          ? values.optionale.sonderkosten_euro
+          : null,
+        sonderkosten_beschreibung: typeof values.optionale.sonderkosten_beschreibung === 'string'
+          ? values.optionale.sonderkosten_beschreibung
+          : null,
+        notizen: typeof values.optionale.notizen === 'string'
+          ? values.optionale.notizen
+          : null,
         investitionen: [],
       }
 
@@ -367,12 +405,20 @@ export default function MonatsabschlussWizard() {
           />
         )}
 
-        {currentStep > 0 && currentStep < steps.length - 1 && (
+        {currentStep > 0 && currentStep < steps.length - 1 && steps[currentStep].id !== 'optionale' && (
           <InvestitionStep
             typ={steps[currentStep].id}
             investitionen={data.investitionen.filter(i => i.typ === steps[currentStep].id)}
             values={values.investitionen}
             onChange={(invId, feld, wert) => handleValueChange(feld, wert, invId)}
+          />
+        )}
+
+        {steps[currentStep].id === 'optionale' && (
+          <OptionaleStep
+            felder={data.optionale_felder || []}
+            values={values.optionale}
+            onChange={handleOptionalChange}
           />
         )}
 
@@ -484,6 +530,58 @@ function BasisStep({
             ))}
         </div>
       </details>
+    </div>
+  )
+}
+
+function OptionaleStep({
+  felder,
+  values,
+  onChange,
+}: {
+  felder: FeldStatus[]
+  values: Record<string, number | string | null>
+  onChange: (feld: string, wert: number | string | null) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+        <FileText className="w-5 h-5 text-gray-500" />
+        Sonstiges
+      </h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Optionale Eingaben für diesen Monat - können auch leer bleiben.
+      </p>
+
+      <div className="space-y-4">
+        {felder.map(feld => (
+          <div key={feld.feld} className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {feld.label}
+              {feld.einheit && <span className="text-gray-400 ml-1">({feld.einheit})</span>}
+            </label>
+
+            {feld.typ === 'text' ? (
+              <textarea
+                value={(values[feld.feld] as string) || ''}
+                onChange={(e) => onChange(feld.feld, e.target.value || null)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                placeholder={feld.label}
+              />
+            ) : (
+              <input
+                type="number"
+                step="0.01"
+                value={values[feld.feld] ?? ''}
+                onChange={(e) => onChange(feld.feld, e.target.value ? parseFloat(e.target.value) : null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                placeholder={feld.label}
+              />
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -621,6 +719,29 @@ function SummaryStep({
           </div>
         </div>
       ))}
+
+      {/* Optionale Felder */}
+      {data.optionale_felder && data.optionale_felder.length > 0 && (
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-gray-500" />
+            <h3 className="font-medium text-gray-900 dark:text-white">Sonstiges</h3>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {data.optionale_felder.map(feld => (
+              <SummaryRow
+                key={feld.feld}
+                label={feld.label}
+                wert={feld.typ === 'text'
+                  ? (values.optionale[feld.feld] as string)
+                  : (values.optionale[feld.feld] as number)}
+                einheit={feld.einheit}
+                isText={feld.typ === 'text'}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -728,19 +849,29 @@ function SummaryRow({
   label,
   wert,
   einheit,
+  isText = false,
 }: {
   label: string
-  wert: number | null | undefined
+  wert: number | string | null | undefined
   einheit: string
+  isText?: boolean
 }) {
+  const hasValue = wert !== null && wert !== undefined && wert !== ''
+
   return (
     <div className="flex items-center justify-between px-4 py-2">
       <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
       <span className="text-sm font-medium text-gray-900 dark:text-white">
-        {wert !== null && wert !== undefined ? (
-          <>
-            {wert.toLocaleString('de-DE', { maximumFractionDigits: 1 })} {einheit}
-          </>
+        {hasValue ? (
+          isText ? (
+            <span className="max-w-xs truncate">{wert}</span>
+          ) : (
+            <>
+              {typeof wert === 'number'
+                ? wert.toLocaleString('de-DE', { maximumFractionDigits: 1 })
+                : wert} {einheit}
+            </>
+          )
         ) : (
           <span className="text-gray-400 italic">nicht ausgefüllt</span>
         )}

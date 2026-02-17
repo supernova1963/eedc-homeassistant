@@ -56,6 +56,11 @@ class Monatsdaten(Base):
     # Wetterdaten (optional, von Open-Meteo)
     globalstrahlung_kwh_m2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sonnenstunden: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    durchschnittstemperatur: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Sonderkosten (manuelle Eingabe)
+    sonderkosten_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sonderkosten_beschreibung: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Metadaten
     datenquelle: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # manual, csv, ha_import

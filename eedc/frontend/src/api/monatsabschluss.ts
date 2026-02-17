@@ -30,11 +30,13 @@ export interface FeldStatus {
   label: string
   einheit: string
   aktueller_wert: number | null
+  aktueller_text: string | null  // Für Textfelder
   quelle: 'ha_sensor' | 'snapshot' | 'manuell' | 'berechnet' | null
   vorschlaege: Vorschlag[]
   warnungen: Warnung[]
   strategie: string | null
   sensor_id: string | null
+  typ: 'number' | 'text'  // Feldtyp
 }
 
 export interface InvestitionStatus {
@@ -52,6 +54,7 @@ export interface MonatsabschlussResponse {
   ist_abgeschlossen: boolean
   ha_mapping_konfiguriert: boolean
   basis_felder: FeldStatus[]
+  optionale_felder: FeldStatus[]  // Sonderkosten, Notizen
   investitionen: InvestitionStatus[]
 }
 
@@ -72,8 +75,10 @@ export interface MonatsabschlussInput {
   globalstrahlung_kwh_m2?: number | null
   sonnenstunden?: number | null
   durchschnittstemperatur?: number | null
+  // Optionale manuelle Felder
   sonderkosten_euro?: number | null
   sonderkosten_beschreibung?: string | null
+  notizen?: string | null
   investitionen: InvestitionWerte[]
 }
 
