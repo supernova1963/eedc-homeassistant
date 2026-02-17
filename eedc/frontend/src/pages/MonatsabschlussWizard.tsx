@@ -129,31 +129,16 @@ export default function MonatsabschlussWizard() {
         setAnlageName(response.anlage_name)
 
         // Werte aus aktuellen Daten initialisieren
-        // Wenn kein aktueller_wert vorhanden, verwende den besten Vorschlag (höchste Konfidenz)
         const basisValues: Record<string, number | null> = {}
         for (const feld of response.basis_felder) {
-          if (feld.aktueller_wert !== null && feld.aktueller_wert !== undefined) {
-            basisValues[feld.feld] = feld.aktueller_wert
-          } else if (feld.vorschlaege && feld.vorschlaege.length > 0) {
-            // Besten Vorschlag (höchste Konfidenz, bereits sortiert) übernehmen
-            basisValues[feld.feld] = feld.vorschlaege[0].wert
-          } else {
-            basisValues[feld.feld] = null
-          }
+          basisValues[feld.feld] = feld.aktueller_wert
         }
 
         const invValues: Record<number, Record<string, number | null>> = {}
         for (const inv of response.investitionen) {
           invValues[inv.id] = {}
           for (const feld of inv.felder) {
-            if (feld.aktueller_wert !== null && feld.aktueller_wert !== undefined) {
-              invValues[inv.id][feld.feld] = feld.aktueller_wert
-            } else if (feld.vorschlaege && feld.vorschlaege.length > 0) {
-              // Besten Vorschlag übernehmen
-              invValues[inv.id][feld.feld] = feld.vorschlaege[0].wert
-            } else {
-              invValues[inv.id][feld.feld] = null
-            }
+            invValues[inv.id][feld.feld] = feld.aktueller_wert
           }
         }
 
