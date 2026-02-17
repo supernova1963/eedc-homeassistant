@@ -26,7 +26,12 @@ from reportlab.graphics.charts.linecharts import HorizontalLineChart
 from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.widgets.markers import makeMarker
 
+from pathlib import Path
+
 from backend.core.config import APP_VERSION
+
+# Pfad zum Icon (relativ zum Backend-Verzeichnis)
+ICON_PATH = Path(__file__).parent.parent.parent / "icon.png"
 
 
 # =============================================================================
@@ -507,10 +512,25 @@ class PDFService:
         text_width = canvas_obj.stringWidth(titel, "Helvetica", 9)
         canvas_obj.drawString((page_width - text_width) / 2, y, titel)
 
-        # Rechte Seite: EEDC Logo-Text (da kein Bild vorhanden)
-        canvas_obj.setFont("Helvetica-Bold", 9)
-        canvas_obj.setFillColor(self.PRIMARY_COLOR)
-        canvas_obj.drawRightString(page_width - 1.5*cm, y, "eedc")
+        # Rechte Seite: EEDC Icon
+        if ICON_PATH.exists():
+            # Icon rechts ausrichten (ca. 0.8cm hoch, Seitenverhaeltnis 1:1)
+            icon_height = 0.8*cm
+            icon_width = icon_height  # quadratisch
+            canvas_obj.drawImage(
+                str(ICON_PATH),
+                page_width - 1.5*cm - icon_width,
+                y - 0.15*cm,  # leicht nach unten versetzt fuer Ausrichtung
+                width=icon_width,
+                height=icon_height,
+                preserveAspectRatio=True,
+                mask='auto'
+            )
+        else:
+            # Fallback: Text wenn Icon nicht gefunden
+            canvas_obj.setFont("Helvetica-Bold", 9)
+            canvas_obj.setFillColor(self.PRIMARY_COLOR)
+            canvas_obj.drawRightString(page_width - 1.5*cm, y, "eedc")
 
         # Trennlinie unter Kopfzeile
         canvas_obj.setStrokeColor(self.LIGHT_BG)
@@ -653,16 +673,21 @@ class PDFService:
         ]
         elements.append(self._create_key_value_table(tarif))
 
-        # 1.5 Home Assistant Integration
-        elements.append(Paragraph("1.5 Home Assistant Integration", self.styles['SubsectionHeader']))
-        ha_sensoren = [
-            ["PV-Erzeugung:", self._safe_str(anlage.ha_sensor_pv_erzeugung)],
-            ["Einspeisung:", self._safe_str(anlage.ha_sensor_einspeisung)],
-            ["Netzbezug:", self._safe_str(anlage.ha_sensor_netzbezug)],
-            ["Batterie-Ladung:", self._safe_str(anlage.ha_sensor_batterie_ladung)],
-            ["Batterie-Entladung:", self._safe_str(anlage.ha_sensor_batterie_entladung)],
+        # 1.5 Home Assistant Integration (nur anzeigen wenn Sensoren konfiguriert)
+        ha_sensoren_configured = [
+            ("PV-Erzeugung:", anlage.ha_sensor_pv_erzeugung),
+            ("Einspeisung:", anlage.ha_sensor_einspeisung),
+            ("Netzbezug:", anlage.ha_sensor_netzbezug),
+            ("Batterie-Ladung:", anlage.ha_sensor_batterie_ladung),
+            ("Batterie-Entladung:", anlage.ha_sensor_batterie_entladung),
         ]
-        elements.append(self._create_key_value_table(ha_sensoren))
+        # Nur nicht-leere Sensoren
+        ha_sensoren_filled = [(label, sensor) for label, sensor in ha_sensoren_configured if sensor]
+
+        if ha_sensoren_filled:
+            elements.append(Paragraph("1.5 Home Assistant Integration", self.styles['SubsectionHeader']))
+            ha_sensoren = [[label, self._safe_str(sensor)] for label, sensor in ha_sensoren_filled]
+            elements.append(self._create_key_value_table(ha_sensoren))
 
         return elements
 

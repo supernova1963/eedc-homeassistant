@@ -8,6 +8,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
+import eedcIcon from '../../assets/eedc-icon.svg'
 
 // Haupttabs mit Icons
 const mainTabs: { name: string; basePath: string; icon: LucideIcon }[] = [
@@ -31,7 +32,7 @@ const settingsMenu = [
     items: [
       { name: 'Monatsdaten', href: '/einstellungen/monatsdaten' },
       { name: 'Import', href: '/einstellungen/import' },
-      { name: 'Datenerfassung (HA)', href: '/einstellungen/ha-import' },
+      { name: 'Datenerfassung', href: '/einstellungen/datenerfassung' },
       { name: 'Demo-Daten', href: '/einstellungen/demo' },
     ],
   },
@@ -91,28 +92,14 @@ export default function TopNavigation() {
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <div className="px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14">
           {/* Logo */}
           <div className="flex items-center">
-            <div className="flex items-center">
-              <svg className="h-8 w-8 text-yellow-500" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-                eedc
-              </span>
-            </div>
+            <img src={eedcIcon} alt="eedc" className="h-10 w-10" />
+            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">eedc</span>
 
             {/* Haupttabs */}
-            <nav className="ml-10 flex space-x-1">
+            <nav className="ml-8 flex space-x-1">
               {mainTabs.map((tab) => {
                 const Icon = tab.icon
                 return (

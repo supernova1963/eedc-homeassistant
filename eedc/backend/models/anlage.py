@@ -54,12 +54,16 @@ class Anlage(Base):
     neigung_grad: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     wechselrichter_hersteller: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # sma, fronius, kostal, etc.
 
-    # Home Assistant Sensor-Konfiguration (ersetzt config.yaml ha_sensors)
-    ha_sensor_pv_erzeugung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    ha_sensor_einspeisung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    ha_sensor_netzbezug: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    ha_sensor_batterie_ladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    ha_sensor_batterie_entladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # DEPRECATED: Manuelle HA Sensor-Konfiguration
+    # Diese Felder werden durch den neuen Utility Meter Ansatz (Teil 2) ersetzt.
+    # Felder bleiben für Rückwärtskompatibilität erhalten, werden aber nicht mehr
+    # aktiv genutzt. Neue Anlagen sollten diese Felder nicht mehr setzen.
+    # TODO: Nach Migration auf Utility Meters entfernen (v2.0)
+    ha_sensor_pv_erzeugung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # DEPRECATED
+    ha_sensor_einspeisung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # DEPRECATED
+    ha_sensor_netzbezug: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # DEPRECATED
+    ha_sensor_batterie_ladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # DEPRECATED
+    ha_sensor_batterie_entladung: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # DEPRECATED
 
     # Erweiterte Stammdaten
     mastr_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # MaStR-ID der Anlage

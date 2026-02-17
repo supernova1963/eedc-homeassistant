@@ -7,6 +7,60 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.0-beta.13] - 2026-02-17
+
+### Hinzugefügt
+
+- **Logo/Icon Integration**
+  - Neues eedc-Logo und Icon durchgängig eingebunden
+  - **HA Add-on:** `icon.png` (512x512) und `logo.png` für Add-on Store
+  - **Frontend:** Neues Favicon, Icon + "eedc" Text in TopNavigation
+  - **Setup-Wizard:** eedc-Icon im Header
+  - **PDF-Export:** eedc-Icon in der Kopfzeile (ab Seite 2)
+  - **README:** Logo zentriert am Anfang
+
+- **Entwickler-Tools**
+  - `scripts/kill-dev.sh`: Beendet alle Entwicklungs-Prozesse und gibt Ports frei
+  - Prüft Ports 8099 (Backend), 5173-5176 (Frontend), 3000-3009 (Tests)
+
+### Geändert
+
+- **HA-Integration Bereinigung (Phase 0)**
+  - `ha_integration.py`: Von 2037 auf 171 LOC reduziert (-92%)
+  - Auto-Discovery komplett entfernt (ineffektiv, ~10% Erkennungsrate)
+  - Discovery-UI Komponenten entfernt
+  - `ha_sensor_*` Felder auf Anlage als DEPRECATED markiert
+
+- **PDF-Export**
+  - HA-Integration Abschnitt wird nur angezeigt wenn Sensoren konfiguriert sind
+  - Icon statt Text "eedc" in Kopfzeile
+
+- **Demo-Daten**
+  - `ha_sensor_*` Beispielwerte entfernt (waren irreführend)
+
+### Entfernt
+
+- **Backend Services**
+  - `ha_yaml_generator.py` (18 LOC Placeholder)
+  - `ha_websocket.py` (261 LOC, unzuverlässig)
+
+- **Backend Models**
+  - `StringMonatsdaten` (redundant mit `InvestitionMonatsdaten.verbrauch_daten`)
+
+- **Frontend Komponenten**
+  - `components/discovery/*` (DeviceCard, DiscoveryDialog, SensorMappingPanel, etc.)
+  - `hooks/useDiscovery.ts`
+  - `setup-wizard/steps/DiscoveryStep.tsx`
+  - `setup-wizard/steps/SensorConfigStep.tsx`
+
+- **API Endpoints (aus ha_integration.py)**
+  - `/ha/discover` - Auto-Discovery
+  - `/ha/statistics/*` - Long-Term Statistics
+  - `/ha/string-monatsdaten/*` - StringMonatsdaten CRUD
+  - Diverse Discovery-bezogene Endpoints
+
+---
+
 ## [1.0.0-beta.12] - 2026-02-16
 
 ### Hinzugefügt

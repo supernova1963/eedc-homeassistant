@@ -23,7 +23,7 @@ export type { InvestitionCreate, InvestitionUpdate, InvestitionTypInfo, ROIKompo
 export type { StrompreisCreate, StrompreisUpdate } from './strompreise'
 export type { CSVTemplateInfo, DemoDataResult } from './import'
 export type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from './pvgis'
-export type { HASensor, HAStatus, StringMonatsdaten, StringMonatsdatenCreate, HAImportResult, HAImportPreview, HAImportPreviewMonth, MonthlyStatistic, HAMonthlyDataResponse } from './ha'
+export type { HASensor, HAStatus, HASensorMapping } from './ha'
 export type { CockpitUebersicht } from './cockpit'
 export type { WetterDaten, StandortInfo } from './wetter'
 export type { InvestitionMitFeldern, SensorFeld } from './haImport'

@@ -2,8 +2,7 @@ import { useState, useEffect, FormEvent } from 'react'
 import { Button, Input, Alert } from '../ui'
 import type { Investition, InvestitionTyp, Anlage } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
-import { haApi, investitionenApi } from '../../api'
-import type { HASensor } from '../../api'
+import { investitionenApi } from '../../api'
 import { AlertCircle } from 'lucide-react'
 import InvestitionStammdatenSection from './InvestitionStammdatenSection'
 
@@ -54,8 +53,6 @@ const alternativkostenHints: Record<InvestitionTyp, string> = {
 export default function InvestitionForm({ investition, anlageId, typ, anlage, onSubmit, onCancel }: InvestitionFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [stringSensors, setStringSensors] = useState<HASensor[]>([])
-  const [loadingSensors, setLoadingSensors] = useState(false)
   const [possibleParents, setPossibleParents] = useState<Investition[]>([])
   const [loadingParents, setLoadingParents] = useState(false)
 
@@ -88,17 +85,6 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         .finally(() => setLoadingParents(false))
     }
   }, [parentTyp, anlageId, investition?.id])
-
-  // String-Sensoren laden für PV-Module
-  useEffect(() => {
-    if (typ === 'pv-module') {
-      setLoadingSensors(true)
-      haApi.getStringSensors()
-        .then(setStringSensors)
-        .catch(() => setStringSensors([]))
-        .finally(() => setLoadingSensors(false))
-    }
-  }, [typ])
 
   // Typ-spezifische Parameter
   const params = investition?.parameter || {}
@@ -508,29 +494,6 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
               onChange={handleChange}
               hint="0° = flach, 90° = senkrecht"
             />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Home Assistant Sensor
-                {loadingSensors && <span className="text-xs text-gray-400 ml-2">(Laden...)</span>}
-              </label>
-              <select
-                name="ha_entity_id"
-                value={formData.ha_entity_id}
-                onChange={(e) => setFormData(prev => ({ ...prev, ha_entity_id: e.target.value }))}
-                className="input w-full"
-              >
-                <option value="">Kein Sensor (manuell)</option>
-                {stringSensors.map(sensor => (
-                  <option key={sensor.entity_id} value={sensor.entity_id}>
-                    {sensor.friendly_name || sensor.entity_id}
-                    {sensor.state && ` (${sensor.state} ${sensor.unit_of_measurement || ''})`}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Verknüpfe dieses PV-Modul mit einem String-Sensor für automatische IST-Daten
-              </p>
-            </div>
           </div>
         </div>
       )}

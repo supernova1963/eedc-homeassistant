@@ -1,8 +1,14 @@
-# eedc - Energie Effizienz Data Center
+<p align="center">
+  <img src="./docs/images/eedc-logo-full.png" alt="eedc Logo" width="400">
+</p>
 
-**Version 1.0.0-beta.9** | Standalone PV-Analyse mit optionaler Home Assistant Integration
+<p align="center">
+  <strong>Version 1.0.0-beta.12</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
 
 ---
 

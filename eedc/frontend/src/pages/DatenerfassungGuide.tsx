@@ -79,7 +79,7 @@ automation:
 # Hinweis: Die CSV muss dann manuell in EEDC importiert werden
 # oder du erweiterst die Automation um einen REST-Call zu EEDC`
 
-export default function HAImportSettings() {
+export default function DatenerfassungGuide() {
   const [showYamlGuide, setShowYamlGuide] = useState(false)
   const [copiedYaml, setCopiedYaml] = useState<string | null>(null)
 

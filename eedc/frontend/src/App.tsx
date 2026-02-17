@@ -31,7 +31,7 @@ import Import from './pages/Import'
 // Einstellungen - System
 import Settings from './pages/Settings'
 import PVGISSettings from './pages/PVGISSettings'
-import HAImportSettings from './pages/HAImportSettings'
+import DatenerfassungGuide from './pages/DatenerfassungGuide'
 import HAExportSettings from './pages/HAExportSettings'
 
 function App() {
@@ -75,7 +75,8 @@ function App() {
           {/* Einstellungen - System */}
           <Route path="einstellungen/solarprognose" element={<PVGISSettings />} />
           <Route path="einstellungen/pvgis" element={<Navigate to="/einstellungen/solarprognose" replace />} />
-          <Route path="einstellungen/ha-import" element={<HAImportSettings />} />
+          <Route path="einstellungen/datenerfassung" element={<DatenerfassungGuide />} />
+          <Route path="einstellungen/ha-import" element={<Navigate to="/einstellungen/datenerfassung" replace />} />
           <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
 

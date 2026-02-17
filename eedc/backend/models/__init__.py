@@ -5,7 +5,6 @@ from backend.models.investition import Investition, InvestitionMonatsdaten, Inve
 from backend.models.strompreis import Strompreis
 from backend.models.settings import Settings
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
-from backend.models.string_monatsdaten import StringMonatsdaten
 
 __all__ = [
     "Anlage",
@@ -17,5 +16,4 @@ __all__ = [
     "Settings",
     "PVGISPrognose",
     "PVGISMonatsprognose",
-    "StringMonatsdaten",
 ]

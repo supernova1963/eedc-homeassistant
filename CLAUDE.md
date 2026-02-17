@@ -310,26 +310,65 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 ## Offene Features
 
 - [x] PDF-Export ✓ (beta.12)
+- [x] HA-Integration Bereinigung ✓ (beta.13)
+- [ ] Monatsabschluss-Wizard (Teil 1)
+- [ ] HA YAML-Wizard für Utility Meters (Teil 2)
 - [ ] KI-Insights
 
-## Letzte Änderungen (v1.0.0-beta.12)
+## Nächste Schritte (Automatische Datenerfassung)
 
-**PDF-Export: Vollständige Anlagen-Dokumentation**
-- Neuer PDF-Export-Button auf der Anlagen-Seite (Stammdaten)
-- Gesamtzeitraum als Standard (alle Jahre seit Installation)
-- Vollständige Stammdaten: Hersteller, Modell, Seriennummer, Garantie
-- Ansprechpartner & Wartungsverträge pro Komponente
-- Versorger-Daten mit Zählernummern und Zählpunkten
+Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md) für Details.
 
-**PDF-Layout & Design**
-- Kopfzeile (ab Seite 2): Anlagenname | Titel | eedc-Logo
-- Fußzeile: Erstellungsdatum | GitHub-Repository | "Seite X von Y"
-- Farbschema: Darkblue-Hintergrund, Orangered-Überschriften
-- Wiederholende Tabellenköpfe bei Seitenumbrüchen
+**Wichtige Erkenntnisse aus der Bereinigung:**
+- Auto-Discovery (alter Ansatz) fand nur ~10% der HA-Sensoren wegen prefix-basierter Erkennung
+- `StringMonatsdaten` war redundant - PV-Erzeugung wird in `InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]` gespeichert
+- `ha_sensor_*` Felder auf Anlage sind DEPRECATED - werden durch Utility Meter Ansatz ersetzt
 
-**Erweiterte Demo-Daten**
-- Alle Investitionen mit vollständigen Stammdaten
-- Ansprechpartner und Wartungsverträge
-- Versorger-Daten mit Zählern
+**Empfohlene Reihenfolge:**
+1. Teil 2 (HA YAML-Wizard) zuerst - generiert Utility Meter Konfiguration
+2. Teil 1 (Monatsabschluss-Wizard) - nutzt dann die HA-Daten
+
+## HA-Integration Status (nach Bereinigung beta.13)
+
+**Behalten (funktioniert):**
+- MQTT Export (`mqtt_client.py`, `ha_export.py`)
+- HA Sensor Export (`ha_sensors_export.py`)
+- Basis-Endpunkte: `/ha/status`, `/ha/sensors`, `/ha/mapping`
+
+**Entfernt:**
+- Auto-Discovery (ineffektiv, ~10% Erkennungsrate)
+- `StringMonatsdaten` Model (redundant)
+- `ha_websocket.py` (unzuverlässig)
+- `ha_yaml_generator.py` (Placeholder)
+- Discovery UI-Komponenten
+
+**DEPRECATED (nicht mehr verwenden):**
+```python
+# Anlage Model - diese Felder sind deprecated:
+ha_sensor_pv_erzeugung      # DEPRECATED
+ha_sensor_einspeisung       # DEPRECATED
+ha_sensor_netzbezug         # DEPRECATED
+ha_sensor_batterie_ladung   # DEPRECATED
+ha_sensor_batterie_entladung # DEPRECATED
+```
+
+## Letzte Änderungen (v1.0.0-beta.13)
+
+**HA-Integration Bereinigung (Phase 0)**
+- ~2000 LOC toter/problematischer Code entfernt
+- `ha_integration.py`: 2037 → 171 LOC
+- Auto-Discovery komplett entfernt
+- `StringMonatsdaten` Model entfernt
+- `ha_sensor_*` Felder als DEPRECATED markiert
+
+**Logo/Icon Integration**
+- Neues eedc-Logo und Icon durchgängig eingebunden
+- HA Add-on: `icon.png` (512x512), `logo.png`
+- Frontend: Favicon, TopNavigation, Setup-Wizard
+- PDF-Export: Icon in Kopfzeile
+- README: Logo zentriert am Anfang
+
+**Entwickler-Tools**
+- `scripts/kill-dev.sh`: Beendet alle Dev-Prozesse, gibt Ports frei
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

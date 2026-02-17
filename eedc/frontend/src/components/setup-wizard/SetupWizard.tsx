@@ -12,9 +12,10 @@
  */
 
 import { useEffect } from 'react'
-import { Sun, CheckCircle2 } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
 import { useSetupWizard, type WizardStep } from '../../hooks/useSetupWizard'
 import { importApi } from '../../api'
+import eedcIcon from '../../assets/eedc-icon.svg'
 
 // Schritt-Komponenten
 import WelcomeStep from './steps/WelcomeStep'
@@ -67,9 +68,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-                <Sun className="w-6 h-6 text-white" />
-              </div>
+              <img src={eedcIcon} alt="eedc" className="w-10 h-10" />
               <div>
                 <h1 className="text-lg font-bold text-gray-900 dark:text-white">
                   eedc Einrichtung

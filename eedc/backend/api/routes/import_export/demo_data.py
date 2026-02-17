@@ -133,11 +133,8 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 ]
             }
         },
-        ha_sensor_pv_erzeugung="sensor.fronius_symo_total_energy",
-        ha_sensor_einspeisung="sensor.stromzaehler_einspeisung",
-        ha_sensor_netzbezug="sensor.stromzaehler_bezug",
-        ha_sensor_batterie_ladung="sensor.byd_battery_charge",
-        ha_sensor_batterie_entladung="sensor.byd_battery_discharge",
+        # ha_sensor_* Felder sind deprecated (siehe Anlage-Model)
+        # Werden in Zukunft durch Utility Meter Konfiguration ersetzt
     )
     db.add(anlage)
     await db.flush()
