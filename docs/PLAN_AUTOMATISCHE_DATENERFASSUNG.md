@@ -1,16 +1,61 @@
 # Implementierungsplan: Automatische Datenerfassung
 
-> **Status:** Geplant für zukünftiges Release
+> **Status:** Phase 0 (Bereinigung) abgeschlossen, Phase 1+2 geplant
 > **Erstellt:** 2026-02-16
+> **Aktualisiert:** 2026-02-17
 > **Priorität:** Enhancement
-> **Geschätzter Aufwand:** ~25 Stunden
+> **Geschätzter Aufwand:** ~25 Stunden (reduziert nach Bereinigung)
 
 ## Zusammenfassung
 
 Dieses Dokument beschreibt zwei komplementäre Features zur Vereinfachung der monatlichen Datenerfassung in EEDC:
 
-1. **Monatsabschluss-Wizard** (Priorität 1) - Geführte monatliche Dateneingabe mit intelligenten Vorschlägen
-2. **HA YAML-Wizard** (Priorität 2) - Generierung von Home Assistant Utility Meter Konfiguration
+1. **HA YAML-Wizard** (Priorität 1) - Generierung von Home Assistant Utility Meter Konfiguration
+2. **Monatsabschluss-Wizard** (Priorität 2) - Geführte monatliche Dateneingabe mit intelligenten Vorschlägen
+
+> **Hinweis:** Die Reihenfolge wurde nach der HA-Integration Bereinigung (v1.0.0-beta.13) angepasst.
+> Der YAML-Wizard sollte zuerst implementiert werden, da er die Utility Meters generiert,
+> die dann vom Monatsabschluss-Wizard genutzt werden können.
+
+---
+
+## Phase 0: HA-Integration Bereinigung ✅ ABGESCHLOSSEN
+
+**Durchgeführt in v1.0.0-beta.13**
+
+### Erkenntnisse
+
+- **Auto-Discovery war ineffektiv:** Nur ~10% der HA-Sensoren wurden erkannt (prefix-basierte Erkennung)
+- **StringMonatsdaten war redundant:** PV-Erzeugung wird bereits in `InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]` gespeichert
+- **ha_sensor_* Felder sind veraltet:** Manuelles Sensor-Mapping wird durch Utility Meter Ansatz ersetzt
+
+### Entfernte Komponenten
+
+| Komponente | LOC | Grund |
+|------------|-----|-------|
+| `ha_integration.py` Discovery | ~1866 | Ineffektiv (~10% Erkennungsrate) |
+| `StringMonatsdaten` Model | ~66 | Redundant mit InvestitionMonatsdaten |
+| `ha_websocket.py` | ~261 | Unzuverlässig |
+| `ha_yaml_generator.py` | ~18 | War nur Placeholder |
+| Discovery UI-Komponenten | ~800 | Nicht mehr benötigt |
+
+### Beibehaltene Komponenten
+
+- MQTT Export (`mqtt_client.py`, `ha_export.py`) - funktioniert
+- HA Sensor Export (`ha_sensors_export.py`) - für REST API
+- Basis-Endpunkte: `/ha/status`, `/ha/sensors`, `/ha/mapping`
+
+### DEPRECATED Felder (Anlage Model)
+
+```python
+ha_sensor_pv_erzeugung      # DEPRECATED - nicht mehr verwenden
+ha_sensor_einspeisung       # DEPRECATED - nicht mehr verwenden
+ha_sensor_netzbezug         # DEPRECATED - nicht mehr verwenden
+ha_sensor_batterie_ladung   # DEPRECATED - nicht mehr verwenden
+ha_sensor_batterie_entladung # DEPRECATED - nicht mehr verwenden
+```
+
+Diese Felder bleiben für Rückwärtskompatibilität erhalten, werden aber nicht mehr aktiv genutzt.
 
 ---
 
@@ -656,25 +701,53 @@ export function HAYamlWizard() {
 
 ---
 
-## Teil 3: Integration & Cleanup
+## Teil 3: Integration & Cleanup ✅ GRÖßTENTEILS ABGESCHLOSSEN
 
-### Zu entfernende/überarbeitende Dateien
+> **Status:** Die meisten Cleanup-Aufgaben wurden in Phase 0 (v1.0.0-beta.13) erledigt.
+
+### Bereits durchgeführt (v1.0.0-beta.13)
+
+| Datei | Aktion | Status |
+|-------|--------|--------|
+| `frontend/src/pages/HAImportSettings.tsx` | Umbenannt zu `DatenerfassungGuide.tsx` | ✅ |
+| `backend/api/routes/ha_integration.py` | Discovery entfernt, nur Basis-Endpoints | ✅ |
+| `backend/models/string_monatsdaten.py` | Gelöscht (redundant) | ✅ |
+| `backend/services/ha_websocket.py` | Gelöscht (unzuverlässig) | ✅ |
+| `backend/services/ha_yaml_generator.py` | Gelöscht (war Placeholder) | ✅ |
+| Discovery UI-Komponenten | Gelöscht | ✅ |
+
+### Noch offen
 
 | Datei | Aktion |
 |-------|--------|
-| `frontend/src/pages/HAImportSettings.tsx` | Entfernen oder Redirect |
-| `frontend/src/pages/HAExportSettings.tsx` | Vereinfachen, Wizard verlinken |
-| `backend/api/routes/ha_integration.py` | Discovery behalten, Import entfernen |
-| `backend/api/routes/ha_import.py` | Prüfen ob noch benötigt |
+| `frontend/src/pages/HAExportSettings.tsx` | Wizard verlinken wenn implementiert |
+| `frontend/src/pages/DatenerfassungGuide.tsx` | Aktualisieren mit Links zu neuen Wizards |
 
-### Navigation
+### Navigation (aktuell)
 
 ```
 Einstellungen
-├── Datenerfassung
-│   ├── Monatsabschluss-Wizard (empfohlen)
-│   └── HA YAML-Wizard (für Fortgeschrittene)
-├── ...
+├── Daten
+│   ├── Monatsdaten
+│   ├── Import
+│   ├── Datenerfassung (aktuell: Guide)
+│   └── Demo-Daten
+├── Optional
+│   └── HA-Export (MQTT)
+```
+
+### Navigation (nach Implementierung)
+
+```
+Einstellungen
+├── Daten
+│   ├── Monatsdaten
+│   ├── Monatsabschluss-Wizard (NEU)
+│   ├── Import
+│   └── Demo-Daten
+├── Home Assistant
+│   ├── YAML-Wizard (NEU)
+│   └── MQTT-Export
 ```
 
 ### Dashboard-Integration
@@ -704,32 +777,37 @@ function MonatsabschlussBanner() {
 
 ---
 
-## Priorisierung
+## Priorisierung (AKTUALISIERT)
 
-### Phase 1: Monatsabschluss-Wizard (Release v1.1)
+### Phase 0: HA-Integration Bereinigung ✅ ABGESCHLOSSEN (v1.0.0-beta.13)
 
-**Priorität: HOCH**
+- ~2000 LOC toter Code entfernt
+- Klare Basis für neue Features
+- Aufwand: ~4h
+
+### Phase 1: HA YAML-Wizard (Release v1.1)
+
+**Priorität: HOCH** (vorher Phase 2)
+
+- Generiert Utility Meter Konfiguration für HA
+- Utility Meters liefern dann automatisch monatliche Daten
+- Muss VOR dem Monatsabschluss-Wizard implementiert werden
+- Aufwand: ~14h
+
+### Phase 2: Monatsabschluss-Wizard (Release v1.1 oder v1.2)
+
+**Priorität: HOCH** (vorher Phase 1)
 
 - Löst das Kernproblem (monatliche Dateneingabe)
 - Funktioniert standalone (ohne HA)
-- Sofortiger Nutzen für alle Benutzer
+- Kann HA-Daten aus Utility Meters nutzen (wenn Phase 1 implementiert)
 - Aufwand: ~11.5h
 
-### Phase 2: HA YAML-Wizard (Release v1.2)
+### Phase 3: Integration & Cleanup ✅ GRÖßTENTEILS ABGESCHLOSSEN
 
-**Priorität: MITTEL**
-
-- Für Power-User mit Home Assistant
-- Reduziert manuelle Eingaben weiter
-- Aufwand: ~14h
-
-### Phase 3: Integration & Cleanup (Release v1.2)
-
-**Priorität: NIEDRIG**
-
-- Alte HA-Integration bereinigen
-- Navigation vereinfachen
-- Aufwand: ~2h
+- Alte HA-Integration bereits bereinigt
+- Nur noch kleinere Anpassungen nötig
+- Aufwand: ~1h (reduziert von ~2h)
 
 ---
 
