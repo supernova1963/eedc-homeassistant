@@ -323,8 +323,9 @@ async def get_monatsabschluss(
         imd = imd_result.scalar_one_or_none()
         verbrauch_daten = imd.verbrauch_daten if imd else {}
 
-        # Mapping für diese Investition
-        inv_mapping = inv_mappings.get(str(inv.id), {})
+        # Mapping für diese Investition - beachte die verschachtelte Struktur {"felder": {...}}
+        inv_mapping_raw = inv_mappings.get(str(inv.id), {})
+        inv_mapping = inv_mapping_raw.get("felder", inv_mapping_raw) if isinstance(inv_mapping_raw, dict) else {}
 
         felder: list[FeldStatus] = []
         for feld_config in felder_config:
@@ -336,10 +337,23 @@ async def get_monatsabschluss(
             strategie = feld_mapping.get("strategie") if feld_mapping else None
             sensor_id = feld_mapping.get("sensor_id") if feld_mapping else None
 
-            # Vorschläge holen
+            # Vorschläge holen (historische Daten)
             vorschlaege = await vorschlag_service.get_vorschlaege(
                 anlage_id, feld, jahr, monat, investition_id=inv.id
             )
+
+            # Bei konfiguriertem Sensor: MQTT-Monatssensor-Wert als Vorschlag hinzufügen
+            if strategie == "sensor" and sensor_mapping.get("mqtt_setup_complete"):
+                # Investitions-Sensoren haben das Format: inv{id}_{feld}
+                feld_key = f"inv{inv.id}_{feld}"
+                mwd_wert = await ha_state_service.get_mwd_sensor_value(anlage_id, feld_key)
+                if mwd_wert is not None:
+                    vorschlaege.insert(0, Vorschlag(
+                        wert=round(mwd_wert, 1),
+                        quelle=VorschlagQuelle.HA_SENSOR,
+                        konfidenz=95,
+                        beschreibung="Aus HA-Sensor (aktueller Monatswert)",
+                    ))
 
             # Warnungen prüfen
             warnungen = []

@@ -24,6 +24,7 @@ from sqlalchemy import select
 from backend.core.database import async_session_maker
 from backend.models.anlage import Anlage
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
+from backend.services.ha_state_service import get_ha_state_service
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +193,7 @@ async def monthly_snapshot_job(anlage_id: Optional[int] = None) -> dict:
     }
 
     mqtt_sync = get_ha_mqtt_sync_service()
+    ha_state = get_ha_state_service()
 
     async with async_session_maker() as db:
         # Anlagen mit sensor_mapping laden
@@ -209,22 +211,81 @@ async def monthly_snapshot_job(anlage_id: Optional[int] = None) -> dict:
                 # sensor_mapping enthält die Zuordnungen
                 mapping = anlage.sensor_mapping or {}
 
-                # Hier würden wir normalerweise die aktuellen Zählerstände aus HA lesen
-                # Da wir keinen direkten HA-API-Zugriff haben, speichern wir nur das Flag
-                # Die eigentlichen Werte werden im Monatsabschluss-Wizard bestätigt
+                # mqtt_setup_complete prüfen
+                if not mapping.get("mqtt_setup_complete"):
+                    results["anlagen_failed"] += 1
+                    results["details"].append({
+                        "anlage_id": anlage.id,
+                        "anlage_name": anlage.anlagenname,
+                        "status": "mqtt_not_configured",
+                        "message": "MQTT-Setup nicht abgeschlossen",
+                    })
+                    continue
 
-                # Für jetzt: Nur Status aktualisieren
+                # Aktuelle Zählerstände aus HA lesen und als Startwerte publizieren
+                zaehlerstaende: dict[str, float] = {}
+                updated_fields = 0
+                errors = []
+
+                # Basis-Sensoren (Einspeisung, Netzbezug, etc.)
+                basis = mapping.get("basis", {})
+                for feld, config in basis.items():
+                    if config and config.get("strategie") == "sensor" and config.get("sensor_id"):
+                        sensor_id = config["sensor_id"]
+                        # Aktuellen Wert aus HA lesen
+                        wert = await ha_state.get_sensor_state(sensor_id)
+                        if wert is not None:
+                            zaehlerstaende[feld] = wert
+                            # Startwert auf MQTT publizieren
+                            start_key = f"mwd_{feld}_start"
+                            success = await mqtt_sync.mqtt.update_month_start_value(
+                                anlage_id=anlage.id,
+                                key=start_key,
+                                wert=wert,
+                            )
+                            if success:
+                                updated_fields += 1
+                            else:
+                                errors.append(f"MQTT-Publish fehlgeschlagen für {feld}")
+                        else:
+                            errors.append(f"Sensor {sensor_id} nicht verfügbar")
+
+                # Investitionen-Sensoren
+                investitionen = mapping.get("investitionen", {})
+                for inv_id, inv_config in investitionen.items():
+                    if isinstance(inv_config, dict):
+                        felder = inv_config.get("felder", inv_config)
+                    else:
+                        felder = {}
+                    for feld, config in felder.items():
+                        if config and config.get("strategie") == "sensor" and config.get("sensor_id"):
+                            sensor_id = config["sensor_id"]
+                            wert = await ha_state.get_sensor_state(sensor_id)
+                            if wert is not None:
+                                feld_key = f"inv{inv_id}_{feld}"
+                                zaehlerstaende[feld_key] = wert
+                                start_key = f"mwd_{feld_key}_start"
+                                success = await mqtt_sync.mqtt.update_month_start_value(
+                                    anlage_id=anlage.id,
+                                    key=start_key,
+                                    wert=wert,
+                                )
+                                if success:
+                                    updated_fields += 1
+                                else:
+                                    errors.append(f"MQTT-Publish fehlgeschlagen für {feld_key}")
+
                 detail = {
                     "anlage_id": anlage.id,
                     "anlage_name": anlage.anlagenname,
-                    "status": "pending_confirmation",
-                    "message": "Monat bereit zum Abschluss",
+                    "status": "success" if not errors else "partial",
+                    "updated_fields": updated_fields,
+                    "zaehlerstaende": zaehlerstaende,
+                    "errors": errors if errors else None,
                 }
 
-                # mqtt_setup_complete prüfen
-                if not mapping.get("mqtt_setup_complete"):
-                    detail["status"] = "mqtt_not_configured"
-                    detail["message"] = "MQTT-Setup nicht abgeschlossen"
+                if errors and updated_fields == 0:
+                    detail["status"] = "failed"
                     results["anlagen_failed"] += 1
                 else:
                     results["anlagen_success"] += 1
