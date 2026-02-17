@@ -130,4 +130,17 @@ export const sensorMappingApi = {
   async getStatus(anlageId: number): Promise<MappingStatus> {
     return api.get<MappingStatus>(`/sensor-mapping/${anlageId}/status`)
   },
+
+  /**
+   * Startwerte initialisieren - liest aktuelle Sensorwerte und setzt diese als Monatsanfang
+   */
+  async initStartValues(anlageId: number): Promise<{
+    success: boolean
+    message: string
+    updated_fields: number
+    zaehlerstaende?: Record<string, number>
+    errors?: string[]
+  }> {
+    return api.post(`/sensor-mapping/${anlageId}/init-start-values`, {})
+  },
 }

@@ -95,6 +95,13 @@ export default function SensorMappingWizard() {
   const [state, setState] = useState<WizardState>(initialState)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [showInitDialog, setShowInitDialog] = useState(false)
+  const [isInitializing, setIsInitializing] = useState(false)
+  const [initResult, setInitResult] = useState<{
+    success: boolean
+    message: string
+    updated_fields: number
+  } | null>(null)
 
   // Data loading states
   const [anlagen, setAnlagen] = useState<{ id: number; anlagenname: string }[] | null>(null)
@@ -271,13 +278,38 @@ export default function SensorMappingWizard() {
       }
 
       await sensorMappingApi.saveMapping(effectiveAnlageId, request)
-      navigate('/einstellungen/ha-export?saved=true')
+      // Nach erfolgreichem Speichern: Dialog zum Initialisieren anzeigen
+      setShowInitDialog(true)
     } catch (err) {
       setSaveError((err as Error).message || 'Fehler beim Speichern')
     } finally {
       setIsSaving(false)
     }
-  }, [state, effectiveAnlageId, navigate])
+  }, [state, effectiveAnlageId])
+
+  // Handler zum Initialisieren der Startwerte
+  const handleInitStartValues = useCallback(async () => {
+    if (!effectiveAnlageId) return
+
+    setIsInitializing(true)
+    try {
+      const result = await sensorMappingApi.initStartValues(effectiveAnlageId)
+      setInitResult(result)
+    } catch (err) {
+      setInitResult({
+        success: false,
+        message: (err as Error).message || 'Fehler beim Initialisieren',
+        updated_fields: 0,
+      })
+    } finally {
+      setIsInitializing(false)
+    }
+  }, [effectiveAnlageId])
+
+  // Handler zum Abschließen (nach Init-Dialog)
+  const handleFinish = useCallback(() => {
+    navigate('/einstellungen/ha-export?saved=true')
+  }, [navigate])
 
   // Navigation
   const canGoNext = currentStep < steps.length - 1
@@ -321,6 +353,80 @@ export default function SensorMappingWizard() {
         <Alert type="error">
           Fehler beim Laden: {loadError}
         </Alert>
+      </div>
+    )
+  }
+
+  // Init-Dialog nach erfolgreichem Speichern
+  if (showInitDialog) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 space-y-6">
+        <Card>
+          <CardHeader
+            title="Sensor-Zuordnung gespeichert"
+            subtitle="MQTT-Sensoren wurden erfolgreich erstellt"
+          />
+
+          <div className="mt-6 space-y-4">
+            {!initResult ? (
+              <>
+                <Alert type="info">
+                  <div className="space-y-2">
+                    <p className="font-medium">Möchten Sie die Monatsstart-Werte jetzt initialisieren?</p>
+                    <p className="text-sm opacity-80">
+                      Die aktuellen Zählerstände werden als Startwerte für die Monatsberechnung gesetzt.
+                      Der berechnete Monatswert startet dann bei 0 und steigt mit der Zeit.
+                    </p>
+                    <p className="text-sm opacity-80">
+                      Dies ist nur beim ersten Setup nötig. Danach werden die Startwerte automatisch
+                      am 1. jedes Monats aktualisiert.
+                    </p>
+                  </div>
+                </Alert>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleInitStartValues}
+                    disabled={isInitializing}
+                  >
+                    {isInitializing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Initialisiere...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Startwerte initialisieren
+                      </>
+                    )}
+                  </Button>
+                  <Button variant="secondary" onClick={handleFinish}>
+                    Überspringen
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Alert type={initResult.success ? 'success' : 'error'}>
+                  <div className="space-y-1">
+                    <p className="font-medium">{initResult.message}</p>
+                    {initResult.updated_fields > 0 && (
+                      <p className="text-sm opacity-80">
+                        {initResult.updated_fields} Startwert(e) wurden in Home Assistant gesetzt.
+                      </p>
+                    )}
+                  </div>
+                </Alert>
+
+                <Button onClick={handleFinish}>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Fertig
+                </Button>
+              </>
+            )}
+          </div>
+        </Card>
       </div>
     )
   }
