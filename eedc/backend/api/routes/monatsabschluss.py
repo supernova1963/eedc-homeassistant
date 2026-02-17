@@ -103,9 +103,9 @@ class InvestitionWerte(BaseModel):
 class MonatsabschlussInput(BaseModel):
     """Eingabedaten für den Monatsabschluss."""
     # Basis-Zählerdaten
+    # HINWEIS: direktverbrauch_kwh wird automatisch berechnet (PV-Erzeugung - Einspeisung)
     einspeisung_kwh: Optional[float] = None
     netzbezug_kwh: Optional[float] = None
-    direktverbrauch_kwh: Optional[float] = None
     globalstrahlung_kwh_m2: Optional[float] = None
     sonnenstunden: Optional[float] = None
     durchschnittstemperatur: Optional[float] = None
@@ -145,13 +145,13 @@ MONAT_NAMEN = [
 ]
 
 # Basis-Felder Konfiguration
+# HINWEIS: direktverbrauch_kwh wird berechnet (PV-Erzeugung - Einspeisung), daher NICHT hier
 BASIS_FELDER = [
-    {"feld": "einspeisung_kwh", "label": "Einspeisung", "einheit": "kWh"},
-    {"feld": "netzbezug_kwh", "label": "Netzbezug", "einheit": "kWh"},
-    {"feld": "direktverbrauch_kwh", "label": "Direktverbrauch", "einheit": "kWh"},
-    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²"},
-    {"feld": "sonnenstunden", "label": "Sonnenstunden", "einheit": "h"},
-    {"feld": "durchschnittstemperatur", "label": "Ø Temperatur", "einheit": "°C"},
+    {"feld": "einspeisung_kwh", "label": "Einspeisung", "einheit": "kWh", "mapping_key": "einspeisung"},
+    {"feld": "netzbezug_kwh", "label": "Netzbezug", "einheit": "kWh", "mapping_key": "netzbezug"},
+    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung"},
+    {"feld": "sonnenstunden", "label": "Sonnenstunden", "einheit": "h", "mapping_key": "sonnenstunden"},
+    {"feld": "durchschnittstemperatur", "label": "Ø Temperatur", "einheit": "°C", "mapping_key": "temperatur"},
 ]
 
 # Investition-Felder nach Typ
@@ -258,8 +258,9 @@ async def get_monatsabschluss(
         feld = feld_config["feld"]
         aktueller_wert = getattr(monatsdaten, feld, None) if monatsdaten else None
 
-        # Mapping-Info
-        mapping_info = basis_mapping.get(feld.replace("_kwh", "").replace("_", ""), {})
+        # Mapping-Info - verwende mapping_key aus der Konfiguration
+        mapping_key = feld_config.get("mapping_key", feld)
+        mapping_info = basis_mapping.get(mapping_key, {})
         strategie = mapping_info.get("strategie") if mapping_info else None
         sensor_id = mapping_info.get("sensor_id") if mapping_info else None
 
@@ -390,7 +391,7 @@ async def save_monatsabschluss(
     alle_warnungen: list[WarnungResponse] = []
 
     # Plausibilität prüfen
-    for feld in ["einspeisung_kwh", "netzbezug_kwh", "direktverbrauch_kwh"]:
+    for feld in ["einspeisung_kwh", "netzbezug_kwh"]:
         wert = getattr(daten, feld, None)
         if wert is not None:
             warnungen = await vorschlag_service.pruefe_plausibilitaet(
@@ -422,8 +423,8 @@ async def save_monatsabschluss(
         monatsdaten.einspeisung_kwh = daten.einspeisung_kwh
     if daten.netzbezug_kwh is not None:
         monatsdaten.netzbezug_kwh = daten.netzbezug_kwh
-    if daten.direktverbrauch_kwh is not None:
-        monatsdaten.direktverbrauch_kwh = daten.direktverbrauch_kwh
+    # direktverbrauch_kwh wird automatisch berechnet (PV-Erzeugung - Einspeisung)
+    # und nicht manuell eingegeben
     if daten.globalstrahlung_kwh_m2 is not None:
         monatsdaten.globalstrahlung_kwh_m2 = daten.globalstrahlung_kwh_m2
     if daten.sonnenstunden is not None:
@@ -483,7 +484,6 @@ async def save_monatsabschluss(
             "monat": monat,
             "einspeisung_kwh": daten.einspeisung_kwh,
             "netzbezug_kwh": daten.netzbezug_kwh,
-            "direktverbrauch_kwh": daten.direktverbrauch_kwh,
         }
         await mqtt_sync.publish_final_month_data(anlage_id, jahr, monat, monatsdaten_dict)
     except Exception as e:
@@ -596,7 +596,6 @@ async def get_monatsabschluss_historie(
             "monat_name": MONAT_NAMEN[md.monat],
             "einspeisung_kwh": md.einspeisung_kwh,
             "netzbezug_kwh": md.netzbezug_kwh,
-            "direktverbrauch_kwh": md.direktverbrauch_kwh,
         }
         for md in monatsdaten
     ]
