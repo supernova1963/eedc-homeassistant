@@ -14,6 +14,8 @@ export { haApi } from './ha'
 export { cockpitApi } from './cockpit'
 export { wetterApi } from './wetter'
 export { haImportApi } from './haImport'
+export { sensorMappingApi } from './sensorMapping'
+export { monatsabschlussApi } from './monatsabschluss'
 
 // Re-export types
 export type { ApiError } from './client'
@@ -27,3 +29,28 @@ export type { HASensor, HAStatus, HASensorMapping } from './ha'
 export type { CockpitUebersicht } from './cockpit'
 export type { WetterDaten, StandortInfo } from './wetter'
 export type { InvestitionMitFeldern, SensorFeld } from './haImport'
+export type {
+  StrategieTyp,
+  FeldMapping,
+  BasisMapping,
+  InvestitionFelder,
+  SensorMappingRequest,
+  SensorMappingResponse,
+  InvestitionInfo,
+  HASensorInfo,
+  SetupResult,
+  MappingStatus,
+} from './sensorMapping'
+export type {
+  Vorschlag,
+  Warnung,
+  FeldStatus,
+  InvestitionStatus,
+  MonatsabschlussResponse,
+  MonatsabschlussInput,
+  MonatsabschlussResult,
+  NaechsterMonat,
+  MonatHistorie,
+  FeldWert,
+  InvestitionWerte,
+} from './monatsabschluss'

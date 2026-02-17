@@ -17,11 +17,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, ha_export, ha_import, pvgis, cockpit, wetter, aussichten, solar_prognose
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, ha_export, ha_import, pvgis, cockpit, wetter, aussichten, solar_prognose, sensor_mapping, monatsabschluss
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
+from backend.services.scheduler import start_scheduler, stop_scheduler, get_scheduler
 
 
 @asynccontextmanager
@@ -31,8 +32,10 @@ async def lifespan(app: FastAPI):
 
     Beim Start:
     - Datenbank initialisieren (Tabellen erstellen falls nicht vorhanden)
+    - Scheduler starten (Cron-Jobs für Monatswechsel etc.)
 
     Beim Shutdown:
+    - Scheduler stoppen
     - Ressourcen freigeben
     """
     # Startup
@@ -40,9 +43,16 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("Datenbank initialisiert.")
 
+    # Scheduler starten
+    if start_scheduler():
+        print("Scheduler gestartet.")
+    else:
+        print("Scheduler konnte nicht gestartet werden (APScheduler nicht installiert?).")
+
     yield
 
     # Shutdown
+    stop_scheduler()
     print("EEDC Backend wird beendet...")
 
 
@@ -85,6 +95,8 @@ app.include_router(wetter.router, prefix="/api/wetter", tags=["Wetter"])
 app.include_router(ha_import.router, prefix="/api/ha-import", tags=["HA Import"])
 app.include_router(aussichten.router, prefix="/api/aussichten", tags=["Aussichten"])
 app.include_router(solar_prognose.router, prefix="/api/solar-prognose", tags=["Solar-Prognose"])
+app.include_router(sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"])
+app.include_router(monatsabschluss.router, prefix="/api", tags=["Monatsabschluss"])
 
 
 # =============================================================================
@@ -133,6 +145,33 @@ async def get_settings():
             "batterie_entladung": settings.ha_sensor_batterie_entladung,
         }
     }
+
+
+@app.get("/api/scheduler", tags=["System"])
+async def get_scheduler_status():
+    """
+    Gibt Scheduler-Status zurück.
+
+    Returns:
+        dict: Scheduler-Informationen und geplante Jobs
+    """
+    scheduler = get_scheduler()
+    return scheduler.get_status()
+
+
+@app.post("/api/scheduler/monthly-snapshot", tags=["System"])
+async def trigger_monthly_snapshot(anlage_id: int = None):
+    """
+    Triggert Monatswechsel-Snapshot manuell.
+
+    Args:
+        anlage_id: Optional - nur für eine bestimmte Anlage
+
+    Returns:
+        dict: Ergebnis des Snapshot-Jobs
+    """
+    scheduler = get_scheduler()
+    return await scheduler.trigger_monthly_snapshot(anlage_id=anlage_id)
 
 
 @app.get("/api/stats", tags=["System"])

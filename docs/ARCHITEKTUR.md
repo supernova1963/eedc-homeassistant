@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.0.0-beta.12** | Stand: Februar 2026
+**Version 1.1.0-beta.1** | Stand: Februar 2026
 
 ---
 
@@ -69,6 +69,7 @@ Externe APIs (optional):
 | **Pydantic** | 2.x | Datenvalidierung |
 | **httpx** | 0.26+ | HTTP Client für externe APIs |
 | **aiomqtt** | optional | MQTT Client für HA Export |
+| **APScheduler** | 3.x | Scheduler für Cron-Jobs (NEU) |
 
 ### Frontend
 
@@ -136,7 +137,9 @@ eedc-homeassistant/
     │   │       ├── pvgis.py
     │   │       ├── ha_export.py
     │   │       ├── ha_import.py
-    │   │       └── ha_integration.py
+    │   │       ├── ha_integration.py
+    │   │       ├── sensor_mapping.py     # Sensor-Mapping CRUD (NEU)
+    │   │       └── monatsabschluss.py    # Monatsabschluss-Wizard API (NEU)
     │   │
     │   ├── core/                # Kernfunktionalität
     │   │   ├── config.py        # Settings + Version
@@ -153,10 +156,12 @@ eedc-homeassistant/
     │   │
     │   └── services/            # Business Logic
     │       ├── wetter_service.py
-    │       ├── pdf_service.py       # PDF-Generierung (NEU beta.12)
+    │       ├── pdf_service.py       # PDF-Generierung
     │       ├── ha_sensors_export.py
     │       ├── mqtt_client.py
-    │       └── ha_yaml_generator.py
+    │       ├── ha_mqtt_sync.py      # MQTT Sync Service (NEU)
+    │       ├── vorschlag_service.py # Intelligente Vorschläge (NEU)
+    │       └── scheduler.py         # APScheduler für Cron-Jobs (NEU)
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -241,6 +246,7 @@ eedc-homeassistant/
 | mastr_id | VARCHAR(20) | MaStR-ID der Anlage |
 | versorger_daten | JSON | Versorger & Zähler |
 | wetter_provider | VARCHAR(30) | Bevorzugter Wetter-Provider (auto, open-meteo, brightsky, open-meteo-solar) |
+| sensor_mapping | JSON | HA-Sensor-Mapping (NEU v1.1.0) |
 | created_at | DATETIME | Erstellungsdatum |
 
 #### Monatsdaten
@@ -455,6 +461,9 @@ Sonstiges [Eigenständig]
 | `/api/ha/export` | ha_export.py | HA Sensor Export (REST, MQTT) |
 | `/api/ha-import` | ha_import.py | Investitions-Felder (CSV-Template) |
 | `/api/ha` | ha_integration.py | HA Discovery, String-Import |
+| `/api/sensor-mapping` | sensor_mapping.py | **Sensor-Mapping CRUD** (NEU) |
+| `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** (NEU) |
+| `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** (NEU) |
 
 ### Wichtige Endpoints
 
@@ -492,7 +501,46 @@ GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation
 **ROI-Metrik**: `amortisations_fortschritt_prozent` = Kumulierte Erträge / Investition
 (Unterscheidet sich von Cockpit `jahres_rendite_prozent`!)
 
-#### Aggregierte Monatsdaten (NEU)
+#### Sensor-Mapping API (NEU v1.1.0)
+
+```
+GET  /api/sensor-mapping/{anlage_id}              # Aktuelles Mapping abrufen
+POST /api/sensor-mapping/{anlage_id}              # Mapping speichern
+GET  /api/sensor-mapping/{anlage_id}/felder       # Verfügbare Felder
+GET  /api/sensor-mapping/{anlage_id}/sensoren     # HA-Sensoren auflisten
+```
+
+**Mapping-Strategien:**
+- `sensor` - Direkter HA-Sensor
+- `kwp_verteilung` - Anteilige Verteilung nach kWp
+- `cop_berechnung` - COP-basierte Berechnung (Wärmepumpe)
+- `ev_quote` - Eigenverbrauchsquote-Berechnung
+- `manuell` - Manuelle Eingabe im Wizard
+- `keine` - Nicht erfassen
+
+#### Monatsabschluss API (NEU v1.1.0)
+
+```
+GET  /api/monatsabschluss/{anlage_id}/status?jahr=2026&monat=2     # Status prüfen
+GET  /api/monatsabschluss/{anlage_id}/naechster                    # Nächster offener Monat
+POST /api/monatsabschluss/{anlage_id}/abschliessen                 # Abschluss durchführen
+GET  /api/monatsabschluss/{anlage_id}/historie                     # Letzte Abschlüsse
+```
+
+**VorschlagService liefert intelligente Vorschläge:**
+- `vormonat` (Konfidenz 80%) - Wert vom Vormonat
+- `vorjahr` (Konfidenz 70%) - Wert vom gleichen Monat im Vorjahr
+- `berechnung` (Konfidenz 60%) - COP/EV-Quote basierte Berechnung
+- `durchschnitt` (Konfidenz 50%) - Durchschnitt aller vorhandenen Werte
+
+#### Scheduler API (NEU v1.1.0)
+
+```
+GET  /api/scheduler/status                        # Scheduler-Status
+POST /api/scheduler/trigger-monthly               # Manueller Monatswechsel-Trigger
+```
+
+#### Aggregierte Monatsdaten
 
 ```
 GET /api/monatsdaten/aggregiert/{anlage_id}?jahr=2025
@@ -734,12 +782,52 @@ SensorDefinition(
 
 **Funktion:** Publizieren von Sensoren via MQTT Auto-Discovery.
 
+**Erweiterte Methoden (NEU v1.1.0):**
+- `publish_number_discovery()` - Erstellt Number-Entities für Monatsstarts
+- `publish_calculated_sensor()` - Erstellt Sensoren mit value_template
+- `update_month_start_value()` - Aktualisiert retained Startwerte
+- `publish_monatsdaten()` - Publiziert finale Monatswerte
+
 **Topics:**
 ```
 homeassistant/sensor/eedc_{anlage_id}_{key}/config  → Discovery
 eedc/{anlage_id}/{key}                              → State
 eedc/{anlage_id}/{key}/attributes                   → Attributes
 ```
+
+### VorschlagService (NEU v1.1.0)
+
+**Datei:** `backend/services/vorschlag_service.py`
+
+**Funktion:** Intelligente Vorschläge für Monatsabschluss-Wizard.
+
+**Vorschlags-Hierarchie:**
+1. **Vormonat** (Konfidenz 80%) - Bester Indikator für kontinuierliche Werte
+2. **Vorjahr** (Konfidenz 70%) - Gleicher Monat, saisonale Korrelation
+3. **Berechnung** (Konfidenz 60%) - COP/EV-Quote basiert
+4. **Durchschnitt** (Konfidenz 50%) - Fallback aus allen vorhandenen Werten
+
+### Scheduler Service (NEU v1.1.0)
+
+**Datei:** `backend/services/scheduler.py`
+
+**Funktion:** APScheduler-basierte Cron-Jobs für automatische Aufgaben.
+
+**Jobs:**
+- `monthly_snapshot_job` - Läuft am 1. jedes Monats um 00:01
+  - Liest Sensor-Werte via HA MQTT
+  - Erstellt Vorschläge für den Monatsabschluss
+  - Sendet Notifications (optional)
+
+### HA MQTT Sync Service (NEU v1.1.0)
+
+**Datei:** `backend/services/ha_mqtt_sync.py`
+
+**Funktion:** Koordiniert MQTT-Sensoren basierend auf Sensor-Mapping.
+
+**Hauptfunktionen:**
+- `setup_sensors_for_anlage()` - Erstellt alle MQTT Entities
+- `trigger_month_rollover()` - Führt Monatswechsel durch
 
 ---
 

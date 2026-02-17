@@ -33,6 +33,8 @@ import Settings from './pages/Settings'
 import PVGISSettings from './pages/PVGISSettings'
 import DatenerfassungGuide from './pages/DatenerfassungGuide'
 import HAExportSettings from './pages/HAExportSettings'
+import SensorMappingWizard from './pages/SensorMappingWizard'
+import MonatsabschlussWizard from './pages/MonatsabschlussWizard'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -69,6 +71,9 @@ function App() {
 
           {/* Einstellungen - Daten */}
           <Route path="einstellungen/monatsdaten" element={<Monatsdaten />} />
+          <Route path="einstellungen/monatsabschluss" element={<MonatsabschlussWizard />} />
+          <Route path="monatsabschluss/:anlageId" element={<MonatsabschlussWizard />} />
+          <Route path="monatsabschluss/:anlageId/:jahr/:monat" element={<MonatsabschlussWizard />} />
           <Route path="einstellungen/import" element={<Import />} />
           <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
 
@@ -78,6 +83,7 @@ function App() {
           <Route path="einstellungen/datenerfassung" element={<DatenerfassungGuide />} />
           <Route path="einstellungen/ha-import" element={<Navigate to="/einstellungen/datenerfassung" replace />} />
           <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
+          <Route path="einstellungen/sensor-mapping" element={<SensorMappingWizard />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
 
           {/* Legacy redirects für alte URLs */}

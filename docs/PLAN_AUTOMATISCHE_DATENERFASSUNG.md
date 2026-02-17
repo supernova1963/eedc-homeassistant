@@ -1,21 +1,67 @@
 # Implementierungsplan: Automatische Datenerfassung
 
-> **Status:** Phase 0 (Bereinigung) abgeschlossen, Phase 1+2 geplant
+> **Status:** ✅ IMPLEMENTIERT (2026-02-17)
 > **Erstellt:** 2026-02-16
 > **Aktualisiert:** 2026-02-17
 > **Priorität:** Enhancement
-> **Geschätzter Aufwand:** ~25 Stunden (reduziert nach Bereinigung)
+> **Geschätzter Aufwand:** ~31 Stunden
 
 ## Zusammenfassung
 
-Dieses Dokument beschreibt zwei komplementäre Features zur Vereinfachung der monatlichen Datenerfassung in EEDC:
+Dieses Dokument beschreibt die Implementierung der automatischen Datenerfassung für EEDC:
 
-1. **HA YAML-Wizard** (Priorität 1) - Generierung von Home Assistant Utility Meter Konfiguration
-2. **Monatsabschluss-Wizard** (Priorität 2) - Geführte monatliche Dateneingabe mit intelligenten Vorschlägen
+1. **Sensor-Mapping-Wizard** - Zuordnung HA-Sensoren zu EEDC-Feldern (aus YAML-Wizard übernommen)
+2. **MQTT Auto-Discovery für Monatswerte** - Automatische Sensor-Erstellung in HA
+3. **Monatsabschluss-Wizard** - Geführte monatliche Dateneingabe mit HA-Integration
 
-> **Hinweis:** Die Reihenfolge wurde nach der HA-Integration Bereinigung (v1.0.0-beta.13) angepasst.
-> Der YAML-Wizard sollte zuerst implementiert werden, da er die Utility Meters generiert,
-> die dann vom Monatsabschluss-Wizard genutzt werden können.
+> **Konzeptänderung (2026-02-17):** Der ursprünglich geplante YAML-Wizard wurde durch einen
+> MQTT Auto-Discovery Ansatz ersetzt. Vorteile:
+> - Keine YAML-Bearbeitung durch User nötig
+> - Kein HA-Neustart erforderlich
+> - Nahtlose Integration in bestehenden Monatsabschluss-Wizard
+
+---
+
+## Architektur-Übersicht
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MQTT Auto-Discovery                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  EEDC erstellt via MQTT:                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ number.eedc_{anlage}_mwd_{feld}_start                               │   │
+│  │ → Speichert Zählerstand vom 1. des Monats (retained)                │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              ↓                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ sensor.eedc_{anlage}_mwd_{feld}_monat                               │   │
+│  │ → value_template: states(quell_sensor) - states(number.start)       │   │
+│  │ → Zeigt aktuellen Monatsverbrauch in Echtzeit                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Monatswechsel-Ablauf                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Am 1. des Monats 00:01 (Cron-Job):                                        │
+│  ├── Liest aktuellen Zählerstand aus HA                                    │
+│  ├── Speichert Snapshot in DB (Vorschlagswert)                             │
+│  ├── Publiziert neuen Startwert auf MQTT (retained)                        │
+│  └── Setzt Flag: "Monat X bereit zum Abschluss"                            │
+│                                                                             │
+│  Im Monatsabschluss-Wizard (User-gesteuert):                               │
+│  ├── Zeigt Snapshot/berechnete Werte als Vorschlag                         │
+│  ├── Plausibilitätsprüfung + Warnungen                                     │
+│  ├── User bestätigt oder korrigiert                                        │
+│  ├── Speichert finale Monatsdaten in DB                                    │
+│  └── Publiziert Monatsdaten auf MQTT (retained)                            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -27,7 +73,7 @@ Dieses Dokument beschreibt zwei komplementäre Features zur Vereinfachung der mo
 
 - **Auto-Discovery war ineffektiv:** Nur ~10% der HA-Sensoren wurden erkannt (prefix-basierte Erkennung)
 - **StringMonatsdaten war redundant:** PV-Erzeugung wird bereits in `InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]` gespeichert
-- **ha_sensor_* Felder sind veraltet:** Manuelles Sensor-Mapping wird durch Utility Meter Ansatz ersetzt
+- **ha_sensor_* Felder sind veraltet:** Werden durch MQTT Auto-Discovery Ansatz ersetzt
 
 ### Entfernte Komponenten
 
@@ -41,25 +87,739 @@ Dieses Dokument beschreibt zwei komplementäre Features zur Vereinfachung der mo
 
 ### Beibehaltene Komponenten
 
-- MQTT Export (`mqtt_client.py`, `ha_export.py`) - funktioniert
+- MQTT Export (`mqtt_client.py`, `ha_export.py`) - funktioniert, wird erweitert
 - HA Sensor Export (`ha_sensors_export.py`) - für REST API
 - Basis-Endpunkte: `/ha/status`, `/ha/sensors`, `/ha/mapping`
 
-### DEPRECATED Felder (Anlage Model)
+---
 
-```python
-ha_sensor_pv_erzeugung      # DEPRECATED - nicht mehr verwenden
-ha_sensor_einspeisung       # DEPRECATED - nicht mehr verwenden
-ha_sensor_netzbezug         # DEPRECATED - nicht mehr verwenden
-ha_sensor_batterie_ladung   # DEPRECATED - nicht mehr verwenden
-ha_sensor_batterie_entladung # DEPRECATED - nicht mehr verwenden
+## Teil 1: Sensor-Mapping-Wizard
+
+### Motivation
+
+Bevor EEDC automatisch Monatswerte berechnen kann, muss der User einmalig zuordnen, welche HA-Sensoren für welche EEDC-Felder verwendet werden sollen. Diese UI-Logik stammt aus dem ursprünglich geplanten YAML-Wizard, nur der Output ist anders (MQTT statt YAML).
+
+### Wizard-Ablauf
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Sensor-Mapping-Wizard                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Schritt 1: Basis-Sensoren (Pflicht)                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ Einspeisung:  [sensor.stromzaehler_einspeisung_total         ▼]    │   │
+│  │ Netzbezug:    [sensor.stromzaehler_bezug_total               ▼]    │   │
+│  │ PV Gesamt:    [sensor.fronius_total_energy                   ▼]    │   │
+│  │               (optional - für kWp-Verteilung auf Strings)          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Schritt 2: PV-Module                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ "Süddach" (10 kWp, 55.6%)                                          │   │
+│  │ ○ Eigener Sensor: [sensor.fronius_string1_energy             ▼]    │   │
+│  │ ● kWp-Verteilung: 55.6% von PV Gesamt                              │   │
+│  │                                                                     │   │
+│  │ "Westdach" (8 kWp, 44.4%)                                          │   │
+│  │ ○ Eigener Sensor: [_________________________________         ▼]    │   │
+│  │ ● kWp-Verteilung: 44.4% von PV Gesamt                              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Schritt 3: Speicher                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ "BYD HVS 10.2"                                                     │   │
+│  │ Ladung:       [sensor.byd_charge_energy                      ▼]    │   │
+│  │ Entladung:    [sensor.byd_discharge_energy                   ▼]    │   │
+│  │ Netzladung:   ○ Nicht erfassen  ● Sensor: [______________    ▼]    │   │
+│  │               (für Arbitrage-Auswertung)                           │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Schritt 4: Wärmepumpe                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ "Viessmann Vitocal"                                                │   │
+│  │ Stromverbrauch: [sensor.wp_energy                            ▼]    │   │
+│  │ Heizenergie:    ○ Sensor: [______________________________    ▼]    │   │
+│  │                 ● COP-Berechnung: Strom × 3.5 (JAZ)                │   │
+│  │ Warmwasser:     ○ Sensor: [______________________________    ▼]    │   │
+│  │                 ● COP-Berechnung: Strom × 3.0                      │   │
+│  │                 ○ Nicht separat erfassen                           │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Schritt 5: E-Auto & Wallbox                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ "VW ID.4" + "Wallbox Pulsar"                                       │   │
+│  │ Ladung PV:     [sensor.wallbox_pv_energy                     ▼]    │   │
+│  │ Ladung Netz:   [sensor.wallbox_grid_energy                   ▼]    │   │
+│  │                oder: ● EV-Quote: Nach Anlagen-Eigenverbrauchsquote │   │
+│  │ km gefahren:   ○ Sensor: [______________________________     ▼]    │   │
+│  │                ● Manuell im Monatsabschluss-Wizard                 │   │
+│  │ V2H-Entladung: ○ Nicht vorhanden  ● Sensor: [____________    ▼]    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Schritt 6: Zusammenfassung                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ ✅ 3 Sensoren direkt zugeordnet                                    │   │
+│  │ 📊 2 Felder per kWp-Verteilung                                     │   │
+│  │ 🔢 2 Felder per COP-Berechnung                                     │   │
+│  │ ✏️ 1 Feld manuell im Wizard                                        │   │
+│  │                                                                     │   │
+│  │ [Speichern & MQTT-Sensoren erstellen]                              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Diese Felder bleiben für Rückwärtskompatibilität erhalten, werden aber nicht mehr aktiv genutzt.
+### Schätzungsstrategien
+
+Wenn nicht für jedes Feld ein eigener Sensor existiert:
+
+| Strategie | Anwendung | Beispiel | Formel |
+|-----------|-----------|----------|--------|
+| **Direkter Sensor** | Sensor vorhanden | Einspeisung | `states('sensor.xyz')` |
+| **kWp-Verteilung** | PV-Strings ohne eigenen Sensor | Süddach 55.6% | `PV_Gesamt × (kWp_String / kWp_Total)` |
+| **EV-Quote** | Wallbox PV/Netz-Aufteilung | 72% PV-Anteil | `Ladung × Anlagen_EV_Quote` |
+| **COP-Berechnung** | WP Heizung/Warmwasser | JAZ 3.5 | `Stromverbrauch × COP` |
+| **Manuell** | Keine Automatisierung | km gefahren | User gibt im Wizard ein |
+| **Nicht erfassen** | Feld nicht relevant | V2H ohne Funktion | Wird übersprungen |
+
+### Datenmodell
+
+**Neue Tabelle oder JSON-Feld:** `Anlage.sensor_mapping`
+
+```python
+# Anlage.sensor_mapping (JSON)
+{
+    "basis": {
+        "einspeisung": {
+            "strategie": "sensor",
+            "sensor_id": "sensor.stromzaehler_einspeisung_total"
+        },
+        "netzbezug": {
+            "strategie": "sensor",
+            "sensor_id": "sensor.stromzaehler_bezug_total"
+        },
+        "pv_gesamt": {
+            "strategie": "sensor",
+            "sensor_id": "sensor.fronius_total_energy"
+        }
+    },
+    "investitionen": {
+        "1": {  # Investition ID
+            "typ": "pv_module",
+            "bezeichnung": "Süddach",
+            "felder": {
+                "pv_erzeugung_kwh": {
+                    "strategie": "kwp_verteilung",
+                    "parameter": {"anteil": 0.556, "basis_sensor": "pv_gesamt"}
+                }
+            }
+        },
+        "2": {
+            "typ": "speicher",
+            "bezeichnung": "BYD HVS",
+            "felder": {
+                "ladung_kwh": {
+                    "strategie": "sensor",
+                    "sensor_id": "sensor.byd_charge_energy"
+                },
+                "entladung_kwh": {
+                    "strategie": "sensor",
+                    "sensor_id": "sensor.byd_discharge_energy"
+                },
+                "ladung_netz_kwh": {
+                    "strategie": "keine"
+                }
+            }
+        },
+        "3": {
+            "typ": "waermepumpe",
+            "bezeichnung": "Viessmann",
+            "felder": {
+                "stromverbrauch_kwh": {
+                    "strategie": "sensor",
+                    "sensor_id": "sensor.wp_energy"
+                },
+                "heizenergie_kwh": {
+                    "strategie": "cop_berechnung",
+                    "parameter": {"cop": 3.5, "basis_feld": "stromverbrauch_kwh"}
+                },
+                "warmwasser_kwh": {
+                    "strategie": "cop_berechnung",
+                    "parameter": {"cop": 3.0, "basis_feld": "stromverbrauch_kwh"}
+                }
+            }
+        },
+        "4": {
+            "typ": "e_auto",
+            "bezeichnung": "VW ID.4",
+            "felder": {
+                "ladung_pv_kwh": {
+                    "strategie": "sensor",
+                    "sensor_id": "sensor.wallbox_pv_energy"
+                },
+                "ladung_netz_kwh": {
+                    "strategie": "sensor",
+                    "sensor_id": "sensor.wallbox_grid_energy"
+                },
+                "km_gefahren": {
+                    "strategie": "manuell"
+                }
+            }
+        }
+    },
+    "mqtt_setup_complete": true,
+    "mqtt_setup_timestamp": "2026-02-01T10:30:00Z"
+}
+```
+
+### Technische Umsetzung
+
+#### Backend
+
+**Neue Datei:** `backend/api/routes/sensor_mapping.py`
+
+```python
+router = APIRouter(prefix="/sensor-mapping", tags=["Sensor Mapping"])
+
+class StrategieTyp(str, Enum):
+    SENSOR = "sensor"
+    KWP_VERTEILUNG = "kwp_verteilung"
+    EV_QUOTE = "ev_quote"
+    COP_BERECHNUNG = "cop_berechnung"
+    MANUELL = "manuell"
+    KEINE = "keine"
+
+class FeldMapping(BaseModel):
+    strategie: StrategieTyp
+    sensor_id: Optional[str] = None
+    parameter: Optional[dict] = None
+
+class InvestitionMapping(BaseModel):
+    investition_id: int
+    felder: dict[str, FeldMapping]
+
+class SensorMappingRequest(BaseModel):
+    basis: dict[str, FeldMapping]
+    investitionen: list[InvestitionMapping]
+
+@router.get("/{anlage_id}")
+async def get_sensor_mapping(anlage_id: int) -> SensorMappingResponse:
+    """
+    Gibt aktuelles Sensor-Mapping zurück.
+
+    Enthält auch Liste aller Investitionen mit erwarteten Feldern
+    für die Wizard-Anzeige.
+    """
+
+@router.get("/{anlage_id}/available-sensors")
+async def get_available_sensors(anlage_id: int) -> list[HASensor]:
+    """
+    Holt verfügbare Sensoren aus HA für Dropdown-Auswahl.
+
+    Filtert auf relevante device_classes (energy, power, etc.)
+    """
+
+@router.post("/{anlage_id}")
+async def save_sensor_mapping(
+    anlage_id: int,
+    mapping: SensorMappingRequest
+) -> SensorMappingResult:
+    """
+    Speichert Sensor-Mapping und erstellt MQTT Entities.
+
+    Ablauf:
+    1. Validierung (Sensor existiert in HA?)
+    2. Speichern in Anlage.sensor_mapping
+    3. MQTT Discovery für alle Felder mit Strategie "sensor"
+    4. Return: Liste der erstellten MQTT Entities
+    """
+
+@router.delete("/{anlage_id}")
+async def delete_sensor_mapping(anlage_id: int) -> dict:
+    """
+    Löscht Sensor-Mapping und entfernt MQTT Entities.
+    """
+```
+
+#### Frontend
+
+**Neue Datei:** `frontend/src/pages/SensorMappingWizard.tsx`
+
+```typescript
+interface WizardState {
+  basis: {
+    einspeisung: FeldMapping;
+    netzbezug: FeldMapping;
+    pv_gesamt: FeldMapping;
+  };
+  investitionen: Map<number, InvestitionConfig>;
+}
+
+interface FeldMapping {
+  strategie: 'sensor' | 'kwp_verteilung' | 'ev_quote' | 'cop_berechnung' | 'manuell' | 'keine';
+  sensorId?: string;
+  parameter?: Record<string, number | string>;
+}
+
+export function SensorMappingWizard() {
+  const { anlageId } = useParams();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [state, setState] = useState<WizardState>(initialState);
+
+  // Verfügbare HA-Sensoren laden
+  const { data: availableSensors } = useQuery(
+    ['available-sensors', anlageId],
+    () => api.getAvailableSensors(anlageId)
+  );
+
+  // Investitionen laden
+  const { data: investitionen } = useQuery(
+    ['investitionen', anlageId],
+    () => api.getInvestitionen(anlageId)
+  );
+
+  // Steps dynamisch aus Investitionen generieren
+  const steps = useMemo(() => {
+    const s = [
+      { id: 'basis', title: 'Basis-Sensoren', component: BasisSensorenStep }
+    ];
+
+    // Gruppiert nach Typ
+    const pvModule = investitionen?.filter(i => i.typ === 'pv_module') || [];
+    const speicher = investitionen?.filter(i => i.typ === 'speicher') || [];
+    const wp = investitionen?.filter(i => i.typ === 'waermepumpe') || [];
+    const eAuto = investitionen?.filter(i => i.typ === 'e_auto') || [];
+
+    if (pvModule.length > 0) {
+      s.push({ id: 'pv', title: 'PV-Module', component: PVModuleStep, props: { investitionen: pvModule } });
+    }
+    if (speicher.length > 0) {
+      s.push({ id: 'speicher', title: 'Speicher', component: SpeicherStep, props: { investitionen: speicher } });
+    }
+    if (wp.length > 0) {
+      s.push({ id: 'wp', title: 'Wärmepumpe', component: WaermepumpeStep, props: { investitionen: wp } });
+    }
+    if (eAuto.length > 0) {
+      s.push({ id: 'eauto', title: 'E-Auto & Wallbox', component: EAutoStep, props: { investitionen: eAuto } });
+    }
+
+    s.push({ id: 'summary', title: 'Zusammenfassung', component: MappingSummaryStep });
+
+    return s;
+  }, [investitionen]);
+
+  const handleComplete = async () => {
+    const result = await api.saveSensorMapping(anlageId, state);
+    // Zeigt Erfolg: "X MQTT-Sensoren erstellt"
+  };
+
+  return (
+    <WizardContainer
+      title="Home Assistant Sensor-Zuordnung"
+      steps={steps}
+      currentStep={currentStep}
+      onStepChange={setCurrentStep}
+      onComplete={handleComplete}
+    />
+  );
+}
+```
+
+**Neue Komponente:** `frontend/src/components/sensor-mapping/FeldMappingInput.tsx`
+
+```typescript
+interface FeldMappingInputProps {
+  label: string;
+  einheit: string;
+  feld: string;
+  value: FeldMapping;
+  onChange: (mapping: FeldMapping) => void;
+  availableSensors: HASensor[];
+  strategieOptionen: StrategieOption[];  // Welche Strategien sind für dieses Feld möglich
+}
+
+export function FeldMappingInput({
+  label,
+  einheit,
+  value,
+  onChange,
+  availableSensors,
+  strategieOptionen
+}: FeldMappingInputProps) {
+  return (
+    <Box>
+      <Typography variant="subtitle2">{label}</Typography>
+
+      <RadioGroup
+        value={value.strategie}
+        onChange={(e) => onChange({ ...value, strategie: e.target.value })}
+      >
+        {strategieOptionen.map((opt) => (
+          <FormControlLabel
+            key={opt.value}
+            value={opt.value}
+            control={<Radio />}
+            label={
+              <Box display="flex" alignItems="center" gap={1}>
+                {opt.label}
+                {opt.value === 'sensor' && value.strategie === 'sensor' && (
+                  <SensorAutocomplete
+                    sensors={availableSensors}
+                    value={value.sensorId}
+                    onChange={(id) => onChange({ ...value, sensorId: id })}
+                  />
+                )}
+                {opt.value === 'cop_berechnung' && value.strategie === 'cop_berechnung' && (
+                  <TextField
+                    size="small"
+                    type="number"
+                    label="COP"
+                    value={value.parameter?.cop || ''}
+                    onChange={(e) => onChange({
+                      ...value,
+                      parameter: { ...value.parameter, cop: parseFloat(e.target.value) }
+                    })}
+                    sx={{ width: 80 }}
+                  />
+                )}
+              </Box>
+            }
+          />
+        ))}
+      </RadioGroup>
+    </Box>
+  );
+}
+```
+
+### Dateien-Übersicht Teil 1 (Sensor-Mapping)
+
+| Datei | Aktion | Aufwand |
+|-------|--------|---------|
+| `backend/api/routes/sensor_mapping.py` | Neu | ~2h |
+| `backend/models/anlage.py` | Erweitern (sensor_mapping JSON) | ~0.5h |
+| `frontend/src/pages/SensorMappingWizard.tsx` | Neu | ~3h |
+| `frontend/src/components/sensor-mapping/BasisSensorenStep.tsx` | Neu | ~1h |
+| `frontend/src/components/sensor-mapping/PVModuleStep.tsx` | Neu | ~1h |
+| `frontend/src/components/sensor-mapping/SpeicherStep.tsx` | Neu | ~0.5h |
+| `frontend/src/components/sensor-mapping/WaermepumpeStep.tsx` | Neu | ~0.5h |
+| `frontend/src/components/sensor-mapping/EAutoStep.tsx` | Neu | ~0.5h |
+| `frontend/src/components/sensor-mapping/FeldMappingInput.tsx` | Neu | ~1h |
+| **Gesamt Teil 1** | | **~10h** |
+
+### Navigation
+
+```
+Einstellungen
+├── Home Assistant
+│   ├── Sensor-Zuordnung (NEU - Sensor-Mapping-Wizard)
+│   └── MQTT-Export (bestehend)
+```
+
+Auch aufrufbar aus:
+- Monatsabschluss-Wizard (wenn noch nicht konfiguriert)
+- Setup-Wizard (optionaler Schritt am Ende)
 
 ---
 
-## Teil 1: Monatsabschluss-Wizard
+## Teil 2: MQTT Auto-Discovery für Monatswerte
+
+### Motivation
+
+Nachdem der User im Sensor-Mapping-Wizard die Zuordnungen definiert hat, erstellt EEDC die benötigten MQTT-Sensoren **automatisch** - ohne YAML-Bearbeitung oder HA-Neustart.
+
+### Konzept
+
+**Für jeden Quell-Sensor (z.B. `sensor.stromzaehler_einspeisung_total`) erstellt EEDC:**
+
+1. **Number Entity** - Speichert den Zählerstand vom Monatsanfang
+2. **Sensor Entity** - Berechnet den aktuellen Monatswert via `value_template`
+
+### Benennung & Device-Konsistenz
+
+**Präfix:** `mwd_` (Monatswechseldaten) für alphabetische Gruppierung
+
+**Device:** Gleiches Device wie bestehender MQTT-Export:
+```python
+"device": {
+    "identifiers": ["eedc_anlage_{anlage_id}"],
+    "name": "EEDC - {anlage_name}",
+    "manufacturer": "EEDC",
+    "model": "PV-Auswertung",
+}
+```
+
+**Ergebnis in HA:**
+```
+EEDC - Meine PV-Anlage
+├── pv_erzeugung_gesamt_kwh         (bestehend - Export)
+├── autarkie_prozent                (bestehend - Export)
+├── ...
+├── mwd_einspeisung_start           (NEU - number)
+├── mwd_einspeisung_monat           (NEU - sensor, berechnet)
+├── mwd_netzbezug_start             (NEU - number)
+├── mwd_netzbezug_monat             (NEU - sensor, berechnet)
+├── mwd_pv_erzeugung_start          (NEU - number)
+├── mwd_pv_erzeugung_monat          (NEU - sensor, berechnet)
+└── ...
+```
+
+### MQTT Discovery Payloads
+
+#### Number Entity (Monatsanfang-Speicher)
+
+```json
+{
+  "name": "EEDC Einspeisung Monatsanfang",
+  "unique_id": "eedc_1_mwd_einspeisung_start",
+  "state_topic": "eedc/anlage/1/mwd_einspeisung_start/state",
+  "command_topic": "eedc/anlage/1/mwd_einspeisung_start/set",
+  "min": 0,
+  "max": 9999999,
+  "step": 0.01,
+  "unit_of_measurement": "kWh",
+  "device_class": "energy",
+  "icon": "mdi:counter",
+  "retain": true,
+  "device": {
+    "identifiers": ["eedc_anlage_1"],
+    "name": "EEDC - Meine PV-Anlage",
+    "manufacturer": "EEDC",
+    "model": "PV-Auswertung"
+  }
+}
+```
+
+#### Sensor Entity (Berechneter Monatswert)
+
+```json
+{
+  "name": "EEDC Einspeisung Monat",
+  "unique_id": "eedc_1_mwd_einspeisung_monat",
+  "state_topic": "eedc/anlage/1/mwd_einspeisung_monat/state",
+  "value_template": "{{ (states('sensor.stromzaehler_einspeisung_total') | float(0) - states('number.eedc_1_mwd_einspeisung_start') | float(0)) | round(1) }}",
+  "unit_of_measurement": "kWh",
+  "device_class": "energy",
+  "state_class": "total",
+  "icon": "mdi:transmission-tower-export",
+  "device": {
+    "identifiers": ["eedc_anlage_1"],
+    "name": "EEDC - Meine PV-Anlage",
+    "manufacturer": "EEDC",
+    "model": "PV-Auswertung"
+  }
+}
+```
+
+### MQTT Retained Strategie
+
+Alle MQTT-Nachrichten werden mit `retain: true` publiziert:
+
+| Topic | Inhalt | Retained |
+|-------|--------|----------|
+| `eedc/anlage/{id}/mwd_{feld}_start/state` | Zählerstand Monatsanfang | ✅ |
+| `eedc/anlage/{id}/mwd_{feld}_monat/state` | Aktueller Monatswert | ✅ |
+| `eedc/anlage/{id}/monatsdaten/{jahr}/{monat}` | Finale Monatsdaten (JSON) | ✅ |
+
+**Vorteile:**
+- HA-Dashboards zeigen EEDC-Monatswerte auch nach HA-Neustart
+- HA-Automationen basierend auf Monatswerten möglich
+- Persistenz auch wenn EEDC offline
+
+### Cron-Job: Monatswechsel-Snapshot
+
+**Zweck:** Exakte Erfassung der Zählerstände um 00:00 am 1. des Monats
+
+**Ablauf am 1. des Monats um 00:01:**
+
+```python
+async def monthly_snapshot_job():
+    """Wird am 1. jeden Monats um 00:01 ausgeführt."""
+
+    for anlage in anlagen_mit_ha_sensoren:
+        # 1. Aktuelle Zählerstände aus HA lesen
+        zaehlerstaende = await ha_api.get_sensor_states(anlage.sensor_mapping)
+
+        # 2. Snapshot in DB speichern (für Wizard-Vorschlag)
+        await db.save_monatswechsel_snapshot(
+            anlage_id=anlage.id,
+            jahr=now.year,
+            monat=now.month - 1,  # Abgeschlossener Monat
+            werte=zaehlerstaende,
+            erfasst_um=now
+        )
+
+        # 3. Neue Startwerte für aktuellen Monat auf MQTT publizieren
+        for feld, wert in zaehlerstaende.items():
+            await mqtt.publish(
+                f"eedc/anlage/{anlage.id}/mwd_{feld}_start/state",
+                str(wert),
+                retain=True
+            )
+
+        # 4. Flag setzen: Monat bereit zum Abschluss
+        await db.set_monat_bereit(anlage.id, now.year, now.month - 1)
+```
+
+**Implementierung:** APScheduler oder ähnlich, läuft als Background-Task in FastAPI.
+
+### Technische Umsetzung
+
+#### Backend
+
+**Erweitern:** `backend/services/mqtt_client.py`
+
+```python
+# Neue Methoden:
+async def publish_number_discovery(
+    self,
+    key: str,                    # z.B. "mwd_einspeisung_start"
+    name: str,                   # z.B. "EEDC Einspeisung Monatsanfang"
+    anlage_id: int,
+    anlage_name: str,
+    unit: str = "kWh",
+    min_value: float = 0,
+    max_value: float = 9999999,
+) -> bool:
+    """Erstellt eine number Entity via MQTT Discovery."""
+
+async def publish_calculated_sensor(
+    self,
+    key: str,                    # z.B. "mwd_einspeisung_monat"
+    name: str,                   # z.B. "EEDC Einspeisung Monat"
+    anlage_id: int,
+    anlage_name: str,
+    source_sensor: str,          # z.B. "sensor.stromzaehler_einspeisung_total"
+    start_number: str,           # z.B. "number.eedc_1_mwd_einspeisung_start"
+    unit: str = "kWh",
+) -> bool:
+    """Erstellt einen Sensor mit value_template via MQTT Discovery."""
+
+async def update_month_start_value(
+    self,
+    anlage_id: int,
+    feld: str,
+    wert: float,
+) -> bool:
+    """Publiziert neuen Startwert (retained)."""
+```
+
+**Neue Datei:** `backend/services/ha_mqtt_sync.py`
+
+```python
+class HAMqttSyncService:
+    """Synchronisiert Monatsdaten zwischen HA und EEDC via MQTT."""
+
+    def __init__(self, mqtt_client: MQTTClient, db: AsyncSession):
+        self.mqtt = mqtt_client
+        self.db = db
+
+    async def setup_sensors_for_anlage(
+        self,
+        anlage_id: int,
+        sensor_mapping: dict[str, str]  # {"einspeisung": "sensor.xyz", ...}
+    ) -> SetupResult:
+        """
+        Erstellt alle MQTT Entities für eine Anlage.
+
+        Für jeden Eintrag im Mapping werden erstellt:
+        - number.eedc_{anlage}_mwd_{feld}_start
+        - sensor.eedc_{anlage}_mwd_{feld}_monat
+        """
+
+    async def get_current_month_values(
+        self,
+        anlage_id: int
+    ) -> dict[str, float]:
+        """Liest aktuelle Monatswerte aus HA via REST API."""
+
+    async def trigger_month_rollover(
+        self,
+        anlage_id: int,
+        jahr: int,
+        monat: int
+    ) -> RolloverResult:
+        """
+        Monatswechsel durchführen:
+        1. Snapshot speichern
+        2. Neue Startwerte publizieren
+        """
+
+    async def publish_final_month_data(
+        self,
+        anlage_id: int,
+        jahr: int,
+        monat: int,
+        daten: dict
+    ) -> bool:
+        """Publiziert finale Monatsdaten auf MQTT (retained)."""
+```
+
+**Neue Datei:** `backend/services/scheduler.py`
+
+```python
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+class EEDCScheduler:
+    """Background-Scheduler für periodische Tasks."""
+
+    def __init__(self):
+        self.scheduler = AsyncIOScheduler()
+
+    def start(self):
+        # Monatswechsel-Snapshot: Am 1. jeden Monats um 00:01
+        self.scheduler.add_job(
+            monthly_snapshot_job,
+            CronTrigger(day=1, hour=0, minute=1),
+            id="monthly_snapshot",
+            name="Monatswechsel Snapshot"
+        )
+        self.scheduler.start()
+
+    def stop(self):
+        self.scheduler.shutdown()
+```
+
+#### Frontend
+
+**Erweiterung im Monatsabschluss-Wizard:**
+
+```typescript
+// Schritt 0: HA-Sensor-Setup (einmalig)
+interface SensorMappingStep {
+  // User gibt nur Quell-Sensor-IDs ein
+  einspeisung: string;      // sensor.stromzaehler_einspeisung_total
+  netzbezug: string;        // sensor.stromzaehler_bezug_total
+  pv_erzeugung?: string;    // sensor.fronius_total_energy (optional)
+  // Pro Investition mit HA-Sensor
+  investitionen: {
+    [investitionId: number]: {
+      [feld: string]: string;  // z.B. "ladung_kwh": "sensor.wallbox_energy"
+    }
+  }
+}
+
+// Nach Eingabe: EEDC erstellt MQTT Entities automatisch
+const handleSetupComplete = async (mapping: SensorMappingStep) => {
+  await api.setupMqttSensors(anlageId, mapping);
+  // Entities erscheinen sofort in HA
+};
+```
+
+### Dateien-Übersicht Teil 1
+
+| Datei | Aktion | Aufwand |
+|-------|--------|---------|
+| `backend/services/mqtt_client.py` | Erweitern (number, value_template) | ~3h |
+| `backend/services/ha_mqtt_sync.py` | Neu | ~3h |
+| `backend/services/scheduler.py` | Neu (Cron-Job) | ~2h |
+| `backend/api/routes/ha_mqtt_setup.py` | Neu | ~1h |
+| **Gesamt Teil 1** | | **~9h** |
+
+---
+
+## Teil 3: Monatsabschluss-Wizard
 
 ### Motivation
 
@@ -73,43 +833,87 @@ Der Wizard reduziert diesen Aufwand auf **2-5 Minuten pro Monat**.
 
 ### Kernfunktionen
 
-#### 1.1 Intelligente Vorschläge
+#### 2.1 Intelligente Vorschläge
 
-Für jedes fehlende Feld werden Vorschläge aus verschiedenen Quellen generiert:
+Für jedes Feld werden Vorschläge aus verschiedenen Quellen generiert:
 
 | Quelle | Beispiel | Konfidenz |
 |--------|----------|-----------|
+| **HA-Sensor (MQTT)** | "Aus HA: 485,3 kWh" | 95% |
+| **Cron-Snapshot** | "Erfasst am 01.02. 00:01" | 90% |
 | Vormonat | "Letzter Monat: 1.380 km" | 80% |
 | Vorjahr gleicher Monat | "Februar 2025: 1.520 km" | 70% |
 | Berechnung | "COP 3.5 × 485 kWh = 1.697 kWh" | 60% |
 | Durchschnitt (12 Monate) | "Ø letzte 12 Monate: 1.250 km" | 50% |
 | EEDC Parameter | "Jahresfahrleistung ÷ 12: 1.250 km" | 30% |
 
-#### 1.2 Feld-Status-Anzeige
+#### 2.2 Feld-Status-Anzeige
 
 Jedes Feld zeigt seinen Status:
-- ✅ **Automatisch** - Aus HA oder bereits erfasst
+- ✅ **Automatisch (HA)** - Aus MQTT-Sensor berechnet
+- 📸 **Snapshot** - Vom Cron-Job erfasst
 - ❓ **Fehlt** - Muss eingegeben werden
 - ✏️ **Manuell** - Benutzer hat Wert eingegeben
 - 💡 **Vorschlag** - Vorschlag verfügbar
 
-#### 1.3 Wizard-Ablauf
+#### 2.3 Plausibilitätsprüfungen
+
+| Prüfung | Beispiel | Aktion |
+|---------|----------|--------|
+| **Negativ-Wert** | Monatswert = -50 kWh | Fehler: "Zähler kann nicht rückwärts laufen" |
+| **Unrealistisch hoch** | Einspeisung > 2× PVGIS-Prognose | Warnung: "Deutlich über Erwartung" |
+| **Unrealistisch niedrig** | PV im Juli = 10 kWh bei 10 kWp | Warnung: "Sehr niedrig für Jahreszeit" |
+| **Sensor unavailable** | Quell-Sensor = "unavailable" | Hinweis: "Sensor nicht erreichbar" |
+| **Große Abweichung** | Monatswert vs. Vorjahr ±50% | Warnung mit Vergleichswert |
+
+#### 2.4 Wizard-Ablauf
 
 ```
+Schritt 0: HA-Setup (einmalig, wenn nicht konfiguriert)
+├── "Nutzt du Home Assistant für Energie-Monitoring?"
+│   ├── Ja → Sensor-IDs eingeben → MQTT Setup automatisch
+│   └── Nein → Überspringen (manuelle Eingabe)
+└── EEDC erstellt MQTT Entities in HA
+
 Schritt 1: Zählerdaten (Basis)
 ├── Einspeisung, Netzbezug, PV-Erzeugung
-└── Meist automatisch aus HA
+├── HA verbunden: Zeigt berechnete Werte + Plausibilität
+└── Standalone: Manuelle Eingabe + Vorschläge
 
 Schritt 2-n: Pro Investitionstyp
-├── E-Auto: km, externe Ladung
-├── Wärmepumpe: Heizung, Warmwasser
+├── E-Auto: km, externe Ladung, V2H
+├── Wärmepumpe: Heizung, Warmwasser, Stromverbrauch
 ├── Speicher: Netzladung (Arbitrage)
 └── Etc.
 
-Letzter Schritt: Zusammenfassung
-├── Übersicht aller Werte
+Letzter Schritt: Zusammenfassung + Speichern
+├── Übersicht aller Werte mit Status
 ├── Monatsergebnis (KPIs)
-└── Sonderkosten-Option
+├── Sonderkosten-Option
+└── Speichern → Startwerte für nächsten Monat setzen
+```
+
+### Startwert-Initialisierung
+
+Beim ersten Setup oder wenn Startwert fehlt:
+
+```
+Wizard erkennt: number.eedc_*_start = 0 oder nicht gesetzt
+    ↓
+EEDC holt via HA REST API den AKTUELLEN Zählerstand:
+  GET /api/states/sensor.stromzaehler_einspeisung_total
+  → 12.456,7 kWh
+    ↓
+Wizard zeigt:
+  ┌─────────────────────────────────────────────────────────┐
+  │ Startwert für Januar fehlt.                            │
+  │ Aktueller Zählerstand: 12.456,7 kWh                    │
+  │                                                         │
+  │ [Übernehmen] [Manuell eingeben: ______]                │
+  │                                                         │
+  │ Tipp: Falls du den Wert vom 01.01. kennst              │
+  │ (z.B. aus der Stromrechnung), trage ihn ein.           │
+  └─────────────────────────────────────────────────────────┘
 ```
 
 ### Technische Umsetzung
@@ -124,7 +928,8 @@ class VorschlagService:
 
     async def get_vorschlaege(
         self,
-        investition_id: int,
+        anlage_id: int,
+        investition_id: Optional[int],
         feld: str,
         jahr: int,
         monat: int
@@ -132,82 +937,24 @@ class VorschlagService:
         """
         Generiert Vorschläge für ein Feld.
 
-        Returns:
-            Liste von Vorschlägen, sortiert nach Konfidenz
+        Quellen (in Prioritätsreihenfolge):
+        1. HA-Sensor (MQTT) - wenn konfiguriert
+        2. Cron-Snapshot - wenn vorhanden
+        3. Vormonat
+        4. Vorjahr
+        5. Berechnungen (COP, kWp-Verteilung, etc.)
+        6. Durchschnitt
         """
-        vorschlaege = []
 
-        # Vormonat
-        vormonat = await self._get_vormonat(investition_id, feld, jahr, monat)
-        if vormonat:
-            vorschlaege.append(Vorschlag(
-                wert=vormonat,
-                label=f"Letzter Monat: {vormonat}",
-                quelle="vormonat",
-                konfidenz=0.8
-            ))
-
-        # Vorjahr
-        vorjahr = await self._get_vorjahr(investition_id, feld, jahr, monat)
-        if vorjahr:
-            vorschlaege.append(Vorschlag(
-                wert=vorjahr,
-                label=f"{self._monat_name(monat)} {jahr-1}: {vorjahr}",
-                quelle="vorjahr",
-                konfidenz=0.7
-            ))
-
-        # Durchschnitt
-        durchschnitt = await self._get_durchschnitt(investition_id, feld, 12)
-        if durchschnitt:
-            vorschlaege.append(Vorschlag(
-                wert=durchschnitt,
-                label=f"Ø 12 Monate: {durchschnitt}",
-                quelle="durchschnitt",
-                konfidenz=0.5
-            ))
-
-        # Typ-spezifische Berechnungen
-        berechnet = await self._berechne_feld(investition_id, feld, jahr, monat)
-        if berechnet:
-            vorschlaege.append(berechnet)
-
-        return sorted(vorschlaege, key=lambda x: -x.konfidenz)
-
-    async def _berechne_feld(
+    async def pruefe_plausibilitaet(
         self,
-        investition_id: int,
+        anlage_id: int,
         feld: str,
+        wert: float,
         jahr: int,
         monat: int
-    ) -> Optional[Vorschlag]:
-        """Typ-spezifische Berechnungen."""
-        investition = await self._get_investition(investition_id)
-
-        if feld == "km_gefahren" and investition.parameter.get("km_jahr"):
-            km_monat = investition.parameter["km_jahr"] / 12
-            return Vorschlag(
-                wert=round(km_monat),
-                label=f"Jahresfahrleistung ÷ 12: {round(km_monat)} km",
-                quelle="berechnet",
-                konfidenz=0.3
-            )
-
-        if feld == "heizenergie_kwh":
-            stromverbrauch = await self._get_feld_wert(
-                investition_id, "stromverbrauch_kwh", jahr, monat
-            )
-            cop = investition.parameter.get("jaz") or investition.parameter.get("cop_heizung")
-            if stromverbrauch and cop:
-                berechnet = round(stromverbrauch * cop)
-                return Vorschlag(
-                    wert=berechnet,
-                    label=f"Berechnet (COP {cop}): {berechnet} kWh",
-                    quelle="berechnet",
-                    konfidenz=0.6
-                )
-
-        return None
+    ) -> list[PlausibilitaetsWarnung]:
+        """Prüft Wert auf Plausibilität."""
 ```
 
 **Neue Datei:** `backend/api/routes/monatsabschluss.py`
@@ -215,37 +962,20 @@ class VorschlagService:
 ```python
 router = APIRouter(prefix="/monatsabschluss", tags=["Monatsabschluss"])
 
-class FeldStatus(str, Enum):
-    AUTOMATISCH = "automatisch"
-    MANUELL = "manuell"
-    FEHLT = "fehlt"
-    VORSCHLAG = "vorschlag"
-
-class MonatsabschlussResponse(BaseModel):
-    """Antwort mit Status aller Felder."""
-    anlage_id: int
-    jahr: int
-    monat: int
-    vollstaendig: bool
-    felder: dict[str, FeldInfo]
-    zusammenfassung: dict
-
 @router.get("/{anlage_id}/{jahr}/{monat}")
 async def get_monatsabschluss(
     anlage_id: int,
     jahr: int,
     monat: int,
-    db: AsyncSession = Depends(get_db)
 ) -> MonatsabschlussResponse:
     """
     Gibt Status aller Felder für einen Monat zurück.
 
     Enthält:
-    - Aktuelle Werte (automatisch oder manuell)
+    - Aktuelle Werte (HA, Snapshot, oder manuell)
     - Vorschläge für fehlende Felder
-    - Zusammenfassung (wie viele fehlen)
+    - Plausibilitätswarnungen
     """
-    ...
 
 @router.post("/{anlage_id}/{jahr}/{monat}")
 async def save_monatsabschluss(
@@ -253,22 +983,20 @@ async def save_monatsabschluss(
     jahr: int,
     monat: int,
     daten: MonatsabschlussInput,
-    db: AsyncSession = Depends(get_db)
 ) -> MonatsabschlussResult:
     """
-    Speichert die manuell eingegebenen Felder.
+    Speichert Monatsdaten.
 
-    Merged automatische und manuelle Werte.
+    Ablauf:
+    1. Validierung + Plausibilitätsprüfung
+    2. Speichern in Monatsdaten + InvestitionMonatsdaten
+    3. Neue Startwerte auf MQTT publizieren
+    4. Finale Monatsdaten auf MQTT publizieren (retained)
     """
-    ...
 
 @router.get("/naechster/{anlage_id}")
-async def get_naechster_monat(
-    anlage_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> dict:
+async def get_naechster_monat(anlage_id: int) -> dict:
     """Findet den nächsten unvollständigen Monat."""
-    ...
 ```
 
 #### Frontend
@@ -276,465 +1004,81 @@ async def get_naechster_monat(
 **Neue Datei:** `frontend/src/pages/MonatsabschlussWizard.tsx`
 
 ```typescript
-interface WizardStep {
-  id: string;
-  title: string;
-  type: 'basis' | 'investition';
-  investitionId?: number;
-  investitionTyp?: string;
-  felder: FeldConfig[];
-}
-
 export function MonatsabschlussWizard() {
-  const { anlageId, jahr, monat } = useParams();
+  const { anlageId } = useParams();
+  const [jahr, monat] = useNaechsterMonat(anlageId);
   const [currentStep, setCurrentStep] = useState(0);
-  const [daten, setDaten] = useState<MonatsabschlussDaten | null>(null);
 
-  // API-Daten laden
+  // Prüfen ob HA-Setup nötig
+  const { data: haStatus } = useQuery(
+    ['ha-setup-status', anlageId],
+    () => api.getHaSetupStatus(anlageId)
+  );
+
+  // Monatsdaten laden
   const { data, isLoading } = useQuery(
     ['monatsabschluss', anlageId, jahr, monat],
     () => api.getMonatsabschluss(anlageId, jahr, monat)
   );
 
-  // Steps dynamisch aus Investitionen generieren
-  const steps = useMemo(() => generateSteps(data), [data]);
+  // Steps dynamisch generieren
+  const steps = useMemo(() => {
+    const s = [];
+
+    // HA-Setup wenn nicht konfiguriert
+    if (!haStatus?.configured) {
+      s.push({ id: 'ha-setup', title: 'Home Assistant', component: HASetupStep });
+    }
+
+    // Basis-Zählerdaten
+    s.push({ id: 'zaehler', title: 'Zählerdaten', component: ZaehlerStep });
+
+    // Pro Investitionstyp
+    for (const inv of data?.investitionen || []) {
+      s.push({
+        id: `inv-${inv.id}`,
+        title: inv.bezeichnung,
+        component: InvestitionStep,
+        props: { investition: inv }
+      });
+    }
+
+    // Zusammenfassung
+    s.push({ id: 'summary', title: 'Zusammenfassung', component: SummaryStep });
+
+    return s;
+  }, [haStatus, data]);
 
   return (
-    <Box>
-      <Typography variant="h4">
-        Monatsabschluss {monatName(monat)} {jahr}
-      </Typography>
-
-      <Stepper activeStep={currentStep}>
-        {steps.map((step) => (
-          <Step key={step.id}>
-            <StepLabel>{step.title}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
-
-      <StepContent step={steps[currentStep]} />
-
-      <WizardNavigation
-        onBack={() => setCurrentStep(s => s - 1)}
-        onNext={() => setCurrentStep(s => s + 1)}
-        onSave={handleSave}
-        isLastStep={currentStep === steps.length - 1}
-      />
-    </Box>
+    <WizardContainer
+      title={`Monatsabschluss ${monatName(monat)} ${jahr}`}
+      steps={steps}
+      currentStep={currentStep}
+      onStepChange={setCurrentStep}
+      onComplete={handleSave}
+    />
   );
 }
 ```
 
-**Neue Komponente:** `frontend/src/components/monatsabschluss/FeldMitVorschlag.tsx`
-
-```typescript
-interface FeldMitVorschlagProps {
-  label: string;
-  einheit: string;
-  status: FeldStatus;
-  wert: number | null;
-  vorschlaege: Vorschlag[];
-  onChange: (wert: number) => void;
-}
-
-export function FeldMitVorschlag({
-  label,
-  einheit,
-  status,
-  wert,
-  vorschlaege,
-  onChange
-}: FeldMitVorschlagProps) {
-  return (
-    <Box>
-      <Box display="flex" alignItems="center" gap={1}>
-        <StatusIcon status={status} />
-        <Typography>{label}</Typography>
-      </Box>
-
-      {status === 'automatisch' ? (
-        <Typography color="success.main">
-          {wert} {einheit} (aus HA)
-        </Typography>
-      ) : (
-        <>
-          <TextField
-            type="number"
-            value={wert ?? ''}
-            onChange={(e) => onChange(parseFloat(e.target.value))}
-            InputProps={{
-              endAdornment: <InputAdornment position="end">{einheit}</InputAdornment>
-            }}
-          />
-
-          {vorschlaege.length > 0 && (
-            <Box mt={1}>
-              <Typography variant="caption" color="text.secondary">
-                Vorschläge:
-              </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                {vorschlaege.map((v) => (
-                  <Chip
-                    key={v.quelle}
-                    label={v.label}
-                    size="small"
-                    icon={<LightbulbIcon />}
-                    onClick={() => onChange(v.wert)}
-                  />
-                ))}
-              </Stack>
-            </Box>
-          )}
-        </>
-      )}
-    </Box>
-  );
-}
-```
-
-### Dateien-Übersicht Teil 1
+### Dateien-Übersicht Teil 3
 
 | Datei | Aktion | Aufwand |
 |-------|--------|---------|
 | `backend/services/vorschlag_service.py` | Neu | ~3h |
 | `backend/api/routes/monatsabschluss.py` | Neu | ~2h |
 | `frontend/src/pages/MonatsabschlussWizard.tsx` | Neu | ~3h |
-| `frontend/src/components/monatsabschluss/FeldMitVorschlag.tsx` | Neu | ~1h |
-| `frontend/src/components/monatsabschluss/StepContent.tsx` | Neu | ~1h |
-| `frontend/src/components/monatsabschluss/Zusammenfassung.tsx` | Neu | ~1h |
-| `frontend/src/pages/Dashboard.tsx` | Banner hinzufügen | ~0.5h |
-| **Gesamt Teil 1** | | **~11.5h** |
+| `frontend/src/components/monatsabschluss/ZaehlerStep.tsx` | Neu | ~1h |
+| `frontend/src/components/monatsabschluss/InvestitionStep.tsx` | Neu | ~1h |
+| `frontend/src/components/monatsabschluss/SummaryStep.tsx` | Neu | ~1h |
+| **Gesamt Teil 3** | | **~11h** |
+
+> **Hinweis:** HASetupStep entfällt hier, da das Setup jetzt im separaten Sensor-Mapping-Wizard erfolgt.
+> Der Monatsabschluss-Wizard verlinkt nur dorthin, wenn noch nicht konfiguriert.
 
 ---
 
-## Teil 2: HA YAML-Wizard
-
-### Motivation
-
-Für Benutzer mit Home Assistant kann die Datenerfassung teilweise automatisiert werden. Der YAML-Wizard generiert eine vollständige, kopierfähige HA-Konfiguration mit Utility Meters für monatliche Aggregation.
-
-### Kernfunktionen
-
-#### 2.1 EEDC-integrierte Generierung
-
-Der Wizard liest die vorhandenen Investitionen und generiert pro Komponente passende Utility Meters:
-
-```yaml
-utility_meter:
-  # Investition ID: 1 - "Süddach" (10 kWp)
-  eedc_pv_1_sueddach_monat:
-    source: sensor.fronius_string1_energy
-    name: "EEDC PV Süddach Monat"
-    cycle: monthly
-```
-
-#### 2.2 Schätzungs-Strategien
-
-Wenn nicht alle Sensoren verfügbar sind:
-
-| Strategie | Anwendung | Beispiel |
-|-----------|-----------|----------|
-| kWp-Verteilung | PV-Strings | 55.6% von Gesamt für 10kWp String |
-| EV-Quote | Wallbox PV/Netz | 72% PV-Anteil nach Anlagen-Quote |
-| COP-Berechnung | WP Heizung | Strom × COP = Wärme |
-| Jahreswert ÷ 12 | E-Auto km | Gleichverteilung |
-
-#### 2.3 Generiertes YAML enthält
-
-1. **Utility Meters** - Pro Sensor monatliche Aggregation
-2. **Template Sensors** - Für Schätzungen und Berechnungen
-3. **JSON-Sensor** - Aggregiert alle Werte für EEDC-Import
-4. **Optional: MQTT Automation** - Push bei Monatswechsel
-
-### Technische Umsetzung
-
-#### Backend
-
-**Neue Datei:** `backend/services/ha_yaml_generator.py` (Inhalt ersetzen)
-
-```python
-from jinja2 import Environment, BaseLoader
-from dataclasses import dataclass
-from typing import Optional
-from enum import Enum
-
-class SchaetzungsStrategie(str, Enum):
-    SENSOR = "sensor"           # Direkter Sensor
-    KWP_ANTEIL = "kwp_anteil"   # Verteilung nach kWp
-    EV_QUOTE = "ev_quote"       # Nach Eigenverbrauchsquote
-    COP = "cop"                 # COP-Berechnung
-    KONSTANT = "konstant"       # Fester Monatswert
-    KEINE = "keine"             # Nicht erfassen
-
-@dataclass
-class SensorConfig:
-    """Konfiguration für einen Sensor im YAML."""
-    feld: str
-    sensor_id: Optional[str]
-    strategie: SchaetzungsStrategie
-    parameter: dict  # z.B. {"anteil": 0.556} oder {"cop": 3.5}
-
-@dataclass
-class InvestitionYAMLConfig:
-    """YAML-Konfiguration für eine Investition."""
-    investition_id: int
-    bezeichnung: str
-    typ: str
-    sensoren: list[SensorConfig]
-
-class HAYamlGenerator:
-    """Generiert Home Assistant YAML für EEDC."""
-
-    UTILITY_METER_TEMPLATE = """
-  # Investition ID: {{ inv.investition_id }} - "{{ inv.bezeichnung }}"
-  eedc_{{ inv.typ }}_{{ inv.investition_id }}_{{ inv.slug }}_monat:
-    source: {{ sensor.sensor_id }}
-    name: "EEDC {{ inv.bezeichnung }} Monat"
-    cycle: monthly
-"""
-
-    TEMPLATE_SENSOR_KWP = """
-      # {{ inv.bezeichnung }} ({{ sensor.parameter.anteil_prozent }}% von Gesamt)
-      - name: "EEDC {{ inv.bezeichnung }} Monat (berechnet)"
-        unique_id: eedc_{{ inv.typ }}_{{ inv.investition_id }}_monat_calc
-        unit_of_measurement: "kWh"
-        device_class: energy
-        state: >
-          {{ "{{" }} (states('sensor.eedc_pv_gesamt_monat') | float(0) * {{ sensor.parameter.anteil }}) | round(1) {{ "}}" }}
-        attributes:
-          anteil_prozent: {{ sensor.parameter.anteil_prozent }}
-          basis: "kWp-Verteilung"
-          investition_id: {{ inv.investition_id }}
-"""
-
-    def generate(self, config: list[InvestitionYAMLConfig]) -> str:
-        """Generiert vollständiges YAML."""
-        yaml_parts = [self._header()]
-
-        # Utility Meters
-        yaml_parts.append("\nutility_meter:")
-        for inv in config:
-            for sensor in inv.sensoren:
-                if sensor.strategie == SchaetzungsStrategie.SENSOR:
-                    yaml_parts.append(self._render_utility_meter(inv, sensor))
-
-        # Template Sensors für Schätzungen
-        yaml_parts.append("\ntemplate:")
-        yaml_parts.append("  - sensor:")
-        for inv in config:
-            for sensor in inv.sensoren:
-                if sensor.strategie == SchaetzungsStrategie.KWP_ANTEIL:
-                    yaml_parts.append(self._render_template_kwp(inv, sensor))
-                elif sensor.strategie == SchaetzungsStrategie.EV_QUOTE:
-                    yaml_parts.append(self._render_template_ev_quote(inv, sensor))
-
-        # JSON-Aggregations-Sensor
-        yaml_parts.append(self._render_json_sensor(config))
-
-        return "\n".join(yaml_parts)
-
-    def _header(self) -> str:
-        return """# ══════════════════════════════════════════════════════════════════
-# EEDC Utility Meters - Automatisch generiert
-# Kopiere diesen Block in deine configuration.yaml
-# Generiert am: {{ now }}
-# ══════════════════════════════════════════════════════════════════
-"""
-```
-
-**Neue Datei:** `backend/api/routes/ha_yaml_wizard.py`
-
-```python
-router = APIRouter(prefix="/ha/yaml-wizard", tags=["HA YAML Wizard"])
-
-class YAMLWizardRequest(BaseModel):
-    """Anfrage für YAML-Generierung."""
-    anlage_id: int
-    basis_sensoren: BasisSensoren
-    investition_configs: list[InvestitionSensorConfig]
-
-class BasisSensoren(BaseModel):
-    """Pflicht-Sensoren."""
-    einspeisung: str  # sensor.grid_export_energy
-    netzbezug: str    # sensor.grid_import_energy
-
-class InvestitionSensorConfig(BaseModel):
-    """Sensor-Konfiguration pro Investition."""
-    investition_id: int
-    sensoren: dict[str, SensorEingabe]  # feld -> config
-
-class SensorEingabe(BaseModel):
-    """Eingabe für ein Sensor-Feld."""
-    strategie: SchaetzungsStrategie
-    sensor_id: Optional[str] = None
-    parameter: Optional[dict] = None
-
-@router.get("/investitionen/{anlage_id}")
-async def get_investitionen_fuer_wizard(
-    anlage_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> list[InvestitionFuerWizard]:
-    """
-    Gibt alle Investitionen mit erwarteten Feldern zurück.
-
-    Pro Investitionstyp werden die möglichen Sensor-Felder
-    und Schätzungs-Optionen zurückgegeben.
-    """
-    ...
-
-@router.post("/generate")
-async def generate_yaml(
-    request: YAMLWizardRequest,
-    db: AsyncSession = Depends(get_db)
-) -> YAMLResponse:
-    """
-    Generiert YAML basierend auf Benutzer-Konfiguration.
-
-    Speichert auch die ha_entity_id in den Investitionen.
-    """
-    ...
-
-@router.get("/template")
-async def get_yaml_template() -> dict:
-    """
-    Gibt eine leere YAML-Vorlage mit Dokumentation zurück.
-    """
-    ...
-```
-
-#### Frontend
-
-**Neue Datei:** `frontend/src/pages/HAYamlWizard.tsx`
-
-```typescript
-interface WizardState {
-  basisSensoren: {
-    einspeisung: string;
-    netzbezug: string;
-  };
-  investitionen: Map<number, InvestitionConfig>;
-}
-
-interface InvestitionConfig {
-  [feld: string]: {
-    strategie: 'sensor' | 'kwp_anteil' | 'ev_quote' | 'konstant' | 'keine';
-    sensorId?: string;
-    parameter?: Record<string, number>;
-  };
-}
-
-export function HAYamlWizard() {
-  const { anlageId } = useParams();
-  const [state, setState] = useState<WizardState>(initialState);
-  const [generatedYaml, setGeneratedYaml] = useState<string | null>(null);
-
-  // Investitionen laden
-  const { data: investitionen } = useQuery(
-    ['ha-wizard-investitionen', anlageId],
-    () => api.getInvestitionenFuerWizard(anlageId)
-  );
-
-  // YAML generieren
-  const handleGenerate = async () => {
-    const yaml = await api.generateYaml({
-      anlage_id: anlageId,
-      basis_sensoren: state.basisSensoren,
-      investition_configs: Array.from(state.investitionen.entries()).map(
-        ([id, config]) => ({ investition_id: id, sensoren: config })
-      )
-    });
-    setGeneratedYaml(yaml);
-  };
-
-  return (
-    <Box>
-      <Typography variant="h4">
-        Home Assistant YAML-Wizard
-      </Typography>
-
-      <Alert severity="info" sx={{ mb: 3 }}>
-        Dieser Wizard generiert YAML-Konfiguration für Home Assistant
-        Utility Meters. Das YAML kann in deine <code>configuration.yaml</code>
-        kopiert werden.
-      </Alert>
-
-      {/* Schritte */}
-      <BasisSensorenStep ... />
-
-      {investitionen?.map((inv) => (
-        <InvestitionSensorStep
-          key={inv.id}
-          investition={inv}
-          config={state.investitionen.get(inv.id)}
-          onChange={(config) => updateInvestition(inv.id, config)}
-        />
-      ))}
-
-      <Button variant="contained" onClick={handleGenerate}>
-        YAML generieren
-      </Button>
-
-      {generatedYaml && (
-        <YamlPreview
-          yaml={generatedYaml}
-          onCopy={() => navigator.clipboard.writeText(generatedYaml)}
-          onDownload={() => downloadAsFile(generatedYaml, 'eedc_ha.yaml')}
-        />
-      )}
-    </Box>
-  );
-}
-```
-
-### Dateien-Übersicht Teil 2
-
-| Datei | Aktion | Aufwand |
-|-------|--------|---------|
-| `backend/services/ha_yaml_generator.py` | Neu schreiben | ~4h |
-| `backend/api/routes/ha_yaml_wizard.py` | Neu | ~2h |
-| `frontend/src/pages/HAYamlWizard.tsx` | Neu | ~4h |
-| `frontend/src/components/ha-wizard/BasisSensorenStep.tsx` | Neu | ~1h |
-| `frontend/src/components/ha-wizard/InvestitionSensorStep.tsx` | Neu | ~2h |
-| `frontend/src/components/ha-wizard/YamlPreview.tsx` | Neu | ~1h |
-| **Gesamt Teil 2** | | **~14h** |
-
----
-
-## Teil 3: Integration & Cleanup ✅ GRÖßTENTEILS ABGESCHLOSSEN
-
-> **Status:** Die meisten Cleanup-Aufgaben wurden in Phase 0 (v1.0.0-beta.13) erledigt.
-
-### Bereits durchgeführt (v1.0.0-beta.13)
-
-| Datei | Aktion | Status |
-|-------|--------|--------|
-| `frontend/src/pages/HAImportSettings.tsx` | Umbenannt zu `DatenerfassungGuide.tsx` | ✅ |
-| `backend/api/routes/ha_integration.py` | Discovery entfernt, nur Basis-Endpoints | ✅ |
-| `backend/models/string_monatsdaten.py` | Gelöscht (redundant) | ✅ |
-| `backend/services/ha_websocket.py` | Gelöscht (unzuverlässig) | ✅ |
-| `backend/services/ha_yaml_generator.py` | Gelöscht (war Placeholder) | ✅ |
-| Discovery UI-Komponenten | Gelöscht | ✅ |
-
-### Noch offen
-
-| Datei | Aktion |
-|-------|--------|
-| `frontend/src/pages/HAExportSettings.tsx` | Wizard verlinken wenn implementiert |
-| `frontend/src/pages/DatenerfassungGuide.tsx` | Aktualisieren mit Links zu neuen Wizards |
-
-### Navigation (aktuell)
-
-```
-Einstellungen
-├── Daten
-│   ├── Monatsdaten
-│   ├── Import
-│   ├── Datenerfassung (aktuell: Guide)
-│   └── Demo-Daten
-├── Optional
-│   └── HA-Export (MQTT)
-```
+## Teil 4: Integration & Navigation
 
 ### Navigation (nach Implementierung)
 
@@ -746,8 +1090,22 @@ Einstellungen
 │   ├── Import
 │   └── Demo-Daten
 ├── Home Assistant
-│   ├── YAML-Wizard (NEU)
-│   └── MQTT-Export
+│   ├── Sensor-Zuordnung (NEU - Sensor-Mapping-Wizard)
+│   └── MQTT-Export (bestehend)
+```
+
+### Wizard-Verknüpfungen
+
+```
+Sensor-Mapping-Wizard
+├── Aufrufbar über: Einstellungen → Home Assistant → Sensor-Zuordnung
+├── Aufrufbar über: Monatsabschluss-Wizard (wenn nicht konfiguriert)
+└── Aufrufbar über: Setup-Wizard (optionaler letzter Schritt)
+
+Monatsabschluss-Wizard
+├── Aufrufbar über: Einstellungen → Daten → Monatsabschluss
+├── Aufrufbar über: Dashboard-Banner ("Monat X abschließen")
+└── Prüft: sensor_mapping vorhanden? → Sonst Link zu Sensor-Mapping-Wizard
 ```
 
 ### Dashboard-Integration
@@ -762,8 +1120,9 @@ function MonatsabschlussBanner() {
   return (
     <Alert
       severity="info"
+      icon={<CalendarIcon />}
       action={
-        <Button href={`/monatsabschluss/${data.jahr}/${data.monat}`}>
+        <Button href={`/monatsabschluss/${data.anlageId}/${data.jahr}/${data.monat}`}>
           Jetzt erfassen
         </Button>
       }
@@ -777,49 +1136,18 @@ function MonatsabschlussBanner() {
 
 ---
 
-## Priorisierung (AKTUALISIERT)
+## Gesamtaufwand
 
-### Phase 0: HA-Integration Bereinigung ✅ ABGESCHLOSSEN (v1.0.0-beta.13)
+| Phase | Aufwand |
+|-------|---------|
+| Phase 0: Bereinigung | ✅ Abgeschlossen (~4h) |
+| Teil 1: Sensor-Mapping-Wizard | ~10h |
+| Teil 2: MQTT Auto-Discovery | ~9h |
+| Teil 3: Monatsabschluss-Wizard | ~11h |
+| Teil 4: Integration | ~1h |
+| **Gesamt (neu)** | **~31h** |
 
-- ~2000 LOC toter Code entfernt
-- Klare Basis für neue Features
-- Aufwand: ~4h
-
-### Phase 1: HA YAML-Wizard (Release v1.1)
-
-**Priorität: HOCH** (vorher Phase 2)
-
-- Generiert Utility Meter Konfiguration für HA
-- Utility Meters liefern dann automatisch monatliche Daten
-- Muss VOR dem Monatsabschluss-Wizard implementiert werden
-- Aufwand: ~14h
-
-### Phase 2: Monatsabschluss-Wizard (Release v1.1 oder v1.2)
-
-**Priorität: HOCH** (vorher Phase 1)
-
-- Löst das Kernproblem (monatliche Dateneingabe)
-- Funktioniert standalone (ohne HA)
-- Kann HA-Daten aus Utility Meters nutzen (wenn Phase 1 implementiert)
-- Aufwand: ~11.5h
-
-### Phase 3: Integration & Cleanup ✅ GRÖßTENTEILS ABGESCHLOSSEN
-
-- Alte HA-Integration bereits bereinigt
-- Nur noch kleinere Anpassungen nötig
-- Aufwand: ~1h (reduziert von ~2h)
-
----
-
-## Offene Fragen
-
-1. **Benachrichtigungen:** Soll EEDC E-Mail/Push-Benachrichtigungen senden wenn ein neuer Monat verfügbar ist?
-
-2. **Bulk-Import:** Soll der Monatsabschluss-Wizard auch mehrere Monate gleichzeitig unterstützen?
-
-3. **Validierung:** Wie streng soll die Validierung sein? (Warnungen vs. Fehler bei unplausiblen Werten)
-
-4. **MQTT vs. REST:** Soll der HA-Import per MQTT Push oder REST Pull erfolgen?
+*Vergleich zum alten Plan (YAML-Wizard): ~25.5h → Mehr Aufwand, aber deutlich bessere UX und Wiederverwendung der Wizard-Logik*
 
 ---
 
@@ -827,32 +1155,53 @@ function MonatsabschlussBanner() {
 
 ### Backend
 
-- Keine neuen Dependencies erforderlich
-- Jinja2 bereits in FastAPI enthalten
+| Paket | Verwendung | Status |
+|-------|------------|--------|
+| `aiomqtt` | MQTT Client | Bereits vorhanden |
+| `apscheduler` | Cron-Jobs | Neu hinzufügen |
 
 ### Frontend
 
-- Optional: `react-syntax-highlighter` für YAML-Vorschau
-- Alternativ: Einfaches `<pre>` mit Copy-Button
+- Keine neuen Dependencies erforderlich
 
 ---
 
 ## Testplan
 
+### Sensor-Mapping-Wizard
+
+1. Wizard öffnen ohne vorheriges Mapping
+2. Verfügbare HA-Sensoren werden im Dropdown angezeigt
+3. Verschiedene Strategien auswählen (Sensor, kWp-Verteilung, COP)
+4. Speichern → Mapping wird in DB gespeichert
+5. MQTT Entities werden automatisch erstellt
+6. Entities erscheinen in HA (ohne Neustart)
+
+### MQTT Auto-Discovery
+
+1. Nach Sensor-Mapping: Entities erscheinen in HA
+2. number Entity manuell setzen → Wert wird gespeichert
+3. Berechneter Sensor zeigt korrekten Monatswert
+4. Retained Messages überleben HA-Neustart
+5. value_template berechnet korrekt (aktuell - start)
+
+### Cron-Job
+
+1. Job manuell triggern
+2. Snapshot wird in DB gespeichert
+3. Neue Startwerte werden auf MQTT publiziert
+4. Flag "Monat bereit" wird gesetzt
+
 ### Monatsabschluss-Wizard
 
-1. Wizard öffnen für Monat ohne Daten
-2. Vorschläge werden korrekt angezeigt
-3. Werte eingeben und speichern
-4. Monatsdaten + InvestitionMonatsdaten werden erstellt
-5. Wizard für gleichen Monat öffnen → zeigt gespeicherte Daten
-
-### HA YAML-Wizard
-
-1. Wizard öffnen, Sensoren eingeben
-2. YAML wird korrekt generiert
-3. YAML in HA configuration.yaml testen
-4. Utility Meters funktionieren nach HA-Neustart
+1. Wizard öffnen ohne Sensor-Mapping → Link zum Mapping-Wizard
+2. Wizard öffnen mit Mapping → HA-Werte als Vorschläge
+3. Schätzungsstrategien werden korrekt angewendet (kWp, COP)
+4. Plausibilitätswarnungen bei unrealistischen Werten
+5. Werte eingeben und speichern
+6. Monatsdaten + InvestitionMonatsdaten werden erstellt
+7. Startwerte für nächsten Monat werden aktualisiert
+8. Finale Monatsdaten auf MQTT publiziert
 
 ---
 
@@ -862,17 +1211,29 @@ function MonatsabschlussBanner() {
 ## [1.1.0] - TBD
 
 ### Neu
-- **Monatsabschluss-Wizard**: Geführte monatliche Dateneingabe mit
-  intelligenten Vorschlägen basierend auf Vormonat, Vorjahr und
-  berechneten Werten
+- **Sensor-Mapping-Wizard**: Zuordnung von HA-Sensoren zu EEDC-Feldern
+  - Intuitive UI für Basis-Sensoren und Investitionen
+  - Schätzungsstrategien: kWp-Verteilung, COP-Berechnung, EV-Quote
+  - Mapping wird in DB gespeichert und für MQTT verwendet
 
-## [1.2.0] - TBD
+- **MQTT Auto-Discovery für Monatswerte**: EEDC erstellt automatisch
+  Sensoren in Home Assistant basierend auf dem Sensor-Mapping
+  - Keine YAML-Bearbeitung nötig
+  - Kein HA-Neustart erforderlich
+  - `mwd_*` Sensoren für Zählerstände und Monatswerte
+  - value_template berechnet Monatswerte in Echtzeit
 
-### Neu
-- **HA YAML-Wizard**: Generiert Home Assistant Utility Meter
-  Konfiguration basierend auf EEDC-Investitionen
-- Unterstützung für Schätzungsstrategien (kWp-Verteilung, EV-Quote, etc.)
+- **Monatsabschluss-Wizard**: Geführte monatliche Dateneingabe
+  - Automatische Werte aus HA-Sensoren (wenn Mapping konfiguriert)
+  - Intelligente Vorschläge (Vormonat, Vorjahr, Berechnungen)
+  - Plausibilitätsprüfungen mit Warnungen
+  - Verknüpfung mit Sensor-Mapping-Wizard
 
-### Entfernt
-- Veraltete HA-Import Funktionen (waren bereits deaktiviert)
+- **Cron-Job für Monatswechsel**: Automatische Erfassung der
+  Zählerstände am 1. des Monats um 00:01
+
+### Technisch
+- Neue Dependency: `apscheduler` für Background-Tasks
+- MQTT retained Messages für Persistenz
+- Neues DB-Feld: `Anlage.sensor_mapping` (JSON)
 ```

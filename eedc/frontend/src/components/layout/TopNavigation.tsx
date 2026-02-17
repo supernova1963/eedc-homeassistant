@@ -31,6 +31,7 @@ const settingsMenu = [
     category: 'Daten',
     items: [
       { name: 'Monatsdaten', href: '/einstellungen/monatsdaten' },
+      { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss' },
       { name: 'Import', href: '/einstellungen/import' },
       { name: 'Datenerfassung', href: '/einstellungen/datenerfassung' },
       { name: 'Demo-Daten', href: '/einstellungen/demo' },
@@ -44,9 +45,10 @@ const settingsMenu = [
     ],
   },
   {
-    category: 'Optional',
+    category: 'Home Assistant',
     items: [
-      { name: 'HA-Export (MQTT)', href: '/einstellungen/ha-export' },
+      { name: 'Sensor-Zuordnung', href: '/einstellungen/sensor-mapping' },
+      { name: 'MQTT-Export', href: '/einstellungen/ha-export' },
     ],
   },
 ]

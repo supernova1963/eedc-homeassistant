@@ -68,6 +68,8 @@ async def run_migrations(conn):
                 ('versorger_daten', 'JSON'),
                 # v1.0.0-beta.10: Wetterdaten-Provider
                 ('wetter_provider', 'VARCHAR(30)'),
+                # v1.1.0: Sensor-Mapping für HA-Integration
+                ('sensor_mapping', 'JSON'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

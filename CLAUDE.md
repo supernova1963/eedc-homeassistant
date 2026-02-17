@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.0.0-beta.12 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.1.0-beta.1 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -104,30 +104,45 @@ if val is not None:
 ```
 eedc/
 ├── backend/
-│   ├── main.py                    # FastAPI Entry + /stats
+│   ├── main.py                    # FastAPI Entry + /stats + Scheduler
 │   ├── api/routes/
 │   │   ├── cockpit.py             # Dashboard-Aggregation (jahres_rendite_prozent)
 │   │   ├── aussichten.py          # Prognosen: Kurzfristig, Langfristig, Trend, Finanzen
 │   │   ├── import_export/         # Import/Export Package (CSV, JSON, Demo)
 │   │   ├── monatsdaten.py         # CRUD + Berechnungen
-│   │   └── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
+│   │   ├── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
+│   │   ├── sensor_mapping.py      # HA Sensor-Zuordnung (NEU v1.1.0)
+│   │   └── monatsabschluss.py     # Monatsabschluss-Wizard API (NEU v1.1.0)
 │   ├── core/config.py             # APP_VERSION
 │   └── services/
 │       ├── wetter_service.py      # Multi-Provider Wetterdaten
 │       ├── brightsky_service.py   # DWD-Daten via Bright Sky API
 │       ├── solar_forecast_service.py  # Open-Meteo Solar GTI
 │       ├── prognose_service.py    # Prognose-Berechnungen
-│       └── mqtt_client.py         # HA Export
+│       ├── mqtt_client.py         # HA Export + MQTT Auto-Discovery (erweitert v1.1.0)
+│       ├── ha_mqtt_sync.py        # MQTT Sync Service (NEU v1.1.0)
+│       ├── scheduler.py           # Cron-Jobs (NEU v1.1.0)
+│       └── vorschlag_service.py   # Intelligente Vorschläge (NEU v1.1.0)
 │
 └── frontend/src/
     ├── pages/
     │   ├── Dashboard.tsx          # Cockpit-Übersicht
     │   ├── Auswertung.tsx         # 6 Analyse-Tabs
     │   ├── Aussichten.tsx         # 4 Prognose-Tabs
-    │   └── PVAnlageDashboard.tsx  # String-Vergleich (Jahr-Parameter!)
+    │   ├── PVAnlageDashboard.tsx  # String-Vergleich (Jahr-Parameter!)
+    │   ├── SensorMappingWizard.tsx    # HA Sensor-Zuordnung (NEU v1.1.0)
+    │   └── MonatsabschlussWizard.tsx  # Monatliche Dateneingabe (NEU v1.1.0)
     ├── components/
     │   ├── forms/MonatsdatenForm.tsx  # Dynamische Felder
-    │   └── pv/PVStringVergleich.tsx   # SOLL-IST
+    │   ├── pv/PVStringVergleich.tsx   # SOLL-IST
+    │   └── sensor-mapping/            # Wizard-Steps (NEU v1.1.0)
+    │       ├── FeldMappingInput.tsx
+    │       ├── BasisSensorenStep.tsx
+    │       ├── PVModuleStep.tsx
+    │       ├── SpeicherStep.tsx
+    │       ├── WaermepumpeStep.tsx
+    │       ├── EAutoStep.tsx
+    │       └── MappingSummaryStep.tsx
     └── config/version.ts          # APP_VERSION
 ```
 
@@ -250,6 +265,22 @@ GET  /api/aussichten/kurzfristig/{anlage_id}         # 7-Tage Wetterprognose
 GET  /api/aussichten/langfristig/{anlage_id}         # 12-Monats-Prognose (PVGIS)
 GET  /api/aussichten/trend/{anlage_id}               # Trend-Analyse + Degradation
 GET  /api/aussichten/finanzen/{anlage_id}            # Finanz-Prognose + Amortisation
+
+# Sensor-Mapping (NEU v1.1.0)
+GET  /api/sensor-mapping/{anlage_id}                 # Aktuelles Mapping abrufen
+GET  /api/sensor-mapping/{anlage_id}/available-sensors # Verfügbare HA-Sensoren
+POST /api/sensor-mapping/{anlage_id}                 # Mapping speichern
+GET  /api/sensor-mapping/{anlage_id}/status          # Kurzstatus
+
+# Monatsabschluss (NEU v1.1.0)
+GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat} # Status + Vorschläge
+POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat} # Monatsdaten speichern
+GET  /api/monatsabschluss/naechster/{anlage_id}      # Nächster offener Monat
+GET  /api/monatsabschluss/historie/{anlage_id}       # Letzte Abschlüsse
+
+# Scheduler (NEU v1.1.0)
+GET  /api/scheduler                                  # Scheduler-Status
+POST /api/scheduler/monthly-snapshot                 # Manueller Monatswechsel
 ```
 
 ## ROI-Metriken (WICHTIG: Unterschiedliche Bedeutungen!)
@@ -311,64 +342,82 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 
 - [x] PDF-Export ✓ (beta.12)
 - [x] HA-Integration Bereinigung ✓ (beta.13)
-- [ ] Monatsabschluss-Wizard (Teil 1)
-- [ ] HA YAML-Wizard für Utility Meters (Teil 2)
+- [x] Sensor-Mapping-Wizard ✓ (v1.1.0)
+- [x] MQTT Auto-Discovery für Monatswerte ✓ (v1.1.0)
+- [x] Monatsabschluss-Wizard ✓ (v1.1.0)
 - [ ] KI-Insights
 
-## Nächste Schritte (Automatische Datenerfassung)
+## HA-Integration Status (v1.1.0)
 
-Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md) für Details.
+**Neu in v1.1.0:**
+- **Sensor-Mapping-Wizard:** Zuordnung HA-Sensoren zu EEDC-Feldern
+- **MQTT Auto-Discovery:** Erstellt automatisch `number` und `sensor` Entities in HA
+- **Monatsabschluss-Wizard:** Geführte monatliche Dateneingabe mit Vorschlägen
+- **Scheduler:** Cron-Job für Monatswechsel-Snapshot (1. des Monats 00:01)
 
-**Wichtige Erkenntnisse aus der Bereinigung:**
-- Auto-Discovery (alter Ansatz) fand nur ~10% der HA-Sensoren wegen prefix-basierter Erkennung
-- `StringMonatsdaten` war redundant - PV-Erzeugung wird in `InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]` gespeichert
-- `ha_sensor_*` Felder auf Anlage sind DEPRECATED - werden durch Utility Meter Ansatz ersetzt
+**Anlage.sensor_mapping (JSON) - NEU:**
+```json
+{
+  "basis": {
+    "einspeisung": {"strategie": "sensor", "sensor_id": "sensor.zaehler_einspeisung"},
+    "netzbezug": {"strategie": "sensor", "sensor_id": "sensor.zaehler_bezug"}
+  },
+  "investitionen": {
+    "1": {"pv_erzeugung_kwh": {"strategie": "kwp_verteilung", "parameter": {"anteil": 0.55}}}
+  },
+  "mqtt_setup_complete": true,
+  "mqtt_setup_timestamp": "2026-02-17T10:00:00Z"
+}
+```
 
-**Empfohlene Reihenfolge:**
-1. Teil 2 (HA YAML-Wizard) zuerst - generiert Utility Meter Konfiguration
-2. Teil 1 (Monatsabschluss-Wizard) - nutzt dann die HA-Daten
-
-## HA-Integration Status (nach Bereinigung beta.13)
-
-**Behalten (funktioniert):**
-- MQTT Export (`mqtt_client.py`, `ha_export.py`)
-- HA Sensor Export (`ha_sensors_export.py`)
-- Basis-Endpunkte: `/ha/status`, `/ha/sensors`, `/ha/mapping`
-
-**Entfernt:**
-- Auto-Discovery (ineffektiv, ~10% Erkennungsrate)
-- `StringMonatsdaten` Model (redundant)
-- `ha_websocket.py` (unzuverlässig)
-- `ha_yaml_generator.py` (Placeholder)
-- Discovery UI-Komponenten
+**Schätzungsstrategien:**
+- `sensor` - Direkt aus HA-Sensor
+- `kwp_verteilung` - Anteilig nach kWp (PV-Module)
+- `cop_berechnung` - COP × Stromverbrauch (Wärmepumpe)
+- `ev_quote` - Nach Eigenverbrauchsquote (E-Auto)
+- `manuell` - Eingabe im Wizard
+- `keine` - Nicht erfassen
 
 **DEPRECATED (nicht mehr verwenden):**
 ```python
 # Anlage Model - diese Felder sind deprecated:
-ha_sensor_pv_erzeugung      # DEPRECATED
-ha_sensor_einspeisung       # DEPRECATED
-ha_sensor_netzbezug         # DEPRECATED
-ha_sensor_batterie_ladung   # DEPRECATED
-ha_sensor_batterie_entladung # DEPRECATED
+ha_sensor_pv_erzeugung      # DEPRECATED - nutze sensor_mapping
+ha_sensor_einspeisung       # DEPRECATED - nutze sensor_mapping
+ha_sensor_netzbezug         # DEPRECATED - nutze sensor_mapping
+ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
+ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v1.0.0-beta.13)
+## Letzte Änderungen (v1.1.0-beta.1)
 
-**HA-Integration Bereinigung (Phase 0)**
-- ~2000 LOC toter/problematischer Code entfernt
-- `ha_integration.py`: 2037 → 171 LOC
-- Auto-Discovery komplett entfernt
-- `StringMonatsdaten` Model entfernt
-- `ha_sensor_*` Felder als DEPRECATED markiert
+**Automatische Datenerfassung - Komplett implementiert!**
 
-**Logo/Icon Integration**
-- Neues eedc-Logo und Icon durchgängig eingebunden
-- HA Add-on: `icon.png` (512x512), `logo.png`
-- Frontend: Favicon, TopNavigation, Setup-Wizard
-- PDF-Export: Icon in Kopfzeile
-- README: Logo zentriert am Anfang
+Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md) für Details.
 
-**Entwickler-Tools**
-- `scripts/kill-dev.sh`: Beendet alle Dev-Prozesse, gibt Ports frei
+**Teil 1: Sensor-Mapping-Wizard**
+- UI zur Zuordnung von HA-Sensoren zu EEDC-Feldern
+- Schätzungsstrategien: sensor, kwp_verteilung, cop_berechnung, ev_quote, manuell
+- Dynamische Steps basierend auf vorhandenen Investitionen
+- Speicherung in `Anlage.sensor_mapping` (JSON)
+
+**Teil 2: MQTT Auto-Discovery**
+- `mqtt_client.py` erweitert: `publish_number_discovery()`, `publish_calculated_sensor()`
+- Erstellt `number.eedc_{anlage}_mwd_{feld}_start` für Monatsanfang-Werte
+- Erstellt `sensor.eedc_{anlage}_mwd_{feld}_monat` mit `value_template`
+- `ha_mqtt_sync.py`: Synchronisations-Service
+- `scheduler.py`: Cron-Job für Monatswechsel (1. des Monats 00:01)
+
+**Teil 3: Monatsabschluss-Wizard**
+- `vorschlag_service.py`: Intelligente Vorschläge (Vormonat, Vorjahr, COP, Durchschnitt)
+- Plausibilitätsprüfungen mit Warnungen
+- `monatsabschluss.py` API: Status, Speichern, nächster Monat
+- Frontend mit dynamischen Steps pro Investitionstyp
+
+**Teil 4: Navigation**
+- "Sensor-Zuordnung" unter Einstellungen → Home Assistant
+- "Monatsabschluss" unter Einstellungen → Daten
+
+**Neue Dependencies:**
+- `apscheduler>=3.10.0` für Cron-Jobs
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

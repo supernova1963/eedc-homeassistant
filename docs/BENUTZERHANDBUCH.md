@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.0.0-beta.12** | Stand: Februar 2026
+**Version 1.1.0-beta.1** | Stand: Februar 2026
 
 ---
 
@@ -15,9 +15,11 @@
 7. [Aussichten (Prognosen)](#7-aussichten-prognosen)
 8. [Einstellungen](#8-einstellungen)
 9. [Datenerfassung](#9-datenerfassung)
-10. [Home Assistant Integration](#10-home-assistant-integration-optional)
-11. [Tipps & Best Practices](#11-tipps--best-practices)
-12. [Fehlerbehebung](#12-fehlerbehebung)
+10. [Sensor-Mapping (NEU)](#10-sensor-mapping-neu)
+11. [Monatsabschluss-Wizard (NEU)](#11-monatsabschluss-wizard-neu)
+12. [Home Assistant Integration](#12-home-assistant-integration-optional)
+13. [Tipps & Best Practices](#13-tipps--best-practices)
+14. [Fehlerbehebung](#14-fehlerbehebung)
 
 ---
 
@@ -745,16 +747,156 @@ Zum Ausprobieren ohne echte Daten:
 
 ---
 
-## 10. Home Assistant Integration (optional)
+## 10. Sensor-Mapping (NEU)
+
+Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den EEDC-Feldern.
+
+### 10.1 Wizard starten
+
+**Pfad**: Einstellungen → Sensor-Mapping (im HA-Bereich)
+
+### 10.2 Schritte des Wizards
+
+#### Schritt 1: Basis-Sensoren
+
+Ordne die grundlegenden Energie-Sensoren zu:
+
+| Feld | Beschreibung | Strategie-Optionen |
+|------|--------------|-------------------|
+| **PV-Erzeugung Gesamt** | Gesamte PV-Produktion | HA-Sensor, Manuell |
+| **Einspeisung** | Netz-Einspeisung | HA-Sensor, Manuell |
+| **Netzbezug** | Bezug aus dem Netz | HA-Sensor, Manuell |
+| **Batterie-Ladung** | Gesamt-Ladung (alle Speicher) | HA-Sensor, Manuell |
+| **Batterie-Entladung** | Gesamt-Entladung | HA-Sensor, Manuell |
+
+#### Schritt 2: PV-Module
+
+Für jeden PV-String/Modul-Gruppe:
+
+| Strategie | Beschreibung |
+|-----------|--------------|
+| **Eigener Sensor** | Separater HA-Sensor für diesen String |
+| **kWp-Verteilung** | Anteilige Berechnung aus PV-Gesamt basierend auf kWp |
+| **Manuell** | Manuelle Eingabe im Monatsabschluss |
+
+**Beispiel kWp-Verteilung:**
+Bei 10 kWp Gesamt und einem String mit 4 kWp erhält dieser String 40% der Gesamt-Erzeugung.
+
+#### Schritt 3: Speicher
+
+Für jeden Speicher:
+
+| Feld | Strategien |
+|------|------------|
+| **Ladung** | HA-Sensor, Manuell |
+| **Entladung** | HA-Sensor, Manuell |
+| **Netz-Ladung** | HA-Sensor, Manuell (für Arbitrage) |
+
+#### Schritt 4: Wärmepumpe
+
+| Feld | Strategien |
+|------|------------|
+| **Stromverbrauch** | HA-Sensor, Manuell (Pflicht) |
+| **Heizenergie** | Wärmemengenzähler, COP-Berechnung |
+| **Warmwasser** | Wärmemengenzähler, COP-Berechnung, Nicht separat |
+
+**COP-Berechnung:**
+Wenn kein Wärmemengenzähler vorhanden, kann die Heizenergie über den COP berechnet werden:
+`Heizenergie = Stromverbrauch × COP`
+
+#### Schritt 5: E-Auto
+
+| Feld | Strategien |
+|------|------------|
+| **km gefahren** | HA-Sensor (Odometer), Manuell |
+| **Ladung PV** | HA-Sensor, EV-Quote, Manuell |
+| **Ladung Netz** | HA-Sensor, Berechnung, Manuell |
+| **V2H-Entladung** | HA-Sensor, Manuell, Nicht aktiv |
+
+**EV-Quote Strategie:**
+Berechnet PV-Ladung basierend auf der Eigenverbrauchsquote:
+`Ladung PV = Gesamt-Ladung × Eigenverbrauchsquote`
+
+#### Schritt 6: Zusammenfassung
+
+- Übersicht aller konfigurierten Mappings
+- Sensoren mit Warnungen (z.B. fehlende Zuordnung)
+- Button "Mapping speichern"
+
+### 10.3 Sensor-Auswahl
+
+Bei der Sensor-Auswahl werden automatisch alle verfügbaren HA-Sensoren angezeigt:
+
+- **Filterbar** nach Namen oder Entity-ID
+- **Sortiert** nach Relevanz (energy-Sensoren zuerst)
+- **Einheit** wird angezeigt (kWh, W, etc.)
+
+---
+
+## 11. Monatsabschluss-Wizard (NEU)
+
+Der **Monatsabschluss-Wizard** führt dich durch die monatliche Datenerfassung mit intelligenten Vorschlägen.
+
+### 11.1 Wizard starten
+
+**Pfad**: Einstellungen → Monatsabschluss (im Daten-Bereich)
+
+Oder direkt über die URL: `/monatsabschluss`
+
+### 11.2 Funktionsweise
+
+#### Automatische Vorschläge
+
+Für jedes Feld werden automatisch Vorschläge berechnet:
+
+| Quelle | Konfidenz | Beschreibung |
+|--------|-----------|--------------|
+| **Vormonat** | 80% | Wert vom Vormonat (beste Quelle für kontinuierliche Werte) |
+| **Vorjahr** | 70% | Gleicher Monat im Vorjahr (saisonale Korrelation) |
+| **Berechnung** | 60% | COP- oder EV-Quote-basierte Berechnung |
+| **Durchschnitt** | 50% | Durchschnitt aller vorhandenen Werte |
+
+#### Vorschläge nutzen
+
+Jedes Feld zeigt:
+- **Aktueller Wert** (falls vorhanden)
+- **Vorschlag** mit Quelle und Konfidenz
+- **Übernehmen-Button** zum direkten Übernehmen
+- **Manuelles Eingabefeld** für Anpassungen
+
+#### Workflow
+
+1. **Monat wählen** - Der nächste offene Monat wird vorgeschlagen
+2. **Basis-Daten prüfen** - Einspeisung, Netzbezug, PV-Erzeugung
+3. **Komponenten-Daten** - Speicher, Wärmepumpe, E-Auto, etc.
+4. **Speichern** - Alle Daten werden als Monatsdaten gespeichert
+
+### 11.3 Sensor-Werte aus HA
+
+Wenn Sensor-Mapping konfiguriert ist:
+- Werte werden automatisch aus HA abgerufen
+- Bei `manuell`-Strategie: Vorschläge aus historischen Daten
+- Bei `sensor`-Strategie: Aktueller Sensor-Wert als Vorschlag
+
+### 11.4 Historie
+
+Die letzten Abschlüsse werden angezeigt:
+- Monat/Jahr
+- Abschlussdatum
+- Wichtige Kennzahlen
+
+---
+
+## 12. Home Assistant Integration (optional)
 
 EEDC kann berechnete KPIs an Home Assistant exportieren.
 
-### 10.1 Voraussetzungen
+### 12.1 Voraussetzungen
 
 - Home Assistant mit MQTT-Broker (Mosquitto)
 - MQTT-Benutzer und Passwort
 
-### 10.2 MQTT konfigurieren
+### 12.2 MQTT konfigurieren
 
 **Pfad**: Einstellungen → HA-Export
 
@@ -766,7 +908,7 @@ EEDC kann berechnete KPIs an Home Assistant exportieren.
 3. **Verbindung testen**: Klicke "Test"
 4. **Sensoren publizieren**: Klicke "Publizieren"
 
-### 10.3 Verfügbare Sensoren
+### 12.3 Verfügbare Sensoren
 
 Nach dem Publizieren erscheinen in HA neue Sensoren:
 
@@ -779,7 +921,7 @@ Nach dem Publizieren erscheinen in HA neue Sensoren:
 | `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
 | `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
 
-### 10.4 Alternative: REST API
+### 12.4 Alternative: REST API
 
 Statt MQTT kannst du auch die REST API nutzen:
 
@@ -796,7 +938,7 @@ rest:
 
 ---
 
-## 11. Tipps & Best Practices
+## 13. Tipps & Best Practices
 
 ### Datenqualität
 
@@ -824,7 +966,7 @@ rest:
 
 ---
 
-## 12. Fehlerbehebung
+## 14. Fehlerbehebung
 
 ### SOLL-IST Vergleich zeigt 0 kWh
 

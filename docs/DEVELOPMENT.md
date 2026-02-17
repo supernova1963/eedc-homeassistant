@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 1.0.0-beta.12** | Stand: Februar 2026
+**Version 1.1.0-beta.1** | Stand: Februar 2026
 
 ---
 
@@ -203,8 +203,11 @@ eedc-homeassistant/
     │   └── services/
     │       ├── wetter_service.py    # Open-Meteo + PVGIS
     │       ├── prognose_service.py  # Prognose-Berechnungen
-    │       ├── pdf_service.py       # PDF-Export (NEU beta.12)
-    │       └── mqtt_client.py       # HA Export
+    │       ├── pdf_service.py       # PDF-Export
+    │       ├── mqtt_client.py       # HA Export
+    │       ├── ha_mqtt_sync.py      # MQTT Sync Service (NEU)
+    │       ├── vorschlag_service.py # Intelligente Vorschläge (NEU)
+    │       └── scheduler.py         # APScheduler für Cron-Jobs (NEU)
     │
     └── frontend/
         ├── package.json
@@ -215,10 +218,12 @@ eedc-homeassistant/
         │   │   └── aussichten.ts # Prognosen
         │   ├── components/      # UI Components
         │   ├── pages/           # Seiten
-        │   │   ├── Dashboard.tsx      # Cockpit
-        │   │   ├── Auswertung.tsx     # Analysen
-        │   │   ├── Aussichten.tsx     # Prognosen (4 Tabs)
-        │   │   └── aussichten/        # Tab-Komponenten
+        │   │   ├── Dashboard.tsx             # Cockpit
+        │   │   ├── Auswertung.tsx            # Analysen
+        │   │   ├── Aussichten.tsx            # Prognosen (4 Tabs)
+        │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping (NEU)
+        │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss (NEU)
+        │   │   └── aussichten/               # Tab-Komponenten
         │   │       ├── KurzfristTab.tsx
         │   │       ├── LangfristTab.tsx
         │   │       ├── TrendTab.tsx
@@ -296,6 +301,24 @@ GET /api/aussichten/kurzfristig/{anlage_id}     # 7-Tage Wetter-Prognose
 GET /api/aussichten/langfristig/{anlage_id}     # 12-Monats PVGIS-Prognose
 GET /api/aussichten/trend/{anlage_id}           # Historische Trend-Analyse
 GET /api/aussichten/finanzen/{anlage_id}        # Amortisations-Prognose
+```
+
+### Sensor-Mapping API (NEU v1.1.0)
+
+```
+GET  /api/sensor-mapping/{anlage_id}              # Aktuelles Mapping abrufen
+POST /api/sensor-mapping/{anlage_id}              # Mapping speichern
+GET  /api/sensor-mapping/{anlage_id}/felder       # Verfügbare Felder
+GET  /api/sensor-mapping/{anlage_id}/sensoren     # HA-Sensoren auflisten
+```
+
+### Monatsabschluss API (NEU v1.1.0)
+
+```
+GET  /api/monatsabschluss/{anlage_id}/status      # Status für Jahr/Monat
+GET  /api/monatsabschluss/{anlage_id}/naechster   # Nächster offener Monat
+POST /api/monatsabschluss/{anlage_id}/abschliessen # Abschluss durchführen
+GET  /api/monatsabschluss/{anlage_id}/historie    # Letzte Abschlüsse
 ```
 
 ### Import/Export API (erweitert in beta.8)

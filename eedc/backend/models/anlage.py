@@ -76,6 +76,11 @@ class Anlage(Base):
     # Optionen: "auto", "open-meteo", "brightsky", "open-meteo-solar"
     wetter_provider: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="auto")
 
+    # Sensor-Mapping für Home Assistant Integration
+    # Struktur: {"basis": {...}, "investitionen": {...}, "mqtt_setup_complete": bool, "mqtt_setup_timestamp": str}
+    # Siehe docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation
+    sensor_mapping: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

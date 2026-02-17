@@ -7,6 +7,79 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.1] - 2026-02-17
+
+### Hinzugefügt
+
+- **Sensor-Mapping-Wizard** - Zuordnung von Home Assistant Sensoren zu EEDC-Feldern
+  - Intuitive Wizard-Oberfläche mit dynamischen Steps
+  - Unterstützte Schätzungsstrategien:
+    - **sensor** - Direkter HA-Sensor
+    - **kwp_verteilung** - Anteilig nach kWp (für PV-Module ohne eigenen Sensor)
+    - **cop_berechnung** - COP × Stromverbrauch (für Wärmepumpen)
+    - **ev_quote** - Nach Eigenverbrauchsquote (für E-Auto)
+    - **manuell** - Eingabe im Monatsabschluss-Wizard
+  - Speicherung in neuem `Anlage.sensor_mapping` JSON-Feld
+  - Navigation: Einstellungen → Home Assistant → Sensor-Zuordnung
+
+- **MQTT Auto-Discovery für Monatswerte**
+  - EEDC erstellt automatisch MQTT-Entities in Home Assistant:
+    - `number.eedc_{anlage}_mwd_{feld}_start` - Zählerstand vom Monatsanfang
+    - `sensor.eedc_{anlage}_mwd_{feld}_monat` - Berechneter Monatswert via `value_template`
+  - Keine YAML-Bearbeitung oder HA-Neustart nötig
+  - Retained Messages für Persistenz
+
+- **Monatsabschluss-Wizard** - Geführte monatliche Dateneingabe
+  - **Intelligente Vorschläge** aus verschiedenen Quellen:
+    - Vormonat (80% Konfidenz)
+    - Vorjahr gleicher Monat (70% Konfidenz)
+    - COP-Berechnung für Wärmepumpen (60% Konfidenz)
+    - Durchschnitt letzte 12 Monate (50% Konfidenz)
+  - **Plausibilitätsprüfungen** mit Warnungen:
+    - Negativwerte bei Zählern
+    - Große Abweichungen vs. Vorjahr (±50%)
+    - Ungewöhnlich niedrige/hohe Werte
+  - Dynamische Steps basierend auf Investitionstypen
+  - Navigation: Einstellungen → Daten → Monatsabschluss
+
+- **Scheduler für Cron-Jobs**
+  - APScheduler-Integration für periodische Tasks
+  - Monatswechsel-Snapshot: Am 1. jeden Monats um 00:01
+  - Status-Endpoint: `GET /api/scheduler`
+  - Manueller Trigger: `POST /api/scheduler/monthly-snapshot`
+
+- **Neue API-Endpoints**
+  - `/api/sensor-mapping/{anlage_id}` - CRUD für Sensor-Zuordnung
+  - `/api/sensor-mapping/{anlage_id}/available-sensors` - Verfügbare HA-Sensoren
+  - `/api/monatsabschluss/{anlage_id}/{jahr}/{monat}` - Status und Vorschläge
+  - `/api/monatsabschluss/naechster/{anlage_id}` - Nächster offener Monat
+  - `/api/scheduler` - Scheduler-Status
+
+- **Neue Backend-Services**
+  - `ha_mqtt_sync.py` - MQTT Synchronisations-Service
+  - `scheduler.py` - Cron-Job Management
+  - `vorschlag_service.py` - Intelligente Vorschläge
+
+### Geändert
+
+- **mqtt_client.py** erweitert um:
+  - `publish_number_discovery()` - Erstellt number-Entities
+  - `publish_calculated_sensor()` - Erstellt Sensoren mit value_template
+  - `update_month_start_value()` - Aktualisiert Monatsanfang-Werte
+  - `publish_monatsdaten()` - Publiziert finale Monatsdaten
+
+- **Navigation** erweitert:
+  - "Sensor-Zuordnung" unter Einstellungen → Home Assistant
+  - "Monatsabschluss" unter Einstellungen → Daten
+
+### Technisch
+
+- **Neue Dependency:** `apscheduler>=3.10.0` für Cron-Jobs
+- **DB-Migration:** Neue Spalte `sensor_mapping` (JSON) in `anlagen` Tabelle
+- Scheduler startet automatisch mit dem Backend
+
+---
+
 ## [1.0.0-beta.13] - 2026-02-17
 
 ### Hinzugefügt

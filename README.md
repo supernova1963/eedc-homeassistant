@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.0.0-beta.12</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 1.1.0-beta.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -50,9 +50,11 @@
 
 ### Datenerfassung
 - **Manuelles Formular** mit dynamischen Komponenten-Feldern
-- **CSV-Import** mit personalisierten Spalten und Plausibilitätsprüfung (NEU)
+- **CSV-Import** mit personalisierten Spalten und Plausibilitätsprüfung
 - **Wetter-Auto-Fill** via Open-Meteo / PVGIS TMY
 - **Demo-Daten** zum Ausprobieren
+- **Sensor-Mapping-Wizard** (NEU) - Home Assistant Sensoren den EEDC-Feldern zuordnen
+- **Monatsabschluss-Wizard** (NEU) - Geführte monatliche Datenerfassung mit Vorschlägen
 
 ### Investitions-Management
 - **Parent-Child Beziehungen**: PV-Module → Wechselrichter, DC-Speicher → Hybrid-WR
@@ -69,6 +71,8 @@
 - **MQTT Discovery** für native HA-Sensoren
 - **REST API** für configuration.yaml
 - **Berechnete KPIs** zurück an HA exportieren
+- **Sensor-Mapping** (NEU) - Flexible Zuordnung von HA-Sensoren zu EEDC-Feldern
+- **Automatische Vorschläge** (NEU) - Intelligente Werte aus Vormonat, Vorjahr, oder Berechnung
 
 ---
 
@@ -183,16 +187,24 @@ Anlage (PV-Anlage mit Standort, Ausrichtung)
 
 ---
 
-## Unterstützte Geräte (Auto-Discovery)
+## Home Assistant Integration
 
-Bei Nutzung mit Home Assistant können diese Geräte automatisch erkannt werden:
+EEDC bietet flexible Home Assistant Integration mit zwei Ansätzen:
 
-| Kategorie | Hersteller |
-|-----------|------------|
-| **Wechselrichter** | SMA, Fronius, Kostal, Huawei, Growatt, SolaX, Sungrow, GoodWe, Enphase |
-| **Wärmepumpen** | Viessmann, Daikin, Vaillant, Bosch, Mitsubishi, Panasonic, Stiebel Eltron, Nibe, Lambda, iDM |
-| **Balkonkraftwerke** | EcoFlow, Hoymiles, Anker SOLIX, APSystems, Deye, OpenDTU/AhoyDTU |
-| **E-Autos & Wallboxen** | evcc (bevorzugt), Smart, Wallbox |
+### Sensor-Mapping (Empfohlen)
+Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den EEDC-Feldern zu:
+- Basis-Sensoren: PV-Erzeugung, Einspeisung, Netzbezug
+- PV-Module: Pro String oder kWp-Verteilung
+- Speicher: Ladung, Entladung, Netz-Ladung
+- E-Auto: km, Ladung (PV/Netz/Extern), V2H
+- Wärmepumpe: Strom, Heizung (COP-Berechnung möglich)
+
+### Monatlicher Abschluss
+Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfassung:
+- Automatische Vorschläge aus Vormonat oder Vorjahr
+- COP-basierte Berechnungen für Wärmepumpen
+- Durchschnittswerte als Fallback
+- Direkte Übernahme oder manuelle Anpassung
 
 ---
 
@@ -207,7 +219,9 @@ Bei Nutzung mit Home Assistant können diese Geräte automatisch erkannt werden:
 - [x] MQTT Export zu Home Assistant
 - [x] **Aussichten** mit 4 Prognose-Tabs (Kurzfristig, Langfristig, Trend, Finanzen)
 - [x] **Erweiterte Stammdaten** für Anlagen und Investitionen
-- [ ] PDF-Export
+- [x] **PDF-Export** für vollständige Anlagen-Dokumentation
+- [x] **Sensor-Mapping-Wizard** für HA-Integration
+- [x] **Monatsabschluss-Wizard** mit intelligenten Vorschlägen
 - [ ] KI-gestützte Insights
 
 ---
