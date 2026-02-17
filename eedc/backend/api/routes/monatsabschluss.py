@@ -17,7 +17,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.core.database import get_session
+from backend.core.database import get_db
 
 logger = logging.getLogger(__name__)
 from backend.models.anlage import Anlage
@@ -215,7 +215,7 @@ async def get_monatsabschluss(
     anlage_id: int,
     jahr: int,
     monat: int,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Gibt Status aller Felder für einen Monat zurück.
@@ -368,7 +368,7 @@ async def save_monatsabschluss(
     jahr: int,
     monat: int,
     daten: MonatsabschlussInput,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Speichert Monatsdaten.
@@ -502,7 +502,7 @@ async def save_monatsabschluss(
 @router.get("/naechster/{anlage_id}", response_model=Optional[NaechsterMonatResponse])
 async def get_naechster_monat(
     anlage_id: int,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Findet den nächsten unvollständigen Monat.
@@ -572,7 +572,7 @@ async def get_naechster_monat(
 async def get_monatsabschluss_historie(
     anlage_id: int,
     limit: int = 12,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Gibt Historie der letzten Monatsabschlüsse zurück.
