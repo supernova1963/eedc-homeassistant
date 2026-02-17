@@ -20,6 +20,7 @@ from backend.core.database import get_session
 from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
 
 
 # =============================================================================
@@ -289,8 +290,6 @@ async def save_sensor_mapping(
     2. Speichern in Anlage.sensor_mapping
     3. MQTT Discovery für alle Felder mit Strategie "sensor"
     4. Return: Status und Anzahl erstellter Entities
-
-    Note: MQTT-Setup erfolgt in Teil 2 der Implementierung.
     """
     async with get_session() as session:
         anlage = await _get_anlage(anlage_id, session)
@@ -299,7 +298,7 @@ async def save_sensor_mapping(
         mapping_dict: dict[str, Any] = {
             "basis": {},
             "investitionen": {},
-            "mqtt_setup_complete": False,  # Wird in Teil 2 auf True gesetzt
+            "mqtt_setup_complete": False,
             "mqtt_setup_timestamp": None,
         }
 
@@ -340,26 +339,56 @@ async def save_sensor_mapping(
                     if isinstance(feld_data, dict) and feld_data.get("strategie") == "sensor":
                         sensor_count += 1
 
+        # MQTT Auto-Discovery für die neuen Sensor-Paare
+        mqtt_errors: list[str] = []
+        created_mqtt_sensors = 0
+
+        if sensor_count > 0:
+            try:
+                # Anlage neu laden mit aktuellem Mapping
+                await session.refresh(anlage)
+
+                mqtt_sync = get_ha_mqtt_sync_service()
+                result = await mqtt_sync.setup_sensors_for_anlage(anlage)
+
+                if result.success:
+                    created_mqtt_sensors = result.created_sensors
+                    # Mapping als erfolgreich markieren
+                    anlage.sensor_mapping["mqtt_setup_complete"] = True
+                    anlage.sensor_mapping["mqtt_setup_timestamp"] = datetime.utcnow().isoformat()
+                    flag_modified(anlage, "sensor_mapping")
+                    await session.commit()
+                else:
+                    mqtt_errors = result.errors
+            except Exception as e:
+                mqtt_errors.append(f"MQTT-Setup fehlgeschlagen: {str(e)}")
+
         return SetupResult(
-            success=True,
-            message=f"Sensor-Mapping gespeichert. {sensor_count} Sensor(en) zugeordnet.",
-            created_sensors=0,  # MQTT-Setup erfolgt in Teil 2
-            errors=[],
+            success=len(mqtt_errors) == 0,
+            message=f"Sensor-Mapping gespeichert. {sensor_count} Sensor(en) zugeordnet, {created_mqtt_sensors} MQTT-Sensor-Paare erstellt.",
+            created_sensors=created_mqtt_sensors,
+            errors=mqtt_errors,
         )
 
 
 @router.delete("/{anlage_id}")
 async def delete_sensor_mapping(anlage_id: int):
     """
-    Löscht das Sensor-Mapping einer Anlage.
-
-    In Teil 2 werden auch die MQTT Entities entfernt.
+    Löscht das Sensor-Mapping einer Anlage und entfernt MQTT Entities.
     """
     async with get_session() as session:
         anlage = await _get_anlage(anlage_id, session)
 
         if not anlage.sensor_mapping:
             raise HTTPException(status_code=404, detail="Kein Sensor-Mapping vorhanden")
+
+        # MQTT Entities entfernen
+        try:
+            mqtt_sync = get_ha_mqtt_sync_service()
+            await mqtt_sync.remove_sensors_for_anlage(anlage)
+        except Exception as e:
+            # Fehler loggen, aber nicht abbrechen
+            print(f"MQTT-Cleanup fehlgeschlagen: {e}")
 
         # Mapping löschen
         anlage.sensor_mapping = None
