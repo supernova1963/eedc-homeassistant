@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.1.0-beta.1 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.1.0-beta.4 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -388,7 +388,7 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v1.1.0-beta.1)
+## Letzte Änderungen (v1.1.0-beta.4)
 
 **Automatische Datenerfassung - Komplett implementiert!**
 
@@ -406,6 +406,8 @@ Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERF
 - Erstellt `sensor.eedc_{anlage}_mwd_{feld}_monat` mit `value_template`
 - `ha_mqtt_sync.py`: Synchronisations-Service
 - `scheduler.py`: Cron-Job für Monatswechsel (1. des Monats 00:01)
+- **v1.1.0-beta.3:** Entity-Namen enthalten jetzt Investitionsnamen (z.B. "BYD HVS 12.8 Ladung")
+- **v1.1.0-beta.4:** `object_id` im Payload sorgt für eindeutige Entity-IDs (keine `_2` Suffixe mehr)
 
 **Teil 3: Monatsabschluss-Wizard**
 - `vorschlag_service.py`: Intelligente Vorschläge (Vormonat, Vorjahr, COP, Durchschnitt)
@@ -419,5 +421,10 @@ Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERF
 
 **Neue Dependencies:**
 - `apscheduler>=3.10.0` für Cron-Jobs
+
+**Bugfixes (beta.2-4):**
+- beta.2: Datenbank-Migration für neue Monatsdaten-Felder
+- beta.3: MQTT Entity-Namen enthalten Investitionsnamen
+- beta.4: MQTT Entity-IDs eindeutig durch `object_id`
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.1.0-beta.1** | Stand: Februar 2026
+**Version 1.1.0-beta.4** | Stand: Februar 2026
 
 ---
 
@@ -889,28 +889,124 @@ Die letzten Abschlüsse werden angezeigt:
 
 ## 12. Home Assistant Integration (optional)
 
-EEDC kann berechnete KPIs an Home Assistant exportieren.
+EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
 
 ### 12.1 Voraussetzungen
 
-- Home Assistant mit MQTT-Broker (Mosquitto)
+- Home Assistant mit MQTT-Broker (Mosquitto Add-on)
 - MQTT-Benutzer und Passwort
 
 ### 12.2 MQTT konfigurieren
 
-**Pfad**: Einstellungen → HA-Export
+**Pfad**: EEDC Add-on Konfiguration in Home Assistant
 
-1. **MQTT aktivieren**: Toggle auf "Ein"
-2. **Verbindungsdaten**:
-   - Host: `core-mosquitto` (oder IP des Brokers)
-   - Port: `1883`
-   - Benutzer/Passwort: Deine MQTT-Credentials
-3. **Verbindung testen**: Klicke "Test"
-4. **Sensoren publizieren**: Klicke "Publizieren"
+In der Add-on-Konfiguration:
+```yaml
+mqtt:
+  enabled: true
+  host: "core-mosquitto"
+  port: 1883
+  username: "dein_mqtt_user"
+  password: "dein_mqtt_passwort"
+```
 
-### 12.3 Verfügbare Sensoren
+### 12.3 MQTT Auto-Discovery (NEU in v1.1.0)
 
-Nach dem Publizieren erscheinen in HA neue Sensoren:
+Wenn du das **Sensor-Mapping** konfigurierst und speicherst, erstellt EEDC automatisch MQTT-Entities in Home Assistant. Diese ermöglichen die automatische Berechnung von Monatswerten.
+
+#### Wie funktioniert es?
+
+Für jedes gemappte Feld mit Strategie "HA-Sensor" werden **zwei Entities** erstellt:
+
+| Entity-Typ | Zweck | Beispiel |
+|------------|-------|----------|
+| **Number** | Speichert den Zählerstand vom Monatsanfang | `number.eedc_winterborn_mwd_inv1_ladung_kwh_start` |
+| **Sensor** | Berechnet automatisch den Monatswert | `sensor.eedc_winterborn_mwd_inv1_ladung_kwh_monat` |
+
+**Zusammenspiel:**
+
+```
+┌─────────────────────────────────┐     ┌────────────────────────────────┐
+│ HA-Sensor (z.B. Batteriezähler) │     │ Number (Startwert Monatsanfang)│
+│ aktueller Wert: 12.500 kWh      │     │ gespeicherter Wert: 12.345 kWh │
+└───────────────┬─────────────────┘     └──────────────┬─────────────────┘
+                │                                      │
+                └──────────────┬───────────────────────┘
+                               ▼
+                 ┌─────────────────────────────┐
+                 │ Berechneter Sensor (Monat)  │
+                 │ = 12.500 - 12.345 = 155 kWh │
+                 └─────────────────────────────┘
+```
+
+#### Entity-Benennung
+
+Die Entity-IDs enthalten den technischen Key für Eindeutigkeit:
+- `number.eedc_{anlage}_{key}_start` - Startwert
+- `sensor.eedc_{anlage}_{key}_monat` - Monatswert
+
+Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
+- "EEDC BYD HVS 12.8 Ladung Monatsanfang"
+- "EEDC SMA eCharger 22 Ladung Monat"
+
+### 12.4 Monatsstartwerte initialisieren
+
+**Wichtig:** Damit die automatische Monatswert-Berechnung funktioniert, müssen einmalig die Startwerte (Zählerstände vom Monatsanfang) gesetzt werden.
+
+#### Wann ist das nötig?
+
+1. **Erstmalige Einrichtung** - Nach dem Speichern des Sensor-Mappings
+2. **Nach MQTT-Bereinigung** - Wenn Discovery-Messages gelöscht wurden
+3. **Korrektur falscher Werte** - Bei Fehlern in den Startwerten
+
+#### Methode 1: Über den Sensor-Mapping-Wizard (empfohlen)
+
+1. Gehe zu **Einstellungen → Sensor-Zuordnung**
+2. Nach dem Speichern erscheint ein Dialog "Startwerte initialisieren?"
+3. Klicke auf **"Startwerte initialisieren"**
+4. EEDC liest die aktuellen Zählerstände aus HA und setzt sie als Startwerte
+
+#### Methode 2: Manuell in Home Assistant
+
+1. Gehe zu **Einstellungen → Geräte & Dienste → Entitäten**
+2. Suche nach `number.eedc_`
+3. Klicke auf eine Number-Entity (z.B. `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`)
+4. Gib den aktuellen Zählerstand als Wert ein
+
+#### Methode 3: Über die HA-Entwicklerwerkzeuge
+
+1. Gehe zu **Entwicklerwerkzeuge → Dienste**
+2. Wähle `number.set_value`
+3. Entity: `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`
+4. Value: Der aktuelle Zählerstand
+
+### 12.5 MQTT-Bereinigung bei Problemen
+
+Falls Entities doppelt erscheinen (mit `_2` Suffix) oder andere Probleme auftreten:
+
+#### Lösung: Discovery-Messages löschen
+
+Mit **mosquitto_pub** (im Terminal/SSH):
+
+```bash
+# Beispiel für eine Number-Entity löschen:
+mosquitto_pub -h core-mosquitto -t "homeassistant/number/eedc_1_mwd_inv1_ladung_kwh_start/config" -r -n
+
+# Beispiel für eine Sensor-Entity löschen:
+mosquitto_pub -h core-mosquitto -t "homeassistant/sensor/eedc_1_mwd_inv1_ladung_kwh_monat/config" -r -n
+```
+
+Oder im **MQTT Explorer**:
+1. Navigiere zu `homeassistant/number/` und `homeassistant/sensor/`
+2. Lösche alle Topics die mit `eedc_` beginnen
+3. Home Assistant neu starten
+4. In EEDC: Sensor-Mapping erneut speichern
+
+### 12.6 KPI-Export (klassisch)
+
+Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
+
+**Pfad**: Einstellungen → HA-Export → Sensoren publizieren
 
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
@@ -921,7 +1017,7 @@ Nach dem Publizieren erscheinen in HA neue Sensoren:
 | `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
 | `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
 
-### 12.4 Alternative: REST API
+### 12.7 Alternative: REST API
 
 Statt MQTT kannst du auch die REST API nutzen:
 
