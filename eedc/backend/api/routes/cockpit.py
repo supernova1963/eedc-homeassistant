@@ -1127,6 +1127,81 @@ class PVStringsResponse(BaseModel):
     schlechtester_string: Optional[str]
 
 
+# =============================================================================
+# Gesamtlaufzeit SOLL-IST Vergleich (NEU)
+# =============================================================================
+
+class PVStringJahreswert(BaseModel):
+    """Jahreswert für einen String."""
+    jahr: int
+    prognose_kwh: float
+    ist_kwh: float
+    abweichung_prozent: Optional[float]
+    performance_ratio: Optional[float]
+
+
+class PVStringSaisonalwert(BaseModel):
+    """Saisonaler Monatswert (Durchschnitt über alle Jahre)."""
+    monat: int
+    monat_name: str
+    prognose_kwh: float  # PVGIS-Prognose für diesen Monat
+    ist_durchschnitt_kwh: float  # Durchschnitt IST über alle Jahre
+    ist_summe_kwh: float  # Summe IST über alle Jahre
+    anzahl_jahre: int  # Anzahl Jahre mit Daten
+
+
+class PVStringGesamtlaufzeit(BaseModel):
+    """SOLL-IST Vergleich für einen String über die gesamte Laufzeit."""
+    investition_id: int
+    bezeichnung: str
+    leistung_kwp: float
+    ausrichtung: Optional[str]
+    neigung_grad: Optional[int]
+    wechselrichter_name: Optional[str]
+
+    # Gesamtlaufzeit-Statistik
+    prognose_gesamt_kwh: float  # PVGIS × Anzahl Jahre
+    ist_gesamt_kwh: float
+    abweichung_gesamt_prozent: Optional[float]
+    performance_ratio_gesamt: Optional[float]
+    spezifischer_ertrag_kwh_kwp: Optional[float]
+
+    # Jahreswerte für Chart
+    jahreswerte: list[PVStringJahreswert]
+
+    # Saisonale Werte (Jan-Dez Durchschnitt)
+    saisonalwerte: list[PVStringSaisonalwert]
+
+
+class PVStringsGesamtlaufzeitResponse(BaseModel):
+    """PV-String-Vergleich für Gesamtlaufzeit."""
+    anlage_id: int
+    hat_prognose: bool
+    anlagen_leistung_kwp: float
+
+    # Zeitraum
+    erstes_jahr: int
+    letztes_jahr: int
+    anzahl_jahre: int
+    anzahl_monate: int
+
+    # Gesamt-Summen
+    prognose_gesamt_kwh: float  # PVGIS × Anzahl Jahre
+    ist_gesamt_kwh: float
+    abweichung_gesamt_kwh: float
+    abweichung_gesamt_prozent: Optional[float]
+
+    # Einzelne Strings
+    strings: list[PVStringGesamtlaufzeit]
+
+    # Saisonale Aggregation (alle Strings summiert)
+    saisonal_aggregiert: list[PVStringSaisonalwert]
+
+    # Performance-Ranking
+    bester_string: Optional[str]
+    schlechtester_string: Optional[str]
+
+
 @router.get("/pv-strings/{anlage_id}", response_model=PVStringsResponse)
 async def get_pv_strings(
     anlage_id: int,
@@ -1317,6 +1392,277 @@ async def get_pv_strings(
         abweichung_gesamt_kwh=round(abweichung_gesamt, 1),
         abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
         strings=strings_data,
+        bester_string=bester_string,
+        schlechtester_string=schlechtester_string,
+    )
+
+
+@router.get("/pv-strings-gesamtlaufzeit/{anlage_id}", response_model=PVStringsGesamtlaufzeitResponse)
+async def get_pv_strings_gesamtlaufzeit(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    PV-String-Vergleich über die gesamte Laufzeit.
+
+    Liefert:
+    - Jahresübersicht pro String (SOLL vs IST für jedes Jahr)
+    - Saisonaler Vergleich (Jan-Dez Durchschnitt vs PVGIS-Prognose)
+    - Gesamtlaufzeit-Statistik pro String
+    """
+    # Anlage prüfen
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    # PV-Module laden
+    result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == "pv-module")
+        .where(Investition.aktiv == True)
+    )
+    pv_module = result.scalars().all()
+
+    if not pv_module:
+        return PVStringsGesamtlaufzeitResponse(
+            anlage_id=anlage_id,
+            hat_prognose=False,
+            anlagen_leistung_kwp=anlage.leistung_kwp or 0,
+            erstes_jahr=date.today().year,
+            letztes_jahr=date.today().year,
+            anzahl_jahre=0,
+            anzahl_monate=0,
+            prognose_gesamt_kwh=0,
+            ist_gesamt_kwh=0,
+            abweichung_gesamt_kwh=0,
+            abweichung_gesamt_prozent=None,
+            strings=[],
+            saisonal_aggregiert=[],
+            bester_string=None,
+            schlechtester_string=None,
+        )
+
+    # Wechselrichter laden
+    wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
+    wechselrichter_map = {}
+    if wr_ids:
+        result = await db.execute(select(Investition).where(Investition.id.in_(wr_ids)))
+        for wr in result.scalars().all():
+            wechselrichter_map[wr.id] = wr.bezeichnung
+
+    # PVGIS-Prognose laden
+    result = await db.execute(
+        select(PVGISPrognoseModel)
+        .where(PVGISPrognoseModel.anlage_id == anlage_id)
+        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
+        .limit(1)
+    )
+    prognose = result.scalar_one_or_none()
+    hat_prognose = prognose is not None
+
+    # Prognose-Monatswerte (PVGIS)
+    prognose_monate = {}
+    if prognose and prognose.monatswerte:
+        for mw in prognose.monatswerte:
+            prognose_monate[mw["monat"]] = mw.get("e_m", 0)
+
+    # Gesamt-kWp
+    gesamt_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
+    if gesamt_kwp == 0:
+        gesamt_kwp = anlage.leistung_kwp or 1
+
+    # ALLE InvestitionMonatsdaten laden (ohne Jahr-Filter)
+    pv_ids = [m.id for m in pv_module]
+    result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
+        .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    alle_monatsdaten = result.scalars().all()
+
+    # Jahre ermitteln
+    jahre_set = set()
+    for imd in alle_monatsdaten:
+        jahre_set.add(imd.jahr)
+    jahre = sorted(jahre_set)
+
+    if not jahre:
+        return PVStringsGesamtlaufzeitResponse(
+            anlage_id=anlage_id,
+            hat_prognose=hat_prognose,
+            anlagen_leistung_kwp=gesamt_kwp,
+            erstes_jahr=date.today().year,
+            letztes_jahr=date.today().year,
+            anzahl_jahre=0,
+            anzahl_monate=0,
+            prognose_gesamt_kwh=0,
+            ist_gesamt_kwh=0,
+            abweichung_gesamt_kwh=0,
+            abweichung_gesamt_prozent=None,
+            strings=[],
+            saisonal_aggregiert=[],
+            bester_string=None,
+            schlechtester_string=None,
+        )
+
+    erstes_jahr = jahre[0]
+    letztes_jahr = jahre[-1]
+    anzahl_jahre = len(jahre)
+
+    # Daten gruppieren: {inv_id: {jahr: {monat: kwh}}}
+    md_by_inv: dict[int, dict[int, dict[int, float]]] = {m.id: {} for m in pv_module}
+    for imd in alle_monatsdaten:
+        data = imd.verbrauch_daten or {}
+        pv_erzeugt = data.get("pv_erzeugung_kwh", 0) or 0
+        if imd.investition_id in md_by_inv:
+            if imd.jahr not in md_by_inv[imd.investition_id]:
+                md_by_inv[imd.investition_id][imd.jahr] = {}
+            md_by_inv[imd.investition_id][imd.jahr][imd.monat] = pv_erzeugt
+
+    # Strings-Daten aufbauen
+    strings_data = []
+    prognose_gesamt_total = 0
+    ist_gesamt_total = 0
+
+    # Saisonale Aggregation (alle Strings)
+    saisonal_agg: dict[int, dict] = {m: {"prognose": 0, "ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
+
+    for modul in pv_module:
+        modul_kwp = modul.leistung_kwp or 0
+        kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
+
+        params = modul.parameter or {}
+        ausrichtung = modul.ausrichtung or params.get("ausrichtung")
+        neigung = modul.neigung_grad or params.get("neigung_grad")
+
+        # Jahreswerte
+        jahreswerte = []
+        prognose_string_gesamt = 0
+        ist_string_gesamt = 0
+
+        # Saisonale Daten für diesen String
+        string_saisonal: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
+
+        for jahr in jahre:
+            # Prognose für das Jahr (PVGIS × kWp-Anteil)
+            prognose_jahr = sum(prognose_monate.get(m, 0) for m in range(1, 13)) * kwp_anteil
+
+            # IST für das Jahr
+            ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
+
+            abweichung_pct = ((ist_jahr - prognose_jahr) / prognose_jahr * 100) if prognose_jahr > 0 else None
+            perf_ratio = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
+
+            jahreswerte.append(PVStringJahreswert(
+                jahr=jahr,
+                prognose_kwh=round(prognose_jahr, 1),
+                ist_kwh=round(ist_jahr, 1),
+                abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
+                performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
+            ))
+
+            prognose_string_gesamt += prognose_jahr
+            ist_string_gesamt += ist_jahr
+
+            # Saisonale Daten sammeln
+            for monat in range(1, 13):
+                ist_monat = md_by_inv.get(modul.id, {}).get(jahr, {}).get(monat, 0)
+                if ist_monat > 0 or monat in md_by_inv.get(modul.id, {}).get(jahr, {}):
+                    string_saisonal[monat]["ist_summe"] += ist_monat
+                    string_saisonal[monat]["anzahl"] += 1
+
+        # Saisonalwerte für String
+        saisonalwerte = []
+        for monat in range(1, 13):
+            prognose_monat = prognose_monate.get(monat, 0) * kwp_anteil
+            ist_summe = string_saisonal[monat]["ist_summe"]
+            anzahl = string_saisonal[monat]["anzahl"]
+            ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
+
+            saisonalwerte.append(PVStringSaisonalwert(
+                monat=monat,
+                monat_name=MONATSNAMEN[monat],
+                prognose_kwh=round(prognose_monat, 1),
+                ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
+                ist_summe_kwh=round(ist_summe, 1),
+                anzahl_jahre=anzahl,
+            ))
+
+            # Aggregation für Gesamt
+            saisonal_agg[monat]["prognose"] += prognose_monat
+            saisonal_agg[monat]["ist_summe"] += ist_summe
+            saisonal_agg[monat]["anzahl"] = max(saisonal_agg[monat]["anzahl"], anzahl)
+
+        # Gesamtlaufzeit-Statistik
+        abweichung_gesamt_pct = ((ist_string_gesamt - prognose_string_gesamt) / prognose_string_gesamt * 100) if prognose_string_gesamt > 0 else None
+        perf_ratio_gesamt = (ist_string_gesamt / prognose_string_gesamt) if prognose_string_gesamt > 0 else None
+        spez_ertrag = (ist_string_gesamt / modul_kwp) if modul_kwp > 0 else None
+
+        strings_data.append(PVStringGesamtlaufzeit(
+            investition_id=modul.id,
+            bezeichnung=modul.bezeichnung,
+            leistung_kwp=modul_kwp,
+            ausrichtung=ausrichtung,
+            neigung_grad=neigung,
+            wechselrichter_name=wechselrichter_map.get(modul.parent_investition_id) if modul.parent_investition_id else None,
+            prognose_gesamt_kwh=round(prognose_string_gesamt, 1),
+            ist_gesamt_kwh=round(ist_string_gesamt, 1),
+            abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
+            performance_ratio_gesamt=round(perf_ratio_gesamt, 3) if perf_ratio_gesamt is not None else None,
+            spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
+            jahreswerte=jahreswerte,
+            saisonalwerte=saisonalwerte,
+        ))
+
+        prognose_gesamt_total += prognose_string_gesamt
+        ist_gesamt_total += ist_string_gesamt
+
+    # Saisonale Aggregation aufbauen
+    saisonal_aggregiert = []
+    for monat in range(1, 13):
+        prognose = saisonal_agg[monat]["prognose"]
+        ist_summe = saisonal_agg[monat]["ist_summe"]
+        anzahl = saisonal_agg[monat]["anzahl"]
+        ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
+
+        saisonal_aggregiert.append(PVStringSaisonalwert(
+            monat=monat,
+            monat_name=MONATSNAMEN[monat],
+            prognose_kwh=round(prognose, 1),
+            ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
+            ist_summe_kwh=round(ist_summe, 1),
+            anzahl_jahre=anzahl,
+        ))
+
+    # Gesamt-Abweichung
+    abweichung_gesamt = ist_gesamt_total - prognose_gesamt_total
+    abweichung_gesamt_pct = (abweichung_gesamt / prognose_gesamt_total * 100) if prognose_gesamt_total > 0 else None
+
+    # Beste/schlechteste Performance
+    strings_with_perf = [(s.bezeichnung, s.performance_ratio_gesamt) for s in strings_data if s.performance_ratio_gesamt]
+    bester_string = None
+    schlechtester_string = None
+    if strings_with_perf:
+        strings_sorted = sorted(strings_with_perf, key=lambda x: x[1] or 0, reverse=True)
+        bester_string = strings_sorted[0][0]
+        schlechtester_string = strings_sorted[-1][0] if len(strings_sorted) > 1 else None
+
+    return PVStringsGesamtlaufzeitResponse(
+        anlage_id=anlage_id,
+        hat_prognose=hat_prognose,
+        anlagen_leistung_kwp=gesamt_kwp,
+        erstes_jahr=erstes_jahr,
+        letztes_jahr=letztes_jahr,
+        anzahl_jahre=anzahl_jahre,
+        anzahl_monate=len(alle_monatsdaten),
+        prognose_gesamt_kwh=round(prognose_gesamt_total, 1),
+        ist_gesamt_kwh=round(ist_gesamt_total, 1),
+        abweichung_gesamt_kwh=round(abweichung_gesamt, 1),
+        abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
+        strings=strings_data,
+        saisonal_aggregiert=saisonal_aggregiert,
         bester_string=bester_string,
         schlechtester_string=schlechtester_string,
     )

@@ -28,7 +28,7 @@ export default function Dashboard() {
   const { anlagen, loading: anlagenLoading } = useAnlagen()
 
   const [data, setData] = useState<CockpitUebersicht | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)  // Start mit true um Race Condition zu vermeiden
   const [error, setError] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined)
   const [availableYears, setAvailableYears] = useState<number[]>([])

@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.6] - 2026-02-18
+
+### Geändert
+
+- **Cockpit PV-Anlage komplett überarbeitet** - zeigt jetzt Gesamtlaufzeit statt einzelne Jahre
+  - Neuer API-Endpoint `/api/cockpit/pv-strings-gesamtlaufzeit` für aggregierte Daten
+  - **SOLL vs IST pro Jahr**: Balkendiagramm zeigt für jedes Jahr SOLL und IST pro String
+  - **Saisonaler Vergleich**: Jan-Dez Durchschnitt vs PVGIS-Prognose als Linien/Flächen-Chart
+  - **Gesamtlaufzeit-Tabelle**: Performance-Statistik pro String über alle Jahre
+  - Keine Jahr-Auswahl mehr nötig - konsistent mit Cockpit-Philosophie "Gesamtlaufzeit"
+
+### Behoben
+
+- **Dashboard Race Condition** - "Fehler beim Laden der Daten" erschien manchmal nach F5
+  - `loading` State wird jetzt mit `true` initialisiert
+  - Cockpit-Tabs sind wieder statisch (dynamische Tabs verursachten Race Conditions)
+
+---
+
 ## [1.1.0-beta.5] - 2026-02-18
 
 ### Hinzugefügt

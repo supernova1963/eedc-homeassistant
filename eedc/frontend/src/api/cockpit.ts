@@ -245,6 +245,77 @@ export interface PVStringsResponse {
 }
 
 // =============================================================================
+// Gesamtlaufzeit SOLL-IST Vergleich Types (NEU)
+// =============================================================================
+
+export interface PVStringJahreswert {
+  jahr: number
+  prognose_kwh: number
+  ist_kwh: number
+  abweichung_prozent: number | null
+  performance_ratio: number | null
+}
+
+export interface PVStringSaisonalwert {
+  monat: number
+  monat_name: string
+  prognose_kwh: number
+  ist_durchschnitt_kwh: number
+  ist_summe_kwh: number
+  anzahl_jahre: number
+}
+
+export interface PVStringGesamtlaufzeit {
+  investition_id: number
+  bezeichnung: string
+  leistung_kwp: number
+  ausrichtung: string | null
+  neigung_grad: number | null
+  wechselrichter_name: string | null
+
+  // Gesamtlaufzeit-Statistik
+  prognose_gesamt_kwh: number
+  ist_gesamt_kwh: number
+  abweichung_gesamt_prozent: number | null
+  performance_ratio_gesamt: number | null
+  spezifischer_ertrag_kwh_kwp: number | null
+
+  // Jahreswerte für Chart
+  jahreswerte: PVStringJahreswert[]
+
+  // Saisonale Werte (Jan-Dez)
+  saisonalwerte: PVStringSaisonalwert[]
+}
+
+export interface PVStringsGesamtlaufzeitResponse {
+  anlage_id: number
+  hat_prognose: boolean
+  anlagen_leistung_kwp: number
+
+  // Zeitraum
+  erstes_jahr: number
+  letztes_jahr: number
+  anzahl_jahre: number
+  anzahl_monate: number
+
+  // Gesamt-Summen
+  prognose_gesamt_kwh: number
+  ist_gesamt_kwh: number
+  abweichung_gesamt_kwh: number
+  abweichung_gesamt_prozent: number | null
+
+  // Einzelne Strings
+  strings: PVStringGesamtlaufzeit[]
+
+  // Saisonale Aggregation
+  saisonal_aggregiert: PVStringSaisonalwert[]
+
+  // Performance-Ranking
+  bester_string: string | null
+  schlechtester_string: string | null
+}
+
+// =============================================================================
 // API Functions
 // =============================================================================
 
@@ -287,5 +358,13 @@ export const cockpitApi = {
   async getPVStrings(anlageId: number, jahr?: number): Promise<PVStringsResponse> {
     const params = jahr ? `?jahr=${jahr}` : ''
     return api.get<PVStringsResponse>(`/cockpit/pv-strings/${anlageId}${params}`)
+  },
+
+  /**
+   * Holt PV-String-Vergleich für die gesamte Laufzeit.
+   * Enthält Jahresübersicht und saisonalen Vergleich.
+   */
+  async getPVStringsGesamtlaufzeit(anlageId: number): Promise<PVStringsGesamtlaufzeitResponse> {
+    return api.get<PVStringsGesamtlaufzeitResponse>(`/cockpit/pv-strings-gesamtlaufzeit/${anlageId}`)
   },
 }
