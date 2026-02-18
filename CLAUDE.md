@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.1.0-beta.5 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 2.0.0 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -111,20 +111,20 @@ eedc/
 │   │   ├── import_export/         # Import/Export Package (CSV, JSON, Demo)
 │   │   ├── monatsdaten.py         # CRUD + Berechnungen
 │   │   ├── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
-│   │   ├── sensor_mapping.py      # HA Sensor-Zuordnung (NEU v1.1.0)
-│   │   ├── monatsabschluss.py     # Monatsabschluss-Wizard API (NEU v1.1.0)
-│   │   └── ha_statistics.py       # HA DB-Abfrage für Monatswerte (NEU v1.1.0-beta.8)
+│   │   ├── sensor_mapping.py      # HA Sensor-Zuordnung
+│   │   ├── monatsabschluss.py     # Monatsabschluss-Wizard API
+│   │   └── ha_statistics.py       # HA DB-Abfrage für Monatswerte (NEU v2.0.0)
 │   ├── core/config.py             # APP_VERSION
 │   └── services/
 │       ├── wetter_service.py      # Multi-Provider Wetterdaten
 │       ├── brightsky_service.py   # DWD-Daten via Bright Sky API
 │       ├── solar_forecast_service.py  # Open-Meteo Solar GTI
 │       ├── prognose_service.py    # Prognose-Berechnungen
-│       ├── mqtt_client.py         # HA Export + MQTT Auto-Discovery (erweitert v1.1.0)
-│       ├── ha_mqtt_sync.py        # MQTT Sync Service (NEU v1.1.0)
-│       ├── scheduler.py           # Cron-Jobs (NEU v1.1.0)
-│       ├── vorschlag_service.py   # Intelligente Vorschläge (NEU v1.1.0)
-│       └── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v1.1.0-beta.8)
+│       ├── mqtt_client.py         # HA Export + MQTT Auto-Discovery
+│       ├── ha_mqtt_sync.py        # MQTT Sync Service
+│       ├── scheduler.py           # Cron-Jobs
+│       ├── vorschlag_service.py   # Intelligente Vorschläge
+│       └── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v2.0.0)
 │
 └── frontend/src/
     ├── pages/
@@ -132,12 +132,13 @@ eedc/
     │   ├── Auswertung.tsx         # 6 Analyse-Tabs
     │   ├── Aussichten.tsx         # 4 Prognose-Tabs
     │   ├── PVAnlageDashboard.tsx  # String-Vergleich (Jahr-Parameter!)
-    │   ├── SensorMappingWizard.tsx    # HA Sensor-Zuordnung (NEU v1.1.0)
-    │   └── MonatsabschlussWizard.tsx  # Monatliche Dateneingabe (NEU v1.1.0)
+    │   ├── SensorMappingWizard.tsx    # HA Sensor-Zuordnung
+    │   ├── MonatsabschlussWizard.tsx  # Monatliche Dateneingabe
+    │   └── HAStatistikImport.tsx      # HA-Statistik Bulk-Import (NEU v2.0.0)
     ├── components/
     │   ├── forms/MonatsdatenForm.tsx  # Dynamische Felder
     │   ├── pv/PVStringVergleich.tsx   # SOLL-IST
-    │   └── sensor-mapping/            # Wizard-Steps (NEU v1.1.0)
+    │   └── sensor-mapping/            # Wizard-Steps
     │       ├── FeldMappingInput.tsx
     │       ├── BasisSensorenStep.tsx
     │       ├── PVModuleStep.tsx
@@ -269,28 +270,30 @@ GET  /api/aussichten/langfristig/{anlage_id}         # 12-Monats-Prognose (PVGIS
 GET  /api/aussichten/trend/{anlage_id}               # Trend-Analyse + Degradation
 GET  /api/aussichten/finanzen/{anlage_id}            # Finanz-Prognose + Amortisation
 
-# Sensor-Mapping (NEU v1.1.0)
+# Sensor-Mapping
 GET  /api/sensor-mapping/{anlage_id}                 # Aktuelles Mapping abrufen
 GET  /api/sensor-mapping/{anlage_id}/available-sensors # Verfügbare HA-Sensoren
 POST /api/sensor-mapping/{anlage_id}                 # Mapping speichern
 GET  /api/sensor-mapping/{anlage_id}/status          # Kurzstatus
 
-# Monatsabschluss (NEU v1.1.0)
+# Monatsabschluss
 GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat} # Status + Vorschläge
 POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat} # Monatsdaten speichern
 GET  /api/monatsabschluss/naechster/{anlage_id}      # Nächster offener Monat
 GET  /api/monatsabschluss/historie/{anlage_id}       # Letzte Abschlüsse
 
-# Scheduler (NEU v1.1.0)
+# Scheduler
 GET  /api/scheduler                                  # Scheduler-Status
 POST /api/scheduler/monthly-snapshot                 # Manueller Monatswechsel
 
-# HA Statistics - Direkte DB-Abfrage (NEU v1.1.0-beta.8)
+# HA Statistics - Direkte DB-Abfrage (NEU v2.0.0)
 GET  /api/ha-statistics/status                       # Prüft ob HA-DB verfügbar
 GET  /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}  # Einzelner Monat
 GET  /api/ha-statistics/verfuegbare-monate/{anlage_id}          # Alle Monate mit Daten
 GET  /api/ha-statistics/alle-monatswerte/{anlage_id}            # Bulk: Alle Monatswerte
 GET  /api/ha-statistics/monatsanfang/{anlage_id}/{jahr}/{monat} # Startwerte für MQTT
+GET  /api/ha-statistics/import-vorschau/{anlage_id}             # Import-Vorschau mit Konflikten
+POST /api/ha-statistics/import/{anlage_id}                      # Import mit Überschreib-Schutz
 ```
 
 ## ROI-Metriken (WICHTIG: Unterschiedliche Bedeutungen!)
@@ -355,11 +358,23 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - [x] Sensor-Mapping-Wizard ✓ (v1.1.0)
 - [x] MQTT Auto-Discovery für Monatswerte ✓ (v1.1.0)
 - [x] Monatsabschluss-Wizard ✓ (v1.1.0)
+- [x] HA-Statistik Bulk-Import ✓ (v2.0.0)
 - [ ] KI-Insights
 
-## HA-Integration Status (v1.1.0)
+## HA-Integration Status (v2.0.0)
 
-**Neu in v1.1.0:**
+**Neu in v2.0.0:**
+- **HA-Statistik-Import:** Direkte Abfrage der Home Assistant Langzeitstatistiken
+- **Bulk-Import:** Rückwirkende Befüllung aller Monatsdaten seit Installation
+- **Import-Vorschau:** Konflikt-Erkennung mit Überschreib-Schutz
+- **Monatsabschluss:** "Werte aus HA laden" Button für einzelne Monate
+- **Sensor-Mapping:** Startwerte aus HA-DB Option beim Setup
+
+**Voraussetzung:**
+- Volume-Mapping `config:ro` für Lesezugriff auf HA-Datenbank
+- ⚠️ BREAKING CHANGE: Neuinstallation des Add-ons erforderlich!
+
+**Features aus v1.1.0:**
 - **Sensor-Mapping-Wizard:** Zuordnung HA-Sensoren zu EEDC-Feldern
 - **MQTT Auto-Discovery:** Erstellt automatisch `number` und `sensor` Entities in HA
 - **Monatsabschluss-Wizard:** Geführte monatliche Dateneingabe mit Vorschlägen
@@ -398,51 +413,25 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v1.1.0-beta.5)
+## Letzte Änderungen (v2.0.0)
 
-**Automatische Datenerfassung - Komplett implementiert!**
+**⚠️ BREAKING CHANGE - Neuinstallation erforderlich!**
 
-Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md) für Details.
+Diese Version benötigt Lesezugriff auf `/config` für die HA-Statistik-Funktion.
+Das Volume-Mapping wurde geändert - Upgrade-Anleitung siehe CHANGELOG.md.
 
-**Teil 1: Sensor-Mapping-Wizard**
-- UI zur Zuordnung von HA-Sensoren zu EEDC-Feldern
-- Schätzungsstrategien: sensor, kwp_verteilung, cop_berechnung, ev_quote, manuell
-- Dynamische Steps basierend auf vorhandenen Investitionen
-- Speicherung in `Anlage.sensor_mapping` (JSON)
+**HA-Statistik-Import (NEU):**
+- Service `ha_statistics_service.py`: SQLite-Zugriff auf HA-Datenbank
+- API-Endpoints unter `/api/ha-statistics/` für Monatswerte-Abfrage
+- Import-Vorschau mit Konflikt-Erkennung
+- Intelligenter Import mit Überschreib-Schutz
 
-**Teil 2: MQTT Auto-Discovery**
-- `mqtt_client.py` erweitert: `publish_number_discovery()`, `publish_calculated_sensor()`
-- Erstellt `number.eedc_{anlage}_mwd_{feld}_start` für Monatsanfang-Werte
-- Erstellt `sensor.eedc_{anlage}_mwd_{feld}_monat` mit `value_template`
-- `ha_mqtt_sync.py`: Synchronisations-Service
-- `scheduler.py`: Cron-Job für Monatswechsel (1. des Monats 00:01)
-- **v1.1.0-beta.3:** Entity-Namen enthalten jetzt Investitionsnamen (z.B. "BYD HVS 12.8 Ladung")
-- **v1.1.0-beta.4:** `object_id` im Payload sorgt für eindeutige Entity-IDs (keine `_2` Suffixe mehr)
+**Frontend (NEU):**
+- `HAStatistikImport.tsx`: Bulk-Import Seite mit Vorschau
+- Monatsabschluss-Wizard: "Werte aus HA-Statistik laden" Button
+- Sensor-Mapping: "Aus HA-Statistik laden" Option beim Init
 
-**Teil 3: Monatsabschluss-Wizard**
-- `vorschlag_service.py`: Intelligente Vorschläge (Vormonat, Vorjahr, COP, Durchschnitt)
-- Plausibilitätsprüfungen mit Warnungen
-- `monatsabschluss.py` API: Status, Speichern, nächster Monat
-- Frontend mit dynamischen Steps pro Investitionstyp
-
-**Teil 4: Navigation**
-- "Sensor-Zuordnung" unter Einstellungen → Home Assistant
-- "Monatsabschluss" unter Einstellungen → Daten
-
-**Teil 5: JSON-Export/Import für Backup/Restore (v1.1.0-beta.5)**
-- Export-Version 1.1 mit vollständigem Backup aller Daten
-- `sensor_mapping` wird exportiert/importiert
-- `durchschnittstemperatur`, `sonderkosten_euro`, `sonderkosten_beschreibung` in Monatsdaten
-- Beim Import: MQTT-Setup muss nach Import erneut durchgeführt werden (IDs ändern sich)
-- Rückwärtskompatibel mit Export-Version 1.0
-
-**Neue Dependencies:**
-- `apscheduler>=3.10.0` für Cron-Jobs
-
-**Bugfixes (beta.2-5):**
-- beta.2: Datenbank-Migration für neue Monatsdaten-Felder
-- beta.3: MQTT Entity-Namen enthalten Investitionsnamen
-- beta.4: MQTT Entity-IDs eindeutig durch `object_id`
-- beta.5: JSON-Export enthält jetzt alle Felder für vollständiges Backup
+**Navigation:**
+- Einstellungen → Home Assistant → Statistik-Import (NEU)
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

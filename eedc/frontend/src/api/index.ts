@@ -16,6 +16,7 @@ export { wetterApi } from './wetter'
 export { haImportApi } from './haImport'
 export { sensorMappingApi } from './sensorMapping'
 export { monatsabschlussApi } from './monatsabschluss'
+export { haStatisticsApi } from './haStatistics'
 
 // Re-export types
 export type { ApiError } from './client'
@@ -54,3 +55,15 @@ export type {
   FeldWert,
   InvestitionWerte,
 } from './monatsabschluss'
+export type {
+  HAStatisticsStatus,
+  Monatswerte,
+  VerfuegbarerMonat,
+  AlleMonatswerte,
+  MonatsanfangWerte,
+  ImportAktion,
+  MonatImportStatus,
+  ImportVorschau,
+  ImportRequest,
+  ImportResult as HAImportResult,
+} from './haStatistics'

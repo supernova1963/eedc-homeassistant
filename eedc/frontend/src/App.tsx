@@ -35,6 +35,7 @@ import DatenerfassungGuide from './pages/DatenerfassungGuide'
 import HAExportSettings from './pages/HAExportSettings'
 import SensorMappingWizard from './pages/SensorMappingWizard'
 import MonatsabschlussWizard from './pages/MonatsabschlussWizard'
+import HAStatistikImport from './pages/HAStatistikImport'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -84,6 +85,7 @@ function App() {
           <Route path="einstellungen/ha-import" element={<Navigate to="/einstellungen/datenerfassung" replace />} />
           <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
           <Route path="einstellungen/sensor-mapping" element={<SensorMappingWizard />} />
+          <Route path="einstellungen/ha-statistik-import" element={<HAStatistikImport />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
 
           {/* Legacy redirects für alte URLs */}

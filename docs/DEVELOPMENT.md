@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 1.1.0-beta.1** | Stand: Februar 2026
+**Version 2.0.0** | Stand: Februar 2026
 
 ---
 

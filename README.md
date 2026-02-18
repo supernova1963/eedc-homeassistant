@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.1.0-beta.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.0.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -53,8 +53,9 @@
 - **CSV-Import** mit personalisierten Spalten und Plausibilitätsprüfung
 - **Wetter-Auto-Fill** via Open-Meteo / PVGIS TMY
 - **Demo-Daten** zum Ausprobieren
-- **Sensor-Mapping-Wizard** (NEU) - Home Assistant Sensoren den EEDC-Feldern zuordnen
-- **Monatsabschluss-Wizard** (NEU) - Geführte monatliche Datenerfassung mit Vorschlägen
+- **Sensor-Mapping-Wizard** - Home Assistant Sensoren den EEDC-Feldern zuordnen
+- **Monatsabschluss-Wizard** - Geführte monatliche Datenerfassung mit Vorschlägen
+- **HA-Statistik Import** (NEU v2.0.0) - Automatischer Import historischer Monatswerte aus HA
 
 ### Investitions-Management
 - **Parent-Child Beziehungen**: PV-Module → Wechselrichter, DC-Speicher → Hybrid-WR
@@ -71,8 +72,9 @@
 - **MQTT Discovery** für native HA-Sensoren
 - **REST API** für configuration.yaml
 - **Berechnete KPIs** zurück an HA exportieren
-- **Sensor-Mapping** (NEU) - Flexible Zuordnung von HA-Sensoren zu EEDC-Feldern
-- **Automatische Vorschläge** (NEU) - Intelligente Werte aus Vormonat, Vorjahr, oder Berechnung
+- **Sensor-Mapping** - Flexible Zuordnung von HA-Sensoren zu EEDC-Feldern
+- **Automatische Vorschläge** - Intelligente Werte aus Vormonat, Vorjahr, oder Berechnung
+- **HA-Statistik Import** (NEU v2.0.0) - Bulk-Import historischer Daten aus HA-Langzeitstatistik
 
 ---
 

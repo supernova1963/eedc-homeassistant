@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.1.0-beta.5** | Stand: Februar 2026
+**Version 2.0.0** | Stand: Februar 2026
 
 ---
 
@@ -159,9 +159,10 @@ eedc-homeassistant/
     │       ├── pdf_service.py       # PDF-Generierung
     │       ├── ha_sensors_export.py
     │       ├── mqtt_client.py
-    │       ├── ha_mqtt_sync.py      # MQTT Sync Service (NEU)
-    │       ├── vorschlag_service.py # Intelligente Vorschläge (NEU)
-    │       └── scheduler.py         # APScheduler für Cron-Jobs (NEU)
+    │       ├── ha_mqtt_sync.py      # MQTT Sync Service
+    │       ├── vorschlag_service.py # Intelligente Vorschläge
+    │       ├── scheduler.py         # APScheduler für Cron-Jobs
+    │       └── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v2.0.0)
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -802,7 +803,30 @@ eedc/{anlage_id}/{key}                              → State
 eedc/{anlage_id}/{key}/attributes                   → Attributes
 ```
 
-### VorschlagService (NEU v1.1.0)
+### HA Statistics Service (NEU v2.0.0)
+
+**Datei:** `backend/services/ha_statistics_service.py`
+
+**Funktion:** Direkter SQLite-Zugriff auf Home Assistant Langzeitstatistiken.
+
+**Voraussetzungen:**
+- Volume-Mapping `config:ro` für Lesezugriff auf `/config/home-assistant_v2.db`
+- Sensor-Mapping konfiguriert
+
+**Hauptfunktionen:**
+- `get_monatswerte()` - Einzelner Monat aus HA-Statistik
+- `get_alle_monatswerte()` - Bulk-Abfrage aller historischen Monate
+- `get_verfuegbare_monate()` - Liste aller Monate mit Daten
+- `get_monatsanfang_wert()` - Zählerstand am Monatsanfang für MQTT-Startwerte
+
+**API-Endpoints:**
+- `GET /api/ha-statistics/status` - Prüft DB-Verfügbarkeit
+- `GET /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}` - Einzelner Monat
+- `GET /api/ha-statistics/alle-monatswerte/{anlage_id}` - Bulk-Abfrage
+- `GET /api/ha-statistics/import-vorschau/{anlage_id}` - Vorschau mit Konflikten
+- `POST /api/ha-statistics/import/{anlage_id}` - Import mit Überschreib-Schutz
+
+### VorschlagService
 
 **Datei:** `backend/services/vorschlag_service.py`
 
@@ -814,7 +838,7 @@ eedc/{anlage_id}/{key}/attributes                   → Attributes
 3. **Berechnung** (Konfidenz 60%) - COP/EV-Quote basiert
 4. **Durchschnitt** (Konfidenz 50%) - Fallback aus allen vorhandenen Werten
 
-### Scheduler Service (NEU v1.1.0)
+### Scheduler Service
 
 **Datei:** `backend/services/scheduler.py`
 
@@ -826,7 +850,7 @@ eedc/{anlage_id}/{key}/attributes                   → Attributes
   - Erstellt Vorschläge für den Monatsabschluss
   - Sendet Notifications (optional)
 
-### HA MQTT Sync Service (NEU v1.1.0)
+### HA MQTT Sync Service
 
 **Datei:** `backend/services/ha_mqtt_sync.py`
 

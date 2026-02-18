@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.1.0-beta.5** | Stand: Februar 2026
+**Version 2.0.0** | Stand: Februar 2026
 
 ---
 
@@ -15,11 +15,12 @@
 7. [Aussichten (Prognosen)](#7-aussichten-prognosen)
 8. [Einstellungen](#8-einstellungen)
 9. [Datenerfassung](#9-datenerfassung)
-10. [Sensor-Mapping (NEU)](#10-sensor-mapping-neu)
-11. [Monatsabschluss-Wizard (NEU)](#11-monatsabschluss-wizard-neu)
-12. [Home Assistant Integration](#12-home-assistant-integration-optional)
-13. [Tipps & Best Practices](#13-tipps--best-practices)
-14. [Fehlerbehebung](#14-fehlerbehebung)
+10. [Sensor-Mapping](#10-sensor-mapping)
+11. [Monatsabschluss-Wizard](#11-monatsabschluss-wizard)
+12. [HA-Statistik Import (NEU)](#12-ha-statistik-import-neu)
+13. [Home Assistant Integration](#13-home-assistant-integration-optional)
+14. [Tipps & Best Practices](#14-tipps--best-practices)
+15. [Fehlerbehebung](#15-fehlerbehebung)
 
 ---
 
@@ -912,16 +913,79 @@ Die letzten Abschlüsse werden angezeigt:
 
 ---
 
-## 12. Home Assistant Integration (optional)
+## 12. HA-Statistik Import (NEU)
+
+**Pfad**: Einstellungen → Home Assistant → Statistik-Import
+
+### 12.1 Übersicht
+
+Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der Installation deiner PV-Anlage** automatisch aus der Home Assistant Langzeitstatistik-Datenbank importieren. Das ist besonders nützlich, wenn du:
+
+- EEDC neu installiert hast und Altdaten übernehmen möchtest
+- Monatsdaten nachträglich befüllen willst
+- Von manueller auf automatische Erfassung umstellen möchtest
+
+### 12.2 Voraussetzungen
+
+- **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den EEDC-Feldern zugeordnet sein
+- **Home Assistant Langzeitstatistiken**: Deine Sensoren müssen in der HA-Datenbank gespeichert werden
+- **EEDC v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
+
+> ⚠️ **Wichtig**: Bei Update von v1.x auf v2.0.0 ist eine Neuinstallation des Add-ons erforderlich! Siehe CHANGELOG für Upgrade-Anleitung.
+
+### 12.3 Bulk-Import verwenden
+
+1. **Seite öffnen**: Einstellungen → Home Assistant → Statistik-Import
+2. **Datenbank-Status prüfen**: Die Seite zeigt ob die HA-Datenbank verfügbar ist
+3. **Anlage auswählen**: Wähle die Anlage für den Import
+4. **Vorschau laden**: Klicke auf "Vorschau laden"
+5. **Konflikte prüfen**:
+   - **Grün (Importieren)**: Neue Monate ohne vorhandene Daten
+   - **Grau (Übersprungen)**: Bereits ausgefüllte Monate (werden nicht überschrieben)
+   - **Amber (Konflikt)**: Monate mit vorhandenen Daten
+6. **Optional**: Aktiviere "Vorhandene Daten überschreiben" wenn du Konflikte überschreiben möchtest
+7. **Import starten**: Klicke auf "X Monate importieren"
+
+### 12.4 Einzelne Monate laden (Monatsabschluss)
+
+Im **Monatsabschluss-Wizard** gibt es einen Button "Werte aus HA-Statistik laden":
+
+1. Gehe zu Einstellungen → Daten → Monatsabschluss
+2. Wähle den gewünschten Monat
+3. Klicke auf "Werte aus HA-Statistik laden"
+4. Die Felder werden automatisch befüllt
+5. Prüfe die Werte und speichere
+
+### 12.5 Startwerte beim Sensor-Mapping
+
+Beim Speichern des Sensor-Mappings bietet EEDC zwei Optionen für die Startwerte:
+
+1. **Aus HA-Statistik laden (empfohlen)**: Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank
+2. **Aktuelle Werte verwenden**: Setzt die aktuellen Sensorwerte als Startwerte (Monatswert startet bei 0)
+
+### 12.6 Konflikt-Erkennung
+
+Der Import schützt deine manuell erfassten Daten:
+
+| Situation | Aktion | Beschreibung |
+|-----------|--------|--------------|
+| Neuer Monat | Importieren | Monat existiert noch nicht in EEDC |
+| Leerer Monat | Importieren | Monatsdaten vorhanden aber alle Felder leer |
+| Ausgefüllter Monat | Übersprungen | Mindestens ein Feld hat einen Wert |
+| Konflikt + Checkbox | Überschreiben | Nur wenn "Überschreiben" aktiviert |
+
+---
+
+## 13. Home Assistant Integration (optional)
 
 EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
 
-### 12.1 Voraussetzungen
+### 13.1 Voraussetzungen
 
 - Home Assistant mit MQTT-Broker (Mosquitto Add-on)
 - MQTT-Benutzer und Passwort
 
-### 12.2 MQTT konfigurieren
+### 13.2 MQTT konfigurieren
 
 **Pfad**: EEDC Add-on Konfiguration in Home Assistant
 
@@ -935,7 +999,7 @@ mqtt:
   password: "dein_mqtt_passwort"
 ```
 
-### 12.3 MQTT Auto-Discovery (NEU in v1.1.0)
+### 13.3 MQTT Auto-Discovery (NEU in v1.1.0)
 
 Wenn du das **Sensor-Mapping** konfigurierst und speicherst, erstellt EEDC automatisch MQTT-Entities in Home Assistant. Diese ermöglichen die automatische Berechnung von Monatswerten.
 
@@ -974,7 +1038,7 @@ Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
 - "EEDC BYD HVS 12.8 Ladung Monatsanfang"
 - "EEDC SMA eCharger 22 Ladung Monat"
 
-### 12.4 Monatsstartwerte initialisieren
+### 13.4 Monatsstartwerte initialisieren
 
 **Wichtig:** Damit die automatische Monatswert-Berechnung funktioniert, müssen einmalig die Startwerte (Zählerstände vom Monatsanfang) gesetzt werden.
 
@@ -1005,7 +1069,7 @@ Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
 3. Entity: `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`
 4. Value: Der aktuelle Zählerstand
 
-### 12.5 MQTT-Bereinigung bei Problemen
+### 13.5 MQTT-Bereinigung bei Problemen
 
 Falls Entities doppelt erscheinen (mit `_2` Suffix) oder andere Probleme auftreten:
 
@@ -1027,7 +1091,7 @@ Oder im **MQTT Explorer**:
 3. Home Assistant neu starten
 4. In EEDC: Sensor-Mapping erneut speichern
 
-### 12.6 KPI-Export (klassisch)
+### 13.6 KPI-Export (klassisch)
 
 Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
 
@@ -1042,7 +1106,7 @@ Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
 | `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
 | `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
 
-### 12.7 Alternative: REST API
+### 13.7 Alternative: REST API
 
 Statt MQTT kannst du auch die REST API nutzen:
 
@@ -1059,7 +1123,7 @@ rest:
 
 ---
 
-## 13. Tipps & Best Practices
+## 14. Tipps & Best Practices
 
 ### Datenqualität
 
@@ -1087,7 +1151,7 @@ rest:
 
 ---
 
-## 14. Fehlerbehebung
+## 15. Fehlerbehebung
 
 ### SOLL-IST Vergleich zeigt 0 kWh
 

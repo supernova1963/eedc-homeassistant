@@ -25,7 +25,7 @@ import {
   Car,
   Sun,
 } from 'lucide-react'
-import { sensorMappingApi, anlagenApi } from '../api'
+import { sensorMappingApi, anlagenApi, haStatisticsApi } from '../api'
 import type {
   FeldMapping,
   SensorMappingRequest,
@@ -102,6 +102,9 @@ export default function SensorMappingWizard() {
     message: string
     updated_fields: number
   } | null>(null)
+  const [haDbVerfuegbar, setHaDbVerfuegbar] = useState<boolean | null>(null)
+  const [loadingHaStatus, setLoadingHaStatus] = useState(false)
+  const [isInitializingFromDb, setIsInitializingFromDb] = useState(false)
 
   // Data loading states
   const [anlagen, setAnlagen] = useState<{ id: number; anlagenname: string }[] | null>(null)
@@ -306,6 +309,57 @@ export default function SensorMappingWizard() {
     }
   }, [effectiveAnlageId])
 
+  // Prüfe HA-DB-Verfügbarkeit wenn Init-Dialog geöffnet wird
+  useEffect(() => {
+    if (showInitDialog && haDbVerfuegbar === null) {
+      setLoadingHaStatus(true)
+      haStatisticsApi.getStatus()
+        .then(status => setHaDbVerfuegbar(status.verfuegbar))
+        .catch(() => setHaDbVerfuegbar(false))
+        .finally(() => setLoadingHaStatus(false))
+    }
+  }, [showInitDialog, haDbVerfuegbar])
+
+  // Handler zum Initialisieren aus HA-Statistik-DB (Monatsanfang)
+  const handleInitFromHaDb = useCallback(async () => {
+    if (!effectiveAnlageId) return
+
+    setIsInitializingFromDb(true)
+    try {
+      // Aktueller Monat
+      const now = new Date()
+      const jahr = now.getFullYear()
+      const monat = now.getMonth() + 1
+
+      const result = await haStatisticsApi.getMonatsanfangWerte(effectiveAnlageId, jahr, monat)
+      const feldCount = Object.keys(result.werte).length
+
+      if (feldCount > 0) {
+        // Werte wurden geladen, jetzt an MQTT senden
+        // Das macht der Backend-Endpoint automatisch
+        setInitResult({
+          success: true,
+          message: `Startwerte für ${monat}/${jahr} aus HA-Statistik geladen`,
+          updated_fields: feldCount,
+        })
+      } else {
+        setInitResult({
+          success: false,
+          message: 'Keine Daten in HA-Statistik für diesen Monat gefunden',
+          updated_fields: 0,
+        })
+      }
+    } catch (err) {
+      setInitResult({
+        success: false,
+        message: (err as Error).message || 'Fehler beim Laden aus HA-Statistik',
+        updated_fields: 0,
+      })
+    } finally {
+      setIsInitializingFromDb(false)
+    }
+  }, [effectiveAnlageId])
+
   // Handler zum Abschließen (nach Init-Dialog)
   const handleFinish = useCallback(() => {
     navigate('/einstellungen/ha-export?saved=true')
@@ -374,34 +428,74 @@ export default function SensorMappingWizard() {
                   <div className="space-y-2">
                     <p className="font-medium">Möchten Sie die Monatsstart-Werte jetzt initialisieren?</p>
                     <p className="text-sm opacity-80">
-                      Die aktuellen Zählerstände werden als Startwerte für die Monatsberechnung gesetzt.
+                      Die Startwerte werden als Basis für die monatliche Berechnung benötigt.
                       Der berechnete Monatswert startet dann bei 0 und steigt mit der Zeit.
-                    </p>
-                    <p className="text-sm opacity-80">
-                      Dies ist nur beim ersten Setup nötig. Danach werden die Startwerte automatisch
-                      am 1. jedes Monats aktualisiert.
                     </p>
                   </div>
                 </Alert>
 
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleInitStartValues}
-                    disabled={isInitializing}
-                  >
-                    {isInitializing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Initialisiere...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        Startwerte initialisieren
-                      </>
-                    )}
-                  </Button>
-                  <Button variant="secondary" onClick={handleFinish}>
+                <div className="space-y-3">
+                  {/* Option 1: Aus HA-Statistik (empfohlen wenn verfügbar) */}
+                  {loadingHaStatus ? (
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Prüfe HA-Statistik-Verfügbarkeit...
+                    </div>
+                  ) : haDbVerfuegbar && (
+                    <div className="p-4 border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                      <p className="text-sm text-green-800 dark:text-green-200 mb-2">
+                        <strong>Empfohlen:</strong> Startwerte aus HA-Langzeitstatistik laden
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400 mb-3">
+                        Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank.
+                      </p>
+                      <Button
+                        onClick={handleInitFromHaDb}
+                        disabled={isInitializingFromDb}
+                      >
+                        {isInitializingFromDb ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Lade aus HA-DB...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Aus HA-Statistik laden (empfohlen)
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Option 2: Aktuelle Sensorwerte */}
+                  <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                      Aktuelle Sensor-Werte als Startwerte setzen
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Verwendet die aktuellen Zählerstände. Der Monatswert startet dann bei 0.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      onClick={handleInitStartValues}
+                      disabled={isInitializing}
+                    >
+                      {isInitializing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Initialisiere...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 mr-2" />
+                          Aktuelle Werte verwenden
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <Button variant="secondary" onClick={handleFinish} className="mt-2">
                     Überspringen
                   </Button>
                 </div>

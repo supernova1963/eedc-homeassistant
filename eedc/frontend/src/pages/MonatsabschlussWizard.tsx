@@ -25,8 +25,9 @@ import {
   Settings,
   Loader2,
   FileText,
+  Database,
 } from 'lucide-react'
-import { anlagenApi, monatsabschlussApi } from '../api'
+import { anlagenApi, monatsabschlussApi, haStatisticsApi } from '../api'
 import type {
   MonatsabschlussResponse,
   FeldStatus,
@@ -65,8 +66,10 @@ export default function MonatsabschlussWizard() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loadingHA, setLoadingHA] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [haInfo, setHaInfo] = useState<string | null>(null)
 
   const [anlageName, setAnlageName] = useState('')
   const [data, setData] = useState<MonatsabschlussResponse | null>(null)
@@ -244,6 +247,70 @@ export default function MonatsabschlussWizard() {
     }))
   }
 
+  // HA-Werte für diesen Monat laden
+  const handleLoadHAValues = async () => {
+    if (!anlageId) return
+
+    setLoadingHA(true)
+    setError(null)
+    setHaInfo(null)
+
+    try {
+      // Prüfen ob HA verfügbar
+      const status = await haStatisticsApi.getStatus()
+      if (!status.verfuegbar) {
+        setError('Home Assistant Datenbank nicht verfügbar')
+        return
+      }
+
+      // Monatswerte laden
+      const monatswerte = await haStatisticsApi.getMonatswerte(
+        parseInt(anlageId),
+        selectedJahr,
+        selectedMonat
+      )
+
+      // Werte in State übernehmen
+      let geladenCount = 0
+
+      // Basis-Felder
+      const newBasis = { ...values.basis }
+      for (const feld of monatswerte.basis) {
+        if (feld.wert !== null && feld.wert !== undefined) {
+          newBasis[feld.feld] = feld.wert
+          geladenCount++
+        }
+      }
+
+      // Investitionen
+      const newInv = { ...values.investitionen }
+      for (const inv of monatswerte.investitionen) {
+        if (!newInv[inv.investition_id]) {
+          newInv[inv.investition_id] = {}
+        }
+        for (const feld of inv.felder) {
+          if (feld.wert !== null && feld.wert !== undefined) {
+            newInv[inv.investition_id][feld.feld] = feld.wert
+            geladenCount++
+          }
+        }
+      }
+
+      setValues(prev => ({
+        ...prev,
+        basis: newBasis,
+        investitionen: newInv,
+      }))
+
+      setHaInfo(`${geladenCount} Werte aus HA-Statistik geladen`)
+    } catch (e) {
+      console.error(e)
+      setError('Fehler beim Laden der HA-Werte. Ist das Sensor-Mapping konfiguriert?')
+    } finally {
+      setLoadingHA(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!data || !anlageId) return
 
@@ -351,8 +418,8 @@ export default function MonatsabschlussWizard() {
           Monatsabschluss {MONAT_NAMEN[selectedMonat]} {selectedJahr}
         </h1>
 
-        {/* HA-Mapping Hinweis */}
-        {!data.ha_mapping_konfiguriert && (
+        {/* HA-Mapping Hinweis oder HA-Laden Button */}
+        {!data.ha_mapping_konfiguriert ? (
           <Alert type="info" className="mt-4">
             <div className="flex items-center justify-between">
               <span>
@@ -368,6 +435,31 @@ export default function MonatsabschlussWizard() {
               </Link>
             </div>
           </Alert>
+        ) : (
+          <div className="mt-4 flex items-center gap-4">
+            <button
+              onClick={handleLoadHAValues}
+              disabled={loadingHA}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+            >
+              {loadingHA ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Lade HA-Werte...
+                </>
+              ) : (
+                <>
+                  <Database className="w-4 h-4" />
+                  Werte aus HA-Statistik laden
+                </>
+              )}
+            </button>
+            {haInfo && (
+              <span className="text-sm text-green-600 dark:text-green-400">
+                {haInfo}
+              </span>
+            )}
+          </div>
         )}
       </div>
 

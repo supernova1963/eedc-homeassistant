@@ -48,6 +48,7 @@ const settingsMenu = [
     category: 'Home Assistant',
     items: [
       { name: 'Sensor-Zuordnung', href: '/einstellungen/sensor-mapping' },
+      { name: 'Statistik-Import', href: '/einstellungen/ha-statistik-import' },
       { name: 'MQTT-Export', href: '/einstellungen/ha-export' },
     ],
   },

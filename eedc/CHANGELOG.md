@@ -7,7 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [1.1.0-beta.8] - 2026-02-18
+## [2.0.0] - 2026-02-18
+
+### ⚠️ BREAKING CHANGE - Neuinstallation erforderlich!
+
+Diese Version benötigt **Lesezugriff auf `/config`** für die HA-Statistik-Funktion.
+Das Volume-Mapping wurde geändert - eine einfache Aktualisierung reicht nicht!
+
+**Vor dem Update:**
+1. **JSON-Export** aller Anlagen erstellen (Einstellungen → Import/Export → Export JSON)
+2. Export-Datei sichern!
+
+**Update durchführen:**
+1. Add-on **stoppen**
+2. Add-on **deinstallieren** (⚠️ Daten werden gelöscht!)
+3. Repository aktualisieren (Add-ons → ⋮ → Nach Updates suchen)
+4. Add-on **neu installieren**
+5. Add-on **starten**
+6. **JSON-Import** durchführen
 
 ### Hinzugefügt
 
@@ -22,10 +39,44 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Nutzt die sensor_mapping Zuordnungen um HA-Sensoren auf EEDC-Felder zu mappen
   - Ermöglicht rückwirkende Befüllung aller Monatsdaten seit Installationsdatum
 
+- **HA-Statistik Import mit Überschreib-Schutz**
+  - `GET /api/ha-statistics/import-vorschau/{anlage_id}` - Vorschau mit Konflikt-Erkennung
+  - `POST /api/ha-statistics/import/{anlage_id}` - Import mit intelligenter Logik:
+    - Neue Monate werden importiert
+    - Leere Monatsdaten werden befüllt
+    - Vorhandene Daten werden **nicht** überschrieben (außer explizit gewünscht)
+    - Konflikte werden erkannt und angezeigt
+
+- **Frontend: HA-Statistik Import UI**
+  - Neue Seite: Einstellungen → Home Assistant → Statistik-Import
+  - Bulk-Import aller historischen Monatswerte
+  - Vorschau mit farbcodierter Konflikt-Erkennung
+  - Option zum Überschreiben vorhandener Daten
+
+- **Monatsabschluss-Wizard: HA-Werte laden**
+  - Neuer Button "Werte aus HA-Statistik laden"
+  - Lädt Monatswerte direkt aus der HA-Langzeitstatistik
+  - Nur sichtbar wenn Sensor-Mapping konfiguriert ist
+
+- **Sensor-Mapping: Startwerte aus HA-DB**
+  - Nach Speichern: Option "Aus HA-Statistik laden (empfohlen)"
+  - Verwendet gespeicherte Zählerstände vom Monatsanfang
+  - Fallback: Aktuelle Sensorwerte verwenden
+
+### Geändert
+
+- **Volume-Mapping erweitert**: `config:ro` für Lesezugriff auf HA-Datenbank
+
 ### Behoben
 
 - **Sensor-Mapping UI** - Importierte Sensoren werden jetzt angezeigt auch wenn HA nicht verfügbar
   - Zeigt sensor_id mit Hinweis "(nicht verfügbar)" wenn Sensor nicht in lokaler Liste
+
+---
+
+## [1.1.0-beta.8] - 2026-02-18
+
+(Übersprungen - direkt zu 2.0.0 wegen Breaking Change)
 
 ---
 
