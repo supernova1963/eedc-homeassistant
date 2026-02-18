@@ -5,14 +5,15 @@
  *
  * Datenquellen:
  * - Cockpit-API: Aggregierte KPIs (pv_erzeugung aus InvestitionMonatsdaten)
- * - Prognose-vs-IST-API: Monatliche Werte aus InvestitionMonatsdaten
+ * - Aggregierte Monatsdaten-API: Jahresübersicht
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle, GitCompare } from 'lucide-react'
+import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle, GitCompare, Calendar } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc } from '../components/ui'
-import { useAnlagen, useInvestitionen, useMonatsdaten } from '../hooks'
-import { cockpitApi, type CockpitUebersicht, type PrognoseVsIst } from '../api/cockpit'
+import { useAnlagen, useInvestitionen } from '../hooks'
+import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
+import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell
@@ -44,7 +45,7 @@ export default function PVAnlageDashboard() {
 
   // Cockpit-Daten (aggregierte KPIs aus InvestitionMonatsdaten)
   const [cockpitData, setCockpitData] = useState<CockpitUebersicht | null>(null)
-  const [prognoseData, setPrognoseData] = useState<PrognoseVsIst | null>(null)
+  const [aggregierteDaten, setAggregierteDaten] = useState<AggregierteMonatsdaten[]>([])
   const [cockpitLoading, setCockpitLoading] = useState(true)
 
   useEffect(() => {
@@ -54,38 +55,48 @@ export default function PVAnlageDashboard() {
   }, [anlagen, selectedAnlageId])
 
   const { investitionen, loading: invLoading } = useInvestitionen(selectedAnlageId)
-  // Monatsdaten nur für verfügbare Jahre und latestYear
-  const { monatsdaten, loading: mdLoading } = useMonatsdaten(selectedAnlageId)
 
-  // Neuestes Jahr aus Monatsdaten für SOLL-IST Vergleich
-  const latestYear = useMemo(() => {
-    if (monatsdaten.length === 0) return new Date().getFullYear()
-    return Math.max(...monatsdaten.map(md => md.jahr))
-  }, [monatsdaten])
+  // Verfügbare Jahre und neuestes Jahr für String-Vergleich
+  const { availableYears, latestYear } = useMemo(() => {
+    if (aggregierteDaten.length === 0) {
+      return { availableYears: [], latestYear: new Date().getFullYear() }
+    }
+    const years = [...new Set(aggregierteDaten.map(md => md.jahr))].sort((a, b) => b - a)
+    return { availableYears: years, latestYear: years[0] }
+  }, [aggregierteDaten])
 
-  // Cockpit-Daten laden (aggregierte Werte aus InvestitionMonatsdaten)
+  // Jahr-Auswahl für String-Vergleich (Standard: neuestes Jahr)
+  const [selectedStringYear, setSelectedStringYear] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    if (latestYear && !selectedStringYear) {
+      setSelectedStringYear(latestYear)
+    }
+  }, [latestYear, selectedStringYear])
+
+  // Cockpit-Daten und aggregierte Monatsdaten laden
+  // WICHTIG: OHNE Jahr-Filter für Gesamtlaufzeit-Übersicht
   useEffect(() => {
     if (!selectedAnlageId) return
 
-    const loadCockpitData = async () => {
+    const loadData = async () => {
       setCockpitLoading(true)
       try {
-        // Cockpit-Übersicht für das aktuellste Jahr laden
-        const cockpit = await cockpitApi.getUebersicht(selectedAnlageId, latestYear)
+        // Cockpit-Übersicht für ALLE Jahre (Gesamtlaufzeit)
+        const cockpit = await cockpitApi.getUebersicht(selectedAnlageId, undefined)
         setCockpitData(cockpit)
 
-        // Prognose-vs-IST für monatliche Chart-Daten
-        const prognose = await cockpitApi.getPrognoseVsIst(selectedAnlageId, latestYear)
-        setPrognoseData(prognose)
+        // Aggregierte Monatsdaten für Charts (alle Jahre)
+        const aggregiert = await monatsdatenApi.listAggregiert(selectedAnlageId)
+        setAggregierteDaten(aggregiert)
       } catch (err) {
-        console.error('Fehler beim Laden der Cockpit-Daten:', err)
+        console.error('Fehler beim Laden der Daten:', err)
       } finally {
         setCockpitLoading(false)
       }
     }
 
-    loadCockpitData()
-  }, [selectedAnlageId, latestYear])
+    loadData()
+  }, [selectedAnlageId])
 
   // PV-Systeme gruppieren (Wechselrichter + zugeordnete Module + Speicher)
   const { pvSysteme, orphanModule } = useMemo(() => {
@@ -134,35 +145,50 @@ export default function PVAnlageDashboard() {
   const spezifischerErtrag = cockpitData?.spezifischer_ertrag_kwh_kwp || 0
   const eigenverbrauchsQuote = cockpitData?.eigenverbrauch_quote_prozent || 0
   const anzahlMonate = cockpitData?.anzahl_monate || 0
+  const zeitraumVon = cockpitData?.zeitraum_von
+  const zeitraumBis = cockpitData?.zeitraum_bis
 
-  // Chart-Daten: Kombiniere PV-Erzeugung aus Prognose-vs-IST mit Einspeisung aus Monatsdaten
-  const chartData = useMemo(() => {
-    if (!prognoseData || monatsdaten.length === 0) return []
+  // Chart-Daten: Jahresübersicht (Gesamtlaufzeit)
+  const jahresChartData = useMemo(() => {
+    if (aggregierteDaten.length === 0) return []
 
-    // Monatsdaten für das aktuelle Jahr filtern
-    const mdByMonth = new Map<number, { einspeisung: number; netzbezug: number }>()
-    monatsdaten
-      .filter(m => m.jahr === latestYear)
-      .forEach(m => mdByMonth.set(m.monat, {
-        einspeisung: m.einspeisung_kwh,
-        netzbezug: m.netzbezug_kwh
+    // Nach Jahren gruppieren
+    const byYear = new Map<number, { erzeugung: number; eigenverbrauch: number; einspeisung: number }>()
+
+    for (const md of aggregierteDaten) {
+      if (!byYear.has(md.jahr)) {
+        byYear.set(md.jahr, { erzeugung: 0, eigenverbrauch: 0, einspeisung: 0 })
+      }
+      const y = byYear.get(md.jahr)!
+      y.erzeugung += md.pv_erzeugung_kwh || 0
+      y.eigenverbrauch += md.eigenverbrauch_kwh || 0
+      y.einspeisung += md.einspeisung_kwh || 0
+    }
+
+    return [...byYear.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([jahr, data]) => ({
+        name: jahr.toString(),
+        Erzeugung: Math.round(data.erzeugung),
+        Eigenverbrauch: Math.round(data.eigenverbrauch),
+        Einspeisung: Math.round(data.einspeisung),
       }))
+  }, [aggregierteDaten])
 
-    return prognoseData.monatswerte
-      .filter(m => m.ist_kwh > 0) // Nur Monate mit Daten
-      .map(m => {
-        const md = mdByMonth.get(m.monat)
-        const einspeisung = md?.einspeisung || 0
-        // Eigenverbrauch = Erzeugung - Einspeisung (vereinfacht)
-        const eigenverbrauch = Math.max(0, m.ist_kwh - einspeisung)
-        return {
-          name: `${monatNamen[m.monat]}`,
-          Erzeugung: m.ist_kwh,
-          Eigenverbrauch: eigenverbrauch,
-          Einspeisung: einspeisung,
-        }
-      })
-  }, [prognoseData, monatsdaten, latestYear])
+  // Chart-Daten: Monatlicher Verlauf (für gewähltes Jahr im String-Vergleich)
+  const monatsChartData = useMemo(() => {
+    if (aggregierteDaten.length === 0 || !selectedStringYear) return []
+
+    return aggregierteDaten
+      .filter(md => md.jahr === selectedStringYear)
+      .sort((a, b) => a.monat - b.monat)
+      .map(md => ({
+        name: monatNamen[md.monat],
+        Erzeugung: Math.round(md.pv_erzeugung_kwh || 0),
+        Eigenverbrauch: Math.round(md.eigenverbrauch_kwh || 0),
+        Einspeisung: Math.round(md.einspeisung_kwh || 0),
+      }))
+  }, [aggregierteDaten, selectedStringYear])
 
   // Energieverteilung Pie-Chart
   const verteilungData = useMemo(() => {
@@ -195,7 +221,7 @@ export default function PVAnlageDashboard() {
     }))
   }, [pvSysteme, orphanModule])
 
-  const loading = anlagenLoading || invLoading || mdLoading || cockpitLoading
+  const loading = anlagenLoading || invLoading || cockpitLoading
 
   if (loading) return <LoadingSpinner text="Lade PV-Anlage..." />
 
@@ -210,13 +236,21 @@ export default function PVAnlageDashboard() {
 
   const hasData = gesamtErzeugung > 0
   const hasPVSystem = pvSysteme.length > 0 || orphanModule.length > 0
+  const hasMultipleYears = availableYears.length > 1
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <Sun className="h-8 w-8 text-yellow-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PV-Anlage</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PV-Anlage</h1>
+            {zeitraumVon && zeitraumBis && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Gesamtlaufzeit: {zeitraumVon} bis {zeitraumBis} ({anzahlMonate} Monate)
+              </p>
+            )}
+          </div>
         </div>
         {anlagen.length > 1 && (
           <Select
@@ -247,7 +281,7 @@ export default function PVAnlageDashboard() {
         </Alert>
       )}
 
-      {/* KPI Cards - Daten aus Cockpit-API (InvestitionMonatsdaten) */}
+      {/* KPI Cards - Daten aus Cockpit-API (Gesamtlaufzeit) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           title="Anlagenleistung"
@@ -261,7 +295,7 @@ export default function PVAnlageDashboard() {
           title="Gesamterzeugung"
           value={gesamtErzeugung > 0 ? (gesamtErzeugung / 1000).toFixed(1) : '---'}
           unit="MWh"
-          subtitle={anzahlMonate > 0 ? `${anzahlMonate} Monate (${latestYear})` : undefined}
+          subtitle={anzahlMonate > 0 ? `${anzahlMonate} Monate Gesamtlaufzeit` : undefined}
           icon={Zap}
           color="green"
         />
@@ -269,7 +303,7 @@ export default function PVAnlageDashboard() {
           title="Spez. Ertrag"
           value={spezifischerErtrag > 0 ? spezifischerErtrag.toFixed(0) : '---'}
           unit="kWh/kWp"
-          subtitle={anzahlMonate >= 12 ? 'Jahreswert' : `${anzahlMonate} Monate`}
+          subtitle="Durchschnitt Gesamtlaufzeit"
           icon={TrendingUp}
           color="blue"
           formel="Spez. Ertrag = Erzeugung ÷ Leistung"
@@ -387,14 +421,14 @@ export default function PVAnlageDashboard() {
       {/* Charts */}
       {hasData && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Monatlicher Verlauf */}
+          {/* Jahresübersicht (Gesamtlaufzeit) */}
           <Card className="lg:col-span-2">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Monatlicher Verlauf ({latestYear})
+              {hasMultipleYears ? 'Jahresübersicht (Gesamtlaufzeit)' : `Jahresübersicht ${latestYear}`}
             </h2>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <BarChart data={jahresChartData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" className="text-xs" />
                   <YAxis unit=" kWh" className="text-xs" />
@@ -403,13 +437,13 @@ export default function PVAnlageDashboard() {
                       backgroundColor: 'var(--tooltip-bg, #fff)',
                       borderColor: 'var(--tooltip-border, #e5e7eb)',
                     }}
-                    formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']}
+                    formatter={(value: number) => [`${value.toLocaleString()} kWh`, '']}
                   />
                   <Legend />
-                  <Area type="monotone" dataKey="Erzeugung" stroke={COLORS.solar} fill={COLORS.solar} fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="Eigenverbrauch" stroke={COLORS.consumption} fill={COLORS.consumption} fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="Einspeisung" stroke={COLORS.feedin} fill={COLORS.feedin} fillOpacity={0.3} />
-                </AreaChart>
+                  <Bar dataKey="Erzeugung" fill={COLORS.solar} />
+                  <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} />
+                  <Bar dataKey="Einspeisung" fill={COLORS.feedin} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
@@ -437,7 +471,7 @@ export default function PVAnlageDashboard() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} />
+                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`, '']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -467,14 +501,60 @@ export default function PVAnlageDashboard() {
         </Card>
       )}
 
-      {/* SOLL-IST String-Vergleich */}
+      {/* SOLL-IST String-Vergleich mit Jahr-Auswahl */}
       {hasPVSystem && hasData && selectedAnlageId && (
         <Card>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <GitCompare className="h-5 w-5 text-blue-500" />
-            SOLL-IST Vergleich pro String
-          </h2>
-          <PVStringVergleich anlageId={selectedAnlageId} jahr={latestYear} />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <GitCompare className="h-5 w-5 text-blue-500" />
+              SOLL-IST Vergleich pro String
+            </h2>
+            {availableYears.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-gray-400" />
+                <select
+                  value={selectedStringYear || ''}
+                  onChange={(e) => setSelectedStringYear(parseInt(e.target.value))}
+                  className="input py-1.5 text-sm"
+                >
+                  {availableYears.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Monatlicher Verlauf für gewähltes Jahr */}
+          {monatsChartData.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+                Monatlicher Verlauf {selectedStringYear}
+              </h3>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monatsChartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis unit=" kWh" className="text-xs" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'var(--tooltip-bg, #fff)',
+                        borderColor: 'var(--tooltip-border, #e5e7eb)',
+                      }}
+                      formatter={(value: number) => [`${value.toLocaleString()} kWh`, '']}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="Erzeugung" stroke={COLORS.solar} fill={COLORS.solar} fillOpacity={0.3} />
+                    <Area type="monotone" dataKey="Eigenverbrauch" stroke={COLORS.consumption} fill={COLORS.consumption} fillOpacity={0.3} />
+                    <Area type="monotone" dataKey="Einspeisung" stroke={COLORS.feedin} fill={COLORS.feedin} fillOpacity={0.3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          <PVStringVergleich anlageId={selectedAnlageId} jahr={selectedStringYear || latestYear} />
         </Card>
       )}
     </div>

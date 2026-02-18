@@ -1,6 +1,8 @@
 /**
  * SubTabs Komponente
  * Zeigt kontextabhängige Sub-Navigation unter der Hauptnavigation
+ *
+ * Cockpit-Tabs werden dynamisch basierend auf vorhandenen Investitionen angezeigt.
  */
 
 import { NavLink, useLocation } from 'react-router-dom'
@@ -20,6 +22,7 @@ import {
   Upload,
   Settings
 } from 'lucide-react'
+import { useAnlagen, useInvestitionen } from '../../hooks'
 
 interface TabItem {
   name: string
@@ -27,18 +30,6 @@ interface TabItem {
   icon: LucideIcon
   exact?: boolean
 }
-
-// Sub-Tabs für Cockpit
-const cockpitTabs: TabItem[] = [
-  { name: 'Übersicht', href: '/cockpit', icon: LayoutDashboard, exact: true },
-  { name: 'PV-Anlage', href: '/cockpit/pv-anlage', icon: Sun },
-  { name: 'E-Auto', href: '/cockpit/e-auto', icon: Car },
-  { name: 'Wärmepumpe', href: '/cockpit/waermepumpe', icon: Flame },
-  { name: 'Speicher', href: '/cockpit/speicher', icon: Battery },
-  { name: 'Wallbox', href: '/cockpit/wallbox', icon: Plug },
-  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk', icon: Sun },
-  { name: 'Sonstiges', href: '/cockpit/sonstiges', icon: Wrench },
-]
 
 // Sub-Tabs für Auswertungen (leer, da Auswertung.tsx eigene Inline-Tabs hat)
 const auswertungenTabs: TabItem[] = []
@@ -58,12 +49,73 @@ const einstellungenTabs: TabItem[] = [
   { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
 ]
 
+/**
+ * Hook für dynamische Cockpit-Tabs basierend auf vorhandenen Investitionen
+ */
+function useDynamicCockpitTabs(): TabItem[] {
+  const { anlagen } = useAnlagen()
+  const anlageId = anlagen[0]?.id
+  const { investitionen } = useInvestitionen(anlageId)
+
+  // Basis-Tabs (immer sichtbar)
+  const baseTabs: TabItem[] = [
+    { name: 'Übersicht', href: '/cockpit', icon: LayoutDashboard, exact: true },
+  ]
+
+  // PV-Anlage: Zeigen wenn Wechselrichter oder PV-Module vorhanden
+  const hatPV = investitionen.some(i =>
+    i.typ === 'wechselrichter' || i.typ === 'pv-module'
+  )
+  if (hatPV) {
+    baseTabs.push({ name: 'PV-Anlage', href: '/cockpit/pv-anlage', icon: Sun })
+  }
+
+  // E-Auto
+  const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
+  if (hatEAuto) {
+    baseTabs.push({ name: 'E-Auto', href: '/cockpit/e-auto', icon: Car })
+  }
+
+  // Wärmepumpe
+  const hatWP = investitionen.some(i => i.typ === 'waermepumpe')
+  if (hatWP) {
+    baseTabs.push({ name: 'Wärmepumpe', href: '/cockpit/waermepumpe', icon: Flame })
+  }
+
+  // Speicher (AC-Speicher oder DC-Speicher an Wechselrichter)
+  const hatSpeicher = investitionen.some(i => i.typ === 'speicher')
+  if (hatSpeicher) {
+    baseTabs.push({ name: 'Speicher', href: '/cockpit/speicher', icon: Battery })
+  }
+
+  // Wallbox
+  const hatWallbox = investitionen.some(i => i.typ === 'wallbox')
+  if (hatWallbox) {
+    baseTabs.push({ name: 'Wallbox', href: '/cockpit/wallbox', icon: Plug })
+  }
+
+  // Balkonkraftwerk
+  const hatBKW = investitionen.some(i => i.typ === 'balkonkraftwerk')
+  if (hatBKW) {
+    baseTabs.push({ name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk', icon: Sun })
+  }
+
+  // Sonstiges
+  const hatSonstiges = investitionen.some(i => i.typ === 'sonstiges')
+  if (hatSonstiges) {
+    baseTabs.push({ name: 'Sonstiges', href: '/cockpit/sonstiges', icon: Wrench })
+  }
+
+  return baseTabs
+}
+
 export default function SubTabs() {
   const location = useLocation()
+  const dynamicCockpitTabs = useDynamicCockpitTabs()
 
   // Bestimme welche Tabs angezeigt werden sollen
   const getTabs = () => {
-    if (location.pathname.startsWith('/cockpit')) return cockpitTabs
+    if (location.pathname.startsWith('/cockpit')) return dynamicCockpitTabs
     if (location.pathname.startsWith('/auswertungen')) return auswertungenTabs
     if (location.pathname.startsWith('/einstellungen')) return einstellungenTabs
     return null
@@ -72,7 +124,7 @@ export default function SubTabs() {
   const tabs = getTabs()
 
   // Keine Sub-Tabs für andere Seiten
-  if (!tabs) return null
+  if (!tabs || tabs.length === 0) return null
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
