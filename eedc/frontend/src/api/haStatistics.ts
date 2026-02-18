@@ -36,6 +36,14 @@ interface BackendMappedFeld {
   einheit: string
 }
 
+// Backend Response Format für InvestitionMitFelder
+interface BackendInvestitionMitFelder {
+  investition_id: number
+  bezeichnung: string
+  typ: string
+  felder: BackendMappedFeld[]
+}
+
 // Backend Response Format für AnlagenMonatswertResponse
 interface BackendMonatswerte {
   anlage_id: number
@@ -44,7 +52,7 @@ interface BackendMonatswerte {
   monat: number
   monat_name: string
   basis: BackendMappedFeld[]
-  investitionen: Record<string, BackendMappedFeld[]>  // inv_id -> felder
+  investitionen: BackendInvestitionMitFelder[]  // Liste von Investitionen mit Feldern
 }
 
 export interface InvestitionWerte {
@@ -77,11 +85,11 @@ function convertBackendToMonatswerte(backend: BackendMonatswerte): Monatswerte {
       einheit: b.einheit,
       sensor_id: b.sensor_id
     })),
-    investitionen: Object.entries(backend.investitionen).map(([invId, felder]) => ({
-      investition_id: parseInt(invId),
-      bezeichnung: '', // Backend liefert dies nicht direkt
-      typ: '',
-      felder: felder.map(f => ({
+    investitionen: backend.investitionen.map(inv => ({
+      investition_id: inv.investition_id,
+      bezeichnung: inv.bezeichnung,
+      typ: inv.typ,
+      felder: inv.felder.map(f => ({
         feld: f.feld,
         label: f.feld_label,
         wert: f.differenz,

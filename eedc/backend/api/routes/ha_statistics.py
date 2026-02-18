@@ -47,6 +47,14 @@ class MappedMonatswert(BaseModel):
     einheit: str = "kWh"
 
 
+class InvestitionMitFelder(BaseModel):
+    """Investition mit zugehörigen Feld-Werten."""
+    investition_id: int
+    bezeichnung: str
+    typ: str
+    felder: list[MappedMonatswert]
+
+
 class AnlagenMonatswertResponse(BaseModel):
     """Monatswerte für eine Anlage mit Feld-Zuordnung."""
     anlage_id: int
@@ -55,7 +63,7 @@ class AnlagenMonatswertResponse(BaseModel):
     monat: int
     monat_name: str
     basis: list[MappedMonatswert]
-    investitionen: dict[str, list[MappedMonatswert]]  # investition_id -> felder
+    investitionen: list[InvestitionMitFelder]  # Liste von Investitionen mit Feldern
 
 
 class VerfuegbareMonate(BaseModel):
@@ -145,19 +153,25 @@ def extract_sensor_ids_from_mapping(sensor_mapping: dict) -> list[str]:
 
 def map_sensor_values_to_fields(
     sensor_mapping: dict,
-    sensoren: list[SensorMonatswert]
-) -> tuple[list[MappedMonatswert], dict[str, list[MappedMonatswert]]]:
+    sensoren: list[SensorMonatswert],
+    investitionen_db: dict[int, "Investition"] = None
+) -> tuple[list[MappedMonatswert], list[InvestitionMitFelder]]:
     """
     Ordnet Sensorwerte den EEDC-Feldern zu.
 
+    Args:
+        sensor_mapping: Sensor-Mapping der Anlage
+        sensoren: Sensor-Monatswerte aus HA
+        investitionen_db: Dict von Investition-ID zu Investition-Objekt
+
     Returns:
-        Tuple von (basis_felder, investitions_felder)
+        Tuple von (basis_felder, investitions_liste)
     """
     # Sensor-Werte als Dict für schnellen Zugriff
     sensor_values = {s.sensor_id: s for s in sensoren}
 
     basis_felder: list[MappedMonatswert] = []
-    inv_felder: dict[str, list[MappedMonatswert]] = {}
+    inv_liste: list[InvestitionMitFelder] = []
 
     # Basis-Felder
     basis = sensor_mapping.get("basis", {})
@@ -178,16 +192,17 @@ def map_sensor_values_to_fields(
 
     # Investitions-Felder
     investitionen = sensor_mapping.get("investitionen", {})
-    for inv_id, inv_config in investitionen.items():
-        felder = inv_config.get("felder", {})
-        inv_felder[inv_id] = []
+    for inv_id_str, inv_config in investitionen.items():
+        inv_id = int(inv_id_str)
+        felder_config = inv_config.get("felder", {})
+        felder: list[MappedMonatswert] = []
 
-        for feld, config in felder.items():
+        for feld, config in felder_config.items():
             if config and config.get("strategie") == "sensor":
                 sensor_id = config.get("sensor_id")
                 if sensor_id and sensor_id in sensor_values:
                     sv = sensor_values[sensor_id]
-                    inv_felder[inv_id].append(MappedMonatswert(
+                    felder.append(MappedMonatswert(
                         feld=feld,
                         feld_label=FELD_LABELS.get(feld, feld),
                         sensor_id=sensor_id,
@@ -197,7 +212,23 @@ def map_sensor_values_to_fields(
                         einheit=sv.einheit
                     ))
 
-    return basis_felder, inv_felder
+        # Investitions-Metadaten aus DB holen
+        bezeichnung = f"Investition {inv_id}"
+        typ = ""
+        if investitionen_db and inv_id in investitionen_db:
+            inv = investitionen_db[inv_id]
+            bezeichnung = inv.bezeichnung or bezeichnung
+            typ = inv.typ or ""
+
+        if felder:  # Nur hinzufügen wenn Felder vorhanden
+            inv_liste.append(InvestitionMitFelder(
+                investition_id=inv_id,
+                bezeichnung=bezeichnung,
+                typ=typ,
+                felder=felder
+            ))
+
+    return basis_felder, inv_liste
 
 
 # =============================================================================
@@ -265,6 +296,12 @@ async def get_monatswerte(
             detail="Keine Sensor-Zuordnungen mit Strategie 'sensor' gefunden."
         )
 
+    # Investitionen für Metadaten laden
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    investitionen_db = {inv.id: inv for inv in inv_result.scalars().all()}
+
     # Werte aus HA-DB holen
     try:
         response = service.get_monatswerte(sensor_ids, jahr, monat)
@@ -272,9 +309,10 @@ async def get_monatswerte(
         raise HTTPException(status_code=500, detail=f"Fehler bei DB-Abfrage: {e}")
 
     # Auf EEDC-Felder mappen
-    basis_felder, inv_felder = map_sensor_values_to_fields(
+    basis_felder, inv_liste = map_sensor_values_to_fields(
         anlage.sensor_mapping,
-        response.sensoren
+        response.sensoren,
+        investitionen_db
     )
 
     return AnlagenMonatswertResponse(
@@ -284,7 +322,7 @@ async def get_monatswerte(
         monat=monat,
         monat_name=response.monat_name,
         basis=basis_felder,
-        investitionen=inv_felder
+        investitionen=inv_liste
     )
 
 
@@ -381,6 +419,12 @@ async def get_alle_monatswerte(
             detail="Keine Sensor-Zuordnungen mit Strategie 'sensor' gefunden."
         )
 
+    # Investitionen für Metadaten laden
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    investitionen_db = {inv.id: inv for inv in inv_result.scalars().all()}
+
     # Ab-Datum berechnen
     ab_datum = None
     if ab_jahr:
@@ -394,9 +438,10 @@ async def get_alle_monatswerte(
     # Auf EEDC-Felder mappen
     ergebnisse = []
     for raw in raw_responses:
-        basis_felder, inv_felder = map_sensor_values_to_fields(
+        basis_felder, inv_liste = map_sensor_values_to_fields(
             anlage.sensor_mapping,
-            raw.sensoren
+            raw.sensoren,
+            investitionen_db
         )
 
         ergebnisse.append(AnlagenMonatswertResponse(
@@ -406,7 +451,7 @@ async def get_alle_monatswerte(
             monat=raw.monat,
             monat_name=raw.monat_name,
             basis=basis_felder,
-            investitionen=inv_felder
+            investitionen=inv_liste
         ))
 
     return ergebnisse
