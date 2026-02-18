@@ -145,12 +145,12 @@ async def get_solar_prognose_endpoint(
             detail="Keine PV-Module oder Balkonkraftwerke konfiguriert."
         )
 
-    # System-Verluste aus PVGIS laden (falls vorhanden)
+    # System-Verluste aus PVGIS laden (mit limit(1) falls mehrere aktiv)
     result = await db.execute(
         select(PVGISPrognose).where(
             PVGISPrognose.anlage_id == anlage_id,
             PVGISPrognose.ist_aktiv == True
-        )
+        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
     )
     pvgis = result.scalar_one_or_none()
     system_losses = (

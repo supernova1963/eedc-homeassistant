@@ -456,11 +456,13 @@ async def get_prognose_vs_ist(
 
     Berechnet Performance-Ratio und Abweichungen pro Monat.
     """
-    # Aktive PVGIS-Prognose laden
+    # Aktive PVGIS-Prognose laden (mit limit(1) falls mehrere aktiv)
     prognose_result = await db.execute(
         select(PVGISPrognoseModel)
         .where(PVGISPrognoseModel.anlage_id == anlage_id)
         .where(PVGISPrognoseModel.ist_aktiv == True)
+        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
+        .limit(1)
     )
     prognose = prognose_result.scalar_one_or_none()
 

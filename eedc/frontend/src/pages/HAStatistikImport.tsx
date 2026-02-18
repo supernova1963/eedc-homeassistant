@@ -45,8 +45,9 @@ export default function HAStatistikImport() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  const [ueberschreibenErlauben, setUeberschreibenErlauben] = useState(false)
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
+  // Ausgewählte Monate für Import: Map von "jahr-monat" -> boolean
+  const [selectedMonths, setSelectedMonths] = useState<Map<string, boolean>>(new Map())
 
   // Anlagen laden
   useEffect(() => {
@@ -93,10 +94,20 @@ export default function HAStatistikImport() {
     setLoadingVorschau(true)
     setError(null)
     setVorschau(null)
+    setSelectedMonths(new Map())
 
     try {
       const data = await haStatisticsApi.getImportVorschau(selectedAnlage)
       setVorschau(data)
+
+      // Initialisiere Auswahl: "importieren" und "konflikt" sind standardmäßig ausgewählt
+      const initialSelection = new Map<string, boolean>()
+      data.monate.forEach(m => {
+        const key = `${m.jahr}-${m.monat}`
+        // Standardmäßig ausgewählt wenn importierbar oder Konflikt
+        initialSelection.set(key, m.aktion === 'importieren' || m.aktion === 'konflikt')
+      })
+      setSelectedMonths(initialSelection)
     } catch (e) {
       setError('Fehler beim Laden der Vorschau')
       console.error(e)
@@ -105,9 +116,36 @@ export default function HAStatistikImport() {
     }
   }
 
+  // Monat auswählen/abwählen
+  const toggleMonthSelection = (jahr: number, monat: number) => {
+    const key = `${jahr}-${monat}`
+    const newSelection = new Map(selectedMonths)
+    newSelection.set(key, !newSelection.get(key))
+    setSelectedMonths(newSelection)
+  }
+
+  // Berechne Anzahl ausgewählter Monate
+  const selectedCount = vorschau?.monate.filter(m => {
+    const key = `${m.jahr}-${m.monat}`
+    return selectedMonths.get(key) && m.aktion !== 'ueberspringen'
+  }).length || 0
+
   // Import durchführen
   const handleImport = async () => {
     if (!selectedAnlage || !vorschau) return
+
+    // Nur ausgewählte Monate importieren
+    const ausgewaehlte = vorschau.monate
+      .filter(m => {
+        const key = `${m.jahr}-${m.monat}`
+        return selectedMonths.get(key) && m.aktion !== 'ueberspringen'
+      })
+      .map(m => ({ jahr: m.jahr, monat: m.monat }))
+
+    if (ausgewaehlte.length === 0) {
+      setError('Keine Monate zum Import ausgewählt')
+      return
+    }
 
     setImporting(true)
     setError(null)
@@ -115,7 +153,8 @@ export default function HAStatistikImport() {
 
     try {
       const result = await haStatisticsApi.importieren(selectedAnlage, {
-        ueberschreiben_erlauben: ueberschreibenErlauben,
+        ueberschreiben_erlauben: true, // Ausgewählte Konflikte sollen überschrieben werden
+        ausgewaehlte_monate: ausgewaehlte,
       })
 
       if (result.success) {
@@ -307,48 +346,33 @@ export default function HAStatistikImport() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <StatBox
                   label="Verfügbare Monate"
-                  value={vorschau.verfuegbare_monate}
+                  value={vorschau.anzahl_monate}
                   color="blue"
                 />
                 <StatBox
                   label="Zum Import"
-                  value={vorschau.zum_import}
+                  value={vorschau.anzahl_importieren}
                   color="green"
                 />
                 <StatBox
                   label="Konflikte"
-                  value={vorschau.konflikte}
+                  value={vorschau.anzahl_konflikte}
                   color="amber"
                 />
                 <StatBox
                   label="Übersprungen"
-                  value={vorschau.uebersprungen}
+                  value={vorschau.anzahl_ueberspringen}
                   color="gray"
                 />
               </div>
 
-              {/* Optionen */}
-              {vorschau.konflikte > 0 && (
-                <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={ueberschreibenErlauben}
-                      onChange={(e) => setUeberschreibenErlauben(e.target.checked)}
-                      className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
-                    />
-                    <div>
-                      <span className="font-medium text-amber-800 dark:text-amber-200">
-                        Vorhandene Daten überschreiben
-                      </span>
-                      <p className="text-sm text-amber-600 dark:text-amber-400">
-                        {vorschau.konflikte} Monate haben bereits manuell erfasste Werte.
-                        Diese werden bei aktivierter Option überschrieben.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              )}
+              {/* Hinweis zur Auswahl */}
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Hinweis:</strong> Wählen Sie die Monate aus, die importiert werden sollen.
+                  Bei Konflikten (gelb markiert) werden die vorhandenen Werte mit den HA-Statistik-Werten überschrieben.
+                </p>
+              </div>
 
               {/* Monatsliste */}
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-6">
@@ -361,7 +385,8 @@ export default function HAStatistikImport() {
                       onToggle={() => toggleMonth(`${monat.jahr}-${monat.monat}`)}
                       getAktionIcon={getAktionIcon}
                       getAktionBadge={getAktionBadge}
-                      ueberschreibenErlauben={ueberschreibenErlauben}
+                      selected={selectedMonths.get(`${monat.jahr}-${monat.monat}`) || false}
+                      onSelectionChange={() => toggleMonthSelection(monat.jahr, monat.monat)}
                     />
                   ))}
                 </div>
@@ -371,7 +396,7 @@ export default function HAStatistikImport() {
               <div className="flex justify-end">
                 <button
                   onClick={handleImport}
-                  disabled={importing || vorschau.zum_import === 0}
+                  disabled={importing || selectedCount === 0}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 font-medium"
                 >
                   {importing ? (
@@ -382,7 +407,7 @@ export default function HAStatistikImport() {
                   ) : (
                     <>
                       <Download className="w-5 h-5" />
-                      {vorschau.zum_import + (ueberschreibenErlauben ? vorschau.konflikte : 0)} Monate importieren
+                      {selectedCount} Monate importieren
                     </>
                   )}
                 </button>
@@ -445,49 +470,69 @@ function MonatRow({
   onToggle,
   getAktionIcon,
   getAktionBadge,
-  ueberschreibenErlauben,
+  selected,
+  onSelectionChange,
 }: {
   monat: MonatImportStatus
   expanded: boolean
   onToggle: () => void
   getAktionIcon: (aktion: string) => React.ReactNode
   getAktionBadge: (aktion: string) => React.ReactNode
-  ueberschreibenErlauben: boolean
+  selected: boolean
+  onSelectionChange: () => void
 }) {
-  // Bei Konflikten: Zeige "überschreiben" wenn erlaubt, sonst "konflikt"
-  const effektiveAktion = monat.aktion === 'konflikt' && ueberschreibenErlauben
-    ? 'ueberschreiben'
-    : monat.aktion
+  // Kann dieser Monat ausgewählt werden?
+  const canSelect = monat.aktion !== 'ueberspringen'
 
   const hasDetails = Object.keys(monat.ha_werte).length > 0 ||
     (monat.vorhandene_werte && Object.keys(monat.vorhandene_werte).length > 0)
 
   return (
     <div className="border-b border-gray-100 dark:border-gray-700 last:border-b-0">
-      <button
-        onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          {hasDetails ? (
-            expanded ? (
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            )
+      <div className="flex items-center">
+        {/* Checkbox */}
+        <div className="px-3 py-3">
+          {canSelect ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => {
+                e.stopPropagation()
+                onSelectionChange()
+              }}
+              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
           ) : (
-            <div className="w-4" />
+            <div className="w-4 h-4" />
           )}
-          <Calendar className="w-4 h-4 text-gray-400" />
-          <span className="font-medium text-gray-900 dark:text-white">
-            {monat.monat_name} {monat.jahr}
-          </span>
         </div>
-        <div className="flex items-center gap-3">
-          {getAktionIcon(effektiveAktion)}
-          {getAktionBadge(effektiveAktion)}
-        </div>
-      </button>
+
+        {/* Rest der Zeile */}
+        <button
+          onClick={onToggle}
+          className="flex-1 px-2 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            {hasDetails ? (
+              expanded ? (
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              )
+            ) : (
+              <div className="w-4" />
+            )}
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <span className="font-medium text-gray-900 dark:text-white">
+              {monat.monat_name} {monat.jahr}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {getAktionIcon(monat.aktion)}
+            {getAktionBadge(monat.aktion)}
+          </div>
+        </button>
+      </div>
 
       {expanded && hasDetails && (
         <div className="px-4 pb-4 pt-2 bg-gray-50 dark:bg-gray-700/30">
@@ -521,7 +566,7 @@ function MonatRow({
           {monat.vorhandene_werte && Object.keys(monat.vorhandene_werte).length > 0 && (
             <div>
               <h4 className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase mb-2">
-                Vorhandene Werte (werden {ueberschreibenErlauben ? 'überschrieben' : 'beibehalten'})
+                Vorhandene Werte (werden {selected ? 'überschrieben' : 'beibehalten'})
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {Object.entries(monat.vorhandene_werte).map(([key, value]) => (

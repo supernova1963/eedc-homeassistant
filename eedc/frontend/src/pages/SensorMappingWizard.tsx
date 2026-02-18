@@ -332,7 +332,8 @@ export default function SensorMappingWizard() {
       const monat = now.getMonth() + 1
 
       const result = await haStatisticsApi.getMonatsanfangWerte(effectiveAnlageId, jahr, monat)
-      const feldCount = Object.keys(result.werte).length
+      const startwerte = result.startwerte || {}
+      const feldCount = Object.keys(startwerte).length
 
       if (feldCount > 0) {
         // Werte wurden geladen, jetzt an MQTT senden
@@ -345,7 +346,7 @@ export default function SensorMappingWizard() {
       } else {
         setInitResult({
           success: false,
-          message: 'Keine Daten in HA-Statistik für diesen Monat gefunden',
+          message: 'Keine Daten in HA-Statistik für diesen Monat gefunden. Möglicherweise sind noch keine Langzeit-Statistiken für die konfigurierten Sensoren vorhanden.',
           updated_fields: 0,
         })
       }

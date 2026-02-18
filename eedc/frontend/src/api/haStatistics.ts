@@ -60,10 +60,10 @@ export interface AlleMonatswerte {
 
 export interface MonatsanfangWerte {
   anlage_id: number
+  anlage_name: string
   jahr: number
   monat: number
-  werte: Record<string, number>
-  timestamp: string
+  startwerte: Record<string, number>
 }
 
 export type ImportAktion = 'importieren' | 'ueberspringen' | 'ueberschreiben' | 'konflikt'
@@ -81,10 +81,10 @@ export interface MonatImportStatus {
 export interface ImportVorschau {
   anlage_id: number
   anlage_name: string
-  verfuegbare_monate: number
-  zum_import: number
-  konflikte: number
-  uebersprungen: number
+  anzahl_monate: number
+  anzahl_importieren: number
+  anzahl_konflikte: number
+  anzahl_ueberspringen: number
   monate: MonatImportStatus[]
 }
 

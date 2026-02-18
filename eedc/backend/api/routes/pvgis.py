@@ -668,6 +668,8 @@ async def get_aktive_prognose(
         select(PVGISPrognoseModel)
         .where(PVGISPrognoseModel.anlage_id == anlage_id)
         .where(PVGISPrognoseModel.ist_aktiv == True)
+        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
+        .limit(1)
     )
     prognose = result.scalar_one_or_none()
 

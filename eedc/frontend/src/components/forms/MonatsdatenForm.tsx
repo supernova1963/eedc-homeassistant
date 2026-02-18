@@ -15,6 +15,19 @@ interface MonatsdatenFormProps {
   anlageId: number
   onSubmit: (data: MonatsdatenSubmitData) => Promise<void>
   onCancel: () => void
+  /** Vorausgefüllte Werte aus HA-Statistik */
+  haVorausfuellung?: {
+    jahr: number
+    monat: number
+    monat_name: string
+    basis: Array<{ feld: string; wert: number | null; sensor_id?: string }>
+    investitionen: Array<{
+      investition_id: number
+      bezeichnung: string
+      typ: string
+      felder: Array<{ feld: string; wert: number | null; sensor_id?: string }>
+    }>
+  } | null
 }
 
 export interface MonatsdatenSubmitData {
@@ -86,7 +99,7 @@ const monatOptions = [
   { value: '12', label: 'Dezember' },
 ]
 
-export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel }: MonatsdatenFormProps) {
+export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung }: MonatsdatenFormProps) {
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
 
@@ -110,12 +123,19 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const hatBalkonkraftwerk = aktiveInvestitionen.some(i => i.typ === 'balkonkraftwerk')
   const hatSonstiges = aktiveInvestitionen.some(i => i.typ === 'sonstiges')
 
+  // Hilfsfunktion um HA-Basiswert zu finden
+  const getHaBasisWert = (feld: string): string => {
+    if (!haVorausfuellung) return ''
+    const found = haVorausfuellung.basis.find(b => b.feld === feld)
+    return found?.wert !== null && found?.wert !== undefined ? found.wert.toString() : ''
+  }
+
   // Basis-Formulardaten
   const [formData, setFormData] = useState({
-    jahr: monatsdaten?.jahr?.toString() || currentYear.toString(),
-    monat: monatsdaten?.monat?.toString() || currentMonth.toString(),
-    einspeisung_kwh: monatsdaten?.einspeisung_kwh?.toString() || '',
-    netzbezug_kwh: monatsdaten?.netzbezug_kwh?.toString() || '',
+    jahr: haVorausfuellung?.jahr?.toString() || monatsdaten?.jahr?.toString() || currentYear.toString(),
+    monat: haVorausfuellung?.monat?.toString() || monatsdaten?.monat?.toString() || currentMonth.toString(),
+    einspeisung_kwh: getHaBasisWert('einspeisung') || monatsdaten?.einspeisung_kwh?.toString() || '',
+    netzbezug_kwh: getHaBasisWert('netzbezug') || monatsdaten?.netzbezug_kwh?.toString() || '',
     pv_erzeugung_kwh: monatsdaten?.pv_erzeugung_kwh?.toString() || '',
     batterie_ladung_kwh: monatsdaten?.batterie_ladung_kwh?.toString() || '',
     batterie_entladung_kwh: monatsdaten?.batterie_entladung_kwh?.toString() || '',
@@ -297,11 +317,50 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         }
       }
 
+      // =================================================================
+      // HA-Vorausfüllung: Werte aus HA-Statistik einfügen
+      // =================================================================
+      if (haVorausfuellung?.investitionen) {
+        haVorausfuellung.investitionen.forEach(haInv => {
+          const invIdStr = String(haInv.investition_id)
+          if (initial[invIdStr]) {
+            haInv.felder.forEach(({ feld, wert }) => {
+              if (wert !== null && wert !== undefined) {
+                // Direkte Feldzuordnung
+                if (initial[invIdStr][feld] !== undefined) {
+                  initial[invIdStr][feld] = wert.toString()
+                }
+                // Mapping für verschiedene Feldnamen
+                if (feld === 'pv_erzeugung_kwh' && initial[invIdStr]['pv_erzeugung_kwh'] !== undefined) {
+                  initial[invIdStr]['pv_erzeugung_kwh'] = wert.toString()
+                }
+                if (feld === 'ladung_kwh' && initial[invIdStr]['ladung_kwh'] !== undefined) {
+                  initial[invIdStr]['ladung_kwh'] = wert.toString()
+                }
+                if (feld === 'entladung_kwh' && initial[invIdStr]['entladung_kwh'] !== undefined) {
+                  initial[invIdStr]['entladung_kwh'] = wert.toString()
+                }
+                if (feld === 'ladung_pv_kwh' && initial[invIdStr]['ladung_pv_kwh'] !== undefined) {
+                  initial[invIdStr]['ladung_pv_kwh'] = wert.toString()
+                }
+                if (feld === 'ladung_netz_kwh' && initial[invIdStr]['ladung_netz_kwh'] !== undefined) {
+                  initial[invIdStr]['ladung_netz_kwh'] = wert.toString()
+                }
+                if (feld === 'km_gefahren' && initial[invIdStr]['km_gefahren'] !== undefined) {
+                  initial[invIdStr]['km_gefahren'] = wert.toString()
+                }
+              }
+            })
+          }
+        })
+        console.info('HA-Vorausfüllung: Investitionswerte aus HA-Statistik eingefügt')
+      }
+
       setInvestitionsDaten(initial)
     }
 
     initializeAndLoad()
-  }, [aktiveInvestitionen, monatsdaten?.jahr, monatsdaten?.monat, anlageId])
+  }, [aktiveInvestitionen, monatsdaten?.jahr, monatsdaten?.monat, anlageId, haVorausfuellung])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -505,6 +564,14 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <Alert type="error">{error}</Alert>}
 
+      {/* HA-Vorausfüllung Hinweis */}
+      {haVorausfuellung && (
+        <Alert type="info">
+          Die Werte wurden aus der Home Assistant Langzeitstatistik geladen.
+          Bitte prüfen Sie die Daten und ergänzen Sie fehlende Werte vor dem Speichern.
+        </Alert>
+      )}
+
       {/* Zeitraum */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Zeitraum</h3>
@@ -518,7 +585,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             value={formData.jahr}
             onChange={handleChange}
             required
-            disabled={!!monatsdaten}
+            disabled={!!monatsdaten || !!haVorausfuellung}
           />
           <Select
             label="Monat"
@@ -527,7 +594,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onChange={handleChange}
             options={monatOptions}
             required
-            disabled={!!monatsdaten}
+            disabled={!!monatsdaten || !!haVorausfuellung}
           />
         </div>
       </div>

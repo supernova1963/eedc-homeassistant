@@ -335,12 +335,12 @@ async def get_kurzfrist_prognose(
             detail="Keine PV-Leistung konfiguriert. Bitte PV-Module in Investitionen anlegen."
         )
 
-    # Systemverluste aus PVGIS
+    # Systemverluste aus PVGIS (mit limit(1) falls mehrere aktiv)
     result = await db.execute(
         select(PVGISPrognose).where(
             PVGISPrognose.anlage_id == anlage_id,
             PVGISPrognose.ist_aktiv == True
-        )
+        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
     )
     pvgis = result.scalar_one_or_none()
     system_losses = pvgis.system_losses / 100 if pvgis and pvgis.system_losses else DEFAULT_SYSTEM_LOSSES
@@ -457,12 +457,12 @@ async def get_langfrist_prognose(
     if anlagenleistung_kwp <= 0:
         raise HTTPException(status_code=400, detail="Keine PV-Leistung konfiguriert")
 
-    # PVGIS-Prognose
+    # PVGIS-Prognose (mit limit(1) falls mehrere aktiv)
     result = await db.execute(
         select(PVGISPrognose).where(
             PVGISPrognose.anlage_id == anlage_id,
             PVGISPrognose.ist_aktiv == True
-        )
+        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
     )
     pvgis = result.scalar_one_or_none()
 
@@ -620,12 +620,12 @@ async def get_trend_analyse(
     if anlagenleistung_kwp <= 0:
         anlagenleistung_kwp = anlage.leistung_kwp or 0
 
-    # PVGIS
+    # PVGIS (mit limit(1) falls mehrere aktiv)
     result = await db.execute(
         select(PVGISPrognose).where(
             PVGISPrognose.anlage_id == anlage_id,
             PVGISPrognose.ist_aktiv == True
-        )
+        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
     )
     pvgis = result.scalar_one_or_none()
     pvgis_jahresertrag = pvgis.jahresertrag_kwh if pvgis else 0
@@ -1024,13 +1024,13 @@ async def get_finanz_prognose(
     wp_strom_monat_avg = gesamt_wp_strom / anzahl_monate_hist if waermepumpen else 0
 
     # =====================================================================
-    # PVGIS-PROGNOSE
+    # PVGIS-PROGNOSE (mit limit(1) falls mehrere aktiv)
     # =====================================================================
     result = await db.execute(
         select(PVGISPrognose).where(
             PVGISPrognose.anlage_id == anlage_id,
             PVGISPrognose.ist_aktiv == True
-        )
+        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
     )
     pvgis = result.scalar_one_or_none()
 
