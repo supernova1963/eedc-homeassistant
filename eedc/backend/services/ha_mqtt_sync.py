@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
+from backend.core.database import get_session
 
 
 def _get_mqtt_config_from_env() -> MQTTConfig:
@@ -175,7 +177,15 @@ class HAMqttSyncService:
                 else:
                     errors.append(f"Fehler bei Basis-Sensor {feld}")
 
-        # Investition-Sensoren
+        # Investition-Sensoren - lade Investitionen für die Namen
+        inv_namen: dict[str, str] = {}
+        async with get_session() as session:
+            result = await session.execute(
+                select(Investition).where(Investition.anlage_id == anlage.id)
+            )
+            for inv in result.scalars().all():
+                inv_namen[str(inv.id)] = inv.bezeichnung
+
         investitionen = mapping.get("investitionen", {})
         for inv_id, inv_config in investitionen.items():
             # inv_config hat Struktur {"felder": {...}} - extrahiere die Felder
@@ -183,6 +193,10 @@ class HAMqttSyncService:
                 felder = inv_config.get("felder", inv_config)  # Fallback auf inv_config selbst
             else:
                 felder = {}
+
+            # Investitionsname für eindeutige Entity-Namen
+            inv_name = inv_namen.get(inv_id, f"Inv{inv_id}")
+
             for feld, config in felder.items():
                 if config and config.get("strategie") == "sensor" and config.get("sensor_id"):
                     # Eindeutiger Key mit Investition-ID
@@ -193,6 +207,7 @@ class HAMqttSyncService:
                         feld=feld_key,
                         source_sensor=config["sensor_id"],
                         display_feld=feld,
+                        investition_name=inv_name,
                     )
                     if success:
                         created += 1
@@ -213,6 +228,7 @@ class HAMqttSyncService:
         feld: str,
         source_sensor: str,
         display_feld: Optional[str] = None,
+        investition_name: Optional[str] = None,
     ) -> bool:
         """
         Erstellt ein Sensor-Paar (number + calculated sensor) für ein Feld.
@@ -223,6 +239,7 @@ class HAMqttSyncService:
             feld: EEDC-Feld-Key (kann inv{id}_{feld} sein)
             source_sensor: HA-Quell-Sensor
             display_feld: Optionaler Feld-Name für Display (sonst = feld)
+            investition_name: Name der Investition für eindeutige Entity-Namen
 
         Returns:
             True wenn beide Entities erstellt wurden
@@ -234,13 +251,27 @@ class HAMqttSyncService:
             "icon_monat": "mdi:chart-line",
         })
 
+        # Bei Investitionen: Name der Investition zum Display-Namen hinzufügen
+        # z.B. "BYD HVS 12.8 Ladung" statt nur "Speicher Ladung"
+        if investition_name:
+            # Extrahiere sinnvollen Suffix aus config name
+            # "Speicher Ladung" -> "Ladung", "E-Auto Ladung Netz" -> "Ladung Netz"
+            name_parts = config['name'].split()
+            # Entferne Präfixe wie "Speicher", "E-Auto", "WP"
+            prefixes = ["Speicher", "E-Auto", "WP"]
+            suffix_parts = [p for p in name_parts if p not in prefixes]
+            suffix = " ".join(suffix_parts) if suffix_parts else name_parts[-1]
+            display_name = f"{investition_name} {suffix}"
+        else:
+            display_name = config['name']
+
         start_key = f"mwd_{feld}_start"
         monat_key = f"mwd_{feld}_monat"
 
         # 1. Number Entity für Startwert
         number_ok = await self.mqtt.publish_number_discovery(
             key=start_key,
-            name=f"EEDC {config['name']} Monatsanfang",
+            name=f"EEDC {display_name} Monatsanfang",
             anlage_id=anlage_id,
             anlage_name=anlage_name,
             unit="kWh",
@@ -253,7 +284,7 @@ class HAMqttSyncService:
         # 2. Calculated Sensor für Monatswert
         sensor_ok = await self.mqtt.publish_calculated_sensor(
             key=monat_key,
-            name=f"EEDC {config['name']} Monat",
+            name=f"EEDC {display_name} Monat",
             anlage_id=anlage_id,
             anlage_name=anlage_name,
             source_sensor=source_sensor,

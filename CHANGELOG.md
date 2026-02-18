@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.3] - 2026-02-18
+
+### Behoben
+
+- **MQTT Entity-Namen** enthalten jetzt den Investitionsnamen
+  - Vorher: Doppelte Entities wenn Speicher und Wallbox beide `ladung_kwh` haben
+  - Jetzt: "EEDC BYD HVS 12.8 Ladung Monatsanfang" statt "EEDC Speicher Ladung Monatsanfang"
+  - Eindeutige Namen für jede Investition, keine `_2` Suffixe mehr in HA
+
+### Hinweis
+
+Nach dem Update: EEDC-Gerät in Home Assistant löschen und Sensor-Mapping erneut speichern,
+damit die neuen Entity-Namen erstellt werden.
+
+---
+
 ## [1.1.0-beta.2] - 2026-02-17
 
 ### Behoben
