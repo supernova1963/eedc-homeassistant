@@ -9,10 +9,10 @@ Es stellt Endpoints für Anlagen, Monatsdaten, Investitionen und Auswertungen be
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME
@@ -57,14 +57,17 @@ async def lifespan(app: FastAPI):
 
 
 # FastAPI App erstellen
+# docs_url=None und eigene Route für Swagger UI, da Standard-URLs im HA Ingress-Modus
+# nicht funktionieren (absolute Pfade werden falsch aufgelöst)
 app = FastAPI(
     title=f"{APP_NAME.upper()} API",
     description=f"{APP_FULL_NAME} - API für PV-Anlagen Auswertung",
     version=APP_VERSION,
     lifespan=lifespan,
-    docs_url="/api/docs",      # Swagger UI
-    redoc_url="/api/redoc",    # ReDoc
-    openapi_url="/api/openapi.json"
+    docs_url=None,             # Deaktiviert - eigene Route unten
+    redoc_url=None,            # Deaktiviert - eigene Route unten
+    openapi_url="/api/openapi.json",
+    root_path_in_servers=False
 )
 
 # CORS Middleware (für Development)
@@ -97,6 +100,79 @@ app.include_router(aussichten.router, prefix="/api/aussichten", tags=["Aussichte
 app.include_router(solar_prognose.router, prefix="/api/solar-prognose", tags=["Solar-Prognose"])
 app.include_router(sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"])
 app.include_router(monatsabschluss.router, prefix="/api", tags=["Monatsabschluss"])
+
+
+# =============================================================================
+# API Dokumentation (Custom für HA Ingress-Kompatibilität)
+# =============================================================================
+
+@app.get("/api/docs", include_in_schema=False)
+async def custom_swagger_ui():
+    """
+    Custom Swagger UI mit relativen URLs.
+
+    Standard FastAPI docs verwenden absolute Pfade für openapi.json,
+    was im HA Ingress-Modus nicht funktioniert.
+    Diese Version verwendet relative URLs die überall funktionieren.
+    """
+    return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{APP_NAME.upper()} API - Swagger UI</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <style>
+        html {{ box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }}
+        *, *:before, *:after {{ box-sizing: inherit; }}
+        body {{ margin:0; background: #fafafa; }}
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+        window.onload = function() {{
+            // Relative URL zur openapi.json (funktioniert mit jedem Base-Path)
+            const openApiUrl = './openapi.json';
+
+            window.ui = SwaggerUIBundle({{
+                url: openApiUrl,
+                dom_id: '#swagger-ui',
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIBundle.SwaggerUIStandalonePreset
+                ],
+                layout: "BaseLayout",
+                deepLinking: true
+            }});
+        }};
+    </script>
+</body>
+</html>
+""")
+
+
+@app.get("/api/redoc", include_in_schema=False)
+async def custom_redoc():
+    """
+    Custom ReDoc mit relativen URLs.
+    """
+    return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{APP_NAME.upper()} API - ReDoc</title>
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+    <style>
+        body {{ margin: 0; padding: 0; }}
+    </style>
+</head>
+<body>
+    <redoc spec-url='./openapi.json'></redoc>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+</body>
+</html>
+""")
 
 
 # =============================================================================
