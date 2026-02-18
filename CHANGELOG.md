@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.8] - 2026-02-18
+
+### Hinzugefügt
+
+- **HA-Statistik-Abfrage** - Direkte Abfrage der Home Assistant Langzeitstatistiken
+  - Neuer Service `ha_statistics_service.py` für SQLite-Zugriff auf `/config/home-assistant_v2.db`
+  - API-Endpoints unter `/api/ha-statistics/`:
+    - `GET /status` - Prüft ob HA-Datenbank verfügbar ist
+    - `GET /monatswerte/{anlage_id}/{jahr}/{monat}` - Monatswerte für einen Monat
+    - `GET /verfuegbare-monate/{anlage_id}` - Alle Monate mit Daten
+    - `GET /alle-monatswerte/{anlage_id}` - Bulk-Abfrage aller historischen Monatswerte
+    - `GET /monatsanfang/{anlage_id}/{jahr}/{monat}` - Zählerstände für MQTT-Startwerte
+  - Nutzt die sensor_mapping Zuordnungen um HA-Sensoren auf EEDC-Felder zu mappen
+  - Ermöglicht rückwirkende Befüllung aller Monatsdaten seit Installationsdatum
+
+### Behoben
+
+- **Sensor-Mapping UI** - Importierte Sensoren werden jetzt angezeigt auch wenn HA nicht verfügbar
+  - Zeigt sensor_id mit Hinweis "(nicht verfügbar)" wenn Sensor nicht in lokaler Liste
+
+---
+
 ## [1.1.0-beta.7] - 2026-02-18
 
 ### Behoben

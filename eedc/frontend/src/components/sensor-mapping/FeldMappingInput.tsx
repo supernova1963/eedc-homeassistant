@@ -71,12 +71,22 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
     setSearch('')
   }, [onChange])
 
+  // Zeige ausgewählten Sensor auch wenn er nicht in der Liste ist (z.B. nach Import)
+  const hasValue = value && value.length > 0
+
   return (
     <div className="relative">
-      {value && selectedSensor ? (
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+      {hasValue ? (
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+          selectedSensor
+            ? 'bg-gray-100 dark:bg-gray-700'
+            : 'bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700'
+        }`}>
           <span className="flex-1 text-sm truncate">
-            {selectedSensor.friendly_name || selectedSensor.entity_id}
+            {selectedSensor?.friendly_name || value}
+            {!selectedSensor && (
+              <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">(nicht verfügbar)</span>
+            )}
           </span>
           <button
             onClick={handleClear}

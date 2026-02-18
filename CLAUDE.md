@@ -112,7 +112,8 @@ eedc/
 │   │   ├── monatsdaten.py         # CRUD + Berechnungen
 │   │   ├── investitionen.py       # Parent-Child, ROI (Jahres-Rendite p.a.)
 │   │   ├── sensor_mapping.py      # HA Sensor-Zuordnung (NEU v1.1.0)
-│   │   └── monatsabschluss.py     # Monatsabschluss-Wizard API (NEU v1.1.0)
+│   │   ├── monatsabschluss.py     # Monatsabschluss-Wizard API (NEU v1.1.0)
+│   │   └── ha_statistics.py       # HA DB-Abfrage für Monatswerte (NEU v1.1.0-beta.8)
 │   ├── core/config.py             # APP_VERSION
 │   └── services/
 │       ├── wetter_service.py      # Multi-Provider Wetterdaten
@@ -122,7 +123,8 @@ eedc/
 │       ├── mqtt_client.py         # HA Export + MQTT Auto-Discovery (erweitert v1.1.0)
 │       ├── ha_mqtt_sync.py        # MQTT Sync Service (NEU v1.1.0)
 │       ├── scheduler.py           # Cron-Jobs (NEU v1.1.0)
-│       └── vorschlag_service.py   # Intelligente Vorschläge (NEU v1.1.0)
+│       ├── vorschlag_service.py   # Intelligente Vorschläge (NEU v1.1.0)
+│       └── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v1.1.0-beta.8)
 │
 └── frontend/src/
     ├── pages/
@@ -282,6 +284,13 @@ GET  /api/monatsabschluss/historie/{anlage_id}       # Letzte Abschlüsse
 # Scheduler (NEU v1.1.0)
 GET  /api/scheduler                                  # Scheduler-Status
 POST /api/scheduler/monthly-snapshot                 # Manueller Monatswechsel
+
+# HA Statistics - Direkte DB-Abfrage (NEU v1.1.0-beta.8)
+GET  /api/ha-statistics/status                       # Prüft ob HA-DB verfügbar
+GET  /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}  # Einzelner Monat
+GET  /api/ha-statistics/verfuegbare-monate/{anlage_id}          # Alle Monate mit Daten
+GET  /api/ha-statistics/alle-monatswerte/{anlage_id}            # Bulk: Alle Monatswerte
+GET  /api/ha-statistics/monatsanfang/{anlage_id}/{jahr}/{monat} # Startwerte für MQTT
 ```
 
 ## ROI-Metriken (WICHTIG: Unterschiedliche Bedeutungen!)

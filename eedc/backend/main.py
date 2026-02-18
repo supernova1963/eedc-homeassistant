@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, ha_export, ha_import, pvgis, cockpit, wetter, aussichten, solar_prognose, sensor_mapping, monatsabschluss
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, ha_integration, ha_export, ha_import, pvgis, cockpit, wetter, aussichten, solar_prognose, sensor_mapping, monatsabschluss, ha_statistics
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -100,6 +100,7 @@ app.include_router(aussichten.router, prefix="/api/aussichten", tags=["Aussichte
 app.include_router(solar_prognose.router, prefix="/api/solar-prognose", tags=["Solar-Prognose"])
 app.include_router(sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"])
 app.include_router(monatsabschluss.router, prefix="/api", tags=["Monatsabschluss"])
+app.include_router(ha_statistics.router, prefix="/api/ha-statistics", tags=["HA Statistics"])
 
 
 # =============================================================================
