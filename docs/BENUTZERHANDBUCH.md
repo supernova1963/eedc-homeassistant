@@ -939,22 +939,39 @@ Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der I
 2. **Datenbank-Status prüfen**: Die Seite zeigt ob die HA-Datenbank verfügbar ist
 3. **Anlage auswählen**: Wähle die Anlage für den Import
 4. **Vorschau laden**: Klicke auf "Vorschau laden"
-5. **Konflikte prüfen**:
-   - **Grün (Importieren)**: Neue Monate ohne vorhandene Daten
-   - **Grau (Übersprungen)**: Bereits ausgefüllte Monate (werden nicht überschrieben)
-   - **Amber (Konflikt)**: Monate mit vorhandenen Daten
-6. **Optional**: Aktiviere "Vorhandene Daten überschreiben" wenn du Konflikte überschreiben möchtest
+5. **Monate auswählen**: Jeder Monat hat eine Checkbox zur individuellen Auswahl
+   - **Grün**: Neue Monate ohne vorhandene Daten (standardmäßig ausgewählt)
+   - **Grau**: Bereits ausgefüllte Monate (standardmäßig nicht ausgewählt)
+   - **Amber (Konflikt)**: Monate mit abweichenden HA-Werten
+6. **Individuelle Auswahl**: Aktiviere/Deaktiviere einzelne Monate nach Bedarf
 7. **Import starten**: Klicke auf "X Monate importieren"
 
-### 12.4 Einzelne Monate laden (Monatsabschluss)
+### 12.4 Einzelne Monate laden
 
-Im **Monatsabschluss-Wizard** gibt es einen Button "Werte aus HA-Statistik laden":
+Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 
-1. Gehe zu Einstellungen → Daten → Monatsabschluss
-2. Wähle den gewünschten Monat
-3. Klicke auf "Werte aus HA-Statistik laden"
-4. Die Felder werden automatisch befüllt
-5. Prüfe die Werte und speichere
+#### Option A: Über Monatsdaten-Seite (NEU)
+
+**Pfad**: Einstellungen → Daten → Monatsdaten → "Aus HA laden" Button
+
+1. Klicke auf den Button "Aus HA laden" (neben "Neuer Monat")
+2. Wähle den gewünschten Monat aus der Liste verfügbarer HA-Statistik-Monate
+3. **Bei neuem Monat**: Die Werte werden direkt ins Formular übernommen
+4. **Bei existierendem Monat**: Ein Vergleichs-Modal zeigt die Unterschiede:
+   - Spalte "Vorhanden" zeigt aktuelle Werte in EEDC
+   - Spalte "HA-Statistik" zeigt Werte aus Home Assistant
+   - Spalte "Diff" zeigt die Abweichung (farbcodiert bei >10%)
+   - Wähle "HA-Werte übernehmen" oder "Abbrechen"
+5. Bearbeite die Werte bei Bedarf und speichere
+
+#### Option B: Über Monatsabschluss-Wizard
+
+**Pfad**: Einstellungen → Daten → Monatsabschluss
+
+1. Wähle den gewünschten Monat
+2. Klicke auf "Werte aus HA-Statistik laden"
+3. Die Felder werden automatisch befüllt
+4. Prüfe die Werte und speichere
 
 ### 12.5 Startwerte beim Sensor-Mapping
 
@@ -965,14 +982,16 @@ Beim Speichern des Sensor-Mappings bietet EEDC zwei Optionen für die Startwerte
 
 ### 12.6 Konflikt-Erkennung
 
-Der Import schützt deine manuell erfassten Daten:
+Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
-| Situation | Aktion | Beschreibung |
-|-----------|--------|--------------|
-| Neuer Monat | Importieren | Monat existiert noch nicht in EEDC |
-| Leerer Monat | Importieren | Monatsdaten vorhanden aber alle Felder leer |
-| Ausgefüllter Monat | Übersprungen | Mindestens ein Feld hat einen Wert |
-| Konflikt + Checkbox | Überschreiben | Nur wenn "Überschreiben" aktiviert |
+| Situation | Standard-Auswahl | Beschreibung |
+|-----------|------------------|--------------|
+| Neuer Monat | ✓ Ausgewählt | Monat existiert noch nicht in EEDC |
+| Leerer Monat | ✓ Ausgewählt | Monatsdaten vorhanden aber alle Felder leer |
+| Ausgefüllter Monat | ✗ Nicht ausgewählt | Mindestens ein Feld hat einen Wert |
+| Konflikt | ✗ Nicht ausgewählt | Werte in EEDC weichen von HA ab |
+
+**Hinweis**: Du kannst jeden Monat individuell per Checkbox auswählen oder abwählen.
 
 ---
 

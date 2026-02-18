@@ -72,6 +72,23 @@ Das Volume-Mapping wurde geändert - eine einfache Aktualisierung reicht nicht!
 - **Sensor-Mapping UI** - Importierte Sensoren werden jetzt angezeigt auch wenn HA nicht verfügbar
   - Zeigt sensor_id mit Hinweis "(nicht verfügbar)" wenn Sensor nicht in lokaler Liste
 
+- **PVGIS MultipleResultsFound** - 500-Fehler wenn mehrere aktive PVGIS-Prognosen existierten
+  - Query mit `.order_by().limit(1)` abgesichert in pvgis.py, cockpit.py, aussichten.py, solar_prognose.py
+
+- **SensorMappingWizard Startwerte laden** - "Cannot convert undefined or null to object" Fehler
+  - Interface-Feldnamen korrigiert (`startwerte` statt `werte`) und Null-Safety hinzugefügt
+
+- **HAStatistikImport "NaN Monate importieren"** - Frontend-Interface an Backend-Feldnamen angepasst
+  - `anzahl_monate`, `anzahl_importieren`, `anzahl_konflikte`, `anzahl_ueberspringen` korrekt gemappt
+
+- **HAStatistikImport: Individuelle Monatsauswahl** - Checkbox pro Monat statt globaler Überschreiben-Option
+  - Benutzer können gezielt einzelne Monate zum Import auswählen
+
+- **Monatsdaten: "Aus HA laden" Button** - Direktes Laden einzelner Monate aus HA-Statistik
+  - Modal zur Auswahl von Monat/Jahr aus verfügbaren HA-Statistik-Monaten
+  - Bei existierenden Monaten: Vergleichs-Modal mit Diff-Anzeige vor dem Überschreiben
+  - Farbcodierte Hervorhebung signifikanter Unterschiede (>10%)
+
 ---
 
 ## [1.1.0-beta.8] - 2026-02-18
