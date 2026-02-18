@@ -55,6 +55,7 @@ schema:
 # Persistenter Speicher
 map:
   - data:rw
+  - config:ro  # Lesezugriff auf HA-Config für statistics Datenbank-Abfrage
 
 # Netzwerk (nur intern via Ingress)
 ports:
