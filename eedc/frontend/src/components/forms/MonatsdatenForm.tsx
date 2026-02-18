@@ -558,17 +558,36 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             placeholder="z.B. 120"
             required
           />
-          <Input
-            label={(hatPVModule || hatWechselrichter) ? "PV-Erzeugung (Summe oder manuell)" : "PV-Erzeugung (optional)"}
-            name="pv_erzeugung_kwh"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.pv_erzeugung_kwh}
-            onChange={handleChange}
-            placeholder={berechneteWerte.pvErzeugung > 0 ? `Summe: ${berechneteWerte.pvErzeugung.toFixed(1)}` : "z.B. 800"}
-            hint={berechneteWerte.pvErzeugung > 0 ? `Aus ${hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: ${berechneteWerte.pvErzeugung.toFixed(1)} kWh` : "Wird berechnet wenn leer"}
-          />
+          {/* PV-Erzeugung: readonly wenn PV-Module mit Werten vorhanden, sonst editierbar (Legacy) */}
+          {(hatPVModule || hatWechselrichter) && berechneteWerte.pvErzeugung > 0 ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                PV-Erzeugung (berechnet)
+              </label>
+              <input
+                type="text"
+                value={`${berechneteWerte.pvErzeugung.toFixed(1)} kWh`}
+                readOnly
+                disabled
+                className="input bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Aus {hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: {berechneteWerte.pvErzeugung.toFixed(1)} kWh
+              </p>
+            </div>
+          ) : (
+            <Input
+              label={hatPVModule || hatWechselrichter ? "PV-Erzeugung (aus Modulen unten)" : "PV-Erzeugung (optional)"}
+              name="pv_erzeugung_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.pv_erzeugung_kwh}
+              onChange={handleChange}
+              placeholder="z.B. 800"
+              hint={hatPVModule || hatWechselrichter ? "Wird aus PV-Modulen berechnet" : "Manuell eingeben wenn keine PV-Module definiert"}
+            />
+          )}
         </div>
       </div>
 
@@ -750,7 +769,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             label="Sonnenstunden"
             name="sonnenstunden"
             type="number"
-            step="1"
+            step="0.1"
             min="0"
             value={formData.sonnenstunden}
             onChange={handleChange}

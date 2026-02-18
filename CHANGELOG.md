@@ -17,6 +17,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - `sonderkosten_euro` / `sonderkosten_beschreibung` - Manuelle Sonderkosten
   - Rückwärtskompatibel: Export-Version 1.0 wird weiterhin importiert
 
+### Geändert
+
+- **Monatsdaten-Formular verbessert:**
+  - PV-Erzeugung ist jetzt readonly wenn PV-Module mit Werten vorhanden sind (Summe wird automatisch berechnet)
+  - Sonnenstunden akzeptiert jetzt Dezimalwerte (step=0.1 statt step=1) - behebt Validierungsfehler bei Auto-Fill
+
 ### Hinweis
 
 Beim Import von Anlagen mit Sensor-Mapping:
