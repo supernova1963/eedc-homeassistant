@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 1.1.0-beta.1** | Stand: Februar 2026
+**Version 1.1.0-beta.5** | Stand: Februar 2026
 
 ---
 
@@ -577,18 +577,25 @@ file: [CSV-Datei]
 - Negative Werte werden blockiert
 - Plausibilitätswarnungen (Sonnenstunden > 400h, Globalstrahlung > 250)
 
-#### JSON Export (NEU in beta.8)
+#### JSON Export/Import (Export-Version 1.1)
 
 ```
-GET /api/import/export/{anlage_id}/full
+GET  /api/import/export/{anlage_id}/full    # Export
+POST /api/import/json                        # Import
 ```
 
-Exportiert vollständige Anlage mit allen verknüpften Daten:
-- Anlage-Stammdaten (inkl. versorger_daten, mastr_id)
+**Export** - Vollständige Anlage mit allen verknüpften Daten:
+- Anlage-Stammdaten (inkl. versorger_daten, mastr_id, wetter_provider)
+- **sensor_mapping** (NEU in beta.5) - HA Sensor-Zuordnungen
 - Strompreise
 - Investitionen (hierarchisch mit Children)
-- Monatsdaten mit InvestitionMonatsdaten
+- Monatsdaten mit InvestitionMonatsdaten (inkl. durchschnittstemperatur, sonderkosten)
 - PVGIS-Prognosen
+
+**Import** - Restore aus JSON-Export:
+- Erstellt neue Anlage (oder überschreibt bei gleichem Namen)
+- sensor_mapping wird importiert, aber `mqtt_setup_complete=false`
+- Rückwärtskompatibel mit Export-Version 1.0
 ### Request/Response Pattern
 
 ```python

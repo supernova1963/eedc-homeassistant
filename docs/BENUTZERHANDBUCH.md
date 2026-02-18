@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 1.1.0-beta.4** | Stand: Februar 2026
+**Version 1.1.0-beta.5** | Stand: Februar 2026
 
 ---
 
@@ -701,12 +701,37 @@ Der Import prüft deine Daten auf Konsistenz:
 - Redundante Legacy-Spalten (gleiche Werte wie Komponenten)
 - Unplausible Wetterwerte (Sonnenstunden > 400h/Monat)
 
-#### JSON-Export für Support
+#### JSON-Export für Backup & Support
 
 In der Anlagen-Übersicht findest du einen Download-Button (blaues Download-Icon) für den vollständigen JSON-Export:
-- Enthält alle Anlage-Daten, Investitionen, Monatsdaten, Strompreise
-- Nützlich für Support-Anfragen oder Backup
-- Hierarchische Struktur mit allen verknüpften Daten
+
+**Enthaltene Daten (Export-Version 1.1):**
+- Anlage-Stammdaten (inkl. MaStR-ID, Versorger-Daten)
+- Sensor-Mapping für HA-Integration (NEU in beta.5)
+- Alle Investitionen mit Monatsdaten
+- Strompreise
+- PVGIS-Prognosen
+- Monatsdaten inkl. Wetterdaten und Sonderkosten
+
+**Anwendungsfälle:**
+- **Backup**: Vollständige Sicherung aller Daten
+- **Restore**: Import auf anderem System oder nach Neuinstallation
+- **Support**: Für Fehleranalyse und Hilfe
+
+#### JSON-Import (Restore)
+
+**Pfad**: Einstellungen → Import → JSON-Datei
+
+1. Wähle eine zuvor exportierte JSON-Datei
+2. Optional: "Überschreiben" aktivieren, um existierende Anlage zu ersetzen
+3. Klicke auf "Importieren"
+
+**Hinweise zum Import:**
+- Bei gleichem Anlagennamen wird automatisch ein Suffix hinzugefügt (außer bei "Überschreiben")
+- **Sensor-Mapping**: Wird importiert, aber MQTT-Setup muss erneut durchgeführt werden
+  - Grund: Investitions-IDs ändern sich beim Import
+  - Gehe nach dem Import zu Einstellungen → Home Assistant → Sensor-Zuordnung und speichere erneut
+- Export-Version 1.0 (ohne sensor_mapping) wird weiterhin unterstützt
 
 #### PDF-Dokumentation (NEU in beta.12)
 

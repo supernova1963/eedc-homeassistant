@@ -42,8 +42,8 @@ class InvestitionMonatsdatenExport(BaseModel):
     verbrauch_daten: Optional[dict] = None
     einsparung_monat_euro: Optional[float] = None
     co2_einsparung_kg: Optional[float] = None
-    sonderkosten_euro: Optional[float] = None
-    sonderkosten_notiz: Optional[str] = None
+    # Hinweis: sonderkosten_euro/notiz existieren im Model nicht,
+    # wurden hier fälschlicherweise definiert - entfernt
 
 
 class InvestitionExport(BaseModel):
@@ -84,6 +84,9 @@ class MonatsdatenExport(BaseModel):
     netzbezug_kwh: Optional[float] = None
     globalstrahlung_kwh_m2: Optional[float] = None
     sonnenstunden: Optional[float] = None
+    durchschnittstemperatur: Optional[float] = None  # NEU
+    sonderkosten_euro: Optional[float] = None  # NEU
+    sonderkosten_beschreibung: Optional[str] = None  # NEU
     datenquelle: Optional[str] = None
     notizen: Optional[str] = None
 
@@ -123,11 +126,12 @@ class AnlageExport(BaseModel):
     mastr_id: Optional[str] = None
     versorger_daten: Optional[dict] = None
     wetter_provider: Optional[str] = None
+    sensor_mapping: Optional[dict] = None  # NEU: HA Sensor-Zuordnungen
 
 
 class FullAnlageExport(BaseModel):
     """Vollständiger Export einer Anlage mit allen verknüpften Daten."""
-    export_version: str = "1.0"
+    export_version: str = "1.1"  # v1.1: sensor_mapping, durchschnittstemperatur, sonderkosten
     export_datum: datetime
     eedc_version: str
     anlage: AnlageExport
@@ -218,6 +222,7 @@ async def export_anlage_full(
         mastr_id=anlage.mastr_id,
         versorger_daten=anlage.versorger_daten,
         wetter_provider=anlage.wetter_provider,
+        sensor_mapping=anlage.sensor_mapping,  # NEU: HA Sensor-Zuordnungen
     )
 
     # Strompreise laden
@@ -323,6 +328,9 @@ async def export_anlage_full(
             netzbezug_kwh=md.netzbezug_kwh,
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
             sonnenstunden=md.sonnenstunden,
+            durchschnittstemperatur=md.durchschnittstemperatur,  # NEU
+            sonderkosten_euro=md.sonderkosten_euro,  # NEU
+            sonderkosten_beschreibung=md.sonderkosten_beschreibung,  # NEU
             datenquelle=md.datenquelle,
             notizen=md.notizen,
         )
@@ -426,13 +434,15 @@ async def import_json(
             fehler=[f"Fehler beim Lesen der Datei: {e}"]
         )
 
-    # 2. Version prüfen
+    # 2. Version prüfen (1.0 und 1.1 werden unterstützt)
     export_version = data.get("export_version")
-    if export_version != "1.0":
+    if export_version not in ["1.0", "1.1"]:
         return JSONImportResult(
             erfolg=False,
-            fehler=[f"Nicht unterstützte Export-Version: {export_version}. Erwartet: 1.0"]
+            fehler=[f"Nicht unterstützte Export-Version: {export_version}. Unterstützt: 1.0, 1.1"]
         )
+    if export_version == "1.0":
+        warnungen.append("Import von Export-Version 1.0 - sensor_mapping nicht enthalten.")
 
     # 3. Pflichtfelder prüfen
     anlage_data = data.get("anlage")
@@ -470,6 +480,17 @@ async def import_json(
             anlage_name = original_name
 
         # 5. Anlage erstellen
+        # Sensor-Mapping: mqtt_setup_complete auf False setzen, da IDs nicht übertragbar
+        imported_sensor_mapping = anlage_data.get("sensor_mapping")
+        if imported_sensor_mapping:
+            # MQTT-Setup muss nach Import neu durchgeführt werden
+            imported_sensor_mapping["mqtt_setup_complete"] = False
+            imported_sensor_mapping["mqtt_setup_timestamp"] = None
+            warnungen.append(
+                "Sensor-Mapping importiert. MQTT-Setup muss nach Import erneut durchgeführt werden "
+                "(Einstellungen → Home Assistant → Sensor-Zuordnung speichern)."
+            )
+
         new_anlage = Anlage(
             anlagenname=anlage_name,
             leistung_kwp=anlage_data.get("leistung_kwp", 0),
@@ -484,6 +505,7 @@ async def import_json(
             mastr_id=anlage_data.get("mastr_id"),
             versorger_daten=anlage_data.get("versorger_daten"),
             wetter_provider=anlage_data.get("wetter_provider", "auto"),
+            sensor_mapping=imported_sensor_mapping,  # NEU: HA Sensor-Zuordnungen
         )
         db.add(new_anlage)
         await db.flush()
@@ -569,6 +591,9 @@ async def import_json(
                 netzbezug_kwh=md_data.get("netzbezug_kwh", 0),
                 globalstrahlung_kwh_m2=md_data.get("globalstrahlung_kwh_m2"),
                 sonnenstunden=md_data.get("sonnenstunden"),
+                durchschnittstemperatur=md_data.get("durchschnittstemperatur"),  # NEU
+                sonderkosten_euro=md_data.get("sonderkosten_euro"),  # NEU
+                sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),  # NEU
                 datenquelle=md_data.get("datenquelle") or "json_import",
                 notizen=md_data.get("notizen"),
             )

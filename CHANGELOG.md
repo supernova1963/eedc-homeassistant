@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.5] - 2026-02-18
+
+### Hinzugefügt
+
+- **JSON-Export erweitert für vollständiges Backup/Restore** (Export-Version 1.1)
+  - `sensor_mapping` - HA Sensor-Zuordnungen werden jetzt exportiert/importiert
+  - `durchschnittstemperatur` - Wetterdaten in Monatsdaten
+  - `sonderkosten_euro` / `sonderkosten_beschreibung` - Manuelle Sonderkosten
+  - Rückwärtskompatibel: Export-Version 1.0 wird weiterhin importiert
+
+### Hinweis
+
+Beim Import von Anlagen mit Sensor-Mapping:
+- Die Zuordnungen werden übernommen, aber `mqtt_setup_complete` wird auf `false` gesetzt
+- Nach dem Import muss das Sensor-Mapping erneut gespeichert werden, um die MQTT-Entities zu erstellen
+- Grund: Die Investitions-IDs ändern sich beim Import
+
+---
+
 ## [1.1.0-beta.4] - 2026-02-18
 
 ### Behoben

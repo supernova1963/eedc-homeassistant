@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 1.1.0-beta.4 | **Status:** Feature-complete Beta (Tests ausstehend)
+**Version:** 1.1.0-beta.5 | **Status:** Feature-complete Beta (Tests ausstehend)
 
 ## Quick Reference
 
@@ -253,7 +253,8 @@ GET  /api/cockpit/uebersicht/{anlage_id}?jahr=2025   # Dashboard-Daten
 GET  /api/cockpit/pv-strings/{anlage_id}?jahr=2025   # SOLL-IST Vergleich
 POST /api/import/csv/{anlage_id}                     # CSV Import
 GET  /api/import/template/{anlage_id}                # CSV Template-Info
-GET  /api/import/export/{anlage_id}/full             # Vollständiger JSON-Export
+GET  /api/import/export/{anlage_id}/full             # Vollständiger JSON-Export (v1.1: inkl. sensor_mapping)
+POST /api/import/json                                # JSON-Import (Backup/Restore)
 GET  /api/wetter/monat/{anlage_id}/{jahr}/{monat}    # Wetter Auto-Fill
 GET  /api/wetter/provider/{anlage_id}                # Verfügbare Wetter-Provider
 GET  /api/wetter/vergleich/{anlage_id}/{jahr}/{monat} # Provider-Vergleich
@@ -388,7 +389,7 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v1.1.0-beta.4)
+## Letzte Änderungen (v1.1.0-beta.5)
 
 **Automatische Datenerfassung - Komplett implementiert!**
 
@@ -419,12 +420,20 @@ Siehe [docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md](docs/PLAN_AUTOMATISCHE_DATENERF
 - "Sensor-Zuordnung" unter Einstellungen → Home Assistant
 - "Monatsabschluss" unter Einstellungen → Daten
 
+**Teil 5: JSON-Export/Import für Backup/Restore (v1.1.0-beta.5)**
+- Export-Version 1.1 mit vollständigem Backup aller Daten
+- `sensor_mapping` wird exportiert/importiert
+- `durchschnittstemperatur`, `sonderkosten_euro`, `sonderkosten_beschreibung` in Monatsdaten
+- Beim Import: MQTT-Setup muss nach Import erneut durchgeführt werden (IDs ändern sich)
+- Rückwärtskompatibel mit Export-Version 1.0
+
 **Neue Dependencies:**
 - `apscheduler>=3.10.0` für Cron-Jobs
 
-**Bugfixes (beta.2-4):**
+**Bugfixes (beta.2-5):**
 - beta.2: Datenbank-Migration für neue Monatsdaten-Felder
 - beta.3: MQTT Entity-Namen enthalten Investitionsnamen
 - beta.4: MQTT Entity-IDs eindeutig durch `object_id`
+- beta.5: JSON-Export enthält jetzt alle Felder für vollständiges Backup
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.
