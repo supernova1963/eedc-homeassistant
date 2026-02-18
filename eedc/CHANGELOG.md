@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.7] - 2026-02-18
+
+### Behoben
+
+- **JSON-Export Version 1.1 Bug** - Export-Version war fälschlicherweise auf "1.0" hardcoded
+  - In beta.5 wurde das Pydantic-Model auf 1.1 aktualisiert, aber der Code der das Export-Objekt erstellt übergab explizit "1.0"
+  - Dadurch wurde beim Import die Warnung "sensor_mapping nicht enthalten" angezeigt, obwohl es vorhanden war
+  - Export gibt jetzt korrekt `export_version: "1.1"` aus
+
+---
+
 ## [1.1.0-beta.6] - 2026-02-18
 
 ### Geändert

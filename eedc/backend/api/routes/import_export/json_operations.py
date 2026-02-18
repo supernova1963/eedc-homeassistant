@@ -375,7 +375,7 @@ async def export_anlage_full(
 
     # Vollständiger Export
     full_export = FullAnlageExport(
-        export_version="1.0",
+        export_version="1.1",
         export_datum=datetime.now(),
         eedc_version=APP_VERSION,
         anlage=anlage_export,
