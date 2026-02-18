@@ -24,6 +24,7 @@ import {
   Thermometer,
   Car,
   Sun,
+  Trash2,
 } from 'lucide-react'
 import { sensorMappingApi, anlagenApi, haStatisticsApi } from '../api'
 import type {
@@ -105,6 +106,8 @@ export default function SensorMappingWizard() {
   const [haDbVerfuegbar, setHaDbVerfuegbar] = useState<boolean | null>(null)
   const [loadingHaStatus, setLoadingHaStatus] = useState(false)
   const [isInitializingFromDb, setIsInitializingFromDb] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Data loading states
   const [anlagen, setAnlagen] = useState<{ id: number; anlagenname: string }[] | null>(null)
@@ -366,6 +369,26 @@ export default function SensorMappingWizard() {
     navigate('/einstellungen/ha-export?saved=true')
   }, [navigate])
 
+  // Handler zum Löschen des Mappings
+  const handleDeleteMapping = useCallback(async () => {
+    if (!effectiveAnlageId) return
+
+    setIsDeleting(true)
+    try {
+      await sensorMappingApi.deleteMapping(effectiveAnlageId)
+      // State zurücksetzen
+      setState(initialState)
+      setMappingData(prev => prev ? { ...prev, mapping: null, mqtt_setup_complete: false } : null)
+      setShowDeleteConfirm(false)
+      // Seite neu laden um frischen State zu haben
+      window.location.reload()
+    } catch (err) {
+      setSaveError((err as Error).message || 'Fehler beim Löschen')
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [effectiveAnlageId])
+
   // Navigation
   const canGoNext = currentStep < steps.length - 1
   const canGoBack = currentStep > 0
@@ -550,10 +573,66 @@ export default function SensorMappingWizard() {
             {mappingData?.anlage_name} - Home Assistant Sensoren konfigurieren
           </p>
         </div>
-        <Button variant="secondary" onClick={() => navigate(-1)}>
-          Abbrechen
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Löschen-Button nur anzeigen wenn Mapping existiert */}
+          {mappingData?.mapping && Object.keys(mappingData.mapping).length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Mapping löschen
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => navigate(-1)}>
+            Abbrechen
+          </Button>
+        </div>
       </div>
+
+      {/* Lösch-Bestätigung */}
+      {showDeleteConfirm && (
+        <Alert type="warning">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Sensor-Mapping wirklich löschen?</p>
+              <p className="text-sm mt-1">
+                Alle Sensor-Zuordnungen und MQTT-Entities werden entfernt.
+                Die Monatsdaten bleiben erhalten.
+              </p>
+            </div>
+            <div className="flex gap-2 ml-4">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleDeleteMapping}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Lösche...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Löschen
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Alert>
+      )}
 
       {/* Progress */}
       <Card padding="sm">
