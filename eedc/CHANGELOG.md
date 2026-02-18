@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.2] - 2026-02-17
+
+### Behoben
+
+- **Datenbank-Migration** für neue Monatsdaten-Felder hinzugefügt
+  - `durchschnittstemperatur` (FLOAT)
+  - `sonderkosten_euro` (FLOAT)
+  - `sonderkosten_beschreibung` (VARCHAR)
+  - `notizen` (VARCHAR)
+  - Behebt SQLite-Fehler "no such column: monatsdaten.durchschnittstemperatur" nach Update
+
+---
+
 ## [1.1.0-beta.1] - 2026-02-17
 
 ### Hinzugefügt
