@@ -15,7 +15,7 @@ Diese Version benötigt **Lesezugriff auf `/config`** für die HA-Statistik-Funk
 Das Volume-Mapping wurde geändert - eine einfache Aktualisierung reicht nicht!
 
 **Vor dem Update:**
-1. **JSON-Export** aller Anlagen erstellen (Einstellungen → Import/Export → Export JSON)
+1. **JSON-Export** aller Anlagen erstellen (Anlagen-Seite → Download-Icon ⬇️ bei jeder Anlage)
 2. Export-Datei sichern!
 
 **Update durchführen:**
