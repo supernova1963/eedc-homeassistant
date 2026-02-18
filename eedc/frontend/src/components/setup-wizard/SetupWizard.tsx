@@ -1,7 +1,7 @@
 /**
  * SetupWizard - Geführte Ersteinrichtung für EEDC
  *
- * v1.0.0 - Standalone-Version (ohne HA-Abhängigkeit)
+ * v2.0.0 - Mit JSON-Import für Backup-Wiederherstellung
  *
  * Schritte:
  * 1. Willkommen
@@ -45,6 +45,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const handleLoadDemo = async () => {
     await importApi.createDemoData()
     // Nach erfolgreichem Laden direkt zum Dashboard
+    onComplete()
+  }
+
+  // JSON-Import abgeschlossen Handler
+  const handleImportComplete = () => {
     onComplete()
   }
 
@@ -177,7 +182,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           {/* Schritt-Inhalt */}
           {wizard.step === 'welcome' && (
-            <WelcomeStep onNext={wizard.nextStep} onLoadDemo={handleLoadDemo} />
+            <WelcomeStep
+              onNext={wizard.nextStep}
+              onLoadDemo={handleLoadDemo}
+              onImportComplete={handleImportComplete}
+            />
           )}
 
           {wizard.step === 'anlage' && (

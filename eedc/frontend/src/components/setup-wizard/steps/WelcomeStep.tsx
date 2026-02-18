@@ -1,20 +1,26 @@
 /**
  * WelcomeStep - Willkommens-Bildschirm des Setup-Wizards
  *
- * v1.0.0 - Standalone-Version (ohne HA-Abhängigkeit)
+ * v2.0.0 - Mit JSON-Import Option für Backup-Wiederherstellung
  */
 
-import { useState } from 'react'
-import { Sun, TrendingUp, PiggyBank, BarChart3, ArrowRight, Play, Loader2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Sun, TrendingUp, PiggyBank, BarChart3, ArrowRight, Play, Loader2, Upload } from 'lucide-react'
+import { importApi } from '../../../api'
 
 interface WelcomeStepProps {
   onNext: () => void
   onLoadDemo?: () => Promise<void>
+  onImportComplete?: () => void
 }
 
-export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
+export default function WelcomeStep({ onNext, onLoadDemo, onImportComplete }: WelcomeStepProps) {
   const [demoLoading, setDemoLoading] = useState(false)
   const [demoError, setDemoError] = useState<string | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSuccess, setImportSuccess] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleLoadDemo = async () => {
     if (!onLoadDemo) return
@@ -26,6 +32,36 @@ export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
       setDemoError(e instanceof Error ? e.message : 'Fehler beim Laden der Demo-Daten')
       setDemoLoading(false)
     }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImportLoading(true)
+    setImportError(null)
+    setImportSuccess(null)
+
+    try {
+      const result = await importApi.importJSON(file, false)
+      setImportSuccess(`Anlage "${result.anlage_name}" erfolgreich importiert!`)
+      // Nach kurzer Verzögerung zur App navigieren
+      setTimeout(() => {
+        onImportComplete?.()
+      }, 1500)
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Fehler beim Importieren')
+    } finally {
+      setImportLoading(false)
+      // Input zurücksetzen für erneuten Upload
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
   }
 
   return (
@@ -89,9 +125,49 @@ export default function WelcomeStep({ onNext, onLoadDemo }: WelcomeStepProps) {
           Die Einrichtung dauert etwa 2-3 Minuten
         </p>
 
+        {/* JSON-Backup wiederherstellen */}
+        <div className="pt-6 border-t border-gray-200 dark:border-gray-700 mt-6">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            Haben Sie eine JSON-Sicherung? Stellen Sie Ihre Daten wieder her:
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            onClick={handleImportClick}
+            disabled={importLoading}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium rounded-xl hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all disabled:opacity-50"
+          >
+            {importLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Importiere...
+              </>
+            ) : (
+              <>
+                <Upload className="w-5 h-5" />
+                JSON-Backup importieren
+              </>
+            )}
+          </button>
+          {importError && (
+            <p className="mt-2 text-sm text-red-500">{importError}</p>
+          )}
+          {importSuccess && (
+            <p className="mt-2 text-sm text-green-600 dark:text-green-400">{importSuccess}</p>
+          )}
+          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+            Importiert Anlage, Strompreise, Investitionen, Monatsdaten und Sensor-Mapping
+          </p>
+        </div>
+
         {/* Demo-Daten Option */}
         {onLoadDemo && (
-          <div className="pt-6 border-t border-gray-200 dark:border-gray-700 mt-6">
+          <div className="pt-4">
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
               Oder erkunden Sie die App mit vorbereiteten Demo-Daten:
             </p>
