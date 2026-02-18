@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.0-beta.4] - 2026-02-18
+
+### Behoben
+
+- **MQTT Entity-IDs** sind jetzt eindeutig durch `object_id` im Discovery-Payload
+  - Entity-IDs enthalten jetzt den Key: `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`
+  - Vorher wurde die Entity-ID aus dem Namen generiert, was zu `_2` Suffixen führte
+  - Friendly Names bleiben lesbar mit Investitionsnamen
+
+### Hinweis
+
+Nach dem Update: MQTT Discovery Topics löschen (`homeassistant/number/eedc_*` und
+`homeassistant/sensor/eedc_*`), dann Sensor-Mapping erneut speichern.
+
+---
+
 ## [1.1.0-beta.3] - 2026-02-18
 
 ### Behoben
