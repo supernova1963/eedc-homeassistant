@@ -529,6 +529,9 @@ async def import_json(
             importiert["strompreise"] += 1
 
         # 7. Investitionen hierarchisch importieren
+        # Mapping von Bezeichnung+Typ zu neuer ID (für sensor_mapping Korrektur)
+        inv_bezeichnung_to_new_id: dict[str, int] = {}
+
         async def import_investition(inv_data: dict, parent_id: Optional[int] = None) -> int:
             """Importiert eine Investition rekursiv mit Children."""
             inv = Investition(
@@ -552,6 +555,10 @@ async def import_json(
             inv_id = inv.id
             importiert["investitionen"] += 1
 
+            # Mapping von Bezeichnung+Typ zu neuer ID speichern (für sensor_mapping)
+            key = f"{inv_data.get('typ', '')}:{inv_data.get('bezeichnung', '')}"
+            inv_bezeichnung_to_new_id[key] = inv_id
+
             # Monatsdaten der Investition importieren
             for md_data in inv_data.get("monatsdaten", []):
                 inv_md = InvestitionMonatsdaten(
@@ -573,6 +580,25 @@ async def import_json(
 
         for inv_data in data.get("investitionen", []):
             await import_investition(inv_data)
+
+        # 7b. sensor_mapping komplett neu aufbauen basierend auf Bezeichnung+Typ
+        # Das sensor_mapping enthält alte IDs die nicht mehr gültig sind
+        if imported_sensor_mapping:
+            # Wir löschen das alte Investitionen-Mapping komplett
+            # Der Benutzer muss das Sensor-Mapping nach Import neu konfigurieren
+            imported_sensor_mapping["investitionen"] = {}
+            imported_sensor_mapping["mqtt_setup_complete"] = False
+            imported_sensor_mapping["mqtt_setup_timestamp"] = None
+            new_anlage.sensor_mapping = imported_sensor_mapping
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(new_anlage, "sensor_mapping")
+
+            warnungen.append(
+                "WICHTIG: Das Sensor-Mapping für Investitionen wurde zurückgesetzt, da die Investitions-IDs "
+                "nach dem Import nicht mehr übereinstimmen. Bitte konfigurieren Sie das Sensor-Mapping neu "
+                "(Einstellungen → Home Assistant → Sensor-Zuordnung)."
+            )
+            logger.info("sensor_mapping Investitionen zurückgesetzt - IDs nicht übertragbar")
 
         # 8. Monatsdaten (Zählerwerte) importieren
         for md_data in data.get("monatsdaten", []):
