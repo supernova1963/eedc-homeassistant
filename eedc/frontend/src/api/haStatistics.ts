@@ -20,9 +20,31 @@ export interface HAStatisticsStatus {
 export interface FeldWert {
   feld: string
   label: string
-  wert: number
+  wert: number | null
   einheit: string
   sensor_id?: string
+}
+
+// Backend Response Format für MappedMonatswert
+interface BackendMappedFeld {
+  feld: string
+  feld_label: string
+  sensor_id: string
+  start_wert: number
+  end_wert: number
+  differenz: number
+  einheit: string
+}
+
+// Backend Response Format für AnlagenMonatswertResponse
+interface BackendMonatswerte {
+  anlage_id: number
+  anlage_name: string
+  jahr: number
+  monat: number
+  monat_name: string
+  basis: BackendMappedFeld[]
+  investitionen: Record<string, BackendMappedFeld[]>  // inv_id -> felder
 }
 
 export interface InvestitionWerte {
@@ -40,11 +62,50 @@ export interface Monatswerte {
   investitionen: InvestitionWerte[]
 }
 
+/**
+ * Konvertiert Backend-Format zu Frontend-Format
+ */
+function convertBackendToMonatswerte(backend: BackendMonatswerte): Monatswerte {
+  return {
+    jahr: backend.jahr,
+    monat: backend.monat,
+    monat_name: backend.monat_name,
+    basis: backend.basis.map(b => ({
+      feld: b.feld,
+      label: b.feld_label,
+      wert: b.differenz,
+      einheit: b.einheit,
+      sensor_id: b.sensor_id
+    })),
+    investitionen: Object.entries(backend.investitionen).map(([invId, felder]) => ({
+      investition_id: parseInt(invId),
+      bezeichnung: '', // Backend liefert dies nicht direkt
+      typ: '',
+      felder: felder.map(f => ({
+        feld: f.feld,
+        label: f.feld_label,
+        wert: f.differenz,
+        einheit: f.einheit,
+        sensor_id: f.sensor_id
+      }))
+    }))
+  }
+}
+
 export interface VerfuegbarerMonat {
   jahr: number
   monat: number
   monat_name: string
-  hat_daten: boolean
+  hat_daten?: boolean  // Optional, nicht immer vom Backend geliefert
+}
+
+export interface VerfuegbareMonateResponse {
+  anlage_id: number
+  anlage_name: string
+  erstes_datum: string
+  letztes_datum: string
+  anzahl_monate: number
+  monate: VerfuegbarerMonat[]
 }
 
 export interface AlleMonatswerte {
@@ -89,22 +150,16 @@ export interface ImportVorschau {
 }
 
 export interface ImportRequest {
-  ueberschreiben_erlauben: boolean
-  ausgewaehlte_monate?: Array<{ jahr: number; monat: number }>
+  monate: Array<{ jahr: number; monat: number }>
+  ueberschreiben: boolean
 }
 
 export interface ImportResult {
-  success: boolean
-  message: string
+  erfolg: boolean
   importiert: number
   uebersprungen: number
-  fehler: number
-  details: Array<{
-    jahr: number
-    monat: number
-    status: string
-    fehler?: string
-  }>
+  ueberschrieben: number
+  fehler: string[]
 }
 
 // =============================================================================
@@ -127,14 +182,20 @@ export const haStatisticsApi = {
     jahr: number,
     monat: number
   ): Promise<Monatswerte> {
-    return api.get<Monatswerte>(`/ha-statistics/monatswerte/${anlageId}/${jahr}/${monat}`)
+    const backend = await api.get<BackendMonatswerte>(`/ha-statistics/monatswerte/${anlageId}/${jahr}/${monat}`)
+    return convertBackendToMonatswerte(backend)
   },
 
   /**
    * Alle verfügbaren Monate mit Daten abrufen
    */
   async getVerfuegbareMonate(anlageId: number): Promise<VerfuegbarerMonat[]> {
-    return api.get<VerfuegbarerMonat[]>(`/ha-statistics/verfuegbare-monate/${anlageId}`)
+    const response = await api.get<VerfuegbareMonateResponse>(`/ha-statistics/verfuegbare-monate/${anlageId}`)
+    // Backend gibt Wrapper-Objekt zurück, wir extrahieren nur die monate-Liste
+    return response.monate.map(m => ({
+      ...m,
+      hat_daten: true  // Alle zurückgegebenen Monate haben Daten
+    }))
   },
 
   /**

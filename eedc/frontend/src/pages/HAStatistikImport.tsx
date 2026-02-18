@@ -153,20 +153,21 @@ export default function HAStatistikImport() {
 
     try {
       const result = await haStatisticsApi.importieren(selectedAnlage, {
-        ueberschreiben_erlauben: true, // Ausgewählte Konflikte sollen überschrieben werden
-        ausgewaehlte_monate: ausgewaehlte,
+        monate: ausgewaehlte,
+        ueberschreiben: true, // Ausgewählte Konflikte sollen überschrieben werden
       })
 
-      if (result.success) {
+      if (result.erfolg) {
         setSuccess(
           `Import erfolgreich: ${result.importiert} Monate importiert` +
           (result.uebersprungen > 0 ? `, ${result.uebersprungen} übersprungen` : '') +
-          (result.fehler > 0 ? `, ${result.fehler} Fehler` : '')
+          (result.ueberschrieben > 0 ? `, ${result.ueberschrieben} überschrieben` : '') +
+          (result.fehler.length > 0 ? `, ${result.fehler.length} Fehler` : '')
         )
         // Vorschau neu laden
         await loadVorschau()
       } else {
-        setError(result.message)
+        setError(result.fehler.join(', ') || 'Import fehlgeschlagen')
       }
     } catch (e) {
       setError('Fehler beim Import')
