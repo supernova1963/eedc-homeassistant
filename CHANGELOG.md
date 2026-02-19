@@ -89,6 +89,20 @@ Das Volume-Mapping wurde geändert - eine einfache Aktualisierung reicht nicht!
   - Bei existierenden Monaten: Vergleichs-Modal mit Diff-Anzeige vor dem Überschreiben
   - Farbcodierte Hervorhebung signifikanter Unterschiede (>10%)
 
+- **HA-Statistik Investitions-Bezeichnungen** - Zeigt nun "BYD HVS 12.8 (speicher)" statt "()"
+  - Backend lädt Investitions-Metadaten aus DB für korrektes Label
+
+- **JSON-Import sensor_mapping** - Investitions-Mappings werden beim Import zurückgesetzt
+  - IDs ändern sich beim Import, daher muss Sensor-Mapping neu konfiguriert werden
+  - Warnung wird angezeigt mit Hinweis auf Neukonfiguration
+
+- **Sensor-Mapping Wizard: Löschen-Button** - Mapping kann nun über Button im Header gelöscht werden
+  - Bestätigungsdialog vor dem Löschen
+
+- **Komponenten-Vergleich in "Aus HA laden"** - Zeigt nun Vorhanden vs. HA-Statistik Tabelle für alle Investitionen
+  - Differenz-Berechnung wie bei Basis-Werten (Einspeisung, Netzbezug)
+  - Zeigt auch Investitionen die nur in Bestandsdaten existieren (ohne HA-Mapping)
+
 ---
 
 ## [1.1.0-beta.8] - 2026-02-18

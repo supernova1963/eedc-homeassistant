@@ -7,6 +7,7 @@ import { MonatsdatenForm } from '../components/forms'
 import { useAnlagen, useMonatsdaten, useInvestitionen } from '../hooks'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
+import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import type { Monatsdaten } from '../types'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -213,6 +214,7 @@ export default function MonatsdatenPage() {
   const [haVergleichsDaten, setHaVergleichsDaten] = useState<{
     haWerte: Monatswerte
     vorhandeneDaten: Monatsdaten
+    vorhandeneInvestitionsDaten: InvestitionMonatsdaten[]
   } | null>(null)
 
   // Sichtbare Spalten aus LocalStorage laden
@@ -305,8 +307,12 @@ export default function MonatsdatenPage() {
       )
 
       if (vorhandeneDaten) {
+        // Lade auch die InvestitionMonatsdaten für den Vergleich
+        const vorhandeneInvestitionsDaten = await investitionenApi.getMonatsdatenByMonth(
+          selectedAnlageId, selectedHaJahr, selectedHaMonat
+        )
         // Zeige Vergleichsansicht
-        setHaVergleichsDaten({ haWerte: werte, vorhandeneDaten })
+        setHaVergleichsDaten({ haWerte: werte, vorhandeneDaten, vorhandeneInvestitionsDaten })
         setShowHaModal(false)
         setShowHaVergleich(true)
       } else {
@@ -762,26 +768,95 @@ export default function MonatsdatenPage() {
             </div>
 
             {/* Investitions-Werte Vergleich */}
-            {haVergleichsDaten.haWerte.investitionen.length > 0 && (
+            {(haVergleichsDaten.haWerte.investitionen.length > 0 || haVergleichsDaten.vorhandeneInvestitionsDaten.length > 0) && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Komponenten-Werte</h4>
-                {haVergleichsDaten.haWerte.investitionen.map(inv => (
-                  <div key={inv.investition_id} className="border rounded-lg p-3 dark:border-gray-700">
-                    <h5 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                      {inv.bezeichnung} ({inv.typ})
-                    </h5>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                      {inv.felder.filter(f => f.wert !== null).map(f => (
-                        <div key={f.feld} className="flex justify-between bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">
-                          <span className="text-gray-600 dark:text-gray-400">{f.feld}:</span>
-                          <span className="font-medium text-green-700 dark:text-green-300">
-                            {f.wert?.toLocaleString('de-DE', { maximumFractionDigits: 1 })}
-                          </span>
-                        </div>
-                      ))}
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Komponenten-Werte (kWh)</h4>
+                {haVergleichsDaten.haWerte.investitionen.map(inv => {
+                  // Finde die vorhandenen InvestitionMonatsdaten für diese Investition
+                  const vorhandeneInv = haVergleichsDaten.vorhandeneInvestitionsDaten.find(
+                    v => v.investition_id === inv.investition_id
+                  )
+                  const vorhandeneVerbrauchDaten = vorhandeneInv?.verbrauch_daten || {}
+
+                  // Sammle alle Felder (aus HA und vorhanden)
+                  const alleFelder = new Set<string>()
+                  inv.felder.forEach(f => alleFelder.add(f.feld))
+                  Object.keys(vorhandeneVerbrauchDaten).forEach(k => alleFelder.add(k))
+
+                  return (
+                    <div key={inv.investition_id} className="border rounded-lg overflow-hidden dark:border-gray-700">
+                      <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700/50">
+                        <h5 className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                          {inv.bezeichnung} ({inv.typ})
+                        </h5>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="border-b dark:border-gray-700">
+                              <th className="text-left py-2 px-3 font-medium">Feld</th>
+                              <th className="text-right py-2 px-3 font-medium text-blue-600">Vorhanden</th>
+                              <th className="text-right py-2 px-3 font-medium text-green-600">HA-Statistik</th>
+                              <th className="text-right py-2 px-3 font-medium">Diff</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...alleFelder].map(feldKey => {
+                              const haFeld = inv.felder.find(f => f.feld === feldKey)
+                              const vorhandenWert = vorhandeneVerbrauchDaten[feldKey]
+                              // Nur anzeigen wenn mindestens ein Wert vorhanden
+                              if (haFeld?.wert === null && vorhandenWert === undefined) return null
+                              return (
+                                <VergleichsZeile
+                                  key={feldKey}
+                                  label={haFeld?.label || feldKey.replace(/_/g, ' ')}
+                                  vorhanden={vorhandenWert}
+                                  haWert={haFeld?.wert}
+                                />
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
+                {/* Zeige Investitionen die nur in vorhandenen Daten existieren (nicht in HA-Mapping) */}
+                {haVergleichsDaten.vorhandeneInvestitionsDaten
+                  .filter(vorh => !haVergleichsDaten.haWerte.investitionen.some(ha => ha.investition_id === vorh.investition_id))
+                  .filter(vorh => Object.keys(vorh.verbrauch_daten).length > 0)
+                  .map(vorh => (
+                    <div key={vorh.investition_id} className="border rounded-lg overflow-hidden dark:border-gray-700 opacity-75">
+                      <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700/50">
+                        <h5 className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          Investition #{vorh.investition_id} (nur Bestandsdaten, kein HA-Mapping)
+                        </h5>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="border-b dark:border-gray-700">
+                              <th className="text-left py-2 px-3 font-medium">Feld</th>
+                              <th className="text-right py-2 px-3 font-medium text-blue-600">Vorhanden</th>
+                              <th className="text-right py-2 px-3 font-medium text-green-600">HA-Statistik</th>
+                              <th className="text-right py-2 px-3 font-medium">Diff</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(vorh.verbrauch_daten).map(([feldKey, wert]) => (
+                              <VergleichsZeile
+                                key={feldKey}
+                                label={feldKey.replace(/_/g, ' ')}
+                                vorhanden={wert}
+                                haWert={null}
+                              />
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))
+                }
               </div>
             )}
 
