@@ -7,6 +7,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.0.1] - 2026-02-19
+
+### Hinzugefügt
+
+- **Selektiver Feld-Import im HA-Statistik Wizard**
+  - **Import-Modi:** Schnellauswahl zwischen "Alles importieren", "Nur Basis" (Einspeisung/Netzbezug), "Nur Komponenten"
+  - **Granulare Feld-Checkboxen:** Jedes Feld kann einzeln an-/abgewählt werden
+  - Modus wechselt automatisch zu "Manuell" bei individueller Anpassung
+  - Ermöglicht z.B. manuell korrigierte Einspeisung beizubehalten, aber PV-Werte zu importieren
+
+- **Komponenten-Vergleich im HA-Statistik Import Wizard**
+  - Zeigt nun alle InvestitionMonatsdaten (PV, Speicher, E-Auto, etc.) im Vergleich
+  - Vorhanden vs. HA-Statistik mit Differenz-Berechnung
+  - Gelbe Hervorhebung bei Abweichungen ≥1
+  - Konflikt-Erkennung berücksichtigt jetzt auch Komponenten-Werte
+
+- **Erweiterte Sensor-Mapping Felder**
+  - **E-Auto:** Verbrauch gesamt (kWh), Ladung extern (kWh)
+  - **Wallbox:** Ladevorgänge (Anzahl)
+  - **Balkonkraftwerk:** Neuer Wizard-Step mit PV-Erzeugung, Eigenverbrauch, Speicher-Ladung/-Entladung
+
+### Behoben
+
+- **Sensor-Filter erlaubt Zähler ohne Einheit** - Sensoren wie `evcc_charging_sessions` mit `state_class: measurement` aber ohne `unit_of_measurement` werden jetzt korrekt angezeigt
+
+---
+
 ## [2.0.0] - 2026-02-18
 
 ### ⚠️ BREAKING CHANGE - Neuinstallation erforderlich!

@@ -62,8 +62,10 @@ export type {
   AlleMonatswerte,
   MonatsanfangWerte,
   ImportAktion,
+  InvestitionImportStatus,
   MonatImportStatus,
   ImportVorschau,
+  MonatFeldAuswahl,
   ImportRequest,
   ImportResult as HAImportResult,
 } from './haStatistics'

@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.0.0 | **Status:** Stable Release
+**Version:** 2.0.1 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -413,25 +413,23 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v2.0.0)
+## Letzte Änderungen (v2.0.1)
 
-**⚠️ BREAKING CHANGE - Neuinstallation erforderlich!**
+**v2.0.1 - Bugfixes und Features:**
 
-Diese Version benötigt Lesezugriff auf `/config` für die HA-Statistik-Funktion.
-Das Volume-Mapping wurde geändert - Upgrade-Anleitung siehe CHANGELOG.md.
+- **Selektiver Feld-Import:** Import-Modi (Alles/Nur Basis/Nur Komponenten) + Checkboxen pro Feld
+- **Komponenten-Vergleich:** InvestitionMonatsdaten werden im Import-Wizard verglichen
+- **Erweiterte Sensor-Felder:** E-Auto (Verbrauch, Extern), Wallbox (Ladevorgänge), Balkonkraftwerk (kompletter Step)
+- **Sensor-Filter Fix:** Zähler ohne Einheit werden jetzt angezeigt
 
-**HA-Statistik-Import (NEU):**
+**v2.0.0 - ⚠️ BREAKING CHANGE:**
+
+Neuinstallation erforderlich! Volume-Mapping `config:ro` für HA-Statistik-Zugriff.
+Siehe CHANGELOG.md für Upgrade-Anleitung.
+
+**HA-Statistik-Import:**
 - Service `ha_statistics_service.py`: SQLite-Zugriff auf HA-Datenbank
 - API-Endpoints unter `/api/ha-statistics/` für Monatswerte-Abfrage
-- Import-Vorschau mit Konflikt-Erkennung
-- Intelligenter Import mit Überschreib-Schutz
-
-**Frontend (NEU):**
-- `HAStatistikImport.tsx`: Bulk-Import Seite mit Vorschau
-- Monatsabschluss-Wizard: "Werte aus HA-Statistik laden" Button
-- Sensor-Mapping: "Aus HA-Statistik laden" Option beim Init
-
-**Navigation:**
-- Einstellungen → Home Assistant → Statistik-Import (NEU)
+- Import-Vorschau mit Konflikt-Erkennung und selektivem Import
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

@@ -518,6 +518,16 @@ async def get_monatsanfang_werte(
 # Import Models
 # =============================================================================
 
+class InvestitionImportStatus(BaseModel):
+    """Status einer Investition im Import-Vergleich."""
+    investition_id: int
+    bezeichnung: str
+    typ: str
+    ha_werte: dict  # {"pv_erzeugung_kwh": 123.4, ...}
+    vorhandene_werte: dict  # {"pv_erzeugung_kwh": 100.0, ...}
+    hat_abweichung: bool
+
+
 class MonatImportStatus(BaseModel):
     """Status eines Monats für den Import."""
     jahr: int
@@ -527,6 +537,7 @@ class MonatImportStatus(BaseModel):
     grund: str
     ha_werte: dict  # {"einspeisung": 123.4, "netzbezug": 56.7, ...}
     vorhandene_werte: Optional[dict] = None  # Falls Daten existieren
+    investitionen: Optional[list[InvestitionImportStatus]] = None  # Komponenten-Vergleich
 
 
 class ImportVorschauResponse(BaseModel):
@@ -540,9 +551,19 @@ class ImportVorschauResponse(BaseModel):
     monate: list[MonatImportStatus]
 
 
+class MonatFeldAuswahl(BaseModel):
+    """Auswahl der zu importierenden Felder für einen Monat."""
+    jahr: int
+    monat: int
+    # Basis-Felder: Liste der Feld-Namen die importiert werden sollen
+    basis_felder: Optional[list[str]] = None  # None = alle, [] = keine
+    # Investitions-Felder: Dict von inv_id -> Liste der Feld-Namen
+    investition_felder: Optional[dict[str, list[str]]] = None  # None = alle, {} = keine
+
+
 class ImportRequest(BaseModel):
     """Request für den Import."""
-    monate: list[dict]  # [{"jahr": 2024, "monat": 11}, ...]
+    monate: list[MonatFeldAuswahl]  # Detaillierte Auswahl pro Monat
     ueberschreiben: bool = False  # Auch vorhandene Daten überschreiben
 
 
@@ -629,25 +650,67 @@ async def get_import_vorschau(
         jahr = ha_monat.jahr
         monat = ha_monat.monat
 
-        # HA-Werte extrahieren
-        ha_werte = {}
+        # HA-Werte extrahieren (Basis)
+        ha_basis_werte = {}
         for sensor in ha_monat.sensoren:
             # Sensor-ID zu Feld-Name mappen
             for basis_feld, basis_config in (anlage.sensor_mapping.get("basis") or {}).items():
                 if basis_config and basis_config.get("sensor_id") == sensor.sensor_id:
-                    ha_werte[basis_feld] = sensor.differenz
+                    ha_basis_werte[basis_feld] = sensor.differenz
 
-        # Investitions-Werte
+        # Investitions-Werte pro Investition sammeln
+        ha_inv_werte: dict[str, dict] = {}  # inv_id -> {feld: wert}
         for inv_id, inv_config in (anlage.sensor_mapping.get("investitionen") or {}).items():
             felder = inv_config.get("felder", {})
+            ha_inv_werte[inv_id] = {}
             for feld, feld_config in felder.items():
                 if feld_config and feld_config.get("sensor_id"):
                     for sensor in ha_monat.sensoren:
                         if sensor.sensor_id == feld_config["sensor_id"]:
-                            ha_werte[f"inv_{inv_id}_{feld}"] = sensor.differenz
+                            ha_inv_werte[inv_id][feld] = sensor.differenz
 
         # Prüfen ob Monatsdaten existieren
         md = vorhandene_md.get((jahr, monat))
+
+        # Investitionen-Vergleich erstellen
+        inv_status_liste: list[InvestitionImportStatus] = []
+        inv_hat_abweichung = False
+
+        for inv_id_str, ha_felder in ha_inv_werte.items():
+            if not ha_felder:
+                continue
+
+            inv_id = int(inv_id_str)
+            inv = investitionen.get(inv_id_str)
+            bezeichnung = inv.bezeichnung if inv else f"Investition {inv_id}"
+            typ = inv.typ if inv else ""
+
+            # Vorhandene Werte für diese Investition
+            imd = vorhandene_imd.get((inv_id, jahr, monat))
+            vorh_felder = {}
+            if imd and imd.verbrauch_daten:
+                vorh_felder = {k: v for k, v in imd.verbrauch_daten.items() if v is not None}
+
+            # Abweichung prüfen (mit Labels für Anzeige)
+            ha_mit_labels = {FELD_LABELS.get(k, k): v for k, v in ha_felder.items()}
+            vorh_mit_labels = {FELD_LABELS.get(k, k): vorh_felder.get(k) for k in ha_felder.keys()}
+
+            hat_abw = False
+            for feld, ha_wert in ha_felder.items():
+                vorh_wert = vorh_felder.get(feld, 0) or 0
+                if abs(ha_wert - vorh_wert) >= 1:
+                    hat_abw = True
+                    inv_hat_abweichung = True
+                    break
+
+            inv_status_liste.append(InvestitionImportStatus(
+                investition_id=inv_id,
+                bezeichnung=bezeichnung,
+                typ=typ,
+                ha_werte=ha_mit_labels,
+                vorhandene_werte=vorh_mit_labels,
+                hat_abweichung=hat_abw
+            ))
 
         if md is None:
             # Keine Daten vorhanden → Importieren
@@ -657,8 +720,9 @@ async def get_import_vorschau(
                 monat_name=ha_monat.monat_name,
                 aktion="importieren",
                 grund="Keine Monatsdaten vorhanden",
-                ha_werte=ha_werte,
-                vorhandene_werte=None
+                ha_werte=ha_basis_werte,
+                vorhandene_werte=None,
+                investitionen=inv_status_liste if inv_status_liste else None
             ))
             anzahl_importieren += 1
         else:
@@ -682,41 +746,51 @@ async def get_import_vorschau(
                     monat_name=ha_monat.monat_name,
                     aktion="importieren",
                     grund="Monatsdaten vorhanden aber leer",
-                    ha_werte=ha_werte,
-                    vorhandene_werte=vorhandene_werte
+                    ha_werte=ha_basis_werte,
+                    vorhandene_werte=vorhandene_werte,
+                    investitionen=inv_status_liste if inv_status_liste else None
                 ))
                 anzahl_importieren += 1
             else:
-                # Daten existieren mit Werten - Konflikt!
-                # Prüfen ob große Abweichung
-                ha_einspeisung = ha_werte.get("einspeisung", 0)
-                ha_netzbezug = ha_werte.get("netzbezug", 0)
+                # Daten existieren mit Werten - Konflikt?
+                # Prüfen ob große Abweichung bei Basis
+                ha_einspeisung = ha_basis_werte.get("einspeisung", 0) or 0
+                ha_netzbezug = ha_basis_werte.get("netzbezug", 0) or 0
 
                 abweichung_einspeisung = abs(ha_einspeisung - (md.einspeisung_kwh or 0))
                 abweichung_netzbezug = abs(ha_netzbezug - (md.netzbezug_kwh or 0))
 
-                if abweichung_einspeisung < 1 and abweichung_netzbezug < 1:
+                basis_hat_abweichung = abweichung_einspeisung >= 1 or abweichung_netzbezug >= 1
+
+                if not basis_hat_abweichung and not inv_hat_abweichung:
                     # Sehr geringe Abweichung → Überspringen
                     monate_status.append(MonatImportStatus(
                         jahr=jahr,
                         monat=monat,
                         monat_name=ha_monat.monat_name,
                         aktion="ueberspringen",
-                        grund=f"Daten stimmen überein (Δ < 1 kWh)",
-                        ha_werte=ha_werte,
-                        vorhandene_werte=vorhandene_werte
+                        grund=f"Daten stimmen überein (Δ < 1)",
+                        ha_werte=ha_basis_werte,
+                        vorhandene_werte=vorhandene_werte,
+                        investitionen=inv_status_liste if inv_status_liste else None
                     ))
                     anzahl_ueberspringen += 1
                 else:
                     # Abweichung → Konflikt
+                    grund_teile = []
+                    if basis_hat_abweichung:
+                        grund_teile.append(f"Basis: Einspeisung {abweichung_einspeisung:.1f}, Netzbezug {abweichung_netzbezug:.1f}")
+                    if inv_hat_abweichung:
+                        grund_teile.append("Komponenten-Werte weichen ab")
                     monate_status.append(MonatImportStatus(
                         jahr=jahr,
                         monat=monat,
                         monat_name=ha_monat.monat_name,
                         aktion="konflikt",
-                        grund=f"Abweichung: Einspeisung {abweichung_einspeisung:.1f} kWh, Netzbezug {abweichung_netzbezug:.1f} kWh",
-                        ha_werte=ha_werte,
-                        vorhandene_werte=vorhandene_werte
+                        grund=" | ".join(grund_teile),
+                        ha_werte=ha_basis_werte,
+                        vorhandene_werte=vorhandene_werte,
+                        investitionen=inv_status_liste if inv_status_liste else None
                     ))
                     anzahl_konflikte += 1
 
@@ -744,9 +818,13 @@ async def import_ha_statistics(
     """
     Importiert HA-Statistik-Daten in EEDC Monatsdaten.
 
+    Unterstützt selektiven Import:
+    - basis_felder: Liste der zu importierenden Basis-Felder (None = alle)
+    - investition_felder: Dict von inv_id -> Feld-Liste (None = alle)
+
     Args:
         anlage_id: ID der Anlage
-        request.monate: Liste der zu importierenden Monate
+        request.monate: Liste der zu importierenden Monate mit Feld-Auswahl
         request.ueberschreiben: Auch vorhandene Daten überschreiben
 
     Returns:
@@ -769,8 +847,10 @@ async def import_ha_statistics(
     fehler = []
 
     for monat_req in request.monate:
-        jahr = monat_req["jahr"]
-        monat = monat_req["monat"]
+        jahr = monat_req.jahr
+        monat = monat_req.monat
+        basis_felder_auswahl = monat_req.basis_felder  # None = alle, [] = keine
+        inv_felder_auswahl = monat_req.investition_felder  # None = alle, {} = keine
 
         try:
             # HA-Werte für diesen Monat holen
@@ -779,69 +859,92 @@ async def import_ha_statistics(
             # Sensor-Werte zu Dict mappen
             sensor_values = {s.sensor_id: s.differenz for s in ha_response.sensoren}
 
-            # Basis-Werte extrahieren
+            # Basis-Werte extrahieren (nur wenn nicht explizit ausgeschlossen)
             einspeisung = None
             netzbezug = None
+            basis_importiert = False
+
+            # Prüfen ob Basis-Felder importiert werden sollen
+            import_einspeisung = basis_felder_auswahl is None or "einspeisung" in basis_felder_auswahl
+            import_netzbezug = basis_felder_auswahl is None or "netzbezug" in basis_felder_auswahl
 
             basis_mapping = sensor_mapping.get("basis", {})
-            if basis_mapping.get("einspeisung", {}).get("sensor_id"):
+            if import_einspeisung and basis_mapping.get("einspeisung", {}).get("sensor_id"):
                 einspeisung = sensor_values.get(basis_mapping["einspeisung"]["sensor_id"])
-            if basis_mapping.get("netzbezug", {}).get("sensor_id"):
+            if import_netzbezug and basis_mapping.get("netzbezug", {}).get("sensor_id"):
                 netzbezug = sensor_values.get(basis_mapping["netzbezug"]["sensor_id"])
 
-            # Monatsdaten laden oder erstellen
-            result = await db.execute(
-                select(Monatsdaten).where(
-                    and_(
-                        Monatsdaten.anlage_id == anlage_id,
-                        Monatsdaten.jahr == jahr,
-                        Monatsdaten.monat == monat
+            # Monatsdaten laden oder erstellen (nur wenn Basis-Felder importiert werden)
+            if import_einspeisung or import_netzbezug:
+                result = await db.execute(
+                    select(Monatsdaten).where(
+                        and_(
+                            Monatsdaten.anlage_id == anlage_id,
+                            Monatsdaten.jahr == jahr,
+                            Monatsdaten.monat == monat
+                        )
                     )
                 )
-            )
-            md = result.scalar_one_or_none()
+                md = result.scalar_one_or_none()
 
-            if md is None:
-                # Neu erstellen
-                md = Monatsdaten(
-                    anlage_id=anlage_id,
-                    jahr=jahr,
-                    monat=monat,
-                    einspeisung_kwh=einspeisung or 0,
-                    netzbezug_kwh=netzbezug or 0,
-                    datenquelle="ha_statistics"
-                )
-                db.add(md)
-                importiert += 1
-            else:
-                # Existiert - prüfen ob überschreiben
-                hat_werte = (md.einspeisung_kwh or 0) > 0.1 or (md.netzbezug_kwh or 0) > 0.1
-
-                if hat_werte and not request.ueberschreiben:
-                    uebersprungen += 1
-                    continue
-
-                # Überschreiben
-                if einspeisung is not None:
-                    md.einspeisung_kwh = einspeisung
-                if netzbezug is not None:
-                    md.netzbezug_kwh = netzbezug
-                md.datenquelle = "ha_statistics"
-
-                if hat_werte:
-                    ueberschrieben += 1
+                if md is None:
+                    # Neu erstellen
+                    md = Monatsdaten(
+                        anlage_id=anlage_id,
+                        jahr=jahr,
+                        monat=monat,
+                        einspeisung_kwh=einspeisung if import_einspeisung else 0,
+                        netzbezug_kwh=netzbezug if import_netzbezug else 0,
+                        datenquelle="ha_statistics"
+                    )
+                    db.add(md)
+                    basis_importiert = True
                 else:
-                    importiert += 1
+                    # Existiert - selektiv überschreiben
+                    hat_einspeisung = (md.einspeisung_kwh or 0) > 0.1
+                    hat_netzbezug = (md.netzbezug_kwh or 0) > 0.1
+
+                    # Einspeisung aktualisieren
+                    if import_einspeisung and einspeisung is not None:
+                        if not hat_einspeisung or request.ueberschreiben:
+                            md.einspeisung_kwh = einspeisung
+                            basis_importiert = True
+
+                    # Netzbezug aktualisieren
+                    if import_netzbezug and netzbezug is not None:
+                        if not hat_netzbezug or request.ueberschreiben:
+                            md.netzbezug_kwh = netzbezug
+                            basis_importiert = True
+
+                    if basis_importiert:
+                        md.datenquelle = "ha_statistics"
 
             # InvestitionMonatsdaten verarbeiten
             inv_mapping = sensor_mapping.get("investitionen", {})
+            inv_importiert = False
+
             for inv_id_str, inv_config in inv_mapping.items():
                 inv_id = int(inv_id_str)
+
+                # Prüfen ob diese Investition importiert werden soll
+                if inv_felder_auswahl is not None:
+                    if inv_id_str not in inv_felder_auswahl:
+                        continue  # Diese Investition überspringen
+                    erlaubte_felder = inv_felder_auswahl[inv_id_str]
+                    if not erlaubte_felder:
+                        continue  # Keine Felder für diese Investition
+                else:
+                    erlaubte_felder = None  # Alle Felder
+
                 felder = inv_config.get("felder", {})
 
-                # Werte aus HA extrahieren
+                # Werte aus HA extrahieren (nur erlaubte Felder)
                 inv_werte = {}
                 for feld, feld_config in felder.items():
+                    # Nur importieren wenn Feld erlaubt
+                    if erlaubte_felder is not None and feld not in erlaubte_felder:
+                        continue
+
                     if feld_config and feld_config.get("sensor_id"):
                         sensor_id = feld_config["sensor_id"]
                         if sensor_id in sensor_values:
@@ -870,6 +973,7 @@ async def import_ha_statistics(
                         verbrauch_daten=inv_werte
                     )
                     db.add(imd)
+                    inv_importiert = True
                 else:
                     # Merge mit existierenden Daten
                     if imd.verbrauch_daten is None:
@@ -880,8 +984,15 @@ async def import_ha_statistics(
                         vorhandener_wert = imd.verbrauch_daten.get(feld)
                         if vorhandener_wert is None or vorhandener_wert == 0 or request.ueberschreiben:
                             imd.verbrauch_daten[feld] = wert
+                            inv_importiert = True
 
                     flag_modified(imd, "verbrauch_daten")
+
+            # Zähler aktualisieren
+            if basis_importiert or inv_importiert:
+                importiert += 1
+            else:
+                uebersprungen += 1
 
         except Exception as e:
             fehler.append(f"{jahr}/{monat:02d}: {str(e)}")

@@ -137,6 +137,15 @@ export interface MonatsanfangWerte {
 
 export type ImportAktion = 'importieren' | 'ueberspringen' | 'ueberschreiben' | 'konflikt'
 
+export interface InvestitionImportStatus {
+  investition_id: number
+  bezeichnung: string
+  typ: string
+  ha_werte: Record<string, number | null>
+  vorhandene_werte: Record<string, number | null>
+  hat_abweichung: boolean
+}
+
 export interface MonatImportStatus {
   jahr: number
   monat: number
@@ -145,6 +154,7 @@ export interface MonatImportStatus {
   grund: string
   ha_werte: Record<string, number | null>
   vorhandene_werte?: Record<string, number | null>
+  investitionen?: InvestitionImportStatus[]
 }
 
 export interface ImportVorschau {
@@ -157,8 +167,19 @@ export interface ImportVorschau {
   monate: MonatImportStatus[]
 }
 
+export interface MonatFeldAuswahl {
+  jahr: number
+  monat: number
+  // Basis-Felder: Liste der Feld-Namen die importiert werden sollen
+  // null/undefined = alle, [] = keine
+  basis_felder?: string[] | null
+  // Investitions-Felder: Dict von inv_id -> Liste der Feld-Namen
+  // null/undefined = alle, {} = keine
+  investition_felder?: Record<string, string[]> | null
+}
+
 export interface ImportRequest {
-  monate: Array<{ jahr: number; monat: number }>
+  monate: MonatFeldAuswahl[]
   ueberschreiben: boolean
 }
 
