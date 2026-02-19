@@ -3,7 +3,7 @@
  */
 
 export { useAnlagen, useAnlage } from './useAnlagen'
-export { useMonatsdaten, useMonatsdatenStats } from './useMonatsdaten'
+export { useMonatsdaten, useMonatsdatenStats, useAggregierteDaten, useAggregierteStats } from './useMonatsdaten'
 export { useInvestitionen, useInvestitionTypen, useInvestitionenByTyp } from './useInvestitionen'
 export { useStrompreise, useAktuellerStrompreis } from './useStrompreise'
 export { useSetupWizard } from './useSetupWizard'

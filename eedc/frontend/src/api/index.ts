@@ -21,7 +21,7 @@ export { haStatisticsApi } from './haStatistics'
 // Re-export types
 export type { ApiError } from './client'
 export type { HealthResponse, SettingsResponse, StatsResponse } from './system'
-export type { MonatsdatenCreate, MonatsdatenUpdate, MonatsdatenMitKennzahlen } from './monatsdaten'
+export type { MonatsdatenCreate, MonatsdatenUpdate, MonatsdatenMitKennzahlen, AggregierteMonatsdaten } from './monatsdaten'
 export type { InvestitionCreate, InvestitionUpdate, InvestitionTypInfo, ROIKomponente, ROIBerechnung, ROIDashboardResponse } from './investitionen'
 export type { StrompreisCreate, StrompreisUpdate } from './strompreise'
 export type { CSVTemplateInfo, DemoDataResult } from './import'

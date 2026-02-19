@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight, Calendar } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
-import { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis } from '../hooks'
+import { useAnlagen, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis } from '../hooks'
 import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab } from './auswertung'
 
 type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen'
@@ -30,23 +30,24 @@ export default function Auswertung() {
 
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
   const anlage = anlagen.find(a => a.id === anlageId)
-  const { monatsdaten, loading: mdLoading } = useMonatsdaten(anlageId)
+  // Aggregierte Daten verwenden für korrekte PV-Erzeugung aus InvestitionMonatsdaten
+  const { daten: aggregierteDaten, loading: mdLoading } = useAggregierteDaten(anlageId)
   const { strompreis } = useAktuellerStrompreis(anlageId ?? null)
 
   // Verfügbare Jahre
   const verfuegbareJahre = useMemo(() => {
-    const jahre = [...new Set(monatsdaten.map(m => m.jahr))].sort((a, b) => b - a)
+    const jahre = [...new Set(aggregierteDaten.map(m => m.jahr))].sort((a, b) => b - a)
     return jahre
-  }, [monatsdaten])
+  }, [aggregierteDaten])
 
   // Gefilterte Daten nach Jahr
   const filteredData = useMemo(() => {
-    if (selectedYear === 'all') return monatsdaten
-    return monatsdaten.filter(m => m.jahr === selectedYear)
-  }, [monatsdaten, selectedYear])
+    if (selectedYear === 'all') return aggregierteDaten
+    return aggregierteDaten.filter(m => m.jahr === selectedYear)
+  }, [aggregierteDaten, selectedYear])
 
-  // Stats für gefilterte Daten
-  const filteredStats = useMonatsdatenStats(filteredData)
+  // Stats für gefilterte Daten (mit korrekter PV-Erzeugung aus InvestitionMonatsdaten)
+  const filteredStats = useAggregierteStats(filteredData)
 
   const loading = anlagenLoading || mdLoading
 
@@ -65,7 +66,7 @@ export default function Auswertung() {
     )
   }
 
-  if (monatsdaten.length === 0) {
+  if (aggregierteDaten.length === 0) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auswertung</h1>

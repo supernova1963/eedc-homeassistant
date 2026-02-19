@@ -1,5 +1,6 @@
 // Gemeinsame Types für Auswertungs-Tabs
-import type { useAnlagen, useMonatsdaten, useMonatsdatenStats, useAktuellerStrompreis } from '../../hooks'
+import type { useAnlagen, useAggregierteStats, useAktuellerStrompreis } from '../../hooks'
+import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
 
 // Monatsnamen für Labels
 export const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -67,10 +68,10 @@ export const TYP_LABELS: Record<string, string> = {
   'pv-system': 'PV-System',
 }
 
-// Tab Props
+// Tab Props - verwendet jetzt aggregierte Daten mit korrekter PV-Erzeugung
 export interface TabProps {
-  data: ReturnType<typeof useMonatsdaten>['monatsdaten']
-  stats: ReturnType<typeof useMonatsdatenStats>
+  data: AggregierteMonatsdaten[]
+  stats: ReturnType<typeof useAggregierteStats>
   anlage?: ReturnType<typeof useAnlagen>['anlagen'][0]
   strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
   zeitraumLabel?: string  // z.B. "2025" oder "2023–2025"
@@ -114,8 +115,9 @@ export interface MonatsZeitreihe {
 }
 
 // Helper-Funktion zum Erstellen der Monatszeitreihen
+// Verwendet jetzt AggregierteMonatsdaten mit korrekter PV-Erzeugung aus InvestitionMonatsdaten
 export function createMonatsZeitreihe(
-  data: TabProps['data'],
+  data: AggregierteMonatsdaten[],
   anlage?: TabProps['anlage'],
   strompreis?: TabProps['strompreis']
 ): MonatsZeitreihe[] {
@@ -125,30 +127,31 @@ export function createMonatsZeitreihe(
   })
 
   return sorted.map(md => {
-    const erzeugung = md.pv_erzeugung_kwh || (md.einspeisung_kwh + (md.eigenverbrauch_kwh || 0))
+    // PV-Erzeugung kommt jetzt korrekt aus InvestitionMonatsdaten (aggregiert)
+    const erzeugung = md.pv_erzeugung_kwh || 0
     const eigenverbrauch = md.eigenverbrauch_kwh || 0
     const gesamtverbrauch = md.gesamtverbrauch_kwh || (eigenverbrauch + md.netzbezug_kwh)
     const direktverbrauch = md.direktverbrauch_kwh || 0
 
-    // Quoten berechnen
-    const autarkie = gesamtverbrauch > 0 ? (eigenverbrauch / gesamtverbrauch) * 100 : 0
-    const evQuote = erzeugung > 0 ? (eigenverbrauch / erzeugung) * 100 : 0
+    // Quoten berechnen - direkt aus aggregierten Daten oder berechnet
+    const autarkie = md.autarkie_prozent ?? (gesamtverbrauch > 0 ? (eigenverbrauch / gesamtverbrauch) * 100 : 0)
+    const evQuote = md.eigenverbrauchsquote_prozent ?? (erzeugung > 0 ? (eigenverbrauch / erzeugung) * 100 : 0)
     const spezErtrag = anlage?.leistung_kwp ? erzeugung / anlage.leistung_kwp : 0
 
-    // Speicher (Batterie)
-    const speicher_ladung = md.batterie_ladung_kwh || 0
-    const speicher_entladung = md.batterie_entladung_kwh || 0
+    // Speicher - jetzt aus aggregierten InvestitionMonatsdaten
+    const speicher_ladung = md.speicher_ladung_kwh || 0
+    const speicher_entladung = md.speicher_entladung_kwh || 0
     const speicher_effizienz = speicher_ladung > 0 ? (speicher_entladung / speicher_ladung) * 100 : null
 
-    // Wärmepumpe - aktuell nicht in Monatsdaten, placeholder für Erweiterung
-    const wp_waerme = 0
-    const wp_strom = 0
-    const wp_cop = null
+    // Wärmepumpe - aus aggregierten InvestitionMonatsdaten
+    const wp_waerme = (md.wp_heizung_kwh || 0) + (md.wp_warmwasser_kwh || 0)
+    const wp_strom = md.wp_strom_kwh || 0
+    const wp_cop = wp_strom > 0 ? wp_waerme / wp_strom : null
 
-    // E-Auto - aktuell nicht in Monatsdaten, placeholder für Erweiterung
-    const eauto_km = 0
-    const eauto_ladung = 0
-    const eauto_pv_anteil = null
+    // E-Auto - aus aggregierten InvestitionMonatsdaten
+    const eauto_km = md.eauto_km || 0
+    const eauto_ladung = md.eauto_ladung_kwh || 0
+    const eauto_pv_anteil = null // Wird später berechnet wenn PV-Anteil verfügbar
 
     // Finanzen
     const einspeise_erloes = strompreis
