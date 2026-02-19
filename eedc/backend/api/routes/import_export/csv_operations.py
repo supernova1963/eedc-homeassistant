@@ -25,6 +25,8 @@ from .helpers import (
     _normalize_for_matching,
     _import_investition_monatsdaten_v09,
     _import_investition_monatsdaten_legacy,
+    _distribute_legacy_pv_to_modules,
+    _distribute_legacy_battery_to_storages,
 )
 
 router = APIRouter()
@@ -348,9 +350,10 @@ async def import_csv(
             batterie_ladung_explicit = parse_float(row.get("Batterie_Ladung_kWh", ""))
             batterie_entladung_explicit = parse_float(row.get("Batterie_Entladung_kWh", ""))
 
-            # PV-Erzeugung Validierung
+            # PV-Erzeugung Validierung und Migration
             pv_erzeugung = None
             if summen["pv_erzeugung_sum"] > 0:
+                # Individuelle PV-Modul-Spalten vorhanden
                 pv_erzeugung = summen["pv_erzeugung_sum"]
                 if pv_erzeugung_explicit is not None:
                     if abs(pv_erzeugung_explicit - pv_erzeugung) <= 0.5:
@@ -359,19 +362,24 @@ async def import_csv(
                                 "Legacy-Spalte 'PV_Erzeugung_kWh' ist redundant und wird ignoriert."
                             )
                     else:
-                        fehler.append(
-                            f"Zeile {i}: PV_Erzeugung_kWh ({pv_erzeugung_explicit:.1f}) weicht von "
-                            f"Summe der PV-Module ({pv_erzeugung:.1f}) ab."
-                        )
-                        continue
+                        # Abweichung: Legacy-Wert hat Vorrang, warnen statt Fehler
+                        if "Legacy 'PV_Erzeugung_kWh' weicht von Modul-Summe ab" not in warnungen:
+                            warnungen.append(
+                                f"Legacy 'PV_Erzeugung_kWh' weicht von Modul-Summe ab. "
+                                f"Modul-Werte werden verwendet, Legacy-Wert ignoriert."
+                            )
             elif pv_erzeugung_explicit is not None:
                 if pv_module_vorhanden:
-                    fehler.append(
-                        f"Zeile {i}: Spalte 'PV_Erzeugung_kWh' wird nicht mehr unterstützt. "
-                        f"Bitte individuelle PV-Modul-Spalten verwenden."
+                    # Legacy-Wert vorhanden, aber keine individuellen Spalten
+                    # -> Auf PV-Module verteilen
+                    pv_module_list = [inv for inv in investitionen if inv.typ == "pv-module"]
+                    migration_warnungen = await _distribute_legacy_pv_to_modules(
+                        db, pv_erzeugung_explicit, pv_module_list, jahr, monat, ueberschreiben
                     )
-                    continue
+                    warnungen.extend(migration_warnungen)
+                    pv_erzeugung = pv_erzeugung_explicit
                 else:
+                    # Keine PV-Module angelegt - Legacy akzeptieren
                     pv_erzeugung = pv_erzeugung_explicit
                     if "Keine PV-Module als Investitionen angelegt" not in warnungen:
                         warnungen.append(
@@ -379,38 +387,54 @@ async def import_csv(
                             "Legacy-Spalte 'PV_Erzeugung_kWh' wird akzeptiert."
                         )
 
-            # Batterie Validierung
+            # Batterie Validierung und Migration
             batterie_ladung = None
             batterie_entladung = None
 
             if summen["batterie_ladung_sum"] > 0 or summen["batterie_entladung_sum"] > 0:
+                # Individuelle Speicher-Spalten vorhanden
                 if batterie_ladung_explicit is not None:
                     if abs(batterie_ladung_explicit - summen["batterie_ladung_sum"]) <= 0.5:
                         if "Legacy-Spalte 'Batterie_Ladung_kWh' ist redundant" not in warnungen:
                             warnungen.append("Legacy-Spalte 'Batterie_Ladung_kWh' ist redundant.")
                     else:
-                        fehler.append(
-                            f"Zeile {i}: Batterie_Ladung_kWh weicht von Summe der Speicher ab."
-                        )
-                        continue
+                        # Abweichung: Speicher-Werte haben Vorrang
+                        if "Legacy 'Batterie_Ladung_kWh' weicht von Speicher-Summe ab" not in warnungen:
+                            warnungen.append(
+                                "Legacy 'Batterie_Ladung_kWh' weicht von Speicher-Summe ab. "
+                                "Speicher-Werte werden verwendet."
+                            )
 
                 if batterie_entladung_explicit is not None:
                     if abs(batterie_entladung_explicit - summen["batterie_entladung_sum"]) <= 0.5:
                         if "Legacy-Spalte 'Batterie_Entladung_kWh' ist redundant" not in warnungen:
                             warnungen.append("Legacy-Spalte 'Batterie_Entladung_kWh' ist redundant.")
                     else:
-                        fehler.append(
-                            f"Zeile {i}: Batterie_Entladung_kWh weicht von Summe der Speicher ab."
-                        )
-                        continue
+                        # Abweichung: Speicher-Werte haben Vorrang
+                        if "Legacy 'Batterie_Entladung_kWh' weicht von Speicher-Summe ab" not in warnungen:
+                            warnungen.append(
+                                "Legacy 'Batterie_Entladung_kWh' weicht von Speicher-Summe ab. "
+                                "Speicher-Werte werden verwendet."
+                            )
 
             elif batterie_ladung_explicit is not None or batterie_entladung_explicit is not None:
                 if speicher_vorhanden:
-                    fehler.append(
-                        f"Zeile {i}: Legacy-Spalten 'Batterie_*_kWh' werden nicht mehr unterstützt."
+                    # Legacy-Werte vorhanden, aber keine individuellen Spalten
+                    # -> Auf Speicher verteilen
+                    speicher_list = [inv for inv in investitionen if inv.typ == "speicher"]
+                    migration_warnungen = await _distribute_legacy_battery_to_storages(
+                        db,
+                        batterie_ladung_explicit or 0,
+                        batterie_entladung_explicit or 0,
+                        speicher_list,
+                        jahr, monat, ueberschreiben
                     )
-                    continue
+                    warnungen.extend(migration_warnungen)
+                    # Für Legacy-Feld in Monatsdaten (Fallback)
+                    batterie_ladung = batterie_ladung_explicit
+                    batterie_entladung = batterie_entladung_explicit
                 else:
+                    # Keine Speicher angelegt - Legacy akzeptieren
                     batterie_ladung = batterie_ladung_explicit
                     batterie_entladung = batterie_entladung_explicit
                     if "Keine Speicher als Investitionen angelegt" not in warnungen:

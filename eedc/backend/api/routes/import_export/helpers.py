@@ -397,6 +397,134 @@ async def _import_investition_monatsdaten_v09(
     return summen
 
 
+async def _distribute_legacy_pv_to_modules(
+    db: AsyncSession,
+    pv_erzeugung: float,
+    pv_module: list[Investition],
+    jahr: int,
+    monat: int,
+    ueberschreiben: bool
+) -> list[str]:
+    """
+    Verteilt einen Legacy-PV-Erzeugungswert proportional auf die PV-Module.
+
+    Die Verteilung erfolgt nach kWp-Anteil. Bei fehlenden kWp-Werten wird
+    gleichmäßig verteilt.
+
+    Returns:
+        Liste von Warnungen
+    """
+    warnungen = []
+
+    if not pv_module or pv_erzeugung <= 0:
+        return warnungen
+
+    # Gesamt-kWp berechnen
+    total_kwp = sum(
+        (inv.parameter or {}).get("leistung_kwp", 0) or 0
+        for inv in pv_module
+    )
+
+    for inv in pv_module:
+        inv_kwp = (inv.parameter or {}).get("leistung_kwp", 0) or 0
+
+        if total_kwp > 0:
+            # Proportionale Verteilung nach kWp
+            anteil = inv_kwp / total_kwp
+        else:
+            # Gleichmäßige Verteilung wenn keine kWp-Werte
+            anteil = 1.0 / len(pv_module)
+
+        pv_anteil = round(pv_erzeugung * anteil, 1)
+
+        verbrauch_daten = {"pv_erzeugung_kwh": pv_anteil}
+        await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+
+    if total_kwp > 0:
+        warnungen.append(
+            f"Legacy PV-Erzeugung ({pv_erzeugung:.0f} kWh) wurde proportional nach kWp "
+            f"auf {len(pv_module)} PV-Module verteilt."
+        )
+    else:
+        warnungen.append(
+            f"Legacy PV-Erzeugung ({pv_erzeugung:.0f} kWh) wurde gleichmäßig "
+            f"auf {len(pv_module)} PV-Module verteilt (keine kWp-Werte definiert)."
+        )
+
+    return warnungen
+
+
+async def _distribute_legacy_battery_to_storages(
+    db: AsyncSession,
+    batterie_ladung: float,
+    batterie_entladung: float,
+    speicher: list[Investition],
+    jahr: int,
+    monat: int,
+    ueberschreiben: bool
+) -> list[str]:
+    """
+    Verteilt Legacy-Batteriewerte proportional auf die Speicher.
+
+    Die Verteilung erfolgt nach Kapazität (kapazitaet_kwh). Bei fehlenden
+    Kapazitätswerten wird gleichmäßig verteilt.
+
+    Returns:
+        Liste von Warnungen
+    """
+    warnungen = []
+
+    if not speicher:
+        return warnungen
+
+    if batterie_ladung <= 0 and batterie_entladung <= 0:
+        return warnungen
+
+    # Gesamt-Kapazität berechnen
+    total_kapazitaet = sum(
+        (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        for inv in speicher
+    )
+
+    for inv in speicher:
+        inv_kap = (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+
+        if total_kapazitaet > 0:
+            # Proportionale Verteilung nach Kapazität
+            anteil = inv_kap / total_kapazitaet
+        else:
+            # Gleichmäßige Verteilung
+            anteil = 1.0 / len(speicher)
+
+        verbrauch_daten = {}
+        if batterie_ladung > 0:
+            verbrauch_daten["ladung_kwh"] = round(batterie_ladung * anteil, 1)
+        if batterie_entladung > 0:
+            verbrauch_daten["entladung_kwh"] = round(batterie_entladung * anteil, 1)
+
+        if verbrauch_daten:
+            await _upsert_investition_monatsdaten(db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben)
+
+    teile = []
+    if batterie_ladung > 0:
+        teile.append(f"Ladung {batterie_ladung:.0f} kWh")
+    if batterie_entladung > 0:
+        teile.append(f"Entladung {batterie_entladung:.0f} kWh")
+
+    if total_kapazitaet > 0:
+        warnungen.append(
+            f"Legacy Batterie-Werte ({', '.join(teile)}) wurden proportional nach Kapazität "
+            f"auf {len(speicher)} Speicher verteilt."
+        )
+    else:
+        warnungen.append(
+            f"Legacy Batterie-Werte ({', '.join(teile)}) wurden gleichmäßig "
+            f"auf {len(speicher)} Speicher verteilt (keine Kapazitätswerte definiert)."
+        )
+
+    return warnungen
+
+
 async def _import_investition_monatsdaten_legacy(
     db: AsyncSession,
     row: dict,
