@@ -7,6 +7,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.0.2] - 2026-02-19
+
+### Hinzugefügt
+
+- **CSV-Import: Automatische Legacy-Migration**
+  - Alte CSV-Dateien mit `PV_Erzeugung_kWh`, `Batterie_Ladung_kWh`, `Batterie_Entladung_kWh` werden automatisch migriert
+  - PV-Erzeugung wird proportional nach kWp auf alle PV-Module verteilt
+  - Batterie-Werte werden proportional nach Kapazität auf alle Speicher verteilt
+  - Warnung wird angezeigt, wenn Legacy-Werte migriert wurden
+  - Behebt Import-Fehler bei älteren Backup-Dateien
+
+### Behoben
+
+- **Auswertung/Energie KPIs zeigten falsche Werte**
+  - Problem: PV-Erzeugung zeigte 0.3 MWh statt tatsächlicher Werte
+  - Ursache: `useMonatsdatenStats` verwendete Legacy-Feld `Monatsdaten.pv_erzeugung_kwh`
+  - Fix: Neue Hooks `useAggregierteDaten` und `useAggregierteStats` nutzen aggregierte Daten aus `InvestitionMonatsdaten`
+  - Betroffen: Alle KPIs in Auswertung → Energie Tab
+
+- **PrognoseVsIst nutzte Legacy-Felder**
+  - Fix: Verwendet jetzt `/api/monatsdaten/aggregiert` Endpoint
+  - Korrekte PV-Erzeugungswerte für SOLL-IST Vergleich
+
+- **Swagger UI "Try it out" funktioniert jetzt im HA Ingress**
+  - Problem: 404-Fehler beim Testen von API-Endpoints in Swagger UI
+  - Ursache: Swagger verwendete falsche Base-URL im Ingress-Proxy
+  - Fix: Dynamische Base-URL-Berechnung aus aktueller Browser-URL
+
+---
+
 ## [2.0.1] - 2026-02-19
 
 ### Hinzugefügt
