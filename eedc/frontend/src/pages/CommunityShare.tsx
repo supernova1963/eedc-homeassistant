@@ -271,13 +271,16 @@ export default function CommunityShare() {
         {/* Aktionen */}
         <div className="flex flex-wrap gap-4 justify-center">
           <a
-            href={preview?.community_url || 'https://energy.raunet.eu'}
+            href={result?.anlage_hash
+              ? `${preview?.community_url || 'https://energy.raunet.eu'}?anlage=${result.anlage_hash}`
+              : preview?.community_url || 'https://energy.raunet.eu'
+            }
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium"
           >
             <ExternalLink className="h-4 w-4" />
-            Community-Dashboard öffnen
+            Dein persönliches Benchmark öffnen
           </a>
           <button
             onClick={() => {
