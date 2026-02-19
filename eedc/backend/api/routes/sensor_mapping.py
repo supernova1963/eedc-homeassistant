@@ -255,12 +255,22 @@ async def get_available_sensors(
                 attrs = state.get("attributes", {})
                 device_class = attrs.get("device_class", "")
                 unit = attrs.get("unit_of_measurement", "")
+                state_class = attrs.get("state_class", "")
 
                 # Filter auf Energy-relevante Sensoren
                 if filter_energy:
-                    if device_class not in ["energy", "power", "battery", "temperature", "distance"]:
-                        if unit not in ["kWh", "Wh", "W", "kW", "km", "°C"]:
-                            continue
+                    # Erlaubt: Bestimmte device_class
+                    if device_class in ["energy", "power", "battery", "temperature", "distance"]:
+                        pass  # OK
+                    # Erlaubt: Bestimmte Einheiten
+                    elif unit in ["kWh", "Wh", "W", "kW", "km", "°C"]:
+                        pass  # OK
+                    # Erlaubt: Zähler-Sensoren (state_class=measurement oder total_increasing) ohne Einheit
+                    # z.B. Ladevorgänge, Zyklen, etc.
+                    elif state_class in ["measurement", "total_increasing", "total"] and not unit:
+                        pass  # OK - Anzahl-basierte Zähler
+                    else:
+                        continue
 
                 sensors.append(HASensorInfo(
                     entity_id=entity_id,
