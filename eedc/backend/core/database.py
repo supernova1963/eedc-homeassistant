@@ -70,6 +70,8 @@ async def run_migrations(conn):
                 ('wetter_provider', 'VARCHAR(30)'),
                 # v1.1.0: Sensor-Mapping für HA-Integration
                 ('sensor_mapping', 'JSON'),
+                # v2.0.3: Community-Sharing Hash
+                ('community_hash', 'VARCHAR(64)'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

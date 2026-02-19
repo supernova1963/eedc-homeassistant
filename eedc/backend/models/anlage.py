@@ -81,6 +81,10 @@ class Anlage(Base):
     # Siehe docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation
     sensor_mapping: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
+    # Community-Sharing: Hash zur Identifikation bei Löschung
+    # Wird nach erfolgreichem Teilen gesetzt und für Delete-Endpoint benötigt
+    community_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

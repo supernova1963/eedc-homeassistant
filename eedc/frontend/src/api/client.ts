@@ -83,8 +83,8 @@ class ApiClient {
   }
 
   // DELETE Request
-  async delete(endpoint: string): Promise<void> {
-    return this.request<void>(endpoint, { method: 'DELETE' })
+  async delete<T = void>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: 'DELETE' })
   }
 
   // PATCH Request

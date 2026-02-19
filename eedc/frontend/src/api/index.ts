@@ -17,6 +17,7 @@ export { haImportApi } from './haImport'
 export { sensorMappingApi } from './sensorMapping'
 export { monatsabschlussApi } from './monatsabschluss'
 export { haStatisticsApi } from './haStatistics'
+export { communityApi } from './community'
 
 // Re-export types
 export type { ApiError } from './client'
@@ -69,3 +70,12 @@ export type {
   ImportRequest,
   ImportResult as HAImportResult,
 } from './haStatistics'
+export type {
+  CommunityDataPreview,
+  MonatswertPreview,
+  PreviewResponse,
+  ShareResponse,
+  BenchmarkData,
+  CommunityStatus,
+  DeleteResponse,
+} from './community'

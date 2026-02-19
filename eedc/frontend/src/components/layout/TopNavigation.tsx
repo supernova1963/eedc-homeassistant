@@ -52,6 +52,12 @@ const settingsMenu = [
       { name: 'MQTT-Export', href: '/einstellungen/ha-export' },
     ],
   },
+  {
+    category: 'Community',
+    items: [
+      { name: 'Daten teilen', href: '/einstellungen/community' },
+    ],
+  },
 ]
 
 export default function TopNavigation() {
