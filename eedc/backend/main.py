@@ -108,13 +108,14 @@ app.include_router(ha_statistics.router, prefix="/api/ha-statistics", tags=["HA 
 # =============================================================================
 
 @app.get("/api/docs", include_in_schema=False)
-async def custom_swagger_ui():
+async def custom_swagger_ui(request: Request):
     """
-    Custom Swagger UI mit relativen URLs.
+    Custom Swagger UI mit dynamischer Base-URL.
 
     Standard FastAPI docs verwenden absolute Pfade für openapi.json,
     was im HA Ingress-Modus nicht funktioniert.
-    Diese Version verwendet relative URLs die überall funktionieren.
+    Diese Version ermittelt die Base-URL dynamisch aus der aktuellen Request-URL,
+    sodass "Try it out" auch im HA Ingress korrekt funktioniert.
     """
     return HTMLResponse(f"""
 <!DOCTYPE html>
@@ -132,12 +133,23 @@ async def custom_swagger_ui():
     <div id="swagger-ui"></div>
     <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
     <script>
-        window.onload = function() {{
-            // Relative URL zur openapi.json (funktioniert mit jedem Base-Path)
+        window.onload = async function() {{
+            // Relative URL zur openapi.json
             const openApiUrl = './openapi.json';
 
+            // OpenAPI-Spec laden und Base-URL dynamisch setzen
+            const response = await fetch(openApiUrl);
+            const spec = await response.json();
+
+            // Base-URL aus aktueller URL berechnen (entfernt /api/docs)
+            const currentUrl = window.location.href;
+            const baseUrl = currentUrl.replace(/\\/api\\/docs.*$/, '');
+
+            // Server in der Spec setzen, damit "Try it out" funktioniert
+            spec.servers = [{{ url: baseUrl }}];
+
             window.ui = SwaggerUIBundle({{
-                url: openApiUrl,
+                spec: spec,
                 dom_id: '#swagger-ui',
                 presets: [
                     SwaggerUIBundle.presets.apis,
