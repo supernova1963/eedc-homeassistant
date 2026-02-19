@@ -44,6 +44,7 @@ import PVModuleStep from '../components/sensor-mapping/PVModuleStep'
 import SpeicherStep from '../components/sensor-mapping/SpeicherStep'
 import WaermepumpeStep from '../components/sensor-mapping/WaermepumpeStep'
 import EAutoStep from '../components/sensor-mapping/EAutoStep'
+import BalkonkraftwerkStep from '../components/sensor-mapping/BalkonkraftwerkStep'
 import MappingSummaryStep from '../components/sensor-mapping/MappingSummaryStep'
 
 // =============================================================================
@@ -231,6 +232,15 @@ export default function SensorMappingWizard() {
         title: 'E-Auto & Wallbox',
         icon: <Car className="w-5 h-5" />,
         investitionen: [...(invByTyp['e-auto'] || []), ...(invByTyp['wallbox'] || [])],
+      })
+    }
+
+    if (invByTyp['balkonkraftwerk']?.length) {
+      s.push({
+        id: 'bkw',
+        title: 'Balkonkraftwerk',
+        icon: <Sun className="w-5 h-5" />,
+        investitionen: invByTyp['balkonkraftwerk'],
       })
     }
 
@@ -740,6 +750,15 @@ export default function SensorMappingWizard() {
 
           {currentStepConfig.id === 'eauto' && (
             <EAutoStep
+              investitionen={currentStepConfig.investitionen || []}
+              mappings={state.investitionen}
+              onChange={updateInvestition}
+              availableSensors={availableSensors}
+            />
+          )}
+
+          {currentStepConfig.id === 'bkw' && (
+            <BalkonkraftwerkStep
               investitionen={currentStepConfig.investitionen || []}
               mappings={state.investitionen}
               onChange={updateInvestition}

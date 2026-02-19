@@ -100,12 +100,21 @@ FELD_LABELS = {
     "ladung_netz_kwh": "Ladung aus Netz",
     # E-Auto
     "ladung_pv_kwh": "Ladung PV",
+    "ladung_netz_kwh": "Ladung Netz",
     "km_gefahren": "Kilometer",
     "v2h_entladung_kwh": "V2H Entladung",
+    "verbrauch_kwh": "Verbrauch gesamt",
+    "ladung_extern_kwh": "Ladung Extern",
+    # Wallbox
+    "ladevorgaenge": "Ladevorgänge",
     # Wärmepumpe
     "stromverbrauch_kwh": "Stromverbrauch",
     "heizenergie_kwh": "Heizenergie",
     "warmwasser_kwh": "Warmwasser",
+    # Balkonkraftwerk
+    "eigenverbrauch_kwh": "Eigenverbrauch",
+    "speicher_ladung_kwh": "Speicher Ladung",
+    "speicher_entladung_kwh": "Speicher Entladung",
 }
 
 

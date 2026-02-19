@@ -4,11 +4,14 @@
  * E-Auto Felder:
  * - Ladung PV (kWh)
  * - Ladung Netz (kWh) - oder EV-Quote
- * - km gefahren - typischerweise manuell
+ * - Ladung Extern (kWh) - optional, Autobahn/Arbeit
+ * - Verbrauch gesamt (kWh) - optional
+ * - km gefahren - typischerweise manuell oder Auto-Integration
  * - V2H Entladung (kWh) - optional
  *
  * Wallbox Felder:
  * - Ladung gesamt (kWh)
+ * - Ladevorgänge (Anzahl)
  */
 
 import { Car, PlugZap } from 'lucide-react'
@@ -89,6 +92,60 @@ export default function EAutoStep({
     },
   ]
 
+  const externLadungOptionen: StrategieOption[] = [
+    {
+      value: 'sensor',
+      label: 'HA-Sensor',
+      description: 'Z.B. aus Auto-Integration',
+    },
+    {
+      value: 'manuell',
+      label: 'Manuell eingeben',
+      description: 'Im Monatsabschluss erfassen',
+    },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Keine externe Ladung',
+    },
+  ]
+
+  const verbrauchOptionen: StrategieOption[] = [
+    {
+      value: 'sensor',
+      label: 'HA-Sensor',
+      description: 'Z.B. aus Auto-Integration',
+    },
+    {
+      value: 'manuell',
+      label: 'Manuell eingeben',
+      description: 'Im Monatsabschluss erfassen',
+    },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Wird aus Ladung berechnet',
+    },
+  ]
+
+  const ladevorgaengeOptionen: StrategieOption[] = [
+    {
+      value: 'sensor',
+      label: 'HA-Sensor',
+      description: 'Z.B. aus Wallbox-Integration',
+    },
+    {
+      value: 'manuell',
+      label: 'Manuell eingeben',
+      description: 'Im Monatsabschluss erfassen',
+    },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Optional',
+    },
+  ]
+
   return (
     <div className="space-y-6">
       {/* E-Autos */}
@@ -152,6 +209,26 @@ export default function EAutoStep({
                   strategieOptionen={v2hOptionen}
                   defaultStrategie="keine"
                 />
+
+                <FeldMappingInput
+                  label="Verbrauch gesamt"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.verbrauch_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'verbrauch_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={verbrauchOptionen}
+                  defaultStrategie="keine"
+                />
+
+                <FeldMappingInput
+                  label="Ladung Extern"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.ladung_extern_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'ladung_extern_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={externLadungOptionen}
+                  defaultStrategie="keine"
+                />
               </div>
             </div>
           ))}
@@ -186,7 +263,7 @@ export default function EAutoStep({
               </div>
 
               {/* Felder */}
-              <div className="p-4">
+              <div className="p-4 space-y-4">
                 <FeldMappingInput
                   label="Ladung Gesamt"
                   einheit="kWh"
@@ -194,6 +271,16 @@ export default function EAutoStep({
                   onChange={mapping => onChange(inv.id, 'ladung_kwh', mapping)}
                   availableSensors={availableSensors}
                   strategieOptionen={ladungOptionen}
+                />
+
+                <FeldMappingInput
+                  label="Ladevorgänge"
+                  einheit="Anzahl"
+                  value={mappings[inv.id.toString()]?.ladevorgaenge || null}
+                  onChange={mapping => onChange(inv.id, 'ladevorgaenge', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={ladevorgaengeOptionen}
+                  defaultStrategie="keine"
                 />
               </div>
             </div>
