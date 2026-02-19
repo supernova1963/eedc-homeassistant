@@ -11,7 +11,7 @@ import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
-import type { MonatsdatenMitKennzahlen } from '../api/monatsdaten'
+import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   ComposedChart, Line, ReferenceLine, Bar
@@ -41,7 +41,7 @@ export default function PrognoseVsIst() {
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
   const [selectedJahr, setSelectedJahr] = useState<number>(new Date().getFullYear())
   const [prognose, setPrognose] = useState<PrognoseData | null>(null)
-  const [monatsdaten, setMonatsdaten] = useState<MonatsdatenMitKennzahlen[]>([])
+  const [monatsdaten, setMonatsdaten] = useState<AggregierteMonatsdaten[]>([])
   const [loading, setLoading] = useState(false)
   const [savingPrognose, setSavingPrognose] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,9 +67,9 @@ export default function PrognoseVsIst() {
     setError(null)
 
     try {
-      // Zuerst Monatsdaten laden
-      const monatsdatenData = await monatsdatenApi.list(selectedAnlageId)
-      setMonatsdaten(monatsdatenData as MonatsdatenMitKennzahlen[])
+      // Aggregierte Monatsdaten laden (korrekte PV-Erzeugung aus InvestitionMonatsdaten)
+      const monatsdatenData = await monatsdatenApi.listAggregiert(selectedAnlageId)
+      setMonatsdaten(monatsdatenData)
 
       // Versuche gespeicherte Prognose zu laden
       const gespeichertePrognose = await pvgisApi.getAktivePrognose(selectedAnlageId)
