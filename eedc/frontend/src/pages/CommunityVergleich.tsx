@@ -391,28 +391,56 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
               )}
 
               {/* Wallbox */}
-              {benchmark.anlage.hat_wallbox && benchmark.anlage.wallbox_kw && (
+              {benchmark.benchmark_erweitert.wallbox && benchmark.anlage.hat_wallbox && (
                 <KomponentenCard
                   title="Wallbox"
                   icon={<Plug className="h-6 w-6 text-cyan-500" />}
-                  kapazitaet={`${benchmark.anlage.wallbox_kw} kW`}
+                  kapazitaet={benchmark.anlage.wallbox_kw ? `${benchmark.anlage.wallbox_kw} kW` : undefined}
                 >
-                  <p className="text-gray-500 text-sm">
-                    Wallbox-Benchmarks werden bald verfügbar sein.
-                  </p>
+                  <KPIRow
+                    label="PV-Anteil Ladung"
+                    kpi={benchmark.benchmark_erweitert.wallbox.pv_anteil}
+                    einheit="%"
+                  />
+                  <KPIRow
+                    label="Ladung gesamt"
+                    kpi={benchmark.benchmark_erweitert.wallbox.ladung}
+                    einheit="kWh"
+                    hideComparison
+                  />
+                  <KPIRow
+                    label="Ladevorgänge"
+                    kpi={benchmark.benchmark_erweitert.wallbox.ladevorgaenge}
+                    einheit=""
+                    hideComparison
+                  />
                 </KomponentenCard>
               )}
 
               {/* Balkonkraftwerk */}
-              {benchmark.anlage.hat_balkonkraftwerk && benchmark.anlage.bkw_wp && (
+              {benchmark.benchmark_erweitert.balkonkraftwerk && benchmark.anlage.hat_balkonkraftwerk && (
                 <KomponentenCard
                   title="Balkonkraftwerk"
                   icon={<Sun className="h-6 w-6 text-amber-500" />}
-                  kapazitaet={`${benchmark.anlage.bkw_wp} Wp`}
+                  kapazitaet={benchmark.anlage.bkw_wp ? `${benchmark.anlage.bkw_wp} Wp` : undefined}
                 >
-                  <p className="text-gray-500 text-sm">
-                    BKW-Benchmarks werden bald verfügbar sein.
-                  </p>
+                  <KPIRow
+                    label="Spez. Ertrag"
+                    kpi={benchmark.benchmark_erweitert.balkonkraftwerk.spez_ertrag}
+                    einheit="kWh/kWp"
+                  />
+                  <KPIRow
+                    label="Erzeugung"
+                    kpi={benchmark.benchmark_erweitert.balkonkraftwerk.erzeugung}
+                    einheit="kWh"
+                    hideComparison
+                  />
+                  <KPIRow
+                    label="Eigenverbrauchsquote"
+                    kpi={benchmark.benchmark_erweitert.balkonkraftwerk.eigenverbrauch}
+                    einheit="%"
+                    hideComparison
+                  />
                 </KomponentenCard>
               )}
             </div>

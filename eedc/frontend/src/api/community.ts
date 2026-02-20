@@ -109,14 +109,15 @@ export interface EAutoBenchmark {
 }
 
 export interface WallboxBenchmark {
-  ladung_gesamt?: KPIVergleich | null
+  ladung?: KPIVergleich | null
   pv_anteil?: KPIVergleich | null
   ladevorgaenge?: KPIVergleich | null
 }
 
 export interface BKWBenchmark {
   erzeugung?: KPIVergleich | null
-  eigenverbrauch_anteil?: KPIVergleich | null
+  spez_ertrag?: KPIVergleich | null
+  eigenverbrauch?: KPIVergleich | null
 }
 
 export interface ErweiterteBenchmarkData {
@@ -125,7 +126,7 @@ export interface ErweiterteBenchmarkData {
   waermepumpe?: WaermepumpeBenchmark | null
   eauto?: EAutoBenchmark | null
   wallbox?: WallboxBenchmark | null
-  bkw?: BKWBenchmark | null
+  balkonkraftwerk?: BKWBenchmark | null
 }
 
 export interface MonatswertOutput {
