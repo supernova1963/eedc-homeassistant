@@ -71,6 +71,7 @@ export default function CommunityShare() {
   const [error, setError] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [consentGiven, setConsentGiven] = useState(false)
 
   // Anlagen laden
   useEffect(() => {
@@ -390,6 +391,33 @@ export default function CommunityShare() {
         </div>
       </div>
 
+      {/* Einwilligung (DSGVO Art. 6/7) - nur beim ersten Teilen */}
+      {!preview?.bereits_geteilt && preview?.anzahl_monate && preview.anzahl_monate > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={consentGiven}
+              onChange={(e) => setConsentGiven(e.target.checked)}
+              className="mt-1 h-4 w-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500"
+            />
+            <span className="text-sm text-gray-700">
+              Ich stimme der anonymen Übertragung meiner PV-Anlagendaten an die EEDC Community zu.
+              Die Daten werden gemäß der{' '}
+              <a
+                href="https://energy.raunet.eu/datenschutz"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-600 hover:underline"
+              >
+                Datenschutzerklärung
+              </a>
+              {' '}verarbeitet. Ich kann meine Daten jederzeit löschen.
+            </span>
+          </label>
+        </div>
+      )}
+
       {/* Laden-Indikator für Vorschau */}
       {loadingPreview && (
         <div className="flex items-center justify-center py-8">
@@ -549,10 +577,17 @@ export default function CommunityShare() {
       <div className="flex justify-center pt-4">
         <button
           onClick={handleShare}
-          disabled={!status?.online || sharing || !preview?.anzahl_monate || !selectedAnlage}
+          disabled={
+            !status?.online ||
+            sharing ||
+            !preview?.anzahl_monate ||
+            !selectedAnlage ||
+            // Consent erforderlich beim ersten Teilen
+            (!preview?.bereits_geteilt && !consentGiven)
+          }
           className={`
             inline-flex items-center gap-2 px-6 py-3 rounded-lg text-lg font-medium
-            ${status?.online && preview?.anzahl_monate && selectedAnlage
+            ${status?.online && preview?.anzahl_monate && selectedAnlage && (preview?.bereits_geteilt || consentGiven)
               ? 'bg-orange-500 text-white hover:bg-orange-600'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }
