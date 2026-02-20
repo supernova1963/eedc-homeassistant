@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.0.1** | Stand: Februar 2026
+**Version 2.0.3** | Stand: Februar 2026
 
 ---
 
@@ -162,7 +162,8 @@ eedc-homeassistant/
     │       ├── ha_mqtt_sync.py      # MQTT Sync Service
     │       ├── vorschlag_service.py # Intelligente Vorschläge
     │       ├── scheduler.py         # APScheduler für Cron-Jobs
-    │       └── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v2.0.0)
+    │       ├── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v2.0.0)
+    │       └── community_service.py     # Community-Datenaufbereitung (NEU v2.0.3)
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -465,6 +466,7 @@ Sonstiges [Eigenständig]
 | `/api/sensor-mapping` | sensor_mapping.py | **Sensor-Mapping CRUD** (NEU) |
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** (NEU) |
 | `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** (NEU) |
+| `/api/community` | community.py | **Community-Teilen & Benchmark** (NEU v2.0.3) |
 
 ### Wichtige Endpoints
 
@@ -634,9 +636,10 @@ class MonatsdatenResponse(MonatsdatenCreate):
 │   ├── /balkonkraftwerk → BalkonkraftwerkDashboard
 │   └── /sonstiges      → SonstigesDashboard
 │
-├── /auswertungen       → Auswertung.tsx (6 Tabs)
+├── /auswertungen       → Auswertung.tsx (7 Tabs)
 │   ├── /roi            → ROIDashboard (Jahres-Rendite p.a.)
-│   └── /prognose       → PrognoseVsIst
+│   ├── /prognose       → PrognoseVsIst
+│   └── /community      → CommunityVergleich (NEU v2.0.3, nur wenn geteilt)
 │
 ├── /aussichten         → Aussichten.tsx (4 Tabs) [NEU]
 │   ├── /kurzfristig    → KurzfristigTab (7-Tage Wetter)

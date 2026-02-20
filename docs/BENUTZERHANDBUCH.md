@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.0.1** | Stand: Februar 2026
+**Version 2.0.3** | Stand: Februar 2026
 
 ---
 
@@ -12,15 +12,16 @@
 4. [Navigation & Menüstruktur](#4-navigation--menüstruktur)
 5. [Cockpit (Dashboards)](#5-cockpit-dashboards)
 6. [Auswertungen](#6-auswertungen)
-7. [Aussichten (Prognosen)](#7-aussichten-prognosen)
-8. [Einstellungen](#8-einstellungen)
-9. [Datenerfassung](#9-datenerfassung)
-10. [Sensor-Mapping](#10-sensor-mapping)
-11. [Monatsabschluss-Wizard](#11-monatsabschluss-wizard)
-12. [HA-Statistik Import (NEU)](#12-ha-statistik-import-neu)
-13. [Home Assistant Integration](#13-home-assistant-integration-optional)
-14. [Tipps & Best Practices](#14-tipps--best-practices)
-15. [Fehlerbehebung](#15-fehlerbehebung)
+7. [Community-Vergleich (NEU)](#7-community-vergleich-neu)
+8. [Aussichten (Prognosen)](#8-aussichten-prognosen)
+9. [Einstellungen](#9-einstellungen)
+10. [Datenerfassung](#10-datenerfassung)
+11. [Sensor-Mapping](#11-sensor-mapping)
+12. [Monatsabschluss-Wizard](#12-monatsabschluss-wizard)
+13. [HA-Statistik Import](#13-ha-statistik-import)
+14. [Home Assistant Integration](#14-home-assistant-integration-optional)
+15. [Tipps & Best Practices](#15-tipps--best-practices)
+16. [Fehlerbehebung](#16-fehlerbehebung)
 
 ---
 
@@ -339,7 +340,7 @@ Jede Kennzahl zeigt bei Hover einen Tooltip mit:
 
 ## 6. Auswertungen
 
-Detaillierte Analysen in 6 Kategorien.
+Detaillierte Analysen in 7 Kategorien (inkl. Community-Vergleich).
 
 ### 6.1 Energie-Tab
 
@@ -420,11 +421,58 @@ Tabelle mit:
 
 ---
 
-## 7. Aussichten (Prognosen)
+## 7. Community-Vergleich (NEU v2.0.3)
+
+Der Community-Vergleich ermöglicht anonyme Benchmarks mit anderen PV-Anlagen-Besitzern.
+
+### 7.1 Daten teilen
+
+**Pfad**: Auswertungen → Tab "Community-Teilen"
+
+Hier kannst du deine Anlagendaten anonym mit der Community teilen:
+- **Vorschau**: Zeigt welche Daten geteilt werden
+- **Anonymisierung**: Nur Bundesland, keine Adresse/PLZ
+- **Jederzeit löschbar**: Button "Meine Daten löschen"
+
+### 7.2 Community-Tab
+
+Nach dem Teilen erscheint ein neuer Tab "Community" in den Auswertungen mit detaillierten Benchmarks.
+
+#### Zeitraum-Auswahl
+- Letzter Monat
+- Letzte 12 Monate
+- Letztes vollständiges Jahr
+- Bestimmtes Jahr
+- Seit Installation
+
+#### PV-Benchmark
+- **Dein spezifischer Ertrag** (kWh/kWp) vs. Community-Durchschnitt
+- **Ranking**: Platz X von Y Anlagen in deiner Region/Ausrichtung
+- **Monatlicher Vergleich**: Deine Werte vs. Durchschnitt als Chart
+
+#### Komponenten-Benchmarks
+Je nach vorhandenen Komponenten:
+
+| Komponente | KPIs |
+|------------|------|
+| **Speicher** | Zyklen, Autarkie-Beitrag |
+| **Wärmepumpe** | JAZ, PV-Anteil |
+| **E-Auto** | Effizienz (kWh/100km), PV-Anteil |
+
+### 7.3 Datenschutz
+
+- Nur aggregierte Statistiken werden angezeigt
+- Kein Rückschluss auf einzelne Anlagen möglich
+- Daten können jederzeit wieder gelöscht werden
+- Server: https://energy.raunet.eu (Open Source)
+
+---
+
+## 8. Aussichten (Prognosen)
 
 Die **Aussichten**-Seite bietet 4 Prognose-Tabs für zukunftsorientierte Analysen.
 
-### 7.1 Kurzfristig (7 Tage)
+### 8.1 Kurzfristig (7 Tage)
 
 Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
 
@@ -432,7 +480,7 @@ Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
 - **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung
 - **Wettersymbole**: Sonnig, bewölkt, regnerisch
 
-### 7.2 Langfristig (12 Monate)
+### 8.2 Langfristig (12 Monate)
 
 PVGIS-basierte Jahresprognose:
 
@@ -440,7 +488,7 @@ PVGIS-basierte Jahresprognose:
 - **Performance-Ratio**: Historischer Vergleich IST vs. SOLL
 - **Monatliche Aufschlüsselung**: Erwartete Erzeugung pro Monat
 
-### 7.3 Trend-Analyse
+### 8.3 Trend-Analyse
 
 Langfristige Entwicklung und Degradation:
 
@@ -450,7 +498,7 @@ Langfristige Entwicklung und Degradation:
   - Primär: Nur vollständige Jahre (12 Monate)
   - Fallback: TMY-Auffüllung für unvollständige Jahre
 
-### 7.4 Finanzen
+### 8.4 Finanzen
 
 Amortisations-Prognose und Komponenten-Beiträge:
 
@@ -476,9 +524,9 @@ Amortisations-Prognose und Komponenten-Beiträge:
 
 ---
 
-## 8. Einstellungen
+## 9. Einstellungen
 
-### 8.1 Anlage
+### 9.1 Anlage
 
 Bearbeite die Stammdaten deiner PV-Anlage:
 - Name, Adresse, Koordinaten
@@ -491,13 +539,13 @@ Bearbeite die Stammdaten deiner PV-Anlage:
   - Erfasse Versorger-Name, Kundennummer, Portal-URL
   - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
 
-### 8.2 Strompreise
+### 9.2 Strompreise
 
 Verwalte deine Stromtarife:
 - Mehrere Tarife mit Gültigkeitszeitraum möglich
 - Wichtig für korrekte Einsparungsberechnung
 
-### 8.3 Investitionen
+### 9.3 Investitionen
 
 Alle Komponenten im Überblick:
 
@@ -554,7 +602,7 @@ PV-Module und DC-Speicher (mit Parent = Wechselrichter) erben automatisch Anspre
 - V2H-fähig (Ja/Nein)
 - Nutzt V2H aktiv (Ja/Nein)
 
-### 8.4 Monatsdaten
+### 9.4 Monatsdaten
 
 Tabelle aller erfassten Monatsdaten mit:
 - **Spalten-Toggle**: Wähle welche Spalten angezeigt werden
@@ -584,7 +632,7 @@ Bei älteren Daten (vor v0.9.7) erscheint eine Warnung:
 - Beim Bearbeiten werden Werte automatisch migriert
 - Nach dem Speichern sind die Daten aktuell
 
-### 8.5 Solarprognose (vormals PVGIS)
+### 9.5 Solarprognose (vormals PVGIS)
 
 Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen:
 
@@ -602,7 +650,7 @@ Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen
   - **Open-Meteo**: Historische und Forecast-Daten weltweit
   - **Open-Meteo Solar**: GTI-basierte Prognose für geneigte Module
 
-### 8.6 Allgemein
+### 9.6 Allgemein
 
 - **Version**: Aktuelle Software-Version
 - **API-Status**: Backend-Verbindung prüfen
@@ -610,11 +658,11 @@ Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen
 
 ---
 
-## 9. Datenerfassung
+## 10. Datenerfassung
 
 Es gibt drei Wege, Daten in eedc zu bekommen:
 
-### 9.1 Manuelles Formular
+### 10.1 Manuelles Formular
 
 **Pfad**: Einstellungen → Monatsdaten → "Neu" Button
 
@@ -638,7 +686,7 @@ Das Formular zeigt dynamisch die relevanten Felder:
 - Globalstrahlung und Sonnenstunden werden automatisch gefüllt
 - Datenquelle: Open-Meteo (historisch) oder PVGIS TMY (aktuell/Zukunft)
 
-### 9.2 CSV-Import
+### 10.2 CSV-Import
 
 **Pfad**: Einstellungen → Import
 
@@ -761,7 +809,7 @@ Neben dem JSON-Export gibt es jetzt einen **PDF-Export** (orangefarbenes Dokumen
 - Standard: Gesamtzeitraum (alle Jahre seit Installation)
 - Der Export erfolgt direkt über die Anlagen-Seite
 
-### 9.3 Demo-Daten
+### 10.3 Demo-Daten
 
 Zum Ausprobieren ohne echte Daten:
 
@@ -773,15 +821,15 @@ Zum Ausprobieren ohne echte Daten:
 
 ---
 
-## 10. Sensor-Mapping (NEU)
+## 11. Sensor-Mapping
 
 Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den EEDC-Feldern.
 
-### 10.1 Wizard starten
+### 11.1 Wizard starten
 
 **Pfad**: Einstellungen → Sensor-Mapping (im HA-Bereich)
 
-### 10.2 Schritte des Wizards
+### 11.2 Schritte des Wizards
 
 #### Schritt 1: Basis-Sensoren
 
@@ -849,7 +897,7 @@ Berechnet PV-Ladung basierend auf der Eigenverbrauchsquote:
 - Sensoren mit Warnungen (z.B. fehlende Zuordnung)
 - Button "Mapping speichern"
 
-### 10.3 Sensor-Auswahl
+### 11.3 Sensor-Auswahl
 
 Bei der Sensor-Auswahl werden automatisch alle verfügbaren HA-Sensoren angezeigt:
 
@@ -859,17 +907,17 @@ Bei der Sensor-Auswahl werden automatisch alle verfügbaren HA-Sensoren angezeig
 
 ---
 
-## 11. Monatsabschluss-Wizard (NEU)
+## 12. Monatsabschluss-Wizard
 
 Der **Monatsabschluss-Wizard** führt dich durch die monatliche Datenerfassung mit intelligenten Vorschlägen.
 
-### 11.1 Wizard starten
+### 12.1 Wizard starten
 
 **Pfad**: Einstellungen → Monatsabschluss (im Daten-Bereich)
 
 Oder direkt über die URL: `/monatsabschluss`
 
-### 11.2 Funktionsweise
+### 12.2 Funktionsweise
 
 #### Automatische Vorschläge
 
@@ -897,14 +945,14 @@ Jedes Feld zeigt:
 3. **Komponenten-Daten** - Speicher, Wärmepumpe, E-Auto, etc.
 4. **Speichern** - Alle Daten werden als Monatsdaten gespeichert
 
-### 11.3 Sensor-Werte aus HA
+### 12.3 Sensor-Werte aus HA
 
 Wenn Sensor-Mapping konfiguriert ist:
 - Werte werden automatisch aus HA abgerufen
 - Bei `manuell`-Strategie: Vorschläge aus historischen Daten
 - Bei `sensor`-Strategie: Aktueller Sensor-Wert als Vorschlag
 
-### 11.4 Historie
+### 12.4 Historie
 
 Die letzten Abschlüsse werden angezeigt:
 - Monat/Jahr
@@ -913,11 +961,11 @@ Die letzten Abschlüsse werden angezeigt:
 
 ---
 
-## 12. HA-Statistik Import (NEU)
+## 13. HA-Statistik Import
 
 **Pfad**: Einstellungen → Home Assistant → Statistik-Import
 
-### 12.1 Übersicht
+### 13.1 Übersicht
 
 Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der Installation deiner PV-Anlage** automatisch aus der Home Assistant Langzeitstatistik-Datenbank importieren. Das ist besonders nützlich, wenn du:
 
@@ -925,7 +973,7 @@ Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der I
 - Monatsdaten nachträglich befüllen willst
 - Von manueller auf automatische Erfassung umstellen möchtest
 
-### 12.2 Voraussetzungen
+### 13.2 Voraussetzungen
 
 - **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den EEDC-Feldern zugeordnet sein
 - **Home Assistant Langzeitstatistiken**: Deine Sensoren müssen in der HA-Datenbank gespeichert werden
@@ -933,7 +981,7 @@ Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der I
 
 > ⚠️ **Wichtig**: Bei Update von v1.x auf v2.0.0 ist eine Neuinstallation des Add-ons erforderlich! Siehe CHANGELOG für Upgrade-Anleitung.
 
-### 12.3 Bulk-Import verwenden
+### 13.3 Bulk-Import verwenden
 
 1. **Seite öffnen**: Einstellungen → Home Assistant → Statistik-Import
 2. **Datenbank-Status prüfen**: Die Seite zeigt ob die HA-Datenbank verfügbar ist
@@ -946,7 +994,7 @@ Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der I
 6. **Individuelle Auswahl**: Aktiviere/Deaktiviere einzelne Monate nach Bedarf
 7. **Import starten**: Klicke auf "X Monate importieren"
 
-### 12.4 Einzelne Monate laden
+### 13.4 Einzelne Monate laden
 
 Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 
@@ -973,14 +1021,14 @@ Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 3. Die Felder werden automatisch befüllt
 4. Prüfe die Werte und speichere
 
-### 12.5 Startwerte beim Sensor-Mapping
+### 13.5 Startwerte beim Sensor-Mapping
 
 Beim Speichern des Sensor-Mappings bietet EEDC zwei Optionen für die Startwerte:
 
 1. **Aus HA-Statistik laden (empfohlen)**: Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank
 2. **Aktuelle Werte verwenden**: Setzt die aktuellen Sensorwerte als Startwerte (Monatswert startet bei 0)
 
-### 12.6 Konflikt-Erkennung
+### 13.6 Konflikt-Erkennung
 
 Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
@@ -995,16 +1043,16 @@ Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
 ---
 
-## 13. Home Assistant Integration (optional)
+## 14. Home Assistant Integration (optional)
 
 EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
 
-### 13.1 Voraussetzungen
+### 14.1 Voraussetzungen
 
 - Home Assistant mit MQTT-Broker (Mosquitto Add-on)
 - MQTT-Benutzer und Passwort
 
-### 13.2 MQTT konfigurieren
+### 14.2 MQTT konfigurieren
 
 **Pfad**: EEDC Add-on Konfiguration in Home Assistant
 
@@ -1018,7 +1066,7 @@ mqtt:
   password: "dein_mqtt_passwort"
 ```
 
-### 13.3 MQTT Auto-Discovery (NEU in v1.1.0)
+### 14.3 MQTT Auto-Discovery
 
 Wenn du das **Sensor-Mapping** konfigurierst und speicherst, erstellt EEDC automatisch MQTT-Entities in Home Assistant. Diese ermöglichen die automatische Berechnung von Monatswerten.
 
@@ -1057,7 +1105,7 @@ Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
 - "EEDC BYD HVS 12.8 Ladung Monatsanfang"
 - "EEDC SMA eCharger 22 Ladung Monat"
 
-### 13.4 Monatsstartwerte initialisieren
+### 14.4 Monatsstartwerte initialisieren
 
 **Wichtig:** Damit die automatische Monatswert-Berechnung funktioniert, müssen einmalig die Startwerte (Zählerstände vom Monatsanfang) gesetzt werden.
 
@@ -1088,7 +1136,7 @@ Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
 3. Entity: `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`
 4. Value: Der aktuelle Zählerstand
 
-### 13.5 MQTT-Bereinigung bei Problemen
+### 14.5 MQTT-Bereinigung bei Problemen
 
 Falls Entities doppelt erscheinen (mit `_2` Suffix) oder andere Probleme auftreten:
 
@@ -1110,7 +1158,7 @@ Oder im **MQTT Explorer**:
 3. Home Assistant neu starten
 4. In EEDC: Sensor-Mapping erneut speichern
 
-### 13.6 KPI-Export (klassisch)
+### 14.6 KPI-Export (klassisch)
 
 Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
 
@@ -1125,7 +1173,7 @@ Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
 | `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
 | `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
 
-### 13.7 Alternative: REST API
+### 14.7 Alternative: REST API
 
 Statt MQTT kannst du auch die REST API nutzen:
 
@@ -1142,7 +1190,7 @@ rest:
 
 ---
 
-## 14. Tipps & Best Practices
+## 15. Tipps & Best Practices
 
 ### Datenqualität
 
@@ -1170,7 +1218,7 @@ rest:
 
 ---
 
-## 15. Fehlerbehebung
+## 16. Fehlerbehebung
 
 ### SOLL-IST Vergleich zeigt 0 kWh
 

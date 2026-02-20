@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 2.0.1** | Stand: Februar 2026
+**Version 2.0.3** | Stand: Februar 2026
 
 ---
 
@@ -219,10 +219,11 @@ eedc-homeassistant/
         │   ├── components/      # UI Components
         │   ├── pages/           # Seiten
         │   │   ├── Dashboard.tsx             # Cockpit
-        │   │   ├── Auswertung.tsx            # Analysen
+        │   │   ├── Auswertung.tsx            # Analysen (7 Tabs)
+        │   │   ├── CommunityVergleich.tsx    # Community-Benchmark (NEU v2.0.3)
         │   │   ├── Aussichten.tsx            # Prognosen (4 Tabs)
-        │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping (NEU)
-        │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss (NEU)
+        │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping
+        │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss
         │   │   └── aussichten/               # Tab-Komponenten
         │   │       ├── KurzfristTab.tsx
         │   │       ├── LangfristTab.tsx
@@ -293,6 +294,7 @@ Nach dem Start des Backends verfügbar unter:
 | **Investitionen** | `/api/investitionen/*` | Komponenten, ROI |
 | **Import/Export** | `/api/import/*` | CSV Import/Export, JSON-Export |
 | **Wetter** | `/api/wetter/*` | Open-Meteo + PVGIS TMY |
+| **Community** | `/api/community/*` | Community-Teilen & Benchmark (NEU v2.0.3) |
 
 ### Aussichten API
 
