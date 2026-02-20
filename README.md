@@ -141,7 +141,7 @@ Die Hauptansicht zeigt alle wichtigen KPIs auf einen Blick:
 ![Cockpit Übersicht](./docs/images/cockpit_main.png)
 
 ### Auswertungen
-Detaillierte Analysen in 6 Kategorien:
+Detaillierte Analysen in 7 Kategorien:
 - Jahresvergleich mit Delta-Indikatoren
 - PV-String-Performance nach Ausrichtung
 - Arbitrage-Analyse für Speicher
