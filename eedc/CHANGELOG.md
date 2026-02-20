@@ -7,6 +7,39 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.0.3] - 2026-02-20
+
+### Hinzugefügt
+
+- **Community-Vergleich Tab in Auswertungen**
+  - Neuer "Community" Tab erscheint nach Teilen der Anlagendaten
+  - Zeitraum-Auswahl: Letzter Monat, Letzte 12 Monate, Letztes vollständiges Jahr, Seit Installation
+  - **PV-Benchmark:** Spezifischer Ertrag im Vergleich zu Community und Region
+  - **Rang-Anzeige:** Position gesamt und regional
+  - **Komponenten-Benchmarks:** Speicher (Zyklen, Wirkungsgrad), Wärmepumpe (JAZ), E-Auto (PV-Anteil)
+  - **Monatlicher Ertrag Chart:** Visualisierung der letzten 12 Monate
+  - **Zugangslogik:** Tab nur sichtbar wenn `community_hash` gesetzt (Daten geteilt)
+
+- **Backend: Community-Benchmark Proxy**
+  - Neuer Endpoint `GET /api/community/benchmark/{anlage_id}`
+  - Proxy zum Community-Server (`/api/benchmark/anlage/{anlage_hash}`)
+  - Gibt 403 zurück wenn Anlage nicht geteilt (Fairness-Prinzip: Erst teilen, dann vergleichen)
+  - Unterstützt Zeitraum-Filter: `letzter_monat`, `letzte_12_monate`, `letztes_vollstaendiges_jahr`, `jahr`, `seit_installation`
+
+### Geändert
+
+- **Community-Seite (energy.raunet.eu) vereinfacht**
+  - Entfernt: Zeitraum-Auswahl (immer Jahresertrag)
+  - Entfernt: Komponenten-Benchmarks (jetzt im Add-on)
+  - Hinzugefügt: Hinweis-Box mit Verweis auf EEDC Add-on für Details
+  - Titel geändert: "Dein Anlagen-Benchmark" (statt "Dein PV-Anlagen Benchmark")
+
+- **Frontend-Types erweitert**
+  - `community_hash` Feld zum `Anlage` Interface hinzugefügt
+  - Erweiterte TypeScript-Interfaces für Benchmark-Daten
+
+---
+
 ## [2.0.2] - 2026-02-19
 
 ### Hinzugefügt

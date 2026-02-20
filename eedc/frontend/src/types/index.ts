@@ -52,6 +52,8 @@ export interface Anlage {
   versorger_daten?: VersorgerDaten
   // Wetterdaten-Provider
   wetter_provider?: WetterProvider
+  // Community-Sharing
+  community_hash?: string | null
 }
 
 // Sensor-Konfiguration

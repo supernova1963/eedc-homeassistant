@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.0.1 | **Status:** Stable Release
+**Version:** 2.0.3 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -129,7 +129,8 @@ eedc/
 └── frontend/src/
     ├── pages/
     │   ├── Dashboard.tsx          # Cockpit-Übersicht
-    │   ├── Auswertung.tsx         # 6 Analyse-Tabs
+    │   ├── Auswertung.tsx         # 7 Analyse-Tabs (inkl. Community)
+    │   ├── CommunityVergleich.tsx # Community-Benchmark (NEU v2.0.3)
     │   ├── Aussichten.tsx         # 4 Prognose-Tabs
     │   ├── PVAnlageDashboard.tsx  # String-Vergleich (Jahr-Parameter!)
     │   ├── SensorMappingWizard.tsx    # HA Sensor-Zuordnung
@@ -294,6 +295,13 @@ GET  /api/ha-statistics/alle-monatswerte/{anlage_id}            # Bulk: Alle Mon
 GET  /api/ha-statistics/monatsanfang/{anlage_id}/{jahr}/{monat} # Startwerte für MQTT
 GET  /api/ha-statistics/import-vorschau/{anlage_id}             # Import-Vorschau mit Konflikten
 POST /api/ha-statistics/import/{anlage_id}                      # Import mit Überschreib-Schutz
+
+# Community (NEU v2.0.3)
+GET  /api/community/status                            # Server-Status
+GET  /api/community/preview/{anlage_id}               # Vorschau der zu teilenden Daten
+POST /api/community/share/{anlage_id}                 # Daten anonym teilen
+DELETE /api/community/delete/{anlage_id}              # Geteilte Daten löschen
+GET  /api/community/benchmark/{anlage_id}             # Benchmark-Daten abrufen (nur wenn geteilt!)
 ```
 
 ## ROI-Metriken (WICHTIG: Unterschiedliche Bedeutungen!)
@@ -413,23 +421,25 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v2.0.1)
+## Letzte Änderungen (v2.0.3)
 
-**v2.0.1 - Bugfixes und Features:**
+**v2.0.3 - Community-Vergleich:**
 
-- **Selektiver Feld-Import:** Import-Modi (Alles/Nur Basis/Nur Komponenten) + Checkboxen pro Feld
-- **Komponenten-Vergleich:** InvestitionMonatsdaten werden im Import-Wizard verglichen
-- **Erweiterte Sensor-Felder:** E-Auto (Verbrauch, Extern), Wallbox (Ladevorgänge), Balkonkraftwerk (kompletter Step)
-- **Sensor-Filter Fix:** Zähler ohne Einheit werden jetzt angezeigt
+- **Community-Tab in Auswertungen:** Neuer Tab nach Teilen der Daten
+- **Komponenten-Benchmarks:** Speicher, Wärmepumpe, E-Auto Vergleiche
+- **Zeitraum-Auswahl:** Letzter Monat, 12 Monate, Letztes Jahr, Seit Installation
+- **Zugangslogik:** Tab nur sichtbar wenn Daten geteilt wurden
+- **Backend-Proxy:** `/api/community/benchmark/{anlage_id}`
+
+**v2.0.2 - Legacy-Migration:**
+
+- CSV-Import migriert automatisch alte Felder (PV_Erzeugung_kWh, Batterie_*)
+
+**v2.0.1 - Selektiver Import:**
+
+- Import-Modi (Alles/Nur Basis/Nur Komponenten) + Checkboxen pro Feld
 
 **v2.0.0 - ⚠️ BREAKING CHANGE:**
 
 Neuinstallation erforderlich! Volume-Mapping `config:ro` für HA-Statistik-Zugriff.
-Siehe CHANGELOG.md für Upgrade-Anleitung.
-
-**HA-Statistik-Import:**
-- Service `ha_statistics_service.py`: SQLite-Zugriff auf HA-Datenbank
-- API-Endpoints unter `/api/ha-statistics/` für Monatswerte-Abfrage
-- Import-Vorschau mit Konflikt-Erkennung und selektivem Import
-
 Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.

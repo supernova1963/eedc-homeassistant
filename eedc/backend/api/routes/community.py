@@ -5,7 +5,8 @@ Endpunkte für die anonyme Datenübertragung an den Community-Server.
 """
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -17,6 +18,9 @@ from backend.services.community_service import (
     get_community_preview,
     COMMUNITY_SERVER_URL,
 )
+
+# Zeitraum-Typen für Benchmark-Abfrage
+ZeitraumTyp = Literal["letzter_monat", "letzte_12_monate", "letztes_vollstaendiges_jahr", "jahr", "seit_installation"]
 
 router = APIRouter(prefix="/community", tags=["Community"])
 
@@ -243,6 +247,78 @@ async def delete_from_community(
                 raise HTTPException(
                     status_code=429,
                     detail="Zu viele Anfragen. Bitte später erneut versuchen."
+                )
+            else:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Community-Server Fehler: {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Community-Server antwortet nicht. Bitte später erneut versuchen."
+        )
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Verbindung zum Community-Server fehlgeschlagen: {str(e)}"
+        )
+
+
+@router.get("/benchmark/{anlage_id}")
+async def get_community_benchmark(
+    anlage_id: int,
+    zeitraum: ZeitraumTyp = Query("letzte_12_monate", description="Vergleichszeitraum"),
+    jahr: int | None = Query(None, ge=2010, le=2050, description="Jahr für zeitraum=jahr"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ruft die erweiterten Benchmark-Daten vom Community-Server ab.
+
+    WICHTIG: Nur verfügbar wenn die Anlage bereits mit der Community geteilt wurde!
+    Dies stellt sicher, dass Nutzer erst beitragen müssen, bevor sie vergleichen können.
+
+    Zeitraum-Optionen:
+    - letzter_monat: Nur der Vormonat
+    - letzte_12_monate: Die letzten 12 abgeschlossenen Monate (Standard)
+    - letztes_vollstaendiges_jahr: Das letzte vollständige Kalenderjahr
+    - jahr: Ein bestimmtes Jahr (Parameter 'jahr' erforderlich)
+    - seit_installation: Alle Daten seit Installationsjahr
+    """
+    # Anlage laden und prüfen ob geteilt
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    if not anlage.community_hash:
+        raise HTTPException(
+            status_code=403,
+            detail="Community-Vergleich nur verfügbar wenn du deine Daten geteilt hast. "
+                   "Teile zuerst deine Anlagendaten um Zugang zum Community-Benchmark zu erhalten."
+        )
+
+    # Benchmark vom Community-Server abrufen
+    try:
+        params = {"zeitraum": zeitraum}
+        if jahr:
+            params["jahr"] = jahr
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{COMMUNITY_SERVER_URL}/api/benchmark/anlage/{anlage.community_hash}",
+                params=params,
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Anlagendaten nicht auf dem Community-Server gefunden. "
+                           "Bitte teile deine Daten erneut."
                 )
             else:
                 raise HTTPException(

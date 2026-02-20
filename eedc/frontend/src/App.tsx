@@ -37,6 +37,7 @@ import SensorMappingWizard from './pages/SensorMappingWizard'
 import MonatsabschlussWizard from './pages/MonatsabschlussWizard'
 import HAStatistikImport from './pages/HAStatistikImport'
 import CommunityShare from './pages/CommunityShare'
+import CommunityVergleich from './pages/CommunityVergleich'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -89,6 +90,7 @@ function App() {
           <Route path="einstellungen/ha-statistik-import" element={<HAStatistikImport />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
           <Route path="einstellungen/community" element={<CommunityShare />} />
+          <Route path="auswertungen/community" element={<CommunityVergleich />} />
 
           {/* Legacy redirects für alte URLs */}
           <Route path="dashboard" element={<Navigate to="/cockpit" replace />} />
