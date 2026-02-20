@@ -44,11 +44,14 @@ class AnlageBase(BaseModel):
     versorger_daten: Optional[dict[str, Any]] = Field(None, description="Versorger und Zähler als JSON")
     # Wetterdaten-Provider
     wetter_provider: Optional[str] = Field(None, max_length=30, description="Wetterdaten-Provider (auto, brightsky, open-meteo, open-meteo-solar)")
+    # Community
+    community_hash: Optional[str] = Field(None, max_length=64, description="Hash für Community-Teilen (read-only)")
 
 
 class AnlageCreate(AnlageBase):
     """Schema für Anlage-Erstellung."""
-    pass
+    # community_hash wird nicht bei Create akzeptiert (nur über Community-API gesetzt)
+    community_hash: None = None
 
 
 class AnlageUpdate(BaseModel):
