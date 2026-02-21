@@ -7,6 +7,80 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.1.0] - 2026-02-21
+
+### Hinzugefügt
+
+- **Community als eigenständiger Hauptmenüpunkt**
+  - Community jetzt auf Augenhöhe mit Cockpit, Auswertungen und Aussichten
+  - Eigener Navigationsbereich statt Tab in Auswertungen
+  - 6-Tab-Struktur: Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
+
+- **Übersicht Tab**
+  - **Gamification:** 7 Achievements (Autarkiemeister, Effizienzwunder, Solarprofi, Grüner Fahrer, Wärmekönig, Ertragswunder, Speichermeister)
+  - **Fortschrittsanzeige** für nicht erreichte Achievements
+  - **Radar-Chart:** Eigene Performance vs. Community auf 6 Achsen
+  - **Rang-Badges:** Top 10%, Top 25%, Top 50%
+  - **KPI-Tooltips:** Erklärungen für Community-Kennzahlen (Spez. Ertrag, JAZ, etc.)
+
+- **PV-Ertrag Tab**
+  - **Perzentil-Anzeige:** "Du bist besser als X% der Community"
+  - **Abweichungs-KPIs:** vs. Community und vs. Region
+  - **Monatlicher Ertrag Chart:** Mit echten monatlichen Community-Durchschnitten (statt Jahresdurchschnitt/12)
+  - **Jahresübersicht:** Tabelle mit Abweichungen pro Jahr
+  - **Verteilungs-Histogramm:** Eigene Position in der Community-Verteilung
+
+- **Komponenten Tab**
+  - **Speicher Deep-Dive:** Wirkungsgrad, Zyklen, PV-Anteil mit Community-Vergleich
+  - **Wärmepumpe Deep-Dive:** JAZ-Vergleich nach Region, mit Hinweis bei weniger als 3 Anlagen
+  - **E-Auto Deep-Dive:** PV-Anteil, Ladequellen-Chart (PV/Netz/Extern)
+  - **Wallbox Deep-Dive:** Ladung und PV-Anteil
+  - **Balkonkraftwerk Deep-Dive:** Spezifischer Ertrag und Eigenverbrauchsquote
+  - **Zeitraum-Hinweis:** Betrachtungszeitraum wird konsistent angezeigt
+
+- **Regional Tab**
+  - **Regionale Position:** Rang im Bundesland
+  - **Vergleichs-Chart:** Du / Region / Community als Balken
+  - **Regionale Einordnung:** Anlagen-Details im Kontext
+
+- **Trends Tab**
+  - **Ertragsverlauf:** Area-Chart über alle Monate
+  - **Saisonale Performance:** Frühling/Sommer/Herbst/Winter mit Icons
+  - **Jahresvergleich:** Letztes vs. Vorletztes Jahr mit Veränderung
+  - **Typischer Monatsverlauf:** Durchschnitt pro Monat über alle Jahre
+  - **Community-Entwicklung:** Speicher-/WP-/E-Auto-Quoten über Zeit
+  - **Degradations-Analyse:** Ertrag nach Anlagenalter
+
+- **Statistiken Tab**
+  - **Community-Zusammenfassung:** Übersicht über alle Teilnehmer
+  - **Position in Community:** Rang und Perzentil
+  - **Ausstattungs-Übersicht:** Komponenten-Verteilung
+
+- **Backend-Erweiterungen**
+  - **Proxy-Endpoints:** Alle Community-Server-Endpoints durchgereicht
+  - `/api/community/statistics/global` - Globale Statistiken
+  - `/api/community/statistics/monthly-averages` - Monatliche Durchschnitte
+  - `/api/community/statistics/regional` - Regionale Statistiken
+  - `/api/community/statistics/distributions/{metric}` - Verteilungsdaten
+  - `/api/community/statistics/rankings/{category}` - Top-Listen
+  - `/api/community/components/*` - Komponenten-Statistiken
+  - `/api/community/trends/*` - Trend-Daten und Degradation
+
+### Behoben
+
+- **FastAPI Route-Ordering:** `/api/community/trends/degradation` wurde fälschlich von `/api/community/trends/{period}` gematcht
+- **TypeScript-Typen:** Server-Feldnamen (`durchschnitt_zyklen` statt `avg_zyklen`) korrekt gemappt
+- **Chronologische Sortierung:** Monatsdaten in PV-Ertrag und Trends Charts werden jetzt korrekt sortiert (älteste links, neueste rechts)
+- **Monatliche Durchschnitte:** Community-Vergleich verwendet echte monatliche Werte statt Jahresdurchschnitt/12
+
+### Geändert
+
+- **Auswertungen:** Community-Tab entfernt (jetzt eigenständiger Menüpunkt)
+- **Navigation:** Hauptmenü erweitert um Community-Eintrag
+- **Tooltips:** Aussichten-Tabs und Community-Seite haben jetzt erklärende Tooltips
+
+---
+
 ## [2.0.3] - 2026-02-20
 
 ### Hinzugefügt

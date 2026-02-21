@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.0.3** | Stand: Februar 2026
+**Version 2.1.0** | Stand: Februar 2026
 
 ---
 

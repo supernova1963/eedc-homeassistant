@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.0.3</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.1.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@
 - **Jahr-Filter** für mehrjährige Auswertungen
 
 ### Auswertungen & Reporting
-- **7 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen, Community (NEU v2.0.3)
+- **7 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen, Community
 - **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
 - **SOLL-IST Vergleich** gegen PVGIS-Prognosen
 - **CSV/JSON Export** für externe Weiterverarbeitung
@@ -224,7 +224,8 @@ Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfass
 - [x] **PDF-Export** für vollständige Anlagen-Dokumentation
 - [x] **Sensor-Mapping-Wizard** für HA-Integration
 - [x] **Monatsabschluss-Wizard** mit intelligenten Vorschlägen
-- [x] **Community-Vergleich** - Anonymer Benchmark mit anderen PV-Anlagen (NEU v2.0.3)
+- [x] **Community-Vergleich** - Anonymer Benchmark mit anderen PV-Anlagen
+- [x] **Community als Hauptmenü** - Eigener Bereich mit 6 Tabs für tiefgehende Analysen (NEU v2.1.0)
 - [ ] KI-gestützte Insights
 
 ---

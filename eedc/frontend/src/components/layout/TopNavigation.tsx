@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp } from 'lucide-react'
+import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import eedcIcon from '../../assets/eedc-icon.svg'
@@ -15,6 +15,7 @@ const mainTabs: { name: string; basePath: string; icon: LucideIcon }[] = [
   { name: 'Cockpit', basePath: '/cockpit', icon: LayoutDashboard },
   { name: 'Auswertungen', basePath: '/auswertungen', icon: BarChart3 },
   { name: 'Aussichten', basePath: '/aussichten', icon: TrendingUp },
+  { name: 'Community', basePath: '/community', icon: Users },
 ]
 
 // Einstellungen-Menü Struktur
@@ -71,6 +72,7 @@ export default function TopNavigation() {
     if (location.pathname.startsWith('/cockpit')) return 'Cockpit'
     if (location.pathname.startsWith('/auswertungen')) return 'Auswertungen'
     if (location.pathname.startsWith('/aussichten')) return 'Aussichten'
+    if (location.pathname.startsWith('/community')) return 'Community'
     if (location.pathname.startsWith('/einstellungen')) return null
     // Default: Cockpit
     return 'Cockpit'

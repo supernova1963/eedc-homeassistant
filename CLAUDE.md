@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.0.3 | **Status:** Stable Release
+**Version:** 2.1.0 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -367,6 +367,7 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - [x] MQTT Auto-Discovery für Monatswerte ✓ (v1.1.0)
 - [x] Monatsabschluss-Wizard ✓ (v1.1.0)
 - [x] HA-Statistik Bulk-Import ✓ (v2.0.0)
+- [x] Community als Hauptmenüpunkt ✓ (v2.1.0)
 - [ ] KI-Insights
 
 ## HA-Integration Status (v2.0.0)
@@ -421,7 +422,20 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v2.0.3)
+## Letzte Änderungen (v2.1.0)
+
+**v2.1.0 - Community als Hauptmenüpunkt:**
+
+- **Community im Hauptmenü:** Eigener Navigationsbereich auf Augenhöhe mit Cockpit, Auswertungen, Aussichten
+- **6 Tab-Struktur:** Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
+- **Gamification:** 7 Achievements (Autarkiemeister, Effizienzwunder, Solarprofi, etc.)
+- **Radar-Chart:** Eigene Performance vs. Community auf 6 Achsen
+- **PV-Ertrag Deep-Dive:** Monatlicher Ertrag vs. Community-Durchschnitt, Jahresübersicht
+- **Komponenten Deep-Dives:** Detaillierte Analysen für Speicher, Wärmepumpe, E-Auto, Wallbox, BKW
+- **Regional Tab:** Bundesland-Vergleich und regionale Einordnung
+- **Trends Tab:** Ertragsverlauf, saisonale Performance, Jahresvergleich
+- **Tooltips:** Erklärungen für Community-KPIs
+- **Chronologische Sortierung:** Monatsdaten korrekt sortiert in Charts
 
 **v2.0.3 - Community-Vergleich:**
 

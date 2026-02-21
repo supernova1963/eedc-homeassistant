@@ -188,6 +188,164 @@ export interface CommunityBenchmarkResponse {
 }
 
 // =============================================================================
+// Erweiterte Statistik Types (Phase 5)
+// =============================================================================
+
+export interface AusstattungsQuoten {
+  speicher: number
+  waermepumpe: number
+  eauto: number
+  wallbox: number
+  balkonkraftwerk: number
+}
+
+export interface TypischeAnlage {
+  kwp: number
+  ausrichtung: string
+  neigung_grad: number
+  speicher_kwh: number | null
+}
+
+export interface GlobaleStatistik {
+  anzahl_anlagen: number
+  anzahl_regionen: number
+  durchschnitt: {
+    kwp: number
+    spez_ertrag: number
+    speicher_kwh: number | null
+    autarkie_prozent: number | null
+    eigenverbrauch_prozent: number | null
+  }
+  ausstattungsquoten: AusstattungsQuoten
+  typische_anlage: TypischeAnlage
+  stand: string
+}
+
+export interface MonatsDurchschnitt {
+  jahr: number
+  monat: number
+  spez_ertrag_avg: number
+  anzahl_anlagen: number
+}
+
+export interface MonatlicheDurchschnitte {
+  monate: MonatsDurchschnitt[]
+}
+
+export interface RegionStatistik {
+  region: string
+  anzahl_anlagen: number
+  durchschnitt_kwp: number
+  durchschnitt_spez_ertrag: number
+  ausstattung: AusstattungsQuoten
+}
+
+export interface VerteilungsBin {
+  von: number
+  bis: number
+  anzahl: number
+}
+
+export interface VerteilungsStatistik {
+  min: number
+  max: number
+  median: number
+  durchschnitt: number
+  stdabweichung: number
+}
+
+export interface Verteilung {
+  metric: string
+  einheit: string
+  bins: VerteilungsBin[]
+  statistik: VerteilungsStatistik
+}
+
+export interface RankingEintrag {
+  rang: number
+  wert: number
+  region: string
+  kwp: number
+}
+
+export interface Ranking {
+  category: string
+  label: string
+  einheit: string
+  zeitraum: string
+  ranking: RankingEintrag[]
+  eigener_rang?: number | null
+  eigener_wert?: number | null
+}
+
+// Komponenten Types - angepasst an tatsächliche Server-Antwort
+export interface SpeicherKlasse {
+  von_kwh: number
+  bis_kwh: number | null
+  anzahl: number
+  durchschnitt_wirkungsgrad: number | null
+  durchschnitt_zyklen: number | null
+  durchschnitt_netz_anteil: number | null
+}
+
+export interface SpeicherByClass {
+  klassen: SpeicherKlasse[]
+}
+
+export interface WPRegion {
+  region: string
+  anzahl: number
+  durchschnitt_jaz: number | null
+  durchschnitt_stromverbrauch: number | null
+}
+
+export interface WPByRegion {
+  regionen: WPRegion[]
+}
+
+export interface EAutoKlasse {
+  klasse: string
+  beschreibung: string
+  anzahl: number
+  durchschnitt_pv_anteil: number | null
+  durchschnitt_verbrauch_100km: number | null
+}
+
+export interface EAutoByUsage {
+  klassen: EAutoKlasse[]
+}
+
+// Trend Types
+export interface TrendPunkt {
+  monat: string
+  wert: number
+}
+
+export interface TrendDaten {
+  period: string
+  trends: {
+    anzahl_anlagen: TrendPunkt[]
+    durchschnitt_kwp: TrendPunkt[]
+    speicher_quote: TrendPunkt[]
+    waermepumpe_quote: TrendPunkt[]
+    eauto_quote: TrendPunkt[]
+  }
+}
+
+export interface AlterErtrag {
+  alter_jahre: number
+  anzahl: number
+  durchschnitt_spez_ertrag: number
+}
+
+export interface DegradationsAnalyse {
+  nach_alter: AlterErtrag[]
+  durchschnittliche_degradation_prozent_jahr: number
+}
+
+export type TrendPeriod = '12_monate' | '24_monate' | 'gesamt'
+
+// =============================================================================
 // API Client
 // =============================================================================
 
@@ -236,5 +394,94 @@ export const communityApi = {
     return api.get<CommunityBenchmarkResponse>(
       `/community/benchmark/${anlageId}?${params.toString()}`
     )
+  },
+
+  // =============================================================================
+  // Erweiterte Statistiken (Phase 5)
+  // =============================================================================
+
+  /**
+   * Globale Community-Statistiken
+   */
+  async getGlobalStatistics(): Promise<GlobaleStatistik> {
+    return api.get<GlobaleStatistik>('/community/statistics/global')
+  },
+
+  /**
+   * Monatliche Community-Durchschnitte
+   */
+  async getMonthlyAverages(monate: number = 12): Promise<MonatlicheDurchschnitte> {
+    return api.get<MonatlicheDurchschnitte>(`/community/statistics/monthly-averages?monate=${monate}`)
+  },
+
+  /**
+   * Regionale Statistiken (alle Bundesländer)
+   */
+  async getRegionalStatistics(): Promise<RegionStatistik[]> {
+    return api.get<RegionStatistik[]>('/community/statistics/regional')
+  },
+
+  /**
+   * Details zu einer Region
+   */
+  async getRegionalDetails(region: string): Promise<RegionStatistik> {
+    return api.get<RegionStatistik>(`/community/statistics/regional/${region}`)
+  },
+
+  /**
+   * Verteilungsdaten für Histogramme
+   */
+  async getDistribution(metric: string, bins: number = 10): Promise<Verteilung> {
+    return api.get<Verteilung>(`/community/statistics/distributions/${metric}?bins=${bins}`)
+  },
+
+  /**
+   * Top-N Ranglisten
+   */
+  async getRanking(category: string, limit: number = 10): Promise<Ranking> {
+    return api.get<Ranking>(`/community/statistics/rankings/${category}?limit=${limit}`)
+  },
+
+  // =============================================================================
+  // Komponenten Deep-Dives
+  // =============================================================================
+
+  /**
+   * Speicher-Statistiken nach Kapazitätsklasse
+   */
+  async getSpeicherByClass(): Promise<SpeicherByClass> {
+    return api.get<SpeicherByClass>('/community/components/speicher/by-class')
+  },
+
+  /**
+   * Wärmepumpen-Statistiken nach Region
+   */
+  async getWaermepumpeByRegion(): Promise<WPByRegion> {
+    return api.get<WPByRegion>('/community/components/waermepumpe/by-region')
+  },
+
+  /**
+   * E-Auto-Statistiken nach Nutzungsintensität
+   */
+  async getEAutoByUsage(): Promise<EAutoByUsage> {
+    return api.get<EAutoByUsage>('/community/components/eauto/by-usage')
+  },
+
+  // =============================================================================
+  // Trends
+  // =============================================================================
+
+  /**
+   * Zeitliche Trends der Community-Daten
+   */
+  async getTrends(period: TrendPeriod): Promise<TrendDaten> {
+    return api.get<TrendDaten>(`/community/trends/${period}`)
+  },
+
+  /**
+   * Degradations-Analyse nach Anlagenalter
+   */
+  async getDegradation(): Promise<DegradationsAnalyse> {
+    return api.get<DegradationsAnalyse>('/community/trends/degradation')
   },
 }

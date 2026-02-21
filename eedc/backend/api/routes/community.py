@@ -336,3 +336,213 @@ async def get_community_benchmark(
             status_code=503,
             detail=f"Verbindung zum Community-Server fehlgeschlagen: {str(e)}"
         )
+
+
+# =============================================================================
+# Erweiterte Community-Statistiken (Phase 5)
+# =============================================================================
+
+@router.get("/statistics/global")
+async def get_global_statistics():
+    """
+    Globale Community-Statistiken.
+    Proxy zum Community-Server.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/statistics/global")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/statistics/monthly-averages")
+async def get_monthly_averages(
+    monate: int = Query(12, ge=1, le=60, description="Anzahl Monate"),
+):
+    """
+    Monatliche Community-Durchschnitte.
+    Proxy zum Community-Server.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{COMMUNITY_SERVER_URL}/api/statistics/monthly-averages",
+                params={"monate": monate}
+            )
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/statistics/regional")
+async def get_regional_statistics():
+    """
+    Regionale Statistiken (alle Bundesländer).
+    Proxy zum Community-Server.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/statistics/regional")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/statistics/regional/{region}")
+async def get_regional_details(region: str):
+    """
+    Details zu einer Region.
+    Proxy zum Community-Server.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/statistics/regional/{region}")
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Region nicht gefunden")
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/statistics/distributions/{metric}")
+async def get_distribution(
+    metric: str,
+    bins: int = Query(10, ge=5, le=50, description="Anzahl Bins"),
+):
+    """
+    Verteilungsdaten für Histogramme.
+    Metriken: kwp, spez_ertrag, speicher, autarkie
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{COMMUNITY_SERVER_URL}/api/statistics/distributions/{metric}",
+                params={"bins": bins}
+            )
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 400:
+                raise HTTPException(status_code=400, detail="Ungültige Metrik")
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/statistics/rankings/{category}")
+async def get_ranking(
+    category: str,
+    limit: int = Query(10, ge=5, le=50, description="Anzahl Einträge"),
+):
+    """
+    Top-N Ranglisten.
+    Kategorien: spez_ertrag, autarkie, eigenverbrauch
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{COMMUNITY_SERVER_URL}/api/statistics/rankings/{category}",
+                params={"limit": limit}
+            )
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 400:
+                raise HTTPException(status_code=400, detail="Ungültige Kategorie")
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# =============================================================================
+# Komponenten Deep-Dives
+# =============================================================================
+
+@router.get("/components/speicher/by-class")
+async def get_speicher_by_class():
+    """
+    Speicher-Statistiken nach Kapazitätsklasse.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/components/speicher/by-class")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/components/waermepumpe/by-region")
+async def get_waermepumpe_by_region():
+    """
+    Wärmepumpen-Statistiken nach Region.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/components/waermepumpe/by-region")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/components/eauto/by-usage")
+async def get_eauto_by_usage():
+    """
+    E-Auto-Statistiken nach Nutzungsintensität.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/components/eauto/by-usage")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# =============================================================================
+# Trends
+# =============================================================================
+
+TrendPeriod = Literal["12_monate", "24_monate", "gesamt"]
+
+
+# WICHTIG: Spezifische Route MUSS vor parametrisierter Route definiert werden!
+@router.get("/trends/degradation")
+async def get_degradation():
+    """
+    Degradations-Analyse nach Anlagenalter.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/trends/degradation")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/trends/{period}")
+async def get_trends(period: TrendPeriod):
+    """
+    Zeitliche Trends der Community-Daten.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/trends/{period}")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))

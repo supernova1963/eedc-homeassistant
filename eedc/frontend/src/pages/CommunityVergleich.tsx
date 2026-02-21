@@ -1,6 +1,10 @@
 /**
  * Community Vergleich Page
  *
+ * @deprecated Diese Komponente wurde nach /pages/community/UebersichtTab.tsx migriert.
+ * Die Route /auswertungen/community wird jetzt nach /community redirected.
+ * Diese Datei kann in einer zukünftigen Version entfernt werden.
+ *
  * Zeigt erweiterte Benchmark-Daten im Vergleich zur Community.
  * WICHTIG: Nur verfügbar wenn die Anlage bereits mit der Community geteilt wurde!
  */

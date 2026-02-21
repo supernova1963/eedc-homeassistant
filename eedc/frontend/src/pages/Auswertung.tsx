@@ -1,13 +1,12 @@
 // Auswertung Hauptseite - Tab-Navigation
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, ArrowRight, Calendar, Users } from 'lucide-react'
+import { Sun, ArrowRight, Calendar } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { useAnlagen, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis } from '../hooks'
 import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab } from './auswertung'
-import CommunityVergleich from './CommunityVergleich'
 
-type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen' | 'community'
+type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen'
 
 // Zeitraum-Label für Anzeige erstellen
 function getZeitraumLabel(selectedYear: number | 'all', verfuegbareJahre: number[]): string {
@@ -88,18 +87,13 @@ export default function Auswertung() {
     )
   }
 
-  // Community-Tab nur anzeigen wenn Anlage geteilt wurde
-  const hatCommunityZugang = anlage?.community_hash != null
-
-  const tabs: { key: TabType; label: string; icon?: React.ReactNode }[] = [
+  const tabs: { key: TabType; label: string }[] = [
     { key: 'energie', label: 'Energie' },
     { key: 'pv', label: 'PV-Anlage' },
     { key: 'komponenten', label: 'Komponenten' },
     { key: 'finanzen', label: 'Finanzen' },
     { key: 'co2', label: 'CO2' },
     { key: 'investitionen', label: 'Investitionen' },
-    // Community-Tab nur wenn geteilt
-    ...(hatCommunityZugang ? [{ key: 'community' as TabType, label: 'Community', icon: <Users className="h-4 w-4 mr-1 inline" /> }] : []),
   ]
 
   // Zeitraum-Label berechnen
@@ -149,13 +143,12 @@ export default function Auswertung() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`py-3 px-1 border-b-2 text-sm font-medium transition-colors flex items-center ${
+                className={`py-3 px-1 border-b-2 text-sm font-medium transition-colors ${
                   activeTab === tab.key
                     ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
-                {tab.icon}
                 {tab.label}
               </button>
             ))}
@@ -182,9 +175,6 @@ export default function Auswertung() {
         )}
         {activeTab === 'investitionen' && anlageId && (
           <InvestitionenTab anlageId={anlageId} strompreis={strompreis} selectedYear={selectedYear} zeitraumLabel={zeitraumLabel} />
-        )}
-        {activeTab === 'community' && (
-          <CommunityVergleich embedded anlageId={anlageId} />
         )}
       </div>
     </div>
