@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.1.0** | Stand: Februar 2026
+**Version 2.2.0** | Stand: Februar 2026
 
 ---
 
@@ -80,6 +80,7 @@ Externe APIs (optional):
 | **Vite** | 5.x | Build Tool & Dev Server |
 | **Tailwind CSS** | 3.x | Styling |
 | **Recharts** | 2.x | Diagramme |
+| **react-simple-maps** | 3.x | Choropleth Deutschlandkarte (NEU v2.2.0) |
 | **Lucide React** | - | Icons |
 | **React Router** | 6.x | Routing |
 
@@ -944,7 +945,7 @@ npm run dev
 ```
 
 **URLs:**
-- Frontend: http://localhost:5173 (mit Proxy zu Backend)
+- Frontend: http://localhost:3000 (Vite Dev Server, Proxy zu Backend)
 - API Docs: http://localhost:8099/api/docs
 
 ### Production Build

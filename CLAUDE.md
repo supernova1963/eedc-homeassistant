@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.1.0 | **Status:** Stable Release
+**Version:** 2.2.0 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -20,7 +20,7 @@ uvicorn backend.main:app --reload --port 8099
 cd eedc/frontend && npm run dev
 
 # URLs
-# Frontend: http://localhost:5173
+# Frontend: http://localhost:3000 (Vite Proxy auf Backend)
 # API Docs: http://localhost:8099/api/docs
 ```
 
@@ -422,7 +422,22 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v2.1.0)
+## Letzte Änderungen (v2.2.0)
+
+**v2.2.0 - Regional Tab: Choropleth-Karte und Performance-Metriken:**
+
+- **Choropleth Deutschlandkarte:** Interaktive Bundesland-Karte via `react-simple-maps` + GeoJSON (`deutschland-bundeslaender.geo.json`)
+  - Farbkodierung nach spezifischem Ertrag (5 Stufen)
+  - Hover-Tooltip mit Performance-Details (Speicher, WP-JAZ, E-Auto, Wallbox, BKW)
+- **Performance-Metriken statt Ausstattungsquoten:** Regional-Tabelle zeigt jetzt durchschnittliche Leistungsdaten:
+  - 🔋 Ø Ladung/Entladung kWh/Mon (getrennt)
+  - ♨️ Ø JAZ (Jahresarbeitszahl)
+  - 🚗 Ø km/Mon + kWh zuhause geladen (gesamt − extern)
+  - 🔌 Ø kWh/Mon + PV-Anteil %
+  - 🪟 Ø BKW-Ertrag kWh/Mon
+- **Community Server Updates:** Neue Aggregationsfelder in `RegionStatistik` (`avg_speicher_ladung_kwh`, `avg_speicher_entladung_kwh`, `avg_wp_jaz`, `avg_eauto_km`, `avg_eauto_ladung_kwh`, `avg_wallbox_kwh`, `avg_wallbox_pv_anteil`, `avg_bkw_kwh`)
+- **Lokale Entwicklungsumgebung:** Python 3.11 venv, VS Code Tasks (Cmd+Shift+B), `.vscode/launch.json`, `.nvmrc` (Node 20)
+- **TypeScript Import-Fixes:** Casing-Korrekturen (`GeoJSON` → `Geojson`, etc.)
 
 **v2.1.0 - Community als Hauptmenüpunkt:**
 

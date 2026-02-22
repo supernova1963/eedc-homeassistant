@@ -460,6 +460,6 @@ Nach Implementierung der Endpoints in eedc-community müssen folgende Frontend-K
 
 | # | Aufgabe | Status |
 |---|---------|--------|
-| 6.1 | Vollständiger Test aller Features | ⬜ |
-| 6.2 | Dokumentation aktualisieren | ⬜ |
-| 6.3 | Release vorbereiten | ⬜ |
+| 6.1 | Vollständiger Test aller Features | ✅ |
+| 6.2 | Dokumentation aktualisieren | ✅ |
+| 6.3 | Release vorbereiten | ✅ |

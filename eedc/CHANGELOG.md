@@ -7,6 +7,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.2.0] - 2026-02-22
+
+### Hinzugefügt
+
+- **Choropleth Deutschlandkarte im Regional Tab**
+  - Interaktive Bundesländer-Karte mit Farbverlauf nach spezifischem Ertrag (kWh/kWp)
+  - Eigenes Bundesland durch blauen Rahmen hervorgehoben
+  - Hover-Tooltip mit allen Performance-Details je Bundesland
+
+- **Performance-Metriken im Regionalen Vergleich**
+  - Tabelle und Tooltip zeigen jetzt messbare Leistungsdaten statt Ausstattungsquoten
+  - 🔋 Speicher: Ø Ladung ↑ / Entladung ↓ kWh pro Monat (getrennt)
+  - ♨️ Ø berechnete JAZ (Σ Wärme ÷ Σ Strom, saisonaler Wert)
+  - 🚗 Ø km/Monat + Ø kWh zuhause geladen (gesamt − extern)
+  - 🔌 Ø kWh/Monat + Ø PV-Anteil in % (wo von Wallbox messbar)
+  - 🪟 Ø BKW-Ertrag kWh/Monat
+
+- **Community Server: Regionale Performance-Aggregate**
+  - `/api/statistics/regional` liefert jetzt Performance-Durchschnitte pro Bundesland
+  - Alle Metriken nur über Anlagen mit dem jeweiligen Gerät und validen Messwerten
+
+### Technisch
+
+- TypeScript Import-Casing-Fix (macOS case-insensitive Filesystem)
+- `.nvmrc` mit Node 20 (passend zu Docker `node:20-alpine`)
+- Lokale Entwicklungsumgebung: Python 3.11 venv, VS Code tasks.json/launch.json
+- Lokale Testdatenbank unter `eedc/data/eedc.db`
+
+---
+
 ## [2.1.0] - 2026-02-21
 
 ### Hinzugefügt

@@ -1,13 +1,13 @@
 # EEDC Development Guide
 
-**Version 2.1.0** | Stand: Februar 2026
+**Version 2.2.0** | Stand: Februar 2026
 
 ---
 
 ## Voraussetzungen
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 20+ (empfohlen via nvm; `eedc/frontend/.nvmrc` enthält `20`)
 - Docker/Podman (für Container-Tests)
 
 ## Schnellstart
@@ -56,9 +56,20 @@ cd eedc/frontend && npm run dev
 ```
 
 **URLs:**
-- Frontend: http://localhost:5173 (mit Proxy zu Backend)
+- Frontend: http://localhost:3000 (Vite Dev Server, Proxy zu Backend)
 - API Docs: http://localhost:8099/api/docs
 - ReDoc: http://localhost:8099/api/redoc
+
+> **Hinweis für macOS**: Vite verwendet Port 3000 (nicht 5173). Falls `npm run dev` mit dem System-Node fehlschlägt, stelle sicher dass Node 20 aktiv ist: `nvm use 20` oder absoluten Pfad nutzen.
+
+### VS Code Tasks (Alternative)
+
+Mit `Cmd+Shift+B` (macOS) beide Server parallel starten:
+- **Backend starten** – startet uvicorn auf Port 8099
+- **Frontend starten** – startet Vite auf Port 3000 (mit korrektem Node 20 PATH)
+- **EEDC starten (Backend + Frontend)** – startet beide gleichzeitig
+
+Die Tasks sind in `.vscode/tasks.json` konfiguriert und setzen den Node 20 Pfad automatisch.
 
 ---
 

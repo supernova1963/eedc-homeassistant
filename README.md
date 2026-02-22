@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.1.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.2.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -114,7 +114,7 @@ uvicorn backend.main:app --reload --port 8099
 cd eedc/frontend && npm run dev
 
 # Browser öffnen
-open http://localhost:5173
+open http://localhost:3000
 ```
 
 ---

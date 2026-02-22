@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.1.0** | Stand: Februar 2026
+**Version 2.2.0** | Stand: Februar 2026
 
 ---
 
@@ -421,22 +421,23 @@ Tabelle mit:
 
 ---
 
-## 7. Community-Vergleich (NEU v2.0.3)
+## 7. Community-Vergleich
 
 Der Community-Vergleich ermöglicht anonyme Benchmarks mit anderen PV-Anlagen-Besitzern.
+Community ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt (gleichwertig mit Cockpit, Auswertungen, Aussichten).
 
 ### 7.1 Daten teilen
 
-**Pfad**: Auswertungen → Tab "Community-Teilen"
+**Pfad**: Community → Tab "Übersicht" → Button "Jetzt teilen"
 
 Hier kannst du deine Anlagendaten anonym mit der Community teilen:
 - **Vorschau**: Zeigt welche Daten geteilt werden
 - **Anonymisierung**: Nur Bundesland, keine Adresse/PLZ
 - **Jederzeit löschbar**: Button "Meine Daten löschen"
 
-### 7.2 Community-Tab
+### 7.2 Community-Bereich (6 Tabs)
 
-Nach dem Teilen erscheint ein neuer Tab "Community" in den Auswertungen mit detaillierten Benchmarks.
+Nach dem Teilen stehen alle 6 Community-Tabs mit detaillierten Benchmarks zur Verfügung.
 
 #### Zeitraum-Auswahl
 - Letzter Monat
@@ -445,19 +446,42 @@ Nach dem Teilen erscheint ein neuer Tab "Community" in den Auswertungen mit deta
 - Bestimmtes Jahr
 - Seit Installation
 
-#### PV-Benchmark
-- **Dein spezifischer Ertrag** (kWh/kWp) vs. Community-Durchschnitt
-- **Ranking**: Platz X von Y Anlagen in deiner Region/Ausrichtung
-- **Monatlicher Vergleich**: Deine Werte vs. Durchschnitt als Chart
+#### Tab: Übersicht
+- **Radar-Chart**: Eigene Performance vs. Community auf 6 Achsen
+- **Ranking**: Platz X von Y Anlagen (gesamt und regional)
+- **7 Achievements**: Autarkiemeister, Effizienzwunder, Solarprofi, Speicherheld, Klimaschützer, Frühstarter, Vorreiter
 
-#### Komponenten-Benchmarks
-Je nach vorhandenen Komponenten:
+#### Tab: PV-Ertrag
+- **Dein spezifischer Ertrag** (kWh/kWp) vs. Community-Durchschnitt
+- **Monatlicher Vergleich**: Deine Werte vs. Community als Chart
+- **Histogramm**: Wo stehst du in der Verteilung?
+
+#### Tab: Komponenten
+Detaillierte Benchmarks für jede Komponente:
 
 | Komponente | KPIs |
 |------------|------|
-| **Speicher** | Zyklen, Autarkie-Beitrag |
-| **Wärmepumpe** | JAZ, PV-Anteil |
-| **E-Auto** | Effizienz (kWh/100km), PV-Anteil |
+| **Speicher** | Zyklen, Effizienz, Autarkie-Beitrag |
+| **Wärmepumpe** | JAZ vs. Community, PV-Anteil |
+| **E-Auto** | km/Monat, Ø kWh/100km, PV-Anteil |
+| **Wallbox** | Ladung kWh/Mon, PV-Anteil % |
+| **Balkonkraftwerk** | Ertrag kWh/Mon, Vergleich |
+
+#### Tab: Regional (NEU v2.2.0)
+- **Choropleth Deutschlandkarte**: Interaktive Karte mit Farbkodierung nach spezifischem Ertrag
+  - Hover über ein Bundesland zeigt Performance-Details: Speicher-Lade/Entlade-kWh, WP-JAZ, E-Auto km + kWh, Wallbox kWh + PV-Anteil, BKW kWh
+- **Bundesland-Tabelle**: Direkter Vergleich aller Bundesländer mit Performance-Metriken (Ø kWh/Mon, JAZ, etc.)
+- **Regionale Einordnung**: Wie schneidet dein Bundesland ab?
+
+#### Tab: Trends
+- **Ertragsverlauf**: Community-Trend über Zeit
+- **Saisonale Performance**: Beste und schlechteste Monate
+- **Jahresvergleich**: Entwicklung der Community
+
+#### Tab: Statistiken
+- **Ausstattungsquoten**: Wie viele Anlagen haben Speicher, WP, E-Auto etc.?
+- **Top-10-Listen**: Beste Anlagen nach verschiedenen Kategorien
+- **Community-Übersicht**: Gesamtanzahl Anlagen, Regionen, Durchschnittswerte
 
 ### 7.3 Datenschutz
 
