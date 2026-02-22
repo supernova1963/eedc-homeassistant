@@ -237,7 +237,21 @@ export interface RegionStatistik {
   anzahl_anlagen: number
   durchschnitt_kwp: number
   durchschnitt_spez_ertrag: number
-  ausstattung: AusstattungsQuoten
+  durchschnitt_autarkie: number | null
+  anteil_mit_speicher: number
+  anteil_mit_waermepumpe: number
+  anteil_mit_eauto: number
+  anteil_mit_wallbox: number
+  anteil_mit_balkonkraftwerk: number
+  // Performance-Durchschnitte (Ø pro Monat, nur Anlagen mit dem Gerät)
+  avg_speicher_ladung_kwh: number | null
+  avg_speicher_entladung_kwh: number | null
+  avg_wp_jaz: number | null
+  avg_eauto_km: number | null
+  avg_eauto_ladung_kwh: number | null
+  avg_wallbox_kwh: number | null
+  avg_wallbox_pv_anteil: number | null
+  avg_bkw_kwh: number | null
 }
 
 export interface VerteilungsBin {

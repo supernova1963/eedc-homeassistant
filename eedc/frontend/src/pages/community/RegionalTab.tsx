@@ -3,15 +3,13 @@
  *
  * Geografische Vergleiche:
  * - Regionale Position und Ranking
+ * - Bundesland-Karte (Choropleth nach spez. Ertrag)
  * - Bundesland-Vergleich (tabellarisch)
  * - Regionale Insights
- *
- * Hinweis: Eine interaktive Karte (Choropleth) erfordert
- * zusätzliche Daten vom Community-Server und wird in einer
- * späteren Phase implementiert.
  */
 
 import { useState, useEffect, useMemo } from 'react'
+import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
 import {
   MapPin,
   Trophy,
@@ -54,6 +52,124 @@ const BUNDESLAENDER: Record<string, { name: string; kurzname: string }> = {
   TH: { name: 'Thüringen', kurzname: 'Thüring.' },
   AT: { name: 'Österreich', kurzname: 'Österr.' },
   CH: { name: 'Schweiz', kurzname: 'Schweiz' },
+}
+
+// Farbinterpolation für Choropleth: hell (wenig Ertrag) → dunkel (viel Ertrag)
+function interpolateColor(value: number, min: number, max: number): string {
+  if (max === min) return '#fbbf24'
+  const t = Math.max(0, Math.min(1, (value - min) / (max - min)))
+  // Farbverlauf: #dbeafe (hellblau, niedrig) → #fbbf24 (gelb, hoch)
+  const r = Math.round(219 + (251 - 219) * t)
+  const g = Math.round(234 + (191 - 234) * t)
+  const b = Math.round(254 + (36 - 254) * t)
+  return `rgb(${r},${g},${b})`
+}
+
+interface ChoroplethKarteProps {
+  allRegions: RegionStatistik[]
+  eigeneRegion: string | null
+}
+
+function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
+  const [tooltip, setTooltip] = useState<{ name: string; region: RegionStatistik | null; wert: number; x: number; y: number } | null>(null)
+
+  const regionMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    allRegions.forEach(r => { map[r.region] = r.durchschnitt_spez_ertrag })
+    return map
+  }, [allRegions])
+
+  const regionDataMap = useMemo(() => {
+    const map: Record<string, RegionStatistik> = {}
+    allRegions.forEach(r => { map[r.region] = r })
+    return map
+  }, [allRegions])
+
+  const { min, max } = useMemo(() => {
+    const werte = allRegions.map(r => r.durchschnitt_spez_ertrag)
+    return { min: Math.min(...werte), max: Math.max(...werte) }
+  }, [allRegions])
+
+  return (
+    <div className="relative">
+      <ComposableMap
+        projection="geoMercator"
+        projectionConfig={{ center: [10.4515, 51.2], scale: 2800 }}
+        width={500}
+        height={560}
+        style={{ width: '100%', height: 'auto' }}
+      >
+        <Geographies geography="/deutschland-bundeslaender.geo.json">
+          {({ geographies }) =>
+            geographies.map(geo => {
+              const code = (geo.properties.id as string).replace('DE-', '')
+              const wert = regionMap[code]
+              const isOwn = code === eigeneRegion
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill={wert !== undefined ? interpolateColor(wert, min, max) : '#e5e7eb'}
+                  stroke={isOwn ? '#1d4ed8' : '#fff'}
+                  strokeWidth={isOwn ? 2.5 : 0.8}
+                  style={{
+                    default: { outline: 'none' },
+                    hover: { outline: 'none', opacity: 0.85, cursor: 'pointer' },
+                    pressed: { outline: 'none' },
+                  }}
+                  onMouseEnter={e => {
+                    if (wert !== undefined) {
+                      setTooltip({ name: geo.properties.name as string, region: regionDataMap[code] ?? null, wert, x: e.clientX, y: e.clientY })
+                    }
+                  }}
+                  onMouseMove={e => {
+                    if (tooltip) setTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)
+                  }}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              )
+            })
+          }
+        </Geographies>
+      </ComposableMap>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 shadow-lg pointer-events-none text-sm"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 40 }}
+        >
+          <p className="font-medium text-gray-900 dark:text-white">{tooltip.name}</p>
+          <p className="text-blue-600 dark:text-blue-400 font-medium">{tooltip.wert.toFixed(0)} kWh/kWp</p>
+          {tooltip.region && (
+            <div className="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+              <p>{tooltip.region.anzahl_anlagen} Anlage{tooltip.region.anzahl_anlagen !== 1 ? 'n' : ''} · Ø {tooltip.region.durchschnitt_kwp.toFixed(1)} kWp</p>
+              {tooltip.region.avg_speicher_ladung_kwh != null && <p>🔋 {tooltip.region.avg_speicher_ladung_kwh.toFixed(0)} ↑ / {tooltip.region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↓ kWh/Mon</p>}
+              {tooltip.region.avg_wp_jaz != null && <p>♨️ JAZ {tooltip.region.avg_wp_jaz.toFixed(1)}</p>}
+              {tooltip.region.avg_eauto_km != null && <p>🚗 {tooltip.region.avg_eauto_km.toFixed(0)} km/Mon · {tooltip.region.avg_eauto_ladung_kwh != null ? `${tooltip.region.avg_eauto_ladung_kwh.toFixed(0)} kWh zuhause` : '–'}</p>}
+              {tooltip.region.avg_wallbox_kwh != null && <p>🔌 {tooltip.region.avg_wallbox_kwh.toFixed(0)} kWh/Mon{tooltip.region.avg_wallbox_pv_anteil != null ? ` · ${tooltip.region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : ''}</p>}
+              {tooltip.region.avg_bkw_kwh != null && <p>🪟 {tooltip.region.avg_bkw_kwh.toFixed(0)} kWh/Mon</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Legende */}
+      <div className="flex items-center gap-2 mt-2 justify-center">
+        <span className="text-xs text-gray-500">{min.toFixed(0)}</span>
+        <div
+          className="h-3 w-32 rounded"
+          style={{ background: `linear-gradient(to right, ${interpolateColor(min, min, max)}, ${interpolateColor(max, min, max)})` }}
+        />
+        <span className="text-xs text-gray-500">{max.toFixed(0)} kWh/kWp</span>
+      </div>
+      {eigeneRegion && (
+        <p className="text-xs text-center text-blue-600 dark:text-blue-400 mt-1">
+          Dein Bundesland: blauer Rahmen
+        </p>
+      )}
+    </div>
+  )
 }
 
 interface RegionalTabProps {
@@ -335,6 +451,23 @@ export default function RegionalTab({ anlageId, zeitraum }: RegionalTabProps) {
         </div>
       </Card>
 
+      {/* Deutschland-Karte (Choropleth) */}
+      {allRegions.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin className="h-5 w-5 text-blue-500" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Spezifischer Ertrag nach Bundesland
+            </h3>
+          </div>
+
+          <ChoroplethKarte
+            allRegions={allRegions}
+            eigeneRegion={benchmark?.anlage.region ?? null}
+          />
+        </Card>
+      )}
+
       {/* Bundesländer-Übersicht */}
       {allRegions.length > 0 && (
         <Card>
@@ -353,7 +486,11 @@ export default function RegionalTab({ anlageId, zeitraum }: RegionalTabProps) {
                   <th className="text-right py-2 px-3 text-gray-500 font-medium">Anlagen</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium">Ø kWp</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium">Ø kWh/kWp</th>
-                  <th className="text-right py-2 px-3 text-gray-500 font-medium">Speicher</th>
+                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Ladung ↑ / Entladung ↓ pro Monat (kWh)">🔋 Ladung/Entl.</th>
+                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Jahresarbeitszahl (Σ Wärme ÷ Σ Strom)">♨️ JAZ</th>
+                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø km/Mon · Ø kWh zuhause geladen">🚗 km / kWh</th>
+                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø kWh geladen/Mon · davon PV-Anteil (wo messbar)">🔌 kWh / PV%</th>
+                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø BKW-Ertrag pro Monat (kWh)">🪟 kWh/Mon</th>
                 </tr>
               </thead>
               <tbody>
@@ -390,8 +527,26 @@ export default function RegionalTab({ anlageId, zeitraum }: RegionalTabProps) {
                         <td className="py-2 px-3 text-right font-medium text-gray-900 dark:text-white">
                           {region.durchschnitt_spez_ertrag.toFixed(0)}
                         </td>
+                        <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
+                          {region.avg_speicher_ladung_kwh != null
+                            ? <><div>{region.avg_speicher_ladung_kwh.toFixed(0)} ↑</div><div className="text-xs text-gray-400">{region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↓ kWh</div></>
+                            : '-'}
+                        </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
-                          {region.ausstattung?.speicher?.toFixed(0) || '-'}%
+                          {region.avg_wp_jaz != null ? region.avg_wp_jaz.toFixed(1) : '-'}
+                        </td>
+                        <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
+                          {region.avg_eauto_km != null
+                            ? <><div>{region.avg_eauto_km.toFixed(0)} km</div><div className="text-xs text-gray-400">{region.avg_eauto_ladung_kwh != null ? `${region.avg_eauto_ladung_kwh.toFixed(0)} kWh` : '–'}</div></>
+                            : '-'}
+                        </td>
+                        <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
+                          {region.avg_wallbox_kwh != null
+                            ? <><div>{region.avg_wallbox_kwh.toFixed(0)} kWh</div><div className="text-xs text-gray-400">{region.avg_wallbox_pv_anteil != null ? `${region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : '–'}</div></>
+                            : '-'}
+                        </td>
+                        <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
+                          {region.avg_bkw_kwh != null ? `${region.avg_bkw_kwh.toFixed(0)} kWh` : '-'}
                         </td>
                       </tr>
                     )
