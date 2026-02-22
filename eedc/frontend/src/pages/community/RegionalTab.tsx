@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
+import germanyGeoJson from '../../assets/deutschland-bundeslaender.geo.json'
 import {
   MapPin,
   Trophy,
@@ -99,7 +100,7 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
         height={560}
         style={{ width: '100%', height: 'auto' }}
       >
-        <Geographies geography="/deutschland-bundeslaender.geo.json">
+        <Geographies geography={germanyGeoJson}>
           {({ geographies }) =>
             geographies.map(geo => {
               const code = (geo.properties.id as string).replace('DE-', '')
