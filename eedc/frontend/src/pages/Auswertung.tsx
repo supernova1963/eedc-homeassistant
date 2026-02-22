@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight, Calendar } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { useAnlagen, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis } from '../hooks'
-import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab } from './auswertung'
+import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab } from './auswertung/index'
 
 type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen'
 

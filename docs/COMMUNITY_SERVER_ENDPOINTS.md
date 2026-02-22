@@ -446,13 +446,13 @@ Nach Implementierung der Endpoints in eedc-community müssen folgende Frontend-K
 |---|---------|--------------|--------|
 | 5.1 | Backend: Proxy-Endpoints für neue Server-APIs | Phase 1-4 | ✅ |
 | 5.2 | Statistiken Tab: Ausstattungsquoten einbauen | 1.1 | ✅ |
-| 5.3 | PV-Ertrag Tab: Monatliche Vergleichslinie (echte Daten) | 1.2 | ⬜ |
-| 5.4 | PV-Ertrag Tab: Histogramm implementieren | 2.1 | ⬜ |
+| 5.3 | PV-Ertrag Tab: Monatliche Vergleichslinie (echte Daten) | 1.2 | ✅ |
+| 5.4 | PV-Ertrag Tab: Histogramm implementieren | 2.1 | ✅ |
 | 5.5 | Statistiken Tab: Top-10-Listen einbauen | 2.2 | ✅ |
-| 5.6 | Regional Tab: Deutschland-Karte implementieren | 2.3 | ⬜ |
-| 5.7 | Regional Tab: Bundesland-Details erweitern | 3.1 | ⬜ |
-| 5.8 | Komponenten Tab: Speicher nach Kapazitätsklassen | 3.2 | ⬜ |
-| 5.9 | Komponenten Tab: WP JAZ nach Region | 3.3 | ⬜ |
+| 5.6 | Regional Tab: Deutschland-Karte implementieren | 2.3 | ✅ |
+| 5.7 | Regional Tab: Bundesland-Details erweitern (WP/E-Auto/Wallbox/BKW) | 3.1 | ✅ |
+| 5.8 | Komponenten Tab: Speicher nach Kapazitätsklassen | 3.2 | ✅ |
+| 5.9 | Komponenten Tab: WP JAZ nach Region | 3.3 | ✅ |
 | 5.10 | Trends Tab: Community-Trends einbauen | 4.1 | ✅ |
 | 5.11 | Trends Tab: Degradations-Analyse einbauen | 4.2 | ✅ |
 

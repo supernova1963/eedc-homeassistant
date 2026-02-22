@@ -7,7 +7,7 @@ import { Sun, TrendingUp, Calendar, ArrowRight, Euro } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { useAnlagen } from '../hooks'
-import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab } from './aussichten'
+import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab } from './aussichten/index'
 
 type TabType = 'kurzfristig' | 'langfristig' | 'trend' | 'finanzen'
 

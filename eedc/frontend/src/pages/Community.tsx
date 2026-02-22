@@ -35,7 +35,7 @@ import {
   RegionalTab,
   TrendsTab,
   StatistikenTab,
-} from './community'
+} from './community/index'
 
 type TabType = 'uebersicht' | 'pv-ertrag' | 'komponenten' | 'regional' | 'trends' | 'statistiken'
 
