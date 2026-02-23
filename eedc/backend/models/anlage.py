@@ -41,6 +41,7 @@ class Anlage(Base):
     installationsdatum: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     # Standort
+    standort_land: Mapped[Optional[str]] = mapped_column(String(5), nullable=True, default='DE')
     standort_plz: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     standort_ort: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     standort_strasse: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

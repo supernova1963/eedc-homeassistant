@@ -17,11 +17,16 @@ from backend.core.config import settings
 COMMUNITY_SERVER_URL = "https://energy.raunet.eu"
 
 
-def get_region_from_plz(plz: str | None) -> str | None:
+def get_region_from_plz(plz: str | None, land: str | None = None) -> str | None:
     """
-    Ermittelt das Bundesland aus der PLZ.
-    Gibt das 2-Buchstaben-Kürzel zurück.
+    Ermittelt die Region aus PLZ und Land.
+    Für AT und CH wird direkt das Länderkürzel zurückgegeben.
+    Für DE wird das Bundesland-Kürzel aus der PLZ ermittelt.
     """
+    # AT/CH direkt zurückgeben — keine PLZ-Auflösung nötig
+    if land in ("AT", "CH"):
+        return land
+
     if not plz or len(plz) < 2:
         return None
 
@@ -120,8 +125,8 @@ async def prepare_community_data(
     if not anlage:
         return None
 
-    # Region aus PLZ ermitteln
-    region = get_region_from_plz(anlage.standort_plz)
+    # Region aus Land + PLZ ermitteln
+    region = get_region_from_plz(anlage.standort_plz, getattr(anlage, 'standort_land', None))
     if not region:
         region = "XX"  # Unbekannt
 

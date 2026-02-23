@@ -33,6 +33,7 @@ export interface Anlage {
   anlagenname: string
   leistung_kwp: number
   installationsdatum?: string
+  standort_land?: string
   standort_plz?: string
   standort_ort?: string
   standort_strasse?: string

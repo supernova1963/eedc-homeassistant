@@ -72,6 +72,8 @@ async def run_migrations(conn):
                 ('sensor_mapping', 'JSON'),
                 # v2.0.3: Community-Sharing Hash
                 ('community_hash', 'VARCHAR(64)'),
+                # v2.3.0: Land-Auswahl für DACH-Unterstützung
+                ('standort_land', 'VARCHAR(5)'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

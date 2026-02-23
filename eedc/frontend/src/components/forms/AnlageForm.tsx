@@ -19,6 +19,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     anlagenname: anlage?.anlagenname || '',
     leistung_kwp: anlage?.leistung_kwp?.toString() || '',
     installationsdatum: anlage?.installationsdatum || '',
+    standort_land: anlage?.standort_land || 'DE',
     standort_plz: anlage?.standort_plz || '',
     standort_ort: anlage?.standort_ort || '',
     standort_strasse: anlage?.standort_strasse || '',
@@ -71,6 +72,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         anlagenname: formData.anlagenname.trim(),
         leistung_kwp: parseFloat(formData.leistung_kwp),
         installationsdatum: formData.installationsdatum || undefined,
+        standort_land: formData.standort_land || 'DE',
         standort_plz: formData.standort_plz || undefined,
         standort_ort: formData.standort_ort || undefined,
         standort_strasse: formData.standort_strasse || undefined,
@@ -141,20 +143,33 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
       {/* Standort */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Standort</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Land</label>
+            <select
+              name="standort_land"
+              value={formData.standort_land}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="DE">Deutschland</option>
+              <option value="AT">Österreich</option>
+              <option value="CH">Schweiz</option>
+            </select>
+          </div>
           <Input
             label="PLZ"
             name="standort_plz"
             value={formData.standort_plz}
             onChange={handleChange}
-            placeholder="z.B. 12345"
+            placeholder={formData.standort_land === 'DE' ? 'z.B. 12345' : 'z.B. 1234'}
           />
           <Input
             label="Ort"
             name="standort_ort"
             value={formData.standort_ort}
             onChange={handleChange}
-            placeholder="z.B. Berlin"
+            placeholder="z.B. Wien"
           />
           <Input
             label="Straße"
