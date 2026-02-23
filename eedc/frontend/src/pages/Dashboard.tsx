@@ -802,7 +802,7 @@ function SparklineChart({ monatsdaten, selectedYear }: {
   )
   const filtered = selectedYear
     ? sorted.filter(m => m.jahr === selectedYear)
-    : sorted.slice(-24)
+    : sorted
 
   if (filtered.length < 2) return null
 
@@ -818,7 +818,7 @@ function SparklineChart({ monatsdaten, selectedYear }: {
   return (
     <div className="mt-4">
       <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
-        PV-Monatserträge — {selectedYear ?? `letzte ${filtered.length} Monate`}
+        PV-Monatserträge — {selectedYear ?? `${filtered[0].jahr}–${filtered[filtered.length - 1].jahr}`}
       </p>
       <div className="h-20">
         <ResponsiveContainer width="100%" height="100%">
