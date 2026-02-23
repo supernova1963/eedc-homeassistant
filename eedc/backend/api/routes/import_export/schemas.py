@@ -116,6 +116,7 @@ class AnlageExport(BaseModel):
     anlagenname: str
     leistung_kwp: float
     installationsdatum: Optional[str] = None
+    standort_land: Optional[str] = None
     standort_plz: Optional[str] = None
     standort_ort: Optional[str] = None
     standort_strasse: Optional[str] = None
