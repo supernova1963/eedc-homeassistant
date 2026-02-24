@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.3.1] - 2026-02-24
+
+### Behoben
+
+- **Docker Build-Fehler behoben:** `package-lock.json` synchronisiert – picomatch Versionskonflikt (2.3.1 → 4.0.3) verhinderte `npm ci` im HA Add-on Build
+
+---
+
 ## [2.3.0] - 2026-02-24
 
 ### Hinzugefügt
