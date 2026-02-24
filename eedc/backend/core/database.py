@@ -92,6 +92,17 @@ async def run_migrations(conn):
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE monatsdaten ADD COLUMN {col_name} {col_type}'))
 
+        # v2.3.2: Neue Spalten zur pvgis_prognosen Tabelle (per-Modul-Daten + gesamt kWp)
+        if 'pvgis_prognosen' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('pvgis_prognosen')}
+            new_columns = [
+                ('gesamt_leistung_kwp', 'FLOAT'),
+                ('module_monatswerte', 'JSON'),
+            ]
+            for col_name, col_type in new_columns:
+                if col_name not in existing_columns:
+                    connection.execute(text(f'ALTER TABLE pvgis_prognosen ADD COLUMN {col_name} {col_type}'))
+
         # v0.9.5+: Neue Spalten zur investitionen Tabelle (PV-Module spezifisch)
         if 'investitionen' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('investitionen')}

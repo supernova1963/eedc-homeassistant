@@ -1274,12 +1274,23 @@ async def get_pv_strings(
     prognose = result.scalar_one_or_none()
     hat_prognose = prognose is not None
 
-    # Prognose-Monatswerte
+    # Prognose-Monatswerte (Gesamt-Fallback für ältere Prognosen)
     prognose_monate = {}
     if prognose and prognose.monatswerte:
         for mw in prognose.monatswerte:
             # e_m = monatlicher Ertrag in kWh (PVGIS-Feldname)
             prognose_monate[mw["monat"]] = mw.get("e_m", 0)
+
+    # Per-Modul PVGIS-Daten (vorhanden bei Prognosen ab v2.3.2)
+    # Erlaubt exakte SOLL-Werte pro Modul statt proportionaler kWp-Verteilung.
+    prognose_per_modul: dict[int, dict[int, float]] = {}
+    if prognose and prognose.module_monatswerte:
+        for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
+            try:
+                inv_id = int(inv_id_str)
+                prognose_per_modul[inv_id] = {mw["monat"]: mw.get("e_m", 0) for mw in monatsdaten}
+            except (ValueError, TypeError):
+                pass
 
     # Gesamt-kWp aller PV-Module berechnen
     gesamt_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
@@ -1322,9 +1333,15 @@ async def get_pv_strings(
         prognose_jahr = 0
         ist_jahr = 0
 
+        # Per-Modul-Daten haben Vorrang (exakt); Fallback: proportional nach kWp
+        modul_prognose = prognose_per_modul.get(modul.id)
+
         for monat in range(1, 13):
-            # Prognose anteilig nach kWp
-            prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
+            if modul_prognose is not None:
+                prog_monat = modul_prognose.get(monat, 0)
+            else:
+                # Fallback für ältere Prognosen ohne per-Modul-Daten
+                prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
             # IST aus InvestitionMonatsdaten
             ist_monat = md_by_inv.get(modul.id, {}).get(monat, 0)
 
@@ -1464,11 +1481,21 @@ async def get_pv_strings_gesamtlaufzeit(
     prognose = result.scalar_one_or_none()
     hat_prognose = prognose is not None
 
-    # Prognose-Monatswerte (PVGIS)
+    # Prognose-Monatswerte (Gesamt-Fallback für ältere Prognosen)
     prognose_monate = {}
     if prognose and prognose.monatswerte:
         for mw in prognose.monatswerte:
             prognose_monate[mw["monat"]] = mw.get("e_m", 0)
+
+    # Per-Modul PVGIS-Daten (vorhanden bei Prognosen ab v2.3.2)
+    prognose_per_modul: dict[int, dict[int, float]] = {}
+    if prognose and prognose.module_monatswerte:
+        for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
+            try:
+                inv_id = int(inv_id_str)
+                prognose_per_modul[inv_id] = {mw["monat"]: mw.get("e_m", 0) for mw in monatsdaten}
+            except (ValueError, TypeError):
+                pass
 
     # Gesamt-kWp
     gesamt_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
@@ -1547,9 +1574,15 @@ async def get_pv_strings_gesamtlaufzeit(
         # Saisonale Daten für diesen String
         string_saisonal: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
 
+        # Per-Modul-Daten haben Vorrang; Fallback: proportional nach kWp
+        modul_prognose = prognose_per_modul.get(modul.id)
+
         for jahr in jahre:
-            # Prognose für das Jahr (PVGIS × kWp-Anteil)
-            prognose_jahr = sum(prognose_monate.get(m, 0) for m in range(1, 13)) * kwp_anteil
+            # Prognose für das Jahr: per-Modul-Daten oder proportional nach kWp
+            if modul_prognose is not None:
+                prognose_jahr = sum(modul_prognose.get(m, 0) for m in range(1, 13))
+            else:
+                prognose_jahr = sum(prognose_monate.get(m, 0) for m in range(1, 13)) * kwp_anteil
 
             # IST für das Jahr
             ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
@@ -1578,7 +1611,10 @@ async def get_pv_strings_gesamtlaufzeit(
         # Saisonalwerte für String
         saisonalwerte = []
         for monat in range(1, 13):
-            prognose_monat = prognose_monate.get(monat, 0) * kwp_anteil
+            if modul_prognose is not None:
+                prognose_monat = modul_prognose.get(monat, 0)
+            else:
+                prognose_monat = prognose_monate.get(monat, 0) * kwp_anteil
             ist_summe = string_saisonal[monat]["ist_summe"]
             anzahl = string_saisonal[monat]["anzahl"]
             ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0

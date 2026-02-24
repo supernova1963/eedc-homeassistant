@@ -136,7 +136,8 @@ def ausrichtung_zu_azimut(ausrichtung: Optional[str]) -> float:
         "nordwest": 135, "nw": 135, "northwest": 135,
         "west": 90, "w": 90,
         "südwest": 45, "sw": 45, "southwest": 45,
-        # Ost-West Anlagen (Mittelwert)
+        # Ost-West: Wird in PVGIS-Berechnungen separat behandelt (2 Abfragen: Ost + West).
+        # Dieser Wert (0 = Süd) dient nur noch als Anzeige-Fallback.
         "ost-west": 0, "ow": 0, "o-w": 0, "east-west": 0,
     }
 
@@ -229,6 +230,72 @@ async def fetch_pvgis_data(
             )
 
 
+def _ist_ost_west(ausrichtung: Optional[str]) -> bool:
+    """Prüft ob eine Ausrichtungsangabe eine Ost-West-Anlage beschreibt."""
+    if not ausrichtung:
+        return False
+    al = ausrichtung.lower().strip()
+    return al in ("ost-west", "east-west", "ow", "o-w") or "ost-west" in al or "east-west" in al
+
+
+async def _berechne_pvgis_modul(
+    latitude: float,
+    longitude: float,
+    leistung_kwp: float,
+    ausrichtung: Optional[str],
+    neigung_grad: float,
+    system_losses: float,
+) -> tuple[list[PVGISMonthlyData], float]:
+    """
+    Berechnet PVGIS-Prognose für ein PV-Modul.
+
+    Für Ost-West-Anlagen werden zwei separate Abfragen durchgeführt (Ost 50% + West 50%)
+    und die Ergebnisse summiert. Das gibt realistische Ertragswerte statt der (zu hohen)
+    Süd-Ausrichtung als Fallback.
+
+    Returns:
+        (monatsdaten, jahresertrag_kwh)
+    """
+    if _ist_ost_west(ausrichtung):
+        half_kwp = leistung_kwp / 2
+        pvgis_ost = await fetch_pvgis_data(latitude, longitude, half_kwp, neigung_grad, -90.0, system_losses)
+        pvgis_west = await fetch_pvgis_data(latitude, longitude, half_kwp, neigung_grad, 90.0, system_losses)
+
+        monthly_ost = {m["month"]: m for m in pvgis_ost.get("outputs", {}).get("monthly", {}).get("fixed", [])}
+        monthly_west = {m["month"]: m for m in pvgis_west.get("outputs", {}).get("monthly", {}).get("fixed", [])}
+
+        monatsdaten = []
+        for month_num in range(1, 13):
+            m_o = monthly_ost.get(month_num, {})
+            m_w = monthly_west.get(month_num, {})
+            e_m = round(m_o.get("E_m", 0) + m_w.get("E_m", 0), 2)
+            h_m = round((m_o.get("H(i)_m", 0) + m_w.get("H(i)_m", 0)) / 2, 2)
+            sd_m = round(m_o.get("SD_m", 0) + m_w.get("SD_m", 0), 2)
+            monatsdaten.append(PVGISMonthlyData(monat=month_num, e_m=e_m, h_m=h_m, sd_m=sd_m))
+
+        jahresertrag_ost = pvgis_ost.get("outputs", {}).get("totals", {}).get("fixed", {}).get("E_y", 0)
+        jahresertrag_west = pvgis_west.get("outputs", {}).get("totals", {}).get("fixed", {}).get("E_y", 0)
+        return monatsdaten, jahresertrag_ost + jahresertrag_west
+    else:
+        azimuth = ausrichtung_zu_azimut(ausrichtung)
+        pvgis_data = await fetch_pvgis_data(latitude, longitude, leistung_kwp, neigung_grad, azimuth, system_losses)
+
+        outputs = pvgis_data.get("outputs", {})
+        monthly = outputs.get("monthly", {}).get("fixed", [])
+        totals = outputs.get("totals", {}).get("fixed", {})
+
+        monatsdaten = [
+            PVGISMonthlyData(
+                monat=m["month"],
+                e_m=round(m["E_m"], 2),
+                h_m=round(m["H(i)_m"], 2),
+                sd_m=round(m["SD_m"], 2),
+            )
+            for m in monthly
+        ]
+        return monatsdaten, totals.get("E_y", 0)
+
+
 @router.get("/prognose/{anlage_id}", response_model=PVGISPrognose)
 async def get_pvgis_prognose(
     anlage_id: int,
@@ -291,46 +358,25 @@ async def get_pvgis_prognose(
             continue  # Modul ohne Leistung überspringen
 
         tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
-        azimuth = ausrichtung_zu_azimut(modul.ausrichtung)
 
-        # PVGIS API aufrufen
-        pvgis_data = await fetch_pvgis_data(
+        # PVGIS abrufen – Ost-West-Anlagen: 2 separate Abfragen (Ost 50% + West 50%)
+        modul_monatsdaten, jahresertrag = await _berechne_pvgis_modul(
             latitude=anlage.latitude,
             longitude=anlage.longitude,
-            peak_power=modul.leistung_kwp,
-            tilt=tilt,
-            azimuth=azimuth,
-            losses=system_losses
+            leistung_kwp=modul.leistung_kwp,
+            ausrichtung=modul.ausrichtung,
+            neigung_grad=tilt,
+            system_losses=system_losses,
         )
 
-        # Ergebnis parsen
-        outputs = pvgis_data.get("outputs", {})
-        monthly = outputs.get("monthly", {}).get("fixed", [])
-        totals = outputs.get("totals", {}).get("fixed", {})
+        # Zu Gesamt addieren
+        for md in modul_monatsdaten:
+            gesamt_monatsdaten[md.monat]["e_m"] += md.e_m
+            gesamt_monatsdaten[md.monat]["h_m"] = md.h_m  # Einstrahlung gleich für alle Module am Standort
+            gesamt_monatsdaten[md.monat]["sd_m"] += md.sd_m
 
-        # Monatsdaten extrahieren
-        modul_monatsdaten = []
-        for m in monthly:
-            monat = m["month"]
-            e_m = round(m["E_m"], 2)
-            h_m = round(m["H(i)_m"], 2)
-            sd_m = round(m["SD_m"], 2)
-
-            modul_monatsdaten.append(PVGISMonthlyData(
-                monat=monat,
-                e_m=e_m,
-                h_m=h_m,
-                sd_m=sd_m
-            ))
-
-            # Zu Gesamt addieren
-            gesamt_monatsdaten[monat]["e_m"] += e_m
-            gesamt_monatsdaten[monat]["h_m"] = h_m  # Einstrahlung ist gleich für alle Module am Standort
-            gesamt_monatsdaten[monat]["sd_m"] += sd_m
-
-        # Jahreswerte
-        jahresertrag = totals.get("E_y", 0)
         spezifischer_ertrag = jahresertrag / modul.leistung_kwp if modul.leistung_kwp > 0 else 0
+        azimuth = ausrichtung_zu_azimut(modul.ausrichtung)  # nur für Anzeige
 
         module_prognosen.append(PVModulPrognose(
             investition_id=modul.id,
@@ -428,33 +474,18 @@ async def get_pvgis_modul_prognose(
         )
 
     tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
-    azimuth = ausrichtung_zu_azimut(modul.ausrichtung)
 
-    # PVGIS API aufrufen
-    pvgis_data = await fetch_pvgis_data(
+    # PVGIS abrufen – Ost-West-Anlagen: 2 separate Abfragen (Ost 50% + West 50%)
+    monatsdaten_list, jahresertrag = await _berechne_pvgis_modul(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
-        peak_power=modul.leistung_kwp,
-        tilt=tilt,
-        azimuth=azimuth,
-        losses=system_losses
+        leistung_kwp=modul.leistung_kwp,
+        ausrichtung=modul.ausrichtung,
+        neigung_grad=tilt,
+        system_losses=system_losses,
     )
 
-    outputs = pvgis_data.get("outputs", {})
-    monthly = outputs.get("monthly", {}).get("fixed", [])
-    totals = outputs.get("totals", {}).get("fixed", {})
-
-    monatsdaten = [
-        {
-            "monat": m["month"],
-            "e_m": round(m["E_m"], 2),
-            "h_m": round(m["H(i)_m"], 2),
-            "sd_m": round(m["SD_m"], 2)
-        }
-        for m in monthly
-    ]
-
-    jahresertrag = totals.get("E_y", 0)
+    azimuth = ausrichtung_zu_azimut(modul.ausrichtung)  # nur für Anzeige
     spezifischer_ertrag = jahresertrag / modul.leistung_kwp if modul.leistung_kwp > 0 else 0
 
     return {
@@ -466,7 +497,10 @@ async def get_pvgis_modul_prognose(
         "neigung_grad": tilt,
         "jahresertrag_kwh": round(jahresertrag, 2),
         "spezifischer_ertrag_kwh_kwp": round(spezifischer_ertrag, 2),
-        "monatsdaten": monatsdaten,
+        "monatsdaten": [
+            {"monat": m.monat, "e_m": m.e_m, "h_m": m.h_m, "sd_m": m.sd_m}
+            for m in monatsdaten_list
+        ],
         "system_losses": system_losses,
         "standort": {
             "latitude": anlage.latitude,
@@ -592,11 +626,22 @@ async def speichere_pvgis_prognose(
     for alte_prognose in result.scalars().all():
         alte_prognose.ist_aktiv = False
 
-    # Monatswerte als JSON vorbereiten
+    # Monatswerte als JSON vorbereiten (Gesamt-Summe aller Module)
     monatswerte = [
         {"monat": m.monat, "e_m": m.e_m, "h_m": m.h_m, "sd_m": m.sd_m}
         for m in prognose.monatsdaten
     ]
+
+    # Per-Modul-Daten für genaue SOLL-Berechnung im String-Vergleich (v2.3.2)
+    # Ohne diese Daten wird im Cockpit proportional nach kWp verteilt (ungenau bei
+    # unterschiedlichen Ausrichtungen wie Ost-West vs. Süd).
+    module_monatswerte_data = {
+        str(m.investition_id): [
+            {"monat": md.monat, "e_m": md.e_m, "h_m": md.h_m, "sd_m": md.sd_m}
+            for md in m.monatsdaten
+        ]
+        for m in prognose.module
+    }
 
     # Gewichtete Durchschnittswerte für Speicherung berechnen
     gesamt_neigung = 0.0
@@ -616,7 +661,9 @@ async def speichere_pvgis_prognose(
         system_losses=prognose.system_losses,
         jahresertrag_kwh=prognose.jahresertrag_kwh,
         spezifischer_ertrag_kwh_kwp=prognose.spezifischer_ertrag_kwh_kwp,
+        gesamt_leistung_kwp=round(prognose.gesamt_leistung_kwp, 3),
         monatswerte=monatswerte,
+        module_monatswerte=module_monatswerte_data,
         ist_aktiv=True
     )
 

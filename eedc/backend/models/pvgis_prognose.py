@@ -56,9 +56,16 @@ class PVGISPrognose(Base):
     # Ergebnisse
     jahresertrag_kwh: Mapped[float] = mapped_column(Float, nullable=False)
     spezifischer_ertrag_kwh_kwp: Mapped[float] = mapped_column(Float, nullable=False)
+    gesamt_leistung_kwp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Monatswerte als JSON: [{monat: 1, e_m: 123.4, h_m: 45.6}, ...]
     monatswerte: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Per-Modul-Monatswerte für genaue SOLL-Berechnung (NEU v2.3.2)
+    # Format: {"str(investition_id)": [{"monat": 1, "e_m": 123.4, "h_m": 45.6, "sd_m": 1.2}, ...], ...}
+    # Ohne dieses Feld wird die Verteilung proportional nach kWp berechnet (ungenau bei
+    # unterschiedlichen Ausrichtungen). Mit diesem Feld wird pro Modul der exakte PVGIS-Wert genutzt.
+    module_monatswerte: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Aktiv-Flag: Nur eine Prognose pro Anlage kann aktiv sein (für Vergleiche)
     ist_aktiv: Mapped[bool] = mapped_column(default=True)

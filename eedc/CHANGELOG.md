@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.3.2] - 2026-02-24
+
+### Behoben
+
+- **SOLL-Werte im PV-String-Vergleich waren zu hoch – zwei Ursachen behoben:**
+  1. **Ost-West-Anlagen:** Ausrichtung `ost-west` wurde bisher als Süd (Azimut 0°) an PVGIS übergeben, was ~20–25 % zu hohe SOLL-Werte lieferte. Jetzt werden zwei separate PVGIS-Abfragen durchgeführt (je 50 % kWp auf Ost −90° und West +90°) und die Ergebnisse summiert.
+  2. **Proportionale kWp-Verteilung:** Der gespeicherte PVGIS-Gesamtwert wurde bisher anteilig nach kWp auf die einzelnen Strings verteilt – ohne Rücksicht auf unterschiedliche Ausrichtungen. Jetzt werden pro Modul die exakten PVGIS-Werte gespeichert (`module_monatswerte`) und direkt genutzt.
+
+### Technisch
+
+- `PVGISPrognose`-Modell: Neue Felder `gesamt_leistung_kwp` und `module_monatswerte` (JSON)
+- DB-Migration läuft automatisch beim Start
+- **Wichtig:** Nach dem Update einmalig die PVGIS-Prognose unter *Einstellungen → PVGIS* neu abrufen und speichern, um die korrekten per-Modul-Werte zu erhalten
+
+---
+
 ## [2.3.1] - 2026-02-24
 
 ### Behoben
