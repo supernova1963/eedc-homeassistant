@@ -7,6 +7,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.3.0] - 2026-02-24
+
+### Hinzugefügt
+
+- **Dashboard-Modernisierung (6 neue Features)**
+  - **Hero-Leiste:** 3 Top-KPIs (Autarkie, Spez. Ertrag, Netto-Ertrag) mit Jahres-Trend-Pfeilen (▲/▼/—) im Vergleich zum Vorjahr
+  - **Energie-Fluss-Diagramm:** Gestapelte Balkendiagramme visualisieren PV-Verteilung (Direktverbrauch, Speicher, Einspeisung) und Haus-Versorgungsquellen (PV direkt, Speicher, Netzbezug)
+  - **Ring-Gauges:** SVG-Ringdiagramme für Autarkie- und Eigenverbrauchsquote ersetzen die bisherigen Zahlenkarten
+  - **Sparkline:** Monatliche PV-Erträge als kompaktes Balkendiagramm im Energie-Bilanz-Bereich
+  - **Amortisations-Fortschrittsbalken:** Zeigt wie viel % der Investition bereits zurückgeflossen sind inkl. geschätztem Amortisationsjahr (nur in Gesamtansicht)
+  - **Community-Teaser:** Hinweiskarte mit Link zur Community-Seite (nur sichtbar wenn Daten bereits geteilt wurden)
+
+- **DACH-Onboarding vorbereitet**
+  - Neues Feld `standort_land` (DE/AT/CH) im Anlage-Modell
+  - Land-Dropdown im Anlage-Formular (Deutschland, Österreich, Schweiz)
+  - Community-Regionszuordnung: AT/CH direkt zugeordnet (keine PLZ-Auflösung nötig)
+  - JSON-Export/Import berücksichtigt `standort_land`
+
+### Geändert
+
+- **Sparkline zeigt Gesamtzeitraum:** Ohne Jahresfilter werden alle verfügbaren Monate gezeigt (konsistent mit dem Rest des Dashboards), Label zeigt z.B. „2023–2025"
+
+---
+
 ## [2.2.0] - 2026-02-22
 
 ### Hinzugefügt
