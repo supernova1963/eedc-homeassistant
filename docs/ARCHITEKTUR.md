@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.2.0** | Stand: Februar 2026
+**Version 2.3.0** | Stand: Februar 2026
 
 ---
 
@@ -247,9 +247,10 @@ eedc-homeassistant/
 | neigung_grad | FLOAT | Dachneigung |
 | leistung_kwp | FLOAT | Anlagenleistung |
 | mastr_id | VARCHAR(20) | MaStR-ID der Anlage |
+| standort_land | VARCHAR(5) | Land: DE, AT oder CH (v2.3.0) |
 | versorger_daten | JSON | Versorger & Zähler |
 | wetter_provider | VARCHAR(30) | Bevorzugter Wetter-Provider (auto, open-meteo, brightsky, open-meteo-solar) |
-| sensor_mapping | JSON | HA-Sensor-Mapping (NEU v1.1.0) |
+| sensor_mapping | JSON | HA-Sensor-Mapping |
 | created_at | DATETIME | Erstellungsdatum |
 
 #### Monatsdaten
@@ -637,12 +638,19 @@ class MonatsdatenResponse(MonatsdatenCreate):
 │   ├── /balkonkraftwerk → BalkonkraftwerkDashboard
 │   └── /sonstiges      → SonstigesDashboard
 │
-├── /auswertungen       → Auswertung.tsx (7 Tabs)
+├── /auswertungen       → Auswertung.tsx (6 Tabs)
 │   ├── /roi            → ROIDashboard (Jahres-Rendite p.a.)
-│   ├── /prognose       → PrognoseVsIst
-│   └── /community      → CommunityVergleich (NEU v2.0.3, nur wenn geteilt)
+│   └── /prognose       → PrognoseVsIst
 │
-├── /aussichten         → Aussichten.tsx (4 Tabs) [NEU]
+├── /community          → CommunityVergleich.tsx (6 Tabs, v2.1.0)
+│   ├── Übersicht       → Achievements, Radar-Chart, Rang-Badges
+│   ├── PV-Ertrag       → Monatlicher Vergleich, Histogramm
+│   ├── Komponenten     → Speicher, WP, E-Auto, Wallbox, BKW Deep-Dives
+│   ├── Regional        → Bundesland-Ranking, Choropleth-Karte (v2.2.0)
+│   ├── Trends          → Ertragsverlauf, Saisonale Performance
+│   └── Statistiken     → Community-weite Auswertungen
+│
+├── /aussichten         → Aussichten.tsx (4 Tabs)
 │   ├── /kurzfristig    → KurzfristigTab (7-Tage Wetter)
 │   ├── /langfristig    → LangfristigTab (12-Monats PVGIS)
 │   ├── /trend          → TrendTab (Jahresvergleich, Degradation)
@@ -670,7 +678,7 @@ App.tsx
     └── Layout.tsx
         ├── TopNavigation.tsx
         │   ├── Logo
-        │   ├── MainTabs (Cockpit, Auswertungen)
+        │   ├── MainTabs (Cockpit, Auswertungen, Community, Aussichten)
         │   ├── SettingsDropdown
         │   └── ThemeToggle
         │

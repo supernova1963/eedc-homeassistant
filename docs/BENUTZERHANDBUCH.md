@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.2.0** | Stand: Februar 2026
+**Version 2.3.0** | Stand: Februar 2026
 
 ---
 
@@ -12,7 +12,7 @@
 4. [Navigation & Menüstruktur](#4-navigation--menüstruktur)
 5. [Cockpit (Dashboards)](#5-cockpit-dashboards)
 6. [Auswertungen](#6-auswertungen)
-7. [Community-Vergleich (NEU)](#7-community-vergleich-neu)
+7. [Community](#7-community)
 8. [Aussichten (Prognosen)](#8-aussichten-prognosen)
 9. [Einstellungen](#9-einstellungen)
 10. [Datenerfassung](#10-datenerfassung)
@@ -45,7 +45,7 @@
 
 ### Systemanforderungen
 
-- **Standalone**: Docker oder Python 3.11+ mit Node.js 18+
+- **Standalone**: Docker oder Python 3.11+ mit Node.js 20+
 - **Home Assistant Add-on**: Home Assistant OS oder Supervised
 - **Browser**: Moderner Browser (Chrome, Firefox, Safari, Edge)
 
@@ -190,12 +190,14 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 
 ### Hauptnavigation (oben)
 
-Die horizontale Navigation enthält zwei Hauptbereiche:
+Die horizontale Navigation enthält vier Hauptbereiche:
 
 | Bereich | Funktion |
 |---------|----------|
-| **Cockpit** | Live-Dashboards mit KPIs und Charts |
-| **Auswertungen** | Detaillierte Analysen und Reports |
+| **Cockpit** | Übersicht mit KPIs, Energie-Fluss und Charts |
+| **Auswertungen** | Detaillierte Analysen in 6 Tabs |
+| **Community** | Anonymer Benchmark-Vergleich mit anderen PV-Anlagen |
+| **Aussichten** | Prognosen: 7-Tage, Langfristig, Trend, Finanzen |
 
 Plus ein Dropdown-Menü für **Einstellungen**.
 
@@ -238,27 +240,35 @@ Das Cockpit zeigt dir alle wichtigen Kennzahlen auf einen Blick.
 
 ### 5.1 Übersicht
 
-Die Hauptansicht zeigt 7 Sektionen:
+Das Cockpit zeigt alle wichtigen Kennzahlen auf einen Blick – ab v2.3.0 modernisiert:
+
+#### Hero-Leiste (oben)
+Die drei wichtigsten KPIs prominent dargestellt, jeweils mit Trend-Pfeil zum Vorjahr:
+- **Autarkie** (%), **Spezifischer Ertrag** (kWh/kWp), **Netto-Ertrag** (€)
+
+#### Energie-Fluss-Diagramm
+Zwei gestapelte Balkendiagramme zeigen:
+- **PV-Verteilung**: Wohin fließt der erzeugte Strom? (Direktverbrauch / Speicher / Einspeisung)
+- **Haus-Versorgung**: Woher kommt der Strom im Haus? (PV direkt / Speicher / Netzbezug)
 
 #### Energiebilanz
 - **PV-Erzeugung** – Gesamte Stromerzeugung in kWh
 - **Direktverbrauch** – Sofort selbst verbrauchter PV-Strom
 - **Einspeisung** – Ins Netz eingespeister Überschuss
 - **Netzbezug** – Aus dem Netz bezogener Strom
+- **Sparkline** – Monatserträge als kompaktes Balkendiagramm über den Gesamtzeitraum
 
-#### Effizienz-Kennzahlen
+#### Effizienz-Quoten (Ring-Gauges)
+Anschauliche Ringdiagramme statt reiner Zahlen:
 - **Autarkie** = (Gesamtverbrauch - Netzbezug) / Gesamtverbrauch × 100%
-  - Wie viel Prozent deines Verbrauchs deckst du selbst?
 - **Eigenverbrauchsquote** = Eigenverbrauch / PV-Erzeugung × 100%
-  - Wie viel deines PV-Stroms nutzt du selbst?
 
 #### Komponenten-Status
 Schnellstatus für alle Komponenten mit Klick-Navigation zu Details.
 
 #### Finanzielle Auswertung
-- Einspeiseerlös (€)
-- Eingesparte Stromkosten (€)
-- Gesamt-Einsparung (€)
+- Einspeiseerlös, eingesparte Stromkosten, Gesamt-Einsparung (€)
+- **Amortisations-Fortschrittsbalken**: Wie viel % der Investition ist zurückgeflossen? Mit geschätztem Amortisationsjahr (nur in der Gesamtansicht)
 
 #### CO2-Bilanz
 - Vermiedene CO2-Emissionen (kg)
@@ -340,7 +350,7 @@ Jede Kennzahl zeigt bei Hover einen Tooltip mit:
 
 ## 6. Auswertungen
 
-Detaillierte Analysen in 7 Kategorien (inkl. Community-Vergleich).
+Detaillierte Analysen in 6 Kategorien. Der Community-Vergleich ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt.
 
 ### 6.1 Energie-Tab
 
@@ -421,7 +431,7 @@ Tabelle mit:
 
 ---
 
-## 7. Community-Vergleich
+## 7. Community
 
 Der Community-Vergleich ermöglicht anonyme Benchmarks mit anderen PV-Anlagen-Besitzern.
 Community ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt (gleichwertig mit Cockpit, Auswertungen, Aussichten).

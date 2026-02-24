@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.2.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.3.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -29,17 +29,18 @@
 ## Features
 
 ### Cockpit & Dashboards
-- **Aggregierte Übersicht** mit 7 Sektionen (Energie, Effizienz, Speicher, E-Auto, Wärmepumpe, Finanzen, CO2)
+- **Modernisiertes Cockpit** mit Hero-Leiste (Top-KPIs + Jahres-Trend), Energie-Fluss-Diagramm, Ring-Gauges und Sparkline
 - **8 spezialisierte Dashboards** für jede Komponente
+- **Amortisations-Fortschrittsbalken** – Investitionsrückfluss auf einen Blick
 - **Formel-Tooltips** zeigen Berechnungsgrundlagen per Hover
 - **Jahr-Filter** für mehrjährige Auswertungen
 
 ### Auswertungen & Reporting
-- **7 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen, Community
+- **6 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen
 - **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
 - **SOLL-IST Vergleich** gegen PVGIS-Prognosen
 - **CSV/JSON Export** für externe Weiterverarbeitung
-- **Vollständiger JSON-Export** für Support und Backup (NEU)
+- **Vollständiger JSON-Export** für Support und Backup
 
 ### Aussichten (Prognosen)
 - **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
@@ -141,7 +142,7 @@ Die Hauptansicht zeigt alle wichtigen KPIs auf einen Blick:
 ![Cockpit Übersicht](./docs/images/cockpit_main.png)
 
 ### Auswertungen
-Detaillierte Analysen in 7 Kategorien:
+Detaillierte Analysen in 6 Kategorien:
 - Jahresvergleich mit Delta-Indikatoren
 - PV-String-Performance nach Ausrichtung
 - Arbitrage-Analyse für Speicher
@@ -225,7 +226,9 @@ Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfass
 - [x] **Sensor-Mapping-Wizard** für HA-Integration
 - [x] **Monatsabschluss-Wizard** mit intelligenten Vorschlägen
 - [x] **Community-Vergleich** - Anonymer Benchmark mit anderen PV-Anlagen
-- [x] **Community als Hauptmenü** - Eigener Bereich mit 6 Tabs für tiefgehende Analysen (NEU v2.1.0)
+- [x] **Community als Hauptmenü** - Eigener Bereich mit 6 Tabs für tiefgehende Analysen (v2.1.0)
+- [x] **Dashboard-Modernisierung** - Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline, Amortisationsbalken (v2.3.0)
+- [x] **DACH-Onboarding** - Österreich und Schweiz unterstützt (v2.3.0)
 - [ ] KI-gestützte Insights
 
 ---

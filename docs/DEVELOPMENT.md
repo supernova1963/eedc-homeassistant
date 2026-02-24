@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 2.2.0** | Stand: Februar 2026
+**Version 2.3.0** | Stand: Februar 2026
 
 ---
 
@@ -229,9 +229,9 @@ eedc-homeassistant/
         │   │   └── aussichten.ts # Prognosen
         │   ├── components/      # UI Components
         │   ├── pages/           # Seiten
-        │   │   ├── Dashboard.tsx             # Cockpit
-        │   │   ├── Auswertung.tsx            # Analysen (7 Tabs)
-        │   │   ├── CommunityVergleich.tsx    # Community-Benchmark (NEU v2.0.3)
+        │   │   ├── Dashboard.tsx             # Cockpit (Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline – v2.3.0)
+        │   │   ├── Auswertung.tsx            # Analysen (6 Tabs)
+        │   │   ├── CommunityVergleich.tsx    # Community (Hauptmenüpunkt seit v2.1.0, 6 Tabs)
         │   │   ├── Aussichten.tsx            # Prognosen (4 Tabs)
         │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping
         │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss
