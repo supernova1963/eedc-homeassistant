@@ -11,9 +11,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 
-- **SOLL-Werte im PV-String-Vergleich waren zu hoch – zwei Ursachen behoben:**
+- **SOLL-Werte im PV-String-Vergleich waren zu hoch – drei Ursachen behoben:**
   1. **Ost-West-Anlagen:** Ausrichtung `ost-west` wurde bisher als Süd (Azimut 0°) an PVGIS übergeben, was ~20–25 % zu hohe SOLL-Werte lieferte. Jetzt werden zwei separate PVGIS-Abfragen durchgeführt (je 50 % kWp auf Ost −90° und West +90°) und die Ergebnisse summiert.
   2. **Proportionale kWp-Verteilung:** Der gespeicherte PVGIS-Gesamtwert wurde bisher anteilig nach kWp auf die einzelnen Strings verteilt – ohne Rücksicht auf unterschiedliche Ausrichtungen. Jetzt werden pro Modul die exakten PVGIS-Werte gespeichert (`module_monatswerte`) und direkt genutzt.
+  3. **Teil-Jahre / laufendes Jahr (Auswertungen → PV-Anlage):** SOLL enthielt bisher alle 12 Monate eines Jahres, auch wenn IST-Daten nur für einen Teil des Jahres vorlagen (z.B. Anlage ab Mai, oder laufendes Jahr mit Jan–Feb). Jetzt wird SOLL nur für Monate gezählt, für die auch IST-Daten erfasst sind.
 
 ### Technisch
 

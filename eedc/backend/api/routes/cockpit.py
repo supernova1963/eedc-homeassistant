@@ -1336,12 +1336,21 @@ async def get_pv_strings(
         # Per-Modul-Daten haben Vorrang (exakt); Fallback: proportional nach kWp
         modul_prognose = prognose_per_modul.get(modul.id)
 
+        # Monate MIT IST-Daten – SOLL wird nur für diese Monate gezählt.
+        # Verhindert aufgeblähten SOLL-Wert bei Teil-Jahren (z.B. Anlage ab Mai,
+        # oder laufendes Jahr mit nur Jan–Feb Daten).
+        months_with_data = set(md_by_inv.get(modul.id, {}).keys())
+
         for monat in range(1, 13):
-            if modul_prognose is not None:
-                prog_monat = modul_prognose.get(monat, 0)
+            # SOLL-Berechnung (PVGIS): nur für Monate mit IST-Daten – faire Vergleichsbasis
+            if monat in months_with_data:
+                if modul_prognose is not None:
+                    prog_monat = modul_prognose.get(monat, 0)
+                else:
+                    # Fallback für ältere Prognosen ohne per-Modul-Daten
+                    prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
             else:
-                # Fallback für ältere Prognosen ohne per-Modul-Daten
-                prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
+                prog_monat = 0.0
             # IST aus InvestitionMonatsdaten
             ist_monat = md_by_inv.get(modul.id, {}).get(monat, 0)
 
@@ -1578,11 +1587,14 @@ async def get_pv_strings_gesamtlaufzeit(
         modul_prognose = prognose_per_modul.get(modul.id)
 
         for jahr in jahre:
-            # Prognose für das Jahr: per-Modul-Daten oder proportional nach kWp
+            # Monate MIT IST-Daten für dieses Jahr (faire Vergleichsbasis)
+            months_with_data_year = set(md_by_inv.get(modul.id, {}).get(jahr, {}).keys())
+
+            # Prognose nur für Monate mit IST-Daten (verhindert aufgeblähten SOLL bei Teil-Jahren)
             if modul_prognose is not None:
-                prognose_jahr = sum(modul_prognose.get(m, 0) for m in range(1, 13))
+                prognose_jahr = sum(modul_prognose.get(m, 0) for m in months_with_data_year)
             else:
-                prognose_jahr = sum(prognose_monate.get(m, 0) for m in range(1, 13)) * kwp_anteil
+                prognose_jahr = sum(prognose_monate.get(m, 0) for m in months_with_data_year) * kwp_anteil
 
             # IST für das Jahr
             ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
