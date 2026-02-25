@@ -16,6 +16,8 @@ from backend.models.investition import Investition, InvestitionTyp, InvestitionM
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import Strompreis
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.utils.sonstige_positionen import berechne_sonstige_summen
 
 
 # =============================================================================
@@ -603,8 +605,8 @@ class ROIDashboardResponse(BaseModel):
 @router.get("/roi/{anlage_id}", response_model=ROIDashboardResponse)
 async def get_roi_dashboard(
     anlage_id: int,
-    strompreis_cent: float = Query(30.0, description="Strompreis in Cent/kWh"),
-    einspeiseverguetung_cent: float = Query(8.2, description="Einspeisevergütung in Cent/kWh"),
+    strompreis_cent: Optional[float] = Query(None, description="Override: Strompreis in Cent/kWh (auto aus DB wenn leer)"),
+    einspeiseverguetung_cent: Optional[float] = Query(None, description="Override: Einspeisevergütung in Cent/kWh (auto aus DB wenn leer)"),
     benzinpreis_euro: float = Query(1.85, description="Benzinpreis in Euro/Liter"),
     jahr: Optional[int] = Query(None, description="Jahr für Auswertung (None = alle Jahre)"),
     db: AsyncSession = Depends(get_db)
@@ -630,6 +632,7 @@ async def get_roi_dashboard(
         berechne_eauto_einsparung,
         berechne_waermepumpe_einsparung,
         berechne_roi,
+        berechne_ust_eigenverbrauch,
         CO2_FAKTOR_STROM_KG_KWH,
     )
     from sqlalchemy import func
@@ -640,6 +643,16 @@ async def get_roi_dashboard(
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    # Tarife laden (allgemein + Spezialtarife)
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    allgemein_tarif = tarife.get("allgemein")
+    strompreis_cent = strompreis_cent or (allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0)
+    einspeiseverguetung_cent = einspeiseverguetung_cent or (allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else 8.2)
+    wp_tarif = tarife.get("waermepumpe")
+    wp_strompreis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else strompreis_cent
+    wallbox_tarif = tarife.get("wallbox")
+    wallbox_strompreis = wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else strompreis_cent
 
     # Investitionen laden
     inv_result = await db.execute(
@@ -1112,7 +1125,7 @@ async def get_roi_dashboard(
                 km_jahr=km_jahr,
                 verbrauch_kwh_100km=verbrauch,
                 pv_anteil_prozent=pv_anteil,
-                strompreis_cent=strompreis_cent,
+                strompreis_cent=wallbox_strompreis,
                 benzinpreis_euro_liter=benzinpreis_euro,
                 benzin_verbrauch_liter_100km=benzin_verbrauch,
                 nutzt_v2h=nutzt_v2h,
@@ -1148,7 +1161,7 @@ async def get_roi_dashboard(
                     cop_heizung=cop_heizung,
                     cop_warmwasser=cop_warmwasser,
                     effizienz_modus='getrennte_cops',
-                    strompreis_cent=strompreis_cent,
+                    strompreis_cent=wp_strompreis,
                     pv_anteil_prozent=pv_anteil,
                     alter_energietraeger=alter_energietraeger,
                     alter_preis_cent_kwh=alter_preis,
@@ -1167,7 +1180,7 @@ async def get_roi_dashboard(
                     scop_heizung=scop_heizung,
                     scop_warmwasser=scop_warmwasser,
                     effizienz_modus='scop',
-                    strompreis_cent=strompreis_cent,
+                    strompreis_cent=wp_strompreis,
                     pv_anteil_prozent=pv_anteil,
                     alter_energietraeger=alter_energietraeger,
                     alter_preis_cent_kwh=alter_preis,
@@ -1186,7 +1199,7 @@ async def get_roi_dashboard(
                     waermebedarf_kwh=waermebedarf,
                     jaz=jaz,
                     effizienz_modus='gesamt_jaz',
-                    strompreis_cent=strompreis_cent,
+                    strompreis_cent=wp_strompreis,
                     pv_anteil_prozent=pv_anteil,
                     alter_energietraeger=alter_energietraeger,
                     alter_preis_cent_kwh=alter_preis,
@@ -1255,6 +1268,24 @@ async def get_roi_dashboard(
         gesamt_relevante += relevante
         gesamt_einsparung += jahres_einsparung
         gesamt_co2 += co2_einsparung
+
+    # USt auf Eigenverbrauch bei Regelbesteuerung (reduziert Gesamt-Einsparung)
+    steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
+    if steuerliche_beh == "regelbesteuerung" and pv_detail.get('erzeugung_kwh_jahr', 0) > 0:
+        alle_inv_result = await db.execute(
+            select(Investition).where(Investition.anlage_id == anlage_id)
+        )
+        alle_inv = alle_inv_result.scalars().all()
+        betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_inv)
+        alle_kosten = sum(i.anschaffungskosten_gesamt or 0 for i in alle_inv)
+        ust_abzug = berechne_ust_eigenverbrauch(
+            eigenverbrauch_kwh=pv_detail.get('eigenverbrauch_kwh_jahr', 0),
+            investition_gesamt_euro=alle_kosten,
+            betriebskosten_jahr_euro=betriebskosten_ges,
+            pv_erzeugung_jahr_kwh=pv_detail.get('erzeugung_kwh_jahr', 0),
+            ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None) or 19.0,
+        )
+        gesamt_einsparung -= ust_abzug
 
     # Gesamt-ROI
     gesamt_roi = berechne_roi(gesamt_investition, gesamt_einsparung, gesamt_investition - gesamt_relevante)
@@ -1335,7 +1366,7 @@ class SonstigesDashboardResponse(BaseModel):
 @router.get("/dashboard/e-auto/{anlage_id}", response_model=list[EAutoDashboardResponse])
 async def get_eauto_dashboard(
     anlage_id: int,
-    strompreis_cent: float = Query(30.0),
+    strompreis_cent: Optional[float] = Query(None, description="Override: Strompreis (auto aus Wallbox-Tarif wenn leer)"),
     benzinpreis_euro: float = Query(1.65),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1344,6 +1375,12 @@ async def get_eauto_dashboard(
 
     Zeigt alle E-Autos mit Monatsdaten, km-Statistik, PV-Anteil, Ersparnis.
     """
+    # Wallbox-Tarif laden (E-Auto lädt über Wallbox)
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    wallbox_tarif = tarife.get("wallbox")
+    allgemein_tarif = tarife.get("allgemein")
+    strompreis_cent = strompreis_cent or (wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else (allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0))
+
     # E-Autos laden
     inv_result = await db.execute(
         select(Investition)
@@ -1467,7 +1504,7 @@ async def get_eauto_dashboard(
 @router.get("/dashboard/waermepumpe/{anlage_id}", response_model=list[WaermepumpeDashboardResponse])
 async def get_waermepumpe_dashboard(
     anlage_id: int,
-    strompreis_cent: float = Query(30.0),
+    strompreis_cent: Optional[float] = Query(None, description="Override: Strompreis (auto aus WP-Tarif wenn leer)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1475,6 +1512,12 @@ async def get_waermepumpe_dashboard(
 
     Zeigt alle Wärmepumpen mit COP, Heizkosten, Ersparnis vs. alte Heizung.
     """
+    # WP-Tarif laden
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    wp_tarif = tarife.get("waermepumpe")
+    allgemein_tarif = tarife.get("allgemein")
+    strompreis_cent = strompreis_cent or (wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else (allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0))
+
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
@@ -1686,7 +1729,7 @@ async def get_investition_monatsdaten_by_month(
 @router.get("/dashboard/wallbox/{anlage_id}", response_model=list[WallboxDashboardResponse])
 async def get_wallbox_dashboard(
     anlage_id: int,
-    strompreis_cent: float = Query(30.0),
+    strompreis_cent: Optional[float] = Query(None, description="Override: Strompreis (auto aus Wallbox-Tarif wenn leer)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1695,6 +1738,12 @@ async def get_wallbox_dashboard(
     Zeigt Wallboxen mit Heimladung (aus E-Auto-Daten) und Ersparnis vs. externe Ladung.
     Die Wallbox-Daten kommen primär aus den E-Auto-Monatsdaten (ladung_pv_kwh + ladung_netz_kwh).
     """
+    # Wallbox-Tarif laden
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    wallbox_tarif = tarife.get("wallbox")
+    allgemein_tarif = tarife.get("allgemein")
+    strompreis_cent = strompreis_cent or (wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else (allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0))
+
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
@@ -1956,11 +2005,14 @@ async def get_sonstiges_dashboard(
         gesamt_bezug_netz = 0
         gesamt_ladung = 0
         gesamt_entladung = 0
-        gesamt_sonderkosten = 0
+        gesamt_sonstige_ertraege = 0
+        gesamt_sonstige_ausgaben = 0
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_sonderkosten += d.get('sonderkosten_euro', 0)
+            summen = berechne_sonstige_summen(d)
+            gesamt_sonstige_ertraege += summen["ertraege_euro"]
+            gesamt_sonstige_ausgaben += summen["ausgaben_euro"]
 
             if kategorie == 'erzeuger':
                 gesamt_erzeugung += d.get('erzeugung_kwh', 0)
@@ -1974,12 +2026,14 @@ async def get_sonstiges_dashboard(
                 gesamt_ladung += d.get('ladung_kwh', 0)
                 gesamt_entladung += d.get('entladung_kwh', 0)
 
+        gesamt_sonstige_netto = gesamt_sonstige_ertraege - gesamt_sonstige_ausgaben
+
         # Berechnungen je nach Kategorie
         if kategorie == 'erzeuger':
             eigenverbrauch_quote = (gesamt_eigenverbrauch / gesamt_erzeugung * 100) if gesamt_erzeugung > 0 else 0
             ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
             erloes_einspeisung = gesamt_einspeisung * einspeiseverguetung_cent / 100
-            gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung
+            gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung + gesamt_sonstige_netto
             co2_ersparnis = gesamt_eigenverbrauch * 0.38
 
             zusammenfassung = {
@@ -1993,15 +2047,18 @@ async def get_sonstiges_dashboard(
                 'erloes_einspeisung_euro': round(erloes_einspeisung, 2),
                 'gesamt_ersparnis_euro': round(gesamt_ersparnis, 2),
                 'co2_ersparnis_kg': round(co2_ersparnis, 1),
-                'sonderkosten_euro': round(gesamt_sonderkosten, 2),
+                'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
+                'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_netto_euro': round(gesamt_sonstige_netto, 2),
                 'anzahl_monate': len(monatsdaten),
             }
 
         elif kategorie == 'verbraucher':
             pv_anteil = (gesamt_bezug_pv / gesamt_verbrauch * 100) if gesamt_verbrauch > 0 else 0
             kosten_netz = gesamt_bezug_netz * strompreis_cent / 100
-            # Ersparnis: PV-Strom statt Netzstrom
-            ersparnis_pv = gesamt_bezug_pv * strompreis_cent / 100
+            # Ersparnis: PV-Strom statt Netzstrom + sonstige Erträge/Ausgaben
+            ersparnis_pv = gesamt_bezug_pv * strompreis_cent / 100 + gesamt_sonstige_netto
 
             zusammenfassung = {
                 'kategorie': kategorie,
@@ -2012,7 +2069,10 @@ async def get_sonstiges_dashboard(
                 'pv_anteil_prozent': round(pv_anteil, 1),
                 'kosten_netz_euro': round(kosten_netz, 2),
                 'ersparnis_pv_euro': round(ersparnis_pv, 2),
-                'sonderkosten_euro': round(gesamt_sonderkosten, 2),
+                'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
+                'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_netto_euro': round(gesamt_sonstige_netto, 2),
                 'anzahl_monate': len(monatsdaten),
             }
 
@@ -2020,7 +2080,7 @@ async def get_sonstiges_dashboard(
             effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
             # Ersparnis: Spread zwischen Netzbezug und Einspeisung
             spread = strompreis_cent - einspeiseverguetung_cent
-            ersparnis = gesamt_entladung * spread / 100
+            ersparnis = gesamt_entladung * spread / 100 + gesamt_sonstige_netto
 
             zusammenfassung = {
                 'kategorie': kategorie,
@@ -2029,7 +2089,10 @@ async def get_sonstiges_dashboard(
                 'gesamt_entladung_kwh': round(gesamt_entladung, 1),
                 'effizienz_prozent': round(effizienz, 1),
                 'ersparnis_euro': round(ersparnis, 2),
-                'sonderkosten_euro': round(gesamt_sonderkosten, 2),
+                'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
+                'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),
+                'sonstige_netto_euro': round(gesamt_sonstige_netto, 2),
                 'anzahl_monate': len(monatsdaten),
             }
 

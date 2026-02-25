@@ -51,21 +51,26 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
   )
 
   // Sonderkosten nach Jahr/Monat mappen
-  const sonderkostenByMonth = useMemo(() => {
-    const map = new Map<string, number>()
+  const sonstigeByMonth = useMemo(() => {
+    const map = new Map<string, { ertraege: number; ausgaben: number; netto: number }>()
     sonderkostenData?.monatswerte?.forEach(m => {
       const key = `${m.jahr}-${m.monat}`
-      map.set(key, m.sonderkosten_euro || 0)
+      map.set(key, {
+        ertraege: m.sonstige_ertraege_euro || 0,
+        ausgaben: m.sonstige_ausgaben_euro || 0,
+        netto: m.sonstige_netto_euro || 0,
+      })
     })
     return map
   }, [sonderkostenData])
 
-  // Kumulierte Werte berechnen (inkl. Sonderkosten)
+  // Kumulierte Werte berechnen (inkl. sonstige Erträge/Ausgaben)
   const chartDataWithKumuliert = useMemo(() => {
     let kumuliert = 0
     return zeitreihe.map(z => {
-      const sonderkosten = sonderkostenByMonth.get(`${z.jahr}-${z.monat}`) || 0
-      const nettoMitSonderkosten = z.netto_ertrag - sonderkosten
+      const sonstige = sonstigeByMonth.get(`${z.jahr}-${z.monat}`)
+      const sonderkosten = sonstige?.ausgaben || 0
+      const nettoMitSonderkosten = z.netto_ertrag + (sonstige?.netto || 0)
       kumuliert += nettoMitSonderkosten
       return {
         ...z,
@@ -74,7 +79,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
         kumuliert_ertrag: kumuliert
       }
     })
-  }, [zeitreihe, sonderkostenByMonth])
+  }, [zeitreihe, sonstigeByMonth])
 
   // Gesamt-Finanzen (inkl. Sonderkosten)
   const gesamt = useMemo(() => {

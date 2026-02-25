@@ -7,6 +7,48 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.4.0] - 2026-02-25
+
+### Hinzugefügt
+
+- **Kleinunternehmerregelung / Steuerliche Behandlung (Issue #9)**
+  - Neues Feld `steuerliche_behandlung` auf der Anlage: „Keine USt-Auswirkung" (Standard) oder „Regelbesteuerung"
+  - Bei Regelbesteuerung: USt auf Eigenverbrauch (unentgeltliche Wertabgabe §3 Abs. 1b UStG) wird als Kostenfaktor berechnet
+  - Bemessungsgrundlage: Selbstkosten (Abschreibung/20J + Betriebskosten / Jahresertrag)
+  - Editierbarer USt-Satz mit länderspezifischen Defaults (DE: 19%, AT: 20%, CH: 8.1%)
+  - Auto-Vorschlag des USt-Satzes bei Land-Wechsel
+  - Dashboard: Neue KPI-Karte „USt Eigenverbrauch" (nur bei Regelbesteuerung sichtbar)
+  - Netto-Ertrag-Berechnung im Cockpit, Aussichten und ROI-Dashboard berücksichtigt USt
+  - Hinweis im Setup-Wizard: Steuerliche Einstellungen unter Anlage bearbeiten konfigurierbar
+
+- **Spezialtarife für Wärmepumpe & Wallbox (Issue #8)**
+  - Neues Feld `verwendung` auf Strompreisen: „Standard", „Wärmepumpe" oder „Wallbox"
+  - Neuer API-Endpoint `/api/strompreise/aktuell/{anlage_id}/{verwendung}` mit Fallback auf Standard-Tarif
+  - Cockpit-Berechnung nutzt automatisch den günstigsten zutreffenden Tarif pro Komponente
+  - Strompreise-Seite: Sortierung (aktuell + Standard zuerst), Verwendungs-Badges, Info-Box für aktive Spezialtarife
+  - Tarif-Formular: Neues Dropdown „Tarif-Verwendung" mit kontextabhängigem Hinweis
+
+- **Sonstige Positionen bei Investitionen (Issue #7)**
+  - Neuer Investitionstyp „Sonstiges" mit Kategorien: Erzeuger, Verbraucher, Speicher
+  - Flexible Monatsdaten-Erfassung je nach Kategorie (Erzeugung/Verbrauch/Ladung-Entladung)
+  - Sonstige Erträge & Ausgaben pro Monat (Versicherung, Wartung, Einspeisebonus, etc.)
+  - Integration in Dashboard: Finanzen-Tab zeigt sonstige Erträge/Ausgaben
+  - Demo-Daten: Beispiel „Notstrom-Batterie" als sonstiger Speicher
+
+### Behoben
+
+- **Leeres Installationsdatum verursachte Setup-Wizard-Fehler (Issue #10):** StrompreiseStep akzeptiert jetzt fehlende Installationsdaten und setzt vernünftige Defaults
+
+### Technisch
+
+- DB-Migration: Neue Spalten `steuerliche_behandlung`, `ust_satz_prozent` (Anlage), `verwendung` (Strompreis) – automatisch beim Start
+- Neue Berechnungsfunktion `berechne_ust_eigenverbrauch()` in `calculations.py`
+- Neue Helper-Funktion `berechne_sonstige_summen()` für sonstige Erträge/Ausgaben
+- JSON Export/Import: Steuerliche Felder und Strompreis-Verwendung werden mit exportiert/importiert
+- CSV Import: Sonstige Positionen werden korrekt verarbeitet
+
+---
+
 ## [2.3.2] - 2026-02-24
 
 ### Behoben

@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.3.0** | Stand: Februar 2026
+**Version 2.4.0** | Stand: Februar 2026
 
 ---
 
@@ -135,8 +135,11 @@ Konfiguriere deine Stromtarife:
 | **Bezugspreis** | Was du pro kWh zahlst | 32-40 ct/kWh |
 | **Einspeisevergütung** | Was du pro eingespeister kWh bekommst | 8-12 ct/kWh |
 | **Gültig ab** | Seit wann gilt dieser Tarif | 01.01.2024 |
+| **Verwendung** | Standard, Wärmepumpe oder Wallbox | Standard |
 
 **Hinweis**: Du kannst mehrere Tarife mit unterschiedlichen Gültigkeitszeiträumen anlegen.
+
+**Spezialtarife (NEU v2.4.0):** Für Wärmepumpe oder Wallbox mit separatem Stromzähler und günstigerem Tarif kann ein eigener Strompreis angelegt werden. Ohne Spezialtarif wird der Standard-Tarif verwendet.
 
 ### Schritt 5: Geräte-Erkennung (optional)
 
@@ -573,11 +576,21 @@ Bearbeite die Stammdaten deiner PV-Anlage:
   - Erfasse Versorger-Name, Kundennummer, Portal-URL
   - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
 
+**Steuerliche Behandlung (NEU v2.4.0):**
+- **Keine USt-Auswirkung** (Standard): Für Anlagen ab 2023 mit Nullsteuersatz (≤30 kWp) oder Kleinunternehmer
+- **Regelbesteuerung**: USt auf Eigenverbrauch wird als Kostenfaktor berechnet (Pre-2023, >30 kWp, AT/CH)
+- USt-Satz ist editierbar (DE: 19%, AT: 20%, CH: 8.1%) und wird bei Land-Wechsel automatisch angepasst
+
 ### 9.2 Strompreise
 
 Verwalte deine Stromtarife:
 - Mehrere Tarife mit Gültigkeitszeitraum möglich
 - Wichtig für korrekte Einsparungsberechnung
+
+**Spezialtarife (NEU v2.4.0):**
+- Jeder Tarif kann einer Verwendung zugeordnet werden: Standard, Wärmepumpe oder Wallbox
+- Aktive Spezialtarife werden in der Info-Box oben angezeigt
+- Ohne Spezialtarif wird automatisch der Standard-Tarif für die Komponente verwendet
 
 ### 9.3 Investitionen
 
@@ -594,6 +607,7 @@ Alle Komponenten im Überblick:
 | Wärmepumpe | - | - |
 | Wallbox | - | - |
 | Balkonkraftwerk | - | - |
+| Sonstiges | - | - |
 
 **Warnung**: PV-Module ohne Wechselrichter-Zuordnung zeigen ein Warnsymbol!
 
@@ -635,6 +649,11 @@ PV-Module und DC-Speicher (mit Parent = Wechselrichter) erben automatisch Anspre
 **E-Auto:**
 - V2H-fähig (Ja/Nein)
 - Nutzt V2H aktiv (Ja/Nein)
+
+**Sonstiges (NEU v2.4.0):**
+- Kategorie: Erzeuger, Verbraucher oder Speicher
+- Beschreibung (optional)
+- Monatsdaten-Felder passen sich der Kategorie an
 
 ### 9.4 Monatsdaten
 
@@ -714,6 +733,8 @@ Das Formular zeigt dynamisch die relevanten Felder:
 - Wärmepumpe: Strom, Heizung, Warmwasser
 - Wallbox: Ladung, Ladevorgänge
 - Balkonkraftwerk: Erzeugung
+- Sonstiges: Felder je nach Kategorie (Erzeugung/Verbrauch/Ladung)
+- Sonstige Erträge & Ausgaben: Versicherung, Wartung, Einspeisebonus etc.
 
 **Wetter-Auto-Fill:**
 - Klicke auf "Wetter abrufen"

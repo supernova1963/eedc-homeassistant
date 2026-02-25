@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.2.0 | **Status:** Stable Release
+**Version:** 2.4.0 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -158,7 +158,7 @@ Wechselrichter (Parent)
 ├── PV-Module (Child) [PFLICHT]
 └── DC-Speicher (Child) [optional, Hybrid-WR]
 
-AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
+AC-Speicher, E-Auto, WP, Wallbox, BKW, Sonstiges = eigenständig
 ```
 
 ### InvestitionMonatsdaten.verbrauch_daten (JSON)
@@ -180,6 +180,19 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW = eigenständig
 
 // Wallbox
 { "ladung_kwh": 180 }
+
+// Sonstiges - Erzeuger
+{ "erzeugung_kwh": 120, "eigenverbrauch_kwh": 100, "einspeisung_kwh": 20 }
+
+// Sonstiges - Verbraucher
+{ "verbrauch_kwh": 200, "bezug_pv_kwh": 80, "bezug_netz_kwh": 120 }
+
+// Sonstiges - Speicher
+{ "ladung_kwh": 50, "entladung_kwh": 45 }
+
+// Sonstige Erträge & Ausgaben (in allen Typen via Monatsdaten-Formular)
+{ "sonstige_ertraege": [{"bezeichnung": "Einspeisebonus", "betrag": 15.0}],
+  "sonstige_ausgaben": [{"bezeichnung": "Versicherung", "betrag": 8.50}] }
 ```
 
 ### Wärmepumpe: Effizienz-Parameter (Investition.parameter)
@@ -296,6 +309,9 @@ GET  /api/ha-statistics/monatsanfang/{anlage_id}/{jahr}/{monat} # Startwerte fü
 GET  /api/ha-statistics/import-vorschau/{anlage_id}             # Import-Vorschau mit Konflikten
 POST /api/ha-statistics/import/{anlage_id}                      # Import mit Überschreib-Schutz
 
+# Strompreise - Spezialtarife (NEU v2.4.0)
+GET  /api/strompreise/aktuell/{anlage_id}/{verwendung} # Aktueller Preis für Verwendung (mit Fallback auf allgemein)
+
 # Community (NEU v2.0.3)
 GET  /api/community/status                            # Server-Status
 GET  /api/community/preview/{anlage_id}               # Vorschau der zu teilenden Daten
@@ -368,6 +384,9 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - [x] Monatsabschluss-Wizard ✓ (v1.1.0)
 - [x] HA-Statistik Bulk-Import ✓ (v2.0.0)
 - [x] Community als Hauptmenüpunkt ✓ (v2.1.0)
+- [x] Sonstige Positionen ✓ (v2.4.0)
+- [x] Spezialtarife WP/Wallbox ✓ (v2.4.0)
+- [x] Kleinunternehmerregelung ✓ (v2.4.0)
 - [ ] KI-Insights
 
 ## HA-Integration Status (v2.0.0)
@@ -422,7 +441,19 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v2.2.0)
+## Letzte Änderungen (v2.4.0)
+
+**v2.4.0 - Steuerliche Behandlung, Spezialtarife, Sonstige Positionen:**
+
+- **Kleinunternehmerregelung (Issue #9):** Neue Felder `steuerliche_behandlung` (`keine_ust`/`regelbesteuerung`) und `ust_satz_prozent` auf Anlage-Model. Bei Regelbesteuerung wird USt auf Eigenverbrauch als Kostenfaktor in Cockpit, Aussichten und ROI berechnet. `berechne_ust_eigenverbrauch()` in calculations.py.
+- **Spezialtarife (Issue #8):** Neues Feld `verwendung` auf Strompreis-Model (`allgemein`/`waermepumpe`/`wallbox`). Neuer Endpoint `/api/strompreise/aktuell/{anlage_id}/{verwendung}` mit Fallback. Cockpit nutzt automatisch den passenden Tarif pro Komponente.
+- **Sonstige Positionen (Issue #7):** Neuer Investitionstyp `sonstiges` mit Kategorien (`erzeuger`/`verbraucher`/`speicher`). Flexible verbrauch_daten je Kategorie. Sonstige Erträge & Ausgaben in MonatsdatenForm.
+- **Bugfix (Issue #10):** Leeres Installationsdatum verursachte Setup-Wizard-Fehler
+
+**v2.3.0 - Dashboard-Modernisierung und DACH-Onboarding:**
+
+- **Dashboard-Modernisierung:** Hero-Leiste, Energie-Fluss-Diagramm, Ring-Gauges, Sparkline, Amortisations-Fortschrittsbalken
+- **DACH-Onboarding:** `standort_land` (DE/AT/CH) im Anlage-Modell, Community-Regionszuordnung
 
 **v2.2.0 - Regional Tab: Choropleth-Karte und Performance-Metriken:**
 

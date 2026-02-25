@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert, Input } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { useAnlagen, useStrompreise } from '../hooks'
-import type { Strompreis } from '../types'
+import type { Strompreis, StrompreisVerwendung } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
 export default function Strompreise() {
@@ -72,13 +72,28 @@ export default function Strompreise() {
     )
   }
 
-  // Sortiere: Aktueller Preis zuerst, dann nach Gültigkeitsdatum absteigend
+  const verwendungLabel = (v: StrompreisVerwendung) => {
+    switch (v) {
+      case 'waermepumpe': return 'Warmepumpe'
+      case 'wallbox': return 'Wallbox'
+      default: return 'Standard'
+    }
+  }
+
+  // Sortiere: Aktuell + allgemein zuerst, dann Spezialtarife, dann historisch
   const sortedStrompreise = [...strompreise].sort((a, b) => {
     const aAktuell = isAktuell(a)
     const bAktuell = isAktuell(b)
     if (aAktuell !== bAktuell) return aAktuell ? -1 : 1
+    const aAllgemein = (a.verwendung || 'allgemein') === 'allgemein'
+    const bAllgemein = (b.verwendung || 'allgemein') === 'allgemein'
+    if (aAllgemein !== bAllgemein) return aAllgemein ? -1 : 1
     return b.gueltig_ab.localeCompare(a.gueltig_ab)
   })
+
+  // Aktive Spezialtarife für Info-Box
+  const aktiveSpezialtarife = sortedStrompreise.filter(sp => isAktuell(sp) && sp.verwendung && sp.verwendung !== 'allgemein')
+  const aktuellerStandard = sortedStrompreise.find(sp => isAktuell(sp) && (!sp.verwendung || sp.verwendung === 'allgemein'))
 
   return (
     <div className="space-y-6">
@@ -92,6 +107,7 @@ export default function Strompreise() {
               value={anlageId ?? ''}
               onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
               className="input w-auto"
+              title="Anlage auswahlen"
             >
               {anlagen.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -110,7 +126,7 @@ export default function Strompreise() {
       {error && <Alert type="error">{error}</Alert>}
 
       {/* Info-Box für aktuellen Tarif */}
-      {sortedStrompreise.length > 0 && isAktuell(sortedStrompreise[0]) && (
+      {aktuellerStandard && (
         <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-full bg-green-100 dark:bg-green-800">
@@ -118,16 +134,32 @@ export default function Strompreise() {
             </div>
             <div className="flex-1">
               <h3 className="font-medium text-green-800 dark:text-green-200">
-                Aktueller Tarif: {sortedStrompreise[0].tarifname || 'Standard'}
+                Aktueller Tarif: {aktuellerStandard.tarifname || 'Standard'}
               </h3>
               <p className="text-sm text-green-700 dark:text-green-300">
-                Netzbezug: <strong>{sortedStrompreise[0].netzbezug_arbeitspreis_cent_kwh.toFixed(2)} ct/kWh</strong>
+                Netzbezug: <strong>{aktuellerStandard.netzbezug_arbeitspreis_cent_kwh.toFixed(2)} ct/kWh</strong>
                 {' · '}
-                Einspeisung: <strong>{sortedStrompreise[0].einspeiseverguetung_cent_kwh.toFixed(2)} ct/kWh</strong>
-                {sortedStrompreise[0].grundpreis_euro_monat && (
-                  <> · Grundpreis: <strong>{sortedStrompreise[0].grundpreis_euro_monat.toFixed(2)} €/Monat</strong></>
-                )}
+                Einspeisung: <strong>{aktuellerStandard.einspeiseverguetung_cent_kwh.toFixed(2)} ct/kWh</strong>
+                {aktuellerStandard.grundpreis_euro_monat ? (
+                  <> · Grundpreis: <strong>{aktuellerStandard.grundpreis_euro_monat.toFixed(2)} €/Monat</strong></>
+                ) : null}
               </p>
+              {aktiveSpezialtarife.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-700 space-y-1">
+                  {aktiveSpezialtarife.map(sp => (
+                    <p key={sp.id} className="text-sm text-green-700 dark:text-green-300">
+                      <span className={`inline-block text-xs px-1.5 py-0.5 rounded mr-2 ${sp.verwendung === 'waermepumpe' ? 'bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300' : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>
+                        {verwendungLabel(sp.verwendung)}
+                      </span>
+                      <strong>{sp.netzbezug_arbeitspreis_cent_kwh.toFixed(2)} ct/kWh</strong>
+                      {' '}
+                      <span className="text-green-600 dark:text-green-400">
+                        ({(aktuellerStandard.netzbezug_arbeitspreis_cent_kwh - sp.netzbezug_arbeitspreis_cent_kwh).toFixed(2)} ct/kWh gunstiger)
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -152,6 +184,7 @@ export default function Strompreise() {
             <TableHead>
               <TableRow>
                 <TableHeader>Tarif</TableHeader>
+                <TableHeader>Verwendung</TableHeader>
                 <TableHeader>Netzbezug</TableHeader>
                 <TableHeader>Einspeisung</TableHeader>
                 <TableHeader>Grundpreis</TableHeader>
@@ -183,6 +216,21 @@ export default function Strompreise() {
                           )}
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {(!sp.verwendung || sp.verwendung === 'allgemein') ? (
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                          Standard
+                        </span>
+                      ) : sp.verwendung === 'waermepumpe' ? (
+                        <span className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300 rounded">
+                          Warmepumpe
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded">
+                          Wallbox
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="font-mono text-red-600 dark:text-red-400">
@@ -248,6 +296,7 @@ export default function Strompreise() {
           <li>Der aktuell gültige Tarif wird automatisch für Berechnungen verwendet</li>
           <li>Für historische Auswertungen werden die zum jeweiligen Zeitpunkt gültigen Preise herangezogen</li>
           <li>Bei Tarifwechsel: Neuen Tarif anlegen und Gültigkeitszeitraum korrekt setzen</li>
+          <li><strong>Spezialtarife:</strong> Für Warmepumpe oder Wallbox mit separatem Stromtarif kann ein eigener Tarif angelegt werden. Ohne Spezialtarif wird automatisch der Standard-Tarif verwendet.</li>
         </ul>
       </Card>
 
@@ -332,6 +381,7 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
     gueltig_ab: strompreis?.gueltig_ab || new Date().toISOString().split('T')[0],
     gueltig_bis: strompreis?.gueltig_bis || '',
     vertragsart: strompreis?.vertragsart || '',
+    verwendung: (strompreis?.verwendung || 'allgemein') as StrompreisVerwendung,
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -353,6 +403,7 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
         tarifname: formData.tarifname || undefined,
         anbieter: formData.anbieter || undefined,
         vertragsart: formData.vertragsart || undefined,
+        verwendung: formData.verwendung,
       }
 
       if (strompreis && onUpdate) {
@@ -368,6 +419,29 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <Alert type="error">{error}</Alert>}
+
+      {/* Tarif-Verwendung */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Tarif-Verwendung
+        </label>
+        <select
+          name="verwendung"
+          value={formData.verwendung}
+          onChange={handleChange}
+          className="input w-full"
+          title="Tarif-Verwendung"
+        >
+          <option value="allgemein">Standard (allgemein)</option>
+          <option value="waermepumpe">Warmepumpe (Spezialtarif)</option>
+          <option value="wallbox">Wallbox (Spezialtarif)</option>
+        </select>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          {formData.verwendung === 'allgemein'
+            ? 'Standard-Tarif fur alle Berechnungen. Wird auch als Fallback fur WP/Wallbox ohne Spezialtarif genutzt.'
+            : 'Spezialtarif wird nur fur diese Komponente verwendet. Ohne Spezialtarif gilt der Standard-Tarif.'}
+        </p>
+      </div>
 
       {/* Tarif-Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -463,6 +537,7 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
           value={formData.vertragsart}
           onChange={handleChange}
           className="input w-full"
+          title="Vertragsart"
         >
           <option value="">Bitte wählen</option>
           <option value="grundversorgung">Grundversorgung</option>

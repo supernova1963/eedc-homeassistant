@@ -18,6 +18,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.wetter_service import get_wetterdaten
+from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 
 from .schemas import ImportResult, CSVTemplateInfo
 from .helpers import (
@@ -650,8 +651,23 @@ async def export_csv(
 
         for inv, suffix, data_key in inv_columns:
             inv_data = inv_monatsdaten_map.get((inv.id, md.jahr, md.monat), {})
-            value = inv_data.get(data_key, "")
-            row.append(value if value != "" else "")
+            # Sonstige Positionen: aus strukturiertem Array berechnen
+            if data_key == "sonderkosten_euro":
+                summen = berechne_sonstige_summen(inv_data)
+                net = summen["ausgaben_euro"] - summen["ertraege_euro"]
+                row.append(round(net, 2) if net != 0 else "")
+            elif data_key == "sonderkosten_notiz":
+                positionen = get_sonstige_positionen(inv_data)
+                if positionen:
+                    row.append("; ".join(
+                        f"{p.get('bezeichnung', '')}: {p.get('betrag', 0)}€ ({p.get('typ', '')})"
+                        for p in positionen
+                    ))
+                else:
+                    row.append("")
+            else:
+                value = inv_data.get(data_key, "")
+                row.append(value if value != "" else "")
 
         row.append(md.notizen or "")
         writer.writerow(row)

@@ -389,6 +389,17 @@ async def _import_investition_monatsdaten_v09(
                 collected_data[inv.id] = {}
             collected_data[inv.id][field_key] = field_value
 
+    # Legacy sonderkosten → sonstige_positionen konvertieren
+    for inv_id, verbrauch_daten in collected_data.items():
+        sk_euro = verbrauch_daten.pop("sonderkosten_euro", None)
+        sk_notiz = verbrauch_daten.pop("sonderkosten_notiz", None)
+        if sk_euro is not None and sk_euro > 0:
+            verbrauch_daten["sonstige_positionen"] = [{
+                "bezeichnung": sk_notiz or "CSV Import",
+                "betrag": float(sk_euro),
+                "typ": "ausgabe"
+            }]
+
     # Alle gesammelten Daten auf einmal speichern
     for inv_id, verbrauch_daten in collected_data.items():
         if verbrauch_daten:

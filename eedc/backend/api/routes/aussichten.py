@@ -20,6 +20,8 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.core.calculations import berechne_ust_eigenverbrauch
 from backend.services.wetter_service import (
     fetch_open_meteo_forecast,
     wetter_code_zu_symbol,
@@ -189,6 +191,7 @@ class FinanzPrognoseResponse(BaseModel):
     # Finanzen
     jahres_einspeise_erloes_euro: float
     jahres_ev_ersparnis_euro: float
+    ust_eigenverbrauch_euro: Optional[float] = None  # USt auf Eigenverbrauch (nur bei Regelbesteuerung)
     jahres_netto_ertrag_euro: float
 
     # Komponenten-Beiträge (NEU)
@@ -891,17 +894,14 @@ async def get_finanz_prognose(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    # Aktuellen Strompreis laden
-    result = await db.execute(
-        select(Strompreis)
-        .where(Strompreis.anlage_id == anlage_id)
-        .where(Strompreis.gueltig_bis == None)
-        .order_by(Strompreis.gueltig_ab.desc())
-    )
-    strompreis = result.scalar_one_or_none()
+    # Tarife laden (allgemein + Spezialtarife)
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    allgemein_tarif = tarife.get("allgemein")
+    wp_tarif = tarife.get("waermepumpe")
 
-    einspeiseverguetung = strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2
-    netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
+    einspeiseverguetung = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else 8.2
+    netzbezug_preis = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0
+    wp_netzbezug_preis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis
 
     # =====================================================================
     # ALLE INVESTITIONEN LADEN
@@ -1138,7 +1138,7 @@ async def get_finanz_prognose(
                 # WP-Stromkosten (nur Netzanteil, PV-Anteil ist bereits in EV-Ersparnis)
                 # Annahme: ca. 50% aus PV (konservativ)
                 wp_netz_anteil = 0.5
-                wp_stromkosten_netz = strom * wp_netz_anteil * netzbezug_preis / 100
+                wp_stromkosten_netz = strom * wp_netz_anteil * wp_netzbezug_preis / 100
                 # Netto-Ersparnis (Gas-Alternative minus WP-Netzstrom)
                 bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
 
@@ -1272,7 +1272,7 @@ async def get_finanz_prognose(
         # WP-Stromkosten pro Jahr (nur Netzanteil, ca. 50%)
         wp_netz_anteil = 0.5
         wp_strom_jahr = jahres_wp_verbrauch
-        wp_stromkosten_netz_jahr = wp_strom_jahr * wp_netz_anteil * netzbezug_preis / 100
+        wp_stromkosten_netz_jahr = wp_strom_jahr * wp_netz_anteil * wp_netzbezug_preis / 100
         # Netto-Ersparnis
         jahres_wp_ersparnis = gas_kosten_jahr - wp_stromkosten_netz_jahr
 
@@ -1293,6 +1293,20 @@ async def get_finanz_prognose(
 
     # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten
     jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis
+
+    # USt auf Eigenverbrauch bei Regelbesteuerung
+    ust_eigenverbrauch = 0.0
+    steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
+    if steuerliche_beh == "regelbesteuerung" and jahres_erzeugung > 0:
+        betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_investitionen)
+        ust_eigenverbrauch = berechne_ust_eigenverbrauch(
+            eigenverbrauch_kwh=jahres_eigenverbrauch,
+            investition_gesamt_euro=sum(i.anschaffungskosten_gesamt or 0 for i in alle_investitionen),
+            betriebskosten_jahr_euro=betriebskosten_ges,
+            pv_erzeugung_jahr_kwh=jahres_erzeugung,
+            ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None) or 19.0,
+        )
+        jahres_netto_ertrag -= ust_eigenverbrauch
 
     # =====================================================================
     # KOMPONENTEN-BEITRÄGE ZUSAMMENSTELLEN
@@ -1416,6 +1430,7 @@ async def get_finanz_prognose(
         eigenverbrauchsquote_prozent=round(jahres_eigenverbrauch / jahres_erzeugung * 100 if jahres_erzeugung > 0 else 0, 1),
         jahres_einspeise_erloes_euro=round(jahres_einspeise_erloes, 2),
         jahres_ev_ersparnis_euro=round(jahres_ev_ersparnis, 2),
+        ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
         jahres_netto_ertrag_euro=round(jahres_netto_ertrag, 2),
         komponenten_beitraege=komponenten_beitraege,
         speicher_ev_erhoehung_kwh=round(jahres_speicher_beitrag, 0),

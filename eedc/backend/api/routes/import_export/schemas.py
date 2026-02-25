@@ -81,6 +81,7 @@ class StrompreisExport(BaseModel):
     grundgebuehr_monat: float
     gueltig_von: str
     gueltig_bis: Optional[str] = None
+    verwendung: str = "allgemein"
 
 
 class MonatsdatenExport(BaseModel):
@@ -126,6 +127,8 @@ class AnlageExport(BaseModel):
     neigung_grad: Optional[float] = None
     mastr_id: Optional[str] = None
     versorger_daten: Optional[dict] = None
+    steuerliche_behandlung: Optional[str] = None
+    ust_satz_prozent: Optional[float] = None
 
 
 class FullAnlageExport(BaseModel):

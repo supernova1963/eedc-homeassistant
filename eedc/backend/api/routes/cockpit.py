@@ -14,10 +14,11 @@ from pydantic import BaseModel
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
-from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
+from backend.utils.sonstige_positionen import berechne_sonstige_summen
 
 
 # =============================================================================
@@ -72,9 +73,11 @@ class CockpitUebersichtResponse(BaseModel):
     # Finanzen (Euro)
     einspeise_erloes_euro: float
     ev_ersparnis_euro: float
+    ust_eigenverbrauch_euro: Optional[float] = None  # USt auf Eigenverbrauch (nur bei Regelbesteuerung)
     netto_ertrag_euro: float
     jahres_rendite_prozent: Optional[float]  # Jahres-Ertrag / Investition (Rendite p.a.)
     investition_gesamt_euro: float
+    steuerliche_behandlung: Optional[str] = None  # regelbesteuerung wenn aktiv
 
     # Umwelt (kg CO2)
     co2_pv_kg: float
@@ -125,16 +128,16 @@ async def get_cockpit_uebersicht(
     investitionen = inv_result.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}
 
-    # Aktuellen Strompreis laden
-    preis_query = select(Strompreis).where(
-        Strompreis.anlage_id == anlage_id
-    ).order_by(Strompreis.gueltig_ab.desc()).limit(1)
-    preis_result = await db.execute(preis_query)
-    strompreis = preis_result.scalar_one_or_none()
+    # Tarife laden (allgemein + Spezialtarife für WP/Wallbox)
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    allgemein_tarif = tarife.get("allgemein")
+    wp_tarif = tarife.get("waermepumpe")
+    wallbox_tarif = tarife.get("wallbox")
 
-    # Default-Preise falls nicht konfiguriert
-    netzbezug_preis_cent = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
-    einspeise_verguetung_cent = strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2
+    netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0
+    einspeise_verguetung_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else 8.2
+    wp_preis_cent = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis_cent
+    wallbox_preis_cent = wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else netzbezug_preis_cent
 
     # ==========================================================================
     # Alle InvestitionMonatsdaten laden (eine Query für alle!)
@@ -279,7 +282,7 @@ async def get_cockpit_uebersicht(
     hat_waermepumpe = len(wp_invs) > 0
     wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 else None
     gas_preis_cent = 10.0
-    wp_ersparnis = ((wp_waerme / 0.9 * gas_preis_cent) - (wp_strom * netzbezug_preis_cent)) / 100 if wp_waerme > 0 else 0
+    wp_ersparnis = ((wp_waerme / 0.9 * gas_preis_cent) - (wp_strom * wp_preis_cent)) / 100 if wp_waerme > 0 else 0
 
     # E-Mobilität
     emob_invs = [i for i in investitionen if i.typ in ("e-auto", "wallbox")]
@@ -287,7 +290,7 @@ async def get_cockpit_uebersicht(
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
     benzin_verbrauch = emob_km * 7 / 100
     benzin_kosten = benzin_verbrauch * 1.80
-    strom_kosten = (emob_ladung - emob_pv_ladung) * netzbezug_preis_cent / 100
+    strom_kosten = (emob_ladung - emob_pv_ladung) * wallbox_preis_cent / 100
     emob_ersparnis = benzin_kosten - strom_kosten if emob_km > 0 else 0
 
     # Balkonkraftwerk
@@ -303,6 +306,20 @@ async def get_cockpit_uebersicht(
     netto_ertrag = einspeise_erloes + ev_ersparnis
 
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
+
+    # USt auf Eigenverbrauch bei Regelbesteuerung
+    ust_eigenverbrauch = 0.0
+    steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
+    if steuerliche_beh == "regelbesteuerung":
+        betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
+        ust_eigenverbrauch = berechne_ust_eigenverbrauch(
+            eigenverbrauch_kwh=eigenverbrauch,
+            investition_gesamt_euro=investition_gesamt,
+            betriebskosten_jahr_euro=betriebskosten_ges,
+            pv_erzeugung_jahr_kwh=pv_erzeugung,
+            ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None) or 19.0,
+        )
+        netto_ertrag -= ust_eigenverbrauch
 
     kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis
     roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
@@ -386,9 +403,11 @@ async def get_cockpit_uebersicht(
         # Finanzen
         einspeise_erloes_euro=round(einspeise_erloes, 2),
         ev_ersparnis_euro=round(ev_ersparnis, 2),
+        ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
         netto_ertrag_euro=round(netto_ertrag, 2),
         jahres_rendite_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
         investition_gesamt_euro=round(investition_gesamt, 2),
+        steuerliche_behandlung=steuerliche_beh if steuerliche_beh != "keine_ust" else None,
 
         # Umwelt
         co2_pv_kg=round(co2_pv, 1),
@@ -814,7 +833,10 @@ class KomponentenMonat(BaseModel):
     sonstiges_verbrauch_kwh: float
 
     # Sonderkosten (alle Komponenten aggregiert)
-    sonderkosten_euro: float  # NEU
+    sonderkosten_euro: float  # Legacy - backward compat
+    sonstige_ertraege_euro: float = 0
+    sonstige_ausgaben_euro: float = 0
+    sonstige_netto_euro: float = 0
 
 
 class KomponentenZeitreiheResponse(BaseModel):
@@ -918,8 +940,10 @@ async def get_komponenten_zeitreihe(
             "bkw_erzeugung": 0, "bkw_eigenverbrauch": 0, "bkw_speicher_ladung": 0, "bkw_speicher_entladung": 0,
             # Sonstiges
             "sonstiges_erzeugung": 0, "sonstiges_verbrauch": 0,
-            # Sonderkosten
+            # Sonstige Erträge & Ausgaben
             "sonderkosten": 0,
+            "sonstige_ertraege": 0,
+            "sonstige_ausgaben": 0,
         }
 
     inv_data_by_month: dict[tuple[int, int], dict] = {}
@@ -940,8 +964,11 @@ async def get_komponenten_zeitreihe(
         data = imd.verbrauch_daten or {}
         d = inv_data_by_month[key]
 
-        # Sonderkosten (alle Typen)
-        d["sonderkosten"] += data.get("sonderkosten_euro", 0) or 0
+        # Sonstige Erträge & Ausgaben (alle Typen)
+        summen = berechne_sonstige_summen(data)
+        d["sonderkosten"] += summen["ausgaben_euro"]  # Legacy backward compat
+        d["sonstige_ertraege"] += summen["ertraege_euro"]
+        d["sonstige_ausgaben"] += summen["ausgaben_euro"]
 
         if inv.typ == "speicher":
             d["speicher_ladung"] += data.get("ladung_kwh", 0) or 0
@@ -1053,8 +1080,11 @@ async def get_komponenten_zeitreihe(
             # Sonstiges
             sonstiges_erzeugung_kwh=round(d["sonstiges_erzeugung"], 1),
             sonstiges_verbrauch_kwh=round(d["sonstiges_verbrauch"], 1),
-            # Sonderkosten
+            # Sonstige Erträge & Ausgaben
             sonderkosten_euro=round(d["sonderkosten"], 2),
+            sonstige_ertraege_euro=round(d["sonstige_ertraege"], 2),
+            sonstige_ausgaben_euro=round(d["sonstige_ausgaben"], 2),
+            sonstige_netto_euro=round(d["sonstige_ertraege"] - d["sonstige_ausgaben"], 2),
         ))
 
     return KomponentenZeitreiheResponse(

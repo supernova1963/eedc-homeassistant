@@ -439,3 +439,34 @@ def berechne_roi(
         "roi_prozent": round(roi, 1),
         "amortisation_jahre": round(amortisation, 1),
     }
+
+
+def berechne_ust_eigenverbrauch(
+    eigenverbrauch_kwh: float,
+    investition_gesamt_euro: float,
+    betriebskosten_jahr_euro: float,
+    pv_erzeugung_jahr_kwh: float,
+    ust_satz_prozent: float = 19.0,
+) -> float:
+    """
+    Berechnet USt auf Eigenverbrauch (unentgeltliche Wertabgabe § 3 Abs. 1b UStG).
+
+    Bei Regelbesteuerung muss auf selbst verbrauchten PV-Strom USt abgeführt werden.
+    Bemessungsgrundlage = Selbstkosten pro kWh (Abschreibung + lfd. Kosten / Jahresertrag).
+
+    Args:
+        eigenverbrauch_kwh: Selbst verbrauchte Energie in kWh
+        investition_gesamt_euro: Gesamte Anschaffungskosten
+        betriebskosten_jahr_euro: Jährliche Betriebskosten (Wartung, Versicherung)
+        pv_erzeugung_jahr_kwh: Jährliche PV-Erzeugung in kWh
+        ust_satz_prozent: USt-Satz (DE: 19, AT: 20, CH: 8.1)
+
+    Returns:
+        USt-Betrag in Euro (positiv = Kosten für den Betreiber)
+    """
+    if pv_erzeugung_jahr_kwh <= 0 or ust_satz_prozent <= 0 or eigenverbrauch_kwh <= 0:
+        return 0.0
+
+    abschreibung_jahr = investition_gesamt_euro / 20  # 20 Jahre lineare AfA
+    selbstkosten_pro_kwh = (abschreibung_jahr + betriebskosten_jahr_euro) / pv_erzeugung_jahr_kwh
+    return eigenverbrauch_kwh * selbstkosten_pro_kwh * ust_satz_prozent / 100

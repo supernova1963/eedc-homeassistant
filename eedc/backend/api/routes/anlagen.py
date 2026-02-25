@@ -45,6 +45,9 @@ class AnlageBase(BaseModel):
     versorger_daten: Optional[dict[str, Any]] = Field(None, description="Versorger und Zähler als JSON")
     # Wetterdaten-Provider
     wetter_provider: Optional[str] = Field(None, max_length=30, description="Wetterdaten-Provider (auto, brightsky, open-meteo, open-meteo-solar)")
+    # Steuerliche Behandlung
+    steuerliche_behandlung: Optional[str] = Field("keine_ust", max_length=30, description="Steuerliche Behandlung: keine_ust oder regelbesteuerung")
+    ust_satz_prozent: Optional[float] = Field(19.0, ge=0, le=30, description="USt-Satz in Prozent (DE: 19, AT: 20, CH: 8.1)")
     # Community
     community_hash: Optional[str] = Field(None, max_length=64, description="Hash für Community-Teilen (read-only)")
 
@@ -77,6 +80,8 @@ class AnlageUpdate(BaseModel):
     mastr_id: Optional[str] = Field(None, max_length=20)
     versorger_daten: Optional[dict[str, Any]] = None
     wetter_provider: Optional[str] = Field(None, max_length=30)
+    steuerliche_behandlung: Optional[str] = Field(None, max_length=30)
+    ust_satz_prozent: Optional[float] = Field(None, ge=0, le=30)
 
 
 class SensorConfigUpdate(BaseModel):

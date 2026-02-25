@@ -74,6 +74,9 @@ async def run_migrations(conn):
                 ('community_hash', 'VARCHAR(64)'),
                 # v2.3.0: Land-Auswahl für DACH-Unterstützung
                 ('standort_land', 'VARCHAR(5)'),
+                # Steuerliche Behandlung (Kleinunternehmerregelung)
+                ('steuerliche_behandlung', "VARCHAR(30) DEFAULT 'keine_ust'"),
+                ('ust_satz_prozent', 'FLOAT DEFAULT 19.0'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
@@ -115,6 +118,12 @@ async def run_migrations(conn):
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE investitionen ADD COLUMN {col_name} {col_type}'))
+
+        # Spezialtarife: verwendung-Feld für Strompreise
+        if 'strompreise' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('strompreise')}
+            if 'verwendung' not in existing_columns:
+                connection.execute(text("ALTER TABLE strompreise ADD COLUMN verwendung VARCHAR(30) DEFAULT 'allgemein'"))
 
     await conn.run_sync(_run_migrations)
 

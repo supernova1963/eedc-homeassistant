@@ -44,6 +44,9 @@ class Strompreis(Base):
     anbieter: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     vertragsart: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # fix, dynamisch, etc.
 
+    # Verwendung (Spezialtarife)
+    verwendung: Mapped[str] = mapped_column(String(30), nullable=False, default="allgemein", server_default="allgemein")  # allgemein, waermepumpe, wallbox
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

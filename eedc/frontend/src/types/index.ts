@@ -27,6 +27,9 @@ export interface VersorgerDaten {
 // Wetter-Provider
 export type WetterProvider = 'auto' | 'open-meteo' | 'brightsky' | 'open-meteo-solar'
 
+// Steuerliche Behandlung
+export type SteuerlicheBehandlung = 'keine_ust' | 'regelbesteuerung'
+
 // Anlage
 export interface Anlage {
   id: number
@@ -53,6 +56,9 @@ export interface Anlage {
   versorger_daten?: VersorgerDaten
   // Wetterdaten-Provider
   wetter_provider?: WetterProvider
+  // Steuerliche Behandlung
+  steuerliche_behandlung?: SteuerlicheBehandlung
+  ust_satz_prozent?: number
   // Community-Sharing
   community_hash?: string | null
 }
@@ -145,6 +151,8 @@ export interface Investition {
 }
 
 // Strompreise
+export type StrompreisVerwendung = 'allgemein' | 'waermepumpe' | 'wallbox'
+
 export interface Strompreis {
   id: number
   anlage_id: number
@@ -156,6 +164,7 @@ export interface Strompreis {
   tarifname?: string
   anbieter?: string
   vertragsart?: string
+  verwendung: StrompreisVerwendung
 }
 
 // Import

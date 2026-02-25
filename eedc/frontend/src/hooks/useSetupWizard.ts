@@ -438,11 +438,21 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setError(null)
 
     try {
+      // PV-Module und DC-Speicher brauchen einen Wechselrichter als Parent
+      let parentId: number | undefined
+      if (typ === 'pv-module' || typ === 'speicher') {
+        const wechselrichter = investitionen.find(i => i.typ === 'wechselrichter')
+        if (wechselrichter) {
+          parentId = wechselrichter.id
+        }
+      }
+
       const newInvestition = await investitionenApi.create({
         anlage_id: wizardState.anlageId,
         typ,
         bezeichnung: `Neue ${INVESTITION_TYP_LABELS[typ]}`,
         aktiv: true,
+        ...(parentId ? { parent_investition_id: parentId } : {}),
       })
 
       await refreshInvestitionen()
@@ -452,7 +462,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
       setError(message)
       throw e
     }
-  }, [wizardState.anlageId, refreshInvestitionen])
+  }, [wizardState.anlageId, investitionen, refreshInvestitionen])
 
   // Standard-PV-System erstellen (Wechselrichter + PV-Module)
   const createDefaultPVSystem = useCallback(async () => {

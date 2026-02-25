@@ -298,6 +298,17 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
             </div>
           </div>
 
+          {/* Hinweis steuerliche Behandlung */}
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+            <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>
+                Steuerliche Einstellungen (Regelbesteuerung/Kleinunternehmer) können
+                unter <strong>Einstellungen &rarr; Anlage bearbeiten</strong> konfiguriert werden.
+              </span>
+            </p>
+          </div>
+
         </div>
       </div>
 

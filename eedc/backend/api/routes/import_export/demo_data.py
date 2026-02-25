@@ -510,11 +510,19 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 eauto_verbrauch_daten["ladung_extern_euro"] = eauto_extern_euro
 
             if monat == 4:
-                eauto_verbrauch_daten["sonderkosten_euro"] = 120.0
-                eauto_verbrauch_daten["sonderkosten_notiz"] = "Reifenwechsel Sommer"
+                eauto_verbrauch_daten["sonstige_positionen"] = [
+                    {"bezeichnung": "Reifenwechsel Sommer", "betrag": 120.0, "typ": "ausgabe"}
+                ]
+            elif monat == 6:
+                eauto_verbrauch_daten["sonstige_positionen"] = [
+                    {"bezeichnung": "Arbeitgeber-Erstattung Laden", "betrag": 185.0, "typ": "ertrag"},
+                    {"bezeichnung": "Reifenrotation", "betrag": 35.0, "typ": "ausgabe"}
+                ]
             elif monat == 11 and jahr == 2024:
-                eauto_verbrauch_daten["sonderkosten_euro"] = 250.0
-                eauto_verbrauch_daten["sonderkosten_notiz"] = "Jahresservice"
+                eauto_verbrauch_daten["sonstige_positionen"] = [
+                    {"bezeichnung": "Jahresservice", "betrag": 250.0, "typ": "ausgabe"},
+                    {"bezeichnung": "THG-Quote", "betrag": 85.0, "typ": "ertrag"}
+                ]
 
             db.add(InvestitionMonatsdaten(
                 investition_id=eauto.id,
@@ -535,8 +543,9 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 speicher_daten["speicher_ladepreis_cent"] = round(18 + (monat % 4) * 2, 1)
 
             if jahr == 2025 and monat == 3:
-                speicher_daten["sonderkosten_euro"] = 95.0
-                speicher_daten["sonderkosten_notiz"] = "Firmware-Update"
+                speicher_daten["sonstige_positionen"] = [
+                    {"bezeichnung": "Firmware-Update", "betrag": 95.0, "typ": "ausgabe"}
+                ]
 
             db.add(InvestitionMonatsdaten(
                 investition_id=speicher.id,
@@ -553,8 +562,9 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 "warmwasser_kwh": wp_warmwasser,
             }
             if monat == 10:
-                wp_daten["sonderkosten_euro"] = 180.0
-                wp_daten["sonderkosten_notiz"] = "Jahreswartung"
+                wp_daten["sonstige_positionen"] = [
+                    {"bezeichnung": "Jahreswartung", "betrag": 180.0, "typ": "ausgabe"}
+                ]
 
             db.add(InvestitionMonatsdaten(
                 investition_id=waermepumpe.id,

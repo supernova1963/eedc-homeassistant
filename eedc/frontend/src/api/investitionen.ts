@@ -259,6 +259,9 @@ export interface SonstigesDashboardResponse {
     gesamt_ersparnis_euro?: number
     co2_ersparnis_kg?: number
     sonderkosten_euro: number
+    sonstige_ertraege_euro?: number
+    sonstige_ausgaben_euro?: number
+    sonstige_netto_euro?: number
     anzahl_monate: number
   }
 }

@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.3.0** | Stand: Februar 2026
+**Version 2.4.0** | Stand: Februar 2026
 
 ---
 
@@ -251,6 +251,8 @@ eedc-homeassistant/
 | versorger_daten | JSON | Versorger & Zähler |
 | wetter_provider | VARCHAR(30) | Bevorzugter Wetter-Provider (auto, open-meteo, brightsky, open-meteo-solar) |
 | sensor_mapping | JSON | HA-Sensor-Mapping |
+| steuerliche_behandlung | VARCHAR(30) | `keine_ust` oder `regelbesteuerung` (v2.4.0) |
+| ust_satz_prozent | FLOAT | USt-Satz: DE=19, AT=20, CH=8.1 (v2.4.0) |
 | created_at | DATETIME | Erstellungsdatum |
 
 #### Monatsdaten
@@ -384,6 +386,32 @@ Typ-spezifische Zusatzfelder:
   "speicher_ladung_kwh": 10.0,
   "speicher_entladung_kwh": 8.0
 }
+
+// Sonstiges - Erzeuger (v2.4.0)
+{
+  "erzeugung_kwh": 120.0,
+  "eigenverbrauch_kwh": 100.0,
+  "einspeisung_kwh": 20.0
+}
+
+// Sonstiges - Verbraucher (v2.4.0)
+{
+  "verbrauch_kwh": 200.0,
+  "bezug_pv_kwh": 80.0,
+  "bezug_netz_kwh": 120.0
+}
+
+// Sonstiges - Speicher (v2.4.0)
+{
+  "ladung_kwh": 50.0,
+  "entladung_kwh": 45.0
+}
+
+// Sonstige Erträge & Ausgaben (alle Typen, v2.4.0)
+{
+  "sonstige_ertraege": [{"bezeichnung": "Einspeisebonus", "betrag": 15.0}],
+  "sonstige_ausgaben": [{"bezeichnung": "Versicherung", "betrag": 8.50}]
+}
 ```
 
 **versorger_daten Struktur (Anlage, NEU in beta.6):**
@@ -423,6 +451,7 @@ Typ-spezifische Zusatzfelder:
 | einspeiseverguetung_cent | FLOAT | Vergütung pro kWh Einspeisung |
 | gueltig_ab | DATE | Gültigkeitsbeginn |
 | gueltig_bis | DATE | Gültigkeitsende (optional) |
+| verwendung | VARCHAR(20) | `allgemein`, `waermepumpe` oder `wallbox` (v2.4.0) |
 
 ### Parent-Child Beziehungen
 

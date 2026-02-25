@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Info, ExternalLink, Cloud, Sun } from 'lucide-react'
+import { Info, ExternalLink, Cloud, Sun, Receipt } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
 import VersorgerSection from './VersorgerSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
@@ -27,7 +27,12 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     longitude: anlage?.longitude?.toString() || '',
     mastr_id: anlage?.mastr_id || '',
     wetter_provider: (anlage as any)?.wetter_provider || 'auto',
+    steuerliche_behandlung: anlage?.steuerliche_behandlung || 'keine_ust',
+    ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',
   })
+
+  // Track if user manually changed USt-Satz
+  const [ustManuell, setUstManuell] = useState(false)
 
   const [versorgerDaten, setVersorgerDaten] = useState<VersorgerDaten>(
     anlage?.versorger_daten || {}
@@ -47,9 +52,21 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     }
   }, [anlage?.id, anlage?.latitude, anlage?.longitude])
 
+  const UST_DEFAULTS: Record<string, string> = { DE: '19', AT: '20', CH: '8.1' }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    setFormData(prev => {
+      const next = { ...prev, [name]: value }
+      // Auto-set USt-Satz when country changes (unless user manually changed it)
+      if (name === 'standort_land' && !ustManuell) {
+        next.ust_satz_prozent = UST_DEFAULTS[value] || '19'
+      }
+      if (name === 'ust_satz_prozent') {
+        setUstManuell(true)
+      }
+      return next
+    })
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -81,6 +98,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         mastr_id: formData.mastr_id || undefined,
         versorger_daten: Object.keys(versorgerDaten).length > 0 ? versorgerDaten : undefined,
         wetter_provider: formData.wetter_provider as WetterProvider,
+        steuerliche_behandlung: formData.steuerliche_behandlung || 'keine_ust',
+        ust_satz_prozent: formData.ust_satz_prozent ? parseFloat(formData.ust_satz_prozent) : undefined,
       } as AnlageCreate)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -236,6 +255,66 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
                 <ExternalLink className="w-3 h-3" />
                 Im MaStR öffnen
               </a>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Steuerliche Behandlung */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+          <Receipt className="w-4 h-4 text-amber-500" />
+          Steuerliche Behandlung
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="w-full">
+            <label
+              htmlFor="steuerliche_behandlung"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              USt-Behandlung
+            </label>
+            <select
+              id="steuerliche_behandlung"
+              name="steuerliche_behandlung"
+              title="USt-Behandlung"
+              value={formData.steuerliche_behandlung}
+              onChange={handleChange}
+              className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
+            >
+              <option value="keine_ust">Keine USt-Auswirkung (Standard)</option>
+              <option value="regelbesteuerung">Regelbesteuerung (USt auf Eigenverbrauch)</option>
+            </select>
+          </div>
+          {formData.steuerliche_behandlung === 'regelbesteuerung' && (
+            <Input
+              label="USt-Satz (%)"
+              name="ust_satz_prozent"
+              type="number"
+              step="0.1"
+              min="0"
+              max="30"
+              value={formData.ust_satz_prozent}
+              onChange={handleChange}
+              placeholder={UST_DEFAULTS[formData.standort_land] || '19'}
+              hint={`Standard: ${UST_DEFAULTS[formData.standort_land] || '19'}% (${formData.standort_land || 'DE'})`}
+            />
+          )}
+        </div>
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
+          <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-700 dark:text-amber-300">
+            {formData.steuerliche_behandlung === 'regelbesteuerung' ? (
+              <p>
+                Bei <strong>Regelbesteuerung</strong> wird USt auf den Eigenverbrauch (unentgeltliche Wertabgabe)
+                als Kostenfaktor in den Finanzergebnissen berechnet. Die Bemessungsgrundlage basiert auf den
+                Selbstkosten (Abschreibung + Betriebskosten / Jahresertrag).
+              </p>
+            ) : (
+              <p>
+                <strong>Keine USt</strong> gilt fur PV-Anlagen ab 2023 mit Nullsteuersatz (&le;30 kWp),
+                Kleinunternehmer (&sect;19 UStG) oder wenn Sie keine steuerliche Erfassung wunschen.
+              </p>
             )}
           </div>
         </div>

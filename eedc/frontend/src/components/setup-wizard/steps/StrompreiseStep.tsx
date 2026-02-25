@@ -259,6 +259,7 @@ export default function StrompreiseStep({
               <span>
                 Sie können später weitere Stromtarife mit unterschiedlichen Gültigkeitszeiträumen
                 hinzufügen, z.B. bei Tarifwechsel oder Preisänderungen.
+                Spezialtarife für Warmepumpe oder Wallbox können ebenfalls unter Strompreise angelegt werden.
               </span>
             </p>
           </div>

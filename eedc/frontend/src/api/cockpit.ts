@@ -56,9 +56,11 @@ export interface CockpitUebersicht {
   // Finanzen (Euro)
   einspeise_erloes_euro: number
   ev_ersparnis_euro: number
+  ust_eigenverbrauch_euro: number | null  // USt auf Eigenverbrauch (nur bei Regelbesteuerung)
   netto_ertrag_euro: number
   jahres_rendite_prozent: number | null  // Jahres-Ertrag / Investition (Rendite p.a.)
   investition_gesamt_euro: number
+  steuerliche_behandlung: string | null  // 'regelbesteuerung' wenn aktiv
 
   // Umwelt (kg CO2)
   co2_pv_kg: number
@@ -172,8 +174,11 @@ export interface KomponentenMonat {
   sonstiges_erzeugung_kwh: number
   sonstiges_verbrauch_kwh: number
 
-  // Sonderkosten
+  // Sonstige Erträge & Ausgaben
   sonderkosten_euro: number
+  sonstige_ertraege_euro: number
+  sonstige_ausgaben_euro: number
+  sonstige_netto_euro: number
 }
 
 export interface KomponentenZeitreihe {

@@ -74,6 +74,7 @@ class StrompreisExport(BaseModel):
     gueltig_ab: date
     gueltig_bis: Optional[date] = None
     vertragsart: Optional[str] = None
+    verwendung: str = "allgemein"
 
 
 class MonatsdatenExport(BaseModel):
@@ -127,6 +128,8 @@ class AnlageExport(BaseModel):
     versorger_daten: Optional[dict] = None
     wetter_provider: Optional[str] = None
     sensor_mapping: Optional[dict] = None  # NEU: HA Sensor-Zuordnungen
+    steuerliche_behandlung: Optional[str] = None
+    ust_satz_prozent: Optional[float] = None
 
 
 class FullAnlageExport(BaseModel):
@@ -224,6 +227,8 @@ async def export_anlage_full(
         versorger_daten=anlage.versorger_daten,
         wetter_provider=anlage.wetter_provider,
         sensor_mapping=anlage.sensor_mapping,  # NEU: HA Sensor-Zuordnungen
+        steuerliche_behandlung=getattr(anlage, 'steuerliche_behandlung', None),
+        ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None),
     )
 
     # Strompreise laden
@@ -244,6 +249,7 @@ async def export_anlage_full(
             gueltig_ab=sp.gueltig_ab,
             gueltig_bis=sp.gueltig_bis,
             vertragsart=sp.vertragsart,
+            verwendung=sp.verwendung or "allgemein",
         )
         for sp in strompreise
     ]
@@ -508,6 +514,8 @@ async def import_json(
             versorger_daten=anlage_data.get("versorger_daten"),
             wetter_provider=anlage_data.get("wetter_provider", "auto"),
             sensor_mapping=imported_sensor_mapping,  # NEU: HA Sensor-Zuordnungen
+            steuerliche_behandlung=anlage_data.get("steuerliche_behandlung", "keine_ust"),
+            ust_satz_prozent=anlage_data.get("ust_satz_prozent", 19.0),
         )
         db.add(new_anlage)
         await db.flush()
@@ -526,6 +534,7 @@ async def import_json(
                 gueltig_ab=_parse_date(sp_data.get("gueltig_ab")),
                 gueltig_bis=_parse_date(sp_data.get("gueltig_bis")),
                 vertragsart=sp_data.get("vertragsart"),
+                verwendung=sp_data.get("verwendung", "allgemein"),
             )
             db.add(strompreis)
             importiert["strompreise"] += 1

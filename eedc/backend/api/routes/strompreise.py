@@ -30,6 +30,7 @@ class StrompreisBase(BaseModel):
     tarifname: Optional[str] = Field(None, max_length=255)
     anbieter: Optional[str] = Field(None, max_length=255)
     vertragsart: Optional[str] = Field(None, max_length=50)
+    verwendung: str = Field("allgemein", description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
 
 
 class StrompreisCreate(StrompreisBase):
@@ -47,6 +48,7 @@ class StrompreisUpdate(BaseModel):
     tarifname: Optional[str] = Field(None, max_length=255)
     anbieter: Optional[str] = Field(None, max_length=255)
     vertragsart: Optional[str] = Field(None, max_length=50)
+    verwendung: Optional[str] = Field(None, description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
 
 
 class StrompreisResponse(StrompreisBase):
@@ -56,6 +58,45 @@ class StrompreisResponse(StrompreisBase):
 
     class Config:
         from_attributes = True
+
+
+# =============================================================================
+# Helper: Tarife nach Verwendung laden
+# =============================================================================
+
+async def lade_tarife_fuer_anlage(db: AsyncSession, anlage_id: int) -> dict[str, Strompreis | None]:
+    """
+    Lädt die aktuell gültigen Tarife nach Verwendung.
+
+    Returns:
+        Dict mit Keys 'allgemein', 'waermepumpe', 'wallbox'.
+        WP/Wallbox fallen auf allgemein zurück wenn kein Spezialtarif existiert.
+    """
+    today = date.today()
+    query = select(Strompreis).where(
+        Strompreis.anlage_id == anlage_id,
+        Strompreis.gueltig_ab <= today,
+        (Strompreis.gueltig_bis.is_(None) | (Strompreis.gueltig_bis >= today))
+    ).order_by(Strompreis.gueltig_ab.desc())
+
+    result = await db.execute(query)
+    alle_preise = result.scalars().all()
+
+    # Nach Verwendung gruppieren (erster = neuester wg. ORDER BY DESC)
+    tarife: dict[str, Strompreis | None] = {"allgemein": None, "waermepumpe": None, "wallbox": None}
+    for preis in alle_preise:
+        verwendung = preis.verwendung or "allgemein"
+        if verwendung in tarife and tarife[verwendung] is None:
+            tarife[verwendung] = preis
+
+    # Fallback: WP/Wallbox → allgemein
+    allgemein = tarife["allgemein"]
+    if tarife["waermepumpe"] is None:
+        tarife["waermepumpe"] = allgemein
+    if tarife["wallbox"] is None:
+        tarife["wallbox"] = allgemein
+
+    return tarife
 
 
 # =============================================================================
@@ -129,6 +170,28 @@ async def get_aktueller_strompreis(anlage_id: int, db: AsyncSession = Depends(ge
         raise HTTPException(
             status_code=404,
             detail="Kein aktueller Strompreis für diese Anlage gefunden"
+        )
+
+    return preis
+
+
+@router.get("/aktuell/{anlage_id}/{verwendung}", response_model=StrompreisResponse)
+async def get_aktueller_strompreis_fuer(
+    anlage_id: int,
+    verwendung: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gibt den aktuellen Tarif für eine bestimmte Verwendung zurück.
+    Fällt auf 'allgemein' zurück wenn kein Spezialtarif existiert.
+    """
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    preis = tarife.get(verwendung) or tarife.get("allgemein")
+
+    if not preis:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Kein aktueller Strompreis für Verwendung '{verwendung}' gefunden"
         )
 
     return preis

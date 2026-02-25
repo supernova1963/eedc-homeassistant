@@ -3,7 +3,7 @@
  */
 
 import { api } from './client'
-import type { Strompreis } from '../types'
+import type { Strompreis, StrompreisVerwendung } from '../types'
 
 export interface StrompreisCreate {
   anlage_id: number
@@ -15,6 +15,7 @@ export interface StrompreisCreate {
   tarifname?: string
   anbieter?: string
   vertragsart?: string
+  verwendung?: StrompreisVerwendung
 }
 
 export interface StrompreisUpdate {
@@ -26,6 +27,7 @@ export interface StrompreisUpdate {
   tarifname?: string
   anbieter?: string
   vertragsart?: string
+  verwendung?: StrompreisVerwendung
 }
 
 export const strompreiseApi = {
@@ -45,6 +47,13 @@ export const strompreiseApi = {
    */
   async getAktuell(anlageId: number): Promise<Strompreis> {
     return api.get<Strompreis>(`/strompreise/aktuell/${anlageId}`)
+  },
+
+  /**
+   * Aktuellen Strompreis für eine bestimmte Verwendung abrufen (mit Fallback auf allgemein)
+   */
+  async getAktuellFuer(anlageId: number, verwendung: StrompreisVerwendung): Promise<Strompreis> {
+    return api.get<Strompreis>(`/strompreise/aktuell/${anlageId}/${verwendung}`)
   },
 
   /**

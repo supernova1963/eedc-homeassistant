@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Sun, Zap, Battery, TrendingUp, TrendingDown, ArrowRight, Flame, Car, Home,
   ArrowDownToLine, ArrowUpFromLine, Percent, Gauge, Euro, Leaf,
-  ChevronRight, Calendar, Trophy, Minus
+  ChevronRight, Calendar, Trophy, Minus, Receipt
 } from 'lucide-react'
 import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell } from 'recharts'
 import { Card, Button, LoadingSpinner, FormelTooltip, fmtCalc } from '../components/ui'
@@ -436,6 +436,19 @@ export default function Dashboard() {
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh × Strompreis`}
             ergebnis={`= ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
           />
+          {data.ust_eigenverbrauch_euro != null && data.ust_eigenverbrauch_euro > 0 && (
+            <KPICard
+              title="USt Eigenverbrauch"
+              value={`-${data.ust_eigenverbrauch_euro.toFixed(0)}`}
+              unit="€"
+              icon={Receipt}
+              color="text-orange-500"
+              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              formel="EV × Selbstkosten × USt-Satz"
+              berechnung="Regelbesteuerung: USt auf unentgeltliche Wertabgabe"
+              ergebnis={`= -${fmtCalc(data.ust_eigenverbrauch_euro, 0)} €`}
+            />
+          )}
           <KPICard
             title="Netto-Ertrag"
             value={data.netto_ertrag_euro.toFixed(0)}
@@ -443,8 +456,10 @@ export default function Dashboard() {
             icon={TrendingUp}
             color="text-blue-600"
             bgColor="bg-blue-50 dark:bg-blue-900/20"
-            formel="Erlös + Ersparnis"
-            berechnung={`${fmtCalc(data.einspeise_erloes_euro, 0)} + ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
+            formel={data.ust_eigenverbrauch_euro ? "Erlös + Ersparnis − USt" : "Erlös + Ersparnis"}
+            berechnung={data.ust_eigenverbrauch_euro
+              ? `${fmtCalc(data.einspeise_erloes_euro, 0)} + ${fmtCalc(data.ev_ersparnis_euro, 0)} − ${fmtCalc(data.ust_eigenverbrauch_euro, 0)} €`
+              : `${fmtCalc(data.einspeise_erloes_euro, 0)} + ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
             ergebnis={`= ${fmtCalc(data.netto_ertrag_euro, 0)} €`}
           />
           <KPICard
