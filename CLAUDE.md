@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.4.0 | **Status:** Stable Release
+**Version:** 2.4.1 | **Status:** Stable Release
 
 ## Quick Reference
 
@@ -138,6 +138,7 @@ eedc/
     │   └── HAStatistikImport.tsx      # HA-Statistik Bulk-Import (NEU v2.0.0)
     ├── components/
     │   ├── forms/MonatsdatenForm.tsx  # Dynamische Felder
+    │   ├── forms/SonstigePositionenFields.tsx  # Sonstige Erträge/Ausgaben (shared, NEU v2.4.0)
     │   ├── pv/PVStringVergleich.tsx   # SOLL-IST
     │   └── sensor-mapping/            # Wizard-Steps
     │       ├── FeldMappingInput.tsx
@@ -171,6 +172,8 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW, Sonstiges = eigenständig
 
 // E-Auto
 { "km_gefahren": 1200, "ladung_pv_kwh": 130, "ladung_netz_kwh": 86, "v2h_entladung_kwh": 25 }
+// E-Auto (dienstlich → ist_dienstlich=true in Investition.parameter)
+// ROI rechnet mit AG-Erstattung statt Benzinvergleich
 
 // Wärmepumpe
 { "stromverbrauch_kwh": 450, "heizenergie_kwh": 1800, "warmwasser_kwh": 200 }
@@ -178,7 +181,7 @@ AC-Speicher, E-Auto, WP, Wallbox, BKW, Sonstiges = eigenständig
 // Balkonkraftwerk (mit optionalem Speicher)
 { "pv_erzeugung_kwh": 65.0, "eigenverbrauch_kwh": 60.0, "speicher_ladung_kwh": 15, "speicher_entladung_kwh": 14 }
 
-// Wallbox
+// Wallbox (ist_dienstlich=true → AG-Erstattung statt Eigennutzung)
 { "ladung_kwh": 180 }
 
 // Sonstiges - Erzeuger
@@ -387,6 +390,8 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - [x] Sonstige Positionen ✓ (v2.4.0)
 - [x] Spezialtarife WP/Wallbox ✓ (v2.4.0)
 - [x] Kleinunternehmerregelung ✓ (v2.4.0)
+- [x] Firmenwagen/Dienstliches Laden ✓ (v2.4.0)
+- [x] Realisierungsquote ✓ (v2.4.0)
 - [ ] KI-Insights
 
 ## HA-Integration Status (v2.0.0)
@@ -441,13 +446,19 @@ ha_sensor_batterie_ladung   # DEPRECATED - nutze sensor_mapping
 ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 ```
 
-## Letzte Änderungen (v2.4.0)
+## Letzte Änderungen (v2.4.1)
 
-**v2.4.0 - Steuerliche Behandlung, Spezialtarife, Sonstige Positionen:**
+**v2.4.1 - Version-Bump für HA Add-on Update-Erkennung**
+
+**v2.4.0 - Steuerliche Behandlung, Spezialtarife, Sonstige Positionen, Firmenwagen:**
 
 - **Kleinunternehmerregelung (Issue #9):** Neue Felder `steuerliche_behandlung` (`keine_ust`/`regelbesteuerung`) und `ust_satz_prozent` auf Anlage-Model. Bei Regelbesteuerung wird USt auf Eigenverbrauch als Kostenfaktor in Cockpit, Aussichten und ROI berechnet. `berechne_ust_eigenverbrauch()` in calculations.py.
 - **Spezialtarife (Issue #8):** Neues Feld `verwendung` auf Strompreis-Model (`allgemein`/`waermepumpe`/`wallbox`). Neuer Endpoint `/api/strompreise/aktuell/{anlage_id}/{verwendung}` mit Fallback. Cockpit nutzt automatisch den passenden Tarif pro Komponente.
-- **Sonstige Positionen (Issue #7):** Neuer Investitionstyp `sonstiges` mit Kategorien (`erzeuger`/`verbraucher`/`speicher`). Flexible verbrauch_daten je Kategorie. Sonstige Erträge & Ausgaben in MonatsdatenForm.
+- **Sonstige Positionen (Issue #7):** Neuer Investitionstyp `sonstiges` mit Kategorien (`erzeuger`/`verbraucher`/`speicher`). Flexible verbrauch_daten je Kategorie. Sonstige Erträge & Ausgaben in MonatsdatenForm. Neue shared Component `SonstigePositionenFields`.
+- **Firmenwagen & dienstliches Laden:** Neues Flag `ist_dienstlich` an Wallbox und E-Auto (in `Investition.parameter`). ROI-Berechnung berücksichtigt AG-Erstattung statt Benzinvergleich bei dienstlichen Fahrzeugen.
+- **Realisierungsquote:** Neues Panel in Auswertung/Investitionen vergleicht historische Erträge mit konfigurierter Prognose. Farbkodierung: ≥90% grün, ≥70% gelb, <70% rot.
+- **Methodenhinweise:** Amortisationsbalken im Cockpit und Komponenten-Dashboards (E-Auto, WP, BKW) zeigen Basis-Hinweis.
+- **Grundpreis in Netzbezugskosten:** Monatlicher Stromgrundpreis (`grundpreis_euro_monat`) wird zu Netzbezugskosten addiert.
 - **Bugfix (Issue #10):** Leeres Installationsdatum verursachte Setup-Wizard-Fehler
 
 **v2.3.0 - Dashboard-Modernisierung und DACH-Onboarding:**

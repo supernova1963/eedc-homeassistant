@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.4.0** | Stand: Februar 2026
+**Version 2.4.1** | Stand: Februar 2026
 
 ---
 
@@ -302,9 +302,9 @@ eedc-homeassistant/
 | `wechselrichter` | - |
 | `pv-module` | anzahl_module, modul_leistung_wp, ausrichtung, neigung_grad |
 | `speicher` | kapazitaet_kwh, arbitrage_faehig |
-| `e-auto` | v2h_faehig, nutzt_v2h |
+| `e-auto` | v2h_faehig, nutzt_v2h, ist_dienstlich |
 | `waermepumpe` | effizienz_modus, jaz, cop_heizung, cop_warmwasser, heizwaermebedarf_kwh, warmwasserbedarf_kwh, leistung_kw, pv_anteil_prozent, alter_energietraeger, alter_preis_cent_kwh, sg_ready |
-| `wallbox` | - |
+| `wallbox` | ist_dienstlich |
 | `balkonkraftwerk` | leistung_wp, anzahl, hat_speicher, speicher_kapazitaet_wh |
 | `sonstiges` | kategorie (erzeuger/verbraucher/speicher), beschreibung |
 
@@ -447,11 +447,14 @@ Typ-spezifische Zusatzfelder:
 |------|-----|--------------|
 | id | INTEGER | Primary Key |
 | anlage_id | INTEGER | Foreign Key → Anlage |
-| bezugspreis_cent | FLOAT | Preis pro kWh Netzbezug |
-| einspeiseverguetung_cent | FLOAT | Vergütung pro kWh Einspeisung |
+| netzbezug_arbeitspreis_cent_kwh | FLOAT | Preis pro kWh Netzbezug |
+| einspeiseverguetung_cent_kwh | FLOAT | Vergütung pro kWh Einspeisung |
+| grundpreis_euro_monat | FLOAT | Monatlicher Grundpreis (v2.4.0) |
 | gueltig_ab | DATE | Gültigkeitsbeginn |
 | gueltig_bis | DATE | Gültigkeitsende (optional) |
-| verwendung | VARCHAR(20) | `allgemein`, `waermepumpe` oder `wallbox` (v2.4.0) |
+| tarifname | VARCHAR(255) | Name des Tarifs (optional) |
+| anbieter | VARCHAR(255) | Stromanbieter (optional) |
+| verwendung | VARCHAR(30) | `allgemein`, `waermepumpe` oder `wallbox` (v2.4.0) |
 
 ### Parent-Child Beziehungen
 

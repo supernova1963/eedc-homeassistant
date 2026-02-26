@@ -1,6 +1,6 @@
 # EEDC Development Guide
 
-**Version 2.3.0** | Stand: Februar 2026
+**Version 2.4.1** | Stand: Februar 2026
 
 ---
 
@@ -212,13 +212,17 @@ eedc-homeassistant/
     │   ├── core/                # Config, DB, Calculations
     │   ├── models/              # SQLAlchemy Models
     │   └── services/
-    │       ├── wetter_service.py    # Open-Meteo + PVGIS
-    │       ├── prognose_service.py  # Prognose-Berechnungen
-    │       ├── pdf_service.py       # PDF-Export
-    │       ├── mqtt_client.py       # HA Export
-    │       ├── ha_mqtt_sync.py      # MQTT Sync Service (NEU)
-    │       ├── vorschlag_service.py # Intelligente Vorschläge (NEU)
-    │       └── scheduler.py         # APScheduler für Cron-Jobs (NEU)
+    │       ├── wetter_service.py        # Multi-Provider Wetterdaten
+    │       ├── brightsky_service.py     # DWD-Daten via Bright Sky API
+    │       ├── solar_forecast_service.py # Open-Meteo Solar GTI
+    │       ├── prognose_service.py      # Prognose-Berechnungen
+    │       ├── pdf_service.py           # PDF-Export
+    │       ├── mqtt_client.py           # HA Export + MQTT Auto-Discovery
+    │       ├── ha_mqtt_sync.py          # MQTT Sync Service
+    │       ├── ha_statistics_service.py # HA-DB Statistik-Abfragen (v2.0.0)
+    │       ├── vorschlag_service.py     # Intelligente Vorschläge
+    │       ├── community_service.py     # Community-Datenaufbereitung (v2.0.3)
+    │       └── scheduler.py             # APScheduler für Cron-Jobs
     │
     └── frontend/
         ├── package.json
@@ -229,12 +233,14 @@ eedc-homeassistant/
         │   │   └── aussichten.ts # Prognosen
         │   ├── components/      # UI Components
         │   ├── pages/           # Seiten
-        │   │   ├── Dashboard.tsx             # Cockpit (Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline – v2.3.0)
+        │   │   ├── Dashboard.tsx             # Cockpit (Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline)
         │   │   ├── Auswertung.tsx            # Analysen (6 Tabs)
-        │   │   ├── CommunityVergleich.tsx    # Community (Hauptmenüpunkt seit v2.1.0, 6 Tabs)
+        │   │   ├── CommunityVergleich.tsx    # Community (Hauptmenüpunkt, 6 Tabs)
         │   │   ├── Aussichten.tsx            # Prognosen (4 Tabs)
+        │   │   ├── PVAnlageDashboard.tsx     # PV String-Vergleich (SOLL-IST)
         │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping
         │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss
+        │   │   ├── HAStatistikImport.tsx     # HA-Statistik Bulk-Import (v2.0.0)
         │   │   └── aussichten/               # Tab-Komponenten
         │   │       ├── KurzfristTab.tsx
         │   │       ├── LangfristTab.tsx
@@ -303,9 +309,14 @@ Nach dem Start des Backends verfügbar unter:
 | **Aussichten** | `/api/aussichten/*` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
 | **Monatsdaten** | `/api/monatsdaten/*` | CRUD + Berechnungen |
 | **Investitionen** | `/api/investitionen/*` | Komponenten, ROI |
-| **Import/Export** | `/api/import/*` | CSV Import/Export, JSON-Export |
-| **Wetter** | `/api/wetter/*` | Open-Meteo + PVGIS TMY |
-| **Community** | `/api/community/*` | Community-Teilen & Benchmark (NEU v2.0.3) |
+| **Import/Export** | `/api/import/*` | CSV Import/Export, JSON-Export, PDF-Export |
+| **Wetter** | `/api/wetter/*` | Open-Meteo, Bright Sky, PVGIS TMY |
+| **Strompreise** | `/api/strompreise/*` | Tarife CRUD, Spezialtarife (v2.4.0) |
+| **HA Statistics** | `/api/ha-statistics/*` | HA-DB Langzeitstatistiken (v2.0.0) |
+| **Sensor-Mapping** | `/api/sensor-mapping/*` | HA Sensor-Zuordnung (v1.1.0) |
+| **Monatsabschluss** | `/api/monatsabschluss/*` | Monatsabschluss-Wizard (v1.1.0) |
+| **Scheduler** | `/api/scheduler/*` | Cron-Jobs, Monatswechsel (v1.1.0) |
+| **Community** | `/api/community/*` | Community-Teilen & Benchmark (v2.0.3) |
 
 ### Aussichten API
 
@@ -340,6 +351,32 @@ GET  /api/monatsabschluss/{anlage_id}/historie    # Letzte Abschlüsse
 POST /api/import/csv/{anlage_id}                # CSV Import (mit Plausibilitätsprüfung)
 GET  /api/import/export/{anlage_id}/full        # Vollständiger JSON-Export
 GET  /api/import/template/{anlage_id}           # CSV Template herunterladen
+```
+
+### HA Statistics API (NEU v2.0.0)
+
+```
+GET  /api/ha-statistics/status                              # Prüft ob HA-DB verfügbar
+GET  /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}  # Einzelner Monat
+GET  /api/ha-statistics/verfuegbare-monate/{anlage_id}      # Alle Monate mit Daten
+GET  /api/ha-statistics/alle-monatswerte/{anlage_id}        # Bulk: Alle Monatswerte
+GET  /api/ha-statistics/import-vorschau/{anlage_id}         # Import-Vorschau mit Konflikten
+POST /api/ha-statistics/import/{anlage_id}                  # Import mit Überschreib-Schutz
+```
+
+### Strompreise API (erweitert v2.4.0)
+
+```
+GET  /api/strompreise/{anlage_id}                           # Alle Tarife der Anlage
+POST /api/strompreise/{anlage_id}                           # Tarif anlegen
+GET  /api/strompreise/aktuell/{anlage_id}/{verwendung}      # Aktueller Preis (mit Fallback)
+```
+
+### Scheduler API (NEU v1.1.0)
+
+```
+GET  /api/scheduler                                         # Scheduler-Status
+POST /api/scheduler/monthly-snapshot                        # Manueller Monatswechsel
 ```
 
 ---

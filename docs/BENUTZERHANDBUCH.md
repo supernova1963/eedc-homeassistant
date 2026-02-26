@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.4.0** | Stand: Februar 2026
+**Version 2.4.1** | Stand: Februar 2026
 
 ---
 
@@ -134,10 +134,13 @@ Konfiguriere deine Stromtarife:
 |------|--------------|----------------------|
 | **Bezugspreis** | Was du pro kWh zahlst | 32-40 ct/kWh |
 | **Einspeisevergütung** | Was du pro eingespeister kWh bekommst | 8-12 ct/kWh |
+| **Grundpreis** | Monatlicher Grundpreis (NEU v2.4.0) | 10-15 €/Monat |
 | **Gültig ab** | Seit wann gilt dieser Tarif | 01.01.2024 |
 | **Verwendung** | Standard, Wärmepumpe oder Wallbox | Standard |
 
 **Hinweis**: Du kannst mehrere Tarife mit unterschiedlichen Gültigkeitszeiträumen anlegen.
+
+**Grundpreis (NEU v2.4.0):** Der monatliche Stromgrundpreis wird zu den Netzbezugskosten addiert und fließt so in die Gesamtkostenberechnung ein.
 
 **Spezialtarife (NEU v2.4.0):** Für Wärmepumpe oder Wallbox mit separatem Stromzähler und günstigerem Tarif kann ein eigener Strompreis angelegt werden. Ohne Spezialtarif wird der Standard-Tarif verwendet.
 
@@ -169,6 +172,7 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 #### E-Auto
 - Optional: V2H-fähig (Vehicle-to-Home)
 - Optional: Nutzt V2H aktiv
+- Optional: Dienstfahrzeug (NEU v2.4.0) – bei dienstlichen Fahrzeugen wird die ROI-Berechnung auf AG-Erstattung statt Benzinvergleich umgestellt
 
 #### Wärmepumpe
 - **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi (NEU: SCOP in beta.10):
@@ -178,8 +182,12 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 - **Wärmebedarf:** Heiz- und Warmwasserbedarf in kWh/Jahr (aus Energieausweis)
 - **Vergleich:** Alter Energieträger (Gas/Öl/Strom) und Preis für ROI-Berechnung
 
+#### Wallbox
+- Kaufpreis, Installationsdatum
+- Optional: Dienstliches Laden (NEU v2.4.0) – ROI berücksichtigt AG-Erstattung
+
 #### Weitere Komponenten
-- Wallbox, Balkonkraftwerk, Sonstiges
+- Balkonkraftwerk, Sonstiges
 
 ### Schritt 7: Zusammenfassung
 
@@ -272,6 +280,7 @@ Schnellstatus für alle Komponenten mit Klick-Navigation zu Details.
 #### Finanzielle Auswertung
 - Einspeiseerlös, eingesparte Stromkosten, Gesamt-Einsparung (€)
 - **Amortisations-Fortschrittsbalken**: Wie viel % der Investition ist zurückgeflossen? Mit geschätztem Amortisationsjahr (nur in der Gesamtansicht)
+- **Methodenhinweis** (NEU v2.4.0): Amortisationsbalken und Komponenten-Dashboards (E-Auto, WP, BKW) zeigen einen Basis-Hinweis zur Berechnungsmethode
 
 #### CO2-Bilanz
 - Vermiedene CO2-Emissionen (kg)
@@ -423,6 +432,13 @@ Tabelle mit:
 | **Jährliche Einsparung** | Durchschnitt pro Jahr |
 | **ROI** | (Einsparung - Kosten) / Kosten × 100% |
 | **Amortisation** | Jahre bis Break-Even |
+
+#### Realisierungsquote (NEU v2.4.0)
+
+Ein neues Panel vergleicht die historischen Erträge mit der konfigurierten Prognose:
+- **≥90%** (grün): Ertrag entspricht oder übertrifft die Erwartung
+- **≥70%** (gelb): Leichte Abweichung, ggf. prüfen
+- **<70%** (rot): Deutliche Abweichung, Handlungsbedarf
 
 #### PV-System Aggregation
 
