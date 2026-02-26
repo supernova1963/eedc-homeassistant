@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.4.1] - 2026-02-26
+
+### Technisch
+
+- Version-Bump: v2.4.0 wurde force-pushed und war für HA Add-on-Store nicht als Update erkennbar
+
+---
+
 ## [2.4.0] - 2026-02-26
 
 ### Hinzugefügt
