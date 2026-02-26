@@ -364,6 +364,7 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         batterie_entladung_kwh=md.batterie_entladung_kwh or 0,
         einspeiseverguetung_cent=strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2,
         netzbezug_preis_cent=strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0,
+        grundpreis_euro_monat=strompreis.grundpreis_euro_monat or 0 if strompreis else 0,
         leistung_kwp=anlage.leistung_kwp,
     )
 

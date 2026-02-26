@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [2.4.0] - 2026-02-25
+## [2.4.0] - 2026-02-26
 
 ### Hinzugefügt
 
@@ -35,9 +35,42 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Integration in Dashboard: Finanzen-Tab zeigt sonstige Erträge/Ausgaben
   - Demo-Daten: Beispiel „Notstrom-Batterie" als sonstiger Speicher
 
+- **Firmenwagen & dienstliches Laden – korrekte ROI-Berechnung**
+  - Neues Flag `ist_dienstlich` an Wallbox und E-Auto (in Investitions-Parametern)
+  - **Wallbox (dienstlich):** ROI = AG-Erstattung minus (Netzbezug × Strompreis + PV-Anteil × Einspeisevergütung); kein Benzinvergleich
+  - **E-Auto (dienstlich):** Kraftstoffersparnis geht an Arbeitgeber → `emob_ersparnis = 0`; Ladekosten als Ausgaben; AG-Erstattung als sonstiger Ertrag
+  - Hinweistext im Investitionsformular bei aktiviertem Flag (Erklärung + Tipp für gemischte Nutzung)
+  - DatenerfassungGuide: neuer Abschnitt „Firmenwagen & dienstliches Laden" mit Empfehlung separater Zähler
+
+- **Realisierungsquote KPI in Auswertung → Investitionen**
+  - Neues Panel „Tatsächlich realisiert" vergleicht historische Erträge mit konfigurierter Prognose
+  - Realisierungsquote in % mit Farbkodierung: ≥ 90 % grün, ≥ 70 % gelb, < 70 % rot
+  - Zeigt die Diskrepanz zwischen parametriertem Potenzial (z.B. 15.000 km/Jahr E-Auto) und tatsächlicher Nutzung
+
+- **Methodenhinweise in Dashboard und Komponenten-Dashboards**
+  - Amortisationsbalken im Cockpit: Hinweis „Basis: tatsächlich realisierte Erträge & Kosten (Ø X €/Jahr über N Monate)"
+  - E-Auto-, Wärmepumpe-, Balkonkraftwerk-Dashboard: Methodennotiz unter den KPIs (Basis: Monatsdaten)
+
+- **Grundpreis in Netzbezugskosten-Berechnung**
+  - Monatlicher Stromgrundpreis wird zu Netzbezugskosten addiert (`calculations.py`, Auswertung/Zeitreihen)
+
+- **Monatsabschluss-Wizard Erweiterungen**
+  - Balkonkraftwerk: Speicher-Ladung/Entladung für BKW-Modelle mit integriertem Speicher erfassbar
+  - Typ „Sonstiges": kategorie-spezifische Felder (Erzeuger / Verbraucher / Speicher)
+  - API-Response liefert `sonstige_positionen` für alle Investitionstypen (nicht nur „Sonstiges")
+  - Neue shared Component `SonstigePositionenFields` für strukturierte Ertrags-/Ausgaben-Erfassung
+
+- **SubTabs group-aware Navigation**
+  - Tab-Gruppen mit visueller Trennung für bessere Übersichtlichkeit bei vielen Tabs
+
+- **DatenerfassungGuide überarbeitet**
+  - Modernere Struktur und Erklärungen; neuer Abschnitt Firmenwagen; Legacy-Guide aufklappbar
+
 ### Behoben
 
 - **Leeres Installationsdatum verursachte Setup-Wizard-Fehler (Issue #10):** StrompreiseStep akzeptiert jetzt fehlende Installationsdaten und setzt vernünftige Defaults
+- **sonstige_positionen wurde nur für Investitionstyp „Sonstiges" verarbeitet:** Jetzt werden Erträge/Ausgaben aus `sonstige_positionen` für ALLE Investitionstypen in Cockpit und Amortisationsprognose berücksichtigt (z.B. Wartungskosten bei Wärmepumpe, THG-Quote bei E-Auto)
+- **BKW Ersparnis und sonstige Netto-Beträge fehlten in Amortisationsprognose (Aussichten → Finanzen):** `bisherige_ertraege` und `jahres_netto_ertrag` waren unvollständig
 
 ### Technisch
 
@@ -46,6 +79,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Neue Helper-Funktion `berechne_sonstige_summen()` für sonstige Erträge/Ausgaben
 - JSON Export/Import: Steuerliche Felder und Strompreis-Verwendung werden mit exportiert/importiert
 - CSV Import: Sonstige Positionen werden korrekt verarbeitet
+- `CockpitUebersicht` API-Response: neue Felder `bkw_ersparnis_euro`, `sonstige_netto_euro`
 
 ---
 

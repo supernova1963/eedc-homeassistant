@@ -22,6 +22,7 @@ from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.calculations import berechne_ust_eigenverbrauch
+from backend.utils.sonstige_positionen import berechne_sonstige_netto
 from backend.services.wetter_service import (
     fetch_open_meteo_forecast,
     wetter_code_zu_symbol,
@@ -917,9 +918,11 @@ async def get_finanz_prognose(
     # Nach Typ gruppieren
     pv_module = [i for i in alle_investitionen if i.typ == "pv-module"]
     speicher = [i for i in alle_investitionen if i.typ == "speicher"]
-    e_autos = [i for i in alle_investitionen if i.typ == "e-auto"]
+    e_autos = [i for i in alle_investitionen
+               if i.typ == "e-auto" and not (i.parameter or {}).get("ist_dienstlich", False)]
     waermepumpen = [i for i in alle_investitionen if i.typ == "waermepumpe"]
     balkonkraftwerke = [i for i in alle_investitionen if i.typ == "balkonkraftwerk"]
+    sonstiges_investitionen = [i for i in alle_investitionen if i.typ == "sonstiges"]
 
     anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module) or anlage.leistung_kwp or 0
 
@@ -1163,8 +1166,36 @@ async def get_finanz_prognose(
         # Ersparnis = was Benzin gekostet hätte - was Netzstrom kostet
         bisherige_eauto_ersparnis = benzin_kosten - eauto_netzstrom_kosten
 
-    # Alternativkosten zu bisherigen Erträgen addieren
-    bisherige_ertraege += bisherige_wp_ersparnis + bisherige_eauto_ersparnis
+    # BKW Ersparnis (Eigenverbrauch spart Netzbezug)
+    bisherige_bkw_ersparnis = 0.0
+    for bkw in balkonkraftwerke:
+        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
+            if inv_id == bkw.id:
+                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
+                bisherige_bkw_ersparnis += bkw_ev * netzbezug_preis / 100
+
+    # Sonstige Positionen für ALLE Investitionstypen (Wallbox-Erstattungen, THG-Quote, BHKW etc.)
+    bisherige_sonstige_netto = 0.0
+    for inv in alle_investitionen:
+        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
+            if inv_id == inv.id:
+                bisherige_sonstige_netto += berechne_sonstige_netto(daten)
+
+    # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene Einspeisung)
+    bisherige_dienstlich_ladekosten = 0.0
+    for inv in alle_investitionen:
+        if inv.typ in ("e-auto", "wallbox") and (inv.parameter or {}).get("ist_dienstlich", False):
+            for (inv_id, jahr, monat), daten in historische_inv_daten.items():
+                if inv_id == inv.id:
+                    netz_kwh = daten.get("ladung_netz_kwh", 0) or 0
+                    pv_kwh = daten.get("ladung_pv_kwh", 0) or 0
+                    bisherige_dienstlich_ladekosten += (
+                        netz_kwh * netzbezug_preis + pv_kwh * einspeiseverguetung
+                    ) / 100
+    bisherige_sonstige_netto -= bisherige_dienstlich_ladekosten
+
+    # Alternativkosten + BKW + Sonstige zu bisherigen Erträgen addieren
+    bisherige_ertraege += bisherige_wp_ersparnis + bisherige_eauto_ersparnis + bisherige_bkw_ersparnis + bisherige_sonstige_netto
 
     # =====================================================================
     # MONATSPROGNOSEN ERSTELLEN
@@ -1291,8 +1322,18 @@ async def get_finanz_prognose(
         # Netto-Ersparnis
         jahres_eauto_km_ersparnis = benzin_kosten_jahr - eauto_stromkosten_netz_jahr
 
-    # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten
-    jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis
+    # BKW Jahres-Ersparnis (aus historischem Durchschnitt hochgerechnet)
+    jahres_bkw_ersparnis = 0.0
+    if balkonkraftwerke and anzahl_monate_hist > 0 and bisherige_bkw_ersparnis > 0:
+        jahres_bkw_ersparnis = bisherige_bkw_ersparnis / anzahl_monate_hist * 12
+
+    # Sonstige Jahres-Netto (aus historischem Durchschnitt hochgerechnet, alle Investitionstypen)
+    jahres_sonstige_netto = 0.0
+    if anzahl_monate_hist > 0 and bisherige_sonstige_netto != 0:
+        jahres_sonstige_netto = bisherige_sonstige_netto / anzahl_monate_hist * 12
+
+    # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten, BKW und Sonstige
+    jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis + jahres_bkw_ersparnis + jahres_sonstige_netto
 
     # USt auf Eigenverbrauch bei Regelbesteuerung
     ust_eigenverbrauch = 0.0

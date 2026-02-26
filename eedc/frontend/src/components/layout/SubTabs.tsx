@@ -1,6 +1,7 @@
 /**
  * SubTabs Komponente
- * Zeigt kontextabhängige Sub-Navigation unter der Hauptnavigation
+ * Zeigt kontextabhängige Sub-Navigation unter der Hauptnavigation.
+ * Einstellungen: gruppen-aware – zeigt alle Tabs der aktuellen Gruppe.
  */
 
 import { NavLink, useLocation } from 'react-router-dom'
@@ -18,7 +19,15 @@ import {
   PiggyBank,
   Database,
   Upload,
-  Settings
+  Settings,
+  CalendarCheck,
+  BookOpen,
+  FlaskConical,
+  Cpu,
+  Radio,
+  BarChart2,
+  Share2,
+  MapPin,
 } from 'lucide-react'
 
 interface TabItem {
@@ -28,56 +37,136 @@ interface TabItem {
   exact?: boolean
 }
 
-// Sub-Tabs für Cockpit (statisch - Detail-Seiten zeigen "keine Daten" wenn nichts vorhanden)
+interface TabGroup {
+  label: string
+  tabs: TabItem[]
+  /** Pfad-Präfixe, die zu dieser Gruppe gehören */
+  prefixes: string[]
+}
+
+// ─── Cockpit Tabs (statisch) ─────────────────────────────────────────────────
 const cockpitTabs: TabItem[] = [
-  { name: 'Übersicht', href: '/cockpit', icon: LayoutDashboard, exact: true },
-  { name: 'PV-Anlage', href: '/cockpit/pv-anlage', icon: Sun },
-  { name: 'E-Auto', href: '/cockpit/e-auto', icon: Car },
-  { name: 'Wärmepumpe', href: '/cockpit/waermepumpe', icon: Flame },
-  { name: 'Speicher', href: '/cockpit/speicher', icon: Battery },
-  { name: 'Wallbox', href: '/cockpit/wallbox', icon: Plug },
-  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk', icon: Sun },
-  { name: 'Sonstiges', href: '/cockpit/sonstiges', icon: Wrench },
+  { name: 'Übersicht',       href: '/cockpit',                  icon: LayoutDashboard, exact: true },
+  { name: 'PV-Anlage',       href: '/cockpit/pv-anlage',        icon: Sun },
+  { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car },
+  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame },
+  { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery },
+  { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug },
+  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun },
+  { name: 'Sonstiges',       href: '/cockpit/sonstiges',        icon: Wrench },
 ]
 
-// Sub-Tabs für Auswertungen (leer, da Auswertung.tsx eigene Inline-Tabs hat)
-const auswertungenTabs: TabItem[] = []
-
-// Sub-Tabs für Einstellungen
-// Logische Gruppierung: Stammdaten → Daten → System
-const einstellungenTabs: TabItem[] = [
-  // Stammdaten
-  { name: 'Anlage', href: '/einstellungen/anlage', icon: Home },
-  { name: 'Strompreise', href: '/einstellungen/strompreise', icon: Zap },
-  { name: 'Investitionen', href: '/einstellungen/investitionen', icon: PiggyBank },
-  // Daten
-  { name: 'Monatsdaten', href: '/einstellungen/monatsdaten', icon: Database },
-  { name: 'Import/Export', href: '/einstellungen/import', icon: Upload },
-  // System
-  { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Sun },
-  { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
+// ─── Einstellungen-Gruppen ────────────────────────────────────────────────────
+const einstellungenGruppen: TabGroup[] = [
+  {
+    label: 'Stammdaten',
+    prefixes: [
+      '/einstellungen/anlage',
+      '/einstellungen/strompreise',
+      '/einstellungen/investitionen',
+    ],
+    tabs: [
+      { name: 'Anlage',        href: '/einstellungen/anlage',        icon: Home },
+      { name: 'Strompreise',   href: '/einstellungen/strompreise',   icon: Zap },
+      { name: 'Investitionen', href: '/einstellungen/investitionen', icon: PiggyBank },
+    ],
+  },
+  {
+    label: 'Daten',
+    prefixes: [
+      '/einstellungen/monatsdaten',
+      '/einstellungen/monatsabschluss',
+      '/einstellungen/import',
+      '/einstellungen/demo',
+      '/einstellungen/datenerfassung',
+    ],
+    tabs: [
+      { name: 'Monatsdaten',     href: '/einstellungen/monatsdaten',     icon: Database },
+      { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss', icon: CalendarCheck },
+      { name: 'Import/Export',   href: '/einstellungen/import',          icon: Upload },
+      { name: 'Demo-Daten',      href: '/einstellungen/demo',            icon: FlaskConical },
+      { name: 'Datenerfassung',  href: '/einstellungen/datenerfassung',  icon: BookOpen },
+    ],
+  },
+  {
+    label: 'System',
+    prefixes: [
+      '/einstellungen/solarprognose',
+      '/einstellungen/allgemein',
+    ],
+    tabs: [
+      { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Cpu },
+      { name: 'Allgemein',     href: '/einstellungen/allgemein',     icon: Settings },
+    ],
+  },
+  {
+    label: 'Home Assistant',
+    prefixes: [
+      '/einstellungen/sensor-mapping',
+      '/einstellungen/ha-statistik-import',
+      '/einstellungen/ha-export',
+    ],
+    tabs: [
+      { name: 'Sensor-Zuordnung',  href: '/einstellungen/sensor-mapping',        icon: MapPin },
+      { name: 'Statistik-Import',  href: '/einstellungen/ha-statistik-import',   icon: BarChart2 },
+      { name: 'MQTT-Export',       href: '/einstellungen/ha-export',             icon: Radio },
+    ],
+  },
+  {
+    label: 'Community',
+    prefixes: [
+      '/einstellungen/community',
+    ],
+    tabs: [
+      { name: 'Daten teilen', href: '/einstellungen/community', icon: Share2 },
+    ],
+  },
 ]
+
+/** Findet die Einstellungen-Gruppe anhand des aktuellen Pfads */
+function getEinstellungenGruppe(pathname: string): TabGroup | null {
+  return (
+    einstellungenGruppen.find(g =>
+      g.prefixes.some(p => pathname.startsWith(p))
+    ) ?? null
+  )
+}
 
 export default function SubTabs() {
   const location = useLocation()
+  const path = location.pathname
 
-  // Bestimme welche Tabs angezeigt werden sollen
-  const getTabs = () => {
-    if (location.pathname.startsWith('/cockpit')) return cockpitTabs
-    if (location.pathname.startsWith('/auswertungen')) return auswertungenTabs
-    if (location.pathname.startsWith('/einstellungen')) return einstellungenTabs
-    return null
+  // ── Cockpit ──────────────────────────────────────────────────────────────
+  if (path.startsWith('/cockpit')) {
+    return <TabBar tabs={cockpitTabs} />
   }
 
-  const tabs = getTabs()
+  // ── Einstellungen – gruppen-aware ────────────────────────────────────────
+  if (path.startsWith('/einstellungen')) {
+    const gruppe = getEinstellungenGruppe(path)
+    if (!gruppe) return null
+    return <TabBar tabs={gruppe.tabs} groupLabel={gruppe.label} />
+  }
 
-  // Keine Sub-Tabs für andere Seiten
-  if (!tabs || tabs.length === 0) return null
+  return null
+}
+
+// ─── Wiederverwendbare Tab-Leiste ─────────────────────────────────────────────
+function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) {
+  if (tabs.length === 0) return null
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <div className="px-4 sm:px-6">
-        <nav className="flex space-x-1 py-2 overflow-x-auto">
+        <nav className="flex items-center gap-1 py-2 overflow-x-auto">
+          {groupLabel && (
+            <>
+              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap pr-2">
+                {groupLabel}
+              </span>
+              <span className="h-4 w-px bg-gray-300 dark:bg-gray-600 mr-2 shrink-0" />
+            </>
+          )}
           {tabs.map((tab) => (
             <NavLink
               key={tab.href}

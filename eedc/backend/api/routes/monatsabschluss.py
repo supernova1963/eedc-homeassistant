@@ -73,6 +73,8 @@ class InvestitionStatus(BaseModel):
     typ: str
     bezeichnung: str
     felder: list[FeldStatus]
+    kategorie: Optional[str] = None          # Für Typ "sonstiges": erzeuger/verbraucher/speicher
+    sonstige_positionen: list[dict] = []     # Strukturierte Erträge & Ausgaben
 
 
 class MonatsabschlussResponse(BaseModel):
@@ -104,6 +106,7 @@ class InvestitionWerte(BaseModel):
     """Werte für eine Investition."""
     investition_id: int
     felder: list[FeldWert]
+    sonstige_positionen: Optional[list[dict]] = None  # Strukturierte Erträge & Ausgaben
 
 
 class MonatsabschlussInput(BaseModel):
@@ -197,7 +200,22 @@ INVESTITION_FELDER = {
     "balkonkraftwerk": [
         {"feld": "pv_erzeugung_kwh", "label": "PV Erzeugung", "einheit": "kWh"},
         {"feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh"},
+        {"feld": "speicher_ladung_kwh", "label": "Speicher Ladung", "einheit": "kWh"},
+        {"feld": "speicher_entladung_kwh", "label": "Speicher Entladung", "einheit": "kWh"},
     ],
+    # Sonstige Positionen – Felder je nach kategorie (erzeuger/verbraucher/speicher)
+    "sonstiges": {
+        "erzeuger": [
+            {"feld": "erzeugung_kwh", "label": "Erzeugung", "einheit": "kWh"},
+        ],
+        "verbraucher": [
+            {"feld": "verbrauch_sonstig_kwh", "label": "Verbrauch", "einheit": "kWh"},
+        ],
+        "speicher": [
+            {"feld": "erzeugung_kwh", "label": "Erzeugung/Entladung", "einheit": "kWh"},
+            {"feld": "verbrauch_sonstig_kwh", "label": "Verbrauch/Ladung", "einheit": "kWh"},
+        ],
+    },
 }
 
 
@@ -322,7 +340,18 @@ async def get_monatsabschluss(
     # Investitionen aufbereiten
     investitionen_status: list[InvestitionStatus] = []
     for inv in anlage.investitionen:
-        felder_config = INVESTITION_FELDER.get(inv.typ, [])
+        inv_felder_def = INVESTITION_FELDER.get(inv.typ)
+        if not inv_felder_def:
+            continue
+
+        # Für "sonstiges": kategorie-spezifische Felder auflösen
+        if inv.typ == "sonstiges" and isinstance(inv_felder_def, dict):
+            kategorie = (inv.parameter or {}).get("kategorie", "verbraucher")
+            felder_config = inv_felder_def.get(kategorie, inv_felder_def.get("verbraucher", []))
+        else:
+            felder_config = inv_felder_def
+            kategorie = None
+
         if not felder_config:
             continue
 
@@ -389,11 +418,18 @@ async def get_monatsabschluss(
                 sensor_id=sensor_id,
             ))
 
+        # sonstige_positionen aus verbrauch_daten lesen (für alle Typen)
+        inv_sonstige_pos = []
+        if verbrauch_daten and isinstance(verbrauch_daten.get("sonstige_positionen"), list):
+            inv_sonstige_pos = verbrauch_daten["sonstige_positionen"]
+
         investitionen_status.append(InvestitionStatus(
             id=inv.id,
             typ=inv.typ,
             bezeichnung=inv.bezeichnung,
             felder=felder,
+            kategorie=kategorie,
+            sonstige_positionen=inv_sonstige_pos,
         ))
 
     # Optionale Felder aufbereiten (manuelle Eingaben, nicht aus HA)
@@ -542,6 +578,14 @@ async def save_monatsabschluss(
         verbrauch_daten = imd.verbrauch_daten or {}
         for feld_wert in inv_werte.felder:
             verbrauch_daten[feld_wert.feld] = feld_wert.wert
+
+        # Sonstige Positionen (Erträge & Ausgaben) speichern
+        if inv_werte.sonstige_positionen is not None:
+            gueltige = [
+                p for p in inv_werte.sonstige_positionen
+                if isinstance(p, dict) and p.get("betrag", 0) > 0 and str(p.get("bezeichnung", "")).strip()
+            ]
+            verbrauch_daten["sonstige_positionen"] = gueltige
 
         imd.verbrauch_daten = verbrauch_daten
         flag_modified(imd, "verbrauch_daten")

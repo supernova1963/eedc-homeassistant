@@ -188,6 +188,9 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           ergebnis={`= ${(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €`}
         />
       </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 italic -mt-2">
+        Basis: tatsächlich erfasste km & Ladedaten aus Monatsdaten (inkl. Dienst- und Privatfahrten)
+      </p>
 
       {/* Charts Row 1 */}
       <div className="grid md:grid-cols-2 gap-6">

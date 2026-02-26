@@ -176,6 +176,9 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           ergebnis={`= ${z.ersparnis_euro.toFixed(2)} €`}
         />
       </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 italic -mt-2">
+        Basis: tatsächlich erfasste Wärmemengen (Heizung + Warmwasser) aus Monatsdaten
+      </p>
 
       {/* Charts Row 1 */}
       <div className="grid md:grid-cols-2 gap-6">

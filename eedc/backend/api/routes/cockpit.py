@@ -75,6 +75,8 @@ class CockpitUebersichtResponse(BaseModel):
     ev_ersparnis_euro: float
     ust_eigenverbrauch_euro: Optional[float] = None  # USt auf Eigenverbrauch (nur bei Regelbesteuerung)
     netto_ertrag_euro: float
+    bkw_ersparnis_euro: float = 0          # BKW Eigenverbrauch-Ersparnis
+    sonstige_netto_euro: float = 0         # Sonstige Positionen (BHKW, THG-Quote etc.) netto
     jahres_rendite_prozent: Optional[float]  # Jahres-Ertrag / Investition (Rendite p.a.)
     investition_gesamt_euro: float
     steuerliche_behandlung: Optional[str] = None  # regelbesteuerung wenn aktiv
@@ -171,6 +173,9 @@ async def get_cockpit_uebersicht(
     emob_pv_ladung = 0.0
     bkw_erzeugung = 0.0
     bkw_eigenverbrauch = 0.0
+    sonstige_ertraege_gesamt = 0.0
+    sonstige_ausgaben_gesamt = 0.0
+    dienstlich_ladekosten_euro = 0.0  # Dienstliche Wallbox: Netzkosten + entg. Einspeisung
 
     # Zeitraum aus InvestitionMonatsdaten ermitteln
     zeitraum_monate = set()
@@ -203,16 +208,34 @@ async def get_cockpit_uebersicht(
             )
 
         elif inv.typ in ("e-auto", "wallbox"):
-            emob_km += data.get("km_gefahren", 0) or 0
-            emob_ladung += (
-                data.get("ladung_kwh", 0) or
-                data.get("verbrauch_kwh", 0) or 0
-            )
-            emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
+            if (inv.parameter or {}).get("ist_dienstlich", False):
+                # Dienstliche Nutzung (Firmenwagen E-Auto oder Firmenwagen-Wallbox):
+                # Ladekosten = Netzbezug + entgangene Einspeisung; kein Benzinvergleich
+                netz_kwh = data.get("ladung_netz_kwh", 0) or 0
+                pv_kwh = data.get("ladung_pv_kwh", 0) or 0
+                dienstlich_ladekosten_euro += (
+                    netz_kwh * wallbox_preis_cent +
+                    pv_kwh * einspeise_verguetung_cent
+                ) / 100
+            else:
+                emob_km += data.get("km_gefahren", 0) or 0
+                emob_ladung += (
+                    data.get("ladung_kwh", 0) or
+                    data.get("verbrauch_kwh", 0) or 0
+                )
+                emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
 
         elif inv.typ == "balkonkraftwerk":
             bkw_erzeugung += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
             bkw_eigenverbrauch += data.get("eigenverbrauch_kwh", 0) or 0
+
+        # Sonstige Positionen für ALLE Investitionstypen (Wallbox-Erstattungen, THG-Quote, etc.)
+        summen = berechne_sonstige_summen(data)
+        sonstige_ertraege_gesamt += summen["ertraege_euro"]
+        sonstige_ausgaben_gesamt += summen["ausgaben_euro"]
+
+    # Dienstliche Wallbox-Ladekosten als kalkulatorische Ausgaben verbuchen
+    sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
 
     # ==========================================================================
     # Monatsdaten NUR für Anlagen-Energiebilanz (Einspeisung, Netzbezug)
@@ -284,8 +307,12 @@ async def get_cockpit_uebersicht(
     gas_preis_cent = 10.0
     wp_ersparnis = ((wp_waerme / 0.9 * gas_preis_cent) - (wp_strom * wp_preis_cent)) / 100 if wp_waerme > 0 else 0
 
-    # E-Mobilität
-    emob_invs = [i for i in investitionen if i.typ in ("e-auto", "wallbox")]
+    # E-Mobilität (dienstliche E-Autos/Wallboxen ausgeschlossen – ROI läuft über sonstige_netto)
+    emob_invs = [
+        i for i in investitionen
+        if i.typ in ("e-auto", "wallbox")
+        and not (i.parameter or {}).get("ist_dienstlich", False)
+    ]
     hat_emobilitaet = len(emob_invs) > 0
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
     benzin_verbrauch = emob_km * 7 / 100
@@ -305,7 +332,36 @@ async def get_cockpit_uebersicht(
     ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
     netto_ertrag = einspeise_erloes + ev_ersparnis
 
-    investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
+    # Investition mit Mehrkosten-Ansatz (analog zu aussichten.py)
+    # WP/E-Auto: nur Aufpreis gegenüber Alternative zählt
+    PV_RELEVANTE_TYPEN = ["pv-module", "wechselrichter", "speicher", "wallbox", "balkonkraftwerk"]
+    investition_pv_system = 0.0
+    investition_wp_mehrkosten = 0.0
+    investition_eauto_mehrkosten = 0.0
+    investition_sonstige = 0.0
+    for inv in investitionen:
+        kosten = inv.anschaffungskosten_gesamt or 0
+        if inv.typ in PV_RELEVANTE_TYPEN:
+            investition_pv_system += kosten
+        elif inv.typ == "waermepumpe":
+            alternativ_kosten = 8000.0
+            if inv.parameter:
+                alternativ_kosten = inv.parameter.get("alternativ_kosten_euro", 8000.0)
+            investition_wp_mehrkosten += max(0, kosten - alternativ_kosten)
+        elif inv.typ == "e-auto":
+            alternativ_kosten = 35000.0
+            if inv.parameter:
+                alternativ_kosten = inv.parameter.get("alternativ_kosten_euro", 35000.0)
+            investition_eauto_mehrkosten += max(0, kosten - alternativ_kosten)
+        else:
+            investition_sonstige += kosten
+    investition_gesamt = (
+        investition_pv_system + investition_wp_mehrkosten +
+        investition_eauto_mehrkosten + investition_sonstige
+    )
+    # Fallback: volle Kosten falls Mehrkosten-Ansatz zu 0 führt
+    if investition_gesamt <= 0:
+        investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
 
     # USt auf Eigenverbrauch bei Regelbesteuerung
     ust_eigenverbrauch = 0.0
@@ -321,7 +377,12 @@ async def get_cockpit_uebersicht(
         )
         netto_ertrag -= ust_eigenverbrauch
 
-    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis
+    # BKW: Eigenverbrauch spart Netzbezug (wird separat getrackt, nicht in netto_ertrag)
+    bkw_ersparnis = bkw_eigenverbrauch * netzbezug_preis_cent / 100
+    # Sonstige Positionen netto (BHKW-Ertrag, THG-Quote minus Wartungskosten etc.)
+    sonstige_netto = sonstige_ertraege_gesamt - sonstige_ausgaben_gesamt
+
+    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis + bkw_ersparnis + sonstige_netto
     roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
 
     # ==========================================================================
@@ -405,6 +466,8 @@ async def get_cockpit_uebersicht(
         ev_ersparnis_euro=round(ev_ersparnis, 2),
         ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
         netto_ertrag_euro=round(netto_ertrag, 2),
+        bkw_ersparnis_euro=round(bkw_ersparnis, 2),
+        sonstige_netto_euro=round(sonstige_netto, 2),
         jahres_rendite_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
         investition_gesamt_euro=round(investition_gesamt, 2),
         steuerliche_behandlung=steuerliche_beh if steuerliche_beh != "keine_ust" else None,

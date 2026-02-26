@@ -39,11 +39,19 @@ export interface FeldStatus {
   typ: 'number' | 'text'  // Feldtyp
 }
 
+export interface SonstigePosition {
+  bezeichnung: string
+  betrag: number
+  typ: 'ertrag' | 'ausgabe'
+}
+
 export interface InvestitionStatus {
   id: number
   typ: string
   bezeichnung: string
   felder: FeldStatus[]
+  kategorie?: string             // Für Typ "sonstiges": erzeuger/verbraucher/speicher
+  sonstige_positionen: SonstigePosition[]
 }
 
 export interface MonatsabschlussResponse {
@@ -66,6 +74,7 @@ export interface FeldWert {
 export interface InvestitionWerte {
   investition_id: number
   felder: FeldWert[]
+  sonstige_positionen?: SonstigePosition[] | null
 }
 
 export interface MonatsabschlussInput {

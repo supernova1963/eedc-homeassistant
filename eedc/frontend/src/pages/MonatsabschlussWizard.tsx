@@ -26,6 +26,7 @@ import {
   Loader2,
   FileText,
   Database,
+  Wrench,
 } from 'lucide-react'
 import { anlagenApi, monatsabschlussApi, haStatisticsApi } from '../api'
 import type {
@@ -34,8 +35,10 @@ import type {
   InvestitionStatus,
   MonatsabschlussInput,
   FeldWert,
+  SonstigePosition,
 } from '../api'
 import Alert from '../components/ui/Alert'
+import SonstigePositionenFields from '../components/forms/SonstigePositionenFields'
 
 const MONAT_NAMEN = [
   '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -48,12 +51,15 @@ const TYP_ICONS: Record<string, React.ReactNode> = {
   waermepumpe: <Thermometer className="w-5 h-5" />,
   'e-auto': <Car className="w-5 h-5" />,
   wallbox: <Zap className="w-5 h-5" />,
+  balkonkraftwerk: <Sun className="w-5 h-5" />,
+  sonstiges: <Wrench className="w-5 h-5" />,
 }
 
 interface WizardState {
   basis: Record<string, number | null>
   optionale: Record<string, number | string | null>  // Sonderkosten, Notizen
   investitionen: Record<number, Record<string, number | null>>
+  sonstigePositionen: Record<number, SonstigePosition[]>
 }
 
 export default function MonatsabschlussWizard() {
@@ -78,6 +84,7 @@ export default function MonatsabschlussWizard() {
     basis: {},
     optionale: {},
     investitionen: {},
+    sonstigePositionen: {},
   })
 
   // Jahr und Monat aus URL oder automatisch ermitteln
@@ -151,14 +158,21 @@ export default function MonatsabschlussWizard() {
         }
 
         const invValues: Record<number, Record<string, number | null>> = {}
+        const invSonstigePos: Record<number, SonstigePosition[]> = {}
         for (const inv of response.investitionen) {
           invValues[inv.id] = {}
           for (const feld of inv.felder) {
             invValues[inv.id][feld.feld] = feld.aktueller_wert
           }
+          invSonstigePos[inv.id] = inv.sonstige_positionen || []
         }
 
-        setValues({ basis: basisValues, optionale: optionaleValues, investitionen: invValues })
+        setValues({
+          basis: basisValues,
+          optionale: optionaleValues,
+          investitionen: invValues,
+          sonstigePositionen: invSonstigePos,
+        })
       } catch (e) {
         setError('Fehler beim Laden der Monatsdaten')
         console.error(e)
@@ -350,10 +364,14 @@ export default function MonatsabschlussWizard() {
           }
         }
 
-        if (felder.length > 0) {
+        const positionen = values.sonstigePositionen[inv.id] || []
+        const gueltigePositionen = positionen.filter(p => p.betrag > 0 && p.bezeichnung.trim())
+
+        if (felder.length > 0 || gueltigePositionen.length > 0) {
           input.investitionen.push({
             investition_id: inv.id,
             felder,
+            sonstige_positionen: gueltigePositionen.length > 0 ? gueltigePositionen : null,
           })
         }
       }
@@ -503,6 +521,13 @@ export default function MonatsabschlussWizard() {
             investitionen={data.investitionen.filter(i => i.typ === steps[currentStep].id)}
             values={values.investitionen}
             onChange={(invId, feld, wert) => handleValueChange(feld, wert, invId)}
+            sonstigePositionen={values.sonstigePositionen}
+            onSonstigePositionenChange={(invId, pos) =>
+              setValues(prev => ({
+                ...prev,
+                sonstigePositionen: { ...prev.sonstigePositionen, [invId]: pos },
+              }))
+            }
           />
         )}
 
@@ -683,11 +708,15 @@ function InvestitionStep({
   investitionen,
   values,
   onChange,
+  sonstigePositionen,
+  onSonstigePositionenChange,
 }: {
   typ: string
   investitionen: InvestitionStatus[]
   values: Record<number, Record<string, number | null>>
   onChange: (invId: number, feld: string, wert: number | null) => void
+  sonstigePositionen: Record<number, SonstigePosition[]>
+  onSonstigePositionenChange: (invId: number, positionen: SonstigePosition[]) => void
 }) {
   return (
     <div className="space-y-6">
@@ -704,17 +733,28 @@ function InvestitionStep({
           <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
             <h3 className="font-medium text-gray-900 dark:text-white">
               {inv.bezeichnung}
+              {inv.kategorie && (
+                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                  ({inv.kategorie})
+                </span>
+              )}
             </h3>
           </div>
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {inv.felder.map(feld => (
-              <FeldInput
-                key={feld.feld}
-                feld={feld}
-                value={values[inv.id]?.[feld.feld]}
-                onChange={(wert) => onChange(inv.id, feld.feld, wert)}
-              />
-            ))}
+          <div className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {inv.felder.map(feld => (
+                <FeldInput
+                  key={feld.feld}
+                  feld={feld}
+                  value={values[inv.id]?.[feld.feld]}
+                  onChange={(wert) => onChange(inv.id, feld.feld, wert)}
+                />
+              ))}
+            </div>
+            <SonstigePositionenFields
+              positionen={sonstigePositionen[inv.id] || []}
+              onChange={(pos) => onSonstigePositionenChange(inv.id, pos)}
+            />
           </div>
         </div>
       ))}

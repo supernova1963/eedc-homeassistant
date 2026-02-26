@@ -175,6 +175,9 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           ergebnis={`= ${z.co2_ersparnis_kg.toFixed(0)} kg`}
         />
       </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 italic -mt-2">
+        Basis: tatsächlich erfasster Eigenverbrauch aus Monatsdaten
+      </p>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

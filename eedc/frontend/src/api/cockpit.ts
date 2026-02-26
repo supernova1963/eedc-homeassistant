@@ -58,6 +58,8 @@ export interface CockpitUebersicht {
   ev_ersparnis_euro: number
   ust_eigenverbrauch_euro: number | null  // USt auf Eigenverbrauch (nur bei Regelbesteuerung)
   netto_ertrag_euro: number
+  bkw_ersparnis_euro: number             // BKW Eigenverbrauch-Ersparnis
+  sonstige_netto_euro: number            // Sonstige Positionen netto (BHKW, THG-Quote etc.)
   jahres_rendite_prozent: number | null  // Jahres-Ertrag / Investition (Rendite p.a.)
   investition_gesamt_euro: number
   steuerliche_behandlung: string | null  // 'regelbesteuerung' wenn aktiv

@@ -55,6 +55,7 @@ export type {
   MonatHistorie,
   FeldWert,
   InvestitionWerte,
+  SonstigePosition,
 } from './monatsabschluss'
 export type {
   HAStatisticsStatus,

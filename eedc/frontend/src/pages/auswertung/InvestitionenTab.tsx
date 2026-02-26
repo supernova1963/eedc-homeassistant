@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, FormelTooltip, fmtCalc } from '../../components/ui'
 import { useInvestitionen } from '../../hooks'
-import { investitionenApi, type ROIDashboardResponse, type ROIKomponente } from '../../api'
+import { investitionenApi, cockpitApi, type ROIDashboardResponse, type ROIKomponente, type CockpitUebersicht } from '../../api'
 import { KPICard } from './KPICard'
 import { COLORS, TYP_COLORS, TYP_LABELS } from './types'
 import type { useAktuellerStrompreis } from '../../hooks'
@@ -26,20 +26,26 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
   const { investitionen, loading: invLoading } = useInvestitionen(anlageId)
   const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(null)
   const [roiLoading, setRoiLoading] = useState(true)
+  const [cockpitData, setCockpitData] = useState<CockpitUebersicht | null>(null)
   const [expandedSystems, setExpandedSystems] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     const loadROI = async () => {
       try {
         setRoiLoading(true)
-        const data = await investitionenApi.getROIDashboard(
-          anlageId,
-          strompreis?.netzbezug_arbeitspreis_cent_kwh,
-          strompreis?.einspeiseverguetung_cent_kwh,
-          undefined, // benzinpreisEuro
-          selectedYear
-        )
-        setRoiData(data)
+        const [roi, cockpit] = await Promise.all([
+          investitionenApi.getROIDashboard(
+            anlageId,
+            strompreis?.netzbezug_arbeitspreis_cent_kwh,
+            strompreis?.einspeiseverguetung_cent_kwh,
+            undefined,
+            selectedYear
+          ),
+          // Alle Zeiträume (kein Jahr-Filter) für realisierte Gesamtwerte
+          cockpitApi.getUebersicht(anlageId),
+        ])
+        setRoiData(roi)
+        setCockpitData(cockpit)
       } catch (e) {
         console.error('ROI-Dashboard Fehler:', e)
       } finally {
@@ -162,6 +168,72 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           ergebnis={roiData?.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre.toFixed(1)} Jahre bis zur Kostendeckung` : undefined}
         />
       </div>
+
+      {/* Tatsächlich realisiert – Vergleich mit konfigurierten Werten */}
+      {cockpitData && cockpitData.anzahl_monate > 0 && roiData && (() => {
+        const invest = roiData.gesamt_relevante_kosten
+        const kumuliert = (cockpitData.netto_ertrag_euro || 0)
+          + (cockpitData.wp_ersparnis_euro || 0)
+          + (cockpitData.emob_ersparnis_euro || 0)
+          + (cockpitData.bkw_ersparnis_euro || 0)
+          + (cockpitData.sonstige_netto_euro || 0)
+        const jaehrlichRealisiert = kumuliert / (cockpitData.anzahl_monate / 12)
+        const roiRealisiert = invest > 0 ? (jaehrlichRealisiert / invest * 100) : 0
+        const amortRealisiert = jaehrlichRealisiert > 0 ? (invest / jaehrlichRealisiert) : null
+        const realisierungsquote = roiData.gesamt_jahres_einsparung > 0
+          ? (jaehrlichRealisiert / roiData.gesamt_jahres_einsparung * 100)
+          : null
+
+        return (
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                  Tatsächlich realisiert
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Basis: {cockpitData.anzahl_monate} Monate Echtdaten
+                  {cockpitData.zeitraum_von && cockpitData.zeitraum_bis
+                    ? ` (${cockpitData.zeitraum_von} – ${cockpitData.zeitraum_bis})`
+                    : ''}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-6">
+                <div className="text-center">
+                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                    {Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Ø Jahresersparnis</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                    {roiRealisiert.toFixed(1)} %
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">ROI p.a.</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                    {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Amortisation</p>
+                </div>
+                {realisierungsquote !== null && (
+                  <div className="text-center">
+                    <p className={`text-base font-bold ${realisierungsquote >= 90 ? 'text-green-600 dark:text-green-400' : realisierungsquote >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {realisierungsquote.toFixed(0)} %
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Realisierungsquote</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
+              Die Kacheln oben zeigen Prognosen auf Basis konfigurierter Parameter und aktueller Strompreise.
+              Die Realisierungsquote zeigt, wie viel des konfigurierten Potenzials tatsächlich erreicht wurde.
+            </p>
+          </div>
+        )
+      })()}
 
       {/* Investitionen nach Typ - Pie Chart */}
       <div className="grid md:grid-cols-2 gap-6">

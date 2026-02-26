@@ -94,6 +94,8 @@ def berechne_monatskennzahlen(
     # Preise (Cent/kWh)
     einspeiseverguetung_cent: float = 8.2,
     netzbezug_preis_cent: float = 30.0,
+    # Grundpreis (Euro/Monat) - wird zu den Netzbezugskosten addiert
+    grundpreis_euro_monat: float = 0,
     # Anlage
     leistung_kwp: Optional[float] = None,
 ) -> MonatsKennzahlen:
@@ -117,6 +119,7 @@ def berechne_monatskennzahlen(
         v2h_entladung_kwh: Aus E-Auto ins Haus entladene Energie (V2H)
         einspeiseverguetung_cent: Vergütung pro kWh in Cent
         netzbezug_preis_cent: Strompreis pro kWh in Cent
+        grundpreis_euro_monat: Monatlicher Grundpreis in Euro (wird zu Netzbezugskosten addiert)
         leistung_kwp: Anlagenleistung in kWp (für spezifischen Ertrag)
 
     Returns:
@@ -138,7 +141,7 @@ def berechne_monatskennzahlen(
 
     # Finanzielle Berechnungen (Cent -> Euro)
     einspeise_erloes = einspeisung_kwh * einspeiseverguetung_cent / 100
-    netzbezug_kosten = netzbezug_kwh * netzbezug_preis_cent / 100
+    netzbezug_kosten = netzbezug_kwh * netzbezug_preis_cent / 100 + grundpreis_euro_monat
     ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
 
     # Netto-Ertrag der PV-Anlage:

@@ -871,7 +871,12 @@ function SparklineChart({ monatsdaten, selectedYear }: {
 
 function AmortisationsBar({ data }: { data: CockpitUebersicht }) {
   const invest = data.investition_gesamt_euro
-  const kumuliert = data.netto_ertrag_euro
+  // Kumulierte Gesamtersparnis: alle Komponenten (analog zu jahres_rendite_prozent im Backend)
+  const kumuliert = (data.netto_ertrag_euro || 0)
+    + (data.wp_ersparnis_euro || 0)
+    + (data.emob_ersparnis_euro || 0)
+    + (data.bkw_ersparnis_euro || 0)
+    + (data.sonstige_netto_euro || 0)
   const progress = Math.min(100, Math.max(0, (kumuliert / invest) * 100))
 
   let amortJahr: number | null = null
@@ -881,6 +886,10 @@ function AmortisationsBar({ data }: { data: CockpitUebersicht }) {
       amortJahr = new Date().getFullYear() + Math.ceil((invest - kumuliert) / jaehrlich)
     }
   }
+
+  const jaehrlich = data.anzahl_monate > 0 && kumuliert > 0
+    ? kumuliert / (data.anzahl_monate / 12)
+    : null
 
   return (
     <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
@@ -907,6 +916,12 @@ function AmortisationsBar({ data }: { data: CockpitUebersicht }) {
           </p>
         )
       }
+      {jaehrlich && (
+        <p className="text-xs text-emerald-500/70 dark:text-emerald-400/60 mt-1 italic">
+          Basis: tatsächlich realisierte Erträge & Kosten
+          (Ø {Math.round(jaehrlich).toLocaleString('de')} €/Jahr über {data.anzahl_monate} Monate)
+        </p>
+      )}
     </div>
   )
 }

@@ -161,7 +161,7 @@ export function createMonatsZeitreihe(
       ? eigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
       : 0
     const netzbezug_kosten = strompreis
-      ? md.netzbezug_kwh * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+      ? md.netzbezug_kwh * strompreis.netzbezug_arbeitspreis_cent_kwh / 100 + (strompreis.grundpreis_euro_monat || 0)
       : 0
     const netto_ertrag = einspeise_erloes + ev_ersparnis
 

@@ -140,6 +140,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
           benzinpreis_euro: params.benzinpreis_euro?.toString() || '1.65',
           v2h_faehig: (params.v2h_faehig as boolean) ?? false,
           v2h_entladeleistung_kw: params.v2h_entladeleistung_kw?.toString() || '',
+          ist_dienstlich: (params.ist_dienstlich as boolean) ?? false,
         }
       case 'speicher':
         return {
@@ -181,6 +182,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '11',
           bidirektional: (params.bidirektional as boolean) ?? false,
           pv_optimiert: (params.pv_optimiert as boolean) ?? true,
+          ist_dienstlich: (params.ist_dienstlich as boolean) ?? false,
         }
       case 'wechselrichter':
         return {
@@ -619,6 +621,22 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               onChange={onChange}
             />
           )}
+          <label className="flex items-center gap-2 text-sm mt-2">
+            <input
+              type="checkbox"
+              name="param_ist_dienstlich"
+              checked={paramData.ist_dienstlich as boolean}
+              onChange={onChange}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-gray-700 dark:text-gray-300">Firmenwagen (dienstlich – kein Benzinvergleich im ROI)</span>
+          </label>
+          {paramData.ist_dienstlich && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 ml-6 -mt-1">
+              Die Kraftstoffersparnis geht an den Arbeitgeber. ROI-Berechnung: nur PV-Eigenverbrauchsvorteil
+              und AG-Erstattung (als "Sonstiger Ertrag" im Monatsabschluss erfassen).
+            </p>
+          )}
         </div>
       )
 
@@ -969,6 +987,23 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               />
               <span className="text-gray-700 dark:text-gray-300">PV-Überschussladen möglich</span>
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="param_ist_dienstlich"
+                checked={paramData.ist_dienstlich as boolean}
+                onChange={onChange}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-gray-700 dark:text-gray-300">Ausschließlich dienstliches Laden (Firmenwagen)</span>
+            </label>
+            {paramData.ist_dienstlich && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 ml-6 -mt-1">
+                ROI-Berechnung: Netzkosten + entgangene Einspeisung als Ausgaben.
+                Erträge (z. B. AG-Erstattung) als "Sonstige Erträge" im Monatsabschluss erfassen.
+                Für gemischte Nutzung (privat + dienstlich): zwei separate Wallbox-Einträge anlegen.
+              </p>
+            )}
           </div>
         </div>
       )
