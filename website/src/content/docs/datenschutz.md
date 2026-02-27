@@ -15,7 +15,7 @@ Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit deinen
 Die Datenverarbeitung auf dieser Website erfolgt durch den Websitebetreiber. Dessen Kontaktdaten findest du im [Impressum](/eedc-homeassistant/impressum/).
 
 **Wie erfassen wir deine Daten?**
-Diese Website ist eine statische Seite, gehostet auf GitHub Pages. Es werden keine Cookies gesetzt, keine Formulare verarbeitet und kein Tracking durchgeführt.
+Diese Website ist eine statische Seite, gehostet auf GitHub Pages. Es werden keine Cookies gesetzt und kein Tracking durchgeführt. Über das Kontaktformular auf der Support-Seite kannst du uns eine Nachricht senden — die Daten werden dabei über den Dienst [Formspree](https://formspree.io) verarbeitet (siehe Abschnitt 6).
 
 ---
 
@@ -32,7 +32,7 @@ Diese Website wird auf **GitHub Pages** gehostet. Beim Besuch der Website kann G
 Gernot Rau
 Am Sträßchen 3
 51588 Nümbrecht
-E-Mail: gernot.rau@t-online.de
+Kontakt: [Kontaktformular](/eedc-homeassistant/support/)
 
 ### Deine Rechte
 
@@ -50,7 +50,13 @@ Diese Website verwendet **keine** Analyse-Tools (wie Google Analytics) und **kei
 
 ---
 
-## 5. Hinweis zur EEDC-Software
+## 5. Kontaktformular
+
+Das Kontaktformular auf der Support-Seite nutzt den Dienst **Formspree** (Formspree Inc., USA) zur Übermittlung deiner Nachricht. Wenn du das Formular nutzt, werden dein Name, deine E-Mail-Adresse und deine Nachricht an Formspree übermittelt und per E-Mail an uns weitergeleitet. Es gelten die [Datenschutzbestimmungen von Formspree](https://formspree.io/legal/privacy-policy/). Die Verarbeitung erfolgt auf Grundlage von Art. 6 Abs. 1 lit. a DSGVO (Einwilligung durch Absenden des Formulars).
+
+---
+
+## 6. Hinweis zur EEDC-Software
 
 Diese Datenschutzerklärung gilt ausschließlich für diese Website. Die EEDC-Software selbst verarbeitet Daten lokal auf deinem eigenen System. Die optionale Community-Funktion überträgt ausschließlich anonymisierte, aggregierte Leistungsdaten – keine personenbezogenen Informationen.
 

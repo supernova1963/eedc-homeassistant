@@ -11,7 +11,7 @@ Am Sträßchen 3
 
 ## Kontakt
 
-E-Mail: gernot.rau@t-online.de
+Kontaktaufnahme über das [Kontaktformular auf der Support-Seite](/eedc-homeassistant/support/).
 
 ## Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
 
