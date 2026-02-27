@@ -66,6 +66,47 @@ gh release create vX.Y.Z \
 > **WICHTIG:** Home Assistant Add-ons lesen das Changelog aus `eedc/CHANGELOG.md`,
 > nicht aus dem Repository-Root! Bei Releases immer beide Dateien synchron halten.
 
+### Website (Astro Starlight)
+```bash
+# Entwicklungsserver
+cd website && npm run dev
+# URL: http://localhost:4321/eedc-homeassistant/
+
+# Build testen
+cd website && npm run build
+```
+
+**Technik:** Astro Starlight (v0.37), GitHub Pages, German-only (`root` locale)
+**Live:** https://supernova1963.github.io/eedc-homeassistant/
+**Deployment:** Automatisch via `.github/workflows/deploy-website.yml` bei Push auf `main` (paths: `website/**`, `docs/**`, `CHANGELOG.md`)
+
+**Dateistruktur:**
+```
+website/
+├── astro.config.mjs              # Konfiguration, Sidebar, Locale
+├── src/
+│   ├── content/docs/             # Alle Seiten (flat, kein de/ Prefix)
+│   │   ├── index.mdx             # Startseite (Splash-Template)
+│   │   ├── features.mdx          # Features mit Screenshots
+│   │   ├── installation.md       # Installationsanleitung
+│   │   ├── support.mdx           # Support + Formspree-Kontaktformular
+│   │   ├── ueber.md              # Über das Projekt
+│   │   ├── benutzerhandbuch.md   # Migriert aus docs/
+│   │   ├── architektur.md        # Migriert aus docs/
+│   │   ├── entwicklung.md        # Migriert aus docs/
+│   │   ├── setup-devmachine.md   # Migriert aus docs/
+│   │   ├── changelog.md          # Migriert aus CHANGELOG.md
+│   │   ├── impressum.md          # Rechtliches
+│   │   └── datenschutz.md        # DSGVO
+│   ├── styles/custom.css         # EEDC-Branding (Amber-Akzent)
+│   └── assets/eedc-icon.png      # Logo
+└── public/images/                # Screenshots
+```
+
+**Wichtig:**
+- Starlight invertiert die Farbskala im Light Mode! `--sl-color-white` = Text (dunkel), `--sl-color-black` = Hintergrund (hell). Vollständige Grau-Skala für beide Modi in `custom.css` definieren.
+- Kontaktformular via Formspree (Form-ID in `support.mdx`), keine E-Mail-Adresse öffentlich sichtbar.
+
 ## Architektur-Prinzipien
 
 1. **Standalone-First:** Keine HA-Abhängigkeit für Kernfunktionen
@@ -392,6 +433,7 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - [x] Kleinunternehmerregelung ✓ (v2.4.0)
 - [x] Firmenwagen/Dienstliches Laden ✓ (v2.4.0)
 - [x] Realisierungsquote ✓ (v2.4.0)
+- [x] Website (Astro Starlight + GitHub Pages) ✓
 - [ ] KI-Insights
 
 ## HA-Integration Status (v2.0.0)
