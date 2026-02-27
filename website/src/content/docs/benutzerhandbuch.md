@@ -1,0 +1,1374 @@
+---
+title: "Benutzerhandbuch"
+description: "Vollständiges Benutzerhandbuch für EEDC - Energie Effizienz Data Center"
+---
+
+
+**Version 2.4.0** | Stand: Februar 2026
+
+---
+
+## Inhaltsverzeichnis
+
+1. [Einführung](#1-einführung)
+2. [Installation](#2-installation)
+3. [Ersteinrichtung (Setup-Wizard)](#3-ersteinrichtung-setup-wizard)
+4. [Navigation & Menüstruktur](#4-navigation--menüstruktur)
+5. [Cockpit (Dashboards)](#5-cockpit-dashboards)
+6. [Auswertungen](#6-auswertungen)
+7. [Community](#7-community)
+8. [Aussichten (Prognosen)](#8-aussichten-prognosen)
+9. [Einstellungen](#9-einstellungen)
+10. [Datenerfassung](#10-datenerfassung)
+11. [Sensor-Mapping](#11-sensor-mapping)
+12. [Monatsabschluss-Wizard](#12-monatsabschluss-wizard)
+13. [HA-Statistik Import](#13-ha-statistik-import)
+14. [Home Assistant Integration](#14-home-assistant-integration-optional)
+15. [Tipps & Best Practices](#15-tipps--best-practices)
+16. [Fehlerbehebung](#16-fehlerbehebung)
+
+---
+
+## 1. Einführung
+
+### Was ist eedc?
+
+**eedc** (Energie Effizienz Data Center) ist eine lokale Software zur Analyse deiner Photovoltaik-Anlage. Die Software hilft dir:
+
+- **Energieflüsse zu verstehen** – Wieviel erzeugst du? Wieviel verbrauchst du selbst?
+- **Wirtschaftlichkeit zu analysieren** – Wann amortisiert sich die Investition?
+- **Optimierungspotenziale zu erkennen** – Wie kannst du mehr Eigenverbrauch erreichen?
+- **Alle Komponenten im Blick zu behalten** – PV-Anlage, Speicher, E-Auto, Wärmepumpe
+
+### Grundprinzipien
+
+1. **Standalone-First**: EEDC funktioniert komplett ohne Home Assistant
+2. **Lokale Datenspeicherung**: Alle Daten bleiben auf deinem Server
+3. **Monatliche Granularität**: Daten werden pro Monat erfasst und ausgewertet
+4. **Flexible Datenquellen**: CSV-Import, manuelle Eingabe, oder Wetter-API
+
+### Systemanforderungen
+
+- **Standalone**: Docker oder Python 3.11+ mit Node.js 20+
+- **Home Assistant Add-on**: Home Assistant OS oder Supervised
+- **Browser**: Moderner Browser (Chrome, Firefox, Safari, Edge)
+
+---
+
+## 2. Installation
+
+### Option A: Home Assistant Add-on (empfohlen)
+
+1. **Repository hinzufügen**:
+   - Gehe zu *Einstellungen → Add-ons → Add-on Store*
+   - Klicke auf das Menü (⋮) → *Repositories*
+   - Füge hinzu: `https://github.com/supernova1963/eedc-homeassistant`
+
+2. **Add-on installieren**:
+   - Suche nach "EEDC" im Add-on Store
+   - Klicke auf *Installieren*
+   - Aktiviere "In Sidebar anzeigen"
+   - Starte das Add-on
+
+3. **Öffnen**:
+   - Klicke in der HA-Sidebar auf "eedc"
+   - Oder öffne direkt: `http://homeassistant.local:8099`
+
+### Option B: Docker (Standalone)
+
+```bash
+# In das eedc-Verzeichnis wechseln
+cd eedc
+
+# Image bauen
+docker build -t eedc .
+
+# Container starten mit persistentem Datenverzeichnis
+docker run -d \
+  --name eedc \
+  -p 8099:8099 \
+  -v $(pwd)/data:/data \
+  --restart unless-stopped \
+  eedc
+
+# Browser öffnen
+open http://localhost:8099
+```
+
+### Option C: Entwicklungsumgebung
+
+Siehe [DEVELOPMENT.md](DEVELOPMENT.md) für die lokale Entwicklungsumgebung.
+
+---
+
+## 3. Ersteinrichtung (Setup-Wizard)
+
+Beim ersten Start führt dich ein 7-Schritt-Wizard durch die Einrichtung.
+
+### Schritt 1: Willkommen
+
+- Übersicht der Features
+- Option: **Demo-Daten laden** zum Ausprobieren
+- Klicke "Weiter" um zu starten
+
+### Schritt 2: Anlage erstellen
+
+Hier legst du deine PV-Anlage an:
+
+| Feld | Beschreibung | Beispiel |
+|------|--------------|----------|
+| **Name** | Bezeichnung der Anlage | "Haus Musterstraße" |
+| **Adresse** | Straße, PLZ, Ort | Musterstraße 1, 12345 Musterstadt |
+| **Koordinaten** | Werden automatisch ermittelt | 48.1234, 11.5678 |
+| **Anlagenleistung** | Gesamt-kWp (wird später durch Module überschrieben) | 10.5 kWp |
+
+**Tipp**: Die Adresse wird für die Wetter-API und PVGIS-Prognosen benötigt. Klicke auf "Koordinaten ermitteln" nachdem du die Adresse eingegeben hast.
+
+### Schritt 3: Home Assistant (optional)
+
+- Prüft die Verbindung zu Home Assistant
+- Nur relevant wenn du HA-Features nutzen möchtest
+- Kann übersprungen werden
+
+### Schritt 4: Strompreise
+
+Konfiguriere deine Stromtarife:
+
+| Feld | Beschreibung | Typischer Wert (2026) |
+|------|--------------|----------------------|
+| **Bezugspreis** | Was du pro kWh zahlst | 32-40 ct/kWh |
+| **Einspeisevergütung** | Was du pro eingespeister kWh bekommst | 8-12 ct/kWh |
+| **Gültig ab** | Seit wann gilt dieser Tarif | 01.01.2024 |
+| **Verwendung** | Standard, Wärmepumpe oder Wallbox | Standard |
+
+**Hinweis**: Du kannst mehrere Tarife mit unterschiedlichen Gültigkeitszeiträumen anlegen.
+
+**Spezialtarife (NEU v2.4.0):** Für Wärmepumpe oder Wallbox mit separatem Stromzähler und günstigerem Tarif kann ein eigener Strompreis angelegt werden. Ohne Spezialtarif wird der Standard-Tarif verwendet.
+
+### Schritt 5: Geräte-Erkennung (optional)
+
+Falls Home Assistant verbunden ist:
+- Automatische Erkennung von Wechselrichtern, Speichern, E-Autos
+- Erkannte Geräte werden als Investitionen vorgeschlagen
+
+### Schritt 6: Investitionen
+
+Hier konfigurierst du alle Komponenten deiner Anlage:
+
+#### Wechselrichter
+- Kaufpreis, Installationsdatum
+- Lebensdauer (typisch: 15-20 Jahre)
+
+#### PV-Module
+- **Wichtig**: Müssen einem Wechselrichter zugeordnet werden!
+- Anzahl Module, Leistung pro Modul (Wp)
+- Ausrichtung (Süd, Ost, West, ...)
+- Neigung in Grad
+
+#### Speicher
+- Kapazität in kWh
+- Optional: Arbitrage-fähig (Netzbezug bei günstigem Strom)
+- Optional: Parent = Wechselrichter (für Hybrid-WR mit DC-Speicher)
+
+#### E-Auto
+- Optional: V2H-fähig (Vehicle-to-Home)
+- Optional: Nutzt V2H aktiv
+
+#### Wärmepumpe
+- **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi (NEU: SCOP in beta.10):
+  - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP.
+  - **SCOP (EU-Label):** Saisonaler COP vom EU-Energielabel - realistischer als Hersteller-COP, aber standortunabhängig. Wähle die passende Vorlauftemperatur (35°C für Fußbodenheizung, 55°C für Heizkörper).
+  - **Getrennte COPs:** Separate Werte für Heizung (~3,5-4,5 bei 35°C) und Warmwasser (~2,5-3,5 bei 55°C) - präziser bei unterschiedlichen Betriebspunkten.
+- **Wärmebedarf:** Heiz- und Warmwasserbedarf in kWh/Jahr (aus Energieausweis)
+- **Vergleich:** Alter Energieträger (Gas/Öl/Strom) und Preis für ROI-Berechnung
+
+#### Weitere Komponenten
+- Wallbox, Balkonkraftwerk, Sonstiges
+
+### Schritt 7: Zusammenfassung
+
+- Übersicht aller Eingaben
+- Individualisierte nächste Schritte
+- Klicke "Einrichtung abschließen"
+
+---
+
+## 4. Navigation & Menüstruktur
+
+### Hauptnavigation (oben)
+
+Die horizontale Navigation enthält vier Hauptbereiche:
+
+| Bereich | Funktion |
+|---------|----------|
+| **Cockpit** | Übersicht mit KPIs, Energie-Fluss und Charts |
+| **Auswertungen** | Detaillierte Analysen in 6 Tabs |
+| **Community** | Anonymer Benchmark-Vergleich mit anderen PV-Anlagen |
+| **Aussichten** | Prognosen: 7-Tage, Langfristig, Trend, Finanzen |
+
+Plus ein Dropdown-Menü für **Einstellungen**.
+
+### Einstellungen-Dropdown
+
+Das Dropdown-Menü ist in vier Kategorien unterteilt:
+
+**Stammdaten:**
+- Anlage – PV-Anlage bearbeiten
+- Strompreise – Tarife verwalten
+- Investitionen – Komponenten konfigurieren
+
+**Daten:**
+- Monatsdaten – Energiedaten eingeben/bearbeiten
+- Import – CSV-Import/Export
+- Demo-Daten – Testdaten laden
+
+**System:**
+- Solarprognose – PVGIS-Prognose und Wetter-Provider
+- Allgemein – Version, Status
+
+**Optional:**
+- HA-Export – MQTT-Konfiguration (nur bei HA-Nutzung)
+
+### Sub-Tabs (kontextabhängig)
+
+Unter der Hauptnavigation erscheinen kontextabhängige Tabs:
+
+**Cockpit Sub-Tabs:**
+- Übersicht | PV-Anlage | E-Auto | Wärmepumpe | Speicher | Wallbox | Balkonkraftwerk | Sonstiges
+
+**Einstellungen Sub-Tabs:**
+- Anlage | Strompreise | Investitionen | Monatsdaten | Import/Export | Solarprognose | Allgemein
+
+---
+
+## 5. Cockpit (Dashboards)
+
+Das Cockpit zeigt dir alle wichtigen Kennzahlen auf einen Blick.
+
+### 5.1 Übersicht
+
+Das Cockpit zeigt alle wichtigen Kennzahlen auf einen Blick – ab v2.3.0 modernisiert:
+
+#### Hero-Leiste (oben)
+Die drei wichtigsten KPIs prominent dargestellt, jeweils mit Trend-Pfeil zum Vorjahr:
+- **Autarkie** (%), **Spezifischer Ertrag** (kWh/kWp), **Netto-Ertrag** (€)
+
+#### Energie-Fluss-Diagramm
+Zwei gestapelte Balkendiagramme zeigen:
+- **PV-Verteilung**: Wohin fließt der erzeugte Strom? (Direktverbrauch / Speicher / Einspeisung)
+- **Haus-Versorgung**: Woher kommt der Strom im Haus? (PV direkt / Speicher / Netzbezug)
+
+#### Energiebilanz
+- **PV-Erzeugung** – Gesamte Stromerzeugung in kWh
+- **Direktverbrauch** – Sofort selbst verbrauchter PV-Strom
+- **Einspeisung** – Ins Netz eingespeister Überschuss
+- **Netzbezug** – Aus dem Netz bezogener Strom
+- **Sparkline** – Monatserträge als kompaktes Balkendiagramm über den Gesamtzeitraum
+
+#### Effizienz-Quoten (Ring-Gauges)
+Anschauliche Ringdiagramme statt reiner Zahlen:
+- **Autarkie** = (Gesamtverbrauch - Netzbezug) / Gesamtverbrauch × 100%
+- **Eigenverbrauchsquote** = Eigenverbrauch / PV-Erzeugung × 100%
+
+#### Komponenten-Status
+Schnellstatus für alle Komponenten mit Klick-Navigation zu Details.
+
+#### Finanzielle Auswertung
+- Einspeiseerlös, eingesparte Stromkosten, Gesamt-Einsparung (€)
+- **Amortisations-Fortschrittsbalken**: Wie viel % der Investition ist zurückgeflossen? Mit geschätztem Amortisationsjahr (nur in der Gesamtansicht)
+
+#### CO2-Bilanz
+- Vermiedene CO2-Emissionen (kg)
+- Vergleich zu reinem Netzbezug
+
+### 5.2 PV-Anlage Dashboard
+
+Detailansicht für deine Photovoltaik:
+
+- **Wechselrichter-Übersicht** mit zugeordneten Modulen
+- **String-Vergleich** nach Ausrichtung (Süd, Ost, West)
+- **Spezifischer Ertrag** (kWh/kWp) – wichtig für Vergleiche
+- **SOLL-IST Vergleich** gegen PVGIS-Prognose
+
+#### SOLL-IST Vergleich verstehen
+
+| Kennzahl | Bedeutung |
+|----------|-----------|
+| **SOLL (PVGIS)** | Erwarteter Ertrag basierend auf Standort, Ausrichtung, Neigung |
+| **IST** | Tatsächlich gemessener Ertrag |
+| **Abweichung** | Positiv = besser als erwartet, Negativ = schlechter |
+
+**Typische Abweichungen:**
+- ±5% – Normal (Wetterschwankungen)
+- ±10-15% – Prüfen (Verschattung? Verschmutzung?)
+- >20% – Handlungsbedarf (Defekt? Fehlkonfiguration?)
+
+### 5.3 E-Auto Dashboard
+
+- **Gefahrene Kilometer** im Zeitraum
+- **Verbrauch** (kWh)
+- **Ladequellen-Aufteilung**:
+  - PV-Ladung (kostenlos)
+  - Netz-Ladung (zu Hause)
+  - Externe Ladung (unterwegs)
+- **Kostenersparnis** vs. Benziner/Diesel
+- **V2H-Entladung** (wenn aktiviert)
+
+### 5.4 Speicher Dashboard
+
+- **Ladezyklen** (Vollzyklen)
+- **Effizienz** = Entladung / Ladung × 100%
+- **Degradation** (Kapazitätsverlust über Zeit)
+- **Arbitrage-Analyse** (wenn aktiviert):
+  - Netzladung zu günstigem Strom
+  - Entladung bei hohem Preis
+  - Arbitrage-Gewinn
+
+### 5.5 Wärmepumpe Dashboard
+
+- **Stromverbrauch** (kWh)
+- **Erzeugte Wärme** (kWh)
+- **COP** (Coefficient of Performance) = Wärme / Strom
+- **Aufteilung**: Heizung vs. Warmwasser
+- **Einsparung** vs. Gas/Öl-Heizung
+
+### 5.6 Wallbox Dashboard
+
+- **Geladene Energie** (kWh)
+- **Ladevorgänge** (Anzahl)
+- **Durchschnittliche Lademenge**
+- **PV-Anteil** der Ladungen
+
+### 5.7 Balkonkraftwerk Dashboard
+
+- **Erzeugung** (kWh) - Stromerzeugung des BKW
+- **Eigenverbrauch** (kWh) - Selbst genutzter BKW-Strom (NEU)
+- **Einspeisung** (kWh) - Unvergütete Einspeisung (= Erzeugung - Eigenverbrauch)
+- **Optional**: Speicher-Nutzung (Ladung/Entladung)
+
+### KPI-Tooltips
+
+Jede Kennzahl zeigt bei Hover einen Tooltip mit:
+- **Formel**: Wie wird der Wert berechnet?
+- **Berechnung**: Konkrete Zahlen eingesetzt
+- **Ergebnis**: Der angezeigte Wert
+
+---
+
+## 6. Auswertungen
+
+Detaillierte Analysen in 6 Kategorien. Der Community-Vergleich ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt.
+
+### 6.1 Energie-Tab
+
+**Jahresvergleich** mit:
+- Monats-Charts für alle Energieflüsse
+- Delta-Indikatoren (Δ%) zum Vorjahr
+- Jahres-Summentabelle
+
+**Visualisierungen:**
+- Gestapelte Balkendiagramme (Erzeugung, Verbrauch, Einspeisung)
+- Liniendiagramme für Trends
+- Torten-/Donut-Charts für Anteile
+
+### 6.2 PV-Anlage Tab
+
+- **String-Performance** über Zeit
+- **Ertrag pro Modul** in kWh und kWh/kWp
+- **Ausrichtungs-Vergleich**: Welcher String performt am besten?
+- **Degradations-Analyse** (Jahr-über-Jahr)
+
+### 6.3 Komponenten Tab
+
+Detaillierte Zeitreihen für jede Komponente:
+
+**Speicher:**
+- Ladung/Entladung im Zeitverlauf
+- Arbitrage-Gewinne (wenn aktiviert)
+- Vollzyklen und Effizienz
+
+**E-Auto:**
+- Ladequellen-Aufteilung (PV/Netz/Extern)
+- V2H-Entladung (wenn aktiviert)
+- Kostenentwicklung
+
+**Wärmepumpe:**
+- Heizung vs. Warmwasser getrennt
+- COP-Entwicklung über die Saison
+
+### 6.4 Finanzen Tab
+
+- **Einspeiseerlös** = Einspeisung × Einspeisevergütung
+- **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis
+- **Sonderkosten** (Reparaturen, Wartung)
+- **Netto-Einsparung** = Erlöse + Einsparungen - Sonderkosten
+
+### 6.5 CO2 Tab
+
+- **Vermiedene Emissionen** (kg CO2)
+- **Berechnung**: Eigenverbrauch × CO2-Faktor Strommix
+- **Zeitreihe** der CO2-Einsparung
+- **Äquivalente**: z.B. "entspricht X km Autofahren"
+
+### 6.6 Investitionen Tab (ROI)
+
+Das **ROI-Dashboard** zeigt:
+
+#### Amortisationskurve
+- X-Achse: Zeit (Jahre)
+- Y-Achse: Kumulierte Einsparung vs. Investition
+- **Break-Even-Punkt**: Wann ist die Investition zurückverdient?
+
+#### ROI pro Komponente
+Tabelle mit:
+| Spalte | Bedeutung |
+|--------|-----------|
+| **Investition** | Kaufpreis + Installation |
+| **Jährliche Einsparung** | Durchschnitt pro Jahr |
+| **ROI** | (Einsparung - Kosten) / Kosten × 100% |
+| **Amortisation** | Jahre bis Break-Even |
+
+#### PV-System Aggregation
+
+**Wichtig**: Wechselrichter + zugeordnete PV-Module + DC-Speicher werden als "PV-System" zusammengefasst!
+
+- Die ROI-Berechnung erfolgt auf System-Ebene
+- Einzelkomponenten sind in aufklappbaren Unterzeilen sichtbar
+- Einsparungen werden proportional nach kWp verteilt
+
+---
+
+## 7. Community
+
+Der Community-Vergleich ermöglicht anonyme Benchmarks mit anderen PV-Anlagen-Besitzern.
+Community ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt (gleichwertig mit Cockpit, Auswertungen, Aussichten).
+
+### 7.1 Daten teilen
+
+**Pfad**: Community → Tab "Übersicht" → Button "Jetzt teilen"
+
+Hier kannst du deine Anlagendaten anonym mit der Community teilen:
+- **Vorschau**: Zeigt welche Daten geteilt werden
+- **Anonymisierung**: Nur Bundesland, keine Adresse/PLZ
+- **Jederzeit löschbar**: Button "Meine Daten löschen"
+
+### 7.2 Community-Bereich (6 Tabs)
+
+Nach dem Teilen stehen alle 6 Community-Tabs mit detaillierten Benchmarks zur Verfügung.
+
+#### Zeitraum-Auswahl
+- Letzter Monat
+- Letzte 12 Monate
+- Letztes vollständiges Jahr
+- Bestimmtes Jahr
+- Seit Installation
+
+#### Tab: Übersicht
+- **Radar-Chart**: Eigene Performance vs. Community auf 6 Achsen
+- **Ranking**: Platz X von Y Anlagen (gesamt und regional)
+- **7 Achievements**: Autarkiemeister, Effizienzwunder, Solarprofi, Speicherheld, Klimaschützer, Frühstarter, Vorreiter
+
+#### Tab: PV-Ertrag
+- **Dein spezifischer Ertrag** (kWh/kWp) vs. Community-Durchschnitt
+- **Monatlicher Vergleich**: Deine Werte vs. Community als Chart
+- **Histogramm**: Wo stehst du in der Verteilung?
+
+#### Tab: Komponenten
+Detaillierte Benchmarks für jede Komponente:
+
+| Komponente | KPIs |
+|------------|------|
+| **Speicher** | Zyklen, Effizienz, Autarkie-Beitrag |
+| **Wärmepumpe** | JAZ vs. Community, PV-Anteil |
+| **E-Auto** | km/Monat, Ø kWh/100km, PV-Anteil |
+| **Wallbox** | Ladung kWh/Mon, PV-Anteil % |
+| **Balkonkraftwerk** | Ertrag kWh/Mon, Vergleich |
+
+#### Tab: Regional (NEU v2.2.0)
+- **Choropleth Deutschlandkarte**: Interaktive Karte mit Farbkodierung nach spezifischem Ertrag
+  - Hover über ein Bundesland zeigt Performance-Details: Speicher-Lade/Entlade-kWh, WP-JAZ, E-Auto km + kWh, Wallbox kWh + PV-Anteil, BKW kWh
+- **Bundesland-Tabelle**: Direkter Vergleich aller Bundesländer mit Performance-Metriken (Ø kWh/Mon, JAZ, etc.)
+- **Regionale Einordnung**: Wie schneidet dein Bundesland ab?
+
+#### Tab: Trends
+- **Ertragsverlauf**: Community-Trend über Zeit
+- **Saisonale Performance**: Beste und schlechteste Monate
+- **Jahresvergleich**: Entwicklung der Community
+
+#### Tab: Statistiken
+- **Ausstattungsquoten**: Wie viele Anlagen haben Speicher, WP, E-Auto etc.?
+- **Top-10-Listen**: Beste Anlagen nach verschiedenen Kategorien
+- **Community-Übersicht**: Gesamtanzahl Anlagen, Regionen, Durchschnittswerte
+
+### 7.3 Datenschutz
+
+- Nur aggregierte Statistiken werden angezeigt
+- Kein Rückschluss auf einzelne Anlagen möglich
+- Daten können jederzeit wieder gelöscht werden
+- Server: https://energy.raunet.eu (Open Source)
+
+---
+
+## 8. Aussichten (Prognosen)
+
+Die **Aussichten**-Seite bietet 4 Prognose-Tabs für zukunftsorientierte Analysen.
+
+### 8.1 Kurzfristig (7 Tage)
+
+Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
+
+- **Datenquelle**: Open-Meteo Wetterprognose
+- **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung
+- **Wettersymbole**: Sonnig, bewölkt, regnerisch
+
+### 8.2 Langfristig (12 Monate)
+
+PVGIS-basierte Jahresprognose:
+
+- **Datenquelle**: PVGIS-Erwartungswerte oder TMY
+- **Performance-Ratio**: Historischer Vergleich IST vs. SOLL
+- **Monatliche Aufschlüsselung**: Erwartete Erzeugung pro Monat
+
+### 8.3 Trend-Analyse
+
+Langfristige Entwicklung und Degradation:
+
+- **Jahresvergleich**: Alle bisherigen Jahre im Vergleich
+- **Saisonale Muster**: Beste und schlechteste Monate identifizieren
+- **Degradation**: Geschätzter Leistungsrückgang pro Jahr
+  - Primär: Nur vollständige Jahre (12 Monate)
+  - Fallback: TMY-Auffüllung für unvollständige Jahre
+
+### 8.4 Finanzen
+
+Amortisations-Prognose und Komponenten-Beiträge:
+
+**Amortisations-Fortschritt:**
+- Zeigt wie viel % der Investition bereits amortisiert ist
+- **Wichtig**: Dies ist der *kumulierte* Fortschritt, nicht die Jahres-Rendite!
+
+**Mehrkosten-Ansatz für Investitionen:**
+- **PV-System**: Volle Kosten (keine Alternative)
+- **Wärmepumpe**: Kosten minus Gasheizung (konfigurierbar über `alternativ_kosten_euro`)
+- **E-Auto**: Kosten minus Verbrenner (konfigurierbar über `alternativ_kosten_euro`)
+
+**Komponenten-Beiträge:**
+- Speicher: Eigenverbrauchserhöhung
+- E-Auto (V2H): Rückspeisung ins Haus
+- E-Auto (vs. Benzin): Ersparnis gegenüber Verbrenner
+- Wärmepumpe (PV): Direktverbrauch aus PV
+- Wärmepumpe (vs. Gas): Ersparnis gegenüber Gasheizung
+
+> **Hinweis:** Die Finanz-Prognose zeigt den **Amortisations-Fortschritt** (kumulierte Erträge / Investition).
+> Im Cockpit und in Auswertung/Investitionen wird dagegen die **Jahres-Rendite** (Jahres-Ertrag / Investition) angezeigt.
+> Beide Metriken sind korrekt, aber für unterschiedliche Zwecke gedacht.
+
+---
+
+## 9. Einstellungen
+
+### 9.1 Anlage
+
+Bearbeite die Stammdaten deiner PV-Anlage:
+- Name, Adresse, Koordinaten
+- Ausrichtung und Neigung (für PVGIS-Prognosen)
+
+**Erweiterte Stammdaten (NEU in beta.6):**
+- **MaStR-ID**: Marktstammdatenregister-ID der Anlage mit direktem Link zum MaStR
+- **Versorger & Zähler**: Strom-, Gas- und Wasserversorger mit beliebig vielen Zählern
+  - Klicke auf "+ Strom-Versorger hinzufügen" etc.
+  - Erfasse Versorger-Name, Kundennummer, Portal-URL
+  - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
+
+**Steuerliche Behandlung (NEU v2.4.0):**
+- **Keine USt-Auswirkung** (Standard): Für Anlagen ab 2023 mit Nullsteuersatz (≤30 kWp) oder Kleinunternehmer
+- **Regelbesteuerung**: USt auf Eigenverbrauch wird als Kostenfaktor berechnet (Pre-2023, >30 kWp, AT/CH)
+- USt-Satz ist editierbar (DE: 19%, AT: 20%, CH: 8.1%) und wird bei Land-Wechsel automatisch angepasst
+
+### 9.2 Strompreise
+
+Verwalte deine Stromtarife:
+- Mehrere Tarife mit Gültigkeitszeitraum möglich
+- Wichtig für korrekte Einsparungsberechnung
+
+**Spezialtarife (NEU v2.4.0):**
+- Jeder Tarif kann einer Verwendung zugeordnet werden: Standard, Wärmepumpe oder Wallbox
+- Aktive Spezialtarife werden in der Info-Box oben angezeigt
+- Ohne Spezialtarif wird automatisch der Standard-Tarif für die Komponente verwendet
+
+### 9.3 Investitionen
+
+Alle Komponenten im Überblick:
+
+#### Parent-Child Beziehungen
+
+| Typ | Parent | Pflicht? |
+|-----|--------|----------|
+| PV-Module | Wechselrichter | **Ja** |
+| DC-Speicher | Wechselrichter (Hybrid) | Optional |
+| AC-Speicher | - (eigenständig) | - |
+| E-Auto | - | - |
+| Wärmepumpe | - | - |
+| Wallbox | - | - |
+| Balkonkraftwerk | - | - |
+| Sonstiges | - | - |
+
+**Warnung**: PV-Module ohne Wechselrichter-Zuordnung zeigen ein Warnsymbol!
+
+#### Erweiterte Stammdaten (NEU in beta.6)
+
+Jede Investition kann zusätzlich mit detaillierten Stammdaten versehen werden:
+
+**Gerätedaten:**
+- Hersteller, Modell, Seriennummer
+- Garantie-Datum
+- MaStR-ID (nur für Wechselrichter)
+- Typ-spezifische Felder (z.B. Garantie-Zyklen für Speicher, Kennzeichen für E-Auto)
+
+**Ansprechpartner (klappbare Sektion):**
+- Firma, Name, Telefon, E-Mail
+- Ticketsystem/Support-Portal mit direktem Link
+- Kundennummer, Vertragsnummer
+
+**Wartungsvertrag (klappbare Sektion):**
+- Vertragsnummer, Anbieter
+- Gültig bis, Kündigungsfrist
+- Leistungsumfang
+
+**Vererbung für PV-System:**
+PV-Module und DC-Speicher (mit Parent = Wechselrichter) erben automatisch Ansprechpartner und Wartungsvertrag vom Wechselrichter. Leere Felder zeigen "(erbt von Wechselrichter)". Nur bei Abweichung ausfüllen.
+
+#### Typ-spezifische Parameter
+
+**PV-Module:**
+- Anzahl Module
+- Leistung pro Modul (Wp)
+- Ausrichtung (Süd = 0°, Ost = -90°, West = +90°)
+- Neigung (0° = flach, 90° = senkrecht)
+
+**Speicher:**
+- Kapazität (kWh)
+- Arbitrage-fähig (Ja/Nein)
+
+**E-Auto:**
+- V2H-fähig (Ja/Nein)
+- Nutzt V2H aktiv (Ja/Nein)
+
+**Sonstiges (NEU v2.4.0):**
+- Kategorie: Erzeuger, Verbraucher oder Speicher
+- Beschreibung (optional)
+- Monatsdaten-Felder passen sich der Kategorie an
+
+### 9.4 Monatsdaten
+
+Tabelle aller erfassten Monatsdaten mit:
+- **Spalten-Toggle**: Wähle welche Spalten angezeigt werden
+- **Inline-Bearbeitung**: Direkt in der Tabelle ändern
+- **Modal-Bearbeitung**: Für alle Details
+
+#### Aggregierte Darstellung (NEU in beta.3)
+
+Die Monatsdaten-Seite zeigt jetzt alle Daten aggregiert:
+
+| Spaltengruppe | Inhalt | Farbe |
+|---------------|--------|-------|
+| **Zählerwerte** | Einspeisung, Netzbezug | Blau |
+| **PV-Erzeugung** | Summe aller PV-Module | Amber |
+| **Speicher** | Ladung, Entladung | Amber |
+| **Wärmepumpe** | Strom, Heizung, Warmwasser | Amber |
+| **E-Auto** | km, Ladung (PV/Netz) | Amber |
+| **Wallbox** | Ladung | Amber |
+| **Berechnungen** | Direktverbrauch, Eigenverbrauch, Autarkie | Grün |
+
+**Gruppierte Spaltenauswahl**: Du kannst ganze Gruppen ein-/ausblenden oder einzelne Spalten wählen.
+
+#### Migrations-Warnung
+
+Bei älteren Daten (vor v0.9.7) erscheint eine Warnung:
+- Legacy-Daten in `Monatsdaten.batterie_*` werden nicht mehr verwendet
+- Beim Bearbeiten werden Werte automatisch migriert
+- Nach dem Speichern sind die Daten aktuell
+
+### 9.5 Solarprognose (vormals PVGIS)
+
+Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen:
+
+**PVGIS-Prognose:**
+- **Systemverluste**: Standard 14% (für Deutschland typisch)
+- **TMY-Daten**: Typical Meteorological Year als Referenz
+- **Optimale Ausrichtung**: Berechnet optimale Neigung/Azimut für deinen Standort
+
+**Wetter-Provider (NEU in beta.10):**
+- Zeigt verfügbare Wetter-Datenquellen für deinen Standort
+- Der aktuelle Provider wird in den Anlagen-Stammdaten eingestellt
+- Verfügbare Provider:
+  - **Auto**: Automatische Auswahl (Bright Sky für DE, sonst Open-Meteo)
+  - **Bright Sky (DWD)**: Hochwertige Daten für Deutschland
+  - **Open-Meteo**: Historische und Forecast-Daten weltweit
+  - **Open-Meteo Solar**: GTI-basierte Prognose für geneigte Module
+
+### 9.6 Allgemein
+
+- **Version**: Aktuelle Software-Version
+- **API-Status**: Backend-Verbindung prüfen
+- **Datenbank-Statistiken**: Anzahl Datensätze
+
+---
+
+## 10. Datenerfassung
+
+Es gibt drei Wege, Daten in eedc zu bekommen:
+
+### 10.1 Manuelles Formular
+
+**Pfad**: Einstellungen → Monatsdaten → "Neu" Button
+
+Das Formular zeigt dynamisch die relevanten Felder:
+
+**Basis-Felder (immer):**
+- Jahr, Monat
+- Einspeisung (kWh) – Zählerwert
+- Netzbezug (kWh) – Zählerwert
+
+**Komponenten-Felder (je nach Investitionen):**
+- PV-Module: Erzeugung pro Modul/String
+- Speicher: Ladung, Entladung, Netz-Ladung (Arbitrage)
+- E-Auto: km, Verbrauch, Ladung (PV/Netz/Extern), V2H-Entladung
+- Wärmepumpe: Strom, Heizung, Warmwasser
+- Wallbox: Ladung, Ladevorgänge
+- Balkonkraftwerk: Erzeugung
+- Sonstiges: Felder je nach Kategorie (Erzeugung/Verbrauch/Ladung)
+- Sonstige Erträge & Ausgaben: Versicherung, Wartung, Einspeisebonus etc.
+
+**Wetter-Auto-Fill:**
+- Klicke auf "Wetter abrufen"
+- Globalstrahlung und Sonnenstunden werden automatisch gefüllt
+- Datenquelle: Open-Meteo (historisch) oder PVGIS TMY (aktuell/Zukunft)
+
+### 10.2 CSV-Import
+
+**Pfad**: Einstellungen → Import
+
+#### Template herunterladen
+
+1. Klicke auf "CSV-Template herunterladen"
+2. Das Template enthält alle relevanten Spalten basierend auf deinen Investitionen
+
+#### Spalten-Struktur
+
+**Pflicht-Spalten:**
+```
+Jahr, Monat, Einspeisung_kWh, Netzbezug_kWh
+```
+
+**Komponenten-Spalten (dynamisch):**
+```
+[Investitions-Name]_PV_Erzeugung_kWh     (für PV-Module)
+[Investitions-Name]_Ladung_kWh           (für Speicher)
+[Investitions-Name]_Entladung_kWh        (für Speicher)
+[Investitions-Name]_km                   (für E-Auto)
+[Investitions-Name]_Ladung_PV_kWh        (für E-Auto)
+[Investitions-Name]_Ladung_Netz_kWh      (für E-Auto)
+[Investitions-Name]_Strom_kWh            (für Wärmepumpe)
+[Investitions-Name]_Heizung_kWh          (für Wärmepumpe)
+[Investitions-Name]_Warmwasser_kWh       (für Wärmepumpe)
+...
+```
+
+> **Hinweis Wärmepumpe:** Die JAZ/COP-Werte werden über das Investitions-Formular konfiguriert, nicht über CSV. Die CSV enthält nur die gemessenen Monatswerte (Strom, Heizung, Warmwasser).
+
+**Balkonkraftwerk-Spalten (NEU):**
+```
+[BKW-Name]_Erzeugung_kWh        (PV-Erzeugung)
+[BKW-Name]_Eigenverbrauch_kWh   (Selbst genutzt)
+```
+Die Einspeisung wird automatisch berechnet (Erzeugung - Eigenverbrauch).
+
+**Beispiel:** Wenn dein E-Auto "Smart #1" heißt:
+```
+Smart #1_km, Smart #1_Ladung_PV_kWh, Smart #1_Ladung_Netz_kWh
+```
+
+#### CSV hochladen
+
+1. Befülle das Template mit deinen Daten
+2. Klicke auf "CSV importieren"
+3. Wähle die Datei aus
+4. Duplikate werden automatisch überschrieben
+
+#### Plausibilitätsprüfungen (NEU in beta.8)
+
+Der Import prüft deine Daten auf Konsistenz:
+
+**Fehler (Import wird abgebrochen):**
+- Negative Werte in kWh/km/€-Feldern
+- Legacy-Spalten (`PV_Erzeugung_kWh`) ohne passende PV-Module-Investitionen
+- Mismatch zwischen Legacy-Wert und Summe der individuellen Komponenten
+
+**Warnungen (Import wird fortgesetzt):**
+- Redundante Legacy-Spalten (gleiche Werte wie Komponenten)
+- Unplausible Wetterwerte (Sonnenstunden > 400h/Monat)
+
+#### JSON-Export für Backup & Support
+
+In der Anlagen-Übersicht findest du einen Download-Button (blaues Download-Icon) für den vollständigen JSON-Export:
+
+**Enthaltene Daten (Export-Version 1.1):**
+- Anlage-Stammdaten (inkl. MaStR-ID, Versorger-Daten)
+- Sensor-Mapping für HA-Integration (NEU in beta.5)
+- Alle Investitionen mit Monatsdaten
+- Strompreise
+- PVGIS-Prognosen
+- Monatsdaten inkl. Wetterdaten und Sonderkosten
+
+**Anwendungsfälle:**
+- **Backup**: Vollständige Sicherung aller Daten
+- **Restore**: Import auf anderem System oder nach Neuinstallation
+- **Support**: Für Fehleranalyse und Hilfe
+
+#### JSON-Import (Restore)
+
+**Pfad**: Einstellungen → Import → JSON-Datei
+
+1. Wähle eine zuvor exportierte JSON-Datei
+2. Optional: "Überschreiben" aktivieren, um existierende Anlage zu ersetzen
+3. Klicke auf "Importieren"
+
+**Hinweise zum Import:**
+- Bei gleichem Anlagennamen wird automatisch ein Suffix hinzugefügt (außer bei "Überschreiben")
+- **Sensor-Mapping**: Wird importiert, aber MQTT-Setup muss erneut durchgeführt werden
+  - Grund: Investitions-IDs ändern sich beim Import
+  - Gehe nach dem Import zu Einstellungen → Home Assistant → Sensor-Zuordnung und speichere erneut
+- Export-Version 1.0 (ohne sensor_mapping) wird weiterhin unterstützt
+
+#### PDF-Dokumentation (NEU in beta.12)
+
+Neben dem JSON-Export gibt es jetzt einen **PDF-Export** (orangefarbenes Dokument-Icon):
+
+**Inhalt der PDF-Dokumentation:**
+- **Stammdaten**: Anlagenname, Standort, Koordinaten, MaStR-ID
+- **Versorger-Daten**: Stromversorger, Kundennummern, Zählernummern mit Zählpunkten
+- **Stromtarif**: Aktueller Tarif mit Preisen
+- **Investitionen**: Alle Komponenten mit vollständigen Details:
+  - Technische Daten (Leistung, Kapazität, etc.)
+  - Gerätedaten (Hersteller, Modell, Seriennummer, Garantie)
+  - Ansprechpartner (Service-Firma, Kontaktdaten)
+  - Wartungsverträge (Vertragsnummer, Leistungsumfang)
+- **Jahresübersicht**: Alle KPIs (Energie, Autarkie, Finanzen, CO2)
+- **Diagramme**: PV-Erzeugung, Energie-Fluss, Autarkie-Verlauf
+- **Monatstabellen**: Energie, Speicher, Wärmepumpe, E-Mobilität, Finanzen
+- **PV-String Vergleich**: SOLL (PVGIS) vs. IST mit Abweichung
+
+**Layout:**
+- Kopfzeile (ab Seite 2): Anlagenname | Titel | eedc-Logo
+- Fußzeile: Erstellungsdatum | GitHub-Repository | "Seite X von Y"
+- Wiederholende Tabellenköpfe bei Seitenumbrüchen
+
+**Zeitraum:**
+- Standard: Gesamtzeitraum (alle Jahre seit Installation)
+- Der Export erfolgt direkt über die Anlagen-Seite
+
+### 10.3 Demo-Daten
+
+Zum Ausprobieren ohne echte Daten:
+
+**Pfad**: Einstellungen → Demo-Daten
+
+- Generiert realistische Beispieldaten für 2 Jahre
+- Inkludiert alle Komponenten-Typen
+- Kann jederzeit gelöscht werden
+
+---
+
+## 11. Sensor-Mapping
+
+Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den EEDC-Feldern.
+
+### 11.1 Wizard starten
+
+**Pfad**: Einstellungen → Sensor-Mapping (im HA-Bereich)
+
+### 11.2 Schritte des Wizards
+
+#### Schritt 1: Basis-Sensoren
+
+Ordne die grundlegenden Energie-Sensoren zu:
+
+| Feld | Beschreibung | Strategie-Optionen |
+|------|--------------|-------------------|
+| **PV-Erzeugung Gesamt** | Gesamte PV-Produktion | HA-Sensor, Manuell |
+| **Einspeisung** | Netz-Einspeisung | HA-Sensor, Manuell |
+| **Netzbezug** | Bezug aus dem Netz | HA-Sensor, Manuell |
+| **Batterie-Ladung** | Gesamt-Ladung (alle Speicher) | HA-Sensor, Manuell |
+| **Batterie-Entladung** | Gesamt-Entladung | HA-Sensor, Manuell |
+
+#### Schritt 2: PV-Module
+
+Für jeden PV-String/Modul-Gruppe:
+
+| Strategie | Beschreibung |
+|-----------|--------------|
+| **Eigener Sensor** | Separater HA-Sensor für diesen String |
+| **kWp-Verteilung** | Anteilige Berechnung aus PV-Gesamt basierend auf kWp |
+| **Manuell** | Manuelle Eingabe im Monatsabschluss |
+
+**Beispiel kWp-Verteilung:**
+Bei 10 kWp Gesamt und einem String mit 4 kWp erhält dieser String 40% der Gesamt-Erzeugung.
+
+#### Schritt 3: Speicher
+
+Für jeden Speicher:
+
+| Feld | Strategien |
+|------|------------|
+| **Ladung** | HA-Sensor, Manuell |
+| **Entladung** | HA-Sensor, Manuell |
+| **Netz-Ladung** | HA-Sensor, Manuell (für Arbitrage) |
+
+#### Schritt 4: Wärmepumpe
+
+| Feld | Strategien |
+|------|------------|
+| **Stromverbrauch** | HA-Sensor, Manuell (Pflicht) |
+| **Heizenergie** | Wärmemengenzähler, COP-Berechnung |
+| **Warmwasser** | Wärmemengenzähler, COP-Berechnung, Nicht separat |
+
+**COP-Berechnung:**
+Wenn kein Wärmemengenzähler vorhanden, kann die Heizenergie über den COP berechnet werden:
+`Heizenergie = Stromverbrauch × COP`
+
+#### Schritt 5: E-Auto
+
+| Feld | Strategien |
+|------|------------|
+| **km gefahren** | HA-Sensor (Odometer), Manuell |
+| **Ladung PV** | HA-Sensor, EV-Quote, Manuell |
+| **Ladung Netz** | HA-Sensor, Berechnung, Manuell |
+| **V2H-Entladung** | HA-Sensor, Manuell, Nicht aktiv |
+
+**EV-Quote Strategie:**
+Berechnet PV-Ladung basierend auf der Eigenverbrauchsquote:
+`Ladung PV = Gesamt-Ladung × Eigenverbrauchsquote`
+
+#### Schritt 6: Zusammenfassung
+
+- Übersicht aller konfigurierten Mappings
+- Sensoren mit Warnungen (z.B. fehlende Zuordnung)
+- Button "Mapping speichern"
+
+### 11.3 Sensor-Auswahl
+
+Bei der Sensor-Auswahl werden automatisch alle verfügbaren HA-Sensoren angezeigt:
+
+- **Filterbar** nach Namen oder Entity-ID
+- **Sortiert** nach Relevanz (energy-Sensoren zuerst)
+- **Einheit** wird angezeigt (kWh, W, etc.)
+
+---
+
+## 12. Monatsabschluss-Wizard
+
+Der **Monatsabschluss-Wizard** führt dich durch die monatliche Datenerfassung mit intelligenten Vorschlägen.
+
+### 12.1 Wizard starten
+
+**Pfad**: Einstellungen → Monatsabschluss (im Daten-Bereich)
+
+Oder direkt über die URL: `/monatsabschluss`
+
+### 12.2 Funktionsweise
+
+#### Automatische Vorschläge
+
+Für jedes Feld werden automatisch Vorschläge berechnet:
+
+| Quelle | Konfidenz | Beschreibung |
+|--------|-----------|--------------|
+| **Vormonat** | 80% | Wert vom Vormonat (beste Quelle für kontinuierliche Werte) |
+| **Vorjahr** | 70% | Gleicher Monat im Vorjahr (saisonale Korrelation) |
+| **Berechnung** | 60% | COP- oder EV-Quote-basierte Berechnung |
+| **Durchschnitt** | 50% | Durchschnitt aller vorhandenen Werte |
+
+#### Vorschläge nutzen
+
+Jedes Feld zeigt:
+- **Aktueller Wert** (falls vorhanden)
+- **Vorschlag** mit Quelle und Konfidenz
+- **Übernehmen-Button** zum direkten Übernehmen
+- **Manuelles Eingabefeld** für Anpassungen
+
+#### Workflow
+
+1. **Monat wählen** - Der nächste offene Monat wird vorgeschlagen
+2. **Basis-Daten prüfen** - Einspeisung, Netzbezug, PV-Erzeugung
+3. **Komponenten-Daten** - Speicher, Wärmepumpe, E-Auto, etc.
+4. **Speichern** - Alle Daten werden als Monatsdaten gespeichert
+
+### 12.3 Sensor-Werte aus HA
+
+Wenn Sensor-Mapping konfiguriert ist:
+- Werte werden automatisch aus HA abgerufen
+- Bei `manuell`-Strategie: Vorschläge aus historischen Daten
+- Bei `sensor`-Strategie: Aktueller Sensor-Wert als Vorschlag
+
+### 12.4 Historie
+
+Die letzten Abschlüsse werden angezeigt:
+- Monat/Jahr
+- Abschlussdatum
+- Wichtige Kennzahlen
+
+---
+
+## 13. HA-Statistik Import
+
+**Pfad**: Einstellungen → Home Assistant → Statistik-Import
+
+### 13.1 Übersicht
+
+Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der Installation deiner PV-Anlage** automatisch aus der Home Assistant Langzeitstatistik-Datenbank importieren. Das ist besonders nützlich, wenn du:
+
+- EEDC neu installiert hast und Altdaten übernehmen möchtest
+- Monatsdaten nachträglich befüllen willst
+- Von manueller auf automatische Erfassung umstellen möchtest
+
+### 13.2 Voraussetzungen
+
+- **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den EEDC-Feldern zugeordnet sein
+- **Home Assistant Langzeitstatistiken**: Deine Sensoren müssen in der HA-Datenbank gespeichert werden
+- **EEDC v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
+
+> ⚠️ **Wichtig**: Bei Update von v1.x auf v2.0.0 ist eine Neuinstallation des Add-ons erforderlich! Siehe CHANGELOG für Upgrade-Anleitung.
+
+### 13.3 Bulk-Import verwenden
+
+1. **Seite öffnen**: Einstellungen → Home Assistant → Statistik-Import
+2. **Datenbank-Status prüfen**: Die Seite zeigt ob die HA-Datenbank verfügbar ist
+3. **Anlage auswählen**: Wähle die Anlage für den Import
+4. **Vorschau laden**: Klicke auf "Vorschau laden"
+5. **Monate auswählen**: Jeder Monat hat eine Checkbox zur individuellen Auswahl
+   - **Grün**: Neue Monate ohne vorhandene Daten (standardmäßig ausgewählt)
+   - **Grau**: Bereits ausgefüllte Monate (standardmäßig nicht ausgewählt)
+   - **Amber (Konflikt)**: Monate mit abweichenden HA-Werten
+6. **Individuelle Auswahl**: Aktiviere/Deaktiviere einzelne Monate nach Bedarf
+7. **Import starten**: Klicke auf "X Monate importieren"
+
+### 13.4 Einzelne Monate laden
+
+Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
+
+#### Option A: Über Monatsdaten-Seite (NEU)
+
+**Pfad**: Einstellungen → Daten → Monatsdaten → "Aus HA laden" Button
+
+1. Klicke auf den Button "Aus HA laden" (neben "Neuer Monat")
+2. Wähle den gewünschten Monat aus der Liste verfügbarer HA-Statistik-Monate
+3. **Bei neuem Monat**: Die Werte werden direkt ins Formular übernommen
+4. **Bei existierendem Monat**: Ein Vergleichs-Modal zeigt die Unterschiede:
+   - Spalte "Vorhanden" zeigt aktuelle Werte in EEDC
+   - Spalte "HA-Statistik" zeigt Werte aus Home Assistant
+   - Spalte "Diff" zeigt die Abweichung (farbcodiert bei >10%)
+   - Wähle "HA-Werte übernehmen" oder "Abbrechen"
+5. Bearbeite die Werte bei Bedarf und speichere
+
+#### Option B: Über Monatsabschluss-Wizard
+
+**Pfad**: Einstellungen → Daten → Monatsabschluss
+
+1. Wähle den gewünschten Monat
+2. Klicke auf "Werte aus HA-Statistik laden"
+3. Die Felder werden automatisch befüllt
+4. Prüfe die Werte und speichere
+
+### 13.5 Startwerte beim Sensor-Mapping
+
+Beim Speichern des Sensor-Mappings bietet EEDC zwei Optionen für die Startwerte:
+
+1. **Aus HA-Statistik laden (empfohlen)**: Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank
+2. **Aktuelle Werte verwenden**: Setzt die aktuellen Sensorwerte als Startwerte (Monatswert startet bei 0)
+
+### 13.6 Konflikt-Erkennung
+
+Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
+
+| Situation | Standard-Auswahl | Beschreibung |
+|-----------|------------------|--------------|
+| Neuer Monat | ✓ Ausgewählt | Monat existiert noch nicht in EEDC |
+| Leerer Monat | ✓ Ausgewählt | Monatsdaten vorhanden aber alle Felder leer |
+| Ausgefüllter Monat | ✗ Nicht ausgewählt | Mindestens ein Feld hat einen Wert |
+| Konflikt | ✗ Nicht ausgewählt | Werte in EEDC weichen von HA ab |
+
+**Hinweis**: Du kannst jeden Monat individuell per Checkbox auswählen oder abwählen.
+
+---
+
+## 14. Home Assistant Integration (optional)
+
+EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
+
+### 14.1 Voraussetzungen
+
+- Home Assistant mit MQTT-Broker (Mosquitto Add-on)
+- MQTT-Benutzer und Passwort
+
+### 14.2 MQTT konfigurieren
+
+**Pfad**: EEDC Add-on Konfiguration in Home Assistant
+
+In der Add-on-Konfiguration:
+```yaml
+mqtt:
+  enabled: true
+  host: "core-mosquitto"
+  port: 1883
+  username: "dein_mqtt_user"
+  password: "dein_mqtt_passwort"
+```
+
+### 14.3 MQTT Auto-Discovery
+
+Wenn du das **Sensor-Mapping** konfigurierst und speicherst, erstellt EEDC automatisch MQTT-Entities in Home Assistant. Diese ermöglichen die automatische Berechnung von Monatswerten.
+
+#### Wie funktioniert es?
+
+Für jedes gemappte Feld mit Strategie "HA-Sensor" werden **zwei Entities** erstellt:
+
+| Entity-Typ | Zweck | Beispiel |
+|------------|-------|----------|
+| **Number** | Speichert den Zählerstand vom Monatsanfang | `number.eedc_winterborn_mwd_inv1_ladung_kwh_start` |
+| **Sensor** | Berechnet automatisch den Monatswert | `sensor.eedc_winterborn_mwd_inv1_ladung_kwh_monat` |
+
+**Zusammenspiel:**
+
+```
+┌─────────────────────────────────┐     ┌────────────────────────────────┐
+│ HA-Sensor (z.B. Batteriezähler) │     │ Number (Startwert Monatsanfang)│
+│ aktueller Wert: 12.500 kWh      │     │ gespeicherter Wert: 12.345 kWh │
+└───────────────┬─────────────────┘     └──────────────┬─────────────────┘
+                │                                      │
+                └──────────────┬───────────────────────┘
+                               ▼
+                 ┌─────────────────────────────┐
+                 │ Berechneter Sensor (Monat)  │
+                 │ = 12.500 - 12.345 = 155 kWh │
+                 └─────────────────────────────┘
+```
+
+#### Entity-Benennung
+
+Die Entity-IDs enthalten den technischen Key für Eindeutigkeit:
+- `number.eedc_{anlage}_{key}_start` - Startwert
+- `sensor.eedc_{anlage}_{key}_monat` - Monatswert
+
+Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
+- "EEDC BYD HVS 12.8 Ladung Monatsanfang"
+- "EEDC SMA eCharger 22 Ladung Monat"
+
+### 14.4 Monatsstartwerte initialisieren
+
+**Wichtig:** Damit die automatische Monatswert-Berechnung funktioniert, müssen einmalig die Startwerte (Zählerstände vom Monatsanfang) gesetzt werden.
+
+#### Wann ist das nötig?
+
+1. **Erstmalige Einrichtung** - Nach dem Speichern des Sensor-Mappings
+2. **Nach MQTT-Bereinigung** - Wenn Discovery-Messages gelöscht wurden
+3. **Korrektur falscher Werte** - Bei Fehlern in den Startwerten
+
+#### Methode 1: Über den Sensor-Mapping-Wizard (empfohlen)
+
+1. Gehe zu **Einstellungen → Sensor-Zuordnung**
+2. Nach dem Speichern erscheint ein Dialog "Startwerte initialisieren?"
+3. Klicke auf **"Startwerte initialisieren"**
+4. EEDC liest die aktuellen Zählerstände aus HA und setzt sie als Startwerte
+
+#### Methode 2: Manuell in Home Assistant
+
+1. Gehe zu **Einstellungen → Geräte & Dienste → Entitäten**
+2. Suche nach `number.eedc_`
+3. Klicke auf eine Number-Entity (z.B. `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`)
+4. Gib den aktuellen Zählerstand als Wert ein
+
+#### Methode 3: Über die HA-Entwicklerwerkzeuge
+
+1. Gehe zu **Entwicklerwerkzeuge → Dienste**
+2. Wähle `number.set_value`
+3. Entity: `number.eedc_winterborn_mwd_inv1_ladung_kwh_start`
+4. Value: Der aktuelle Zählerstand
+
+### 14.5 MQTT-Bereinigung bei Problemen
+
+Falls Entities doppelt erscheinen (mit `_2` Suffix) oder andere Probleme auftreten:
+
+#### Lösung: Discovery-Messages löschen
+
+Mit **mosquitto_pub** (im Terminal/SSH):
+
+```bash
+# Beispiel für eine Number-Entity löschen:
+mosquitto_pub -h core-mosquitto -t "homeassistant/number/eedc_1_mwd_inv1_ladung_kwh_start/config" -r -n
+
+# Beispiel für eine Sensor-Entity löschen:
+mosquitto_pub -h core-mosquitto -t "homeassistant/sensor/eedc_1_mwd_inv1_ladung_kwh_monat/config" -r -n
+```
+
+Oder im **MQTT Explorer**:
+1. Navigiere zu `homeassistant/number/` und `homeassistant/sensor/`
+2. Lösche alle Topics die mit `eedc_` beginnen
+3. Home Assistant neu starten
+4. In EEDC: Sensor-Mapping erneut speichern
+
+### 14.6 KPI-Export (klassisch)
+
+Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
+
+**Pfad**: Einstellungen → HA-Export → Sensoren publizieren
+
+| Sensor | Einheit | Beschreibung |
+|--------|---------|--------------|
+| `sensor.eedc_pv_erzeugung` | kWh | Gesamte PV-Erzeugung |
+| `sensor.eedc_eigenverbrauch` | kWh | Selbst verbrauchter PV-Strom |
+| `sensor.eedc_autarkie` | % | Autarkiegrad |
+| `sensor.eedc_eigenverbrauchsquote` | % | EV-Quote |
+| `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
+| `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
+
+### 14.7 Alternative: REST API
+
+Statt MQTT kannst du auch die REST API nutzen:
+
+```yaml
+# configuration.yaml
+rest:
+  - resource: http://localhost:8099/api/ha/export/sensors/1
+    scan_interval: 3600
+    sensor:
+      - name: "EEDC PV Erzeugung"
+        value_template: "{{ value_json.pv_erzeugung_kwh }}"
+        unit_of_measurement: "kWh"
+```
+
+---
+
+## 15. Tipps & Best Practices
+
+### Datenqualität
+
+1. **Zählerstände nutzen**: Einspeisung und Netzbezug sollten Zählerwerte sein
+2. **Monatlich erfassen**: Mindestens monatlich Daten eintragen
+3. **Konsistenz prüfen**: Eigenverbrauch ≤ Erzeugung
+
+### Investitionen richtig anlegen
+
+1. **Wechselrichter zuerst**: Dann PV-Module zuordnen
+2. **Realistische Werte**: Lebensdauer, Kaufpreis, Installation
+3. **Alle Kosten**: Auch Montage, Gerüst, Elektriker
+
+### Auswertungen interpretieren
+
+1. **Jahresvergleich**: Gleicher Monat, unterschiedliche Jahre
+2. **Wetter berücksichtigen**: Schlechtes Jahr ≠ schlechte Anlage
+3. **PVGIS als Referenz**: ±10% Abweichung ist normal
+
+### Performance-Optimierung
+
+1. **Eigenverbrauch erhöhen**: Verbraucher tagsüber laufen lassen
+2. **Speicher nutzen**: Überschuss für abends speichern
+3. **E-Auto laden**: Mittags bei Sonne laden
+
+---
+
+## 16. Fehlerbehebung
+
+### SOLL-IST Vergleich zeigt 0 kWh
+
+**Problem**: Im PV-Anlage Dashboard werden keine IST-Werte angezeigt.
+
+**Lösung**:
+1. Prüfe ob PV-Module als Investitionen angelegt sind
+2. Prüfe ob Monatsdaten mit PV-Erzeugung existieren
+3. Prüfe ob das richtige Jahr ausgewählt ist
+
+### CSV-Import schlägt fehl
+
+**Problem**: Beim Import erscheint eine Fehlermeldung.
+
+**Lösung**:
+1. Template neu herunterladen (Spalten können sich ändern)
+2. Spaltentrennzeichen prüfen (Semikolon `;` oder Komma `,`)
+3. Dezimaltrennzeichen prüfen (Punkt `.` verwenden)
+4. Bei Legacy-Spalten-Fehlern: Verwende die individuellen Komponenten-Spalten statt `PV_Erzeugung_kWh`
+5. Prüfe ob negative Werte in den Daten sind (nicht erlaubt)
+
+### Wetter-Daten nicht verfügbar
+
+**Problem**: "Wetter abrufen" zeigt Fehler.
+
+**Lösung**:
+1. Koordinaten der Anlage prüfen
+2. Internetverbindung prüfen
+3. Open-Meteo API könnte überlastet sein (später erneut versuchen)
+
+### MQTT-Verbindung fehlgeschlagen
+
+**Problem**: Test-Verbindung zu MQTT schlägt fehl.
+
+**Lösung**:
+1. MQTT-Broker läuft? (`docker ps` oder HA Add-on Status)
+2. Host/Port korrekt? (`core-mosquitto` bei HA, sonst IP)
+3. Benutzer/Passwort korrekt?
+4. Firewall-Regeln prüfen
+
+### Dashboard zeigt keine Daten
+
+**Problem**: Alle KPIs zeigen 0 oder "-".
+
+**Lösung**:
+1. Monatsdaten vorhanden? (Einstellungen → Monatsdaten)
+2. Richtiges Jahr ausgewählt?
+3. Strompreise konfiguriert?
+4. Browser-Cache leeren (Strg+Shift+R)
+
+### Setup-Wizard erscheint erneut
+
+**Problem**: Nach Abschluss startet der Wizard wieder.
+
+**Lösung**:
+1. Browser localStorage prüfen/löschen:
+   - `eedc_setup_wizard_completed`
+   - `eedc_setup_wizard_state`
+2. Oder: Wizard erneut durchlaufen
+
+---
+
+## Glossar
+
+| Begriff | Bedeutung |
+|---------|-----------|
+| **Autarkie** | Grad der Unabhängigkeit vom Stromnetz |
+| **Eigenverbrauch** | Selbst genutzter PV-Strom |
+| **Direktverbrauch** | Sofort verbrauchter PV-Strom (ohne Speicher) |
+| **Einspeisung** | Ins Netz abgegebener Überschuss |
+| **Netzbezug** | Aus dem Netz bezogener Strom |
+| **kWp** | Kilowatt Peak (Nennleistung der PV-Anlage) |
+| **kWh** | Kilowattstunde (Energiemenge) |
+| **ROI** | Return on Investment (Kapitalrendite) |
+| **COP** | Coefficient of Performance (momentane Wärmepumpen-Effizienz) |
+| **SCOP** | Seasonal COP (saisonale Effizienz vom EU-Energielabel) |
+| **JAZ** | Jahresarbeitszahl (gemessene Effizienz am Standort) |
+| **V2H** | Vehicle-to-Home (E-Auto als Stromspeicher) |
+| **Arbitrage** | Speicher-Strategie: Billig laden, teuer nutzen |
+| **PVGIS** | EU-Dienst für PV-Ertragsprognosen |
+| **TMY** | Typical Meteorological Year (Durchschnittswetter) |
+
+---
+
+## Support
+
+Bei Fragen oder Problemen:
+
+1. **GitHub Issues**: [github.com/supernova1963/eedc-homeassistant/issues](https://github.com/supernova1963/eedc-homeassistant/issues)
+2. **Dokumentation**: [docs/](.)
+
+---
+
+*Letzte Aktualisierung: Februar 2026*

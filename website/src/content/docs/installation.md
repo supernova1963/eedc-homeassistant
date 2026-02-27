@@ -1,0 +1,74 @@
+---
+title: Installation
+description: EEDC als Home Assistant Add-on oder Standalone installieren
+---
+
+EEDC kann als Home Assistant Add-on oder standalone betrieben werden.
+
+## Option A: Home Assistant Add-on (empfohlen)
+
+Die einfachste Methode – EEDC wird direkt in Home Assistant integriert und kann automatisch Daten aus deinen Sensoren übernehmen.
+
+### Voraussetzungen
+
+- Home Assistant OS oder Supervised (mit Add-on-Unterstützung)
+- MQTT-Broker (z.B. Mosquitto Add-on) für Auto-Discovery
+
+### Schritte
+
+1. **Repository hinzufügen:** In Home Assistant unter *Einstellungen → Add-ons → Add-on Store → Repositories* folgende URL eintragen:
+   ```
+   https://github.com/supernova1963/eedc-homeassistant
+   ```
+2. **Add-on installieren:** „EEDC – Energie Effizienz Data Center" im Store suchen und installieren
+3. **Add-on starten:** Nach der Installation auf „Starten" klicken
+4. **Weboberfläche öffnen:** Über den Button „Weboberfläche öffnen" oder direkt über die Sidebar
+5. **Anlage einrichten:** Der Setup-Wizard führt dich durch die Erstkonfiguration
+
+:::caution[Wichtig]
+Für den direkten Zugriff auf Home Assistant Langzeitstatistiken ist ein Volume-Mapping `config:ro` erforderlich. Dies erfordert eine Neuinstallation des Add-ons (kein einfaches Update).
+:::
+
+---
+
+## Option B: Standalone (Docker)
+
+EEDC kann auch ohne Home Assistant betrieben werden. Ideal wenn du deine Daten manuell oder per CSV-Import erfassen möchtest.
+
+### Voraussetzungen
+
+- Docker und Docker Compose
+- Kein Home Assistant erforderlich
+
+### Schnellstart
+
+```bash
+git clone https://github.com/supernova1963/eedc-homeassistant.git
+cd eedc-homeassistant/eedc
+./run.sh
+```
+
+Die Anwendung ist dann unter `http://localhost:8099` erreichbar.
+
+---
+
+## Nach der Installation
+
+![EEDC Sensor-Mapping Wizard](/eedc-homeassistant/images/einstellungen_sensormapping.png)
+
+1. **Anlage anlegen:** Standort, Koordinaten und Grunddaten eingeben
+2. **Komponenten erfassen:** Wechselrichter, PV-Module, Speicher, etc. mit Investitionskosten
+3. **Strompreise hinterlegen:** Bezugspreis, Einspeisevergütung, ggf. Spezialtarife
+4. **Sensor-Mapping (HA):** Zuordnung deiner HA-Sensoren zu EEDC-Feldern
+5. **Monatsdaten importieren:** Via HA-Statistik-Import, CSV oder manuelle Eingabe
+
+---
+
+## Dateneingabe-Optionen
+
+| Methode | Beschreibung | Voraussetzung |
+|---------|-------------|---------------|
+| HA-Statistik-Import | Bulk-Import aller Monate aus HA-Langzeitstatistiken | Home Assistant + Volume-Mapping |
+| Monatsabschluss-Wizard | Geführte monatliche Eingabe mit Vorschlägen aus HA | Home Assistant (optional) |
+| CSV-Import | Import aus Tabellenkalkulationen | Keine |
+| Manuelle Eingabe | Direkte Erfassung im Formular | Keine |

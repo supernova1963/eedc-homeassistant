@@ -1,0 +1,61 @@
+---
+title: EEDC – Energie Effizienz Data Center
+description: Deine PV-Anlage verdient mehr als nur einen Zählerstand.
+template: splash
+hero:
+  tagline: Detaillierte Analysen, Prognosen und Community-Vergleiche – standalone oder als Home Assistant Add-on.
+  image:
+    file: ../../assets/eedc-icon.png
+  actions:
+    - text: Features entdecken
+      link: /eedc-homeassistant/features/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub Repository
+      link: https://github.com/supernova1963/eedc-homeassistant
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+![EEDC Cockpit Dashboard](/eedc-homeassistant/images/cockpit_main.png)
+
+## Was EEDC für dich tut
+
+<CardGrid stagger>
+  <Card title="Cockpit" icon="sun">
+    Alle wichtigen Kennzahlen auf einen Blick: Autarkiegrad, Eigenverbrauch, Einspeisung, Rendite und Amortisation – übersichtlich auf einem Dashboard.
+  </Card>
+  <Card title="Auswertungen" icon="document">
+    Detaillierte Analysen deiner PV-Anlage, Speicher, Wärmepumpe, E-Auto und Wallbox. SOLL-IST-Vergleich für jeden PV-String.
+  </Card>
+  <Card title="Prognosen" icon="star">
+    7-Tage Wetterprognose, 12-Monats-Vorhersage, Trend-Analyse mit Degradationserkennung und Finanzprognose bis zur Amortisation.
+  </Card>
+  <Card title="Community" icon="approve-check-circle">
+    Vergleiche deine Anlage anonym mit anderen. Regionale Benchmarks, Achievements und Performance-Vergleiche auf Bundesland-Ebene.
+  </Card>
+  <Card title="Home Assistant" icon="setting">
+    Nahtlose Integration als HA Add-on. Automatischer Datenimport aus Langzeitstatistiken, MQTT Auto-Discovery und Sensor-Mapping.
+  </Card>
+  <Card title="Standalone" icon="laptop">
+    Kein Home Assistant? Kein Problem. EEDC läuft auch komplett eigenständig mit manueller Dateneingabe oder CSV-Import.
+  </Card>
+</CardGrid>
+
+## Unterstützte Komponenten
+
+<div class="component-list">
+
+PV-Module (Multi-String) · Wechselrichter · Batteriespeicher (AC & DC) · Wärmepumpe (JAZ/SCOP/COP) · E-Auto (privat & dienstlich) · Wallbox · Balkonkraftwerk · Sonstige Erzeuger & Verbraucher
+
+</div>
+
+## Jetzt starten
+
+EEDC ist Open Source und kostenlos. Installiere es als Home Assistant Add-on oder starte die Standalone-Version.
+
+<div class="cta-buttons">
+  <a href="/eedc-homeassistant/installation/" class="primary">Installationsanleitung</a>
+  <a href="/eedc-homeassistant/support/" class="secondary">Support & Feedback</a>
+</div>

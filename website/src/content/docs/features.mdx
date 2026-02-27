@@ -1,0 +1,83 @@
+---
+title: Features
+description: Alle Features von EEDC im Überblick
+---
+
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Cockpit – Dein Dashboard
+
+![EEDC Cockpit Dashboard](/eedc-homeassistant/images/cockpit_main.png)
+
+- **Hero-Leiste** mit den wichtigsten Kennzahlen: Autarkiegrad, Eigenverbrauchsquote, Gesamtertrag
+- **Energie-Flussdiagramm** – Wohin fließt dein Strom?
+- **Amortisations-Fortschritt** pro Komponente mit Methodenhinweis
+- **Jahres-Rendite** (p.a.) für jede Investition
+- **Sparklines** für Monatsverläufe
+
+---
+
+## Auswertungen – 7 Analyse-Tabs
+
+![EEDC Auswertungen](/eedc-homeassistant/images/auswertungen_komponenten.png)
+
+- **Energie-Übersicht:** Monatliche Aufschlüsselung von Erzeugung, Verbrauch, Einspeisung, Netzbezug
+- **PV-Anlage:** SOLL-IST-Vergleich pro String, Degradationsanalyse
+- **Speicher:** Lade-/Entladezyklen, Netzladungsanteil
+- **Wärmepumpe:** COP/JAZ/SCOP-Auswertung, Heiz- vs. Warmwasseranteil
+- **E-Auto & Wallbox:** Fahrleistung, PV-Ladeanteil, V2H-Entladung, Firmenwagen-Unterstützung
+- **Investitionen:** ROI pro Komponente, Realisierungsquote (Prognose vs. Realität)
+- **Community:** Anonymer Vergleich mit anderen EEDC-Nutzern
+
+---
+
+## Aussichten – 4 Prognose-Module
+
+![EEDC Aussichten Langfristprognose](/eedc-homeassistant/images/aussichten_langfristig.png)
+
+<CardGrid>
+  <Card title="Kurzfristig" icon="sun">
+    7-Tage Wetterprognose mit erwarteter PV-Erzeugung basierend auf GTI (Global Tilted Irradiance) für deine spezifische Modulneigung und -ausrichtung.
+  </Card>
+  <Card title="Langfristig" icon="star">
+    12-Monats-Prognose basierend auf PVGIS-Daten, angepasst an deine historischen Erträge und saisonale Muster.
+  </Card>
+  <Card title="Trend-Analyse" icon="document">
+    Erkennung von Leistungsveränderungen und Degradation über die gesamte Betriebsdauer deiner PV-Anlage.
+  </Card>
+  <Card title="Finanzen" icon="approve-check-circle">
+    Amortisationsprognose, kumulierte Erträge und Finanzplanung bis zum Break-Even – inklusive Mehrkosten-Ansatz.
+  </Card>
+</CardGrid>
+
+---
+
+## Community – Vergleiche dich
+
+![EEDC Community](/eedc-homeassistant/images/community_uebersicht.png)
+
+- **Anonymer Benchmark:** Deine Anlage vs. Community-Durchschnitt
+- **Radar-Chart:** Performance auf 6 Achsen im Vergleich
+- **Regionale Auswertung:** Interaktive Choropleth-Karte nach Bundesländern
+- **Achievements:** Gamification mit 7 Auszeichnungen (Autarkiemeister, Solarprofi, ...)
+- **Komponenten-Deep-Dives:** Detailvergleiche für Speicher, WP, E-Auto, Wallbox, BKW
+
+---
+
+## Steuerliche Features
+
+- **Kleinunternehmerregelung:** Automatische USt-Berechnung auf Eigenverbrauch bei Regelbesteuerung
+- **Spezialtarife:** Separate Strompreise für Wärmepumpe und Wallbox
+- **Firmenwagen:** Dienstliches Laden mit AG-Erstattung in der ROI-Berechnung
+- **Sonstige Positionen:** Flexible Erträge und Ausgaben pro Monat
+
+---
+
+## Wetterdaten – Multi-Provider
+
+| Provider | Region | Besonderheit |
+|----------|--------|-------------|
+| Bright Sky (DWD) | Deutschland | Offizielle DWD-Daten, MOSMIX-Prognose |
+| Open-Meteo | Weltweit | Historisch + Forecast |
+| Open-Meteo Solar | Weltweit | GTI-Berechnung für geneigte Module |
+| PVGIS | Europa | TMY-Referenzdaten der EU |
