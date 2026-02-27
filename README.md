@@ -3,10 +3,11 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.3.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.4.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
+  <a href="https://supernova1963.github.io/eedc-homeassistant/"><img src="https://img.shields.io/badge/Website-GitHub%20Pages-blue" alt="Website"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
@@ -122,6 +123,8 @@ open http://localhost:3000
 
 ## Dokumentation
 
+> **Tipp:** Die Dokumentation ist auch als Website verfügbar: **[supernova1963.github.io/eedc-homeassistant](https://supernova1963.github.io/eedc-homeassistant/)**
+
 | Dokument | Beschreibung |
 |----------|--------------|
 | [Benutzerhandbuch](docs/BENUTZERHANDBUCH.md) | Vollständige Anleitung für Endbenutzer |
@@ -229,6 +232,8 @@ Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfass
 - [x] **Community als Hauptmenü** - Eigener Bereich mit 6 Tabs für tiefgehende Analysen (v2.1.0)
 - [x] **Dashboard-Modernisierung** - Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline, Amortisationsbalken (v2.3.0)
 - [x] **DACH-Onboarding** - Österreich und Schweiz unterstützt (v2.3.0)
+- [x] **Steuerliche Behandlung** - Kleinunternehmerregelung, Spezialtarife (v2.4.0)
+- [x] **Website** - Astro Starlight mit Docs auf GitHub Pages
 - [ ] KI-gestützte Insights
 
 ---
