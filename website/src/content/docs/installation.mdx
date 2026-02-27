@@ -3,6 +3,9 @@ title: Installation
 description: EEDC als Home Assistant Add-on oder Standalone installieren
 ---
 
+import { Image } from 'astro:assets';
+import sensormappingImg from '../../assets/screenshots/einstellungen_sensormapping.png';
+
 EEDC kann als Home Assistant Add-on oder standalone betrieben werden.
 
 ## Option A: Home Assistant Add-on (empfohlen)
@@ -54,7 +57,7 @@ Die Anwendung ist dann unter `http://localhost:8099` erreichbar.
 
 ## Nach der Installation
 
-![EEDC Sensor-Mapping Wizard](/eedc-homeassistant/images/einstellungen_sensormapping.png)
+<Image src={sensormappingImg} alt="EEDC Sensor-Mapping Wizard" quality={85} />
 
 1. **Anlage anlegen:** Standort, Koordinaten und Grunddaten eingeben
 2. **Komponenten erfassen:** Wechselrichter, PV-Module, Speicher, etc. mit Investitionskosten

@@ -17,8 +17,10 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import cockpitImg from '../../assets/screenshots/cockpit_uebersicht.png';
 
-![EEDC Cockpit Dashboard](/eedc-homeassistant/images/cockpit_main.png)
+<Image src={cockpitImg} alt="EEDC Cockpit Dashboard" quality={85} />
 
 ## Was EEDC für dich tut
 

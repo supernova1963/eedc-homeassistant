@@ -8,6 +8,43 @@
 
 **Version:** 2.4.1 | **Status:** Stable Release
 
+## Verbundenes Repository: eedc-community
+
+EEDC besteht aus **zwei eng gekoppelten Repositories**, die gemeinsam entwickelt werden:
+
+| Repository | Zweck | Technik |
+| --- | --- | --- |
+| **eedc-homeassistant** (dieses) | PV-Analyse Add-on (Frontend + Backend) | FastAPI, React, SQLite |
+| **[eedc-community](https://github.com/supernova1963/eedc-community)** | Anonymer Community-Benchmark-Server | FastAPI, React, PostgreSQL |
+
+**Lokaler Pfad:** `/home/gernot/claude/eedc-community`
+**Live:** https://energy.raunet.eu
+
+### Datenfluss
+
+```
+EEDC Add-on                              Community Server
+┌──────────────────────┐                 ┌──────────────────┐
+│ CommunityShare.tsx   │ ── POST ──────→ │ /api/submit      │
+│ CommunityVergleich   │ ── Proxy ─────→ │ /api/benchmark/  │
+│   .tsx (embedded)    │                 │   anlage/{hash}  │
+│ "Im Browser öffnen"  │ ── Link ──────→ │ /?anlage=HASH    │
+└──────────────────────┘                 └──────────────────┘
+```
+
+### Relevante Dateien (EEDC-Seite)
+
+- `eedc/backend/services/community_service.py` – Datenaufbereitung + Anonymisierung
+- `eedc/backend/api/routes/community.py` – API Routes + Benchmark-Proxy
+- `eedc/frontend/src/pages/CommunityShare.tsx` – Upload UI
+- `eedc/frontend/src/pages/CommunityVergleich.tsx` – Benchmark-Analyse
+- `eedc/frontend/src/api/community.ts` – API Client
+
+> **Beachte:** Änderungen am Datenmodell (z.B. neue Monatswert-Felder, Komponenten-KPIs)
+> müssen in **beiden** Repositories synchron angepasst werden:
+> Schemas in `eedc-community/backend/schemas.py` und Aufbereitung in
+> `eedc-homeassistant/eedc/backend/services/community_service.py`.
+
 ## Quick Reference
 
 ### Entwicklungsserver starten
@@ -421,19 +458,6 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 
 ## Offene Features
 
-- [x] PDF-Export ✓ (beta.12)
-- [x] HA-Integration Bereinigung ✓ (beta.13)
-- [x] Sensor-Mapping-Wizard ✓ (v1.1.0)
-- [x] MQTT Auto-Discovery für Monatswerte ✓ (v1.1.0)
-- [x] Monatsabschluss-Wizard ✓ (v1.1.0)
-- [x] HA-Statistik Bulk-Import ✓ (v2.0.0)
-- [x] Community als Hauptmenüpunkt ✓ (v2.1.0)
-- [x] Sonstige Positionen ✓ (v2.4.0)
-- [x] Spezialtarife WP/Wallbox ✓ (v2.4.0)
-- [x] Kleinunternehmerregelung ✓ (v2.4.0)
-- [x] Firmenwagen/Dienstliches Laden ✓ (v2.4.0)
-- [x] Realisierungsquote ✓ (v2.4.0)
-- [x] Website (Astro Starlight + GitHub Pages) ✓
 - [ ] KI-Insights
 
 ## HA-Integration Status (v2.0.0)
@@ -478,7 +502,12 @@ Open-Meteo Solar berechnet GTI für geneigte PV-Module basierend auf:
 - `manuell` - Eingabe im Wizard
 - `keine` - Nicht erfassen
 
-**DEPRECATED (nicht mehr verwenden):**
+**DEPRECATED (nicht mehr verwenden, aber NICHT löschen!):**
+
+> **WICHTIG:** Diese Felder im Anlage-Model dürfen NICHT aus der DB/dem Model entfernt werden,
+> da bestehende Installationen sie noch in der Datenbank haben. Neuer Code soll ausschließlich
+> `sensor_mapping` verwenden.
+
 ```python
 # Anlage Model - diese Felder sind deprecated:
 ha_sensor_pv_erzeugung      # DEPRECATED - nutze sensor_mapping
@@ -499,60 +528,10 @@ ha_sensor_batterie_entladung # DEPRECATED - nutze sensor_mapping
 - **Sonstige Positionen (Issue #7):** Neuer Investitionstyp `sonstiges` mit Kategorien (`erzeuger`/`verbraucher`/`speicher`). Flexible verbrauch_daten je Kategorie. Sonstige Erträge & Ausgaben in MonatsdatenForm. Neue shared Component `SonstigePositionenFields`.
 - **Firmenwagen & dienstliches Laden:** Neues Flag `ist_dienstlich` an Wallbox und E-Auto (in `Investition.parameter`). ROI-Berechnung berücksichtigt AG-Erstattung statt Benzinvergleich bei dienstlichen Fahrzeugen.
 - **Realisierungsquote:** Neues Panel in Auswertung/Investitionen vergleicht historische Erträge mit konfigurierter Prognose. Farbkodierung: ≥90% grün, ≥70% gelb, <70% rot.
-- **Methodenhinweise:** Amortisationsbalken im Cockpit und Komponenten-Dashboards (E-Auto, WP, BKW) zeigen Basis-Hinweis.
 - **Grundpreis in Netzbezugskosten:** Monatlicher Stromgrundpreis (`grundpreis_euro_monat`) wird zu Netzbezugskosten addiert.
 - **Bugfix (Issue #10):** Leeres Installationsdatum verursachte Setup-Wizard-Fehler
 
-**v2.3.0 - Dashboard-Modernisierung und DACH-Onboarding:**
+> **⚠️ BREAKING CHANGE (v2.0.0):** Neuinstallation des Add-ons erforderlich!
+> Volume-Mapping `config:ro` für HA-Statistik-Zugriff.
 
-- **Dashboard-Modernisierung:** Hero-Leiste, Energie-Fluss-Diagramm, Ring-Gauges, Sparkline, Amortisations-Fortschrittsbalken
-- **DACH-Onboarding:** `standort_land` (DE/AT/CH) im Anlage-Modell, Community-Regionszuordnung
-
-**v2.2.0 - Regional Tab: Choropleth-Karte und Performance-Metriken:**
-
-- **Choropleth Deutschlandkarte:** Interaktive Bundesland-Karte via `react-simple-maps` + GeoJSON (`deutschland-bundeslaender.geo.json`)
-  - Farbkodierung nach spezifischem Ertrag (5 Stufen)
-  - Hover-Tooltip mit Performance-Details (Speicher, WP-JAZ, E-Auto, Wallbox, BKW)
-- **Performance-Metriken statt Ausstattungsquoten:** Regional-Tabelle zeigt jetzt durchschnittliche Leistungsdaten:
-  - 🔋 Ø Ladung/Entladung kWh/Mon (getrennt)
-  - ♨️ Ø JAZ (Jahresarbeitszahl)
-  - 🚗 Ø km/Mon + kWh zuhause geladen (gesamt − extern)
-  - 🔌 Ø kWh/Mon + PV-Anteil %
-  - 🪟 Ø BKW-Ertrag kWh/Mon
-- **Community Server Updates:** Neue Aggregationsfelder in `RegionStatistik` (`avg_speicher_ladung_kwh`, `avg_speicher_entladung_kwh`, `avg_wp_jaz`, `avg_eauto_km`, `avg_eauto_ladung_kwh`, `avg_wallbox_kwh`, `avg_wallbox_pv_anteil`, `avg_bkw_kwh`)
-- **Lokale Entwicklungsumgebung:** Python 3.11 venv, VS Code Tasks (Cmd+Shift+B), `.vscode/launch.json`, `.nvmrc` (Node 20)
-- **TypeScript Import-Fixes:** Casing-Korrekturen (`GeoJSON` → `Geojson`, etc.)
-
-**v2.1.0 - Community als Hauptmenüpunkt:**
-
-- **Community im Hauptmenü:** Eigener Navigationsbereich auf Augenhöhe mit Cockpit, Auswertungen, Aussichten
-- **6 Tab-Struktur:** Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
-- **Gamification:** 7 Achievements (Autarkiemeister, Effizienzwunder, Solarprofi, etc.)
-- **Radar-Chart:** Eigene Performance vs. Community auf 6 Achsen
-- **PV-Ertrag Deep-Dive:** Monatlicher Ertrag vs. Community-Durchschnitt, Jahresübersicht
-- **Komponenten Deep-Dives:** Detaillierte Analysen für Speicher, Wärmepumpe, E-Auto, Wallbox, BKW
-- **Regional Tab:** Bundesland-Vergleich und regionale Einordnung
-- **Trends Tab:** Ertragsverlauf, saisonale Performance, Jahresvergleich
-- **Tooltips:** Erklärungen für Community-KPIs
-- **Chronologische Sortierung:** Monatsdaten korrekt sortiert in Charts
-
-**v2.0.3 - Community-Vergleich:**
-
-- **Community-Tab in Auswertungen:** Neuer Tab nach Teilen der Daten
-- **Komponenten-Benchmarks:** Speicher, Wärmepumpe, E-Auto Vergleiche
-- **Zeitraum-Auswahl:** Letzter Monat, 12 Monate, Letztes Jahr, Seit Installation
-- **Zugangslogik:** Tab nur sichtbar wenn Daten geteilt wurden
-- **Backend-Proxy:** `/api/community/benchmark/{anlage_id}`
-
-**v2.0.2 - Legacy-Migration:**
-
-- CSV-Import migriert automatisch alte Felder (PV_Erzeugung_kWh, Batterie_*)
-
-**v2.0.1 - Selektiver Import:**
-
-- Import-Modi (Alles/Nur Basis/Nur Komponenten) + Checkboxen pro Feld
-
-**v2.0.0 - ⚠️ BREAKING CHANGE:**
-
-Neuinstallation erforderlich! Volume-Mapping `config:ro` für HA-Statistik-Zugriff.
-Siehe [CHANGELOG.md](CHANGELOG.md) für vollständige Versionshistorie.
+Für die vollständige Versionshistorie siehe [CHANGELOG.md](CHANGELOG.md).
