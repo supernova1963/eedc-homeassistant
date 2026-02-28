@@ -32,7 +32,7 @@
   - [x] 0.5b Frontend startet (`npm run dev`) ✓ Vite auf Port 3001
   - [x] 0.5c HA-Tabs NICHT sichtbar: `ha_integration_available: false`, 0 HA-Endpoints in OpenAPI
   - [x] 0.5d Core-Features: `/api/anlagen`, `/api/stats`, `/api/scheduler`, `/api/health` → alle OK
-  - [ ] 0.5e `docker-compose up` → Docker nicht auf Entwicklungsmaschine installiert, Dateien syntaktisch OK
+  - [x] 0.5e `docker-compose up` ✓ Container läuft, App erreichbar auf Port 8099
 
 ### Phase 1: SMA Client Foundation (braucht: Phase 0 + SMA Credentials)
 
