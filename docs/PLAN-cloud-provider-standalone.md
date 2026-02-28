@@ -1,5 +1,121 @@
 # EEDC Standalone + Cloud-Provider-Integration
 
+## Checkliste
+
+> **Stand:** 2026-02-28 | **Kein Breaking Change** für eedc-homeassistant
+
+### Voraussetzungen
+
+- [x] SMA Developer Portal registrieren (developer.sma.de) → Antwort ausstehend
+- [x] GitHub: Altes eedc Repo → `eedc-legacy` umbenannt
+- [ ] SMA Sandbox-Credentials erhalten (client_id / client_secret)
+
+### Phase 0: Repo-Restrukturierung
+
+- [x] 0.1 Altes `eedc` Repo zu `eedc-legacy` umbenennen
+- [ ] 0.2 Neues `eedc` Repo erstellen (supernova1963/eedc)
+- [ ] 0.2a Code aus `eedc-homeassistant/eedc/` kopieren (backend, frontend, data)
+- [ ] 0.2b `.gitignore` erstellen
+- [ ] 0.2c Initial Commit + Push
+- [ ] 0.3 Conditional Loading einbauen
+  - [ ] 0.3a `backend/core/config.py` – Feature-Flag `HA_INTEGRATION_AVAILABLE`
+  - [ ] 0.3b `backend/main.py` – Conditional Router Registration (HA-Routes nur mit SUPERVISOR_TOKEN)
+  - [ ] 0.3c `frontend/src/hooks/useHAAvailable.ts` – NEU: Hook zur HA-Erkennung
+  - [ ] 0.3d `frontend/src/components/layout/SubTabs.tsx` – HA-Tabs conditional, "Datenquellen"-Gruppe
+  - [ ] 0.3e `frontend/src/components/layout/TopNavigation.tsx` – HA-Kategorie conditional
+- [ ] 0.4 Standalone Deployment
+  - [ ] 0.4a `Dockerfile` – NEU: Standalone Docker (Multi-stage, ohne HA-Labels)
+  - [ ] 0.4b `docker-compose.yml` – NEU: Standalone Deployment
+  - [ ] 0.4c `README.md` – NEU: Standalone-Dokumentation
+- [ ] 0.5 Verifizierung Phase 0
+  - [ ] 0.5a Backend startet standalone (`uvicorn backend.main:app`)
+  - [ ] 0.5b Frontend startet (`npm run dev`)
+  - [ ] 0.5c HA-Tabs NICHT sichtbar (kein SUPERVISOR_TOKEN)
+  - [ ] 0.5d Core-Features funktionieren (Anlage, Monatsdaten, Cockpit)
+  - [ ] 0.5e `docker-compose up` funktioniert
+
+### Phase 1: SMA Client Foundation (braucht: Phase 0 + SMA Credentials)
+
+- [ ] 1.1 Datenmodell
+  - [ ] 1.1a `backend/models/anlage.py` – Feld `cloud_provider_config` (JSON, nullable)
+  - [ ] 1.1b `backend/core/database.py` – Migration registrieren
+- [ ] 1.2 Provider-Package
+  - [ ] 1.2a `backend/services/cloud_providers/__init__.py` – Package Init
+  - [ ] 1.2b `backend/services/cloud_providers/base.py` – ABC + Dataclasses
+  - [ ] 1.2c `backend/services/cloud_providers/registry.py` – Provider Factory
+  - [ ] 1.2d `backend/services/cloud_providers/token_manager.py` – Token-Refresh
+  - [ ] 1.2e `backend/services/cloud_providers/sma_ennexos.py` – SMA Implementation
+- [ ] 1.3 API-Routen
+  - [ ] 1.3a `backend/api/routes/cloud_provider.py` – NEU (Auth + Status Endpoints)
+  - [ ] 1.3b `backend/main.py` – Cloud-Router registrieren
+- [ ] 1.4 Verifizierung Phase 1
+  - [ ] 1.4a `GET /api/cloud/providers` → SMA ennexOS in Liste
+  - [ ] 1.4b OAuth2-Flow mit SMA Sandbox erfolgreich
+  - [ ] 1.4c Token-Refresh funktioniert
+  - [ ] 1.4d Verbindungsstatus korrekt angezeigt
+
+### Phase 2: System Discovery + Smart Setup Wizard (braucht: Phase 1)
+
+- [ ] 2.1 Backend
+  - [ ] 2.1a `cloud_provider.py` – Discovery Endpoint (`GET /api/cloud/discover`)
+  - [ ] 2.1b `cloud_provider.py` – Import-System Endpoint (`POST /api/cloud/import-system`)
+- [ ] 2.2 Frontend
+  - [ ] 2.2a `frontend/src/api/cloudProvider.ts` – NEU: API Client
+  - [ ] 2.2b `frontend/src/pages/CloudSetupWizard.tsx` – NEU: 5-Schritt Wizard
+  - [ ] 2.2c `frontend/src/App.tsx` – Route hinzufügen
+  - [ ] 2.2d `SubTabs.tsx` + `TopNavigation.tsx` – Cloud-Provider Tab
+- [ ] 2.3 Verifizierung Phase 2
+  - [ ] 2.3a Wizard: Provider wählen → Auth → System erkennen
+  - [ ] 2.3b Geräte korrekt als Baum angezeigt (WR → Module → Speicher)
+  - [ ] 2.3c Kosten manuell ergänzen → Investitionen korrekt angelegt
+  - [ ] 2.3d Parent-Child Beziehungen (WR → PV-Module) korrekt
+  - [ ] 2.3e `device_mapping` in `cloud_provider_config` gespeichert
+
+### Phase 3: Monatsdaten-Prefill (braucht: Phase 2)
+
+- [ ] 3.1 Backend
+  - [ ] 3.1a `backend/services/vorschlag_service.py` – `CLOUD_API` als VorschlagQuelle
+  - [ ] 3.1b `cloud_provider.py` – Monatswerte Endpoint
+  - [ ] 3.1c `cloud_provider.py` – Verfügbare Monate Endpoint
+- [ ] 3.2 Frontend
+  - [ ] 3.2a `MonatsabschlussWizard.tsx` – "Werte aus Cloud laden" Button
+  - [ ] 3.2b `cloudProvider.ts` – Monatswerte API-Calls
+- [ ] 3.3 Verifizierung Phase 3
+  - [ ] 3.3a Monatsabschluss: Cloud-Button sichtbar (wenn setup_complete)
+  - [ ] 3.3b Werte werden als Vorschläge angezeigt (Quelle: cloud_api)
+  - [ ] 3.3c User kann einzelne Werte übernehmen/ablehnen
+  - [ ] 3.3d E-Auto, sonstige Kosten etc. manuell ergänzbar
+
+### Phase 4: Scheduler + Sicherheit + Polish (braucht: Phase 3)
+
+- [ ] 4.1 Scheduler
+  - [ ] 4.1a `backend/services/scheduler.py` – Cloud-Fetch CronJob (1. des Monats, 00:15)
+- [ ] 4.2 Sicherheit
+  - [ ] 4.2a `import_export/json_operations.py` – Tokens aus Export ausschließen
+  - [ ] 4.2b Token-Refresh-Fehler → UI-Hinweis "Erneut anmelden"
+- [ ] 4.3 Dokumentation
+  - [ ] 4.3a CHANGELOG.md aktualisieren
+  - [ ] 4.3b CLAUDE.md – Cloud-Provider Sektion
+  - [ ] 4.3c README.md (eedc) – Anleitung Cloud-Setup
+- [ ] 4.4 Verifizierung Phase 4
+  - [ ] 4.4a Scheduler-Job manuell triggern → Daten gecached
+  - [ ] 4.4b JSON-Export enthält KEINE Tokens
+  - [ ] 4.4c Abgelaufener Token → "Erneut anmelden" Hinweis
+
+### Phase 5: Subtree Integration (braucht: Phase 0, unabhängig von 1-4)
+
+- [ ] 5.1 `eedc-homeassistant`: bestehenden eedc/ Code entfernen (git rm)
+- [ ] 5.2 `git subtree add --prefix=eedc` von supernova1963/eedc
+- [ ] 5.3 HA-Add-on testen: alle Features funktionieren wie bisher
+- [ ] 5.4 CLAUDE.md – Subtree-Workflow dokumentieren
+- [ ] 5.5 Verifizierung Phase 5
+  - [ ] 5.5a HA-Add-on startet und funktioniert vollständig
+  - [ ] 5.5b HA-Tabs sichtbar (SUPERVISOR_TOKEN gesetzt)
+  - [ ] 5.5c Cloud-Provider ebenfalls verfügbar
+  - [ ] 5.5d `git subtree pull` holt Änderungen aus eedc
+
+---
+
 ## Kontext
 
 EEDC existiert aktuell nur als HA-Add-on (`eedc-homeassistant`). Das alte standalone `eedc` Repo (Supabase/Next.js) ist deprecated/archived. Ziel:
@@ -454,16 +570,8 @@ Phase 5: Subtree Integration (braucht: Phase 0, unabhängig von 1-4)
 
 **Hinweis:** Phase 5 kann parallel zu Phase 1-4 erfolgen, sobald Phase 0 abgeschlossen ist.
 
-## Voraussetzungen (VOR Implementierung)
+## Hinweise
 
-1. **SMA Developer Portal** (developer.sma.de) registrieren + Sandbox-Credentials anfordern
-2. **GitHub**: Altes eedc Repo umbenennen (Adminrechte nötig)
-
-## Verifikation
-
-- **Phase 0:** `docker-compose up` → EEDC läuft standalone, HA-Tabs nicht sichtbar, Cloud-Tab sichtbar
-- **Phase 1:** `GET /api/cloud/providers` → SMA ennexOS in Liste. OAuth2 mit SMA Sandbox testen
-- **Phase 2:** Wizard: Provider → Auth → Discover → Kosten → Investitionen korrekt angelegt
-- **Phase 3:** Monatsabschluss → "Werte aus Cloud laden" → Vorschläge erscheinen
-- **Phase 4:** Scheduler-Job manuell triggern, JSON-Export ohne Tokens prüfen
-- **Phase 5:** `git subtree pull` in eedc-homeassistant, HA-Add-on funktioniert weiterhin
+- **Kein Breaking Change** für bestehende eedc-homeassistant Installationen
+- Voraussetzungen und Verifikationsschritte sind in der Checkliste oben integriert
+- Diese Datei wird mit jedem Implementierungsschritt aktualisiert
