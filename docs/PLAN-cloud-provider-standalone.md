@@ -2,7 +2,7 @@
 
 ## Checkliste
 
-> **Stand:** 2026-02-28 | Phase 0 abgeschlossen | **Kein Breaking Change** für eedc-homeassistant
+> **Stand:** 2026-02-28 | Phase 0 + 5 abgeschlossen | **Kein Breaking Change** für eedc-homeassistant
 
 ### Voraussetzungen
 
@@ -108,10 +108,11 @@
 - [x] 5.2 `git subtree add --prefix=eedc` von supernova1963/eedc ✓
 - [x] 5.3 HA-spezifische Dateien zurückkopieren (Dockerfile, config.yaml, run.sh, icons, CHANGELOG)
 - [x] 5.4 CLAUDE.md – Subtree-Workflow dokumentiert (inkl. Regeln)
-- [ ] 5.5 Verifizierung Phase 5
-  - [ ] 5.5a HA-Add-on startet und funktioniert vollständig (Test auf HA-Instanz)
-  - [ ] 5.5b HA-Tabs sichtbar (SUPERVISOR_TOKEN gesetzt)
-  - [ ] 5.5c `git subtree pull` holt Änderungen aus eedc
+- [x] 5.5 Verifizierung Phase 5
+  - [x] 5.5a HA-Add-on startet und funktioniert vollständig ✓
+  - [x] 5.5b HA-Tabs sichtbar (Sensor-Zuordnung, Statistik-Import, MQTT-Export) ✓
+  - [x] 5.5c `git subtree pull` holt Änderungen aus eedc ✓ (Fix für useHAAvailable erfolgreich gepullt)
+  - [x] 5.5d Bugfix: useHAAvailable auf relativen API-Pfad umgestellt (HA Ingress Kompatibilität)
 
 ---
 
