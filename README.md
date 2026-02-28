@@ -94,16 +94,18 @@
 ### Option 2: Standalone mit Docker
 
 ```bash
-# Image bauen
+# Standalone-Repository klonen
+git clone https://github.com/supernova1963/eedc.git
 cd eedc
-docker build -t eedc .
 
-# Container starten
-docker run -p 8099:8099 -v $(pwd)/data:/data eedc
+# Mit Docker Compose starten
+docker compose up -d
 
 # Browser öffnen
 open http://localhost:8099
 ```
+
+> **Hinweis:** Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://github.com/supernova1963/eedc).
 
 ### Option 3: Lokale Entwicklung
 
@@ -190,6 +192,18 @@ Anlage (PV-Anlage mit Standort, Ausrichtung)
         ├── Balkonkraftwerk
         └── Sonstiges
 ```
+
+---
+
+## Repositories
+
+| Repository | Zweck |
+|---|---|
+| **[eedc](https://github.com/supernova1963/eedc)** | Standalone EEDC (Backend + Frontend) |
+| **[eedc-homeassistant](https://github.com/supernova1963/eedc-homeassistant)** (dieses) | HA-Add-on + Website + Dokumentation |
+| **[eedc-community](https://github.com/supernova1963/eedc-community)** | Anonymer Community-Benchmark-Server |
+
+Der Shared Code (Backend, Frontend) liegt im `eedc` Repo und wird hier als git subtree unter `eedc/` eingebunden.
 
 ---
 

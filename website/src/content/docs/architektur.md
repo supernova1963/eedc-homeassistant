@@ -4,7 +4,7 @@ description: "Architektur-Dokumentation für EEDC - Systemaufbau, Datenmodell un
 ---
 
 
-**Version 2.4.0** | Stand: Februar 2026
+**Version 2.4.1** | Stand: Februar 2026
 
 ---
 

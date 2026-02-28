@@ -46,12 +46,16 @@ EEDC kann auch ohne Home Assistant betrieben werden. Ideal wenn du deine Daten m
 ### Schnellstart
 
 ```bash
-git clone https://github.com/supernova1963/eedc-homeassistant.git
-cd eedc-homeassistant/eedc
-./run.sh
+git clone https://github.com/supernova1963/eedc.git
+cd eedc
+docker compose up -d
 ```
 
 Die Anwendung ist dann unter `http://localhost:8099` erreichbar.
+
+:::tip[Standalone-Repository]
+Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://github.com/supernova1963/eedc) mit vereinfachtem Dockerfile und docker-compose.yml.
+:::
 
 ---
 

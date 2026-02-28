@@ -4,7 +4,23 @@ description: "Entwicklungsanleitung für EEDC - Setup, Build, Test und Deploymen
 ---
 
 
-**Version 2.3.0** | Stand: Februar 2026
+**Version 2.4.1** | Stand: Februar 2026
+
+---
+
+## Repository-Struktur
+
+EEDC besteht aus drei Repositories:
+
+| Repository | Zweck | URL |
+|---|---|---|
+| **eedc** | Standalone EEDC (Source of Truth) | [supernova1963/eedc](https://github.com/supernova1963/eedc) |
+| **eedc-homeassistant** | HA-Add-on + Website + Docs | [supernova1963/eedc-homeassistant](https://github.com/supernova1963/eedc-homeassistant) |
+| **eedc-community** | Community-Benchmark-Server | [supernova1963/eedc-community](https://github.com/supernova1963/eedc-community) |
+
+Der Shared Code (Backend + Frontend) liegt im **eedc** Repo. Das **eedc-homeassistant** Repo bindet diesen Code als git subtree unter `eedc/` ein und ergänzt HA-spezifische Dateien (Dockerfile, config.yaml, run.sh).
+
+**Workflow:** Shared Code im `eedc` Repo entwickeln, dann `git subtree pull` in eedc-homeassistant.
 
 ---
 
@@ -18,6 +34,13 @@ description: "Entwicklungsanleitung für EEDC - Setup, Build, Test und Deploymen
 
 ### 1. Repository klonen
 
+**Standalone-Entwicklung (empfohlen):**
+```bash
+git clone https://github.com/supernova1963/eedc.git
+cd eedc
+```
+
+**HA-Add-on Entwicklung:**
 ```bash
 git clone https://github.com/supernova1963/eedc-homeassistant.git
 cd eedc-homeassistant
