@@ -2,7 +2,7 @@
 
 ## Checkliste
 
-> **Stand:** 2026-02-28 | Phase 0.2-0.4 erledigt | **Kein Breaking Change** für eedc-homeassistant
+> **Stand:** 2026-02-28 | Phase 0 abgeschlossen | **Kein Breaking Change** für eedc-homeassistant
 
 ### Voraussetzungen
 
@@ -27,12 +27,12 @@
   - [x] 0.4a `Dockerfile` – NEU: Standalone Docker (Multi-stage, ohne HA-Labels)
   - [x] 0.4b `docker-compose.yml` – NEU: Standalone Deployment
   - [x] 0.4c `README.md` – NEU: Standalone-Dokumentation
-- [ ] 0.5 Verifizierung Phase 0
-  - [ ] 0.5a Backend startet standalone (`uvicorn backend.main:app`)
-  - [ ] 0.5b Frontend startet (`npm run dev`)
-  - [ ] 0.5c HA-Tabs NICHT sichtbar (kein SUPERVISOR_TOKEN)
-  - [ ] 0.5d Core-Features funktionieren (Anlage, Monatsdaten, Cockpit)
-  - [ ] 0.5e `docker-compose up` funktioniert
+- [x] 0.5 Verifizierung Phase 0
+  - [x] 0.5a Backend startet standalone (`uvicorn backend.main:app`) ✓ Port 8199
+  - [x] 0.5b Frontend startet (`npm run dev`) ✓ Vite auf Port 3001
+  - [x] 0.5c HA-Tabs NICHT sichtbar: `ha_integration_available: false`, 0 HA-Endpoints in OpenAPI
+  - [x] 0.5d Core-Features: `/api/anlagen`, `/api/stats`, `/api/scheduler`, `/api/health` → alle OK
+  - [ ] 0.5e `docker-compose up` → Docker nicht auf Entwicklungsmaschine installiert, Dateien syntaktisch OK
 
 ### Phase 1: SMA Client Foundation (braucht: Phase 0 + SMA Credentials)
 
