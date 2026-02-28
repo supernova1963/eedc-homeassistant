@@ -1,1 +1,0 @@
-export { PVStringVergleich } from './PVStringVergleich'
