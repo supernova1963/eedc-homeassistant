@@ -8,17 +8,58 @@
 
 **Version:** 2.4.1 | **Status:** Stable Release
 
-## Verbundenes Repository: eedc-community
+## Verbundene Repositories
 
-EEDC besteht aus **zwei eng gekoppelten Repositories**, die gemeinsam entwickelt werden:
+EEDC besteht aus **drei Repositories**, die gemeinsam entwickelt werden:
 
 | Repository | Zweck | Technik |
 | --- | --- | --- |
-| **eedc-homeassistant** (dieses) | PV-Analyse Add-on (Frontend + Backend) | FastAPI, React, SQLite |
+| **eedc-homeassistant** (dieses) | HA-Add-on + Website + Docs | HA-Config, Subtree |
+| **[eedc](https://github.com/supernova1963/eedc)** | Standalone EEDC (Source of Truth) | FastAPI, React, SQLite |
 | **[eedc-community](https://github.com/supernova1963/eedc-community)** | Anonymer Community-Benchmark-Server | FastAPI, React, PostgreSQL |
 
-**Lokaler Pfad:** `/home/gernot/claude/eedc-community`
-**Live:** https://energy.raunet.eu
+**Lokale Pfade:**
+- eedc: `/home/gernot/claude/eedc`
+- eedc-community: `/home/gernot/claude/eedc-community`
+
+**Live:** https://energy.raunet.eu (Community)
+
+### git subtree: eedc ↔ eedc-homeassistant
+
+Das `eedc/` Verzeichnis ist ein **git subtree** von `supernova1963/eedc`:
+
+```
+eedc-homeassistant/
+├── eedc/                    ← git subtree von supernova1963/eedc
+│   ├── backend/             ← Shared Code (aus Subtree)
+│   ├── frontend/            ← Shared Code (aus Subtree)
+│   ├── Dockerfile           ← HA-spezifisch (NICHT aus Subtree!)
+│   ├── config.yaml          ← HA-spezifisch
+│   ├── run.sh               ← HA-spezifisch
+│   ├── icon.png / logo.png  ← HA-spezifisch
+│   ├── CHANGELOG.md         ← HA-spezifisch
+│   ├── docker-compose.yml   ← Aus Subtree (Standalone)
+│   └── README.md            ← Aus Subtree (Standalone)
+├── website/
+├── docs/
+├── CLAUDE.md
+└── repository.yaml
+```
+
+**Subtree-Workflow:**
+```bash
+# Änderungen aus eedc Repo holen:
+cd /home/gernot/claude/eedc-homeassistant
+git subtree pull --prefix=eedc https://github.com/supernova1963/eedc.git main --squash
+
+# WICHTIG: Dockerfile-Konflikt manuell lösen (HA-Version behalten!)
+# Das eedc Repo hat ein Standalone-Dockerfile, wir brauchen das HA-spezifische.
+```
+
+**Regeln:**
+- Shared Code (backend/, frontend/) → Änderungen im `eedc` Repo machen, dann `subtree pull`
+- HA-spezifische Dateien (Dockerfile, config.yaml, run.sh) → Direkt in eedc-homeassistant ändern
+- **KEIN `git subtree push`** verwenden (würde HA-Dateien ins Standalone-Repo pushen)
 
 ### Datenfluss
 

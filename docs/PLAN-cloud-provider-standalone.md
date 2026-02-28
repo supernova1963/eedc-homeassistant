@@ -104,15 +104,14 @@
 
 ### Phase 5: Subtree Integration (braucht: Phase 0, unabhängig von 1-4)
 
-- [ ] 5.1 `eedc-homeassistant`: bestehenden eedc/ Code entfernen (git rm)
-- [ ] 5.2 `git subtree add --prefix=eedc` von supernova1963/eedc
-- [ ] 5.3 HA-Add-on testen: alle Features funktionieren wie bisher
-- [ ] 5.4 CLAUDE.md – Subtree-Workflow dokumentieren
+- [x] 5.1 `eedc-homeassistant`: bestehenden eedc/ Code entfernen (git rm)
+- [x] 5.2 `git subtree add --prefix=eedc` von supernova1963/eedc ✓
+- [x] 5.3 HA-spezifische Dateien zurückkopieren (Dockerfile, config.yaml, run.sh, icons, CHANGELOG)
+- [x] 5.4 CLAUDE.md – Subtree-Workflow dokumentiert (inkl. Regeln)
 - [ ] 5.5 Verifizierung Phase 5
-  - [ ] 5.5a HA-Add-on startet und funktioniert vollständig
+  - [ ] 5.5a HA-Add-on startet und funktioniert vollständig (Test auf HA-Instanz)
   - [ ] 5.5b HA-Tabs sichtbar (SUPERVISOR_TOKEN gesetzt)
-  - [ ] 5.5c Cloud-Provider ebenfalls verfügbar
-  - [ ] 5.5d `git subtree pull` holt Änderungen aus eedc
+  - [ ] 5.5c `git subtree pull` holt Änderungen aus eedc
 
 ---
 
