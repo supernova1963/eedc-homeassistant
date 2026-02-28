@@ -7,12 +7,12 @@
 ### Voraussetzungen
 
 - [x] SMA Developer Portal registrieren (developer.sma.de) → Antwort ausstehend
-- [x] GitHub: Altes eedc Repo → `eedc-legacy` umbenannt
+- [x] GitHub: Altes eedc Repo → `eedc-archive` umbenannt
 - [ ] SMA Sandbox-Credentials erhalten (client_id / client_secret)
 
 ### Phase 0: Repo-Restrukturierung
 
-- [x] 0.1 Altes `eedc` Repo zu `eedc-legacy` umbenennen
+- [x] 0.1 Altes `eedc` Repo zu `eedc-archive` umbenennen
 - [ ] 0.2 Neues `eedc` Repo erstellen (supernova1963/eedc)
 - [ ] 0.2a Code aus `eedc-homeassistant/eedc/` kopieren (backend, frontend, data)
 - [ ] 0.2b `.gitignore` erstellen
@@ -171,7 +171,7 @@ supernova1963/eedc-community        # Community-Server (unverändert)
 ### 0.1 Altes eedc Repo umbenennen
 
 ```bash
-gh repo rename eedc-legacy --repo supernova1963/eedc
+gh repo rename eedc-archive --repo supernova1963/eedc
 # Danach: supernova1963/eedc ist frei
 ```
 
