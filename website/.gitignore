@@ -19,3 +19,10 @@ pnpm-debug.log*
 
 # macOS-specific files
 .DS_Store
+
+# Auto-generated from docs/ via scripts/sync-docs.sh (Single Source of Truth: docs/)
+src/content/docs/benutzerhandbuch.md
+src/content/docs/architektur.md
+src/content/docs/entwicklung.md
+src/content/docs/setup-devmachine.md
+src/content/docs/changelog.md
