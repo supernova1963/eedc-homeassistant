@@ -1,9 +1,13 @@
 /**
  * Hook zur Erkennung ob Home Assistant Integration verfügbar ist.
  * Prüft den /api/settings Endpoint auf ha_integration_available.
+ *
+ * WICHTIG: Verwendet relativen Pfad './api' für HA Ingress Kompatibilität!
+ * Absoluter Pfad '/api' würde in HA Ingress auf die HA-API zeigen.
  */
 
 import { useState, useEffect } from 'react'
+import { api } from '../api/client'
 
 let cachedResult: boolean | null = null
 
@@ -13,8 +17,7 @@ export function useHAAvailable(): boolean {
   useEffect(() => {
     if (cachedResult !== null) return
 
-    fetch('/api/settings')
-      .then(res => res.json())
+    api.get<{ ha_integration_available?: boolean }>('/settings')
       .then(data => {
         cachedResult = data.ha_integration_available ?? false
         setAvailable(cachedResult!)
