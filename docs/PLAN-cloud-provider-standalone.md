@@ -2,7 +2,7 @@
 
 ## Checkliste
 
-> **Stand:** 2026-02-28 | **Kein Breaking Change** für eedc-homeassistant
+> **Stand:** 2026-02-28 | Phase 0.2-0.4 erledigt | **Kein Breaking Change** für eedc-homeassistant
 
 ### Voraussetzungen
 
@@ -13,20 +13,20 @@
 ### Phase 0: Repo-Restrukturierung
 
 - [x] 0.1 Altes `eedc` Repo zu `eedc-archive` umbenennen
-- [ ] 0.2 Neues `eedc` Repo erstellen (supernova1963/eedc)
-- [ ] 0.2a Code aus `eedc-homeassistant/eedc/` kopieren (backend, frontend, data)
-- [ ] 0.2b `.gitignore` erstellen
-- [ ] 0.2c Initial Commit + Push
-- [ ] 0.3 Conditional Loading einbauen
-  - [ ] 0.3a `backend/core/config.py` – Feature-Flag `HA_INTEGRATION_AVAILABLE`
-  - [ ] 0.3b `backend/main.py` – Conditional Router Registration (HA-Routes nur mit SUPERVISOR_TOKEN)
-  - [ ] 0.3c `frontend/src/hooks/useHAAvailable.ts` – NEU: Hook zur HA-Erkennung
-  - [ ] 0.3d `frontend/src/components/layout/SubTabs.tsx` – HA-Tabs conditional, "Datenquellen"-Gruppe
-  - [ ] 0.3e `frontend/src/components/layout/TopNavigation.tsx` – HA-Kategorie conditional
-- [ ] 0.4 Standalone Deployment
-  - [ ] 0.4a `Dockerfile` – NEU: Standalone Docker (Multi-stage, ohne HA-Labels)
-  - [ ] 0.4b `docker-compose.yml` – NEU: Standalone Deployment
-  - [ ] 0.4c `README.md` – NEU: Standalone-Dokumentation
+- [x] 0.2 Neues `eedc` Repo erstellen (supernova1963/eedc)
+- [x] 0.2a Code aus `eedc-homeassistant/eedc/` kopieren (backend, frontend, data)
+- [x] 0.2b `.gitignore` erstellen
+- [x] 0.2c Initial Commit + Push
+- [x] 0.3 Conditional Loading einbauen
+  - [x] 0.3a `backend/core/config.py` – Feature-Flag `HA_INTEGRATION_AVAILABLE`
+  - [x] 0.3b `backend/main.py` – Conditional Router Registration (HA-Routes nur mit SUPERVISOR_TOKEN)
+  - [x] 0.3c `frontend/src/hooks/useHAAvailable.ts` – NEU: Hook zur HA-Erkennung
+  - [x] 0.3d `frontend/src/components/layout/SubTabs.tsx` – HA-Tabs conditional
+  - [x] 0.3e `frontend/src/components/layout/TopNavigation.tsx` – HA-Kategorie conditional
+- [x] 0.4 Standalone Deployment
+  - [x] 0.4a `Dockerfile` – NEU: Standalone Docker (Multi-stage, ohne HA-Labels)
+  - [x] 0.4b `docker-compose.yml` – NEU: Standalone Deployment
+  - [x] 0.4c `README.md` – NEU: Standalone-Dokumentation
 - [ ] 0.5 Verifizierung Phase 0
   - [ ] 0.5a Backend startet standalone (`uvicorn backend.main:app`)
   - [ ] 0.5b Frontend startet (`npm run dev`)
