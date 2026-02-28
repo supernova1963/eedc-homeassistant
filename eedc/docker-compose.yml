@@ -1,0 +1,13 @@
+services:
+  eedc:
+    build: .
+    ports:
+      - "8099:8099"
+    volumes:
+      - eedc-data:/data
+    environment:
+      - TZ=Europe/Berlin
+    restart: unless-stopped
+
+volumes:
+  eedc-data:
