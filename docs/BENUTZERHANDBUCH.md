@@ -214,7 +214,7 @@ Plus ein Dropdown-Menü für **Einstellungen**.
 
 ### Einstellungen-Dropdown
 
-Das Dropdown-Menü ist in vier Kategorien unterteilt:
+Das Dropdown-Menü ist in fünf Kategorien unterteilt:
 
 **Stammdaten:**
 - Anlage – PV-Anlage bearbeiten
@@ -223,25 +223,31 @@ Das Dropdown-Menü ist in vier Kategorien unterteilt:
 
 **Daten:**
 - Monatsdaten – Energiedaten eingeben/bearbeiten
+- Monatsabschluss – Geführter Monatsabschluss-Wizard
 - Import – CSV-Import/Export
+- Datenerfassung – Automatische Datenerfassung konfigurieren
 - Demo-Daten – Testdaten laden
 
 **System:**
 - Solarprognose – PVGIS-Prognose und Wetter-Provider
 - Allgemein – Version, Status
 
-**Optional:**
-- HA-Export – MQTT-Konfiguration (nur bei HA-Nutzung)
+**Home Assistant** (nur bei HA-Nutzung sichtbar):
+- Sensor-Zuordnung – HA-Sensoren zu EEDC-Feldern zuordnen
+- Statistik-Import – Bulk-Import aus HA-Langzeitstatistik
+- MQTT-Export – MQTT Auto-Discovery Konfiguration
 
-### Sub-Tabs (kontextabhängig)
+**Community:**
+- Daten teilen – Anonyme Daten an Community-Server senden
 
-Unter der Hauptnavigation erscheinen kontextabhängige Tabs:
+### Sub-Navigation (kontextabhängig)
 
-**Cockpit Sub-Tabs:**
+Unter der Hauptnavigation erscheinen kontextabhängige Links:
+
+**Cockpit Sub-Seiten:**
 - Übersicht | PV-Anlage | E-Auto | Wärmepumpe | Speicher | Wallbox | Balkonkraftwerk | Sonstiges
 
-**Einstellungen Sub-Tabs:**
-- Anlage | Strompreise | Investitionen | Monatsdaten | Import/Export | Solarprognose | Allgemein
+(Jede Komponente hat ein eigenes Dashboard mit spezifischen KPIs.)
 
 ---
 

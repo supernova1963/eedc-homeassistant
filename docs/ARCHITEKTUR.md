@@ -126,21 +126,24 @@ eedc-homeassistant/
     │   │       ├── investitionen.py
     │   │       ├── strompreise.py
     │   │       ├── cockpit.py
-    │   │       ├── import_export/     # Modulares Package
-    │   │       │   ├── __init__.py   # Router-Kombination
-    │   │       │   ├── schemas.py    # Pydantic-Modelle
-    │   │       │   ├── helpers.py    # Hilfsfunktionen
+    │   │       ├── aussichten.py          # Prognosen (4 Tabs)
+    │   │       ├── community.py           # Community-Teilen & Benchmark
+    │   │       ├── import_export/         # Modulares Package
+    │   │       │   ├── __init__.py       # Router-Kombination
+    │   │       │   ├── schemas.py        # Pydantic-Modelle
+    │   │       │   ├── helpers.py        # Hilfsfunktionen
     │   │       │   ├── csv_operations.py
     │   │       │   ├── json_operations.py
-    │   │       │   ├── pdf_operations.py  # PDF-Export (NEU beta.12)
+    │   │       │   ├── pdf_operations.py  # PDF-Export
     │   │       │   └── demo_data.py
     │   │       ├── wetter.py
     │   │       ├── pvgis.py
     │   │       ├── ha_export.py
     │   │       ├── ha_import.py
     │   │       ├── ha_integration.py
-    │   │       ├── sensor_mapping.py     # Sensor-Mapping CRUD (NEU)
-    │   │       └── monatsabschluss.py    # Monatsabschluss-Wizard API (NEU)
+    │   │       ├── ha_statistics.py       # HA-Statistik Bulk-Import
+    │   │       ├── sensor_mapping.py      # Sensor-Mapping CRUD
+    │   │       └── monatsabschluss.py     # Monatsabschluss-Wizard API
     │   │
     │   ├── core/                # Kernfunktionalität
     │   │   ├── config.py        # Settings + Version
@@ -153,18 +156,25 @@ eedc-homeassistant/
     │   │   ├── investition.py
     │   │   ├── strompreis.py
     │   │   ├── pvgis_prognose.py
-    │   │   └── string_monatsdaten.py
+    │   │   └── settings.py         # App-Einstellungen
+    │   │
+    │   ├── utils/                # Hilfsfunktionen
+    │   │   └── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
     │   │
     │   └── services/            # Business Logic
     │       ├── wetter_service.py
-    │       ├── pdf_service.py       # PDF-Generierung
+    │       ├── brightsky_service.py       # DWD-Daten via Bright Sky API
+    │       ├── solar_forecast_service.py  # Open-Meteo Solar mit GTI
+    │       ├── prognose_service.py        # Prognose-Berechnungen
+    │       ├── pdf_service.py             # PDF-Generierung
     │       ├── ha_sensors_export.py
+    │       ├── ha_state_service.py        # HA State-Abfragen
     │       ├── mqtt_client.py
-    │       ├── ha_mqtt_sync.py      # MQTT Sync Service
-    │       ├── vorschlag_service.py # Intelligente Vorschläge
-    │       ├── scheduler.py         # APScheduler für Cron-Jobs
-    │       ├── ha_statistics_service.py # HA-DB Statistik-Abfragen (NEU v2.0.0)
-    │       └── community_service.py     # Community-Datenaufbereitung (NEU v2.0.3)
+    │       ├── ha_mqtt_sync.py            # MQTT Sync Service
+    │       ├── vorschlag_service.py       # Intelligente Vorschläge
+    │       ├── scheduler.py               # APScheduler für Cron-Jobs
+    │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
+    │       └── community_service.py       # Community-Datenaufbereitung
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -237,27 +247,31 @@ eedc-homeassistant/
 | Feld | Typ | Beschreibung |
 |------|-----|--------------|
 | id | INTEGER | Primary Key |
-| name | VARCHAR | Bezeichnung |
-| strasse | VARCHAR | Adresse |
-| plz | VARCHAR | Postleitzahl |
-| stadt | VARCHAR | Ort |
-| latitude | FLOAT | Breitengrad |
-| longitude | FLOAT | Längengrad |
-| ausrichtung | VARCHAR | Himmelsrichtung |
-| neigung_grad | FLOAT | Dachneigung |
-| leistung_kwp | FLOAT | Anlagenleistung |
+| anlagenname | VARCHAR(255) | Bezeichnung |
+| leistung_kwp | FLOAT | Anlagenleistung in kWp |
+| installationsdatum | DATE | Inbetriebnahme (optional) |
+| standort_land | VARCHAR(5) | Land: DE, AT oder CH |
+| standort_plz | VARCHAR(10) | Postleitzahl |
+| standort_ort | VARCHAR(255) | Ort |
+| standort_strasse | VARCHAR(255) | Adresse |
+| latitude | FLOAT | Breitengrad (für PVGIS) |
+| longitude | FLOAT | Längengrad (für PVGIS) |
+| ausrichtung | VARCHAR(50) | DEPRECATED – jetzt bei PV-Modul Investitionen |
+| neigung_grad | FLOAT | DEPRECATED – jetzt bei PV-Modul Investitionen |
+| wechselrichter_hersteller | VARCHAR(50) | sma, fronius, kostal, etc. |
 | mastr_id | VARCHAR(20) | MaStR-ID der Anlage |
-| standort_land | VARCHAR(5) | Land: DE, AT oder CH (v2.3.0) |
 | versorger_daten | JSON | Versorger & Zähler |
-| wetter_provider | VARCHAR(30) | Bevorzugter Wetter-Provider (auto, open-meteo, brightsky, open-meteo-solar) |
+| wetter_provider | VARCHAR(30) | auto, open-meteo, brightsky, open-meteo-solar |
 | sensor_mapping | JSON | HA-Sensor-Mapping |
-| steuerliche_behandlung | VARCHAR(30) | `keine_ust` oder `regelbesteuerung` (v2.4.0) |
-| ust_satz_prozent | FLOAT | USt-Satz: DE=19, AT=20, CH=8.1 (v2.4.0) |
+| community_hash | VARCHAR(64) | Hash für Community-Löschung |
+| steuerliche_behandlung | VARCHAR(30) | `keine_ust` oder `regelbesteuerung` |
+| ust_satz_prozent | FLOAT | USt-Satz: DE=19, AT=20, CH=8.1 |
 | created_at | DATETIME | Erstellungsdatum |
+| updated_at | DATETIME | Letztes Update |
 
 #### Monatsdaten
 
-**Wichtig**: Diese Tabelle enthält NUR Zählerwerte (Einspeisung, Netzbezug).
+**Wichtig**: Diese Tabelle enthält primär Zählerwerte (Einspeisung, Netzbezug).
 
 | Feld | Typ | Beschreibung |
 |------|-----|--------------|
@@ -272,13 +286,20 @@ eedc-homeassistant/
 | gesamtverbrauch_kwh | FLOAT | Berechnet |
 | globalstrahlung_kwh_m2 | FLOAT | Wetter-API |
 | sonnenstunden | FLOAT | Wetter-API |
-| datenquelle | VARCHAR | manual, csv, ha_import |
-| notizen | TEXT | Freitext |
+| durchschnittstemperatur | FLOAT | Wetter-API |
+| sonderkosten_euro | FLOAT | Manuelle Eingabe |
+| sonderkosten_beschreibung | VARCHAR(500) | Beschreibung der Sonderkosten |
+| datenquelle | VARCHAR(50) | manual, csv, ha_import |
+| notizen | VARCHAR(1000) | Freitext |
+| created_at | DATETIME | Erstellungsdatum |
+| updated_at | DATETIME | Letztes Update |
 
 **Legacy-Felder (nicht mehr verwenden):**
 - `pv_erzeugung_kwh` → Verwende InvestitionMonatsdaten
 - `batterie_ladung_kwh` → Verwende InvestitionMonatsdaten
 - `batterie_entladung_kwh` → Verwende InvestitionMonatsdaten
+- `batterie_ladung_netz_kwh` → Arbitrage (Legacy)
+- `batterie_ladepreis_cent` → Arbitrage (Legacy)
 
 #### Investitionen
 
@@ -286,14 +307,23 @@ eedc-homeassistant/
 |------|-----|--------------|
 | id | INTEGER | Primary Key |
 | anlage_id | INTEGER | Foreign Key → Anlage |
-| typ | VARCHAR | Investitionstyp |
-| bezeichnung | VARCHAR | Name der Komponente |
-| kosten_euro | FLOAT | Kaufpreis + Installation |
-| lebensdauer_jahre | INTEGER | Erwartete Lebensdauer |
-| installationsdatum | DATE | Inbetriebnahme |
+| typ | VARCHAR(50) | Investitionstyp (siehe InvestitionTyp Enum) |
+| bezeichnung | VARCHAR(255) | Name der Komponente |
+| anschaffungsdatum | DATE | Inbetriebnahme |
+| anschaffungskosten_gesamt | FLOAT | Kaufpreis + Installation |
+| anschaffungskosten_alternativ | FLOAT | Alternativkosten (z.B. neuer Verbrenner) |
+| betriebskosten_jahr | FLOAT | Jährliche Betriebskosten |
+| leistung_kwp | FLOAT | Leistung in kWp (PV-Module) |
+| ausrichtung | VARCHAR(50) | Modulausrichtung (PV-Module) |
+| neigung_grad | FLOAT | Modulneigung in Grad (PV-Module) |
+| ha_entity_id | VARCHAR(255) | HA Entity-ID (für String-IST-Erfassung) |
 | parameter | JSON | Typ-spezifische Parameter |
-| parent_investition_id | INTEGER | Foreign Key → Investitionen (für Parent-Child) |
+| einsparung_prognose_jahr | FLOAT | Jahres-Einsparungsprognose |
+| co2_einsparung_prognose_kg | FLOAT | CO2-Einsparungsprognose |
 | aktiv | BOOLEAN | Aktiv/Inaktiv |
+| parent_investition_id | INTEGER | Foreign Key → Investitionen (für Parent-Child) |
+| created_at | DATETIME | Erstellungsdatum |
+| updated_at | DATETIME | Letztes Update |
 
 **Investitionstypen:**
 
@@ -337,7 +367,10 @@ Typ-spezifische Zusatzfelder:
 | verbrauch_daten | JSON | Typ-spezifische Messwerte |
 | einsparung_monat_euro | FLOAT | Berechnet |
 | co2_einsparung_kg | FLOAT | Berechnet |
-| sonderkosten_euro | FLOAT | Reparatur, Wartung |
+| created_at | DATETIME | Erstellungsdatum |
+| updated_at | DATETIME | Letztes Update |
+
+**Hinweis:** Sonstige Erträge/Ausgaben werden in `verbrauch_daten` als `sonstige_ertraege` / `sonstige_ausgaben` Arrays gespeichert (v2.4.0).
 
 **verbrauch_daten Struktur je nach Investitionstyp:**
 
@@ -449,12 +482,15 @@ Typ-spezifische Zusatzfelder:
 | anlage_id | INTEGER | Foreign Key → Anlage |
 | netzbezug_arbeitspreis_cent_kwh | FLOAT | Preis pro kWh Netzbezug |
 | einspeiseverguetung_cent_kwh | FLOAT | Vergütung pro kWh Einspeisung |
-| grundpreis_euro_monat | FLOAT | Monatlicher Grundpreis (v2.4.0) |
+| grundpreis_euro_monat | FLOAT | Monatlicher Grundpreis |
 | gueltig_ab | DATE | Gültigkeitsbeginn |
-| gueltig_bis | DATE | Gültigkeitsende (optional) |
-| tarifname | VARCHAR(255) | Name des Tarifs (optional) |
-| anbieter | VARCHAR(255) | Stromanbieter (optional) |
-| verwendung | VARCHAR(30) | `allgemein`, `waermepumpe` oder `wallbox` (v2.4.0) |
+| gueltig_bis | DATE | Gültigkeitsende (NULL = aktuell gültig) |
+| tarifname | VARCHAR(255) | Name des Tarifs |
+| anbieter | VARCHAR(255) | Stromanbieter |
+| vertragsart | VARCHAR(50) | fix, dynamisch, etc. |
+| verwendung | VARCHAR(30) | `allgemein`, `waermepumpe` oder `wallbox` |
+| created_at | DATETIME | Erstellungsdatum |
+| updated_at | DATETIME | Letztes Update |
 
 ### Parent-Child Beziehungen
 
@@ -507,10 +543,15 @@ Sonstiges [Eigenständig]
 #### Cockpit (Dashboard-Daten)
 
 ```
-GET /api/cockpit/uebersicht/{anlage_id}?jahr=2025
+GET /api/cockpit/uebersicht/{anlage_id}?jahr=2025       # Haupt-Dashboard
+GET /api/cockpit/prognose-vs-ist/{anlage_id}             # PVGIS SOLL vs IST
+GET /api/cockpit/nachhaltigkeit/{anlage_id}              # CO2-Bilanz
+GET /api/cockpit/komponenten-zeitreihe/{anlage_id}       # Komponenten-Zeitreihen
+GET /api/cockpit/pv-strings/{anlage_id}                  # String-Vergleich (Jahres-Ansicht)
+GET /api/cockpit/pv-strings-gesamtlaufzeit/{anlage_id}   # String-Vergleich (Gesamtlaufzeit)
 ```
 
-Liefert aggregierte Daten für alle Dashboard-Sektionen:
+`uebersicht` liefert aggregierte Daten für alle Dashboard-Sektionen:
 - Energiebilanz (Erzeugung, Verbrauch, Einspeisung)
 - Effizienz (Autarkie, EV-Quote)
 - Komponenten-Status
@@ -524,6 +565,7 @@ Liefert aggregierte Daten für alle Dashboard-Sektionen:
 
 ```
 GET /api/aussichten/kurzfristig/{anlage_id}   # 7-Tage Wetterprognose
+GET /api/aussichten/wetter/{anlage_id}        # Wetterdaten für Prognose
 GET /api/aussichten/langfristig/{anlage_id}   # 12-Monats-Prognose (PVGIS)
 GET /api/aussichten/trend/{anlage_id}         # Trend-Analyse + Degradation
 GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation
@@ -541,10 +583,12 @@ GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation
 #### Sensor-Mapping API (NEU v1.1.0)
 
 ```
-GET  /api/sensor-mapping/{anlage_id}              # Aktuelles Mapping abrufen
-POST /api/sensor-mapping/{anlage_id}              # Mapping speichern
-GET  /api/sensor-mapping/{anlage_id}/felder       # Verfügbare Felder
-GET  /api/sensor-mapping/{anlage_id}/sensoren     # HA-Sensoren auflisten
+GET    /api/sensor-mapping/{anlage_id}                    # Aktuelles Mapping abrufen
+GET    /api/sensor-mapping/{anlage_id}/available-sensors   # Verfügbare HA-Sensoren
+POST   /api/sensor-mapping/{anlage_id}                    # Mapping speichern
+DELETE /api/sensor-mapping/{anlage_id}                    # Mapping löschen
+GET    /api/sensor-mapping/{anlage_id}/status             # Kurzstatus
+POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte initialisieren
 ```
 
 **Mapping-Strategien:**
@@ -558,10 +602,10 @@ GET  /api/sensor-mapping/{anlage_id}/sensoren     # HA-Sensoren auflisten
 #### Monatsabschluss API (NEU v1.1.0)
 
 ```
-GET  /api/monatsabschluss/{anlage_id}/status?jahr=2026&monat=2     # Status prüfen
-GET  /api/monatsabschluss/{anlage_id}/naechster                    # Nächster offener Monat
-POST /api/monatsabschluss/{anlage_id}/abschliessen                 # Abschluss durchführen
-GET  /api/monatsabschluss/{anlage_id}/historie                     # Letzte Abschlüsse
+GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Status + Vorschläge
+POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Abschluss durchführen
+GET  /api/monatsabschluss/naechster/{anlage_id}         # Nächster offener Monat
+GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
 ```
 
 **VorschlagService liefert intelligente Vorschläge:**
@@ -573,8 +617,8 @@ GET  /api/monatsabschluss/{anlage_id}/historie                     # Letzte Absc
 #### Scheduler API (NEU v1.1.0)
 
 ```
-GET  /api/scheduler/status                        # Scheduler-Status
-POST /api/scheduler/trigger-monthly               # Manueller Monatswechsel-Trigger
+GET  /api/scheduler                               # Scheduler-Status
+POST /api/scheduler/monthly-snapshot              # Manueller Monatswechsel-Trigger
 ```
 
 #### Aggregierte Monatsdaten
@@ -617,8 +661,12 @@ file: [CSV-Datei]
 #### JSON Export/Import (Export-Version 1.1)
 
 ```
-GET  /api/import/export/{anlage_id}/full    # Export
-POST /api/import/json                        # Import
+GET  /api/import/export/{anlage_id}          # Vollständiger JSON-Export
+GET  /api/import/template/{anlage_id}        # CSV-Template herunterladen
+GET  /api/import/template/{anlage_id}/download  # CSV-Template Download
+GET  /api/import/pdf/{anlage_id}             # PDF-Export
+POST /api/import/demo                        # Demo-Daten erstellen
+DELETE /api/import/demo                      # Demo-Daten löschen
 ```
 
 **Export** - Vollständige Anlage mit allen verknüpften Daten:
@@ -658,6 +706,9 @@ class MonatsdatenResponse(MonatsdatenCreate):
 
 ### Routing-Struktur
 
+**Hinweis:** EEDC verwendet `HashRouter` (nicht BrowserRouter) für HA Ingress-Kompatibilität.
+URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
+
 ```
 /                       → Redirect zu /cockpit
 │
@@ -670,23 +721,22 @@ class MonatsdatenResponse(MonatsdatenCreate):
 │   ├── /balkonkraftwerk → BalkonkraftwerkDashboard
 │   └── /sonstiges      → SonstigesDashboard
 │
-├── /auswertungen       → Auswertung.tsx (6 Tabs)
+├── /auswertungen       → Auswertung.tsx (6 Client-Side Tabs)
+│   │                     Tabs: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen
 │   ├── /roi            → ROIDashboard (Jahres-Rendite p.a.)
-│   └── /prognose       → PrognoseVsIst
+│   ├── /prognose       → PrognoseVsIst
+│   └── /export         → PDF-Export
 │
-├── /community          → CommunityVergleich.tsx (6 Tabs, v2.1.0)
-│   ├── Übersicht       → Achievements, Radar-Chart, Rang-Badges
-│   ├── PV-Ertrag       → Monatlicher Vergleich, Histogramm
-│   ├── Komponenten     → Speicher, WP, E-Auto, Wallbox, BKW Deep-Dives
-│   ├── Regional        → Bundesland-Ranking, Choropleth-Karte (v2.2.0)
-│   ├── Trends          → Ertragsverlauf, Saisonale Performance
-│   └── Statistiken     → Community-weite Auswertungen
+├── /community          → Community.tsx (6 Client-Side Tabs)
+│                         Tabs: Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
+│                         (Tabs via useState, KEINE URL-Sub-Routes)
 │
-├── /aussichten         → Aussichten.tsx (4 Tabs)
-│   ├── /kurzfristig    → KurzfristigTab (7-Tage Wetter)
-│   ├── /langfristig    → LangfristigTab (12-Monats PVGIS)
-│   ├── /trend          → TrendTab (Jahresvergleich, Degradation)
-│   └── /finanzen       → FinanzenTab (Amortisations-Fortschritt)
+├── /aussichten         → Aussichten.tsx (4 Client-Side Tabs)
+│                         Tabs: Kurzfristig, Langfristig, Trend, Finanzen
+│                         (Tabs via useState, KEINE URL-Sub-Routes)
+│
+├── /monatsabschluss/:anlageId              → MonatsabschlussWizard
+├── /monatsabschluss/:anlageId/:jahr/:monat → MonatsabschlussWizard (Monat)
 │
 └── /einstellungen
     ├── /anlage         → Anlagen.tsx
@@ -704,20 +754,22 @@ class MonatsdatenResponse(MonatsdatenCreate):
 ### Komponenten-Hierarchie
 
 ```
-App.tsx
+main.tsx
 ├── ThemeProvider
-└── BrowserRouter
-    └── Layout.tsx
-        ├── TopNavigation.tsx
-        │   ├── Logo
-        │   ├── MainTabs (Cockpit, Auswertungen, Community, Aussichten)
-        │   ├── SettingsDropdown
-        │   └── ThemeToggle
-        │
-        ├── SubTabs.tsx (kontextabhängig)
-        │
-        └── <Outlet /> (React Router)
-            └── [Page Component]
+└── AppWithSetup
+    └── App.tsx
+        └── HashRouter
+            └── Layout.tsx
+                ├── TopNavigation.tsx
+                │   ├── Logo
+                │   ├── MainTabs (Cockpit, Auswertungen, Community, Aussichten)
+                │   ├── SettingsDropdown (5 Kategorien)
+                │   └── ThemeToggle
+                │
+                ├── SubTabs.tsx (kontextabhängig)
+                │
+                └── <Outlet /> (React Router)
+                    └── [Page Component]
 ```
 
 ### State Management
@@ -791,9 +843,10 @@ useEffect(() => {
 **API-Endpoints:**
 ```
 GET /api/wetter/monat/{anlage_id}/{jahr}/{monat}?provider=auto
-GET /api/wetter/provider/{anlage_id}           # Verfügbare Provider
-GET /api/wetter/vergleich/{anlage_id}/{jahr}/{monat}  # Provider-Vergleich
-GET /api/solar-prognose/{anlage_id}?tage=7     # GTI-basierte PV-Prognose
+GET /api/wetter/monat/koordinaten/{lat}/{lon}/{jahr}/{monat}  # Direkt per Koordinaten
+GET /api/wetter/provider/{anlage_id}                          # Verfügbare Provider
+GET /api/wetter/vergleich/{anlage_id}/{jahr}/{monat}          # Provider-Vergleich
+GET /api/solar-prognose/{anlage_id}?tage=7                    # GTI-basierte PV-Prognose
 ```
 
 **GTI (Global Tilted Irradiance):**
@@ -864,11 +917,15 @@ eedc/{anlage_id}/{key}/attributes                   → Attributes
 - `get_monatsanfang_wert()` - Zählerstand am Monatsanfang für MQTT-Startwerte
 
 **API-Endpoints:**
-- `GET /api/ha-statistics/status` - Prüft DB-Verfügbarkeit
-- `GET /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}` - Einzelner Monat
-- `GET /api/ha-statistics/alle-monatswerte/{anlage_id}` - Bulk-Abfrage
-- `GET /api/ha-statistics/import-vorschau/{anlage_id}` - Vorschau mit Konflikten
-- `POST /api/ha-statistics/import/{anlage_id}` - Import mit Überschreib-Schutz
+```
+GET  /api/ha-statistics/status                                     # Prüft DB-Verfügbarkeit
+GET  /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}     # Einzelner Monat
+GET  /api/ha-statistics/verfuegbare-monate/{anlage_id}             # Alle Monate mit Daten
+GET  /api/ha-statistics/alle-monatswerte/{anlage_id}               # Bulk-Abfrage
+GET  /api/ha-statistics/monatsanfang/{anlage_id}/{jahr}/{monat}    # Zählerstand am Monatsanfang
+GET  /api/ha-statistics/import-vorschau/{anlage_id}                # Vorschau mit Konflikten
+POST /api/ha-statistics/import/{anlage_id}                         # Import mit Überschreib-Schutz
+```
 
 ### VorschlagService
 
@@ -964,6 +1021,45 @@ if val is not None:  # Richtig!
 ```
 
 **Konsequenz:** Überall `is not None` statt `if val`.
+
+### ROI-Metriken (Wichtig: Unterschiedliche Bedeutungen!)
+
+| Metrik | Wo | Formel | Bedeutung |
+|--------|-----|--------|-----------|
+| **Jahres-Rendite** | Cockpit, Auswertung/Investitionen | `Jahres-Ertrag / Investition × 100` | Rendite pro Jahr (p.a.) |
+| **Amortisations-Fortschritt** | Aussichten/Finanzen | `Kum. Erträge / Investition × 100` | Wie viel % bereits abbezahlt |
+
+**Mehrkosten-Ansatz für Investitionen:**
+Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksichtigt:
+- **PV-System**: Volle Kosten (keine Alternative)
+- **Wärmepumpe**: Kosten minus Gasheizung (`alternativ_kosten_euro` Parameter)
+- **E-Auto**: Kosten minus Verbrenner (`alternativ_kosten_euro` Parameter)
+
+### Community-Integration
+
+```
+EEDC Add-on                              Community Server
+┌──────────────────────┐                 ┌──────────────────┐
+│ CommunityShare.tsx   │ ── POST ──────→ │ /api/submit      │
+│ CommunityVergleich   │ ── Proxy ─────→ │ /api/benchmark/  │
+│   .tsx (embedded)    │                 │   anlage/{hash}  │
+│ "Im Browser öffnen"  │ ── Link ──────→ │ /?anlage=HASH    │
+└──────────────────────┘                 └──────────────────┘
+```
+
+**Relevante Dateien:**
+- `backend/services/community_service.py` – Datenaufbereitung + Anonymisierung
+- `backend/api/routes/community.py` – API Routes + Benchmark-Proxy
+- `frontend/src/pages/CommunityShare.tsx` – Upload UI
+- `frontend/src/pages/CommunityVergleich.tsx` – Benchmark-Analyse (6 Tabs)
+- `frontend/src/api/community.ts` – API Client
+
+### Cloud-Provider Integration (geplant)
+
+Status: Phase 0 (Repo-Restrukturierung) und Phase 5 (Subtree-Integration) abgeschlossen.
+Phasen 1-4 (SMA ennexOS Integration) warten auf SMA Developer Portal Sandbox-Credentials.
+
+Details siehe [PLAN-cloud-provider-standalone.md](PLAN-cloud-provider-standalone.md).
 
 ---
 

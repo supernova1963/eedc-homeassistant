@@ -290,13 +290,13 @@ git subtree add --prefix=eedc https://github.com/supernova1963/eedc.git main --s
 # └── ...
 ```
 
-**Zukünftiger Sync-Workflow:**
+**Sync-Workflow:**
 ```bash
 # Änderungen aus eedc holen:
 git subtree pull --prefix=eedc https://github.com/supernova1963/eedc.git main --squash
 
-# Änderungen zurück zu eedc pushen:
-git subtree push --prefix=eedc https://github.com/supernova1963/eedc.git main
+# ⚠️ KEIN subtree push! Würde HA-spezifische Dateien ins Standalone-Repo pushen.
+# Stattdessen: Änderungen direkt im eedc Repo machen, dann subtree pull.
 ```
 
 ---

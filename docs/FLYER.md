@@ -16,7 +16,7 @@ I built a Home Assistant add-on that gives you a complete analysis of your PV sy
 **What does it do?**
 
 - **Dashboard** – Hero KPIs with year-over-year trends, energy flow diagram, ring gauges for self-sufficiency & self-consumption, sparklines
-- **7 Analysis Tabs** – Energy, PV system, components, finances, CO2, investments, community
+- **6 Analysis Tabs + Community** – Energy, PV system, components, finances, CO2, investments + dedicated community section
 - **ROI Tracking** – When will your system pay for itself? Progress bar with estimated payback date
 - **Multi-Component** – PV, battery storage, EV, heat pump, wallbox, balcony PV
 - **Forecasting** – 7-day weather forecast, 12-month PVGIS projection, trend analysis with degradation detection, financial forecast
@@ -70,7 +70,7 @@ Das Dashboard zeigt auf einen Blick:
 
 ---
 
-#### Auswertungen (7 Tabs)
+#### Auswertungen (6 Tabs)
 
 | Tab | Inhalt |
 |-----|--------|
@@ -80,7 +80,10 @@ Das Dashboard zeigt auf einen Blick:
 | **Finanzen** | Einspeisung, Einsparungen, Netto-Ertrag, Amortisation |
 | **CO2** | Vermiedene Emissionen, Vergleich zu Netzbezug |
 | **Investitionen** | ROI pro Komponente, Jahres-Rendite p.a. |
-| **Community** | Anonymer Benchmark mit anderen PV-Anlagen |
+
+#### Community (eigener Hauptmenüpunkt, 6 Tabs)
+
+Anonymer Benchmark mit anderen PV-Anlagen: Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
 
 ---
 
@@ -130,7 +133,9 @@ PV-Anlage (inkl. String-Vergleich) | Batteriespeicher (AC & DC) | E-Auto (V2H-f�
 
 Alternativ als **Docker-Container** ohne HA:
 ```bash
-docker run -p 8099:8099 -v $(pwd)/data:/data supernova1963/eedc:latest
+git clone https://github.com/supernova1963/eedc.git && cd eedc
+docker compose up -d
+# → http://localhost:8099
 ```
 
 ---

@@ -62,15 +62,6 @@ cd eedc/frontend && npm run dev
 
 > **Hinweis für macOS**: Vite verwendet Port 3000 (nicht 5173). Falls `npm run dev` mit dem System-Node fehlschlägt, stelle sicher dass Node 20 aktiv ist: `nvm use 20` oder absoluten Pfad nutzen.
 
-### VS Code Tasks (Alternative)
-
-Mit `Cmd+Shift+B` (macOS) beide Server parallel starten:
-- **Backend starten** – startet uvicorn auf Port 8099
-- **Frontend starten** – startet Vite auf Port 3000 (mit korrektem Node 20 PATH)
-- **EEDC starten (Backend + Frontend)** – startet beide gleichzeitig
-
-Die Tasks sind in `.vscode/tasks.json` konfiguriert und setzen den Node 20 Pfad automatisch.
-
 ---
 
 ## Docker/Podman Build
@@ -330,19 +321,21 @@ GET /api/aussichten/finanzen/{anlage_id}        # Amortisations-Prognose
 ### Sensor-Mapping API (NEU v1.1.0)
 
 ```
-GET  /api/sensor-mapping/{anlage_id}              # Aktuelles Mapping abrufen
-POST /api/sensor-mapping/{anlage_id}              # Mapping speichern
-GET  /api/sensor-mapping/{anlage_id}/felder       # Verfügbare Felder
-GET  /api/sensor-mapping/{anlage_id}/sensoren     # HA-Sensoren auflisten
+GET    /api/sensor-mapping/{anlage_id}                    # Aktuelles Mapping abrufen
+GET    /api/sensor-mapping/{anlage_id}/available-sensors   # Verfügbare HA-Sensoren
+POST   /api/sensor-mapping/{anlage_id}                    # Mapping speichern
+DELETE /api/sensor-mapping/{anlage_id}                    # Mapping löschen
+GET    /api/sensor-mapping/{anlage_id}/status             # Kurzstatus
+POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte init
 ```
 
 ### Monatsabschluss API (NEU v1.1.0)
 
 ```
-GET  /api/monatsabschluss/{anlage_id}/status      # Status für Jahr/Monat
-GET  /api/monatsabschluss/{anlage_id}/naechster   # Nächster offener Monat
-POST /api/monatsabschluss/{anlage_id}/abschliessen # Abschluss durchführen
-GET  /api/monatsabschluss/{anlage_id}/historie    # Letzte Abschlüsse
+GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Status + Vorschläge
+POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Abschluss durchführen
+GET  /api/monatsabschluss/naechster/{anlage_id}         # Nächster offener Monat
+GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
 ```
 
 ### Import/Export API (erweitert in beta.8)
