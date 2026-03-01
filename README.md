@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.4.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.5.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -33,6 +33,7 @@
 - **Modernisiertes Cockpit** mit Hero-Leiste (Top-KPIs + Jahres-Trend), Energie-Fluss-Diagramm, Ring-Gauges und Sparkline
 - **8 spezialisierte Dashboards** für jede Komponente
 - **Amortisations-Fortschrittsbalken** – Investitionsrückfluss auf einen Blick
+- **Social-Media-Textvorlage** – Kopierfertige Monatsübersicht für Twitter/X und Facebook (NEU v2.5.0)
 - **Formel-Tooltips** zeigen Berechnungsgrundlagen per Hover
 - **Jahr-Filter** für mehrjährige Auswertungen
 
@@ -248,6 +249,8 @@ Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfass
 - [x] **DACH-Onboarding** - Österreich und Schweiz unterstützt (v2.3.0)
 - [x] **Steuerliche Behandlung** - Kleinunternehmerregelung, Spezialtarife (v2.4.0)
 - [x] **Website** - Astro Starlight mit Docs auf GitHub Pages
+- [x] **PVGIS Horizontprofil** - Geländeprofil für genauere Ertragsprognosen (v2.5.0)
+- [x] **Social-Media-Textvorlage** - Kopierfertige Monatsübersicht für Social Media (v2.5.0)
 - [ ] KI-gestützte Insights
 
 ---

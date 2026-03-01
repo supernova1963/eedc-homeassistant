@@ -23,6 +23,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Update-Banner im Frontend wenn neuere Version verfügbar
   - Deployment-spezifische Update-Anleitung (Docker, HA Add-on, Git)
 
+- **Social-Media-Textvorlage** ([#16](https://github.com/supernova1963/eedc-homeassistant/issues/16))
+  - Kopierfertige Monatsübersicht für Social-Media-Posts
+  - Zwei Varianten: Kompakt (Twitter/X) und Ausführlich (Facebook/Foren)
+  - Bedingte Blöcke je nach Anlagenkomponenten (Speicher, E-Auto, Wärmepumpe)
+  - PVGIS-Prognose-Vergleich, CO₂-Einsparung, Netto-Ertrag
+  - Share-Button im Dashboard-Header mit Modal, Monat/Jahr-Auswahl und Clipboard-Kopie
+
 ### Behoben
 
 - **Community-Vorschau zeigte falsche Ausrichtung und Neigung**: Werte wurden aus leerem Parameter-JSON gelesen statt aus Modelfeldern

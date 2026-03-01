@@ -1,6 +1,6 @@
 # EEDC - Energie Effizienz Data Center
 
-Standalone PV-Analyse-Software mit optionaler Cloud-Provider-Integration.
+Standalone PV-Analyse-Software.
 
 ## Features
 
@@ -9,7 +9,8 @@ Standalone PV-Analyse-Software mit optionaler Cloud-Provider-Integration.
 - **Prognosen** - Kurzfristig (Wetter), Langfristig (PVGIS), Trend-Analyse, Finanz-Prognose
 - **Multi-Provider Wetter** - DWD (Bright Sky), Open-Meteo, PVGIS
 - **Community-Benchmark** - Anonymer Vergleich auf [energy.raunet.eu](https://energy.raunet.eu)
-- **Cloud-Provider** - Automatische Datenerfassung via Hersteller-APIs (SMA, weitere geplant)
+- **Social-Media-Textvorlage** - Kopierfertige Monatsübersicht für Twitter/X und Facebook
+- **Cloud-Provider** *(geplant)* - Automatische Datenerfassung via Hersteller-APIs (SMA)
 - **Import/Export** - CSV, JSON, PDF-Berichte
 
 ## Schnellstart

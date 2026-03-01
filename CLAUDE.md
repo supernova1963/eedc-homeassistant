@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.4.1 | **Status:** Stable Release
+**Version:** 2.5.0 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -155,9 +155,13 @@ EEDC Add-on                              Community Server
 
 > Die alten `ha_sensor_*` Felder im Anlage-Model dürfen NICHT aus der DB/dem Model entfernt werden (bestehende Installationen). Neuer Code nutzt ausschließlich `sensor_mapping`.
 
-## Letzte Änderungen (v2.4.1)
+## Letzte Änderungen (v2.5.0)
 
-**v2.4.1** - Version-Bump für HA Add-on Update-Erkennung
+**v2.5.0** - PVGIS Horizontprofil, Social-Media-Textvorlage, GitHub Releases:
+- **PVGIS Horizontprofil:** `usehorizon=1`, eigenes Profil Upload/Abruf, Badge bei Prognosen
+- **Social-Media-Textvorlage:** `GET /api/cockpit/share-text/{id}` – Kompakt/Ausführlich, bedingte Blöcke
+- **GitHub Releases & Update-Hinweis:** Auto-Releases, Update-Banner im Frontend
+- **Community-Fix:** Ausrichtung/Neigung aus Modelfeldern statt Parameter-JSON
 
 **v2.4.0** - Steuerliche Behandlung, Spezialtarife, Sonstige Positionen, Firmenwagen:
 - **Kleinunternehmerregelung:** `steuerliche_behandlung` + `ust_satz_prozent` auf Anlage-Model

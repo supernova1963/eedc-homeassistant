@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.4.1** | Stand: Februar 2026
+**Version 2.5.0** | Stand: März 2026
 
 ---
 
@@ -291,6 +291,24 @@ Schnellstatus für alle Komponenten mit Klick-Navigation zu Details.
 #### CO2-Bilanz
 - Vermiedene CO2-Emissionen (kg)
 - Vergleich zu reinem Netzbezug
+
+#### Social-Media-Textvorlage (NEU v2.5.0)
+
+Über das **Share-Icon** (↗) im Dashboard-Header kannst du einen kopierfertigen Text für Social-Media-Posts generieren:
+
+1. **Monat/Jahr wählen** – Standard: letzter verfügbarer Monat
+2. **Variante wählen**:
+   - **Kompakt** – Für Twitter/X und kurze Posts (mit Hashtags)
+   - **Ausführlich** – Für Facebook-Gruppen und Foren (mit Emojis und Details)
+3. **Vorschau** – Der generierte Text wird sofort angezeigt
+4. **Kopieren** – Mit einem Klick in die Zwischenablage
+
+Der Text enthält automatisch:
+- Anlagenleistung (kWp), Ausrichtung, Bundesland
+- Erzeugung, Autarkie, Eigenverbrauchsquote
+- PVGIS-Prognose-Vergleich (wenn vorhanden)
+- Speicher, Wärmepumpe, E-Auto (nur wenn vorhanden)
+- CO₂-Einsparung und Netto-Ertrag
 
 ### 5.2 PV-Anlage Dashboard
 
