@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.5.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.5.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">

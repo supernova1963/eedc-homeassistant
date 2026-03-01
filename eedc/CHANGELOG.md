@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.5.1] - 2026-03-01
+
+### Geändert
+
+- Dokumentation und Website aktualisiert
+
+---
+
 ## [2.5.0] - 2026-03-01
 
 ### Hinzugefügt
