@@ -39,6 +39,7 @@ import type {
 } from '../api'
 import Alert from '../components/ui/Alert'
 import SonstigePositionenFields from '../components/forms/SonstigePositionenFields'
+import { useHAAvailable } from '../hooks/useHAAvailable'
 
 const MONAT_NAMEN = [
   '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -69,6 +70,7 @@ export default function MonatsabschlussWizard() {
     monat?: string
   }>()
   const navigate = useNavigate()
+  const haAvailable = useHAAvailable()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -438,21 +440,23 @@ export default function MonatsabschlussWizard() {
 
         {/* HA-Mapping Hinweis oder HA-Laden Button */}
         {!data.ha_mapping_konfiguriert ? (
-          <Alert type="info" className="mt-4">
-            <div className="flex items-center justify-between">
-              <span>
-                Home Assistant Sensor-Zuordnung nicht konfiguriert.
-                Werte müssen manuell eingegeben werden.
-              </span>
-              <Link
-                to={`/einstellungen/sensor-mapping?anlageId=${anlageId}`}
-                className="flex items-center gap-1 text-primary-600 hover:underline"
-              >
-                <Settings className="w-4 h-4" />
-                Konfigurieren
-              </Link>
-            </div>
-          </Alert>
+          haAvailable && (
+            <Alert type="info" className="mt-4">
+              <div className="flex items-center justify-between">
+                <span>
+                  Home Assistant Sensor-Zuordnung nicht konfiguriert.
+                  Werte müssen manuell eingegeben werden.
+                </span>
+                <Link
+                  to={`/einstellungen/sensor-mapping?anlageId=${anlageId}`}
+                  className="flex items-center gap-1 text-primary-600 hover:underline"
+                >
+                  <Settings className="w-4 h-4" />
+                  Konfigurieren
+                </Link>
+              </div>
+            </Alert>
+          )
         ) : (
           <div className="mt-4 flex items-center gap-4">
             <button
