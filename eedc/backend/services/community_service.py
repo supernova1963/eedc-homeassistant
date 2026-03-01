@@ -79,6 +79,26 @@ def generate_anlage_hash(anlage: Anlage, secret: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+# Mapping: Ausrichtungs-Text → Kompass-Azimut (0=Nord, 90=Ost, 180=Süd, 270=West)
+_AUSRICHTUNG_ZU_KOMPASS = {
+    "süd": 180, "south": 180, "s": 180,
+    "südost": 135, "southeast": 135, "so": 135,
+    "ost": 90, "east": 90, "o": 90,
+    "nordost": 45, "northeast": 45, "no": 45,
+    "nord": 0, "north": 0, "n": 0,
+    "nordwest": 315, "northwest": 315, "nw": 315,
+    "west": 270, "w": 270,
+    "südwest": 225, "southwest": 225, "sw": 225,
+}
+
+
+def _ausrichtung_zu_kompass(ausrichtung: str | None) -> int:
+    """Konvertiert Ausrichtungs-Text in Kompass-Azimut (0=Nord, 180=Süd)."""
+    if not ausrichtung:
+        return 180  # Default: Süd
+    return _AUSRICHTUNG_ZU_KOMPASS.get(ausrichtung.lower(), 180)
+
+
 def get_ausrichtung_label(azimut: int | None) -> str:
     """Konvertiert Azimut-Winkel in Ausrichtungs-Label."""
     if azimut is None:
@@ -183,16 +203,10 @@ async def prepare_community_data(
     # Durchschnittliche Neigung und Ausrichtung aus PV-Modulen
     pv_module = [inv for inv in investitionen if inv.typ == "pv-module"]
     if pv_module:
-        neigungen = [
-            (inv.parameter or {}).get("neigung_grad", 30) or 30
-            for inv in pv_module
-        ]
+        neigungen = [inv.neigung_grad or 30 for inv in pv_module]
         neigung_grad = int(sum(neigungen) / len(neigungen))
 
-        azimute = [
-            (inv.parameter or {}).get("ausrichtung_grad", 180) or 180
-            for inv in pv_module
-        ]
+        azimute = [_ausrichtung_zu_kompass(inv.ausrichtung) for inv in pv_module]
         # Prüfen ob gemischt (z.B. Ost-West)
         if max(azimute) - min(azimute) > 45:
             ausrichtung = "ost-west" if any(60 <= a <= 120 for a in azimute) and any(240 <= a <= 300 for a in azimute) else "gemischt"
