@@ -7,12 +7,12 @@
  * - Optimale Ausrichtung
  */
 
-import { useState, useEffect } from 'react'
-import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud, Mountain, Upload } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { pvgisApi, wetterApi } from '../api'
-import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum } from '../api/pvgis'
+import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
 import type { WetterProviderList } from '../api/wetter'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -33,6 +33,11 @@ export default function PVGISSettings() {
   const [optimumLoading, setOptimumLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Horizont-Profil
+  const [horizontStatus, setHorizontStatus] = useState<HorizontStatus | null>(null)
+  const [horizontUploading, setHorizontUploading] = useState(false)
+  const horizontFileRef = useRef<HTMLInputElement>(null)
 
   // Parameter für Vorschau
   const [systemLosses, setSystemLosses] = useState(14)
@@ -59,14 +64,16 @@ export default function PVGISSettings() {
     setSuccess(null)
 
     try {
-      const [aktive, gespeicherte, provider] = await Promise.all([
+      const [aktive, gespeicherte, provider, horizont] = await Promise.all([
         pvgisApi.getAktivePrognose(selectedAnlageId),
         pvgisApi.listeGespeichertePrognosen(selectedAnlageId),
-        wetterApi.getProvider(selectedAnlageId).catch(() => null)
+        wetterApi.getProvider(selectedAnlageId).catch(() => null),
+        pvgisApi.getHorizont(selectedAnlageId).catch(() => null)
       ])
       setAktivePrognose(aktive)
       setGespeichertePrognosen(gespeicherte)
       setWetterProvider(provider)
+      setHorizontStatus(horizont)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -271,6 +278,7 @@ export default function PVGISSettings() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Abgerufen am: {new Date(aktivePrognose.abgerufen_am).toLocaleDateString('de-DE')}
                   {' • '}Koordinaten: {aktivePrognose.latitude.toFixed(4)}°N, {aktivePrognose.longitude.toFixed(4)}°E
+                  {' • '}Horizont: {aktivePrognose.horizont_verwendet ? 'Eigenes Profil' : 'PVGIS-Gelände'}
                 </p>
               </div>
             ) : (
@@ -280,6 +288,137 @@ export default function PVGISSettings() {
                 <p className="text-sm mt-2">Rufe eine PVGIS Prognose ab und speichere sie.</p>
               </div>
             )}
+          </Card>
+
+          {/* Horizontprofil */}
+          <Card className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Mountain className="h-5 w-5" />
+              Horizontprofil
+            </h2>
+
+            {horizontStatus?.hat_horizont ? (
+              <div className="space-y-3">
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-2">Profil vorhanden</p>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-green-600 dark:text-green-400">Datenpunkte</p>
+                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.anzahl_punkte}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600 dark:text-green-400">Min. Elevation</p>
+                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.min_elevation}°</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600 dark:text-green-400">Max. Elevation</p>
+                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.max_elevation}°</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => horizontFileRef.current?.click()}
+                    disabled={horizontUploading}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Eigene Datei
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      if (!selectedAnlageId || !confirm('Horizontprofil löschen?')) return
+                      try {
+                        await pvgisApi.deleteHorizont(selectedAnlageId)
+                        setHorizontStatus(null)
+                        setSuccess('Horizontprofil gelöscht')
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Fehler beim Löschen')
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Löschen
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Das Horizontprofil beschreibt, wie hoch Berge, Gebäude oder Bäume den Horizont
+                  in jeder Himmelsrichtung verdecken. Ohne Profil verwendet PVGIS automatisch
+                  Geländedaten (~90m Auflösung) bei der Ertragsprognose.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Button
+                    onClick={async () => {
+                      if (!selectedAnlageId) return
+                      setHorizontUploading(true)
+                      setError(null)
+                      try {
+                        const result = await pvgisApi.abrufeHorizont(selectedAnlageId)
+                        setHorizontStatus(result)
+                        setSuccess('Geländeprofil von PVGIS abgerufen')
+                      } catch (e: any) {
+                        setError(e?.detail || e?.message || 'Abruf fehlgeschlagen')
+                      } finally {
+                        setHorizontUploading(false)
+                      }
+                    }}
+                    disabled={horizontUploading}
+                  >
+                    {horizontUploading ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Geländeprofil von PVGIS abrufen
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => horizontFileRef.current?.click()}
+                    disabled={horizontUploading}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Eigene Datei hochladen
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <strong>Geländeprofil:</strong> Erfasst Berge und große Geländestrukturen (aus Satellitendaten).
+                  <br />
+                  <strong>Eigene Datei:</strong> Für lokale Hindernisse (Gebäude, Bäume), die im Geländemodell fehlen.
+                  Kann z.B. mit Smartphone-Apps wie "Sun Surveyor" erstellt oder von{' '}
+                  <a href="https://re.jrc.ec.europa.eu/pvg_tools/en/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                    PVGIS
+                  </a>
+                  {' '}heruntergeladen werden.
+                </p>
+              </div>
+            )}
+
+            <input
+              ref={horizontFileRef}
+              type="file"
+              accept=".txt,.csv,.hor"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file || !selectedAnlageId) return
+                setHorizontUploading(true)
+                setError(null)
+                try {
+                  const result = await pvgisApi.uploadHorizont(selectedAnlageId, file)
+                  setHorizontStatus(result)
+                  setSuccess('Horizontprofil gespeichert')
+                } catch (e: any) {
+                  setError(e?.detail || e?.message || 'Upload fehlgeschlagen')
+                } finally {
+                  setHorizontUploading(false)
+                  if (horizontFileRef.current) horizontFileRef.current.value = ''
+                }
+              }}
+            />
           </Card>
 
           {/* Neue Prognose abrufen */}
@@ -459,6 +598,7 @@ export default function PVGISSettings() {
                       <th className="text-right py-2 px-2">Jahresertrag</th>
                       <th className="text-right py-2 px-2">kWh/kWp</th>
                       <th className="text-right py-2 px-2">Neigung</th>
+                      <th className="text-center py-2 px-2">Horizont</th>
                       <th className="text-center py-2 px-2">Status</th>
                       <th className="text-right py-2 px-2">Aktionen</th>
                     </tr>
@@ -477,6 +617,13 @@ export default function PVGISSettings() {
                         </td>
                         <td className="text-right py-2 px-2">
                           {p.neigung_grad}°
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {p.horizont_verwendet ? (
+                            <span title="Eigenes Profil"><Mountain className="h-4 w-4 text-green-500 mx-auto" /></span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">DEM</span>
+                          )}
                         </td>
                         <td className="text-center py-2 px-2">
                           {p.ist_aktiv ? (

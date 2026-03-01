@@ -130,6 +130,7 @@ class AnlageExport(BaseModel):
     sensor_mapping: Optional[dict] = None  # NEU: HA Sensor-Zuordnungen
     steuerliche_behandlung: Optional[str] = None
     ust_satz_prozent: Optional[float] = None
+    horizont_daten: Optional[list] = None
 
 
 class FullAnlageExport(BaseModel):

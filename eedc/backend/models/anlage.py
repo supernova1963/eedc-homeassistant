@@ -50,6 +50,10 @@ class Anlage(Base):
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Horizont-Profil für PVGIS (userhorizon Parameter)
+    # Flat-Liste von Elevationswerten (Grad) bei gleichmäßigen Azimut-Schritten ab Nord (0°)
+    horizont_daten: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
     # Technische Daten
     ausrichtung: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Süd, Ost-West, etc.
     neigung_grad: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

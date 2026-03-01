@@ -67,6 +67,9 @@ class PVGISPrognose(Base):
     # unterschiedlichen Ausrichtungen). Mit diesem Feld wird pro Modul der exakte PVGIS-Wert genutzt.
     module_monatswerte: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
+    # Horizont-Profil wurde bei der Berechnung berücksichtigt
+    horizont_verwendet: Mapped[Optional[bool]] = mapped_column(default=False)
+
     # Aktiv-Flag: Nur eine Prognose pro Anlage kann aktiv sein (für Vergleiche)
     ist_aktiv: Mapped[bool] = mapped_column(default=True)
 

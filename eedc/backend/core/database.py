@@ -74,6 +74,8 @@ async def run_migrations(conn):
                 ('community_hash', 'VARCHAR(64)'),
                 # v2.3.0: Land-Auswahl für DACH-Unterstützung
                 ('standort_land', 'VARCHAR(5)'),
+                # Horizont-Profil für PVGIS
+                ('horizont_daten', 'JSON'),
                 # Steuerliche Behandlung (Kleinunternehmerregelung)
                 ('steuerliche_behandlung', "VARCHAR(30) DEFAULT 'keine_ust'"),
                 ('ust_satz_prozent', 'FLOAT DEFAULT 19.0'),
@@ -101,6 +103,7 @@ async def run_migrations(conn):
             new_columns = [
                 ('gesamt_leistung_kwp', 'FLOAT'),
                 ('module_monatswerte', 'JSON'),
+                ('horizont_verwendet', 'BOOLEAN DEFAULT 0'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

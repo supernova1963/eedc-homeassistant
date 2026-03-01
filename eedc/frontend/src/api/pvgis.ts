@@ -54,6 +54,7 @@ export interface GespeichertePrognose {
   neigung_grad: number
   ausrichtung_grad: number
   ist_aktiv: boolean
+  horizont_verwendet?: boolean
 }
 
 export interface AktivePrognoseResponse {
@@ -68,12 +69,22 @@ export interface AktivePrognoseResponse {
   system_losses: number
   jahresertrag_kwh: number
   spezifischer_ertrag_kwh_kwp: number
+  horizont_verwendet?: boolean
   monatswerte: Array<{
     monat: number
     e_m: number
     h_m: number
     sd_m: number
   }>
+}
+
+export interface HorizontStatus {
+  hat_horizont: boolean
+  anzahl_punkte: number
+  azimut_schrittweite: number
+  min_elevation: number
+  max_elevation: number
+  daten: number[] | null
 }
 
 export interface PVGISOptimum {
@@ -179,5 +190,33 @@ export const pvgisApi = {
    */
   async getOptimum(anlageId: number): Promise<PVGISOptimum> {
     return api.get(`/pvgis/optimum/${anlageId}`)
+  },
+
+  /**
+   * Gibt den Horizont-Status einer Anlage zurück
+   */
+  async getHorizont(anlageId: number): Promise<HorizontStatus> {
+    return api.get(`/pvgis/horizont/${anlageId}`)
+  },
+
+  /**
+   * Lädt eine PVGIS Horizont-Datei hoch
+   */
+  async uploadHorizont(anlageId: number, file: File): Promise<HorizontStatus> {
+    return api.upload(`/pvgis/horizont/${anlageId}/upload`, file)
+  },
+
+  /**
+   * Ruft das Horizontprofil automatisch von PVGIS ab (DEM-Geländedaten)
+   */
+  async abrufeHorizont(anlageId: number): Promise<HorizontStatus> {
+    return api.post(`/pvgis/horizont/${anlageId}/abrufen`)
+  },
+
+  /**
+   * Löscht das benutzerdefinierte Horizont-Profil
+   */
+  async deleteHorizont(anlageId: number): Promise<void> {
+    return api.delete(`/pvgis/horizont/${anlageId}`)
   }
 }

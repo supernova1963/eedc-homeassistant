@@ -18,7 +18,7 @@ Struktur:
 
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
@@ -104,9 +104,20 @@ class GespeichertePrognoseResponse(BaseModel):
     neigung_grad: float
     ausrichtung_grad: float
     ist_aktiv: bool
+    horizont_verwendet: Optional[bool] = False
 
     class Config:
         from_attributes = True
+
+
+class HorizontStatusResponse(BaseModel):
+    """Status des Horizont-Profils einer Anlage."""
+    hat_horizont: bool
+    anzahl_punkte: int = 0
+    azimut_schrittweite: float = 0
+    min_elevation: float = 0
+    max_elevation: float = 0
+    daten: Optional[list[float]] = None
 
 
 # =============================================================================
@@ -175,7 +186,8 @@ async def fetch_pvgis_data(
     peak_power: float,
     tilt: float,
     azimuth: float,
-    losses: float = DEFAULT_LOSSES
+    losses: float = DEFAULT_LOSSES,
+    user_horizon: Optional[list[float]] = None,
 ) -> dict:
     """
     Ruft Daten von der PVGIS API ab.
@@ -187,6 +199,7 @@ async def fetch_pvgis_data(
         tilt: Modulneigung in Grad
         azimuth: Azimut (0=Süd)
         losses: Systemverluste in %
+        user_horizon: Benutzerdefiniertes Horizontprofil (Elevationswerte ab Nord)
 
     Returns:
         dict: PVGIS Antwort
@@ -204,7 +217,11 @@ async def fetch_pvgis_data(
         "outputformat": "json",
         "pvtechchoice": "crystSi",  # Kristallines Silizium (Standard)
         "mountingplace": "building",  # Dachanlage
+        "usehorizon": 1,  # PVGIS DEM-Geländehorizont verwenden
     }
+
+    if user_horizon:
+        params["userhorizon"] = ",".join(f"{v:.1f}" for v in user_horizon)
 
     url = f"{PVGIS_BASE_URL}/PVcalc"
 
@@ -245,6 +262,7 @@ async def _berechne_pvgis_modul(
     ausrichtung: Optional[str],
     neigung_grad: float,
     system_losses: float,
+    user_horizon: Optional[list[float]] = None,
 ) -> tuple[list[PVGISMonthlyData], float]:
     """
     Berechnet PVGIS-Prognose für ein PV-Modul.
@@ -258,8 +276,8 @@ async def _berechne_pvgis_modul(
     """
     if _ist_ost_west(ausrichtung):
         half_kwp = leistung_kwp / 2
-        pvgis_ost = await fetch_pvgis_data(latitude, longitude, half_kwp, neigung_grad, -90.0, system_losses)
-        pvgis_west = await fetch_pvgis_data(latitude, longitude, half_kwp, neigung_grad, 90.0, system_losses)
+        pvgis_ost = await fetch_pvgis_data(latitude, longitude, half_kwp, neigung_grad, -90.0, system_losses, user_horizon)
+        pvgis_west = await fetch_pvgis_data(latitude, longitude, half_kwp, neigung_grad, 90.0, system_losses, user_horizon)
 
         monthly_ost = {m["month"]: m for m in pvgis_ost.get("outputs", {}).get("monthly", {}).get("fixed", [])}
         monthly_west = {m["month"]: m for m in pvgis_west.get("outputs", {}).get("monthly", {}).get("fixed", [])}
@@ -278,7 +296,7 @@ async def _berechne_pvgis_modul(
         return monatsdaten, jahresertrag_ost + jahresertrag_west
     else:
         azimuth = ausrichtung_zu_azimut(ausrichtung)
-        pvgis_data = await fetch_pvgis_data(latitude, longitude, leistung_kwp, neigung_grad, azimuth, system_losses)
+        pvgis_data = await fetch_pvgis_data(latitude, longitude, leistung_kwp, neigung_grad, azimuth, system_losses, user_horizon)
 
         outputs = pvgis_data.get("outputs", {})
         monthly = outputs.get("monthly", {}).get("fixed", [])
@@ -367,6 +385,7 @@ async def get_pvgis_prognose(
             ausrichtung=modul.ausrichtung,
             neigung_grad=tilt,
             system_losses=system_losses,
+            user_horizon=anlage.horizont_daten,
         )
 
         # Zu Gesamt addieren
@@ -483,6 +502,7 @@ async def get_pvgis_modul_prognose(
         ausrichtung=modul.ausrichtung,
         neigung_grad=tilt,
         system_losses=system_losses,
+        user_horizon=anlage.horizont_daten,
     )
 
     azimuth = ausrichtung_zu_azimut(modul.ausrichtung)  # nur für Anzeige
@@ -549,7 +569,11 @@ async def get_pvgis_optimum(
         "pvtechchoice": "crystSi",
         "mountingplace": "building",
         "optimalangles": 1,  # Optimale Winkel berechnen
+        "usehorizon": 1,  # PVGIS DEM-Geländehorizont verwenden
     }
+
+    if anlage.horizont_daten:
+        params["userhorizon"] = ",".join(f"{v:.1f}" for v in anlage.horizont_daten)
 
     url = f"{PVGIS_BASE_URL}/PVcalc"
 
@@ -651,6 +675,11 @@ async def speichere_pvgis_prognose(
         gesamt_neigung += modul.neigung_grad * gewicht
         gesamt_azimut += modul.ausrichtung_grad * gewicht
 
+    # Horizont-Status prüfen
+    result_anlage = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result_anlage.scalar_one_or_none()
+    hat_horizont = bool(anlage and anlage.horizont_daten)
+
     # Neue Prognose erstellen
     neue_prognose = PVGISPrognoseModel(
         anlage_id=anlage_id,
@@ -664,6 +693,7 @@ async def speichere_pvgis_prognose(
         gesamt_leistung_kwp=round(prognose.gesamt_leistung_kwp, 3),
         monatswerte=monatswerte,
         module_monatswerte=module_monatswerte_data,
+        horizont_verwendet=hat_horizont,
         ist_aktiv=True
     )
 
@@ -735,7 +765,8 @@ async def get_aktive_prognose(
         "system_losses": prognose.system_losses,
         "jahresertrag_kwh": prognose.jahresertrag_kwh,
         "spezifischer_ertrag_kwh_kwp": prognose.spezifischer_ertrag_kwh_kwp,
-        "monatswerte": prognose.monatswerte
+        "monatswerte": prognose.monatswerte,
+        "horizont_verwendet": prognose.horizont_verwendet or False,
     }
 
 
@@ -794,3 +825,164 @@ async def loesche_prognose(
 
     await db.delete(prognose)
     return {"message": "Prognose gelöscht", "id": prognose_id}
+
+
+# =============================================================================
+# Horizont-Profil Endpoints
+# =============================================================================
+
+def _parse_horizont_datei(content: str) -> list[float]:
+    """
+    Parst eine PVGIS Horizont-Textdatei.
+
+    Format: Zeilen mit azimuth(°) und elevation(°), Whitespace-getrennt.
+    Kommentarzeilen (#) und Leerzeilen werden ignoriert.
+    """
+    punkte: list[tuple[float, float]] = []
+
+    for line in content.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        try:
+            azimuth = float(parts[0])
+            elevation = float(parts[1])
+        except ValueError:
+            continue
+
+        if not (0 <= azimuth < 360):
+            continue
+        elevation = max(0.0, min(90.0, elevation))
+        punkte.append((azimuth, elevation))
+
+    if len(punkte) < 4:
+        raise ValueError(f"Zu wenige Datenpunkte ({len(punkte)}). Mindestens 4 erwartet.")
+
+    # Nach Azimut sortieren und nur Elevationswerte als Flat-Liste zurückgeben
+    punkte.sort(key=lambda p: p[0])
+    return [round(p[1], 2) for p in punkte]
+
+
+def _horizont_status(daten: Optional[list]) -> HorizontStatusResponse:
+    """Erzeugt HorizontStatusResponse aus gespeicherten Daten."""
+    if not daten:
+        return HorizontStatusResponse(hat_horizont=False)
+
+    anzahl = len(daten)
+    return HorizontStatusResponse(
+        hat_horizont=True,
+        anzahl_punkte=anzahl,
+        azimut_schrittweite=round(360 / anzahl, 1) if anzahl > 0 else 0,
+        min_elevation=round(min(daten), 1),
+        max_elevation=round(max(daten), 1),
+        daten=daten,
+    )
+
+
+@router.get("/horizont/{anlage_id}", response_model=HorizontStatusResponse)
+async def get_horizont(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Gibt den Horizont-Status einer Anlage zurück."""
+    anlage = await db.get(Anlage, anlage_id)
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+    return _horizont_status(anlage.horizont_daten)
+
+
+@router.post("/horizont/{anlage_id}/upload", response_model=HorizontStatusResponse)
+async def upload_horizont_datei(
+    anlage_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lädt eine PVGIS Horizont-Datei hoch und speichert das Profil.
+
+    Akzeptiert das PVGIS-Textformat mit azimuth/elevation Spalten.
+    """
+    anlage = await db.get(Anlage, anlage_id)
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    try:
+        content = (await file.read()).decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Datei muss eine UTF-8 Textdatei sein")
+
+    try:
+        daten = _parse_horizont_datei(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    anlage.horizont_daten = daten
+    await db.commit()
+
+    return _horizont_status(daten)
+
+
+@router.post("/horizont/{anlage_id}/abrufen", response_model=HorizontStatusResponse)
+async def abrufe_horizont_von_pvgis(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ruft das Horizontprofil vom PVGIS-Server ab (DEM-Geländedaten).
+
+    Nutzt die Koordinaten der Anlage, um das Geländeprofil automatisch zu laden.
+    """
+    anlage = await db.get(Anlage, anlage_id)
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    if not anlage.latitude or not anlage.longitude:
+        raise HTTPException(status_code=400, detail="Anlage hat keine Geokoordinaten")
+
+    url = f"{PVGIS_BASE_URL}/printhorizon"
+    params = {
+        "lat": anlage.latitude,
+        "lon": anlage.longitude,
+        "outputformat": "json",
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="PVGIS API Timeout")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"PVGIS API Fehler: {str(e)}")
+
+    # PVGIS liefert: outputs.horizon = [{A_sun: azimuth, H_hor: elevation}, ...]
+    horizon_data = data.get("outputs", {}).get("horizon", [])
+    if not horizon_data:
+        raise HTTPException(status_code=502, detail="PVGIS lieferte keine Horizontdaten")
+
+    daten = [round(float(p.get("H_hor", 0)), 2) for p in horizon_data]
+
+    anlage.horizont_daten = daten
+    await db.commit()
+
+    return _horizont_status(daten)
+
+
+@router.delete("/horizont/{anlage_id}")
+async def loesche_horizont(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Löscht das benutzerdefinierte Horizont-Profil einer Anlage."""
+    anlage = await db.get(Anlage, anlage_id)
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    anlage.horizont_daten = None
+    await db.commit()
+
+    return {"message": "Horizontprofil gelöscht"}
