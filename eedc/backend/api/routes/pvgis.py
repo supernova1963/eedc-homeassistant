@@ -959,8 +959,10 @@ async def abrufe_horizont_von_pvgis(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"PVGIS API Fehler: {str(e)}")
 
-    # PVGIS liefert: outputs.horizon = [{A_sun: azimuth, H_hor: elevation}, ...]
-    horizon_data = data.get("outputs", {}).get("horizon", [])
+    # PVGIS liefert: outputs.horizon_profile = [{A: azimuth, H_hor: elevation}, ...]
+    # (Ältere PVGIS-Versionen nutzten "horizon" statt "horizon_profile")
+    outputs = data.get("outputs", {})
+    horizon_data = outputs.get("horizon_profile", []) or outputs.get("horizon", [])
     if not horizon_data:
         raise HTTPException(status_code=502, detail="PVGIS lieferte keine Horizontdaten")
 
