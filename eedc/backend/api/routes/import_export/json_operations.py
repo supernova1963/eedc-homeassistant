@@ -83,11 +83,21 @@ class MonatsdatenExport(BaseModel):
     monat: int
     einspeisung_kwh: Optional[float] = None
     netzbezug_kwh: Optional[float] = None
+    # Legacy-Felder (Bestandsdaten aus älteren Versionen)
+    pv_erzeugung_kwh: Optional[float] = None
+    direktverbrauch_kwh: Optional[float] = None
+    eigenverbrauch_kwh: Optional[float] = None
+    gesamtverbrauch_kwh: Optional[float] = None
+    batterie_ladung_kwh: Optional[float] = None
+    batterie_entladung_kwh: Optional[float] = None
+    batterie_ladung_netz_kwh: Optional[float] = None
+    batterie_ladepreis_cent: Optional[float] = None
+    # Wetterdaten
     globalstrahlung_kwh_m2: Optional[float] = None
     sonnenstunden: Optional[float] = None
-    durchschnittstemperatur: Optional[float] = None  # NEU
-    sonderkosten_euro: Optional[float] = None  # NEU
-    sonderkosten_beschreibung: Optional[str] = None  # NEU
+    durchschnittstemperatur: Optional[float] = None
+    sonderkosten_euro: Optional[float] = None
+    sonderkosten_beschreibung: Optional[str] = None
     datenquelle: Optional[str] = None
     notizen: Optional[str] = None
 
@@ -108,7 +118,13 @@ class PVGISPrognoseExport(BaseModel):
     ausrichtung_grad: float
     jahresertrag_kwh: float
     spezifischer_ertrag_kwh_kwp: Optional[float] = None
+    gesamt_leistung_kwp: Optional[float] = None
     system_losses: Optional[float] = None
+    abgerufen_am: Optional[datetime] = None
+    horizont_verwendet: Optional[bool] = None
+    monatswerte: Optional[dict] = None
+    module_monatswerte: Optional[dict] = None
+    ist_aktiv: bool = True
     monatsprognosen: List[PVGISMonatsprognoseExport] = []
 
 
@@ -117,6 +133,7 @@ class AnlageExport(BaseModel):
     anlagenname: str
     leistung_kwp: float
     installationsdatum: Optional[date] = None
+    standort_land: Optional[str] = None
     standort_plz: Optional[str] = None
     standort_ort: Optional[str] = None
     standort_strasse: Optional[str] = None
@@ -124,10 +141,11 @@ class AnlageExport(BaseModel):
     longitude: Optional[float] = None
     ausrichtung: Optional[str] = None
     neigung_grad: Optional[float] = None
+    wechselrichter_hersteller: Optional[str] = None
     mastr_id: Optional[str] = None
     versorger_daten: Optional[dict] = None
     wetter_provider: Optional[str] = None
-    sensor_mapping: Optional[dict] = None  # NEU: HA Sensor-Zuordnungen
+    sensor_mapping: Optional[dict] = None
     steuerliche_behandlung: Optional[str] = None
     ust_satz_prozent: Optional[float] = None
     horizont_daten: Optional[list] = None
@@ -135,7 +153,7 @@ class AnlageExport(BaseModel):
 
 class FullAnlageExport(BaseModel):
     """Vollständiger Export einer Anlage mit allen verknüpften Daten."""
-    export_version: str = "1.1"  # v1.1: sensor_mapping, durchschnittstemperatur, sonderkosten
+    export_version: str = "1.2"  # v1.2: standort_land, horizont_daten, PVGIS komplett, Legacy-Monatsdaten
     export_datum: datetime
     eedc_version: str
     anlage: AnlageExport
@@ -224,12 +242,14 @@ async def export_anlage_full(
         longitude=anlage.longitude,
         ausrichtung=anlage.ausrichtung,
         neigung_grad=anlage.neigung_grad,
+        wechselrichter_hersteller=getattr(anlage, 'wechselrichter_hersteller', None),
         mastr_id=anlage.mastr_id,
         versorger_daten=anlage.versorger_daten,
         wetter_provider=anlage.wetter_provider,
-        sensor_mapping=anlage.sensor_mapping,  # NEU: HA Sensor-Zuordnungen
+        sensor_mapping=anlage.sensor_mapping,
         steuerliche_behandlung=getattr(anlage, 'steuerliche_behandlung', None),
         ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None),
+        horizont_daten=anlage.horizont_daten,
     )
 
     # Strompreise laden
@@ -334,11 +354,19 @@ async def export_anlage_full(
             monat=md.monat,
             einspeisung_kwh=md.einspeisung_kwh,
             netzbezug_kwh=md.netzbezug_kwh,
+            pv_erzeugung_kwh=md.pv_erzeugung_kwh,
+            direktverbrauch_kwh=md.direktverbrauch_kwh,
+            eigenverbrauch_kwh=md.eigenverbrauch_kwh,
+            gesamtverbrauch_kwh=md.gesamtverbrauch_kwh,
+            batterie_ladung_kwh=md.batterie_ladung_kwh,
+            batterie_entladung_kwh=md.batterie_entladung_kwh,
+            batterie_ladung_netz_kwh=md.batterie_ladung_netz_kwh,
+            batterie_ladepreis_cent=md.batterie_ladepreis_cent,
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
             sonnenstunden=md.sonnenstunden,
-            durchschnittstemperatur=md.durchschnittstemperatur,  # NEU
-            sonderkosten_euro=md.sonderkosten_euro,  # NEU
-            sonderkosten_beschreibung=md.sonderkosten_beschreibung,  # NEU
+            durchschnittstemperatur=md.durchschnittstemperatur,
+            sonderkosten_euro=md.sonderkosten_euro,
+            sonderkosten_beschreibung=md.sonderkosten_beschreibung,
             datenquelle=md.datenquelle,
             notizen=md.notizen,
         )
@@ -369,7 +397,13 @@ async def export_anlage_full(
             ausrichtung_grad=pvgis.ausrichtung_grad,
             jahresertrag_kwh=pvgis.jahresertrag_kwh,
             spezifischer_ertrag_kwh_kwp=pvgis.spezifischer_ertrag_kwh_kwp,
+            gesamt_leistung_kwp=pvgis.gesamt_leistung_kwp,
             system_losses=pvgis.system_losses,
+            abgerufen_am=pvgis.abgerufen_am,
+            horizont_verwendet=pvgis.horizont_verwendet,
+            monatswerte=pvgis.monatswerte,
+            module_monatswerte=pvgis.module_monatswerte,
+            ist_aktiv=pvgis.ist_aktiv,
             monatsprognosen=[
                 PVGISMonatsprognoseExport(
                     monat=mp.monat,
@@ -383,7 +417,7 @@ async def export_anlage_full(
 
     # Vollständiger Export
     full_export = FullAnlageExport(
-        export_version="1.1",
+        export_version="1.2",
         export_datum=datetime.now(),
         eedc_version=APP_VERSION,
         anlage=anlage_export,
@@ -444,13 +478,15 @@ async def import_json(
 
     # 2. Version prüfen (1.0 und 1.1 werden unterstützt)
     export_version = data.get("export_version")
-    if export_version not in ["1.0", "1.1"]:
+    if export_version not in ["1.0", "1.1", "1.2"]:
         return JSONImportResult(
             erfolg=False,
-            fehler=[f"Nicht unterstützte Export-Version: {export_version}. Unterstützt: 1.0, 1.1"]
+            fehler=[f"Nicht unterstützte Export-Version: {export_version}. Unterstützt: 1.0, 1.1, 1.2"]
         )
     if export_version == "1.0":
         warnungen.append("Import von Export-Version 1.0 - sensor_mapping nicht enthalten.")
+    elif export_version == "1.1":
+        warnungen.append("Import von Export-Version 1.1 - horizont_daten und PVGIS-Details ggf. unvollständig.")
 
     # 3. Pflichtfelder prüfen
     anlage_data = data.get("anlage")
@@ -511,12 +547,14 @@ async def import_json(
             longitude=anlage_data.get("longitude"),
             ausrichtung=anlage_data.get("ausrichtung"),
             neigung_grad=anlage_data.get("neigung_grad"),
+            wechselrichter_hersteller=anlage_data.get("wechselrichter_hersteller"),
             mastr_id=anlage_data.get("mastr_id"),
             versorger_daten=anlage_data.get("versorger_daten"),
             wetter_provider=anlage_data.get("wetter_provider", "auto"),
-            sensor_mapping=imported_sensor_mapping,  # NEU: HA Sensor-Zuordnungen
+            sensor_mapping=imported_sensor_mapping,
             steuerliche_behandlung=anlage_data.get("steuerliche_behandlung", "keine_ust"),
             ust_satz_prozent=anlage_data.get("ust_satz_prozent", 19.0),
+            horizont_daten=anlage_data.get("horizont_daten"),
         )
         db.add(new_anlage)
         await db.flush()
@@ -627,11 +665,19 @@ async def import_json(
                 monat=monat,
                 einspeisung_kwh=md_data.get("einspeisung_kwh", 0),
                 netzbezug_kwh=md_data.get("netzbezug_kwh", 0),
+                pv_erzeugung_kwh=md_data.get("pv_erzeugung_kwh"),
+                direktverbrauch_kwh=md_data.get("direktverbrauch_kwh"),
+                eigenverbrauch_kwh=md_data.get("eigenverbrauch_kwh"),
+                gesamtverbrauch_kwh=md_data.get("gesamtverbrauch_kwh"),
+                batterie_ladung_kwh=md_data.get("batterie_ladung_kwh"),
+                batterie_entladung_kwh=md_data.get("batterie_entladung_kwh"),
+                batterie_ladung_netz_kwh=md_data.get("batterie_ladung_netz_kwh"),
+                batterie_ladepreis_cent=md_data.get("batterie_ladepreis_cent"),
                 globalstrahlung_kwh_m2=md_data.get("globalstrahlung_kwh_m2"),
                 sonnenstunden=md_data.get("sonnenstunden"),
-                durchschnittstemperatur=md_data.get("durchschnittstemperatur"),  # NEU
-                sonderkosten_euro=md_data.get("sonderkosten_euro"),  # NEU
-                sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),  # NEU
+                durchschnittstemperatur=md_data.get("durchschnittstemperatur"),
+                sonderkosten_euro=md_data.get("sonderkosten_euro"),
+                sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),
                 datenquelle=md_data.get("datenquelle") or "json_import",
                 notizen=md_data.get("notizen"),
             )
@@ -648,8 +694,12 @@ async def import_json(
                 ausrichtung_grad=pvgis_data.get("ausrichtung_grad", 0),
                 jahresertrag_kwh=pvgis_data.get("jahresertrag_kwh", 0),
                 spezifischer_ertrag_kwh_kwp=pvgis_data.get("spezifischer_ertrag_kwh_kwp", 0),
+                gesamt_leistung_kwp=pvgis_data.get("gesamt_leistung_kwp"),
                 system_losses=pvgis_data.get("system_losses", 14.0),
-                ist_aktiv=True,
+                horizont_verwendet=pvgis_data.get("horizont_verwendet", False),
+                monatswerte=pvgis_data.get("monatswerte"),
+                module_monatswerte=pvgis_data.get("module_monatswerte"),
+                ist_aktiv=pvgis_data.get("ist_aktiv", True),
             )
             db.add(pvgis)
             await db.flush()
