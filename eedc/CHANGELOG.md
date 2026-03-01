@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.5.2] - 2026-03-01
+
+### Hinzugefügt
+
+- **Backup & Restore** – Neue Seite im System-Menü für einfachen JSON-Export und Drag-and-Drop-Import
+
+### Behoben
+
+- PVGIS Horizont-Abruf: API-Key `horizon` → `horizon_profile` (PVGIS API-Änderung)
+- JSON Export/Import auf Vollständigkeit gebracht (Export-Version 1.2): fehlende Felder für Anlage, PVGIS-Prognosen und Monatsdaten ergänzt
+- HA-Mapping Hinweis wird nur noch bei verfügbarem Home Assistant angezeigt
+- Demo-Daten Menüeintrag scrollt jetzt korrekt zur Demo-Sektion
+
+---
+
 ## [2.5.1] - 2026-03-01
 
 ### Geändert
