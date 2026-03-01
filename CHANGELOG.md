@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.5.0] - 2026-03-01
+
+### Hinzugefügt
+
+- **PVGIS Horizontprofil-Support für genauere Ertragsprognosen**
+  - Automatisches Geländeprofil (DEM) bei allen PVGIS-Abfragen aktiv (`usehorizon=1`)
+  - Eigenes Horizontprofil hochladen (PVGIS-Textformat) oder automatisch von PVGIS abrufen
+  - Horizont-Card in PVGIS-Einstellungen mit Status, Statistik und Upload/Abruf
+  - Badge "Eigenes Profil" / "DEM" bei gespeicherten Prognosen
+  - Horizontprofil im JSON-Export/Import enthalten
+
+- **GitHub Releases & Update-Hinweis (Standalone)**
+  - Automatische GitHub Releases mit Docker-Image auf ghcr.io bei Tag-Push
+  - Update-Banner im Frontend wenn neuere Version verfügbar
+  - Deployment-spezifische Update-Anleitung (Docker, HA Add-on, Git)
+
+### Behoben
+
+- **Community-Vorschau zeigte falsche Ausrichtung und Neigung**: Werte wurden aus leerem Parameter-JSON gelesen statt aus Modelfeldern
+
+---
+
 ## [2.4.1] - 2026-02-26
 
 ### Technisch

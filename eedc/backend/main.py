@@ -7,9 +7,11 @@ HA-spezifische Features (MQTT, Sensor-Mapping, HA-Statistik) werden
 nur geladen wenn SUPERVISOR_TOKEN gesetzt ist.
 """
 
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -279,6 +281,63 @@ async def trigger_monthly_snapshot(anlage_id: int = None):
     """
     scheduler = get_scheduler()
     return await scheduler.trigger_monthly_snapshot(anlage_id=anlage_id)
+
+
+# Update-Check Cache (6 Stunden)
+_update_cache: dict = {"result": None, "timestamp": 0}
+_UPDATE_CACHE_TTL = 6 * 3600  # 6 Stunden
+
+GITHUB_RELEASES_URL = "https://api.github.com/repos/supernova1963/eedc/releases/latest"
+
+
+@app.get("/api/updates/check", tags=["System"])
+async def check_for_updates():
+    """
+    Prüft ob eine neuere Version auf GitHub verfügbar ist.
+
+    Nutzt einen In-Memory-Cache (6h) um die GitHub API nicht zu überlasten.
+    Bei Fehlern (kein Internet, Rate Limit) wird kein Fehler zum User
+    durchgereicht, sondern update_verfuegbar=False zurückgegeben.
+    """
+    now = time.time()
+
+    # Cache prüfen
+    if _update_cache["result"] and (now - _update_cache["timestamp"]) < _UPDATE_CACHE_TTL:
+        return _update_cache["result"]
+
+    result = {
+        "update_verfuegbar": False,
+        "aktuelle_version": APP_VERSION,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                GITHUB_RELEASES_URL,
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                latest = data.get("tag_name", "").lstrip("v")
+                if latest and latest != APP_VERSION:
+                    # Einfacher Versionsvergleich über Tupel
+                    try:
+                        current_parts = tuple(int(x) for x in APP_VERSION.split("."))
+                        latest_parts = tuple(int(x) for x in latest.split("."))
+                        if latest_parts > current_parts:
+                            result["update_verfuegbar"] = True
+                            result["neueste_version"] = latest
+                            result["release_url"] = data.get("html_url", "")
+                            result["veroeffentlicht_am"] = (data.get("published_at") or "")[:10]
+                    except (ValueError, TypeError):
+                        pass
+    except Exception:
+        # Kein Internet, Timeout, etc. — still fail
+        pass
+
+    _update_cache["result"] = result
+    _update_cache["timestamp"] = now
+    return result
 
 
 @app.get("/api/stats", tags=["System"])

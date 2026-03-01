@@ -45,6 +45,14 @@ export interface StatsResponse {
   database_path: string
 }
 
+export interface UpdateCheckResponse {
+  update_verfuegbar: boolean
+  aktuelle_version: string
+  neueste_version?: string
+  release_url?: string
+  veroeffentlicht_am?: string
+}
+
 export const systemApi = {
   /**
    * Health Check
@@ -65,5 +73,12 @@ export const systemApi = {
    */
   async getStats(): Promise<StatsResponse> {
     return api.get<StatsResponse>('/stats')
+  },
+
+  /**
+   * Prüft ob ein Update verfügbar ist
+   */
+  async checkUpdate(): Promise<UpdateCheckResponse> {
+    return api.get<UpdateCheckResponse>('/updates/check')
   },
 }
