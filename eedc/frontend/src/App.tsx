@@ -29,6 +29,7 @@ import Monatsdaten from './pages/Monatsdaten'
 import Import from './pages/Import'
 
 // Einstellungen - System
+import Backup from './pages/Backup'
 import Settings from './pages/Settings'
 import PVGISSettings from './pages/PVGISSettings'
 import DatenerfassungGuide from './pages/DatenerfassungGuide'
@@ -84,6 +85,7 @@ function App() {
           <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
 
           {/* Einstellungen - System */}
+          <Route path="einstellungen/backup" element={<Backup />} />
           <Route path="einstellungen/solarprognose" element={<PVGISSettings />} />
           <Route path="einstellungen/pvgis" element={<Navigate to="/einstellungen/solarprognose" replace />} />
           <Route path="einstellungen/datenerfassung" element={<DatenerfassungGuide />} />

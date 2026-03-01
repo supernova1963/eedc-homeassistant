@@ -29,6 +29,7 @@ import {
   BarChart2,
   Share2,
   MapPin,
+  HardDrive,
 } from 'lucide-react'
 
 interface TabItem {
@@ -94,10 +95,12 @@ const einstellungenGruppen: TabGroup[] = [
     prefixes: [
       '/einstellungen/solarprognose',
       '/einstellungen/allgemein',
+      '/einstellungen/backup',
     ],
     tabs: [
       { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Cpu },
       { name: 'Allgemein',     href: '/einstellungen/allgemein',     icon: Settings },
+      { name: 'Backup',        href: '/einstellungen/backup',        icon: HardDrive },
     ],
   },
   {
