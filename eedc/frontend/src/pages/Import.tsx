@@ -1,4 +1,5 @@
-import { useState, useRef, DragEvent, ChangeEvent } from 'react'
+import { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Upload, FileSpreadsheet, Download, Check, AlertTriangle, X, Sparkles, Trash2, FileJson } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { useAnlagen } from '../hooks'
@@ -7,6 +8,9 @@ import type { ImportResult, JSONImportResult } from '../types'
 import type { DemoDataResult } from '../api'
 
 export default function Import() {
+  const location = useLocation()
+  const demoSectionRef = useRef<HTMLDivElement>(null)
+  const isDemo = location.pathname.endsWith('/demo')
   const { anlagen, loading: anlagenLoading, refresh: refreshAnlagen } = useAnlagen()
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -30,6 +34,13 @@ export default function Import() {
 
   // Automatisch erste Anlage auswählen
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
+
+  // Bei /demo Route zur Demo-Sektion scrollen
+  useEffect(() => {
+    if (isDemo && !anlagenLoading && demoSectionRef.current) {
+      demoSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [isDemo, anlagenLoading])
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault()
@@ -203,6 +214,7 @@ export default function Import() {
         </Alert>
 
         {/* Demo-Daten auch ohne Anlage verfügbar */}
+        <div ref={demoSectionRef} />
         <Card>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
@@ -345,6 +357,7 @@ export default function Import() {
         </Card>
 
         {/* Demo-Daten */}
+        <div ref={demoSectionRef} />
         <Card>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
