@@ -84,13 +84,30 @@ class StatusResponse(BaseModel):
 
 
 # =============================================================================
+# Mapping: sensor_mapping-Key → DB-Feldname (für Monatsabschluss-Kompatibilität)
+# sensor_mapping nutzt Kurzformen ("einspeisung"), DB hat "einspeisung_kwh"
+# =============================================================================
+
+MAPPING_KEY_TO_DB_FELD = {
+    "einspeisung": "einspeisung_kwh",
+    "netzbezug": "netzbezug_kwh",
+    "globalstrahlung": "globalstrahlung_kwh_m2",
+    "sonnenstunden": "sonnenstunden",
+    "temperatur": "durchschnittstemperatur",
+}
+
+
+# =============================================================================
 # Feld-Labels für bessere Lesbarkeit
 # =============================================================================
 
 FELD_LABELS = {
-    # Basis
+    # Basis (mapping_key-Form)
     "einspeisung": "Einspeisung",
     "netzbezug": "Netzbezug",
+    "globalstrahlung": "Globalstrahlung",
+    "sonnenstunden": "Sonnenstunden",
+    "temperatur": "Ø Temperatur",
     "pv_gesamt": "PV Erzeugung Gesamt",
     # PV-Module
     "pv_erzeugung_kwh": "PV Erzeugung",
@@ -184,14 +201,16 @@ def map_sensor_values_to_fields(
 
     # Basis-Felder
     basis = sensor_mapping.get("basis", {})
-    for feld, config in basis.items():
+    for mapping_key, config in basis.items():
         if config and config.get("strategie") == "sensor":
             sensor_id = config.get("sensor_id")
             if sensor_id and sensor_id in sensor_values:
                 sv = sensor_values[sensor_id]
+                # mapping_key ("einspeisung") → DB-Feldname ("einspeisung_kwh")
+                db_feld = MAPPING_KEY_TO_DB_FELD.get(mapping_key, mapping_key)
                 basis_felder.append(MappedMonatswert(
-                    feld=feld,
-                    feld_label=FELD_LABELS.get(feld, feld),
+                    feld=db_feld,
+                    feld_label=FELD_LABELS.get(mapping_key, mapping_key),
                     sensor_id=sensor_id,
                     start_wert=sv.start_wert,
                     end_wert=sv.end_wert,
