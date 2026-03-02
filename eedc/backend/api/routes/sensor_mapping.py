@@ -116,7 +116,7 @@ ERWARTETE_FELDER = {
     "speicher": ["ladung_kwh", "entladung_kwh", "ladung_netz_kwh"],
     "waermepumpe": ["stromverbrauch_kwh", "heizenergie_kwh", "warmwasser_kwh"],
     "e-auto": ["ladung_pv_kwh", "ladung_netz_kwh", "km_gefahren", "v2h_entladung_kwh", "verbrauch_kwh", "ladung_extern_kwh"],
-    "wallbox": ["ladung_kwh", "ladevorgaenge"],
+    "wallbox": ["ladung_kwh", "ladung_pv_kwh", "ladevorgaenge"],
     "balkonkraftwerk": ["pv_erzeugung_kwh", "eigenverbrauch_kwh", "speicher_ladung_kwh", "speicher_entladung_kwh"],
 }
 

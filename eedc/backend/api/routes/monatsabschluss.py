@@ -191,11 +191,15 @@ INVESTITION_FELDER = {
     "e-auto": [
         {"feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh"},
         {"feld": "ladung_netz_kwh", "label": "Ladung Netz", "einheit": "kWh"},
+        {"feld": "ladung_extern_kwh", "label": "Externe Ladung", "einheit": "kWh"},
+        {"feld": "ladung_extern_euro", "label": "Externe Ladekosten", "einheit": "€"},
         {"feld": "km_gefahren", "label": "Gefahrene km", "einheit": "km"},
         {"feld": "v2h_entladung_kwh", "label": "V2H Entladung", "einheit": "kWh"},
     ],
     "wallbox": [
         {"feld": "ladung_kwh", "label": "Ladung gesamt", "einheit": "kWh"},
+        {"feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh"},
+        {"feld": "ladevorgaenge", "label": "Ladevorgänge", "einheit": "Anzahl"},
     ],
     "balkonkraftwerk": [
         {"feld": "pv_erzeugung_kwh", "label": "PV Erzeugung", "einheit": "kWh"},
