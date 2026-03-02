@@ -122,8 +122,8 @@ class PVGISPrognoseExport(BaseModel):
     system_losses: Optional[float] = None
     abgerufen_am: Optional[datetime] = None
     horizont_verwendet: Optional[bool] = None
-    monatswerte: Optional[dict] = None
-    module_monatswerte: Optional[dict] = None
+    monatswerte: Optional[list | dict] = None
+    module_monatswerte: Optional[list | dict] = None
     ist_aktiv: bool = True
     monatsprognosen: List[PVGISMonatsprognoseExport] = []
 
