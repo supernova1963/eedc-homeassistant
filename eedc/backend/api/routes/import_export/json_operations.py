@@ -222,6 +222,17 @@ async def export_anlage_full(
     - Monatsdaten (Zählerwerte)
     - PVGIS-Prognosen mit Monatswerten
     """
+    try:
+        return await _export_anlage_full_impl(anlage_id, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Export fehlgeschlagen für Anlage {anlage_id}")
+        raise HTTPException(status_code=500, detail=f"Export-Fehler: {type(e).__name__}: {str(e)}")
+
+
+async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
+    """Interne Implementierung des Exports."""
     # Anlage laden
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
