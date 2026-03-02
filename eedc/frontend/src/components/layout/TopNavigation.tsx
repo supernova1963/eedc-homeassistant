@@ -44,6 +44,7 @@ const settingsMenu = [
     items: [
       { name: 'Solarprognose', href: '/einstellungen/solarprognose' },
       { name: 'Allgemein', href: '/einstellungen/allgemein' },
+      { name: 'Backup', href: '/einstellungen/backup' },
     ],
   },
   {
