@@ -7,19 +7,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.5.4] - 2026-03-03
+
+### Hinzugefügt
+
+- **WP Monatsvergleich – Toggle zwischen Stromverbrauch und COP:** Im Wärmepumpe-Dashboard kann jetzt zwischen Stromverbrauch- und COP-Ansicht umgeschaltet werden
+
+### Behoben
+
+- **PVGIS Monatswerte Export:** list statt dict erlauben bei der Serialisierung
+- **Bessere Fehlerbehandlung im JSON-Export Endpoint:** Robustere Serialisierung
+- **Backup im Einstellungen-Dropdown ergänzt:** Menüeintrag war nicht sichtbar
+
+---
+
 ## [2.5.3] - 2026-03-02
 
 ### Hinzugefügt
 
-- **WP Dashboard: COP Monatsvergleich** – Gleiche Monate über Jahre nebeneinander (z.B. Jan 24 vs Jan 25 vs Jan 26) statt Zeitreihe, volle Breite
-- **Monatsabschluss: Fehlende Felder ergänzt**
-  - E-Auto: Externe Ladung (kWh) und Externe Ladekosten (€)
-  - Wallbox: PV-Ladung (kWh) und Ladevorgänge (Anzahl)
+- **WP Dashboard – COP Monatsvergleich über Jahre:** Vergleich der COP-Werte über mehrere Betriebsjahre
 
 ### Behoben
 
-- HA-Statistik Werte wurden nicht ins Monatsabschluss-Formular übernommen (Feldnamen-Mapping fehlte: `einspeisung` → `einspeisung_kwh`)
-- Degradation: Positive Werte (+5.92%) durch Wetterschwankungen werden auf 0% gekappt, Warnung bei weniger als 3 Datenjahren
+- **Fehlende Felder im Monatsabschluss-Wizard ergänzt**
+- **HA-Statistik Feldnamen-Mapping für Monatsabschluss korrigiert**
+- **Degradation:** Positive Degradationswerte werden gekappt, Warnung bei < 3 Jahren Betriebsdauer
 
 ---
 
@@ -27,14 +39,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Hinzugefügt
 
-- **Backup & Restore** – Neue Seite im System-Menü für einfachen JSON-Export und Drag-and-Drop-Import
+- **Backup & Restore Seite im System-Menü:** Neue dedizierte Seite für Datensicherung
 
 ### Behoben
 
-- PVGIS Horizont-Abruf: API-Key `horizon` → `horizon_profile` (PVGIS API-Änderung)
-- JSON Export/Import auf Vollständigkeit gebracht (Export-Version 1.2): fehlende Felder für Anlage, PVGIS-Prognosen und Monatsdaten ergänzt
-- HA-Mapping Hinweis wird nur noch bei verfügbarem Home Assistant angezeigt
-- Demo-Daten Menüeintrag scrollt jetzt korrekt zur Demo-Sektion
+- **JSON Export/Import auf Vollständigkeit gebracht (v1.2)**
+- **Demo-Daten Route scrollt zur Demo-Sektion**
+- **HA-Mapping Hinweis nur bei verfügbarem Home Assistant anzeigen**
+- **PVGIS Horizont-Abruf:** API-Key "horizon" → "horizon_profile"
 
 ---
 

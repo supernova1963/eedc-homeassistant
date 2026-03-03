@@ -7,6 +7,49 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.5.4] - 2026-03-03
+
+### Hinzugefügt
+
+- **WP Monatsvergleich – Toggle zwischen Stromverbrauch und COP:** Im Wärmepumpe-Dashboard kann jetzt zwischen Stromverbrauch- und COP-Ansicht umgeschaltet werden
+
+### Behoben
+
+- **PVGIS Monatswerte Export:** list statt dict erlauben bei der Serialisierung
+- **Bessere Fehlerbehandlung im JSON-Export Endpoint:** Robustere Serialisierung
+- **Backup im Einstellungen-Dropdown ergänzt:** Menüeintrag war nicht sichtbar
+
+---
+
+## [2.5.3] - 2026-03-02
+
+### Hinzugefügt
+
+- **WP Dashboard – COP Monatsvergleich über Jahre:** Vergleich der COP-Werte über mehrere Betriebsjahre
+
+### Behoben
+
+- **Fehlende Felder im Monatsabschluss-Wizard ergänzt**
+- **HA-Statistik Feldnamen-Mapping für Monatsabschluss korrigiert**
+- **Degradation:** Positive Degradationswerte werden gekappt, Warnung bei < 3 Jahren Betriebsdauer
+
+---
+
+## [2.5.2] - 2026-03-01
+
+### Hinzugefügt
+
+- **Backup & Restore Seite im System-Menü:** Neue dedizierte Seite für Datensicherung
+
+### Behoben
+
+- **JSON Export/Import auf Vollständigkeit gebracht (v1.2)**
+- **Demo-Daten Route scrollt zur Demo-Sektion**
+- **HA-Mapping Hinweis nur bei verfügbarem Home Assistant anzeigen**
+- **PVGIS Horizont-Abruf:** API-Key "horizon" → "horizon_profile"
+
+---
+
 ## [2.5.1] - 2026-03-01
 
 ### Geändert
