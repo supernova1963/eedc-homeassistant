@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users } from 'lucide-react'
+import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
@@ -67,6 +67,7 @@ export default function TopNavigation() {
   const { theme, setTheme } = useTheme()
   const location = useLocation()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const haAvailable = useHAAvailable()
 
@@ -90,6 +91,21 @@ export default function TopNavigation() {
   }
 
   const activeMainTab = getActiveMainTab()
+
+  // Schließe Mobile-Menü bei Navigation
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
+
+  // ESC schließt Mobile-Menü
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false)
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => document.removeEventListener('keydown', handleEsc)
+  }, [mobileMenuOpen])
 
   // Schließe Dropdown bei Klick außerhalb
   useEffect(() => {
@@ -120,8 +136,8 @@ export default function TopNavigation() {
             <img src={eedcIcon} alt="eedc" className="h-10 w-10" />
             <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">eedc</span>
 
-            {/* Haupttabs */}
-            <nav className="ml-8 flex space-x-1">
+            {/* Haupttabs (Desktop) */}
+            <nav className="ml-8 hidden md:flex space-x-1">
               {mainTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -144,8 +160,17 @@ export default function TopNavigation() {
             </nav>
           </div>
 
-          {/* Rechte Seite: Theme + Einstellungen */}
-          <div className="flex items-center gap-2">
+          {/* Hamburger-Button (Mobile) */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+            aria-label="Menü"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+
+          {/* Rechte Seite: Theme + Einstellungen (Desktop) */}
+          <div className="hidden md:flex items-center gap-2">
             {/* Theme Toggle */}
             <button
               onClick={cycleTheme}
@@ -205,6 +230,77 @@ export default function TopNavigation() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Menu Panel */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-gray-200 dark:border-gray-700 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+          {/* Hauptnavigation */}
+          <nav className="px-4 py-3 space-y-1">
+            {mainTabs.map((tab) => {
+              const Icon = tab.icon
+              return (
+                <NavLink
+                  key={tab.name}
+                  to={tab.basePath}
+                  className={() =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      activeMainTab === tab.name
+                        ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                    }`
+                  }
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.name}
+                </NavLink>
+              )
+            })}
+          </nav>
+
+          <div className="border-t border-gray-200 dark:border-gray-700 mx-4" />
+
+          {/* Einstellungen */}
+          <div className="px-4 py-3 space-y-3">
+            {filteredSettingsMenu.map((section) => (
+              <div key={section.category}>
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-3 mb-1">
+                  {section.category}
+                </p>
+                <div className="space-y-0.5">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      to={item.href}
+                      className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isSettingsItemActive(item.href)
+                          ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                          : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {item.name}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-gray-200 dark:border-gray-700 mx-4" />
+
+          {/* Theme Toggle */}
+          <div className="px-4 py-3">
+            <button
+              onClick={cycleTheme}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors w-full"
+            >
+              {theme === 'light' && <SunIcon className="h-4 w-4" />}
+              {theme === 'dark' && <Moon className="h-4 w-4" />}
+              {theme === 'system' && <Monitor className="h-4 w-4" />}
+              Theme: {theme === 'light' ? 'Hell' : theme === 'dark' ? 'Dunkel' : 'System'}
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

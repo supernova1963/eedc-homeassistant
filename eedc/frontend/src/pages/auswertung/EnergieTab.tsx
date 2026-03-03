@@ -1,7 +1,7 @@
 // Energie Tab - Monatszeitreihen für Energie-Bilanz und Effizienz
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart,
+  Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { Sun, Zap, TrendingUp, Download } from 'lucide-react'
@@ -11,6 +11,9 @@ import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
 
 export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: TabProps) {
+  const [bilanzView, setBilanzView] = useState<'erzeugung' | 'verbrauch'>('erzeugung')
+  const [showAutarkie, setShowAutarkie] = useState(false)
+
   // Monatszeitreihen erstellen
   const zeitreihe = useMemo(
     () => createMonatsZeitreihe(data, anlage, strompreis),
@@ -105,25 +108,113 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
 
       {/* Chart 1: Energie-Bilanz (Monatszeitreihe) */}
       <Card>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-blue-500" />
-          Energie-Bilanz pro Monat
-        </h3>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <Zap className="h-5 w-5 text-blue-500" />
+            Energie-Bilanz pro Monat
+          </h3>
+          <div className="flex items-center gap-2">
+            {/* Ansicht-Toggle: Erzeugung / Verbrauch */}
+            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                onClick={() => setBilanzView('erzeugung')}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  bilanzView === 'erzeugung'
+                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                }`}
+              >
+                Erzeugung
+              </button>
+              <button
+                onClick={() => setBilanzView('verbrauch')}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  bilanzView === 'verbrauch'
+                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                }`}
+              >
+                Verbrauch
+              </button>
+            </div>
+            {/* Autarkie-Toggle */}
+            <button
+              onClick={() => setShowAutarkie(!showAutarkie)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                showAutarkie
+                  ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+              }`}
+            >
+              Autarkie %
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+          {bilanzView === 'erzeugung'
+            ? 'Gestapelt: Eigenverbrauch + Einspeisung = PV-Erzeugung'
+            : 'Gestapelt: Eigenverbrauch + Netzbezug = Gesamtverbrauch'}
+        </p>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <ComposedChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 11 }} />
+              <YAxis
+                yAxisId="kwh"
+                tickFormatter={(v) => `${v.toFixed(0)}`}
+                unit=" kWh"
+                tick={{ fontSize: 11 }}
+              />
+              {showAutarkie && (
+                <YAxis
+                  yAxisId="pct"
+                  orientation="right"
+                  domain={[0, 100]}
+                  unit="%"
+                  tick={{ fontSize: 11 }}
+                />
+              )}
               <Tooltip
-                formatter={(value: number, name: string) => [`${value.toFixed(0)} kWh`, name]}
+                formatter={(value: number, name: string) => {
+                  if (name === 'Autarkie') return [`${value.toFixed(1)}%`, name]
+                  return [`${value.toFixed(0)} kWh`, name]
+                }}
                 contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
               />
               <Legend />
-              <Bar dataKey="eigenverbrauch" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} stackId="pv" />
-              <Bar dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} stackId="pv" />
-              <Bar dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} />
-            </BarChart>
+
+              {/* Erzeugung-Ansicht: Eigenverbrauch + Einspeisung gestapelt, Netzbezug separat */}
+              {bilanzView === 'erzeugung' && (
+                <>
+                  <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} stackId="pv" />
+                  <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} stackId="pv" />
+                  <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} />
+                </>
+              )}
+
+              {/* Verbrauch-Ansicht: Eigenverbrauch + Netzbezug gestapelt, Einspeisung separat */}
+              {bilanzView === 'verbrauch' && (
+                <>
+                  <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} stackId="verbrauch" />
+                  <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} stackId="verbrauch" />
+                  <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} />
+                </>
+              )}
+
+              {/* Optionale Autarkie-Linie */}
+              {showAutarkie && (
+                <Line
+                  yAxisId="pct"
+                  type="monotone"
+                  dataKey="autarkie"
+                  name="Autarkie"
+                  stroke={CHART_COLORS.autarkie}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </Card>
