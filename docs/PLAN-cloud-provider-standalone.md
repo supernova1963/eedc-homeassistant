@@ -2,7 +2,7 @@
 
 ## Checkliste
 
-> **Stand:** 2026-03-04 | Phase 0 + 1 + 2 + 5 abgeschlossen | **Kein Breaking Change** für eedc-homeassistant
+> **Stand:** 2026-03-04 | Phase 0 + 1 + 2 + 3 + 5 abgeschlossen | **Kein Breaking Change** für eedc-homeassistant
 
 ### Voraussetzungen
 
@@ -89,19 +89,24 @@ Branch: `feature/portal-import`
 
 **Registrierte Connectors (2):** `sma_ennexos` (Tripower X, Wallbox EVC), `sma_webconnect` (Sunny Boy, Tripower SE)
 
-### Phase 3: Monatsdaten-Prefill Integration (braucht: Phase 1 oder 2)
+### Phase 3: Monatsdaten-Prefill Integration ✅
 
-- [ ] 3.1 Backend
-  - [ ] 3.1a `backend/services/vorschlag_service.py` – `PORTAL_IMPORT` + `LOCAL_CONNECTOR` als VorschlagQuelle
-  - [ ] 3.1b Monatswerte-Caching (letzte Abrufe zwischenspeichern)
-- [ ] 3.2 Frontend
-  - [ ] 3.2a `MonatsabschlussWizard.tsx` – "Daten importieren" Button (CSV oder Connector)
-  - [ ] 3.2b Werte als Vorschläge anzeigen, User übernimmt einzeln
-- [ ] 3.3 Verifizierung Phase 3
-  - [ ] 3.3a Monatsabschluss: Import-Button sichtbar
-  - [ ] 3.3b CSV-Import: Werte werden als Vorschläge angezeigt
-  - [ ] 3.3c Connector: Werte werden automatisch abgerufen und als Vorschläge angezeigt
-  - [ ] 3.3d User kann einzelne Werte übernehmen/ablehnen
+- [x] 3.1 Backend
+  - [x] 3.1a `backend/services/vorschlag_service.py` – `PORTAL_IMPORT` + `LOCAL_CONNECTOR` als VorschlagQuelle
+  - [x] 3.1b `backend/api/routes/connector.py` – `GET /connectors/monatswerte/{id}/{j}/{m}` Snapshot-Delta-Berechnung
+  - [x] 3.1c `backend/api/routes/monatsabschluss.py` – Connector-Vorschläge (Konfidenz 90) automatisch, `connector_konfiguriert` Flag, `quelle`-Tracking
+- [x] 3.2 Frontend
+  - [x] 3.2a `MonatsabschlussWizard.tsx` – "Wechselrichter laden" Button (grün, neben HA-Button)
+  - [x] 3.2b Connector-Werte als Vorschläge angezeigt, User übernimmt einzeln
+  - [x] 3.2c Quellen-Labels übersetzt (`getQuelleLabel()`: Connector, Import, Vormonat etc.)
+  - [x] 3.2d `connector.ts` + `monatsabschluss.ts` – API-Client + Types erweitert
+- [x] 3.3 Verifizierung Phase 3
+  - [x] 3.3a Monatsabschluss: Connector-Button sichtbar (nur wenn Connector konfiguriert)
+  - [ ] 3.3b Live-Test: Connector-Daten laden → Werte werden als Vorschläge angezeigt
+  - [x] 3.3c Portal-Import: Werte erscheinen als `aktueller_wert` mit `quelle=portal_import`
+  - [x] 3.3d User kann einzelne Vorschläge per Klick übernehmen
+
+**Hinweis:** Portal-Import schreibt direkt in Monatsdaten → Werte erscheinen automatisch. Connector-Daten kommen als Vorschläge (Snapshot-Differenz, verteilt auf PV-Module/Speicher nach kWp/Kapazität).
 
 ### Phase 4: Scheduler + Sicherheit + Polish (braucht: Phase 3)
 
@@ -109,7 +114,7 @@ Branch: `feature/portal-import`
   - [ ] 4.1a `backend/services/scheduler.py` – Connector-Fetch CronJob (1. des Monats, 00:15)
   - [ ] 4.1b Nur für Anlagen mit aktivem Connector + `auto_fetch_enabled: true`
 - [ ] 4.2 Sicherheit
-  - [ ] 4.2a `import_export/json_operations.py` – Connector-Credentials aus Export ausschließen
+  - [x] 4.2a `import_export/json_operations.py` – Connector-Credentials aus Export ausschließen (in Phase 2 erledigt)
   - [ ] 4.2b Auth-Fehler → UI-Hinweis "Erneut verbinden"
 - [ ] 4.3 Dokumentation
   - [ ] 4.3a CHANGELOG.md aktualisieren
@@ -117,7 +122,7 @@ Branch: `feature/portal-import`
   - [ ] 4.3c README.md (eedc) – Anleitung Import + Connector-Setup
 - [ ] 4.4 Verifizierung Phase 4
   - [ ] 4.4a Scheduler-Job manuell triggern → Daten gecached
-  - [ ] 4.4b JSON-Export enthält KEINE Credentials
+  - [x] 4.4b JSON-Export enthält KEINE Credentials (in Phase 2 getestet)
   - [ ] 4.4c Fehlender Connector → "Erneut verbinden" Hinweis
 
 ### Phase 5: Subtree Integration ✅ (braucht: Phase 0, unabhängig von 1-4)
