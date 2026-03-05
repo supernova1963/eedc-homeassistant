@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.5.1 | **Status:** Stable Release
+**Version:** 2.6.0 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -163,22 +163,15 @@ EEDC Add-on                              Community Server
 
 > Die alten `ha_sensor_*` Felder im Anlage-Model dürfen NICHT aus der DB/dem Model entfernt werden (bestehende Installationen). Neuer Code nutzt ausschließlich `sensor_mapping`.
 
-## Letzte Änderungen (v2.5.0)
+## Letzte Änderungen
 
-**v2.5.0** - PVGIS Horizontprofil, Social-Media-Textvorlage, GitHub Releases:
-- **PVGIS Horizontprofil:** `usehorizon=1`, eigenes Profil Upload/Abruf, Badge bei Prognosen
-- **Social-Media-Textvorlage:** `GET /api/cockpit/share-text/{id}` – Kompakt/Ausführlich, bedingte Blöcke
-- **GitHub Releases & Update-Hinweis:** Auto-Releases, Update-Banner im Frontend
-- **Community-Fix:** Ausrichtung/Neigung aus Modelfeldern statt Parameter-JSON
+**v2.6.0** - Dynamischer Tarif, Portal-Import, Geräte-Connectors:
 
-**v2.4.0** - Steuerliche Behandlung, Spezialtarife, Sonstige Positionen, Firmenwagen:
-- **Kleinunternehmerregelung:** `steuerliche_behandlung` + `ust_satz_prozent` auf Anlage-Model
-- **Spezialtarife:** `verwendung` auf Strompreis-Model (`allgemein`/`waermepumpe`/`wallbox`)
-- **Sonstige Positionen:** Investitionstyp `sonstiges` mit Kategorien (erzeuger/verbraucher/speicher)
-- **Firmenwagen:** `ist_dienstlich` Flag an Wallbox und E-Auto
-- **Realisierungsquote:** Panel in Auswertung/Investitionen
-- **Grundpreis:** `grundpreis_euro_monat` in Netzbezugskosten
+- **Dynamischer Tarif:** Monatlicher Ø-Strompreis aus HA-Sensor oder manuell
+- **Portal-Import:** CSV-Upload von SMA Sunny Portal, SMA eCharger, EVCC, Fronius Solarweb
+- **9 Geräte-Connectors:** SMA ennexOS, SMA WebConnect, Fronius Solar API, go-eCharger, Shelly 3EM, OpenDTU, Kostal Plenticore, sonnenBatterie, Tasmota SML
+- **getestet-Flag:** Parser und Connectors zeigen im UI an ob mit echten Geräten verifiziert
 
-> **⚠️ BREAKING CHANGE (v2.0.0):** Neuinstallation des Add-ons erforderlich! Volume-Mapping `config:ro`.
+**v2.5.5** - Hamburger-Menu, Mobile Fixes, Energie-Bilanz Toggle
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).

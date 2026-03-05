@@ -1,6 +1,6 @@
 # EEDC Berechnungsreferenz
 
-**Version 2.4.1** | Stand: Februar 2026
+**Version 2.6.0** | Stand: März 2026
 
 Dieses Dokument beschreibt alle Berechnungsketten im EEDC-System: von den Eingabefeldern
 über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche
@@ -130,6 +130,7 @@ Hardcodierte Werte in `cockpit.py`:
 | `einspeiseverguetung_cent` | Tarif | `Strompreis.einspeiseverguetung_cent_kwh` |
 | `netzbezug_preis_cent` | Tarif | `Strompreis.netzbezug_arbeitspreis_cent_kwh` |
 | `grundpreis_euro_monat` | Tarif | `Strompreis.grundpreis_euro_monat` |
+| `netzbezug_durchschnittspreis_cent` | HA-Sensor oder Monatsdaten | Dynamischer Ø-Preis (NEU v2.6.0) |
 | `leistung_kwp` | Anlage | Summe aller `Investition.leistung_kwp` (pv-module) |
 
 #### Formeln
@@ -635,11 +636,30 @@ allgemein   → allgemein-Tarif   || Hardcoded Defaults (30.0 / 8.2)
 
 ### Hardcoded Defaults (wenn kein Tarif)
 
-```
+```text
 Netzbezug_Preis   = 30.0 ct/kWh
 Einspeisevergütung = 8.2 ct/kWh
 Grundpreis         = 0 EUR/Monat
 ```
+
+### Dynamischer Tarif / Monatlicher Ø-Strompreis (NEU v2.6.0)
+
+Für Nutzer mit dynamischem Stromtarif (z.B. Tibber, aWATTar) kann der tatsächliche monatliche Durchschnittspreis verwendet werden statt des festen Tarifpreises.
+
+**Fallback-Kette für `netzbezug_preis_cent`:**
+
+```text
+1. Monatsdaten.netzbezug_durchschnittspreis_cent  (manuell pro Monat)
+2. HA-Sensor strompreis (via Sensor-Mapping)       (automatisch aus HA)
+3. Strompreis.netzbezug_arbeitspreis_cent_kwh      (fester Tarif)
+4. Hardcoded Default: 30.0 ct/kWh
+```
+
+**Konfiguration:**
+
+- Im Sensor-Mapping kann ein HA-Sensor für `strompreis` zugeordnet werden
+- Im Monatsabschluss-Wizard wird der Ø-Preis als Vorschlag angezeigt
+- Manuell editierbar unter Monatsdaten
 
 ---
 

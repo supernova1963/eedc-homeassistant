@@ -1,6 +1,6 @@
 # EEDC Architektur-Dokumentation
 
-**Version 2.4.1** | Stand: Februar 2026
+**Version 2.6.0** | Stand: März 2026
 
 ---
 
@@ -69,7 +69,8 @@ Externe APIs (optional):
 | **Pydantic** | 2.x | Datenvalidierung |
 | **httpx** | 0.26+ | HTTP Client für externe APIs |
 | **aiomqtt** | optional | MQTT Client für HA Export |
-| **APScheduler** | 3.x | Scheduler für Cron-Jobs (NEU) |
+| **APScheduler** | 3.x | Scheduler für Cron-Jobs |
+| **aiohttp** | 3.x | HTTP Client für Geräte-Connectors |
 
 ### Frontend
 
@@ -174,7 +175,26 @@ eedc-homeassistant/
     │       ├── vorschlag_service.py       # Intelligente Vorschläge
     │       ├── scheduler.py               # APScheduler für Cron-Jobs
     │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
-    │       └── community_service.py       # Community-Datenaufbereitung
+    │       ├── community_service.py       # Community-Datenaufbereitung
+    │       ├── connectors/                # Geräte-Connectors (REST API)
+    │       │   ├── base.py               # ABC DeviceConnector + Datenklassen
+    │       │   ├── registry.py           # @register_connector Pattern
+    │       │   ├── sma_ennexos.py        # SMA Tripower X / EVC
+    │       │   ├── sma_webconnect.py     # SMA Sunny Boy / Tripower SE
+    │       │   ├── fronius_solar_api.py  # Fronius Symo / Primo / Gen24
+    │       │   ├── go_echarger.py        # go-eCharger Wallbox
+    │       │   ├── shelly_em.py          # Shelly 3EM / Pro 3EM
+    │       │   ├── opendtu.py            # OpenDTU / AhoyDTU (Hoymiles)
+    │       │   ├── kostal_plenticore.py  # Kostal Plenticore / PIKO IQ
+    │       │   ├── sonnen_batterie.py    # sonnenBatterie
+    │       │   └── tasmota_sml.py        # Tasmota SML Stromzähler
+    │       └── import_parsers/            # Portal-Export CSV-Parser
+    │           ├── base.py               # ABC PortalExportParser
+    │           ├── registry.py           # @register_parser Pattern
+    │           ├── sma_sunny_portal.py   # SMA Sunny Portal CSV
+    │           ├── sma_echarger.py       # SMA eCharger CSV
+    │           ├── evcc.py               # EVCC Wallbox Sessions
+    │           └── fronius_solarweb.py   # Fronius Solarweb CSV
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -537,6 +557,8 @@ Sonstiges [Eigenständig]
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** (NEU) |
 | `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** (NEU) |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** (NEU v2.0.3) |
+| `/api/connectors` | connectors.py | **Geräte-Connectors** (NEU v2.6.0) |
+| `/api/data-import` | data_import.py | **Portal-Import** CSV-Parser (NEU v2.6.0) |
 
 ### Wichtige Endpoints
 
@@ -1054,12 +1076,36 @@ EEDC Add-on                              Community Server
 - `frontend/src/pages/CommunityVergleich.tsx` – Benchmark-Analyse (6 Tabs)
 - `frontend/src/api/community.ts` – API Client
 
-### Cloud-Provider Integration (geplant)
+### Datenquellen-Integration (v2.6.0)
 
-Status: Phase 0 (Repo-Restrukturierung) und Phase 5 (Subtree-Integration) abgeschlossen.
-Phasen 1-4 (SMA ennexOS Integration) warten auf SMA Developer Portal Sandbox-Credentials.
+**Portal-Import (CSV-Parser):**
 
-Details siehe [PLAN-cloud-provider-standalone.md](PLAN-cloud-provider-standalone.md).
+Upload von Portal-Export-CSVs mit automatischer Parser-Erkennung:
+
+| Parser | Hersteller | Datenfelder |
+|--------|-----------|-------------|
+| `sma_sunny_portal` | SMA | PV, Netz, Eigenverbrauch, Batterie |
+| `sma_echarger` | SMA | Wallbox (Ladung, Ladevorgänge) |
+| `evcc` | EVCC | Wallbox (Ladung, PV-Anteil, km) |
+| `fronius_solarweb` | Fronius | PV, Netz, Eigenverbrauch |
+
+**Geräte-Connectors (REST API):**
+
+Direkte Verbindung zu lokalen Geräten für kumulative Zählerstände:
+
+| Connector | Gerätetyp | Datenfelder | Getestet |
+|-----------|-----------|-------------|----------|
+| `sma_ennexos` | Tripower X, EVC | PV, Netz, Batterie, Wallbox | Nein |
+| `sma_webconnect` | Sunny Boy, Tripower SE | PV, Netz, Batterie | Nein |
+| `fronius_solar_api` | Symo, Primo, Gen24 | PV, Netz, Batterie | Nein |
+| `go_echarger` | go-eCharger Wallbox | Wallbox | Nein |
+| `shelly_em` | Shelly 3EM / Pro 3EM | Netz (Bezug + Einspeisung) | Nein |
+| `opendtu` | OpenDTU / AhoyDTU | PV | Nein |
+| `kostal_plenticore` | Plenticore / PIKO IQ | PV, Netz, Batterie | Nein |
+| `sonnen_batterie` | sonnenBatterie | PV | Nein |
+| `tasmota_sml` | Tasmota SML Stromzähler | Netz (Bezug + Einspeisung) | Ja |
+
+**Plugin-Architektur:** Sowohl Parser als auch Connectors verwenden ein Registry-Pattern mit Decorator (`@register_parser` / `@register_connector`). Neue Geräte können durch Hinzufügen einer Datei und Import in `__init__.py` registriert werden.
 
 ---
 
@@ -1143,4 +1189,4 @@ Vollständige API-Dokumentation unter:
 
 ---
 
-*Letzte Aktualisierung: Februar 2026*
+*Letzte Aktualisierung: März 2026*

@@ -1,6 +1,6 @@
 # EEDC Benutzerhandbuch
 
-**Version 2.5.0** | Stand: März 2026
+**Version 2.6.0** | Stand: März 2026
 
 ---
 
@@ -904,7 +904,61 @@ Neben dem JSON-Export gibt es jetzt einen **PDF-Export** (orangefarbenes Dokumen
 - Standard: Gesamtzeitraum (alle Jahre seit Installation)
 - Der Export erfolgt direkt über die Anlagen-Seite
 
-### 10.3 Demo-Daten
+### 10.3 Portal-Import (NEU v2.6.0)
+
+**Pfad**: Einstellungen → Datenerfassung → Portal-Import
+
+Upload von CSV-Dateien aus Hersteller-Portalen. EEDC erkennt das Format automatisch.
+
+**Unterstützte Portale:**
+
+| Portal | Datenfelder | Getestet |
+|--------|-------------|----------|
+| **SMA Sunny Portal** | PV-Erzeugung, Einspeisung, Netzbezug, Eigenverbrauch, Batterie | Ja |
+| **SMA eCharger** | Wallbox-Ladung, Ladevorgänge | Ja |
+| **EVCC** | Wallbox-Ladung, PV-Anteil, km gefahren | Ja |
+| **Fronius Solarweb** | PV-Erzeugung, Einspeisung, Netzbezug, Eigenverbrauch | Nein |
+
+**Ablauf:**
+
+1. CSV-Datei aus dem Hersteller-Portal exportieren
+2. In EEDC hochladen — das Format wird automatisch erkannt
+3. Vorschau der erkannten Monatsdaten prüfen
+4. Import bestätigen — Daten werden in Monatsdaten geschrieben
+
+**Hinweis**: Parser mit (*) sind noch nicht mit echten Gerätedaten verifiziert. Feedback willkommen!
+
+### 10.4 Geräte-Connectors (NEU v2.6.0)
+
+**Pfad**: Einstellungen → Datenerfassung → Connector-Setup
+
+Direkte Verbindung zu lokalen Geräten im Netzwerk. Connectors lesen kumulative kWh-Zählerstände aus und berechnen daraus Monatswerte.
+
+**Unterstützte Geräte:**
+
+| Connector | Gerätetyp | Datenfelder |
+|-----------|-----------|-------------|
+| **SMA ennexOS** | Tripower X, Wallbox EVC | PV, Netz, Batterie, Wallbox |
+| **SMA WebConnect** | Sunny Boy, Tripower SE | PV, Netz, Batterie |
+| **Fronius Solar API** | Symo, Primo, Gen24 | PV, Netz, Batterie |
+| **go-eCharger** | HOME+, Gemini | Wallbox |
+| **Shelly 3EM** | Shelly 3EM, Pro 3EM | Netz (Bezug + Einspeisung) |
+| **OpenDTU / AhoyDTU** | Hoymiles Micro-Inverter | PV |
+| **Kostal Plenticore** | Plenticore, PIKO IQ | PV, Netz, Batterie |
+| **sonnenBatterie** | eco, 10, hybrid | PV |
+| **Tasmota SML** | IR-Lesekopf am Stromzähler | Netz (Bezug + Einspeisung) |
+
+**Einrichtung:**
+
+1. Connector-Typ auswählen
+2. IP-Adresse des Geräts eingeben
+3. Zugangsdaten eingeben (falls nötig — abhängig vom Gerät)
+4. Verbindung testen — zeigt erkannte Sensoren und aktuelle Werte
+5. Speichern — EEDC nimmt regelmäßig Snapshots der Zählerstände
+
+**Geräte mit (*) im Dropdown** sind noch nicht mit echten Geräten verifiziert.
+
+### 10.5 Demo-Daten
 
 Zum Ausprobieren ohne echte Daten:
 
