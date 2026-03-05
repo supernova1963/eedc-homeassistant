@@ -25,6 +25,8 @@ class VorschlagQuelle(str, Enum):
     """Quelle eines Vorschlags."""
     HA_SENSOR = "ha_sensor"        # Aus HA-Sensor (MQTT)
     CRON_SNAPSHOT = "cron_snapshot"  # Vom Monatswechsel-Job
+    LOCAL_CONNECTOR = "local_connector"  # Vom Geräte-Connector (lokale API)
+    PORTAL_IMPORT = "portal_import"      # Aus CSV-Portal-Import
     VORMONAT = "vormonat"          # Letzter Monat
     VORJAHR = "vorjahr"            # Gleicher Monat Vorjahr
     BERECHNUNG = "berechnung"      # Berechnet (COP, kWp, etc.)

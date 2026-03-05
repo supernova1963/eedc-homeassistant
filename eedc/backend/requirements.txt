@@ -25,6 +25,9 @@ aiomqtt>=2.0.0
 # Scheduler (für Cron-Jobs wie Monatswechsel-Snapshot)
 apscheduler>=3.10.0
 
+# SMA Device Connector (ennexOS, WebConnect, Speedwire)
+pysma-plus>=0.4
+
 # Utilities
 python-multipart>=0.0.6  # File Uploads
 python-dateutil>=2.8.2

@@ -18,6 +18,7 @@ export { sensorMappingApi } from './sensorMapping'
 export { monatsabschlussApi } from './monatsabschluss'
 export { haStatisticsApi } from './haStatistics'
 export { communityApi } from './community'
+export { portalImportApi } from './portalImport'
 
 // Re-export types
 export type { ApiError } from './client'

@@ -86,6 +86,11 @@ class Anlage(Base):
     # Siehe docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation
     sensor_mapping: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
+    # Connector-Konfiguration für direkte Geräteverbindung (ennexOS REST API etc.)
+    # Struktur: {"connector_id": "sma_ennexos", "host": "...", "username": "...",
+    #            "password": "base64...", "geraet_name": "...", "meter_snapshots": {...}, ...}
+    connector_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+
     # Community-Sharing: Hash zur Identifikation bei Löschung
     # Wird nach erfolgreichem Teilen gesetzt und für Delete-Endpoint benötigt
     community_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

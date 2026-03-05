@@ -30,6 +30,7 @@ import {
   Share2,
   MapPin,
   HardDrive,
+  FileSpreadsheet,
 } from 'lucide-react'
 
 interface TabItem {
@@ -81,10 +82,14 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/import',
       '/einstellungen/demo',
       '/einstellungen/datenerfassung',
+      '/einstellungen/portal-import',
+      '/einstellungen/connector',
     ],
     tabs: [
       { name: 'Monatsdaten',     href: '/einstellungen/monatsdaten',     icon: Database },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss', icon: CalendarCheck },
+      { name: 'Portal-Import',   href: '/einstellungen/portal-import',   icon: FileSpreadsheet },
+      { name: 'Connector',       href: '/einstellungen/connector',       icon: Cpu },
       { name: 'Import/Export',   href: '/einstellungen/import',          icon: Upload },
       { name: 'Demo-Daten',      href: '/einstellungen/demo',            icon: FlaskConical },
       { name: 'Datenerfassung',  href: '/einstellungen/datenerfassung',  icon: BookOpen },

@@ -29,6 +29,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import { anlagenApi, monatsabschlussApi, haStatisticsApi } from '../api'
+import { connectorApi } from '../api/connector'
 import type {
   MonatsabschlussResponse,
   FeldStatus,
@@ -75,9 +76,11 @@ export default function MonatsabschlussWizard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [loadingHA, setLoadingHA] = useState(false)
+  const [loadingConnector, setLoadingConnector] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [haInfo, setHaInfo] = useState<string | null>(null)
+  const [connectorInfo, setConnectorInfo] = useState<string | null>(null)
 
   const [anlageName, setAnlageName] = useState('')
   const [data, setData] = useState<MonatsabschlussResponse | null>(null)
@@ -327,6 +330,61 @@ export default function MonatsabschlussWizard() {
     }
   }
 
+  // Connector-Werte für diesen Monat laden
+  const handleLoadConnectorValues = async () => {
+    if (!anlageId) return
+
+    setLoadingConnector(true)
+    setError(null)
+    setConnectorInfo(null)
+
+    try {
+      const monatswerte = await connectorApi.getMonatswerte(
+        parseInt(anlageId),
+        selectedJahr,
+        selectedMonat
+      )
+
+      let geladenCount = 0
+
+      // Basis-Felder
+      const newBasis = { ...values.basis }
+      for (const feld of monatswerte.basis) {
+        if (feld.wert !== null && feld.wert !== undefined) {
+          newBasis[feld.feld] = feld.wert
+          geladenCount++
+        }
+      }
+
+      // Investitionen
+      const newInv = { ...values.investitionen }
+      for (const inv of monatswerte.investitionen) {
+        if (!newInv[inv.investition_id]) {
+          newInv[inv.investition_id] = {}
+        }
+        for (const feld of inv.felder) {
+          if (feld.wert !== null && feld.wert !== undefined) {
+            newInv[inv.investition_id][feld.feld] = feld.wert
+            geladenCount++
+          }
+        }
+      }
+
+      setValues(prev => ({
+        ...prev,
+        basis: newBasis,
+        investitionen: newInv,
+      }))
+
+      setConnectorInfo(`${geladenCount} Werte vom Wechselrichter geladen`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Fehler beim Laden der Connector-Werte'
+      setError(msg)
+    } finally {
+      setLoadingConnector(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!data || !anlageId) return
 
@@ -438,27 +496,27 @@ export default function MonatsabschlussWizard() {
           Monatsabschluss {MONAT_NAMEN[selectedMonat]} {selectedJahr}
         </h1>
 
-        {/* HA-Mapping Hinweis oder HA-Laden Button */}
-        {!data.ha_mapping_konfiguriert ? (
-          haAvailable && (
-            <Alert type="info" className="mt-4">
-              <div className="flex items-center justify-between">
-                <span>
-                  Home Assistant Sensor-Zuordnung nicht konfiguriert.
-                  Werte müssen manuell eingegeben werden.
-                </span>
-                <Link
-                  to={`/einstellungen/sensor-mapping?anlageId=${anlageId}`}
-                  className="flex items-center gap-1 text-primary-600 hover:underline"
-                >
-                  <Settings className="w-4 h-4" />
-                  Konfigurieren
-                </Link>
-              </div>
-            </Alert>
-          )
-        ) : (
-          <div className="mt-4 flex items-center gap-4">
+        {/* Datenquellen-Buttons */}
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          {/* HA-Laden Button */}
+          {!data.ha_mapping_konfiguriert ? (
+            haAvailable && (
+              <Alert type="info" className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span>
+                    Home Assistant Sensor-Zuordnung nicht konfiguriert.
+                  </span>
+                  <Link
+                    to={`/einstellungen/sensor-mapping?anlageId=${anlageId}`}
+                    className="flex items-center gap-1 text-primary-600 hover:underline"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Konfigurieren
+                  </Link>
+                </div>
+              </Alert>
+            )
+          ) : (
             <button
               onClick={handleLoadHAValues}
               disabled={loadingHA}
@@ -472,17 +530,45 @@ export default function MonatsabschlussWizard() {
               ) : (
                 <>
                   <Database className="w-4 h-4" />
-                  Werte aus HA-Statistik laden
+                  HA-Statistik laden
                 </>
               )}
             </button>
-            {haInfo && (
-              <span className="text-sm text-green-600 dark:text-green-400">
-                {haInfo}
-              </span>
-            )}
-          </div>
-        )}
+          )}
+
+          {/* Connector-Laden Button */}
+          {data.connector_konfiguriert && (
+            <button
+              onClick={handleLoadConnectorValues}
+              disabled={loadingConnector}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
+            >
+              {loadingConnector ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Lade WR-Werte...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Wechselrichter laden
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Status-Meldungen */}
+          {haInfo && (
+            <span className="text-sm text-green-600 dark:text-green-400">
+              {haInfo}
+            </span>
+          )}
+          {connectorInfo && (
+            <span className="text-sm text-green-600 dark:text-green-400">
+              {connectorInfo}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Step Navigation */}
@@ -945,7 +1031,7 @@ function FeldInput({
               title={v.beschreibung}
             >
               {v.wert} {feld.einheit}
-              <span className="text-gray-400 ml-1">({v.quelle})</span>
+              <span className="text-gray-400 ml-1">({getQuelleLabel(v.quelle)})</span>
             </button>
           ))}
         </div>
@@ -1030,4 +1116,19 @@ function getTypLabel(typ: string): string {
     balkonkraftwerk: 'Balkonkraftwerk',
   }
   return labels[typ] || typ
+}
+
+function getQuelleLabel(quelle: string): string {
+  const labels: Record<string, string> = {
+    ha_sensor: 'HA-Sensor',
+    cron_snapshot: 'Snapshot',
+    local_connector: 'Connector',
+    portal_import: 'Import',
+    vormonat: 'Vormonat',
+    vorjahr: 'Vorjahr',
+    berechnung: 'Berechnet',
+    durchschnitt: 'Durchschnitt',
+    parameter: 'Parameter',
+  }
+  return labels[quelle] || quelle
 }

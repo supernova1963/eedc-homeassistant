@@ -12,7 +12,7 @@ import { api } from './client'
 
 export interface Vorschlag {
   wert: number
-  quelle: 'ha_sensor' | 'cron_snapshot' | 'vormonat' | 'vorjahr' | 'berechnung' | 'durchschnitt' | 'parameter'
+  quelle: 'ha_sensor' | 'cron_snapshot' | 'local_connector' | 'portal_import' | 'vormonat' | 'vorjahr' | 'berechnung' | 'durchschnitt' | 'parameter'
   konfidenz: number
   beschreibung: string
   details?: Record<string, unknown>
@@ -31,7 +31,7 @@ export interface FeldStatus {
   einheit: string
   aktueller_wert: number | null
   aktueller_text: string | null  // Für Textfelder
-  quelle: 'ha_sensor' | 'snapshot' | 'manuell' | 'berechnet' | null
+  quelle: 'ha_sensor' | 'snapshot' | 'manuell' | 'berechnet' | 'portal_import' | 'local_connector' | null
   vorschlaege: Vorschlag[]
   warnungen: Warnung[]
   strategie: string | null
@@ -61,6 +61,7 @@ export interface MonatsabschlussResponse {
   monat: number
   ist_abgeschlossen: boolean
   ha_mapping_konfiguriert: boolean
+  connector_konfiguriert: boolean
   basis_felder: FeldStatus[]
   optionale_felder: FeldStatus[]  // Sonderkosten, Notizen
   investitionen: InvestitionStatus[]

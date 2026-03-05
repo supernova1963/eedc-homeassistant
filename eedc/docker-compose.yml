@@ -1,6 +1,8 @@
 services:
   eedc:
-    build: .
+    image: ghcr.io/supernova1963/eedc:latest
+    # Alternativ lokal bauen: docker compose build
+    # build: .
     ports:
       - "8099:8099"
     volumes:
