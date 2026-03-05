@@ -13,6 +13,7 @@
 3. **Nach Push auf `eedc/main`** → sofort `subtree pull` in `eedc-homeassistant`.
 4. **Versionsnummern + Release** nur wenn der User es explizit anfordert.
 5. **`eedc-community`** ist unabhängig, aber bei Datenmodell-Änderungen beide Repos synchron anpassen.
+6. **Versionen synchron halten** – `eedc` und `eedc-homeassistant` bekommen immer die gleiche Versionsnummer. Release in `eedc` → sofort Subtree Pull + Release in `eedc-homeassistant`.
 
 ## Verbundene Repositories
 
