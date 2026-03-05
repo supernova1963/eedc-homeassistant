@@ -7,16 +7,51 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [2.6.0] - 2026-03-04
+## [2.6.0] - 2026-03-05
 
 ### Hinzugefügt
 
+- **Portal-Import (CSV-Upload)** – Automatische Erkennung und Import von PV-Portal-Exporten
+  - SMA Sunny Portal (PV-Ertrag, Netz, Batterie)
+  - SMA eCharger (Wallbox-Ladevorgänge)
+  - EVCC (Wallbox-Sessions mit PV-Anteil)
+  - Fronius Solarweb (PV-Ertrag, Eigenverbrauch)
+- **9 Geräte-Connectors** – Direkte Datenabfrage von Wechselrichtern und Smart-Home-Geräten
+  - SMA ennexOS (Tripower X, Wallbox EVC)
+  - SMA WebConnect (Sunny Boy, Tripower SE)
+  - Fronius Solar API (Symo, Primo, Gen24)
+  - go-eCharger (Gemini/HOME v3+)
+  - Shelly 3EM (Netz-Monitoring)
+  - OpenDTU (Hoymiles/TSUN Mikro-Wechselrichter)
+  - Kostal Plenticore (Plenticore plus, PIKO IQ)
+  - sonnenBatterie (eco/10 performance)
+  - Tasmota SML (Smart Meter via IR-Lesekopf)
+- **getestet-Flag** – Parser und Connectors zeigen im UI an ob mit echten Geräten verifiziert
 - **Dynamischer Tarif: Monatlicher Durchschnittspreis** – Neues optionales Feld `netzbezug_durchschnittspreis_cent` auf Monatsdaten
   - Wird nur bei dynamischen Tarifen (Tibber, aWATTar) abgefragt
   - Alle Finanzberechnungen nutzen den Monatsdurchschnitt statt des fixen Stammdatenpreises
   - Fallback-Kette: Monats-Durchschnittspreis → Fixer Tarif aus Stammdaten
+  - Gewichteter Durchschnittspreis (nach kWh) bei Jahresaggregation im Cockpit
 - **Arbitrage-Fallback** – `speicher_ladepreis_cent` → `netzbezug_durchschnittspreis_cent` → Stammdaten-Tarif
+- **CSV-Template/Export/Import** – Bedingte Spalte `Durchschnittspreis_Cent` bei dynamischem Tarif
+- **JSON-Export/Import** – Neues Feld in Export-Schema
+- **MonatsdatenForm** – Bedingtes Eingabefeld "Ø Strompreis (dynamisch)" bei dynamischem Tarif
+- **Monatsabschluss-Wizard** – Bedingtes Feld mit HA-Sensor-Vorschlag bei dynamischem Tarif
 - **HA-Sensormapping** – Neues Basis-Feld `strompreis` für direktes Sensor-Lesen (kein MWD-Paar)
+  - Sensor-Filter erweitert um `monetary` device_class und Preis-Einheiten (EUR/kWh, ct/kWh)
+
+---
+
+## [2.5.5] - 2026-03-03
+
+### Hinzugefügt
+
+- **Hamburger-Menu auf Mobile** ([#18](https://github.com/supernova1963/eedc-homeassistant/issues/18)): Navigation auf schmalen Displays (< 768px) über ausklappbares Menü statt horizontaler Tab-Leiste
+- **Energie-Bilanz Perspektiv-Toggle** ([#19](https://github.com/supernova1963/eedc-homeassistant/issues/19)): Umschaltung zwischen Erzeugungs- und Verbrauchsperspektive im Energie-Chart, optionale Autarkie-Linie
+
+### Behoben
+
+- **Mobile Tab-Overflow:** Tab-Navigationen auf Auswertung, Aussichten und HA-Export liefen auf schmalen Displays über den Rand – jetzt horizontal scrollbar
 
 ---
 
