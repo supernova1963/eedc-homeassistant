@@ -22,11 +22,31 @@
 
 **Live:** https://energy.raunet.eu (Community) | https://supernova1963.github.io/eedc-homeassistant/ (Website)
 
-## git subtree: eedc ↔ eedc-homeassistant
+## Git-Workflow (WICHTIG – gilt für alle Sessions und Rechner!)
 
-Das `eedc/` Verzeichnis ist ein **git subtree** von `supernova1963/eedc`:
+### 5 Regeln
 
+1. **Immer auf `main` arbeiten** — keine Feature-Branches. Einzelentwickler-Projekt, Branches erzeugen nur Chaos.
+2. **`eedc` ist Source of Truth** für shared Code (backend/, frontend/). Dort zuerst committen und pushen.
+3. **Nach Push auf `eedc/main`** → sofort `subtree pull` in `eedc-homeassistant`. Nicht aufschieben.
+4. **Versionsnummern + Release** nur wenn der User es explizit anfordert. Dann alle 4 Dateien synchron bumpen.
+5. **`eedc-community`** ist unabhängig, aber bei Datenmodell-Änderungen beide Repos synchron anpassen.
+
+### Subtree-Sync (eedc → eedc-homeassistant)
+
+```bash
+cd /home/gernot/claude/eedc-homeassistant
+git subtree pull --prefix=eedc https://github.com/supernova1963/eedc.git main --squash
+# WICHTIG: Dockerfile-Konflikt manuell lösen (HA-Version behalten!)
 ```
+
+- Shared Code (backend/, frontend/) → Änderungen im `eedc` Repo machen, dann `subtree pull`
+- HA-spezifische Dateien (Dockerfile, config.yaml, run.sh) → Direkt in eedc-homeassistant ändern
+- **KEIN `git subtree push`** verwenden (würde HA-Dateien ins Standalone-Repo pushen)
+
+### Verzeichnisstruktur
+
+```text
 eedc-homeassistant/
 ├── eedc/                    ← git subtree von supernova1963/eedc
 │   ├── backend/             ← Shared Code (aus Subtree)
@@ -43,18 +63,6 @@ eedc-homeassistant/
 ├── CLAUDE.md
 └── repository.yaml
 ```
-
-**Subtree-Workflow:**
-```bash
-cd /home/gernot/claude/eedc-homeassistant
-git subtree pull --prefix=eedc https://github.com/supernova1963/eedc.git main --squash
-# WICHTIG: Dockerfile-Konflikt manuell lösen (HA-Version behalten!)
-```
-
-**Regeln:**
-- Shared Code (backend/, frontend/) → Änderungen im `eedc` Repo machen, dann `subtree pull`
-- HA-spezifische Dateien (Dockerfile, config.yaml, run.sh) → Direkt in eedc-homeassistant ändern
-- **KEIN `git subtree push`** verwenden (würde HA-Dateien ins Standalone-Repo pushen)
 
 ## Quick Reference
 
