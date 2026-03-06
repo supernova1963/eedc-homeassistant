@@ -19,7 +19,7 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
     onGoToDashboard()
     // Nach kurzem Delay zur Monatsdaten-Seite navigieren
     setTimeout(() => {
-      window.location.href = '/einstellungen/monatsdaten'
+      window.location.hash = '#/einstellungen/monatsdaten'
     }, 100)
   }
 

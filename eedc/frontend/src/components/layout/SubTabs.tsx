@@ -19,19 +19,14 @@ import {
   Zap,
   PiggyBank,
   Database,
-  Upload,
   Settings,
   CalendarCheck,
-  BookOpen,
-  FlaskConical,
   Cpu,
   Radio,
   BarChart2,
   Share2,
   MapPin,
   HardDrive,
-  FileSpreadsheet,
-  Cloud,
 } from 'lucide-react'
 
 interface TabItem {
@@ -68,11 +63,13 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/anlage',
       '/einstellungen/strompreise',
       '/einstellungen/investitionen',
+      '/einstellungen/solarprognose',
     ],
     tabs: [
       { name: 'Anlage',        href: '/einstellungen/anlage',        icon: Home },
       { name: 'Strompreise',   href: '/einstellungen/strompreise',   icon: Zap },
       { name: 'Investitionen', href: '/einstellungen/investitionen', icon: PiggyBank },
+      { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Sun },
     ],
   },
   {
@@ -80,9 +77,9 @@ const einstellungenGruppen: TabGroup[] = [
     prefixes: [
       '/einstellungen/monatsdaten',
       '/einstellungen/monatsabschluss',
+      '/einstellungen/einrichtung',
+      // Sub-Wizards erreichbar via Einrichtung-Hub
       '/einstellungen/import',
-      '/einstellungen/demo',
-      '/einstellungen/datenerfassung',
       '/einstellungen/portal-import',
       '/einstellungen/cloud-import',
       '/einstellungen/connector',
@@ -90,25 +87,7 @@ const einstellungenGruppen: TabGroup[] = [
     tabs: [
       { name: 'Monatsdaten',     href: '/einstellungen/monatsdaten',     icon: Database },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss', icon: CalendarCheck },
-      { name: 'Portal-Import',   href: '/einstellungen/portal-import',   icon: FileSpreadsheet },
-      { name: 'Cloud-Import',    href: '/einstellungen/cloud-import',    icon: Cloud },
-      { name: 'Connector',       href: '/einstellungen/connector',       icon: Cpu },
-      { name: 'Import/Export',   href: '/einstellungen/import',          icon: Upload },
-      { name: 'Demo-Daten',      href: '/einstellungen/demo',            icon: FlaskConical },
-      { name: 'Datenerfassung',  href: '/einstellungen/datenerfassung',  icon: BookOpen },
-    ],
-  },
-  {
-    label: 'System',
-    prefixes: [
-      '/einstellungen/solarprognose',
-      '/einstellungen/allgemein',
-      '/einstellungen/backup',
-    ],
-    tabs: [
-      { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Cpu },
-      { name: 'Allgemein',     href: '/einstellungen/allgemein',     icon: Settings },
-      { name: 'Backup',        href: '/einstellungen/backup',        icon: HardDrive },
+      { name: 'Einrichtung',     href: '/einstellungen/einrichtung',     icon: Cpu },
     ],
   },
   {
@@ -122,6 +101,17 @@ const einstellungenGruppen: TabGroup[] = [
       { name: 'Sensor-Zuordnung',  href: '/einstellungen/sensor-mapping',        icon: MapPin },
       { name: 'Statistik-Import',  href: '/einstellungen/ha-statistik-import',   icon: BarChart2 },
       { name: 'MQTT-Export',       href: '/einstellungen/ha-export',             icon: Radio },
+    ],
+  },
+  {
+    label: 'System',
+    prefixes: [
+      '/einstellungen/allgemein',
+      '/einstellungen/backup',
+    ],
+    tabs: [
+      { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
+      { name: 'Backup',    href: '/einstellungen/backup',    icon: HardDrive },
     ],
   },
   {

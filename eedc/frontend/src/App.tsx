@@ -27,12 +27,12 @@ import Investitionen from './pages/Investitionen'
 // Einstellungen - Daten
 import Monatsdaten from './pages/Monatsdaten'
 import Import from './pages/Import'
+import Einrichtung from './pages/Einrichtung'
 
-// Einstellungen - System
+// Einstellungen - System & HA
 import Backup from './pages/Backup'
 import Settings from './pages/Settings'
 import PVGISSettings from './pages/PVGISSettings'
-import DatenerfassungGuide from './pages/DatenerfassungGuide'
 import HAExportSettings from './pages/HAExportSettings'
 import SensorMappingWizard from './pages/SensorMappingWizard'
 import MonatsabschlussWizard from './pages/MonatsabschlussWizard'
@@ -78,29 +78,36 @@ function App() {
           <Route path="einstellungen/anlage" element={<Anlagen />} />
           <Route path="einstellungen/strompreise" element={<Strompreise />} />
           <Route path="einstellungen/investitionen" element={<Investitionen />} />
+          <Route path="einstellungen/solarprognose" element={<PVGISSettings />} />
 
           {/* Einstellungen - Daten */}
           <Route path="einstellungen/monatsdaten" element={<Monatsdaten />} />
           <Route path="einstellungen/monatsabschluss" element={<MonatsabschlussWizard />} />
           <Route path="monatsabschluss/:anlageId" element={<MonatsabschlussWizard />} />
           <Route path="monatsabschluss/:anlageId/:jahr/:monat" element={<MonatsabschlussWizard />} />
+          <Route path="einstellungen/einrichtung" element={<Einrichtung />} />
           <Route path="einstellungen/import" element={<Import />} />
-          <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
           <Route path="einstellungen/portal-import" element={<DataImportWizard />} />
           <Route path="einstellungen/cloud-import" element={<CloudImportWizard />} />
           <Route path="einstellungen/connector" element={<ConnectorSetupWizard />} />
 
-          {/* Einstellungen - System */}
-          <Route path="einstellungen/backup" element={<Backup />} />
-          <Route path="einstellungen/solarprognose" element={<PVGISSettings />} />
-          <Route path="einstellungen/pvgis" element={<Navigate to="/einstellungen/solarprognose" replace />} />
-          <Route path="einstellungen/datenerfassung" element={<DatenerfassungGuide />} />
-          <Route path="einstellungen/ha-import" element={<Navigate to="/einstellungen/datenerfassung" replace />} />
-          <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
+          {/* Einstellungen - Home Assistant */}
           <Route path="einstellungen/sensor-mapping" element={<SensorMappingWizard />} />
           <Route path="einstellungen/ha-statistik-import" element={<HAStatistikImport />} />
+          <Route path="einstellungen/ha-export" element={<HAExportSettings />} />
+
+          {/* Einstellungen - System */}
+          <Route path="einstellungen/backup" element={<Backup />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
+
+          {/* Einstellungen - Community */}
           <Route path="einstellungen/community" element={<CommunityShare />} />
+
+          {/* Redirects für entfernte/umbenannte Seiten */}
+          <Route path="einstellungen/datenerfassung" element={<Navigate to="/einstellungen/monatsabschluss" replace />} />
+          <Route path="einstellungen/demo" element={<Navigate to="/einstellungen/import" replace />} />
+          <Route path="einstellungen/ha-import" element={<Navigate to="/einstellungen/monatsabschluss" replace />} />
+          <Route path="einstellungen/pvgis" element={<Navigate to="/einstellungen/solarprognose" replace />} />
           <Route path="auswertungen/community" element={<Navigate to="/community" replace />} />
 
           {/* Legacy redirects für alte URLs */}

@@ -22,11 +22,12 @@ import {
   Battery,
   Thermometer,
   Car,
-  Settings,
   Loader2,
   FileText,
   Database,
   Wrench,
+  Cloud,
+  Cpu,
 } from 'lucide-react'
 import { anlagenApi, monatsabschlussApi, haStatisticsApi } from '../api'
 import { connectorApi } from '../api/connector'
@@ -77,10 +78,12 @@ export default function MonatsabschlussWizard() {
   const [saving, setSaving] = useState(false)
   const [loadingHA, setLoadingHA] = useState(false)
   const [loadingConnector, setLoadingConnector] = useState(false)
+  const [loadingCloud, setLoadingCloud] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [haInfo, setHaInfo] = useState<string | null>(null)
   const [connectorInfo, setConnectorInfo] = useState<string | null>(null)
+  const [cloudInfo, setCloudInfo] = useState<string | null>(null)
 
   const [anlageName, setAnlageName] = useState('')
   const [data, setData] = useState<MonatsabschlussResponse | null>(null)
@@ -385,6 +388,59 @@ export default function MonatsabschlussWizard() {
     }
   }
 
+  // Cloud-Daten für diesen Monat laden
+  const handleLoadCloudValues = async () => {
+    if (!anlageId) return
+
+    setLoadingCloud(true)
+    setError(null)
+    setCloudInfo(null)
+
+    try {
+      const monatswerte = await monatsabschlussApi.cloudFetch(
+        parseInt(anlageId),
+        selectedJahr,
+        selectedMonat
+      )
+
+      let geladenCount = 0
+
+      const newBasis = { ...values.basis }
+      for (const feld of monatswerte.basis) {
+        if (feld.wert !== null && feld.wert !== undefined) {
+          newBasis[feld.feld] = feld.wert
+          geladenCount++
+        }
+      }
+
+      const newInv = { ...values.investitionen }
+      for (const inv of monatswerte.investitionen) {
+        if (!newInv[inv.investition_id]) {
+          newInv[inv.investition_id] = {}
+        }
+        for (const feld of inv.felder) {
+          if (feld.wert !== null && feld.wert !== undefined) {
+            newInv[inv.investition_id][feld.feld] = feld.wert
+            geladenCount++
+          }
+        }
+      }
+
+      setValues(prev => ({
+        ...prev,
+        basis: newBasis,
+        investitionen: newInv,
+      }))
+
+      setCloudInfo(`${geladenCount} Werte aus Cloud-API geladen`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Fehler beim Laden der Cloud-Werte'
+      setError(msg)
+    } finally {
+      setLoadingCloud(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!data || !anlageId) return
 
@@ -496,77 +552,129 @@ export default function MonatsabschlussWizard() {
           Monatsabschluss {MONAT_NAMEN[selectedMonat]} {selectedJahr}
         </h1>
 
-        {/* Datenquellen-Buttons */}
-        <div className="mt-4 flex flex-wrap items-center gap-4">
-          {/* HA-Laden Button */}
-          {!data.ha_mapping_konfiguriert ? (
-            haAvailable && (
-              <Alert type="info" className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span>
-                    Home Assistant Sensor-Zuordnung nicht konfiguriert.
-                  </span>
-                  <Link
-                    to={`/einstellungen/sensor-mapping?anlageId=${anlageId}`}
-                    className="flex items-center gap-1 text-primary-600 hover:underline"
-                  >
-                    <Settings className="w-4 h-4" />
-                    Konfigurieren
-                  </Link>
-                </div>
-              </Alert>
-            )
-          ) : (
-            <button
-              onClick={handleLoadHAValues}
-              disabled={loadingHA}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-            >
-              {loadingHA ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Lade HA-Werte...
-                </>
-              ) : (
-                <>
-                  <Database className="w-4 h-4" />
-                  HA-Statistik laden
-                </>
-              )}
-            </button>
+        {/* Datenquellen-Status & Aktionen */}
+        <div className="mt-4 space-y-3">
+          {/* Quellen-Status-Chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Quellen:</span>
+
+            {haAvailable && (
+              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                data.ha_mapping_konfiguriert
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`}>
+                <Database className="w-3 h-3" />
+                HA-Sensor
+                {data.ha_mapping_konfiguriert && <CheckCircle className="w-3 h-3" />}
+              </span>
+            )}
+
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+              data.connector_konfiguriert
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+            }`}>
+              <Cpu className="w-3 h-3" />
+              Connector
+              {data.connector_konfiguriert && <CheckCircle className="w-3 h-3" />}
+            </span>
+
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+              data.cloud_import_konfiguriert
+                ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+            }`}>
+              <Cloud className="w-3 h-3" />
+              Cloud
+              {data.cloud_import_konfiguriert && <CheckCircle className="w-3 h-3" />}
+            </span>
+
+            {data.portal_import_vorhanden && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                <FileText className="w-3 h-3" />
+                Portal-Import
+                <CheckCircle className="w-3 h-3" />
+              </span>
+            )}
+          </div>
+
+          {/* Hinweis wenn keine Quellen konfiguriert */}
+          {!data.ha_mapping_konfiguriert && !data.connector_konfiguriert && !data.cloud_import_konfiguriert && !data.portal_import_vorhanden && (
+            <Alert type="info">
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  Keine Datenquellen konfiguriert. Richten Sie mindestens eine Quelle ein, um Werte automatisch zu laden.
+                </span>
+                <Link
+                  to="/einstellungen/einrichtung"
+                  className="flex items-center gap-1 text-primary-600 hover:underline whitespace-nowrap"
+                >
+                  <Cpu className="w-4 h-4" />
+                  Einrichten
+                </Link>
+              </div>
+            </Alert>
           )}
 
-          {/* Connector-Laden Button */}
-          {data.connector_konfiguriert && (
-            <button
-              onClick={handleLoadConnectorValues}
-              disabled={loadingConnector}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
-            >
-              {loadingConnector ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Lade WR-Werte...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4" />
-                  Wechselrichter laden
-                </>
-              )}
-            </button>
-          )}
+          {/* Lade-Buttons (nur konfigurierte Quellen) */}
+          <div className="flex flex-wrap items-center gap-3">
+            {data.ha_mapping_konfiguriert && (
+              <button
+                onClick={handleLoadHAValues}
+                disabled={loadingHA}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+              >
+                {loadingHA ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Lade HA-Werte...</>
+                ) : (
+                  <><Database className="w-4 h-4" /> HA-Statistik laden</>
+                )}
+              </button>
+            )}
+
+            {data.connector_konfiguriert && (
+              <button
+                onClick={handleLoadConnectorValues}
+                disabled={loadingConnector}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
+              >
+                {loadingConnector ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Lade WR-Werte...</>
+                ) : (
+                  <><Zap className="w-4 h-4" /> Wechselrichter laden</>
+                )}
+              </button>
+            )}
+
+            {data.cloud_import_konfiguriert && (
+              <button
+                onClick={handleLoadCloudValues}
+                disabled={loadingCloud}
+                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 text-sm"
+              >
+                {loadingCloud ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Lade Cloud-Werte...</>
+                ) : (
+                  <><Cloud className="w-4 h-4" /> Cloud-Daten abrufen</>
+                )}
+              </button>
+            )}
+          </div>
 
           {/* Status-Meldungen */}
-          {haInfo && (
-            <span className="text-sm text-green-600 dark:text-green-400">
-              {haInfo}
-            </span>
-          )}
-          {connectorInfo && (
-            <span className="text-sm text-green-600 dark:text-green-400">
-              {connectorInfo}
-            </span>
+          <div className="flex flex-wrap items-center gap-4">
+            {haInfo && <span className="text-sm text-green-600 dark:text-green-400">{haInfo}</span>}
+            {connectorInfo && <span className="text-sm text-green-600 dark:text-green-400">{connectorInfo}</span>}
+            {cloudInfo && <span className="text-sm text-green-600 dark:text-green-400">{cloudInfo}</span>}
+          </div>
+
+          {/* Datenherkunft-Hinweis */}
+          {data.datenquelle && data.datenquelle !== 'manual' && data.ist_abgeschlossen && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              Vorhandene Werte stammen aus: {getDatenquelleLabel(data.datenquelle)}
+            </div>
           )}
         </div>
       </div>
@@ -1123,7 +1231,8 @@ function getQuelleLabel(quelle: string): string {
     ha_sensor: 'HA-Sensor',
     cron_snapshot: 'Snapshot',
     local_connector: 'Connector',
-    portal_import: 'Import',
+    portal_import: 'Portal-Import',
+    cloud_import: 'Cloud-Import',
     vormonat: 'Vormonat',
     vorjahr: 'Vorjahr',
     berechnung: 'Berechnet',
@@ -1131,4 +1240,16 @@ function getQuelleLabel(quelle: string): string {
     parameter: 'Parameter',
   }
   return labels[quelle] || quelle
+}
+
+function getDatenquelleLabel(datenquelle: string): string {
+  const labels: Record<string, string> = {
+    manual: 'Manuelle Eingabe',
+    csv: 'CSV-Import',
+    ha_import: 'HA-Statistik-Import',
+    portal_import: 'Portal-Import (CSV)',
+    cloud_import: 'Cloud-Import (API)',
+    cron_snapshot: 'Automatischer Snapshot',
+  }
+  return labels[datenquelle] || datenquelle
 }

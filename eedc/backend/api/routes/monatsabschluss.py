@@ -87,6 +87,9 @@ class MonatsabschlussResponse(BaseModel):
     ist_abgeschlossen: bool
     ha_mapping_konfiguriert: bool
     connector_konfiguriert: bool = False
+    cloud_import_konfiguriert: bool = False
+    portal_import_vorhanden: bool = False
+    datenquelle: Optional[str] = None  # "portal_import", "cloud_import", "manual", etc.
 
     # Basis-Felder (Zählerdaten)
     basis_felder: list[FeldStatus]
@@ -285,6 +288,8 @@ async def get_monatsabschluss(
     # Connector-Status und Monatswerte berechnen
     connector_config = anlage.connector_config
     connector_konfiguriert = bool(connector_config and connector_config.get("connector_id"))
+    cloud_config = (connector_config or {}).get("cloud_import", {})
+    cloud_import_konfiguriert = bool(cloud_config and cloud_config.get("provider_id"))
     connector_delta: Optional[dict] = None
     connector_inv_verteilung: dict[int, dict[str, float]] = {}
 
@@ -515,7 +520,7 @@ async def get_monatsabschluss(
                 label=feld_config["label"],
                 einheit=feld_config["einheit"],
                 aktueller_wert=aktueller_wert,
-                quelle="manuell" if aktueller_wert is not None else None,
+                quelle=(datenquelle or "manuell") if aktueller_wert is not None else None,
                 vorschlaege=[_vorschlag_to_response(v) for v in vorschlaege],
                 warnungen=[_warnung_to_response(w) for w in warnungen],
                 strategie=strategie,
@@ -571,10 +576,116 @@ async def get_monatsabschluss(
         ist_abgeschlossen=monatsdaten is not None,
         ha_mapping_konfiguriert=sensor_mapping.get("mqtt_setup_complete", False),
         connector_konfiguriert=connector_konfiguriert,
+        cloud_import_konfiguriert=cloud_import_konfiguriert,
+        portal_import_vorhanden=datenquelle == "portal_import",
+        datenquelle=datenquelle,
         basis_felder=basis_felder,
         optionale_felder=optionale_felder,
         investitionen=investitionen_status,
     )
+
+
+class CloudMonatswertFeld(BaseModel):
+    feld: str
+    label: str
+    wert: float
+    einheit: str
+
+
+class CloudMonatswerteResponse(BaseModel):
+    basis: list[CloudMonatswertFeld]
+    investitionen: list[dict]
+
+
+@router.post("/{anlage_id}/{jahr}/{monat}/cloud-fetch", response_model=CloudMonatswerteResponse)
+async def fetch_cloud_monatswerte(
+    anlage_id: int,
+    jahr: int,
+    monat: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ruft Monatswerte für einen einzelnen Monat aus der Cloud-API ab.
+    Verwendet gespeicherte Credentials. Gibt Werte zurück ohne in DB zu schreiben.
+    """
+    result = await db.execute(
+        select(Anlage)
+        .options(selectinload(Anlage.investitionen))
+        .where(Anlage.id == anlage_id)
+    )
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    config = (anlage.connector_config or {}).get("cloud_import", {})
+    provider_id = config.get("provider_id")
+    credentials = config.get("credentials", {})
+    if not provider_id or not credentials:
+        raise HTTPException(status_code=400, detail="Keine Cloud-Import Credentials konfiguriert")
+
+    from backend.services.cloud_import import get_provider
+    try:
+        provider = get_provider(provider_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unbekannter Cloud-Provider: {provider_id}")
+
+    try:
+        months = await provider.fetch_monthly_data(credentials, jahr, monat, jahr, monat)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cloud-Abruf fehlgeschlagen: {str(e)}")
+
+    if not months:
+        raise HTTPException(status_code=404, detail="Keine Daten für diesen Monat in der Cloud gefunden")
+
+    month_data = months[0]
+
+    # Basis-Felder
+    basis: list[CloudMonatswertFeld] = []
+    for feld, label, einheit in [
+        ("einspeisung_kwh", "Einspeisung", "kWh"),
+        ("netzbezug_kwh", "Netzbezug", "kWh"),
+    ]:
+        val = getattr(month_data, feld, None)
+        if val is not None:
+            basis.append(CloudMonatswertFeld(feld=feld, label=label, wert=round(val, 1), einheit=einheit))
+
+    # Investitionen: PV auf Module, Batterie auf Speicher verteilen
+    inv_result: list[dict] = []
+    from backend.api.routes.connector import _distribute_by_param
+
+    pv_kwh = getattr(month_data, "pv_erzeugung_kwh", None)
+    if pv_kwh and pv_kwh > 0:
+        pv_module = [i for i in anlage.investitionen if i.typ == "pv-module"]
+        if pv_module:
+            for inv, anteil in _distribute_by_param(pv_module, pv_kwh, "leistung_kwp"):
+                inv_result.append({
+                    "investition_id": inv.id,
+                    "bezeichnung": inv.bezeichnung,
+                    "typ": inv.typ,
+                    "felder": [{"feld": "pv_erzeugung_kwh", "label": "PV Erzeugung", "wert": round(anteil, 1), "einheit": "kWh"}],
+                })
+
+    for cloud_feld, inv_feld, label in [
+        ("batterie_ladung_kwh", "ladung_kwh", "Ladung"),
+        ("batterie_entladung_kwh", "entladung_kwh", "Entladung"),
+    ]:
+        bat_val = getattr(month_data, cloud_feld, None)
+        if bat_val and bat_val > 0:
+            speicher = [i for i in anlage.investitionen if i.typ == "speicher"]
+            if speicher:
+                for inv, anteil in _distribute_by_param(speicher, bat_val, "kapazitaet_kwh"):
+                    existing = next((r for r in inv_result if r["investition_id"] == inv.id), None)
+                    if existing:
+                        existing["felder"].append({"feld": inv_feld, "label": label, "wert": round(anteil, 1), "einheit": "kWh"})
+                    else:
+                        inv_result.append({
+                            "investition_id": inv.id,
+                            "bezeichnung": inv.bezeichnung,
+                            "typ": inv.typ,
+                            "felder": [{"feld": inv_feld, "label": label, "wert": round(anteil, 1), "einheit": "kWh"}],
+                        })
+
+    return CloudMonatswerteResponse(basis=basis, investitionen=inv_result)
 
 
 @router.post("/{anlage_id}/{jahr}/{monat}", response_model=MonatsabschlussResult)

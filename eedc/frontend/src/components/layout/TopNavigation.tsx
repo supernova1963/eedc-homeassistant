@@ -1,14 +1,16 @@
 /**
  * TopNavigation Komponente
- * Hauptnavigation oben mit Logo, Tabs und Einstellungen-Dropdown
+ * Hauptnavigation oben mit Logo, Tabs, Monatsabschluss-Schnellzugriff und Einstellungen-Dropdown
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
-import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X } from 'lucide-react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X, CalendarCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
+import { useAnlagen } from '../../hooks'
+import { monatsabschlussApi } from '../../api/monatsabschluss'
 import eedcIcon from '../../assets/eedc-icon.svg'
 
 // Haupttabs mit Icons
@@ -27,6 +29,7 @@ const settingsMenu = [
       { name: 'Anlage', href: '/einstellungen/anlage' },
       { name: 'Strompreise', href: '/einstellungen/strompreise' },
       { name: 'Investitionen', href: '/einstellungen/investitionen' },
+      { name: 'Solarprognose', href: '/einstellungen/solarprognose' },
     ],
   },
   {
@@ -34,17 +37,7 @@ const settingsMenu = [
     items: [
       { name: 'Monatsdaten', href: '/einstellungen/monatsdaten' },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss' },
-      { name: 'Import', href: '/einstellungen/import' },
-      { name: 'Datenerfassung', href: '/einstellungen/datenerfassung' },
-      { name: 'Demo-Daten', href: '/einstellungen/demo' },
-    ],
-  },
-  {
-    category: 'System',
-    items: [
-      { name: 'Solarprognose', href: '/einstellungen/solarprognose' },
-      { name: 'Allgemein', href: '/einstellungen/allgemein' },
-      { name: 'Backup', href: '/einstellungen/backup' },
+      { name: 'Einrichtung', href: '/einstellungen/einrichtung' },
     ],
   },
   {
@@ -53,6 +46,13 @@ const settingsMenu = [
       { name: 'Sensor-Zuordnung', href: '/einstellungen/sensor-mapping' },
       { name: 'Statistik-Import', href: '/einstellungen/ha-statistik-import' },
       { name: 'MQTT-Export', href: '/einstellungen/ha-export' },
+    ],
+  },
+  {
+    category: 'System',
+    items: [
+      { name: 'Allgemein', href: '/einstellungen/allgemein' },
+      { name: 'Backup', href: '/einstellungen/backup' },
     ],
   },
   {
@@ -66,10 +66,13 @@ const settingsMenu = [
 export default function TopNavigation() {
   const { theme, setTheme } = useTheme()
   const location = useLocation()
+  const navigate = useNavigate()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [hasOpenMonth, setHasOpenMonth] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const haAvailable = useHAAvailable()
+  const { anlagen } = useAnlagen()
 
   // HA-Kategorie nur anzeigen wenn HA verfügbar
   const filteredSettingsMenu = useMemo(() =>
@@ -78,6 +81,15 @@ export default function TopNavigation() {
       : settingsMenu.filter(s => s.category !== 'Home Assistant'),
     [haAvailable]
   )
+
+  // Monatsabschluss-Badge: Prüfe ob ein Monat offen ist
+  useEffect(() => {
+    if (!anlagen || anlagen.length === 0) return
+    const anlageId = anlagen[0].id
+    monatsabschlussApi.getNaechsterMonat(anlageId).then((result) => {
+      setHasOpenMonth(result !== null)
+    })
+  }, [anlagen])
 
   // Bestimme aktiven Haupttab
   const getActiveMainTab = () => {
@@ -169,7 +181,7 @@ export default function TopNavigation() {
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          {/* Rechte Seite: Theme + Einstellungen (Desktop) */}
+          {/* Rechte Seite: Theme + Monatsabschluss + Einstellungen (Desktop) */}
           <div className="hidden md:flex items-center gap-2">
             {/* Theme Toggle */}
             <button
@@ -180,6 +192,22 @@ export default function TopNavigation() {
               {theme === 'light' && <SunIcon className="h-5 w-5" />}
               {theme === 'dark' && <Moon className="h-5 w-5" />}
               {theme === 'system' && <Monitor className="h-5 w-5" />}
+            </button>
+
+            {/* Monatsabschluss Quick-Icon */}
+            <button
+              onClick={() => navigate('/einstellungen/monatsabschluss')}
+              className={`relative p-2 rounded-lg transition-colors ${
+                location.pathname === '/einstellungen/monatsabschluss'
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+              }`}
+              title="Monatsabschluss"
+            >
+              <CalendarCheck className="h-5 w-5" />
+              {hasOpenMonth && (
+                <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white dark:border-gray-800" />
+              )}
             </button>
 
             {/* Einstellungen Dropdown */}
@@ -255,6 +283,24 @@ export default function TopNavigation() {
                 </NavLink>
               )
             })}
+
+            {/* Monatsabschluss Quick-Link (Mobile) */}
+            <NavLink
+              to="/einstellungen/monatsabschluss"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                location.pathname === '/einstellungen/monatsabschluss'
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+              }`}
+            >
+              <div className="relative">
+                <CalendarCheck className="h-4 w-4" />
+                {hasOpenMonth && (
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500" />
+                )}
+              </div>
+              Monatsabschluss
+            </NavLink>
           </nav>
 
           <div className="border-t border-gray-200 dark:border-gray-700 mx-4" />

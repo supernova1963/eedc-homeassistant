@@ -31,7 +31,7 @@ export interface FeldStatus {
   einheit: string
   aktueller_wert: number | null
   aktueller_text: string | null  // Für Textfelder
-  quelle: 'ha_sensor' | 'snapshot' | 'manuell' | 'berechnet' | 'portal_import' | 'local_connector' | null
+  quelle: 'ha_sensor' | 'snapshot' | 'manuell' | 'berechnet' | 'portal_import' | 'cloud_import' | 'local_connector' | 'csv' | 'ha_import' | 'cron_snapshot' | null
   vorschlaege: Vorschlag[]
   warnungen: Warnung[]
   strategie: string | null
@@ -62,6 +62,9 @@ export interface MonatsabschlussResponse {
   ist_abgeschlossen: boolean
   ha_mapping_konfiguriert: boolean
   connector_konfiguriert: boolean
+  cloud_import_konfiguriert: boolean
+  portal_import_vorhanden: boolean
+  datenquelle: string | null
   basis_felder: FeldStatus[]
   optionale_felder: FeldStatus[]  // Sonderkosten, Notizen
   investitionen: InvestitionStatus[]
@@ -119,6 +122,23 @@ export interface MonatHistorie {
   direktverbrauch_kwh: number | null
 }
 
+export interface CloudMonatswertFeld {
+  feld: string
+  label: string
+  wert: number
+  einheit: string
+}
+
+export interface CloudMonatswerteResponse {
+  basis: CloudMonatswertFeld[]
+  investitionen: Array<{
+    investition_id: number
+    bezeichnung: string
+    typ: string
+    felder: CloudMonatswertFeld[]
+  }>
+}
+
 // =============================================================================
 // API Client
 // =============================================================================
@@ -156,6 +176,17 @@ export const monatsabschlussApi = {
     } catch {
       return null
     }
+  },
+
+  /**
+   * Cloud-Daten für einen Monat abrufen (ohne in DB zu schreiben)
+   */
+  async cloudFetch(
+    anlageId: number,
+    jahr: number,
+    monat: number
+  ): Promise<CloudMonatswerteResponse> {
+    return api.post<CloudMonatswerteResponse>(`/monatsabschluss/${anlageId}/${jahr}/${monat}/cloud-fetch`, {})
   },
 
   /**
