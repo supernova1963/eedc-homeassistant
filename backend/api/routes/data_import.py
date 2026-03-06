@@ -160,9 +160,10 @@ async def apply_import(
     anlage_id: int,
     data: ApplyRequest,
     ueberschreiben: bool = Query(False, description="Bestehende Monatsdaten überschreiben"),
+    datenquelle: str = Query("portal_import", description="Datenquelle (portal_import, cloud_import)"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bestätigte Monatswerte aus Portal-Import in die Datenbank übernehmen."""
+    """Bestätigte Monatswerte aus Portal-Import oder Cloud-Import in die Datenbank übernehmen."""
     # Anlage prüfen
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
@@ -227,7 +228,7 @@ async def apply_import(
             if monat_input.batterie_entladung_kwh is not None:
                 md.batterie_entladung_kwh = monat_input.batterie_entladung_kwh
 
-            md.datenquelle = "portal_import"
+            md.datenquelle = datenquelle
 
             # PV-Erzeugung auf PV-Module verteilen
             if monat_input.pv_erzeugung_kwh is not None and monat_input.pv_erzeugung_kwh > 0:

@@ -19,6 +19,7 @@ export { monatsabschlussApi } from './monatsabschluss'
 export { haStatisticsApi } from './haStatistics'
 export { communityApi } from './community'
 export { portalImportApi } from './portalImport'
+export { cloudImportApi } from './cloudImport'
 
 // Re-export types
 export type { ApiError } from './client'

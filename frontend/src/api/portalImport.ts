@@ -83,10 +83,12 @@ export const portalImportApi = {
   async apply(
     anlageId: number,
     monate: ParsedMonth[],
-    ueberschreiben: boolean = false
+    ueberschreiben: boolean = false,
+    datenquelle: string = 'portal_import'
   ): Promise<ApplyResult> {
     const params = new URLSearchParams()
     if (ueberschreiben) params.append('ueberschreiben', 'true')
+    if (datenquelle !== 'portal_import') params.append('datenquelle', datenquelle)
 
     const response = await fetch(
       `${API_BASE}/portal-import/apply/${anlageId}?${params.toString()}`,

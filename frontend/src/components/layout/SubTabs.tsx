@@ -31,6 +31,7 @@ import {
   MapPin,
   HardDrive,
   FileSpreadsheet,
+  Cloud,
 } from 'lucide-react'
 
 interface TabItem {
@@ -83,12 +84,14 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/demo',
       '/einstellungen/datenerfassung',
       '/einstellungen/portal-import',
+      '/einstellungen/cloud-import',
       '/einstellungen/connector',
     ],
     tabs: [
       { name: 'Monatsdaten',     href: '/einstellungen/monatsdaten',     icon: Database },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss', icon: CalendarCheck },
       { name: 'Portal-Import',   href: '/einstellungen/portal-import',   icon: FileSpreadsheet },
+      { name: 'Cloud-Import',    href: '/einstellungen/cloud-import',    icon: Cloud },
       { name: 'Connector',       href: '/einstellungen/connector',       icon: Cpu },
       { name: 'Import/Export',   href: '/einstellungen/import',          icon: Upload },
       { name: 'Demo-Daten',      href: '/einstellungen/demo',            icon: FlaskConical },

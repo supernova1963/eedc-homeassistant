@@ -41,6 +41,7 @@ import CommunityShare from './pages/CommunityShare'
 import Community from './pages/Community'
 import DataImportWizard from './pages/DataImportWizard'
 import ConnectorSetupWizard from './pages/ConnectorSetupWizard'
+import CloudImportWizard from './pages/CloudImportWizard'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -86,6 +87,7 @@ function App() {
           <Route path="einstellungen/import" element={<Import />} />
           <Route path="einstellungen/demo" element={<Import />} /> {/* Redirects to Import with demo section */}
           <Route path="einstellungen/portal-import" element={<DataImportWizard />} />
+          <Route path="einstellungen/cloud-import" element={<CloudImportWizard />} />
           <Route path="einstellungen/connector" element={<ConnectorSetupWizard />} />
 
           {/* Einstellungen - System */}

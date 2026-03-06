@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME, HA_INTEGRATION_AVAILABLE
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -105,6 +105,7 @@ app.include_router(monatsabschluss.router, prefix="/api", tags=["Monatsabschluss
 app.include_router(community.router, prefix="/api", tags=["Community"])
 app.include_router(data_import.router, prefix="/api/portal-import", tags=["Portal-Import"])
 app.include_router(connector.router, prefix="/api/connectors", tags=["Connectors"])
+app.include_router(cloud_import.router, prefix="/api/cloud-import", tags=["Cloud-Import"])
 
 # =============================================================================
 # API Routes - Home Assistant (nur mit SUPERVISOR_TOKEN)
