@@ -74,6 +74,7 @@ class CockpitUebersichtResponse(BaseModel):
     # Finanzen (Euro)
     einspeise_erloes_euro: float
     ev_ersparnis_euro: float
+    netzbezug_kosten_euro: float = 0       # Netzbezugskosten inkl. Grundpreis
     ust_eigenverbrauch_euro: Optional[float] = None  # USt auf Eigenverbrauch (nur bei Regelbesteuerung)
     netto_ertrag_euro: float
     bkw_ersparnis_euro: float = 0          # BKW Eigenverbrauch-Ersparnis
@@ -337,6 +338,12 @@ async def get_cockpit_uebersicht(
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in monatsdaten_list)
     eff_netzbezug_preis = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else netzbezug_preis_cent
 
+    grundpreis = allgemein_tarif.grundpreis_euro_monat or 0 if allgemein_tarif else 0
+    netzbezug_kosten = sum(
+        (m.netzbezug_kwh or 0) * resolve_netzbezug_preis_cent(m, netzbezug_preis_cent) / 100 + grundpreis
+        for m in monatsdaten_list
+    )
+
     einspeise_erloes = einspeisung * einspeise_verguetung_cent / 100
     ev_ersparnis = eigenverbrauch * eff_netzbezug_preis / 100
     netto_ertrag = einspeise_erloes + ev_ersparnis
@@ -372,11 +379,13 @@ async def get_cockpit_uebersicht(
     if investition_gesamt <= 0:
         investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
 
+    # Betriebskosten aller Investitionen (Wartung, Versicherung etc.)
+    betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
+
     # USt auf Eigenverbrauch bei Regelbesteuerung
     ust_eigenverbrauch = 0.0
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
     if steuerliche_beh == "regelbesteuerung":
-        betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
         ust_eigenverbrauch = berechne_ust_eigenverbrauch(
             eigenverbrauch_kwh=eigenverbrauch,
             investition_gesamt_euro=investition_gesamt,
@@ -390,9 +399,6 @@ async def get_cockpit_uebersicht(
     bkw_ersparnis = bkw_eigenverbrauch * eff_netzbezug_preis / 100
     # Sonstige Positionen netto (BHKW-Ertrag, THG-Quote minus Wartungskosten etc.)
     sonstige_netto = sonstige_ertraege_gesamt - sonstige_ausgaben_gesamt
-
-    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis + bkw_ersparnis + sonstige_netto
-    roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
 
     # ==========================================================================
     # CO2-Bilanz
@@ -426,6 +432,11 @@ async def get_cockpit_uebersicht(
         zeitraum_von = f"{first.jahr}-{first.monat:02d}"
         zeitraum_bis = f"{last.jahr}-{last.monat:02d}"
         anzahl_monate = len(monatsdaten_list)
+
+    # Kumulative Ersparnis inkl. anteilige Betriebskosten
+    betriebskosten_zeitraum = betriebskosten_ges * anzahl_monate / 12 if anzahl_monate > 0 else 0
+    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis + bkw_ersparnis + sonstige_netto - betriebskosten_zeitraum
+    roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
 
     return CockpitUebersichtResponse(
         # Energie
@@ -473,6 +484,7 @@ async def get_cockpit_uebersicht(
         # Finanzen
         einspeise_erloes_euro=round(einspeise_erloes, 2),
         ev_ersparnis_euro=round(ev_ersparnis, 2),
+        netzbezug_kosten_euro=round(netzbezug_kosten, 2),
         ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
         netto_ertrag_euro=round(netto_ertrag, 2),
         bkw_ersparnis_euro=round(bkw_ersparnis, 2),

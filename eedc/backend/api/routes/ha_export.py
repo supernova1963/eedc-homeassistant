@@ -202,11 +202,12 @@ async def calculate_anlage_sensors(
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
     alternativ_gesamt = sum(i.anschaffungskosten_alternativ or 0 for i in investitionen)
     relevante_kosten = investition_gesamt - alternativ_gesamt
+    betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
     # Jahresersparnis aus Monatsdaten berechnen (annualisiert)
     anzahl_monate = len(monatsdaten)
     if anzahl_monate > 0:
-        jahres_ersparnis = (netto_ertrag / anzahl_monate) * 12
+        jahres_ersparnis = (netto_ertrag / anzahl_monate) * 12 - betriebskosten_ges
     else:
         jahres_ersparnis = 0
 

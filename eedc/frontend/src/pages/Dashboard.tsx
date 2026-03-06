@@ -444,6 +444,19 @@ export default function Dashboard() {
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh × Strompreis`}
             ergebnis={`= ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
           />
+          {data.netzbezug_kosten_euro > 0 && (
+            <KPICard
+              title="Netzbezugskosten"
+              value={data.netzbezug_kosten_euro.toFixed(0)}
+              unit="€"
+              icon={ArrowDownToLine}
+              color="text-red-500"
+              bgColor="bg-red-50 dark:bg-red-900/20"
+              formel="Σ (Netzbezug × Strompreis + Grundpreis)"
+              berechnung={`${fmtCalc(data.netzbezug_kwh, 0)} kWh × Strompreis + Grundpreis`}
+              ergebnis={`= ${fmtCalc(data.netzbezug_kosten_euro, 0)} €`}
+            />
+          )}
           {data.ust_eigenverbrauch_euro != null && data.ust_eigenverbrauch_euro > 0 && (
             <KPICard
               title="USt Eigenverbrauch"

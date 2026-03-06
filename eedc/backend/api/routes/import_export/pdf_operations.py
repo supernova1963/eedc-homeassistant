@@ -346,8 +346,14 @@ async def export_pdf(
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
     investition_alternativ = sum(i.anschaffungskosten_alternativ or 0 for i in investitionen if i.anschaffungskosten_alternativ)
     investition_mehrkosten = investition_gesamt - investition_alternativ
+    betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
-    rendite = (netto_ertrag / investition_mehrkosten * 100) if investition_mehrkosten > 0 else None
+    # Anteilige Betriebskosten für den Berichtszeitraum
+    anzahl_monate_pdf = len(monatsdaten_list)
+    betriebskosten_zeitraum = betriebskosten_ges * anzahl_monate_pdf / 12 if anzahl_monate_pdf > 0 else 0
+    netto_ertrag_nach_bk = netto_ertrag - betriebskosten_zeitraum
+
+    rendite = (netto_ertrag_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else None
 
     # CO2
     co2_pv = ev_gesamt * CO2_FAKTOR_STROM_KG_KWH
@@ -481,13 +487,13 @@ async def export_pdf(
         )
         inv_dok_list.append(inv_dok)
 
-    # Finanz-Prognose (vereinfacht)
+    # Finanz-Prognose (vereinfacht, nach Betriebskosten)
     finanz_prognose = FinanzPrognose(
         investition_mehrkosten_euro=investition_mehrkosten,
-        bisherige_ertraege_euro=netto_ertrag,  # Nur aktuelles Jahr, TODO: kumulieren
-        amortisations_fortschritt_prozent=(netto_ertrag / investition_mehrkosten * 100) if investition_mehrkosten > 0 else 0,
-        amortisation_erreicht=netto_ertrag >= investition_mehrkosten,
-        jahres_ertrag_prognose_euro=netto_ertrag,
+        bisherige_ertraege_euro=netto_ertrag_nach_bk,
+        amortisations_fortschritt_prozent=(netto_ertrag_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else 0,
+        amortisation_erreicht=netto_ertrag_nach_bk >= investition_mehrkosten,
+        jahres_ertrag_prognose_euro=netto_ertrag_nach_bk,
         jahres_rendite_prognose_prozent=rendite,
     )
 

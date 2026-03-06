@@ -175,6 +175,7 @@ export interface FinanzPrognose {
   // Strompreise
   einspeiseverguetung_cent_kwh: number
   netzbezug_preis_cent_kwh: number
+  grundpreis_euro_monat: number
 
   // Jahresprognose
   jahres_erzeugung_kwh: number

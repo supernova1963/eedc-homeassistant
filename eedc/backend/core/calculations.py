@@ -415,28 +415,31 @@ def berechne_roi(
     anschaffungskosten: float,
     jahres_einsparung: float,
     alternativkosten: float = 0,
+    betriebskosten_jahr: float = 0,
 ) -> dict:
     """
     Berechnet ROI und Amortisationszeit.
 
     Args:
         anschaffungskosten: Gesamtkosten der Investition
-        jahres_einsparung: Jährliche Einsparung in Euro
+        jahres_einsparung: Jährliche Einsparung in Euro (brutto)
         alternativkosten: Kosten die sowieso angefallen wären (z.B. neuer Verbrenner)
+        betriebskosten_jahr: Jährliche Betriebskosten (Wartung, Versicherung etc.)
 
     Returns:
         dict: ROI-Prozent und Amortisationszeit in Jahren
     """
     relevante_kosten = anschaffungskosten - alternativkosten
+    netto_einsparung = jahres_einsparung - betriebskosten_jahr
 
-    if relevante_kosten <= 0 or jahres_einsparung <= 0:
+    if relevante_kosten <= 0 or netto_einsparung <= 0:
         return {
             "roi_prozent": None,
             "amortisation_jahre": None,
         }
 
-    roi = (jahres_einsparung / relevante_kosten) * 100
-    amortisation = relevante_kosten / jahres_einsparung
+    roi = (netto_einsparung / relevante_kosten) * 100
+    amortisation = relevante_kosten / netto_einsparung
 
     return {
         "roi_prozent": round(roi, 1),

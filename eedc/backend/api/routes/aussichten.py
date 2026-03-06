@@ -183,6 +183,7 @@ class FinanzPrognoseResponse(BaseModel):
     # Strompreise
     einspeiseverguetung_cent_kwh: float
     netzbezug_preis_cent_kwh: float
+    grundpreis_euro_monat: float = 0
 
     # Jahresprognose
     jahres_erzeugung_kwh: float
@@ -1127,6 +1128,7 @@ async def get_finanz_prognose(
     # =====================================================================
     # BISHERIGE ERTRÄGE BERECHNEN (inkl. Alternativkosten!)
     # =====================================================================
+    betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_investitionen)
     bisherige_ertraege = 0.0
     bisherige_wp_ersparnis = 0.0
     bisherige_eauto_ersparnis = 0.0
@@ -1211,6 +1213,10 @@ async def get_finanz_prognose(
 
     # Alternativkosten + BKW + Sonstige zu bisherigen Erträgen addieren
     bisherige_ertraege += bisherige_wp_ersparnis + bisherige_eauto_ersparnis + bisherige_bkw_ersparnis + bisherige_sonstige_netto
+
+    # Anteilige Betriebskosten für den historischen Zeitraum abziehen
+    betriebskosten_hist = betriebskosten_ges * anzahl_monate_hist / 12 if anzahl_monate_hist > 0 else 0
+    bisherige_ertraege -= betriebskosten_hist
 
     # =====================================================================
     # MONATSPROGNOSEN ERSTELLEN
@@ -1347,14 +1353,13 @@ async def get_finanz_prognose(
     if anzahl_monate_hist > 0 and bisherige_sonstige_netto != 0:
         jahres_sonstige_netto = bisherige_sonstige_netto / anzahl_monate_hist * 12
 
-    # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten, BKW und Sonstige
-    jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis + jahres_bkw_ersparnis + jahres_sonstige_netto
+    # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten, BKW, Sonstige und Betriebskosten
+    jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis + jahres_bkw_ersparnis + jahres_sonstige_netto - betriebskosten_ges
 
     # USt auf Eigenverbrauch bei Regelbesteuerung
     ust_eigenverbrauch = 0.0
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
     if steuerliche_beh == "regelbesteuerung" and jahres_erzeugung > 0:
-        betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_investitionen)
         ust_eigenverbrauch = berechne_ust_eigenverbrauch(
             eigenverbrauch_kwh=jahres_eigenverbrauch,
             investition_gesamt_euro=sum(i.anschaffungskosten_gesamt or 0 for i in alle_investitionen),
@@ -1480,6 +1485,7 @@ async def get_finanz_prognose(
         },
         einspeiseverguetung_cent_kwh=einspeiseverguetung,
         netzbezug_preis_cent_kwh=netzbezug_preis,
+        grundpreis_euro_monat=allgemein_tarif.grundpreis_euro_monat or 0 if allgemein_tarif else 0,
         jahres_erzeugung_kwh=round(jahres_erzeugung, 0),
         jahres_eigenverbrauch_kwh=round(jahres_eigenverbrauch, 0),
         jahres_einspeisung_kwh=round(jahres_einspeisung, 0),

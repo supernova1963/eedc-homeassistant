@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.6.1] - 2026-03-05
+
+### Behoben
+
+- **Rezertifizierung der Berechnungen** – `betriebskosten_jahr` (Wartung, Versicherung) wird jetzt korrekt in allen Finanzberechnungen berücksichtigt:
+  - ROI-Dashboard: Amortisation und ROI p.a. berücksichtigen jetzt Betriebskosten pro Investition
+  - Cockpit: Kumulative Ersparnis wird um anteilige Betriebskosten reduziert
+  - Aussichten/Finanzen: Jahres-Netto-Ertrag und bisherige Erträge berücksichtigen Betriebskosten
+  - HA-Export: Jahresersparnis und ROI-Berechnung korrigiert
+  - PDF-Export: Rendite und Finanz-Prognose korrigiert
+- **BERECHNUNGEN.md** – Dokumentation aller Formeln aktualisiert (ROI, Cockpit, Aussichten)
+
 ## [2.6.0] - 2026-03-05
 
 ### Hinzugefügt

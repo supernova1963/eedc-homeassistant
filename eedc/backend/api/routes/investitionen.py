@@ -908,6 +908,7 @@ async def get_roi_dashboard(
         # Kosten summieren
         system_kosten = (wr.anschaffungskosten_gesamt or 0)
         system_alternativ = (wr.anschaffungskosten_alternativ or 0)
+        system_betriebskosten = (wr.betriebskosten_jahr or 0)
 
         komponenten: list[ROIKomponente] = []
 
@@ -936,6 +937,7 @@ async def get_roi_dashboard(
             inv_alternativ = inv.anschaffungskosten_alternativ or 0
             system_kosten += inv_kosten
             system_alternativ += inv_alternativ
+            system_betriebskosten += (inv.betriebskosten_jahr or 0)
 
             # Einsparung proportional nach kWp
             inv_kwp = inv.leistung_kwp or 0
@@ -971,6 +973,7 @@ async def get_roi_dashboard(
             inv_alternativ = inv.anschaffungskosten_alternativ or 0
             system_kosten += inv_kosten
             system_alternativ += inv_alternativ
+            system_betriebskosten += (inv.betriebskosten_jahr or 0)
 
             params = inv.parameter or {}
             kapazitaet = params.get('kapazitaet_kwh', 10)
@@ -1003,7 +1006,8 @@ async def get_roi_dashboard(
 
         # System-ROI berechnen
         system_relevante = system_kosten - system_alternativ
-        roi_result = berechne_roi(system_kosten, system_einsparung, system_alternativ)
+        system_netto_einsparung = system_einsparung - system_betriebskosten
+        roi_result = berechne_roi(system_kosten, system_einsparung, system_alternativ, system_betriebskosten)
 
         berechnungen.append(ROIBerechnung(
             investition_id=wr.id,  # WR-ID als System-ID
@@ -1012,7 +1016,7 @@ async def get_roi_dashboard(
             anschaffungskosten=system_kosten,
             anschaffungskosten_alternativ=system_alternativ,
             relevante_kosten=system_relevante,
-            jahres_einsparung=round(system_einsparung, 2),
+            jahres_einsparung=round(system_netto_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
             co2_einsparung_kg=round(system_co2, 1),
@@ -1026,7 +1030,7 @@ async def get_roi_dashboard(
 
         gesamt_investition += system_kosten
         gesamt_relevante += system_relevante
-        gesamt_einsparung += system_einsparung
+        gesamt_einsparung += system_netto_einsparung
         gesamt_co2 += system_co2
 
     # ==========================================================================
@@ -1048,7 +1052,9 @@ async def get_roi_dashboard(
             jahres_einsparung = 0
             co2_einsparung = 0
 
-        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ)
+        betriebskosten = inv.betriebskosten_jahr or 0
+        netto_einsparung = jahres_einsparung - betriebskosten
+        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)
 
         berechnungen.append(ROIBerechnung(
             investition_id=inv.id,
@@ -1057,7 +1063,7 @@ async def get_roi_dashboard(
             anschaffungskosten=kosten,
             anschaffungskosten_alternativ=alternativ,
             relevante_kosten=relevante,
-            jahres_einsparung=round(jahres_einsparung, 2),
+            jahres_einsparung=round(netto_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
             co2_einsparung_kg=round(co2_einsparung, 1),
@@ -1070,7 +1076,7 @@ async def get_roi_dashboard(
 
         gesamt_investition += kosten
         gesamt_relevante += relevante
-        gesamt_einsparung += jahres_einsparung
+        gesamt_einsparung += netto_einsparung
         gesamt_co2 += co2_einsparung
 
     # ==========================================================================
@@ -1248,7 +1254,9 @@ async def get_roi_dashboard(
             co2_einsparung = inv.co2_einsparung_prognose_kg or 0
             detail = {'hinweis': 'Manuelle Prognose verwendet'}
 
-        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ)
+        betriebskosten = inv.betriebskosten_jahr or 0
+        netto_einsparung = jahres_einsparung - betriebskosten
+        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)
 
         berechnungen.append(ROIBerechnung(
             investition_id=inv.id,
@@ -1257,7 +1265,7 @@ async def get_roi_dashboard(
             anschaffungskosten=kosten,
             anschaffungskosten_alternativ=alternativ,
             relevante_kosten=relevante,
-            jahres_einsparung=round(jahres_einsparung, 2),
+            jahres_einsparung=round(netto_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
             co2_einsparung_kg=round(co2_einsparung, 1) if co2_einsparung else None,
@@ -1266,7 +1274,7 @@ async def get_roi_dashboard(
 
         gesamt_investition += kosten
         gesamt_relevante += relevante
-        gesamt_einsparung += jahres_einsparung
+        gesamt_einsparung += netto_einsparung
         gesamt_co2 += co2_einsparung
 
     # USt auf Eigenverbrauch bei Regelbesteuerung (reduziert Gesamt-Einsparung)

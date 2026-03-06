@@ -56,6 +56,7 @@ export interface CockpitUebersicht {
   // Finanzen (Euro)
   einspeise_erloes_euro: number
   ev_ersparnis_euro: number
+  netzbezug_kosten_euro: number           // Netzbezugskosten inkl. Grundpreis
   ust_eigenverbrauch_euro: number | null  // USt auf Eigenverbrauch (nur bei Regelbesteuerung)
   netto_ertrag_euro: number
   bkw_ersparnis_euro: number             // BKW Eigenverbrauch-Ersparnis

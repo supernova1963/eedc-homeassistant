@@ -383,6 +383,14 @@ export default function FinanzenTab({ anlageId }: Props) {
                 {prognose.netzbezug_preis_cent_kwh.toFixed(2)} ct/kWh
               </span>
             </div>
+            {prognose.grundpreis_euro_monat > 0 && (
+              <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <span className="text-gray-600 dark:text-gray-400">Grundpreis</span>
+                <span className="font-semibold text-orange-600">
+                  {prognose.grundpreis_euro_monat.toFixed(2)} €/Monat
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
               <span className="text-gray-600 dark:text-gray-400">Ersparnis durch EV</span>
               <span className="font-semibold text-green-600">
