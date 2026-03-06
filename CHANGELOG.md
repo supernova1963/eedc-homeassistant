@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.7.1] - 2026-03-06
+
+### Verbessert
+
+- **Einstellungen-Menü überarbeitet** – Logische Gruppierung mit 5 Kategorien, Solarprognose zu Stammdaten verschoben
+- **Daten-SubTabs vereinfacht** – Statt 8 Tabs nur noch 3: Monatsdaten, Monatsabschluss, Einrichtung
+- **Neue Einrichtung-Seite** – Hub mit 4 Karten für alle Datenquellen-Setups (Connector, Portal-Import, Cloud-Import, CSV/JSON)
+- **Monatsabschluss Quick-Icon** – CalendarCheck-Button mit rotem Badge in der Hauptnavigation (Desktop + Mobile)
+- **Monatsabschluss-Wizard als zentrale Anlaufstelle** – Quellen-Status-Chips zeigen konfigurierte Datenquellen,
+  neuer "Cloud-Daten abrufen" Button, Hinweis auf Einrichtung wenn keine Quellen konfiguriert,
+  Datenherkunft-Anzeige bei vorhandenen Import-Daten
+
+### Behoben
+
+- Investition-Felder im Monatsabschluss zeigen jetzt die tatsächliche Datenquelle statt immer "manuell"
+- CompleteStep: HashRouter-Navigation korrigiert (`window.location.hash` statt `.href`)
+
+### Hinzugefügt
+
+- Backend-Endpoint `POST /monatsabschluss/{id}/{j}/{m}/cloud-fetch` für Einzelmonat-Abruf aus Cloud-API
+
+---
+
 ## [2.7.0] - 2026-03-06
 
 ### Hinzugefügt
