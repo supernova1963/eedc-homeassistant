@@ -6,6 +6,30 @@ import { investitionenApi } from '../../api'
 import { AlertCircle } from 'lucide-react'
 import InvestitionStammdatenSection from './InvestitionStammdatenSection'
 
+// Azimut-Mapping: Himmelsrichtung → PVGIS-Grad (0=Süd, -90=Ost, 90=West, ±180=Nord)
+const AUSRICHTUNG_GRAD_MAP: Record<string, number> = {
+  'Süd': 0, 'Südost': -45, 'Ost': -90, 'Nordost': -135,
+  'Nord': 180, 'Nordwest': 135, 'West': 90, 'Südwest': 45,
+}
+
+function ausrichtungToGrad(ausrichtung: string): string {
+  return (AUSRICHTUNG_GRAD_MAP[ausrichtung] ?? 0).toString()
+}
+
+function gradToAusrichtung(grad: number): string {
+  let closest = 'Süd'
+  let minDiff = 360
+  for (const [name, deg] of Object.entries(AUSRICHTUNG_GRAD_MAP)) {
+    let diff = Math.abs(grad - deg)
+    if (diff > 180) diff = 360 - diff
+    if (diff < minDiff) {
+      minDiff = diff
+      closest = name
+    }
+  }
+  return closest
+}
+
 // Parent-Kind Beziehungen (analog zu useSetupWizard.ts)
 const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
   'pv-module': 'wechselrichter',  // Pflicht
@@ -67,6 +91,8 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
     // PV-Module direkte Felder
     leistung_kwp: investition?.leistung_kwp?.toString() || '',
     ausrichtung: investition?.ausrichtung || 'Süd',
+    ausrichtung_grad: investition?.parameter?.ausrichtung_grad?.toString()
+      ?? ausrichtungToGrad(investition?.ausrichtung || 'Süd'),
     neigung_grad: investition?.neigung_grad?.toString() || '30',
     ha_entity_id: investition?.ha_entity_id || '',
   })
@@ -270,6 +296,14 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         }
       })
 
+      // PV-Module: exakten Azimut-Grad in parameter JSON speichern
+      if (typ === 'pv-module' && formData.ausrichtung !== 'Ost-West') {
+        const gradNum = parseFloat(formData.ausrichtung_grad)
+        if (!isNaN(gradNum)) {
+          convertedParams.ausrichtung_grad = gradNum
+        }
+      }
+
       // Validierung: Parent erforderlich?
       if (isParentRequired && possibleParents.length > 0 && !formData.parent_investition_id) {
         setError(`${typLabels[typ]} müssen einem ${PARENT_TYPE_LABELS[parentTyp!] || parentTyp} zugeordnet werden`)
@@ -471,7 +505,14 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
               <select
                 name="ausrichtung"
                 value={formData.ausrichtung}
-                onChange={(e) => setFormData(prev => ({ ...prev, ausrichtung: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFormData(prev => ({
+                    ...prev,
+                    ausrichtung: val,
+                    ...(val !== 'Ost-West' && { ausrichtung_grad: ausrichtungToGrad(val) }),
+                  }))
+                }}
                 className="input w-full"
               >
                 <option value="Süd">Süd (0°)</option>
@@ -485,6 +526,27 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
                 <option value="Ost-West">Ost-West (gemischt)</option>
               </select>
             </div>
+            {formData.ausrichtung !== 'Ost-West' && (
+              <Input
+                label="Azimut (°)"
+                name="ausrichtung_grad"
+                type="number"
+                step="1"
+                min="-180"
+                max="180"
+                value={formData.ausrichtung_grad}
+                onChange={(e) => {
+                  const gradValue = e.target.value
+                  const gradNum = parseFloat(gradValue)
+                  setFormData(prev => ({
+                    ...prev,
+                    ausrichtung_grad: gradValue,
+                    ...(!isNaN(gradNum) && { ausrichtung: gradToAusrichtung(gradNum) }),
+                  }))
+                }}
+                hint="0=Süd, -90=Ost, 90=West, ±180=Nord"
+              />
+            )}
             <Input
               label="Neigung (Grad)"
               name="neigung_grad"

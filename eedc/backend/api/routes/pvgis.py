@@ -263,6 +263,7 @@ async def _berechne_pvgis_modul(
     neigung_grad: float,
     system_losses: float,
     user_horizon: Optional[list[float]] = None,
+    ausrichtung_grad: Optional[float] = None,
 ) -> tuple[list[PVGISMonthlyData], float]:
     """
     Berechnet PVGIS-Prognose für ein PV-Modul.
@@ -295,7 +296,7 @@ async def _berechne_pvgis_modul(
         jahresertrag_west = pvgis_west.get("outputs", {}).get("totals", {}).get("fixed", {}).get("E_y", 0)
         return monatsdaten, jahresertrag_ost + jahresertrag_west
     else:
-        azimuth = ausrichtung_zu_azimut(ausrichtung)
+        azimuth = ausrichtung_grad if ausrichtung_grad is not None else ausrichtung_zu_azimut(ausrichtung)
         pvgis_data = await fetch_pvgis_data(latitude, longitude, leistung_kwp, neigung_grad, azimuth, system_losses, user_horizon)
 
         outputs = pvgis_data.get("outputs", {})
@@ -377,6 +378,10 @@ async def get_pvgis_prognose(
 
         tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
 
+        # Exakten Azimut aus Parameter-JSON bevorzugen (falls vorhanden)
+        modul_params = modul.parameter or {}
+        exact_azimuth = modul_params.get("ausrichtung_grad")  # float oder None
+
         # PVGIS abrufen – Ost-West-Anlagen: 2 separate Abfragen (Ost 50% + West 50%)
         modul_monatsdaten, jahresertrag = await _berechne_pvgis_modul(
             latitude=anlage.latitude,
@@ -386,6 +391,7 @@ async def get_pvgis_prognose(
             neigung_grad=tilt,
             system_losses=system_losses,
             user_horizon=anlage.horizont_daten,
+            ausrichtung_grad=exact_azimuth,
         )
 
         # Zu Gesamt addieren
@@ -395,7 +401,7 @@ async def get_pvgis_prognose(
             gesamt_monatsdaten[md.monat]["sd_m"] += md.sd_m
 
         spezifischer_ertrag = jahresertrag / modul.leistung_kwp if modul.leistung_kwp > 0 else 0
-        azimuth = ausrichtung_zu_azimut(modul.ausrichtung)  # nur für Anzeige
+        azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
 
         module_prognosen.append(PVModulPrognose(
             investition_id=modul.id,
@@ -494,6 +500,10 @@ async def get_pvgis_modul_prognose(
 
     tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
 
+    # Exakten Azimut aus Parameter-JSON bevorzugen (falls vorhanden)
+    modul_params = modul.parameter or {}
+    exact_azimuth = modul_params.get("ausrichtung_grad")  # float oder None
+
     # PVGIS abrufen – Ost-West-Anlagen: 2 separate Abfragen (Ost 50% + West 50%)
     monatsdaten_list, jahresertrag = await _berechne_pvgis_modul(
         latitude=anlage.latitude,
@@ -503,9 +513,10 @@ async def get_pvgis_modul_prognose(
         neigung_grad=tilt,
         system_losses=system_losses,
         user_horizon=anlage.horizont_daten,
+        ausrichtung_grad=exact_azimuth,
     )
 
-    azimuth = ausrichtung_zu_azimut(modul.ausrichtung)  # nur für Anzeige
+    azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
     spezifischer_ertrag = jahresertrag / modul.leistung_kwp if modul.leistung_kwp > 0 else 0
 
     return {
