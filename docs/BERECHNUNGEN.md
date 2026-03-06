@@ -167,8 +167,11 @@ Netto-Ertrag        = Einspeise-Erlös + EV-Ersparnis [- USt_Eigenverbrauch]
 BKW-Ersparnis       = Σ(BKW_Eigenverbrauch) * Netzbezug_Preis / 100
 Sonstige-Netto      = Σ(sonstige_ertraege) - Σ(sonstige_ausgaben)
 
+Betriebskosten_Zeitraum = Σ(Betriebskosten_Jahr) * Anzahl_Monate / 12
+
 Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
                        + BKW-Ersparnis + Sonstige-Netto
+                       - Betriebskosten_Zeitraum
 
 Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 ```
@@ -345,9 +348,12 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 
 ```
 Relevante_Kosten     = Anschaffungskosten - Alternativkosten
-ROI (%)              = Jahres-Einsparung / Relevante_Kosten * 100
-Amortisation (Jahre) = Relevante_Kosten / Jahres-Einsparung
+Netto_Einsparung     = Jahres-Einsparung - Betriebskosten_Jahr
+ROI (%)              = Netto_Einsparung / Relevante_Kosten * 100
+Amortisation (Jahre) = Relevante_Kosten / Netto_Einsparung
 ```
+
+Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versicherung etc., Default: 0).
 
 **WICHTIG - Zwei verschiedene ROI-Metriken:**
 
@@ -596,6 +602,7 @@ Investition          = PV_System + WP_Mehrkosten + E-Auto_Mehrkosten + Sonstige
 Jahres_Netto_Ertrag  = PV_Einspeise_Erlös + EV_Ersparnis
                      + WP_Ersparnis + E-Auto_Ersparnis
                      + BKW_Ersparnis + Sonstige_Netto
+                     - Betriebskosten_Jahr
                      [- USt_Eigenverbrauch]
 
 ROI_Fortschritt (%)  = Bisherige_Erträge / Investition * 100
@@ -751,4 +758,4 @@ API: GET /api/cockpit/pv-strings/{anlage_id}?jahr=2025
 
 ---
 
-*Letzte Aktualisierung: Februar 2026*
+*Letzte Aktualisierung: März 2026*
