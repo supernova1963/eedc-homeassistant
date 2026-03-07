@@ -17,6 +17,11 @@ from .registry import list_providers, get_provider
 
 # Provider hier importieren damit sie sich registrieren
 from . import ecoflow_powerocean  # noqa: F401
+from . import solaredge  # noqa: F401
+from . import fronius_solarweb  # noqa: F401
+from . import huawei_fusionsolar  # noqa: F401
+from . import growatt  # noqa: F401
+from . import deye_solarman  # noqa: F401
 
 __all__ = [
     "CloudImportProvider",

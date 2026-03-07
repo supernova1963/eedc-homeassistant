@@ -7,6 +7,37 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.8.0] - 2026-03-07
+
+### Hinzugefügt
+
+- **5 neue Cloud-Import-Provider** – Historische Monatsdaten direkt aus der Cloud abrufen
+  - **SolarEdge** – Monitoring API mit API-Key, monatliche Energiedetails (*)
+  - **Fronius SolarWeb** – SolarWeb API mit AccessKey, Monatsaggregation (*)
+  - **Huawei FusionSolar** – thirdData API mit XSRF-Token, KPI-Monatswerte (*)
+  - **Growatt** – OpenAPI mit MD5-Auth, Monats-Ertragsdaten (*)
+  - **Deye/Solarman** – SolarMAN OpenAPI mit OAuth2 + SHA256, historische Monatsdaten (*)
+- **Eigene Datei importieren (Custom-Import)** – Neuer Wizard für beliebige CSV/JSON-Dateien
+  - Automatische Spalten-Erkennung mit Beispielwerten
+  - Flexibles Feld-Mapping per Dropdown (Spalte → EEDC-Feld)
+  - Auto-Detect für Spaltenbezeichnungen (deutsch + englisch)
+  - Einheit wählbar (Wh/kWh/MWh) mit automatischer Umrechnung
+  - Dezimalzeichen konfigurierbar (Auto/Punkt/Komma)
+  - Kombinierte Datumsspalte (z.B. "2024-01") oder separate Jahr/Monat-Spalten
+  - Mapping als wiederverwendbares Template speichern/laden
+  - 4-Schritt-Wizard: Upload → Mapping → Vorschau → Import
+  - Neue Kachel "Eigene Datei importieren" auf der Einrichtung-Seite
+
+### Entfernt
+
+- **Kostal Plenticore** und **SMA Local** Cloud-Import-Provider entfernt
+  (liefern nur aktuelle Zählerstände, keine historischen Monatsdaten –
+  für diese Geräte die Geräte-Connectors verwenden)
+
+(*) Ungetestet – basiert auf Hersteller-API-Dokumentation
+
+---
+
 ## [2.7.1] - 2026-03-06
 
 ### Verbessert

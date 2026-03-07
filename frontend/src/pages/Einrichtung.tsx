@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cpu, FileSpreadsheet, Cloud, Upload, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
+import { Cpu, FileSpreadsheet, Cloud, Upload, Table2, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { useAnlagen } from '../hooks'
 import { connectorApi, type ConnectorStatus } from '../api/connector'
 
@@ -39,11 +39,19 @@ const datenquellen: DatenquelleCard[] = [
   },
   {
     title: 'Cloud-Import',
-    description: 'Historische Daten direkt von Cloud-APIs abrufen: Fronius Solar.web, SMA ennexOS und weitere.',
+    description: 'Historische Daten direkt von Cloud-APIs abrufen: SolarEdge, Fronius, Huawei, Growatt, EcoFlow, Deye/Solarman.',
     icon: Cloud,
     href: '/einstellungen/cloud-import',
     color: 'text-violet-600 dark:text-violet-400',
     bgColor: 'bg-violet-50 dark:bg-violet-900/20',
+  },
+  {
+    title: 'Eigene Datei importieren',
+    description: 'Beliebige CSV- oder JSON-Dateien importieren: Spalten flexibel den EEDC-Feldern zuordnen. Mapping als Template speichern.',
+    icon: Table2,
+    href: '/einstellungen/custom-import',
+    color: 'text-rose-600 dark:text-rose-400',
+    bgColor: 'bg-rose-50 dark:bg-rose-900/20',
   },
   {
     title: 'CSV/JSON Import/Export',

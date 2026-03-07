@@ -42,6 +42,7 @@ import Community from './pages/Community'
 import DataImportWizard from './pages/DataImportWizard'
 import ConnectorSetupWizard from './pages/ConnectorSetupWizard'
 import CloudImportWizard from './pages/CloudImportWizard'
+import CustomImportWizard from './pages/CustomImportWizard'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -89,6 +90,7 @@ function App() {
           <Route path="einstellungen/import" element={<Import />} />
           <Route path="einstellungen/portal-import" element={<DataImportWizard />} />
           <Route path="einstellungen/cloud-import" element={<CloudImportWizard />} />
+          <Route path="einstellungen/custom-import" element={<CustomImportWizard />} />
           <Route path="einstellungen/connector" element={<ConnectorSetupWizard />} />
 
           {/* Einstellungen - Home Assistant */}
