@@ -10,7 +10,8 @@ Standalone PV-Analyse-Software.
 - **Multi-Provider Wetter** - DWD (Bright Sky), Open-Meteo, PVGIS
 - **Community-Benchmark** - Anonymer Vergleich auf [energy.raunet.eu](https://energy.raunet.eu)
 - **Social-Media-Textvorlage** - Kopierfertige Monatsübersicht für Twitter/X und Facebook
-- **Cloud-Provider** *(geplant)* - Automatische Datenerfassung via Hersteller-APIs (SMA)
+- **Cloud-Import** - Historische Daten aus Hersteller-Cloud-APIs (SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow)
+- **Custom-Import** - Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping importieren
 - **Import/Export** - CSV, JSON, PDF-Berichte
 
 ## Schnellstart
