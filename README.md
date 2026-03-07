@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.7.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 2.8.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -58,7 +58,8 @@
 - **Manuelles Formular** mit dynamischen Komponenten-Feldern
 - **CSV-Import** mit personalisierten Spalten und Plausibilitätsprüfung
 - **Portal-Import** (NEU v2.6.0) - CSV-Upload von SMA Sunny Portal, SMA eCharger, EVCC, Fronius Solarweb
-- **Cloud-Import** (NEU v2.7.0) - Daten direkt aus Hersteller-Cloud-APIs abrufen
+- **Cloud-Import** (NEU v2.7.0) - Daten direkt aus Hersteller-Cloud-APIs abrufen (SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow)
+- **Custom-Import** (NEU v2.8.0) - Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping importieren, Templates speicherbar
 - **9 Geräte-Connectors** (NEU v2.6.0) - Direkte Verbindung zu lokalen Geräten im Netzwerk
 - **Sensor-Mapping-Wizard** - Home Assistant Sensoren den EEDC-Feldern zuordnen
 - **HA-Statistik Import** - Automatischer Import historischer Monatswerte aus HA
@@ -259,6 +260,7 @@ Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfass
 - [x] **Portal-Import & Connectors** - CSV-Upload aus Herstellerportalen + 9 Geräte-Connectors (v2.6.0)
 - [x] **Einrichtung-Hub & Navigation** - Zentrale Datenquellen-Konfiguration, überarbeitetes Menü (v2.7.0)
 - [x] **Cloud-Import & Wizard-Upgrade** - Cloud-API-Abruf, Datenquellen-Status im Monatsabschluss (v2.7.1)
+- [x] **Cloud-Import-Provider & Custom-Import** - 5 Hersteller-Cloud-APIs + beliebige CSV/JSON mit Feld-Mapping (v2.8.0)
 - [ ] KI-gestützte Insights
 
 ---

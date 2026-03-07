@@ -1,6 +1,7 @@
+
 # EEDC Development Guide
 
-**Version 2.7.1** | Stand: März 2026
+**Version 2.8.0** | Stand: März 2026
 
 ---
 
@@ -199,6 +200,9 @@ eedc-homeassistant/
     │   ├── api/routes/          # API Endpoints
     │   │   ├── cockpit.py       # Dashboard-Aggregation
     │   │   ├── aussichten.py    # Prognosen (NEU)
+    │   │   ├── portal_import.py # Portal-CSV Parser (v2.6.0)
+    │   │   ├── cloud_import.py  # Cloud-API Import (v2.7.0)
+    │   │   ├── custom_import.py # CSV/JSON Feld-Mapping (v2.8.0)
     │   │   └── ...              # monatsdaten, investitionen, etc.
     │   ├── core/                # Config, DB, Calculations
     │   ├── models/              # SQLAlchemy Models
@@ -213,6 +217,7 @@ eedc-homeassistant/
     │       ├── ha_statistics_service.py # HA-DB Statistik-Abfragen (v2.0.0)
     │       ├── vorschlag_service.py     # Intelligente Vorschläge
     │       ├── community_service.py     # Community-Datenaufbereitung (v2.0.3)
+    │       ├── cloud_import/            # Cloud-Import-Provider (6 Provider)
     │       └── scheduler.py             # APScheduler für Cron-Jobs
     │
     └── frontend/
@@ -221,7 +226,10 @@ eedc-homeassistant/
         ├── src/
         │   ├── api/             # API Client
         │   │   ├── cockpit.ts   # Cockpit/Dashboard
-        │   │   └── aussichten.ts # Prognosen
+        │   │   ├── aussichten.ts # Prognosen
+        │   │   ├── portalImport.ts  # Portal-CSV Import (v2.6.0)
+        │   │   ├── cloudImport.ts   # Cloud-API Import (v2.7.0)
+        │   │   └── customImport.ts  # CSV/JSON Feld-Mapping (v2.8.0)
         │   ├── components/      # UI Components
         │   ├── pages/           # Seiten
         │   │   ├── Dashboard.tsx             # Cockpit (Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline)
@@ -229,10 +237,12 @@ eedc-homeassistant/
         │   │   ├── CommunityVergleich.tsx    # Community (Hauptmenüpunkt, 6 Tabs)
         │   │   ├── Aussichten.tsx            # Prognosen (4 Tabs)
         │   │   ├── PVAnlageDashboard.tsx     # PV String-Vergleich (SOLL-IST)
-        │   │   ├── Einrichtung.tsx           # Datenquellen-Hub (NEU v2.7.0)
         │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping
-        │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss (Datenquellen-Chips, Cloud-Fetch)
+        │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss
         │   │   ├── HAStatistikImport.tsx     # HA-Statistik Bulk-Import (v2.0.0)
+        │   │   ├── CloudImportWizard.tsx     # Cloud-API Import (v2.7.0)
+        │   │   ├── CustomImportWizard.tsx    # CSV/JSON Feld-Mapping (v2.8.0)
+        │   │   ├── Einrichtung.tsx           # Datenquellen-Hub (v2.7.1)
         │   │   └── aussichten/               # Tab-Komponenten
         │   │       ├── KurzfristTab.tsx
         │   │       ├── LangfristTab.tsx
@@ -309,6 +319,9 @@ Nach dem Start des Backends verfügbar unter:
 | **Monatsabschluss** | `/api/monatsabschluss/*` | Monatsabschluss-Wizard (v1.1.0) |
 | **Scheduler** | `/api/scheduler/*` | Cron-Jobs, Monatswechsel (v1.1.0) |
 | **Community** | `/api/community/*` | Community-Teilen & Benchmark (v2.0.3) |
+| **Portal-Import** | /api/portal-import/* | Portal-CSV Parser (SMA, Fronius, EVCC) (v2.6.0) |
+| **Cloud-Import** | /api/cloud-import/* | Cloud-API Import (6 Provider) (v2.7.0) |
+| **Custom-Import** | /api/custom-import/* | CSV/JSON mit Feld-Mapping (v2.8.0) |
 
 ### Aussichten API
 
@@ -330,14 +343,34 @@ GET    /api/sensor-mapping/{anlage_id}/status             # Kurzstatus
 POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte init
 ```
 
-### Monatsabschluss API (NEU v1.1.0, erweitert v2.7.1)
+### Monatsabschluss API (NEU v1.1.0)
 
 ```
-GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}              # Status + Vorschläge
-POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}              # Abschluss durchführen
-POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}/cloud-fetch  # Cloud-Daten abrufen (NEU v2.7.1)
-GET  /api/monatsabschluss/naechster/{anlage_id}                   # Nächster offener Monat
-GET  /api/monatsabschluss/historie/{anlage_id}                    # Letzte Abschlüsse
+GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Status + Vorschläge
+POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Abschluss durchführen
+GET  /api/monatsabschluss/naechster/{anlage_id}         # Nächster offener Monat
+GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
+```
+
+### Cloud-Import API (NEU v2.7.0)
+
+```
+GET  /api/cloud-import/providers                          # Verfügbare Provider
+POST /api/cloud-import/connect                            # Verbindung testen
+POST /api/cloud-import/fetch                              # Daten abrufen
+GET  /api/cloud-import/credentials/{anlage_id}            # Gespeicherte Credentials
+POST /api/cloud-import/credentials/{anlage_id}            # Credentials speichern
+```
+
+### Custom-Import API (NEU v2.8.0)
+
+```
+POST   /api/custom-import/analyze                         # Datei analysieren
+POST   /api/custom-import/preview                         # Mapping-Vorschau
+GET    /api/custom-import/templates                       # Templates laden
+POST   /api/custom-import/templates/{name}                # Template speichern
+DELETE /api/custom-import/templates/{name}                # Template löschen
+GET    /api/custom-import/fields                          # Verfügbare Zielfelder
 ```
 
 ### Import/Export API (erweitert in beta.8)

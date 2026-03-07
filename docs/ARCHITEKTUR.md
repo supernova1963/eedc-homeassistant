@@ -1,6 +1,7 @@
+
 # EEDC Architektur-Dokumentation
 
-**Version 2.7.1** | Stand: März 2026
+**Version 2.8.0** | Stand: März 2026
 
 ---
 
@@ -69,8 +70,7 @@ Externe APIs (optional):
 | **Pydantic** | 2.x | Datenvalidierung |
 | **httpx** | 0.26+ | HTTP Client für externe APIs |
 | **aiomqtt** | optional | MQTT Client für HA Export |
-| **APScheduler** | 3.x | Scheduler für Cron-Jobs |
-| **aiohttp** | 3.x | HTTP Client für Geräte-Connectors |
+| **APScheduler** | 3.x | Scheduler für Cron-Jobs (NEU) |
 
 ### Frontend
 
@@ -144,7 +144,10 @@ eedc-homeassistant/
     │   │       ├── ha_integration.py
     │   │       ├── ha_statistics.py       # HA-Statistik Bulk-Import
     │   │       ├── sensor_mapping.py      # Sensor-Mapping CRUD
-    │   │       └── monatsabschluss.py     # Monatsabschluss-Wizard API
+    │   │       ├── monatsabschluss.py     # Monatsabschluss-Wizard API
+    │   │       ├── portal_import.py         # Portal-CSV-Parser
+    │   │       ├── custom_import.py          # Custom CSV/JSON Import
+    │   │       └── cloud_import.py           # Cloud-API Import
     │   │
     │   ├── core/                # Kernfunktionalität
     │   │   ├── config.py        # Settings + Version
@@ -176,28 +179,15 @@ eedc-homeassistant/
     │       ├── scheduler.py               # APScheduler für Cron-Jobs
     │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
     │       ├── community_service.py       # Community-Datenaufbereitung
-    │       ├── connectors/                # Geräte-Connectors (REST API)
-    │       │   ├── base.py               # ABC DeviceConnector + Datenklassen
-    │       │   ├── registry.py           # @register_connector Pattern
-    │       │   ├── sma_ennexos.py        # SMA Tripower X / EVC
-    │       │   ├── sma_webconnect.py     # SMA Sunny Boy / Tripower SE
-    │       │   ├── fronius_solar_api.py  # Fronius Symo / Primo / Gen24
-    │       │   ├── go_echarger.py        # go-eCharger Wallbox
-    │       │   ├── shelly_em.py          # Shelly 3EM / Pro 3EM
-    │       │   ├── opendtu.py            # OpenDTU / AhoyDTU (Hoymiles)
-    │       │   ├── kostal_plenticore.py  # Kostal Plenticore / PIKO IQ
-    │       │   ├── sonnen_batterie.py    # sonnenBatterie
-    │       │   └── tasmota_sml.py        # Tasmota SML Stromzähler
-    │       ├── import_parsers/            # Portal-Export CSV-Parser
-    │       │   ├── base.py               # ABC PortalExportParser
-    │       │   ├── registry.py           # @register_parser Pattern
-    │       │   ├── sma_sunny_portal.py   # SMA Sunny Portal CSV
-    │       │   ├── sma_echarger.py       # SMA eCharger CSV
-    │       │   ├── evcc.py               # EVCC Wallbox Sessions
-    │       │   └── fronius_solarweb.py   # Fronius Solarweb CSV
-    │       └── cloud_import/             # Cloud-Import Provider (NEU v2.7.0)
-    │           ├── base.py               # ABC CloudImportProvider
-    │           └── registry.py           # @register_provider Pattern
+    │       └── cloud_import/              # Cloud-Import-Provider
+    │           ├── __init__.py
+    │           ├── base.py                 # ABC + Registry
+    │           ├── ecoflow_powerocean.py
+    │           ├── solaredge.py
+    │           ├── fronius_solarweb.py
+    │           ├── huawei_fusionsolar.py
+    │           ├── growatt.py
+    │           └── deye_solarman.py
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -214,6 +204,9 @@ eedc-homeassistant/
         │   │   ├── investitionen.ts
         │   │   ├── cockpit.ts
         │   │   ├── wetter.ts
+        │   │   ├── portalImport.ts
+        │   │   ├── cloudImport.ts
+        │   │   ├── customImport.ts
         │   │   └── ...
         │   │
         │   ├── components/      # React Komponenten
@@ -227,6 +220,9 @@ eedc-homeassistant/
         │   │   ├── Dashboard.tsx
         │   │   ├── Auswertung.tsx
         │   │   ├── auswertung/  # Auswertungs-Tabs
+        │   │   ├── CloudImportWizard.tsx
+        │   │   ├── CustomImportWizard.tsx
+        │   │   ├── Einrichtung.tsx          # Datenquellen-Hub
         │   │   └── ...
         │   │
         │   ├── hooks/           # Custom React Hooks
@@ -312,7 +308,7 @@ eedc-homeassistant/
 | durchschnittstemperatur | FLOAT | Wetter-API |
 | sonderkosten_euro | FLOAT | Manuelle Eingabe |
 | sonderkosten_beschreibung | VARCHAR(500) | Beschreibung der Sonderkosten |
-| datenquelle | VARCHAR(50) | manual, csv, ha_import, portal_import, cloud_import, cron_snapshot |
+| datenquelle | VARCHAR(50) | manual, csv, ha_import |
 | notizen | VARCHAR(1000) | Freitext |
 | created_at | DATETIME | Erstellungsdatum |
 | updated_at | DATETIME | Letztes Update |
@@ -560,9 +556,9 @@ Sonstiges [Eigenständig]
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** (NEU) |
 | `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** (NEU) |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** (NEU v2.0.3) |
-| `/api/connectors` | connectors.py | **Geräte-Connectors** (NEU v2.6.0) |
-| `/api/data-import` | data_import.py | **Portal-Import** CSV-Parser (NEU v2.6.0) |
-| `/api/cloud-import` | cloud_import.py | **Cloud-Import** Provider (NEU v2.7.0) |
+| `/api/portal-import` | portal_import.py | Portal-CSV Import (SMA, Fronius, EVCC) |
+| `/api/cloud-import` | cloud_import.py | Cloud-API Import (SolarEdge, Fronius, Huawei, Growatt, Deye, EcoFlow) |
+| `/api/custom-import` | custom_import.py | Custom CSV/JSON Import mit Feld-Mapping |
 
 ### Wichtige Endpoints
 
@@ -625,29 +621,20 @@ POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte init
 - `manuell` - Manuelle Eingabe im Wizard
 - `keine` - Nicht erfassen
 
-#### Monatsabschluss API (NEU v1.1.0, erweitert v2.7.1)
+#### Monatsabschluss API (NEU v1.1.0)
 
 ```
-GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}              # Status + Vorschläge
-POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}              # Abschluss durchführen
-POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}/cloud-fetch  # Cloud-Daten abrufen (NEU v2.7.1)
-GET  /api/monatsabschluss/naechster/{anlage_id}                   # Nächster offener Monat
-GET  /api/monatsabschluss/historie/{anlage_id}                    # Letzte Abschlüsse
+GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Status + Vorschläge
+POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Abschluss durchführen
+GET  /api/monatsabschluss/naechster/{anlage_id}         # Nächster offener Monat
+GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
 ```
-
-**Response-Felder (erweitert v2.7.1):**
-- `cloud_import_konfiguriert` - Cloud-Provider mit Credentials vorhanden
-- `portal_import_vorhanden` - Portal-Daten für diesen Monat in DB
-- `datenquelle` - Herkunft der vorhandenen Werte (manual, csv, portal_import, cloud_import, etc.)
 
 **VorschlagService liefert intelligente Vorschläge:**
-- `ha_sensor` (Konfidenz 95%) - Automatisch aus HA-Statistik
-- `local_connector` (Konfidenz 90%) - Aus Geräte-Connector-Snapshots
 - `vormonat` (Konfidenz 80%) - Wert vom Vormonat
 - `vorjahr` (Konfidenz 70%) - Wert vom gleichen Monat im Vorjahr
 - `berechnung` (Konfidenz 60%) - COP/EV-Quote basierte Berechnung
 - `durchschnitt` (Konfidenz 50%) - Durchschnitt aller vorhandenen Werte
-- `parameter` (Konfidenz 30%) - Aus Investitions-Parametern geschätzt
 
 #### Scheduler API (NEU v1.1.0)
 
@@ -774,23 +761,20 @@ URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
 ├── /monatsabschluss/:anlageId/:jahr/:monat → MonatsabschlussWizard (Monat)
 │
 └── /einstellungen
-    ├── /anlage              → Anlagen.tsx
-    ├── /strompreise         → Strompreise.tsx
-    ├── /investitionen       → Investitionen.tsx
-    ├── /solarprognose       → PVGISSettings.tsx
-    ├── /monatsdaten         → Monatsdaten.tsx
-    ├── /monatsabschluss     → MonatsabschlussWizard.tsx
-    ├── /einrichtung         → Einrichtung.tsx (Hub, NEU v2.7.0)
-    ├── /import              → Import.tsx
-    ├── /portal-import       → PortalImport.tsx
-    ├── /cloud-import        → CloudImport.tsx
-    ├── /connector           → ConnectorSetup.tsx
-    ├── /sensor-mapping      → SensorMappingWizard.tsx
-    ├── /ha-statistik-import → HAStatistikImport.tsx
-    ├── /ha-export           → HAExportSettings.tsx
-    ├── /allgemein           → Settings.tsx
-    ├── /backup              → Backup.tsx (NEU v2.7.0)
-    └── /community           → CommunityShare.tsx
+    ├── /anlage         → Anlagen.tsx
+    ├── /strompreise    → Strompreise.tsx
+    ├── /investitionen  → Investitionen.tsx
+    ├── /monatsdaten    → Monatsdaten.tsx
+    ├── /import         → Import.tsx
+    ├── /demo           → Import.tsx (Demo-Sektion)
+    ├── /pvgis          → PVGISSettings.tsx
+    ├── /ha-import      → HAImportSettings.tsx
+    ├── /ha-export      → HAExportSettings.tsx
+    ├── /allgemein      → Settings.tsx
+    ├── /einrichtung       → Einrichtung.tsx (Datenquellen-Hub)
+    ├── /cloud-import      → CloudImportWizard.tsx
+    ├── /custom-import     → CustomImportWizard.tsx
+    └── /portal-import     → PortalImportWizard.tsx
 ```
 
 ### Komponenten-Hierarchie
@@ -804,12 +788,11 @@ main.tsx
             └── Layout.tsx
                 ├── TopNavigation.tsx
                 │   ├── Logo
-                │   ├── MainTabs (Cockpit, Auswertungen, Aussichten, Community)
-                │   ├── MonatsabschlussQuickIcon (mit Badge)
+                │   ├── MainTabs (Cockpit, Auswertungen, Community, Aussichten)
                 │   ├── SettingsDropdown (5 Kategorien)
                 │   └── ThemeToggle
                 │
-                ├── SubTabs.tsx (kontextabhängig, gruppen-aware)
+                ├── SubTabs.tsx (kontextabhängig)
                 │
                 └── <Outlet /> (React Router)
                     └── [Page Component]
@@ -1097,36 +1080,47 @@ EEDC Add-on                              Community Server
 - `frontend/src/pages/CommunityVergleich.tsx` – Benchmark-Analyse (6 Tabs)
 - `frontend/src/api/community.ts` – API Client
 
-### Datenquellen-Integration (v2.6.0)
+### Cloud-Import-Provider (v2.7.0+)
 
-**Portal-Import (CSV-Parser):**
+**Verzeichnis:** `backend/services/cloud_import/`
 
-Upload von Portal-Export-CSVs mit automatischer Parser-Erkennung:
+**Architektur:** ABC-Pattern mit `@register_provider` Decorator und Provider-Registry.
 
-| Parser | Hersteller | Datenfelder |
-|--------|-----------|-------------|
-| `sma_sunny_portal` | SMA | PV, Netz, Eigenverbrauch, Batterie |
-| `sma_echarger` | SMA | Wallbox (Ladung, Ladevorgänge) |
-| `evcc` | EVCC | Wallbox (Ladung, PV-Anteil, km) |
-| `fronius_solarweb` | Fronius | PV, Netz, Eigenverbrauch |
+**Verfügbare Provider (alle ungetestet):**
 
-**Geräte-Connectors (REST API):**
+| Provider | API | Auth |
+|----------|-----|------|
+| EcoFlow PowerOcean | Developer API | HMAC-SHA256 |
+| SolarEdge | Monitoring API v1 | API-Key |
+| Fronius SolarWeb | SolarWeb API | AccessKeyId + AccessKeyValue |
+| Huawei FusionSolar | thirdData API | XSRF-Token |
+| Growatt | OpenAPI | MD5-Auth |
+| Deye/Solarman | SolarMAN OpenAPI v1.1.0 | OAuth2 + SHA256 |
 
-Direkte Verbindung zu lokalen Geräten für kumulative Zählerstände:
+**Output:** Alle Provider liefern `ParsedMonthData` als einheitliches Format.
 
-| Connector | Gerätetyp | Datenfelder | Getestet |
-|-----------|-----------|-------------|----------|
-| `sma_ennexos` | Tripower X, EVC | PV, Netz, Batterie, Wallbox | Nein |
-| `sma_webconnect` | Sunny Boy, Tripower SE | PV, Netz, Batterie | Nein |
-| `fronius_solar_api` | Symo, Primo, Gen24 | PV, Netz, Batterie | Nein |
-| `go_echarger` | go-eCharger Wallbox | Wallbox | Nein |
-| `shelly_em` | Shelly 3EM / Pro 3EM | Netz (Bezug + Einspeisung) | Nein |
-| `opendtu` | OpenDTU / AhoyDTU | PV | Nein |
-| `kostal_plenticore` | Plenticore / PIKO IQ | PV, Netz, Batterie | Nein |
-| `sonnen_batterie` | sonnenBatterie | PV | Nein |
-| `tasmota_sml` | Tasmota SML Stromzähler | Netz (Bezug + Einspeisung) | Ja |
+### Custom-Import (v2.8.0)
 
-**Plugin-Architektur:** Sowohl Parser als auch Connectors verwenden ein Registry-Pattern mit Decorator (`@register_parser` / `@register_connector`). Neue Geräte können durch Hinzufügen einer Datei und Import in `__init__.py` registriert werden.
+**Datei:** `backend/api/routes/custom_import.py`
+
+**Funktion:** Beliebige CSV/JSON-Dateien mit benutzerdefinierbarem Feld-Mapping importieren.
+
+**Features:**
+- Automatische CSV-Dialekt-Erkennung (Trennzeichen, Dezimalformat)
+- Auto-Mapping anhand von Spaltenbezeichnungen (deutsch + englisch)
+- Einheiten-Umrechnung (Wh/kWh/MWh)
+- Mapping-Templates in Settings-Tabelle speicherbar
+- 4-Schritt-Wizard: Upload → Mapping → Vorschau → Import
+
+**API-Endpoints:**
+```
+POST   /api/custom-import/analyze          # Datei analysieren, Spalten erkennen
+POST   /api/custom-import/preview          # Mapping anwenden, Vorschau
+GET    /api/custom-import/templates        # Gespeicherte Templates laden
+POST   /api/custom-import/templates/{name} # Template speichern
+DELETE /api/custom-import/templates/{name} # Template löschen
+GET    /api/custom-import/fields           # Verfügbare EEDC-Zielfelder
+```
 
 ---
 
