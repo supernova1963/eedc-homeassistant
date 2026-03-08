@@ -15,6 +15,13 @@
 5. **`eedc-community`** ist unabhängig, aber bei Datenmodell-Änderungen beide Repos synchron anpassen.
 6. **Versionen synchron halten** – `eedc` und `eedc-homeassistant` bekommen immer die gleiche Versionsnummer. Release in `eedc` → sofort Subtree Pull + Release in `eedc-homeassistant`.
 
+## Verboten ohne explizite Aufforderung durch den User!
+
+- **`git push`** (in ALLEN Repos) – niemals eigenständig pushen
+- **`git subtree pull/push`** – Sync nur auf Anweisung
+- **Releases, Tags, Versionsnummern ändern**
+- **Änderungen in `eedc-homeassistant` oder `eedc-community`** – nur dieses Repo bearbeiten, es sei denn der User fordert es explizit
+
 ## Verbundene Repositories
 
 | Repository | Zweck | Technik |
