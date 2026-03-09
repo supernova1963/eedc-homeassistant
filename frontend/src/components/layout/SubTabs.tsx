@@ -27,6 +27,8 @@ import {
   Share2,
   MapPin,
   HardDrive,
+  ClipboardCheck,
+  ScrollText,
 } from 'lucide-react'
 
 interface TabItem {
@@ -84,10 +86,12 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/cloud-import',
       '/einstellungen/custom-import',
       '/einstellungen/connector',
+      '/einstellungen/daten-checker',
     ],
     tabs: [
       { name: 'Monatsdaten',     href: '/einstellungen/monatsdaten',     icon: Database },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss', icon: CalendarCheck },
+      { name: 'Daten-Checker',   href: '/einstellungen/daten-checker',   icon: ClipboardCheck },
       { name: 'Einrichtung',     href: '/einstellungen/einrichtung',     icon: Cpu },
     ],
   },
@@ -109,10 +113,12 @@ const einstellungenGruppen: TabGroup[] = [
     prefixes: [
       '/einstellungen/allgemein',
       '/einstellungen/backup',
+      '/einstellungen/protokolle',
     ],
     tabs: [
-      { name: 'Allgemein', href: '/einstellungen/allgemein', icon: Settings },
-      { name: 'Backup',    href: '/einstellungen/backup',    icon: HardDrive },
+      { name: 'Allgemein',   href: '/einstellungen/allgemein',   icon: Settings },
+      { name: 'Backup',      href: '/einstellungen/backup',      icon: HardDrive },
+      { name: 'Protokolle',  href: '/einstellungen/protokolle',  icon: ScrollText },
     ],
   },
   {
