@@ -28,6 +28,7 @@ from backend.api.routes.import_export.helpers import (
     _distribute_legacy_pv_to_modules,
     _distribute_legacy_battery_to_storages,
 )
+from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +296,15 @@ async def apply_import(
             fehler.append(f"{monat_input.jahr}/{monat_input.monat:02d}: {str(e)}")
 
     await db.flush()
+
+    await log_activity(
+        kategorie="portal_import",
+        aktion=f"Portal-Import: {importiert} Monate importiert",
+        erfolg=len(fehler) == 0,
+        details=f"Quelle: {datenquelle}, übersprungen: {uebersprungen}",
+        details_json={"importiert": importiert, "uebersprungen": uebersprungen, "fehler": fehler[:5]},
+        anlage_id=anlage_id,
+    )
 
     return ApplyResponse(
         erfolg=len(fehler) == 0,

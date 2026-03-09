@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.8.3] - 2026-03-09
+
+### Hinzugefügt
+
+- **Daten-Checker** – Neue Datenqualitäts-Prüfung unter Einstellungen → Daten
+  - 5 Prüfkategorien: Stammdaten, Strompreise, Investitionen, Monatsdaten-Vollständigkeit/-Plausibilität
+  - PVGIS-basierte PV-Produktionsprüfung mit dynamischer Performance Ratio
+  - Erkennt zu hohe PVGIS-Systemverluste anhand der tatsächlichen Anlagenperformance
+  - KPI-Karten, Fortschrittsbalken für Monatsabdeckung, klappbare Kategorien
+  - „Beheben"-Links verweisen direkt zum betroffenen Monatsabschluss
+- **Protokolle** – Aktivitäts-Logging unter Einstellungen → System
+  - Protokollierung von Monatsabschluss, Connector-Abruf, Cloud-Fetch, Portal-Import
+  - Live-Filter nach Kategorie und Zeitraum
+  - In-Memory Log-Buffer + DB-Persistierung
+
+---
+
 ## [2.8.1] - 2026-03-07
 
 ### Behoben

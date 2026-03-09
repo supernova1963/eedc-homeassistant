@@ -37,6 +37,7 @@ const settingsMenu = [
     items: [
       { name: 'Monatsdaten', href: '/einstellungen/monatsdaten' },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss' },
+      { name: 'Daten-Checker', href: '/einstellungen/daten-checker' },
       { name: 'Einrichtung', href: '/einstellungen/einrichtung' },
     ],
   },
@@ -53,6 +54,7 @@ const settingsMenu = [
     items: [
       { name: 'Allgemein', href: '/einstellungen/allgemein' },
       { name: 'Backup', href: '/einstellungen/backup' },
+      { name: 'Protokolle', href: '/einstellungen/protokolle' },
     ],
   },
   {
