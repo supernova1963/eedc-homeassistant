@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.8.3] - 2026-03-09
+
+### Hinzugefügt
+
+- **Daten-Checker** – Neue Datenqualitäts-Prüfung unter Einstellungen → Daten
+  - 5 Prüfkategorien: Stammdaten, Strompreise, Investitionen, Monatsdaten-Vollständigkeit/-Plausibilität
+  - PVGIS-basierte PV-Produktionsprüfung mit dynamischer Performance Ratio
+  - Erkennt zu hohe PVGIS-Systemverluste anhand der tatsächlichen Anlagenperformance
+  - KPI-Karten, Fortschrittsbalken für Monatsabdeckung, klappbare Kategorien
+  - „Beheben"-Links verweisen direkt zum betroffenen Monatsabschluss
+- **Protokolle** – Aktivitäts-Logging unter Einstellungen → System
+  - Protokollierung von Monatsabschluss, Connector-Abruf, Cloud-Fetch, Portal-Import
+  - Live-Filter nach Kategorie und Zeitraum
+  - In-Memory Log-Buffer + DB-Persistierung
+
+---
+
 ## [2.8.1] - 2026-03-07
 
 ### Behoben
@@ -31,7 +48,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Auto-Detect für Spaltenbezeichnungen (deutsch + englisch)
   - Einheit wählbar (Wh/kWh/MWh) mit automatischer Umrechnung
   - Dezimalzeichen konfigurierbar (Auto/Punkt/Komma)
+<<<<<<< Updated upstream
   - Kombinierte Datumsspalte oder separate Jahr/Monat-Spalten
+=======
+  - Kombinierte Datumsspalte (z.B. "2024-01") oder separate Jahr/Monat-Spalten
+>>>>>>> Stashed changes
   - Mapping als wiederverwendbares Template speichern/laden
   - 4-Schritt-Wizard: Upload → Mapping → Vorschau → Import
   - Neue Kachel "Eigene Datei importieren" auf der Einrichtung-Seite
@@ -39,7 +60,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Entfernt
 
 - **Kostal Plenticore** und **SMA Local** Cloud-Import-Provider entfernt
+<<<<<<< Updated upstream
   (nur aktuelle Zählerstände, keine historischen Monatsdaten)
+=======
+  (liefern nur aktuelle Zählerstände, keine historischen Monatsdaten –
+  für diese Geräte die Geräte-Connectors verwenden)
+>>>>>>> Stashed changes
 
 (*) Ungetestet – basiert auf Hersteller-API-Dokumentation
 
