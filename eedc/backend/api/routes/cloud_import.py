@@ -17,6 +17,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.services.cloud_import import list_providers, get_provider
+from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,12 @@ async def test_connection(data: TestConnectionRequest):
         raise HTTPException(400, f"Unbekannter Provider: {data.provider_id}")
 
     result = await provider.test_connection(data.credentials)
+    await log_activity(
+        kategorie="cloud_import",
+        aktion=f"Cloud-Verbindungstest {data.provider_id}",
+        erfolg=result.erfolg,
+        details=result.fehler if not result.erfolg else f"Gerät: {result.geraet_name}",
+    )
     return TestConnectionResponse(**result.to_dict())
 
 

@@ -27,6 +27,7 @@ from backend.services.vorschlag_service import VorschlagService, Vorschlag, Vors
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
 from backend.services.ha_state_service import get_ha_state_service
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.services.activity_service import log_activity
 
 
 router = APIRouter(prefix="/monatsabschluss", tags=["Monatsabschluss"])
@@ -632,6 +633,13 @@ async def fetch_cloud_monatswerte(
     try:
         months = await provider.fetch_monthly_data(credentials, jahr, monat, jahr, monat)
     except Exception as e:
+        await log_activity(
+            kategorie="cloud_fetch",
+            aktion=f"Cloud-Fetch für {monat:02d}/{jahr} fehlgeschlagen",
+            erfolg=False,
+            details=str(e),
+            anlage_id=anlage_id,
+        )
         raise HTTPException(status_code=400, detail=f"Cloud-Abruf fehlgeschlagen: {str(e)}")
 
     if not months:
@@ -684,6 +692,14 @@ async def fetch_cloud_monatswerte(
                             "typ": inv.typ,
                             "felder": [{"feld": inv_feld, "label": label, "wert": round(anteil, 1), "einheit": "kWh"}],
                         })
+
+    await log_activity(
+        kategorie="cloud_fetch",
+        aktion=f"Cloud-Daten für {monat:02d}/{jahr} abgerufen",
+        erfolg=True,
+        details=f"Provider: {provider_id}, {len(basis)} Basis-Felder, {len(inv_result)} Investitionen",
+        anlage_id=anlage_id,
+    )
 
     return CloudMonatswerteResponse(basis=basis, investitionen=inv_result)
 
@@ -826,6 +842,13 @@ async def save_monatsabschluss(
     except Exception as e:
         # MQTT-Fehler nicht als Fatal behandeln
         logger.warning(f"MQTT-Publish fehlgeschlagen: {e}")
+
+    await log_activity(
+        kategorie="monatsabschluss",
+        aktion=f"Monatsabschluss {MONAT_NAMEN[monat]} {jahr} gespeichert",
+        erfolg=True,
+        anlage_id=anlage_id,
+    )
 
     return MonatsabschlussResult(
         success=True,

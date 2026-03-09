@@ -43,6 +43,8 @@ import DataImportWizard from './pages/DataImportWizard'
 import ConnectorSetupWizard from './pages/ConnectorSetupWizard'
 import CloudImportWizard from './pages/CloudImportWizard'
 import CustomImportWizard from './pages/CustomImportWizard'
+import Protokolle from './pages/Protokolle'
+import DatenChecker from './pages/DatenChecker'
 
 function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -86,6 +88,7 @@ function App() {
           <Route path="einstellungen/monatsabschluss" element={<MonatsabschlussWizard />} />
           <Route path="monatsabschluss/:anlageId" element={<MonatsabschlussWizard />} />
           <Route path="monatsabschluss/:anlageId/:jahr/:monat" element={<MonatsabschlussWizard />} />
+          <Route path="einstellungen/daten-checker" element={<DatenChecker />} />
           <Route path="einstellungen/einrichtung" element={<Einrichtung />} />
           <Route path="einstellungen/import" element={<Import />} />
           <Route path="einstellungen/portal-import" element={<DataImportWizard />} />
@@ -101,6 +104,7 @@ function App() {
           {/* Einstellungen - System */}
           <Route path="einstellungen/backup" element={<Backup />} />
           <Route path="einstellungen/allgemein" element={<Settings />} />
+          <Route path="einstellungen/protokolle" element={<Protokolle />} />
 
           {/* Einstellungen - Community */}
           <Route path="einstellungen/community" element={<CommunityShare />} />

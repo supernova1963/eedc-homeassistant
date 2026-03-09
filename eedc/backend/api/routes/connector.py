@@ -21,6 +21,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.connectors import list_connectors, get_connector
+from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,13 @@ async def test_connection(req: ConnectorTestRequest):
         raise HTTPException(status_code=400, detail=f"Unbekannter Connector: {req.connector_id}")
 
     result = await connector.test_connection(req.host, req.username, req.password)
+    await log_activity(
+        kategorie="connector_test",
+        aktion=f"Verbindungstest {req.connector_id} → {req.host}",
+        erfolg=result.erfolg,
+        details=result.fehler if not result.erfolg else f"Gerät: {result.geraet_name}",
+        details_json={"connector_id": req.connector_id, "host": req.host},
+    )
     return result.to_dict()
 
 
@@ -146,6 +154,13 @@ async def setup_connector(
     logger.info(
         f"Connector '{req.connector_id}' für Anlage {anlage_id} eingerichtet "
         f"(Gerät: {test_result.geraet_name}, SN: {test_result.seriennummer})"
+    )
+    await log_activity(
+        kategorie="connector_setup",
+        aktion=f"Connector '{req.connector_id}' eingerichtet",
+        erfolg=True,
+        details=f"Gerät: {test_result.geraet_name}, SN: {test_result.seriennummer}",
+        anlage_id=anlage_id,
     )
 
     return {
@@ -218,6 +233,13 @@ async def fetch_meters(
         snapshot = await connector.read_meters(host, username, password)
     except Exception as e:
         logger.exception(f"Fehler beim Auslesen: {e}")
+        await log_activity(
+            kategorie="connector_fetch",
+            aktion="Zählerstand-Abruf fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {str(e)}",
+            anlage_id=anlage_id,
+        )
         raise HTTPException(
             status_code=502,
             detail=f"Fehler beim Auslesen: {type(e).__name__}: {str(e)}",
@@ -239,6 +261,14 @@ async def fetch_meters(
 
     anlage.connector_config = config
     flag_modified(anlage, "connector_config")
+
+    await log_activity(
+        kategorie="connector_fetch",
+        aktion="Zählerstand abgelesen",
+        erfolg=True,
+        details_json=snapshot.to_dict(),
+        anlage_id=anlage_id,
+    )
 
     return {
         "snapshot": snapshot.to_dict(),
