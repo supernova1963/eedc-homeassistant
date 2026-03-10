@@ -404,8 +404,13 @@ class DatenChecker:
             self._abdeckung = MonatsdatenAbdeckung(vorhanden=0, erwartet=0, prozent=0)
             return ergebnisse
 
-        # Erwarteten Bereich bestimmen
+        # Erwarteten Bereich bestimmen (bis Vormonat – laufender Monat noch nicht abgeschlossen)
         heute = date.today()
+        if heute.month == 1:
+            letzter_jahr, letzter_monat = heute.year - 1, 12
+        else:
+            letzter_jahr, letzter_monat = heute.year, heute.month - 1
+
         if anlage.installationsdatum:
             start_jahr = anlage.installationsdatum.year
             start_monat = anlage.installationsdatum.month
@@ -417,10 +422,10 @@ class DatenChecker:
         # Vorhandene Monate als Set
         vorhandene = {(md.jahr, md.monat) for md in monatsdaten}
 
-        # Erwartete Monate durchlaufen
+        # Erwartete Monate durchlaufen (bis Vormonat)
         erwartete: list[tuple[int, int]] = []
         j, m = start_jahr, start_monat
-        while (j, m) <= (heute.year, heute.month):
+        while (j, m) <= (letzter_jahr, letzter_monat):
             erwartete.append((j, m))
             m += 1
             if m > 12:

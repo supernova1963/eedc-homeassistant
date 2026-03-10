@@ -661,15 +661,29 @@ async def export_csv(
     header.append("Notizen")
     writer.writerow(header)
 
+    # Fallback-Keys: Manche Felder wurden unter verschiedenen Namen gespeichert
+    FALLBACK_KEYS = {
+        "pv_erzeugung_kwh": "erzeugung_kwh",  # BKW: MonatsdatenForm (alt) vs. Monatsabschluss
+        "verbrauch_sonstig_kwh": "verbrauch_kwh",  # Sonstiges Verbraucher
+    }
+
+    # Hilfsfunktion: Dezimaltrennzeichen für deutsche CSV (Komma statt Punkt)
+    def fmt(value):
+        if value is None or value == "":
+            return ""
+        if isinstance(value, (int, float)):
+            return str(value).replace(".", ",")
+        return value
+
     for md in monatsdaten:
         row = [
             md.jahr,
             md.monat,
-            md.einspeisung_kwh,
-            md.netzbezug_kwh,
+            fmt(md.einspeisung_kwh),
+            fmt(md.netzbezug_kwh),
         ]
         if hat_dynamisch_export:
-            row.append(md.netzbezug_durchschnittspreis_cent if md.netzbezug_durchschnittspreis_cent else "")
+            row.append(fmt(md.netzbezug_durchschnittspreis_cent) if md.netzbezug_durchschnittspreis_cent else "")
 
         for inv, suffix, data_key in inv_columns:
             inv_data = inv_monatsdaten_map.get((inv.id, md.jahr, md.monat), {})
@@ -677,7 +691,7 @@ async def export_csv(
             if data_key == "sonderkosten_euro":
                 summen = berechne_sonstige_summen(inv_data)
                 net = summen["ausgaben_euro"] - summen["ertraege_euro"]
-                row.append(round(net, 2) if net != 0 else "")
+                row.append(fmt(round(net, 2)) if net != 0 else "")
             elif data_key == "sonderkosten_notiz":
                 positionen = get_sonstige_positionen(inv_data)
                 if positionen:
@@ -689,7 +703,10 @@ async def export_csv(
                     row.append("")
             else:
                 value = inv_data.get(data_key, "")
-                row.append(value if value != "" else "")
+                # Fallback-Key versuchen wenn primärer Key leer
+                if value == "" and data_key in FALLBACK_KEYS:
+                    value = inv_data.get(FALLBACK_KEYS[data_key], "")
+                row.append(fmt(value) if value != "" else "")
 
         row.append(md.notizen or "")
         writer.writerow(row)
@@ -697,8 +714,11 @@ async def export_csv(
     output.seek(0)
     filename = f"eedc_export_{anlage.anlagenname}_{jahr or 'alle'}.csv"
 
+    # BOM für Excel/LibreOffice UTF-8-Erkennung
+    csv_content = "\ufeff" + output.getvalue()
+
     return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
+        iter([csv_content]),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

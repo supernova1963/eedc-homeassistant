@@ -979,17 +979,22 @@ async def get_finanz_prognose(
         if md.eigenverbrauch_kwh and md.eigenverbrauch_kwh > 0:
             gesamt_ev += md.eigenverbrauch_kwh
 
-    # PV-Erzeugung aus InvestitionMonatsdaten
+    # PV-Erzeugung aus InvestitionMonatsdaten (gesamt + pro Monat)
+    pv_pro_monat = {}  # {(jahr, monat): kwh} für EV-Quoten-Berechnung
     for pv in pv_module:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == pv.id:
-                gesamt_pv += daten.get("pv_erzeugung_kwh", 0)
+                kwh = daten.get("pv_erzeugung_kwh", 0)
+                gesamt_pv += kwh
+                pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
 
     # BKW-Erzeugung
     for bkw in balkonkraftwerke:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == bkw.id:
-                gesamt_pv += daten.get("pv_erzeugung_kwh", 0)
+                kwh = daten.get("pv_erzeugung_kwh", 0)
+                gesamt_pv += kwh
+                pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
 
     # Speicher-Daten
     for sp in speicher:
@@ -1015,30 +1020,45 @@ async def get_finanz_prognose(
     # QUOTEN BERECHNEN (aus historischen Daten oder Defaults)
     # =====================================================================
 
-    # Basis-EV-Quote (ohne Speicher-Effekt)
-    basis_ev_quote = 0.30  # Default
-    if gesamt_pv > 0 and gesamt_ev > 0:
-        # Speicher-Beitrag abziehen für Basis-Quote
-        ev_ohne_speicher = max(0, gesamt_ev - gesamt_speicher_entladung - gesamt_v2h)
-        basis_ev_quote = ev_ohne_speicher / gesamt_pv if gesamt_pv > 0 else 0.30
-        basis_ev_quote = min(0.70, max(0.15, basis_ev_quote))  # Begrenzen auf realistische Werte
+    anzahl_monate_hist = len(monatsdaten) if monatsdaten else 1
+
+    # Historische EV-Quote pro Kalendermonat berechnen
+    # Nutzt die echte Gesamt-EV-Quote (inkl. Speicher, V2H, WP) aus Monatsdaten
+    hist_ev_quoten_lists = {}  # {kalendermonat: [quote1, quote2, ...]}
+    for md in monatsdaten:
+        pv_monat = pv_pro_monat.get((md.jahr, md.monat), 0)
+        if pv_monat > 0 and md.eigenverbrauch_kwh is not None and md.eigenverbrauch_kwh > 0:
+            quote = min(1.0, md.eigenverbrauch_kwh / pv_monat)
+            hist_ev_quoten_lists.setdefault(md.monat, []).append(quote)
+
+    # Durchschnitt pro Kalendermonat (falls mehrere Jahre vorhanden)
+    hist_ev_quoten = {m: sum(q) / len(q) for m, q in hist_ev_quoten_lists.items()}
+
+    # Gesamt-Durchschnitt als Fallback für Monate ohne historische Daten
+    avg_hist_ev_quote = (
+        sum(hist_ev_quoten.values()) / len(hist_ev_quoten)
+        if hist_ev_quoten else None
+    )
+
+    # Fallback-Komponentenmodell nur wenn KEINE historischen EV-Quoten vorhanden
+    if avg_hist_ev_quote is None:
+        basis_ev_quote = 0.30  # Default ohne Daten
+        if gesamt_pv > 0 and gesamt_ev > 0:
+            ev_ohne_speicher = max(0, gesamt_ev - gesamt_speicher_entladung - gesamt_v2h)
+            basis_ev_quote = ev_ohne_speicher / gesamt_pv if gesamt_pv > 0 else 0.30
+            basis_ev_quote = min(0.70, max(0.15, basis_ev_quote))
+    else:
+        basis_ev_quote = avg_hist_ev_quote  # Wird nur für Monate ohne hist. Daten genutzt
 
     # Speicher-Effizienz (Entladung/Ladung)
     speicher_effizienz = 0.90  # Default 90%
     if gesamt_speicher_ladung > 0:
         speicher_effizienz = min(0.95, gesamt_speicher_entladung / gesamt_speicher_ladung)
 
-    # Speicher-EV-Erhöhung pro Monat (durchschnittlich)
-    anzahl_monate_hist = len(monatsdaten) if monatsdaten else 1
+    # Komponentenbeiträge pro Monat (für Anzeige-Felder in der Prognose)
     speicher_ev_erhohung_monat = gesamt_speicher_entladung / anzahl_monate_hist if speicher else 0
-
-    # V2H-Beitrag pro Monat
     v2h_beitrag_monat = gesamt_v2h / anzahl_monate_hist if e_autos else 0
-
-    # E-Auto PV-Ladung pro Monat
     eauto_pv_monat = gesamt_eauto_pv / anzahl_monate_hist if e_autos else 0
-
-    # WP-Stromverbrauch pro Monat (saisonal gewichtet später)
     wp_strom_monat_avg = gesamt_wp_strom / anzahl_monate_hist if waermepumpen else 0
 
     # =====================================================================
@@ -1252,33 +1272,35 @@ async def get_finanz_prognose(
             tmy = get_pvgis_tmy_defaults(monat, anlage.latitude if anlage.latitude else 48.0)
             pv_kwh = tmy["globalstrahlung_kwh_m2"] * anlagenleistung_kwp * 0.85
 
-        # Basis-Eigenverbrauch
-        basis_ev = pv_kwh * basis_ev_quote
-
-        # Speicher-Beitrag (verhältnismäßig zur PV-Erzeugung im Monat)
-        # Speicher erhöht EV besonders in ertragreichen Monaten
+        # PV-Faktor für saisonale Skalierung der Anzeige-Felder
         pv_faktor = pv_kwh / (sum(pvgis_monatswerte.values()) / 12) if pvgis_monatswerte else 1.0
+
+        # Eigenverbrauch: Historische Quote nutzen, Fallback auf Komponentenmodell
+        if monat in hist_ev_quoten:
+            # Historische EV-Quote für diesen Kalendermonat vorhanden
+            eigenverbrauch_kwh = pv_kwh * hist_ev_quoten[monat]
+        elif avg_hist_ev_quote is not None:
+            # Kein hist. Datum für diesen Monat → Durchschnitt der vorhandenen
+            eigenverbrauch_kwh = pv_kwh * avg_hist_ev_quote
+        else:
+            # Gar keine historischen Daten → Komponentenmodell als Fallback
+            basis_ev = pv_kwh * basis_ev_quote
+            speicher_fallback = speicher_ev_erhohung_monat * pv_faktor if speicher else 0
+            v2h_fallback = v2h_beitrag_monat if e_autos else 0
+            wp_saison_fb = WP_SAISON_FAKTOREN.get(monat, 1.0)
+            wp_verbrauch_fb = wp_strom_monat_avg * wp_saison_fb if waermepumpen else 0
+            wp_pv_fb = wp_verbrauch_fb * 0.5 * (pv_faktor ** 0.5)
+            eigenverbrauch_kwh = basis_ev + speicher_fallback + v2h_fallback + wp_pv_fb
+
+        eigenverbrauch_kwh = min(eigenverbrauch_kwh, pv_kwh)  # Kann nicht mehr als erzeugt
+        einspeisung_kwh = pv_kwh - eigenverbrauch_kwh
+
+        # Komponentenbeiträge für Anzeige (informativ, beeinflusst EV nicht)
         speicher_beitrag = speicher_ev_erhohung_monat * pv_faktor if speicher else 0
-
-        # V2H-Beitrag (eher konstant über Jahr)
         v2h_beitrag = v2h_beitrag_monat if e_autos else 0
-
-        # E-Auto PV-Ladung (verhältnismäßig zur PV-Erzeugung)
         eauto_pv = eauto_pv_monat * pv_faktor if e_autos else 0
-
-        # WP-Verbrauch (saisonal)
         wp_saison = WP_SAISON_FAKTOREN.get(monat, 1.0)
         wp_verbrauch = wp_strom_monat_avg * wp_saison if waermepumpen else 0
-
-        # WP erhöht Eigenverbrauch (PV-Direktverbrauch)
-        # Annahme: 40-60% des WP-Stroms kann aus PV kommen (abhängig von Tageszeit)
-        wp_pv_anteil = wp_verbrauch * 0.5 * (pv_faktor ** 0.5)  # Mehr im Sommer
-
-        # Gesamt-Eigenverbrauch
-        eigenverbrauch_kwh = basis_ev + speicher_beitrag + v2h_beitrag + wp_pv_anteil
-        eigenverbrauch_kwh = min(eigenverbrauch_kwh, pv_kwh)  # Kann nicht mehr als erzeugt
-
-        einspeisung_kwh = pv_kwh - eigenverbrauch_kwh
 
         einspeise_erloes = einspeisung_kwh * einspeiseverguetung / 100
         ev_ersparnis = eigenverbrauch_kwh * netzbezug_preis / 100

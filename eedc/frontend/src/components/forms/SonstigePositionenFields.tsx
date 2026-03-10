@@ -74,6 +74,7 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
                   value={pos.bezeichnung}
                   onChange={(e) => updatePosition(index, 'bezeichnung', e.target.value)}
                   placeholder="z.B. THG-Quote, Reparatur"
+                  aria-label={`Bezeichnung Position ${index + 1}`}
                   className="input text-sm py-1.5"
                 />
               </div>
@@ -88,6 +89,7 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
                   value={pos.betrag || ''}
                   onChange={(e) => updatePosition(index, 'betrag', parseFloat(e.target.value) || 0)}
                   placeholder="0.00"
+                  aria-label={`Betrag Position ${index + 1}`}
                   className="input text-sm py-1.5"
                 />
               </div>
@@ -99,7 +101,7 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
                   value={pos.typ}
                   onChange={(e) => updatePosition(index, 'typ', e.target.value)}
                   className="input text-sm py-1.5"
-                  title="Typ: Ertrag oder Ausgabe"
+                  aria-label={`Typ Position ${index + 1}`}
                 >
                   <option value="ertrag">Ertrag</option>
                   <option value="ausgabe">Ausgabe</option>
@@ -113,7 +115,7 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
                   type="button"
                   onClick={() => removePosition(index)}
                   className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 p-1 text-sm"
-                  title="Position entfernen"
+                  aria-label={`Position ${index + 1} entfernen`}
                 >
                   &times;
                 </button>

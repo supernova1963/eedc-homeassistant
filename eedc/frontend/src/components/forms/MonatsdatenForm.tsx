@@ -494,6 +494,11 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
       // Sammle Investitions-Daten
       const invDaten: Record<string, InvestitionMonatsdaten> = {}
+      // Hilfsfunktion: Wert nur setzen wenn nicht leer (aber 0 erlauben!)
+      const hasValue = (val: string | undefined): boolean => val !== undefined && val !== ''
+      const pf = (val: string) => parseFloat(val)
+      const pi = (val: string) => parseInt(val)
+
       aktiveInvestitionen.forEach(inv => {
         const daten = investitionsDaten[inv.id]
         if (!daten) return
@@ -501,50 +506,50 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         const parsed: InvestitionMonatsdaten = {}
 
         if (inv.typ === 'e-auto') {
-          if (daten.km_gefahren) parsed.km_gefahren = parseFloat(daten.km_gefahren)
-          if (daten.verbrauch_kwh) parsed.verbrauch_kwh = parseFloat(daten.verbrauch_kwh)
-          if (daten.ladung_pv_kwh) parsed.ladung_pv_kwh = parseFloat(daten.ladung_pv_kwh)
-          if (daten.ladung_netz_kwh) parsed.ladung_netz_kwh = parseFloat(daten.ladung_netz_kwh)
-          if (daten.ladung_extern_kwh) parsed.ladung_extern_kwh = parseFloat(daten.ladung_extern_kwh)
-          if (daten.ladung_extern_euro) parsed.ladung_extern_euro = parseFloat(daten.ladung_extern_euro)
+          if (hasValue(daten.km_gefahren)) parsed.km_gefahren = pf(daten.km_gefahren)
+          if (hasValue(daten.verbrauch_kwh)) parsed.verbrauch_kwh = pf(daten.verbrauch_kwh)
+          if (hasValue(daten.ladung_pv_kwh)) parsed.ladung_pv_kwh = pf(daten.ladung_pv_kwh)
+          if (hasValue(daten.ladung_netz_kwh)) parsed.ladung_netz_kwh = pf(daten.ladung_netz_kwh)
+          if (hasValue(daten.ladung_extern_kwh)) parsed.ladung_extern_kwh = pf(daten.ladung_extern_kwh)
+          if (hasValue(daten.ladung_extern_euro)) parsed.ladung_extern_euro = pf(daten.ladung_extern_euro)
           // V2H: Form verwendet entladung_v2h_kwh, Backend erwartet v2h_entladung_kwh
-          if (daten.entladung_v2h_kwh) (parsed as Record<string, number>).v2h_entladung_kwh = parseFloat(daten.entladung_v2h_kwh)
+          if (hasValue(daten.entladung_v2h_kwh)) (parsed as Record<string, number>).v2h_entladung_kwh = pf(daten.entladung_v2h_kwh)
         } else if (inv.typ === 'speicher') {
-          if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
-          if (daten.entladung_kwh) parsed.entladung_kwh = parseFloat(daten.entladung_kwh)
+          if (hasValue(daten.ladung_kwh)) parsed.ladung_kwh = pf(daten.ladung_kwh)
+          if (hasValue(daten.entladung_kwh)) parsed.entladung_kwh = pf(daten.entladung_kwh)
           // Arbitrage-Felder
-          if (daten.speicher_ladung_netz_kwh) parsed.speicher_ladung_netz_kwh = parseFloat(daten.speicher_ladung_netz_kwh)
-          if (daten.speicher_ladepreis_cent) parsed.speicher_ladepreis_cent = parseFloat(daten.speicher_ladepreis_cent)
+          if (hasValue(daten.speicher_ladung_netz_kwh)) parsed.speicher_ladung_netz_kwh = pf(daten.speicher_ladung_netz_kwh)
+          if (hasValue(daten.speicher_ladepreis_cent)) parsed.speicher_ladepreis_cent = pf(daten.speicher_ladepreis_cent)
         } else if (inv.typ === 'wallbox') {
-          if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
-          if (daten.ladevorgaenge) parsed.ladevorgaenge = parseInt(daten.ladevorgaenge)
+          if (hasValue(daten.ladung_kwh)) parsed.ladung_kwh = pf(daten.ladung_kwh)
+          if (hasValue(daten.ladevorgaenge)) parsed.ladevorgaenge = pi(daten.ladevorgaenge)
         } else if (inv.typ === 'waermepumpe') {
-          if (daten.stromverbrauch_kwh) parsed.stromverbrauch_kwh = parseFloat(daten.stromverbrauch_kwh)
-          if (daten.heizenergie_kwh) parsed.heizenergie_kwh = parseFloat(daten.heizenergie_kwh)
-          if (daten.warmwasser_kwh) parsed.warmwasser_kwh = parseFloat(daten.warmwasser_kwh)
+          if (hasValue(daten.stromverbrauch_kwh)) parsed.stromverbrauch_kwh = pf(daten.stromverbrauch_kwh)
+          if (hasValue(daten.heizenergie_kwh)) parsed.heizenergie_kwh = pf(daten.heizenergie_kwh)
+          if (hasValue(daten.warmwasser_kwh)) parsed.warmwasser_kwh = pf(daten.warmwasser_kwh)
         } else if (inv.typ === 'wechselrichter') {
-          if (daten.pv_erzeugung_kwh) parsed.pv_erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
+          if (hasValue(daten.pv_erzeugung_kwh)) parsed.pv_erzeugung_kwh = pf(daten.pv_erzeugung_kwh)
         } else if (inv.typ === 'pv-module') {
-          if (daten.pv_erzeugung_kwh) parsed.pv_erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
+          if (hasValue(daten.pv_erzeugung_kwh)) parsed.pv_erzeugung_kwh = pf(daten.pv_erzeugung_kwh)
         } else if (inv.typ === 'balkonkraftwerk') {
-          // Balkonkraftwerk: Form verwendet pv_erzeugung_kwh, Backend erwartet erzeugung_kwh
-          if (daten.pv_erzeugung_kwh) (parsed as Record<string, number>).erzeugung_kwh = parseFloat(daten.pv_erzeugung_kwh)
-          if (daten.eigenverbrauch_kwh) parsed.eigenverbrauch_kwh = parseFloat(daten.eigenverbrauch_kwh)
-          if (daten.einspeisung_kwh) parsed.einspeisung_kwh = parseFloat(daten.einspeisung_kwh)
-          if (daten.speicher_ladung_kwh) parsed.speicher_ladung_kwh = parseFloat(daten.speicher_ladung_kwh)
-          if (daten.speicher_entladung_kwh) parsed.speicher_entladung_kwh = parseFloat(daten.speicher_entladung_kwh)
+          // BKW: Konsistent pv_erzeugung_kwh verwenden (wie Monatsabschluss + CSV-Export)
+          if (hasValue(daten.pv_erzeugung_kwh)) parsed.pv_erzeugung_kwh = pf(daten.pv_erzeugung_kwh)
+          if (hasValue(daten.eigenverbrauch_kwh)) parsed.eigenverbrauch_kwh = pf(daten.eigenverbrauch_kwh)
+          if (hasValue(daten.einspeisung_kwh)) parsed.einspeisung_kwh = pf(daten.einspeisung_kwh)
+          if (hasValue(daten.speicher_ladung_kwh)) parsed.speicher_ladung_kwh = pf(daten.speicher_ladung_kwh)
+          if (hasValue(daten.speicher_entladung_kwh)) parsed.speicher_entladung_kwh = pf(daten.speicher_entladung_kwh)
         } else if (inv.typ === 'sonstiges') {
           // Sonstiges Erzeuger
-          if (daten.erzeugung_kwh) parsed.erzeugung_kwh = parseFloat(daten.erzeugung_kwh)
-          if (daten.eigenverbrauch_kwh) parsed.eigenverbrauch_kwh = parseFloat(daten.eigenverbrauch_kwh)
-          if (daten.einspeisung_kwh) parsed.einspeisung_kwh = parseFloat(daten.einspeisung_kwh)
+          if (hasValue(daten.erzeugung_kwh)) parsed.erzeugung_kwh = pf(daten.erzeugung_kwh)
+          if (hasValue(daten.eigenverbrauch_kwh)) parsed.eigenverbrauch_kwh = pf(daten.eigenverbrauch_kwh)
+          if (hasValue(daten.einspeisung_kwh)) parsed.einspeisung_kwh = pf(daten.einspeisung_kwh)
           // Sonstiges Verbraucher: Form verwendet verbrauch_sonstig_kwh, Backend erwartet verbrauch_kwh
-          if (daten.verbrauch_sonstig_kwh) (parsed as Record<string, number>).verbrauch_kwh = parseFloat(daten.verbrauch_sonstig_kwh)
-          if (daten.bezug_pv_kwh) parsed.bezug_pv_kwh = parseFloat(daten.bezug_pv_kwh)
-          if (daten.bezug_netz_kwh) parsed.bezug_netz_kwh = parseFloat(daten.bezug_netz_kwh)
+          if (hasValue(daten.verbrauch_sonstig_kwh)) (parsed as Record<string, number>).verbrauch_kwh = pf(daten.verbrauch_sonstig_kwh)
+          if (hasValue(daten.bezug_pv_kwh)) parsed.bezug_pv_kwh = pf(daten.bezug_pv_kwh)
+          if (hasValue(daten.bezug_netz_kwh)) parsed.bezug_netz_kwh = pf(daten.bezug_netz_kwh)
           // Sonstiges Speicher
-          if (daten.ladung_kwh) parsed.ladung_kwh = parseFloat(daten.ladung_kwh)
-          if (daten.entladung_kwh) parsed.entladung_kwh = parseFloat(daten.entladung_kwh)
+          if (hasValue(daten.ladung_kwh)) parsed.ladung_kwh = pf(daten.ladung_kwh)
+          if (hasValue(daten.entladung_kwh)) parsed.entladung_kwh = pf(daten.entladung_kwh)
         }
 
         // Sonstige Positionen (Erträge & Ausgaben) für alle Investitionstypen

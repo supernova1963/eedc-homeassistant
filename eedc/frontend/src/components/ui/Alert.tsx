@@ -54,6 +54,7 @@ export default function Alert({ type, title, children, onClose, className = '' }
         {onClose && (
           <button
             onClick={onClose}
+            aria-label="Schließen"
             className={`ml-3 ${text} hover:opacity-70 transition-opacity`}
           >
             <X className="w-4 h-4" />
