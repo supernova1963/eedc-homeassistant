@@ -55,13 +55,15 @@ def get_region_from_plz(plz: str | None, land: str | None = None) -> str | None:
         range(60, 66): "HE",  # 60-65: Hessen (Frankfurt, Wiesbaden)
         range(66, 67): "SL",  # 66: Saarland
         range(67, 70): "RP",  # 67-69: Rheinland-Pfalz (Ludwigshafen, Mainz)
-        range(70, 77): "BW",  # 70-76: Baden-Württemberg (Stuttgart, Karlsruhe)
-        range(77, 80): "BW",  # 77-79: Baden-Württemberg (Freiburg)
-        range(80, 88): "BY",  # 80-87: Bayern (München, Augsburg)
-        range(88, 90): "BW",  # 88-89: Baden-Württemberg (Bodensee, Ulm)
-        range(90, 97): "BY",  # 90-96: Bayern (Nürnberg, Würzburg)
-        range(97, 98): "BY",  # 97: Bayern (Würzburg)
-        range(98, 100): "TH", # 98-99: Thüringen
+        range(70, 76): "BW",  # 70-75: Baden-Württemberg (Stuttgart, Karlsruhe)
+        range(76, 78): "RP",  # 76-77: Rheinland-Pfalz (Landau, Südwestpfalz)
+        range(78, 80): "BW",  # 78-79: Baden-Württemberg (Freiburg)
+        range(80, 83): "BY",  # 80-82: Bayern (München)
+        range(83, 88): "BY",  # 83-87: Bayern (Augsburg, Regensburg)
+        range(88, 91): "BY",  # 88-90: Bayern (Kempten, Augsburg)
+        range(91, 97): "BY",  # 91-96: Bayern (Nürnberg, Würzburg)
+        range(97, 99): "TH",  # 97-98: Thüringen
+        range(99, 100): "TH", # 99: Thüringen
     }
 
     for plz_range, region in plz_regions.items():
