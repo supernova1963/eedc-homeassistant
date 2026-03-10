@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Anlage, Monatsdaten, Investition, InvestitionMonatsdaten
 from backend.core.config import settings
+from backend.services.plz_to_state import PLZ_TO_STATE
 
 
 # Community Server URL
@@ -27,50 +28,11 @@ def get_region_from_plz(plz: str | None, land: str | None = None) -> str | None:
     if land in ("AT", "CH"):
         return land
 
-    if not plz or len(plz) < 2:
+    if not plz:
         return None
 
-    # PLZ-Bereiche für deutsche Bundesländer (vereinfacht)
-    plz_prefix = plz[:2]
-    plz_num = int(plz_prefix)
-
-    plz_regions = {
-        range(1, 10): "SN",   # 01-09: Sachsen (Dresden, Leipzig, Chemnitz)
-        range(10, 15): "BE",  # 10-14: Berlin
-        range(15, 20): "BB",  # 15-19: Brandenburg
-        range(20, 22): "HH",  # 20-21: Hamburg
-        range(22, 26): "SH",  # 22-25: Schleswig-Holstein
-        range(26, 28): "NI",  # 26-27: Niedersachsen (Oldenburg)
-        range(28, 29): "HB",  # 28: Bremen
-        range(29, 32): "NI",  # 29-31: Niedersachsen
-        range(32, 34): "NW",  # 32-33: NRW (Ostwestfalen)
-        range(34, 37): "HE",  # 34-36: Hessen (Kassel)
-        range(37, 38): "NI",  # 37: Niedersachsen (Göttingen)
-        range(38, 40): "NI",  # 38-39: Niedersachsen (Braunschweig)
-        range(40, 48): "NW",  # 40-47: NRW (Düsseldorf, Köln)
-        range(48, 50): "NW",  # 48-49: NRW (Münster)
-        range(50, 54): "NW",  # 50-53: NRW (Köln, Bonn)
-        range(54, 57): "RP",  # 54-56: Rheinland-Pfalz (Trier, Koblenz)
-        range(57, 60): "NW",  # 57-59: NRW (Siegen, Hagen)
-        range(60, 66): "HE",  # 60-65: Hessen (Frankfurt, Wiesbaden)
-        range(66, 67): "SL",  # 66: Saarland
-        range(67, 70): "RP",  # 67-69: Rheinland-Pfalz (Ludwigshafen, Mainz)
-        range(70, 76): "BW",  # 70-75: Baden-Württemberg (Stuttgart, Karlsruhe)
-        range(76, 78): "RP",  # 76-77: Rheinland-Pfalz (Landau, Südwestpfalz)
-        range(78, 80): "BW",  # 78-79: Baden-Württemberg (Freiburg)
-        range(80, 83): "BY",  # 80-82: Bayern (München)
-        range(83, 88): "BY",  # 83-87: Bayern (Augsburg, Regensburg)
-        range(88, 91): "BY",  # 88-90: Bayern (Kempten, Augsburg)
-        range(91, 97): "BY",  # 91-96: Bayern (Nürnberg, Würzburg)
-        range(97, 99): "TH",  # 97-98: Thüringen
-        range(99, 100): "TH", # 99: Thüringen
-    }
-
-    for plz_range, region in plz_regions.items():
-        if plz_num in plz_range:
-            return region
-
-    return None
+    # PLZ aus dem Dictionary ermitteln
+    return PLZ_TO_STATE.get(plz)
 
 
 def generate_anlage_hash(anlage: Anlage, secret: str) -> str:
