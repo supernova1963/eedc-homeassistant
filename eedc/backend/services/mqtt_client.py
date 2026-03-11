@@ -441,8 +441,8 @@ class MQTTClient:
             return False
 
         unique_id = f"eedc_{anlage_id}_{key}"
-        # object_id bestimmt die Entity-ID in HA (z.B. number.eedc_winterborn_mwd_inv1_ladung_kwh_start)
-        object_id = f"eedc_{anlage_name.lower().replace(' ', '_')}_{key}"
+        # default_entity_id bestimmt die Entity-ID in HA (z.B. number.eedc_winterborn_mwd_inv1_ladung_kwh_start)
+        default_entity_id = f"eedc_{anlage_name.lower().replace(' ', '_')}_{key}"
         state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{key}/state"
         command_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{key}/set"
         config_topic = f"{self.config.discovery_prefix}/number/{unique_id}/config"
@@ -450,7 +450,7 @@ class MQTTClient:
         payload = {
             "name": name,
             "unique_id": unique_id,
-            "object_id": object_id,
+            "default_entity_id": default_entity_id,
             "state_topic": state_topic,
             "command_topic": command_topic,
             "min": min_value,
@@ -518,12 +518,12 @@ class MQTTClient:
             return False
 
         unique_id = f"eedc_{anlage_id}_{key}"
-        # object_id bestimmt die Entity-ID in HA (z.B. sensor.eedc_winterborn_mwd_inv1_ladung_kwh_monat)
-        object_id = f"eedc_{anlage_name.lower().replace(' ', '_')}_{key}"
+        # default_entity_id bestimmt die Entity-ID in HA (z.B. sensor.eedc_winterborn_mwd_inv1_ladung_kwh_monat)
+        default_entity_id = f"eedc_{anlage_name.lower().replace(' ', '_')}_{key}"
         state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{key}/state"
         config_topic = f"{self.config.discovery_prefix}/sensor/{unique_id}/config"
 
-        # Number Entity ID für value_template - muss auch object_id Format verwenden
+        # Number Entity ID für value_template - muss auch default_entity_id Format verwenden
         number_object_id = f"eedc_{anlage_name.lower().replace(' ', '_')}_{start_number_key}"
         number_entity_id = f"number.{number_object_id}"
 
@@ -536,7 +536,7 @@ class MQTTClient:
         payload = {
             "name": name,
             "unique_id": unique_id,
-            "object_id": object_id,
+            "default_entity_id": default_entity_id,
             "state_topic": state_topic,
             "value_template": value_template,
             "unit_of_measurement": unit,
