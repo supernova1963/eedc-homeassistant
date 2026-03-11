@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.8.5] - 2026-03-11
+
+### Behoben
+
+- **MQTT: object_id Deprecation** – `object_id` im MQTT Discovery Payload durch `default_entity_id` ersetzt (HA 2026.4 Kompatibilität)
+
+---
+
 ## [2.8.4] - 2026-03-10
 
 ### Behoben
