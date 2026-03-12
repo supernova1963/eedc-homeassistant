@@ -168,14 +168,20 @@ EOF
 mkdir -p ~/claude
 cd ~/claude
 
-# eedc-homeassistant
+# eedc-homeassistant (Source of Truth für alle Änderungen)
 git clone git@github.com:supernova1963/eedc-homeassistant.git
 # oder HTTPS: git clone https://github.com/supernova1963/eedc-homeassistant.git
 
-# eedc-community
+# eedc (Standalone-Spiegel, wird per release.sh synchronisiert)
+git clone git@github.com:supernova1963/eedc.git
+# oder HTTPS: git clone https://github.com/supernova1963/eedc.git
+
+# eedc-community (unabhängiges Repo)
 git clone git@github.com:supernova1963/eedc-community.git
 # oder HTTPS: git clone https://github.com/supernova1963/eedc-community.git
 ```
+
+> **Wichtig:** Alle Änderungen in `eedc-homeassistant` machen. Das `eedc`-Repo ist ein Spiegel und wird nur per `scripts/release.sh` synchronisiert.
 
 ---
 

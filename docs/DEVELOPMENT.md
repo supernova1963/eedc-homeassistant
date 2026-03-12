@@ -1,7 +1,7 @@
 
 # EEDC Development Guide
 
-**Version 2.8.0** | Stand: März 2026
+**Version 2.8.5** | Stand: März 2026
 
 ---
 
@@ -96,17 +96,29 @@ Für Tests in einer echten Home Assistant Umgebung:
 
 ---
 
+## Repository-Workflow
+
+**`eedc-homeassistant` ist die Source of Truth.** Alle Änderungen (Backend, Frontend, Docs, HA-Config) hier machen. Das `eedc`-Standalone-Repo ist ein Spiegel und wird per Release-Script synchronisiert.
+
+Siehe [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) für Details.
+
 ## Versionierung
 
-Bei neuen Releases müssen diese Dateien aktualisiert werden:
+Ein Release-Script bumpt alle Versionsdateien, committed, taggt, pusht und synchronisiert das Standalone-Repo:
+
+```bash
+./scripts/release.sh 2.8.6
+```
 
 | Datei | Feld |
-|-------|------|
+| ----- | ---- |
 | `eedc/backend/core/config.py` | `APP_VERSION` |
 | `eedc/frontend/src/config/version.ts` | `APP_VERSION` |
-| `eedc/config.yaml` | `version` |
+| `eedc/config.yaml` | `version` (HA Add-on) |
 | `eedc/run.sh` | Echo-Statement |
-| `CHANGELOG.md` | Neuer Eintrag |
+| `CHANGELOG.md` | Neuer Eintrag (manuell vor Release) |
+
+**Wichtig:** HA Add-ons erkennen Updates über `config.yaml`. Jede Änderung, die beim User ankommen soll, benötigt ein Release.
 
 ---
 
@@ -183,10 +195,14 @@ eedc-homeassistant/
 ├── CHANGELOG.md                 # Versionshistorie
 ├── CLAUDE.md                    # KI-Entwicklungskontext
 │
+├── scripts/
+│   └── release.sh               # Release + Sync (ein Script für alles)
+│
 ├── docs/
 │   ├── BENUTZERHANDBUCH.md      # Endbenutzer-Anleitung
 │   ├── ARCHITEKTUR.md           # Technische Dokumentation
 │   ├── DEVELOPMENT.md           # Diese Datei
+│   ├── RELEASE-WORKFLOW.md      # Release-Prozess Dokumentation
 │   └── archive/                 # Archivierte Dokumente
 │
 └── eedc/                        # Die Anwendung
@@ -217,6 +233,7 @@ eedc-homeassistant/
     │       ├── ha_statistics_service.py # HA-DB Statistik-Abfragen (v2.0.0)
     │       ├── vorschlag_service.py     # Intelligente Vorschläge
     │       ├── community_service.py     # Community-Datenaufbereitung (v2.0.3)
+    │       ├── plz_to_state.py         # PLZ→Bundesland Mapping (8.308 Einträge)
     │       ├── cloud_import/            # Cloud-Import-Provider (6 Provider)
     │       └── scheduler.py             # APScheduler für Cron-Jobs
     │

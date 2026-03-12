@@ -169,6 +169,14 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
+**v2.8.3–2.8.5** - Daten-Checker, Protokolle, Bugfixes:
+
+- **Daten-Checker:** Datenqualitäts-Prüfung mit 5 Kategorien, PVGIS-basierter PV-Produktionsprüfung
+- **Protokolle:** Aktivitäts-Logging (Monatsabschluss, Connector, Cloud-Fetch, Portal-Import)
+- **PLZ→Bundesland:** Vollständiges Dictionary-Lookup (8.308 Einträge) statt fehleranfälliger Prefix-Bereiche
+- **MQTT:** `object_id` → `default_entity_id` für HA 2026.4 Kompatibilität
+- **Bugfixes:** CSV-Export BKW-Erzeugung, 0-Werte-Bug, Dezimaltrennzeichen, Aussichten-EV-Quote
+
 **v2.8.0** - Cloud-Import-Provider + Custom-Import:
 
 - **5 neue Cloud-Import-Provider:** SolarEdge, Fronius SolarWeb, Huawei FusionSolar, Growatt, Deye/Solarman (alle ungetestet)

@@ -1,7 +1,7 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 2.8.0** | Stand: März 2026
+**Version 2.8.5** | Stand: März 2026
 
 ---
 
@@ -179,6 +179,7 @@ eedc-homeassistant/
     │       ├── scheduler.py               # APScheduler für Cron-Jobs
     │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
     │       ├── community_service.py       # Community-Datenaufbereitung
+    │       ├── plz_to_state.py           # PLZ→Bundesland Mapping (8.308 Einträge)
     │       └── cloud_import/              # Cloud-Import-Provider
     │           ├── __init__.py
     │           ├── base.py                 # ABC + Registry
@@ -1075,6 +1076,7 @@ EEDC Add-on                              Community Server
 
 **Relevante Dateien:**
 - `backend/services/community_service.py` – Datenaufbereitung + Anonymisierung
+- `backend/services/plz_to_state.py` – Vollständiges PLZ→Bundesland Dictionary (8.308 Einträge, O(1) Lookup)
 - `backend/api/routes/community.py` – API Routes + Benchmark-Proxy
 - `frontend/src/pages/CommunityShare.tsx` – Upload UI
 - `frontend/src/pages/CommunityVergleich.tsx` – Benchmark-Analyse (6 Tabs)
@@ -1126,6 +1128,29 @@ GET    /api/custom-import/fields           # Verfügbare EEDC-Zielfelder
 
 ## 9. Entwickler-Workflow
 
+### Repository-Struktur
+
+**`eedc-homeassistant` ist die Source of Truth** für alle Änderungen (Backend, Frontend, Docs, HA-Config).
+
+Das `eedc`-Standalone-Repo ist ein **Spiegel** und wird ausschließlich per Release-Script synchronisiert.
+
+```
+eedc-homeassistant (Source of Truth)
+├── eedc/backend/          ─── release.sh ───→  eedc (Standalone-Spiegel)
+├── eedc/frontend/         ─── release.sh ───→  eedc (Standalone-Spiegel)
+├── website/
+├── docs/
+└── CHANGELOG.md
+
+eedc-community (unabhängig)
+```
+
+**Regeln:**
+
+- Alle Änderungen in `eedc-homeassistant` machen, nie direkt in `eedc`
+- Immer auf `main` arbeiten (keine Feature-Branches, Einzelentwickler-Projekt)
+- Kein `git subtree` (abgeschafft)
+
 ### Lokale Entwicklung
 
 **Terminal 1 – Backend:**
@@ -1161,15 +1186,25 @@ docker build -t eedc .
 docker run -p 8099:8099 -v $(pwd)/data:/data eedc
 ```
 
-### Versionierung
+### Release-Workflow
 
-Bei neuen Releases diese Dateien aktualisieren:
+Ein Script erledigt alles — Version bumpen, committen, taggen, pushen und Standalone-Repo synchronisieren:
 
-1. `eedc/backend/core/config.py` – `APP_VERSION`
-2. `eedc/frontend/src/config/version.ts` – `APP_VERSION`
-3. `eedc/config.yaml` – `version`
-4. `CHANGELOG.md` – Änderungen dokumentieren
-5. `eedc/run.sh` – Version in Echo
+```bash
+cd /home/gernot/claude/eedc-homeassistant
+./scripts/release.sh 2.8.6
+```
+
+Das Script aktualisiert automatisch alle 4 Versionsdateien:
+
+| Datei | Feld |
+| ----- | ---- |
+| `eedc/backend/core/config.py` | `APP_VERSION` |
+| `eedc/frontend/src/config/version.ts` | `APP_VERSION` |
+| `eedc/config.yaml` | `version` (HA Add-on) |
+| `eedc/run.sh` | Version im Echo |
+
+**Wichtig:** HA Add-ons erkennen Updates über das `version`-Feld in `config.yaml`. Jede Änderung, die beim User ankommen soll, benötigt ein Release.
 
 ### Git Commit Conventions
 

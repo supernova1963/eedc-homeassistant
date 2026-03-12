@@ -9,7 +9,7 @@ Drei Varianten für verschiedene Kanäle.
 
 ---
 
-### EEDC – Free, local PV analysis for Home Assistant (and standalone) [v2.7.1]
+### EEDC – Free, local PV analysis for Home Assistant (and standalone) [v2.8.5]
 
 I built a Home Assistant add-on that gives you a complete analysis of your PV system – fully local, no cloud, no subscription fees.
 
