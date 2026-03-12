@@ -10,6 +10,7 @@ import SpeicherDashboard from './pages/SpeicherDashboard'
 import WallboxDashboard from './pages/WallboxDashboard'
 import BalkonkraftwerkDashboard from './pages/BalkonkraftwerkDashboard'
 import SonstigesDashboard from './pages/SonstigesDashboard'
+import AktuellerMonat from './pages/AktuellerMonat'
 
 // Auswertungen
 import Auswertung from './pages/Auswertung'
@@ -63,6 +64,7 @@ function App() {
           <Route path="cockpit/speicher" element={<SpeicherDashboard />} />
           <Route path="cockpit/wallbox" element={<WallboxDashboard />} />
           <Route path="cockpit/balkonkraftwerk" element={<BalkonkraftwerkDashboard />} />
+          <Route path="cockpit/aktueller-monat" element={<AktuellerMonat />} />
           <Route path="cockpit/sonstiges" element={<SonstigesDashboard />} />
 
           {/* Auswertungen */}

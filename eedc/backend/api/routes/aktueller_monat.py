@@ -1,0 +1,516 @@
+"""
+Aktueller Monat API Route.
+
+Kombiniert Daten aus HA-Sensoren, Connectors und gespeicherten Monatsdaten
+zu einer Echtzeit-Übersicht des laufenden Monats.
+"""
+
+import logging
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from backend.api.deps import get_db
+from backend.core.config import HA_INTEGRATION_AVAILABLE
+from backend.models.anlage import Anlage
+from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.models.monatsdaten import Monatsdaten
+from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.api.routes.connector import _calc_month_delta
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+MONAT_NAMEN = [
+    "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+]
+
+
+# =============================================================================
+# Schemas
+# =============================================================================
+
+class DatenquelleInfo(BaseModel):
+    """Quellenangabe für ein einzelnes Feld."""
+    quelle: str          # "ha_sensor" | "local_connector" | "gespeichert"
+    konfidenz: int       # 95, 90, 85
+    zeitpunkt: Optional[str] = None
+
+
+class AktuellerMonatResponse(BaseModel):
+    """Aggregierte Übersicht des aktuellen Monats."""
+    anlage_id: int
+    anlage_name: str
+    jahr: int
+    monat: int
+    monat_name: str
+    aktualisiert_um: str
+
+    # Verfügbare Quellen
+    quellen: dict[str, bool]
+
+    # Energie-Bilanz (kWh)
+    pv_erzeugung_kwh: Optional[float] = None
+    einspeisung_kwh: Optional[float] = None
+    netzbezug_kwh: Optional[float] = None
+    eigenverbrauch_kwh: Optional[float] = None
+    gesamtverbrauch_kwh: Optional[float] = None
+
+    # Quoten (%)
+    autarkie_prozent: Optional[float] = None
+    eigenverbrauch_quote_prozent: Optional[float] = None
+
+    # Komponenten
+    speicher_ladung_kwh: Optional[float] = None
+    speicher_entladung_kwh: Optional[float] = None
+    hat_speicher: bool = False
+    wp_strom_kwh: Optional[float] = None
+    wp_waerme_kwh: Optional[float] = None
+    hat_waermepumpe: bool = False
+    emob_ladung_kwh: Optional[float] = None
+    hat_emobilitaet: bool = False
+    bkw_erzeugung_kwh: Optional[float] = None
+    hat_balkonkraftwerk: bool = False
+
+    # Finanzen (Euro)
+    einspeise_erloes_euro: Optional[float] = None
+    netzbezug_kosten_euro: Optional[float] = None
+    ev_ersparnis_euro: Optional[float] = None
+    netto_ertrag_euro: Optional[float] = None
+
+    # Vergleiche
+    vorjahr: Optional[dict] = None
+    soll_pv_kwh: Optional[float] = None
+
+    # Quellenangabe pro Feld
+    feld_quellen: dict[str, DatenquelleInfo] = {}
+
+
+# =============================================================================
+# Datensammlung
+# =============================================================================
+
+async def _collect_ha_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """Sammelt Daten aus HA MQTT-Monatssensoren (Konfidenz 95%)."""
+    if not HA_INTEGRATION_AVAILABLE:
+        return {}
+
+    mapping = anlage.sensor_mapping or {}
+    if not mapping.get("mqtt_setup_complete"):
+        return {}
+
+    from backend.services.ha_state_service import get_ha_state_service
+    ha_service = get_ha_state_service()
+    if not ha_service.is_available:
+        return {}
+
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
+    now_str = datetime.utcnow().isoformat()
+    quelle = DatenquelleInfo(quelle="ha_sensor", konfidenz=95, zeitpunkt=now_str)
+
+    # Basis-Felder aus Sensor-Mapping
+    basis = mapping.get("basis", {})
+    basis_feld_map = {
+        "einspeisung": "einspeisung_kwh",
+        "netzbezug": "netzbezug_kwh",
+        "pv_gesamt": "pv_erzeugung_kwh",
+    }
+    for mapping_key, feld_name in basis_feld_map.items():
+        feld_mapping = basis.get(mapping_key)
+        if feld_mapping and feld_mapping.get("strategie") == "sensor":
+            val = await ha_service.get_mwd_sensor_value(anlage.id, mapping_key)
+            if val is not None:
+                resolved[feld_name] = (val, quelle)
+
+    # Investitions-Felder aus Sensor-Mapping
+    inv_mapping = mapping.get("investitionen", {})
+    for inv_id_str, inv_data in inv_mapping.items():
+        felder = inv_data.get("felder", {})
+        for feld_key, feld_config in felder.items():
+            if feld_config.get("strategie") == "sensor":
+                sensor_key = f"inv_{inv_id_str}_{feld_key}"
+                val = await ha_service.get_mwd_sensor_value(anlage.id, sensor_key)
+                if val is not None:
+                    # Investitions-Felder mit Prefix speichern
+                    resolved[f"inv_{inv_id_str}_{feld_key}"] = (val, quelle)
+
+    return resolved
+
+
+async def _collect_connector_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """Sammelt Daten aus Connector-Snapshots (Konfidenz 90%)."""
+    config = anlage.connector_config
+    if not config:
+        return {}
+
+    snapshots = config.get("meter_snapshots", {})
+    if not snapshots:
+        return {}
+
+    delta = _calc_month_delta(snapshots, jahr, monat)
+    if not delta:
+        return {}
+
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
+    last_fetch = config.get("last_fetch")
+    quelle = DatenquelleInfo(quelle="local_connector", konfidenz=90, zeitpunkt=last_fetch)
+
+    feld_map = {
+        "pv_erzeugung_kwh": "pv_erzeugung_kwh",
+        "einspeisung_kwh": "einspeisung_kwh",
+        "netzbezug_kwh": "netzbezug_kwh",
+        "batterie_ladung_kwh": "speicher_ladung_kwh",
+        "batterie_entladung_kwh": "speicher_entladung_kwh",
+    }
+    for delta_key, feld_name in feld_map.items():
+        val = delta.get(delta_key)
+        if val is not None:
+            resolved[feld_name] = (val, quelle)
+
+    return resolved
+
+
+async def _collect_saved_data(
+    anlage_id: int, jahr: int, monat: int,
+    investitionen: list[Investition],
+    db: AsyncSession,
+) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """Sammelt bereits gespeicherte Monatsdaten (Konfidenz 85%)."""
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
+    quelle = DatenquelleInfo(quelle="gespeichert", konfidenz=85)
+
+    # Monatsdaten (Basis)
+    md_result = await db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr == jahr,
+            Monatsdaten.monat == monat,
+        )
+    )
+    md = md_result.scalar_one_or_none()
+
+    if md:
+        quelle = DatenquelleInfo(
+            quelle="gespeichert", konfidenz=85,
+            zeitpunkt=md.updated_at.isoformat() if hasattr(md, 'updated_at') and md.updated_at else None,
+        )
+        for attr, feld in [
+            ("einspeisung_kwh", "einspeisung_kwh"),
+            ("netzbezug_kwh", "netzbezug_kwh"),
+        ]:
+            val = getattr(md, attr, None)
+            if val is not None:
+                resolved[feld] = (val, quelle)
+
+    # InvestitionMonatsdaten
+    inv_ids = [i.id for i in investitionen]
+    if inv_ids:
+        imd_result = await db.execute(
+            select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_(inv_ids),
+                InvestitionMonatsdaten.jahr == jahr,
+                InvestitionMonatsdaten.monat == monat,
+            )
+        )
+        inv_by_id = {i.id: i for i in investitionen}
+        pv_erzeugung_total = 0.0
+        speicher_ladung_total = 0.0
+        speicher_entladung_total = 0.0
+        wp_strom_total = 0.0
+        wp_waerme_total = 0.0
+        emob_ladung_total = 0.0
+        bkw_erzeugung_total = 0.0
+
+        for imd in imd_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if not inv:
+                continue
+            data = imd.verbrauch_daten or {}
+
+            if inv.typ == "pv-module":
+                pv_erzeugung_total += data.get("pv_erzeugung_kwh", 0) or 0
+            elif inv.typ == "speicher":
+                speicher_ladung_total += data.get("ladung_kwh", 0) or 0
+                speicher_entladung_total += data.get("entladung_kwh", 0) or 0
+            elif inv.typ == "waermepumpe":
+                wp_strom_total += (
+                    data.get("stromverbrauch_kwh", 0) or
+                    data.get("strom_kwh", 0) or
+                    data.get("verbrauch_kwh", 0) or 0
+                )
+                wp_waerme_total += (
+                    data.get("waerme_kwh", 0) or
+                    (data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0)) +
+                    (data.get("warmwasser_kwh", 0) or 0)
+                )
+            elif inv.typ in ("e-auto", "wallbox"):
+                if not (inv.parameter or {}).get("ist_dienstlich", False):
+                    emob_ladung_total += (
+                        data.get("ladung_kwh", 0) or
+                        data.get("verbrauch_kwh", 0) or 0
+                    )
+            elif inv.typ == "balkonkraftwerk":
+                bkw_erzeugung_total += (
+                    data.get("pv_erzeugung_kwh", 0) or
+                    data.get("erzeugung_kwh", 0) or 0
+                )
+
+        if pv_erzeugung_total > 0:
+            resolved["pv_erzeugung_kwh"] = (pv_erzeugung_total, quelle)
+        if speicher_ladung_total > 0:
+            resolved["speicher_ladung_kwh"] = (speicher_ladung_total, quelle)
+        if speicher_entladung_total > 0:
+            resolved["speicher_entladung_kwh"] = (speicher_entladung_total, quelle)
+        if wp_strom_total > 0:
+            resolved["wp_strom_kwh"] = (wp_strom_total, quelle)
+        if wp_waerme_total > 0:
+            resolved["wp_waerme_kwh"] = (wp_waerme_total, quelle)
+        if emob_ladung_total > 0:
+            resolved["emob_ladung_kwh"] = (emob_ladung_total, quelle)
+        if bkw_erzeugung_total > 0:
+            resolved["bkw_erzeugung_kwh"] = (bkw_erzeugung_total, quelle)
+
+    return resolved
+
+
+# =============================================================================
+# Vergleichsdaten
+# =============================================================================
+
+async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: int, monat: int, db: AsyncSession) -> Optional[dict]:
+    """Lädt Vorjahres-Monatsdaten für Vergleich."""
+    vj = jahr - 1
+
+    md_result = await db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr == vj,
+            Monatsdaten.monat == monat,
+        )
+    )
+    md = md_result.scalar_one_or_none()
+    if not md:
+        return None
+
+    result: dict = {
+        "einspeisung_kwh": md.einspeisung_kwh,
+        "netzbezug_kwh": md.netzbezug_kwh,
+    }
+
+    # PV-Erzeugung aus InvestitionMonatsdaten
+    inv_ids = [i.id for i in investitionen if i.typ == "pv-module"]
+    if inv_ids:
+        imd_result = await db.execute(
+            select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_(inv_ids),
+                InvestitionMonatsdaten.jahr == vj,
+                InvestitionMonatsdaten.monat == monat,
+            )
+        )
+        pv_vj = sum(
+            (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0
+            for imd in imd_result.scalars().all()
+        )
+        if pv_vj > 0:
+            result["pv_erzeugung_kwh"] = round(pv_vj, 1)
+
+    # Berechnete Werte
+    pv = result.get("pv_erzeugung_kwh", 0) or 0
+    einsp = result.get("einspeisung_kwh", 0) or 0
+    netz = result.get("netzbezug_kwh", 0) or 0
+    ev = max(0, pv - einsp) if pv > 0 else 0
+    gv = ev + netz
+    result["eigenverbrauch_kwh"] = round(ev, 1)
+    result["autarkie_prozent"] = round(ev / gv * 100, 1) if gv > 0 else None
+
+    return result
+
+
+async def _load_soll_pv(anlage_id: int, monat: int, db: AsyncSession) -> Optional[float]:
+    """Lädt PVGIS SOLL-Wert für den Monat."""
+    result = await db.execute(
+        select(PVGISMonatsprognose)
+        .join(PVGISPrognose)
+        .where(
+            PVGISPrognose.anlage_id == anlage_id,
+            PVGISPrognose.ist_aktiv == True,
+            PVGISMonatsprognose.monat == monat,
+        )
+    )
+    prognosen = result.scalars().all()
+    if not prognosen:
+        return None
+    return round(sum(p.ertrag_kwh for p in prognosen), 1)
+
+
+# =============================================================================
+# Endpoint
+# =============================================================================
+
+@router.get("/{anlage_id}", response_model=AktuellerMonatResponse)
+async def get_aktueller_monat(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Übersicht des aktuellen Monats mit Daten aus allen verfügbaren Quellen.
+
+    Datenquellen-Priorität:
+    1. HA-Sensoren (95%) — MQTT-Monatswerte
+    2. Connector (90%) — Geräte-Snapshot-Delta
+    3. Gespeicherte Monatsdaten (85%) — DB
+    """
+    # Anlage mit Investitionen laden
+    result = await db.execute(
+        select(Anlage)
+        .options(selectinload(Anlage.investitionen))
+        .where(Anlage.id == anlage_id)
+    )
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    now = datetime.utcnow()
+    jahr = now.year
+    monat = now.month
+    investitionen = [i for i in anlage.investitionen if i.aktiv]
+
+    # ── Daten sammeln (niedrigste Konfidenz zuerst, höchste überschreibt) ──
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
+
+    saved = await _collect_saved_data(anlage_id, jahr, monat, investitionen, db)
+    resolved.update(saved)
+
+    connector = await _collect_connector_data(anlage, jahr, monat)
+    resolved.update(connector)
+
+    ha = await _collect_ha_data(anlage, jahr, monat)
+    resolved.update(ha)
+
+    # ── Werte extrahieren ──
+    def get_val(feld: str) -> Optional[float]:
+        entry = resolved.get(feld)
+        return round(entry[0], 2) if entry else None
+
+    pv = get_val("pv_erzeugung_kwh")
+    einspeisung = get_val("einspeisung_kwh")
+    netzbezug = get_val("netzbezug_kwh")
+    speicher_ladung = get_val("speicher_ladung_kwh")
+    speicher_entladung = get_val("speicher_entladung_kwh")
+
+    # ── Berechnete Werte ──
+    eigenverbrauch = None
+    gesamtverbrauch = None
+    autarkie = None
+    ev_quote = None
+
+    if pv is not None and einspeisung is not None:
+        ladung = speicher_ladung or 0
+        entladung = speicher_entladung or 0
+        direktverbrauch = max(0, pv - einspeisung - ladung)
+        eigenverbrauch = round(direktverbrauch + entladung, 2)
+
+        if netzbezug is not None:
+            gesamtverbrauch = round(eigenverbrauch + netzbezug, 2)
+            if gesamtverbrauch > 0:
+                autarkie = round(eigenverbrauch / gesamtverbrauch * 100, 1)
+
+        if pv > 0:
+            ev_quote = round(eigenverbrauch / pv * 100, 1)
+
+    # ── Finanzen ──
+    einspeise_erloes = None
+    netzbezug_kosten = None
+    ev_ersparnis = None
+    netto_ertrag = None
+
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    allgemein_tarif = tarife.get("allgemein")
+    if allgemein_tarif:
+        netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh or 30.0
+        einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh or 8.2
+
+        if einspeisung is not None:
+            einspeise_erloes = round(einspeisung * einspeise_cent / 100, 2)
+        if netzbezug is not None:
+            grundpreis = allgemein_tarif.grundpreis_euro_monat or 0
+            netzbezug_kosten = round(netzbezug * netzbezug_preis_cent / 100 + grundpreis, 2)
+        if eigenverbrauch is not None:
+            ev_ersparnis = round(eigenverbrauch * netzbezug_preis_cent / 100, 2)
+
+        if einspeise_erloes is not None and ev_ersparnis is not None:
+            netto_ertrag = round(einspeise_erloes + ev_ersparnis, 2)
+
+    # ── Komponenten-Flags ──
+    hat_speicher = any(i.typ == "speicher" for i in investitionen)
+    hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
+    hat_emobilitaet = any(
+        i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)
+        for i in investitionen
+    )
+    hat_balkonkraftwerk = any(i.typ == "balkonkraftwerk" for i in investitionen)
+
+    # ── Vergleichsdaten ──
+    vorjahr = await _load_vorjahr(anlage_id, investitionen, jahr, monat, db)
+    soll_pv = await _load_soll_pv(anlage_id, monat, db)
+
+    # ── Quellen-Übersicht ──
+    quellen = {
+        "ha_sensor": bool(ha),
+        "connector": bool(connector),
+        "gespeichert": bool(saved),
+    }
+
+    # ── Feld-Quellen extrahieren ──
+    feld_quellen = {
+        feld: info
+        for feld, (_, info) in resolved.items()
+        if not feld.startswith("inv_")  # Investitions-Detail-Felder ausblenden
+    }
+
+    return AktuellerMonatResponse(
+        anlage_id=anlage.id,
+        anlage_name=anlage.anlagenname,
+        jahr=jahr,
+        monat=monat,
+        monat_name=MONAT_NAMEN[monat],
+        aktualisiert_um=now.isoformat(),
+        quellen=quellen,
+        # Energie
+        pv_erzeugung_kwh=pv,
+        einspeisung_kwh=einspeisung,
+        netzbezug_kwh=netzbezug,
+        eigenverbrauch_kwh=eigenverbrauch,
+        gesamtverbrauch_kwh=gesamtverbrauch,
+        autarkie_prozent=autarkie,
+        eigenverbrauch_quote_prozent=ev_quote,
+        # Komponenten
+        speicher_ladung_kwh=speicher_ladung,
+        speicher_entladung_kwh=speicher_entladung,
+        hat_speicher=hat_speicher,
+        wp_strom_kwh=get_val("wp_strom_kwh"),
+        wp_waerme_kwh=get_val("wp_waerme_kwh"),
+        hat_waermepumpe=hat_waermepumpe,
+        emob_ladung_kwh=get_val("emob_ladung_kwh"),
+        hat_emobilitaet=hat_emobilitaet,
+        bkw_erzeugung_kwh=get_val("bkw_erzeugung_kwh"),
+        hat_balkonkraftwerk=hat_balkonkraftwerk,
+        # Finanzen
+        einspeise_erloes_euro=einspeise_erloes,
+        netzbezug_kosten_euro=netzbezug_kosten,
+        ev_ersparnis_euro=ev_ersparnis,
+        netto_ertrag_euro=netto_ertrag,
+        # Vergleiche
+        vorjahr=vorjahr,
+        soll_pv_kwh=soll_pv,
+        # Quellen
+        feld_quellen=feld_quellen,
+    )

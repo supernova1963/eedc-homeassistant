@@ -29,6 +29,7 @@ import {
   HardDrive,
   ClipboardCheck,
   ScrollText,
+  CalendarClock,
 } from 'lucide-react'
 
 interface TabItem {
@@ -48,6 +49,7 @@ interface TabGroup {
 // ─── Cockpit Tabs (statisch) ─────────────────────────────────────────────────
 const cockpitTabs: TabItem[] = [
   { name: 'Übersicht',       href: '/cockpit',                  icon: LayoutDashboard, exact: true },
+  { name: 'Aktueller Monat', href: '/cockpit/aktueller-monat',  icon: CalendarClock },
   { name: 'PV-Anlage',       href: '/cockpit/pv-anlage',        icon: Sun },
   { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car },
   { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame },

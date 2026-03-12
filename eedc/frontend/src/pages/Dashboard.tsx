@@ -20,7 +20,7 @@ import {
   ChevronRight, Calendar, Trophy, Minus, Receipt, Share2, Copy, Check
 } from 'lucide-react'
 import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell } from 'recharts'
-import { Card, Button, Modal, LoadingSpinner, FormelTooltip, fmtCalc } from '../components/ui'
+import { Card, Button, Modal, LoadingSpinner, Select, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { cockpitApi } from '../api'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -37,22 +37,28 @@ export default function Dashboard() {
   const [monatsdaten, setMonatsdaten] = useState<AggregierteMonatsdaten[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [showShareModal, setShowShareModal] = useState(false)
 
-  const erstesAnlageId = anlagen[0]?.id
+  // Auto-select first anlage
+  useEffect(() => {
+    if (anlagen.length > 0 && !selectedAnlageId) {
+      setSelectedAnlageId(anlagen[0].id)
+    }
+  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
-    if (!erstesAnlageId) return
+    if (!selectedAnlageId) return
 
     const loadData = async () => {
       setLoading(true)
       setError(null)
       try {
         const [result, monate] = await Promise.all([
-          cockpitApi.getUebersicht(erstesAnlageId, selectedYear),
-          monatsdatenApi.listAggregiert(erstesAnlageId),
+          cockpitApi.getUebersicht(selectedAnlageId, selectedYear),
+          monatsdatenApi.listAggregiert(selectedAnlageId),
         ])
         setData(result)
         setMonatsdaten(monate)
@@ -68,7 +74,7 @@ export default function Dashboard() {
         // Vorjahr laden wenn ein Jahr gewählt ist
         if (selectedYear) {
           try {
-            const prev = await cockpitApi.getUebersicht(erstesAnlageId, selectedYear - 1)
+            const prev = await cockpitApi.getUebersicht(selectedAnlageId, selectedYear - 1)
             setPrevYearData(prev.anzahl_monate > 0 ? prev : null)
           } catch {
             setPrevYearData(null)
@@ -85,7 +91,7 @@ export default function Dashboard() {
     }
 
     loadData()
-  }, [erstesAnlageId, selectedYear])
+  }, [selectedAnlageId, selectedYear])
 
   if (anlagenLoading || loading) return <LoadingSpinner text="Lade Dashboard..." />
 
@@ -112,7 +118,7 @@ export default function Dashboard() {
     )
   }
 
-  const anlage = anlagen[0]
+  const anlage = anlagen.find(a => a.id === selectedAnlageId) || anlagen[0]
 
   return (
     <div className="space-y-6">
@@ -128,6 +134,13 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {anlagen.length > 1 && (
+            <Select
+              value={selectedAnlageId?.toString() || ''}
+              onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+              options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+            />
+          )}
           <button
             onClick={() => setShowShareModal(true)}
             className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -568,9 +581,9 @@ export default function Dashboard() {
       </div>
 
       {/* Share-Text Modal */}
-      {showShareModal && erstesAnlageId && (
+      {showShareModal && selectedAnlageId && (
         <ShareTextModal
-          anlageId={erstesAnlageId}
+          anlageId={selectedAnlageId}
           availableYears={availableYears}
           monatsdaten={monatsdaten}
           onClose={() => setShowShareModal(false)}
