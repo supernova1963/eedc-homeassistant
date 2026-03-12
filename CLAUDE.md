@@ -42,15 +42,11 @@
 
 ### Subtree-Sync (eedc → eedc-homeassistant)
 
-```bash
-cd /home/gernot/claude/eedc-homeassistant
-git subtree pull --prefix=eedc https://github.com/supernova1963/eedc.git main --squash
-# WICHTIG: Dockerfile-Konflikt manuell lösen (HA-Version behalten!)
-```
-
-- Shared Code (backend/, frontend/) → Änderungen im `eedc` Repo machen, dann `subtree pull`
+- Shared Code (backend/, frontend/) → Änderungen im `eedc` Repo machen, dann Subtree Pull
 - HA-spezifische Dateien (Dockerfile, config.yaml, run.sh) → Direkt in eedc-homeassistant ändern
+- CHANGELOG → Nur Root-CHANGELOG editieren, wird per Script nach `eedc/` kopiert
 - **KEIN `git subtree push`** verwenden (würde HA-Dateien ins Standalone-Repo pushen)
+- **KEIN `git pull --rebase`** in eedc-homeassistant (Subtree-Commits vertragen kein Rebase)
 
 ### Verzeichnisstruktur
 
@@ -86,27 +82,31 @@ cd eedc/frontend && npm run dev
 # URLs: Frontend http://localhost:3000 | API Docs http://localhost:8099/api/docs
 ```
 
-### Versionierung (bei Releases aktualisieren!)
-```
-eedc/backend/core/config.py        → APP_VERSION
-eedc/frontend/src/config/version.ts → APP_VERSION
-eedc/config.yaml                   → version
-eedc/run.sh                        → Echo-Statement
-```
+### Release-Workflow (automatisiert per Scripts!)
 
-### Release-Checkliste
+Detaillierte Anleitung: [docs/RELEASE-WORKFLOW.md](docs/RELEASE-WORKFLOW.md)
+
 ```bash
-# 1. Version in allen Dateien aktualisieren (siehe oben)
-# 2. CHANGELOG.md aktualisieren + kopieren:
-cp CHANGELOG.md eedc/CHANGELOG.md
-# 3. Frontend Build
-cd eedc/frontend && npm run build
-# 4. Git Tag + Push
-git tag -a vX.Y.Z -m "Version X.Y.Z" && git push && git push origin vX.Y.Z
-# 5. GitHub Release erstellen
+# Schritt 1: In eedc (Source of Truth)
+cd /home/gernot/claude/eedc
+./scripts/release.sh 2.8.6          # Bumpt config.py + version.ts, committed + taggt
+git push && git push origin v2.8.6  # MANUELL im Terminal!
+
+# Schritt 2: In eedc-homeassistant
+cd /home/gernot/claude/eedc-homeassistant
+./scripts/sync-and-release.sh 2.8.6 # Subtree Pull + HA-Bump + CHANGELOG-Sync + Tag
+git push && git push origin v2.8.6  # MANUELL im Terminal!
 ```
 
-> **WICHTIG:** HA Add-ons lesen `eedc/CHANGELOG.md`, nicht Root! Immer beide synchron halten.
+**Versionsdateien (4 Stück, werden von den Scripts automatisch gebumpt):**
+| Datei | Gebumpt durch |
+|---|---|
+| `eedc/backend/core/config.py` | `release.sh` |
+| `eedc/frontend/src/config/version.ts` | `release.sh` |
+| `eedc/config.yaml` | `sync-and-release.sh` |
+| `eedc/run.sh` | `sync-and-release.sh` |
+
+> **WICHTIG:** HA Add-ons lesen `eedc/CHANGELOG.md`, nicht Root! `sync-and-release.sh` kopiert automatisch.
 
 ### Website (Astro Starlight)
 ```bash
