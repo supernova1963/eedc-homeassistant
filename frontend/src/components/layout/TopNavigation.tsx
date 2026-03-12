@@ -189,7 +189,7 @@ export default function TopNavigation() {
             <button
               onClick={cycleTheme}
               className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
-              title={`Theme: ${theme}`}
+              aria-label={`Theme: ${theme}`}
             >
               {theme === 'light' && <SunIcon className="h-5 w-5" />}
               {theme === 'dark' && <Moon className="h-5 w-5" />}
@@ -204,7 +204,7 @@ export default function TopNavigation() {
                   ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
                   : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
               }`}
-              title="Monatsabschluss"
+              aria-label="Monatsabschluss"
             >
               <CalendarCheck className="h-5 w-5" />
               {hasOpenMonth && (

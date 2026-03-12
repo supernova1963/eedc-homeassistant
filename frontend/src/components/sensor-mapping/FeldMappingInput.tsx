@@ -90,6 +90,7 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
           </span>
           <button
             onClick={handleClear}
+            aria-label="Auswahl löschen"
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
           >
             <X className="w-4 h-4 text-gray-500" />
@@ -107,6 +108,7 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
             }}
             onFocus={() => setIsOpen(true)}
             placeholder={placeholder || 'Sensor suchen...'}
+            aria-label="Sensor suchen"
             className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
         </div>
@@ -265,6 +267,7 @@ export default function FeldMappingInput({
                     max="10"
                     value={value?.parameter?.cop || copDefault || 3.5}
                     onChange={e => handleCopChange(parseFloat(e.target.value) || 3.5)}
+                    aria-label="COP-Wert"
                     className="w-20 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 </div>

@@ -509,7 +509,8 @@ export default function MonatsabschlussWizard() {
         setError('Speichern fehlgeschlagen')
       }
     } catch (e) {
-      setError('Fehler beim Speichern')
+      const detail = e instanceof Error ? e.message : String(e)
+      setError(`Fehler beim Speichern: ${detail}`)
       console.error(e)
     } finally {
       setSaving(false)

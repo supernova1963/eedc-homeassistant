@@ -131,7 +131,7 @@ export default function Dashboard() {
           <button
             onClick={() => setShowShareModal(true)}
             className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            title="Monatstext für Social Media"
+            aria-label="Monatstext für Social Media"
           >
             <Share2 className="h-4 w-4" />
           </button>
@@ -139,6 +139,7 @@ export default function Dashboard() {
           <select
             value={selectedYear || ''}
             onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : undefined)}
+            aria-label="Jahr filtern"
             className="input py-1.5 text-sm"
           >
             <option value="">Alle Jahre</option>
@@ -1152,8 +1153,9 @@ function ShareTextModal({ anlageId, availableYears, monatsdaten, onClose }: {
         {/* Auswahl */}
         <div className="flex flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-500 dark:text-gray-400">Monat:</label>
+            <label htmlFor="share-monat" className="text-sm text-gray-500 dark:text-gray-400">Monat:</label>
             <select
+              id="share-monat"
               value={monat}
               onChange={e => setMonat(parseInt(e.target.value))}
               className="input py-1.5 text-sm"
@@ -1164,8 +1166,9 @@ function ShareTextModal({ anlageId, availableYears, monatsdaten, onClose }: {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-500 dark:text-gray-400">Jahr:</label>
+            <label htmlFor="share-jahr" className="text-sm text-gray-500 dark:text-gray-400">Jahr:</label>
             <select
+              id="share-jahr"
               value={jahr}
               onChange={e => setJahr(parseInt(e.target.value))}
               className="input py-1.5 text-sm"

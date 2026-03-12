@@ -430,7 +430,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">Zuordnung</h3>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="parent_investition_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Gehört zu ({PARENT_TYPE_LABELS[parentTyp] || parentTyp})
               {isParentRequired ? ' *' : ' (optional)'}
               {loadingParents && <span className="text-xs text-gray-400 ml-2">(Laden...)</span>}
@@ -438,6 +438,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
             {possibleParents.length > 0 ? (
               <>
                 <select
+                  id="parent_investition_id"
                   name="parent_investition_id"
                   value={formData.parent_investition_id}
                   onChange={(e) => setFormData(prev => ({ ...prev, parent_investition_id: e.target.value }))}
@@ -499,10 +500,11 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
               hint="Gesamtleistung dieses PV-Moduls/Strings"
             />
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="ausrichtung" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Ausrichtung
               </label>
               <select
+                id="ausrichtung"
                 name="ausrichtung"
                 value={formData.ausrichtung}
                 onChange={(e) => {
@@ -885,10 +887,11 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                   required
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="param_vorlauftemperatur" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Vorlauftemperatur (EU-Label)
                   </label>
                   <select
+                    id="param_vorlauftemperatur"
                     name="param_vorlauftemperatur"
                     value={paramData.vorlauftemperatur as string}
                     onChange={(e) => onChange({ target: { name: 'param_vorlauftemperatur', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}

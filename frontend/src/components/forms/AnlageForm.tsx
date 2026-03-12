@@ -164,8 +164,9 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Standort</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Land</label>
+            <label htmlFor="standort_land" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Land</label>
             <select
+              id="standort_land"
               name="standort_land"
               value={formData.standort_land}
               onChange={handleChange}

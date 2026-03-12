@@ -213,6 +213,7 @@ export default function DatenChecker() {
             <select
               value={selectedAnlageId || ''}
               onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
+              aria-label="Anlage auswählen"
               className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
             >
               {anlagen.map((a) => (
@@ -224,7 +225,7 @@ export default function DatenChecker() {
             onClick={() => selectedAnlageId && setSelectedAnlageId((prev) => { setResult(null); return prev })}
             disabled={loading}
             className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-            title="Aktualisieren"
+            aria-label="Aktualisieren"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>

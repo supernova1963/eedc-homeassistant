@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.8.5] - 2026-03-11
+
+### Behoben
+
+- **MQTT: object_id Deprecation** – `object_id` im MQTT Discovery Payload durch `default_entity_id` ersetzt (HA 2026.4 Kompatibilität)
+
+---
+
+## [2.8.4] - 2026-03-10
+
+### Behoben
+
+- **CSV-Export: Fehlende BKW-Erzeugung** – Balkonkraftwerk-Erzeugung wurde unter falschem Feldnamen gespeichert, daher im Export leer (Issue #22)
+- **CSV-Export: Dezimaltrennzeichen** – Punkt statt Komma für deutsche Locale, jetzt korrekt mit Semikolon-Trennung und Dezimalkomma
+- **CSV-Export: UTF-8 BOM** – Für korrekte Zeichenkodierung in Excel/LibreOffice
+- **Monatsdaten-Formular: 0-Werte** – Wert `0` wurde als leer interpretiert und nicht gespeichert (betraf alle Investitionstypen)
+- **Aussichten-Finanzen: EV-Quote** – Eigenverbrauchsquote wird jetzt direkt aus historischen Daten berechnet statt synthetisch zerlegt (Issue #21)
+
+---
+
 ## [2.8.3] - 2026-03-09
 
 ### Hinzugefügt
@@ -48,7 +68,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Auto-Detect für Spaltenbezeichnungen (deutsch + englisch)
   - Einheit wählbar (Wh/kWh/MWh) mit automatischer Umrechnung
   - Dezimalzeichen konfigurierbar (Auto/Punkt/Komma)
+<<<<<<< Updated upstream
+  - Kombinierte Datumsspalte oder separate Jahr/Monat-Spalten
+=======
   - Kombinierte Datumsspalte (z.B. "2024-01") oder separate Jahr/Monat-Spalten
+>>>>>>> Stashed changes
   - Mapping als wiederverwendbares Template speichern/laden
   - 4-Schritt-Wizard: Upload → Mapping → Vorschau → Import
   - Neue Kachel "Eigene Datei importieren" auf der Einrichtung-Seite
@@ -56,8 +80,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Entfernt
 
 - **Kostal Plenticore** und **SMA Local** Cloud-Import-Provider entfernt
+<<<<<<< Updated upstream
+  (nur aktuelle Zählerstände, keine historischen Monatsdaten)
+=======
   (liefern nur aktuelle Zählerstände, keine historischen Monatsdaten –
   für diese Geräte die Geräte-Connectors verwenden)
+>>>>>>> Stashed changes
 
 (*) Ungetestet – basiert auf Hersteller-API-Dokumentation
 
