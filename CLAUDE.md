@@ -35,8 +35,8 @@
 
 ### Verboten ohne explizite Aufforderung durch den User!
 
-- **`git push`** (in ALLEN Repos) – niemals eigenständig pushen
-- **`git subtree pull/push`** – Sync nur auf Anweisung
+- **`git push`** – nur erlaubt über die Release-Scripts (`scripts/release.sh`, `scripts/sync-and-release.sh`). Kein manuelles `git push` ohne User-Aufforderung.
+- **`git subtree pull/push`** – Sync nur über `scripts/sync-and-release.sh` oder auf Anweisung
 - **Releases, Tags, Versionsnummern ändern**
 - **Änderungen in anderen Repos** – nur dieses Repo bearbeiten, es sei denn der User fordert es explizit
 
