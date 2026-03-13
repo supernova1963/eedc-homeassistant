@@ -409,25 +409,31 @@ async def get_aktueller_monat(
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
     resolved.update(ha_stats)
 
-    # ── Investitions-Felder in Top-Level aggregieren ──
-    # PV-Erzeugung: Summe aller inv_*_pv_erzeugung_kwh
-    # Speicher: Summe aller inv_*_ladung_kwh / inv_*_entladung_kwh
-    aggregation_map = {
-        "pv_erzeugung_kwh": "pv_erzeugung_kwh",
-        "ladung_kwh": "speicher_ladung_kwh",
-        "entladung_kwh": "speicher_entladung_kwh",
+    # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
+    # Gleiche Logik wie _collect_saved_data: Typ bestimmt Ziel-Feld
+    typ_aggregation: dict[str, dict[str, str]] = {
+        "pv-module": {"pv_erzeugung_kwh": "pv_erzeugung_kwh"},
+        "speicher": {"ladung_kwh": "speicher_ladung_kwh", "entladung_kwh": "speicher_entladung_kwh"},
+        "waermepumpe": {"stromverbrauch_kwh": "wp_strom_kwh"},
+        "e-auto": {"ladung_kwh": "emob_ladung_kwh", "verbrauch_kwh": "emob_ladung_kwh"},
+        "wallbox": {"ladung_kwh": "emob_ladung_kwh"},
+        "balkonkraftwerk": {"pv_erzeugung_kwh": "bkw_erzeugung_kwh"},
     }
+
+    def _aggregate(top_level_feld: str, inv_key: str) -> None:
+        if inv_key not in resolved:
+            return
+        val = resolved[inv_key][0]
+        quelle_info = resolved[inv_key][1]
+        if top_level_feld not in resolved:
+            resolved[top_level_feld] = (val, quelle_info)
+        else:
+            resolved[top_level_feld] = (resolved[top_level_feld][0] + val, quelle_info)
+
     for inv in investitionen:
-        for inv_suffix, top_level_feld in aggregation_map.items():
-            inv_key = f"inv_{inv.id}_{inv_suffix}"
-            if inv_key in resolved and top_level_feld not in resolved:
-                # Erstes Vorkommen: direkt setzen
-                resolved[top_level_feld] = resolved[inv_key]
-            elif inv_key in resolved and top_level_feld in resolved:
-                # Weitere: aufsummieren (gleiche Quelle)
-                existing_val, existing_quelle = resolved[top_level_feld]
-                add_val = resolved[inv_key][0]
-                resolved[top_level_feld] = (existing_val + add_val, existing_quelle)
+        agg_map = typ_aggregation.get(inv.typ, {})
+        for inv_suffix, top_level_feld in agg_map.items():
+            _aggregate(top_level_feld, f"inv_{inv.id}_{inv_suffix}")
 
     # ── Werte extrahieren ──
     def get_val(feld: str) -> Optional[float]:
