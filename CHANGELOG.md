@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.9.1] - 2026-03-13
+
+### Geändert
+
+- **HA Statistics statt MQTT MWD** – Monatsdaten für „Aktueller Monat" und Monatsabschluss werden jetzt direkt aus der HA Recorder-Statistik-DB gelesen (MAX−MIN). Die fehleranfälligen MWD-MQTT-Sensorpaare (`number.*_mwd_*_start` / `sensor.*_mwd_*_monat`) wurden komplett entfernt.
+- **MQTT nur noch für Export** – MQTT wird nur noch zum Exportieren von EEDC-KPIs nach HA verwendet, nicht mehr zum Lesen von Monatsdaten.
+- **Sensor-Zuordnung vereinfacht** – Init-Startwerte-Dialog nach dem Speichern entfällt, `mqtt_setup_complete`-Flag entfernt.
+- **Scheduler** – Monatswechsel-Job ist jetzt nur noch ein Zeitstempel-Marker, kein MQTT-Rollover mehr.
+
+### Hinzugefügt
+
+- **Einrichtung: HA Sensor-Zuordnung** – Neue Karte auf der Einrichtungs-Seite verlinkt direkt zur Sensor-Zuordnung.
+- **Typabhängige Aggregation** – Investitions-Felder (PV, Speicher, E-Auto, Wallbox, WP, BKW) werden automatisch in die Top-Level-Felder des Aktueller-Monat-Dashboards aggregiert.
+- **HA-Statistik Quellen-Badge** – Aktueller Monat und Monatsabschluss zeigen „HA-Statistik" als Datenquelle an.
+
+### Behoben
+
+- **Strompreis-Sensor** – `get_ha_state_service()` wurde im Monatsabschluss nicht instanziiert (AttributeError bei dynamischem Tarif).
+- **Speicher vs. Wallbox** – Wallbox-Ladung wurde fälschlich in `speicher_ladung_kwh` summiert statt in `emob_ladung_kwh`.
+
+---
+
 ## [2.9.0] - 2026-03-12
 
 ### Hinzugefügt
