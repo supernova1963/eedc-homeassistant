@@ -566,7 +566,7 @@ export default function MonatsabschlussWizard() {
                   : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
               }`}>
                 <Database className="w-3 h-3" />
-                HA-Sensor
+                HA-Statistik
                 {data.ha_mapping_konfiguriert && <CheckCircle className="w-3 h-3" />}
               </span>
             )}
@@ -1229,6 +1229,7 @@ function getTypLabel(typ: string): string {
 
 function getQuelleLabel(quelle: string): string {
   const labels: Record<string, string> = {
+    ha_statistics: 'HA-Statistik',
     ha_sensor: 'HA-Sensor',
     cron_snapshot: 'Snapshot',
     local_connector: 'Connector',

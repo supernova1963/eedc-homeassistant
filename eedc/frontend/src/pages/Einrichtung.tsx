@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cpu, FileSpreadsheet, Cloud, Upload, Table2, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
+import { Database, Cpu, FileSpreadsheet, Cloud, Upload, Table2, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { useAnlagen } from '../hooks'
 import { connectorApi, type ConnectorStatus } from '../api/connector'
 
@@ -21,6 +21,14 @@ interface DatenquelleCard {
 }
 
 const datenquellen: DatenquelleCard[] = [
+  {
+    title: 'HA Sensor-Zuordnung',
+    description: 'Home Assistant Sensoren den EEDC-Feldern zuordnen. Monatswerte werden automatisch aus der HA-Statistik-Datenbank gelesen.',
+    icon: Database,
+    href: '/einstellungen/ha-export',
+    color: 'text-green-600 dark:text-green-400',
+    bgColor: 'bg-green-50 dark:bg-green-900/20',
+  },
   {
     title: 'Geräte-Connector',
     description: 'Direkte Verbindung zu lokalen Geräten (SMA, Fronius, Shelly, etc.) per REST-API. Automatische Zählerstandserfassung.',

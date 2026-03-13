@@ -56,6 +56,7 @@ function fmtEuro(val: number | null | undefined): string {
 
 function quelleLabel(quelle: string): string {
   switch (quelle) {
+    case 'ha_statistics': return 'HA-Statistik'
     case 'ha_sensor': return 'HA-Sensor'
     case 'local_connector': return 'Connector'
     case 'gespeichert': return 'Gespeichert'
@@ -65,6 +66,7 @@ function quelleLabel(quelle: string): string {
 
 function quelleColor(quelle: string): string {
   switch (quelle) {
+    case 'ha_statistics': return 'bg-green-500'
     case 'ha_sensor': return 'bg-green-500'
     case 'local_connector': return 'bg-blue-500'
     case 'gespeichert': return 'bg-gray-400'
@@ -268,7 +270,7 @@ export default function AktuellerMonat() {
               Aktueller Monat: {data.monat_name} {data.jahr}
             </h1>
             <div className="flex items-center gap-2 mt-1">
-              <QuelleBadge quelle="ha_sensor" aktiv={data.quellen.ha_sensor} />
+              <QuelleBadge quelle="ha_statistics" aktiv={data.quellen.ha_statistics} />
               <QuelleBadge quelle="local_connector" aktiv={data.quellen.connector} />
               <QuelleBadge quelle="gespeichert" aktiv={data.quellen.gespeichert} />
             </div>
