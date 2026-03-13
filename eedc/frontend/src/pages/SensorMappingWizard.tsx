@@ -26,7 +26,7 @@ import {
   Sun,
   Trash2,
 } from 'lucide-react'
-import { sensorMappingApi, anlagenApi, haStatisticsApi } from '../api'
+import { sensorMappingApi, anlagenApi } from '../api'
 import type {
   FeldMapping,
   SensorMappingRequest,
@@ -97,16 +97,6 @@ export default function SensorMappingWizard() {
   const [state, setState] = useState<WizardState>(initialState)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [showInitDialog, setShowInitDialog] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(false)
-  const [initResult, setInitResult] = useState<{
-    success: boolean
-    message: string
-    updated_fields: number
-  } | null>(null)
-  const [haDbVerfuegbar, setHaDbVerfuegbar] = useState<boolean | null>(null)
-  const [loadingHaStatus, setLoadingHaStatus] = useState(false)
-  const [isInitializingFromDb, setIsInitializingFromDb] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -294,90 +284,14 @@ export default function SensorMappingWizard() {
       }
 
       await sensorMappingApi.saveMapping(effectiveAnlageId, request)
-      // Nach erfolgreichem Speichern: Dialog zum Initialisieren anzeigen
-      setShowInitDialog(true)
+      // Nach erfolgreichem Speichern direkt zur Einstellungsseite navigieren
+      navigate('/einstellungen/ha-export?saved=true')
     } catch (err) {
       setSaveError((err as Error).message || 'Fehler beim Speichern')
     } finally {
       setIsSaving(false)
     }
   }, [state, effectiveAnlageId])
-
-  // Handler zum Initialisieren der Startwerte
-  const handleInitStartValues = useCallback(async () => {
-    if (!effectiveAnlageId) return
-
-    setIsInitializing(true)
-    try {
-      const result = await sensorMappingApi.initStartValues(effectiveAnlageId)
-      setInitResult(result)
-    } catch (err) {
-      setInitResult({
-        success: false,
-        message: (err as Error).message || 'Fehler beim Initialisieren',
-        updated_fields: 0,
-      })
-    } finally {
-      setIsInitializing(false)
-    }
-  }, [effectiveAnlageId])
-
-  // Prüfe HA-DB-Verfügbarkeit wenn Init-Dialog geöffnet wird
-  useEffect(() => {
-    if (showInitDialog && haDbVerfuegbar === null) {
-      setLoadingHaStatus(true)
-      haStatisticsApi.getStatus()
-        .then(status => setHaDbVerfuegbar(status.verfuegbar))
-        .catch(() => setHaDbVerfuegbar(false))
-        .finally(() => setLoadingHaStatus(false))
-    }
-  }, [showInitDialog, haDbVerfuegbar])
-
-  // Handler zum Initialisieren aus HA-Statistik-DB (Monatsanfang)
-  const handleInitFromHaDb = useCallback(async () => {
-    if (!effectiveAnlageId) return
-
-    setIsInitializingFromDb(true)
-    try {
-      // Aktueller Monat
-      const now = new Date()
-      const jahr = now.getFullYear()
-      const monat = now.getMonth() + 1
-
-      const result = await haStatisticsApi.getMonatsanfangWerte(effectiveAnlageId, jahr, monat)
-      const startwerte = result.startwerte || {}
-      const feldCount = Object.keys(startwerte).length
-
-      if (feldCount > 0) {
-        // Werte wurden geladen, jetzt an MQTT senden
-        // Das macht der Backend-Endpoint automatisch
-        setInitResult({
-          success: true,
-          message: `Startwerte für ${monat}/${jahr} aus HA-Statistik geladen`,
-          updated_fields: feldCount,
-        })
-      } else {
-        setInitResult({
-          success: false,
-          message: 'Keine Daten in HA-Statistik für diesen Monat gefunden. Möglicherweise sind noch keine Langzeit-Statistiken für die konfigurierten Sensoren vorhanden.',
-          updated_fields: 0,
-        })
-      }
-    } catch (err) {
-      setInitResult({
-        success: false,
-        message: (err as Error).message || 'Fehler beim Laden aus HA-Statistik',
-        updated_fields: 0,
-      })
-    } finally {
-      setIsInitializingFromDb(false)
-    }
-  }, [effectiveAnlageId])
-
-  // Handler zum Abschließen (nach Init-Dialog)
-  const handleFinish = useCallback(() => {
-    navigate('/einstellungen/ha-export?saved=true')
-  }, [navigate])
 
   // Handler zum Löschen des Mappings
   const handleDeleteMapping = useCallback(async () => {
@@ -388,7 +302,7 @@ export default function SensorMappingWizard() {
       await sensorMappingApi.deleteMapping(effectiveAnlageId)
       // State zurücksetzen
       setState(initialState)
-      setMappingData(prev => prev ? { ...prev, mapping: null, mqtt_setup_complete: false } : null)
+      setMappingData(prev => prev ? { ...prev, mapping: null } : null)
       setShowDeleteConfirm(false)
       // Seite neu laden um frischen State zu haben
       window.location.reload()
@@ -441,120 +355,6 @@ export default function SensorMappingWizard() {
         <Alert type="error">
           Fehler beim Laden: {loadError}
         </Alert>
-      </div>
-    )
-  }
-
-  // Init-Dialog nach erfolgreichem Speichern
-  if (showInitDialog) {
-    return (
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
-        <Card>
-          <CardHeader
-            title="Sensor-Zuordnung gespeichert"
-            subtitle="MQTT-Sensoren wurden erfolgreich erstellt"
-          />
-
-          <div className="mt-6 space-y-4">
-            {!initResult ? (
-              <>
-                <Alert type="info">
-                  <div className="space-y-2">
-                    <p className="font-medium">Möchten Sie die Monatsstart-Werte jetzt initialisieren?</p>
-                    <p className="text-sm opacity-80">
-                      Die Startwerte werden als Basis für die monatliche Berechnung benötigt.
-                      Der berechnete Monatswert startet dann bei 0 und steigt mit der Zeit.
-                    </p>
-                  </div>
-                </Alert>
-
-                <div className="space-y-3">
-                  {/* Option 1: Aus HA-Statistik (empfohlen wenn verfügbar) */}
-                  {loadingHaStatus ? (
-                    <div className="flex items-center gap-2 text-gray-500">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Prüfe HA-Statistik-Verfügbarkeit...
-                    </div>
-                  ) : haDbVerfuegbar && (
-                    <div className="p-4 border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <p className="text-sm text-green-800 dark:text-green-200 mb-2">
-                        <strong>Empfohlen:</strong> Startwerte aus HA-Langzeitstatistik laden
-                      </p>
-                      <p className="text-xs text-green-600 dark:text-green-400 mb-3">
-                        Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank.
-                      </p>
-                      <Button
-                        onClick={handleInitFromHaDb}
-                        disabled={isInitializingFromDb}
-                      >
-                        {isInitializingFromDb ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Lade aus HA-DB...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 mr-2" />
-                            Aus HA-Statistik laden (empfohlen)
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Option 2: Aktuelle Sensorwerte */}
-                  <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                      Aktuelle Sensor-Werte als Startwerte setzen
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                      Verwendet die aktuellen Zählerstände. Der Monatswert startet dann bei 0.
-                    </p>
-                    <Button
-                      variant="secondary"
-                      onClick={handleInitStartValues}
-                      disabled={isInitializing}
-                    >
-                      {isInitializing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Initialisiere...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="w-4 h-4 mr-2" />
-                          Aktuelle Werte verwenden
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  <Button variant="secondary" onClick={handleFinish} className="mt-2">
-                    Überspringen
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <Alert type={initResult.success ? 'success' : 'error'}>
-                  <div className="space-y-1">
-                    <p className="font-medium">{initResult.message}</p>
-                    {initResult.updated_fields > 0 && (
-                      <p className="text-sm opacity-80">
-                        {initResult.updated_fields} Startwert(e) wurden in Home Assistant gesetzt.
-                      </p>
-                    )}
-                  </div>
-                </Alert>
-
-                <Button onClick={handleFinish}>
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Fertig
-                </Button>
-              </>
-            )}
-          </div>
-        </Card>
       </div>
     )
   }

@@ -26,6 +26,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.vorschlag_service import VorschlagService, Vorschlag, VorschlagQuelle, PlausibilitaetsWarnung
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
 from backend.services.ha_state_service import get_ha_state_service
+from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.services.activity_service import log_activity
 
@@ -330,8 +331,29 @@ async def get_monatsabschluss(
     )
     monatsdaten = md_result.scalar_one_or_none()
 
-    # HA State Service für MQTT-Sensor-Vorschläge
-    ha_state_service = get_ha_state_service()
+    # HA Statistics Service für Sensor-Vorschläge
+    ha_stats_werte: dict[str, float] = {}  # sensor_id → differenz
+    if HA_INTEGRATION_AVAILABLE:
+        import asyncio
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        ha_stats_svc = get_ha_statistics_service()
+        if ha_stats_svc.is_available:
+            # Alle sensor_ids aus dem Mapping sammeln
+            all_sensor_ids = []
+            for cfg in basis_mapping.values():
+                if cfg and cfg.get("strategie") == "sensor" and cfg.get("sensor_id"):
+                    all_sensor_ids.append(cfg["sensor_id"])
+            for inv_cfg in inv_mappings.values():
+                if isinstance(inv_cfg, dict):
+                    for fcfg in inv_cfg.get("felder", inv_cfg).values():
+                        if isinstance(fcfg, dict) and fcfg.get("strategie") == "sensor" and fcfg.get("sensor_id"):
+                            all_sensor_ids.append(fcfg["sensor_id"])
+            if all_sensor_ids:
+                try:
+                    stats_result = await asyncio.to_thread(ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat)
+                    ha_stats_werte = {s.sensor_id: s.differenz for s in stats_result.sensoren if s.differenz is not None}
+                except Exception:
+                    logger.warning("HA Statistics DB nicht erreichbar für Monatsabschluss-Vorschläge")
 
     # Datenquelle des Monats ermitteln
     datenquelle = getattr(monatsdaten, "datenquelle", None) if monatsdaten else None
@@ -358,16 +380,15 @@ async def get_monatsabschluss(
             anlage_id, feld, jahr, monat
         )
 
-        # Bei konfiguriertem Sensor: MQTT-Monatssensor-Wert als Vorschlag hinzufügen
-        if strategie == "sensor" and sensor_mapping.get("mqtt_setup_complete"):
-            mwd_wert = await ha_state_service.get_mwd_sensor_value(anlage_id, mapping_key)
-            if mwd_wert is not None:
-                # Als höchste Konfidenz einfügen (kommt aus Live-Sensor)
+        # Bei konfiguriertem Sensor: HA Statistics Wert als Vorschlag hinzufügen
+        if strategie == "sensor" and sensor_id and sensor_id in ha_stats_werte:
+            stats_wert = ha_stats_werte[sensor_id]
+            if stats_wert > 0:
                 vorschlaege.insert(0, Vorschlag(
-                    wert=round(mwd_wert, 1),
-                    quelle=VorschlagQuelle.HA_SENSOR,
-                    konfidenz=95,
-                    beschreibung="Aus HA-Sensor (aktueller Monatswert)",
+                    wert=round(stats_wert, 1),
+                    quelle=VorschlagQuelle.HA_STATISTICS,
+                    konfidenz=92,
+                    beschreibung="Aus HA-Statistik (Recorder-DB)",
                 ))
 
         # Connector-Vorschlag einfügen
@@ -414,7 +435,8 @@ async def get_monatsabschluss(
         strompreis_sensor_id = strompreis_mapping.get("sensor_id") if strompreis_mapping else None
 
         if strompreis_strategie == "sensor" and strompreis_sensor_id:
-            sensor_wert = await ha_state_service.get_sensor_state(strompreis_sensor_id)
+            ha_state_svc = get_ha_state_service()
+            sensor_wert = await ha_state_svc.get_sensor_state(strompreis_sensor_id)
             if sensor_wert is not None:
                 strompreis_vorschlaege.append(VorschlagResponse(
                     wert=round(sensor_wert, 2),
@@ -484,17 +506,15 @@ async def get_monatsabschluss(
                 anlage_id, feld, jahr, monat, investition_id=inv.id
             )
 
-            # Bei konfiguriertem Sensor: MQTT-Monatssensor-Wert als Vorschlag hinzufügen
-            if strategie == "sensor" and sensor_mapping.get("mqtt_setup_complete"):
-                # Investitions-Sensoren haben das Format: inv{id}_{feld}
-                feld_key = f"inv{inv.id}_{feld}"
-                mwd_wert = await ha_state_service.get_mwd_sensor_value(anlage_id, feld_key)
-                if mwd_wert is not None:
+            # Bei konfiguriertem Sensor: HA Statistics Wert als Vorschlag hinzufügen
+            if strategie == "sensor" and sensor_id and sensor_id in ha_stats_werte:
+                stats_wert = ha_stats_werte[sensor_id]
+                if stats_wert > 0:
                     vorschlaege.insert(0, Vorschlag(
-                        wert=round(mwd_wert, 1),
-                        quelle=VorschlagQuelle.HA_SENSOR,
-                        konfidenz=95,
-                        beschreibung="Aus HA-Sensor (aktueller Monatswert)",
+                        wert=round(stats_wert, 1),
+                        quelle=VorschlagQuelle.HA_STATISTICS,
+                        konfidenz=92,
+                        beschreibung="Aus HA-Statistik (Recorder-DB)",
                     ))
 
             # Connector-Vorschlag einfügen (verteilte Werte)
@@ -575,7 +595,7 @@ async def get_monatsabschluss(
         jahr=jahr,
         monat=monat,
         ist_abgeschlossen=monatsdaten is not None,
-        ha_mapping_konfiguriert=sensor_mapping.get("mqtt_setup_complete", False),
+        ha_mapping_konfiguriert=bool(sensor_mapping),
         connector_konfiguriert=connector_konfiguriert,
         cloud_import_konfiguriert=cloud_import_konfiguriert,
         portal_import_vorhanden=datenquelle == "portal_import",
@@ -924,7 +944,7 @@ async def get_naechster_monat(
         jahr=naechster_jahr,
         monat=naechster_monat,
         monat_name=MONAT_NAMEN[naechster_monat],
-        ha_mapping_konfiguriert=sensor_mapping.get("mqtt_setup_complete", False),
+        ha_mapping_konfiguriert=bool(sensor_mapping),
     )
 
 

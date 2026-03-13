@@ -1,10 +1,11 @@
 """
 Aktueller Monat API Route.
 
-Kombiniert Daten aus HA-Sensoren, Connectors und gespeicherten Monatsdaten
-zu einer Echtzeit-Übersicht des laufenden Monats.
+Kombiniert Daten aus HA-Sensoren, HA-Statistics, Connectors und gespeicherten
+Monatsdaten zu einer Echtzeit-Übersicht des laufenden Monats.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Optional
@@ -98,26 +99,27 @@ class AktuellerMonatResponse(BaseModel):
 # Datensammlung
 # =============================================================================
 
-async def _collect_ha_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
-    """Sammelt Daten aus HA MQTT-Monatssensoren (Konfidenz 95%)."""
+async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """Sammelt Daten aus der HA Recorder-Statistik-DB (Konfidenz 92%).
+
+    Liest MAX(state) - MIN(state) pro Sensor aus der HA statistics-Tabelle.
+    Funktioniert für total_increasing UND measurement Sensoren (Fallback).
+    """
     if not HA_INTEGRATION_AVAILABLE:
         return {}
 
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    ha_stats = get_ha_statistics_service()
+    if not ha_stats.is_available:
+        return {}
+
     mapping = anlage.sensor_mapping or {}
-    if not mapping.get("mqtt_setup_complete"):
-        return {}
-
-    from backend.services.ha_state_service import get_ha_state_service
-    ha_service = get_ha_state_service()
-    if not ha_service.is_available:
-        return {}
-
-    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
-    now_str = datetime.utcnow().isoformat()
-    quelle = DatenquelleInfo(quelle="ha_sensor", konfidenz=95, zeitpunkt=now_str)
-
-    # Basis-Felder aus Sensor-Mapping
     basis = mapping.get("basis", {})
+    inv_mapping = mapping.get("investitionen", {})
+
+    # Sensor-IDs sammeln und Rückmapping erstellen: sensor_id → feld_name
+    sensor_to_feld: dict[str, str] = {}
+
     basis_feld_map = {
         "einspeisung": "einspeisung_kwh",
         "netzbezug": "netzbezug_kwh",
@@ -125,22 +127,34 @@ async def _collect_ha_data(anlage: Anlage, jahr: int, monat: int) -> dict[str, t
     }
     for mapping_key, feld_name in basis_feld_map.items():
         feld_mapping = basis.get(mapping_key)
-        if feld_mapping and feld_mapping.get("strategie") == "sensor":
-            val = await ha_service.get_mwd_sensor_value(anlage.id, mapping_key)
-            if val is not None:
-                resolved[feld_name] = (val, quelle)
+        if feld_mapping and feld_mapping.get("strategie") == "sensor" and feld_mapping.get("sensor_id"):
+            sensor_to_feld[feld_mapping["sensor_id"]] = feld_name
 
-    # Investitions-Felder aus Sensor-Mapping
-    inv_mapping = mapping.get("investitionen", {})
     for inv_id_str, inv_data in inv_mapping.items():
         felder = inv_data.get("felder", {})
         for feld_key, feld_config in felder.items():
-            if feld_config.get("strategie") == "sensor":
-                sensor_key = f"inv_{inv_id_str}_{feld_key}"
-                val = await ha_service.get_mwd_sensor_value(anlage.id, sensor_key)
-                if val is not None:
-                    # Investitions-Felder mit Prefix speichern
-                    resolved[f"inv_{inv_id_str}_{feld_key}"] = (val, quelle)
+            if feld_config and feld_config.get("strategie") == "sensor" and feld_config.get("sensor_id"):
+                sensor_to_feld[feld_config["sensor_id"]] = f"inv_{inv_id_str}_{feld_key}"
+
+    if not sensor_to_feld:
+        return {}
+
+    # Synchronen SQLite-Zugriff in Thread auslagern
+    try:
+        sensor_ids = list(sensor_to_feld.keys())
+        result = await asyncio.to_thread(ha_stats.get_monatswerte, sensor_ids, jahr, monat)
+    except Exception:
+        logger.warning("HA Statistics DB nicht erreichbar")
+        return {}
+
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
+    now_str = datetime.utcnow().isoformat()
+    quelle = DatenquelleInfo(quelle="ha_statistics", konfidenz=92, zeitpunkt=now_str)
+
+    for sensor_wert in result.sensoren:
+        feld_name = sensor_to_feld.get(sensor_wert.sensor_id)
+        if feld_name and sensor_wert.differenz is not None and sensor_wert.differenz > 0:
+            resolved[feld_name] = (sensor_wert.differenz, quelle)
 
     return resolved
 
@@ -392,8 +406,8 @@ async def get_aktueller_monat(
     connector = await _collect_connector_data(anlage, jahr, monat)
     resolved.update(connector)
 
-    ha = await _collect_ha_data(anlage, jahr, monat)
-    resolved.update(ha)
+    ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
+    resolved.update(ha_stats)
 
     # ── Werte extrahieren ──
     def get_val(feld: str) -> Optional[float]:
@@ -464,7 +478,7 @@ async def get_aktueller_monat(
 
     # ── Quellen-Übersicht ──
     quellen = {
-        "ha_sensor": bool(ha),
+        "ha_statistics": bool(ha_stats),
         "connector": bool(connector),
         "gespeichert": bool(saved),
     }

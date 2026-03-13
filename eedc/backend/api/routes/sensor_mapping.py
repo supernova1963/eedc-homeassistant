@@ -20,8 +20,6 @@ from backend.core.database import get_session
 from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
-from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
-from backend.services.ha_state_service import get_ha_state_service
 
 
 # =============================================================================
@@ -85,8 +83,6 @@ class SensorMappingResponse(BaseModel):
     anlage_id: int
     anlage_name: str
     mapping: Optional[dict[str, Any]] = None
-    mqtt_setup_complete: bool = False
-    mqtt_setup_timestamp: Optional[str] = None
     investitionen: list[InvestitionInfo] = []
     gesamt_kwp: float = 0.0
 
@@ -193,15 +189,11 @@ async def get_sensor_mapping(anlage_id: int):
 
         # Mapping aus Anlage extrahieren
         mapping = anlage.sensor_mapping or {}
-        mqtt_complete = mapping.get("mqtt_setup_complete", False)
-        mqtt_timestamp = mapping.get("mqtt_setup_timestamp")
 
         return SensorMappingResponse(
             anlage_id=anlage_id,
             anlage_name=anlage.anlagenname,
             mapping=mapping,
-            mqtt_setup_complete=mqtt_complete,
-            mqtt_setup_timestamp=mqtt_timestamp,
             investitionen=investitionen,
             gesamt_kwp=gesamt_kwp,
         )
@@ -310,8 +302,6 @@ async def save_sensor_mapping(
         mapping_dict: dict[str, Any] = {
             "basis": {},
             "investitionen": {},
-            "mqtt_setup_complete": False,
-            "mqtt_setup_timestamp": None,
         }
 
         # Basis-Sensoren
@@ -353,56 +343,24 @@ async def save_sensor_mapping(
                     if isinstance(feld_data, dict) and feld_data.get("strategie") == "sensor":
                         sensor_count += 1
 
-        # MQTT Auto-Discovery für die neuen Sensor-Paare
-        mqtt_errors: list[str] = []
-        created_mqtt_sensors = 0
-
-        if sensor_count > 0:
-            try:
-                # Anlage neu laden mit aktuellem Mapping
-                await session.refresh(anlage)
-
-                mqtt_sync = get_ha_mqtt_sync_service()
-                result = await mqtt_sync.setup_sensors_for_anlage(anlage)
-
-                if result.success:
-                    created_mqtt_sensors = result.created_sensors
-                    # Mapping als erfolgreich markieren
-                    anlage.sensor_mapping["mqtt_setup_complete"] = True
-                    anlage.sensor_mapping["mqtt_setup_timestamp"] = datetime.utcnow().isoformat()
-                    flag_modified(anlage, "sensor_mapping")
-                    await session.commit()
-                else:
-                    mqtt_errors = result.errors
-            except Exception as e:
-                mqtt_errors.append(f"MQTT-Setup fehlgeschlagen: {str(e)}")
-
         return SetupResult(
-            success=len(mqtt_errors) == 0,
-            message=f"Sensor-Mapping gespeichert. {sensor_count} Sensor(en) zugeordnet, {created_mqtt_sensors} MQTT-Sensor-Paare erstellt.",
-            created_sensors=created_mqtt_sensors,
-            errors=mqtt_errors,
+            success=True,
+            message=f"Sensor-Mapping gespeichert. {sensor_count} Sensor(en) zugeordnet.",
+            created_sensors=0,
+            errors=[],
         )
 
 
 @router.delete("/{anlage_id}")
 async def delete_sensor_mapping(anlage_id: int):
     """
-    Löscht das Sensor-Mapping einer Anlage und entfernt MQTT Entities.
+    Löscht das Sensor-Mapping einer Anlage.
     """
     async with get_session() as session:
         anlage = await _get_anlage(anlage_id, session)
 
         if not anlage.sensor_mapping:
             raise HTTPException(status_code=404, detail="Kein Sensor-Mapping vorhanden")
-
-        # MQTT Entities entfernen
-        try:
-            mqtt_sync = get_ha_mqtt_sync_service()
-            await mqtt_sync.remove_sensors_for_anlage(anlage)
-        except Exception as e:
-            # Fehler loggen, aber nicht abbrechen
-            print(f"MQTT-Cleanup fehlgeschlagen: {e}")
 
         # Mapping löschen
         anlage.sensor_mapping = None
@@ -460,8 +418,6 @@ async def get_mapping_status(anlage_id: int):
 
         return {
             "configured": bool(mapping),
-            "mqtt_setup_complete": mapping.get("mqtt_setup_complete", False),
-            "mqtt_setup_timestamp": mapping.get("mqtt_setup_timestamp"),
             "updated_at": mapping.get("updated_at"),
             "counts": {
                 "sensor": sensor_count,
@@ -472,101 +428,3 @@ async def get_mapping_status(anlage_id: int):
         }
 
 
-@router.post("/{anlage_id}/init-start-values")
-async def init_start_values(anlage_id: int):
-    """
-    Initialisiert die Monatsstart-Werte mit den aktuellen Zählerständen.
-
-    Liest die aktuellen Werte aus den konfigurierten HA-Sensoren und
-    publiziert diese als Startwerte auf MQTT. Dies ermöglicht die korrekte
-    Berechnung der Monatswerte (aktuell - start).
-
-    Sollte aufgerufen werden:
-    - Nach dem ersten Setup des Sensor-Mappings
-    - Wenn die Startwerte manuell zurückgesetzt werden sollen
-
-    Returns:
-        Dict mit Anzahl gesetzter Felder und eventuellen Fehlern
-    """
-    async with get_session() as session:
-        anlage = await _get_anlage(anlage_id, session)
-
-        mapping = anlage.sensor_mapping or {}
-
-        if not mapping.get("mqtt_setup_complete"):
-            raise HTTPException(
-                status_code=400,
-                detail="MQTT-Setup nicht abgeschlossen. Bitte zuerst Sensor-Mapping speichern."
-            )
-
-        ha_state = get_ha_state_service()
-        mqtt_sync = get_ha_mqtt_sync_service()
-
-        if not ha_state.is_available:
-            raise HTTPException(
-                status_code=503,
-                detail="HA-API nicht verfügbar (kein Supervisor Token)"
-            )
-
-        zaehlerstaende: dict[str, float] = {}
-        updated_fields = 0
-        errors: list[str] = []
-
-        # Felder, die direkt gelesen werden (kein MWD-Startwert nötig)
-        DIRECT_READ_FIELDS = {"strompreis"}
-
-        # Basis-Sensoren (Einspeisung, Netzbezug, etc.)
-        basis = mapping.get("basis", {})
-        for feld, config in basis.items():
-            if feld in DIRECT_READ_FIELDS:
-                continue  # Direktes Lesen, kein MWD-Startwert
-            if config and config.get("strategie") == "sensor" and config.get("sensor_id"):
-                sensor_id = config["sensor_id"]
-                wert = await ha_state.get_sensor_state(sensor_id)
-                if wert is not None:
-                    zaehlerstaende[feld] = wert
-                    start_key = f"mwd_{feld}_start"
-                    success = await mqtt_sync.mqtt.update_month_start_value(
-                        anlage_id=anlage.id,
-                        key=start_key,
-                        wert=wert,
-                    )
-                    if success:
-                        updated_fields += 1
-                    else:
-                        errors.append(f"MQTT-Publish fehlgeschlagen für {feld}")
-                else:
-                    errors.append(f"Sensor {sensor_id} nicht verfügbar oder hat keinen Wert")
-
-        # Investitionen-Sensoren
-        investitionen = mapping.get("investitionen", {})
-        for inv_id, inv_config in investitionen.items():
-            if isinstance(inv_config, dict):
-                felder = inv_config.get("felder", inv_config)
-            else:
-                felder = {}
-            for feld, config in felder.items():
-                if config and config.get("strategie") == "sensor" and config.get("sensor_id"):
-                    sensor_id = config["sensor_id"]
-                    wert = await ha_state.get_sensor_state(sensor_id)
-                    if wert is not None:
-                        feld_key = f"inv{inv_id}_{feld}"
-                        zaehlerstaende[feld_key] = wert
-                        start_key = f"mwd_{feld_key}_start"
-                        success = await mqtt_sync.mqtt.update_month_start_value(
-                            anlage_id=anlage.id,
-                            key=start_key,
-                            wert=wert,
-                        )
-                        if success:
-                            updated_fields += 1
-                        else:
-                            errors.append(f"MQTT-Publish fehlgeschlagen für {feld_key}")
-
-        return {
-            "success": len(errors) == 0 or updated_fields > 0,
-            "message": f"{updated_fields} Startwerte initialisiert" + (f", {len(errors)} Fehler" if errors else ""),
-            "updated_fields": updated_fields,
-            "zaehlerstaende": zaehlerstaende,
-            "errors": errors if errors else None,
-        }

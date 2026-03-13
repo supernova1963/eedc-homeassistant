@@ -23,7 +23,8 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 
 class VorschlagQuelle(str, Enum):
     """Quelle eines Vorschlags."""
-    HA_SENSOR = "ha_sensor"        # Aus HA-Sensor (MQTT)
+    HA_SENSOR = "ha_sensor"        # Aus HA-Sensor (MQTT) — deprecated
+    HA_STATISTICS = "ha_statistics"  # Aus HA Recorder-Statistik-DB
     CRON_SNAPSHOT = "cron_snapshot"  # Vom Monatswechsel-Job
     LOCAL_CONNECTOR = "local_connector"  # Vom Geräte-Connector (lokale API)
     PORTAL_IMPORT = "portal_import"      # Aus CSV-Portal-Import

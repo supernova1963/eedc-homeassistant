@@ -29,7 +29,7 @@ class HAStateService:
         Holt den aktuellen State eines Sensors.
 
         Args:
-            entity_id: HA Entity-ID (z.B. "sensor.eedc_1_mwd_einspeisung_monat")
+            entity_id: HA Entity-ID (z.B. "sensor.sma_netzeinspeisung_pv")
 
         Returns:
             Float-Wert oder None wenn nicht verfügbar
@@ -63,26 +63,6 @@ class HAStateService:
         except Exception:
             return None
 
-    async def get_mwd_sensor_value(
-        self,
-        anlage_id: int,
-        feld: str,
-    ) -> Optional[float]:
-        """
-        Holt den Wert eines EEDC-Monatssensors.
-
-        Die MQTT Auto-Discovery erstellt Sensoren im Format:
-        sensor.eedc_{anlage_id}_mwd_{feld}_monat
-
-        Args:
-            anlage_id: ID der Anlage
-            feld: Feld-Key (z.B. "einspeisung", "netzbezug")
-
-        Returns:
-            Aktueller Monatswert oder None
-        """
-        entity_id = f"sensor.eedc_{anlage_id}_mwd_{feld}_monat"
-        return await self.get_sensor_state(entity_id)
 
 
 # Singleton

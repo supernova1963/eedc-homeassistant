@@ -82,7 +82,7 @@ class Anlage(Base):
     wetter_provider: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="auto")
 
     # Sensor-Mapping für Home Assistant Integration
-    # Struktur: {"basis": {...}, "investitionen": {...}, "mqtt_setup_complete": bool, "mqtt_setup_timestamp": str}
+    # Struktur: {"basis": {...}, "investitionen": {...}}
     # Siehe docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation
     sensor_mapping: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 

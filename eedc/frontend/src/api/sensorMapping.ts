@@ -52,8 +52,6 @@ export interface SensorMappingResponse {
   anlage_id: number
   anlage_name: string
   mapping: Record<string, unknown> | null
-  mqtt_setup_complete: boolean
-  mqtt_setup_timestamp?: string | null
   investitionen: InvestitionInfo[]
   gesamt_kwp: number
 }
@@ -75,8 +73,6 @@ export interface SetupResult {
 
 export interface MappingStatus {
   configured: boolean
-  mqtt_setup_complete: boolean
-  mqtt_setup_timestamp?: string | null
   updated_at?: string | null
   counts: {
     sensor: number
@@ -129,18 +125,5 @@ export const sensorMappingApi = {
    */
   async getStatus(anlageId: number): Promise<MappingStatus> {
     return api.get<MappingStatus>(`/sensor-mapping/${anlageId}/status`)
-  },
-
-  /**
-   * Startwerte initialisieren - liest aktuelle Sensorwerte und setzt diese als Monatsanfang
-   */
-  async initStartValues(anlageId: number): Promise<{
-    success: boolean
-    message: string
-    updated_fields: number
-    zaehlerstaende?: Record<string, number>
-    errors?: string[]
-  }> {
-    return api.post(`/sensor-mapping/${anlageId}/init-start-values`, {})
   },
 }

@@ -550,15 +550,11 @@ async def import_json(
             anlage_name = original_name
 
         # 5. Anlage erstellen
-        # Sensor-Mapping: mqtt_setup_complete auf False setzen, da IDs nicht übertragbar
         imported_sensor_mapping = anlage_data.get("sensor_mapping")
         if imported_sensor_mapping:
-            # MQTT-Setup muss nach Import neu durchgeführt werden
-            imported_sensor_mapping["mqtt_setup_complete"] = False
-            imported_sensor_mapping["mqtt_setup_timestamp"] = None
             warnungen.append(
-                "Sensor-Mapping importiert. MQTT-Setup muss nach Import erneut durchgeführt werden "
-                "(Einstellungen → Home Assistant → Sensor-Zuordnung speichern)."
+                "Sensor-Mapping importiert. Sensor-IDs müssen ggf. nach Import angepasst werden "
+                "(Einstellungen → Home Assistant → Sensor-Zuordnung)."
             )
 
         new_anlage = Anlage(
@@ -664,8 +660,6 @@ async def import_json(
             # Wir löschen das alte Investitionen-Mapping komplett
             # Der Benutzer muss das Sensor-Mapping nach Import neu konfigurieren
             imported_sensor_mapping["investitionen"] = {}
-            imported_sensor_mapping["mqtt_setup_complete"] = False
-            imported_sensor_mapping["mqtt_setup_timestamp"] = None
             new_anlage.sensor_mapping = imported_sensor_mapping
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(new_anlage, "sensor_mapping")
