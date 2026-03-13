@@ -117,7 +117,7 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
     basis = mapping.get("basis", {})
     inv_mapping = mapping.get("investitionen", {})
 
-    logger.info(f"HA Statistics: basis keys={list(basis.keys())}, inv keys={list(inv_mapping.keys())}")
+    print(f"HA Statistics: basis keys={list(basis.keys())}, inv keys={list(inv_mapping.keys())}")
 
     # Sensor-IDs sammeln und Rückmapping erstellen: sensor_id → feld_name
     sensor_to_feld: dict[str, str] = {}
@@ -131,7 +131,7 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
         feld_mapping = basis.get(mapping_key)
         if feld_mapping and feld_mapping.get("strategie") == "sensor" and feld_mapping.get("sensor_id"):
             sensor_to_feld[feld_mapping["sensor_id"]] = feld_name
-            logger.info(f"HA Statistics: Basis {mapping_key} → {feld_name} (sensor: {feld_mapping['sensor_id']})")
+            print(f"HA Statistics: Basis {mapping_key} → {feld_name} (sensor: {feld_mapping['sensor_id']})")
 
     for inv_id_str, inv_data in inv_mapping.items():
         felder = inv_data.get("felder", {})
@@ -139,21 +139,21 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
             if feld_config and feld_config.get("strategie") == "sensor" and feld_config.get("sensor_id"):
                 sensor_to_feld[feld_config["sensor_id"]] = f"inv_{inv_id_str}_{feld_key}"
 
-    logger.info(f"HA Statistics: sensor_to_feld={sensor_to_feld}")
+    print(f"HA Statistics: sensor_to_feld={sensor_to_feld}")
 
     if not sensor_to_feld:
-        logger.warning("HA Statistics: Kein sensor_to_feld Mapping — keine Sensoren mit strategie=sensor")
+        print("HA Statistics: Kein sensor_to_feld Mapping — keine Sensoren mit strategie=sensor")
         return {}
 
     # Synchronen SQLite-Zugriff in Thread auslagern
     try:
         sensor_ids = list(sensor_to_feld.keys())
         result = await asyncio.to_thread(ha_stats.get_monatswerte, sensor_ids, jahr, monat)
-        logger.info(f"HA Statistics: {len(result.sensoren)} Sensoren zurückgegeben")
+        print(f"HA Statistics: {len(result.sensoren)} Sensoren zurückgegeben")
         for s in result.sensoren:
-            logger.info(f"  {s.sensor_id}: differenz={s.differenz}")
+            print(f"  {s.sensor_id}: differenz={s.differenz}")
     except Exception as e:
-        logger.warning(f"HA Statistics DB nicht erreichbar: {e}")
+        print(f"HA Statistics DB nicht erreichbar: {e}")
         return {}
 
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
@@ -165,7 +165,7 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
         if feld_name and sensor_wert.differenz is not None and sensor_wert.differenz > 0:
             resolved[feld_name] = (sensor_wert.differenz, quelle)
 
-    logger.info(f"HA Statistics: resolved keys={list(resolved.keys())}")
+    print(f"HA Statistics: resolved keys={list(resolved.keys())}")
     return resolved
 
 
