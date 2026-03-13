@@ -255,7 +255,7 @@ export default function AktuellerMonat() {
   const q = data.feld_quellen
   const vj = data.vorjahr
 
-  const keineQuellen = !data.quellen.ha_sensor && !data.quellen.connector && !data.quellen.gespeichert
+  const keineQuellen = !data.quellen.ha_statistics && !data.quellen.ha_sensor && !data.quellen.connector && !data.quellen.gespeichert
   const keineDaten = data.pv_erzeugung_kwh === null && data.einspeisung_kwh === null && data.netzbezug_kwh === null
   const hasChartData = energieBilanzData.length > 0
 
