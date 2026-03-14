@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Database, Cpu, FileSpreadsheet, Cloud, Upload, Table2, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { useAnlagen } from '../hooks'
+import { useHAAvailable } from '../hooks/useHAAvailable'
 import { connectorApi, type ConnectorStatus } from '../api/connector'
 
 interface DatenquelleCard {
@@ -18,6 +19,7 @@ interface DatenquelleCard {
   href: string
   color: string
   bgColor: string
+  haOnly?: boolean
 }
 
 const datenquellen: DatenquelleCard[] = [
@@ -28,6 +30,7 @@ const datenquellen: DatenquelleCard[] = [
     href: '/einstellungen/ha-export',
     color: 'text-green-600 dark:text-green-400',
     bgColor: 'bg-green-50 dark:bg-green-900/20',
+    haOnly: true,
   },
   {
     title: 'Geräte-Connector',
@@ -74,6 +77,7 @@ const datenquellen: DatenquelleCard[] = [
 export default function Einrichtung() {
   const navigate = useNavigate()
   const { anlagen } = useAnlagen()
+  const haAvailable = useHAAvailable()
   const [connectorStatus, setConnectorStatus] = useState<ConnectorStatus | null>(null)
 
   useEffect(() => {
@@ -93,7 +97,7 @@ export default function Einrichtung() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {datenquellen.map((quelle) => {
+        {datenquellen.filter(q => !q.haOnly || haAvailable).map((quelle) => {
           const Icon = quelle.icon
           const isConnector = quelle.href === '/einstellungen/connector'
           const isConfigured = isConnector && connectorStatus?.configured

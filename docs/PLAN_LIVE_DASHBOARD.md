@@ -6,14 +6,23 @@ Stufe 1 ("Aktueller Monat") ist fertig — zeigt aggregierte kWh-Werte des laufe
 
 Ziel: Der User sieht auf einen Blick, was seine PV-Anlage **gerade jetzt** produziert, wie viel ins Netz geht, wie viel verbraucht wird, und wie der Speicher steht.
 
-## Architektur-Entscheidung: REST-Polling (10s)
+## Architektur-Entscheidung: REST-Polling (10s) + MQTT-Inbound
 
-**Kein WebSocket, kein SSE.** Gruende:
+**Frontend → Backend: REST-Polling (10s).** Kein WebSocket, kein SSE. Gruende:
 - HA Ingress proxied HTTP zuverlaessig, WebSocket/SSE sind fragil hinter Ingress
 - HA-Sensoren aktualisieren sich typisch alle 10-30s — 10s Polling reicht
 - TanStack Query `refetchInterval` ist trivial, kein neuer Transport-Layer noetig
-- Standalone-Modus funktioniert identisch (gibt einfach weniger Felder zurueck)
 - `websockets>=12.0` steht in requirements.txt — spaeterer Upgrade-Pfad offen
+
+**Smarthome → Backend: MQTT-Inbound (universelle Datenbruecke).**
+Statt fuer jedes Smarthome-System (ioBroker, FHEM, openHAB, HA extern) einen eigenen REST-Adapter zu bauen, definiert EEDC eine MQTT-Topic-Struktur, die User aus ihrem System heraus befuellen (z.B. via Node-RED, HA-Automation, ioBroker-Script).
+
+Vorteile gegenueber individuellen Gateway-Adaptern:
+- **Einmal bauen, ueberall nutzen** — jedes Smarthome hat MQTT-Support
+- **Push statt Poll** — Werte liegen sofort im Cache, kein REST-Roundtrip zu HA
+- **Standalone bekommt Live-Daten** — war vorher gar nicht moeglich
+- **Community-Effekt** — User teilen ihre Node-RED-Flows / HA-Automationen
+- **Kein Adapter-Code pro System** — EEDC dokumentiert Topics, User mappt selbst
 
 ## Sensor-Konzept
 
@@ -21,7 +30,7 @@ Ziel: Der User sieht auf einen Blick, was seine PV-Anlage **gerade jetzt** produ
 
 Die bestehende `sensor_mapping` mappt **Energie-Sensoren** (kWh, Zaehlerstaende). Fuer Live brauchen wir **Leistungs-Sensoren** (W/kW). Das sind oft Companion-Sensoren auf demselben Geraet.
 
-### Loesung: `live_sensors` Sektion in sensor_mapping
+### Loesung: `live_sensors` Sektion in sensor_mapping (HA-Modus)
 
 Neuer optionaler Block im bestehenden JSON-Feld `Anlage.sensor_mapping`:
 
@@ -46,6 +55,109 @@ Neuer optionaler Block im bestehenden JSON-Feld `Anlage.sensor_mapping`:
 - Keine DB-Migration noetig (JSON-Feld erweitert sich)
 - Rueckwaertskompatibel (fehlendes `live_sensors` = keine Live-Daten)
 - Konfiguration ueber erweiterten SensorMappingWizard (Phase 3)
+
+### Loesung: MQTT-Inbound (universell, Standalone + jedes Smarthome)
+
+EEDC subscribt auf eine vordefinierte Topic-Struktur. User befuellen diese aus ihrem Smarthome-System oder Node-RED.
+
+#### MQTT Topic-Struktur
+
+```
+eedc/{anlage_id}/
+├── energy/                          # Monatswerte (kWh) — fuer Aktuellen Monat
+│   ├── einspeisung_kwh              → 397.2  (retained)
+│   ├── netzbezug_kwh                → 182.5  (retained)
+│   ├── pv_gesamt_kwh                → 627.0  (retained)
+│   └── inv/{inv_id}/ladung_kwh      → 128.6  (retained)
+│
+└── live/                            # Echtzeit-Leistung (W) — fuer Live Dashboard
+    ├── pv_leistung_w                → 4200
+    ├── einspeisung_w                → 1100
+    ├── netzbezug_w                  → 0
+    ├── batterie_w                   → -500   (negativ = Entladung)
+    ├── batterie_soc                 → 72
+    ├── eauto_w                      → 3700
+    ├── eauto_soc                    → 45
+    └── waermepumpe_w                → 1800
+```
+
+**Alternativ: Ein JSON-Payload pro Kategorie**
+
+```
+eedc/{anlage_id}/energy  →  { "einspeisung_kwh": 397.2, "netzbezug_kwh": 182.5, ... }
+eedc/{anlage_id}/live    →  { "pv_leistung_w": 4200, "einspeisung_w": 1100, ... }
+```
+
+#### Backend: MQTT-Inbound-Cache
+
+```python
+class MqttInboundCache:
+    """In-Memory-Cache fuer MQTT-Inbound-Daten."""
+
+    def __init__(self):
+        self._live: dict[int, dict[str, float]] = {}    # anlage_id → {key: wert}
+        self._energy: dict[int, dict[str, float]] = {}   # anlage_id → {key: wert}
+        self._last_update: dict[int, datetime] = {}
+
+    def on_message(self, topic: str, payload: str):
+        # Parse: eedc/{anlage_id}/live/{key} oder eedc/{anlage_id}/energy/{key}
+        # Update Cache
+
+    def get_live_data(self, anlage_id: int) -> dict[str, float]:
+        return self._live.get(anlage_id, {})
+
+    def get_energy_data(self, anlage_id: int) -> dict[str, float]:
+        return self._energy.get(anlage_id, {})
+```
+
+Der bestehende `mqtt_client.py` wird um Subscribe erweitert:
+- Subscribe auf `eedc/+/live/#` und `eedc/+/energy/#`
+- Callbacks fuellen `MqttInboundCache`
+- Gleicher MQTT-Client der bereits fuer KPI-Export genutzt wird
+
+#### Datenquellen-Prioritaet (aktueller_monat.py)
+
+MQTT-Inbound wird als eigene Quelle in die Prioritaetskette eingebaut:
+
+```
+Gespeichert (85%) → Connector (90%) → MQTT-Inbound (91%) → HA Statistics (92%) → HA Sensor (95%)
+```
+
+#### Datenquellen fuer Live Dashboard
+
+Der `LivePowerService` liest aus drei Quellen (hoechste Prioritaet gewinnt):
+
+| Quelle | Modus | Prioritaet |
+|--------|-------|-----------|
+| Connector `read_current_power()` | Standalone (direkte Geraete) | 1 (niedrigste) |
+| MQTT-Inbound Cache | Universell (jedes Smarthome) | 2 |
+| HA State Service | HA Add-on (live_sensors Mapping) | 3 (hoechste) |
+
+#### Beispiel-Flows fuer User
+
+**Node-RED (ioBroker / generisch):**
+```json
+[{"id":"mqtt-out","type":"mqtt out","topic":"eedc/1/live/pv_leistung_w","broker":"..."}]
+```
+
+**HA Automation:**
+```yaml
+trigger:
+  - platform: state
+    entity_id: sensor.pv_power
+action:
+  - service: mqtt.publish
+    data:
+      topic: "eedc/1/live/pv_leistung_w"
+      payload: "{{ states('sensor.pv_power') }}"
+```
+
+**ioBroker JavaScript-Adapter:**
+```javascript
+on('sourceDP.pv_power', (obj) => {
+    sendTo('mqtt.0', 'publish', {topic: 'eedc/1/live/pv_leistung_w', message: obj.state.val});
+});
+```
 
 ---
 
@@ -129,7 +241,7 @@ class LiveDashboardResponse(BaseModel):
     # Gauge-Charts (dynamisch, nur vorhandene)
     gauges: list[LiveGauge]
 
-    # Tages-Energie (kWh) — optional, aus mwd-Sensoren
+    # Tages-Energie (kWh) — optional, aus HA Statistics oder MQTT-Inbound
     heute_pv_kwh: float | None = None
     heute_einspeisung_kwh: float | None = None
     heute_netzbezug_kwh: float | None = None
@@ -201,7 +313,7 @@ export const liveDashboardApi = {
 │                                                             │
 │  HEUTE (kWh-Tagessummen)                                    │
 │  PV: 18.3 kWh | Einsp: 9.2 kWh | Bezug: 3.1 kWh          │
-│  (aus mwd-Sensoren, gleiche Quelle wie Aktueller Monat)    │
+│  (aus HA Statistics DB oder MQTT-Inbound energy/ Topics)    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -241,8 +353,9 @@ const { data, isLoading, isRefetching } = useQuery({
 
 ### Graceful Degradation
 
-- Keine `live_sensors` konfiguriert → EmptyState mit Link zu Sensor-Zuordnung
-- Kein HA → "Live-Daten nur mit Home-Assistant verfuegbar"
+- Keine `live_sensors` und kein MQTT-Inbound → EmptyState mit Link zu Einrichtung
+- HA-Modus ohne live_sensors → Hinweis auf Sensor-Zuordnung
+- Standalone ohne MQTT → Hinweis auf MQTT-Einrichtung mit Beispiel-Flows
 - Einzelne Sensoren null → KPICard zeigt "—"
 - Komponenten nur wenn `hat_speicher`/`hat_waermepumpe`/`hat_emobilitaet`
 
@@ -308,8 +421,8 @@ import LiveDashboard from './pages/LiveDashboard'
 
 ## 7. Implementierungs-Phasen
 
-### Phase 1: MVP (diese Session)
-1. `live_power_service.py` — Service mit HA-Sensor-Lesen
+### Phase 1: MVP — HA Live Dashboard
+1. `live_power_service.py` — Service mit HA-Sensor-Lesen (live_sensors Mapping)
 2. `live_dashboard.py` — REST-Endpoint
 3. `main.py` — Router registrieren
 4. `liveDashboard.ts` — API-Client
@@ -317,14 +430,22 @@ import LiveDashboard from './pages/LiveDashboard'
 6. `App.tsx` + `TopNavigation.tsx` + `SubTabs.tsx` — Navigation
 7. `EnergieBilanz.tsx` + `GaugeChart.tsx` — Bilanz-Tabelle + Gauge-Charts
 
-### Phase 2: Sensor-Konfiguration (Folge-Session)
-8. SensorMappingWizard um "Live-Sensoren" Tab erweitern
-9. Auto-Detect von Power-Sensoren anbieten (HA device_class: power)
+### Phase 2: MQTT-Inbound (universelle Datenbruecke)
+8. `MqttInboundCache` in `mqtt_client.py` — Subscribe + In-Memory-Cache
+9. `_collect_mqtt_inbound_data()` in `aktueller_monat.py` — Monatswerte aus MQTT
+10. `LivePowerService` um MQTT-Inbound-Cache als Quelle erweitern
+11. Frontend: Einrichtungs-Karte "MQTT-Datenquelle" mit Topic-Dokumentation
+12. Frontend: Test-Funktion (zeige empfangene MQTT-Werte)
+13. Docs: Beispiel-Flows fuer Node-RED, HA-Automation, ioBroker
 
-### Phase 3: Connector-Live-Daten (optional)
-10. `read_current_power()` Methode in DeviceConnector ABC
-11. Implementierung in Fronius, SMA etc.
-12. LivePowerService nutzt Connectors als Fallback
+### Phase 3: Sensor-Konfiguration
+14. SensorMappingWizard um "Live-Sensoren" Tab erweitern
+15. Auto-Detect von Power-Sensoren anbieten (HA device_class: power)
+
+### Phase 4: Connector-Live-Daten (optional)
+16. `read_current_power()` Methode in DeviceConnector ABC
+17. Implementierung in Fronius, SMA etc.
+18. LivePowerService nutzt Connectors als Fallback
 
 ## 8. Verifikation
 
