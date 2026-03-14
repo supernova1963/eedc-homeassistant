@@ -172,4 +172,14 @@ export const liveDashboardApi = {
 
   getMqttTopics: (anlageId?: number) =>
     api.get<MqttTopicsResponse>(`/live/mqtt/topics${anlageId ? `?anlage_id=${anlageId}` : ''}`),
+
+  deleteMqttCache: (anlageId?: number, clearRetained = false) => {
+    const params = new URLSearchParams()
+    if (anlageId) params.set('anlage_id', String(anlageId))
+    if (clearRetained) params.set('clear_retained', 'true')
+    const qs = params.toString()
+    return api.delete<{ geloescht: number; retained_geloescht: number; anlage_id: number | null }>(
+      `/live/mqtt/cache${qs ? `?${qs}` : ''}`,
+    )
+  },
 }

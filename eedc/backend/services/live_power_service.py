@@ -53,6 +53,9 @@ _BIDIREKTIONAL_TYPEN = {"speicher"}
 # Typen die SoC-Gauges bekommen
 _SOC_TYPEN = {"speicher", "e-auto"}
 
+# Typen die im Live-Dashboard übersprungen werden (Durchleiter, keine eigene Messgröße)
+_SKIP_TYPEN = {"wechselrichter"}
+
 # Kategorien für Tagesverlauf-Aggregation
 _TAGESVERLAUF_KATEGORIE = {
     "pv-module": "pv",
@@ -213,12 +216,12 @@ class LivePowerService:
         summe_verbrauch = 0.0
         gauges = []
         pv_total_w = 0.0
-        batterie_total_w = 0.0  # Für Haushalt-Berechnung
+
 
         # Per-Investition Komponenten
         for inv_id, values in inv_values.items():
             inv = investitionen.get(inv_id)
-            if not inv:
+            if not inv or inv.typ in _SKIP_TYPEN:
                 continue
 
             val_w = values.get("leistung_w")
@@ -226,6 +229,12 @@ class LivePowerService:
                 continue
 
             typ = inv.typ
+
+            # E-Auto mit V2H ist bidirektional (negativ = Entladung ins Haus)
+            ist_v2h = (typ == "e-auto"
+                       and isinstance(inv.parameter, dict)
+                       and inv.parameter.get("nutzt_v2h"))
+            ist_bidirektional = typ in _BIDIREKTIONAL_TYPEN or ist_v2h
 
             if typ in _ERZEUGER_TYPEN:
                 # PV / BKW — nur Erzeugung
@@ -240,12 +249,13 @@ class LivePowerService:
                 summe_erzeugung += kw
                 pv_total_w += val_w
 
-            elif typ in _BIDIREKTIONAL_TYPEN:
-                # Speicher — bidirektional (positiv = Ladung, negativ = Entladung)
+            elif ist_bidirektional:
+                # Speicher / E-Auto mit V2H — bidirektional (positiv = Ladung, negativ = Entladung)
                 kw = abs(val_w) / 1000
                 ist_ladung = val_w > 0
+                kategorie = _TAGESVERLAUF_KATEGORIE.get(typ, "batterie")
                 komponenten.append({
-                    "key": f"batterie_{inv_id}",
+                    "key": f"{kategorie}_{inv_id}",
                     "label": inv.bezeichnung,
                     "icon": _TYP_ICON.get(typ, "battery"),
                     "erzeugung_kw": round(kw, 2) if not ist_ladung else None,
@@ -255,10 +265,9 @@ class LivePowerService:
                     summe_verbrauch += kw
                 else:
                     summe_erzeugung += kw
-                batterie_total_w += val_w
 
             else:
-                # Verbraucher (E-Auto, WP, Wallbox, Sonstige)
+                # Verbraucher (E-Auto ohne V2H, WP, Wallbox, Sonstige)
                 kw = val_w / 1000
                 komponenten.append({
                     "key": f"{_TAGESVERLAUF_KATEGORIE.get(typ, typ)}_{inv_id}",
@@ -301,17 +310,13 @@ class LivePowerService:
             if einsp_kw > 0:
                 summe_verbrauch += einsp_kw
 
-        # Haushalt (berechnet: Gesamterzeugung - Gesamtverbrauch - bekannte Abgänge)
-        if pv_total_w > 0 and (einspeisung_w is not None or netzbezug_w is not None):
-            bekannte_verbraucher = sum(
-                k.get("verbrauch_kw") or 0
-                for k in komponenten
-                if k["key"] not in ("netz",) and not k["key"].startswith("pv_")
-            )
-            gesamt_erzeugung_kw = pv_total_w / 1000 + (netzbezug_w or 0) / 1000
-            gesamt_abgang_kw = (einspeisung_w or 0) / 1000
-            gesamt_verbrauch_kw = gesamt_erzeugung_kw - gesamt_abgang_kw
-            haushalt_kw = max(0, gesamt_verbrauch_kw - bekannte_verbraucher)
+        # Haushalt = Residual aus allen Komponenten
+        # Quellen: PV, Batterie-Entladung, V2H-Entladung, Netzbezug
+        # Senken: Einspeisung, Batterie-Ladung, EV-Ladung, WP, Wallbox, Sonstige
+        gesamt_quellen = sum(k.get("erzeugung_kw") or 0 for k in komponenten)
+        gesamt_senken = sum(k.get("verbrauch_kw") or 0 for k in komponenten)
+        if gesamt_quellen > 0 and (einspeisung_w is not None or netzbezug_w is not None):
+            haushalt_kw = max(0, gesamt_quellen - gesamt_senken)
 
             komponenten.append({
                 "key": "haushalt",

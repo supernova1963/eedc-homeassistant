@@ -125,6 +125,30 @@ class MqttInboundCache:
         cache = self._live.get(anlage_id, {})
         return bool(cache.get("basis") or cache.get("inv"))
 
+    def clear_cache(self, anlage_id: Optional[int] = None) -> int:
+        """Löscht Cache-Daten. Gibt Anzahl gelöschter Einträge zurück."""
+        if anlage_id is not None:
+            count = 0
+            if anlage_id in self._live:
+                live = self._live.pop(anlage_id)
+                count += len(live.get("basis", {}))
+                count += sum(len(v) for v in live.get("inv", {}).values())
+            if anlage_id in self._energy:
+                count += len(self._energy.pop(anlage_id))
+            return count
+        # Alle löschen
+        count = 0
+        for data in self._live.values():
+            count += len(data.get("basis", {}))
+            count += sum(len(v) for v in data.get("inv", {}).values())
+        for data in self._energy.values():
+            count += len(data)
+        self._live.clear()
+        self._energy.clear()
+        self._message_count = 0
+        self._last_message_at = None
+        return count
+
     def get_status(self) -> dict:
         """Gibt Status-Informationen zurück."""
         anlagen_mit_daten = [

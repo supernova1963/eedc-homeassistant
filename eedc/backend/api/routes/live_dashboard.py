@@ -242,6 +242,37 @@ async def get_mqtt_inbound_values():
     return {"werte": werte}
 
 
+@router.delete("/mqtt/cache")
+async def delete_mqtt_cache(
+    anlage_id: Optional[int] = Query(None, description="Nur Cache einer Anlage löschen"),
+    clear_retained: bool = Query(False, description="Auch Retained Messages am Broker löschen"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Löscht den MQTT-Inbound-Cache und optional Retained Messages am Broker."""
+    from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+    svc = get_mqtt_inbound_service()
+    if not svc:
+        return {"geloescht": 0, "hinweis": "MQTT-Inbound nicht aktiv"}
+
+    count = svc.cache.clear_cache(anlage_id)
+    retained_cleared = 0
+
+    if clear_retained:
+        # Topics generieren und leere retained Messages publishen
+        topics_resp = await get_mqtt_topics(db=db, anlage_id=anlage_id)
+        topic_list = [t["topic"] for t in topics_resp.get("topics", [])]
+        if topic_list:
+            retained_cleared = await _clear_retained_messages(
+                svc.host, svc.port, svc.username, svc.password, topic_list,
+            )
+
+    return {
+        "geloescht": count,
+        "retained_geloescht": retained_cleared,
+        "anlage_id": anlage_id,
+    }
+
+
 @router.get("/mqtt/settings")
 async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
     """Gibt die gespeicherten MQTT-Inbound-Einstellungen zurück."""
@@ -269,6 +300,30 @@ async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
         "password": "***" if val.get("password") else "",
         "quelle": "db",
     }
+
+
+async def _clear_retained_messages(
+    host: str, port: int,
+    username: Optional[str], password: Optional[str],
+    topics: list[str],
+) -> int:
+    """Löscht Retained Messages am Broker (leere Payload mit Retain-Flag)."""
+    try:
+        import aiomqtt
+    except ImportError:
+        return 0
+
+    try:
+        async with aiomqtt.Client(
+            hostname=host, port=port,
+            username=username, password=password,
+        ) as client:
+            for topic in topics:
+                await client.publish(topic, payload=b"", retain=True)
+            return len(topics)
+    except Exception as e:
+        logger.warning("MQTT-Inbound: Retained Messages löschen fehlgeschlagen: %s", e)
+        return 0
 
 
 async def _publish_initial_values(
@@ -363,7 +418,7 @@ async def save_mqtt_settings(
 
         # Initialwerte auf alle Topics publishen (retained)
         if started:
-            topics_resp = await get_mqtt_topics(db)
+            topics_resp = await get_mqtt_topics(db=db, anlage_id=None)
             topic_list = [t["topic"] for t in topics_resp.get("topics", [])]
             if topic_list:
                 published = await _publish_initial_values(
@@ -471,7 +526,14 @@ async def get_mqtt_topics(
             "balkonkraftwerk": [("pv_erzeugung_kwh", "Erzeugung (kWh)")],
         }
 
+        # Wechselrichter überspringen — die PV-Erzeugung kommt von den Modulen,
+        # der WR ist nur Durchleiter und würde doppelt zählen.
+        skip_typen = {"wechselrichter"}
+
         for inv in investitionen:
+            if inv.typ in skip_typen:
+                continue
+
             islug = _mqtt_slug(inv.bezeichnung)
             inv_live = f"{live_prefix}/inv/{inv.id}_{islug}"
             inv_energy = f"{energy_prefix}/inv/{inv.id}_{islug}"
@@ -492,7 +554,15 @@ async def get_mqtt_topics(
                 })
 
             # Energy-Topics
-            for key, label in energy_keys_by_typ.get(inv.typ, []):
+            energy_keys = list(energy_keys_by_typ.get(inv.typ, []))
+
+            # E-Auto mit V2H bekommt zusätzlich entladung_kwh
+            if inv.typ == "e-auto":
+                param = inv.parameter if isinstance(inv.parameter, dict) else {}
+                if param.get("nutzt_v2h"):
+                    energy_keys.append(("entladung_kwh", "V2H-Entladung (kWh)"))
+
+            for key, label in energy_keys:
                 topics.append({
                     "topic": f"{inv_energy}/{key}",
                     "label": f"{inv.bezeichnung} – {label}",

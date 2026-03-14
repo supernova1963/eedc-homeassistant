@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen } from 'lucide-react'
+import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen, Trash2 } from 'lucide-react'
 import Input from '../components/ui/Input'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { MqttTestResult, MqttInboundStatus, MqttTopic, MqttCacheWert } from '../api/liveDashboard'
@@ -310,14 +310,30 @@ export default function MqttInboundSetup() {
               <Activity className="w-5 h-5 text-green-500" />
               <h2 className="font-semibold text-gray-900 dark:text-white">Empfangene Werte</h2>
             </div>
-            <button
-              onClick={loadCacheValues}
-              disabled={monitorLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${monitorLoading ? 'animate-spin' : ''}`} />
-              Aktualisieren
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={loadCacheValues}
+                disabled={monitorLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${monitorLoading ? 'animate-spin' : ''}`} />
+                Aktualisieren
+              </button>
+              {cacheValues.length > 0 && (
+                <button
+                  onClick={async () => {
+                    await liveDashboardApi.deleteMqttCache(undefined, true)
+                    setCacheValues([])
+                    liveDashboardApi.getMqttStatus().then(setStatus).catch(() => {})
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                  title="Löscht Cache und Retained Messages am Broker"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Cache leeren
+                </button>
+              )}
+            </div>
           </div>
 
           {cacheValues.length > 0 ? (
