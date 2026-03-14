@@ -4,11 +4,12 @@
  * Unterstützt:
  * - Direkter Sensor pro String
  * - kWp-Verteilung basierend auf PV Gesamt
+ * - Live-Leistungssensor pro String (für Live-Dashboard)
  */
 
-import { Sun } from 'lucide-react'
+import { Sun, Activity } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
-import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
+import FeldMappingInput, { SensorAutocomplete, type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 
 interface PVModuleStepProps {
@@ -18,6 +19,8 @@ interface PVModuleStepProps {
   availableSensors: HASensorInfo[]
   gesamtKwp: number
   basisPvGesamt: FeldMapping | null
+  liveMappings?: Record<string, Record<string, string | null>>
+  onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
 }
 
 export default function PVModuleStep({
@@ -27,6 +30,8 @@ export default function PVModuleStep({
   availableSensors,
   gesamtKwp,
   basisPvGesamt,
+  liveMappings = {},
+  onLiveChange,
 }: PVModuleStepProps) {
   const hasPvGesamtSensor = basisPvGesamt?.strategie === 'sensor' && basisPvGesamt?.sensor_id
 
@@ -89,7 +94,7 @@ export default function PVModuleStep({
             </div>
 
             {/* Felder */}
-            <div className="p-4">
+            <div className="p-4 space-y-4">
               <FeldMappingInput
                 label="PV-Erzeugung"
                 einheit="kWh"
@@ -100,6 +105,23 @@ export default function PVModuleStep({
                 kwpAnteil={kwpAnteil}
                 defaultStrategie={hasPvGesamtSensor && kwpAnteil > 0 ? 'kwp_verteilung' : 'sensor'}
               />
+
+              {/* Live-Sensor */}
+              {onLiveChange && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity className="w-4 h-4 text-primary-500" />
+                    <span className="font-medium text-sm text-gray-900 dark:text-white">Live-Leistung</span>
+                    <span className="text-xs text-gray-500">(W) — für Live-Dashboard</span>
+                  </div>
+                  <SensorAutocomplete
+                    value={liveMappings[inv.id.toString()]?.leistung_w}
+                    onChange={entityId => onLiveChange(inv.id, 'leistung_w', entityId)}
+                    sensors={availableSensors}
+                    placeholder="PV-Leistungssensor suchen..."
+                  />
+                </div>
+              )}
             </div>
           </div>
         )

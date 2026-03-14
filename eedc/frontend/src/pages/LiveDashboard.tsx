@@ -11,26 +11,31 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Activity, AlertCircle } from 'lucide-react'
 import { useAnlagen } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
-import type { LiveDashboardResponse, LiveWetterResponse } from '../api/liveDashboard'
+import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, MqttInboundStatus } from '../api/liveDashboard'
 import EnergieBilanz from '../components/live/EnergieBilanz'
 import GaugeChart from '../components/live/GaugeChart'
+import TagesverlaufChart from '../components/live/TagesverlaufChart'
 import WetterWidget from '../components/live/WetterWidget'
 
 const REFRESH_INTERVAL = 5_000 // 5 Sekunden
 const WETTER_REFRESH_INTERVAL = 300_000 // 5 Minuten
+const TAGESVERLAUF_REFRESH_INTERVAL = 60_000 // 1 Minute
 
 export default function LiveDashboard() {
   const { anlagen, loading: anlagenLoading } = useAnlagen()
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
   const [data, setData] = useState<LiveDashboardResponse | null>(null)
   const [wetter, setWetter] = useState<LiveWetterResponse | null>(null)
+  const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
+  const [mqttStatus, setMqttStatus] = useState<MqttInboundStatus | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const tagesverlaufIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Auto-select erste Anlage
   useEffect(() => {
@@ -71,10 +76,27 @@ export default function LiveDashboard() {
     }
   }, [selectedAnlageId, demoMode])
 
+  // Tagesverlauf laden (alle 60s)
+  const fetchTagesverlauf = useCallback(async () => {
+    if (!selectedAnlageId) return
+    try {
+      const result = await liveDashboardApi.getTagesverlauf(selectedAnlageId, demoMode)
+      setTagesverlauf(result)
+    } catch {
+      // Tagesverlauf-Fehler still ignorieren
+    }
+  }, [selectedAnlageId, demoMode])
+
+  // MQTT-Status einmalig laden
+  useEffect(() => {
+    liveDashboardApi.getMqttStatus().then(setMqttStatus).catch(() => {})
+  }, [])
+
   // Initial laden + Auto-Refresh
   useEffect(() => {
     fetchData(false)
     fetchWetter()
+    fetchTagesverlauf()
 
     intervalRef.current = setInterval(() => {
       fetchData(true)
@@ -84,11 +106,16 @@ export default function LiveDashboard() {
       fetchWetter()
     }, WETTER_REFRESH_INTERVAL)
 
+    tagesverlaufIntervalRef.current = setInterval(() => {
+      fetchTagesverlauf()
+    }, TAGESVERLAUF_REFRESH_INTERVAL)
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
       if (wetterIntervalRef.current) clearInterval(wetterIntervalRef.current)
+      if (tagesverlaufIntervalRef.current) clearInterval(tagesverlaufIntervalRef.current)
     }
-  }, [fetchData, fetchWetter])
+  }, [fetchData, fetchWetter, fetchTagesverlauf])
 
   // Loading State
   if (anlagenLoading) {
@@ -148,6 +175,15 @@ export default function LiveDashboard() {
           >
             {demoMode ? 'Demo an' : 'Demo'}
           </button>
+          {/* MQTT-Status */}
+          {mqttStatus?.subscriber_aktiv && (
+            <span
+              className="text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+              title={`MQTT: ${mqttStatus.broker}\nNachrichten: ${mqttStatus.empfangene_nachrichten ?? 0}${mqttStatus.letzte_nachricht ? `\nLetzte: ${new Date(mqttStatus.letzte_nachricht).toLocaleTimeString('de-DE')}` : ''}`}
+            >
+              MQTT {mqttStatus.empfangene_nachrichten ? `(${mqttStatus.empfangene_nachrichten})` : ''}
+            </span>
+          )}
           {/* Refresh-Status */}
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             {isRefreshing && (
@@ -193,7 +229,7 @@ export default function LiveDashboard() {
         <div className="space-y-6">
           {/* Zeile 1: Energiebilanz (2/3) + Zustandswerte (1/3) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
               <EnergieBilanz
                 komponenten={data.komponenten}
                 summeErzeugung={data.summe_erzeugung_kw}
@@ -252,7 +288,14 @@ export default function LiveDashboard() {
             <WetterWidget wetter={wetter} />
           </div>
 
-          {/* Zeile 3: Tagesenergie (IST + Prognose) */}
+          {/* Zeile 3: Tagesverlauf-Chart */}
+          {tagesverlauf && tagesverlauf.punkte.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+              <TagesverlaufChart punkte={tagesverlauf.punkte} />
+            </div>
+          )}
+
+          {/* Zeile 4: Tagesenergie (IST + Prognose + Gestern) */}
           {(data.heute_pv_kwh !== null || data.heute_einspeisung_kwh !== null || data.heute_netzbezug_kwh !== null || wetter?.pv_prognose_kwh !== null) && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
@@ -265,6 +308,11 @@ export default function LiveDashboard() {
                     <span className="font-semibold text-gray-900 dark:text-white">
                       {data.heute_pv_kwh.toFixed(1)} kWh
                     </span>
+                    {data.gestern_pv_kwh !== null && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+                        (gestern: {data.gestern_pv_kwh.toFixed(1)})
+                      </span>
+                    )}
                   </div>
                 )}
                 {data.heute_einspeisung_kwh !== null && (
@@ -273,6 +321,11 @@ export default function LiveDashboard() {
                     <span className="font-semibold text-gray-900 dark:text-white">
                       {data.heute_einspeisung_kwh.toFixed(1)} kWh
                     </span>
+                    {data.gestern_einspeisung_kwh !== null && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+                        (gestern: {data.gestern_einspeisung_kwh.toFixed(1)})
+                      </span>
+                    )}
                   </div>
                 )}
                 {data.heute_netzbezug_kwh !== null && (
@@ -281,6 +334,11 @@ export default function LiveDashboard() {
                     <span className="font-semibold text-gray-900 dark:text-white">
                       {data.heute_netzbezug_kwh.toFixed(1)} kWh
                     </span>
+                    {data.gestern_netzbezug_kwh !== null && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+                        (gestern: {data.gestern_netzbezug_kwh.toFixed(1)})
+                      </span>
+                    )}
                   </div>
                 )}
                 {/* Prognose-Werte aus Wetter */}

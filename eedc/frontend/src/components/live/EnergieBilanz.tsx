@@ -29,6 +29,14 @@ const COLOR_MAP: Record<string, string> = {
   haushalt: '#10b981',  // grün
 }
 
+/** Farbe für einen Komponenten-Key ermitteln (z.B. "pv_1" → pv-Farbe) */
+function getColor(key: string): string {
+  if (COLOR_MAP[key]) return COLOR_MAP[key]
+  // Prefix vor der Investition-ID extrahieren (z.B. "batterie_3" → "batterie")
+  const prefix = key.replace(/_\d+$/, '')
+  return COLOR_MAP[prefix] || '#6b7280'
+}
+
 interface EnergieBilanzProps {
   komponenten: LiveKomponente[]
   summeErzeugung: number
@@ -58,14 +66,14 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
   const maxLog = Math.log(1 + Math.max(...allValues, 0.1))
 
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Energiebilanz</h3>
-      <div className="space-y-2">
+    <div className="flex flex-col h-full">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 shrink-0">Energiebilanz</h3>
+      <div className="flex-1 flex flex-col justify-evenly min-h-0">
         {rows.map((row) => {
           const Icon = ICON_MAP[row.icon]
           const erzPct = logScale(row.erzeugung, maxLog)
           const vrbPct = logScale(row.verbrauch, maxLog)
-          const color = COLOR_MAP[row.key] || '#6b7280'
+          const color = getColor(row.key)
 
           // Tooltip: aktuell + Tageswert
           const tagesKwh = tagesWerte?.[row.key]
@@ -75,9 +83,9 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
           if (tagesKwh !== null && tagesKwh !== undefined) tipParts.push(`Heute: ${tagesKwh.toFixed(1)} kWh`)
 
           return (
-            <div key={row.key} className="flex items-center gap-2 h-9 cursor-default" title={tipParts.join('\n')}>
+            <div key={row.key} className="flex items-center gap-2 min-h-9 py-1 cursor-default" title={tipParts.join('\n')}>
               {/* Label + Icon links */}
-              <div className="flex items-center gap-1.5 w-28 shrink-0">
+              <div className="flex items-center gap-1.5 w-36 shrink-0">
                 {Icon && <Icon className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
                 <span className="text-xs text-gray-700 dark:text-gray-300 truncate">{row.label}</span>
               </div>
@@ -132,14 +140,14 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
       </div>
 
       {/* Achsen-Beschriftung */}
-      <div className="flex items-center mt-1 px-28 text-[10px] text-gray-400 dark:text-gray-500">
+      <div className="flex items-center mt-1 pl-36 text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
         <div className="flex-1 text-right">Quellen (kW)</div>
         <div className="w-px mx-1" />
         <div className="flex-1 text-left">Verbrauch (kW)</div>
       </div>
 
       {/* Summenzeile */}
-      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mt-2 px-2">
+      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mt-2 px-2 shrink-0">
         <span className="text-green-600 dark:text-green-400">
           Quellen: {summeErzeugung.toFixed(2)} kW
         </span>

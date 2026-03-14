@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Database, Cpu, FileSpreadsheet, Cloud, Upload, Table2, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
+import { Database, Cpu, FileSpreadsheet, Cloud, Upload, Table2, Radio, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { useAnlagen } from '../hooks'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { connectorApi, type ConnectorStatus } from '../api/connector'
@@ -63,6 +63,14 @@ const datenquellen: DatenquelleCard[] = [
     href: '/einstellungen/custom-import',
     color: 'text-rose-600 dark:text-rose-400',
     bgColor: 'bg-rose-50 dark:bg-rose-900/20',
+  },
+  {
+    title: 'MQTT-Inbound',
+    description: 'Live-Leistungsdaten via MQTT empfangen. Universelle Datenbrücke für Node-RED, ioBroker, FHEM, openHAB und andere.',
+    icon: Radio,
+    href: '/einstellungen/mqtt-inbound',
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
   },
   {
     title: 'CSV/JSON Import/Export',

@@ -11,12 +11,15 @@ import { Thermometer, Zap } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
 
 interface WaermepumpeStepProps {
   investitionen: InvestitionInfo[]
   mappings: Record<string, Record<string, FeldMapping>>
   onChange: (invId: number, field: string, mapping: FeldMapping | null) => void
   availableSensors: HASensorInfo[]
+  liveMappings?: Record<string, Record<string, string | null>>
+  onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
 }
 
 export default function WaermepumpeStep({
@@ -24,6 +27,8 @@ export default function WaermepumpeStep({
   mappings,
   onChange,
   availableSensors,
+  liveMappings = {},
+  onLiveChange,
 }: WaermepumpeStepProps) {
   const stromOptionen: StrategieOption[] = [
     {
@@ -137,6 +142,17 @@ export default function WaermepumpeStep({
               copDefault={inv.cop ? inv.cop - 0.5 : 3.0}
               defaultStrategie="keine"
             />
+
+            {/* Live-Sensoren */}
+            {onLiveChange && (
+              <LiveSensorSection
+                invId={inv.id}
+                liveMappings={liveMappings}
+                onLiveChange={onLiveChange}
+                availableSensors={availableSensors}
+                fields={[...LIVE_FIELDS.waermepumpe]}
+              />
+            )}
           </div>
         </div>
       ))}

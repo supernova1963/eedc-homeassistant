@@ -52,11 +52,13 @@ class BasisMapping(BaseModel):
     netzbezug: Optional[FeldMapping] = None
     pv_gesamt: Optional[FeldMapping] = None  # Optional, für kWp-Verteilung
     strompreis: Optional[FeldMapping] = None  # Ø Strompreis bei dyn. Tarif (direktes Lesen, kein MWD)
+    live: Optional[dict[str, Optional[str]]] = None  # Live-Sensoren: {einspeisung_w: entity_id, netzbezug_w: entity_id}
 
 
 class InvestitionFelder(BaseModel):
     """Felder-Mapping für eine Investition."""
     felder: dict[str, FeldMapping]
+    live: Optional[dict[str, Optional[str]]] = None  # Live-Sensoren: {leistung_w: entity_id, soc: entity_id}
 
 
 class SensorMappingRequest(BaseModel):
@@ -313,15 +315,25 @@ async def save_sensor_mapping(
             mapping_dict["basis"]["pv_gesamt"] = mapping.basis.pv_gesamt.model_dump()
         if mapping.basis.strompreis:
             mapping_dict["basis"]["strompreis"] = mapping.basis.strompreis.model_dump()
+        if mapping.basis.live:
+            # Nur nicht-leere Einträge speichern
+            live_clean = {k: v for k, v in mapping.basis.live.items() if v}
+            if live_clean:
+                mapping_dict["basis"]["live"] = live_clean
 
         # Investitionen
         for inv_id, inv_mapping in mapping.investitionen.items():
-            mapping_dict["investitionen"][inv_id] = {
+            inv_data: dict[str, Any] = {
                 "felder": {
                     feld: fm.model_dump()
                     for feld, fm in inv_mapping.felder.items()
                 }
             }
+            if inv_mapping.live:
+                live_clean = {k: v for k, v in inv_mapping.live.items() if v}
+                if live_clean:
+                    inv_data["live"] = live_clean
+            mapping_dict["investitionen"][inv_id] = inv_data
 
         # Timestamp setzen
         mapping_dict["updated_at"] = datetime.utcnow().isoformat()

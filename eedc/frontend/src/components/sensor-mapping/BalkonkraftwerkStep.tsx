@@ -12,12 +12,15 @@ import { Sun } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
 
 interface BalkonkraftwerkStepProps {
   investitionen: InvestitionInfo[]
   mappings: Record<string, Record<string, FeldMapping>>
   onChange: (invId: number, field: string, mapping: FeldMapping | null) => void
   availableSensors: HASensorInfo[]
+  liveMappings?: Record<string, Record<string, string | null>>
+  onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
 }
 
 export default function BalkonkraftwerkStep({
@@ -25,6 +28,8 @@ export default function BalkonkraftwerkStep({
   mappings,
   onChange,
   availableSensors,
+  liveMappings = {},
+  onLiveChange,
 }: BalkonkraftwerkStepProps) {
   const erzeugungOptionen: StrategieOption[] = [
     {
@@ -136,6 +141,17 @@ export default function BalkonkraftwerkStep({
               strategieOptionen={speicherOptionen}
               defaultStrategie="keine"
             />
+
+            {/* Live-Sensoren */}
+            {onLiveChange && (
+              <LiveSensorSection
+                invId={inv.id}
+                liveMappings={liveMappings}
+                onLiveChange={onLiveChange}
+                availableSensors={availableSensors}
+                fields={[...LIVE_FIELDS.balkonkraftwerk]}
+              />
+            )}
           </div>
         </div>
       ))}

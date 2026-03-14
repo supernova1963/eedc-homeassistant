@@ -28,10 +28,12 @@ export interface BasisMapping {
   einspeisung?: FeldMapping | null
   netzbezug?: FeldMapping | null
   pv_gesamt?: FeldMapping | null
+  live?: Record<string, string | null> | null  // Live-Sensoren: {einspeisung_w: entity_id, netzbezug_w: entity_id}
 }
 
 export interface InvestitionFelder {
   felder: Record<string, FeldMapping>
+  live?: Record<string, string | null> | null  // Live-Sensoren: {leistung_w: entity_id, soc: entity_id}
 }
 
 export interface SensorMappingRequest {

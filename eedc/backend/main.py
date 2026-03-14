@@ -33,6 +33,31 @@ if HA_INTEGRATION_AVAILABLE:
     from backend.api.routes import ha_integration, ha_export, ha_import, ha_statistics, sensor_mapping
 
 
+async def _load_mqtt_config() -> dict | None:
+    """Lädt MQTT-Config: DB-Settings (Priorität) → Env-Vars (Fallback)."""
+    try:
+        from backend.models.settings import Settings as SettingsModel
+        async with get_session() as session:
+            result = await session.execute(
+                select(SettingsModel).where(SettingsModel.key == "mqtt_inbound")
+            )
+            setting = result.scalar_one_or_none()
+            if setting and setting.value and setting.value.get("host"):
+                return setting.value
+    except Exception:
+        pass
+    # Fallback: Env-Vars
+    if settings.mqtt_enabled:
+        return {
+            "enabled": True,
+            "host": settings.mqtt_host,
+            "port": settings.mqtt_port,
+            "username": settings.mqtt_username,
+            "password": settings.mqtt_password,
+        }
+    return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -58,9 +83,28 @@ async def lifespan(app: FastAPI):
     else:
         print("Scheduler konnte nicht gestartet werden (APScheduler nicht installiert?).")
 
+    # MQTT-Inbound starten (DB-Settings haben Vorrang vor Env-Vars)
+    mqtt_inbound = None
+    mqtt_cfg = await _load_mqtt_config()
+    if mqtt_cfg and mqtt_cfg.get("enabled"):
+        from backend.services.mqtt_inbound_service import init_mqtt_inbound_service
+        host = mqtt_cfg["host"]
+        port = mqtt_cfg["port"]
+        mqtt_inbound = init_mqtt_inbound_service(
+            host=host, port=port,
+            username=mqtt_cfg.get("username") or None,
+            password=mqtt_cfg.get("password") or None,
+        )
+        if await mqtt_inbound.start():
+            print(f"  MQTT-Inbound: aktiv ({host}:{port})")
+        else:
+            print("  MQTT-Inbound: konnte nicht gestartet werden")
+
     yield
 
     # Shutdown
+    if mqtt_inbound:
+        await mqtt_inbound.stop()
     stop_scheduler()
     print("EEDC Backend wird beendet...")
 

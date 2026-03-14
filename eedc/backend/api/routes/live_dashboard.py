@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.services.live_power_service import get_live_power_service
 from backend.services.wetter_service import wetter_code_zu_symbol
 
@@ -67,15 +68,43 @@ class LiveDashboardResponse(BaseModel):
     heute_netzbezug_kwh: Optional[float] = None
     heute_eigenverbrauch_kwh: Optional[float] = None
 
+    gestern_pv_kwh: Optional[float] = None
+    gestern_einspeisung_kwh: Optional[float] = None
+    gestern_netzbezug_kwh: Optional[float] = None
+    gestern_eigenverbrauch_kwh: Optional[float] = None
+
+
+class TagesverlaufPunkt(BaseModel):
+    """Ein Stunden-Datenpunkt im Tagesverlauf."""
+    zeit: str  # "14:00"
+    pv: Optional[float] = None
+    einspeisung: Optional[float] = None
+    netzbezug: Optional[float] = None
+    batterie: Optional[float] = None
+    eauto: Optional[float] = None
+    waermepumpe: Optional[float] = None
+    haushalt: Optional[float] = None
+    verbrauch_gesamt: Optional[float] = None
+
+
+class TagesverlaufResponse(BaseModel):
+    anlage_id: int
+    datum: str  # "2026-03-14"
+    punkte: list[TagesverlaufPunkt]
+
 
 # ── Demo-Daten ───────────────────────────────────────────────────────────────
 
 def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
-    """Simulierte Live-Daten mit leichten Zufallsschwankungen."""
+    """Simulierte Live-Daten mit Multi-Sensor (2 PV-Strings, benannte Komponenten)."""
     def jitter(base: float, pct: float = 0.1) -> float:
         return round(base * (1 + random.uniform(-pct, pct)), 2)
 
-    pv_kw = jitter(4.2)
+    # Zwei PV-Strings
+    pv_a_kw = jitter(2.8)
+    pv_b_kw = jitter(1.4)
+    pv_kw = pv_a_kw + pv_b_kw
+
     einsp_kw = jitter(1.1)
     bezug_kw = jitter(0.3, 0.3)
     batt_kw = jitter(0.5)
@@ -85,9 +114,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
     batt_soc = min(100, max(0, 72 + random.randint(-5, 5)))
     eauto_soc = min(100, max(0, 45 + random.randint(-3, 3)))
 
-    # Energiebilanz: Summe Quellen == Summe Verbrauch
-    # Quellen: PV, Netzbezug, Batterie-Entladung
-    # Verbrauch: Einspeisung, Batterie-Ladung, E-Auto, WP, Haushalt (Rest)
+    # Energiebilanz
     summe_erz = pv_kw + bezug_kw + (batt_kw if not ist_ladung else 0)
     bekannte_vrb = einsp_kw + (batt_kw if ist_ladung else 0) + eauto_kw + wp_kw
     haushalt_kw = max(0, round(summe_erz - bekannte_vrb, 2))
@@ -106,17 +133,20 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "zeitpunkt": datetime.now().isoformat(),
         "verfuegbar": True,
         "komponenten": [
-            {"key": "pv", "label": "PV-Anlage", "icon": "sun",
-             "erzeugung_kw": pv_kw, "verbrauch_kw": None},
+            # Zwei PV-Strings (wie bei SMA mit pv_a + pv_b)
+            {"key": "pv_1", "label": "PV Süd (String A)", "icon": "sun",
+             "erzeugung_kw": pv_a_kw, "verbrauch_kw": None},
+            {"key": "pv_2", "label": "PV Ost (String B)", "icon": "sun",
+             "erzeugung_kw": pv_b_kw, "verbrauch_kw": None},
             {"key": "netz", "label": "Stromnetz", "icon": "zap",
              "erzeugung_kw": bezug_kw if bezug_kw > 0 else None,
              "verbrauch_kw": einsp_kw if einsp_kw > 0 else None},
-            {"key": "batterie", "label": "Speicher", "icon": "battery",
+            {"key": "batterie_3", "label": "BYD HVS 10.2", "icon": "battery",
              "erzeugung_kw": batt_kw if not ist_ladung else None,
              "verbrauch_kw": batt_kw if ist_ladung else None},
-            {"key": "eauto", "label": "E-Auto", "icon": "car",
+            {"key": "eauto_4", "label": "VW ID.4", "icon": "car",
              "erzeugung_kw": None, "verbrauch_kw": eauto_kw},
-            {"key": "waermepumpe", "label": "Wärmepumpe", "icon": "flame",
+            {"key": "waermepumpe_5", "label": "Viessmann Vitocal", "icon": "flame",
              "erzeugung_kw": None, "verbrauch_kw": wp_kw},
             {"key": "haushalt", "label": "Haushalt", "icon": "home",
              "erzeugung_kw": None, "verbrauch_kw": haushalt_kw},
@@ -126,18 +156,306 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "gauges": [
             {"key": "netz", "label": "Netz", "wert": netto_w,
              "min_wert": -max_netz, "max_wert": max_netz, "einheit": "W"},
-            {"key": "batterie_soc", "label": "Speicher", "wert": batt_soc,
+            {"key": "soc_3", "label": "BYD HVS 10.2", "wert": batt_soc,
              "min_wert": 0, "max_wert": 100, "einheit": "%"},
-            {"key": "eauto_soc", "label": "E-Auto", "wert": eauto_soc,
+            {"key": "soc_4", "label": "VW ID.4", "wert": eauto_soc,
              "min_wert": 0, "max_wert": 100, "einheit": "%"},
             {"key": "autarkie", "label": "Autarkie", "wert": min(autarkie, 100),
              "min_wert": 0, "max_wert": 100, "einheit": "%"},
+            {"key": "eigenverbrauch", "label": "Eigenverbr.", "wert": min(round(eigenverbrauch / pv_kw * 100, 0) if pv_kw > 0 else 0, 100),
+             "min_wert": 0, "max_wert": 100, "einheit": "%"},
+            {"key": "pv_leistung", "label": "PV-Leistung", "wert": round(pv_kw / 10.0 * 100, 0),
+             "min_wert": 0, "max_wert": 120, "einheit": "% kWp"},
         ],
         "heute_pv_kwh": round(18.3 + random.uniform(-1, 1), 1),
         "heute_einspeisung_kwh": round(9.2 + random.uniform(-0.5, 0.5), 1),
         "heute_netzbezug_kwh": round(3.1 + random.uniform(-0.3, 0.3), 1),
         "heute_eigenverbrauch_kwh": round(9.1 + random.uniform(-0.5, 0.5), 1),
+        "gestern_pv_kwh": round(22.5 + random.uniform(-2, 2), 1),
+        "gestern_einspeisung_kwh": round(12.1 + random.uniform(-1, 1), 1),
+        "gestern_netzbezug_kwh": round(4.2 + random.uniform(-0.5, 0.5), 1),
+        "gestern_eigenverbrauch_kwh": round(10.4 + random.uniform(-1, 1), 1),
     }
+
+
+# ── MQTT-Inbound Endpoints (VOR /{anlage_id} damit kein Wildcard-Match) ───
+
+MQTT_SETTINGS_KEY = "mqtt_inbound"
+
+
+@router.get("/mqtt/status")
+async def get_mqtt_inbound_status():
+    """Status des MQTT-Inbound-Subscribers."""
+    from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+    svc = get_mqtt_inbound_service()
+    if not svc:
+        return {
+            "verfuegbar": False,
+            "subscriber_aktiv": False,
+            "grund": "MQTT nicht aktiviert",
+        }
+    return svc.get_status()
+
+
+@router.get("/mqtt/settings")
+async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
+    """Gibt die gespeicherten MQTT-Inbound-Einstellungen zurück."""
+    from backend.models.settings import Settings as SettingsModel
+    result = await db.execute(
+        select(SettingsModel).where(SettingsModel.key == MQTT_SETTINGS_KEY)
+    )
+    setting = result.scalar_one_or_none()
+    if not setting or not setting.value:
+        # Defaults aus Env-Vars
+        return {
+            "enabled": settings.mqtt_enabled,
+            "host": settings.mqtt_host,
+            "port": settings.mqtt_port,
+            "username": settings.mqtt_username,
+            "password": "***" if settings.mqtt_password else "",
+            "quelle": "env",
+        }
+    val = setting.value
+    return {
+        "enabled": val.get("enabled", False),
+        "host": val.get("host", "localhost"),
+        "port": val.get("port", 1883),
+        "username": val.get("username", ""),
+        "password": "***" if val.get("password") else "",
+        "quelle": "db",
+    }
+
+
+async def _publish_initial_values(
+    host: str, port: int,
+    username: Optional[str], password: Optional[str],
+    topics: list[str],
+) -> int:
+    """Publisht Initialwert 0 auf alle Topics (retained), damit sie am Broker sichtbar sind."""
+    try:
+        import aiomqtt
+    except ImportError:
+        return 0
+
+    try:
+        async with aiomqtt.Client(
+            hostname=host, port=port,
+            username=username, password=password,
+        ) as client:
+            for topic in topics:
+                await client.publish(topic, payload="0", retain=True)
+            return len(topics)
+    except Exception as e:
+        logger.warning("MQTT-Inbound: Initialwerte publish fehlgeschlagen: %s", e)
+        return 0
+
+
+@router.post("/mqtt/settings")
+async def save_mqtt_settings(
+    config: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Speichert MQTT-Inbound-Einstellungen in der DB und (re)startet den Subscriber."""
+    from backend.models.settings import Settings as SettingsModel
+    from sqlalchemy.orm.attributes import flag_modified
+
+    # Validierung
+    host = config.get("host", "").strip()
+    port = int(config.get("port", 1883))
+    username = config.get("username", "").strip()
+    password = config.get("password", "").strip()
+    enabled = bool(config.get("enabled", False))
+
+    if enabled and not host:
+        raise HTTPException(status_code=400, detail="Host ist erforderlich")
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="Port muss zwischen 1 und 65535 liegen")
+
+    # Bestehende Settings laden (Passwort behalten wenn "***")
+    result = await db.execute(
+        select(SettingsModel).where(SettingsModel.key == MQTT_SETTINGS_KEY)
+    )
+    setting = result.scalar_one_or_none()
+    old_password = ""
+    if setting and setting.value:
+        old_password = setting.value.get("password", "")
+
+    if password == "***":
+        password = old_password
+
+    new_value = {
+        "enabled": enabled,
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+    }
+
+    if setting:
+        setting.value = new_value
+        flag_modified(setting, "value")
+    else:
+        setting = SettingsModel(key=MQTT_SETTINGS_KEY, value=new_value)
+        db.add(setting)
+
+    await db.commit()
+
+    # Subscriber (re)starten
+    from backend.services.mqtt_inbound_service import (
+        get_mqtt_inbound_service, init_mqtt_inbound_service
+    )
+    svc = get_mqtt_inbound_service()
+
+    if enabled:
+        if svc:
+            await svc.stop()
+        svc = init_mqtt_inbound_service(
+            host=host, port=port,
+            username=username or None,
+            password=password or None,
+        )
+        started = await svc.start()
+
+        # Initialwerte auf alle Topics publishen (retained)
+        if started:
+            topics_resp = await get_mqtt_topics(db)
+            topic_list = [t["topic"] for t in topics_resp.get("topics", [])]
+            if topic_list:
+                published = await _publish_initial_values(
+                    host, port, username or None, password or None, topic_list,
+                )
+                logger.info("MQTT-Inbound: %d Topics mit Initialwert published", published)
+
+        return {
+            "gespeichert": True,
+            "subscriber_gestartet": started,
+            "broker": f"{host}:{port}",
+        }
+    else:
+        if svc:
+            await svc.stop()
+        return {"gespeichert": True, "subscriber_gestartet": False}
+
+
+def _mqtt_slug(name: str) -> str:
+    """Erzeugt einen MQTT-Topic-sicheren Slug aus einem Namen.
+
+    Beispiel: "BYD HVS 10.2" → "BYD_HVS_10.2"
+    """
+    import re as _re
+    # Leerzeichen → Unterstrich, alles außer Wort-Zeichen/Punkt/Minus entfernen
+    slug = name.strip().replace(" ", "_")
+    slug = _re.sub(r"[^\w.\-]", "", slug)
+    return slug or "unnamed"
+
+
+@router.get("/mqtt/topics")
+async def get_mqtt_topics(
+    db: AsyncSession = Depends(get_db),
+    anlage_id: Optional[int] = Query(None, description="Filter auf eine Anlage"),
+):
+    """Generiert die vollständige Topic-Liste mit konkreten Anlage- und Investitions-IDs."""
+    if anlage_id is not None:
+        anlagen = (await db.execute(
+            select(Anlage).where(Anlage.id == anlage_id)
+        )).scalars().all()
+    else:
+        anlagen = (await db.execute(select(Anlage))).scalars().all()
+    if not anlagen:
+        return {"topics": []}
+
+    topics = []
+    for anlage in anlagen:
+        aid = anlage.id
+        aname = anlage.anlagenname or f"Anlage {aid}"
+        aslug = _mqtt_slug(aname)
+        prefix = f"eedc/{aid}_{aslug}/live"
+
+        # Basis-Topics
+        topics.append({
+            "topic": f"{prefix}/einspeisung_w",
+            "label": f"Einspeisung (W)",
+            "anlage": aname,
+            "typ": "basis",
+        })
+        topics.append({
+            "topic": f"{prefix}/netzbezug_w",
+            "label": f"Netzbezug (W)",
+            "anlage": aname,
+            "typ": "basis",
+        })
+
+        # Investitions-Topics
+        investitionen = (await db.execute(
+            select(Investition).where(
+                Investition.anlage_id == aid,
+                Investition.aktiv == True,
+            )
+        )).scalars().all()
+
+        soc_typen = {"speicher", "e-auto"}
+
+        for inv in investitionen:
+            islug = _mqtt_slug(inv.bezeichnung)
+            inv_prefix = f"{prefix}/inv/{inv.id}_{islug}"
+
+            topics.append({
+                "topic": f"{inv_prefix}/leistung_w",
+                "label": f"{inv.bezeichnung} – Leistung (W)",
+                "anlage": aname,
+                "typ": inv.typ,
+            })
+            if inv.typ in soc_typen:
+                topics.append({
+                    "topic": f"{inv_prefix}/soc",
+                    "label": f"{inv.bezeichnung} – SoC (%)",
+                    "anlage": aname,
+                    "typ": inv.typ,
+                })
+
+    return {"topics": topics}
+
+
+@router.post("/mqtt/test")
+async def test_mqtt_connection(config: dict):
+    """Testet die MQTT-Verbindung ohne zu speichern."""
+    try:
+        import aiomqtt
+    except ImportError:
+        return {"connected": False, "error": "aiomqtt nicht installiert"}
+
+    host = config.get("host", "").strip()
+    port = int(config.get("port", 1883))
+    username = config.get("username", "").strip() or None
+    password = config.get("password", "").strip() or None
+
+    # Maskiertes Passwort → aus DB laden
+    if password == "***":
+        from backend.models.settings import Settings as SettingsModel
+        # Kein db-Parameter hier, aber wir können es aus dem Service holen
+        svc = get_mqtt_inbound_service()
+        if svc:
+            password = svc.password
+
+    if not host:
+        return {"connected": False, "error": "Host ist erforderlich"}
+
+    try:
+        async with aiomqtt.Client(
+            hostname=host, port=port,
+            username=username, password=password,
+        ) as client:
+            return {
+                "connected": True,
+                "broker": f"{host}:{port}",
+                "message": "Verbindung erfolgreich",
+            }
+    except Exception as e:
+        return {
+            "connected": False,
+            "broker": f"{host}:{port}",
+            "error": str(e),
+        }
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────
@@ -159,6 +477,99 @@ async def get_live_data(
 
     service = get_live_power_service()
     return await service.get_live_data(anlage, db)
+
+
+# ── Tagesverlauf Demo-Daten ──────────────────────────────────────────────────
+
+def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
+    """Simulierter Tagesverlauf für Demo-Modus."""
+    import math
+
+    now = datetime.now()
+    punkte = []
+
+    for h in range(24):
+        if h > now.hour:
+            break
+
+        # PV: Glockenkurve mit Peak bei 13 Uhr
+        pv_base = max(0, 8.0 * math.exp(-((h - 13) ** 2) / 18))
+        pv = round(pv_base * (0.85 + random.uniform(0, 0.3)), 2) if pv_base > 0.1 else 0
+
+        # Verbrauch: BDEW H0 Profil
+        lastprofil = {
+            0: 0.2, 1: 0.18, 2: 0.15, 3: 0.15, 4: 0.15, 5: 0.2,
+            6: 0.25, 7: 0.45, 8: 0.55, 9: 0.40, 10: 0.35,
+            11: 0.38, 12: 0.50, 13: 0.45, 14: 0.35, 15: 0.33,
+            16: 0.35, 17: 0.50, 18: 0.65, 19: 0.70, 20: 0.55,
+            21: 0.40, 22: 0.30, 23: 0.22,
+        }
+        haushalt = round(lastprofil.get(h, 0.3) * (0.8 + random.uniform(0, 0.4)), 2)
+
+        # E-Auto: Zufällig nachmittags laden
+        eauto = round(random.uniform(3, 7), 2) if (15 <= h <= 17 and random.random() > 0.4) else 0
+
+        # WP: Morgens und abends
+        wp = round(random.uniform(1.2, 2.5), 2) if (h in [6, 7, 8, 17, 18, 19]) else round(0.3 * random.uniform(0.5, 1.5), 2)
+
+        verbrauch_gesamt = round(haushalt + eauto + wp, 2)
+
+        # Netz: Differenz PV - Verbrauch
+        netto = pv - verbrauch_gesamt
+        einspeisung = round(max(0, netto), 2)
+        netzbezug = round(max(0, -netto), 2)
+
+        # Batterie: Laden wenn Überschuss, Entladen abends
+        batt = 0.0
+        if 10 <= h <= 15 and pv > verbrauch_gesamt + 0.5:
+            batt = round(min(pv - verbrauch_gesamt - einspeisung * 0.3, 3.0), 2)
+        elif 18 <= h <= 22 and netzbezug > 0.3:
+            batt = round(-min(netzbezug * 0.6, 2.5), 2)
+
+        punkte.append({
+            "zeit": f"{h:02d}:00",
+            "pv": pv if pv > 0 else None,
+            "einspeisung": einspeisung if einspeisung > 0 else None,
+            "netzbezug": netzbezug if netzbezug > 0 else None,
+            "batterie": batt if abs(batt) > 0.01 else None,
+            "eauto": eauto if eauto > 0 else None,
+            "waermepumpe": wp if wp > 0.05 else None,
+            "haushalt": haushalt,
+            "verbrauch_gesamt": verbrauch_gesamt,
+        })
+
+    return {
+        "anlage_id": anlage_id,
+        "datum": now.strftime("%Y-%m-%d"),
+        "punkte": punkte,
+    }
+
+
+# ── Tagesverlauf Endpoint ────────────────────────────────────────────────────
+
+@router.get("/{anlage_id}/tagesverlauf", response_model=TagesverlaufResponse)
+async def get_tagesverlauf(
+    anlage_id: int,
+    demo: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stündlicher Leistungsverlauf für heute."""
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    if demo:
+        return _generate_demo_tagesverlauf(anlage.id)
+
+    service = get_live_power_service()
+    punkte = await service.get_tagesverlauf(anlage, db)
+
+    return {
+        "anlage_id": anlage.id,
+        "datum": datetime.now().strftime("%Y-%m-%d"),
+        "punkte": punkte,
+    }
 
 
 # ── Wetter Models ─────────────────────────────────────────────────────────────
@@ -397,3 +808,7 @@ async def get_live_wetter(
     except Exception as e:
         logger.warning(f"Live-Wetter Fehler: {e}")
         return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
+
+
+# ── MQTT-Inbound Status ─────────────────────────────────────────────────────
+

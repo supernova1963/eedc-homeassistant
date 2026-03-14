@@ -18,12 +18,15 @@ import { Car, PlugZap } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
 
 interface EAutoStepProps {
   investitionen: InvestitionInfo[]
   mappings: Record<string, Record<string, FeldMapping>>
   onChange: (invId: number, field: string, mapping: FeldMapping | null) => void
   availableSensors: HASensorInfo[]
+  liveMappings?: Record<string, Record<string, string | null>>
+  onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
 }
 
 export default function EAutoStep({
@@ -31,6 +34,8 @@ export default function EAutoStep({
   mappings,
   onChange,
   availableSensors,
+  liveMappings = {},
+  onLiveChange,
 }: EAutoStepProps) {
   const eAutos = investitionen.filter(i => i.typ === 'e-auto')
   const wallboxen = investitionen.filter(i => i.typ === 'wallbox')
@@ -229,6 +234,17 @@ export default function EAutoStep({
                   strategieOptionen={externLadungOptionen}
                   defaultStrategie="keine"
                 />
+
+                {/* Live-Sensoren */}
+                {onLiveChange && (
+                  <LiveSensorSection
+                    invId={inv.id}
+                    liveMappings={liveMappings}
+                    onLiveChange={onLiveChange}
+                    availableSensors={availableSensors}
+                    fields={[...LIVE_FIELDS.eauto]}
+                  />
+                )}
               </div>
             </div>
           ))}
@@ -282,6 +298,17 @@ export default function EAutoStep({
                   strategieOptionen={ladevorgaengeOptionen}
                   defaultStrategie="keine"
                 />
+
+                {/* Live-Sensoren */}
+                {onLiveChange && (
+                  <LiveSensorSection
+                    invId={inv.id}
+                    liveMappings={liveMappings}
+                    onLiveChange={onLiveChange}
+                    availableSensors={availableSensors}
+                    fields={[...LIVE_FIELDS.wallbox]}
+                  />
+                )}
               </div>
             </div>
           ))}

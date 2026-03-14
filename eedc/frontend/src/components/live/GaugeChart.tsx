@@ -16,6 +16,10 @@ function getGaugeColor(key: string, wert: number, min: number, max: number): str
     // Netz: grün bei Einspeisung (negativ), rot bei Bezug (positiv)
     return wert <= 0 ? '#22c55e' : '#ef4444'
   }
+  if (key === 'pv-leistung') {
+    // PV-Leistung: gelb (PV-Farbe), bei >100% orange (Überleistung)
+    return wert > 100 ? '#f97316' : '#eab308'
+  }
   // SoC / Autarkie: rot < 20%, gelb 20-50%, grün > 50%
   const prozent = max > min ? ((wert - min) / (max - min)) * 100 : 0
   if (prozent < 20) return '#ef4444'

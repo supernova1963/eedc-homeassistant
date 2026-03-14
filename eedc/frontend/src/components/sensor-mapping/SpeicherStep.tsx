@@ -10,12 +10,15 @@
 import { Battery } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
+import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
 
 interface SpeicherStepProps {
   investitionen: InvestitionInfo[]
   mappings: Record<string, Record<string, FeldMapping>>
   onChange: (invId: number, field: string, mapping: FeldMapping | null) => void
   availableSensors: HASensorInfo[]
+  liveMappings?: Record<string, Record<string, string | null>>
+  onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
 }
 
 export default function SpeicherStep({
@@ -23,6 +26,8 @@ export default function SpeicherStep({
   mappings,
   onChange,
   availableSensors,
+  liveMappings = {},
+  onLiveChange,
 }: SpeicherStepProps) {
   const basisOptionen: StrategieOption[] = [
     {
@@ -103,6 +108,17 @@ export default function SpeicherStep({
             <p className="text-xs text-gray-500 -mt-2 ml-1">
               Netzladung wird für Arbitrage-Auswertung (Speicher aus Netz laden) benötigt.
             </p>
+
+            {/* Live-Sensoren */}
+            {onLiveChange && (
+              <LiveSensorSection
+                invId={inv.id}
+                liveMappings={liveMappings}
+                onLiveChange={onLiveChange}
+                availableSensors={availableSensors}
+                fields={[...LIVE_FIELDS.speicher]}
+              />
+            )}
           </div>
         </div>
       ))}

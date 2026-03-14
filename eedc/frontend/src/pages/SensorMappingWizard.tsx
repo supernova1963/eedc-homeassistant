@@ -57,7 +57,9 @@ interface WizardState {
     netzbezug: FeldMapping | null
     pv_gesamt: FeldMapping | null
   }
+  basisLive: Record<string, string | null>  // {einspeisung_w: entity_id, netzbezug_w: entity_id}
   investitionen: Record<string, Record<string, FeldMapping>>
+  investitionenLive: Record<string, Record<string, string | null>>  // {inv_id: {leistung_w: entity_id, soc: entity_id}}
 }
 
 interface StepConfig {
@@ -77,7 +79,9 @@ const initialState: WizardState = {
     netzbezug: null,
     pv_gesamt: null,
   },
+  basisLive: {},
   investitionen: {},
+  investitionenLive: {},
 }
 
 // =============================================================================
@@ -144,8 +148,8 @@ export default function SensorMappingWizard() {
         // Initialize state from existing mapping
         if (mapping?.mapping) {
           const existingMapping = mapping.mapping as {
-            basis?: Record<string, FeldMapping>
-            investitionen?: Record<string, { felder: Record<string, FeldMapping> }>
+            basis?: Record<string, FeldMapping> & { live?: Record<string, string | null> }
+            investitionen?: Record<string, { felder: Record<string, FeldMapping>; live?: Record<string, string | null> }>
           }
 
           setState({
@@ -154,11 +158,17 @@ export default function SensorMappingWizard() {
               netzbezug: existingMapping.basis?.netzbezug || null,
               pv_gesamt: existingMapping.basis?.pv_gesamt || null,
             },
+            basisLive: existingMapping.basis?.live || {},
             investitionen: Object.fromEntries(
               Object.entries(existingMapping.investitionen || {}).map(([id, inv]) => [
                 id,
                 inv.felder || {},
               ])
+            ),
+            investitionenLive: Object.fromEntries(
+              Object.entries(existingMapping.investitionen || {})
+                .filter(([, inv]) => inv.live && Object.keys(inv.live).length > 0)
+                .map(([id, inv]) => [id, inv.live!])
             ),
           })
         }
@@ -261,6 +271,26 @@ export default function SensorMappingWizard() {
     }))
   }, [])
 
+  const updateBasisLive = useCallback((key: string, entityId: string | null) => {
+    setState(prev => ({
+      ...prev,
+      basisLive: { ...prev.basisLive, [key]: entityId },
+    }))
+  }, [])
+
+  const updateInvestitionLive = useCallback((invId: number, sensorKey: string, entityId: string | null) => {
+    setState(prev => ({
+      ...prev,
+      investitionenLive: {
+        ...prev.investitionenLive,
+        [invId.toString()]: {
+          ...prev.investitionenLive[invId.toString()],
+          [sensorKey]: entityId,
+        },
+      },
+    }))
+  }, [])
+
   // Save handler
   const handleSave = useCallback(async () => {
     if (!effectiveAnlageId) return
@@ -269,16 +299,28 @@ export default function SensorMappingWizard() {
     setSaveError(null)
 
     try {
+      // Live-Felder bereinigen (leere Werte entfernen)
+      const cleanLive = (live: Record<string, string | null>): Record<string, string | null> | undefined => {
+        const cleaned = Object.fromEntries(
+          Object.entries(live).filter(([, v]) => v)
+        )
+        return Object.keys(cleaned).length > 0 ? cleaned : undefined
+      }
+
       const request: SensorMappingRequest = {
         basis: {
           einspeisung: state.basis.einspeisung,
           netzbezug: state.basis.netzbezug,
           pv_gesamt: state.basis.pv_gesamt,
+          live: cleanLive(state.basisLive) || null,
         },
         investitionen: Object.fromEntries(
           Object.entries(state.investitionen).map(([id, felder]) => [
             id,
-            { felder },
+            {
+              felder,
+              live: cleanLive(state.investitionenLive[id] || {}) || null,
+            },
           ])
         ),
       }
@@ -516,6 +558,8 @@ export default function SensorMappingWizard() {
               value={state.basis}
               onChange={updateBasis}
               availableSensors={availableSensors}
+              basisLive={state.basisLive}
+              onBasisLiveChange={updateBasisLive}
             />
           )}
 
@@ -527,6 +571,8 @@ export default function SensorMappingWizard() {
               availableSensors={availableSensors}
               gesamtKwp={mappingData?.gesamt_kwp || 0}
               basisPvGesamt={state.basis.pv_gesamt}
+              liveMappings={state.investitionenLive}
+              onLiveChange={updateInvestitionLive}
             />
           )}
 
@@ -536,6 +582,8 @@ export default function SensorMappingWizard() {
               mappings={state.investitionen}
               onChange={updateInvestition}
               availableSensors={availableSensors}
+              liveMappings={state.investitionenLive}
+              onLiveChange={updateInvestitionLive}
             />
           )}
 
@@ -545,6 +593,8 @@ export default function SensorMappingWizard() {
               mappings={state.investitionen}
               onChange={updateInvestition}
               availableSensors={availableSensors}
+              liveMappings={state.investitionenLive}
+              onLiveChange={updateInvestitionLive}
             />
           )}
 
@@ -554,6 +604,8 @@ export default function SensorMappingWizard() {
               mappings={state.investitionen}
               onChange={updateInvestition}
               availableSensors={availableSensors}
+              liveMappings={state.investitionenLive}
+              onLiveChange={updateInvestitionLive}
             />
           )}
 
@@ -563,6 +615,8 @@ export default function SensorMappingWizard() {
               mappings={state.investitionen}
               onChange={updateInvestition}
               availableSensors={availableSensors}
+              liveMappings={state.investitionenLive}
+              onLiveChange={updateInvestitionLive}
             />
           )}
 

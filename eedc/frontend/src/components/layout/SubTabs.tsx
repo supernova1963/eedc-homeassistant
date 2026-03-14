@@ -88,6 +88,7 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/cloud-import',
       '/einstellungen/custom-import',
       '/einstellungen/connector',
+      '/einstellungen/mqtt-inbound',
       '/einstellungen/daten-checker',
     ],
     tabs: [
