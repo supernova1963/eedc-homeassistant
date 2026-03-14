@@ -139,6 +139,9 @@ export default function SubTabs() {
   const path = location.pathname
   const haAvailable = useHAAvailable()
 
+  // ── Live (keine Sub-Tabs) ────────────────────────────────────────────────
+  if (path.startsWith('/live')) return null
+
   // ── Cockpit ──────────────────────────────────────────────────────────────
   if (path.startsWith('/cockpit')) {
     return <TabBar tabs={cockpitTabs} />

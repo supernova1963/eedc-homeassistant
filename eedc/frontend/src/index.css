@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tooltip-Farben für Recharts (Light/Dark) */
+html {
+  --tooltip-bg: #fff;
+  --tooltip-fg: #1f2937;
+  --tooltip-border: #e5e7eb;
+}
+html.dark {
+  --tooltip-bg: #1f2937;
+  --tooltip-fg: #f3f4f6;
+  --tooltip-border: #374151;
+}
+
 /* Custom base styles */
 @layer base {
   html {

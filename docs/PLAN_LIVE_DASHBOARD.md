@@ -6,12 +6,12 @@ Stufe 1 ("Aktueller Monat") ist fertig — zeigt aggregierte kWh-Werte des laufe
 
 Ziel: Der User sieht auf einen Blick, was seine PV-Anlage **gerade jetzt** produziert, wie viel ins Netz geht, wie viel verbraucht wird, und wie der Speicher steht.
 
-## Architektur-Entscheidung: REST-Polling (10s) + MQTT-Inbound
+## Architektur-Entscheidung: REST-Polling (5s) + MQTT-Inbound
 
-**Frontend → Backend: REST-Polling (10s).** Kein WebSocket, kein SSE. Gruende:
+**Frontend → Backend: REST-Polling (5s).** Kein WebSocket, kein SSE. Gruende:
 - HA Ingress proxied HTTP zuverlaessig, WebSocket/SSE sind fragil hinter Ingress
-- HA-Sensoren aktualisieren sich typisch alle 10-30s — 10s Polling reicht
-- TanStack Query `refetchInterval` ist trivial, kein neuer Transport-Layer noetig
+- 5s Polling fuer spuerbares Live-Gefuehl, MQTT-Cache liefert sofort aktuelle Werte
+- Leichtgewichtiger Call (nur In-Memory-Read, kein DB-Query)
 - `websockets>=12.0` steht in requirements.txt — spaeterer Upgrade-Pfad offen
 
 **Smarthome → Backend: MQTT-Inbound (universelle Datenbruecke).**
@@ -339,12 +339,14 @@ Einfache SVG-Halbkreis-Gauges (kein externes Library):
 ### Auto-Refresh
 
 ```typescript
-const { data, isLoading, isRefetching } = useQuery({
-  queryKey: ['live-dashboard', selectedAnlageId],
-  queryFn: () => liveDashboardApi.getData(selectedAnlageId!),
-  enabled: !!selectedAnlageId,
-  refetchInterval: 10_000,  // 10 Sekunden
-})
+// useEffect + setInterval (kein React Query, da QueryClientProvider nicht eingerichtet)
+const REFRESH_INTERVAL = 5_000 // 5 Sekunden
+
+useEffect(() => {
+  fetchData(false)
+  intervalRef.current = setInterval(() => fetchData(true), REFRESH_INTERVAL)
+  return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+}, [fetchData])
 ```
 
 - Gruener pulsierender Punkt zeigt Live-Status
@@ -421,14 +423,14 @@ import LiveDashboard from './pages/LiveDashboard'
 
 ## 7. Implementierungs-Phasen
 
-### Phase 1: MVP — HA Live Dashboard
-1. `live_power_service.py` — Service mit HA-Sensor-Lesen (live_sensors Mapping)
-2. `live_dashboard.py` — REST-Endpoint
-3. `main.py` — Router registrieren
-4. `liveDashboard.ts` — API-Client
-5. `LiveDashboard.tsx` — Page mit KPI-Cards + Auto-Refresh
-6. `App.tsx` + `TopNavigation.tsx` + `SubTabs.tsx` — Navigation
-7. `EnergieBilanz.tsx` + `GaugeChart.tsx` — Bilanz-Tabelle + Gauge-Charts
+### Phase 1: MVP — HA Live Dashboard ✅ ERLEDIGT
+1. ✅ `live_power_service.py` — Service mit HA-Sensor-Lesen (live_sensors Mapping)
+2. ✅ `live_dashboard.py` — REST-Endpoint
+3. ✅ `main.py` — Router registrieren
+4. ✅ `liveDashboard.ts` — API-Client
+5. ✅ `LiveDashboard.tsx` — Page mit EnergieBilanz + Gauges + 5s Auto-Refresh
+6. ✅ `App.tsx` + `TopNavigation.tsx` + `SubTabs.tsx` — Navigation (Top-Level "Live" Tab)
+7. ✅ `EnergieBilanz.tsx` + `GaugeChart.tsx` — Bilanz-Tabelle + Gauge-Charts
 
 ### Phase 2: MQTT-Inbound (universelle Datenbruecke)
 8. `MqttInboundCache` in `mqtt_client.py` — Subscribe + In-Memory-Cache

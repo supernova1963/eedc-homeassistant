@@ -11,6 +11,7 @@ import WallboxDashboard from './pages/WallboxDashboard'
 import BalkonkraftwerkDashboard from './pages/BalkonkraftwerkDashboard'
 import SonstigesDashboard from './pages/SonstigesDashboard'
 import AktuellerMonat from './pages/AktuellerMonat'
+import LiveDashboard from './pages/LiveDashboard'
 
 // Auswertungen
 import Auswertung from './pages/Auswertung'
@@ -66,6 +67,9 @@ function App() {
           <Route path="cockpit/balkonkraftwerk" element={<BalkonkraftwerkDashboard />} />
           <Route path="cockpit/aktueller-monat" element={<AktuellerMonat />} />
           <Route path="cockpit/sonstiges" element={<SonstigesDashboard />} />
+
+          {/* Live Dashboard */}
+          <Route path="live" element={<LiveDashboard />} />
 
           {/* Auswertungen */}
           <Route path="auswertungen" element={<Auswertung />} />

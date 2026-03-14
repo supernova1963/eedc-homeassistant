@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X, CalendarCheck } from 'lucide-react'
+import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X, CalendarCheck, Activity } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
@@ -16,6 +16,7 @@ import eedcIcon from '../../assets/eedc-icon.svg'
 // Haupttabs mit Icons
 const mainTabs: { name: string; basePath: string; icon: LucideIcon }[] = [
   { name: 'Cockpit', basePath: '/cockpit', icon: LayoutDashboard },
+  { name: 'Live', basePath: '/live', icon: Activity },
   { name: 'Auswertungen', basePath: '/auswertungen', icon: BarChart3 },
   { name: 'Aussichten', basePath: '/aussichten', icon: TrendingUp },
   { name: 'Community', basePath: '/community', icon: Users },
@@ -96,6 +97,7 @@ export default function TopNavigation() {
   // Bestimme aktiven Haupttab
   const getActiveMainTab = () => {
     if (location.pathname.startsWith('/cockpit')) return 'Cockpit'
+    if (location.pathname.startsWith('/live')) return 'Live'
     if (location.pathname.startsWith('/auswertungen')) return 'Auswertungen'
     if (location.pathname.startsWith('/aussichten')) return 'Aussichten'
     if (location.pathname.startsWith('/community')) return 'Community'
