@@ -134,6 +134,17 @@ export interface MqttTopicsResponse {
   topics: MqttTopic[]
 }
 
+export interface MqttCacheWert {
+  topic: string
+  wert: number
+  zeitpunkt: string
+  kategorie: 'live' | 'energy'
+}
+
+export interface MqttValuesResponse {
+  werte: MqttCacheWert[]
+}
+
 export const liveDashboardApi = {
   getData: (anlageId: number, demo = false) =>
     api.get<LiveDashboardResponse>(`/live/${anlageId}${demo ? '?demo=true' : ''}`),
@@ -146,6 +157,9 @@ export const liveDashboardApi = {
 
   getMqttStatus: () =>
     api.get<MqttInboundStatus>('/live/mqtt/status'),
+
+  getMqttValues: () =>
+    api.get<MqttValuesResponse>('/live/mqtt/values'),
 
   getMqttSettings: () =>
     api.get<MqttSettings>('/live/mqtt/settings'),

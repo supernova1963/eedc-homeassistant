@@ -197,6 +197,51 @@ async def get_mqtt_inbound_status():
     return svc.get_status()
 
 
+@router.get("/mqtt/values")
+async def get_mqtt_inbound_values():
+    """Gibt alle aktuell im Cache befindlichen MQTT-Werte zurück (für Monitor-Anzeige)."""
+    from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+    svc = get_mqtt_inbound_service()
+    if not svc:
+        return {"werte": []}
+
+    cache = svc.cache
+    werte = []
+
+    # Live-Werte
+    for anlage_id, data in cache._live.items():
+        for key, (val, ts) in data.get("basis", {}).items():
+            werte.append({
+                "topic": f"eedc/{anlage_id}/live/{key}",
+                "wert": val,
+                "zeitpunkt": ts.isoformat(),
+                "kategorie": "live",
+            })
+        for inv_id, inv_data in data.get("inv", {}).items():
+            for key, (val, ts) in inv_data.items():
+                werte.append({
+                    "topic": f"eedc/{anlage_id}/live/inv/{inv_id}/{key}",
+                    "wert": val,
+                    "zeitpunkt": ts.isoformat(),
+                    "kategorie": "live",
+                })
+
+    # Energy-Werte
+    for anlage_id, energy_data in cache._energy.items():
+        for key, (val, ts) in energy_data.items():
+            werte.append({
+                "topic": f"eedc/{anlage_id}/energy/{key}",
+                "wert": val,
+                "zeitpunkt": ts.isoformat(),
+                "kategorie": "energy",
+            })
+
+    # Nach Zeitpunkt sortieren (neueste zuerst)
+    werte.sort(key=lambda w: w["zeitpunkt"], reverse=True)
+
+    return {"werte": werte}
+
+
 @router.get("/mqtt/settings")
 async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
     """Gibt die gespeicherten MQTT-Inbound-Einstellungen zurück."""
@@ -369,20 +414,41 @@ async def get_mqtt_topics(
         aid = anlage.id
         aname = anlage.anlagenname or f"Anlage {aid}"
         aslug = _mqtt_slug(aname)
-        prefix = f"eedc/{aid}_{aslug}/live"
+        live_prefix = f"eedc/{aid}_{aslug}/live"
+        energy_prefix = f"eedc/{aid}_{aslug}/energy"
 
-        # Basis-Topics
+        # Live Basis-Topics
         topics.append({
-            "topic": f"{prefix}/einspeisung_w",
-            "label": f"Einspeisung (W)",
+            "topic": f"{live_prefix}/einspeisung_w",
+            "label": "Einspeisung (W)",
             "anlage": aname,
             "typ": "basis",
         })
         topics.append({
-            "topic": f"{prefix}/netzbezug_w",
-            "label": f"Netzbezug (W)",
+            "topic": f"{live_prefix}/netzbezug_w",
+            "label": "Netzbezug (W)",
             "anlage": aname,
             "typ": "basis",
+        })
+
+        # Energy Basis-Topics (kWh Monatswerte)
+        topics.append({
+            "topic": f"{energy_prefix}/pv_gesamt_kwh",
+            "label": "PV-Erzeugung Monat (kWh)",
+            "anlage": aname,
+            "typ": "energy",
+        })
+        topics.append({
+            "topic": f"{energy_prefix}/einspeisung_kwh",
+            "label": "Einspeisung Monat (kWh)",
+            "anlage": aname,
+            "typ": "energy",
+        })
+        topics.append({
+            "topic": f"{energy_prefix}/netzbezug_kwh",
+            "label": "Netzbezug Monat (kWh)",
+            "anlage": aname,
+            "typ": "energy",
         })
 
         # Investitions-Topics
@@ -395,22 +461,43 @@ async def get_mqtt_topics(
 
         soc_typen = {"speicher", "e-auto"}
 
+        # Investitions-spezifische Energy-Keys nach Typ
+        energy_keys_by_typ = {
+            "pv-module": [("pv_erzeugung_kwh", "PV-Erzeugung (kWh)")],
+            "speicher": [("ladung_kwh", "Ladung (kWh)"), ("entladung_kwh", "Entladung (kWh)")],
+            "waermepumpe": [("stromverbrauch_kwh", "Stromverbrauch (kWh)")],
+            "e-auto": [("ladung_kwh", "Ladung (kWh)")],
+            "wallbox": [("ladung_kwh", "Ladung (kWh)")],
+            "balkonkraftwerk": [("pv_erzeugung_kwh", "Erzeugung (kWh)")],
+        }
+
         for inv in investitionen:
             islug = _mqtt_slug(inv.bezeichnung)
-            inv_prefix = f"{prefix}/inv/{inv.id}_{islug}"
+            inv_live = f"{live_prefix}/inv/{inv.id}_{islug}"
+            inv_energy = f"{energy_prefix}/inv/{inv.id}_{islug}"
 
+            # Live-Topics
             topics.append({
-                "topic": f"{inv_prefix}/leistung_w",
+                "topic": f"{inv_live}/leistung_w",
                 "label": f"{inv.bezeichnung} – Leistung (W)",
                 "anlage": aname,
                 "typ": inv.typ,
             })
             if inv.typ in soc_typen:
                 topics.append({
-                    "topic": f"{inv_prefix}/soc",
+                    "topic": f"{inv_live}/soc",
                     "label": f"{inv.bezeichnung} – SoC (%)",
                     "anlage": aname,
                     "typ": inv.typ,
+                })
+
+            # Energy-Topics
+            for key, label in energy_keys_by_typ.get(inv.typ, []):
+                topics.append({
+                    "topic": f"{inv_energy}/{key}",
+                    "label": f"{inv.bezeichnung} – {label}",
+                    "anlage": aname,
+                    "typ": "energy",
                 })
 
     return {"topics": topics}

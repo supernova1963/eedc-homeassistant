@@ -6,10 +6,10 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check } from 'lucide-react'
+import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen } from 'lucide-react'
 import Input from '../components/ui/Input'
 import { liveDashboardApi } from '../api/liveDashboard'
-import type { MqttTestResult, MqttInboundStatus, MqttTopic } from '../api/liveDashboard'
+import type { MqttTestResult, MqttInboundStatus, MqttTopic, MqttCacheWert } from '../api/liveDashboard'
 import { useAnlagen } from '../hooks'
 
 export default function MqttInboundSetup() {
@@ -40,6 +40,10 @@ export default function MqttInboundSetup() {
 
   // Konkrete Topics
   const [topics, setTopics] = useState<MqttTopic[]>([])
+
+  // Monitor
+  const [cacheValues, setCacheValues] = useState<MqttCacheWert[]>([])
+  const [monitorLoading, setMonitorLoading] = useState(false)
 
   // Erste Anlage vorauswählen
   useEffect(() => {
@@ -116,6 +120,18 @@ export default function MqttInboundSetup() {
     navigator.clipboard.writeText(topic)
     setCopied(topic)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  const loadCacheValues = async () => {
+    setMonitorLoading(true)
+    try {
+      const resp = await liveDashboardApi.getMqttValues()
+      setCacheValues(resp.werte || [])
+    } catch {
+      setCacheValues([])
+    } finally {
+      setMonitorLoading(false)
+    }
   }
 
   if (loading) {
@@ -286,6 +302,55 @@ export default function MqttInboundSetup() {
         </div>
       )}
 
+      {/* Empfangene Werte (Monitor) */}
+      {status?.subscriber_aktiv && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-green-500" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">Empfangene Werte</h2>
+            </div>
+            <button
+              onClick={loadCacheValues}
+              disabled={monitorLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${monitorLoading ? 'animate-spin' : ''}`} />
+              Aktualisieren
+            </button>
+          </div>
+
+          {cacheValues.length > 0 ? (
+            <div className="space-y-1">
+              {cacheValues.map((w) => (
+                <div key={w.topic} className="flex items-center gap-2 text-sm">
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    w.kategorie === 'live'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  }`}>
+                    {w.kategorie}
+                  </span>
+                  <code className="flex-1 text-xs font-mono text-gray-600 dark:text-gray-400 truncate" title={w.topic}>
+                    {w.topic}
+                  </code>
+                  <span className="font-medium text-gray-900 dark:text-white tabular-nums">
+                    {w.wert}
+                  </span>
+                  <span className="text-xs text-gray-400 tabular-nums">
+                    {new Date(w.zeitpunkt).toLocaleTimeString('de-DE')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 italic">
+              Noch keine Werte empfangen. Klicke &quot;Aktualisieren&quot; nach dem Senden von Testdaten.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Topic-Dokumentation */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 space-y-4">
         <div className="flex items-center justify-between">
@@ -338,6 +403,12 @@ export default function MqttInboundSetup() {
           </div>
         )}
       </div>
+
+      {/* Beispiel-Flows */}
+      <BeispielFlows
+        exampleTopic={erstesInvTopic?.topic || 'eedc/1/live/inv/1/leistung_w'}
+        host={host || 'localhost'}
+      />
     </div>
   )
 }
@@ -361,6 +432,108 @@ function TopicRow({ label, topic, copied, onCopy }: {
       >
         {copied === topic ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
+    </div>
+  )
+}
+
+function BeispielFlows({ exampleTopic, host }: { exampleTopic: string; host: string }) {
+  const [open, setOpen] = useState(false)
+  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null)
+
+  const copySnippet = (id: string, text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedSnippet(id)
+    setTimeout(() => setCopiedSnippet(null), 2000)
+  }
+
+  const haAutomation = `automation:
+  - alias: "EEDC PV-Leistung senden"
+    trigger:
+      - platform: state
+        entity_id: sensor.pv_power
+    action:
+      - service: mqtt.publish
+        data:
+          topic: "${exampleTopic}"
+          payload: "{{ states('sensor.pv_power') }}"`
+
+  const nodeRed = `[
+  {
+    "id": "eedc_pv",
+    "type": "mqtt out",
+    "topic": "${exampleTopic}",
+    "broker": "${host}",
+    "name": "EEDC PV-Leistung"
+  }
+]`
+
+  const ioBroker = `on('sourceDP.pv_power', (obj) => {
+    sendTo('mqtt.0', 'publish', {
+        topic: '${exampleTopic}',
+        message: String(obj.state.val)
+    });
+});`
+
+  const fhem = `define eedc_pv notify pv_power:.* {\\
+  fhem("set mqtt2 publish ${exampleTopic} " . ReadingsVal("pv_power","state","0"))\\
+}`
+
+  const openHab = `rule "EEDC PV senden"
+when
+    Item PV_Power changed
+then
+    val mqttActions = getActions("mqtt", "mqtt:broker:myBroker")
+    mqttActions.publishMQTT("${exampleTopic}", PV_Power.state.toString)
+end`
+
+  const snippets = [
+    { id: 'ha', label: 'Home Assistant Automation', lang: 'yaml', code: haAutomation },
+    { id: 'nodered', label: 'Node-RED', lang: 'json', code: nodeRed },
+    { id: 'iobroker', label: 'ioBroker JavaScript', lang: 'javascript', code: ioBroker },
+    { id: 'fhem', label: 'FHEM', lang: 'perl', code: fhem },
+    { id: 'openhab', label: 'openHAB', lang: 'java', code: openHab },
+  ]
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-5 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-5 h-5 text-purple-500" />
+          <h2 className="font-semibold text-gray-900 dark:text-white">Beispiel-Flows</h2>
+          <span className="text-xs text-gray-400">HA, Node-RED, ioBroker, FHEM, openHAB</span>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Kopiere den passenden Beispiel-Flow und passe die Sensor-IDs an deine Installation an.
+            Die Topics oben werden automatisch mit deinen Anlagen-/Investitions-IDs generiert.
+          </p>
+
+          {snippets.map((s) => (
+            <div key={s.id} className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{s.label}</span>
+                <button
+                  onClick={() => copySnippet(s.id, s.code)}
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  {copiedSnippet === s.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                  {copiedSnippet === s.id ? 'Kopiert' : 'Kopieren'}
+                </button>
+              </div>
+              <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded-lg overflow-x-auto text-gray-800 dark:text-gray-200">
+                <code>{s.code}</code>
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

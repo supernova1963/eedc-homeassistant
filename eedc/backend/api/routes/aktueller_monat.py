@@ -295,6 +295,50 @@ async def _collect_saved_data(
     return resolved
 
 
+async def _collect_mqtt_inbound_data(anlage: Anlage, investitionen: list[Investition]) -> dict[str, tuple[float, DatenquelleInfo]]:
+    """Sammelt Monatsdaten aus MQTT-Inbound Energy-Topics (Konfidenz 91%).
+
+    Liest kumulierte Monatswerte aus dem MQTT-Cache.
+    Topics: eedc/{id}/energy/einspeisung_kwh, .../inv/{inv_id}/ladung_kwh etc.
+    """
+    from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+
+    svc = get_mqtt_inbound_service()
+    if not svc:
+        return {}
+
+    energy = svc.cache.get_energy_data(anlage.id)
+    if not energy:
+        return {}
+
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
+    now_str = datetime.utcnow().isoformat()
+    quelle = DatenquelleInfo(quelle="mqtt_inbound", konfidenz=91, zeitpunkt=now_str)
+
+    # Basis-Felder
+    basis_map = {
+        "pv_gesamt_kwh": "pv_erzeugung_kwh",
+        "einspeisung_kwh": "einspeisung_kwh",
+        "netzbezug_kwh": "netzbezug_kwh",
+    }
+    for mqtt_key, feld_name in basis_map.items():
+        val = energy.get(mqtt_key)
+        if val is not None and val > 0:
+            resolved[feld_name] = (val, quelle)
+
+    # Investitions-Felder: inv/{inv_id}/{key} → inv_{inv_id}_{key}
+    # (passt zum Aggregations-Pattern in der Prioritätskette)
+    inv_ids = {str(i.id) for i in investitionen}
+    for mqtt_key, val in energy.items():
+        if not mqtt_key.startswith("inv/") or val is None or val <= 0:
+            continue
+        parts = mqtt_key.split("/", 2)  # ["inv", "3", "ladung_kwh"]
+        if len(parts) == 3 and parts[1] in inv_ids:
+            resolved[f"inv_{parts[1]}_{parts[2]}"] = (val, quelle)
+
+    return resolved
+
+
 # =============================================================================
 # Vergleichsdaten
 # =============================================================================
@@ -377,10 +421,11 @@ async def get_aktueller_monat(
     """
     Übersicht des aktuellen Monats mit Daten aus allen verfügbaren Quellen.
 
-    Datenquellen-Priorität:
-    1. HA-Sensoren (95%) — MQTT-Monatswerte
+    Datenquellen-Priorität (höchste überschreibt niedrigere):
+    1. Gespeicherte Monatsdaten (85%) — DB
     2. Connector (90%) — Geräte-Snapshot-Delta
-    3. Gespeicherte Monatsdaten (85%) — DB
+    3. MQTT-Inbound (91%) — Energy-Topics aus Smarthome
+    4. HA Statistics (92%) — Recorder-DB
     """
     # Anlage mit Investitionen laden
     result = await db.execute(
@@ -405,6 +450,9 @@ async def get_aktueller_monat(
 
     connector = await _collect_connector_data(anlage, jahr, monat)
     resolved.update(connector)
+
+    mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen)
+    resolved.update(mqtt_energy)
 
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
     resolved.update(ha_stats)
@@ -505,6 +553,7 @@ async def get_aktueller_monat(
     # ── Quellen-Übersicht ──
     quellen = {
         "ha_statistics": bool(ha_stats),
+        "mqtt_inbound": bool(mqtt_energy),
         "connector": bool(connector),
         "gespeichert": bool(saved),
     }

@@ -115,6 +115,11 @@ class MqttInboundCache:
             for inv_id, values in inv_data.items()
         }
 
+    def get_energy_data(self, anlage_id: int) -> dict[str, float]:
+        """Gibt Energy-Werte zurück (einspeisung_kwh, netzbezug_kwh, inv/...)."""
+        cache = self._energy.get(anlage_id, {})
+        return {k: v[0] for k, v in cache.items()}
+
     def has_data(self, anlage_id: int) -> bool:
         """Prüft ob MQTT-Daten für eine Anlage vorliegen."""
         cache = self._live.get(anlage_id, {})
