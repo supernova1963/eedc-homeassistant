@@ -117,7 +117,7 @@ echo "  eedc/frontend/src/config/version.ts  → $VERSION"
 sed -i "s/^version: \".*\"/version: \"$VERSION\"/" eedc/config.yaml
 echo "  eedc/config.yaml                    → $VERSION"
 
-sed -i "s/Version: .*/Version: $VERSION/" eedc/run.sh
+sed -i "s/Version: [0-9][0-9.]*/Version: $VERSION/" eedc/run.sh
 echo "  eedc/run.sh                         → $VERSION"
 
 sed -i "s/io.hass.version=\"[^\"]*\"/io.hass.version=\"$VERSION\"/" eedc/Dockerfile
