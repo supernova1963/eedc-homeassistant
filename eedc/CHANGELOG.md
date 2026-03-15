@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.4] - 2026-03-15
+
+### Behoben
+
+- **Energiefluss: E-Auto/Wallbox Doppelzählung:** E-Auto-Ladeleistung wurde separat zur Wallbox-Leistung in Σ Verbrauch gezählt, obwohl beides denselben Energiefluss misst
+- **Energiefluss: E-Auto → Wallbox Verbindung:** E-Auto verbindet sich jetzt mit der Wallbox statt direkt mit dem Haus (physisch korrekt: Haus → Wallbox → E-Auto)
+
 ## [3.0.3] - 2026-03-15
 
 ### Hinzugefügt
