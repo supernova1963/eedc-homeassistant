@@ -44,7 +44,7 @@ class PVGISPrognose(Base):
     anlage_id: Mapped[int] = mapped_column(Integer, ForeignKey("anlagen.id", ondelete="CASCADE"), nullable=False)
 
     # Timestamp
-    abgerufen_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    abgerufen_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     # Parameter
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
@@ -74,7 +74,7 @@ class PVGISPrognose(Base):
     ist_aktiv: Mapped[bool] = mapped_column(default=True)
 
     # Metadata
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     # Relationships
     anlage = relationship("Anlage", back_populates="pvgis_prognosen")

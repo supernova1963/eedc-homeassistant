@@ -148,7 +148,7 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
         return {}
 
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
-    now_str = datetime.utcnow().isoformat()
+    now_str = datetime.now().isoformat()
     quelle = DatenquelleInfo(quelle="ha_statistics", konfidenz=92, zeitpunkt=now_str)
 
     for sensor_wert in result.sensoren:
@@ -312,7 +312,7 @@ async def _collect_mqtt_inbound_data(anlage: Anlage, investitionen: list[Investi
         return {}
 
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
-    now_str = datetime.utcnow().isoformat()
+    now_str = datetime.now().isoformat()
     quelle = DatenquelleInfo(quelle="mqtt_inbound", konfidenz=91, zeitpunkt=now_str)
 
     # Basis-Felder
@@ -437,7 +437,7 @@ async def get_aktueller_monat(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    now = datetime.utcnow()
+    now = datetime.now()
     jahr = now.year
     monat = now.month
     investitionen = [i for i in anlage.investitionen if i.aktiv]

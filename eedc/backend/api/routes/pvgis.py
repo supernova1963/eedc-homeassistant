@@ -442,7 +442,7 @@ async def get_pvgis_prognose(
         monatsdaten=gesamt_monatsdaten_list,
         module=module_prognosen,
         system_losses=system_losses,
-        abgerufen_am=datetime.utcnow()
+        abgerufen_am=datetime.now()
     )
 
 
@@ -537,7 +537,7 @@ async def get_pvgis_modul_prognose(
             "latitude": anlage.latitude,
             "longitude": anlage.longitude
         },
-        "abgerufen_am": datetime.utcnow().isoformat()
+        "abgerufen_am": datetime.now().isoformat()
     }
 
 

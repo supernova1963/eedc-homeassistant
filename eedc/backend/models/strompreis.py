@@ -48,8 +48,8 @@ class Strompreis(Base):
     verwendung: Mapped[str] = mapped_column(String(30), nullable=False, default="allgemein", server_default="allgemein")  # allgemein, waermepumpe, wallbox
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     # Relationships
     anlage = relationship("Anlage", back_populates="strompreise")

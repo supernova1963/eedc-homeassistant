@@ -88,7 +88,7 @@ async def get_activities(
 async def cleanup_old_activities():
     """Alte Activity-Log-Einträge bereinigen (>90 Tage oder >1000 Stück)."""
     async with get_session() as session:
-        cutoff = datetime.utcnow() - timedelta(days=CLEANUP_INTERVAL_DAYS)
+        cutoff = datetime.now() - timedelta(days=CLEANUP_INTERVAL_DAYS)
         await session.execute(
             delete(ActivityLog).where(ActivityLog.timestamp < cutoff)
         )

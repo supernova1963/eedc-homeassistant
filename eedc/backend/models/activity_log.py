@@ -27,7 +27,7 @@ class ActivityLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False, index=True
+        DateTime, default=datetime.now, nullable=False, index=True
     )
     kategorie: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     aktion: Mapped[str] = mapped_column(String(500), nullable=False)

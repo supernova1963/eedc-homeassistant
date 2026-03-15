@@ -102,8 +102,8 @@ class Anlage(Base):
     ust_satz_prozent: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=19.0)  # DE: 19, AT: 20, CH: 8.1
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     # Relationships
     monatsdaten = relationship("Monatsdaten", back_populates="anlage", cascade="all, delete-orphan")

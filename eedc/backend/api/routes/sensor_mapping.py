@@ -336,7 +336,7 @@ async def save_sensor_mapping(
             mapping_dict["investitionen"][inv_id] = inv_data
 
         # Timestamp setzen
-        mapping_dict["updated_at"] = datetime.utcnow().isoformat()
+        mapping_dict["updated_at"] = datetime.now().isoformat()
 
         # In Anlage speichern
         anlage.sensor_mapping = mapping_dict

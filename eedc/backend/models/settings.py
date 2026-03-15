@@ -26,7 +26,7 @@ class Settings(Base):
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)
     value: Mapped[Any] = mapped_column(JSON, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     def __repr__(self) -> str:
         return f"<Settings(key='{self.key}')>"
