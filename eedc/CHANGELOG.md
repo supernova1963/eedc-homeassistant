@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.2] - 2026-03-15
+
+### Behoben
+
+- **run.sh:** Fehlendes Anführungszeichen in Version-Echo repariert (sed-Pattern fraß das `"`)
+- **Release-Script:** sed-Pattern auf `[0-9][0-9.]*` eingeschränkt, damit nachfolgende Zeichen erhalten bleiben
+
 ## [3.0.1] - 2026-03-15
 
 ### Behoben
