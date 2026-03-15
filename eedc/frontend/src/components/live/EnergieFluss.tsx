@@ -62,13 +62,6 @@ interface NodePosition {
 
 const W = 600
 const CX = W / 2
-const CY = 210  // Festes Zentrum (unabhängig von Höhe)
-
-// Knoten-Dimensionen
-const NODE_W = 110
-const NODE_H = 68
-const NODE_R = 12
-const HAUS_R = 46
 
 /** Verteile n Items gleichmäßig auf einer Linie */
 function distribute(n: number, minX: number, maxX: number): number[] {
@@ -78,7 +71,56 @@ function distribute(n: number, minX: number, maxX: number): number[] {
   return Array.from({ length: n }, (_, i) => minX + i * step)
 }
 
-function layoutNodes(komponenten: LiveKomponente[]): NodePosition[] {
+/** Dynamische Dimensionen abhängig von der max. Anzahl Komponenten pro Zeile */
+interface LayoutDims {
+  nodeW: number
+  nodeH: number
+  nodeR: number
+  hausR: number
+  cy: number
+  verbraucherY: number
+  kwFontSize: number
+  labelFontSize: number
+  socFontSize: number
+  labelMaxChars: number
+  iconSize: number
+  hausIconSize: number
+}
+
+function computeDims(maxPerRow: number): LayoutDims {
+  // Ab 5+ Items pro Zeile: kompakte Darstellung
+  if (maxPerRow >= 5) {
+    return {
+      nodeW: 80, nodeH: 52, nodeR: 10, hausR: 38,
+      cy: 190, verbraucherY: 340,
+      kwFontSize: 10, labelFontSize: 8.5, socFontSize: 9,
+      labelMaxChars: 11, iconSize: 16, hausIconSize: 26,
+    }
+  }
+  // 4 Items: leicht reduziert
+  if (maxPerRow >= 4) {
+    return {
+      nodeW: 95, nodeH: 60, nodeR: 11, hausR: 42,
+      cy: 200, verbraucherY: 355,
+      kwFontSize: 11.5, labelFontSize: 9, socFontSize: 10,
+      labelMaxChars: 13, iconSize: 18, hausIconSize: 28,
+    }
+  }
+  // ≤3 Items: Standard-Größe
+  return {
+    nodeW: 110, nodeH: 68, nodeR: 12, hausR: 46,
+    cy: 210, verbraucherY: 370,
+    kwFontSize: 13, labelFontSize: 10, socFontSize: 11,
+    labelMaxChars: 16, iconSize: 20, hausIconSize: 32,
+  }
+}
+
+interface LayoutResult {
+  nodes: NodePosition[]
+  dims: LayoutDims
+}
+
+function layoutNodes(komponenten: LiveKomponente[]): LayoutResult {
   const erzeuger = komponenten.filter(k => k.key.startsWith('pv_'))
   const netz = komponenten.filter(k => k.key === 'netz')
   const speicher = komponenten.filter(k => k.key.startsWith('batterie_'))
@@ -91,47 +133,45 @@ function layoutNodes(komponenten: LiveKomponente[]): NodePosition[] {
     !kinderKeys.has(k.key)
   )
 
+  // Kinder in Verbraucher-Reihe einreihen (Flusslinie geht trotzdem zum Parent)
+  const alleUnten = [...verbraucher, ...kinder]
+
+  const maxPerRow = Math.max(erzeuger.length, alleUnten.length, 1)
+  const dims = computeDims(maxPerRow)
+  const { nodeW, nodeH, cy: CY } = dims
+
   const nodes: NodePosition[] = []
 
-  // Oben: Erzeuger
-  const ezXs = distribute(erzeuger.length, 140, 460)
+  // Dynamische Ränder: nutzt die volle Breite besser aus
+  const margin = nodeW / 2 + 15
+
+  // Oben: Erzeuger (volle Breite abzüglich Rand)
+  const ezXs = distribute(erzeuger.length, margin, W - margin)
   erzeuger.forEach((k, i) => nodes.push({ x: ezXs[i], y: 50, komp: k }))
 
   // Links: Netz
-  netz.forEach(k => nodes.push({ x: 70, y: CY, komp: k }))
+  netz.forEach(k => nodes.push({ x: margin, y: CY, komp: k }))
 
-  // Rechts: Speicher
-  const spXs = distribute(speicher.length, 510, 540)
-  speicher.forEach((k, i) => nodes.push({ x: spXs[i], y: CY, komp: k }))
-
-  // Unten: Verbraucher (ohne Kinder)
-  const vrXs = distribute(verbraucher.length, 110, 490)
-  verbraucher.forEach((k, i) => nodes.push({ x: vrXs[i], y: 370, komp: k }))
-
-  // Kinder: neben ihrem Parent positionieren (rechts versetzt)
-  const parentPositions = new Map(nodes.map(n => [n.komp.key, n]))
-  kinder.forEach(k => {
-    const parent = parentPositions.get(k.parent_key!)
-    if (parent) {
-      const kinderOfParent = kinder.filter(c => c.parent_key === k.parent_key!)
-      const idx = kinderOfParent.indexOf(k)
-      // Kinder rechts neben dem Parent, bei mehreren gestaffelt nach unten
-      const offsetX = NODE_W + 20
-      const offsetY = idx * (NODE_H + 8)
-      nodes.push({ x: parent.x + offsetX, y: parent.y + offsetY, komp: k })
-    } else {
-      // Fallback: als normaler Verbraucher unten
-      nodes.push({ x: CX, y: 370, komp: k })
-    }
+  // Rechts: Speicher — vertikal gestapelt bei mehreren
+  const spX = W - margin
+  speicher.forEach((k, i) => {
+    const offsetY = speicher.length > 1
+      ? (i - (speicher.length - 1) / 2) * (nodeH + 10)
+      : 0
+    nodes.push({ x: spX, y: CY + offsetY, komp: k })
   })
 
-  return nodes
+  // Unten: Verbraucher + Kinder zusammen in einer Reihe
+  const vrXs = distribute(alleUnten.length, margin, W - margin)
+  alleUnten.forEach((k, i) => nodes.push({ x: vrXs[i], y: dims.verbraucherY, komp: k }))
+
+  return { nodes, dims }
 }
 
 // ─── SVG Helpers ────────────────────────────────────────────────────
 
 /** Quadratic Bezier Pfad von Knoten zu Zielpunkt */
-function flowPath(nx: number, ny: number, tx: number = CX, ty: number = CY): string {
+function flowPath(nx: number, ny: number, tx: number, ty: number): string {
   const mx = (nx + tx) / 2
   const my = (ny + ty) / 2
   const dx = tx - nx
@@ -180,12 +220,14 @@ export default function EnergieFluss({
 }: EnergieFlussProps) {
   if (komponenten.length === 0) return null
 
-  const nodes = layoutNodes(komponenten)
+  const { nodes, dims } = layoutNodes(komponenten)
+  const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
+  const CY = dims.cy
   const nodeMap = new Map(nodes.map(n => [n.komp.key, n]))
   const haushalt = komponenten.find(k => k.key === 'haushalt')
 
   // Dynamische Höhe: Basis 420, erweitert wenn Knoten tiefer liegen
-  const maxY = Math.max(...nodes.map(n => n.y), 370)
+  const maxY = Math.max(...nodes.map(n => n.y), dims.verbraucherY)
   const svgH = Math.max(420, maxY + NODE_H / 2 + 10)
 
   // Max kW für Dicken-Normierung
@@ -275,14 +317,15 @@ export default function EnergieFluss({
             className="fill-white dark:fill-gray-800 stroke-gray-300 dark:stroke-gray-600"
             strokeWidth={2}
           />
-          <foreignObject x={CX - 16} y={CY - 24} width={32} height={32}>
-            <IconElement name="home" size={32} className="text-emerald-500" />
+          <foreignObject x={CX - dims.hausIconSize / 2} y={CY - dims.hausIconSize * 0.75} width={dims.hausIconSize} height={dims.hausIconSize}>
+            <IconElement name="home" size={dims.hausIconSize} className="text-emerald-500" />
           </foreignObject>
           {/* Haushalt kW */}
           <text
-            x={CX} y={CY + 22}
+            x={CX} y={CY + dims.hausIconSize * 0.7}
             textAnchor="middle"
-            className="text-[13px] font-bold fill-gray-900 dark:fill-white"
+            style={{ fontSize: `${dims.kwFontSize}px` }}
+            className="font-bold fill-gray-900 dark:fill-white"
           >
             {haushalt ? `${(haushalt.verbrauch_kw ?? 0).toFixed(2)} kW` : ''}
           </text>
@@ -290,9 +333,10 @@ export default function EnergieFluss({
 
         {/* Summenzeile unter Haus */}
         <text
-          x={CX} y={CY + HAUS_R + 18}
+          x={CX} y={CY + HAUS_R + 16}
           textAnchor="middle"
-          className="text-[11px] fill-gray-500 dark:fill-gray-400"
+          style={{ fontSize: `${dims.socFontSize}px` }}
+          className="fill-gray-500 dark:fill-gray-400"
         >
           <tspan className="fill-green-600 dark:fill-green-400">
             ▲ {summeErzeugung.toFixed(2)}
@@ -333,7 +377,8 @@ export default function EnergieFluss({
           const tip = tipParts.join('\n')
 
           // Label kürzen
-          const shortLabel = k.label.length > 16 ? k.label.slice(0, 14) + '…' : k.label
+          const maxC = dims.labelMaxChars
+          const shortLabel = k.label.length > maxC ? k.label.slice(0, maxC - 2) + '…' : k.label
 
           const nx = node.x - NODE_W / 2
           const ny = node.y - NODE_H / 2
@@ -366,15 +411,16 @@ export default function EnergieFluss({
               )}
 
               {/* Icon */}
-              <foreignObject x={node.x - 10} y={node.y - 28} width={20} height={20}>
-                <IconElement name={k.icon} size={20} color={isActive ? color : '#9ca3af'} />
+              <foreignObject x={node.x - dims.iconSize / 2} y={node.y - NODE_H / 2 + 6} width={dims.iconSize} height={dims.iconSize}>
+                <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : '#9ca3af'} />
               </foreignObject>
 
               {/* kW-Wert */}
               <text
                 x={node.x} y={node.y + 1}
                 textAnchor="middle"
-                className="text-[13px] font-bold fill-gray-900 dark:fill-white"
+                style={{ fontSize: `${dims.kwFontSize}px` }}
+                className="font-bold fill-gray-900 dark:fill-white"
               >
                 {isActive ? `${kw.toFixed(2)} kW` : '0 kW'}
               </text>
@@ -382,9 +428,10 @@ export default function EnergieFluss({
               {/* SoC-Anzeige */}
               {hasSoc && (
                 <text
-                  x={node.x} y={node.y + 16}
+                  x={node.x} y={node.y + dims.kwFontSize + 2}
                   textAnchor="middle"
-                  className="text-[11px] font-semibold"
+                  style={{ fontSize: `${dims.socFontSize}px` }}
+                  className="font-semibold"
                   fill={socColor(soc)}
                 >
                   {soc}%
@@ -393,9 +440,10 @@ export default function EnergieFluss({
 
               {/* Label */}
               <text
-                x={node.x} y={node.y + (hasSoc ? 28 : 18)}
+                x={node.x} y={node.y + (hasSoc ? NODE_H / 2 - 4 : dims.kwFontSize + 6)}
                 textAnchor="middle"
-                className="text-[10px] fill-gray-500 dark:fill-gray-400"
+                style={{ fontSize: `${dims.labelFontSize}px` }}
+                className="fill-gray-500 dark:fill-gray-400"
               >
                 {shortLabel}
               </text>
