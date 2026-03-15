@@ -7,6 +7,48 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.0] - 2026-03-15
+
+### Hinzugefügt
+
+- **Live Dashboard** – Neuer Top-Level-Tab mit Echtzeit-Leistungsdaten (kW), 5-Sekunden Auto-Refresh
+  - Energiebilanz-Tabelle mit gespiegelten Balken (Erzeugung links, Verbrauch rechts)
+  - Gauge-Charts für SoC (Batterie, E-Auto), Netz-Richtung, Autarkie
+  - Tagesverlauf-Chart (24h PV/Verbrauch/Netz/Speicher)
+  - Wetter-Widget mit Stunden-Prognose und PV/Verbrauch-Vorhersage
+  - Heute/Gestern kWh-Tagessummen (aus HA-History oder MQTT-Snapshots)
+  - Demo-Modus für Erstnutzer ohne konfigurierte Sensoren
+- **MQTT-Inbound** – Universelle Datenbrücke für jedes Smarthome-System
+  - Vordefinierte MQTT-Topic-Struktur für Live-Daten (W) und Monatswerte (kWh)
+  - In-Memory-Cache mit Auto-Reconnect und Retained Messages
+  - Einrichtungs-UI mit Monitor, Topic-Dokumentation und Beispiel-Flows (HA, Node-RED, ioBroker, FHEM, openHAB)
+  - Copy-to-Clipboard für alle Topics und Code-Snippets
+- **MQTT Energy → Monatsabschluss** – MQTT-Daten als 6. Datenquelle im Monatsabschluss-Wizard
+  - Konfidenz 91% (zwischen Connector 90% und HA Statistics 92%)
+  - Energy-Topic-Generierung für alle Investitionstypen (PV, Speicher, WP, E-Auto, Wallbox, BKW)
+  - Status-Chip im Wizard-Header, Datenherkunft-Tracking
+- **MQTT Energy Mini-History** – SQLite-basierte Snapshot-Historie für Standalone-MQTT-Nutzer
+  - Automatische Snapshots alle 5 Minuten via APScheduler
+  - Tages-Delta-Berechnung (Mitternacht-Differenzen, Monatswechsel-Handling)
+  - 31 Tage Retention mit täglichem Cleanup
+  - Fallback-Kette: HA-History → MQTT-Snapshots → leer
+- **Live-Sensor-Zuordnung** – Wiederverwendbare Sensor-Konfiguration pro Investitionstyp im Mapping-Wizard
+  - Vordefinierte Leistungs-Felder (W) pro Typ (PV, Speicher, WP, E-Auto, Wallbox, BKW)
+  - SensorAutocomplete mit device_class: power Filter
+- **HA Export: Investitions-Sensoren** – E-Auto (km, kWh/100km, PV-Anteil, Ersparnis vs. Benzin) und WP (COP, Ersparnis vs. alte Heizung) Sensoren aus InvestitionMonatsdaten
+
+### Behoben
+
+- **PDF-Report: WP-Ersparnis** – Berechnet jetzt vs. Gas/Öl aus Investitionsparametern (war 0)
+- **PDF-Report: E-Mob-Ersparnis** – Berechnet jetzt vs. Benzin aus Investitionsparametern (war 0)
+- **Live Dashboard: Haushalt-Berechnung** – Korrekte Berechnung als Residualwert
+- **Live Dashboard: Wechselrichter-Skip** – Investitionen vom Typ „Wechselrichter" werden ausgefiltert
+- **Live Dashboard: Negative Verbraucher-kW** – abs() für Sensoren die negative Standby-Werte melden
+- **MQTT Port-Validierung** – Nicht-numerischer Port gibt 400 statt 500
+- **Initialer MQTT-Snapshot** – Fehlender Logger-Import behoben (NameError wurde still geschluckt)
+
+---
+
 ## [2.9.1] - 2026-03-13
 
 ### Geändert
