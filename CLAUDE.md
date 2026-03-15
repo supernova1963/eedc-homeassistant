@@ -90,7 +90,7 @@ Das Script macht automatisch:
 4. Synchronisiert backend/ + frontend/ nach eedc-Standalone
 5. Committed + taggt + pusht eedc
 
-**Versionsdateien (4 Stück, alle in eedc/):**
+**Versionsdateien (5 Stück, alle in eedc/):**
 
 | Datei | Zweck |
 | --- | --- |
@@ -98,6 +98,7 @@ Das Script macht automatisch:
 | `frontend/src/config/version.ts` | APP_VERSION (Frontend) |
 | `config.yaml` | HA Add-on Version |
 | `run.sh` | Startup-Banner |
+| `Dockerfile` | `io.hass.version` Label |
 
 > **WICHTIG:** HA Add-ons lesen `eedc/CHANGELOG.md`. Das Release-Script kopiert automatisch.
 

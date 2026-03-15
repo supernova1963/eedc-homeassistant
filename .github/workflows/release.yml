@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          # CHANGELOG liegt in eedc/ (vom Release-Script dorthin kopiert)
+          CHANGELOG="eedc/CHANGELOG.md"
+          if [ ! -f "$CHANGELOG" ]; then
+            CHANGELOG="CHANGELOG.md"
+          fi
+          NOTES=$(sed -n "/^## \[${{ steps.version.outputs.VERSION }}\]/,/^## \[/{/^## \[/!p}" "$CHANGELOG")
+          echo "$NOTES" > /tmp/release-notes.md
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "eedc-homeassistant $GITHUB_REF_NAME" \
+              --notes-file /tmp/release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "eedc-homeassistant $GITHUB_REF_NAME" \
+              --notes-file /tmp/release-notes.md
+          fi

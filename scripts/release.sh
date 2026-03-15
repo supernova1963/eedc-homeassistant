@@ -8,7 +8,7 @@
 #
 # Was passiert:
 #   1. Prüft Voraussetzungen (clean, main-Branch, kein Konfliktmarker)
-#   2. Bumpt Version in allen 4 Dateien (eedc-homeassistant)
+#   2. Bumpt Version in allen 5 Dateien (eedc-homeassistant)
 #   3. Kopiert CHANGELOG nach eedc/
 #   4. Committed + taggt eedc-homeassistant
 #   5. Pusht eedc-homeassistant
@@ -104,7 +104,7 @@ echo -e "  Neu:      ${GREEN}$VERSION${NC}"
 echo ""
 
 # =============================================================================
-# SCHRITT 1: Version bumpen in eedc-homeassistant (alle 4 Dateien)
+# SCHRITT 1: Version bumpen in eedc-homeassistant (alle 5 Dateien)
 # =============================================================================
 echo -e "${CYAN}[1/5] Version bumpen in eedc-homeassistant...${NC}"
 
@@ -117,8 +117,11 @@ echo "  eedc/frontend/src/config/version.ts  → $VERSION"
 sed -i "s/^version: \".*\"/version: \"$VERSION\"/" eedc/config.yaml
 echo "  eedc/config.yaml                    → $VERSION"
 
-sed -i "s/Version: .*/Version: $VERSION\"/" eedc/run.sh
+sed -i "s/Version: .*/Version: $VERSION/" eedc/run.sh
 echo "  eedc/run.sh                         → $VERSION"
+
+sed -i "s/io.hass.version=\"[^\"]*\"/io.hass.version=\"$VERSION\"/" eedc/Dockerfile
+echo "  eedc/Dockerfile (Label)             → $VERSION"
 
 # =============================================================================
 # SCHRITT 2: CHANGELOG synchronisieren (Root → eedc/)
@@ -236,11 +239,10 @@ check_version "eedc/backend/core/config.py"         '(?<=APP_VERSION = ")[^"]*'
 check_version "eedc/frontend/src/config/version.ts"  "(?<=APP_VERSION = ')[^']*"
 check_version "eedc/config.yaml"                     '(?<=version: ")[^"]*'
 check_version "eedc/run.sh"                          '(?<=Version: )[0-9]+\.[0-9]+\.[0-9]+'
+check_version "eedc/Dockerfile"                       '(?<=io.hass.version=")[^"]*'
 check_version "$EEDC_STANDALONE/backend/core/config.py"         '(?<=APP_VERSION = ")[^"]*'
 check_version "$EEDC_STANDALONE/frontend/src/config/version.ts"  "(?<=APP_VERSION = ')[^']*"
 
 echo ""
-echo "Optional: GitHub Releases erstellen:"
-echo "  gh release create v$VERSION -R supernova1963/eedc-homeassistant --title \"v$VERSION\" --generate-notes"
-echo "  gh release create v$VERSION -R supernova1963/eedc --title \"v$VERSION\" --generate-notes"
+echo "GitHub Releases werden automatisch per Workflow erstellt (Tag-Push Trigger)."
 echo ""
