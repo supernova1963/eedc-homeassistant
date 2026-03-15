@@ -43,6 +43,8 @@ export interface LiveDashboardResponse {
   gestern_einspeisung_kwh: number | null
   gestern_netzbezug_kwh: number | null
   gestern_eigenverbrauch_kwh: number | null
+
+  heute_kwh_pro_komponente: Record<string, number> | null
 }
 
 export interface WetterStunde {

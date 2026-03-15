@@ -418,6 +418,22 @@ class LivePowerService:
         gestern_bezug = gestern_kwh.get("netzbezug")
         gestern_ev = round(gestern_pv - gestern_einsp, 1) if gestern_pv is not None and gestern_einsp is not None else None
 
+        # Per-Komponente Heute-kWh für Tooltips im Energiefluss
+        heute_pro_komp: dict[str, float] = {}
+        for key, val in heute_kwh.items():
+            if key in ("pv", "einspeisung", "netzbezug"):
+                continue  # Aggregat-Kategorien überspringen
+            if val is not None:
+                heute_pro_komp[key] = val
+        # Netz: Bezug + Einspeisung separat
+        if heute_bezug is not None:
+            heute_pro_komp["netz_bezug"] = heute_bezug
+        if heute_einsp is not None:
+            heute_pro_komp["netz_einspeisung"] = heute_einsp
+        # Haushalt = Eigenverbrauch
+        if heute_ev is not None:
+            heute_pro_komp["haushalt"] = heute_ev
+
         return {
             "anlage_id": anlage.id,
             "anlage_name": anlage.anlagenname,
@@ -435,6 +451,7 @@ class LivePowerService:
             "gestern_einspeisung_kwh": gestern_einsp,
             "gestern_netzbezug_kwh": gestern_bezug,
             "gestern_eigenverbrauch_kwh": gestern_ev,
+            "heute_kwh_pro_komponente": heute_pro_komp or None,
         }
 
     def _empty_response(self, anlage: Anlage) -> dict:
@@ -456,6 +473,7 @@ class LivePowerService:
             "gestern_einspeisung_kwh": None,
             "gestern_netzbezug_kwh": None,
             "gestern_eigenverbrauch_kwh": None,
+            "heute_kwh_pro_komponente": None,
         }
 
     async def _safe_get_tages_kwh(
@@ -484,13 +502,28 @@ class LivePowerService:
 
         return {}
 
+    @staticmethod
+    def _trapez_kwh(points: list) -> Optional[float]:
+        """Berechnet kWh aus Leistungs-History via Trapezregel."""
+        if len(points) < 2:
+            return None
+        energy_wh = 0.0
+        for i in range(len(points) - 1):
+            t1, p1 = points[i]
+            t2, p2 = points[i + 1]
+            dt_hours = (t2 - t1).total_seconds() / 3600
+            if 0 < dt_hours < 2:  # Max 2h Lücke
+                energy_wh += (p1 + p2) / 2 * dt_hours
+        return energy_wh / 1000  # Wh → kWh
+
     async def _get_tages_kwh(
         self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0
     ) -> dict[str, Optional[float]]:
         """
         Berechnet Tages-kWh aus HA-History (Leistungssensoren → Energie via Trapezregel).
 
-        Aggregiert per-Investition Sensoren in Kategorien (pv, einspeisung, netzbezug).
+        Aggregiert in Kategorien (pv, einspeisung, netzbezug) UND per-Komponente
+        (z.B. pv_3, wallbox_6, batterie_2) für Tooltips im Energiefluss.
         """
         from backend.services.ha_state_service import get_ha_state_service
 
@@ -511,20 +544,34 @@ class LivePowerService:
             "netzbezug": [],
         }
 
+        # Per-Komponente Entity-IDs {component_key: entity_id}
+        component_entities: dict[str, str] = {}
+
         # Basis: Einspeisung + Netzbezug
         if basis_live.get("einspeisung_w"):
             category_entities["einspeisung"].append(basis_live["einspeisung_w"])
         if basis_live.get("netzbezug_w"):
             category_entities["netzbezug"].append(basis_live["netzbezug_w"])
 
-        # PV-Investitionen
+        # Alle Investitionen mit leistung_w Sensor
         for inv_id, live in inv_live_map.items():
             typ = inv_types.get(inv_id)
-            if typ in _ERZEUGER_TYPEN and live.get("leistung_w"):
-                category_entities["pv"].append(live["leistung_w"])
+            if not typ or typ in _SKIP_TYPEN or not live.get("leistung_w"):
+                continue
+            entity_id = live["leistung_w"]
 
-        # Alle Entity-IDs sammeln
-        all_ids = [eid for eids in category_entities.values() for eid in eids]
+            if typ in _ERZEUGER_TYPEN:
+                category_entities["pv"].append(entity_id)
+                component_entities[f"pv_{inv_id}"] = entity_id
+            else:
+                prefix = _LIVE_KEY_PREFIX.get(typ, _TAGESVERLAUF_KATEGORIE.get(typ, typ))
+                component_entities[f"{prefix}_{inv_id}"] = entity_id
+
+        # Alle Entity-IDs sammeln (dedupliziert)
+        all_ids = list(set(
+            [eid for eids in category_entities.values() for eid in eids]
+            + list(component_entities.values())
+        ))
         if not all_ids:
             return {}
 
@@ -537,31 +584,28 @@ class LivePowerService:
         history = await ha_service.get_sensor_history(all_ids, start, end)
 
         result: dict[str, Optional[float]] = {}
+
+        # Aggregierte Kategorien (pv, einspeisung, netzbezug)
         for category, entity_ids in category_entities.items():
             total_kwh = 0.0
             has_data = False
-
             for entity_id in entity_ids:
                 if entity_id not in history:
                     continue
-                points = history[entity_id]
-                if len(points) < 2:
-                    continue
-
-                # Trapezregel: ∫P(t)dt ≈ Σ (P_i + P_{i+1})/2 × Δt
-                energy_wh = 0.0
-                for i in range(len(points) - 1):
-                    t1, p1 = points[i]
-                    t2, p2 = points[i + 1]
-                    dt_hours = (t2 - t1).total_seconds() / 3600
-                    if 0 < dt_hours < 2:  # Max 2h Lücke
-                        energy_wh += (p1 + p2) / 2 * dt_hours
-
-                total_kwh += energy_wh / 1000  # Wh → kWh
-                has_data = True
-
+                kwh = self._trapez_kwh(history[entity_id])
+                if kwh is not None:
+                    total_kwh += kwh
+                    has_data = True
             if has_data:
                 result[category] = round(total_kwh, 1)
+
+        # Per-Komponente kWh (für Tooltips)
+        for comp_key, entity_id in component_entities.items():
+            if entity_id not in history:
+                continue
+            kwh = self._trapez_kwh(history[entity_id])
+            if kwh is not None:
+                result[comp_key] = round(abs(kwh), 1)
 
         return result
 

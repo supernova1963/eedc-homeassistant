@@ -234,11 +234,7 @@ export default function LiveDashboard() {
                 komponenten={data.komponenten}
                 summeErzeugung={data.summe_erzeugung_kw}
                 summeVerbrauch={data.summe_verbrauch_kw}
-                tagesWerte={{
-                  pv: data.heute_pv_kwh,
-                  netz: data.heute_netzbezug_kwh,
-                  haushalt: data.heute_eigenverbrauch_kwh,
-                }}
+                tagesWerte={data.heute_kwh_pro_komponente ?? undefined}
                 gauges={data.gauges}
               />
             </div>

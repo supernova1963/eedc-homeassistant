@@ -39,6 +39,7 @@ class LiveKomponente(BaseModel):
     icon: str
     erzeugung_kw: Optional[float] = None
     verbrauch_kw: Optional[float] = None
+    parent_key: Optional[str] = None
 
 
 class LiveGauge(BaseModel):
@@ -72,6 +73,8 @@ class LiveDashboardResponse(BaseModel):
     gestern_einspeisung_kwh: Optional[float] = None
     gestern_netzbezug_kwh: Optional[float] = None
     gestern_eigenverbrauch_kwh: Optional[float] = None
+
+    heute_kwh_pro_komponente: Optional[dict[str, float]] = None
 
 
 class TagesverlaufPunkt(BaseModel):
@@ -175,6 +178,16 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "gestern_einspeisung_kwh": round(12.1 + random.uniform(-1, 1), 1),
         "gestern_netzbezug_kwh": round(4.2 + random.uniform(-0.5, 0.5), 1),
         "gestern_eigenverbrauch_kwh": round(10.4 + random.uniform(-1, 1), 1),
+        "heute_kwh_pro_komponente": {
+            "pv_1": round(12.1 + random.uniform(-1, 1), 1),
+            "pv_2": round(6.2 + random.uniform(-0.5, 0.5), 1),
+            "netz_bezug": round(3.1 + random.uniform(-0.3, 0.3), 1),
+            "netz_einspeisung": round(9.2 + random.uniform(-0.5, 0.5), 1),
+            "batterie_3": round(4.5 + random.uniform(-0.5, 0.5), 1),
+            "eauto_4": round(8.3 + random.uniform(-0.5, 0.5), 1),
+            "waermepumpe_5": round(5.2 + random.uniform(-0.3, 0.3), 1),
+            "haushalt": round(9.1 + random.uniform(-0.5, 0.5), 1),
+        },
     }
 
 

@@ -320,7 +320,15 @@ export default function EnergieFluss({
           if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.erzeugung_kw!.toFixed(2)} kW (Erzeugung)`)
           if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.verbrauch_kw!.toFixed(2)} kW (Verbrauch)`)
           if (hasSoc) tipParts.push(`SoC: ${soc}%`)
-          if (tagesKwh !== null) tipParts.push(`Heute: ${tagesKwh.toFixed(1)} kWh`)
+          // Netz: Bezug + Einspeisung separat anzeigen
+          if (k.key === 'netz') {
+            const bezug = tagesWerte?.netz_bezug
+            const einsp = tagesWerte?.netz_einspeisung
+            if (bezug != null) tipParts.push(`Heute Bezug: ${bezug.toFixed(1)} kWh`)
+            if (einsp != null) tipParts.push(`Heute Einspeisung: ${einsp.toFixed(1)} kWh`)
+          } else if (tagesKwh != null) {
+            tipParts.push(`Heute: ${tagesKwh.toFixed(1)} kWh`)
+          }
           const tip = tipParts.join('\n')
 
           // Label kürzen
