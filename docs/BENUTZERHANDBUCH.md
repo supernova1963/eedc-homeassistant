@@ -1,7 +1,7 @@
 
 # EEDC Benutzerhandbuch
 
-**Version 2.8.5** | Stand: März 2026
+**Version 3.0.3** | Stand: März 2026
 
 ---
 
@@ -11,7 +11,9 @@
 2. [Installation](#2-installation)
 3. [Ersteinrichtung (Setup-Wizard)](#3-ersteinrichtung-setup-wizard)
 4. [Navigation & Menüstruktur](#4-navigation--menüstruktur)
+4b. [Live Dashboard](#4b-live-dashboard-neu-v300)
 5. [Cockpit (Dashboards)](#5-cockpit-dashboards)
+5b. [Aktueller Monat](#5b-aktueller-monat-neu-v290)
 6. [Auswertungen](#6-auswertungen)
 7. [Community](#7-community)
 8. [Aussichten (Prognosen)](#8-aussichten-prognosen)
@@ -21,6 +23,9 @@
 12. [Monatsabschluss-Wizard](#12-monatsabschluss-wizard)
 13. [HA-Statistik Import](#13-ha-statistik-import)
 14. [Home Assistant Integration](#14-home-assistant-integration-optional)
+14b. [MQTT-Inbound](#14b-mqtt-inbound-universelle-datenbrücke-neu-v300)
+15a. [Daten-Checker](#15a-daten-checker-neu-v283)
+15b. [Protokolle](#15b-protokolle-neu-v283)
 15. [Tipps & Best Practices](#15-tipps--best-practices)
 16. [Fehlerbehebung](#16-fehlerbehebung)
 
@@ -206,6 +211,7 @@ Die horizontale Navigation enthält vier Hauptbereiche:
 
 | Bereich | Funktion |
 |---------|----------|
+| **Live** | Echtzeit-Leistungsdaten mit animiertem Energiefluss-Diagramm |
 | **Cockpit** | Übersicht mit KPIs, Energie-Fluss und Charts |
 | **Auswertungen** | Detaillierte Analysen in 6 Tabs |
 | **Community** | Anonymer Benchmark-Vergleich mit anderen PV-Anlagen |
@@ -231,12 +237,15 @@ Das Dropdown-Menü ist in fünf Kategorien unterteilt:
 
 **System:**
 - Solarprognose – PVGIS-Prognose und Wetter-Provider
+- Daten-Checker – Datenqualitäts-Prüfung (NEU v2.8.3)
+- Protokolle – Aktivitäts-Logging (NEU v2.8.3)
 - Allgemein – Version, Status
 
 **Home Assistant** (nur bei HA-Nutzung sichtbar):
 - Sensor-Zuordnung – HA-Sensoren zu EEDC-Feldern zuordnen
 - Statistik-Import – Bulk-Import aus HA-Langzeitstatistik
 - MQTT-Export – MQTT Auto-Discovery Konfiguration
+- MQTT-Inbound – Universelle Datenbrücke konfigurieren
 
 **Community:**
 - Daten teilen – Anonyme Daten an Community-Server senden
@@ -246,9 +255,50 @@ Das Dropdown-Menü ist in fünf Kategorien unterteilt:
 Unter der Hauptnavigation erscheinen kontextabhängige Links:
 
 **Cockpit Sub-Seiten:**
-- Übersicht | PV-Anlage | E-Auto | Wärmepumpe | Speicher | Wallbox | Balkonkraftwerk | Sonstiges
+- Übersicht | Aktueller Monat | PV-Anlage | E-Auto | Wärmepumpe | Speicher | Wallbox | Balkonkraftwerk | Sonstiges
 
 (Jede Komponente hat ein eigenes Dashboard mit spezifischen KPIs.)
+
+---
+
+## 4b. Live Dashboard (NEU v3.0.0)
+
+Das Live Dashboard zeigt dir **Echtzeit-Leistungsdaten** deiner gesamten PV-Anlage auf einen Blick.
+
+### Energiefluss-Diagramm
+
+Das zentrale Element ist ein **animiertes Energiefluss-Diagramm** (ähnlich dem HA Energy Dashboard):
+
+- **Haus** in der Mitte als Senke
+- **Erzeuger** (PV-Module) oben
+- **Netz** links (bidirektional: Bezug/Einspeisung)
+- **Speicher** (Batterie) rechts (bidirektional: Laden/Entladen)
+- **Verbraucher** (Wärmepumpe, Wallbox, E-Auto, Sonstige) unten
+
+**Animierte Flusslinien** zeigen Richtung und Stärke des Energieflusses:
+- Liniendicke proportional zur Leistung (logarithmisch skaliert)
+- Animationsgeschwindigkeit proportional zur Leistung
+- Farbcodierung nach Komponententyp
+
+**SoC-Anzeige:** Bei Batterien und E-Autos wird der Ladezustand als Pegel im Knoten dargestellt (rot <20%, gelb 20-50%, grün >50%).
+
+### Gauges
+
+Halbkreis-Gauges zeigen den **State of Charge** (SoC) von Speichern und E-Autos in Prozent.
+
+### Tageswerte
+
+Unter den Knoten werden die **heutigen kWh-Werte** als Tooltip angezeigt (Datenquelle: HA-Statistik oder MQTT-Snapshots).
+
+### Datenquellen
+
+Das Live Dashboard nutzt Echtzeit-Daten aus:
+1. **Home Assistant Sensoren** — via konfiguriertem Sensor-Mapping
+2. **MQTT-Inbound** — universelle Datenbrücke für beliebige Smarthome-Systeme
+
+### Demo-Modus
+
+Ohne konfigurierte Sensoren zeigt das Dashboard einen **Demo-Modus** mit simulierten Werten, damit du die Darstellung vorab testen kannst.
 
 ---
 
@@ -382,6 +432,37 @@ Jede Kennzahl zeigt bei Hover einen Tooltip mit:
 - **Formel**: Wie wird der Wert berechnet?
 - **Berechnung**: Konkrete Zahlen eingesetzt
 - **Ergebnis**: Der angezeigte Wert
+
+---
+
+
+## 5b. Aktueller Monat (NEU v2.9.0)
+
+**Pfad**: Cockpit → Aktueller Monat
+
+Das Aktueller-Monat-Dashboard zeigt den **laufenden Monat** mit Daten aus verschiedenen Quellen:
+
+### Datenquellen (nach Priorität)
+
+| Quelle | Konfidenz | Beschreibung |
+|--------|-----------|--------------|
+| **HA-Statistik** | 95% | Direkt aus der HA Recorder-Datenbank |
+| **MQTT-Inbound** | 91% | Aus MQTT Energy-Snapshots |
+| **Connector** | 90% | Aus Geräte-Connector-Abfrage |
+| **Gespeichert** | 85% | Bereits abgeschlossene Monatsdaten |
+
+### Anzeige
+
+- **Energie-Bilanz-Charts** — PV-Erzeugung, Einspeisung, Netzbezug, Eigenverbrauch
+- **Komponenten-Karten** — Status jeder Investition mit kWh-Werten
+- **Datenquellen-Badges** — Farbige Indikatoren zeigen pro Feld die Herkunft
+- **Finanz-Übersicht** — Geschätzte Einsparung im laufenden Monat
+- **Vorjahresvergleich** — Delta zum gleichen Monat im Vorjahr
+- **SOLL/IST-Vergleich** — Gegen PVGIS-Prognose
+
+### Leerer Zustand
+
+Wenn keine Daten vorliegen, werden konkrete Import-Möglichkeiten als Aktionskarten angeboten (Monatsabschluss, Connector, Cloud-Import, Portal-Import).
 
 ---
 
@@ -1333,6 +1414,91 @@ rest:
 
 ---
 
+## 14b. MQTT-Inbound: Universelle Datenbrücke (NEU v3.0.0)
+
+MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Smarthome-System** an EEDC zu senden.
+
+### Voraussetzungen
+
+- MQTT-Broker (z.B. Mosquitto)
+- Smarthome-System mit MQTT-Publish-Fähigkeit (HA, ioBroker, FHEM, openHAB, Node-RED)
+
+### Topic-Struktur
+
+EEDC definiert zwei Topic-Typen:
+
+```
+eedc/{anlage_id}/live/{key}    → Echtzeit-Leistung in Watt (W)
+eedc/{anlage_id}/energy/{key}  → Zählerstände in kWh (monoton steigend)
+```
+
+**Live-Topics** werden für das Live Dashboard verwendet, **Energy-Topics** für den Monatsabschluss.
+
+### Einrichtung
+
+**Pfad**: Einstellungen → Home Assistant → MQTT-Inbound
+
+1. **MQTT-Verbindung** konfigurieren (Host, Port, User, Passwort)
+2. **Topics** werden automatisch basierend auf deinen Investitionen generiert
+3. **Monitor** zeigt eingehende Werte in Echtzeit
+4. **Beispiel-Flows** für dein Smarthome-System kopieren (HA, Node-RED, ioBroker, FHEM, openHAB)
+
+### Energy → Monatsabschluss
+
+MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfidenz 91%). Tageswerte werden aus SQLite-Snapshots berechnet (alle 5 Minuten gespeichert, 31 Tage Retention).
+
+---
+
+## 15a. Daten-Checker (NEU v2.8.3)
+
+**Pfad**: Einstellungen → System → Daten-Checker
+
+Der Daten-Checker prüft die Qualität deiner erfassten Daten in 5 Kategorien:
+
+### Prüfkategorien
+
+| Kategorie | Prüfungen |
+|-----------|-----------|
+| **Stammdaten** | Koordinaten, Anlagenleistung, Ausrichtung |
+| **Strompreise** | Lücken im Tarifzeitraum, fehlende Preise |
+| **Investitionen** | Fehlende PV-Module, WR ohne Module, Parameter |
+| **Vollständigkeit** | Fehlende Monate, leere Pflichtfelder |
+| **Plausibilität** | PV-Produktion vs. PVGIS, unrealistische Werte |
+
+### PVGIS-Prüfung
+
+Die PV-Produktionsprüfung vergleicht deine tatsächliche Erzeugung mit der PVGIS-Prognose unter Berücksichtigung einer dynamischen Performance Ratio. Zu hohe Systemverluste werden erkannt.
+
+### Ergebnisse
+
+- **KPI-Karten** mit Gesamtbewertung
+- **Fortschrittsbalken** für Monatsabdeckung
+- **Klappbare Kategorien** mit einzelnen Befunden
+- **"Beheben"-Links** verweisen direkt zum betroffenen Monatsabschluss
+
+---
+
+## 15b. Protokolle (NEU v2.8.3)
+
+**Pfad**: Einstellungen → System → Protokolle
+
+Das Protokoll-System protokolliert automatisch alle wichtigen Aktivitäten:
+
+### Protokollierte Ereignisse
+
+- **Monatsabschluss** — Wann welcher Monat abgeschlossen wurde
+- **Connector-Abruf** — Geräte-Connector Datenabfragen
+- **Cloud-Fetch** — Cloud-Import-Abrufe
+- **Portal-Import** — Portal-CSV-Imports
+
+### Funktionen
+
+- **Live-Filter** nach Kategorie und Zeitraum
+- **In-Memory Log-Buffer** für schnellen Zugriff
+- **DB-Persistierung** für langfristige Historie
+
+---
+
 ## 15. Tipps & Best Practices
 
 ### Datenqualität
@@ -1455,4 +1621,4 @@ Bei Fragen oder Problemen:
 
 ---
 
-*Letzte Aktualisierung: Februar 2026*
+*Letzte Aktualisierung: März 2026*

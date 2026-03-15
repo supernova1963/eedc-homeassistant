@@ -1,7 +1,7 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 2.8.5** | Stand: März 2026
+**Version 3.0.3** | Stand: März 2026
 
 ---
 
@@ -147,7 +147,12 @@ eedc-homeassistant/
     │   │       ├── monatsabschluss.py     # Monatsabschluss-Wizard API
     │   │       ├── portal_import.py         # Portal-CSV-Parser
     │   │       ├── custom_import.py          # Custom CSV/JSON Import
-    │   │       └── cloud_import.py           # Cloud-API Import
+    │   │       ├── cloud_import.py           # Cloud-API Import
+    │   │       ├── live_dashboard.py        # Live Dashboard API (NEU v3.0.0)
+    │   │       ├── aktueller_monat.py       # Aktueller Monat API (NEU v2.9.0)
+    │   │       ├── daten_checker.py         # Daten-Checker API (NEU v2.8.3)
+    │   │       ├── system_logs.py           # Protokolle API (NEU v2.8.3)
+    │   │       └── connector.py             # Geräte-Connector API
     │   │
     │   ├── core/                # Kernfunktionalität
     │   │   ├── config.py        # Settings + Version
@@ -160,7 +165,9 @@ eedc-homeassistant/
     │   │   ├── investition.py
     │   │   ├── strompreis.py
     │   │   ├── pvgis_prognose.py
-    │   │   └── settings.py         # App-Einstellungen
+    │   │   ├── settings.py         # App-Einstellungen
+    │   │   ├── activity_log.py    # Aktivitäts-Protokolle (NEU v2.8.3)
+    │   │   └── mqtt_energy_snapshot.py # MQTT Energy Snapshots (NEU v3.0.0)
     │   │
     │   ├── utils/                # Hilfsfunktionen
     │   │   └── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
@@ -180,6 +187,11 @@ eedc-homeassistant/
     │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
     │       ├── community_service.py       # Community-Datenaufbereitung
     │       ├── plz_to_state.py           # PLZ→Bundesland Mapping (8.308 Einträge)
+    │       ├── live_power_service.py      # Live Dashboard Aggregation (NEU v3.0.0)
+    │       ├── mqtt_inbound_service.py   # MQTT-Inbound Subscribe + Cache (NEU v3.0.0)
+    │       ├── mqtt_energy_history_service.py # MQTT Snapshots (NEU v3.0.0)
+    │       ├── daten_checker.py          # Datenqualitätsprüfung (NEU v2.8.3)
+    │       ├── activity_service.py       # Aktivitäts-Logging (NEU v2.8.3)
     │       └── cloud_import/              # Cloud-Import-Provider
     │           ├── __init__.py
     │           ├── base.py                 # ABC + Registry
@@ -557,6 +569,10 @@ Sonstiges [Eigenständig]
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** (NEU) |
 | `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** (NEU) |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** (NEU v2.0.3) |
+| `/api/live` | live_dashboard.py | **Live Dashboard + MQTT-Inbound** (NEU v3.0.0) |
+| `/api/aktueller-monat` | aktueller_monat.py | **Aktueller Monat Dashboard** (NEU v2.9.0) |
+| `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** (NEU v2.8.3) |
+| `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** (NEU v2.8.3) |
 | `/api/portal-import` | portal_import.py | Portal-CSV Import (SMA, Fronius, EVCC) |
 | `/api/cloud-import` | cloud_import.py | Cloud-API Import (SolarEdge, Fronius, Huawei, Growatt, Deye, EcoFlow) |
 | `/api/custom-import` | custom_import.py | Custom CSV/JSON Import mit Feld-Mapping |
@@ -735,7 +751,11 @@ URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
 ```
 /                       → Redirect zu /cockpit
 │
+│
+├── /live               → LiveDashboard (Echtzeit-Leistungsdaten)
+│                         EnergieFluss (SVG), GaugeChart (SoC), Tagesverlauf
 ├── /cockpit            → Dashboard (Übersicht)
+│   ├── /aktueller-monat → AktuellerMonat (Live-Monatsdaten aus HA/Connector)
 │   ├── /pv-anlage      → PVAnlageDashboard
 │   ├── /e-auto         → EAutoDashboard
 │   ├── /waermepumpe    → WaermepumpeDashboard
@@ -775,7 +795,9 @@ URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
     ├── /einrichtung       → Einrichtung.tsx (Datenquellen-Hub)
     ├── /cloud-import      → CloudImportWizard.tsx
     ├── /custom-import     → CustomImportWizard.tsx
-    └── /portal-import     → PortalImportWizard.tsx
+    ├── /portal-import     → PortalImportWizard.tsx
+    ├── /daten-checker    → DatenChecker.tsx (NEU v2.8.3)
+    └── /protokolle       → Protokolle.tsx (NEU v2.8.3)
 ```
 
 ### Komponenten-Hierarchie
@@ -789,7 +811,7 @@ main.tsx
             └── Layout.tsx
                 ├── TopNavigation.tsx
                 │   ├── Logo
-                │   ├── MainTabs (Cockpit, Auswertungen, Community, Aussichten)
+                │   ├── MainTabs (Live, Cockpit, Auswertungen, Community, Aussichten)
                 │   ├── SettingsDropdown (5 Kategorien)
                 │   └── ThemeToggle
                 │
@@ -977,6 +999,10 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
   - Liest Sensor-Werte via HA MQTT
   - Erstellt Vorschläge für den Monatsabschluss
   - Sendet Notifications (optional)
+- `mqtt_energy_snapshot_job` - Alle 5 Minuten (NEU v3.0.0)
+  - Speichert MQTT Energy-Zählerstände in SQLite
+- `mqtt_energy_cleanup_job` - Täglich 03:00 (NEU v3.0.0)
+  - Löscht Snapshots älter als 31 Tage
 
 ### HA MQTT Sync Service
 
@@ -987,6 +1013,55 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 **Hauptfunktionen:**
 - `setup_sensors_for_anlage()` - Erstellt alle MQTT Entities
 - `trigger_month_rollover()` - Führt Monatswechsel durch
+
+### Live Power Service (NEU v3.0.0)
+
+**Datei:** `backend/services/live_power_service.py`
+
+**Funktion:** Aggregiert Echtzeit-Leistungsdaten aus HA-Sensoren oder MQTT-Inbound für das Live Dashboard.
+
+**Datenquellen (Priorität):**
+1. HA-Sensoren (via Sensor-Mapping) — direkte REST-API-Abfrage
+2. MQTT-Inbound Cache — In-Memory-Werte von subscribten Topics
+
+**Berechnung:**
+- Jede Investition wird als `LiveKomponente` mit `erzeugung_kw` / `verbrauch_kw` geliefert
+- Haushalt = Residual: `max(0, Σ Quellen - Σ Senken)` (keine eigene Messung nötig)
+- SoC-Gauges für Speicher und E-Auto (Key: `soc_{invId}`)
+- Tages-kWh: HA-Statistiken → MQTT-Snapshots → leer (Fallback-Kette)
+
+**API-Endpoints:**
+```
+GET /api/live/power/{anlage_id}        # Alle Leistungsdaten + Gauges + Tagesverlauf
+GET /api/live/power/{anlage_id}/demo   # Demo-Modus mit Zufallswerten
+```
+
+### MQTT Inbound Service (NEU v3.0.0)
+
+**Datei:** `backend/services/mqtt_inbound_service.py`
+
+**Funktion:** Subscribt EEDC-definierte MQTT-Topics und cached Werte im Speicher.
+
+**Topic-Struktur:**
+```
+eedc/{anlage_id}/live/{key}    → Echtzeit-Leistung (kW)
+eedc/{anlage_id}/energy/{key}  → Zählerstände (kWh, monoton steigend)
+```
+
+**Hauptfunktionen:**
+- `MqttInboundCache` — Thread-safe In-Memory-Cache für Live- und Energy-Werte
+- `get_all_energy_raw()` — Aktuelle Zählerstände für Snapshot-Service
+
+### MQTT Energy History Service (NEU v3.0.0)
+
+**Datei:** `backend/services/mqtt_energy_history_service.py`
+
+**Funktion:** SQLite-basierte Mini-History für Tageswerte aus MQTT Energy-Daten.
+
+**Mechanismus:**
+- Tabelle `mqtt_energy_snapshots` speichert Zählerstand-Snapshots alle 5 Minuten
+- Tageswert = Differenz zwischen aktuellem Stand und Mitternacht-Snapshot
+- Retention: 31 Tage, automatischer Cleanup um 03:00
 
 ---
 

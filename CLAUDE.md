@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 2.8.5 | **Status:** Stable Release
+**Version:** 3.0.3 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -170,33 +170,24 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
-**v2.8.3–2.8.5** - Daten-Checker, Protokolle, Bugfixes:
+**v3.0.0–v3.0.3** - Live Dashboard, MQTT-Inbound, Energiefluss:
 
-- **Daten-Checker:** Datenqualitäts-Prüfung mit 5 Kategorien, PVGIS-basierter PV-Produktionsprüfung
-- **Protokolle:** Aktivitäts-Logging (Monatsabschluss, Connector, Cloud-Fetch, Portal-Import)
-- **PLZ→Bundesland:** Vollständiges Dictionary-Lookup (8.308 Einträge) statt fehleranfälliger Prefix-Bereiche
-- **MQTT:** `object_id` → `default_entity_id` für HA 2026.4 Kompatibilität
-- **Bugfixes:** CSV-Export BKW-Erzeugung, 0-Werte-Bug, Dezimaltrennzeichen, Aussichten-EV-Quote
+- **Live Dashboard:** Echtzeit-Leistungsanzeige mit Gauges (SoC), animiertem Energiefluss-Diagramm (SVG + CSS), Heute/Gestern-kWh via Mini-History
+- **Energiefluss-Diagramm (v3.0.3):** Ersetzt EnergieBilanz-Balkendiagramm. Animierte Flusslinien, SoC-Pegel, zonenbasiertes Layout (Erzeuger oben, Netz links, Speicher rechts, Verbraucher unten, Haus Mitte)
+- **MQTT-Inbound:** Universelle Datenbrücke — EEDC-definierte Topics (`eedc/{id}/live/*`, `eedc/{id}/energy/*`), funktioniert mit jedem Smarthome-System
+- **Energy→Monatsabschluss:** MQTT Energy-Daten als Monatsabschluss-Vorschläge (Konfidenz 91%)
+- **Sensor-Mapping:** Ersetzt alte `ha_sensor_*` Felder, konfigurierbar im Wizard
+- **GitHub Release-Workflow:** Automatische GitHub Releases bei Tag-Push
 
-**v2.8.0** - Cloud-Import-Provider + Custom-Import:
+**v2.9.0–v2.9.1** - HA Statistics, MQTT Export-Only:
 
-- **5 neue Cloud-Import-Provider:** SolarEdge, Fronius SolarWeb, Huawei FusionSolar, Growatt, Deye/Solarman (alle ungetestet)
-- **Custom-Import:** Beliebige CSV/JSON mit Feld-Mapping importieren, Templates speicherbar
-- **Kostal/SMA Local entfernt** (nur Zählerstände, keine historischen Daten)
+- **HA Statistics Service:** Liest HA Recorder-Statistiken für Monatsabschluss-Vorschläge
+- **MQTT Export-Only:** Vereinfachtes Setup für reine KPI-Veröffentlichung
 
-**v2.7.1** - Monatsabschluss als zentrale Datenerfassungs-Anlaufstelle:
+**v2.8.0–v2.8.5** - Cloud-Import, Daten-Checker, Connectors:
 
-- **Einstellungen-Menü umgebaut:** Daten-SubTabs auf 3 reduziert (Monatsdaten, Monatsabschluss, Einrichtung), Solarprognose zu Stammdaten verschoben
-- **Einrichtung-Hub:** Neue zentrale Seite für Datenquellen-Konfiguration (HA, Connector, Cloud, CSV)
-- **Monatsabschluss-Wizard:** Datenquellen-Status-Chips, Cloud-Fetch-Button, Datenherkunft-Anzeige, "Keine Quellen"-Hinweis
-- **Monatsabschluss-Schnellzugriff:** Kalender-Icon mit Badge in der Hauptnavigation
-- **Cloud-Fetch-Endpoint:** `POST /monatsabschluss/{id}/{j}/{m}/cloud-fetch` für Live-Abruf aus Cloud-APIs
-
-**v2.6.0** - Dynamischer Tarif, Portal-Import, Geräte-Connectors:
-
-- **Dynamischer Tarif:** Monatlicher Ø-Strompreis aus HA-Sensor oder manuell
-- **Portal-Import:** CSV-Upload von SMA Sunny Portal, SMA eCharger, EVCC, Fronius Solarweb
-- **9 Geräte-Connectors:** SMA ennexOS, SMA WebConnect, Fronius Solar API, go-eCharger, Shelly 3EM, OpenDTU, Kostal Plenticore, sonnenBatterie, Tasmota SML
-- **getestet-Flag:** Parser und Connectors zeigen im UI an ob mit echten Geräten verifiziert
+- **Cloud-Import:** SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman + Custom CSV/JSON
+- **Daten-Checker:** Datenqualitäts-Prüfung mit PVGIS-basierter PV-Produktionsprüfung
+- **9 Geräte-Connectors:** SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
