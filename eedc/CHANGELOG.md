@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.1] - 2026-03-15
+
+### Behoben
+
+- **Release-Infrastruktur:** Dockerfile `io.hass.version` Label wird jetzt automatisch gebumpt (war seit v0.9.0 hartcodiert)
+- **Release-Script:** sed-Bug behoben (überflüssiges Anführungszeichen beim run.sh-Bump)
+- **GitHub Release Workflow:** eedc-homeassistant erstellt jetzt automatisch ein GitHub Release bei Tag-Push (fehlte komplett)
+
 ## [3.0.0] - 2026-03-15
 
 ### Hinzugefügt
