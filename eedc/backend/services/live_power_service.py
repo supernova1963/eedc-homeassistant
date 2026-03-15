@@ -67,6 +67,11 @@ _TAGESVERLAUF_KATEGORIE = {
     "sonstiges": "sonstige",
 }
 
+# Separate Key-Prefixe für Live-Komponenten (Energiefluss)
+_LIVE_KEY_PREFIX = {
+    "wallbox": "wallbox",
+}
+
 
 class LivePowerService:
     """Sammelt aktuelle Leistungswerte aus verfügbaren Quellen."""
@@ -272,7 +277,8 @@ class LivePowerService:
             else:
                 # Verbraucher (E-Auto ohne V2H, WP, Wallbox, Sonstige)
                 kw = abs(val_w) / 1000
-                komp_key = f"{_TAGESVERLAUF_KATEGORIE.get(typ, typ)}_{inv_id}"
+                prefix = _LIVE_KEY_PREFIX.get(typ, _TAGESVERLAUF_KATEGORIE.get(typ, typ))
+                komp_key = f"{prefix}_{inv_id}"
                 komponenten.append({
                     "key": komp_key,
                     "label": inv.bezeichnung,
@@ -304,7 +310,7 @@ class LivePowerService:
         if wallbox_keys:
             wb_idx = 0
             for komp in komponenten:
-                if komp["key"].startswith("eauto_") and wallbox_keys:
+                if komp["key"].startswith("eauto_"):
                     komp["parent_key"] = wallbox_keys[wb_idx % len(wallbox_keys)]
                     wb_idx += 1
 

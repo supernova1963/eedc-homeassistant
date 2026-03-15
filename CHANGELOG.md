@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.5] - 2026-03-15
+
+### Behoben
+
+- **Energiefluss: Wallbox/E-Auto Key-Kollision:** Wallbox und E-Auto hatten beide den Key-Prefix `eauto_`, wodurch die parent_key-Zuordnung fehlschlug. Wallbox hat jetzt eigenen Prefix `wallbox_`
+- **Energiefluss: SVG-Höhe dynamisch:** ViewBox passt sich an Kind-Knoten an statt fixer Höhe
+
 ## [3.0.4] - 2026-03-15
 
 ### Behoben

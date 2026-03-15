@@ -22,6 +22,7 @@ const COLOR_MAP: Record<string, string> = {
   netz: '#ef4444',
   batterie: '#3b82f6',
   eauto: '#a855f7',
+  wallbox: '#a855f7',
   waermepumpe: '#f97316',
   sonstige: '#6b7280',
   haushalt: '#10b981',
