@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.3] - 2026-03-15
+
+### Hinzugefügt
+
+- **Energiefluss-Diagramm:** Neues animiertes SVG-Diagramm im Live Dashboard ersetzt die Energiebilanz-Balken
+  - Alle Investitionen als Knoten um zentrales Haus-Symbol
+  - Animierte Flusslinien zeigen Energierichtung und -stärke
+  - SoC-Pegelanzeige für Speicher und E-Auto (farbcodiert: rot/gelb/grün)
+  - Logarithmische Liniendicke, Tooltips mit Tages-kWh
+
+### Behoben
+
+- **Zeitzone:** `datetime.utcnow()` durch `datetime.now()` ersetzt — HA Add-on zeigte Uhrzeiten mit 1h Offset
+
 ## [3.0.2] - 2026-03-15
 
 ### Behoben
