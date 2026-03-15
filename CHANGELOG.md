@@ -7,6 +7,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.8] - 2026-03-15
+
+### Hinzugefügt
+
+- **Live Sidebar-Redesign:** Zustandswerte-Bereich komplett neu gestaltet
+  - „Heute"-Karten: PV-Erzeugung, Eigenverbrauch, Einspeisung, Netzbezug (farbcodiert, kWh)
+  - Autarkie- und Eigenverbrauchsquote als berechnete Prozentwerte
+  - PV- und Verbrauchs-Prognose direkt in der Sidebar
+  - SoC-Gauges nur noch für Batterie/E-Auto (statt alle Gauges)
+  - Netz: horizontaler Balken mit 0-Mitte (grün=Einspeisung, rot=Bezug)
+  - Gestern-Vergleich als Tooltip auf jeder Karte
+- **MQTT-Beispiel-Flows personalisiert:** Topic-Auswahl-Dropdown mit allen konfigurierten Topics, kontextbezogene Sensor-Platzhalter, `retain: true` in allen Snippets
+
+### Verbessert
+
+- **Energiefluss ~10% kompakter:** Alle Skalierungsstufen verkleinert für bessere FHD-Darstellung
+- **Energiefluss dynamische Skalierung:** 3 Stufen (≤3, 4, 5+ Komponenten) mit angepassten Boxen/Fonts
+- **Sidebar füllt SVG-Höhe:** `flex justify-between` verteilt Elemente optimal
+
+### Behoben
+
+- **Haushalt-Residual:** parent_key statt eauto_ Prefix für korrekte Zuordnung
+- **E-Auto Position:** Rechts neben Wallbox im Energiefluss statt separate Zeile
+- **Heute-kWh Tooltips:** Pro Komponente im Energiefluss
+
 ## [3.0.5] - 2026-03-15
 
 ### Behoben
