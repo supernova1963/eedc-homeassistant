@@ -34,15 +34,41 @@ eedc/{anlage_id}_{name}/
 │       └── soc                        → 72       (nur Speicher/E-Auto)
 │
 └── energy/                            # Monatswerte (kWh, kumuliert)
-    ├── pv_gesamt_kwh                  → 627.0
     ├── einspeisung_kwh                → 397.2
     ├── netzbezug_kwh                  → 182.5
     └── inv/{inv_id}_{name}/
-        ├── pv_erzeugung_kwh           → 627.0    (PV-Module)
-        ├── ladung_kwh                 → 128.6    (Speicher/E-Auto/Wallbox)
-        ├── entladung_kwh              → 85.3     (Speicher)
-        └── stromverbrauch_kwh         → 450.0    (Waermepumpe)
+        └── {key}                      → Wert     (siehe Felder-Referenz)
 ```
+
+### Energy-Felder Referenz (Investitions-Topics)
+
+Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern der jeweiligen Investition. EEDC erkennt alle Felder automatisch — es muss kein Mapping konfiguriert werden.
+
+| Investitionstyp | Key | Einheit | Beschreibung |
+|---|---|---|---|
+| **PV-Module** | `pv_erzeugung_kwh` | kWh | PV-Erzeugung |
+| **Speicher** | `ladung_kwh` | kWh | Batterie-Ladung |
+| **Speicher** | `entladung_kwh` | kWh | Batterie-Entladung |
+| **Waermepumpe** | `stromverbrauch_kwh` | kWh | Stromverbrauch |
+| **Waermepumpe** | `heizenergie_kwh` | kWh | Erzeugte Heizenergie |
+| **Waermepumpe** | `warmwasser_kwh` | kWh | Warmwasser-Erzeugung |
+| **E-Auto** | `km_gefahren` | km | Gefahrene Kilometer (Odometer-Differenz) |
+| **E-Auto** | `v2h_entladung_kwh` | kWh | Vehicle-to-Home Entladung |
+| **Wallbox** | `ladung_kwh` | kWh | Ladung gesamt |
+| **Wallbox** | `ladevorgaenge` | Anzahl | Anzahl Ladevorgaenge |
+| **BKW** | `pv_erzeugung_kwh` | kWh | BKW-Erzeugung |
+| **BKW** | `eigenverbrauch_kwh` | kWh | Eigenverbrauch |
+| **BKW** | `speicher_ladung_kwh` | kWh | BKW-Speicher Ladung |
+| **BKW** | `speicher_entladung_kwh` | kWh | BKW-Speicher Entladung |
+| **Sonstiges** | `erzeugung_kwh` | kWh | Erzeugung (Erzeuger/Speicher) |
+| **Sonstiges** | `verbrauch_sonstig_kwh` | kWh | Verbrauch (Verbraucher/Speicher) |
+
+**Nicht per MQTT lieferbar** (werden im Monatsabschluss manuell eingegeben oder berechnet):
+- `ladung_pv_kwh` / `ladung_netz_kwh` (PV/Netz-Aufteilung bei Speicher, E-Auto, Wallbox)
+- `batterie_ladung_netz_kwh` (Arbitrage-Anteil)
+- `ladung_extern_kwh` / `ladung_extern_euro` (externe Ladung E-Auto)
+- Wetterdaten (`globalstrahlung`, `sonnenstunden`, `temperatur`)
+- `sonderkosten_euro`, `notizen`
 
 ### Beispiel
 
@@ -210,3 +236,4 @@ mosquitto_sub -h localhost -t "eedc/#" -v
 - **Batterie:** Positive Werte = Ladung, negative = Entladung
 - **Retained Messages:** EEDC publisht beim Speichern Initialwerte (0) als Retained, damit Topics am Broker sichtbar sind.
 - **Reconnect:** Bei Verbindungsverlust verbindet sich der Subscriber automatisch nach 10 Sekunden neu.
+- **Monatsabschluss:** Energy-Topics erscheinen automatisch als Vorschlaege im Monatsabschluss-Wizard (Konfidenz 91%). Kein zusaetzliches Mapping noetig.

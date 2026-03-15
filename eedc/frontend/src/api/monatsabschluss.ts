@@ -63,6 +63,7 @@ export interface MonatsabschlussResponse {
   ha_mapping_konfiguriert: boolean
   connector_konfiguriert: boolean
   cloud_import_konfiguriert: boolean
+  mqtt_inbound_konfiguriert: boolean
   portal_import_vorhanden: boolean
   datenquelle: string | null
   basis_felder: FeldStatus[]
@@ -93,6 +94,7 @@ export interface MonatsabschlussInput {
   sonderkosten_beschreibung?: string | null
   notizen?: string | null
   investitionen: InvestitionWerte[]
+  datenquelle?: string | null
 }
 
 export interface MonatsabschlussResult {

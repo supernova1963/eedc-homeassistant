@@ -26,6 +26,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.vorschlag_service import VorschlagService, Vorschlag, VorschlagQuelle, PlausibilitaetsWarnung
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
 from backend.services.ha_state_service import get_ha_state_service
+from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.services.activity_service import log_activity
@@ -90,8 +91,9 @@ class MonatsabschlussResponse(BaseModel):
     ha_mapping_konfiguriert: bool
     connector_konfiguriert: bool = False
     cloud_import_konfiguriert: bool = False
+    mqtt_inbound_konfiguriert: bool = False
     portal_import_vorhanden: bool = False
-    datenquelle: Optional[str] = None  # "portal_import", "cloud_import", "manual", etc.
+    datenquelle: Optional[str] = None  # "portal_import", "cloud_import", "mqtt_inbound", "manual", etc.
 
     # Basis-Felder (Zählerdaten)
     basis_felder: list[FeldStatus]
@@ -134,6 +136,9 @@ class MonatsabschlussInput(BaseModel):
 
     # Investitionen
     investitionen: list[InvestitionWerte] = []
+
+    # Datenquelle (z.B. "mqtt_inbound", "cloud_import", "ha_statistics")
+    datenquelle: Optional[str] = None
 
 
 class MonatsabschlussResult(BaseModel):
@@ -320,6 +325,35 @@ async def get_monatsabschluss(
                             for inv, anteil in _distribute_by_param(speicher, bat_val, "kapazitaet_kwh"):
                                 connector_inv_verteilung.setdefault(inv.id, {})[inv_feld] = anteil
 
+    # MQTT Inbound Energy-Daten sammeln
+    mqtt_energy: dict[str, float] = {}
+    mqtt_inv_energy: dict[int, dict[str, float]] = {}  # inv_id → {feld: wert}
+    mqtt_svc = get_mqtt_inbound_service()
+    if mqtt_svc:
+        energy = mqtt_svc.cache.get_energy_data(anlage.id)
+        if energy:
+            # Basis-Felder
+            basis_map = {
+                "einspeisung_kwh": "einspeisung_kwh",
+                "netzbezug_kwh": "netzbezug_kwh",
+            }
+            for mqtt_key, feld_name in basis_map.items():
+                val = energy.get(mqtt_key)
+                if val is not None and val > 0:
+                    mqtt_energy[feld_name] = round(val, 1)
+
+            # Investitions-Felder: inv/{inv_id}/{key}
+            for mqtt_key, val in energy.items():
+                if not mqtt_key.startswith("inv/") or val is None or val <= 0:
+                    continue
+                parts = mqtt_key.split("/", 2)  # ["inv", "3", "ladung_kwh"]
+                if len(parts) == 3:
+                    try:
+                        inv_id = int(parts[1])
+                        mqtt_inv_energy.setdefault(inv_id, {})[parts[2]] = round(val, 1)
+                    except ValueError:
+                        pass
+
     # Bestehende Monatsdaten laden
     md_result = await db.execute(
         select(Monatsdaten)
@@ -401,6 +435,15 @@ async def get_monatsabschluss(
                     konfidenz=90,
                     beschreibung="Vom Wechselrichter (Zählerstand-Differenz)",
                 ))
+
+        # MQTT Inbound-Vorschlag einfügen (Konfidenz 91)
+        if feld in mqtt_energy:
+            vorschlaege.insert(0, Vorschlag(
+                wert=mqtt_energy[feld],
+                quelle=VorschlagQuelle.MQTT_INBOUND,
+                konfidenz=91,
+                beschreibung="Aus MQTT Energy-Topics (Monatswerte)",
+            ))
 
         # Warnungen prüfen (nur wenn Wert vorhanden)
         warnungen = []
@@ -529,6 +572,16 @@ async def get_monatsabschluss(
                         beschreibung="Vom Wechselrichter (Zählerstand-Differenz)",
                     ))
 
+            # MQTT Inbound-Vorschlag einfügen (Konfidenz 91)
+            mqtt_inv_values = mqtt_inv_energy.get(inv.id, {})
+            if feld in mqtt_inv_values:
+                vorschlaege.insert(0, Vorschlag(
+                    wert=mqtt_inv_values[feld],
+                    quelle=VorschlagQuelle.MQTT_INBOUND,
+                    konfidenz=91,
+                    beschreibung="Aus MQTT Energy-Topics (Monatswerte)",
+                ))
+
             # Warnungen prüfen
             warnungen = []
             if aktueller_wert is not None:
@@ -598,6 +651,7 @@ async def get_monatsabschluss(
         ha_mapping_konfiguriert=bool(sensor_mapping),
         connector_konfiguriert=connector_konfiguriert,
         cloud_import_konfiguriert=cloud_import_konfiguriert,
+        mqtt_inbound_konfiguriert=bool(mqtt_energy or mqtt_inv_energy),
         portal_import_vorhanden=datenquelle == "portal_import",
         datenquelle=datenquelle,
         basis_felder=basis_felder,
@@ -800,6 +854,8 @@ async def save_monatsabschluss(
         monatsdaten.sonderkosten_beschreibung = daten.sonderkosten_beschreibung
     if daten.notizen is not None:
         monatsdaten.notizen = daten.notizen
+    if daten.datenquelle:
+        monatsdaten.datenquelle = daten.datenquelle
 
     await db.flush()
     monatsdaten_id = monatsdaten.id

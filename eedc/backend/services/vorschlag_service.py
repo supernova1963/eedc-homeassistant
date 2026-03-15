@@ -27,6 +27,7 @@ class VorschlagQuelle(str, Enum):
     HA_STATISTICS = "ha_statistics"  # Aus HA Recorder-Statistik-DB
     CRON_SNAPSHOT = "cron_snapshot"  # Vom Monatswechsel-Job
     LOCAL_CONNECTOR = "local_connector"  # Vom Geräte-Connector (lokale API)
+    MQTT_INBOUND = "mqtt_inbound"        # Aus MQTT Energy-Topics (Standalone)
     PORTAL_IMPORT = "portal_import"      # Aus CSV-Portal-Import
     VORMONAT = "vormonat"          # Letzter Monat
     VORJAHR = "vorjahr"            # Gleicher Monat Vorjahr

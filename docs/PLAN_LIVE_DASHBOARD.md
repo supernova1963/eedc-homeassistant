@@ -432,22 +432,41 @@ import LiveDashboard from './pages/LiveDashboard'
 6. ✅ `App.tsx` + `TopNavigation.tsx` + `SubTabs.tsx` — Navigation (Top-Level "Live" Tab)
 7. ✅ `EnergieBilanz.tsx` + `GaugeChart.tsx` — Bilanz-Tabelle + Gauge-Charts
 
-### Phase 2: MQTT-Inbound (universelle Datenbruecke)
-8. `MqttInboundCache` in `mqtt_client.py` — Subscribe + In-Memory-Cache
-9. `_collect_mqtt_inbound_data()` in `aktueller_monat.py` — Monatswerte aus MQTT
-10. `LivePowerService` um MQTT-Inbound-Cache als Quelle erweitern
-11. Frontend: Einrichtungs-Karte "MQTT-Datenquelle" mit Topic-Dokumentation
-12. Frontend: Test-Funktion (zeige empfangene MQTT-Werte)
-13. Docs: Beispiel-Flows fuer Node-RED, HA-Automation, ioBroker
+### Phase 2: MQTT-Inbound (universelle Datenbruecke) ✅ ERLEDIGT
+8. ✅ `MqttInboundService` + `MqttInboundCache` in `mqtt_inbound_service.py` — Eigenstaendiger MQTT-Subscriber mit Auto-Reconnect
+9. ✅ `_collect_mqtt_inbound_data()` in `aktueller_monat.py` — Monatswerte aus MQTT Energy-Cache
+10. ✅ `LivePowerService` um MQTT-Inbound-Cache als Quelle erweitern (Prioritaet 2, zwischen Connector und HA)
+11. ✅ Frontend: `MqttInboundSetup.tsx` — Einrichtung, Monitor, Topic-Dokumentation, Copy-to-Clipboard
+12. ✅ Frontend: Test-Funktion (empfangene Werte, Cache-Status, Clear-Cache)
+13. ✅ Docs: `MQTT_INBOUND.md` — Beispiel-Flows fuer HA, Node-RED, ioBroker, FHEM, openHAB
 
-### Phase 3: Sensor-Konfiguration
-14. SensorMappingWizard um "Live-Sensoren" Tab erweitern
-15. Auto-Detect von Power-Sensoren anbieten (HA device_class: power)
+### Phase 2b: MQTT Energy → Monatsdaten ✅ ERLEDIGT
+14. ✅ `VorschlagQuelle.MQTT_INBOUND` (Konfidenz 91%) im Monatsabschluss-Wizard
+15. ✅ MQTT Energy-Werte als Vorschlaege in Basis- und Investitions-Felder (generisch, alle Typen)
+16. ✅ `mqtt_inbound_konfiguriert` Status-Chip im Wizard-Header
+17. ✅ `datenquelle = "mqtt_inbound"` beim Speichern
+18. ✅ Energy-Topic-Generierung fuer alle Investitionstypen (PV, Speicher, WP, E-Auto, Wallbox, BKW, Sonstiges)
+19. ✅ Retained Messages beim Speichern der MQTT-Einstellungen seeden
+
+### Phase 3: Sensor-Konfiguration ✅ ERLEDIGT (Auto-Detect optional)
+20. ✅ `LiveSensorSection.tsx` — Wiederverwendbare Live-Sensor-Zuordnung pro Investitionstyp
+21. ✅ Live-Felder in BasisSensorenStep (einspeisung_w, netzbezug_w) und allen Investitions-Steps
+22. ✅ `LIVE_FIELDS` Presets pro Typ (PV, Speicher, WP, E-Auto, Wallbox, BKW)
+23. ✅ SensorAutocomplete mit device_class: power Filter
+24. Optional: Auto-Detect — Power-Sensoren automatisch vorschlagen (same device as energy sensor)
+
+### Phase 3b: MQTT Energy Mini-History ✅ ERLEDIGT
+25. ✅ `MqttEnergySnapshot` Model — SQLite-Tabelle fuer periodische Energy-Snapshots
+26. ✅ `mqtt_energy_history_service.py` — Snapshot (5min), Cleanup (31 Tage), Tages-Delta-Berechnung
+27. ✅ Scheduler-Jobs: `mqtt_energy_snapshot` (IntervalTrigger 5min) + `mqtt_energy_cleanup` (CronTrigger 03:00)
+28. ✅ `_safe_get_tages_kwh` Fallback: HA-History → MQTT-Snapshots → leer
+29. ✅ Initialer Snapshot 10s nach MQTT-Connect (main.py)
+30. ✅ Erster-Tag-Fallback: Fruehester Snapshot des Tages statt Mitternacht
 
 ### Phase 4: Connector-Live-Daten (optional)
-16. `read_current_power()` Methode in DeviceConnector ABC
-17. Implementierung in Fronius, SMA etc.
-18. LivePowerService nutzt Connectors als Fallback
+31. `read_current_power()` Methode in DeviceConnector ABC
+32. Implementierung in Fronius, SMA etc.
+33. LivePowerService nutzt Connectors als Fallback
 
 ## 8. Verifikation
 

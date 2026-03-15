@@ -7,6 +7,7 @@ HA-spezifische Features (MQTT, Sensor-Mapping, HA-Statistik) werden
 nur geladen wenn SUPERVISOR_TOKEN gesetzt ist.
 """
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -97,6 +98,18 @@ async def lifespan(app: FastAPI):
         )
         if await mqtt_inbound.start():
             print(f"  MQTT-Inbound: aktiv ({host}:{port})")
+            # Initialer Energy-Snapshot nach kurzem Delay (Cache braucht erste Nachrichten)
+            async def _initial_snapshot():
+                import asyncio
+                await asyncio.sleep(10)
+                try:
+                    from backend.services.mqtt_energy_history_service import snapshot_energy_cache
+                    count = await snapshot_energy_cache()
+                    if count > 0:
+                        logger.info(f"MQTT Energy: Initialer Snapshot ({count} Einträge)")
+                except Exception as e:
+                    logger.debug(f"Initialer MQTT Energy Snapshot fehlgeschlagen: {e}")
+            asyncio.create_task(_initial_snapshot())
         else:
             print("  MQTT-Inbound: konnte nicht gestartet werden")
 

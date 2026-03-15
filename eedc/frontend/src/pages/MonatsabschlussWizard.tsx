@@ -591,6 +591,14 @@ export default function MonatsabschlussWizard() {
               {data.cloud_import_konfiguriert && <CheckCircle className="w-3 h-3" />}
             </span>
 
+            {data.mqtt_inbound_konfiguriert && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                <Zap className="w-3 h-3" />
+                MQTT Energy
+                <CheckCircle className="w-3 h-3" />
+              </span>
+            )}
+
             {data.portal_import_vorhanden && (
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                 <FileText className="w-3 h-3" />
@@ -601,7 +609,7 @@ export default function MonatsabschlussWizard() {
           </div>
 
           {/* Hinweis wenn keine Quellen konfiguriert */}
-          {!data.ha_mapping_konfiguriert && !data.connector_konfiguriert && !data.cloud_import_konfiguriert && !data.portal_import_vorhanden && (
+          {!data.ha_mapping_konfiguriert && !data.connector_konfiguriert && !data.cloud_import_konfiguriert && !data.mqtt_inbound_konfiguriert && !data.portal_import_vorhanden && (
             <Alert type="info">
               <div className="flex items-center justify-between gap-3">
                 <span>
@@ -1233,6 +1241,7 @@ function getQuelleLabel(quelle: string): string {
     ha_sensor: 'HA-Sensor',
     cron_snapshot: 'Snapshot',
     local_connector: 'Connector',
+    mqtt_inbound: 'MQTT Energy',
     portal_import: 'Portal-Import',
     cloud_import: 'Cloud-Import',
     vormonat: 'Vormonat',
@@ -1251,6 +1260,7 @@ function getDatenquelleLabel(datenquelle: string): string {
     ha_import: 'HA-Statistik-Import',
     portal_import: 'Portal-Import (CSV)',
     cloud_import: 'Cloud-Import (API)',
+    mqtt_inbound: 'MQTT Energy-Topics',
     cron_snapshot: 'Automatischer Snapshot',
   }
   return labels[datenquelle] || datenquelle

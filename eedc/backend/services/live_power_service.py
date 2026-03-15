@@ -438,15 +438,28 @@ class LivePowerService:
     async def _safe_get_tages_kwh(
         self, anlage: Anlage, db: AsyncSession, tage_zurueck: int
     ) -> dict[str, Optional[float]]:
-        """Wrapper mit Fehlerbehandlung für _get_tages_kwh."""
-        if not HA_INTEGRATION_AVAILABLE:
-            return {}
+        """Wrapper mit Fehlerbehandlung für _get_tages_kwh (HA + MQTT Fallback)."""
+        # 1. Versuche HA-History (Trapezregel)
+        if HA_INTEGRATION_AVAILABLE:
+            try:
+                result = await self._get_tages_kwh(anlage, db, tage_zurueck)
+                if result:
+                    return result
+            except Exception as e:
+                label = "Heute" if tage_zurueck == 0 else "Gestern"
+                logger.warning(f"Fehler bei {label}-kWh Berechnung (HA): {e}")
+
+        # 2. Fallback: MQTT Energy Snapshots
         try:
-            return await self._get_tages_kwh(anlage, db, tage_zurueck)
+            from backend.services.mqtt_energy_history_service import get_tages_kwh
+            result = await get_tages_kwh(anlage.id, tage_zurueck)
+            if result:
+                return result
         except Exception as e:
             label = "Heute" if tage_zurueck == 0 else "Gestern"
-            logger.warning(f"Fehler bei {label}-kWh Berechnung: {e}")
-            return {}
+            logger.debug(f"MQTT Energy History nicht verfügbar für {label}: {e}")
+
+        return {}
 
     async def _get_tages_kwh(
         self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0

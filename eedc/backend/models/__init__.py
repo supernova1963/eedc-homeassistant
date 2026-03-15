@@ -6,6 +6,7 @@ from backend.models.strompreis import Strompreis
 from backend.models.settings import Settings
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.models.activity_log import ActivityLog
+from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
 __all__ = [
     "Anlage",
@@ -18,4 +19,5 @@ __all__ = [
     "PVGISPrognose",
     "PVGISMonatsprognose",
     "ActivityLog",
+    "MqttEnergySnapshot",
 ]

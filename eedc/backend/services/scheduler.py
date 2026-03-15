@@ -12,6 +12,7 @@ from typing import Optional
 try:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
     from apscheduler.jobstores.memory import MemoryJobStore
     SCHEDULER_AVAILABLE = True
 except ImportError:
@@ -26,6 +27,8 @@ class EEDCScheduler:
 
     Jobs:
     - Monatswechsel-Snapshot: Am 1. jeden Monats um 00:01
+    - MQTT Energy Snapshot: Alle 5 Minuten
+    - MQTT Energy Cleanup: Täglich um 03:00
     """
 
     def __init__(self):
@@ -69,6 +72,24 @@ class EEDCScheduler:
                 CronTrigger(day=1, hour=0, minute=1),
                 id="monthly_snapshot",
                 name="Monatswechsel Snapshot",
+                replace_existing=True,
+            )
+
+            # MQTT Energy Snapshot: Alle 5 Minuten
+            self._scheduler.add_job(
+                mqtt_energy_snapshot_job,
+                IntervalTrigger(minutes=5),
+                id="mqtt_energy_snapshot",
+                name="MQTT Energy Snapshot",
+                replace_existing=True,
+            )
+
+            # MQTT Energy Cleanup: Täglich um 03:00
+            self._scheduler.add_job(
+                mqtt_energy_cleanup_job,
+                CronTrigger(hour=3, minute=0),
+                id="mqtt_energy_cleanup",
+                name="MQTT Energy Cleanup",
                 replace_existing=True,
             )
 
@@ -178,6 +199,24 @@ async def monthly_snapshot_job(anlage_id: Optional[int] = None) -> dict:
 
     logger.info("Monatswechsel-Snapshot abgeschlossen")
     return results
+
+
+async def mqtt_energy_snapshot_job() -> None:
+    """Snapshots MQTT Energy-Cache in SQLite (alle 5 Min)."""
+    try:
+        from backend.services.mqtt_energy_history_service import snapshot_energy_cache
+        await snapshot_energy_cache()
+    except Exception as e:
+        logger.warning(f"MQTT Energy Snapshot fehlgeschlagen: {e}")
+
+
+async def mqtt_energy_cleanup_job() -> None:
+    """Löscht alte MQTT Energy Snapshots (täglich um 03:00)."""
+    try:
+        from backend.services.mqtt_energy_history_service import cleanup_old_snapshots
+        await cleanup_old_snapshots()
+    except Exception as e:
+        logger.warning(f"MQTT Energy Cleanup fehlgeschlagen: {e}")
 
 
 # Singleton-Instanz

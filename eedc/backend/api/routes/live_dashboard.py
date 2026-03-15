@@ -520,10 +520,26 @@ async def get_mqtt_topics(
         energy_keys_by_typ = {
             "pv-module": [("pv_erzeugung_kwh", "PV-Erzeugung (kWh)")],
             "speicher": [("ladung_kwh", "Ladung (kWh)"), ("entladung_kwh", "Entladung (kWh)")],
-            "waermepumpe": [("stromverbrauch_kwh", "Stromverbrauch (kWh)")],
-            "e-auto": [("ladung_kwh", "Ladung (kWh)")],
-            "wallbox": [("ladung_kwh", "Ladung (kWh)")],
-            "balkonkraftwerk": [("pv_erzeugung_kwh", "Erzeugung (kWh)")],
+            "waermepumpe": [
+                ("stromverbrauch_kwh", "Stromverbrauch (kWh)"),
+                ("heizenergie_kwh", "Heizenergie (kWh)"),
+                ("warmwasser_kwh", "Warmwasser (kWh)"),
+            ],
+            "e-auto": [
+                ("ladung_kwh", "Ladung (kWh)"),
+                ("km_gefahren", "Gefahrene km"),
+                ("v2h_entladung_kwh", "V2H-Entladung (kWh)"),
+            ],
+            "wallbox": [
+                ("ladung_kwh", "Ladung (kWh)"),
+                ("ladevorgaenge", "Ladevorgaenge (Anzahl)"),
+            ],
+            "balkonkraftwerk": [
+                ("pv_erzeugung_kwh", "Erzeugung (kWh)"),
+                ("eigenverbrauch_kwh", "Eigenverbrauch (kWh)"),
+                ("speicher_ladung_kwh", "Speicher Ladung (kWh)"),
+                ("speicher_entladung_kwh", "Speicher Entladung (kWh)"),
+            ],
         }
 
         # Wechselrichter überspringen — die PV-Erzeugung kommt von den Modulen,
@@ -556,11 +572,19 @@ async def get_mqtt_topics(
             # Energy-Topics
             energy_keys = list(energy_keys_by_typ.get(inv.typ, []))
 
-            # E-Auto mit V2H bekommt zusätzlich entladung_kwh
-            if inv.typ == "e-auto":
+            # Sonstiges: kategorie-abhängige Felder
+            if inv.typ == "sonstiges":
                 param = inv.parameter if isinstance(inv.parameter, dict) else {}
-                if param.get("nutzt_v2h"):
-                    energy_keys.append(("entladung_kwh", "V2H-Entladung (kWh)"))
+                kategorie = param.get("kategorie", "verbraucher")
+                if kategorie == "erzeuger":
+                    energy_keys = [("erzeugung_kwh", "Erzeugung (kWh)")]
+                elif kategorie == "speicher":
+                    energy_keys = [
+                        ("erzeugung_kwh", "Erzeugung/Entladung (kWh)"),
+                        ("verbrauch_sonstig_kwh", "Verbrauch/Ladung (kWh)"),
+                    ]
+                else:
+                    energy_keys = [("verbrauch_sonstig_kwh", "Verbrauch (kWh)")]
 
             for key, label in energy_keys:
                 topics.append({
