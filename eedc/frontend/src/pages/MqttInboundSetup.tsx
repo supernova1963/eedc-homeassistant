@@ -414,7 +414,7 @@ export default function MqttInboundSetup() {
           <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Beispiel (mosquitto_pub):</p>
             <code className="text-xs text-gray-800 dark:text-gray-200 break-all">
-              mosquitto_pub -h {host || 'localhost'} -t &quot;{erstesInvTopic.topic}&quot; -m &quot;4200&quot;
+              mosquitto_pub -h {host || 'localhost'} -r -t &quot;{erstesInvTopic.topic}&quot; -m &quot;4200&quot;
             </code>
           </div>
         )}
@@ -422,7 +422,7 @@ export default function MqttInboundSetup() {
 
       {/* Beispiel-Flows */}
       <BeispielFlows
-        exampleTopic={erstesInvTopic?.topic || 'eedc/1/live/inv/1/leistung_w'}
+        topics={topics}
         host={host || 'localhost'}
       />
     </div>
@@ -452,9 +452,33 @@ function TopicRow({ label, topic, copied, onCopy }: {
   )
 }
 
-function BeispielFlows({ exampleTopic, host }: { exampleTopic: string; host: string }) {
+/** Label → Sensor-Platzhalter: "SolarEdge – Leistung (W)" → "solaredge_leistung" */
+function labelToSensorId(label: string): string {
+  return label
+    .replace(/\s*\([^)]*\)\s*/g, '')   // Einheit entfernen
+    .replace(/\s*–\s*/g, '_')
+    .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .toLowerCase()
+}
+
+function BeispielFlows({ topics, host }: { topics: MqttTopic[]; host: string }) {
   const [open, setOpen] = useState(false)
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null)
+  const [selectedIdx, setSelectedIdx] = useState(0)
+
+  // Default auf erstes Investitions-Topic (falls vorhanden)
+  useEffect(() => {
+    const invIdx = topics.findIndex(t => t.topic.includes('/inv/'))
+    if (invIdx >= 0) setSelectedIdx(invIdx)
+  }, [topics])
+
+  const selected = topics[selectedIdx]
+  const exampleTopic = selected?.topic || 'eedc/1/live/inv/1/leistung_w'
+  const sensorId = selected ? labelToSensorId(selected.label) : 'pv_power'
+  const aliasName = selected?.label.replace(/\s*\([^)]*\)\s*/g, '').trim() || 'PV-Leistung'
 
   const copySnippet = (id: string, text: string) => {
     navigator.clipboard.writeText(text)
@@ -462,44 +486,53 @@ function BeispielFlows({ exampleTopic, host }: { exampleTopic: string; host: str
     setTimeout(() => setCopiedSnippet(null), 2000)
   }
 
+  const haSensor = `sensor.${sensorId}`
   const haAutomation = `automation:
-  - alias: "EEDC PV-Leistung senden"
+  - alias: "EEDC ${aliasName} senden"
     trigger:
       - platform: state
-        entity_id: sensor.pv_power
+        entity_id: ${haSensor}  # ← Deinen Sensor hier einsetzen
     action:
       - service: mqtt.publish
         data:
           topic: "${exampleTopic}"
-          payload: "{{ states('sensor.pv_power') }}"`
+          payload: "{{ states('${haSensor}') }}"
+          retain: true`
 
   const nodeRed = `[
   {
-    "id": "eedc_pv",
+    "id": "eedc_${sensorId}",
     "type": "mqtt out",
     "topic": "${exampleTopic}",
     "broker": "${host}",
-    "name": "EEDC PV-Leistung"
+    "retain": true,
+    "name": "EEDC ${aliasName}"
   }
-]`
+]
+// msg.payload mit dem Sensorwert befüllen (z.B. via Change- oder Function-Node)`
 
-  const ioBroker = `on('sourceDP.pv_power', (obj) => {
+  const ioBroker = `// Datenpunkt anpassen ↓
+const quellSensor = '0_userdata.0.${sensorId}';
+
+on(quellSensor, (obj) => {
     sendTo('mqtt.0', 'publish', {
         topic: '${exampleTopic}',
-        message: String(obj.state.val)
+        message: String(obj.state.val),
+        retain: true
     });
 });`
 
-  const fhem = `define eedc_pv notify pv_power:.* {\\
-  fhem("set mqtt2 publish ${exampleTopic} " . ReadingsVal("pv_power","state","0"))\\
+  const fhem = `# Reading-Name anpassen ↓
+define eedc_${sensorId} notify ${sensorId}:.* {\\
+  fhem("set mqtt2 publish -r ${exampleTopic} " . ReadingsVal("${sensorId}","state","0"))\\
 }`
 
-  const openHab = `rule "EEDC PV senden"
+  const openHab = `rule "EEDC ${aliasName} senden"
 when
-    Item PV_Power changed
+    Item ${sensorId} changed  // ← Item-Name anpassen
 then
     val mqttActions = getActions("mqtt", "mqtt:broker:myBroker")
-    mqttActions.publishMQTT("${exampleTopic}", PV_Power.state.toString)
+    mqttActions.publishMQTT("${exampleTopic}", ${sensorId}.state.toString, true)
 end`
 
   const snippets = [
@@ -526,9 +559,29 @@ end`
 
       {open && (
         <div className="px-5 pb-5 space-y-4">
+          {/* Topic-Auswahl */}
+          {topics.length > 0 && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Beispiel generieren für:
+              </label>
+              <select
+                value={selectedIdx}
+                onChange={(e) => setSelectedIdx(Number(e.target.value))}
+                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {topics.map((t, i) => (
+                  <option key={t.topic} value={i}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Kopiere den passenden Beispiel-Flow und passe die Sensor-IDs an deine Installation an.
-            Die Topics oben werden automatisch mit deinen Anlagen-/Investitions-IDs generiert.
+            Kopiere den passenden Beispiel-Flow. Das MQTT-Topic ist bereits korrekt —
+            ersetze nur den <span className="font-mono text-xs bg-gray-100 dark:bg-gray-900 px-1 rounded">Sensor-Namen</span> durch deinen eigenen.
           </p>
 
           {snippets.map((s) => (
