@@ -2,9 +2,10 @@
  * LiveDashboard — Echtzeit-Leistungsdaten mit 5s Auto-Refresh.
  *
  * Layout:
- *   Zeile 1: Energiebilanz (2/3) | Zustandswerte/Gauges (1/3)
- *   Zeile 2: Wetter + Prognose (volle Breite)
- *   Zeile 3: Tagesenergie (volle Breite)
+ *   Zeile 1: Energiebilanz (2/3) | Sidebar: Heute + SoC + Netz (1/3)
+ *   Zeile 2: Wetter (volle Breite)
+ *   Zeile 3: Tagesverlauf (volle Breite)
+ *   Zeile 4: Prognose (optional)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -239,29 +240,95 @@ export default function LiveDashboard() {
               />
             </div>
 
-            {/* Zustandswerte (Gauges) */}
-            {data.gauges.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  Zustandswerte
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {data.gauges.map((gauge) => {
-                    // Tageswert zuordnen wo möglich
-                    const tagesMap: Record<string, number | null> = {
-                      netz: data.heute_netzbezug_kwh !== null && data.heute_einspeisung_kwh !== null
-                        ? data.heute_netzbezug_kwh - data.heute_einspeisung_kwh
-                        : null,
-                    }
-                    const tagesKwh = tagesMap[gauge.key] ?? null
-                    const tip = [
-                      `${gauge.label}: ${gauge.wert} ${gauge.einheit}`,
-                      `Bereich: ${gauge.min_wert} – ${gauge.max_wert} ${gauge.einheit}`,
-                      ...(tagesKwh !== null ? [`Heute netto: ${tagesKwh.toFixed(1)} kWh`] : []),
-                    ].join('\n')
-
+            {/* Sidebar: Heute + SoC + Netz — Höhe bestimmt durch EnergieFluss-SVG */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col justify-between gap-3">
+              {/* Heute — Tageswerte */}
+              {(data.heute_pv_kwh !== null || data.heute_einspeisung_kwh !== null || data.heute_netzbezug_kwh !== null) && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Heute</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {data.heute_pv_kwh !== null && (
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 py-2"
+                           title={data.gestern_pv_kwh !== null ? `Gestern: ${data.gestern_pv_kwh.toFixed(1)} kWh` : undefined}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">PV-Erzeugung</div>
+                        <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">{data.heute_pv_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {data.heute_eigenverbrauch_kwh !== null && (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2"
+                           title={data.gestern_eigenverbrauch_kwh !== null ? `Gestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : undefined}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch</div>
+                        <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {data.heute_einspeisung_kwh !== null && (
+                      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2"
+                           title={data.gestern_einspeisung_kwh !== null ? `Gestern: ${data.gestern_einspeisung_kwh.toFixed(1)} kWh` : undefined}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Einspeisung</div>
+                        <div className="text-lg font-bold text-green-600 dark:text-green-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {data.heute_netzbezug_kwh !== null && (
+                      <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2"
+                           title={data.gestern_netzbezug_kwh !== null ? `Gestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : undefined}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug</div>
+                        <div className="text-lg font-bold text-red-600 dark:text-red-400">{data.heute_netzbezug_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Autarkie + Eigenverbrauchsquote */}
+                  {(() => {
+                    const ev = data.heute_eigenverbrauch_kwh
+                    const nb = data.heute_netzbezug_kwh
+                    const pv = data.heute_pv_kwh
+                    const autarkie = ev !== null && nb !== null && (ev + nb) > 0
+                      ? (ev / (ev + nb)) * 100 : null
+                    const evQuote = ev !== null && pv !== null && pv > 0
+                      ? (ev / pv) * 100 : null
+                    if (autarkie === null && evQuote === null) return null
                     return (
-                      <div key={gauge.key} title={tip} className="cursor-default">
+                      <div className="flex gap-3 mt-2">
+                        {autarkie !== null && (
+                          <div className="flex-1 text-center bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-2 py-1.5">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Autarkie</div>
+                            <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{autarkie.toFixed(0)}<span className="text-xs font-normal">%</span></div>
+                          </div>
+                        )}
+                        {evQuote !== null && (
+                          <div className="flex-1 text-center bg-sky-50 dark:bg-sky-900/20 rounded-lg px-2 py-1.5">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbr.</div>
+                            <div className="text-base font-bold text-sky-600 dark:text-sky-400">{evQuote.toFixed(0)}<span className="text-xs font-normal">%</span></div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* Prognose */}
+              {wetter?.pv_prognose_kwh != null && (
+                <div className="flex gap-2">
+                  <div className="flex-1 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose</div>
+                    <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                  </div>
+                  {wetter?.verbrauchsprofil && wetter.verbrauchsprofil.length > 0 && (
+                    <div className="flex-1 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Verbr.-Prognose</div>
+                      <div className="text-base font-bold text-orange-600 dark:text-orange-400">~{wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SoC Gauges — nur Batterie/E-Auto */}
+              {data.gauges.filter(g => g.key.startsWith('soc_')).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Ladezustand</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {data.gauges.filter(g => g.key.startsWith('soc_')).map((gauge) => (
+                      <div key={gauge.key} title={`${gauge.label}: ${gauge.wert} ${gauge.einheit}`} className="cursor-default">
                         <GaugeChart
                           wert={gauge.wert}
                           min={gauge.min_wert}
@@ -270,11 +337,48 @@ export default function LiveDashboard() {
                           einheit={gauge.einheit}
                         />
                       </div>
-                    )
-                  })}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Netz — Horizontaler Balken mit 0 in der Mitte */}
+              {(() => {
+                const netzGauge = data.gauges.find(g => g.key === 'netz')
+                if (!netzGauge) return null
+                const maxAbs = Math.max(Math.abs(netzGauge.min_wert), Math.abs(netzGauge.max_wert)) || 1
+                const ratio = Math.min(1, Math.abs(netzGauge.wert) / maxAbs)
+                const isExport = netzGauge.wert < 0
+                const displayW = Math.abs(netzGauge.wert) >= 1000
+                  ? `${(netzGauge.wert / 1000).toFixed(1)} kW`
+                  : `${Math.round(netzGauge.wert)} W`
+                return (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Netz</h3>
+                    <div className="relative h-7 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                      {/* Mittellinie */}
+                      <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-300 dark:bg-gray-500 z-10" />
+                      {/* Balken */}
+                      <div
+                        className={`absolute top-0 bottom-0 transition-all duration-500 ${isExport ? 'bg-green-500' : 'bg-red-500'}`}
+                        style={isExport
+                          ? { right: '50%', width: `${ratio * 50}%` }
+                          : { left: '50%', width: `${ratio * 50}%` }
+                        }
+                      />
+                      {/* Wert */}
+                      <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-800 dark:text-gray-100 z-20">
+                        {displayW}
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 px-1">
+                      <span>Einspeisung</span>
+                      <span>Bezug</span>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
           </div>
 
           {/* Zeile 2: Wetter + Prognose (volle Breite) */}
@@ -292,72 +396,6 @@ export default function LiveDashboard() {
             </div>
           )}
 
-          {/* Zeile 4: Tagesenergie (IST + Prognose + Gestern) */}
-          {(data.heute_pv_kwh !== null || data.heute_einspeisung_kwh !== null || data.heute_netzbezug_kwh !== null || wetter?.pv_prognose_kwh !== null) && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                Heute (kWh)
-              </h3>
-              <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                {data.heute_pv_kwh !== null && (
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">PV: </span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {data.heute_pv_kwh.toFixed(1)} kWh
-                    </span>
-                    {data.gestern_pv_kwh !== null && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
-                        (gestern: {data.gestern_pv_kwh.toFixed(1)})
-                      </span>
-                    )}
-                  </div>
-                )}
-                {data.heute_einspeisung_kwh !== null && (
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Einspeisung: </span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {data.heute_einspeisung_kwh.toFixed(1)} kWh
-                    </span>
-                    {data.gestern_einspeisung_kwh !== null && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
-                        (gestern: {data.gestern_einspeisung_kwh.toFixed(1)})
-                      </span>
-                    )}
-                  </div>
-                )}
-                {data.heute_netzbezug_kwh !== null && (
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Bezug: </span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {data.heute_netzbezug_kwh.toFixed(1)} kWh
-                    </span>
-                    {data.gestern_netzbezug_kwh !== null && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
-                        (gestern: {data.gestern_netzbezug_kwh.toFixed(1)})
-                      </span>
-                    )}
-                  </div>
-                )}
-                {/* Prognose-Werte aus Wetter */}
-                {wetter?.pv_prognose_kwh !== null && wetter?.pv_prognose_kwh !== undefined && (
-                  <div className="border-l border-gray-200 dark:border-gray-700 pl-6">
-                    <span className="text-gray-400 dark:text-gray-500">PV-Prognose: </span>
-                    <span className="font-semibold text-yellow-600 dark:text-yellow-400">
-                      ~{wetter.pv_prognose_kwh.toFixed(1)} kWh
-                    </span>
-                  </div>
-                )}
-                {wetter?.verbrauchsprofil && wetter.verbrauchsprofil.length > 0 && (
-                  <div>
-                    <span className="text-gray-400 dark:text-gray-500">Verbrauch-Prognose: </span>
-                    <span className="font-semibold text-red-500 dark:text-red-400">
-                      ~{wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0).toFixed(1)} kWh
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

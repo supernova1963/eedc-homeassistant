@@ -91,27 +91,27 @@ function computeDims(maxPerRow: number): LayoutDims {
   // Ab 5+ Items pro Zeile: kompakte Darstellung
   if (maxPerRow >= 5) {
     return {
-      nodeW: 80, nodeH: 52, nodeR: 10, hausR: 38,
-      cy: 190, verbraucherY: 340,
+      nodeW: 80, nodeH: 48, nodeR: 10, hausR: 34,
+      cy: 170, verbraucherY: 305,
       kwFontSize: 10, labelFontSize: 8.5, socFontSize: 9,
-      labelMaxChars: 11, iconSize: 16, hausIconSize: 26,
+      labelMaxChars: 11, iconSize: 16, hausIconSize: 24,
     }
   }
   // 4 Items: leicht reduziert
   if (maxPerRow >= 4) {
     return {
-      nodeW: 95, nodeH: 60, nodeR: 11, hausR: 42,
-      cy: 200, verbraucherY: 355,
-      kwFontSize: 11.5, labelFontSize: 9, socFontSize: 10,
-      labelMaxChars: 13, iconSize: 18, hausIconSize: 28,
+      nodeW: 88, nodeH: 52, nodeR: 10, hausR: 36,
+      cy: 175, verbraucherY: 310,
+      kwFontSize: 10.5, labelFontSize: 8.5, socFontSize: 9.5,
+      labelMaxChars: 12, iconSize: 17, hausIconSize: 24,
     }
   }
-  // ≤3 Items: Standard-Größe
+  // ≤3 Items: Standard-Größe (proportional zur Sidebar)
   return {
-    nodeW: 110, nodeH: 68, nodeR: 12, hausR: 46,
-    cy: 210, verbraucherY: 370,
-    kwFontSize: 13, labelFontSize: 10, socFontSize: 11,
-    labelMaxChars: 16, iconSize: 20, hausIconSize: 32,
+    nodeW: 100, nodeH: 58, nodeR: 12, hausR: 38,
+    cy: 180, verbraucherY: 320,
+    kwFontSize: 11, labelFontSize: 9, socFontSize: 10,
+    labelMaxChars: 14, iconSize: 17, hausIconSize: 26,
   }
 }
 
@@ -226,9 +226,9 @@ export default function EnergieFluss({
   const nodeMap = new Map(nodes.map(n => [n.komp.key, n]))
   const haushalt = komponenten.find(k => k.key === 'haushalt')
 
-  // Dynamische Höhe: Basis 420, erweitert wenn Knoten tiefer liegen
+  // Dynamische Höhe: Basis 380, erweitert wenn Knoten tiefer liegen
   const maxY = Math.max(...nodes.map(n => n.y), dims.verbraucherY)
-  const svgH = Math.max(420, maxY + NODE_H / 2 + 10)
+  const svgH = Math.max(380, maxY + NODE_H / 2 + 10)
 
   // Max kW für Dicken-Normierung
   const allKw = komponenten.flatMap(k => [k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0])
