@@ -361,7 +361,10 @@ async def save_mqtt_settings(
 
     # Validierung
     host = config.get("host", "").strip()
-    port = int(config.get("port", 1883))
+    try:
+        port = int(config.get("port", 1883))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Port muss eine Zahl sein")
     username = config.get("username", "").strip()
     password = config.get("password", "").strip()
     enabled = bool(config.get("enabled", False))
@@ -606,7 +609,10 @@ async def test_mqtt_connection(config: dict):
         return {"connected": False, "error": "aiomqtt nicht installiert"}
 
     host = config.get("host", "").strip()
-    port = int(config.get("port", 1883))
+    try:
+        port = int(config.get("port", 1883))
+    except (ValueError, TypeError):
+        return {"connected": False, "error": "Ungültiger Port"}
     username = config.get("username", "").strip() or None
     password = config.get("password", "").strip() or None
 

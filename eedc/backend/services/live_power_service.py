@@ -268,7 +268,7 @@ class LivePowerService:
 
             else:
                 # Verbraucher (E-Auto ohne V2H, WP, Wallbox, Sonstige)
-                kw = val_w / 1000
+                kw = abs(val_w) / 1000
                 komponenten.append({
                     "key": f"{_TAGESVERLAUF_KATEGORIE.get(typ, typ)}_{inv_id}",
                     "label": inv.bezeichnung,

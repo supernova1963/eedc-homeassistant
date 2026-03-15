@@ -8,11 +8,14 @@ nur geladen wenn SUPERVISOR_TOKEN gesetzt ist.
 """
 
 import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
+
+logger = logging.getLogger(__name__)
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
