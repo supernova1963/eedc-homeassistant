@@ -387,10 +387,17 @@ async def calculate_investition_sensors(
     strompreis: Optional[Strompreis]
 ) -> list[SensorValue]:
     """Berechnet Sensor-Werte für eine Investition basierend auf Typ."""
-    # TODO: Investitions-Monatsdaten laden und auswerten
-    # Vorerst nur Basis-Daten aus dem ROI-Dashboard
-
     sensor_values = []
+
+    # InvestitionMonatsdaten laden
+    imd_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id == investition.id)
+    )
+    monatsdaten = imd_result.scalars().all()
+
+    params = investition.parameter or {}
+    netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
 
     # ROI-Basisdaten
     if investition.anschaffungskosten_gesamt:
@@ -398,8 +405,94 @@ async def calculate_investition_sensors(
             if sensor.key == "investition_gesamt_euro":
                 sensor_values.append(SensorValue(
                     definition=sensor,
-                    value=investition.anschaffungskosten_gesamt,
+                    value=round(investition.anschaffungskosten_gesamt, 2),
                     berechnung=None
+                ))
+
+    # E-Auto / Wallbox Sensoren
+    if investition.typ in ("e-auto", "wallbox"):
+        gesamt_km = 0.0
+        gesamt_verbrauch = 0.0
+        gesamt_pv_ladung = 0.0
+        gesamt_netz_ladung = 0.0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_km += d.get("km_gefahren", 0) or 0
+            gesamt_verbrauch += d.get("verbrauch_kwh", 0) or 0
+            gesamt_pv_ladung += d.get("ladung_pv_kwh", 0) or 0
+            gesamt_netz_ladung += d.get("ladung_netz_kwh", 0) or 0
+
+        gesamt_ladung = gesamt_pv_ladung + gesamt_netz_ladung
+
+        for sensor in E_AUTO_SENSOREN:
+            value = None
+            berechnung = None
+
+            if sensor.key == "e_auto_km_gesamt":
+                if gesamt_km > 0:
+                    value = round(gesamt_km, 0)
+                    berechnung = f"Summe aus {len(monatsdaten)} Monaten"
+            elif sensor.key == "e_auto_verbrauch_kwh_100km":
+                if gesamt_km > 0 and gesamt_verbrauch > 0:
+                    value = round(gesamt_verbrauch / gesamt_km * 100, 1)
+                    berechnung = f"{gesamt_verbrauch:.0f} / {gesamt_km:.0f} × 100"
+            elif sensor.key == "e_auto_pv_anteil_prozent":
+                if gesamt_ladung > 0:
+                    value = round(gesamt_pv_ladung / gesamt_ladung * 100, 1)
+                    berechnung = f"{gesamt_pv_ladung:.0f} / {gesamt_ladung:.0f} × 100"
+            elif sensor.key == "e_auto_ersparnis_vs_benzin_euro":
+                if gesamt_km > 0:
+                    benzinpreis = params.get("benzinpreis_euro", 1.65)
+                    vergleich_l = params.get("vergleich_verbrauch_l_100km", 7.5)
+                    benzin_kosten = (gesamt_km / 100) * vergleich_l * benzinpreis
+                    strom_kosten = gesamt_netz_ladung * netzbezug_preis / 100
+                    value = round(benzin_kosten - strom_kosten, 2)
+                    berechnung = f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom)"
+
+            if value is not None:
+                sensor_values.append(SensorValue(
+                    definition=sensor,
+                    value=value,
+                    berechnung=berechnung
+                ))
+
+    # Wärmepumpe Sensoren
+    elif investition.typ == "waermepumpe":
+        gesamt_strom = 0.0
+        gesamt_heizung = 0.0
+        gesamt_warmwasser = 0.0
+
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            gesamt_strom += d.get("stromverbrauch_kwh", 0) or 0
+            gesamt_heizung += d.get("heizenergie_kwh", 0) or 0
+            gesamt_warmwasser += d.get("warmwasser_kwh", 0) or 0
+
+        gesamt_waerme = gesamt_heizung + gesamt_warmwasser
+
+        for sensor in WAERMEPUMPE_SENSOREN:
+            value = None
+            berechnung = None
+
+            if sensor.key == "wp_cop_durchschnitt":
+                if gesamt_strom > 0 and gesamt_waerme > 0:
+                    value = round(gesamt_waerme / gesamt_strom, 2)
+                    berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
+            elif sensor.key == "wp_ersparnis_euro":
+                if gesamt_waerme > 0:
+                    alter_preis = params.get("alter_preis_cent_kwh", 12.0)
+                    alter_wirkungsgrad = 0.85 if params.get("alter_energietraeger") == "oel" else 0.90
+                    alte_kosten = (gesamt_waerme / alter_wirkungsgrad) * alter_preis / 100
+                    wp_kosten = gesamt_strom * netzbezug_preis / 100
+                    value = round(alte_kosten - wp_kosten, 2)
+                    berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"
+
+            if value is not None:
+                sensor_values.append(SensorValue(
+                    definition=sensor,
+                    value=value,
+                    berechnung=berechnung
                 ))
 
     return sensor_values

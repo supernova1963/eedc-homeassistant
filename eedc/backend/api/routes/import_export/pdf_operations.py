@@ -367,11 +367,34 @@ async def export_pdf(
 
     # WP-Metriken
     wp_cop = (wp_waerme_total / wp_strom_total) if wp_strom_total > 0 else None
-    wp_ersparnis = 0  # TODO: vs. Gas berechnen
+    wp_ersparnis = 0.0
+    if hat_waermepumpe and wp_waerme_total > 0:
+        wp_alter_preis_cent = 12.0
+        wp_alter_wirkungsgrad = 0.90
+        for inv in investitionen:
+            if inv.typ == "waermepumpe" and inv.parameter:
+                wp_alter_preis_cent = inv.parameter.get("alter_preis_cent_kwh", 12.0)
+                if inv.parameter.get("alter_energietraeger") == "oel":
+                    wp_alter_wirkungsgrad = 0.85
+                break
+        alte_heizung_kosten = (wp_waerme_total / wp_alter_wirkungsgrad) * wp_alter_preis_cent / 100
+        wp_stromkosten = wp_strom_total * netzbezug_preis_cent / 100
+        wp_ersparnis = alte_heizung_kosten - wp_stromkosten
 
     # E-Mob-Metriken
     emob_pv_anteil = (emob_pv_total / emob_ladung_total * 100) if emob_ladung_total > 0 else None
-    emob_ersparnis = 0  # TODO: vs. Benzin berechnen
+    emob_ersparnis = 0.0
+    if hat_emobilitaet and emob_km_total > 0:
+        emob_benzinpreis = 1.65
+        emob_vergleich_l_100km = 7.5
+        for inv in investitionen:
+            if inv.typ in ("e-auto", "wallbox") and inv.parameter:
+                emob_benzinpreis = inv.parameter.get("benzinpreis_euro", 1.65)
+                emob_vergleich_l_100km = inv.parameter.get("vergleich_verbrauch_l_100km", 7.5)
+                break
+        benzin_kosten = (emob_km_total / 100) * emob_vergleich_l_100km * emob_benzinpreis
+        strom_kosten = emob_netz_total * netzbezug_preis_cent / 100
+        emob_ersparnis = benzin_kosten - strom_kosten
 
     jahres_kpis = JahresKPIs(
         pv_erzeugung_kwh=pv_gesamt,

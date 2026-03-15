@@ -463,7 +463,12 @@ import LiveDashboard from './pages/LiveDashboard'
 29. ✅ Initialer Snapshot 10s nach MQTT-Connect (main.py)
 30. ✅ Erster-Tag-Fallback: Fruehester Snapshot des Tages statt Mitternacht
 
-### Phase 4: Connector-Live-Daten (optional)
+### ~~Automatischer Monatsabschluss~~ (VERWORFEN)
+Bewusst nicht implementiert — gleiche Argumentation wie bei HA:
+Sonderkosten, Notizen und ggf. fehlende Investitions-Felder erfordern manuelles Review.
+Das bestehende Kalender-Badge in der Navigation erinnert datenquellenunabhaengig an offene Monate.
+
+### Phase 4: Connector-Live-Daten (optional, kein MQTT)
 31. `read_current_power()` Methode in DeviceConnector ABC
 32. Implementierung in Fronius, SMA etc.
 33. LivePowerService nutzt Connectors als Fallback
