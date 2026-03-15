@@ -60,9 +60,8 @@ interface NodePosition {
 // ─── Layout ─────────────────────────────────────────────────────────
 
 const W = 600
-const H = 420
 const CX = W / 2
-const CY = H / 2
+const CY = 210  // Festes Zentrum (unabhängig von Höhe)
 
 // Knoten-Dimensionen
 const NODE_W = 110
@@ -82,9 +81,13 @@ function layoutNodes(komponenten: LiveKomponente[]): NodePosition[] {
   const erzeuger = komponenten.filter(k => k.key.startsWith('pv_'))
   const netz = komponenten.filter(k => k.key === 'netz')
   const speicher = komponenten.filter(k => k.key.startsWith('batterie_'))
+  // Kinder (E-Autos mit parent_key) separat behandeln
+  const kinder = komponenten.filter(k => k.parent_key)
+  const kinderKeys = new Set(kinder.map(k => k.key))
   const verbraucher = komponenten.filter(k =>
     !k.key.startsWith('pv_') && k.key !== 'netz' &&
-    !k.key.startsWith('batterie_') && k.key !== 'haushalt'
+    !k.key.startsWith('batterie_') && k.key !== 'haushalt' &&
+    !kinderKeys.has(k.key)
   )
 
   const nodes: NodePosition[] = []
@@ -100,25 +103,41 @@ function layoutNodes(komponenten: LiveKomponente[]): NodePosition[] {
   const spXs = distribute(speicher.length, 510, 540)
   speicher.forEach((k, i) => nodes.push({ x: spXs[i], y: CY, komp: k }))
 
-  // Unten: Verbraucher
+  // Unten: Verbraucher (ohne Kinder)
   const vrXs = distribute(verbraucher.length, 110, 490)
   verbraucher.forEach((k, i) => nodes.push({ x: vrXs[i], y: 370, komp: k }))
+
+  // Kinder: direkt unter/neben ihrem Parent positionieren
+  const parentPositions = new Map(nodes.map(n => [n.komp.key, n]))
+  kinder.forEach(k => {
+    const parent = parentPositions.get(k.parent_key!)
+    if (parent) {
+      // Kind 70px unter dem Parent, leicht versetzt
+      const kinderOfParent = kinder.filter(c => c.parent_key === k.parent_key!)
+      const idx = kinderOfParent.indexOf(k)
+      const offsetX = (idx - (kinderOfParent.length - 1) / 2) * 120
+      nodes.push({ x: parent.x + offsetX, y: parent.y + 65, komp: k })
+    } else {
+      // Fallback: als normaler Verbraucher unten
+      nodes.push({ x: CX, y: 370, komp: k })
+    }
+  })
 
   return nodes
 }
 
 // ─── SVG Helpers ────────────────────────────────────────────────────
 
-/** Quadratic Bezier Pfad von Knoten zum Haus-Zentrum */
-function flowPath(nx: number, ny: number): string {
-  const mx = (nx + CX) / 2
-  const my = (ny + CY) / 2
-  const dx = CX - nx
-  const dy = CY - ny
+/** Quadratic Bezier Pfad von Knoten zu Zielpunkt */
+function flowPath(nx: number, ny: number, tx: number = CX, ty: number = CY): string {
+  const mx = (nx + tx) / 2
+  const my = (ny + ty) / 2
+  const dx = tx - nx
+  const dy = ty - ny
   const len = Math.sqrt(dx * dx + dy * dy) || 1
   const perpX = -dy / len * 25
   const perpY = dx / len * 25
-  return `M ${nx} ${ny} Q ${mx + perpX} ${my + perpY} ${CX} ${CY}`
+  return `M ${nx} ${ny} Q ${mx + perpX} ${my + perpY} ${tx} ${ty}`
 }
 
 /** Animationsgeschwindigkeit: mehr kW = schneller */
@@ -160,7 +179,12 @@ export default function EnergieFluss({
   if (komponenten.length === 0) return null
 
   const nodes = layoutNodes(komponenten)
+  const nodeMap = new Map(nodes.map(n => [n.komp.key, n]))
   const haushalt = komponenten.find(k => k.key === 'haushalt')
+
+  // Dynamische Höhe: Basis 420, erweitert wenn Knoten tiefer liegen
+  const maxY = Math.max(...nodes.map(n => n.y), 370)
+  const svgH = Math.max(420, maxY + NODE_H / 2 + 10)
 
   // Max kW für Dicken-Normierung
   const allKw = komponenten.flatMap(k => [k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0])
@@ -173,7 +197,7 @@ export default function EnergieFluss({
       </h3>
 
       <svg
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={`0 0 ${W} ${svgH}`}
         className="w-full flex-1 min-h-0"
       >
         {/* CSS Animation */}
@@ -199,7 +223,11 @@ export default function EnergieFluss({
           const isActive = kw > 0
           const isSource = (k.erzeugung_kw ?? 0) > 0
           const duration = flowDuration(kw)
-          const d = flowPath(node.x, node.y)
+          // Kinder verbinden sich zum Parent statt zum Haus
+          const parentNode = k.parent_key ? nodeMap.get(k.parent_key) : null
+          const targetX = parentNode ? parentNode.x : CX
+          const targetY = parentNode ? parentNode.y : CY
+          const d = flowPath(node.x, node.y, targetX, targetY)
 
           return (
             <g key={`line-${k.key}`}>

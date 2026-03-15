@@ -10,6 +10,7 @@ export interface LiveKomponente {
   icon: string
   erzeugung_kw: number | null
   verbrauch_kw: number | null
+  parent_key?: string | null
 }
 
 export interface LiveGauge {

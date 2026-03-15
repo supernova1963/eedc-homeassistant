@@ -218,6 +218,9 @@ class LivePowerService:
         pv_total_w = 0.0
 
 
+        # Wallbox-Keys sammeln für E-Auto → Wallbox Zuordnung
+        wallbox_keys: list[str] = []
+
         # Per-Investition Komponenten
         for inv_id, values in inv_values.items():
             inv = investitionen.get(inv_id)
@@ -269,14 +272,20 @@ class LivePowerService:
             else:
                 # Verbraucher (E-Auto ohne V2H, WP, Wallbox, Sonstige)
                 kw = abs(val_w) / 1000
+                komp_key = f"{_TAGESVERLAUF_KATEGORIE.get(typ, typ)}_{inv_id}"
                 komponenten.append({
-                    "key": f"{_TAGESVERLAUF_KATEGORIE.get(typ, typ)}_{inv_id}",
+                    "key": komp_key,
                     "label": inv.bezeichnung,
                     "icon": _TYP_ICON.get(typ, "wrench"),
                     "erzeugung_kw": None,
                     "verbrauch_kw": round(kw, 2),
                 })
-                summe_verbrauch += kw
+                if typ == "wallbox":
+                    wallbox_keys.append(komp_key)
+                # E-Auto ohne V2H: NICHT in summe_verbrauch zählen
+                # (Wallbox erfasst die gleiche Ladeleistung bereits)
+                if typ != "e-auto":
+                    summe_verbrauch += kw
 
             # SoC-Gauge pro Investition
             if typ in _SOC_TYPEN:
@@ -290,6 +299,14 @@ class LivePowerService:
                         "max_wert": 100,
                         "einheit": "%",
                     })
+
+        # E-Auto → Wallbox Zuordnung (parent_key setzen)
+        if wallbox_keys:
+            wb_idx = 0
+            for komp in komponenten:
+                if komp["key"].startswith("eauto_") and wallbox_keys:
+                    komp["parent_key"] = wallbox_keys[wb_idx % len(wallbox_keys)]
+                    wb_idx += 1
 
         # Netz-Komponente (aus Basis-Werten)
         einspeisung_w = basis_values.get("einspeisung_w")
