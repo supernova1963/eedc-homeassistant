@@ -12,7 +12,7 @@ import { Activity, AlertCircle } from 'lucide-react'
 import { useAnlagen } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, MqttInboundStatus } from '../api/liveDashboard'
-import EnergieBilanz from '../components/live/EnergieBilanz'
+import EnergieFluss from '../components/live/EnergieFluss'
 import GaugeChart from '../components/live/GaugeChart'
 import TagesverlaufChart from '../components/live/TagesverlaufChart'
 import WetterWidget from '../components/live/WetterWidget'
@@ -230,7 +230,7 @@ export default function LiveDashboard() {
           {/* Zeile 1: Energiebilanz (2/3) + Zustandswerte (1/3) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
-              <EnergieBilanz
+              <EnergieFluss
                 komponenten={data.komponenten}
                 summeErzeugung={data.summe_erzeugung_kw}
                 summeVerbrauch={data.summe_verbrauch_kw}
@@ -239,6 +239,7 @@ export default function LiveDashboard() {
                   netz: data.heute_netzbezug_kwh,
                   haushalt: data.heute_eigenverbrauch_kwh,
                 }}
+                gauges={data.gauges}
               />
             </div>
 
