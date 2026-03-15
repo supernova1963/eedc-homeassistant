@@ -108,16 +108,17 @@ function layoutNodes(komponenten: LiveKomponente[]): NodePosition[] {
   const vrXs = distribute(verbraucher.length, 110, 490)
   verbraucher.forEach((k, i) => nodes.push({ x: vrXs[i], y: 370, komp: k }))
 
-  // Kinder: direkt unter/neben ihrem Parent positionieren
+  // Kinder: neben ihrem Parent positionieren (rechts versetzt)
   const parentPositions = new Map(nodes.map(n => [n.komp.key, n]))
   kinder.forEach(k => {
     const parent = parentPositions.get(k.parent_key!)
     if (parent) {
-      // Kind 70px unter dem Parent, leicht versetzt
       const kinderOfParent = kinder.filter(c => c.parent_key === k.parent_key!)
       const idx = kinderOfParent.indexOf(k)
-      const offsetX = (idx - (kinderOfParent.length - 1) / 2) * 120
-      nodes.push({ x: parent.x + offsetX, y: parent.y + 65, komp: k })
+      // Kinder rechts neben dem Parent, bei mehreren gestaffelt nach unten
+      const offsetX = NODE_W + 20
+      const offsetY = idx * (NODE_H + 8)
+      nodes.push({ x: parent.x + offsetX, y: parent.y + offsetY, komp: k })
     } else {
       // Fallback: als normaler Verbraucher unten
       nodes.push({ x: CX, y: 370, komp: k })

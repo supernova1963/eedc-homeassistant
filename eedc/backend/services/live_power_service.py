@@ -336,8 +336,12 @@ class LivePowerService:
         # Haushalt = Residual aus allen Komponenten
         # Quellen: PV, Batterie-Entladung, V2H-Entladung, Netzbezug
         # Senken: Einspeisung, Batterie-Ladung, EV-Ladung, WP, Wallbox, Sonstige
+        # Kind-Komponenten (parent_key) ausschließen: Parent misst bereits die gleiche Energie
         gesamt_quellen = sum(k.get("erzeugung_kw") or 0 for k in komponenten)
-        gesamt_senken = sum(k.get("verbrauch_kw") or 0 for k in komponenten)
+        gesamt_senken = sum(
+            k.get("verbrauch_kw") or 0 for k in komponenten
+            if not k.get("parent_key")
+        )
         if gesamt_quellen > 0 and (einspeisung_w is not None or netzbezug_w is not None):
             haushalt_kw = max(0, gesamt_quellen - gesamt_senken)
 
