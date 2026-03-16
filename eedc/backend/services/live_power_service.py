@@ -56,7 +56,7 @@ _SOC_TYPEN = {"speicher", "e-auto"}
 # Typen die im Live-Dashboard übersprungen werden (Durchleiter, keine eigene Messgröße)
 _SKIP_TYPEN = {"wechselrichter"}
 
-# Kategorien für Tagesverlauf-Aggregation
+# Kategorien für Tagesverlauf-Aggregation (Legacy, wird noch für Live-Komponenten-Keys genutzt)
 _TAGESVERLAUF_KATEGORIE = {
     "pv-module": "pv",
     "balkonkraftwerk": "pv",
@@ -65,6 +65,17 @@ _TAGESVERLAUF_KATEGORIE = {
     "wallbox": "eauto",
     "waermepumpe": "waermepumpe",
     "sonstiges": "sonstige",
+}
+
+# Tagesverlauf: Kategorie + Seite (quelle/senke) + Farbe pro Investitionstyp
+_TV_SERIE_CONFIG: dict[str, dict] = {
+    "pv-module":       {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False},
+    "balkonkraftwerk": {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False},
+    "speicher":        {"kategorie": "batterie",    "seite": "quelle", "farbe": "#3b82f6", "bidirektional": True},
+    "wallbox":         {"kategorie": "wallbox",     "seite": "senke",  "farbe": "#a855f7", "bidirektional": False},
+    "e-auto":          {"kategorie": "eauto",       "seite": "senke",  "farbe": "#a855f7", "bidirektional": False},
+    "waermepumpe":     {"kategorie": "waermepumpe", "seite": "senke",  "farbe": "#f97316", "bidirektional": False},
+    "sonstiges":       {"kategorie": "sonstige",    "seite": "senke",  "farbe": "#64748b", "bidirektional": False},
 }
 
 # Separate Key-Prefixe für Live-Komponenten (Energiefluss)
@@ -613,27 +624,31 @@ class LivePowerService:
 
         return result
 
-    async def get_tagesverlauf(self, anlage: Anlage, db: AsyncSession) -> list[dict]:
+    async def get_tagesverlauf(self, anlage: Anlage, db: AsyncSession) -> dict:
         """
         Holt stündlich aggregierte Leistungsdaten für heute.
 
-        Aggregiert per-Investition Sensoren in Kategorien für den Chart.
+        Returns:
+            dict mit "serien" (Beschreibung der Kurven) und "punkte" (Stundenwerte).
+            Butterfly-Chart: Quellen positiv, Senken negativ.
+            Bidirektionale Serien (Speicher, Netz) wechseln je nach Richtung.
         """
         basis_live, inv_live_map = self._extract_live_config(anlage)
 
         if not basis_live and not inv_live_map:
-            return []
+            return {"serien": [], "punkte": []}
 
         if not HA_INTEGRATION_AVAILABLE:
-            return []
+            return {"serien": [], "punkte": []}
 
-        # Investitionstypen laden
+        # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id)
         inv_result = await db.execute(
-            select(Investition.id, Investition.typ).where(
-                Investition.anlage_id == anlage.id, Investition.aktiv == True
+            select(Investition).where(
+                Investition.anlage_id == anlage.id,
+                Investition.aktiv == True,
             )
         )
-        inv_types = {str(row[0]): row[1] for row in inv_result.all()}
+        investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
 
         from backend.services.ha_state_service import get_ha_state_service
         ha_service = get_ha_state_service()
@@ -641,43 +656,96 @@ class LivePowerService:
         now = datetime.now()
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # Entity-IDs nach Tagesverlauf-Kategorie gruppieren
-        category_entities: dict[str, list[str]] = {}
+        # Serien aufbauen + Entity-IDs sammeln
+        serien: list[dict] = []
+        # Mapping: serie_key → list[entity_id] (für Multi-Sensor-Aggregation)
+        serie_entities: dict[str, list[str]] = {}
 
-        # Basis: Einspeisung + Netzbezug
-        if basis_live.get("einspeisung_w"):
-            category_entities.setdefault("einspeisung", []).append(basis_live["einspeisung_w"])
-        if basis_live.get("netzbezug_w"):
-            category_entities.setdefault("netzbezug", []).append(basis_live["netzbezug_w"])
-
-        # Investitionen nach Kategorie
+        # Investitionen → Serien
         for inv_id, live in inv_live_map.items():
-            typ = inv_types.get(inv_id)
-            if not typ or not live.get("leistung_w"):
+            inv = investitionen.get(inv_id)
+            if not inv or not live.get("leistung_w"):
                 continue
-            kategorie = _TAGESVERLAUF_KATEGORIE.get(typ)
-            if kategorie:
-                category_entities.setdefault(kategorie, []).append(live["leistung_w"])
+            typ = inv.typ
+            if typ in _SKIP_TYPEN:
+                continue
+            # E-Auto mit Parent (Wallbox) überspringen — Wallbox misst bereits
+            if typ == "e-auto" and inv.parent_investition_id is not None:
+                continue
 
-        all_ids = [eid for eids in category_entities.values() for eid in eids]
+            config = _TV_SERIE_CONFIG.get(typ)
+            if not config:
+                continue
+
+            # Sonstiges: Seite aus parameter.kategorie ableiten
+            seite = config["seite"]
+            bidirektional = config["bidirektional"]
+            if typ == "sonstiges" and isinstance(inv.parameter, dict):
+                kat = inv.parameter.get("kategorie", "verbraucher")
+                if kat == "erzeuger":
+                    seite = "quelle"
+                elif kat == "speicher":
+                    bidirektional = True
+
+            serie_key = f"{config['kategorie']}_{inv_id}"
+            serien.append({
+                "key": serie_key,
+                "label": inv.bezeichnung,
+                "kategorie": config["kategorie"],
+                "farbe": config["farbe"],
+                "seite": seite,
+                "bidirektional": bidirektional,
+            })
+            serie_entities[serie_key] = [live["leistung_w"]]
+
+        # Netz (Einspeisung + Netzbezug als eine bidirektionale Serie)
+        has_netz = False
+        netz_einspeisung_eid = basis_live.get("einspeisung_w")
+        netz_bezug_eid = basis_live.get("netzbezug_w")
+        if netz_einspeisung_eid or netz_bezug_eid:
+            has_netz = True
+            serien.append({
+                "key": "netz",
+                "label": "Stromnetz",
+                "kategorie": "netz",
+                "farbe": "#ef4444",
+                "seite": "quelle",
+                "bidirektional": True,
+            })
+
+        # Alle Entity-IDs für History-Abfrage sammeln
+        all_ids = list(set(
+            eid for eids in serie_entities.values() for eid in eids
+        ))
+        if netz_einspeisung_eid:
+            all_ids.append(netz_einspeisung_eid)
+        if netz_bezug_eid:
+            all_ids.append(netz_bezug_eid)
+        all_ids = list(set(all_ids))
+
         if not all_ids:
-            return []
+            return {"serien": [], "punkte": []}
 
         history = await ha_service.get_sensor_history(all_ids, start, now)
 
-        # Stündliche Mittelwerte berechnen (aggregiert pro Kategorie)
-        stunden: list[dict] = []
+        # Stündliche Mittelwerte berechnen
+        punkte: list[dict] = []
         for h in range(24):
             h_start = start + timedelta(hours=h)
             h_end = h_start + timedelta(hours=1)
             if h_start > now:
                 break
 
-            punkt: dict = {"zeit": f"{h:02d}:00"}
+            werte: dict[str, float] = {}
 
-            for kategorie, entity_ids in category_entities.items():
-                # Alle Entity-IDs dieser Kategorie summieren
-                kategorie_sum = 0.0
+            # Investitions-Serien
+            for serie in serien:
+                skey = serie["key"]
+                if skey == "netz":
+                    continue  # Netz separat behandeln
+
+                entity_ids = serie_entities.get(skey, [])
+                serie_sum = 0.0
                 has_data = False
 
                 for entity_id in entity_ids:
@@ -685,37 +753,339 @@ class LivePowerService:
                     h_points = [p[1] for p in points if h_start <= p[0] < h_end]
                     if h_points:
                         avg_w = sum(h_points) / len(h_points)
-                        kategorie_sum += avg_w / 1000  # W → kW
+                        serie_sum += avg_w / 1000  # W → kW
                         has_data = True
 
                 if has_data:
-                    punkt[kategorie] = round(kategorie_sum, 2)
+                    if serie["bidirektional"]:
+                        # Vorzeichen beibehalten (positiv=Entladung/Quelle, negativ=Ladung/Senke)
+                        werte[skey] = round(serie_sum, 2)
+                    elif serie["seite"] == "senke":
+                        # Senken als negative Werte
+                        werte[skey] = round(-abs(serie_sum), 2)
+                    else:
+                        # Quellen als positive Werte
+                        werte[skey] = round(abs(serie_sum), 2)
 
-            # Haushalt berechnen wenn PV + Netz vorhanden
-            pv = punkt.get("pv", 0)
-            bezug = punkt.get("netzbezug", 0)
-            einsp = punkt.get("einspeisung", 0)
-            batt = punkt.get("batterie", 0)
-            eauto = punkt.get("eauto", 0)
-            wp = punkt.get("waermepumpe", 0)
+            # Netz: Bezug (positiv/Quelle) - Einspeisung (negativ/Senke)
+            if has_netz:
+                bezug_kw = 0.0
+                einsp_kw = 0.0
 
-            gesamt_erzeugung = pv + bezug
-            gesamt_abgang = einsp + eauto + wp
-            if batt > 0:  # Ladung
-                gesamt_abgang += batt
-            else:  # Entladung
-                gesamt_erzeugung += abs(batt)
+                if netz_bezug_eid:
+                    pts = history.get(netz_bezug_eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        bezug_kw = sum(h_pts) / len(h_pts) / 1000
 
-            haushalt = max(0, gesamt_erzeugung - gesamt_abgang)
-            if "pv" in punkt:
-                punkt["haushalt"] = round(haushalt, 2)
-                punkt["verbrauch_gesamt"] = round(
-                    eauto + wp + haushalt + (batt if batt > 0 else 0), 2
-                )
+                if netz_einspeisung_eid:
+                    pts = history.get(netz_einspeisung_eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        einsp_kw = sum(h_pts) / len(h_pts) / 1000
 
-            stunden.append(punkt)
+                netto = bezug_kw - einsp_kw  # positiv=Bezug, negativ=Einspeisung
+                if abs(netto) > 0.001:
+                    werte["netz"] = round(netto, 2)
 
-        return stunden
+            # Haushalt = Residual (Σ Quellen + Σ Senken ≈ 0 → Haushalt füllt die Lücke)
+            quellen_sum = sum(v for v in werte.values() if v > 0)
+            senken_sum = sum(v for v in werte.values() if v < 0)  # schon negativ
+            haushalt = quellen_sum + senken_sum  # Rest der nicht zugeordnet ist
+            if quellen_sum > 0 and haushalt > 0.01:
+                werte["haushalt"] = round(-haushalt, 2)  # Haushalt ist Senke → negativ
+
+            punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
+
+        # Haushalt-Serie hinzufügen wenn Daten vorhanden
+        if any("haushalt" in p["werte"] for p in punkte):
+            serien.append({
+                "key": "haushalt",
+                "label": "Haushalt",
+                "kategorie": "haushalt",
+                "farbe": "#10b981",
+                "seite": "senke",
+                "bidirektional": False,
+            })
+
+        return {"serien": serien, "punkte": punkte}
+
+
+    # ── Individuelles Verbrauchsprofil ──────────────────────────────────────
+
+    async def get_verbrauchsprofil(
+        self, anlage: Anlage, db: AsyncSession
+    ) -> Optional[dict]:
+        """
+        Berechnet ein individuelles stündliches Verbrauchsprofil aus den letzten 14 Tagen,
+        getrennt nach Werktag (Mo-Fr) und Wochenende (Sa-So).
+
+        Datenquellen (Priorität):
+          1. HA-History (Leistungs-Sensoren → Stundenmittel in kW)
+          2. MQTT Energy Snapshots (kumulative kWh → stündliche Deltas)
+
+        Verbrauch pro Stunde = PV + Netzbezug - Einspeisung
+
+        Returns:
+            {
+                "werktag": {0: kW, 1: kW, ..., 23: kW},
+                "wochenende": {0: kW, 1: kW, ..., 23: kW},
+                "tage_werktag": int,
+                "tage_wochenende": int,
+                "quelle": "ha" | "mqtt",
+            }
+            oder None wenn keine History verfügbar.
+        """
+        # Cache prüfen
+        cache = self._get_profil_cache(anlage.id)
+        if cache is not None:
+            return cache
+
+        # 1. Versuche HA-History
+        result = await self._profil_from_ha(anlage, db)
+
+        # 2. Fallback: MQTT Energy Snapshots
+        if result is None:
+            result = await self._profil_from_mqtt(anlage.id)
+
+        if result is not None:
+            self._set_profil_cache(anlage.id, result)
+
+        return result
+
+    async def _profil_from_ha(
+        self, anlage: Anlage, db: AsyncSession
+    ) -> Optional[dict]:
+        """Verbrauchsprofil aus HA-History (Leistungs-Sensoren, kW-Mittelwerte)."""
+        if not HA_INTEGRATION_AVAILABLE:
+            return None
+
+        basis_live, inv_live_map = self._extract_live_config(anlage)
+
+        einsp_eid = basis_live.get("einspeisung_w")
+        bezug_eid = basis_live.get("netzbezug_w")
+        if not einsp_eid and not bezug_eid:
+            return None
+
+        # PV-Entity-IDs
+        inv_result = await db.execute(
+            select(Investition.id, Investition.typ).where(
+                Investition.anlage_id == anlage.id, Investition.aktiv == True
+            )
+        )
+        inv_types = {str(row[0]): row[1] for row in inv_result.all()}
+
+        pv_eids: list[str] = []
+        for inv_id, live in inv_live_map.items():
+            typ = inv_types.get(inv_id)
+            if typ in _ERZEUGER_TYPEN and live.get("leistung_w"):
+                pv_eids.append(live["leistung_w"])
+
+        from backend.services.ha_state_service import get_ha_state_service
+        ha_service = get_ha_state_service()
+
+        now = datetime.now()
+        start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        all_ids = list(set(filter(None, [einsp_eid, bezug_eid] + pv_eids)))
+        history = await ha_service.get_sensor_history(all_ids, start, now)
+
+        if not history:
+            return None
+
+        werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+        wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+        werktage_set: set[str] = set()
+        wochenende_set: set[str] = set()
+
+        for day_offset in range(14):
+            tag = start + timedelta(days=day_offset)
+            tag_str = tag.strftime("%Y-%m-%d")
+            ist_wochenende = tag.weekday() >= 5
+
+            for h in range(24):
+                h_start = tag.replace(hour=h, minute=0, second=0)
+                h_end = h_start + timedelta(hours=1)
+                if h_end > now:
+                    break
+
+                pv_kw = 0.0
+                for eid in pv_eids:
+                    pts = history.get(eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        pv_kw += sum(h_pts) / len(h_pts) / 1000
+
+                bezug_kw = 0.0
+                if bezug_eid:
+                    pts = history.get(bezug_eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        bezug_kw = sum(h_pts) / len(h_pts) / 1000
+
+                einsp_kw = 0.0
+                if einsp_eid:
+                    pts = history.get(einsp_eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        einsp_kw = sum(h_pts) / len(h_pts) / 1000
+
+                verbrauch_kw = max(0, pv_kw + bezug_kw - einsp_kw)
+
+                if ist_wochenende:
+                    wochenende_sums[h].append(verbrauch_kw)
+                    wochenende_set.add(tag_str)
+                else:
+                    werktag_sums[h].append(verbrauch_kw)
+                    werktage_set.add(tag_str)
+
+        return self._build_profil_result(
+            werktag_sums, wochenende_sums, werktage_set, wochenende_set, "ha"
+        )
+
+    async def _profil_from_mqtt(self, anlage_id: int) -> Optional[dict]:
+        """
+        Verbrauchsprofil aus MQTT Energy Snapshots (kumulative kWh → stündliche Deltas).
+
+        Die Snapshots enthalten kumulative Monatswerte (pv_gesamt_kwh, einspeisung_kwh,
+        netzbezug_kwh) alle 5 Minuten. Für jede Stunde berechnen wir das Delta und
+        daraus den durchschnittlichen Verbrauch in kW (= kWh/h).
+        """
+        from backend.core.database import get_session
+        from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
+
+        now = datetime.now()
+        start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Alle Snapshots der letzten 14 Tage laden
+        async with get_session() as session:
+            result = await session.execute(
+                select(
+                    MqttEnergySnapshot.timestamp,
+                    MqttEnergySnapshot.energy_key,
+                    MqttEnergySnapshot.value_kwh,
+                ).where(
+                    MqttEnergySnapshot.anlage_id == anlage_id,
+                    MqttEnergySnapshot.timestamp >= start,
+                ).order_by(MqttEnergySnapshot.timestamp)
+            )
+            rows = result.all()
+
+        if not rows:
+            return None
+
+        # Snapshots nach Zeitpunkt gruppieren: {timestamp: {key: value}}
+        snapshots: dict[datetime, dict[str, float]] = {}
+        for ts, key, val in rows:
+            if ts not in snapshots:
+                snapshots[ts] = {}
+            snapshots[ts][key] = val
+
+        sorted_times = sorted(snapshots.keys())
+        if len(sorted_times) < 2:
+            return None
+
+        # Relevante Keys
+        pv_key = "pv_gesamt_kwh"
+        einsp_key = "einspeisung_kwh"
+        bezug_key = "netzbezug_kwh"
+
+        werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+        wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+        werktage_set: set[str] = set()
+        wochenende_set: set[str] = set()
+
+        for day_offset in range(14):
+            tag = start + timedelta(days=day_offset)
+            tag_str = tag.strftime("%Y-%m-%d")
+            ist_wochenende = tag.weekday() >= 5
+
+            for h in range(24):
+                h_start = tag.replace(hour=h, minute=0, second=0)
+                h_end = h_start + timedelta(hours=1)
+                if h_end > now:
+                    break
+
+                # Snapshots in dieser Stunde finden
+                hour_snaps = [
+                    snapshots[t] for t in sorted_times
+                    if h_start <= t < h_end
+                ]
+                if len(hour_snaps) < 2:
+                    continue
+
+                # Delta: letzter - erster Snapshot der Stunde
+                first = hour_snaps[0]
+                last = hour_snaps[-1]
+
+                def delta(key: str) -> float:
+                    v_end = last.get(key)
+                    v_start = first.get(key)
+                    if v_end is None or v_start is None:
+                        return 0.0
+                    d = v_end - v_start
+                    return max(0, d)  # Negative Deltas = Counter-Reset → ignorieren
+
+                pv_kwh = delta(pv_key)
+                bezug_kwh = delta(bezug_key)
+                einsp_kwh = delta(einsp_key)
+
+                # Verbrauch in kWh für diese Stunde, ≈ kW (da 1h Intervall)
+                verbrauch_kw = max(0, pv_kwh + bezug_kwh - einsp_kwh)
+
+                if ist_wochenende:
+                    wochenende_sums[h].append(verbrauch_kw)
+                    wochenende_set.add(tag_str)
+                else:
+                    werktag_sums[h].append(verbrauch_kw)
+                    werktage_set.add(tag_str)
+
+        return self._build_profil_result(
+            werktag_sums, wochenende_sums, werktage_set, wochenende_set, "mqtt"
+        )
+
+    @staticmethod
+    def _build_profil_result(
+        werktag_sums: dict[int, list[float]],
+        wochenende_sums: dict[int, list[float]],
+        werktage_set: set[str],
+        wochenende_set: set[str],
+        quelle: str,
+    ) -> Optional[dict]:
+        """Baut das Profil-Ergebnis aus den gesammelten Stundenwerten."""
+        tage_wt = len(werktage_set)
+        tage_we = len(wochenende_set)
+
+        if tage_wt < 2 and tage_we < 2:
+            return None
+
+        def avg(values: list[float]) -> float:
+            return round(sum(values) / len(values), 3) if values else 0.0
+
+        return {
+            "werktag": {h: avg(werktag_sums[h]) for h in range(24)} if tage_wt >= 2 else None,
+            "wochenende": {h: avg(wochenende_sums[h]) for h in range(24)} if tage_we >= 2 else None,
+            "tage_werktag": tage_wt,
+            "tage_wochenende": tage_we,
+            "quelle": quelle,
+        }
+
+    # ── Profil-Cache (1x täglich) ────────────────────────────────────────
+
+    _profil_cache: dict[int, tuple[str, dict]] = {}  # {anlage_id: (datum_str, profil)}
+
+    def _get_profil_cache(self, anlage_id: int) -> Optional[dict]:
+        """Gibt gecachtes Profil zurück wenn es von heute ist."""
+        if anlage_id not in self._profil_cache:
+            return None
+        datum, profil = self._profil_cache[anlage_id]
+        if datum == datetime.now().strftime("%Y-%m-%d"):
+            return profil
+        return None
+
+    def _set_profil_cache(self, anlage_id: int, profil: dict) -> None:
+        """Speichert Profil mit heutigem Datum."""
+        self._profil_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), profil)
 
 
 # Singleton

@@ -77,23 +77,27 @@ class LiveDashboardResponse(BaseModel):
     heute_kwh_pro_komponente: Optional[dict[str, float]] = None
 
 
+class TagesverlaufSerie(BaseModel):
+    """Beschreibung einer Kurve im Tagesverlauf-Chart."""
+    key: str              # z.B. "pv_3", "batterie_5", "wallbox_6", "netz", "haushalt"
+    label: str            # z.B. "PV Süd", "BYD HVS 10.2"
+    kategorie: str        # "pv", "batterie", "wallbox", "waermepumpe", "sonstige", "netz", "haushalt"
+    farbe: str            # Hex-Farbe, z.B. "#eab308"
+    seite: str            # "quelle" (positiv) oder "senke" (negativ)
+    bidirektional: bool = False  # Speicher/Netz: wechselt dynamisch die Seite
+
+
 class TagesverlaufPunkt(BaseModel):
     """Ein Stunden-Datenpunkt im Tagesverlauf."""
     zeit: str  # "14:00"
-    pv: Optional[float] = None
-    einspeisung: Optional[float] = None
-    netzbezug: Optional[float] = None
-    batterie: Optional[float] = None
-    eauto: Optional[float] = None
-    waermepumpe: Optional[float] = None
-    haushalt: Optional[float] = None
-    verbrauch_gesamt: Optional[float] = None
+    werte: dict[str, float] = {}  # {serie_key: kW-Wert mit Vorzeichen}
 
 
 class TagesverlaufResponse(BaseModel):
     anlage_id: int
     datum: str  # "2026-03-14"
-    punkte: list[TagesverlaufPunkt]
+    serien: list[TagesverlaufSerie] = []
+    punkte: list[TagesverlaufPunkt] = []
 
 
 # ── Demo-Daten ───────────────────────────────────────────────────────────────
@@ -682,65 +686,100 @@ async def get_live_data(
 # ── Tagesverlauf Demo-Daten ──────────────────────────────────────────────────
 
 def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
-    """Simulierter Tagesverlauf für Demo-Modus."""
+    """Simulierter Tagesverlauf für Demo-Modus (Butterfly-Chart)."""
     import math
 
     now = datetime.now()
+
+    # Demo-Serien: Zwei PV-Strings, Batterie, Wallbox, WP, Netz, Haushalt
+    serien = [
+        {"key": "pv_1", "label": "PV Süd (String A)", "kategorie": "pv",
+         "farbe": "#eab308", "seite": "quelle", "bidirektional": False},
+        {"key": "pv_2", "label": "PV Ost (String B)", "kategorie": "pv",
+         "farbe": "#ca8a04", "seite": "quelle", "bidirektional": False},
+        {"key": "batterie_3", "label": "BYD HVS 10.2", "kategorie": "batterie",
+         "farbe": "#3b82f6", "seite": "quelle", "bidirektional": True},
+        {"key": "wallbox_6", "label": "go-eCharger", "kategorie": "wallbox",
+         "farbe": "#a855f7", "seite": "senke", "bidirektional": False},
+        {"key": "waermepumpe_5", "label": "Viessmann Vitocal", "kategorie": "waermepumpe",
+         "farbe": "#f97316", "seite": "senke", "bidirektional": False},
+        {"key": "netz", "label": "Stromnetz", "kategorie": "netz",
+         "farbe": "#ef4444", "seite": "quelle", "bidirektional": True},
+        {"key": "haushalt", "label": "Haushalt", "kategorie": "haushalt",
+         "farbe": "#10b981", "seite": "senke", "bidirektional": False},
+    ]
+
     punkte = []
+    lastprofil = {
+        0: 0.2, 1: 0.18, 2: 0.15, 3: 0.15, 4: 0.15, 5: 0.2,
+        6: 0.25, 7: 0.45, 8: 0.55, 9: 0.40, 10: 0.35,
+        11: 0.38, 12: 0.50, 13: 0.45, 14: 0.35, 15: 0.33,
+        16: 0.35, 17: 0.50, 18: 0.65, 19: 0.70, 20: 0.55,
+        21: 0.40, 22: 0.30, 23: 0.22,
+    }
 
     for h in range(24):
         if h > now.hour:
             break
 
-        # PV: Glockenkurve mit Peak bei 13 Uhr
-        pv_base = max(0, 8.0 * math.exp(-((h - 13) ** 2) / 18))
-        pv = round(pv_base * (0.85 + random.uniform(0, 0.3)), 2) if pv_base > 0.1 else 0
+        werte: dict[str, float] = {}
 
-        # Verbrauch: BDEW H0 Profil
-        lastprofil = {
-            0: 0.2, 1: 0.18, 2: 0.15, 3: 0.15, 4: 0.15, 5: 0.2,
-            6: 0.25, 7: 0.45, 8: 0.55, 9: 0.40, 10: 0.35,
-            11: 0.38, 12: 0.50, 13: 0.45, 14: 0.35, 15: 0.33,
-            16: 0.35, 17: 0.50, 18: 0.65, 19: 0.70, 20: 0.55,
-            21: 0.40, 22: 0.30, 23: 0.22,
-        }
+        # PV: Glockenkurve, String A (Süd) stärker als String B (Ost, Peak früher)
+        pv_a_base = max(0, 5.5 * math.exp(-((h - 13) ** 2) / 18))
+        pv_b_base = max(0, 2.8 * math.exp(-((h - 11) ** 2) / 14))
+        pv_a = round(pv_a_base * (0.85 + random.uniform(0, 0.3)), 2) if pv_a_base > 0.1 else 0
+        pv_b = round(pv_b_base * (0.85 + random.uniform(0, 0.3)), 2) if pv_b_base > 0.1 else 0
+        pv_total = pv_a + pv_b
+
+        if pv_a > 0:
+            werte["pv_1"] = pv_a  # Quelle → positiv
+        if pv_b > 0:
+            werte["pv_2"] = pv_b  # Quelle → positiv
+
+        # Haushalt (BDEW H0)
         haushalt = round(lastprofil.get(h, 0.3) * (0.8 + random.uniform(0, 0.4)), 2)
 
-        # E-Auto: Zufällig nachmittags laden
-        eauto = round(random.uniform(3, 7), 2) if (15 <= h <= 17 and random.random() > 0.4) else 0
+        # Wallbox: Nachmittags laden
+        wallbox = round(random.uniform(3, 7), 2) if (15 <= h <= 17 and random.random() > 0.4) else 0
 
-        # WP: Morgens und abends
-        wp = round(random.uniform(1.2, 2.5), 2) if (h in [6, 7, 8, 17, 18, 19]) else round(0.3 * random.uniform(0.5, 1.5), 2)
+        # WP: Morgens und abends stärker
+        wp = round(random.uniform(1.2, 2.5), 2) if h in (6, 7, 8, 17, 18, 19) else round(0.3 * random.uniform(0.5, 1.5), 2)
 
-        verbrauch_gesamt = round(haushalt + eauto + wp, 2)
+        verbrauch_gesamt = haushalt + wallbox + wp
 
-        # Netz: Differenz PV - Verbrauch
-        netto = pv - verbrauch_gesamt
-        einspeisung = round(max(0, netto), 2)
-        netzbezug = round(max(0, -netto), 2)
-
-        # Batterie: Laden wenn Überschuss, Entladen abends
+        # Batterie: Laden bei PV-Überschuss, Entladen abends
         batt = 0.0
-        if 10 <= h <= 15 and pv > verbrauch_gesamt + 0.5:
-            batt = round(min(pv - verbrauch_gesamt - einspeisung * 0.3, 3.0), 2)
-        elif 18 <= h <= 22 and netzbezug > 0.3:
-            batt = round(-min(netzbezug * 0.6, 2.5), 2)
+        if 10 <= h <= 15 and pv_total > verbrauch_gesamt + 0.5:
+            batt = round(min(pv_total - verbrauch_gesamt, 3.0) * random.uniform(0.4, 0.8), 2)
+            # Ladung → negativ (Senke)
+            werte["batterie_3"] = round(-batt, 2)
+        elif 18 <= h <= 22 and pv_total < verbrauch_gesamt:
+            batt = round(min(verbrauch_gesamt - pv_total, 2.5) * random.uniform(0.3, 0.7), 2)
+            # Entladung → positiv (Quelle)
+            werte["batterie_3"] = round(batt, 2)
 
-        punkte.append({
-            "zeit": f"{h:02d}:00",
-            "pv": pv if pv > 0 else None,
-            "einspeisung": einspeisung if einspeisung > 0 else None,
-            "netzbezug": netzbezug if netzbezug > 0 else None,
-            "batterie": batt if abs(batt) > 0.01 else None,
-            "eauto": eauto if eauto > 0 else None,
-            "waermepumpe": wp if wp > 0.05 else None,
-            "haushalt": haushalt,
-            "verbrauch_gesamt": verbrauch_gesamt,
-        })
+        # Netz: Residual aus PV + Batterie-Entladung - Verbrauch - Batterie-Ladung
+        quellen = pv_total + (batt if werte.get("batterie_3", 0) > 0 else 0)
+        senken = verbrauch_gesamt + (batt if werte.get("batterie_3", 0) < 0 else 0)
+        netto = quellen - senken
+        # Positiv = Einspeisung (Senke), Negativ = Bezug (Quelle)
+        if abs(netto) > 0.01:
+            # Netz: Bezug positiv (Quelle), Einspeisung negativ (Senke)
+            werte["netz"] = round(-netto, 2)
+
+        # Senken als negative Werte
+        if wallbox > 0.01:
+            werte["wallbox_6"] = round(-wallbox, 2)
+        if wp > 0.05:
+            werte["waermepumpe_5"] = round(-wp, 2)
+        werte["haushalt"] = round(-haushalt, 2)
+
+        punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
 
     return {
         "anlage_id": anlage_id,
         "datum": now.strftime("%Y-%m-%d"),
+        "serien": serien,
         "punkte": punkte,
     }
 
@@ -753,7 +792,7 @@ async def get_tagesverlauf(
     demo: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stündlicher Leistungsverlauf für heute."""
+    """Stündlicher Leistungsverlauf für heute (Butterfly-Chart: Quellen +, Senken -)."""
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -763,12 +802,13 @@ async def get_tagesverlauf(
         return _generate_demo_tagesverlauf(anlage.id)
 
     service = get_live_power_service()
-    punkte = await service.get_tagesverlauf(anlage, db)
+    tv_data = await service.get_tagesverlauf(anlage, db)
 
     return {
         "anlage_id": anlage.id,
         "datum": datetime.now().strftime("%Y-%m-%d"),
-        "punkte": punkte,
+        "serien": tv_data.get("serien", []),
+        "punkte": tv_data.get("punkte", []),
     }
 
 
@@ -803,6 +843,9 @@ class LiveWetterResponse(BaseModel):
     pv_prognose_kwh: Optional[float] = None
     grundlast_kw: Optional[float] = None
     verbrauchsprofil: list[VerbrauchsStunde] = []
+    profil_typ: str = "bdew_h0"  # "individuell_werktag", "individuell_wochenende", "bdew_h0"
+    profil_quelle: Optional[str] = None  # "ha", "mqtt" — woher die History kam
+    profil_tage: Optional[int] = None  # Anzahl Tage die ins individuelle Profil einflossen
 
 
 # ── Typisches Haushaltsprofil (BDEW H0) ──────────────────────────────────────
@@ -819,18 +862,25 @@ PERFORMANCE_RATIO = 0.85  # Typisch: Kabel, WR, Temperatur, Verschmutzung
 
 
 def _berechne_verbrauchsprofil(
-    stunden: list[dict], kwp: float, jahresverbrauch_kwh: float = 4000
-) -> tuple[list[dict], Optional[float], Optional[float]]:
+    stunden: list[dict],
+    kwp: float,
+    jahresverbrauch_kwh: float = 4000,
+    individuelles_profil: Optional[dict] = None,
+) -> tuple[list[dict], Optional[float], Optional[float], bool]:
     """
     Berechnet stündliches PV-Ertrag + Verbrauchsprofil.
 
     PV-Ertrag: Strahlung(W/m²) x kWp x PR / 1000
-    Verbrauch: BDEW H0 Lastprofil, skaliert auf Jahresverbrauch.
+    Verbrauch: Individuelles Profil (aus HA-History) mit BDEW H0 Fallback.
+
+    Args:
+        individuelles_profil: Stundenwerte {0: kW, 1: kW, ..., 23: kW} oder None
 
     Returns:
-        (profil, pv_prognose_kwh, grundlast_kw)
+        (profil, pv_prognose_kwh, grundlast_kw, ist_individuell)
     """
-    tages_faktor = jahresverbrauch_kwh / 4000  # Normiert auf 4000 kWh/a
+    ist_individuell = individuelles_profil is not None
+    tages_faktor = jahresverbrauch_kwh / 4000  # Nur für BDEW-Fallback
 
     profil = []
     pv_summe_kwh = 0.0
@@ -843,7 +893,12 @@ def _berechne_verbrauchsprofil(
         pv_kw = round(strahlung * kwp * PERFORMANCE_RATIO / 1000, 2)
         pv_summe_kwh += pv_kw  # 1h x kW = kWh
 
-        verbrauch_kw = round(_LASTPROFIL_KW.get(h, 0.3) * tages_faktor, 2)
+        if individuelles_profil is not None:
+            # Individuelles Profil: Schlüssel sind int oder str
+            verbrauch_kw = round(individuelles_profil.get(h, individuelles_profil.get(str(h), 0.3)), 2)
+        else:
+            # BDEW H0 Fallback
+            verbrauch_kw = round(_LASTPROFIL_KW.get(h, 0.3) * tages_faktor, 2)
 
         profil.append({
             "zeit": s["zeit"],
@@ -853,7 +908,7 @@ def _berechne_verbrauchsprofil(
 
     grundlast = round(min(p["verbrauch_kw"] for p in profil), 2) if profil else None
 
-    return profil, round(pv_summe_kwh, 1) if pv_summe_kwh > 0 else None, grundlast
+    return profil, round(pv_summe_kwh, 1) if pv_summe_kwh > 0 else None, grundlast, ist_individuell
 
 
 # ── Wetter Demo-Daten ─────────────────────────────────────────────────────────
@@ -900,7 +955,7 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
         aktuelle_stunde = stunden[0]
 
     temps = [s["temperatur_c"] for s in stunden]
-    profil, pv_prognose, grundlast = _berechne_verbrauchsprofil(stunden, kwp)
+    profil, pv_prognose, grundlast, _ = _berechne_verbrauchsprofil(stunden, kwp)
 
     return {
         "anlage_id": 0,
@@ -990,7 +1045,28 @@ async def get_live_wetter(
         daily = data.get("daily", {})
         sunshine_s = (daily.get("sunshine_duration", [None]) or [None])[0]
 
-        profil, pv_prognose, grundlast = _berechne_verbrauchsprofil(stunden, kwp)
+        # Individuelles Verbrauchsprofil laden (Werktag/Wochenende)
+        service = get_live_power_service()
+        ind_profil_data = await service.get_verbrauchsprofil(anlage, db)
+
+        ind_stunden_profil = None
+        profil_typ = "bdew_h0"
+        profil_tage = None
+
+        if ind_profil_data:
+            ist_wochenende = now.weekday() >= 5
+            if ist_wochenende and ind_profil_data.get("wochenende"):
+                ind_stunden_profil = ind_profil_data["wochenende"]
+                profil_typ = "individuell_wochenende"
+                profil_tage = ind_profil_data["tage_wochenende"]
+            elif not ist_wochenende and ind_profil_data.get("werktag"):
+                ind_stunden_profil = ind_profil_data["werktag"]
+                profil_typ = "individuell_werktag"
+                profil_tage = ind_profil_data["tage_werktag"]
+
+        profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
+            stunden, kwp, individuelles_profil=ind_stunden_profil,
+        )
 
         return {
             "anlage_id": anlage.id,
@@ -1003,6 +1079,9 @@ async def get_live_wetter(
             "pv_prognose_kwh": pv_prognose,
             "grundlast_kw": grundlast,
             "verbrauchsprofil": profil,
+            "profil_typ": profil_typ if ist_ind else "bdew_h0",
+            "profil_quelle": ind_profil_data.get("quelle") if ind_profil_data and ist_ind else None,
+            "profil_tage": profil_tage,
         }
 
     except Exception as e:

@@ -1,68 +1,129 @@
 /**
- * TagesverlaufChart — Stündlicher Leistungsverlauf als gestapeltes AreaChart.
+ * TagesverlaufChart — Butterfly-Chart (Quellen oben, Senken unten).
  *
- * Zeigt PV-Erzeugung (gelb) vs. Verbrauchskomponenten (gestapelt) über den Tag.
- * Aktuelle Stunde wird per ReferenceLine markiert.
+ * Dynamische Serien aus Backend: Jede Investition wird einzeln dargestellt.
+ * Positive Werte = Quellen (PV, Batterie-Entladung, Netzbezug)
+ * Negative Werte = Senken (Haushalt, WP, Wallbox, Batterie-Ladung, Einspeisung)
+ * Bidirektionale Serien (Speicher, Netz) werden in pos/neg aufgespalten.
+ *
+ * Stacking: Zwei getrennte stackIds ("quellen" / "senken") damit sich
+ * positive und negative Werte nicht gegenseitig aufheben.
  */
 
+import { useState, useCallback, useMemo } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, ResponsiveContainer,
   Tooltip, ReferenceLine, Legend, CartesianGrid,
 } from 'recharts'
-import type { TagesverlaufPunkt } from '../../api/liveDashboard'
+import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 
 interface TagesverlaufChartProps {
+  serien: TagesverlaufSerie[]
   punkte: TagesverlaufPunkt[]
 }
 
-const FARBEN = {
-  pv: '#eab308',
-  haushalt: '#10b981',
-  waermepumpe: '#f97316',
-  eauto: '#a855f7',
-  netzbezug: '#ef4444',
-  einspeisung: '#22c55e',
-  batterie: '#3b82f6',
+/** Interne Darstellung einer Render-Serie (nach Aufspaltung bidirektionaler Serien). */
+interface RenderSerie {
+  dataKey: string
+  label: string
+  farbe: string
+  stackId: 'quellen' | 'senken'
+  /** Originale Serie-Key (für Tooltip-Gruppierung) */
+  origKey: string
 }
 
-const LABELS: Record<string, string> = {
-  pv: 'PV',
-  haushalt: 'Haushalt',
-  waermepumpe: 'Wärmepumpe',
-  eauto: 'E-Auto',
-  netzbezug: 'Netzbezug',
-  einspeisung: 'Einspeisung',
-  batterie: 'Batterie',
-}
+export default function TagesverlaufChart({ serien, punkte }: TagesverlaufChartProps) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
 
-export default function TagesverlaufChart({ punkte }: TagesverlaufChartProps) {
-  if (punkte.length === 0) return null
+  const toggleSerie = useCallback((origKey: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev)
+      if (next.has(origKey)) next.delete(origKey)
+      else next.add(origKey)
+      return next
+    })
+  }, [])
+
+  // Render-Serien: Bidirektionale werden in _pos/_neg aufgespalten
+  const renderSerien = useMemo<RenderSerie[]>(() => {
+    const result: RenderSerie[] = []
+    for (const s of serien) {
+      if (s.bidirektional) {
+        // Positiver Anteil → Quellen-Stack
+        result.push({
+          dataKey: `${s.key}_pos`,
+          label: `${s.label} ↑`,
+          farbe: s.farbe,
+          stackId: 'quellen',
+          origKey: s.key,
+        })
+        // Negativer Anteil → Senken-Stack
+        result.push({
+          dataKey: `${s.key}_neg`,
+          label: `${s.label} ↓`,
+          farbe: s.farbe,
+          stackId: 'senken',
+          origKey: s.key,
+        })
+      } else if (s.seite === 'quelle') {
+        result.push({
+          dataKey: s.key,
+          label: s.label,
+          farbe: s.farbe,
+          stackId: 'quellen',
+          origKey: s.key,
+        })
+      } else {
+        result.push({
+          dataKey: s.key,
+          label: s.label,
+          farbe: s.farbe,
+          stackId: 'senken',
+          origKey: s.key,
+        })
+      }
+    }
+    return result
+  }, [serien])
+
+  // Chart-Daten: Bidirektionale Serien in pos/neg splitten
+  const chartData = useMemo(() => {
+    return punkte.map((p) => {
+      const row: Record<string, string | number> = { zeit: p.zeit }
+      for (const s of serien) {
+        const val = p.werte[s.key] ?? 0
+        const isHidden = hidden.has(s.key)
+
+        if (s.bidirektional) {
+          row[`${s.key}_pos`] = isHidden ? 0 : Math.max(0, val)
+          row[`${s.key}_neg`] = isHidden ? 0 : Math.min(0, val)
+        } else {
+          row[s.key] = isHidden ? 0 : val
+        }
+      }
+      return row
+    })
+  }, [punkte, serien, hidden])
+
+  if (punkte.length === 0 || serien.length === 0) return null
 
   const now = new Date()
   const currentHour = `${now.getHours().toString().padStart(2, '0')}:00`
 
-  // Daten für Recharts aufbereiten — null → 0 für stacking
-  const chartData = punkte.map((p) => ({
-    zeit: p.zeit,
-    pv: p.pv ?? 0,
-    haushalt: p.haushalt ?? 0,
-    waermepumpe: p.waermepumpe ?? 0,
-    eauto: p.eauto ?? 0,
-    netzbezug: p.netzbezug ?? 0,
-    einspeisung: p.einspeisung ?? 0,
-    batterie_ladung: p.batterie !== null && p.batterie > 0 ? p.batterie : 0,
-    batterie_entladung: p.batterie !== null && p.batterie < 0 ? -p.batterie : 0,
-  }))
-
-  // Prüfen welche Serien tatsächlich Daten haben
-  const hatDaten = (key: string) => chartData.some((d) => (d as Record<string, unknown>)[key] as number > 0)
+  // Prüfen ob eine Render-Serie tatsächlich Daten hat
+  const hatDaten = (dataKey: string) =>
+    chartData.some((d) => Math.abs(d[dataKey] as number) > 0.001)
 
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
         Tagesverlauf (kW)
       </h3>
-      <ResponsiveContainer width="100%" height={280}>
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between px-1">
+        <span>▲ Quellen (Erzeugung, Bezug)</span>
+        <span>▼ Senken (Verbrauch, Einspeisung)</span>
+      </div>
+      <ResponsiveContainer width="100%" height={320}>
         <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
@@ -86,81 +147,60 @@ export default function TagesverlaufChart({ punkte }: TagesverlaufChartProps) {
             }}
             labelFormatter={(label: string) => `${label} Uhr`}
             formatter={(value: number, name: string) => {
-              if (value === 0) return [null, null]
-              const label = LABELS[name] || name
-              return [`${value.toFixed(2)} kW`, label]
+              if (Math.abs(value) < 0.001) return [null, null]
+              // Render-Serie finden → Original-Label
+              const rs = renderSerien.find((r) => r.dataKey === name)
+              const origSerie = serien.find((s) => s.key === rs?.origKey)
+              const label = origSerie?.label || rs?.label || name
+              const absVal = Math.abs(value).toFixed(2)
+              const richtung = value > 0 ? '▲' : '▼'
+              return [`${richtung} ${absVal} kW`, label]
             }}
+            itemSorter={(item) => -(Math.abs(item.value as number))}
           />
           <Legend
-            formatter={(value: string) => LABELS[value] || value}
-            wrapperStyle={{ fontSize: 11 }}
+            formatter={(value: string) => {
+              const rs = renderSerien.find((r) => r.dataKey === value)
+              const origSerie = serien.find((s) => s.key === rs?.origKey)
+              // Bidirektionale: nur einmal in Legende (pos zeigen, neg verstecken)
+              return origSerie?.label || rs?.label || value
+            }}
+            wrapperStyle={{ fontSize: 11, cursor: 'pointer' }}
+            onClick={(e) => {
+              if (e && typeof e.dataKey === 'string') {
+                // Render-Serie → Original-Key für Toggle
+                const rs = renderSerien.find((r) => r.dataKey === e.dataKey)
+                if (rs) toggleSerie(rs.origKey)
+              }
+            }}
           />
 
-          {/* PV-Erzeugung */}
-          {hatDaten('pv') && (
-            <Area
-              type="monotone"
-              dataKey="pv"
-              fill={FARBEN.pv}
-              stroke={FARBEN.pv}
-              fillOpacity={0.3}
-              strokeWidth={2}
-            />
-          )}
+          {/* Null-Linie (Energiebilanz-Grenze) */}
+          <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1.5} />
 
-          {/* Verbrauchskomponenten */}
-          {hatDaten('haushalt') && (
-            <Area
-              type="monotone"
-              dataKey="haushalt"
-              fill={FARBEN.haushalt}
-              stroke={FARBEN.haushalt}
-              fillOpacity={0.3}
-              strokeWidth={1.5}
-            />
-          )}
-          {hatDaten('waermepumpe') && (
-            <Area
-              type="monotone"
-              dataKey="waermepumpe"
-              fill={FARBEN.waermepumpe}
-              stroke={FARBEN.waermepumpe}
-              fillOpacity={0.3}
-              strokeWidth={1.5}
-            />
-          )}
-          {hatDaten('eauto') && (
-            <Area
-              type="monotone"
-              dataKey="eauto"
-              fill={FARBEN.eauto}
-              stroke={FARBEN.eauto}
-              fillOpacity={0.3}
-              strokeWidth={1.5}
-            />
-          )}
-          {hatDaten('netzbezug') && (
-            <Area
-              type="monotone"
-              dataKey="netzbezug"
-              fill={FARBEN.netzbezug}
-              stroke={FARBEN.netzbezug}
-              fillOpacity={0.2}
-              strokeWidth={1.5}
-              strokeDasharray="4 2"
-            />
-          )}
-          {hatDaten('einspeisung') && (
-            <Area
-              type="monotone"
-              dataKey="einspeisung"
-              fill={FARBEN.einspeisung}
-              stroke={FARBEN.einspeisung}
-              fillOpacity={0.2}
-              strokeWidth={1.5}
-              strokeDasharray="4 2"
-            />
-          )}
+          {/* Dynamische Areas — getrennte Stacks für Quellen und Senken */}
+          {renderSerien.map((rs) => {
+            if (!hatDaten(rs.dataKey)) return null
+
+            // Bidirektionale _neg Serien: in Legende verstecken (nur _pos zeigen)
+            const legendHide = rs.dataKey.endsWith('_neg')
+
+            return (
+              <Area
+                key={rs.dataKey}
+                type="monotone"
+                dataKey={rs.dataKey}
+                name={rs.dataKey}
+                fill={rs.farbe}
+                stroke={rs.farbe}
+                fillOpacity={0.3}
+                strokeWidth={1.5}
+                stackId={rs.stackId}
+                isAnimationActive={false}
+                legendType={legendHide ? 'none' : undefined}
+              />
+            )
+          })}
 
           {/* Aktuelle Stunde */}
           <ReferenceLine

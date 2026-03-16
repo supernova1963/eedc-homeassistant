@@ -74,23 +74,29 @@ export interface LiveWetterResponse {
   pv_prognose_kwh: number | null
   grundlast_kw: number | null
   verbrauchsprofil: VerbrauchsStunde[]
+  profil_typ?: string  // "individuell_werktag", "individuell_wochenende", "bdew_h0"
+  profil_quelle?: string | null  // "ha", "mqtt"
+  profil_tage?: number | null  // Anzahl Tage im individuellen Profil
+}
+
+export interface TagesverlaufSerie {
+  key: string          // z.B. "pv_3", "batterie_5", "wallbox_6", "netz", "haushalt"
+  label: string        // z.B. "PV Süd", "BYD HVS 10.2"
+  kategorie: string    // "pv", "batterie", "wallbox", "waermepumpe", "sonstige", "netz", "haushalt"
+  farbe: string        // Hex-Farbe
+  seite: string        // "quelle" (positiv) oder "senke" (negativ)
+  bidirektional: boolean
 }
 
 export interface TagesverlaufPunkt {
   zeit: string
-  pv: number | null
-  einspeisung: number | null
-  netzbezug: number | null
-  batterie: number | null
-  eauto: number | null
-  waermepumpe: number | null
-  haushalt: number | null
-  verbrauch_gesamt: number | null
+  werte: Record<string, number>  // {serie_key: kW-Wert mit Vorzeichen}
 }
 
 export interface TagesverlaufResponse {
   anlage_id: number
   datum: string
+  serien: TagesverlaufSerie[]
   punkte: TagesverlaufPunkt[]
 }
 

@@ -219,8 +219,8 @@ export default function LiveDashboard() {
             Keine Live-Daten verfügbar
           </h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-            Um Live-Daten zu sehen, konfiguriere Leistungs-Sensoren in der Sensor-Zuordnung
-            (Einstellungen → Home Assistant → Sensor-Zuordnung) im Bereich „Live-Sensoren".
+            Um Live-Daten zu sehen, konfiguriere Leistungs-Sensoren über eine der beiden Optionen:
+            Sensor-Zuordnung (Einstellungen → Home Assistant) oder MQTT-Inbound (Einstellungen → MQTT).
           </p>
         </div>
       )}
@@ -314,8 +314,19 @@ export default function LiveDashboard() {
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                   </div>
                   {wetter?.verbrauchsprofil && wetter.verbrauchsprofil.length > 0 && (
-                    <div className="flex-1 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Verbr.-Prognose</div>
+                    <div className="flex-1 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5"
+                         title={wetter.profil_typ?.startsWith('individuell')
+                           ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage, Quelle: ${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
+                           : 'BDEW H0 Standardlastprofil (keine History verfügbar)'
+                         }>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Verbr.-Prognose
+                        {wetter.profil_typ?.startsWith('individuell') && (
+                          <span className="ml-1 text-[9px] text-emerald-500" title="Basiert auf deinem individuellen Verbrauchsmuster">
+                            (individuell)
+                          </span>
+                        )}
+                      </div>
                       <div className="text-base font-bold text-orange-600 dark:text-orange-400">~{wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                     </div>
                   )}
@@ -389,10 +400,10 @@ export default function LiveDashboard() {
             <WetterWidget wetter={wetter} />
           </div>
 
-          {/* Zeile 3: Tagesverlauf-Chart */}
-          {tagesverlauf && tagesverlauf.punkte.length > 0 && (
+          {/* Zeile 3: Tagesverlauf-Chart (Butterfly) */}
+          {tagesverlauf && tagesverlauf.punkte.length > 0 && tagesverlauf.serien?.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
-              <TagesverlaufChart punkte={tagesverlauf.punkte} />
+              <TagesverlaufChart serien={tagesverlauf.serien} punkte={tagesverlauf.punkte} />
             </div>
           )}
 
