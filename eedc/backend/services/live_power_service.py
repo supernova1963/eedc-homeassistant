@@ -748,6 +748,7 @@ class LivePowerService:
                 break
 
             werte: dict[str, float] = {}
+            raw_values: dict[str, float] = {}  # Ungerundet für Haushalt-Berechnung
 
             # Investitions-Serien
             for serie in serien:
@@ -772,13 +773,15 @@ class LivePowerService:
                         # Sensor-Konvention: positiv=Ladung, negativ=Entladung
                         # Butterfly-Konvention: positiv=Quelle(Entladung), negativ=Senke(Ladung)
                         # → Vorzeichen umkehren
-                        werte[skey] = round(-serie_sum, 2)
+                        raw_val = -serie_sum
                     elif serie["seite"] == "senke":
                         # Senken als negative Werte
-                        werte[skey] = round(-abs(serie_sum), 2)
+                        raw_val = -abs(serie_sum)
                     else:
                         # Quellen als positive Werte
-                        werte[skey] = round(abs(serie_sum), 2)
+                        raw_val = abs(serie_sum)
+                    raw_values[skey] = raw_val
+                    werte[skey] = round(raw_val, 2)
 
             # Netz: Bezug (positiv/Quelle) - Einspeisung (negativ/Senke)
             if has_netz:
@@ -799,13 +802,14 @@ class LivePowerService:
 
                 netto = bezug_kw - einsp_kw  # positiv=Bezug, negativ=Einspeisung
                 if abs(netto) > 0.001:
+                    raw_values["netz"] = netto
                     werte["netz"] = round(netto, 2)
 
-            # Haushalt = Residual (Σ Quellen + Σ Senken ≈ 0 → Haushalt füllt die Lücke)
-            quellen_sum = sum(v for v in werte.values() if v > 0)
-            senken_sum = sum(v for v in werte.values() if v < 0)  # schon negativ
-            haushalt = quellen_sum + senken_sum  # Rest der nicht zugeordnet ist
-            if quellen_sum > 0 and haushalt > 0.01:
+            # Haushalt aus ungerundeten Rohwerten berechnen (vermeidet akkumulierte Rundungsfehler)
+            quellen_sum = sum(v for v in raw_values.values() if v > 0)
+            senken_sum = sum(v for v in raw_values.values() if v < 0)
+            haushalt = quellen_sum + senken_sum
+            if quellen_sum > 0 and haushalt > 0:
                 werte["haushalt"] = round(-haushalt, 2)  # Haushalt ist Senke → negativ
 
             punkte.append({"zeit": f"{h:02d}:00", "werte": werte})

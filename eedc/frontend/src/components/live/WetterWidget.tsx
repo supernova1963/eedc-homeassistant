@@ -39,21 +39,15 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
 
   // IST-Daten aus Tagesverlauf aggregieren:
   //   PV = Σ PV-Serien (positiv)
-  //   Verbrauch = Σ echte Verbraucher-Senken (Haushalt, WP, Wallbox, Sonstige)
-  //   OHNE Batterie-Ladung und Netz-Einspeisung (sind keine Verbraucher)
+  //   Verbrauch = PV + Netzbezug - Einspeisung (Energiebilanz)
+  //   Netz-Wert im Butterfly: positiv=Bezug, negativ=Einspeisung
+  //   → Verbrauch = pvSum + netzValue
   const istDaten = useMemo(() => {
     if (!tagesverlauf?.punkte?.length || !tagesverlauf?.serien?.length) return null
 
     const pvKeys = tagesverlauf.serien
       .filter(s => s.kategorie === 'pv')
       .map(s => s.key)
-
-    // Batterie + Netz ausschließen — keine echten Verbraucher
-    const excludeKeys = new Set(
-      tagesverlauf.serien
-        .filter(s => s.kategorie === 'batterie' || s.kategorie === 'netz')
-        .map(s => s.key)
-    )
 
     const result: Record<number, { pv: number; verbrauch: number }> = {}
 
@@ -62,17 +56,17 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
       if (h > currentHour) continue // Nur vergangene Stunden
 
       let pvSum = 0
-      let verbrauchSum = 0
+      const netzValue = punkt.werte['netz'] ?? 0 // positiv=Bezug, negativ=Einspeisung
 
       for (const [key, val] of Object.entries(punkt.werte)) {
         if (pvKeys.includes(key)) {
           pvSum += val // PV ist positiv
-        } else if (val < 0 && !excludeKeys.has(key)) {
-          verbrauchSum += Math.abs(val) // Echte Verbraucher-Senken
         }
       }
 
-      result[h] = { pv: pvSum, verbrauch: verbrauchSum }
+      // Energiebilanz: Verbrauch = PV + Netzbezug - Einspeisung = pvSum + netzValue
+      const verbrauch = pvSum + netzValue
+      result[h] = { pv: pvSum, verbrauch: Math.max(0, verbrauch) }
     }
 
     return Object.keys(result).length > 0 ? result : null
