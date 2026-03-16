@@ -955,7 +955,27 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
         aktuelle_stunde = stunden[0]
 
     temps = [s["temperatur_c"] for s in stunden]
-    profil, pv_prognose, grundlast, _ = _berechne_verbrauchsprofil(stunden, kwp)
+
+    # Simuliertes individuelles Profil — Gesamtverbrauch inkl. WP, Wallbox, Haushalt
+    # (In Realität berechnet aus: PV + Netzbezug - Einspeisung über 14 Tage)
+    ist_wochenende = now.weekday() >= 5
+    demo_profil = {
+        # Wochenende: später aufstehen, WP morgens/abends, mittags kochen, kein Wallbox
+        0: 0.55, 1: 0.45, 2: 0.40, 3: 0.40, 4: 0.40, 5: 0.50,
+        6: 1.80, 7: 2.20, 8: 2.50, 9: 1.40, 10: 0.90,
+        11: 1.10, 12: 1.80, 13: 1.20, 14: 0.80, 15: 0.75,
+        16: 0.85, 17: 2.30, 18: 2.80, 19: 2.50, 20: 1.20,
+    } if ist_wochenende else {
+        # Werktag: WP-Spitzen 6-8 + 17-19, Wallbox 15-17, Haushalt-Grundlast
+        0: 0.50, 1: 0.40, 2: 0.35, 3: 0.35, 4: 0.35, 5: 0.45,
+        6: 2.10, 7: 2.80, 8: 1.60, 9: 0.70, 10: 0.55,
+        11: 0.60, 12: 0.90, 13: 0.70, 14: 0.55, 15: 4.20,
+        16: 4.50, 17: 2.80, 18: 2.90, 19: 2.60, 20: 1.30,
+    }
+
+    profil, pv_prognose, grundlast, _ = _berechne_verbrauchsprofil(
+        stunden, kwp, individuelles_profil=demo_profil,
+    )
 
     return {
         "anlage_id": 0,
@@ -968,6 +988,9 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
         "pv_prognose_kwh": pv_prognose,
         "grundlast_kw": grundlast,
         "verbrauchsprofil": profil,
+        "profil_typ": "individuell_wochenende" if ist_wochenende else "individuell_werktag",
+        "profil_quelle": "demo",
+        "profil_tage": 14,
     }
 
 

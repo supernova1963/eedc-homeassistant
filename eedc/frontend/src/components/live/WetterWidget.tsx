@@ -219,8 +219,16 @@ export default function WetterWidget({ wetter, loading }: WetterWidgetProps) {
             <span className="flex items-center gap-1">
               <span className="w-3 h-0.5 bg-yellow-500 rounded" /> PV-Ertrag
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 bg-red-400 rounded border-dashed" /> Verbrauch (BDEW H0)
+            <span className="flex items-center gap-1"
+                  title={wetter.profil_typ?.startsWith('individuell')
+                    ? `Basiert auf ${wetter.profil_tage ?? '?'} Tagen ${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}-History (${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
+                    : 'Standardlastprofil — wird durch individuelles Profil ersetzt sobald History verfügbar'
+                  }>
+              <span className="w-3 h-0.5 bg-red-400 rounded border-dashed" />
+              {wetter.profil_typ?.startsWith('individuell')
+                ? `Verbrauch (individuell, ${wetter.profil_typ === 'individuell_wochenende' ? 'WE' : 'WT'})`
+                : 'Verbrauch (BDEW H0)'
+              }
             </span>
           </div>
         </div>
