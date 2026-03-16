@@ -758,8 +758,10 @@ class LivePowerService:
 
                 if has_data:
                     if serie["bidirektional"]:
-                        # Vorzeichen beibehalten (positiv=Entladung/Quelle, negativ=Ladung/Senke)
-                        werte[skey] = round(serie_sum, 2)
+                        # Sensor-Konvention: positiv=Ladung, negativ=Entladung
+                        # Butterfly-Konvention: positiv=Quelle(Entladung), negativ=Senke(Ladung)
+                        # → Vorzeichen umkehren
+                        werte[skey] = round(-serie_sum, 2)
                     elif serie["seite"] == "senke":
                         # Senken als negative Werte
                         werte[skey] = round(-abs(serie_sum), 2)
