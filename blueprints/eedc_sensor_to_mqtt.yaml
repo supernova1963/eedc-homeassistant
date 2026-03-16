@@ -1,0 +1,96 @@
+blueprint:
+  name: "EEDC: Sensor per MQTT senden"
+  description: >
+    Sendet einen Home Assistant Sensor-Wert per MQTT an EEDC.
+
+    Erstelle eine Automation pro Sensor/Topic-Paar. Die passenden MQTT-Topics
+    findest du in EEDC unter Einstellungen > MQTT-Inbound > Beispiel-Flows.
+
+    Mehr Infos: https://supernova1963.github.io/eedc-homeassistant/benutzerhandbuch/#14-home-assistant-integration
+  domain: automation
+  author: "EEDC"
+  source_url: https://github.com/supernova1963/eedc-homeassistant/blob/main/blueprints/eedc_sensor_to_mqtt.yaml
+  input:
+    sensor_entity:
+      name: "Sensor"
+      description: "Der Home Assistant Sensor, dessen Wert gesendet werden soll (z.B. sensor.pv_power, sensor.battery_soc)"
+      selector:
+        entity:
+          domain: sensor
+    mqtt_topic:
+      name: "MQTT Topic"
+      description: >
+        Das EEDC-Topic, z.B. eedc/1_Meine_PV/live/inv/2_SMA/leistung_w.
+        Kopiere das Topic aus EEDC (Einstellungen > MQTT-Inbound > Beispiel-Flows).
+      selector:
+        text:
+    trigger_mode:
+      name: "Sende-Modus"
+      description: >
+        "Bei Aenderung" sendet nur wenn sich der Wert aendert (empfohlen fuer die meisten Sensoren).
+        "Alle 5 Sekunden" sendet regelmaessig (gut fuer Sensoren die sich selten aendern oder fuer zuverlaessigere Live-Anzeige).
+      default: "state_change"
+      selector:
+        select:
+          options:
+            - label: "Bei Aenderung"
+              value: "state_change"
+            - label: "Alle 5 Sekunden"
+              value: "interval_5s"
+            - label: "Alle 10 Sekunden"
+              value: "interval_10s"
+            - label: "Alle 30 Sekunden"
+              value: "interval_30s"
+            - label: "Jede Minute"
+              value: "interval_60s"
+    retain:
+      name: "Retained Message"
+      description: >
+        Wenn aktiviert, speichert der MQTT-Broker den letzten Wert.
+        EEDC empfaengt dann auch nach Neustart sofort einen Wert.
+        Empfohlen: aktiviert.
+      default: true
+      selector:
+        boolean:
+
+variables:
+  trigger_mode: !input trigger_mode
+  sensor_entity: !input sensor_entity
+
+trigger:
+  - platform: state
+    entity_id: !input sensor_entity
+    id: "state_change"
+  - platform: time_pattern
+    seconds: "/5"
+    id: "interval_5s"
+  - platform: time_pattern
+    seconds: "/10"
+    id: "interval_10s"
+  - platform: time_pattern
+    seconds: "/30"
+    id: "interval_30s"
+  - platform: time_pattern
+    minutes: "/1"
+    id: "interval_60s"
+
+condition:
+  # Nur den passenden Trigger-Modus durchlassen
+  - condition: trigger
+    id: "{{ trigger_mode }}"
+  # Keine ungültigen Werte senden
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: !input sensor_entity
+        state:
+          - "unavailable"
+          - "unknown"
+          - ""
+
+action:
+  - service: mqtt.publish
+    data:
+      topic: !input mqtt_topic
+      payload: "{{ states(sensor_entity) }}"
+      retain: !input retain

@@ -94,7 +94,26 @@ Gespeichert (85%) → Connector (90%) → MQTT-Inbound (91%) → HA Statistics (
 
 Hoehere Konfidenz ueberschreibt niedrigere. Wer also HA Statistics hat, dessen Werte haben Vorrang vor MQTT-Inbound.
 
-## Beispiel-Flows
+## Home Assistant Blueprint (empfohlen)
+
+Fuer Home Assistant Nutzer gibt es ein fertiges Blueprint, das die Einrichtung vereinfacht. Statt manuell YAML-Automationen zu schreiben, genuegt ein Import per URL:
+
+1. In Home Assistant: **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren**
+2. URL eingeben:
+   ```
+   https://github.com/supernova1963/eedc-homeassistant/blob/main/blueprints/eedc_sensor_to_mqtt.yaml
+   ```
+3. Pro Sensor eine Automation erstellen:
+   - **Sensor** auswaehlen (z.B. `sensor.pv_power`)
+   - **MQTT Topic** aus EEDC kopieren (Einstellungen → MQTT-Inbound → Beispiel-Flows)
+   - **Sende-Modus** waehlen (bei Aenderung oder Intervall)
+4. Fertig — das Blueprint filtert automatisch `unavailable`/`unknown` Werte heraus
+
+**Tipp:** Erstelle eine Automation pro Sensor/Topic-Paar. Die passenden Topics zeigt EEDC personalisiert fuer deine Anlage an.
+
+## Beispiel-Flows (manuell)
+
+Die folgenden Beispiele zeigen die manuelle Konfiguration ohne Blueprint — nuetzlich fuer andere Smarthome-Systeme oder wenn du volle Kontrolle ueber die Automation haben moechtest.
 
 ### Home Assistant Automation
 

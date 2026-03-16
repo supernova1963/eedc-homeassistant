@@ -1443,6 +1443,16 @@ eedc/{anlage_id}/energy/{key}  → Zählerstände in kWh (monoton steigend)
 3. **Monitor** zeigt eingehende Werte in Echtzeit
 4. **Beispiel-Flows** für dein Smarthome-System kopieren (HA, Node-RED, ioBroker, FHEM, openHAB)
 
+### Home Assistant Blueprint
+
+Für HA-Nutzer gibt es ein fertiges **Blueprint** — kein manuelles YAML nötig:
+
+1. **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren**
+2. URL: `https://github.com/supernova1963/eedc-homeassistant/blob/main/blueprints/eedc_sensor_to_mqtt.yaml`
+3. Pro Sensor eine Automation erstellen: Sensor auswählen, Topic aus EEDC kopieren, fertig
+
+Das Blueprint filtert automatisch ungültige Werte (`unavailable`/`unknown`) und unterstützt verschiedene Sende-Modi (bei Änderung oder in festen Intervallen).
+
 ### Energy → Monatsabschluss
 
 MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfidenz 91%). Tageswerte werden aus SQLite-Snapshots berechnet (alle 5 Minuten gespeichert, 31 Tage Retention).
