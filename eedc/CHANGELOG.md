@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.9] - 2026-03-16
+
+### Hinzugefügt
+
+- **HA Automation Generator:** Integrierter Wizard in der MQTT-Inbound-Seite — HA-Sensoren den EEDC-Topics zuordnen und zwei fertige YAML-Automationen (Live + Energy) zum Kopieren erhalten. Anlage-Auswahl, konfigurierbares Intervall (5s/10s/30s/60s), automatische YAML-Generierung.
+- **Andere Systeme:** Beispiel-Flows für Node-RED, ioBroker, FHEM, openHAB in eigenem Bereich
+
+### Geändert
+
+- **Beispiel-Flows aufgeteilt:** HA-Nutzer nutzen den neuen Generator, andere Systeme haben einen separaten Bereich
+
 ## [3.0.8] - 2026-03-15
 
 ### Hinzugefügt
