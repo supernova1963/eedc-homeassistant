@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.1] - 2026-03-16
+
+### Behoben
+
+- **Verbrauch 0,00 kWh bei hoher PV:** Haushalt-Residual im Tagesverlauf wurde aus gerundeten Werten berechnet — akkumulierte Rundungsfehler (±0.005/Serie) konnten den Verbrauch auf 0 drücken. Jetzt aus ungerundeten Rohwerten berechnet.
+- **Verbrauch IST im Wetter-Chart:** Berechnung von Butterfly-Senken-Summierung auf Energiebilanz (PV + Netzbezug − Einspeisung) umgestellt — funktioniert unabhängig vom Haushalt-Residual.
+
 ## [3.1.0] - 2026-03-16
 
 ### Hinzugefügt
