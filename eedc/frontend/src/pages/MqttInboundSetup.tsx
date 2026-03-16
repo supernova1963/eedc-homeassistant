@@ -421,7 +421,7 @@ export default function MqttInboundSetup() {
       </div>
 
       {/* HA Automation Generator */}
-      <HaAutomationGenerator topics={topics} />
+      <HaAutomationGenerator anlagen={anlagen} />
 
       {/* Beispiel-Flows für andere Systeme */}
       <AndereSystemeFlows topics={topics} host={host || 'localhost'} />
@@ -465,11 +465,28 @@ function labelToSensorId(label: string): string {
 }
 
 /** HA Automation Generator — Wizard zum Zuordnen von HA-Entities zu MQTT-Topics */
-function HaAutomationGenerator({ topics }: { topics: MqttTopic[] }) {
+function HaAutomationGenerator({ anlagen }: { anlagen: { id: number; anlagenname: string }[] }) {
   const [open, setOpen] = useState(false)
+  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const [topics, setTopics] = useState<MqttTopic[]>([])
   const [entityMap, setEntityMap] = useState<Record<string, string>>({})
   const [copiedYaml, setCopiedYaml] = useState<string | null>(null)
   const [interval, setInterval] = useState('5')
+
+  // Erste Anlage vorauswählen
+  useEffect(() => {
+    if (anlagen.length > 0 && selectedAnlageId === null) {
+      setSelectedAnlageId(anlagen[0].id)
+    }
+  }, [anlagen, selectedAnlageId])
+
+  // Topics laden wenn Anlage gewählt
+  useEffect(() => {
+    if (selectedAnlageId === null) return
+    liveDashboardApi.getMqttTopics(selectedAnlageId)
+      .then(resp => setTopics(resp.topics || []))
+      .catch(() => setTopics([]))
+  }, [selectedAnlageId])
 
   // Topics in Live und Energy aufteilen
   const { liveTopics, energyTopics } = useMemo(() => {
@@ -540,7 +557,7 @@ ${actions}`
   const liveCount = liveTopics.filter(t => entityMap[t.topic]?.trim()).length
   const energyCount = energyTopics.filter(t => entityMap[t.topic]?.trim()).length
 
-  if (topics.length === 0) return null
+  if (anlagen.length === 0) return null
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
@@ -563,19 +580,38 @@ ${actions}`
             Am Ende erhältst du zwei fertige Automationen (Live + Energy) zum Kopieren.
           </p>
 
-          {/* Intervall-Auswahl */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-600 dark:text-gray-400">Live-Intervall:</label>
-            <select
-              value={interval}
-              onChange={(e) => setInterval(e.target.value)}
-              className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="5">Alle 5 Sekunden</option>
-              <option value="10">Alle 10 Sekunden</option>
-              <option value="30">Alle 30 Sekunden</option>
-              <option value="60">Jede Minute</option>
-            </select>
+          {/* Anlage + Intervall */}
+          <div className="flex flex-wrap items-center gap-4">
+            {anlagen.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 dark:text-gray-400">Anlage:</label>
+                <select
+                  value={selectedAnlageId ?? ''}
+                  onChange={(e) => {
+                    setSelectedAnlageId(Number(e.target.value))
+                    setEntityMap({})
+                  }}
+                  className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {anlagen.map(a => (
+                    <option key={a.id} value={a.id}>{a.anlagenname || `Anlage ${a.id}`}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600 dark:text-gray-400">Live-Intervall:</label>
+              <select
+                value={interval}
+                onChange={(e) => setInterval(e.target.value)}
+                className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="5">Alle 5 Sekunden</option>
+                <option value="10">Alle 10 Sekunden</option>
+                <option value="30">Alle 30 Sekunden</option>
+                <option value="60">Jede Minute</option>
+              </select>
+            </div>
           </div>
 
           {/* Live-Sensoren */}
