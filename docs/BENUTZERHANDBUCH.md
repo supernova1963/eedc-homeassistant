@@ -1443,15 +1443,16 @@ eedc/{anlage_id}/energy/{key}  → Zählerstände in kWh (monoton steigend)
 3. **Monitor** zeigt eingehende Werte in Echtzeit
 4. **Beispiel-Flows** für dein Smarthome-System kopieren (HA, Node-RED, ioBroker, FHEM, openHAB)
 
-### Home Assistant Blueprint
+### Home Assistant Automation Generator
 
-Für HA-Nutzer gibt es ein fertiges **Blueprint** — kein manuelles YAML nötig:
+Für HA-Nutzer gibt es einen integrierten **Automation Generator** — kein manuelles YAML-Schreiben nötig:
 
-1. **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren**
-2. URL: `https://github.com/supernova1963/eedc-homeassistant/blob/main/blueprints/eedc_sensor_to_mqtt.yaml`
-3. Pro Sensor eine Automation erstellen: Sensor auswählen, Topic aus EEDC kopieren, fertig
+1. **HA Automation Generator** aufklappen
+2. Pro Topic deine HA-Entity eintragen (z.B. `sensor.pv_power`)
+3. Intervall wählen und fertiges YAML kopieren
+4. In Home Assistant einfügen (Einstellungen → Automatisierungen → YAML-Modus)
 
-Das Blueprint filtert automatisch ungültige Werte (`unavailable`/`unknown`) und unterstützt verschiedene Sende-Modi (bei Änderung oder in festen Intervallen).
+Der Generator erzeugt zwei Automationen: **Live** (Echtzeit-Leistung) und **Energy** (Zählerstände für Monatsabschluss).
 
 ### Energy → Monatsabschluss
 

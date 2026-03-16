@@ -5,8 +5,8 @@
  * über den Live-Leistungsdaten empfangen werden.
  */
 
-import { useState, useEffect } from 'react'
-import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen, Trash2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen, Trash2, Wand2 } from 'lucide-react'
 import Input from '../components/ui/Input'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { MqttTestResult, MqttInboundStatus, MqttTopic, MqttCacheWert } from '../api/liveDashboard'
@@ -420,11 +420,11 @@ export default function MqttInboundSetup() {
         )}
       </div>
 
-      {/* Beispiel-Flows */}
-      <BeispielFlows
-        topics={topics}
-        host={host || 'localhost'}
-      />
+      {/* HA Automation Generator */}
+      <HaAutomationGenerator topics={topics} />
+
+      {/* Beispiel-Flows für andere Systeme */}
+      <AndereSystemeFlows topics={topics} host={host || 'localhost'} />
     </div>
   )
 }
@@ -464,12 +464,260 @@ function labelToSensorId(label: string): string {
     .toLowerCase()
 }
 
-function BeispielFlows({ topics, host }: { topics: MqttTopic[]; host: string }) {
+/** HA Automation Generator — Wizard zum Zuordnen von HA-Entities zu MQTT-Topics */
+function HaAutomationGenerator({ topics }: { topics: MqttTopic[] }) {
+  const [open, setOpen] = useState(false)
+  const [entityMap, setEntityMap] = useState<Record<string, string>>({})
+  const [copiedYaml, setCopiedYaml] = useState<string | null>(null)
+  const [interval, setInterval] = useState('5')
+
+  // Topics in Live und Energy aufteilen
+  const { liveTopics, energyTopics } = useMemo(() => {
+    const live: MqttTopic[] = []
+    const energy: MqttTopic[] = []
+    for (const t of topics) {
+      if (t.typ === 'live') live.push(t)
+      else if (t.typ === 'energy') energy.push(t)
+    }
+    return { liveTopics: live, energyTopics: energy }
+  }, [topics])
+
+  // Default-Platzhalter für Entity-IDs
+  const getPlaceholder = useCallback((t: MqttTopic) => {
+    return `sensor.${labelToSensorId(t.label)}`
+  }, [])
+
+  const updateEntity = (topic: string, value: string) => {
+    setEntityMap(prev => ({ ...prev, [topic]: value }))
+  }
+
+  // YAML generieren für eine Gruppe von Topics
+  const generateYaml = (
+    groupTopics: MqttTopic[],
+    alias: string,
+    triggerSeconds: string,
+  ): string => {
+    const mapped = groupTopics.filter(t => entityMap[t.topic]?.trim())
+    if (mapped.length === 0) return ''
+
+    const actions = mapped.map(t => {
+      const entity = entityMap[t.topic]!.trim()
+      return `      - service: mqtt.publish
+        data:
+          topic: "${t.topic}"
+          payload: "{{ states('${entity}') }}"
+          retain: true`
+    }).join('\n')
+
+    return `automation:
+  - alias: "${alias}"
+    description: "Generiert von EEDC — sendet ${mapped.length} Sensor(en) per MQTT"
+    trigger:
+      - platform: time_pattern
+        seconds: "/${triggerSeconds}"
+    condition:
+      - condition: template
+        value_template: "{{ true }}"
+    action:
+${actions}`
+  }
+
+  const liveYaml = useMemo(
+    () => generateYaml(liveTopics, 'EEDC Live-Daten senden', interval),
+    [liveTopics, entityMap, interval],
+  )
+  const energyYaml = useMemo(
+    () => generateYaml(energyTopics, 'EEDC Energy-Daten senden', '60'),
+    [energyTopics, entityMap],
+  )
+
+  const copyYaml = (id: string, yaml: string) => {
+    navigator.clipboard.writeText(yaml)
+    setCopiedYaml(id)
+    setTimeout(() => setCopiedYaml(null), 2000)
+  }
+
+  const liveCount = liveTopics.filter(t => entityMap[t.topic]?.trim()).length
+  const energyCount = energyTopics.filter(t => entityMap[t.topic]?.trim()).length
+
+  if (topics.length === 0) return null
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-5 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Wand2 className="w-5 h-5 text-purple-500" />
+          <h2 className="font-semibold text-gray-900 dark:text-white">HA Automation Generator</h2>
+          <span className="text-xs text-gray-400">Home Assistant YAML erzeugen</span>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-6">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Ordne deine Home Assistant Sensoren den EEDC-Topics zu.
+            Am Ende erhältst du zwei fertige Automationen (Live + Energy) zum Kopieren.
+          </p>
+
+          {/* Intervall-Auswahl */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-600 dark:text-gray-400">Live-Intervall:</label>
+            <select
+              value={interval}
+              onChange={(e) => setInterval(e.target.value)}
+              className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="5">Alle 5 Sekunden</option>
+              <option value="10">Alle 10 Sekunden</option>
+              <option value="30">Alle 30 Sekunden</option>
+              <option value="60">Jede Minute</option>
+            </select>
+          </div>
+
+          {/* Live-Sensoren */}
+          {liveTopics.length > 0 && (
+            <TopicMappingSection
+              title="Live-Sensoren"
+              description="Echtzeit-Leistung in Watt — für das Live Dashboard"
+              badge="live"
+              topics={liveTopics}
+              entityMap={entityMap}
+              getPlaceholder={getPlaceholder}
+              onUpdate={updateEntity}
+            />
+          )}
+
+          {/* Energy-Sensoren */}
+          {energyTopics.length > 0 && (
+            <TopicMappingSection
+              title="Energy-Sensoren"
+              description="Zählerstände in kWh — für den Monatsabschluss"
+              badge="energy"
+              topics={energyTopics}
+              entityMap={entityMap}
+              getPlaceholder={getPlaceholder}
+              onUpdate={updateEntity}
+            />
+          )}
+
+          {/* Generiertes YAML */}
+          {(liveCount > 0 || energyCount > 0) && (
+            <div className="space-y-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+              <h3 className="font-medium text-gray-900 dark:text-white text-sm">
+                Generierte Automationen
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Kopiere das YAML und füge es in Home Assistant ein:
+                Einstellungen → Automatisierungen → ⋮ → YAML-Modus, oder in <code className="bg-gray-100 dark:bg-gray-900 px-1 rounded">automations.yaml</code>.
+              </p>
+
+              {liveYaml && (
+                <YamlOutput
+                  id="live"
+                  title={`Live-Automation (${liveCount} Sensor${liveCount !== 1 ? 'en' : ''}, alle ${interval}s)`}
+                  yaml={liveYaml}
+                  copied={copiedYaml}
+                  onCopy={copyYaml}
+                />
+              )}
+              {energyYaml && (
+                <YamlOutput
+                  id="energy"
+                  title={`Energy-Automation (${energyCount} Sensor${energyCount !== 1 ? 'en' : ''}, jede Minute)`}
+                  yaml={energyYaml}
+                  copied={copiedYaml}
+                  onCopy={copyYaml}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TopicMappingSection({ title, description, badge, topics, entityMap, getPlaceholder, onUpdate }: {
+  title: string
+  description: string
+  badge: string
+  topics: MqttTopic[]
+  entityMap: Record<string, string>
+  getPlaceholder: (t: MqttTopic) => string
+  onUpdate: (topic: string, value: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium text-gray-900 dark:text-white text-sm">{title}</h3>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${
+            badge === 'live'
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+          }`}>{badge}</span>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+      </div>
+      <div className="space-y-2">
+        {topics.map(t => (
+          <div key={t.topic} className="flex items-center gap-2">
+            <div className="w-40 shrink-0">
+              <span className="text-sm text-gray-700 dark:text-gray-300 truncate block" title={t.label}>
+                {t.label}
+              </span>
+            </div>
+            <span className="text-gray-300 dark:text-gray-600 shrink-0">→</span>
+            <input
+              type="text"
+              value={entityMap[t.topic] || ''}
+              onChange={(e) => onUpdate(t.topic, e.target.value)}
+              placeholder={getPlaceholder(t)}
+              className="flex-1 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder:text-gray-400 dark:placeholder:text-gray-600 font-mono"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function YamlOutput({ id, title, yaml, copied, onCopy }: {
+  id: string
+  title: string
+  yaml: string
+  copied: string | null
+  onCopy: (id: string, yaml: string) => void
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{title}</span>
+        <button
+          onClick={() => onCopy(id, yaml)}
+          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+        >
+          {copied === id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+          {copied === id ? 'Kopiert!' : 'Kopieren'}
+        </button>
+      </div>
+      <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded-lg overflow-x-auto text-gray-800 dark:text-gray-200 max-h-80 overflow-y-auto">
+        <code>{yaml}</code>
+      </pre>
+    </div>
+  )
+}
+
+/** Beispiel-Flows für andere Smarthome-Systeme (Node-RED, ioBroker, FHEM, openHAB) */
+function AndereSystemeFlows({ topics, host }: { topics: MqttTopic[]; host: string }) {
   const [open, setOpen] = useState(false)
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null)
   const [selectedIdx, setSelectedIdx] = useState(0)
 
-  // Default auf erstes Investitions-Topic (falls vorhanden)
   useEffect(() => {
     const invIdx = topics.findIndex(t => t.topic.includes('/inv/'))
     if (invIdx >= 0) setSelectedIdx(invIdx)
@@ -486,20 +734,9 @@ function BeispielFlows({ topics, host }: { topics: MqttTopic[]; host: string }) 
     setTimeout(() => setCopiedSnippet(null), 2000)
   }
 
-  const haSensor = `sensor.${sensorId}`
-  const haAutomation = `automation:
-  - alias: "EEDC ${aliasName} senden"
-    trigger:
-      - platform: state
-        entity_id: ${haSensor}  # ← Deinen Sensor hier einsetzen
-    action:
-      - service: mqtt.publish
-        data:
-          topic: "${exampleTopic}"
-          payload: "{{ states('${haSensor}') }}"
-          retain: true`
-
-  const nodeRed = `[
+  const snippets = [
+    {
+      id: 'nodered', label: 'Node-RED', code: `[
   {
     "id": "eedc_${sensorId}",
     "type": "mqtt out",
@@ -509,9 +746,10 @@ function BeispielFlows({ topics, host }: { topics: MqttTopic[]; host: string }) 
     "name": "EEDC ${aliasName}"
   }
 ]
-// msg.payload mit dem Sensorwert befüllen (z.B. via Change- oder Function-Node)`
-
-  const ioBroker = `// Datenpunkt anpassen ↓
+// msg.payload mit dem Sensorwert befüllen (z.B. via Change- oder Function-Node)`,
+    },
+    {
+      id: 'iobroker', label: 'ioBroker JavaScript', code: `// Datenpunkt anpassen ↓
 const quellSensor = '0_userdata.0.${sensorId}';
 
 on(quellSensor, (obj) => {
@@ -520,28 +758,26 @@ on(quellSensor, (obj) => {
         message: String(obj.state.val),
         retain: true
     });
-});`
-
-  const fhem = `# Reading-Name anpassen ↓
+});`,
+    },
+    {
+      id: 'fhem', label: 'FHEM', code: `# Reading-Name anpassen ↓
 define eedc_${sensorId} notify ${sensorId}:.* {\\
   fhem("set mqtt2 publish -r ${exampleTopic} " . ReadingsVal("${sensorId}","state","0"))\\
-}`
-
-  const openHab = `rule "EEDC ${aliasName} senden"
+}`,
+    },
+    {
+      id: 'openhab', label: 'openHAB', code: `rule "EEDC ${aliasName} senden"
 when
     Item ${sensorId} changed  // ← Item-Name anpassen
 then
     val mqttActions = getActions("mqtt", "mqtt:broker:myBroker")
     mqttActions.publishMQTT("${exampleTopic}", ${sensorId}.state.toString, true)
-end`
-
-  const snippets = [
-    { id: 'ha', label: 'Home Assistant Automation', lang: 'yaml', code: haAutomation },
-    { id: 'nodered', label: 'Node-RED', lang: 'json', code: nodeRed },
-    { id: 'iobroker', label: 'ioBroker JavaScript', lang: 'javascript', code: ioBroker },
-    { id: 'fhem', label: 'FHEM', lang: 'perl', code: fhem },
-    { id: 'openhab', label: 'openHAB', lang: 'java', code: openHab },
+end`,
+    },
   ]
+
+  if (topics.length === 0) return null
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
@@ -550,16 +786,15 @@ end`
         className="w-full flex items-center justify-between p-5 text-left"
       >
         <div className="flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-purple-500" />
-          <h2 className="font-semibold text-gray-900 dark:text-white">Beispiel-Flows</h2>
-          <span className="text-xs text-gray-400">HA, Node-RED, ioBroker, FHEM, openHAB</span>
+          <BookOpen className="w-5 h-5 text-gray-400" />
+          <h2 className="font-semibold text-gray-900 dark:text-white">Andere Systeme</h2>
+          <span className="text-xs text-gray-400">Node-RED, ioBroker, FHEM, openHAB</span>
         </div>
         <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div className="px-5 pb-5 space-y-4">
-          {/* Topic-Auswahl */}
           {topics.length > 0 && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -580,8 +815,9 @@ end`
           )}
 
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Kopiere den passenden Beispiel-Flow. Das MQTT-Topic ist bereits korrekt —
-            ersetze nur den <span className="font-mono text-xs bg-gray-100 dark:bg-gray-900 px-1 rounded">Sensor-Namen</span> durch deinen eigenen.
+            Kopiere den passenden Beispiel-Flow und ersetze den
+            <span className="font-mono text-xs bg-gray-100 dark:bg-gray-900 px-1 rounded mx-1">Sensor-Namen</span>
+            durch deinen eigenen. Wiederhole für jedes Topic.
           </p>
 
           {snippets.map((s) => (
