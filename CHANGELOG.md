@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.0] - 2026-03-16
+
+### Hinzugefügt
+
+- **Wetter-Chart IST/Prognose-Split:** PV-Ertrag vs. Verbrauch zeigt jetzt IST-Daten (solide Linien) für vergangene Stunden und Prognose (gestrichelt) für die Zukunft. Volle 24h-Achse, PV-Prognose auch rückwirkend sichtbar zum Vergleich mit tatsächlicher Erzeugung.
+- **Energieprofil-Datenbasis:** Neue persistente Datensammlung als Grundlage für zukünftige Speicher-Dimensionierungsanalyse:
+  - Stündliches Energieprofil (24 Werte/Tag) mit Per-Komponenten-Aufschlüsselung, Wetter-IST, Batterie-SoC
+  - Tägliche Zusammenfassung: Über-/Unterdeckung (kWh), Spitzenleistungen, Batterie-Vollzyklen, Performance Ratio
+  - Automatische tägliche Aggregation (Scheduler, 00:15)
+  - Nachberechnung beim Monatsabschluss (Backfill + Rollup)
+- **Monatsdaten erweitert:** Neue Felder `ueberschuss_kwh`, `defizit_kwh`, `batterie_vollzyklen`, `performance_ratio`, `peak_netzbezug_kw`
+- **Tagesverlauf historisch:** `tage_zurueck` Parameter ermöglicht Abruf vergangener Tage
+
+### Behoben
+
+- **Batterie-Vorzeichen im Tagesverlauf:** Bidirektionale Serien (Batterie) hatten invertierte Vorzeichen — Entladung wurde als Senke statt Quelle dargestellt, Haushalt-Residual war dadurch zu hoch
+- **Verbrauch IST im Wetter-Chart:** Exkludiert jetzt korrekt Batterie-Ladung und Netz-Einspeisung (keine echten Verbraucher)
+
 ## [3.0.9] - 2026-03-16
 
 ### Hinzugefügt
