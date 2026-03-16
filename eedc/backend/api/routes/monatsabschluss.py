@@ -919,6 +919,28 @@ async def save_monatsabschluss(
         # MQTT-Fehler nicht als Fatal behandeln
         logger.warning(f"MQTT-Publish fehlgeschlagen: {e}")
 
+    # Energie-Profil Rollup: TagesZusammenfassungen → Monatsdaten-Felder
+    try:
+        from backend.services.energie_profil_service import rollup_month, backfill_range
+        from datetime import timedelta
+
+        # Backfill: Fehlende Tage nachberechnen (soweit History verfügbar)
+        erster_tag = date(jahr, monat, 1)
+        if monat == 12:
+            letzter_tag = date(jahr + 1, 1, 1) - timedelta(days=1)
+        else:
+            letzter_tag = date(jahr, monat + 1, 1) - timedelta(days=1)
+
+        backfill_count = await backfill_range(anlage, erster_tag, letzter_tag, db)
+        if backfill_count > 0:
+            await db.commit()
+
+        # Rollup in Monatsdaten
+        await rollup_month(anlage_id, jahr, monat, db)
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {e}")
+
     await log_activity(
         kategorie="monatsabschluss",
         aktion=f"Monatsabschluss {MONAT_NAMEN[monat]} {jahr} gespeichert",

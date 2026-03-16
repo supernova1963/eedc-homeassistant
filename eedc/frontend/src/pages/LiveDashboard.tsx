@@ -397,7 +397,7 @@ export default function LiveDashboard() {
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
               Wetter heute
             </h3>
-            <WetterWidget wetter={wetter} />
+            <WetterWidget wetter={wetter} tagesverlauf={tagesverlauf} />
           </div>
 
           {/* Zeile 3: Tagesverlauf-Chart (Butterfly) */}

@@ -916,9 +916,10 @@ def _berechne_verbrauchsprofil(
 def _generate_demo_wetter(kwp: float = 10.0) -> dict:
     """Simuliertes Wetter für Demo-Modus."""
     now = datetime.now()
-    stunden = []
+    alle_stunden = []  # 0-23 für Verbrauchsprofil
+    stunden = []       # 6-20 für Wetter-Timeline
 
-    for h in range(6, 21):
+    for h in range(24):
         strahlung = max(0, 800 * max(0, 1 - ((h - 13) / 5) ** 2))
         strahlung *= (0.85 + random.uniform(0, 0.3))
 
@@ -936,7 +937,7 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
 
         niederschlag = round(random.uniform(0, 0.5), 1) if code >= 61 else 0.0
 
-        stunden.append({
+        stunde = {
             "zeit": f"{h:02d}:00",
             "temperatur_c": round(temp, 1),
             "wetter_code": code,
@@ -944,7 +945,10 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
             "bewoelkung_prozent": bewoelkung,
             "niederschlag_mm": niederschlag,
             "globalstrahlung_wm2": round(strahlung, 0),
-        })
+        }
+        alle_stunden.append(stunde)
+        if 6 <= h <= 20:
+            stunden.append(stunde)
 
     aktuelle_stunde = None
     for s in stunden:
@@ -965,16 +969,18 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
         6: 1.80, 7: 2.20, 8: 2.50, 9: 1.40, 10: 0.90,
         11: 1.10, 12: 1.80, 13: 1.20, 14: 0.80, 15: 0.75,
         16: 0.85, 17: 2.30, 18: 2.80, 19: 2.50, 20: 1.20,
+        21: 0.80, 22: 0.60, 23: 0.55,
     } if ist_wochenende else {
         # Werktag: WP-Spitzen 6-8 + 17-19, Wallbox 15-17, Haushalt-Grundlast
         0: 0.50, 1: 0.40, 2: 0.35, 3: 0.35, 4: 0.35, 5: 0.45,
         6: 2.10, 7: 2.80, 8: 1.60, 9: 0.70, 10: 0.55,
         11: 0.60, 12: 0.90, 13: 0.70, 14: 0.55, 15: 4.20,
         16: 4.50, 17: 2.80, 18: 2.90, 19: 2.60, 20: 1.30,
+        21: 0.85, 22: 0.60, 23: 0.50,
     }
 
     profil, pv_prognose, grundlast, _ = _berechne_verbrauchsprofil(
-        stunden, kwp, individuelles_profil=demo_profil,
+        alle_stunden, kwp, individuelles_profil=demo_profil,
     )
 
     return {
@@ -1042,14 +1048,13 @@ async def get_live_wetter(
         times = hourly.get("time", [])
         now = datetime.now()
 
-        stunden = []
+        alle_stunden = []  # 0-23 für Verbrauchsprofil
+        stunden = []       # 6-20 für Wetter-Timeline
         for i, t in enumerate(times):
             h = int(t[11:13])
-            if h < 6 or h > 20:
-                continue
 
             code = hourly.get("weather_code", [None] * len(times))[i]
-            stunden.append({
+            stunde = {
                 "zeit": f"{h:02d}:00",
                 "temperatur_c": hourly.get("temperature_2m", [None] * len(times))[i],
                 "wetter_code": code,
@@ -1057,7 +1062,10 @@ async def get_live_wetter(
                 "bewoelkung_prozent": hourly.get("cloud_cover", [None] * len(times))[i],
                 "niederschlag_mm": hourly.get("precipitation", [None] * len(times))[i],
                 "globalstrahlung_wm2": hourly.get("shortwave_radiation", [None] * len(times))[i],
-            })
+            }
+            alle_stunden.append(stunde)
+            if 6 <= h <= 20:
+                stunden.append(stunde)
 
         aktuelle_stunde = None
         for s in stunden:
@@ -1088,7 +1096,7 @@ async def get_live_wetter(
                 profil_tage = ind_profil_data["tage_werktag"]
 
         profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
-            stunden, kwp, individuelles_profil=ind_stunden_profil,
+            alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
         )
 
         return {

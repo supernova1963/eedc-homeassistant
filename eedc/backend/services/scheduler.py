@@ -29,6 +29,7 @@ class EEDCScheduler:
     - Monatswechsel-Snapshot: Am 1. jeden Monats um 00:01
     - MQTT Energy Snapshot: Alle 5 Minuten
     - MQTT Energy Cleanup: Täglich um 03:00
+    - Energie-Profil Aggregation: Täglich um 00:15 (Vortag)
     """
 
     def __init__(self):
@@ -90,6 +91,15 @@ class EEDCScheduler:
                 CronTrigger(hour=3, minute=0),
                 id="mqtt_energy_cleanup",
                 name="MQTT Energy Cleanup",
+                replace_existing=True,
+            )
+
+            # Energie-Profil Aggregation: Täglich um 00:15 (Vortag)
+            self._scheduler.add_job(
+                energie_profil_aggregation_job,
+                CronTrigger(hour=0, minute=15),
+                id="energie_profil_aggregation",
+                name="Energie-Profil Aggregation",
                 replace_existing=True,
             )
 
@@ -217,6 +227,17 @@ async def mqtt_energy_cleanup_job() -> None:
         await cleanup_old_snapshots()
     except Exception as e:
         logger.warning(f"MQTT Energy Cleanup fehlgeschlagen: {e}")
+
+
+async def energie_profil_aggregation_job() -> None:
+    """Aggregiert Energieprofil des Vortags für alle Anlagen (täglich um 00:15)."""
+    try:
+        from backend.services.energie_profil_service import aggregate_yesterday_all
+        results = await aggregate_yesterday_all()
+        ok = sum(1 for r in results.values() if r["status"] == "ok")
+        logger.info(f"Energie-Profil Aggregation: {ok}/{len(results)} Anlagen erfolgreich")
+    except Exception as e:
+        logger.warning(f"Energie-Profil Aggregation fehlgeschlagen: {e}")
 
 
 # Singleton-Instanz

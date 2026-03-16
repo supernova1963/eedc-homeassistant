@@ -95,6 +95,12 @@ async def run_migrations(conn):
                 ('sonderkosten_beschreibung', 'VARCHAR(500)'),
                 ('notizen', 'VARCHAR(1000)'),
                 ('netzbezug_durchschnittspreis_cent', 'FLOAT'),
+                # v3.1.0: Energiebilanz-Analyse
+                ('ueberschuss_kwh', 'FLOAT'),
+                ('defizit_kwh', 'FLOAT'),
+                ('batterie_vollzyklen', 'FLOAT'),
+                ('performance_ratio', 'FLOAT'),
+                ('peak_netzbezug_kw', 'FLOAT'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
@@ -142,7 +148,7 @@ async def init_db():
     Wird beim App-Start aufgerufen.
     """
     # Importiere alle Models damit sie registriert werden
-    from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot
+    from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot, tages_energie_profil
 
     async with engine.begin() as conn:
         # Migrationen ausführen

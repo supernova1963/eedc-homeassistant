@@ -7,6 +7,7 @@ from backend.models.settings import Settings
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.models.activity_log import ActivityLog
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
+from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
 __all__ = [
     "Anlage",
@@ -20,4 +21,6 @@ __all__ = [
     "PVGISMonatsprognose",
     "ActivityLog",
     "MqttEnergySnapshot",
+    "TagesEnergieProfil",
+    "TagesZusammenfassung",
 ]

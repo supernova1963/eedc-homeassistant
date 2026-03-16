@@ -61,6 +61,18 @@ class Monatsdaten(Base):
     sonnenstunden: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     durchschnittstemperatur: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Energiebilanz-Analyse (aus TagesZusammenfassung aggregiert)
+    ueberschuss_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Σ stündlicher PV-Überschüsse (PV > Verbrauch) — Speicher-Potenzial
+    defizit_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Σ stündlicher Defizite (Verbrauch > PV) — Speicher-Bedarf
+    batterie_vollzyklen: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Σ Vollzyklen im Monat (ein Zyklus = 0→100→0)
+    performance_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Durchschnittliche Performance Ratio im Monat
+    peak_netzbezug_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Maximaler Netzbezug im Monat (kW)
+
     # Sonderkosten (manuelle Eingabe)
     sonderkosten_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sonderkosten_beschreibung: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

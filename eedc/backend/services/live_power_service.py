@@ -624,9 +624,14 @@ class LivePowerService:
 
         return result
 
-    async def get_tagesverlauf(self, anlage: Anlage, db: AsyncSession) -> dict:
+    async def get_tagesverlauf(
+        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+    ) -> dict:
         """
-        Holt stündlich aggregierte Leistungsdaten für heute.
+        Holt stündlich aggregierte Leistungsdaten für einen Tag.
+
+        Args:
+            tage_zurueck: 0=heute, 1=gestern, etc.
 
         Returns:
             dict mit "serien" (Beschreibung der Kurven) und "punkte" (Stundenwerte).
@@ -654,7 +659,13 @@ class LivePowerService:
         ha_service = get_ha_state_service()
 
         now = datetime.now()
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if tage_zurueck > 0:
+            tag = now - timedelta(days=tage_zurueck)
+            start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=1)
+        else:
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = now
 
         # Serien aufbauen + Entity-IDs sammeln
         serien: list[dict] = []
@@ -726,14 +737,14 @@ class LivePowerService:
         if not all_ids:
             return {"serien": [], "punkte": []}
 
-        history = await ha_service.get_sensor_history(all_ids, start, now)
+        history = await ha_service.get_sensor_history(all_ids, start, end)
 
         # Stündliche Mittelwerte berechnen
         punkte: list[dict] = []
         for h in range(24):
             h_start = start + timedelta(hours=h)
             h_end = h_start + timedelta(hours=1)
-            if h_start > now:
+            if h_start > end:
                 break
 
             werte: dict[str, float] = {}

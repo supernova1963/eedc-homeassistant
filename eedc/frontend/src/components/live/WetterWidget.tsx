@@ -2,12 +2,13 @@
  * WetterWidget — Aktuelles Wetter + Stundenprognose + PV/Verbrauch-Chart.
  *
  * Breites Layout (volle Breite): Hero links, Stundenverlauf Mitte, KPI rechts.
- * Darunter: PV-Ertrag vs. Verbrauch Flächendiagramm.
+ * Darunter: PV-Ertrag vs. Verbrauch — IST (solid) + Prognose (dashed), volle 24h.
  */
 
+import { useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
-import type { LiveWetterResponse } from '../../api/liveDashboard'
+import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
 function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; className?: string }) {
@@ -28,10 +29,116 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
 
 interface WetterWidgetProps {
   wetter: LiveWetterResponse | null
+  tagesverlauf?: TagesverlaufResponse | null
   loading?: boolean
 }
 
-export default function WetterWidget({ wetter, loading }: WetterWidgetProps) {
+export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWidgetProps) {
+  const now = new Date()
+  const currentHour = now.getHours()
+
+  // IST-Daten aus Tagesverlauf aggregieren:
+  //   PV = Σ PV-Serien (positiv)
+  //   Verbrauch = Σ echte Verbraucher-Senken (Haushalt, WP, Wallbox, Sonstige)
+  //   OHNE Batterie-Ladung und Netz-Einspeisung (sind keine Verbraucher)
+  const istDaten = useMemo(() => {
+    if (!tagesverlauf?.punkte?.length || !tagesverlauf?.serien?.length) return null
+
+    const pvKeys = tagesverlauf.serien
+      .filter(s => s.kategorie === 'pv')
+      .map(s => s.key)
+
+    // Batterie + Netz ausschließen — keine echten Verbraucher
+    const excludeKeys = new Set(
+      tagesverlauf.serien
+        .filter(s => s.kategorie === 'batterie' || s.kategorie === 'netz')
+        .map(s => s.key)
+    )
+
+    const result: Record<number, { pv: number; verbrauch: number }> = {}
+
+    for (const punkt of tagesverlauf.punkte) {
+      const h = parseInt(punkt.zeit.split(':')[0])
+      if (h > currentHour) continue // Nur vergangene Stunden
+
+      let pvSum = 0
+      let verbrauchSum = 0
+
+      for (const [key, val] of Object.entries(punkt.werte)) {
+        if (pvKeys.includes(key)) {
+          pvSum += val // PV ist positiv
+        } else if (val < 0 && !excludeKeys.has(key)) {
+          verbrauchSum += Math.abs(val) // Echte Verbraucher-Senken
+        }
+      }
+
+      result[h] = { pv: pvSum, verbrauch: verbrauchSum }
+    }
+
+    return Object.keys(result).length > 0 ? result : null
+  }, [tagesverlauf, currentHour])
+
+  // Chart-Daten: 24h mit IST + Prognose
+  const chartData = useMemo(() => {
+    if (!wetter?.verfuegbar) return []
+
+    // Prognose-Daten indexieren
+    const prognoseMap: Record<number, { pv: number; verbrauch: number }> = {}
+    for (const v of wetter.verbrauchsprofil) {
+      const h = parseInt(v.zeit.replace(':00', ''))
+      prognoseMap[h] = { pv: v.pv_ertrag_kw, verbrauch: v.verbrauch_kw }
+    }
+
+    const data: Array<Record<string, number | string | null>> = []
+
+    for (let h = 0; h < 24; h++) {
+      const punkt: Record<string, number | string | null> = { zeit: String(h) }
+      const prognose = prognoseMap[h]
+      const ist = istDaten?.[h]
+
+      if (h < currentHour) {
+        // Vergangene Stunden: IST (solid) + PV-Prognose (dashed, zum Vergleich)
+        if (ist) {
+          punkt.pv_ist = ist.pv
+          punkt.verbrauch_ist = ist.verbrauch
+        } else if (prognose) {
+          // Fallback auf Prognose wenn kein IST
+          punkt.pv_ist = prognose.pv
+          punkt.verbrauch_ist = prognose.verbrauch
+        }
+        punkt.pv_prognose = prognose?.pv ?? null
+        punkt.verbrauch_prognose = null
+      } else if (h === currentHour) {
+        // Aktuelle Stunde: Beide zeigen für nahtlosen Übergang
+        if (ist) {
+          punkt.pv_ist = ist.pv
+          punkt.verbrauch_ist = ist.verbrauch
+        }
+        if (prognose) {
+          punkt.pv_prognose = prognose.pv
+          punkt.verbrauch_prognose = prognose.verbrauch
+        }
+        // Falls IST fehlt, Prognose auch als IST (Übergang)
+        if (!ist && prognose) {
+          punkt.pv_ist = prognose.pv
+          punkt.verbrauch_ist = prognose.verbrauch
+        }
+      } else {
+        // Zukünftige Stunden: Nur Prognose (dashed)
+        punkt.pv_ist = null
+        punkt.verbrauch_ist = null
+        if (prognose) {
+          punkt.pv_prognose = prognose.pv
+          punkt.verbrauch_prognose = prognose.verbrauch
+        }
+      }
+
+      data.push(punkt)
+    }
+
+    return data
+  }, [wetter, istDaten, currentHour])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -54,16 +161,7 @@ export default function WetterWidget({ wetter, loading }: WetterWidgetProps) {
     )
   }
 
-  const { aktuell, stunden, verbrauchsprofil } = wetter
-  const now = new Date()
-  const currentHour = now.getHours()
-
-  // Chart-Daten: PV vs Verbrauch
-  const chartData = verbrauchsprofil.map((v) => ({
-    zeit: v.zeit.replace(':00', ''),
-    pv: v.pv_ertrag_kw,
-    verbrauch: v.verbrauch_kw,
-  }))
+  const { aktuell, stunden } = wetter
 
   return (
     <div className="space-y-4">
@@ -151,22 +249,32 @@ export default function WetterWidget({ wetter, loading }: WetterWidgetProps) {
         </div>
       </div>
 
-      {/* PV-Ertrag vs. Verbrauch Chart */}
+      {/* PV-Ertrag vs. Verbrauch — IST + Prognose */}
       {chartData.length > 0 && (
         <div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-            PV-Ertrag vs. Verbrauch (Prognose)
+            PV-Ertrag vs. Verbrauch — IST + Prognose
           </div>
-          <ResponsiveContainer width="100%" height={120}>
+          <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <defs>
-                <linearGradient id="pvGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#eab308" stopOpacity={0.05} />
+                {/* IST-Gradienten (kräftiger) */}
+                <linearGradient id="pvIstGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.5} />
+                  <stop offset="95%" stopColor="#eab308" stopOpacity={0.1} />
                 </linearGradient>
-                <linearGradient id="vrbGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                <linearGradient id="vrbIstGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
                   <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} />
+                </linearGradient>
+                {/* Prognose-Gradienten (blasser) */}
+                <linearGradient id="pvProgGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#eab308" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="vrbProgGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -189,45 +297,91 @@ export default function WetterWidget({ wetter, loading }: WetterWidgetProps) {
                   border: '1px solid var(--tooltip-border, #e5e7eb)',
                 }}
                 labelFormatter={(label: string) => `${label}:00 Uhr`}
-                formatter={(value: number, name: string) => [
-                  `${value.toFixed(2)} kW`,
-                  name === 'pv' ? 'PV-Ertrag' : 'Verbrauch',
-                ]}
+                formatter={(value: number, name: string) => {
+                  if (value === null || value === undefined) return [null, null]
+                  const labels: Record<string, string> = {
+                    pv_ist: 'PV (IST)',
+                    pv_prognose: 'PV (Prognose)',
+                    verbrauch_ist: 'Verbrauch (IST)',
+                    verbrauch_prognose: 'Verbrauch (Prognose)',
+                  }
+                  return [`${value.toFixed(2)} kW`, labels[name] ?? name]
+                }}
+                itemSorter={() => 0}
               />
-              {/* Aktuelle Stunde markieren */}
-              {currentHour >= 6 && currentHour <= 20 && (
-                <ReferenceLine x={String(currentHour)} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={1} />
-              )}
+              {/* Aktuelle Stunde — Trennlinie IST/Prognose */}
+              <ReferenceLine
+                x={String(currentHour)}
+                stroke="#6366f1"
+                strokeDasharray="3 3"
+                strokeWidth={1}
+                label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: '#6366f1' }}
+              />
+
+              {/* IST: PV — solid, kräftig */}
               <Area
                 type="monotone"
-                dataKey="pv"
+                dataKey="pv_ist"
                 stroke="#eab308"
-                fill="url(#pvGrad)"
+                fill="url(#pvIstGrad)"
                 strokeWidth={2}
+                connectNulls={false}
+                dot={false}
               />
+              {/* IST: Verbrauch — solid */}
               <Area
                 type="monotone"
-                dataKey="verbrauch"
+                dataKey="verbrauch_ist"
                 stroke="#ef4444"
-                fill="url(#vrbGrad)"
+                fill="url(#vrbIstGrad)"
                 strokeWidth={1.5}
+                connectNulls={false}
+                dot={false}
+              />
+
+              {/* Prognose: PV — dashed, blass */}
+              <Area
+                type="monotone"
+                dataKey="pv_prognose"
+                stroke="#eab308"
+                fill="url(#pvProgGrad)"
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                connectNulls={false}
+                dot={false}
+              />
+              {/* Prognose: Verbrauch — dashed, blass */}
+              <Area
+                type="monotone"
+                dataKey="verbrauch_prognose"
+                stroke="#ef4444"
+                fill="url(#vrbProgGrad)"
+                strokeWidth={1}
                 strokeDasharray="4 2"
+                connectNulls={false}
+                dot={false}
               />
             </AreaChart>
           </ResponsiveContainer>
           <div className="flex gap-4 text-[10px] text-gray-500 dark:text-gray-400 mt-1 justify-center">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 bg-yellow-500 rounded" /> PV-Ertrag
+              <span className="w-3 h-0.5 bg-yellow-500 rounded" /> PV (IST)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-0.5 bg-yellow-500/40 rounded border-dashed" /> PV (Prognose)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-0.5 bg-red-500 rounded" /> Verbrauch (IST)
             </span>
             <span className="flex items-center gap-1"
                   title={wetter.profil_typ?.startsWith('individuell')
                     ? `Basiert auf ${wetter.profil_tage ?? '?'} Tagen ${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}-History (${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
                     : 'Standardlastprofil — wird durch individuelles Profil ersetzt sobald History verfügbar'
                   }>
-              <span className="w-3 h-0.5 bg-red-400 rounded border-dashed" />
+              <span className="w-3 h-0.5 bg-red-400/40 rounded border-dashed" />
               {wetter.profil_typ?.startsWith('individuell')
-                ? `Verbrauch (individuell, ${wetter.profil_typ === 'individuell_wochenende' ? 'WE' : 'WT'})`
-                : 'Verbrauch (BDEW H0)'
+                ? `Verbr. (ind., ${wetter.profil_typ === 'individuell_wochenende' ? 'WE' : 'WT'})`
+                : 'Verbr. (BDEW H0)'
               }
             </span>
           </div>
