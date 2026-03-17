@@ -363,7 +363,8 @@ export default function LiveDashboard() {
                 const ratio = Math.min(1, absWert / maxAbs)
                 const isExport = netzGauge.wert < 0
                 const isPuffer = absWert <= PUFFER_W
-                const pufferRatio = Math.min(1, PUFFER_W / maxAbs) // Breite der Pufferzone
+                // Puffer-Hintergrund: max 8% pro Seite (visuell dezent)
+                const pufferVisual = Math.min(8, (PUFFER_W / maxAbs) * 50)
                 const displayW = absWert >= 1000
                   ? `${(netzGauge.wert / 1000).toFixed(1)} kW`
                   : `${Math.round(netzGauge.wert)} W`
@@ -371,10 +372,10 @@ export default function LiveDashboard() {
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Netz</h3>
                     <div className="relative h-7 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      {/* Pufferzone — gelber Bereich in der Mitte (±100 W) */}
+                      {/* Pufferzone — schmaler gelber Bereich in der Mitte (±100 W) */}
                       <div
                         className="absolute top-0 bottom-0 bg-yellow-400/20 dark:bg-yellow-500/15"
-                        style={{ left: `${50 - pufferRatio * 50}%`, width: `${pufferRatio * 100}%` }}
+                        style={{ left: `${50 - pufferVisual}%`, width: `${pufferVisual * 2}%` }}
                       />
                       {/* Mittellinie */}
                       <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-300 dark:bg-gray-500 z-10" />
@@ -383,11 +384,9 @@ export default function LiveDashboard() {
                         className={`absolute top-0 bottom-0 transition-all duration-500 ${
                           isPuffer ? 'bg-yellow-500' : isExport ? 'bg-green-500' : 'bg-red-500'
                         }`}
-                        style={isPuffer
-                          ? { left: `${50 - ratio * 50}%`, width: `${ratio * 100}%`, maxWidth: `${pufferRatio * 100}%` }
-                          : isExport
-                            ? { right: '50%', width: `${ratio * 50}%` }
-                            : { left: '50%', width: `${ratio * 50}%` }
+                        style={isExport
+                          ? { right: '50%', width: `${ratio * 50}%` }
+                          : { left: '50%', width: `${ratio * 50}%` }
                         }
                       />
                       {/* Wert */}

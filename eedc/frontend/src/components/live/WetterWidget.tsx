@@ -159,50 +159,26 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
       const prognose = prognoseMap[h]
       const ist = istDaten?.[h]
 
-      if (h < currentHour) {
-        // Vergangene Stunden: IST (gestapelt) + PV-Prognose (dashed)
+      // Prognose immer setzen (volle 24h, für Vergleich)
+      if (prognose) {
+        punkt.pv_prognose = prognose.pv
+        punkt.verbrauch_prognose = prognose.verbrauch
+      }
+
+      if (h <= currentHour) {
+        // Vergangene + aktuelle Stunde: IST (gestapelt)
         if (ist) {
           punkt.pv_ist = ist.pv
-          punkt.haushalt_ist = ist.haushalt || null
-          punkt.batterie_ladung_ist = ist.batterie_ladung || null
-          punkt.wallbox_ist = ist.wallbox || null
-          punkt.waermepumpe_ist = ist.waermepumpe || null
-          punkt.sonstige_ist = ist.sonstige || null
+          // 0 als 0 belassen (nicht null) — Recharts braucht das für korrektes Stacking
+          punkt.haushalt_ist = ist.haushalt
+          punkt.batterie_ladung_ist = ist.batterie_ladung
+          punkt.wallbox_ist = ist.wallbox
+          punkt.waermepumpe_ist = ist.waermepumpe
+          punkt.sonstige_ist = ist.sonstige
         } else if (prognose) {
+          // Fallback auf Prognose wenn kein IST
           punkt.pv_ist = prognose.pv
           punkt.haushalt_ist = prognose.verbrauch
-        }
-        punkt.pv_prognose = prognose?.pv ?? null
-        punkt.verbrauch_prognose = null
-      } else if (h === currentHour) {
-        // Aktuelle Stunde: Beide zeigen
-        if (ist) {
-          punkt.pv_ist = ist.pv
-          punkt.haushalt_ist = ist.haushalt || null
-          punkt.batterie_ladung_ist = ist.batterie_ladung || null
-          punkt.wallbox_ist = ist.wallbox || null
-          punkt.waermepumpe_ist = ist.waermepumpe || null
-          punkt.sonstige_ist = ist.sonstige || null
-        }
-        if (prognose) {
-          punkt.pv_prognose = prognose.pv
-          punkt.verbrauch_prognose = prognose.verbrauch
-        }
-        if (!ist && prognose) {
-          punkt.pv_ist = prognose.pv
-          punkt.haushalt_ist = prognose.verbrauch
-        }
-      } else {
-        // Zukünftige Stunden: Nur Prognose (dashed)
-        punkt.pv_ist = null
-        punkt.haushalt_ist = null
-        punkt.batterie_ladung_ist = null
-        punkt.wallbox_ist = null
-        punkt.waermepumpe_ist = null
-        punkt.sonstige_ist = null
-        if (prognose) {
-          punkt.pv_prognose = prognose.pv
-          punkt.verbrauch_prognose = prognose.verbrauch
         }
       }
 
