@@ -143,6 +143,18 @@ export default function Settings() {
           </div>
         </div>
 
+        <div className="p-3 mt-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
+          <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-700 dark:text-amber-300">
+            <p className="font-medium mb-1">MariaDB/MySQL als Recorder-Datenbank?</p>
+            <p>
+              Die HA-Statistik-Funktion liest direkt aus der SQLite-Datenbank (<code className="text-[11px]">home-assistant_v2.db</code>).
+              Bei Nutzung von <strong>MariaDB oder MySQL</strong> als Recorder-Backend steht diese Funktion nicht zur Verfügung.
+              Nutze stattdessen <strong>MQTT-Inbound</strong> als gleichwertige Alternative (Konfidenz 91%) — unter <strong>Einstellungen → MQTT-Inbound</strong> findest du einen Automations-Generator, der die passenden HA-Automationen erstellt.
+            </p>
+          </div>
+        </div>
+
         {haSensors.length > 0 && (
           <details className="mt-4">
             <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-primary-600">

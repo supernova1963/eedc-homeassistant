@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Select, KPICard } from '../components/ui'
 import { useAnlagen } from '../hooks'
-import { aktuellerMonatApi, type AktuellerMonatResponse, type DatenquelleInfo } from '../api/aktuellerMonat'
+import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -84,13 +84,6 @@ function QuelleBadge({ quelle, aktiv }: { quelle: string; aktiv: boolean }) {
   )
 }
 
-function FeldQuelleIndikator({ feld, quellen }: { feld: string; quellen: Record<string, DatenquelleInfo> }) {
-  const info = quellen[feld]
-  if (!info) return null
-  return (
-    <span className={`inline-block w-2 h-2 rounded-full ${quelleColor(info.quelle)} ml-1`} title={quelleLabel(info.quelle)} />
-  )
-}
 
 // ─── Custom Tooltip ──────────────────────────────────────────────────────────
 
@@ -165,10 +158,10 @@ export default function AktuellerMonat() {
   const energieBilanzData = useMemo(() => {
     if (!data) return []
     return [
-      { name: 'Erzeugung', value: data.pv_erzeugung_kwh || 0 },
-      { name: 'Einspeisung', value: data.einspeisung_kwh || 0 },
-      { name: 'Eigenverbr.', value: data.eigenverbrauch_kwh || 0 },
-      { name: 'Netzbezug', value: data.netzbezug_kwh || 0 },
+      { name: 'Erzeugung', value: data.pv_erzeugung_kwh || 0, quellefeld: 'pv_erzeugung_kwh' },
+      { name: 'Einspeisung', value: data.einspeisung_kwh || 0, quellefeld: 'einspeisung_kwh' },
+      { name: 'Eigenverbr.', value: data.eigenverbrauch_kwh || 0, quellefeld: null },
+      { name: 'Netzbezug', value: data.netzbezug_kwh || 0, quellefeld: 'netzbezug_kwh' },
     ].filter(d => d.value > 0)
   }, [data])
 
@@ -430,7 +423,29 @@ export default function AktuellerMonat() {
                 <BarChart data={energieBilanzData} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" unit=" kWh" />
-                  <YAxis type="category" dataKey="name" width={90} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={110}
+                    tick={(props: { x: number; y: number; payload: { value: string; index: number } }) => {
+                      const entry = energieBilanzData[props.payload.index]
+                      const info = entry?.quellefeld ? q[entry.quellefeld] : null
+                      return (
+                        <g transform={`translate(${props.x},${props.y})`}>
+                          <text x={-8} y={0} dy={4} textAnchor="end" className="text-xs fill-gray-700 dark:fill-gray-300" fontSize={12}>
+                            {props.payload.value}
+                          </text>
+                          {info && (
+                            <circle cx={-2} cy={1} r={3.5} className={quelleColor(info.quelle).replace('bg-', 'fill-')}
+                              fill={info.quelle === 'ha_statistics' || info.quelle === 'ha_sensor' ? '#22c55e' : info.quelle === 'local_connector' ? '#3b82f6' : '#9ca3af'}
+                            >
+                              <title>{quelleLabel(info.quelle)}</title>
+                            </circle>
+                          )}
+                        </g>
+                      )
+                    }}
+                  />
                   <Tooltip content={<ChartTooltipKWh />} />
                   <Bar dataKey="value" name="kWh" radius={[0, 4, 4, 0]}>
                     {energieBilanzData.map((_, index) => (
@@ -439,27 +454,6 @@ export default function AktuellerMonat() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-            {/* Quellen-Indikatoren unter dem Chart */}
-            <div className="flex flex-wrap gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
-              {q.einspeisung_kwh && (
-                <span className="flex items-center gap-1">
-                  <FeldQuelleIndikator feld="einspeisung_kwh" quellen={q} />
-                  Einspeisung: {quelleLabel(q.einspeisung_kwh.quelle)}
-                </span>
-              )}
-              {q.netzbezug_kwh && (
-                <span className="flex items-center gap-1">
-                  <FeldQuelleIndikator feld="netzbezug_kwh" quellen={q} />
-                  Netzbezug: {quelleLabel(q.netzbezug_kwh.quelle)}
-                </span>
-              )}
-              {q.pv_erzeugung_kwh && (
-                <span className="flex items-center gap-1">
-                  <FeldQuelleIndikator feld="pv_erzeugung_kwh" quellen={q} />
-                  Erzeugung: {quelleLabel(q.pv_erzeugung_kwh.quelle)}
-                </span>
-              )}
             </div>
           </Card>
 
