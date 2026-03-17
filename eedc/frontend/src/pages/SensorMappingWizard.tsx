@@ -120,17 +120,15 @@ export default function SensorMappingWizard() {
       setLoadError(null)
 
       try {
-        // Load anlagen if no anlageId
-        if (!anlageId) {
-          const anlagenList = await anlagenApi.list()
-          setAnlagen(anlagenList)
-          if (!anlagenList.length) {
-            setIsLoading(false)
-            return
-          }
+        // Anlagen-Liste immer laden (für Dropdown bei Multi-Anlage)
+        const anlagenList = await anlagenApi.list()
+        setAnlagen(anlagenList)
+        if (!anlagenList.length) {
+          setIsLoading(false)
+          return
         }
 
-        const targetAnlageId = anlageId || (anlagen?.[0]?.id)
+        const targetAnlageId = anlageId || anlagenList[0]?.id
         if (!targetAnlageId) {
           // Need to wait for anlagen to load first
           return
@@ -180,7 +178,7 @@ export default function SensorMappingWizard() {
     }
 
     loadData()
-  }, [anlageId, anlagen?.[0]?.id])
+  }, [anlageId])
 
   // Steps dynamisch generieren basierend auf Investitionen
   const steps = useMemo<StepConfig[]>(() => {
@@ -422,7 +420,26 @@ export default function SensorMappingWizard() {
             Sensor-Zuordnung
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
-            {mappingData?.anlage_name} - Home Assistant Sensoren konfigurieren
+            {anlagen && anlagen.length > 1 ? (
+              <span className="inline-flex items-center gap-2">
+                <select
+                  title="Anlage auswählen"
+                  value={effectiveAnlageId ?? ''}
+                  onChange={(e) => {
+                    const id = Number(e.target.value)
+                    navigate(`/einstellungen/sensor-mapping?anlage=${id}`, { replace: true })
+                  }}
+                  className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                >
+                  {anlagen.map((a) => (
+                    <option key={a.id} value={a.id}>{a.anlagenname}</option>
+                  ))}
+                </select>
+                <span>— Home Assistant Sensoren konfigurieren</span>
+              </span>
+            ) : (
+              <>{mappingData?.anlage_name} — Home Assistant Sensoren konfigurieren</>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
