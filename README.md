@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 2.8.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 3.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -21,69 +21,89 @@
 
 - **Keine Cloud-Abhängigkeit** – Alle Daten bleiben auf deinem Server
 - **Standalone-fähig** – Funktioniert ohne Home Assistant
+- **Echtzeit-Monitoring** – Live Dashboard mit animiertem Energiefluss
+- **Universelle Anbindung** – MQTT-Inbound für jedes Smarthome-System
 - **Umfassende Analyse** – Von Energiebilanz bis ROI-Berechnung
-- **Flexibler Datenimport** – CSV-Import mit dynamischen Spalten
 - **Multi-Komponenten** – PV-Anlage, Speicher, E-Auto, Wärmepumpe, Wallbox, Balkonkraftwerk
 
 ---
 
 ## Features
 
+### Live Dashboard
+
+- **Animiertes Energiefluss-Diagramm** – SVG mit Flusslinien, SoC-Pegelanzeige, Tooltips mit Tages-kWh
+- **Tagesverlauf** – 24h-Chart mit PV, Verbrauch, Netz, Speicher (auch historisch abrufbar)
+- **Wetter-Widget** – Stunden-Prognose mit IST/Prognose-Overlay zum Vergleich
+- **Heute/Gestern kWh** – Tagessummen pro Komponente
+- **Demo-Modus** für Erstnutzer ohne konfigurierte Sensoren
+
+### MQTT-Inbound – Universelle Datenbrücke
+
+- **Jedes Smarthome-System** – HA, Node-RED, ioBroker, FHEM, openHAB
+- **HA Automation Generator** – Wizard erstellt fertige YAML-Automationen
+- **Energy → Monatsabschluss** – MQTT-Energiedaten als Vorschläge (Konfidenz 91%)
+- **Alternative für MariaDB/MySQL** – Wenn HA-Statistik (SQLite) nicht verfügbar ist
+
+### Aktueller Monat
+
+- **Energie-Bilanz** mit Datenquellen-Indikatoren pro Feld
+- **Vorjahresvergleich** und SOLL/IST-Vergleich
+- **Komponenten-Karten** und Finanz-Übersicht
+
 ### Cockpit & Dashboards
+
 - **Modernisiertes Cockpit** mit Hero-Leiste (Top-KPIs + Jahres-Trend), Energie-Fluss-Diagramm, Ring-Gauges und Sparkline
 - **8 spezialisierte Dashboards** für jede Komponente
 - **Amortisations-Fortschrittsbalken** – Investitionsrückfluss auf einen Blick
-- **Social-Media-Textvorlage** – Kopierfertige Monatsübersicht für Twitter/X und Facebook (NEU v2.5.0)
 - **Formel-Tooltips** zeigen Berechnungsgrundlagen per Hover
-- **Jahr-Filter** für mehrjährige Auswertungen
 
 ### Auswertungen & Reporting
+
 - **6 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen
 - **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
 - **SOLL-IST Vergleich** gegen PVGIS-Prognosen
 - **CSV/JSON Export** für externe Weiterverarbeitung
-- **Vollständiger JSON-Export** für Support und Backup
 
 ### Aussichten (Prognosen)
+
 - **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
 - **Kurzfrist-Prognose** mit Wetter-Daten (Open-Meteo)
 - **Langfrist-Prognose** mit PVGIS-Daten und Performance-Ratio
 - **Trend-Analyse** mit Degradationsberechnung und saisonalen Mustern
-- **Finanz-Prognose** mit Amortisations-Fortschritt und Mehrkosten-Ansatz
 
-### Datenerfassung
-- **Einrichtung-Hub** (NEU v2.7.0) - Zentrale Seite zur Konfiguration aller Datenquellen
-- **Monatsabschluss-Wizard** - Zentrale Anlaufstelle für monatliche Datenerfassung mit Datenquellen-Status, Cloud-Fetch und Herkunftsanzeige
-- **Monatsabschluss-Schnellzugriff** (NEU v2.7.0) - Kalender-Icon mit Badge in der Hauptnavigation
-- **Manuelles Formular** mit dynamischen Komponenten-Feldern
-- **CSV-Import** mit personalisierten Spalten und Plausibilitätsprüfung
-- **Portal-Import** (NEU v2.6.0) - CSV-Upload von SMA Sunny Portal, SMA eCharger, EVCC, Fronius Solarweb
-- **Cloud-Import** (NEU v2.7.0) - Daten direkt aus Hersteller-Cloud-APIs abrufen (SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow)
-- **Custom-Import** (NEU v2.8.0) - Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping importieren, Templates speicherbar
-- **9 Geräte-Connectors** (NEU v2.6.0) - Direkte Verbindung zu lokalen Geräten im Netzwerk
-- **Sensor-Mapping-Wizard** - Home Assistant Sensoren den EEDC-Feldern zuordnen
-- **HA-Statistik Import** - Automatischer Import historischer Monatswerte aus HA
-- **Wetter-Auto-Fill** via Open-Meteo / PVGIS TMY
+### Datenerfassung – Viele Wege führen nach EEDC
+
+- **HA-Statistik** – Direkt aus der HA Recorder-Langzeitstatistik (SQLite)
+- **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman
+- **Custom-Import** – Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping
+- **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
+- **MQTT Energy** – Monatswerte aus MQTT-Topics (91% Konfidenz)
+- **Portal-Import** – CSV-Upload von Herstellerportalen (SMA Sunny Portal, Fronius Solarweb, evcc)
+- **Monatsabschluss-Wizard** – Geführte monatliche Datenerfassung mit Datenquellen-Status
 - **Demo-Daten** zum Ausprobieren
 
+> **Hinweis für MariaDB/MySQL-Nutzer:** Die HA-Statistik-Funktion liest direkt aus der SQLite-Datenbank. Wer MariaDB oder MySQL als Recorder-Backend nutzt, kann stattdessen **MQTT-Inbound** als gleichwertige Alternative verwenden.
+
+### Steuerliche Features
+
+- **Kleinunternehmerregelung** – USt auf Eigenverbrauch bei Regelbesteuerung
+- **Spezialtarife** – Separate Strompreise für Wärmepumpe und Wallbox
+- **Firmenwagen** – Dienstliches Laden mit AG-Erstattung in der ROI-Berechnung
+- **Sonstige Positionen** – Flexible Erträge und Ausgaben pro Monat
+
 ### Investitions-Management
+
 - **Parent-Child Beziehungen**: PV-Module → Wechselrichter, DC-Speicher → Hybrid-WR
 - **Typ-spezifische Parameter**: V2H, Arbitrage, kWp, Ausrichtung, Neigung
 - **ROI-Berechnung** pro Komponente und aggregiert
-- **Erweiterte Stammdaten**: Gerätedaten, Ansprechpartner, Wartungsverträge
 
-### Anlagen-Verwaltung
-- **MaStR-ID** mit direktem Link zum Marktstammdatenregister
-- **Versorger & Zähler**: Strom, Gas, Wasser mit beliebig vielen Zählern
-- **Klappbare Sektionen** für übersichtliche Formulare
+### Community-Vergleich (optional)
 
-### Optionale Home Assistant Integration
-- **MQTT Discovery** für native HA-Sensoren
-- **REST API** für configuration.yaml
-- **Berechnete KPIs** zurück an HA exportieren
-- **Sensor-Mapping** - Flexible Zuordnung von HA-Sensoren zu EEDC-Feldern
-- **Automatische Vorschläge** - Intelligente Werte aus Vormonat, Vorjahr, oder Berechnung
-- **HA-Statistik Import** (NEU v2.0.0) - Bulk-Import historischer Daten aus HA-Langzeitstatistik
+- **Anonymer Benchmark** mit anderen PV-Anlagen auf [energy.raunet.eu](https://energy.raunet.eu)
+- **6 Analyse-Tabs**: Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
+- **Achievements** und Rang-Badges
+- Jederzeit löschbar – ein Klick entfernt alle geteilten Daten
 
 ---
 
@@ -160,6 +180,7 @@ Detaillierte Analysen in 6 Kategorien:
 - Arbitrage-Analyse für Speicher
 - Amortisationskurven für alle Investitionen
 ![Auswertungen - Komponenten](./docs/images/auswertungen_komponenten.png)
+
 ---
 
 ## Architektur-Überblick
@@ -172,32 +193,9 @@ Detaillierte Analysen in 6 Kategorien:
 │                    Backend (Python)                     │
 │  FastAPI + SQLAlchemy 2.0 + SQLite                      │
 ├─────────────────────────────────────────────────────────┤
-│              Externe APIs (optional)                    │
-│  Open-Meteo (Wetter) │ PVGIS (Prognose) │ HA (Export)   │
+│              Externe APIs / Datenquellen                │
+│  Open-Meteo │ PVGIS │ MQTT │ HA │ Cloud-APIs │ Connectors│
 └─────────────────────────────────────────────────────────┘
-```
-
-### Datenmodell
-
-```
-Anlage (PV-Anlage mit Standort, Ausrichtung)
-  │
-  ├── Monatsdaten (Zählerwerte: Einspeisung, Netzbezug)
-  │
-  ├── Strompreise (Bezug, Einspeisung, zeitliche Gültigkeit)
-  │
-  └── Investitionen (Komponenten)
-        │
-        ├── Wechselrichter
-        │     ├── PV-Module (Pflicht-Zuordnung)
-        │     └── DC-Speicher (optional)
-        │
-        ├── AC-Speicher (eigenständig)
-        ├── E-Auto (mit optionalem V2H)
-        ├── Wärmepumpe
-        ├── Wallbox
-        ├── Balkonkraftwerk
-        └── Sonstiges
 ```
 
 ---
@@ -206,19 +204,18 @@ Anlage (PV-Anlage mit Standort, Ausrichtung)
 
 | Repository | Zweck |
 |---|---|
-| **[eedc](https://github.com/supernova1963/eedc)** | Standalone EEDC (Backend + Frontend) |
-| **[eedc-homeassistant](https://github.com/supernova1963/eedc-homeassistant)** (dieses) | HA-Add-on + Website + Dokumentation |
+| **[eedc-homeassistant](https://github.com/supernova1963/eedc-homeassistant)** (dieses) | Source of Truth: HA-Add-on + Website + Dokumentation |
+| **[eedc](https://github.com/supernova1963/eedc)** | Standalone-Distribution (wird per Release-Script synchronisiert) |
 | **[eedc-community](https://github.com/supernova1963/eedc-community)** | Anonymer Community-Benchmark-Server |
-
-Der Shared Code (Backend, Frontend) liegt im `eedc` Repo und wird hier als git subtree unter `eedc/` eingebunden.
 
 ---
 
 ## Home Assistant Integration
 
-EEDC bietet flexible Home Assistant Integration mit zwei Ansätzen:
+EEDC bietet flexible Home Assistant Integration mit mehreren Ansätzen:
 
 ### Sensor-Mapping (Empfohlen)
+
 Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den EEDC-Feldern zu:
 - Basis-Sensoren: PV-Erzeugung, Einspeisung, Netzbezug
 - PV-Module: Pro String oder kWp-Verteilung
@@ -226,61 +223,25 @@ Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den E
 - E-Auto: km, Ladung (PV/Netz/Extern), V2H
 - Wärmepumpe: Strom, Heizung (COP-Berechnung möglich)
 
+### MQTT-Inbound (Universell)
+
+Über vordefinierte MQTT-Topics kann jedes Smarthome-System Daten liefern:
+- Integrierter **HA Automation Generator** erstellt fertige YAML-Automationen
+- Beispiel-Flows für Node-RED, ioBroker, FHEM, openHAB
+- Auch für HA-Nutzer mit **MariaDB/MySQL** als Recorder-DB empfohlen
+
 ### Monatlicher Abschluss
+
 Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfassung:
-- Automatische Vorschläge aus Vormonat oder Vorjahr
+- Automatische Vorschläge aus HA-Statistik, MQTT, Connectors, Vormonat oder Vorjahr
 - COP-basierte Berechnungen für Wärmepumpen
-- Durchschnittswerte als Fallback
-- Direkte Übernahme oder manuelle Anpassung
-
----
-
-## Roadmap
-
-- [x] Cockpit mit aggregierter Übersicht
-- [x] 8 spezialisierte Dashboards
-- [x] ROI-Dashboard mit Amortisationskurve
-- [x] SOLL-IST Vergleich gegen PVGIS
-- [x] CSV-Import mit dynamischen Spalten
-- [x] Wetter-API Integration (Open-Meteo)
-- [x] MQTT Export zu Home Assistant
-- [x] **Aussichten** mit 4 Prognose-Tabs (Kurzfristig, Langfristig, Trend, Finanzen)
-- [x] **Erweiterte Stammdaten** für Anlagen und Investitionen
-- [x] **PDF-Export** für vollständige Anlagen-Dokumentation
-- [x] **Sensor-Mapping-Wizard** für HA-Integration
-- [x] **Monatsabschluss-Wizard** mit intelligenten Vorschlägen
-- [x] **Community-Vergleich** - Anonymer Benchmark mit anderen PV-Anlagen
-- [x] **Community als Hauptmenü** - Eigener Bereich mit 6 Tabs für tiefgehende Analysen (v2.1.0)
-- [x] **Dashboard-Modernisierung** - Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline, Amortisationsbalken (v2.3.0)
-- [x] **DACH-Onboarding** - Österreich und Schweiz unterstützt (v2.3.0)
-- [x] **Steuerliche Behandlung** - Kleinunternehmerregelung, Spezialtarife (v2.4.0)
-- [x] **Website** - Astro Starlight mit Docs auf GitHub Pages
-- [x] **PVGIS Horizontprofil** - Geländeprofil für genauere Ertragsprognosen (v2.5.0)
-- [x] **Social-Media-Textvorlage** - Kopierfertige Monatsübersicht für Social Media (v2.5.0)
-- [x] **Portal-Import & Connectors** - CSV-Upload aus Herstellerportalen + 9 Geräte-Connectors (v2.6.0)
-- [x] **Einrichtung-Hub & Navigation** - Zentrale Datenquellen-Konfiguration, überarbeitetes Menü (v2.7.0)
-- [x] **Cloud-Import & Wizard-Upgrade** - Cloud-API-Abruf, Datenquellen-Status im Monatsabschluss (v2.7.1)
-- [x] **Cloud-Import-Provider & Custom-Import** - 5 Hersteller-Cloud-APIs + beliebige CSV/JSON mit Feld-Mapping (v2.8.0)
-- [ ] KI-gestützte Insights
+- Datenquellen-Status mit Konfidenz-Anzeige
 
 ---
 
 ## Beitragen
 
 Beiträge sind willkommen! Bitte lies zuerst die [Entwickler-Dokumentation](docs/DEVELOPMENT.md).
-
-```bash
-# Fork erstellen und klonen
-git clone git@github.com:YOUR_USERNAME/eedc-homeassistant.git
-
-# Feature-Branch erstellen
-git checkout -b feature/mein-feature
-
-# Änderungen committen
-git commit -m "feat: Beschreibung der Änderung"
-
-# Pull Request erstellen
-```
 
 ---
 
@@ -290,10 +251,4 @@ MIT License - siehe [LICENSE](LICENSE)
 
 ---
 
-## Ursprung
-
-Basiert auf dem Konzept der [EEDC-WebApp](https://github.com/supernova1963/eedc-webapp), reimplementiert als lokale Lösung mit optionaler Home Assistant Integration.
-
----
-
-*Erstellt mit ❤️ für die Energiewende*
+*Erstellt mit Leidenschaft fuer die Energiewende*
