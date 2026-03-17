@@ -1,7 +1,7 @@
 
 # EEDC Development Guide
 
-**Version 2.8.5** | Stand: März 2026
+**Version 3.1** | Stand: März 2026
 
 ---
 
@@ -39,6 +39,9 @@ pip install -r requirements.txt
 ```bash
 cd eedc/frontend
 
+# Node 20 aktivieren (falls nvm genutzt wird)
+nvm use 20
+
 # Dependencies installieren (einmalig)
 npm install
 ```
@@ -46,22 +49,23 @@ npm install
 ### 4. Entwicklungsserver starten
 
 **Terminal 1 (Backend):**
+
 ```bash
 cd eedc && source backend/venv/bin/activate
 uvicorn backend.main:app --reload --port 8099
 ```
 
 **Terminal 2 (Frontend):**
+
 ```bash
 cd eedc/frontend && npm run dev
 ```
 
 **URLs:**
+
 - Frontend: http://localhost:3000 (Vite Dev Server, Proxy zu Backend)
 - API Docs: http://localhost:8099/api/docs
 - ReDoc: http://localhost:8099/api/redoc
-
-> **Hinweis für macOS**: Vite verwendet Port 3000 (nicht 5173). Falls `npm run dev` mit dem System-Node fehlschlägt, stelle sicher dass Node 20 aktiv ist: `nvm use 20` oder absoluten Pfad nutzen.
 
 ---
 
@@ -107,7 +111,7 @@ Siehe [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) für Details.
 Ein Release-Script bumpt alle Versionsdateien, committed, taggt, pusht und synchronisiert das Standalone-Repo:
 
 ```bash
-./scripts/release.sh 2.8.6
+./scripts/release.sh 3.2.0
 ```
 
 | Datei | Feld |
@@ -116,6 +120,7 @@ Ein Release-Script bumpt alle Versionsdateien, committed, taggt, pusht und synch
 | `eedc/frontend/src/config/version.ts` | `APP_VERSION` |
 | `eedc/config.yaml` | `version` (HA Add-on) |
 | `eedc/run.sh` | Echo-Statement |
+| `eedc/Dockerfile` | `io.hass.version` Label |
 | `CHANGELOG.md` | Neuer Eintrag (manuell vor Release) |
 
 **Wichtig:** HA Add-ons erkennen Updates über `config.yaml`. Jede Änderung, die beim User ankommen soll, benötigt ein Release.
@@ -182,8 +187,9 @@ if val is not None:
 - `InvestitionMonatsdaten` = Alle Komponenten-Details
 
 **Legacy-Felder nicht verwenden:**
-- `Monatsdaten.pv_erzeugung_kwh` ❌
-- `Monatsdaten.batterie_*` ❌
+
+- `Monatsdaten.pv_erzeugung_kwh` — Nutze `InvestitionMonatsdaten`
+- `Monatsdaten.batterie_*` — Nutze `InvestitionMonatsdaten`
 
 ---
 
@@ -196,78 +202,139 @@ eedc-homeassistant/
 ├── CLAUDE.md                    # KI-Entwicklungskontext
 │
 ├── scripts/
-│   └── release.sh               # Release + Sync (ein Script für alles)
+│   ├── release.sh               # Release + Sync (ein Script für alles)
+│   └── sync-docs.sh             # Docs → Website Frontmatter-Sync
 │
 ├── docs/
 │   ├── BENUTZERHANDBUCH.md      # Endbenutzer-Anleitung
 │   ├── ARCHITEKTUR.md           # Technische Dokumentation
 │   ├── DEVELOPMENT.md           # Diese Datei
 │   ├── RELEASE-WORKFLOW.md      # Release-Prozess Dokumentation
+│   ├── MQTT_INBOUND.md          # MQTT-Inbound Doku
+│   ├── FLYER.md                 # Promotional Texte
 │   └── archive/                 # Archivierte Dokumente
+│
+├── website/                     # Astro Starlight Website
+│   ├── astro.config.mjs
+│   └── src/content/docs/        # Generiert aus docs/ via sync-docs.sh
 │
 └── eedc/                        # Die Anwendung
     ├── config.yaml              # HA Add-on Konfiguration
     ├── Dockerfile               # Multi-Stage Build
     ├── run.sh                   # Container Startscript
+    ├── docker-compose.yml       # Standalone-Deployment
     │
     ├── backend/
     │   ├── main.py              # FastAPI Entry Point
     │   ├── requirements.txt
-    │   ├── api/routes/          # API Endpoints
-    │   │   ├── cockpit.py       # Dashboard-Aggregation
-    │   │   ├── aussichten.py    # Prognosen (NEU)
-    │   │   ├── portal_import.py # Portal-CSV Parser (v2.6.0)
-    │   │   ├── cloud_import.py  # Cloud-API Import (v2.7.0)
-    │   │   ├── custom_import.py # CSV/JSON Feld-Mapping (v2.8.0)
-    │   │   └── ...              # monatsdaten, investitionen, etc.
+    │   ├── api/routes/
+    │   │   ├── aktueller_monat.py   # Aktueller-Monat Dashboard
+    │   │   ├── anlagen.py           # Anlagen CRUD
+    │   │   ├── aussichten.py        # Prognosen (4 Tabs)
+    │   │   ├── cloud_import.py      # Cloud-API Import
+    │   │   ├── cockpit.py           # Dashboard-Aggregation
+    │   │   ├── community.py         # Community-Benchmark
+    │   │   ├── connector.py         # 9 Geräte-Connectors
+    │   │   ├── custom_import.py     # CSV/JSON Feld-Mapping
+    │   │   ├── daten_checker.py     # Datenqualitäts-Prüfung
+    │   │   ├── data_import.py       # Portal-CSV Parser
+    │   │   ├── ha_export.py         # MQTT Export zu HA
+    │   │   ├── ha_import.py         # HA Import
+    │   │   ├── ha_integration.py    # HA Integration
+    │   │   ├── ha_statistics.py     # HA-DB Statistik (SQLite)
+    │   │   ├── import_export/       # CSV, JSON, Demo, PDF
+    │   │   ├── investitionen.py     # Komponenten, ROI
+    │   │   ├── live_dashboard.py    # Live Dashboard + MQTT-Inbound
+    │   │   ├── monatsabschluss.py   # Monatsabschluss-Wizard
+    │   │   ├── monatsdaten.py       # Monatsdaten CRUD
+    │   │   ├── pvgis.py             # PVGIS-Daten
+    │   │   ├── sensor_mapping.py    # Sensor-Zuordnung
+    │   │   ├── solar_prognose.py    # Solar-Prognose
+    │   │   ├── strompreise.py       # Tarife, Spezialtarife
+    │   │   ├── system_logs.py       # System-Logs + Energieprofile
+    │   │   └── wetter.py            # Wetter Multi-Provider
+    │   │
     │   ├── core/                # Config, DB, Calculations
     │   ├── models/              # SQLAlchemy Models
     │   └── services/
-    │       ├── wetter_service.py        # Multi-Provider Wetterdaten
-    │       ├── brightsky_service.py     # DWD-Daten via Bright Sky API
-    │       ├── solar_forecast_service.py # Open-Meteo Solar GTI
-    │       ├── prognose_service.py      # Prognose-Berechnungen
-    │       ├── pdf_service.py           # PDF-Export
-    │       ├── mqtt_client.py           # HA Export + MQTT Auto-Discovery
-    │       ├── ha_mqtt_sync.py          # MQTT Sync Service
-    │       ├── ha_statistics_service.py # HA-DB Statistik-Abfragen (v2.0.0)
-    │       ├── vorschlag_service.py     # Intelligente Vorschläge
-    │       ├── community_service.py     # Community-Datenaufbereitung (v2.0.3)
-    │       ├── plz_to_state.py         # PLZ→Bundesland Mapping (8.308 Einträge)
-    │       ├── cloud_import/            # Cloud-Import-Provider (6 Provider)
-    │       └── scheduler.py             # APScheduler für Cron-Jobs
+    │       ├── brightsky_service.py        # DWD-Daten via Bright Sky API
+    │       ├── cloud_import/               # Cloud-Import-Provider (5 Provider)
+    │       ├── community_service.py        # Community-Datenaufbereitung
+    │       ├── ha_mqtt_sync.py             # MQTT Sync Service
+    │       ├── ha_state_service.py         # HA State API
+    │       ├── ha_statistics_service.py    # HA-DB Statistik-Abfragen
+    │       ├── mqtt_client.py              # HA Export + MQTT Auto-Discovery
+    │       ├── mqtt_inbound_service.py     # MQTT-Inbound (Live + Energy)
+    │       ├── mqtt_energy_history_service.py # Energy-Snapshots (SQLite)
+    │       ├── pdf_service.py              # PDF-Export
+    │       ├── plz_to_state.py             # PLZ→Bundesland Mapping
+    │       ├── prognose_service.py         # Prognose-Berechnungen
+    │       ├── scheduler.py                # APScheduler für Cron-Jobs
+    │       ├── solar_forecast_service.py   # Open-Meteo Solar GTI
+    │       ├── vorschlag_service.py        # Intelligente Vorschläge
+    │       └── wetter_service.py           # Multi-Provider Wetterdaten
     │
     └── frontend/
         ├── package.json
         ├── vite.config.ts
         ├── src/
-        │   ├── api/             # API Client
-        │   │   ├── cockpit.ts   # Cockpit/Dashboard
-        │   │   ├── aussichten.ts # Prognosen
-        │   │   ├── portalImport.ts  # Portal-CSV Import (v2.6.0)
-        │   │   ├── cloudImport.ts   # Cloud-API Import (v2.7.0)
-        │   │   └── customImport.ts  # CSV/JSON Feld-Mapping (v2.8.0)
-        │   ├── components/      # UI Components
-        │   ├── pages/           # Seiten
-        │   │   ├── Dashboard.tsx             # Cockpit (Hero-Leiste, Energie-Fluss, Ring-Gauges, Sparkline)
-        │   │   ├── Auswertung.tsx            # Analysen (6 Tabs)
-        │   │   ├── CommunityVergleich.tsx    # Community (Hauptmenüpunkt, 6 Tabs)
-        │   │   ├── Aussichten.tsx            # Prognosen (4 Tabs)
-        │   │   ├── PVAnlageDashboard.tsx     # PV String-Vergleich (SOLL-IST)
-        │   │   ├── SensorMappingWizard.tsx   # Sensor-Mapping
-        │   │   ├── MonatsabschlussWizard.tsx # Monatsabschluss
-        │   │   ├── HAStatistikImport.tsx     # HA-Statistik Bulk-Import (v2.0.0)
-        │   │   ├── CloudImportWizard.tsx     # Cloud-API Import (v2.7.0)
-        │   │   ├── CustomImportWizard.tsx    # CSV/JSON Feld-Mapping (v2.8.0)
-        │   │   ├── Einrichtung.tsx           # Datenquellen-Hub (v2.7.1)
-        │   │   └── aussichten/               # Tab-Komponenten
-        │   │       ├── KurzfristTab.tsx
-        │   │       ├── LangfristTab.tsx
-        │   │       ├── TrendTab.tsx
-        │   │       └── FinanzenTab.tsx
-        │   ├── hooks/           # React Hooks
-        │   └── config/          # Version, etc.
-        └── dist/                # Production Build
+        │   ├── api/                 # API Clients
+        │   │   ├── aktuellerMonat.ts    # Aktueller Monat
+        │   │   ├── anlagen.ts           # Anlagen CRUD
+        │   │   ├── aussichten.ts        # Prognosen
+        │   │   ├── cloudImport.ts       # Cloud-API Import
+        │   │   ├── cockpit.ts           # Dashboard
+        │   │   ├── community.ts         # Community-Benchmark
+        │   │   ├── connector.ts         # Geräte-Connectors
+        │   │   ├── customImport.ts      # CSV/JSON Feld-Mapping
+        │   │   ├── datenChecker.ts      # Datenqualität
+        │   │   ├── haStatistics.ts      # HA-Statistik
+        │   │   ├── liveDashboard.ts     # Live Dashboard + MQTT
+        │   │   ├── monatsabschluss.ts   # Monatsabschluss
+        │   │   ├── portalImport.ts      # Portal-CSV Import
+        │   │   ├── sensorMapping.ts     # Sensor-Zuordnung
+        │   │   ├── system.ts            # System-Info
+        │   │   └── systemLogs.ts        # System-Logs
+        │   │
+        │   ├── components/
+        │   │   ├── ui/              # Shared UI (Card, Button, etc.)
+        │   │   ├── live/            # Live Dashboard Komponenten
+        │   │   │   ├── EnergieFluss.tsx     # Animiertes SVG-Diagramm
+        │   │   │   ├── EnergieBilanz.tsx    # Gespiegelte Balken
+        │   │   │   ├── TagesverlaufChart.tsx # 24h-Chart
+        │   │   │   └── WetterWidget.tsx     # Wetter IST/Prognose
+        │   │   ├── sensor-mapping/  # Sensor-Wizard Steps
+        │   │   └── setup-wizard/    # Ersteinrichtung
+        │   │
+        │   ├── pages/
+        │   │   ├── LiveDashboard.tsx        # Echtzeit-Monitoring
+        │   │   ├── AktuellerMonat.tsx       # Laufender Monat
+        │   │   ├── Dashboard.tsx            # Cockpit
+        │   │   ├── Auswertung.tsx           # Analysen (6 Tabs)
+        │   │   ├── CommunityVergleich.tsx   # Community (6 Tabs)
+        │   │   ├── Aussichten.tsx           # Prognosen (4 Tabs)
+        │   │   ├── MqttInboundSetup.tsx     # MQTT-Inbound Einrichtung
+        │   │   ├── MonatsabschlussWizard.tsx
+        │   │   ├── SensorMappingWizard.tsx
+        │   │   ├── HAStatistikImport.tsx
+        │   │   ├── CloudImportWizard.tsx
+        │   │   ├── CustomImportWizard.tsx
+        │   │   ├── DataImportWizard.tsx     # Portal-Import
+        │   │   ├── DatenChecker.tsx         # Datenqualität
+        │   │   ├── Settings.tsx             # Einstellungen
+        │   │   ├── PVAnlageDashboard.tsx    # PV-Anlage
+        │   │   ├── SpeicherDashboard.tsx    # Speicher
+        │   │   ├── BalkonkraftwerkDashboard.tsx
+        │   │   ├── SonstigesDashboard.tsx
+        │   │   └── auswertung/             # Tab-Komponenten
+        │   │       ├── EnergieTab.tsx
+        │   │       ├── KomponentenTab.tsx
+        │   │       ├── FinanzenTab.tsx
+        │   │       └── InvestitionenTab.tsx
+        │   │
+        │   ├── hooks/               # React Hooks
+        │   └── config/              # Version, etc.
+        └── dist/                    # Production Build
 ```
 
 ---
@@ -279,18 +346,11 @@ eedc-homeassistant/
 - **Schema:** Wird beim ersten Start automatisch erstellt
 
 Für Schema-Änderungen:
+
 1. Model in `backend/models/` anpassen
 2. Backend neu starten (Schema wird automatisch aktualisiert)
 
-**Hinweis für bestehende Installationen (z.B. nach Update auf beta.6):**
-
-SQLAlchemy fügt neue Spalten nicht automatisch zu bestehenden Tabellen hinzu. Bei neuen Spalten manuell ausführen:
-
-```sql
--- Beispiel für beta.6 Stammdaten-Erweiterung:
-ALTER TABLE anlagen ADD COLUMN mastr_id VARCHAR(20);
-ALTER TABLE anlagen ADD COLUMN versorger_daten JSON;
-```
+**Hinweis:** SQLAlchemy fügt neue Spalten nicht automatisch zu bestehenden Tabellen hinzu. Bei neuen Spalten manuell `ALTER TABLE` ausführen oder die DB neu erstellen.
 
 Die `parameter` JSON-Spalte in `investitionen` wird automatisch erweitert (kein ALTER TABLE nötig).
 
@@ -299,13 +359,11 @@ Die `parameter` JSON-Spalte in `investitionen` wird automatisch erweitert (kein 
 ## Tests
 
 ```bash
-# Backend Tests
-cd eedc/backend
-pytest
+# Backend: Syntax-Check (kein pytest installiert)
+python -c "import ast; ast.parse(open('backend/main.py').read())"
 
-# Frontend Tests (noch nicht implementiert)
-cd eedc/frontend
-npm test
+# Frontend: TypeScript Type-Check
+cd eedc/frontend && npx tsc --noEmit
 ```
 
 ---
@@ -314,115 +372,42 @@ npm test
 
 Nach dem Start des Backends verfügbar unter:
 
-| Format | URL |
-|--------|-----|
-| Swagger UI | http://localhost:8099/api/docs |
-| ReDoc | http://localhost:8099/api/redoc |
-| OpenAPI JSON | http://localhost:8099/api/openapi.json |
+| Format       | URL                                    |
+| ------------ | -------------------------------------- |
+| Swagger UI   | `http://localhost:8099/api/docs`        |
+| ReDoc        | `http://localhost:8099/api/redoc`       |
+| OpenAPI JSON | `http://localhost:8099/api/openapi.json`|
 
-### Wichtige API-Routen
+### API-Routen Übersicht
 
-| Modul | Endpoints | Beschreibung |
-|-------|-----------|--------------|
-| **Cockpit** | `/api/cockpit/*` | Dashboard-Aggregation, KPIs |
-| **Aussichten** | `/api/aussichten/*` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
-| **Monatsdaten** | `/api/monatsdaten/*` | CRUD + Berechnungen |
-| **Investitionen** | `/api/investitionen/*` | Komponenten, ROI |
-| **Import/Export** | `/api/import/*` | CSV Import/Export, JSON-Export, PDF-Export |
-| **Wetter** | `/api/wetter/*` | Open-Meteo, Bright Sky, PVGIS TMY |
-| **Strompreise** | `/api/strompreise/*` | Tarife CRUD, Spezialtarife (v2.4.0) |
-| **HA Statistics** | `/api/ha-statistics/*` | HA-DB Langzeitstatistiken (v2.0.0) |
-| **Sensor-Mapping** | `/api/sensor-mapping/*` | HA Sensor-Zuordnung (v1.1.0) |
-| **Monatsabschluss** | `/api/monatsabschluss/*` | Monatsabschluss-Wizard (v1.1.0) |
-| **Scheduler** | `/api/scheduler/*` | Cron-Jobs, Monatswechsel (v1.1.0) |
-| **Community** | `/api/community/*` | Community-Teilen & Benchmark (v2.0.3) |
-| **Portal-Import** | /api/portal-import/* | Portal-CSV Parser (SMA, Fronius, EVCC) (v2.6.0) |
-| **Cloud-Import** | /api/cloud-import/* | Cloud-API Import (6 Provider) (v2.7.0) |
-| **Custom-Import** | /api/custom-import/* | CSV/JSON mit Feld-Mapping (v2.8.0) |
+| Modul              | Prefix               | Beschreibung                                            |
+| ------------------ | -------------------- | ------------------------------------------------------- |
+| **Live Dashboard** | `/api/live` | Echtzeit-Daten, MQTT-Inbound, Tagesverlauf, Energiefluss |
+| **Aktueller Monat** | `/api/aktueller-monat` | Laufender Monat mit Multi-Source-Daten |
+| **Cockpit** | `/api/cockpit` | Dashboard-Aggregation, KPIs |
+| **Aussichten** | `/api/aussichten` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
+| **Monatsdaten** | `/api/monatsdaten` | CRUD + Berechnungen |
+| **Monatsabschluss** | `/api/monatsabschluss` | Wizard mit Datenquellen-Status |
+| **Investitionen** | `/api/investitionen` | Komponenten, ROI |
+| **Anlagen** | `/api/anlagen` | Anlagen CRUD |
+| **Strompreise** | `/api/strompreise` | Tarife, Spezialtarife |
+| **Sensor-Mapping** | `/api/sensor-mapping` | HA Sensor-Zuordnung |
+| **Import/Export** | `/api/import` | CSV, JSON, Demo, PDF |
+| **Portal-Import** | `/api/portal-import` | CSV-Upload (SMA, Fronius, evcc) |
+| **Cloud-Import** | `/api/cloud-import` | Cloud-API Import (5 Provider) |
+| **Custom-Import** | `/api/custom-import` | CSV/JSON mit Feld-Mapping |
+| **Connectors** | `/api/connectors` | 9 Geräte-Connectors |
+| **Community** | `/api/community` | Community-Benchmark |
+| **Wetter** | `/api/wetter` | Open-Meteo, Bright Sky, PVGIS TMY |
+| **PVGIS** | `/api/pvgis` | PVGIS-Daten + Horizontprofil |
+| **Solar-Prognose** | `/api/solar-prognose` | Open-Meteo Solar GTI |
+| **System** | `/api/system` | Daten-Checker, Logs, Energieprofile |
+| **HA Integration** | `/api/ha` | HA-Status, MQTT Export |
+| **HA Statistics** | `/api/ha-statistics` | HA-DB Langzeitstatistik (SQLite) |
+| **HA Import** | `/api/ha-import` | HA Datenimport |
+| **Scheduler** | `/api/scheduler` | Cron-Jobs, Monatswechsel |
 
-### Aussichten API
-
-```
-GET /api/aussichten/kurzfristig/{anlage_id}     # 7-Tage Wetter-Prognose
-GET /api/aussichten/langfristig/{anlage_id}     # 12-Monats PVGIS-Prognose
-GET /api/aussichten/trend/{anlage_id}           # Historische Trend-Analyse
-GET /api/aussichten/finanzen/{anlage_id}        # Amortisations-Prognose
-```
-
-### Sensor-Mapping API (NEU v1.1.0)
-
-```
-GET    /api/sensor-mapping/{anlage_id}                    # Aktuelles Mapping abrufen
-GET    /api/sensor-mapping/{anlage_id}/available-sensors   # Verfügbare HA-Sensoren
-POST   /api/sensor-mapping/{anlage_id}                    # Mapping speichern
-DELETE /api/sensor-mapping/{anlage_id}                    # Mapping löschen
-GET    /api/sensor-mapping/{anlage_id}/status             # Kurzstatus
-POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte init
-```
-
-### Monatsabschluss API (NEU v1.1.0)
-
-```
-GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Status + Vorschläge
-POST /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Abschluss durchführen
-GET  /api/monatsabschluss/naechster/{anlage_id}         # Nächster offener Monat
-GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
-```
-
-### Cloud-Import API (NEU v2.7.0)
-
-```
-GET  /api/cloud-import/providers                          # Verfügbare Provider
-POST /api/cloud-import/connect                            # Verbindung testen
-POST /api/cloud-import/fetch                              # Daten abrufen
-GET  /api/cloud-import/credentials/{anlage_id}            # Gespeicherte Credentials
-POST /api/cloud-import/credentials/{anlage_id}            # Credentials speichern
-```
-
-### Custom-Import API (NEU v2.8.0)
-
-```
-POST   /api/custom-import/analyze                         # Datei analysieren
-POST   /api/custom-import/preview                         # Mapping-Vorschau
-GET    /api/custom-import/templates                       # Templates laden
-POST   /api/custom-import/templates/{name}                # Template speichern
-DELETE /api/custom-import/templates/{name}                # Template löschen
-GET    /api/custom-import/fields                          # Verfügbare Zielfelder
-```
-
-### Import/Export API (erweitert in beta.8)
-
-```
-POST /api/import/csv/{anlage_id}                # CSV Import (mit Plausibilitätsprüfung)
-GET  /api/import/export/{anlage_id}/full        # Vollständiger JSON-Export
-GET  /api/import/template/{anlage_id}           # CSV Template herunterladen
-```
-
-### HA Statistics API (NEU v2.0.0)
-
-```
-GET  /api/ha-statistics/status                              # Prüft ob HA-DB verfügbar
-GET  /api/ha-statistics/monatswerte/{anlage_id}/{jahr}/{monat}  # Einzelner Monat
-GET  /api/ha-statistics/verfuegbare-monate/{anlage_id}      # Alle Monate mit Daten
-GET  /api/ha-statistics/alle-monatswerte/{anlage_id}        # Bulk: Alle Monatswerte
-GET  /api/ha-statistics/import-vorschau/{anlage_id}         # Import-Vorschau mit Konflikten
-POST /api/ha-statistics/import/{anlage_id}                  # Import mit Überschreib-Schutz
-```
-
-### Strompreise API (erweitert v2.4.0)
-
-```
-GET  /api/strompreise/{anlage_id}                           # Alle Tarife der Anlage
-POST /api/strompreise/{anlage_id}                           # Tarif anlegen
-GET  /api/strompreise/aktuell/{anlage_id}/{verwendung}      # Aktueller Preis (mit Fallback)
-```
-
-### Scheduler API (NEU v1.1.0)
-
-```
-GET  /api/scheduler                                         # Scheduler-Status
-POST /api/scheduler/monthly-snapshot                        # Manueller Monatswechsel
-```
+> **Hinweis:** HA-spezifische Routen (`/api/ha*`, `/api/sensor-mapping`, `/api/ha-statistics`) sind nur aktiv wenn `HA_MODE=true`.
 
 ---
 
@@ -430,6 +415,7 @@ POST /api/scheduler/monthly-snapshot                        # Manueller Monatswe
 
 - [Architektur](ARCHITEKTUR.md) - Detaillierte technische Dokumentation
 - [Benutzerhandbuch](BENUTZERHANDBUCH.md) - Für Endbenutzer
+- [MQTT-Inbound](MQTT_INBOUND.md) - Topic-Struktur und Beispiel-Flows
 - [CLAUDE.md](../CLAUDE.md) - KI-Entwicklungskontext
 
 ---
