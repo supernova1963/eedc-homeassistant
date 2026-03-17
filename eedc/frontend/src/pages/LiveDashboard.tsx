@@ -357,14 +357,12 @@ export default function LiveDashboard() {
               {(() => {
                 const netzGauge = data.gauges.find(g => g.key === 'netz')
                 if (!netzGauge) return null
-                const PUFFER_W = 100 // ±100 W Pufferzone (gelb)
+                const PUFFER_W = 100 // ±100 W Pufferzone
                 const maxAbs = Math.max(Math.abs(netzGauge.min_wert), Math.abs(netzGauge.max_wert)) || 1
                 const absWert = Math.abs(netzGauge.wert)
                 const ratio = Math.min(1, absWert / maxAbs)
                 const isExport = netzGauge.wert < 0
                 const isPuffer = absWert <= PUFFER_W
-                // Puffer-Hintergrund: max 8% pro Seite (visuell dezent)
-                const pufferVisual = Math.min(8, (PUFFER_W / maxAbs) * 50)
                 const displayW = absWert >= 1000
                   ? `${(netzGauge.wert / 1000).toFixed(1)} kW`
                   : `${Math.round(netzGauge.wert)} W`
@@ -372,28 +370,25 @@ export default function LiveDashboard() {
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Netz</h3>
                     <div className="relative h-7 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      {/* Pufferzone — schmaler gelber Bereich in der Mitte (±100 W) */}
-                      <div
-                        className="absolute top-0 bottom-0 bg-yellow-400/20 dark:bg-yellow-500/15"
-                        style={{ left: `${50 - pufferVisual}%`, width: `${pufferVisual * 2}%` }}
-                      />
                       {/* Mittellinie */}
                       <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-300 dark:bg-gray-500 z-10" />
-                      {/* Balken */}
-                      <div
-                        className={`absolute top-0 bottom-0 transition-all duration-500 ${
-                          isPuffer ? 'bg-yellow-500' : isExport ? 'bg-green-500' : 'bg-red-500'
-                        }`}
-                        style={isExport
-                          ? { right: '50%', width: `${ratio * 50}%` }
-                          : { left: '50%', width: `${ratio * 50}%` }
-                        }
-                      />
+                      {/* Balken — nur außerhalb der Pufferzone */}
+                      {!isPuffer && (
+                        <div
+                          className={`absolute top-0 bottom-0 transition-all duration-500 ${isExport ? 'bg-green-500' : 'bg-red-500'}`}
+                          style={isExport
+                            ? { right: '50%', width: `${ratio * 50}%` }
+                            : { left: '50%', width: `${ratio * 50}%` }
+                          }
+                        />
+                      )}
                       {/* Wert */}
                       <div className={`absolute inset-0 flex items-center justify-center text-xs font-bold z-20 ${
-                        isPuffer ? 'text-yellow-800 dark:text-yellow-200' : 'text-gray-800 dark:text-gray-100'
+                        isPuffer
+                          ? 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-gray-800 dark:text-gray-100'
                       }`}>
-                        {isPuffer ? `≈ ${displayW}` : displayW}
+                        {isPuffer ? `≈ ${Math.round(absWert)} W` : displayW}
                       </div>
                     </div>
                     <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 px-1">
