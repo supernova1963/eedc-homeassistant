@@ -377,6 +377,22 @@ class LivePowerService:
                     komp["parent_key"] = wallbox_keys[wb_idx % len(wallbox_keys)]
                     wb_idx += 1
 
+        # PV Gesamt aus Basis (wenn kein individueller PV-Sensor vorhanden)
+        has_individual_pv = any(k.key.startswith("pv_") if hasattr(k, 'key') else k.get("key", "").startswith("pv_") for k in komponenten)
+        pv_gesamt_w_val = basis_values.get("pv_gesamt_w")
+        if pv_gesamt_w_val is not None and not has_individual_pv:
+            kw = pv_gesamt_w_val / 1000
+            gesamt_kwp = anlage.leistung_kwp or 0
+            komponenten.append({
+                "key": "pv_gesamt",
+                "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
+                "icon": "sun",
+                "erzeugung_kw": round(kw, 2),
+                "verbrauch_kw": None,
+            })
+            summe_erzeugung += kw
+            pv_total_w += pv_gesamt_w_val
+
         # Netz-Komponente (aus Basis-Werten)
         einspeisung_w = basis_values.get("einspeisung_w")
         netzbezug_w = basis_values.get("netzbezug_w")
@@ -632,6 +648,12 @@ class LivePowerService:
                 prefix = _LIVE_KEY_PREFIX.get(typ, _TAGESVERLAUF_KATEGORIE.get(typ, typ))
                 component_entities[f"{prefix}_{inv_id}"] = entity_id
 
+        # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
+        if not category_entities["pv"] and basis_live.get("pv_gesamt_w"):
+            pv_gesamt_eid = basis_live["pv_gesamt_w"]
+            category_entities["pv"].append(pv_gesamt_eid)
+            component_entities["pv_gesamt"] = pv_gesamt_eid
+
         # Alle Entity-IDs sammeln (dedupliziert)
         all_ids = list(set(
             [eid for eids in category_entities.values() for eid in eids]
@@ -754,6 +776,20 @@ class LivePowerService:
                 "bidirektional": bidirektional,
             })
             serie_entities[serie_key] = [live["leistung_w"]]
+
+        # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
+        has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
+        if not has_individual_pv and basis_live.get("pv_gesamt_w"):
+            gesamt_kwp = anlage.leistung_kwp or 0
+            serien.append({
+                "key": "pv_gesamt",
+                "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
+                "kategorie": "pv",
+                "farbe": "#eab308",
+                "seite": "quelle",
+                "bidirektional": False,
+            })
+            serie_entities["pv_gesamt"] = [basis_live["pv_gesamt_w"]]
 
         # Netz (Einspeisung + Netzbezug als eine bidirektionale Serie)
         has_netz = False
@@ -943,6 +979,10 @@ class LivePowerService:
             typ = inv_types.get(inv_id)
             if typ in _ERZEUGER_TYPEN and live.get("leistung_w"):
                 pv_eids.append(live["leistung_w"])
+
+        # PV Gesamt aus Basis als Fallback
+        if not pv_eids and basis_live.get("pv_gesamt_w"):
+            pv_eids.append(basis_live["pv_gesamt_w"])
 
         now = datetime.now()
         start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)

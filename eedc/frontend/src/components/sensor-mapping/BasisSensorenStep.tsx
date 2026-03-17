@@ -161,6 +161,23 @@ export default function BasisSensorenStep({
                   placeholder="Netzbezug-Leistungssensor suchen..."
                 />
               </div>
+
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm text-gray-900 dark:text-white">PV Gesamt</span>
+                  <span className="text-xs text-gray-500">(W)</span>
+                </div>
+                <SensorAutocomplete
+                  value={basisLive.pv_gesamt_w}
+                  onChange={entityId => onBasisLiveChange('pv_gesamt_w', entityId)}
+                  sensors={availableSensors}
+                  placeholder="PV-Gesamt-Leistungssensor suchen..."
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  Optional: Nur nötig wenn kein Live-Sensor pro PV-String konfiguriert ist.
+                  Wird als ein &quot;PV Gesamt&quot;-Knoten im Live-Dashboard angezeigt.
+                </p>
+              </div>
             </div>
           </div>
         </>
