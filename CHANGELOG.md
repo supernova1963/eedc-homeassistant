@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.1.3] - 2026-03-17
+## [3.1.4] - 2026-03-17
 
 ### Hinzugefügt
 
@@ -17,7 +17,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 
-- **Grundlast 0 W:** Stunden ohne HA-History-Daten wurden als 0 kW ins individuelle Verbrauchsprofil geschrieben. Jetzt werden fehlende Stunden übersprungen (BDEW-Fallback greift). Grundlast-Berechnung ignoriert 0-Werte.
+- **Verbrauch-Prognose durchgängig:** Gestrichelte Verbrauchs-Prognose-Linie wird jetzt auch für vergangene Stunden angezeigt (IST/Prognose-Vergleich). Kein Sprung mehr an der "Jetzt"-Linie.
+- **Stacking-Fix:** 0-Werte in gestapelten Verbrauchskategorien bleiben als 0 statt null — Recharts stackt korrekt
+- **Netz-Pufferzone Vollausschlag:** Gelbe Zone war bei kleinem Gauge-Range viel zu breit (Vollausschlag). Jetzt visuell auf max 8% pro Seite begrenzt.
+- **Grundlast 0 W:** Stunden ohne HA-History-Daten wurden als 0 kW ins individuelle Verbrauchsprofil geschrieben. Jetzt werden fehlende Stunden übersprungen (BDEW-Fallback greift).
 - **Quellen-Indikatoren:** Farbige Punkte an den Balkennamen im Energie-Bilanz-Chart (AktuellerMonat) statt irreführender Pseudo-Legende
 - **MariaDB-Hinweis:** Info-Box in Settings warnt dass HA-Statistik nur mit SQLite funktioniert, MQTT-Inbound als Alternative
 
