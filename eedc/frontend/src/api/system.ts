@@ -32,6 +32,19 @@ export interface SettingsResponse {
   }
 }
 
+export interface ProfildatenStats {
+  stundenwerte: number
+  tageszusammenfassungen: number
+  zeitraum: {
+    von: string
+    bis: string
+    tage_mit_daten: number
+    tage_gesamt: number
+    abdeckung_prozent: number
+  } | null
+  wachstum_pro_monat: number
+}
+
 export interface StatsResponse {
   anlagen: number
   monatsdaten: number
@@ -43,6 +56,7 @@ export interface StatsResponse {
     bis: number
   } | null
   database_path: string
+  profildaten?: ProfildatenStats
 }
 
 export interface UpdateCheckResponse {

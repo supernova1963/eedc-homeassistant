@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info } from 'lucide-react'
+import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info, BarChart3 } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 import { systemApi, haApi, type StatsResponse, type SettingsResponse, type HASensor } from '../api'
 
@@ -244,6 +244,74 @@ export default function Settings() {
           </a>
         </div>
       </div>
+
+      {/* Datenbestand / Profildaten */}
+      {stats?.profildaten && (stats.profildaten.stundenwerte > 0 || stats.profildaten.tageszusammenfassungen > 0) && (
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <BarChart3 className="h-6 w-6 text-emerald-500" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Datenbestand Energieprofile
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {stats.profildaten.stundenwerte.toLocaleString('de-DE')}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Stundenwerte</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">24 pro Tag × Anlage</p>
+            </div>
+            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {stats.profildaten.tageszusammenfassungen.toLocaleString('de-DE')}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Tagessummen</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">1 pro Tag × Anlage</p>
+            </div>
+            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {stats.monatsdaten.toLocaleString('de-DE')}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Monatswerte</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">1 pro Monat × Anlage</p>
+            </div>
+          </div>
+
+          {stats.profildaten.zeitraum && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  Abdeckung: {stats.profildaten.zeitraum.tage_mit_daten} von {stats.profildaten.zeitraum.tage_gesamt} Tagen
+                </span>
+                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                  {stats.profildaten.zeitraum.abdeckung_prozent}%
+                </span>
+              </div>
+              <div className="w-full bg-emerald-200 dark:bg-emerald-800 rounded-full h-2">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, stats.profildaten.zeitraum.abdeckung_prozent)}%` }}
+                />
+              </div>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                {stats.profildaten.zeitraum.von} bis {stats.profildaten.zeitraum.bis}
+              </p>
+            </div>
+          )}
+
+          {stats.profildaten.wachstum_pro_monat > 0 && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">
+              <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Wachstum: ~{stats.profildaten.wachstum_pro_monat.toLocaleString('de-DE')} Zeilen/Monat
+                ({stats.anlagen} {stats.anlagen === 1 ? 'Anlage' : 'Anlagen'} × 25 Zeilen/Tag × 30 Tage)
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   )

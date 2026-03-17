@@ -30,6 +30,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
+from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.scheduler import start_scheduler, stop_scheduler, get_scheduler
 
 # HA-spezifische Imports (nur wenn HA verfügbar)
@@ -466,6 +467,45 @@ async def get_database_stats():
         min_jahr = zeitraum[0]
         max_jahr = zeitraum[1]
 
+        # ── Profildaten-Statistiken ──────────────────────────────────────
+        profil_count_result = await session.execute(
+            select(func.count()).select_from(TagesEnergieProfil)
+        )
+        profil_count = profil_count_result.scalar() or 0
+
+        zusammenfassung_count_result = await session.execute(
+            select(func.count()).select_from(TagesZusammenfassung)
+        )
+        zusammenfassung_count = zusammenfassung_count_result.scalar() or 0
+
+        # Zeitraum und Tage-Abdeckung der Profildaten
+        profil_zeitraum = None
+        if zusammenfassung_count > 0:
+            tz_range_result = await session.execute(
+                select(
+                    func.min(TagesZusammenfassung.datum),
+                    func.max(TagesZusammenfassung.datum),
+                    func.count(func.distinct(TagesZusammenfassung.datum)),
+                )
+            )
+            tz_range = tz_range_result.one()
+            if tz_range[0]:
+                von_datum = tz_range[0]
+                bis_datum = tz_range[1]
+                tage_mit_daten = tz_range[2]
+                tage_gesamt = (bis_datum - von_datum).days + 1
+                profil_zeitraum = {
+                    "von": von_datum.isoformat(),
+                    "bis": bis_datum.isoformat(),
+                    "tage_mit_daten": tage_mit_daten,
+                    "tage_gesamt": tage_gesamt,
+                    "abdeckung_prozent": round(tage_mit_daten / tage_gesamt * 100, 1) if tage_gesamt > 0 else 0,
+                }
+
+        # Wachstumsprognose: Zeilen pro Monat pro Anlage
+        # 24 Stundenwerte + 1 Zusammenfassung = 25 Zeilen/Tag × 30 Tage = 750/Monat
+        wachstum_pro_monat = anlagen_count * 750 if anlagen_count > 0 else 0
+
     return {
         "anlagen": anlagen_count,
         "monatsdaten": monatsdaten_count,
@@ -477,6 +517,12 @@ async def get_database_stats():
             "bis": max_jahr
         } if min_jahr else None,
         "database_path": str(settings.database_path),
+        "profildaten": {
+            "stundenwerte": profil_count,
+            "tageszusammenfassungen": zusammenfassung_count,
+            "zeitraum": profil_zeitraum,
+            "wachstum_pro_monat": wachstum_pro_monat,
+        },
     }
 
 
