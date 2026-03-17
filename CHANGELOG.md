@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.7] - 2026-03-17
+
+### Behoben
+
+- **Automatische Einheiten-Konvertierung** (#25): HA-Sensoren mit `suggested_unit_of_measurement` (z.B. E3DC: nativ W, angezeigt als kW) werden jetzt automatisch erkannt und korrekt zu W konvertiert. Betrifft Live-Daten, Tagesverlauf, Tages-kWh und Energieprofil. Keine manuellen kW→W Template-Helper mehr nötig.
+
 ## [3.1.6] - 2026-03-17
 
 ### Behoben
