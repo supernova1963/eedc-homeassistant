@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.6] - 2026-03-17
+
+### Behoben
+
+- **Sensor-Mapping: Anlage-Auswahl** (#26): Bei mehreren Anlagen konnte bisher nur die erste Anlage im Sensor-Mapping Wizard konfiguriert werden. Jetzt erscheint ein Dropdown zur Anlage-Auswahl.
+- **Netz-Anzeige Ampel-Schema:** Farbgebung der Netz-Anzeige überarbeitet — Grün = Balance (±100 W), Rot = Netzbezug, Amber = Einspeisung. Kein Balken mehr in der Pufferzone.
+- **Grundlast-Berechnung:** Median der Nachtstunden (0–5 Uhr) statt Durchschnitt aller Stunden — robust gegen Ausreißer an der PV-Übergangsstunde.
+- **Energiefluss:** „Energieumsatz" statt redundanter Quelle/Senke-Anzeige unter dem Haus-Symbol.
+- **Wetter-Timeline:** Stunden-Icons jetzt horizontal mit der Chart-X-Achse ausgerichtet (24h-Grid über dem Chart statt separater Timeline).
+- **Wallbox-Icon:** Eigenes Plug-Icon für Wallbox (war identisch mit E-Auto).
+- **Legende ohne Phantome:** PV-Chart-Legende zeigt nur Kategorien mit tatsächlichen Werten (keine Wallbox/Sonstige bei 0).
+
 ## [3.1.4] - 2026-03-17
 
 ### Hinzugefügt
