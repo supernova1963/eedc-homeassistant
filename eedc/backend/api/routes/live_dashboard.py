@@ -906,7 +906,9 @@ def _berechne_verbrauchsprofil(
             "verbrauch_kw": verbrauch_kw,
         })
 
-    grundlast = round(min(p["verbrauch_kw"] for p in profil), 2) if profil else None
+    # Grundlast: Minimum des Verbrauchs, aber nur Stunden mit echtem Verbrauch > 0
+    positive_verbrauch = [p["verbrauch_kw"] for p in profil if p["verbrauch_kw"] > 0]
+    grundlast = round(min(positive_verbrauch), 2) if positive_verbrauch else None
 
     return profil, round(pv_summe_kwh, 1) if pv_summe_kwh > 0 else None, grundlast, ist_individuell
 

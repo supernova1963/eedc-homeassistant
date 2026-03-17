@@ -1079,9 +1079,13 @@ class LivePowerService:
         def avg(values: list[float]) -> float:
             return round(sum(values) / len(values), 3) if values else 0.0
 
+        # Nur Stunden mit echten Daten aufnehmen (keine 0.0 für fehlende History)
+        def build_profil(sums: dict[int, list[float]]) -> dict[int, float]:
+            return {h: avg(sums[h]) for h in range(24) if sums[h]}
+
         return {
-            "werktag": {h: avg(werktag_sums[h]) for h in range(24)} if tage_wt >= 2 else None,
-            "wochenende": {h: avg(wochenende_sums[h]) for h in range(24)} if tage_we >= 2 else None,
+            "werktag": build_profil(werktag_sums) if tage_wt >= 2 else None,
+            "wochenende": build_profil(wochenende_sums) if tage_we >= 2 else None,
             "tage_werktag": tage_wt,
             "tage_wochenende": tage_we,
             "quelle": quelle,
