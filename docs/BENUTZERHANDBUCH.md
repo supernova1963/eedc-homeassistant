@@ -26,6 +26,7 @@
 14b. [MQTT-Inbound](#14b-mqtt-inbound-universelle-datenbrücke-neu-v300)
 15a. [Daten-Checker](#15a-daten-checker-neu-v283)
 15b. [Protokolle](#15b-protokolle-neu-v283)
+15c. [Energieprofile](#15c-energieprofile-automatische-datensammlung)
 15. [Tipps & Best Practices](#15-tipps--best-practices)
 16. [Fehlerbehebung](#16-fehlerbehebung)
 
@@ -1507,6 +1508,31 @@ Das Protokoll-System protokolliert automatisch alle wichtigen Aktivitäten:
 - **Live-Filter** nach Kategorie und Zeitraum
 - **In-Memory Log-Buffer** für schnellen Zugriff
 - **DB-Persistierung** für langfristige Historie
+
+## 15c. Energieprofile (automatische Datensammlung)
+
+**Pfad**: Einstellungen → System → Energieprofile
+
+EEDC sammelt automatisch stündliche Energiedaten und verdichtet sie zu Tages- und Monatswerten. Dies geschieht im Hintergrund — du musst nichts konfigurieren, solange ein Sensor-Mapping eingerichtet ist.
+
+### Wie funktioniert es?
+
+1. **Stündliche Sammlung:** Täglich um 00:15 wird der Vortag aggregiert. Für jede Stunde werden PV-Erzeugung, Verbrauch, Einspeisung, Netzbezug, Batterie-Leistung, SoC und Wetterdaten (Open-Meteo) gespeichert.
+2. **Tageszusammenfassung:** Aus den 24 Stundenwerten wird eine Tageszusammenfassung berechnet: Überschuss/Defizit (kWh), Peak-Leistungen (kW), Batterie-Vollzyklen, Performance Ratio.
+3. **Monats-Rollup:** Beim Monatsabschluss werden die Tageszusammenfassungen zu Monatswerten verdichtet (Überschuss, Defizit, Vollzyklen, Performance Ratio, Peak-Netzbezug).
+
+### Voraussetzungen für Energieprofile
+
+- Ein **Sensor-Mapping** muss eingerichtet sein (Live-Sensoren für PV, Verbrauch etc.)
+- Funktioniert mit HA-Sensoren und MQTT-Inbound
+
+### Warum?
+
+HA-History hat nur ~10 Tage Retention. EEDC sichert die Daten dauerhaft in seiner eigenen Datenbank, sodass auch langfristige Analysen (Jahresvergleiche, Speicher-Dimensionierung) möglich sind.
+
+### Datenbestand
+
+Unter Einstellungen → System → Energieprofile siehst du den Datenbestand: wie viele Tage pro Anlage bereits gesammelt wurden.
 
 ---
 

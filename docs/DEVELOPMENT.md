@@ -255,7 +255,9 @@ eedc-homeassistant/
     │   │   └── wetter.py            # Wetter Multi-Provider
     │   │
     │   ├── core/                # Config, DB, Calculations
-    │   ├── models/              # SQLAlchemy Models
+    │   ├── models/
+    │   │   ├── ...                        # Anlage, Monatsdaten, Investition, etc.
+    │   │   └── tages_energie_profil.py    # TagesEnergieProfil + TagesZusammenfassung
     │   └── services/
     │       ├── brightsky_service.py        # DWD-Daten via Bright Sky API
     │       ├── cloud_import/               # Cloud-Import-Provider (5 Provider)
@@ -266,6 +268,7 @@ eedc-homeassistant/
     │       ├── mqtt_client.py              # HA Export + MQTT Auto-Discovery
     │       ├── mqtt_inbound_service.py     # MQTT-Inbound (Live + Energy)
     │       ├── mqtt_energy_history_service.py # Energy-Snapshots (SQLite)
+    │       ├── energie_profil_service.py    # Tages-Aggregation + Monats-Rollup
     │       ├── pdf_service.py              # PDF-Export
     │       ├── plz_to_state.py             # PLZ→Bundesland Mapping
     │       ├── prognose_service.py         # Prognose-Berechnungen

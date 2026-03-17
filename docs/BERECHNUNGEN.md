@@ -30,6 +30,7 @@ und zum Verständnis der Datenflüsse.
    - [4.4 Finanz-Prognose & Amortisation](#44-finanz-prognose--amortisation)
 5. [Tarif-System (Spezialtarife)](#5-tarif-system-spezialtarife)
 6. [Investitionstyp-spezifische Berechnungen (ROI-Dashboard)](#6-investitionstyp-spezifische-berechnungen-roi-dashboard)
+6b. [Energieprofil-Berechnungen (Tages-Aggregation)](#6b-energieprofil-berechnungen-tages-aggregation)
 7. [Debugging-Leitfaden](#7-debugging-leitfaden)
 
 ---
@@ -46,6 +47,8 @@ und zum Verständnis der Datenflüsse.
 | `Investition` | `anschaffungskosten_gesamt`, `parameter` (JSON) | Manuell | Kosten, technische Parameter |
 | `Anlage` | `leistung_kwp`, `steuerliche_behandlung`, `ust_satz_prozent` | Manuell | Anlage-Stammdaten |
 | `PVGISPrognose` | `monatswerte`, `module_monatswerte`, `jahresertrag_kwh` | PVGIS API | SOLL-Werte pro Monat/Modul |
+| `TagesEnergieProfil` | `pv_kw`, `verbrauch_kw`, `einspeisung_kw`, `netzbezug_kw`, `batterie_kw`, `soc_prozent`, `komponenten` (JSON) | Scheduler/Monatsabschluss | 24 Zeilen/Tag, stündliche kW-Werte + Wetter |
+| `TagesZusammenfassung` | `ueberschuss_kwh`, `defizit_kwh`, `peak_pv_kw`, `batterie_vollzyklen`, `performance_ratio` | Aggregiert aus TagesEnergieProfil | 1 Zeile/Tag, Tagessummen + KPIs |
 
 **Legacy-Felder (NICHT verwenden):**
 - `Monatsdaten.pv_erzeugung_kwh` - Nutze `InvestitionMonatsdaten` (PV-Module)
@@ -61,6 +64,7 @@ und zum Verständnis der Datenflüsse.
 | `api/routes/investitionen.py` | ROI-Dashboard | PV-System-Gruppierung und ROI pro Komponente |
 | `api/routes/strompreise.py` | `lade_tarife_fuer_anlage()` | Multi-Tarif-Lookup mit Fallback |
 | `utils/sonstige_positionen.py` | `berechne_sonstige_summen()` | Strukturierte Erträge/Ausgaben |
+| `services/energie_profil_service.py` | `aggregate_day()`, `rollup_month()`, `backfill_range()` | Tages-Aggregation + Monats-Rollup |
 
 ### Schicht 3: Frontend-Anzeige
 
@@ -695,6 +699,73 @@ Wenn weniger als 12 Monate Daten:
     2. Fallback: Lineare Hochrechnung:
        Faktor = 12 / Anzahl_Monate
 ```
+
+---
+
+## 6b. Energieprofil-Berechnungen (Tages-Aggregation)
+
+**Service:** `services/energie_profil_service.py`
+**Trigger:** Scheduler täglich 00:15 (Vortag) + Monatsabschluss (Backfill + Rollup)
+
+### Stündliche Berechnung (aggregate_day)
+
+Für jede Stunde (0–23) aus dem Tagesverlauf:
+
+```
+PV_kW             = Σ(positive kW aller PV-Serien)
+Verbrauch_kW      = Σ(|negative kW| aller Verbraucher-Serien, ohne Batterie/Netz)
+Netz_kW           = Σ(Netz-Serien)
+Einspeisung_kW    = |Netz_kW| wenn Netz_kW < 0, sonst 0
+Netzbezug_kW      = Netz_kW wenn Netz_kW > 0, sonst 0
+Batterie_kW       = Σ(Batterie-Serien)  (positiv=Entladung, negativ=Ladung)
+
+Überschuss_kW     = max(0, PV_kW - Verbrauch_kW)
+Defizit_kW        = max(0, Verbrauch_kW - PV_kW)
+```
+
+**Zusätzliche Daten pro Stunde:**
+
+- **Temperatur + Globalstrahlung:** Open-Meteo Historical API (Archiv) bzw. Forecast API (heute)
+- **Batterie-SoC:** HA Sensor History (Stundenmittel)
+- **Komponenten:** Alle Butterfly-Werte als JSON (für spätere Detail-Analyse)
+
+### Tageszusammenfassung (TagesZusammenfassung)
+
+```
+Überschuss_kWh         = Σ(Überschuss_kW × 1h)     alle 24 Stunden
+Defizit_kWh            = Σ(Defizit_kW × 1h)
+Peak_PV_kW             = max(PV_kW)                  über alle Stunden
+Peak_Netzbezug_kW      = max(Netzbezug_kW)
+Peak_Einspeisung_kW    = max(Einspeisung_kW)
+Temperatur_Min/Max     = min/max(Temperatur_C)       aus Open-Meteo
+Strahlung_Summe_Wh_m2  = Σ(Globalstrahlung_W/m²)    × 1h = Wh/m²
+```
+
+**Batterie-Vollzyklen:**
+```
+Δ_SoC_Summe            = Σ |SoC[h] - SoC[h-1]|     für h = 1..23
+Vollzyklen              = Δ_SoC_Summe / 200          (0→100→0 = 200% = 1 Vollzyklus)
+```
+
+**Performance Ratio:**
+```
+Theoretisch_kWh        = Strahlung_Wh_m2 × kWp / 1000
+Performance_Ratio      = PV_Ertrag_kWh / Theoretisch_kWh
+```
+
+### Monats-Rollup (rollup_month)
+
+Aggregiert alle `TagesZusammenfassung` eines Monats in `Monatsdaten`-Felder:
+
+| Monatsdaten-Feld | Aggregation | Beschreibung |
+|------------------|-------------|--------------|
+| `ueberschuss_kwh` | Σ(Tages-Überschuss) | Monatlicher PV-Überschuss |
+| `defizit_kwh` | Σ(Tages-Defizit) | Monatliches Energie-Defizit |
+| `batterie_vollzyklen` | Σ(Tages-Vollzyklen) | Monatliche Batterie-Zyklen |
+| `performance_ratio` | Ø(Tages-PR) | Durchschnittliche Performance Ratio |
+| `peak_netzbezug_kw` | max(Tages-Peak) | Maximaler Netzbezug im Monat |
+
+**Auslöser:** Wird beim Monatsabschluss nach `backfill_range()` aufgerufen, um fehlende Tage nachzuberechnen (begrenzt durch HA-History ~10 Tage).
 
 ---
 

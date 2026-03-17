@@ -167,7 +167,8 @@ eedc-homeassistant/
     │   │   ├── pvgis_prognose.py
     │   │   ├── settings.py         # App-Einstellungen
     │   │   ├── activity_log.py    # Aktivitäts-Protokolle
-    │   │   └── mqtt_energy_snapshot.py # MQTT Energy Snapshots (NEU v3.0.0)
+    │   │   ├── mqtt_energy_snapshot.py # MQTT Energy Snapshots (NEU v3.0.0)
+    │   │   └── tages_energie_profil.py # Energieprofil: Stundenwerte + Tagessummary (NEU v3.1.0)
     │   │
     │   ├── utils/                # Hilfsfunktionen
     │   │   └── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
@@ -190,6 +191,7 @@ eedc-homeassistant/
     │       ├── live_power_service.py      # Live Dashboard Aggregation (NEU v3.0.0)
     │       ├── mqtt_inbound_service.py   # MQTT-Inbound Subscribe + Cache (NEU v3.0.0)
     │       ├── mqtt_energy_history_service.py # MQTT Snapshots (NEU v3.0.0)
+    │       ├── energie_profil_service.py  # Energieprofil: Aggregation + Rollup (NEU v3.1.0)
     │       ├── daten_checker.py          # Datenqualitätsprüfung
     │       ├── activity_service.py       # Aktivitäts-Logging
     │       └── cloud_import/              # Cloud-Import-Provider
@@ -1003,6 +1005,8 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
   - Speichert MQTT Energy-Zählerstände in SQLite
 - `mqtt_energy_cleanup_job` - Täglich 03:00 (NEU v3.0.0)
   - Löscht Snapshots älter als 31 Tage
+- `energie_profil_aggregation_job` - Täglich 00:15 (NEU v3.1.0)
+  - Aggregiert Vortag für alle Anlagen → `TagesEnergieProfil` + `TagesZusammenfassung`
 
 ### HA MQTT Sync Service
 
@@ -1062,6 +1066,73 @@ eedc/{anlage_id}/energy/{key}  → Zählerstände (kWh, monoton steigend)
 - Tabelle `mqtt_energy_snapshots` speichert Zählerstand-Snapshots alle 5 Minuten
 - Tageswert = Differenz zwischen aktuellem Stand und Mitternacht-Snapshot
 - Retention: 31 Tage, automatischer Cleanup um 03:00
+
+### Energieprofil Service (NEU v3.1.0)
+
+**Dateien:**
+
+- `backend/services/energie_profil_service.py` — Aggregationslogik
+- `backend/models/tages_energie_profil.py` — Datenmodelle
+
+**Funktion:** Langfristige Persistierung stündlicher Energiedaten. HA-History hat nur ~10 Tage Retention — dieser Service sichert die Daten dauerhaft in SQLite.
+
+**Datenmodelle:**
+
+| Tabelle | Granularität | Inhalt |
+| --- | --- | --- |
+| `TagesEnergieProfil` | 24 Zeilen/Tag/Anlage | Stündliche kW-Werte: PV, Verbrauch, Einspeisung, Netzbezug, Batterie, Überschuss, Defizit + Wetter (Temperatur, Globalstrahlung) + SoC + Komponenten-JSON |
+| `TagesZusammenfassung` | 1 Zeile/Tag/Anlage | Tagessummen (Überschuss/Defizit kWh), Peaks (PV, Netzbezug, Einspeisung kW), Batterie-Vollzyklen, Wetter-Min/Max, Performance Ratio, Datenqualität (stunden_verfuegbar) |
+
+**Datenfluss-Pipeline:**
+
+```
+                           Scheduler (00:15 täglich)
+                                    │
+                    ┌───────────────┼──────────────────┐
+                    ▼               ▼                  ▼
+            HA Sensor History   MQTT Snapshots    Open-Meteo Archive
+            (via get_tagesverlauf)                (Wetter-IST)
+                    │               │                  │
+                    └───────┬───────┘                  │
+                            ▼                          │
+                   aggregate_day()  ◄──────────────────┘
+                     │          │
+                     ▼          ▼
+         TagesEnergieProfil   TagesZusammenfassung
+         (24 Stunden-Zeilen)  (1 Tages-Zeile)
+                                │
+                                ▼  (beim Monatsabschluss)
+                         rollup_month()
+                                │
+                                ▼
+                     Monatsdaten-Felder aktualisiert
+                     (ueberschuss_kwh, defizit_kwh,
+                      batterie_vollzyklen, performance_ratio,
+                      peak_netzbezug_kw)
+```
+
+**Hauptfunktionen:**
+
+| Funktion | Trigger | Beschreibung |
+| --- | --- | --- |
+| `aggregate_day()` | Scheduler / Monatsabschluss | Holt Tagesverlauf + Wetter + SoC, berechnet 24 Stundenprofile + Tageszusammenfassung |
+| `aggregate_yesterday_all()` | Scheduler 00:15 | Ruft `aggregate_day()` für alle Anlagen mit Sensor-Mapping auf |
+| `rollup_month()` | Monatsabschluss | Aggregiert `TagesZusammenfassung` → `Monatsdaten`-Felder (Summe/Durchschnitt/Max) |
+| `backfill_range()` | Monatsabschluss | Nachberechnung eines Datumsbereichs (limitiert durch HA-History ~10 Tage) |
+
+**Berechnungsdetails:**
+
+- **Überschuss/Defizit:** Pro Stunde `max(0, PV - Verbrauch)` bzw. umgekehrt, Summe = kWh (kW × 1h)
+- **Batterie-Vollzyklen:** `Σ |ΔSoC| / 200` (ein Vollzyklus = 0→100→0 = 200% ΔSoC)
+- **Performance Ratio:** `PV_Ertrag_kWh / (Strahlung_Wh/m² × kWp / 1000)`
+- **Wetter:** Open-Meteo Historical API (Archiv) oder Forecast API (heute)
+- **SoC:** Aus HA Sensor History (Stundenmittel)
+
+**Integration mit Monatsabschluss:**
+
+Beim Monatsabschluss werden zwei Schritte ausgeführt:
+1. `backfill_range()` — Fehlende Tage nachberechnen (soweit HA-History reicht)
+2. `rollup_month()` — Tagesdaten in Monatsdaten verdichten
 
 ---
 
