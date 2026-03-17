@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.8] - 2026-03-17
+
+### Hinzugefügt
+
+- **PV Gesamt Live-Sensor** (#25): Neues optionales Feld `pv_gesamt_w` unter Basis → Live im Sensor-Mapping Wizard. Für Wechselrichter die nur einen Gesamt-PV-Sensor liefern (z.B. E3DC) — wird als ein "PV Gesamt"-Knoten im Energiefluss, Tagesverlauf und Heute-kWh angezeigt. Individuelle PV-String-Sensoren werden bevorzugt falls vorhanden.
+- **Datenbestand Energieprofile**: Neue Sektion in System → Allgemein zeigt den Bestand der aggregierten Profildaten mit Abdeckungs-Fortschrittsbalken und Wachstumsprognose
+
 ## [3.1.7] - 2026-03-17
 
 ### Behoben
