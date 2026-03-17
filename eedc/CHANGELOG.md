@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.2] - 2026-03-17
+
+### Hinzugefügt
+
+- **Datenbestand Energieprofile:** Neue Sektion in System → Allgemein zeigt den Bestand der aggregierten Profildaten (Stundenwerte, Tagessummen, Monatswerte) mit Abdeckungs-Fortschrittsbalken und Wachstumsprognose
+
 ## [3.1.1] - 2026-03-16
 
 ### Behoben
