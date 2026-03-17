@@ -32,6 +32,27 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 
 
+# Einheiten-Konvertierung: HA gibt State in suggested_unit zurück (z.B. kW statt W).
+# Wir normalisieren alles zu W, damit die Berechnung einheitlich ist.
+_UNIT_TO_W: dict[str, float] = {
+    "W": 1.0,
+    "kW": 1000.0,
+    "MW": 1_000_000.0,
+}
+
+
+def _normalize_to_w(value: float, unit: str) -> float:
+    """Konvertiert einen Leistungswert in W basierend auf der HA-Einheit.
+
+    SoC (%) und unbekannte Einheiten werden unverändert durchgereicht.
+    """
+    factor = _UNIT_TO_W.get(unit)
+    if factor is not None:
+        return value * factor
+    # Nicht-Leistungseinheiten (%, °C, etc.) unverändert lassen
+    return value
+
+
 # Icon-Zuordnung pro Investitionstyp
 _TYP_ICON = {
     "pv-module": "sun",
@@ -86,6 +107,30 @@ _LIVE_KEY_PREFIX = {
 
 class LivePowerService:
     """Sammelt aktuelle Leistungswerte aus verfügbaren Quellen."""
+
+    @staticmethod
+    async def _get_history_normalized(
+        entity_ids: list[str], start: datetime, end: datetime,
+    ) -> dict[str, list[tuple[datetime, float]]]:
+        """Holt Sensor-History und normalisiert kW→W anhand der Einheit.
+
+        HA gibt History-Werte in der suggested_unit zurück (z.B. kW statt W).
+        Wir fragen die Einheit pro Entity einmal ab und skalieren alle Punkte.
+        """
+        from backend.services.ha_state_service import get_ha_state_service
+        ha_service = get_ha_state_service()
+
+        # Einheiten + History parallel-ish abfragen
+        units = await ha_service.get_sensor_units(entity_ids)
+        history = await ha_service.get_sensor_history(entity_ids, start, end)
+
+        # History-Werte normalisieren
+        for eid, points in history.items():
+            factor = _UNIT_TO_W.get(units.get(eid, ""), None)
+            if factor is not None and factor != 1.0:
+                history[eid] = [(ts, val * factor) for ts, val in points]
+
+        return history
 
     def _extract_live_config(self, anlage: Anlage) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
         """
@@ -219,7 +264,14 @@ class LivePowerService:
             from backend.services.ha_state_service import get_ha_state_service
             ha_service = get_ha_state_service()
             for entity_id in all_entity_ids:
-                sensor_values[entity_id] = await ha_service.get_sensor_state(entity_id)
+                result = await ha_service.get_sensor_state_with_unit(entity_id)
+                if result is not None:
+                    value, unit = result
+                    # Automatische Einheiten-Konvertierung zu W
+                    # HA gibt den State in suggested_unit zurück (z.B. kW statt W)
+                    sensor_values[entity_id] = _normalize_to_w(value, unit)
+                else:
+                    sensor_values[entity_id] = None
 
         # Werte aus HA + MQTT zusammenführen
         basis_values, inv_values = self._collect_values(
@@ -540,8 +592,6 @@ class LivePowerService:
         Aggregiert in Kategorien (pv, einspeisung, netzbezug) UND per-Komponente
         (z.B. pv_3, wallbox_6, batterie_2) für Tooltips im Energiefluss.
         """
-        from backend.services.ha_state_service import get_ha_state_service
-
         basis_live, inv_live_map = self._extract_live_config(anlage)
 
         # Investitionstypen laden
@@ -590,13 +640,12 @@ class LivePowerService:
         if not all_ids:
             return {}
 
-        ha_service = get_ha_state_service()
         now = datetime.now()
         tag = now - timedelta(days=tage_zurueck)
         start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1) if tage_zurueck > 0 else now
 
-        history = await ha_service.get_sensor_history(all_ids, start, end)
+        history = await self._get_history_normalized(all_ids, start, end)
 
         result: dict[str, Optional[float]] = {}
 
@@ -654,9 +703,6 @@ class LivePowerService:
             )
         )
         investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
-
-        from backend.services.ha_state_service import get_ha_state_service
-        ha_service = get_ha_state_service()
 
         now = datetime.now()
         if tage_zurueck > 0:
@@ -737,7 +783,7 @@ class LivePowerService:
         if not all_ids:
             return {"serien": [], "punkte": []}
 
-        history = await ha_service.get_sensor_history(all_ids, start, end)
+        history = await self._get_history_normalized(all_ids, start, end)
 
         # Stündliche Mittelwerte berechnen
         punkte: list[dict] = []
@@ -898,14 +944,11 @@ class LivePowerService:
             if typ in _ERZEUGER_TYPEN and live.get("leistung_w"):
                 pv_eids.append(live["leistung_w"])
 
-        from backend.services.ha_state_service import get_ha_state_service
-        ha_service = get_ha_state_service()
-
         now = datetime.now()
         start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         all_ids = list(set(filter(None, [einsp_eid, bezug_eid] + pv_eids)))
-        history = await ha_service.get_sensor_history(all_ids, start, now)
+        history = await self._get_history_normalized(all_ids, start, now)
 
         if not history:
             return None

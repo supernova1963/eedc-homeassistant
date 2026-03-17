@@ -39,6 +39,20 @@ class HAStateService:
         Returns:
             Float-Wert oder None wenn nicht verfügbar
         """
+        result = await self.get_sensor_state_with_unit(entity_id)
+        return result[0] if result else None
+
+    async def get_sensor_state_with_unit(self, entity_id: str) -> Optional[tuple[float, str]]:
+        """
+        Holt State + Einheit eines Sensors.
+
+        HA gibt den State in der `suggested_unit_of_measurement` zurück, nicht
+        in der nativen Einheit. Z.B. E3DC-Sensoren: nativ W, angezeigt als kW.
+        Die Einheit steht in attributes.unit_of_measurement.
+
+        Returns:
+            (wert, einheit) oder None wenn nicht verfügbar
+        """
         if not self.is_available:
             return None
 
@@ -61,12 +75,41 @@ class HAStateService:
                     return None
 
                 try:
-                    return float(state)
+                    value = float(state)
                 except (ValueError, TypeError):
                     return None
 
+                unit = (data.get("attributes") or {}).get("unit_of_measurement", "")
+                return (value, unit or "")
+
         except Exception:
             return None
+
+    async def get_sensor_units(self, entity_ids: list[str]) -> dict[str, str]:
+        """Holt unit_of_measurement für mehrere Entities in einem Batch."""
+        if not self.is_available or not entity_ids:
+            return {}
+
+        units: dict[str, str] = {}
+        try:
+            async with httpx.AsyncClient() as client:
+                for entity_id in entity_ids:
+                    try:
+                        response = await client.get(
+                            f"{self.api_url}/states/{entity_id}",
+                            headers={"Authorization": f"Bearer {self.token}"},
+                            timeout=5.0,
+                        )
+                        if response.status_code == 200:
+                            data = response.json()
+                            unit = (data.get("attributes") or {}).get("unit_of_measurement", "")
+                            if unit:
+                                units[entity_id] = unit
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return units
 
     async def get_sensor_history(
         self,
