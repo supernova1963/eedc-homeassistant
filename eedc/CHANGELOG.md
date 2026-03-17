@@ -7,11 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.1.2] - 2026-03-17
+## [3.1.3] - 2026-03-17
 
 ### Hinzugefügt
 
-- **Datenbestand Energieprofile:** Neue Sektion in System → Allgemein zeigt den Bestand der aggregierten Profildaten (Stundenwerte, Tagessummen, Monatswerte) mit Abdeckungs-Fortschrittsbalken und Wachstumsprognose
+- **Gestapelter Verbrauch im PV-Chart:** Verbrauch im Wetter-Chart wird nach Kategorien aufgeschlüsselt (Haushalt, Speicher-Ladung, Wallbox, Wärmepumpe, Sonstige) statt einer Gesamtlinie. Chart-Höhe verdoppelt (280px). Legende zeigt nur vorhandene Kategorien.
+- **Netz-Pufferzone:** Gelbe ±100 W Zone in der Netz-Anzeige reduziert visuelles Flackern bei Werten nahe 0
+- **Datenbestand Energieprofile:** Neue Sektion in System → Allgemein zeigt den Bestand der aggregierten Profildaten
+
+### Behoben
+
+- **Grundlast 0 W:** Stunden ohne HA-History-Daten wurden als 0 kW ins individuelle Verbrauchsprofil geschrieben. Jetzt werden fehlende Stunden übersprungen (BDEW-Fallback greift). Grundlast-Berechnung ignoriert 0-Werte.
+- **Quellen-Indikatoren:** Farbige Punkte an den Balkennamen im Energie-Bilanz-Chart (AktuellerMonat) statt irreführender Pseudo-Legende
+- **MariaDB-Hinweis:** Info-Box in Settings warnt dass HA-Statistik nur mit SQLite funktioniert, MQTT-Inbound als Alternative
+
+### Dokumentation
+
+- Energieprofil-Pipeline in ARCHITEKTUR.md, BERECHNUNGEN.md, BENUTZERHANDBUCH.md, DEVELOPMENT.md dokumentiert
+- Alle Dokumentationen auf v3.1 aktualisiert, veraltete NEU-Marker entfernt
+- README.md (Root + Standalone), Flyer auf v3.1 aktualisiert
 
 ## [3.1.1] - 2026-03-16
 
