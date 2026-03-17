@@ -906,9 +906,21 @@ def _berechne_verbrauchsprofil(
             "verbrauch_kw": verbrauch_kw,
         })
 
-    # Grundlast: Minimum des Verbrauchs, aber nur Stunden mit echtem Verbrauch > 0
-    positive_verbrauch = [p["verbrauch_kw"] for p in profil if p["verbrauch_kw"] > 0]
-    grundlast = round(min(positive_verbrauch), 2) if positive_verbrauch else None
+    # Grundlast: Median der Nachtstunden (0-5 Uhr) — kein PV das die Bilanz verfälscht,
+    # Median ist robust gegen einzelne Ausreißer/Messfehler
+    nacht_verbrauch = sorted([
+        p["verbrauch_kw"] for p in profil
+        if int(p["zeit"].split(":")[0]) <= 5 and p["verbrauch_kw"] > 0
+    ])
+    if nacht_verbrauch:
+        mid = len(nacht_verbrauch) // 2
+        grundlast = round(
+            nacht_verbrauch[mid] if len(nacht_verbrauch) % 2
+            else (nacht_verbrauch[mid - 1] + nacht_verbrauch[mid]) / 2,
+            2,
+        )
+    else:
+        grundlast = None
 
     return profil, round(pv_summe_kwh, 1) if pv_summe_kwh > 0 else None, grundlast, ist_individuell
 

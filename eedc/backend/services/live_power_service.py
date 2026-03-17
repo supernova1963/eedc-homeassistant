@@ -38,7 +38,7 @@ _TYP_ICON = {
     "balkonkraftwerk": "sun",
     "speicher": "battery",
     "e-auto": "car",
-    "wallbox": "car",
+    "wallbox": "plug",
     "waermepumpe": "flame",
     "sonstiges": "wrench",
     "wechselrichter": "zap",

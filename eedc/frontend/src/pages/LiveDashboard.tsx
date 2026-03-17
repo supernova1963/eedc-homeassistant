@@ -353,47 +353,59 @@ export default function LiveDashboard() {
                 </div>
               )}
 
-              {/* Netz — Horizontaler Balken mit 0 in der Mitte + Pufferzone */}
+              {/* Netz — Ampel-Farbgebung: Grün=Balance, Orange=Einspeisung, Rot=Bezug */}
               {(() => {
                 const netzGauge = data.gauges.find(g => g.key === 'netz')
                 if (!netzGauge) return null
-                const PUFFER_W = 100 // ±100 W Pufferzone
+                const PUFFER_W = 100 // ±100 W = ideal (grün)
                 const maxAbs = Math.max(Math.abs(netzGauge.min_wert), Math.abs(netzGauge.max_wert)) || 1
                 const absWert = Math.abs(netzGauge.wert)
                 const ratio = Math.min(1, absWert / maxAbs)
                 const isExport = netzGauge.wert < 0
                 const isPuffer = absWert <= PUFFER_W
                 const displayW = absWert >= 1000
-                  ? `${(netzGauge.wert / 1000).toFixed(1)} kW`
-                  : `${Math.round(netzGauge.wert)} W`
+                  ? `${(Math.abs(netzGauge.wert) / 1000).toFixed(1)} kW`
+                  : `${Math.round(absWert)} W`
+                // Farben: Grün=ideal, Orange=Einspeisung (EV wäre besser), Rot=Bezug (kostet)
+                const barColor = isPuffer ? '' : isExport ? 'bg-amber-500' : 'bg-red-500'
+                const textColor = isPuffer
+                  ? 'text-green-600 dark:text-green-400'
+                  : isExport
+                    ? 'text-amber-700 dark:text-amber-300'
+                    : 'text-red-700 dark:text-red-300'
+                const statusLabel = isPuffer ? 'Balance' : isExport ? 'Einspeisung' : 'Netzbezug'
                 return (
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Netz</h3>
-                    <div className="relative h-7 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div className="relative h-8 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                       {/* Mittellinie */}
                       <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-300 dark:bg-gray-500 z-10" />
                       {/* Balken — nur außerhalb der Pufferzone */}
                       {!isPuffer && (
                         <div
-                          className={`absolute top-0 bottom-0 transition-all duration-500 ${isExport ? 'bg-green-500' : 'bg-red-500'}`}
+                          className={`absolute top-0 bottom-0 transition-all duration-500 ${barColor}`}
                           style={isExport
                             ? { right: '50%', width: `${ratio * 50}%` }
                             : { left: '50%', width: `${ratio * 50}%` }
                           }
                         />
                       )}
+                      {/* Grüner Puffer-Hintergrund bei Balance */}
+                      {isPuffer && (
+                        <div className="absolute inset-0 bg-green-500/20 dark:bg-green-500/15 rounded-full" />
+                      )}
                       {/* Wert */}
-                      <div className={`absolute inset-0 flex items-center justify-center text-xs font-bold z-20 ${
-                        isPuffer
-                          ? 'text-yellow-600 dark:text-yellow-400'
-                          : 'text-gray-800 dark:text-gray-100'
-                      }`}>
-                        {isPuffer ? `≈ ${Math.round(absWert)} W` : displayW}
+                      <div className={`absolute inset-0 flex items-center justify-center z-20 ${textColor}`}>
+                        {isPuffer ? (
+                          <span className="text-base font-extrabold">✓ {displayW}</span>
+                        ) : (
+                          <span className="text-xs font-bold">{statusLabel} {displayW}</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 px-1">
-                      <span>Einspeisung</span>
-                      <span>Bezug</span>
+                      <span>← Einspeisung</span>
+                      <span>Bezug →</span>
                     </div>
                   </div>
                 )

@@ -100,16 +100,16 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
           // Netz wird separat behandelt (in Energiebilanz)
         } else if (kat === 'haushalt') {
           haushalt += Math.abs(val)
-          kategorienGesehen.add('haushalt')
+          if (val !== 0) kategorienGesehen.add('haushalt')
         } else if (kat === 'wallbox') {
           wallbox += Math.abs(val)
-          kategorienGesehen.add('wallbox')
+          if (val !== 0) kategorienGesehen.add('wallbox')
         } else if (kat === 'waermepumpe') {
           waermepumpe += Math.abs(val)
-          kategorienGesehen.add('waermepumpe')
+          if (val !== 0) kategorienGesehen.add('waermepumpe')
         } else if (kat && kat !== 'pv') {
           sonstige += Math.abs(val)
-          kategorienGesehen.add('sonstige')
+          if (val !== 0) kategorienGesehen.add('sonstige')
         }
       }
 
@@ -194,6 +194,17 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
     [vorhandeneKategorien]
   )
 
+  // Stunden-Index für 24h-Timeline (Wetter-Icons über dem Chart)
+  const stundenMap = useMemo(() => {
+    if (!wetter?.stunden) return {}
+    const map: Record<number, (typeof wetter.stunden)[0]> = {}
+    for (const s of wetter.stunden) {
+      const h = parseInt(s.zeit.split(':')[0])
+      map[h] = s
+    }
+    return map
+  }, [wetter?.stunden])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -232,7 +243,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
 
   return (
     <div className="space-y-4">
-      {/* Obere Zeile: Hero + Stundenverlauf + KPIs */}
+      {/* Obere Zeile: Hero + KPIs */}
       <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
         {/* Aktuelles Wetter — Hero */}
         {aktuell && (
@@ -249,46 +260,8 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
           </div>
         )}
 
-        {/* Stundenverlauf — kompakte Timeline */}
-        <div className="flex-1 min-w-0">
-          <div className="flex gap-0.5">
-            {stunden.map((s) => {
-              const h = parseInt(s.zeit.split(':')[0])
-              const istJetzt = h === currentHour
-              const istVergangen = h < currentHour
-
-              return (
-                <div
-                  key={s.zeit}
-                  className={`flex-1 flex flex-col items-center gap-0.5 py-1 rounded transition-opacity ${
-                    istVergangen ? 'opacity-40' : ''
-                  } ${istJetzt ? 'ring-1 ring-primary-400 rounded bg-primary-50 dark:bg-primary-900/20' : ''}`}
-                  title={`${s.zeit}: ${s.temperatur_c?.toFixed(1)}°C, ${s.globalstrahlung_wm2?.toFixed(0)} W/m²`}
-                >
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500 leading-none">
-                    {h % 3 === 0 ? h : ''}
-                  </span>
-                  <WetterIcon symbol={s.wetter_symbol} className="h-5 w-5" />
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400 leading-none">
-                    {s.temperatur_c !== null ? `${s.temperatur_c.toFixed(0)}°` : ''}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-          {/* Niederschlag-Hinweis */}
-          {stunden.some((s) => (s.niederschlag_mm || 0) > 0) && (
-            <div className="flex items-center gap-1 mt-1 text-xs text-blue-500 dark:text-blue-400">
-              <Droplets className="h-3 w-3" />
-              <span>
-                {stunden.reduce((sum, s) => sum + (s.niederschlag_mm || 0), 0).toFixed(1)} mm
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* KPIs rechts */}
-        <div className="flex sm:flex-col gap-3 sm:gap-2 text-xs shrink-0">
+        {/* KPIs */}
+        <div className="flex flex-wrap sm:flex-row gap-3 sm:gap-4 text-xs">
           {wetter.temperatur_min_c !== null && wetter.temperatur_max_c !== null && (
             <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <Thermometer className="h-3.5 w-3.5" />
@@ -313,6 +286,14 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
               <span>Grundlast {(wetter.grundlast_kw * 1000).toFixed(0)} W</span>
             </div>
           )}
+          {stunden.some((s) => (s.niederschlag_mm || 0) > 0) && (
+            <div className="flex items-center gap-1.5 text-blue-500 dark:text-blue-400">
+              <Droplets className="h-3.5 w-3.5" />
+              <span>
+                {stunden.reduce((sum, s) => sum + (s.niederschlag_mm || 0), 0).toFixed(1)} mm
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -321,6 +302,35 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
         <div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
             PV-Ertrag vs. Verbrauch — IST + Prognose
+          </div>
+          {/* Wetter-Timeline: 24h-Grid, aligned mit Chart-X-Achse */}
+          {/* Chart-Margins: left=-20 + YAxis ~60px = ~40px offset, right=5px */}
+          <div className="flex" style={{ paddingLeft: 40, paddingRight: 5 }}>
+            {Array.from({ length: 24 }, (_, h) => {
+              const s = stundenMap[h]
+              const istJetzt = h === currentHour
+              const istVergangen = h < currentHour
+              return (
+                <div
+                  key={h}
+                  className={`flex-1 flex flex-col items-center py-0.5 rounded transition-opacity ${
+                    istVergangen ? 'opacity-40' : ''
+                  } ${istJetzt ? 'ring-1 ring-primary-400 bg-primary-50 dark:bg-primary-900/20' : ''}`}
+                  title={s ? `${s.zeit}: ${s.temperatur_c?.toFixed(1)}°C, ${s.globalstrahlung_wm2?.toFixed(0)} W/m²` : `${h}:00`}
+                >
+                  {s ? (
+                    <>
+                      <WetterIcon symbol={s.wetter_symbol} className="h-4 w-4" />
+                      <span className="text-[9px] text-gray-600 dark:text-gray-400 leading-none">
+                        {s.temperatur_c !== null ? `${s.temperatur_c.toFixed(0)}°` : ''}
+                      </span>
+                    </>
+                  ) : (
+                    <div className="h-4" />
+                  )}
+                </div>
+              )
+            })}
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>

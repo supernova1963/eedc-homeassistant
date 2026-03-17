@@ -7,13 +7,13 @@
  * Tages-kWh Tooltips, Σ Erzeugung/Verbrauch.
  */
 
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 
 // ─── Shared Utilities (aus EnergieBilanz) ───────────────────────────
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  sun: Sun, zap: Zap, battery: Battery, car: Car,
+  sun: Sun, zap: Zap, battery: Battery, car: Car, plug: Plug,
   flame: Flame, wrench: Wrench, home: Home,
 }
 
@@ -331,21 +331,14 @@ export default function EnergieFluss({
           </text>
         </g>
 
-        {/* Summenzeile unter Haus */}
+        {/* Energieumsatz unter Haus */}
         <text
           x={CX} y={CY + HAUS_R + 16}
           textAnchor="middle"
           style={{ fontSize: `${dims.socFontSize}px` }}
           className="fill-gray-500 dark:fill-gray-400"
         >
-          <tspan className="fill-green-600 dark:fill-green-400">
-            ▲ {summeErzeugung.toFixed(2)}
-          </tspan>
-          <tspan> / </tspan>
-          <tspan className="fill-red-600 dark:fill-red-400">
-            ▼ {summeVerbrauch.toFixed(2)}
-          </tspan>
-          <tspan> kW</tspan>
+          Energieumsatz {Math.max(summeErzeugung, summeVerbrauch).toFixed(2)} kW
         </text>
 
         {/* Komponenten-Knoten */}
