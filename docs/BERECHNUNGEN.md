@@ -1,6 +1,6 @@
 # EEDC Berechnungsreferenz
 
-**Version 2.8.5** | Stand: März 2026
+**Version 3.1** | Stand: März 2026
 
 Dieses Dokument beschreibt alle Berechnungsketten im EEDC-System: von den Eingabefeldern
 über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche
@@ -130,7 +130,7 @@ Hardcodierte Werte in `cockpit.py`:
 | `einspeiseverguetung_cent` | Tarif | `Strompreis.einspeiseverguetung_cent_kwh` |
 | `netzbezug_preis_cent` | Tarif | `Strompreis.netzbezug_arbeitspreis_cent_kwh` |
 | `grundpreis_euro_monat` | Tarif | `Strompreis.grundpreis_euro_monat` |
-| `netzbezug_durchschnittspreis_cent` | HA-Sensor oder Monatsdaten | Dynamischer Ø-Preis (NEU v2.6.0) |
+| `netzbezug_durchschnittspreis_cent` | HA-Sensor oder Monatsdaten | Dynamischer Ø-Preis |
 | `leistung_kwp` | Anlage | Summe aller `Investition.leistung_kwp` (pv-module) |
 
 #### Formeln
@@ -649,7 +649,7 @@ Einspeisevergütung = 8.2 ct/kWh
 Grundpreis         = 0 EUR/Monat
 ```
 
-### Dynamischer Tarif / Monatlicher Ø-Strompreis (NEU v2.6.0)
+### Dynamischer Tarif / Monatlicher Ø-Strompreis
 
 Für Nutzer mit dynamischem Stromtarif (z.B. Tibber, aWATTar) kann der tatsächliche monatliche Durchschnittspreis verwendet werden statt des festen Tarifpreises.
 

@@ -1,7 +1,7 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 3.0.3** | Stand: März 2026
+**Version 3.1** | Stand: März 2026
 
 ---
 
@@ -70,7 +70,7 @@ Externe APIs (optional):
 | **Pydantic** | 2.x | Datenvalidierung |
 | **httpx** | 0.26+ | HTTP Client für externe APIs |
 | **aiomqtt** | optional | MQTT Client für HA Export |
-| **APScheduler** | 3.x | Scheduler für Cron-Jobs (NEU) |
+| **APScheduler** | 3.x | Scheduler für Cron-Jobs |
 
 ### Frontend
 
@@ -81,7 +81,7 @@ Externe APIs (optional):
 | **Vite** | 5.x | Build Tool & Dev Server |
 | **Tailwind CSS** | 3.x | Styling |
 | **Recharts** | 2.x | Diagramme |
-| **react-simple-maps** | 3.x | Choropleth Deutschlandkarte (NEU v2.2.0) |
+| **react-simple-maps** | 3.x | Choropleth Deutschlandkarte |
 | **Lucide React** | - | Icons |
 | **React Router** | 6.x | Routing |
 
@@ -149,9 +149,9 @@ eedc-homeassistant/
     │   │       ├── custom_import.py          # Custom CSV/JSON Import
     │   │       ├── cloud_import.py           # Cloud-API Import
     │   │       ├── live_dashboard.py        # Live Dashboard API (NEU v3.0.0)
-    │   │       ├── aktueller_monat.py       # Aktueller Monat API (NEU v2.9.0)
-    │   │       ├── daten_checker.py         # Daten-Checker API (NEU v2.8.3)
-    │   │       ├── system_logs.py           # Protokolle API (NEU v2.8.3)
+    │   │       ├── aktueller_monat.py       # Aktueller Monat API
+    │   │       ├── daten_checker.py         # Daten-Checker API
+    │   │       ├── system_logs.py           # Protokolle API
     │   │       └── connector.py             # Geräte-Connector API
     │   │
     │   ├── core/                # Kernfunktionalität
@@ -166,7 +166,7 @@ eedc-homeassistant/
     │   │   ├── strompreis.py
     │   │   ├── pvgis_prognose.py
     │   │   ├── settings.py         # App-Einstellungen
-    │   │   ├── activity_log.py    # Aktivitäts-Protokolle (NEU v2.8.3)
+    │   │   ├── activity_log.py    # Aktivitäts-Protokolle
     │   │   └── mqtt_energy_snapshot.py # MQTT Energy Snapshots (NEU v3.0.0)
     │   │
     │   ├── utils/                # Hilfsfunktionen
@@ -190,8 +190,8 @@ eedc-homeassistant/
     │       ├── live_power_service.py      # Live Dashboard Aggregation (NEU v3.0.0)
     │       ├── mqtt_inbound_service.py   # MQTT-Inbound Subscribe + Cache (NEU v3.0.0)
     │       ├── mqtt_energy_history_service.py # MQTT Snapshots (NEU v3.0.0)
-    │       ├── daten_checker.py          # Datenqualitätsprüfung (NEU v2.8.3)
-    │       ├── activity_service.py       # Aktivitäts-Logging (NEU v2.8.3)
+    │       ├── daten_checker.py          # Datenqualitätsprüfung
+    │       ├── activity_service.py       # Aktivitäts-Logging
     │       └── cloud_import/              # Cloud-Import-Provider
     │           ├── __init__.py
     │           ├── base.py                 # ABC + Registry
@@ -370,7 +370,7 @@ eedc-homeassistant/
 | `balkonkraftwerk` | leistung_wp, anzahl, hat_speicher, speicher_kapazitaet_wh |
 | `sonstiges` | kategorie (erzeuger/verbraucher/speicher), beschreibung |
 
-**Stammdaten-Felder (NEU in beta.6):**
+**Stammdaten-Felder:**
 
 Alle Investitionstypen können zusätzlich folgende Felder im `parameter` JSON enthalten:
 
@@ -479,7 +479,7 @@ Typ-spezifische Zusatzfelder:
 }
 ```
 
-**versorger_daten Struktur (Anlage, NEU in beta.6):**
+**versorger_daten Struktur (Anlage):**
 
 ```json
 {
@@ -565,14 +565,14 @@ Sonstiges [Eigenständig]
 | `/api/ha/export` | ha_export.py | HA Sensor Export (REST, MQTT) |
 | `/api/ha-import` | ha_import.py | Investitions-Felder (CSV-Template) |
 | `/api/ha` | ha_integration.py | HA Discovery, String-Import |
-| `/api/sensor-mapping` | sensor_mapping.py | **Sensor-Mapping CRUD** (NEU) |
-| `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** (NEU) |
-| `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** (NEU) |
-| `/api/community` | community.py | **Community-Teilen & Benchmark** (NEU v2.0.3) |
+| `/api/sensor-mapping` | sensor_mapping.py | **Sensor-Mapping CRUD** |
+| `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** |
+| `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** |
+| `/api/community` | community.py | **Community-Teilen & Benchmark** |
 | `/api/live` | live_dashboard.py | **Live Dashboard + MQTT-Inbound** (NEU v3.0.0) |
-| `/api/aktueller-monat` | aktueller_monat.py | **Aktueller Monat Dashboard** (NEU v2.9.0) |
-| `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** (NEU v2.8.3) |
-| `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** (NEU v2.8.3) |
+| `/api/aktueller-monat` | aktueller_monat.py | **Aktueller Monat Dashboard** |
+| `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** |
+| `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** |
 | `/api/portal-import` | portal_import.py | Portal-CSV Import (SMA, Fronius, EVCC) |
 | `/api/cloud-import` | cloud_import.py | Cloud-API Import (SolarEdge, Fronius, Huawei, Growatt, Deye, EcoFlow) |
 | `/api/custom-import` | custom_import.py | Custom CSV/JSON Import mit Feld-Mapping |
@@ -619,7 +619,7 @@ GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation
 **ROI-Metrik**: `amortisations_fortschritt_prozent` = Kumulierte Erträge / Investition
 (Unterscheidet sich von Cockpit `jahres_rendite_prozent`!)
 
-#### Sensor-Mapping API (NEU v1.1.0)
+#### Sensor-Mapping API
 
 ```
 GET    /api/sensor-mapping/{anlage_id}                    # Aktuelles Mapping abrufen
@@ -638,7 +638,7 @@ POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte init
 - `manuell` - Manuelle Eingabe im Wizard
 - `keine` - Nicht erfassen
 
-#### Monatsabschluss API (NEU v1.1.0)
+#### Monatsabschluss API
 
 ```
 GET  /api/monatsabschluss/{anlage_id}/{jahr}/{monat}    # Status + Vorschläge
@@ -653,7 +653,7 @@ GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
 - `berechnung` (Konfidenz 60%) - COP/EV-Quote basierte Berechnung
 - `durchschnitt` (Konfidenz 50%) - Durchschnitt aller vorhandenen Werte
 
-#### Scheduler API (NEU v1.1.0)
+#### Scheduler API
 
 ```
 GET  /api/scheduler                               # Scheduler-Status
@@ -689,7 +689,7 @@ file: [CSV-Datei]
 4. Duplikate: Upsert (überschreiben)
 5. `flag_modified()` für JSON-Felder
 
-**Plausibilitätsprüfungen (NEU in beta.8):**
+**Plausibilitätsprüfungen:**
 - Legacy-Spalten (`PV_Erzeugung_kWh`, `Batterie_*_kWh`) werden validiert
 - Fehler wenn NUR Legacy und PV-Module/Speicher existieren
 - Fehler bei Mismatch Legacy vs. Summe Komponenten-Werte
@@ -710,7 +710,7 @@ DELETE /api/import/demo                      # Demo-Daten löschen
 
 **Export** - Vollständige Anlage mit allen verknüpften Daten:
 - Anlage-Stammdaten (inkl. versorger_daten, mastr_id, wetter_provider)
-- **sensor_mapping** (NEU in beta.5) - HA Sensor-Zuordnungen
+- **sensor_mapping** - HA Sensor-Zuordnungen
 - Strompreise
 - Investitionen (hierarchisch mit Children)
 - Monatsdaten mit InvestitionMonatsdaten (inkl. durchschnittstemperatur, sonderkosten)
@@ -796,8 +796,8 @@ URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
     ├── /cloud-import      → CloudImportWizard.tsx
     ├── /custom-import     → CustomImportWizard.tsx
     ├── /portal-import     → PortalImportWizard.tsx
-    ├── /daten-checker    → DatenChecker.tsx (NEU v2.8.3)
-    └── /protokolle       → Protokolle.tsx (NEU v2.8.3)
+    ├── /daten-checker    → DatenChecker.tsx
+    └── /protokolle       → Protokolle.tsx
 ```
 
 ### Komponenten-Hierarchie
@@ -936,7 +936,7 @@ SensorDefinition(
 
 **Funktion:** Publizieren von Sensoren via MQTT Auto-Discovery.
 
-**Erweiterte Methoden (NEU v1.1.0):**
+**Erweiterte Methoden:**
 - `publish_number_discovery()` - Erstellt Number-Entities für Monatsstarts
 - `publish_calculated_sensor()` - Erstellt Sensoren mit value_template
 - `update_month_start_value()` - Aktualisiert retained Startwerte
@@ -949,7 +949,7 @@ eedc/{anlage_id}/{key}                              → State
 eedc/{anlage_id}/{key}/attributes                   → Attributes
 ```
 
-### HA Statistics Service (NEU v2.0.0)
+### HA Statistics Service
 
 **Datei:** `backend/services/ha_statistics_service.py`
 

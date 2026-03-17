@@ -1,7 +1,7 @@
 
 # EEDC Benutzerhandbuch
 
-**Version 3.0.3** | Stand: März 2026
+**Version 3.1** | Stand: März 2026
 
 ---
 
@@ -140,15 +140,15 @@ Konfiguriere deine Stromtarife:
 |------|--------------|----------------------|
 | **Bezugspreis** | Was du pro kWh zahlst | 32-40 ct/kWh |
 | **Einspeisevergütung** | Was du pro eingespeister kWh bekommst | 8-12 ct/kWh |
-| **Grundpreis** | Monatlicher Grundpreis (NEU v2.4.0) | 10-15 €/Monat |
+| **Grundpreis** | Monatlicher Grundpreis | 10-15 €/Monat |
 | **Gültig ab** | Seit wann gilt dieser Tarif | 01.01.2024 |
 | **Verwendung** | Standard, Wärmepumpe oder Wallbox | Standard |
 
 **Hinweis**: Du kannst mehrere Tarife mit unterschiedlichen Gültigkeitszeiträumen anlegen.
 
-**Grundpreis (NEU v2.4.0):** Der monatliche Stromgrundpreis wird zu den Netzbezugskosten addiert und fließt so in die Gesamtkostenberechnung ein.
+**Grundpreis:** Der monatliche Stromgrundpreis wird zu den Netzbezugskosten addiert und fließt so in die Gesamtkostenberechnung ein.
 
-**Spezialtarife (NEU v2.4.0):** Für Wärmepumpe oder Wallbox mit separatem Stromzähler und günstigerem Tarif kann ein eigener Strompreis angelegt werden. Ohne Spezialtarif wird der Standard-Tarif verwendet.
+**Spezialtarife:** Für Wärmepumpe oder Wallbox mit separatem Stromzähler und günstigerem Tarif kann ein eigener Strompreis angelegt werden. Ohne Spezialtarif wird der Standard-Tarif verwendet.
 
 ### Schritt 5: Geräte-Erkennung (optional)
 
@@ -178,10 +178,10 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 #### E-Auto
 - Optional: V2H-fähig (Vehicle-to-Home)
 - Optional: Nutzt V2H aktiv
-- Optional: Dienstfahrzeug (NEU v2.4.0) – bei dienstlichen Fahrzeugen wird die ROI-Berechnung auf AG-Erstattung statt Benzinvergleich umgestellt
+- Optional: Dienstfahrzeug – bei dienstlichen Fahrzeugen wird die ROI-Berechnung auf AG-Erstattung statt Benzinvergleich umgestellt
 
 #### Wärmepumpe
-- **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi (NEU: SCOP in beta.10):
+- **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi:
   - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP.
   - **SCOP (EU-Label):** Saisonaler COP vom EU-Energielabel - realistischer als Hersteller-COP, aber standortunabhängig. Wähle die passende Vorlauftemperatur (35°C für Fußbodenheizung, 55°C für Heizkörper).
   - **Getrennte COPs:** Separate Werte für Heizung (~3,5-4,5 bei 35°C) und Warmwasser (~2,5-3,5 bei 55°C) - präziser bei unterschiedlichen Betriebspunkten.
@@ -190,7 +190,7 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 
 #### Wallbox
 - Kaufpreis, Installationsdatum
-- Optional: Dienstliches Laden (NEU v2.4.0) – ROI berücksichtigt AG-Erstattung
+- Optional: Dienstliches Laden – ROI berücksichtigt AG-Erstattung
 
 #### Weitere Komponenten
 - Balkonkraftwerk, Sonstiges
@@ -237,8 +237,8 @@ Das Dropdown-Menü ist in fünf Kategorien unterteilt:
 
 **System:**
 - Solarprognose – PVGIS-Prognose und Wetter-Provider
-- Daten-Checker – Datenqualitäts-Prüfung (NEU v2.8.3)
-- Protokolle – Aktivitäts-Logging (NEU v2.8.3)
+- Daten-Checker – Datenqualitäts-Prüfung
+- Protokolle – Aktivitäts-Logging
 - Allgemein – Version, Status
 
 **Home Assistant** (nur bei HA-Nutzung sichtbar):
@@ -337,13 +337,13 @@ Schnellstatus für alle Komponenten mit Klick-Navigation zu Details.
 #### Finanzielle Auswertung
 - Einspeiseerlös, eingesparte Stromkosten, Gesamt-Einsparung (€)
 - **Amortisations-Fortschrittsbalken**: Wie viel % der Investition ist zurückgeflossen? Mit geschätztem Amortisationsjahr (nur in der Gesamtansicht)
-- **Methodenhinweis** (NEU v2.4.0): Amortisationsbalken und Komponenten-Dashboards (E-Auto, WP, BKW) zeigen einen Basis-Hinweis zur Berechnungsmethode
+- **Methodenhinweis**: Amortisationsbalken und Komponenten-Dashboards (E-Auto, WP, BKW) zeigen einen Basis-Hinweis zur Berechnungsmethode
 
 #### CO2-Bilanz
 - Vermiedene CO2-Emissionen (kg)
 - Vergleich zu reinem Netzbezug
 
-#### Social-Media-Textvorlage (NEU v2.5.0)
+#### Social-Media-Textvorlage
 
 Über das **Share-Icon** (↗) im Dashboard-Header kannst du einen kopierfertigen Text für Social-Media-Posts generieren:
 
@@ -422,7 +422,7 @@ Detailansicht für deine Photovoltaik:
 ### 5.7 Balkonkraftwerk Dashboard
 
 - **Erzeugung** (kWh) - Stromerzeugung des BKW
-- **Eigenverbrauch** (kWh) - Selbst genutzter BKW-Strom (NEU)
+- **Eigenverbrauch** (kWh) - Selbst genutzter BKW-Strom
 - **Einspeisung** (kWh) - Unvergütete Einspeisung (= Erzeugung - Eigenverbrauch)
 - **Optional**: Speicher-Nutzung (Ladung/Entladung)
 
@@ -436,7 +436,7 @@ Jede Kennzahl zeigt bei Hover einen Tooltip mit:
 ---
 
 
-## 5b. Aktueller Monat (NEU v2.9.0)
+## 5b. Aktueller Monat
 
 **Pfad**: Cockpit → Aktueller Monat
 
@@ -539,7 +539,7 @@ Tabelle mit:
 | **ROI** | (Einsparung - Kosten) / Kosten × 100% |
 | **Amortisation** | Jahre bis Break-Even |
 
-#### Realisierungsquote (NEU v2.4.0)
+#### Realisierungsquote
 
 Ein neues Panel vergleicht die historischen Erträge mit der konfigurierten Prognose:
 - **≥90%** (grün): Ertrag entspricht oder übertrifft die Erwartung
@@ -602,7 +602,7 @@ Detaillierte Benchmarks für jede Komponente:
 | **Wallbox** | Ladung kWh/Mon, PV-Anteil % |
 | **Balkonkraftwerk** | Ertrag kWh/Mon, Vergleich |
 
-#### Tab: Regional (NEU v2.2.0)
+#### Tab: Regional
 - **Choropleth Deutschlandkarte**: Interaktive Karte mit Farbkodierung nach spezifischem Ertrag
   - Hover über ein Bundesland zeigt Performance-Details: Speicher-Lade/Entlade-kWh, WP-JAZ, E-Auto km + kWh, Wallbox kWh + PV-Anteil, BKW kWh
 - **Bundesland-Tabelle**: Direkter Vergleich aller Bundesländer mit Performance-Metriken (Ø kWh/Mon, JAZ, etc.)
@@ -691,14 +691,14 @@ Bearbeite die Stammdaten deiner PV-Anlage:
 - Name, Adresse, Koordinaten
 - Ausrichtung und Neigung (für PVGIS-Prognosen)
 
-**Erweiterte Stammdaten (NEU in beta.6):**
+**Erweiterte Stammdaten:**
 - **MaStR-ID**: Marktstammdatenregister-ID der Anlage mit direktem Link zum MaStR
 - **Versorger & Zähler**: Strom-, Gas- und Wasserversorger mit beliebig vielen Zählern
   - Klicke auf "+ Strom-Versorger hinzufügen" etc.
   - Erfasse Versorger-Name, Kundennummer, Portal-URL
   - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
 
-**Steuerliche Behandlung (NEU v2.4.0):**
+**Steuerliche Behandlung:**
 - **Keine USt-Auswirkung** (Standard): Für Anlagen ab 2023 mit Nullsteuersatz (≤30 kWp) oder Kleinunternehmer
 - **Regelbesteuerung**: USt auf Eigenverbrauch wird als Kostenfaktor berechnet (Pre-2023, >30 kWp, AT/CH)
 - USt-Satz ist editierbar (DE: 19%, AT: 20%, CH: 8.1%) und wird bei Land-Wechsel automatisch angepasst
@@ -709,7 +709,7 @@ Verwalte deine Stromtarife:
 - Mehrere Tarife mit Gültigkeitszeitraum möglich
 - Wichtig für korrekte Einsparungsberechnung
 
-**Spezialtarife (NEU v2.4.0):**
+**Spezialtarife:**
 - Jeder Tarif kann einer Verwendung zugeordnet werden: Standard, Wärmepumpe oder Wallbox
 - Aktive Spezialtarife werden in der Info-Box oben angezeigt
 - Ohne Spezialtarif wird automatisch der Standard-Tarif für die Komponente verwendet
@@ -733,7 +733,7 @@ Alle Komponenten im Überblick:
 
 **Warnung**: PV-Module ohne Wechselrichter-Zuordnung zeigen ein Warnsymbol!
 
-#### Erweiterte Stammdaten (NEU in beta.6)
+#### Erweiterte Stammdaten
 
 Jede Investition kann zusätzlich mit detaillierten Stammdaten versehen werden:
 
@@ -772,7 +772,7 @@ PV-Module und DC-Speicher (mit Parent = Wechselrichter) erben automatisch Anspre
 - V2H-fähig (Ja/Nein)
 - Nutzt V2H aktiv (Ja/Nein)
 
-**Sonstiges (NEU v2.4.0):**
+**Sonstiges:**
 - Kategorie: Erzeuger, Verbraucher oder Speicher
 - Beschreibung (optional)
 - Monatsdaten-Felder passen sich der Kategorie an
@@ -784,7 +784,7 @@ Tabelle aller erfassten Monatsdaten mit:
 - **Inline-Bearbeitung**: Direkt in der Tabelle ändern
 - **Modal-Bearbeitung**: Für alle Details
 
-#### Aggregierte Darstellung (NEU in beta.3)
+#### Aggregierte Darstellung
 
 Die Monatsdaten-Seite zeigt jetzt alle Daten aggregiert:
 
@@ -816,7 +816,7 @@ Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen
 - **TMY-Daten**: Typical Meteorological Year als Referenz
 - **Optimale Ausrichtung**: Berechnet optimale Neigung/Azimut für deinen Standort
 
-**Wetter-Provider (NEU in beta.10):**
+**Wetter-Provider:**
 - Zeigt verfügbare Wetter-Datenquellen für deinen Standort
 - Der aktuelle Provider wird in den Anlagen-Stammdaten eingestellt
 - Verfügbare Provider:
@@ -895,7 +895,7 @@ Jahr, Monat, Einspeisung_kWh, Netzbezug_kWh
 
 > **Hinweis Wärmepumpe:** Die JAZ/COP-Werte werden über das Investitions-Formular konfiguriert, nicht über CSV. Die CSV enthält nur die gemessenen Monatswerte (Strom, Heizung, Warmwasser).
 
-**Balkonkraftwerk-Spalten (NEU):**
+**Balkonkraftwerk-Spalten:**
 ```
 [BKW-Name]_Erzeugung_kWh        (PV-Erzeugung)
 [BKW-Name]_Eigenverbrauch_kWh   (Selbst genutzt)
@@ -914,7 +914,7 @@ Smart #1_km, Smart #1_Ladung_PV_kWh, Smart #1_Ladung_Netz_kWh
 3. Wähle die Datei aus
 4. Duplikate werden automatisch überschrieben
 
-#### Plausibilitätsprüfungen (NEU in beta.8)
+#### Plausibilitätsprüfungen
 
 Der Import prüft deine Daten auf Konsistenz:
 
@@ -933,7 +933,7 @@ In der Anlagen-Übersicht findest du einen Download-Button (blaues Download-Icon
 
 **Enthaltene Daten (Export-Version 1.1):**
 - Anlage-Stammdaten (inkl. MaStR-ID, Versorger-Daten)
-- Sensor-Mapping für HA-Integration (NEU in beta.5)
+- Sensor-Mapping für HA-Integration
 - Alle Investitionen mit Monatsdaten
 - Strompreise
 - PVGIS-Prognosen
@@ -959,7 +959,7 @@ In der Anlagen-Übersicht findest du einen Download-Button (blaues Download-Icon
   - Gehe nach dem Import zu Einstellungen → Home Assistant → Sensor-Zuordnung und speichere erneut
 - Export-Version 1.0 (ohne sensor_mapping) wird weiterhin unterstützt
 
-#### PDF-Dokumentation (NEU in beta.12)
+#### PDF-Dokumentation
 
 Neben dem JSON-Export gibt es jetzt einen **PDF-Export** (orangefarbenes Dokument-Icon):
 
@@ -1222,7 +1222,7 @@ Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der I
 
 Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 
-#### Option A: Über Monatsdaten-Seite (NEU)
+#### Option A: Über Monatsdaten-Seite
 
 **Pfad**: Einstellungen → Daten → Monatsdaten → "Aus HA laden" Button
 
@@ -1460,7 +1460,7 @@ MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfiden
 
 ---
 
-## 15a. Daten-Checker (NEU v2.8.3)
+## 15a. Daten-Checker
 
 **Pfad**: Einstellungen → System → Daten-Checker
 
@@ -1489,7 +1489,7 @@ Die PV-Produktionsprüfung vergleicht deine tatsächliche Erzeugung mit der PVGI
 
 ---
 
-## 15b. Protokolle (NEU v2.8.3)
+## 15b. Protokolle
 
 **Pfad**: Einstellungen → System → Protokolle
 

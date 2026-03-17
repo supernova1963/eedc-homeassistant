@@ -27,13 +27,13 @@ Ein Befehl macht alles:
 
 ```bash
 cd /home/gernot/claude/eedc-homeassistant
-./scripts/release.sh 2.8.6
+./scripts/release.sh 3.2.0
 ```
 
 Das Script:
 
 1. Prüft ob beide Repos clean sind und auf `main`
-2. Bumpt Version in allen 4 Dateien (`config.py`, `version.ts`, `config.yaml`, `run.sh`)
+2. Bumpt Version in allen 5 Dateien (`config.py`, `version.ts`, `config.yaml`, `run.sh`, `Dockerfile`)
 3. Kopiert CHANGELOG nach `eedc/`
 4. Committed + taggt + pusht `eedc-homeassistant`
 5. Synchronisiert `backend/` + `frontend/` + shared Files nach `eedc`-Standalone
