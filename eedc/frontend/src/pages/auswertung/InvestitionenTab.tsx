@@ -258,7 +258,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -275,7 +275,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis type="number" unit=" €" tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Bar dataKey="kosten" name="Kosten">
                   {kostenByTyp.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -299,7 +299,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis dataKey="jahr" unit=" J." tick={{ fontSize: 11 }} />
                 <YAxis unit=" €" tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} />
+                <Tooltip formatter={(value: number) => [`${value.toFixed(0)} €`, '']} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Legend />
                 <Area
                   type="monotone"

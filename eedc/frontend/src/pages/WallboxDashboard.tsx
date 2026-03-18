@@ -210,7 +210,7 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
                       <Cell fill="#f97316" /> {/* Netz: orange */}
                       <Cell fill="#ef4444" /> {/* Extern: rot */}
                     </Pie>
-                    <Tooltip formatter={(v: number) => `${v.toFixed(1)} kWh`} />
+                    <Tooltip formatter={(v: number) => `${v.toFixed(1)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -239,7 +239,7 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" tickFormatter={(v) => `${v}€`} />
                     <YAxis type="category" dataKey="name" width={150} />
-                    <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} />
+                    <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                     <Legend />
                     <Bar dataKey="value" name="Kosten" />
                   </BarChart>

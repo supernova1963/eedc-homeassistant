@@ -223,10 +223,7 @@ export default function TrendTab({ anlageId }: Props) {
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, white)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 formatter={(value: number) => [`${value.toLocaleString('de-DE')} kWh`, 'Ertrag']}
               />
               <Legend />
@@ -262,6 +259,7 @@ export default function TrendTab({ anlageId }: Props) {
               />
               <Tooltip
                 formatter={(value: number) => [`${value.toFixed(0)} kWh/kWp`, 'Spez. Ertrag']}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Legend />
               <Line

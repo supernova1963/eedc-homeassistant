@@ -361,6 +361,7 @@ export default function ROIDashboard() {
                         name === 'kumulierte_einsparung' ? 'Kumulierte Einsparung' : 'Investition'
                       ]}
                       labelFormatter={(label) => `Jahr ${label}`}
+                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                     />
                     <Legend
                       formatter={(value) =>
@@ -418,6 +419,7 @@ export default function ROIDashboard() {
                     </Pie>
                     <Tooltip
                       formatter={(value: number) => [`${value.toLocaleString('de-DE')} €/Jahr`, 'Einsparung']}
+                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -443,6 +445,7 @@ export default function ROIDashboard() {
                         : `${value.toLocaleString('de-DE')} €/Jahr`,
                       name === 'kosten' ? 'Relevante Kosten' : 'Jährliche Einsparung'
                     ]}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend
                     formatter={(value) =>

@@ -369,10 +369,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                 label={{ value: '°C', angle: 90, position: 'insideRight' }}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, white)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 formatter={(value: number, name: string) => {
                   if (name === 'pv_kwh') return [`${value.toFixed(1)} kWh`, 'PV-Prognose']
                   if (name === 'sonnenstunden') return [`${value.toFixed(1)} h`, 'Sonnenstunden']

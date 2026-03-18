@@ -204,7 +204,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number, name: string) => [`${value.toFixed(2)} €`, name]}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Legend />
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
@@ -232,7 +232,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number) => [`${value.toFixed(0)} €`, 'Kumuliert']}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Area
                 type="monotone"
@@ -269,7 +269,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number, name: string) => [`${value.toFixed(2)} €`, name]}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
               <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />

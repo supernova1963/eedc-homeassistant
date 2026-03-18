@@ -264,11 +264,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                 />
                 <Tooltip
                   formatter={(value: number) => [`${value.toFixed(1)} kWh/kWp`, 'Spez. Ertrag']}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 <Area
                   type="monotone"
@@ -421,11 +417,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                     return [value, name]
                   }}
                   labelFormatter={(label) => MONATSNAMEN_LANG[MONATSNAMEN.indexOf(label as string)]}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 <Legend formatter={() => 'Durchschnittlicher Ertrag'} />
                 <Line
@@ -484,11 +476,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                     }
                     return [`${value.toFixed(1)}%`, labels[name] || name]
                   }}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 <Legend
                   formatter={(value) => {
@@ -549,11 +537,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                     return [value, name]
                   }}
                   labelFormatter={(label) => `${label} Jahre alt`}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 <Legend formatter={() => 'Durchschnittlicher spez. Ertrag'} />
                 <Line

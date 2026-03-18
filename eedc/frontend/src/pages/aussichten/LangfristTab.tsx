@@ -190,10 +190,7 @@ export default function LangfristTab({ anlageId }: Props) {
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, white)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 formatter={(value: number | number[], name: string) => {
                   if (name === 'trend') return [`${(value as number).toFixed(0)} kWh`, 'Trend-korrigiert']
                   if (name === 'pvgis') return [`${(value as number).toFixed(0)} kWh`, 'PVGIS-Prognose']

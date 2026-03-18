@@ -295,7 +295,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       if (name.includes('Effizienz')) return [`${value?.toFixed(1) || '---'}%`, name]
                       return [`${value.toFixed(0)} kWh`, name]
                     }}
-                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend />
                   <Bar yAxisId="left" dataKey="speicher_ladung_kwh" name="Ladung" fill={CHART_COLORS.speicherLadung} />
@@ -411,7 +411,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       if (name === 'COP') return [`${value?.toFixed(2) || '---'}`, name]
                       return [`${value.toFixed(0)} kWh`, name]
                     }}
-                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend />
                   {(wpSummen.heizung > 0 || wpSummen.warmwasser > 0) ? (
@@ -563,7 +563,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       if (name.includes('€')) return [`${value.toFixed(2)} €`, name]
                       return [`${value.toFixed(0)} kWh`, name]
                     }}
-                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend />
                   <Bar yAxisId="left" dataKey="emob_ladung_pv_kwh" name="PV-Ladung" stackId="ladung" fill="#f59e0b" />
@@ -692,7 +692,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
                   <Tooltip
                     formatter={(value: number, name: string) => [`${value.toFixed(0)} kWh`, name]}
-                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend />
                   <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill="#f59e0b" />
@@ -770,7 +770,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
                   <Tooltip
                     formatter={(value: number, name: string) => [`${value.toFixed(0)} kWh`, name]}
-                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend />
                   {sonstigesSummen.erzeugung > 0 && (

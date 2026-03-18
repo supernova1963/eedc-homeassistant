@@ -14,6 +14,20 @@ html.dark {
   --tooltip-border: #374151;
 }
 
+/* Globaler Recharts-Tooltip Style — Dark/Light Mode für ALLE Charts */
+.recharts-default-tooltip {
+  background-color: var(--tooltip-bg) !important;
+  color: var(--tooltip-fg) !important;
+  border: 1px solid var(--tooltip-border) !important;
+  border-radius: 8px !important;
+}
+.recharts-tooltip-label {
+  color: var(--tooltip-fg) !important;
+}
+.recharts-tooltip-item {
+  color: var(--tooltip-fg) !important;
+}
+
 /* Custom base styles */
 @layer base {
   html {

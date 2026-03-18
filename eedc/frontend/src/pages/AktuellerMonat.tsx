@@ -14,7 +14,7 @@ import {
   Home, TrendingUp, AlertCircle, CalendarClock,
   FileSpreadsheet, Plug, Cloud, Upload,
 } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Select, KPICard } from '../components/ui'
+import { Card, Button, LoadingSpinner, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import {
@@ -400,6 +400,11 @@ export default function AktuellerMonat() {
             subtitle={vj?.autarkie_prozent !== undefined
               ? `VJ: ${fmt(vj.autarkie_prozent, 0)}%`
               : undefined}
+            formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
+            berechnung={data.eigenverbrauch_kwh !== null && data.gesamtverbrauch_kwh !== null
+              ? `${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh ÷ ${fmtCalc(data.gesamtverbrauch_kwh, 0)} kWh × 100`
+              : undefined}
+            ergebnis={data.autarkie_prozent !== null ? `= ${fmtCalc(data.autarkie_prozent, 1)} %` : undefined}
           />
           <KPICard
             title="Netto-Ertrag"
@@ -407,6 +412,8 @@ export default function AktuellerMonat() {
             unit="€"
             icon={Euro}
             color={data.netto_ertrag_euro !== null && data.netto_ertrag_euro >= 0 ? 'green' : 'red'}
+            formel="Einspeise-Erlöse + EV-Ersparnis − Netzbezug-Kosten"
+            ergebnis={data.netto_ertrag_euro !== null ? `= ${fmtCalc(data.netto_ertrag_euro, 2)} €` : undefined}
           />
         </div>
       )}
@@ -481,7 +488,7 @@ export default function AktuellerMonat() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => [`${value.toLocaleString('de-DE')} kWh`]} />
+                      <Tooltip formatter={(value: number) => [`${value.toLocaleString('de-DE')} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -503,7 +510,15 @@ export default function AktuellerMonat() {
                   {data.eigenverbrauch_quote_prozent !== null && (
                     <div className="flex justify-between pt-1 border-t border-gray-100 dark:border-gray-700">
                       <span className="text-gray-500">EV-Quote:</span>
-                      <span className="font-medium">{fmt(data.eigenverbrauch_quote_prozent, 0)}%</span>
+                      <FormelTooltip
+                        formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
+                        berechnung={data.eigenverbrauch_kwh !== null && data.pv_erzeugung_kwh !== null
+                          ? `${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh ÷ ${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh × 100`
+                          : undefined}
+                        ergebnis={`= ${fmtCalc(data.eigenverbrauch_quote_prozent, 1)} %`}
+                      >
+                        <span className="font-medium">{fmt(data.eigenverbrauch_quote_prozent, 0)}%</span>
+                      </FormelTooltip>
                     </div>
                   )}
                 </div>
@@ -562,7 +577,13 @@ export default function AktuellerMonat() {
                   {data.speicher_ladung_kwh !== null && data.speicher_entladung_kwh !== null && (
                     <div className="flex justify-between pt-1 border-t border-blue-100 dark:border-blue-800">
                       <span className="text-gray-500">Effizienz:</span>
-                      <span className="font-medium">{fmt(data.speicher_entladung_kwh / data.speicher_ladung_kwh * 100, 0)}%</span>
+                      <FormelTooltip
+                        formel="Entladung ÷ Ladung × 100"
+                        berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} kWh ÷ ${fmtCalc(data.speicher_ladung_kwh, 0)} kWh × 100`}
+                        ergebnis={`= ${fmtCalc(data.speicher_entladung_kwh / data.speicher_ladung_kwh * 100, 1)} %`}
+                      >
+                        <span className="font-medium">{fmt(data.speicher_entladung_kwh / data.speicher_ladung_kwh * 100, 0)}%</span>
+                      </FormelTooltip>
                     </div>
                   )}
                 </div>
@@ -587,7 +608,13 @@ export default function AktuellerMonat() {
                   {data.wp_strom_kwh && data.wp_waerme_kwh && (
                     <div className="flex justify-between pt-1 border-t border-orange-100 dark:border-orange-800">
                       <span className="text-gray-500">COP:</span>
-                      <span className="font-medium">{fmt(data.wp_waerme_kwh / data.wp_strom_kwh)}</span>
+                      <FormelTooltip
+                        formel="Wärme ÷ Strom"
+                        berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} kWh ÷ ${fmtCalc(data.wp_strom_kwh, 0)} kWh`}
+                        ergebnis={`= ${fmtCalc(data.wp_waerme_kwh / data.wp_strom_kwh, 2)}`}
+                      >
+                        <span className="font-medium">{fmt(data.wp_waerme_kwh / data.wp_strom_kwh)}</span>
+                      </FormelTooltip>
                     </div>
                   )}
                 </div>
@@ -706,9 +733,15 @@ export default function AktuellerMonat() {
             <div className="flex items-center justify-center">
               <div className="text-center">
                 <p className="text-sm text-gray-500 mb-2">Erfüllungsgrad</p>
-                <p className={`text-5xl font-bold ${data.pv_erzeugung_kwh! >= data.soll_pv_kwh! ? 'text-green-500' : 'text-orange-500'}`}>
-                  {fmt(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 0)}%
-                </p>
+                <FormelTooltip
+                  formel="IST ÷ SOLL × 100"
+                  berechnung={`${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.soll_pv_kwh, 0)} kWh × 100`}
+                  ergebnis={`= ${fmtCalc(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 1)} %`}
+                >
+                  <p className={`text-5xl font-bold ${data.pv_erzeugung_kwh! >= data.soll_pv_kwh! ? 'text-green-500' : 'text-orange-500'}`}>
+                    {fmt(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 0)}%
+                  </p>
+                </FormelTooltip>
                 <p className="text-sm text-gray-400 mt-2">
                   {fmt(data.pv_erzeugung_kwh)} von {fmt(data.soll_pv_kwh)} kWh
                 </p>

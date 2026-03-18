@@ -234,6 +234,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                     }
                     return [`${value.toFixed(2)} €`, labels[name] || name]
                   }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 <Legend
                   formatter={(value) => {
@@ -280,7 +281,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                     <Cell key={`cell-${index}`} fill={COLORS[index]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => `${value.toFixed(2)} €`} />
+                <Tooltip formatter={(value: number) => `${value.toFixed(2)} €`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

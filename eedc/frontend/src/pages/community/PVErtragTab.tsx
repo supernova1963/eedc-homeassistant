@@ -288,11 +288,7 @@ export default function PVErtragTab({ anlageId, zeitraum }: PVErtragTabProps) {
                     if (name === 'durchschnitt') return [`${value.toFixed(1)} kWh/kWp`, 'Ø Community']
                     return [value, name]
                   }}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 {/* Community-Durchschnitt als Linie */}
                 <Line
@@ -423,11 +419,7 @@ export default function PVErtragTab({ anlageId, zeitraum }: PVErtragTabProps) {
                 <Tooltip
                   formatter={(value: number) => [`${value} Anlagen`, 'Anzahl']}
                   labelFormatter={(label) => `${label} kWh/kWp`}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,0.95)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
+                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                 />
                 <Bar dataKey="anzahl" radius={[4, 4, 0, 0]}>
                   {distribution.bins.map((bin, index) => {

@@ -243,6 +243,11 @@ export default function PVAnlageDashboard() {
           subtitle={gesamtEigenverbrauch > 0 ? `${(gesamtEigenverbrauch / 1000).toFixed(1)} MWh` : undefined}
           icon={Activity}
           color="purple"
+          formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
+          berechnung={gesamtEigenverbrauch > 0 && gesamtErzeugung > 0
+            ? `${fmtCalc(gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(gesamtErzeugung, 0)} kWh × 100`
+            : undefined}
+          ergebnis={eigenverbrauchsQuote > 0 ? `= ${fmtCalc(eigenverbrauchsQuote, 1)} %` : undefined}
         />
       </div>
 
@@ -298,7 +303,7 @@ export default function PVAnlageDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis unit=" kWh" />
-                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} />
+                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                   <Legend />
                   <Bar dataKey="Erzeugung" fill={COLORS.solar} />
                   <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} />
@@ -330,7 +335,7 @@ export default function PVAnlageDashboard() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} />
+                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

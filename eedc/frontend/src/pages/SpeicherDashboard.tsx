@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { Battery, Zap, TrendingUp, Activity, RotateCw, DollarSign } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
+import { Card, LoadingSpinner, Alert, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
@@ -189,15 +189,27 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
         </div>
         <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
           <p className="text-sm text-purple-600 dark:text-purple-400">Zyklen/Monat</p>
-          <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-            {z.zyklen_pro_monat.toFixed(1)}
-          </p>
+          <FormelTooltip
+            formel="Vollzyklen ÷ Anzahl Monate"
+            berechnung={`${fmtCalc(z.vollzyklen, 0)} ÷ ${fmtCalc(z.anzahl_monate, 0)} Monate`}
+            ergebnis={`= ${fmtCalc(z.zyklen_pro_monat, 1)}`}
+          >
+            <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+              {z.zyklen_pro_monat.toFixed(1)}
+            </p>
+          </FormelTooltip>
         </div>
         <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">Verlust</p>
-          <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
-            {(z.gesamt_ladung_kwh - z.gesamt_entladung_kwh).toFixed(0)} kWh
-          </p>
+          <FormelTooltip
+            formel="Ladung − Entladung"
+            berechnung={`${fmtCalc(z.gesamt_ladung_kwh, 0)} kWh − ${fmtCalc(z.gesamt_entladung_kwh, 0)} kWh`}
+            ergebnis={`= ${fmtCalc(z.gesamt_ladung_kwh - z.gesamt_entladung_kwh, 0)} kWh`}
+          >
+            <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
+              {(z.gesamt_ladung_kwh - z.gesamt_entladung_kwh).toFixed(0)} kWh
+            </p>
+          </FormelTooltip>
         </div>
       </div>
 
@@ -223,15 +235,26 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
             </div>
             <div>
               <p className="text-sm text-amber-600 dark:text-amber-400">Anteil an Ladung</p>
-              <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
-                {((z.arbitrage_kwh / z.gesamt_ladung_kwh) * 100).toFixed(0)} %
-              </p>
+              <FormelTooltip
+                formel="Netzladung ÷ Gesamtladung × 100"
+                berechnung={`${fmtCalc(z.arbitrage_kwh, 0)} kWh ÷ ${fmtCalc(z.gesamt_ladung_kwh, 0)} kWh × 100`}
+                ergebnis={`= ${fmtCalc((z.arbitrage_kwh / z.gesamt_ladung_kwh) * 100, 1)} %`}
+              >
+                <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
+                  {((z.arbitrage_kwh / z.gesamt_ladung_kwh) * 100).toFixed(0)} %
+                </p>
+              </FormelTooltip>
             </div>
             <div>
               <p className="text-sm text-amber-600 dark:text-amber-400">Arbitrage-Gewinn</p>
-              <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                +{z.arbitrage_gewinn_euro.toFixed(0)} €
-              </p>
+              <FormelTooltip
+                formel="Netzladung × (Strompreis − Ø Ladepreis)"
+                ergebnis={`= +${fmtCalc(z.arbitrage_gewinn_euro, 2)} €`}
+              >
+                <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                  +{z.arbitrage_gewinn_euro.toFixed(0)} €
+                </p>
+              </FormelTooltip>
             </div>
           </div>
         </div>
@@ -250,7 +273,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Legend />
                 {z.arbitrage_faehig && z.arbitrage_kwh > 0 ? (
                   <>
@@ -277,7 +300,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip formatter={(v: number) => v.toFixed(1)} />
+                <Tooltip formatter={(v: number) => v.toFixed(1)} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Area type="monotone" dataKey="zyklen" fill="#8b5cf6" stroke="#7c3aed" name="Zyklen" />
               </AreaChart>
             </ResponsiveContainer>
@@ -296,7 +319,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} />
               <YAxis domain={[80, 100]} />
-              <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+              <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
               <Line type="monotone" dataKey="effizienz" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Effizienz" />
             </LineChart>
           </ResponsiveContainer>

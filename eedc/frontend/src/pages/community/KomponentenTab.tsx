@@ -397,11 +397,7 @@ function SpeicherDeepDive({
                   <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} width={90} />
                   <Tooltip
                     formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
-                    contentStyle={{
-                      background: 'rgba(255,255,255,0.95)',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                    }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Bar dataKey="du" name="Du" fill="#22c55e" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="community" name="Community" fill="#9ca3af" radius={[0, 4, 4, 0]} />
@@ -463,6 +459,7 @@ function SpeicherDeepDive({
                       `${value} Anlagen`,
                       name,
                     ]}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -651,11 +648,7 @@ function WaermepumpeDeepDive({
                     />
                     <Tooltip
                       formatter={(value: number) => [`JAZ: ${value.toFixed(2)}`, '']}
-                      contentStyle={{
-                        background: 'rgba(255,255,255,0.95)',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                      }}
+                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                     />
                     <Bar dataKey="jaz" radius={[0, 4, 4, 0]}>
                       {regionData.map((entry, index) => (
@@ -857,11 +850,7 @@ function EAutoDeepDive({
                   <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} width={80} />
                   <Tooltip
                     formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
-                    contentStyle={{
-                      background: 'rgba(255,255,255,0.95)',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                    }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
                     {ladequellenData.map((entry, index) => (
@@ -916,6 +905,7 @@ function EAutoDeepDive({
                       `${value} E-Autos`,
                       name,
                     ]}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                 </PieChart>
               </ResponsiveContainer>

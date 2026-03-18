@@ -180,7 +180,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
                   if (name === 'Autarkie') return [`${value.toFixed(1)}%`, name]
                   return [`${value.toFixed(0)} kWh`, name]
                 }}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Legend />
 
@@ -237,7 +237,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
                   if (name.includes('kWh/kWp')) return [`${value.toFixed(0)} kWh/kWp`, name]
                   return [`${value.toFixed(1)}%`, name]
                 }}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Legend />
               <Line yAxisId="left" type="monotone" dataKey="autarkie" name="Autarkie (%)" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} />
@@ -262,7 +262,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
               <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number) => [`${value.toFixed(0)} kWh`, 'Erzeugung']}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Line type="monotone" dataKey="erzeugung" name="PV-Erzeugung" stroke={CHART_COLORS.erzeugung} strokeWidth={2} dot={false} />
             </LineChart>

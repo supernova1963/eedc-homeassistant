@@ -132,7 +132,7 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
               <YAxis unit=" kg" tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number) => [`${value.toFixed(0)} kg CO2`, 'Einsparung']}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Bar dataKey="co2_einsparung" name="CO2 eingespart" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -153,7 +153,7 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
               <YAxis tickFormatter={(v) => `${(v/1000).toFixed(1)}`} unit=" t" tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value: number) => [`${(value/1000).toFixed(2)} t CO2`, 'Kumuliert']}
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #e5e7eb' }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Area
                 type="monotone"

@@ -469,7 +469,7 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
                     <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
                     <Tooltip
                       formatter={(value: number) => [`${value.toFixed(1)} kWh/kWp`, 'Spez. Ertrag']}
-                      contentStyle={{ background: '#fff', border: '1px solid #e5e7eb' }}
+                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                     />
                     <Bar dataKey="ertrag" radius={[4, 4, 0, 0]}>
                       {benchmark.anlage.monatswerte.slice(-12).map((_, index) => (

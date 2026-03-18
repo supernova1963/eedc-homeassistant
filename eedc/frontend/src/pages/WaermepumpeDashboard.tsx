@@ -227,7 +227,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                   <Cell fill="#ef4444" />
                   <Cell fill="#3b82f6" />
                 </Pie>
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} />
+                <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -254,7 +254,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" tickFormatter={(v) => `${v}€`} />
                 <YAxis type="category" dataKey="name" width={100} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} />
+                <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Bar dataKey="value" />
               </BarChart>
             </ResponsiveContainer>
@@ -280,7 +280,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Legend />
                 <Area type="monotone" dataKey="heizung" stackId="1" fill="#ef4444" stroke="#dc2626" name="Heizung" />
                 <Area type="monotone" dataKey="warmwasser" stackId="1" fill="#3b82f6" stroke="#2563eb" name="Warmwasser" />
@@ -318,7 +318,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={12} />
               <YAxis domain={vergleichModus === 'cop' ? [0, 6] : undefined} />
-              <Tooltip formatter={(v: number) => vergleichModus === 'cop' ? v?.toFixed(2) : `${v} kWh`} />
+              <Tooltip formatter={(v: number) => vergleichModus === 'cop' ? v?.toFixed(2) : `${v} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
               <Legend />
               {vergleichJahre.map((jahr, i) => (
                 <Bar

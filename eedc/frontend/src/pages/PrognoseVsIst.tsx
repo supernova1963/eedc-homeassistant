@@ -333,6 +333,7 @@ export default function PrognoseVsIst() {
                       if (name === 'Abweichung %') return `${value.toFixed(1)}%`
                       return `${value.toFixed(0)} kWh`
                     }}
+                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
                   />
                   <Legend />
                   <ReferenceLine yAxisId="right" y={0} stroke="#666" strokeDasharray="3 3" />

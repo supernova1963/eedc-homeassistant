@@ -232,7 +232,7 @@ export function PVStringVergleich({ anlageId }: Props) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis unit=" kWh" />
-                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} />
+                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Legend />
                 {data.strings.map((s, idx) => (
                   <Bar
@@ -273,7 +273,7 @@ export function PVStringVergleich({ anlageId }: Props) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis unit=" kWh" />
-                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} />
+                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                 <Legend />
                 <Area
                   type="monotone"

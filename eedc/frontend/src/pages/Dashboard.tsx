@@ -885,7 +885,7 @@ function SparklineChart({ monatsdaten, selectedYear }: {
           <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
             <Tooltip
               formatter={(v: number) => [`${v} kWh`, 'PV-Ertrag']}
-              contentStyle={{ fontSize: 11 }}
+              contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
             />
             <Bar dataKey="kwh" radius={[2, 2, 0, 0]}>
               {chartData.map((entry, i) => (

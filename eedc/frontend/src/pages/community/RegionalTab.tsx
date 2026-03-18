@@ -375,11 +375,7 @@ export default function RegionalTab({ anlageId, zeitraum }: RegionalTabProps) {
               />
               <Tooltip
                 formatter={(value: number) => [`${value.toFixed(0)} kWh/kWp`, 'Spez. Ertrag']}
-                contentStyle={{
-                  background: 'rgba(255,255,255,0.95)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
+                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
               />
               <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
                 {vergleichsData.map((entry, index) => (

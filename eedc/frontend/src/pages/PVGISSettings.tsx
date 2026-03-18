@@ -268,7 +268,7 @@ export default function PVGISSettings() {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" />
                         <YAxis tickFormatter={(v) => `${v} kWh`} />
-                        <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} />
+                        <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                         <Bar dataKey="prognose" fill="#f59e0b" name="Prognose" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -519,7 +519,7 @@ export default function PVGISSettings() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" fontSize={10} />
                       <YAxis tickFormatter={(v) => `${v}`} />
-                      <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} />
+                      <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
                       <Bar dataKey="ertrag" fill="#22c55e" name="Ertrag" />
                     </BarChart>
                   </ResponsiveContainer>
