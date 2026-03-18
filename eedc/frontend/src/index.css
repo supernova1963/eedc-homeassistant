@@ -9,7 +9,7 @@ html {
   --tooltip-border: #e5e7eb;
 }
 html.dark {
-  --tooltip-bg: #1f2937;
+  --tooltip-bg: #111827;
   --tooltip-fg: #f3f4f6;
   --tooltip-border: #374151;
 }
