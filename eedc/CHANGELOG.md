@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.9] - 2026-03-18
+
+### Hinzugefügt
+
+- **Per-Komponenten Tages-kWh**: Stündliche Leistungswerte pro Komponente (WP, Wallbox, E-Auto, PV-Strings, Speicher) werden jetzt automatisch zu Tages-kWh aufgerollt und in der Tageszusammenfassung persistiert. Grundlage für künftige Tages-/Wochen-Auswertungen pro Komponente.
+- **MQTT Energy History für Investitionen**: Investitions-spezifische Energy-Keys (`inv/{id}/{key}`) werden jetzt in der Delta-Berechnung berücksichtigt — auch im Standalone-MQTT-Modus werden per-Komponenten-Tages-kWh erfasst.
+- **API-Endpoint Tages-Energieprofil**: Neuer Endpoint `GET /api/energie-profil/{id}/tage?von=...&bis=...` liefert Tageszusammenfassungen mit Per-Komponenten-kWh.
+
+### Behoben
+
+- **Tooltip-Lesbarkeit in Dark/Light Mode** (#27): Alle Recharts-Tooltips nutzen jetzt einheitlich CSS-Variablen statt hardcodierter Farben. Globale CSS-Fallback-Regeln als Sicherheitsnetz.
+
 ## [3.1.8] - 2026-03-17
 
 ### Hinzugefügt
