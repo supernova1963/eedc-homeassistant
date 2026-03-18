@@ -137,6 +137,12 @@ async def run_migrations(conn):
             if 'verwendung' not in existing_columns:
                 connection.execute(text("ALTER TABLE strompreise ADD COLUMN verwendung VARCHAR(30) DEFAULT 'allgemein'"))
 
+        # v3.2.0: Per-Komponenten kWh in TagesZusammenfassung
+        if 'tages_zusammenfassung' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('tages_zusammenfassung')}
+            if 'komponenten_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_kwh JSON'))
+
     await conn.run_sync(_run_migrations)
 
 

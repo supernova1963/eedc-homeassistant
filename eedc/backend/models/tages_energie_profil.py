@@ -130,6 +130,11 @@ class TagesZusammenfassung(Base):
     datenquelle: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # "ha_sensor", "mqtt", "scheduler", "monatsabschluss"
 
+    # Per-Komponenten Tages-kWh (Summe der stündlichen kW-Werte)
+    # z.B. {"pv_3": 22.5, "waermepumpe_5": -8.3, "wallbox_7": -12.1, "haushalt": -15.2}
+    # Vorzeichen: positiv = Erzeugung (PV), negativ = Verbrauch (WP, Wallbox, etc.)
+    komponenten_kwh: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(

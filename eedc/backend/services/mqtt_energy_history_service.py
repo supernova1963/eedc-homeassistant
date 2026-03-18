@@ -218,9 +218,11 @@ def _compute_deltas(
 
     Mapped MQTT Energy Keys auf die Kategorien die live_power_service erwartet.
     Behandelt Monatswechsel (negative Deltas → Counter-Reset).
+    Investitions-Keys (inv/...) werden direkt durchgereicht.
     """
     result: dict[str, Optional[float]] = {}
 
+    # Basis-Keys (pv_gesamt_kwh → pv, etc.)
     for key, category in _KEY_TO_CATEGORY.items():
         end_val = end.get(key)
         start_val = start.get(key)
@@ -233,5 +235,20 @@ def _compute_deltas(
             delta = end_val
 
         result[category] = round(delta, 1)
+
+    # Investitions-Keys (inv/{id}/{key}) dynamisch durchreichen
+    for key in end:
+        if not key.startswith("inv/"):
+            continue
+        end_val = end.get(key)
+        start_val = start.get(key)
+        if end_val is None or start_val is None:
+            continue
+
+        delta = end_val - start_val
+        if delta < 0:
+            delta = end_val
+
+        result[key] = round(delta, 2)
 
     return result

@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME, HA_INTEGRATION_AVAILABLE
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, aktueller_monat, live_dashboard
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, aktueller_monat, live_dashboard, energie_profil
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -174,6 +174,7 @@ app.include_router(system_logs.router, prefix="/api/system", tags=["System"])
 app.include_router(daten_checker.router, prefix="/api/system", tags=["System"])
 app.include_router(aktueller_monat.router, prefix="/api/aktueller-monat", tags=["Aktueller Monat"])
 app.include_router(live_dashboard.router, prefix="/api/live", tags=["Live Dashboard"])
+app.include_router(energie_profil.router, prefix="/api/energie-profil", tags=["Energie-Profil"])
 
 # =============================================================================
 # API Routes - Home Assistant (nur mit SUPERVISOR_TOKEN)

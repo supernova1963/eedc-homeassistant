@@ -128,6 +128,7 @@ async def aggregate_day(
     pv_ertrag_summe = 0.0
     soc_values = []
     stunden_count = 0
+    komponenten_summen: dict[str, float] = {}  # Per-Komponenten Tages-kWh
 
     for punkt in punkte:
         h = int(punkt["zeit"].split(":")[0])
@@ -173,6 +174,12 @@ async def aggregate_day(
         soc = soc_stunden.get(h)
         if soc is not None:
             soc_values.append(soc)
+
+        # Per-Komponenten kWh akkumulieren (kW × 1h = kWh)
+        if werte:
+            for komp_key, komp_kw in werte.items():
+                if komp_kw is not None:
+                    komponenten_summen[komp_key] = komponenten_summen.get(komp_key, 0.0) + komp_kw
 
         # TagesEnergieProfil speichern
         profil = TagesEnergieProfil(
@@ -227,6 +234,10 @@ async def aggregate_day(
         performance_ratio=performance_ratio,
         stunden_verfuegbar=stunden_count,
         datenquelle=datenquelle,
+        komponenten_kwh=(
+            {k: round(v, 2) for k, v in komponenten_summen.items()}
+            if komponenten_summen else None
+        ),
     )
     db.add(zusammenfassung)
     await db.flush()
