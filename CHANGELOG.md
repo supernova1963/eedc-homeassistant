@@ -12,6 +12,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Hinzugefügt
 
 - **Italien als Standort-Land** (#30): IT im Land-Dropdown mit automatischem USt-Satz 22%. Italienische PLZ (CAP) korrekt unterstützt, Community-Vergleich mit Länderkennung IT.
+- **Dynamisches WP-Icon im Live Dashboard**: Das Wärmepumpen-Icon wechselt je nach Betriebsmodus (Heizen/Warmwasser/Kühlen).
 
 ### Behoben
 
