@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.2.0] - 2026-03-19
+
+### Hinzugefügt
+
+- **Getrennte WP-Strommessung** (#29): Optionale separate Erfassung von Strom-Heizen und Strom-Warmwasser für Wärmepumpen. Ermöglicht getrennte COP-Berechnung pro Komponente (COP Heizung vs. COP Warmwasser). Neue Checkbox "Getrennte Strommessung" in den Investitions-Parametern. Auswirkung auf Monatserfassung, Sensor-Mapping, Monatsabschluss, WP-Dashboard, CSV Import/Export, Live-Dashboard und HA Statistics.
+- **Getrennte Live-Leistungssensoren**: Bei aktivierter getrennter Strommessung können separate Leistungssensoren für Heizen und Warmwasser zugeordnet werden. Diese erscheinen als zwei separate Knoten im Energiefluss-Diagramm und als eigene Serien im Tagesverlauf.
+
+Danke an [MartyBr](https://community-smarthome.com/u/martybr) für den Vorschlag!
+
 ## [3.1.9] - 2026-03-18
 
 ### Hinzugefügt
