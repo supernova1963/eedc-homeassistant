@@ -16,7 +16,11 @@ TARGET="src/content/docs"
 
 # Mapping: Quelldatei → Zieldatei|Titel|Beschreibung
 declare -A DOCS=(
-  ["BENUTZERHANDBUCH.md"]="benutzerhandbuch.md|Benutzerhandbuch|Vollständiges Benutzerhandbuch für EEDC"
+  ["BENUTZERHANDBUCH.md"]="benutzerhandbuch.md|Benutzerhandbuch|Übersicht und Navigation zum EEDC-Benutzerhandbuch"
+  ["HANDBUCH_INSTALLATION.md"]="handbuch-installation.md|Installation & Einrichtung|Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Fehlerbehebung"
+  ["HANDBUCH_BEDIENUNG.md"]="handbuch-bedienung.md|Bedienung|Teil II: Navigation, Dashboards, Auswertungen, Community und Aussichten"
+  ["HANDBUCH_EINSTELLUNGEN.md"]="handbuch-einstellungen.md|Einstellungen & Sensormapping|Teil III: Einstellungen, Datenerfassung, Sensor-Mapping und HA-Integration"
+  ["GLOSSAR.md"]="glossar.md|Glossar|Begriffserklärungen und Support-Informationen"
   ["ARCHITEKTUR.md"]="architektur.md|Architektur|Architektur-Dokumentation – Systemaufbau, Datenmodell und Schnittstellen"
   ["DEVELOPMENT.md"]="entwicklung.md|Entwicklung|Entwicklungsanleitung – Setup, Build, Test und Deployment"
   ["SETUP_DEVMACHINE.md"]="setup-devmachine.md|Dev-Machine Setup|Entwicklungsrechner einrichten – Ubuntu 24.04"
@@ -52,4 +56,4 @@ done
 # Changelog separat (von Repository-Root)
 sync_file "$CHANGELOG" "changelog.md" "Changelog" "Alle Änderungen und Versionshistorie von EEDC"
 
-echo "✓ Docs sync complete (5 files)"
+echo "✓ Docs sync complete (9 files)"

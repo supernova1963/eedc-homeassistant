@@ -38,9 +38,18 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Benutzerhandbuch',
+					items: [
+						{ label: 'Übersicht', slug: 'benutzerhandbuch' },
+						{ label: 'Teil I: Installation & Einrichtung', slug: 'handbuch-installation' },
+						{ label: 'Teil II: Bedienung', slug: 'handbuch-bedienung' },
+						{ label: 'Teil III: Einstellungen', slug: 'handbuch-einstellungen' },
+						{ label: 'Glossar', slug: 'glossar' },
+					],
+				},
+				{
 					label: 'Dokumentation',
 					items: [
-						{ label: 'Benutzerhandbuch', slug: 'benutzerhandbuch' },
 						{ label: 'Architektur', slug: 'architektur' },
 						{ label: 'Entwicklung', slug: 'entwicklung' },
 						{ label: 'Dev-Machine Setup', slug: 'setup-devmachine' },
