@@ -186,6 +186,7 @@ cp eedc/README.md "$EEDC_STANDALONE/README.md"
 cp eedc/INSTALL.md "$EEDC_STANDALONE/INSTALL.md" 2>/dev/null || true
 cp eedc/.gitignore "$EEDC_STANDALONE/.gitignore" 2>/dev/null || true
 cp eedc/docker-compose.yml "$EEDC_STANDALONE/docker-compose.yml" 2>/dev/null || true
+cp eedc/run.sh "$EEDC_STANDALONE/run.sh"
 echo "  Shared Files kopiert"
 
 # Standalone-Dockerfile NICHT überschreiben (hat eigene Version ohne HA-Labels)
