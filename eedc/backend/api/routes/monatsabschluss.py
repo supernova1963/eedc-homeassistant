@@ -512,8 +512,17 @@ async def get_monatsabschluss(
             kategorie = (inv.parameter or {}).get("kategorie", "verbraucher")
             felder_config = inv_felder_def.get(kategorie, inv_felder_def.get("verbraucher", []))
         else:
-            felder_config = inv_felder_def
+            felder_config = list(inv_felder_def)
             kategorie = None
+
+        # Wärmepumpe: getrennte Strommessung → andere Felder
+        if inv.typ == "waermepumpe" and (inv.parameter or {}).get("getrennte_strommessung"):
+            felder_config = [
+                {"feld": "strom_heizen_kwh", "label": "Strom Heizen", "einheit": "kWh"},
+                {"feld": "strom_warmwasser_kwh", "label": "Strom Warmwasser", "einheit": "kWh"},
+                {"feld": "heizenergie_kwh", "label": "Heizenergie", "einheit": "kWh"},
+                {"feld": "warmwasser_kwh", "label": "Warmwasser", "einheit": "kWh"},
+            ]
 
         if not felder_config:
             continue

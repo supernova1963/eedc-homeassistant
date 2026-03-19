@@ -103,22 +103,57 @@ export default function WaermepumpeStep({
 
           {/* Felder */}
           <div className="p-4 space-y-4">
-            {/* Stromverbrauch - Pflicht */}
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
-                <Zap className="w-3 h-3 text-amber-600" />
+            {/* Stromverbrauch - getrennt oder gesamt */}
+            {inv.parameter?.getrennte_strommessung ? (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
+                    <Zap className="w-3 h-3 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <FeldMappingInput
+                      label="Strom Heizen"
+                      einheit="kWh"
+                      value={mappings[inv.id.toString()]?.strom_heizen_kwh || null}
+                      onChange={mapping => onChange(inv.id, 'strom_heizen_kwh', mapping)}
+                      availableSensors={availableSensors}
+                      strategieOptionen={stromOptionen}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
+                    <Zap className="w-3 h-3 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <FeldMappingInput
+                      label="Strom Warmwasser"
+                      einheit="kWh"
+                      value={mappings[inv.id.toString()]?.strom_warmwasser_kwh || null}
+                      onChange={mapping => onChange(inv.id, 'strom_warmwasser_kwh', mapping)}
+                      availableSensors={availableSensors}
+                      strategieOptionen={stromOptionen}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
+                  <Zap className="w-3 h-3 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <FeldMappingInput
+                    label="Stromverbrauch"
+                    einheit="kWh"
+                    value={mappings[inv.id.toString()]?.stromverbrauch_kwh || null}
+                    onChange={mapping => onChange(inv.id, 'stromverbrauch_kwh', mapping)}
+                    availableSensors={availableSensors}
+                    strategieOptionen={stromOptionen}
+                  />
+                </div>
               </div>
-              <div className="flex-1">
-                <FeldMappingInput
-                  label="Stromverbrauch"
-                  einheit="kWh"
-                  value={mappings[inv.id.toString()]?.stromverbrauch_kwh || null}
-                  onChange={mapping => onChange(inv.id, 'stromverbrauch_kwh', mapping)}
-                  availableSensors={availableSensors}
-                  strategieOptionen={stromOptionen}
-                />
-              </div>
-            </div>
+            )}
 
             {/* Heizenergie */}
             <FeldMappingInput
@@ -150,7 +185,10 @@ export default function WaermepumpeStep({
                 liveMappings={liveMappings}
                 onLiveChange={onLiveChange}
                 availableSensors={availableSensors}
-                fields={[...LIVE_FIELDS.waermepumpe]}
+                fields={inv.parameter?.getrennte_strommessung ? [
+                  { key: 'leistung_heizen_w', label: 'Leistung Heizen', einheit: 'W', placeholder: 'WP-Heizleistung suchen...' },
+                  { key: 'leistung_warmwasser_w', label: 'Leistung Warmwasser', einheit: 'W', placeholder: 'WP-Warmwasserleistung suchen...' },
+                ] : [...LIVE_FIELDS.waermepumpe]}
               />
             )}
           </div>

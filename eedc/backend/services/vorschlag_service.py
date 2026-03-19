@@ -256,10 +256,19 @@ class VorschlagService:
 
         # Wärmepumpe: Heiz-/Warmwasserenergie aus COP berechnen
         if inv.typ == "waermepumpe" and feld in ["heizenergie_kwh", "warmwasser_kwh"]:
-            # Stromverbrauch ermitteln
-            strom = await self._get_feld_wert(
-                anlage_id, "stromverbrauch_kwh", jahr, monat, investition_id
-            )
+            getrennte_messung = params.get("getrennte_strommessung", False)
+
+            # Bei getrennter Strommessung: spezifischen Strom-Wert verwenden
+            if getrennte_messung:
+                strom_feld = "strom_heizen_kwh" if feld == "heizenergie_kwh" else "strom_warmwasser_kwh"
+                strom = await self._get_feld_wert(
+                    anlage_id, strom_feld, jahr, monat, investition_id
+                )
+            else:
+                strom = await self._get_feld_wert(
+                    anlage_id, "stromverbrauch_kwh", jahr, monat, investition_id
+                )
+
             if strom is not None:
                 # Effizienz-Modus prüfen
                 modus = params.get("effizienz_modus", "gesamt_jaz")
@@ -280,13 +289,28 @@ class VorschlagService:
 
                 if cop:
                     berechneter_wert = round(strom * cop, 1)
+                    strom_label = "Strom Heizen" if getrennte_messung and feld == "heizenergie_kwh" else \
+                                  "Strom WW" if getrennte_messung else "Strom"
                     vorschlaege.append(Vorschlag(
                         wert=berechneter_wert,
                         quelle=VorschlagQuelle.BERECHNUNG,
                         konfidenz=60,
-                        beschreibung=f"Berechnet: {strom:.0f} kWh × COP {cop}",
+                        beschreibung=f"Berechnet: {strom:.0f} kWh ({strom_label}) × COP {cop}",
                         details={"stromverbrauch": strom, "cop": cop}
                     ))
+
+        # Wärmepumpe: Gesamtstrom als Summe der getrennten Werte
+        if inv.typ == "waermepumpe" and feld == "stromverbrauch_kwh" and params.get("getrennte_strommessung"):
+            strom_h = await self._get_feld_wert(anlage_id, "strom_heizen_kwh", jahr, monat, investition_id)
+            strom_w = await self._get_feld_wert(anlage_id, "strom_warmwasser_kwh", jahr, monat, investition_id)
+            if strom_h is not None and strom_w is not None:
+                vorschlaege.append(Vorschlag(
+                    wert=round(strom_h + strom_w, 1),
+                    quelle=VorschlagQuelle.BERECHNUNG,
+                    konfidenz=95,
+                    beschreibung=f"Summe: {strom_h:.0f} (Heizen) + {strom_w:.0f} (WW)",
+                    details={"strom_heizen": strom_h, "strom_warmwasser": strom_w}
+                ))
 
         # E-Auto: km aus Jahresfahrleistung
         if inv.typ == "e-auto" and feld == "km_gefahren":

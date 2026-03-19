@@ -296,6 +296,14 @@ class LivePowerService:
                 continue
 
             val_w = values.get("leistung_w")
+
+            # Wärmepumpe: getrennte Leistungswerte summieren
+            if val_w is None and inv.typ == "waermepumpe":
+                heizen_w = values.get("leistung_heizen_w")
+                ww_w = values.get("leistung_warmwasser_w")
+                if heizen_w is not None or ww_w is not None:
+                    val_w = (heizen_w or 0) + (ww_w or 0)
+
             if val_w is None:
                 continue
 
@@ -634,12 +642,26 @@ class LivePowerService:
         if basis_live.get("netzbezug_w"):
             category_entities["netzbezug"].append(basis_live["netzbezug_w"])
 
-        # Alle Investitionen mit leistung_w Sensor
+        # Alle Investitionen mit leistung_w Sensor (oder getrennte WP-Sensoren)
         for inv_id, live in inv_live_map.items():
             typ = inv_types.get(inv_id)
-            if not typ or typ in _SKIP_TYPEN or not live.get("leistung_w"):
+            if not typ or typ in _SKIP_TYPEN:
                 continue
-            entity_id = live["leistung_w"]
+
+            entity_id = live.get("leistung_w")
+
+            # WP: getrennte Leistungssensoren → beide als Komponenten
+            if not entity_id and typ == "waermepumpe":
+                heiz_eid = live.get("leistung_heizen_w")
+                ww_eid = live.get("leistung_warmwasser_w")
+                if heiz_eid:
+                    component_entities[f"waermepumpe_{inv_id}_heizen"] = heiz_eid
+                if ww_eid:
+                    component_entities[f"waermepumpe_{inv_id}_warmwasser"] = ww_eid
+                continue
+
+            if not entity_id:
+                continue
 
             if typ in _ERZEUGER_TYPEN:
                 category_entities["pv"].append(entity_id)
@@ -743,11 +765,47 @@ class LivePowerService:
         # Investitionen → Serien
         for inv_id, live in inv_live_map.items():
             inv = investitionen.get(inv_id)
-            if not inv or not live.get("leistung_w"):
+            if not inv:
                 continue
             typ = inv.typ
             if typ in _SKIP_TYPEN:
                 continue
+
+            has_leistung = live.get("leistung_w")
+
+            # WP mit getrennter Strommessung → zwei Serien statt einer
+            if not has_leistung and typ == "waermepumpe":
+                heiz_eid = live.get("leistung_heizen_w")
+                ww_eid = live.get("leistung_warmwasser_w")
+                config = _TV_SERIE_CONFIG.get("waermepumpe")
+                if config and (heiz_eid or ww_eid):
+                    if heiz_eid:
+                        key_h = f"waermepumpe_{inv_id}_heizen"
+                        serien.append({
+                            "key": key_h,
+                            "label": f"{inv.bezeichnung} Heizen",
+                            "kategorie": config["kategorie"],
+                            "farbe": config["farbe"],
+                            "seite": config["seite"],
+                            "bidirektional": config["bidirektional"],
+                        })
+                        serie_entities[key_h] = [heiz_eid]
+                    if ww_eid:
+                        key_w = f"waermepumpe_{inv_id}_warmwasser"
+                        serien.append({
+                            "key": key_w,
+                            "label": f"{inv.bezeichnung} Warmwasser",
+                            "kategorie": config["kategorie"],
+                            "farbe": "#f59e0b",  # Amber für Warmwasser
+                            "seite": config["seite"],
+                            "bidirektional": config["bidirektional"],
+                        })
+                        serie_entities[key_w] = [ww_eid]
+                continue
+
+            if not has_leistung:
+                continue
+
             # E-Auto mit Parent (Wallbox) überspringen — Wallbox misst bereits
             if typ == "e-auto" and inv.parent_investition_id is not None:
                 continue

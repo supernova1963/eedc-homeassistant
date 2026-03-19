@@ -126,6 +126,8 @@ FELD_LABELS = {
     "ladevorgaenge": "Ladevorgänge",
     # Wärmepumpe
     "stromverbrauch_kwh": "Stromverbrauch",
+    "strom_heizen_kwh": "Strom Heizen",
+    "strom_warmwasser_kwh": "Strom Warmwasser",
     "heizenergie_kwh": "Heizenergie",
     "warmwasser_kwh": "Warmwasser",
     # Balkonkraftwerk

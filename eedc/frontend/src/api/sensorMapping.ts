@@ -48,6 +48,7 @@ export interface InvestitionInfo {
   erwartete_felder: string[]
   kwp?: number | null
   cop?: number | null
+  parameter?: Record<string, unknown> | null
 }
 
 export interface SensorMappingResponse {

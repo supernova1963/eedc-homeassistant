@@ -308,6 +308,16 @@ async def _import_investition_monatsdaten_v09(
                 if val is not None:
                     field_key = "stromverbrauch_kwh"
                     field_value = val
+            elif suffix == "Strom_Heizen_kWh":
+                val = parse_float_positive(value, col_name)
+                if val is not None:
+                    field_key = "strom_heizen_kwh"
+                    field_value = val
+            elif suffix == "Strom_Warmwasser_kWh":
+                val = parse_float_positive(value, col_name)
+                if val is not None:
+                    field_key = "strom_warmwasser_kwh"
+                    field_value = val
             elif suffix == "Heizung_kWh":
                 val = parse_float_positive(value, col_name)
                 if val is not None:

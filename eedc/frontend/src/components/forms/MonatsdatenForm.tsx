@@ -65,6 +65,8 @@ interface InvestitionMonatsdaten {
   ladevorgaenge?: number
   // Wärmepumpe
   stromverbrauch_kwh?: number
+  strom_heizen_kwh?: number
+  strom_warmwasser_kwh?: number
   heizenergie_kwh?: number
   warmwasser_kwh?: number
   // Wechselrichter / PV-Module
@@ -197,8 +199,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             ladevorgaenge: '',
           }
         } else if (inv.typ === 'waermepumpe') {
+          const getrennteStrom = inv.parameter?.getrennte_strommessung === true
           initial[inv.id] = {
             stromverbrauch_kwh: '',
+            ...(getrennteStrom ? { strom_heizen_kwh: '', strom_warmwasser_kwh: '' } : {}),
             heizenergie_kwh: '',
             warmwasser_kwh: '',
           }
@@ -525,8 +529,16 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (hasValue(daten.ladevorgaenge)) parsed.ladevorgaenge = pi(daten.ladevorgaenge)
         } else if (inv.typ === 'waermepumpe') {
           if (hasValue(daten.stromverbrauch_kwh)) parsed.stromverbrauch_kwh = pf(daten.stromverbrauch_kwh)
+          if (hasValue(daten.strom_heizen_kwh)) parsed.strom_heizen_kwh = pf(daten.strom_heizen_kwh)
+          if (hasValue(daten.strom_warmwasser_kwh)) parsed.strom_warmwasser_kwh = pf(daten.strom_warmwasser_kwh)
           if (hasValue(daten.heizenergie_kwh)) parsed.heizenergie_kwh = pf(daten.heizenergie_kwh)
           if (hasValue(daten.warmwasser_kwh)) parsed.warmwasser_kwh = pf(daten.warmwasser_kwh)
+          // Auto-Sum: stromverbrauch aus getrennten Werten berechnen
+          if (inv.parameter?.getrennte_strommessung === true && !hasValue(daten.stromverbrauch_kwh)) {
+            const sh = hasValue(daten.strom_heizen_kwh) ? pf(daten.strom_heizen_kwh) : 0
+            const sw = hasValue(daten.strom_warmwasser_kwh) ? pf(daten.strom_warmwasser_kwh) : 0
+            if (sh > 0 || sw > 0) parsed.stromverbrauch_kwh = sh + sw
+          }
         } else if (inv.typ === 'wechselrichter') {
           if (hasValue(daten.pv_erzeugung_kwh)) parsed.pv_erzeugung_kwh = pf(daten.pv_erzeugung_kwh)
         } else if (inv.typ === 'pv-module') {
@@ -815,6 +827,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             { key: 'heizenergie_kwh', label: 'Heizenergie', unit: 'kWh', placeholder: 'z.B. 1200' },
             { key: 'warmwasser_kwh', label: 'Warmwasser', unit: 'kWh', placeholder: 'z.B. 150' },
           ]}
+          felderFn={(inv) => inv.parameter?.getrennte_strommessung === true ? [
+            { key: 'strom_heizen_kwh', label: 'Strom Heizen', unit: 'kWh', placeholder: 'z.B. 300' },
+            { key: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', unit: 'kWh', placeholder: 'z.B. 50' },
+            { key: 'heizenergie_kwh', label: 'Heizenergie', unit: 'kWh', placeholder: 'z.B. 1200' },
+            { key: 'warmwasser_kwh', label: 'Warmwasser', unit: 'kWh', placeholder: 'z.B. 150' },
+          ] : undefined}
         />
       )}
 
@@ -1115,6 +1133,7 @@ interface InvestitionSectionProps {
   investitionsDaten: Record<string, Record<string, string>>
   onInvChange: (invId: number, field: string, value: string) => void
   felder: { key: string; label: string; unit: string; placeholder: string; hint?: string }[]
+  felderFn?: (inv: Investition) => { key: string; label: string; unit: string; placeholder: string; hint?: string }[] | undefined
   sonstigePositionen: Record<string, SonstigePosition[]>
   onPositionenChange: (invId: number, positionen: SonstigePosition[]) => void
 }
@@ -1127,6 +1146,7 @@ function InvestitionSection({
   investitionsDaten,
   onInvChange,
   felder,
+  felderFn,
   sonstigePositionen,
   onPositionenChange,
 }: InvestitionSectionProps) {
@@ -1139,13 +1159,15 @@ function InvestitionSection({
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">{title}</h3>
       </div>
 
-      {investitionen.map((inv) => (
+      {investitionen.map((inv) => {
+        const aktiveFelder = (felderFn ? felderFn(inv) : undefined) ?? felder
+        return (
         <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
             {inv.bezeichnung}
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {felder.map((feld) => (
+            {aktiveFelder.map((feld) => (
               <div key={feld.key}>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                   {feld.label} {feld.unit && <span className="text-gray-400">({feld.unit})</span>}
@@ -1175,7 +1197,8 @@ function InvestitionSection({
             onChange={(pos) => onPositionenChange(inv.id, pos)}
           />
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

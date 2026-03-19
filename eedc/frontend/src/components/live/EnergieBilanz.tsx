@@ -35,7 +35,10 @@ function getColor(key: string): string {
   if (COLOR_MAP[key]) return COLOR_MAP[key]
   // Prefix vor der Investition-ID extrahieren (z.B. "batterie_3" → "batterie")
   const prefix = key.replace(/_\d+$/, '')
-  return COLOR_MAP[prefix] || '#6b7280'
+  if (COLOR_MAP[prefix]) return COLOR_MAP[prefix]
+  // Basis-Kategorie aus erstem Segment (z.B. "waermepumpe_5_heizen" → "waermepumpe")
+  const basis = key.split('_')[0]
+  return COLOR_MAP[basis] || '#6b7280'
 }
 
 interface EnergieBilanzProps {

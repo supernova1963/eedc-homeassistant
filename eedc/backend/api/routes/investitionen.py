@@ -1547,14 +1547,21 @@ async def get_waermepumpe_dashboard(
         monatsdaten = md_result.scalars().all()
 
         gesamt_strom = 0
+        gesamt_strom_heizen = 0
+        gesamt_strom_warmwasser = 0
         gesamt_heizung = 0
         gesamt_warmwasser = 0
+        hat_getrennte_strom = False
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             gesamt_strom += d.get('stromverbrauch_kwh', 0)
             gesamt_heizung += d.get('heizenergie_kwh', 0)
             gesamt_warmwasser += d.get('warmwasser_kwh', 0)
+            if 'strom_heizen_kwh' in d:
+                hat_getrennte_strom = True
+                gesamt_strom_heizen += d.get('strom_heizen_kwh', 0)
+                gesamt_strom_warmwasser += d.get('strom_warmwasser_kwh', 0)
 
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
         durchschnitt_cop = gesamt_waerme / gesamt_strom if gesamt_strom > 0 else 0
@@ -1586,6 +1593,17 @@ async def get_waermepumpe_dashboard(
             'co2_ersparnis_kg': round(co2_ersparnis, 1),
             'anzahl_monate': len(monatsdaten),
         }
+
+        # Getrennte COP-Werte wenn separate Strommessung vorhanden
+        if hat_getrennte_strom:
+            zusammenfassung['gesamt_strom_heizen_kwh'] = round(gesamt_strom_heizen, 1)
+            zusammenfassung['gesamt_strom_warmwasser_kwh'] = round(gesamt_strom_warmwasser, 1)
+            zusammenfassung['cop_heizen'] = round(
+                gesamt_heizung / gesamt_strom_heizen, 2
+            ) if gesamt_strom_heizen > 0 else 0
+            zusammenfassung['cop_warmwasser'] = round(
+                gesamt_warmwasser / gesamt_strom_warmwasser, 2
+            ) if gesamt_strom_warmwasser > 0 else 0
 
         dashboards.append(WaermepumpeDashboardResponse(
             investition=wp,

@@ -30,8 +30,12 @@ const COLOR_MAP: Record<string, string> = {
 
 function getColor(key: string): string {
   if (COLOR_MAP[key]) return COLOR_MAP[key]
+  // Erst versuche: key ohne trailing _zahl (z.B. "waermepumpe_5" → "waermepumpe")
   const prefix = key.replace(/_\d+$/, '')
-  return COLOR_MAP[prefix] || '#6b7280'
+  if (COLOR_MAP[prefix]) return COLOR_MAP[prefix]
+  // Dann: Basis-Kategorie aus erstem Segment (z.B. "waermepumpe_5_heizen" → "waermepumpe")
+  const basis = key.split('_')[0]
+  return COLOR_MAP[basis] || '#6b7280'
 }
 
 /** log(1 + kW) für Liniendicke, normiert auf min..max px */

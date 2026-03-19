@@ -118,11 +118,19 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
                 beschreibung[col] = desc
 
         elif inv.typ == "waermepumpe":
-            cols = [
-                (f"{prefix}_Strom_kWh", f"Stromverbrauch {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Heizung_kWh", f"Heizenergie {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Warmwasser_kWh", f"Warmwasser {inv.bezeichnung} (kWh)"),
-            ]
+            if (inv.parameter or {}).get("getrennte_strommessung"):
+                cols = [
+                    (f"{prefix}_Strom_Heizen_kWh", f"Strom Heizen {inv.bezeichnung} (kWh)"),
+                    (f"{prefix}_Strom_Warmwasser_kWh", f"Strom Warmwasser {inv.bezeichnung} (kWh)"),
+                    (f"{prefix}_Heizung_kWh", f"Heizenergie {inv.bezeichnung} (kWh)"),
+                    (f"{prefix}_Warmwasser_kWh", f"Warmwasser {inv.bezeichnung} (kWh)"),
+                ]
+            else:
+                cols = [
+                    (f"{prefix}_Strom_kWh", f"Stromverbrauch {inv.bezeichnung} (kWh)"),
+                    (f"{prefix}_Heizung_kWh", f"Heizenergie {inv.bezeichnung} (kWh)"),
+                    (f"{prefix}_Warmwasser_kWh", f"Warmwasser {inv.bezeichnung} (kWh)"),
+                ]
             for col, desc in cols:
                 spalten.append(col)
                 beschreibung[col] = desc

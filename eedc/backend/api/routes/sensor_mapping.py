@@ -78,6 +78,7 @@ class InvestitionInfo(BaseModel):
     erwartete_felder: list[str]
     kwp: Optional[float] = None  # Für PV-Module
     cop: Optional[float] = None  # Für Wärmepumpen
+    parameter: Optional[dict] = None  # Investitions-Parameter (für Frontend-Logik)
 
 
 class SensorMappingResponse(BaseModel):
@@ -165,7 +166,11 @@ async def get_sensor_mapping(anlage_id: int):
 
         for inv in investitionen_db:
             # Erwartete Felder basierend auf Typ
-            felder = ERWARTETE_FELDER.get(inv.typ, [])
+            felder = list(ERWARTETE_FELDER.get(inv.typ, []))
+
+            # Wärmepumpe: getrennte Strommessung → andere Felder
+            if inv.typ == "waermepumpe" and inv.parameter and inv.parameter.get("getrennte_strommessung"):
+                felder = ["strom_heizen_kwh", "strom_warmwasser_kwh", "heizenergie_kwh", "warmwasser_kwh"]
 
             # kWp für PV-Module
             kwp = None
@@ -187,6 +192,7 @@ async def get_sensor_mapping(anlage_id: int):
                 erwartete_felder=felder,
                 kwp=kwp,
                 cop=cop,
+                parameter=inv.parameter,
             ))
 
         # Mapping aus Anlage extrahieren

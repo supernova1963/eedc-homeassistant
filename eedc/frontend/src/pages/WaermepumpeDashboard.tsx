@@ -100,14 +100,27 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
-  const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
-    strom: md.verbrauch_daten.stromverbrauch_kwh || 0,
-    heizung: md.verbrauch_daten.heizenergie_kwh || 0,
-    warmwasser: md.verbrauch_daten.warmwasser_kwh || 0,
-    cop: ((md.verbrauch_daten.heizenergie_kwh || 0) + (md.verbrauch_daten.warmwasser_kwh || 0)) /
-         (md.verbrauch_daten.stromverbrauch_kwh || 1),
-  }))
+  const hatGetrennteStrom = z.cop_heizen !== undefined
+
+  const monthlyData = monatsdaten.map(md => {
+    const d = md.verbrauch_daten
+    const strom = d.stromverbrauch_kwh || 0
+    const heizung = d.heizenergie_kwh || 0
+    const warmwasser = d.warmwasser_kwh || 0
+    const stromHeizen = d.strom_heizen_kwh || 0
+    const stromWarmwasser = d.strom_warmwasser_kwh || 0
+    return {
+      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+      strom,
+      strom_heizen: stromHeizen,
+      strom_warmwasser: stromWarmwasser,
+      heizung,
+      warmwasser,
+      cop: (heizung + warmwasser) / (strom || 1),
+      cop_heizen: stromHeizen > 0 ? heizung / stromHeizen : null,
+      cop_warmwasser: stromWarmwasser > 0 ? warmwasser / stromWarmwasser : null,
+    }
+  })
 
   // Monatsvergleich über Jahre: Jan/Feb/...Dez als Gruppen, je ein Balken pro Jahr
   const [vergleichModus, setVergleichModus] = useState<'cop' | 'strom'>('strom')
@@ -200,6 +213,43 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           ergebnis={`= ${z.ersparnis_euro.toFixed(2)} €`}
         />
       </div>
+      {/* Getrennte COP-Anzeige (wenn separate Strommessung) */}
+      {hatGetrennteStrom && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="COP Heizen"
+            value={z.cop_heizen?.toFixed(2) || '–'}
+            icon={Thermometer}
+            color="blue"
+            formel="COP Heizen = Heizenergie ÷ Strom Heizen"
+            berechnung={`${z.gesamt_heizenergie_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
+            ergebnis={`= ${z.cop_heizen?.toFixed(2) || '–'}`}
+          />
+          <KPICard
+            title="COP Warmwasser"
+            value={z.cop_warmwasser?.toFixed(2) || '–'}
+            icon={Thermometer}
+            color="purple"
+            formel="COP WW = Warmwasser ÷ Strom WW"
+            berechnung={`${z.gesamt_warmwasser_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
+            ergebnis={`= ${z.cop_warmwasser?.toFixed(2) || '–'}`}
+          />
+          <KPICard
+            title="Strom Heizen"
+            value={(z.gesamt_strom_heizen_kwh! / 1000).toFixed(1)}
+            unit="MWh"
+            icon={Zap}
+            color="yellow"
+          />
+          <KPICard
+            title="Strom Warmwasser"
+            value={(z.gesamt_strom_warmwasser_kwh! / 1000).toFixed(1)}
+            unit="MWh"
+            icon={Zap}
+            color="yellow"
+          />
+        </div>
+      )}
       <p className="text-xs text-gray-400 dark:text-gray-500 italic -mt-2">
         Basis: tatsächlich erfasste Wärmemengen (Heizung + Warmwasser) aus Monatsdaten
       </p>

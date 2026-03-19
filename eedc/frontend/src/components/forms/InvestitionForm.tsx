@@ -193,6 +193,8 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
           // Für Modus "getrennte_cops"
           cop_heizung: params.cop_heizung?.toString() || '3.9',
           cop_warmwasser: params.cop_warmwasser?.toString() || '3.0',
+          // Getrennte Strommessung (Heizen/Warmwasser)
+          getrennte_strommessung: params.getrennte_strommessung ? 'true' : 'false',
           // Wärmebedarf (getrennt)
           heizwaermebedarf_kwh: params.heizwaermebedarf_kwh?.toString() || '12000',
           warmwasserbedarf_kwh: params.warmwasserbedarf_kwh?.toString() || '3000',
@@ -934,6 +936,23 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                 />
               </>
             )}
+
+            {/* Getrennte Strommessung */}
+            <label className="flex items-center gap-2 mt-2">
+              <input
+                type="checkbox"
+                name="param_getrennte_strommessung"
+                checked={paramData.getrennte_strommessung === 'true'}
+                onChange={(e) => onChange({ target: { name: 'param_getrennte_strommessung', value: e.target.checked ? 'true' : 'false', type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Getrennte Strommessung (Heizen / Warmwasser)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+              Aktivieren wenn separate Stromzähler für Heizung und Warmwasser vorhanden sind. Ermöglicht getrennte COP-Berechnung.
+            </p>
 
             {/* Wärmebedarf (immer anzeigen) */}
             <Input

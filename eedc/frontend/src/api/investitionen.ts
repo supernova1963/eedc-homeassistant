@@ -154,6 +154,11 @@ export interface WaermepumpeDashboardResponse {
     ersparnis_euro: number
     co2_ersparnis_kg: number
     anzahl_monate: number
+    // Getrennte Strommessung (optional)
+    gesamt_strom_heizen_kwh?: number
+    gesamt_strom_warmwasser_kwh?: number
+    cop_heizen?: number
+    cop_warmwasser?: number
   }
 }
 
