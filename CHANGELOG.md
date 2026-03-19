@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.2.1] - 2026-03-19
+
+### Hinzugefügt
+
+- **Italien als Standort-Land** (#30): IT im Land-Dropdown mit automatischem USt-Satz 22%. Italienische PLZ (CAP) korrekt unterstützt, Community-Vergleich mit Länderkennung IT.
+
+### Behoben
+
+- **Docker-Build im Standalone-Repo**: `run.sh` fehlte im eedc-Repo, da sie nicht vom Release-Script synchronisiert wurde. Das Release-Script kopiert `run.sh` jetzt automatisch mit.
+
 ## [3.2.0] - 2026-03-19
 
 ### Hinzugefügt
