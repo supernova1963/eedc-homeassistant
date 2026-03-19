@@ -7,14 +7,14 @@
  * Tages-kWh Tooltips, Σ Erzeugung/Verbrauch.
  */
 
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 
 // ─── Shared Utilities (aus EnergieBilanz) ───────────────────────────
 
 const ICON_MAP: Record<string, React.ElementType> = {
   sun: Sun, zap: Zap, battery: Battery, car: Car, plug: Plug,
-  flame: Flame, wrench: Wrench, home: Home,
+  flame: Flame, wrench: Wrench, home: Home, heater: Heater, droplets: Droplets,
 }
 
 const COLOR_MAP: Record<string, string> = {

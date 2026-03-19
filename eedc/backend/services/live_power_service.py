@@ -297,12 +297,17 @@ class LivePowerService:
 
             val_w = values.get("leistung_w")
 
-            # Wärmepumpe: getrennte Leistungswerte summieren
+            # Wärmepumpe: getrennte Leistungswerte summieren + Icon je Betriebsmodus
+            wp_icon = None
             if val_w is None and inv.typ == "waermepumpe":
                 heizen_w = values.get("leistung_heizen_w")
                 ww_w = values.get("leistung_warmwasser_w")
                 if heizen_w is not None or ww_w is not None:
                     val_w = (heizen_w or 0) + (ww_w or 0)
+                    if (heizen_w or 0) > 0:
+                        wp_icon = "heater"
+                    elif (ww_w or 0) > 0:
+                        wp_icon = "droplets"
 
             if val_w is None:
                 continue
@@ -353,7 +358,7 @@ class LivePowerService:
                 komponenten.append({
                     "key": komp_key,
                     "label": inv.bezeichnung,
-                    "icon": _TYP_ICON.get(typ, "wrench"),
+                    "icon": wp_icon or _TYP_ICON.get(typ, "wrench"),
                     "erzeugung_kw": None,
                     "verbrauch_kw": round(kw, 2),
                 })

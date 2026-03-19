@@ -6,7 +6,7 @@
  * kW-Werte stehen als Text neben den Balken.
  */
 
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets } from 'lucide-react'
 import type { LiveKomponente } from '../../api/liveDashboard'
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -18,6 +18,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   flame: Flame,
   wrench: Wrench,
   home: Home,
+  heater: Heater,
+  droplets: Droplets,
 }
 
 const COLOR_MAP: Record<string, string> = {
