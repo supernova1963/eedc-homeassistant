@@ -52,7 +52,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     }
   }, [anlage?.id, anlage?.latitude, anlage?.longitude])
 
-  const UST_DEFAULTS: Record<string, string> = { DE: '19', AT: '20', CH: '8.1' }
+  const UST_DEFAULTS: Record<string, string> = { DE: '19', AT: '20', CH: '8.1', IT: '22' }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -175,6 +175,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               <option value="DE">Deutschland</option>
               <option value="AT">Österreich</option>
               <option value="CH">Schweiz</option>
+              <option value="IT">Italien</option>
             </select>
           </div>
           <Input
@@ -182,7 +183,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             name="standort_plz"
             value={formData.standort_plz}
             onChange={handleChange}
-            placeholder={formData.standort_land === 'DE' ? 'z.B. 12345' : 'z.B. 1234'}
+            placeholder={formData.standort_land === 'CH' ? 'z.B. 1234' : 'z.B. 12345'}
           />
           <Input
             label="Ort"

@@ -24,8 +24,8 @@ def get_region_from_plz(plz: str | None, land: str | None = None) -> str | None:
     Für AT und CH wird direkt das Länderkürzel zurückgegeben.
     Für DE wird das Bundesland-Kürzel aus der PLZ ermittelt.
     """
-    # AT/CH direkt zurückgeben — keine PLZ-Auflösung nötig
-    if land in ("AT", "CH"):
+    # AT/CH/IT direkt zurückgeben — keine PLZ-Auflösung nötig
+    if land in ("AT", "CH", "IT"):
         return land
 
     if not plz:

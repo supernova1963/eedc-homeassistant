@@ -99,7 +99,7 @@ class Anlage(Base):
     # keine_ust: Kein USt-Effekt (Post-2023 ≤30kWp, Kleinunternehmer)
     # regelbesteuerung: USt auf Eigenverbrauch (Pre-2023, >30kWp, AT/CH)
     steuerliche_behandlung: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="keine_ust")
-    ust_satz_prozent: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=19.0)  # DE: 19, AT: 20, CH: 8.1
+    ust_satz_prozent: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=19.0)  # DE: 19, AT: 20, CH: 8.1, IT: 22
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

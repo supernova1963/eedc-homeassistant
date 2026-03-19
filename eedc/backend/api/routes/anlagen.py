@@ -25,7 +25,7 @@ class AnlageBase(BaseModel):
     anlagenname: str = Field(..., min_length=1, max_length=255)
     leistung_kwp: float = Field(..., gt=0)
     installationsdatum: Optional[date] = None
-    standort_land: Optional[str] = Field('DE', max_length=5, description="Land: DE, AT oder CH")
+    standort_land: Optional[str] = Field('DE', max_length=5, description="Land: DE, AT, CH oder IT")
     standort_plz: Optional[str] = Field(None, max_length=10)
     standort_ort: Optional[str] = Field(None, max_length=255)
     standort_strasse: Optional[str] = Field(None, max_length=255)
