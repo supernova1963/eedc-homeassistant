@@ -64,7 +64,7 @@ export default function PVAnlageDashboard() {
         setCockpitData(cockpit)
         setAggregierteDaten(aggregiert)
       } catch (err) {
-        console.error('Fehler beim Laden der Daten:', err)
+        // Fehler werden stillschweigend ignoriert
       } finally {
         setCockpitLoading(false)
       }

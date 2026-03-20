@@ -245,7 +245,7 @@ export default function MonatsdatenPage() {
         const data = await monatsdatenApi.listAggregiert(selectedAnlageId)
         setAggregierteDaten(data)
       } catch (e) {
-        console.error('Fehler beim Laden der aggregierten Daten:', e)
+        // Fehler stillschweigend ignoriert
       } finally {
         setAggregiertLoading(false)
       }
@@ -283,7 +283,6 @@ export default function MonatsdatenPage() {
         setVerfuegbareMonate(monate)
       } catch (e) {
         setHaError('Fehler beim Laden der verfügbaren Monate')
-        console.error(e)
       } finally {
         setHaLoading(false)
       }
@@ -323,7 +322,6 @@ export default function MonatsdatenPage() {
       }
     } catch (e) {
       setHaError('Fehler beim Laden der Monatswerte aus HA-Statistik')
-      console.error(e)
     } finally {
       setHaLoading(false)
     }

@@ -167,7 +167,7 @@ async def prepare_community_data(
     # Durchschnittliche Neigung und Ausrichtung aus PV-Modulen
     pv_module = [inv for inv in investitionen if inv.typ == "pv-module"]
     if pv_module:
-        neigungen = [inv.neigung_grad or 30 for inv in pv_module]
+        neigungen = [inv.neigung_grad if inv.neigung_grad is not None else 30 for inv in pv_module]
         neigung_grad = int(sum(neigungen) / len(neigungen))
 
         azimute = [_ausrichtung_zu_kompass(inv.ausrichtung) for inv in pv_module]

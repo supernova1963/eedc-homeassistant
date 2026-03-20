@@ -183,7 +183,6 @@ export default function MonatsabschlussWizard() {
         })
       } catch (e) {
         setError('Fehler beim Laden der Monatsdaten')
-        console.error(e)
       } finally {
         setLoading(false)
       }
@@ -326,7 +325,6 @@ export default function MonatsabschlussWizard() {
 
       setHaInfo(`${geladenCount} Werte aus HA-Statistik geladen`)
     } catch (e) {
-      console.error(e)
       setError('Fehler beim Laden der HA-Werte. Ist das Sensor-Mapping konfiguriert?')
     } finally {
       setLoadingHA(false)
@@ -511,7 +509,6 @@ export default function MonatsabschlussWizard() {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e)
       setError(`Fehler beim Speichern: ${detail}`)
-      console.error(e)
     } finally {
       setSaving(false)
     }

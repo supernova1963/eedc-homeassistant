@@ -52,7 +52,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               const result = await cockpitApi.getPVStrings(anlageId, jahr)
               dataMap.set(jahr, result)
             } catch (err) {
-              console.error(`Fehler beim Laden Jahr ${jahr}:`, err)
+              // Einzelnes Jahr fehlgeschlagen, weiter mit nächstem
             }
           }
           setMultiYearData(dataMap)
@@ -136,7 +136,6 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
         }
       } catch (err) {
         setError('Fehler beim Laden der String-Daten')
-        console.error(err)
       } finally {
         setLoading(false)
       }

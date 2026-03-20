@@ -169,8 +169,12 @@ async def get_solar_prognose_endpoint(
 
         # Neigung und Ausrichtung aus Parameter
         params = pv.parameter or {}
-        neigung = params.get("neigung_grad") or params.get("neigung") or 35
-        ausrichtung = params.get("ausrichtung_grad") or params.get("ausrichtung") or 0
+        neigung = params.get("neigung_grad")
+        if neigung is None:
+            neigung = params.get("neigung", 35)
+        ausrichtung = params.get("ausrichtung_grad")
+        if ausrichtung is None:
+            ausrichtung = params.get("ausrichtung", 0)
 
         # Ausrichtung konvertieren falls als Text
         if isinstance(ausrichtung, str):

@@ -74,7 +74,6 @@ export default function HAStatistikImport() {
         }
       } catch (e) {
         setError('Fehler beim Laden der Anlagen')
-        console.error(e)
       } finally {
         setLoading(false)
       }
@@ -93,7 +92,6 @@ export default function HAStatistikImport() {
       } catch (e) {
         setHaVerfuegbar(false)
         setHaFehler('Fehler bei der Statusprüfung')
-        console.error(e)
       } finally {
         setCheckingStatus(false)
       }
@@ -141,7 +139,6 @@ export default function HAStatistikImport() {
       setFeldAuswahl(initialFeldAuswahl)
     } catch (e) {
       setError('Fehler beim Laden der Vorschau')
-      console.error(e)
     } finally {
       setLoadingVorschau(false)
     }
@@ -312,7 +309,6 @@ export default function HAStatistikImport() {
       }
     } catch (e) {
       setError('Fehler beim Import')
-      console.error(e)
     } finally {
       setImporting(false)
     }

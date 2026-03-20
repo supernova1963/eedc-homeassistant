@@ -386,12 +386,13 @@ async def get_cockpit_uebersicht(
     ust_eigenverbrauch = 0.0
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
     if steuerliche_beh == "regelbesteuerung":
+        _ust = getattr(anlage, 'ust_satz_prozent', None)
         ust_eigenverbrauch = berechne_ust_eigenverbrauch(
             eigenverbrauch_kwh=eigenverbrauch,
             investition_gesamt_euro=investition_gesamt,
             betriebskosten_jahr_euro=betriebskosten_ges,
             pv_erzeugung_jahr_kwh=pv_erzeugung,
-            ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None) or 19.0,
+            ust_satz_prozent=_ust if _ust is not None else 19.0,
         )
         netto_ertrag -= ust_eigenverbrauch
 
@@ -1886,7 +1887,7 @@ async def get_share_text(
     if pv_module:
         haupt_pv = max(pv_module, key=lambda i: i.leistung_kwp or 0)
         ausrichtung = haupt_pv.ausrichtung or "Süd"
-        neigung = haupt_pv.neigung_grad or 30
+        neigung = haupt_pv.neigung_grad if haupt_pv.neigung_grad is not None else 30
     else:
         ausrichtung = "Süd"
         neigung = 30

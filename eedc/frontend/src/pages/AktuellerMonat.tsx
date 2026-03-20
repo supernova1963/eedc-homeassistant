@@ -44,15 +44,12 @@ const COLORS = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmt(val: number | null | undefined, decimals = 1): string {
-  if (val === null || val === undefined) return '—'
-  return val.toLocaleString('de-DE', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
-}
+const fmt = (val: number | null | undefined, decimals = 1) => fmtCalc(val, decimals, '—')
 
 function fmtEuro(val: number | null | undefined): string {
   if (val === null || val === undefined) return '—'
   const prefix = val >= 0 ? '+' : ''
-  return `${prefix}${val.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `${prefix}${fmtCalc(val, 2, '—')}`
 }
 
 function quelleLabel(quelle: string): string {

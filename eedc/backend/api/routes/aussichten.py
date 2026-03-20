@@ -1382,12 +1382,13 @@ async def get_finanz_prognose(
     ust_eigenverbrauch = 0.0
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
     if steuerliche_beh == "regelbesteuerung" and jahres_erzeugung > 0:
+        _ust = getattr(anlage, 'ust_satz_prozent', None)
         ust_eigenverbrauch = berechne_ust_eigenverbrauch(
             eigenverbrauch_kwh=jahres_eigenverbrauch,
             investition_gesamt_euro=sum(i.anschaffungskosten_gesamt or 0 for i in alle_investitionen),
             betriebskosten_jahr_euro=betriebskosten_ges,
             pv_erzeugung_jahr_kwh=jahres_erzeugung,
-            ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None) or 19.0,
+            ust_satz_prozent=_ust if _ust is not None else 19.0,
         )
         jahres_netto_ertrag -= ust_eigenverbrauch
 

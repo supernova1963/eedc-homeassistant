@@ -105,8 +105,8 @@ export default function FormelTooltip({
 /**
  * Hilfsfunktion zum Formatieren von Zahlen in Tooltips
  */
-export function fmtCalc(num: number | null | undefined, decimals = 2): string {
-  if (num === null || num === undefined || isNaN(num)) return '?'
+export function fmtCalc(num: number | null | undefined, decimals = 2, fallback = '?'): string {
+  if (num === null || num === undefined || isNaN(num)) return fallback
   return num.toLocaleString('de-DE', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals

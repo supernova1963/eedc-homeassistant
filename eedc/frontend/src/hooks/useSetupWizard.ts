@@ -258,9 +258,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
     pending.forEach(({ data, timer }, id) => {
       clearTimeout(timer)
       promises.push(
-        investitionenApi.update(id, data).catch(e => {
-          console.error(`Fehler beim Update von Investition ${id}:`, e)
-        })
+        investitionenApi.update(id, data).catch(() => {})
       )
     })
     pending.clear()

@@ -220,7 +220,7 @@ class DatenChecker:
 
         # Performance Ratio Hinweis (PVGIS-Systemverluste ggf. zu hoch)
         if pr_count >= 6 and pr > 1.1 and pvgis_prognose:
-            system_losses = pvgis_prognose.system_losses or 14
+            system_losses = pvgis_prognose.system_losses if pvgis_prognose.system_losses is not None else 14
             abweichung_pct = round((pr - 1) * 100)
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,

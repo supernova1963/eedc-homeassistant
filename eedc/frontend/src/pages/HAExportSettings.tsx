@@ -107,7 +107,7 @@ export default function HAExportSettings() {
       setAnlageExport(anlageData)
       setYamlSnippet(yamlData)
     } catch (e) {
-      console.error('Fehler beim Laden der Anlage-Daten:', e)
+      // Fehler stillschweigend ignoriert
     }
   }
 

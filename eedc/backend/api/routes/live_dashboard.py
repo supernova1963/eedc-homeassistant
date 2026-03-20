@@ -899,7 +899,9 @@ def _get_pv_orientierungsgruppen(pv_module: list) -> list[dict]:
         neigung = pv.neigung_grad
         if neigung is None:
             params = pv.parameter or {}
-            neigung = params.get("neigung_grad") or params.get("neigung") or 35
+            neigung = params.get("neigung_grad")
+            if neigung is None:
+                neigung = params.get("neigung", 35)
 
         # Ausrichtung: parameter.ausrichtung_grad (numerisch) > Direkt-Feld (Text) > 0
         params = pv.parameter or {}

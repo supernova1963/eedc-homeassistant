@@ -35,7 +35,6 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
         setKomponenten(result)
       } catch (err) {
         setError('Fehler beim Laden der Komponentendaten')
-        console.error(err)
       } finally {
         setLoading(false)
       }

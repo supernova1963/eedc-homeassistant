@@ -47,7 +47,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
       setLoadingProvider(true)
       wetterApi.getProvider(anlage.id)
         .then(data => setWetterProviderOptions(data.provider))
-        .catch(err => console.warn('Wetter-Provider laden fehlgeschlagen:', err))
+        .catch(() => {})
         .finally(() => setLoadingProvider(false))
     }
   }, [anlage?.id, anlage?.latitude, anlage?.longitude])

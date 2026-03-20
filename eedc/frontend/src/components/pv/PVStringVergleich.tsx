@@ -46,7 +46,6 @@ export function PVStringVergleich({ anlageId }: Props) {
             ? String((err as { detail: string }).detail)
             : 'Fehler beim Laden der String-Daten'
           setError(errorMsg)
-          console.error('PVStringVergleich Fehler:', err)
         }
       } finally {
         if (!cancelled) {

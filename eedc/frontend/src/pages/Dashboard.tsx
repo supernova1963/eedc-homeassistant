@@ -84,7 +84,6 @@ export default function Dashboard() {
         }
       } catch (err) {
         setError('Fehler beim Laden der Daten')
-        console.error(err)
       } finally {
         setLoading(false)
       }

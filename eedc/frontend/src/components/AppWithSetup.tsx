@@ -45,7 +45,6 @@ export default function AppWithSetup({ children }: AppWithSetupProps) {
       }
     } catch (error) {
       // Bei Fehler direkt zur App
-      console.error('Fehler beim Prüfen des Setup-Status:', error)
       setShowWizard(false)
     } finally {
       setIsLoading(false)

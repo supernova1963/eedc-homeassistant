@@ -48,7 +48,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
         setRoiData(roi)
         setCockpitData(cockpit)
       } catch (e) {
-        console.error('ROI-Dashboard Fehler:', e)
+        // Fehler stillschweigend ignoriert
       } finally {
         setRoiLoading(false)
       }

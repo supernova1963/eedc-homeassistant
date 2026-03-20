@@ -335,14 +335,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
                   initial[invIdStr].entladung_kwh = (legacyEntladung * anteil).toFixed(1)
                 }
               })
-              console.info(
-                `Migration: Legacy-Speicherdaten (${legacyLadung}/${legacyEntladung} kWh) ` +
-                `auf ${speicherOhneDaten.length} Speicher übertragen`
-              )
             }
           }
         } catch (e) {
-          console.error('Fehler beim Laden der InvestitionMonatsdaten:', e)
+          // Fehler stillschweigend ignoriert
         } finally {
           setLoadingInvData(false)
         }
@@ -384,7 +380,6 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             })
           }
         })
-        console.info('HA-Vorausfüllung: Investitionswerte aus HA-Statistik eingefügt')
       }
 
       setInvestitionsDaten(initial)

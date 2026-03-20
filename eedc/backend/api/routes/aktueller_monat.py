@@ -523,8 +523,8 @@ async def get_aktueller_monat(
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
     if allgemein_tarif:
-        netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh or 30.0
-        einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh or 8.2
+        netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else 30.0
+        einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else 8.2
 
         if einspeisung is not None:
             einspeise_erloes = round(einspeisung * einspeise_cent / 100, 2)

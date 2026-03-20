@@ -1286,12 +1286,13 @@ async def get_roi_dashboard(
         alle_inv = alle_inv_result.scalars().all()
         betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_inv)
         alle_kosten = sum(i.anschaffungskosten_gesamt or 0 for i in alle_inv)
+        _ust = getattr(anlage, 'ust_satz_prozent', None)
         ust_abzug = berechne_ust_eigenverbrauch(
             eigenverbrauch_kwh=pv_detail.get('eigenverbrauch_kwh_jahr', 0),
             investition_gesamt_euro=alle_kosten,
             betriebskosten_jahr_euro=betriebskosten_ges,
             pv_erzeugung_jahr_kwh=pv_detail.get('erzeugung_kwh_jahr', 0),
-            ust_satz_prozent=getattr(anlage, 'ust_satz_prozent', None) or 19.0,
+            ust_satz_prozent=_ust if _ust is not None else 19.0,
         )
         gesamt_einsparung -= ust_abzug
 
