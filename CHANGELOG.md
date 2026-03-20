@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.3.0] - 2026-03-20
+
+### Hinzugefügt
+
+- **GTI-basierte PV-Prognose im Live-Dashboard**: Die PV-Ertragsprognose im WetterWidget nutzt jetzt Global Tilted Irradiance (GTI) statt horizontaler Globalstrahlung (GHI). Open-Meteo liefert die Strahlung direkt auf der geneigten Modulfläche — Azimut und Neigung aus den PV-Modul-Investitionen fließen automatisch ein.
+- **Multi-String-Prognose**: Bei Anlagen mit unterschiedlich ausgerichteten Modulen (z.B. Ost/West) werden separate GTI-Werte parallel abgerufen und kWp-gewichtet kombiniert. Das ergibt eine realistischere, breitere Tageskurve statt einer überhöhten Mittagsspitze.
+- **Lernfaktor**: Täglicher IST/Prognose-Vergleich aus den letzten 30 Tagen wird als Korrekturfaktor angewendet. Kompensiert systematische Abweichungen (Verschattung, Modulalterung, lokale Besonderheiten). Median-basiert für Robustheit gegen Ausreißer, aktiviert sich nach 7 Tagen mit Daten.
+- **Temperaturkorrektur**: PV-Ertragsprognose berücksichtigt jetzt die Modultemperatur (Lufttemperatur + strahlungsabhängige Aufheizung, -0.4%/°C über 25°C STC).
+
+### Behoben
+
+- **Frontend-Version im HA Add-on**: Release-Script führt jetzt `npm run build` vor dem Commit durch, damit der dist/-Ordner immer die korrekte Version enthält.
+
 ## [3.2.2] - 2026-03-20
 
 ### Behoben
