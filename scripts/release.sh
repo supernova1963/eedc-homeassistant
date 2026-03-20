@@ -106,7 +106,7 @@ echo ""
 # =============================================================================
 # SCHRITT 1: Version bumpen in eedc-homeassistant (alle 5 Dateien)
 # =============================================================================
-echo -e "${CYAN}[1/5] Version bumpen in eedc-homeassistant...${NC}"
+echo -e "${CYAN}[1/6] Version bumpen in eedc-homeassistant...${NC}"
 
 sed -i "s/^APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" eedc/backend/core/config.py
 echo "  eedc/backend/core/config.py         → $VERSION"
@@ -124,10 +124,26 @@ sed -i "s/io.hass.version=\"[^\"]*\"/io.hass.version=\"$VERSION\"/" eedc/Dockerf
 echo "  eedc/Dockerfile (Label)             → $VERSION"
 
 # =============================================================================
-# SCHRITT 2: CHANGELOG synchronisieren (Root → eedc/)
+# SCHRITT 2: Frontend Build (damit dist/ die neue Version enthält)
 # =============================================================================
 echo ""
-echo -e "${CYAN}[2/5] CHANGELOG synchronisieren...${NC}"
+echo -e "${CYAN}[2/6] Frontend Build...${NC}"
+
+cd eedc/frontend
+if [ ! -d "node_modules" ]; then
+    echo "  npm ci..."
+    npm ci --silent
+fi
+echo "  npm run build..."
+npm run build --silent
+echo -e "  ${GREEN}Frontend Build erfolgreich${NC}"
+cd "$REPO_DIR"
+
+# =============================================================================
+# SCHRITT 3: CHANGELOG synchronisieren (Root → eedc/)
+# =============================================================================
+echo ""
+echo -e "${CYAN}[3/6] CHANGELOG synchronisieren...${NC}"
 
 if [ -f "CHANGELOG.md" ]; then
     cp CHANGELOG.md eedc/CHANGELOG.md
@@ -143,10 +159,10 @@ if grep -rn "<<<<<<" eedc/ --include="*.py" --include="*.ts" --include="*.md" --
 fi
 
 # =============================================================================
-# SCHRITT 3: Commit + Tag + Push eedc-homeassistant
+# SCHRITT 4: Commit + Tag + Push eedc-homeassistant
 # =============================================================================
 echo ""
-echo -e "${CYAN}[3/5] Commit + Tag + Push eedc-homeassistant...${NC}"
+echo -e "${CYAN}[4/6] Commit + Tag + Push eedc-homeassistant...${NC}"
 
 git add -A
 if git diff --cached --quiet; then
@@ -159,10 +175,10 @@ git push && git push origin "v$VERSION"
 echo -e "${GREEN}  eedc-homeassistant v$VERSION gepusht.${NC}"
 
 # =============================================================================
-# SCHRITT 4: Sync shared Code → eedc-Standalone
+# SCHRITT 5: Sync shared Code → eedc-Standalone
 # =============================================================================
 echo ""
-echo -e "${CYAN}[4/5] Sync nach eedc-Standalone...${NC}"
+echo -e "${CYAN}[5/6] Sync nach eedc-Standalone...${NC}"
 
 # backend/ und frontend/ komplett synchronisieren
 rsync -a --delete \
@@ -193,10 +209,10 @@ echo "  Shared Files kopiert"
 # Version im Standalone-config.py ist schon korrekt (wurde oben in eedc/ gebumpt und rüberkopiert)
 
 # =============================================================================
-# SCHRITT 5: Commit + Tag + Push eedc-Standalone
+# SCHRITT 6: Commit + Tag + Push eedc-Standalone
 # =============================================================================
 echo ""
-echo -e "${CYAN}[5/5] Commit + Tag + Push eedc-Standalone...${NC}"
+echo -e "${CYAN}[6/6] Commit + Tag + Push eedc-Standalone...${NC}"
 
 cd "$EEDC_STANDALONE"
 git add -A
