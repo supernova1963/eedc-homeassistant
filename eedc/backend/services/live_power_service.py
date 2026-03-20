@@ -299,15 +299,18 @@ class LivePowerService:
 
             # Wärmepumpe: getrennte Leistungswerte summieren + Icon je Betriebsmodus
             wp_icon = None
-            if val_w is None and inv.typ == "waermepumpe":
+            if inv.typ == "waermepumpe":
                 heizen_w = values.get("leistung_heizen_w")
                 ww_w = values.get("leistung_warmwasser_w")
                 if heizen_w is not None or ww_w is not None:
-                    val_w = (heizen_w or 0) + (ww_w or 0)
-                    if (heizen_w or 0) > 0:
-                        wp_icon = "heater"
-                    elif (ww_w or 0) > 0:
-                        wp_icon = "droplets"
+                    # Getrennte Werte vorhanden: Summe als Leistung (falls kein leistung_w)
+                    if val_w is None:
+                        val_w = (heizen_w or 0) + (ww_w or 0)
+                    # Icon nach dominantem Betriebsmodus (höherer Wert gewinnt)
+                    h = heizen_w or 0
+                    w = ww_w or 0
+                    if h > 0 or w > 0:
+                        wp_icon = "heater" if h >= w else "droplets"
 
             if val_w is None:
                 continue

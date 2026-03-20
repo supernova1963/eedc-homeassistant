@@ -185,10 +185,11 @@ export default function WaermepumpeStep({
                 liveMappings={liveMappings}
                 onLiveChange={onLiveChange}
                 availableSensors={availableSensors}
-                fields={inv.parameter?.getrennte_strommessung ? [
-                  { key: 'leistung_heizen_w', label: 'Leistung Heizen', einheit: 'W', placeholder: 'WP-Heizleistung suchen...' },
-                  { key: 'leistung_warmwasser_w', label: 'Leistung Warmwasser', einheit: 'W', placeholder: 'WP-Warmwasserleistung suchen...' },
-                ] : [...LIVE_FIELDS.waermepumpe]}
+                fields={[
+                  ...LIVE_FIELDS.waermepumpe,
+                  { key: 'leistung_heizen_w', label: 'Leistung Heizen (optional)', einheit: 'W', placeholder: 'WP-Heizleistung suchen...' },
+                  { key: 'leistung_warmwasser_w', label: 'Leistung Warmwasser (optional)', einheit: 'W', placeholder: 'WP-Warmwasserleistung suchen...' },
+                ]}
               />
             )}
           </div>
