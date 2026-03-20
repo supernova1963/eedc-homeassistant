@@ -6,21 +6,23 @@ GET /api/live/{anlage_id}?demo=true — Simulierte Demo-Daten (Entwicklung).
 GET /api/live/{anlage_id}/wetter — Aktuelles Wetter + PV-Prognose + Verbrauchsprofil.
 """
 
+import asyncio
 import logging
 import random
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.live_power_service import get_live_power_service
 from backend.services.wetter_service import wetter_code_zu_symbol
 
@@ -858,7 +860,73 @@ _LASTPROFIL_KW = {
     16: 0.35, 17: 0.50, 18: 0.65, 19: 0.70, 20: 0.55,
 }
 
-PERFORMANCE_RATIO = 0.85  # Typisch: Kabel, WR, Temperatur, Verschmutzung
+DEFAULT_SYSTEM_LOSSES = 0.14  # Kabel, Wechselrichter, Verschmutzung
+TEMP_COEFFICIENT = 0.004  # -0.4%/°C über 25°C (typisch Silizium)
+
+# Ausrichtungs-Text → Azimut (0=Süd, -90=Ost, 90=West)
+_AUSRICHTUNG_ZU_AZIMUT = {
+    "süd": 0, "s": 0, "south": 0, "sued": 0,
+    "südost": -45, "so": -45, "suedost": -45,
+    "ost": -90, "o": -90, "east": -90,
+    "nordost": -135, "no": -135,
+    "nord": 180, "n": 180, "north": 180,
+    "nordwest": 135, "nw": 135,
+    "west": 90, "w": 90,
+    "südwest": 45, "sw": 45, "suedwest": 45,
+}
+
+
+def _get_pv_orientierungsgruppen(pv_module: list) -> list[dict]:
+    """
+    Gruppiert PV-Module nach Orientierung (Neigung + Ausrichtung).
+
+    Returns:
+        Liste von Gruppen: [{"neigung": int, "ausrichtung": int, "kwp": float}, ...]
+        Bei nur einer Gruppe = alle Module gleich ausgerichtet.
+        Leere Liste falls keine PV-Module vorhanden.
+    """
+    if not pv_module:
+        return []
+
+    # Module einzeln auflösen
+    module_configs = []
+    for pv in pv_module:
+        kwp = pv.leistung_kwp or 0
+        if kwp <= 0:
+            continue
+
+        # Neigung: Direkt-Feld > Parameter > Default 35°
+        neigung = pv.neigung_grad
+        if neigung is None:
+            params = pv.parameter or {}
+            neigung = params.get("neigung_grad") or params.get("neigung") or 35
+
+        # Ausrichtung: parameter.ausrichtung_grad (numerisch) > Direkt-Feld (Text) > 0
+        params = pv.parameter or {}
+        azimut = params.get("ausrichtung_grad")
+        if azimut is None:
+            text = pv.ausrichtung or ""
+            azimut = _AUSRICHTUNG_ZU_AZIMUT.get(text.lower(), 0)
+
+        module_configs.append({
+            "neigung": round(float(neigung)),
+            "ausrichtung": round(float(azimut)),
+            "kwp": kwp,
+        })
+
+    if not module_configs:
+        return []
+
+    # Nach (neigung, ausrichtung) gruppieren und kWp summieren
+    gruppen: dict[tuple[int, int], float] = {}
+    for m in module_configs:
+        key = (m["neigung"], m["ausrichtung"])
+        gruppen[key] = gruppen.get(key, 0) + m["kwp"]
+
+    return [
+        {"neigung": n, "ausrichtung": a, "kwp": kwp}
+        for (n, a), kwp in gruppen.items()
+    ]
 
 
 def _berechne_verbrauchsprofil(
@@ -870,8 +938,9 @@ def _berechne_verbrauchsprofil(
     """
     Berechnet stündliches PV-Ertrag + Verbrauchsprofil.
 
-    PV-Ertrag: Strahlung(W/m²) x kWp x PR / 1000
-    Verbrauch: Individuelles Profil (aus HA-History) mit BDEW H0 Fallback.
+    PV-Ertrag: Nutzt GTI (Global Tilted Irradiance) falls verfügbar,
+    sonst Fallback auf GHI (shortwave_radiation).
+    Temperaturkorrektur: -0.4%/°C über 25°C Modultemperatur.
 
     Args:
         individuelles_profil: Stundenwerte {0: kW, 1: kW, ..., 23: kW} oder None
@@ -887,10 +956,26 @@ def _berechne_verbrauchsprofil(
 
     for s in stunden:
         h = int(s["zeit"].split(":")[0])
-        strahlung = s.get("globalstrahlung_wm2") or 0
 
-        # PV: Bei 1000 W/m2 STC liefert 1 kWp genau 1 kW
-        pv_kw = round(strahlung * kwp * PERFORMANCE_RATIO / 1000, 2)
+        # GTI bevorzugen (auf Modulebene geneigt), sonst GHI-Fallback
+        strahlung = s.get("gti_wm2") or s.get("globalstrahlung_wm2") or 0
+
+        if strahlung > 0 and kwp > 0:
+            # Basis-Ertrag: Strahlung/1000 × kWp × (1 - Systemverluste)
+            pv_kw = strahlung * kwp * (1 - DEFAULT_SYSTEM_LOSSES) / 1000
+
+            # Temperaturkorrektur
+            temp = s.get("temperatur_c")
+            if temp is not None:
+                aufheizung = min(25, strahlung / 40)  # ~25°C bei 1000 W/m²
+                modul_temp = temp + aufheizung
+                if modul_temp > 25:
+                    pv_kw *= (1 - (modul_temp - 25) * TEMP_COEFFICIENT)
+
+            pv_kw = round(max(0, pv_kw), 2)
+        else:
+            pv_kw = 0.0
+
         pv_summe_kwh += pv_kw  # 1h x kW = kWh
 
         if individuelles_profil is not None:
@@ -951,6 +1036,9 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
 
         niederschlag = round(random.uniform(0, 0.5), 1) if code >= 61 else 0.0
 
+        # GTI simulieren: ~10% mehr als GHI bei optimaler Südausrichtung 35°
+        gti = round(strahlung * 1.1, 0) if strahlung > 0 else 0
+
         stunde = {
             "zeit": f"{h:02d}:00",
             "temperatur_c": round(temp, 1),
@@ -959,6 +1047,7 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
             "bewoelkung_prozent": bewoelkung,
             "niederschlag_mm": niederschlag,
             "globalstrahlung_wm2": round(strahlung, 0),
+            "gti_wm2": gti,
         }
         alle_stunden.append(stunde)
         if 6 <= h <= 20:
@@ -1014,6 +1103,176 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
     }
 
 
+# ── Multi-String GTI-Fetch ────────────────────────────────────────────────────
+
+async def _fetch_gti_for_gruppe(
+    client: httpx.AsyncClient,
+    latitude: float,
+    longitude: float,
+    neigung: int,
+    ausrichtung: int,
+) -> Optional[list]:
+    """
+    Holt stündliche GTI-Werte für eine Orientierungsgruppe von Open-Meteo.
+
+    Returns:
+        Liste mit 24 stündlichen GTI-Werten (W/m²) oder None bei Fehler.
+    """
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "hourly": "global_tilted_irradiance",
+        "timezone": "Europe/Berlin",
+        "forecast_days": 1,
+        "tilt": neigung,
+        "azimuth": ausrichtung,
+    }
+    try:
+        resp = await client.get(
+            f"{settings.open_meteo_api_url}/forecast", params=params
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("hourly", {}).get("global_tilted_irradiance", [])
+    except Exception as e:
+        logger.warning(f"GTI-Fetch Neigung={neigung}° Azimut={ausrichtung}°: {e}")
+        return None
+
+
+async def _fetch_multi_string_gti(
+    latitude: float,
+    longitude: float,
+    gruppen: list[dict],
+) -> list:
+    """
+    Berechnet gewichtete GTI-Werte für mehrere Orientierungsgruppen.
+
+    Bei nur einer Gruppe: Einzelner API-Call (in den Haupt-Request integriert).
+    Bei mehreren Gruppen: Parallele API-Calls, kWp-gewichtete Kombination.
+
+    Returns:
+        Liste mit 24 kombinierten GTI-Werten (W/m²).
+    """
+    kwp_gesamt = sum(g["kwp"] for g in gruppen)
+    if kwp_gesamt <= 0:
+        return []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        tasks = [
+            _fetch_gti_for_gruppe(client, latitude, longitude, g["neigung"], g["ausrichtung"])
+            for g in gruppen
+        ]
+        ergebnisse = await asyncio.gather(*tasks)
+
+    # kWp-gewichtete Kombination der GTI-Werte
+    n_stunden = 24
+    kombiniert = [0.0] * n_stunden
+
+    for gruppe, gti_values in zip(gruppen, ergebnisse):
+        if not gti_values:
+            continue
+        gewicht = gruppe["kwp"] / kwp_gesamt
+        for i in range(min(n_stunden, len(gti_values))):
+            val = gti_values[i]
+            if val is not None:
+                kombiniert[i] += val * gewicht
+
+    return kombiniert
+
+
+# ── Lernfaktor ────────────────────────────────────────────────────────────────
+
+async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
+    """
+    Berechnet einen Korrekturfaktor aus historischen IST/Prognose-Vergleichen.
+
+    Nutzt die TagesZusammenfassung der letzten 30 Tage:
+    - IST = Summe aller PV-Komponenten-kWh (positive Werte in komponenten_kwh)
+    - Prognose = pv_prognose_kwh (gespeichert beim Wetter-Abruf)
+
+    Returns:
+        Korrekturfaktor (z.B. 0.92 = Anlage liefert 8% weniger als Prognose)
+        oder None wenn nicht genug Daten (< 7 Tage).
+    """
+    vor_30_tagen = date.today() - timedelta(days=30)
+
+    result = await db.execute(
+        select(TagesZusammenfassung).where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum >= vor_30_tagen,
+            TagesZusammenfassung.datum < date.today(),  # Heute ausschließen (noch nicht komplett)
+            TagesZusammenfassung.pv_prognose_kwh.isnot(None),
+            TagesZusammenfassung.pv_prognose_kwh > 0,
+        )
+    )
+    tage = result.scalars().all()
+
+    ratios = []
+    for tag in tage:
+        # IST: Summe der positiven Werte in komponenten_kwh (= PV-Erzeugung)
+        ist_kwh = 0.0
+        if tag.komponenten_kwh:
+            ist_kwh = sum(v for v in tag.komponenten_kwh.values() if v > 0)
+
+        if ist_kwh > 0.5 and tag.pv_prognose_kwh > 0.5:  # Nur Tage mit relevanter Produktion
+            ratios.append(ist_kwh / tag.pv_prognose_kwh)
+
+    if len(ratios) < 7:
+        return None
+
+    # Median statt Mean — robust gegen einzelne Ausreißer (Schnee, Schatten, Störung)
+    ratios.sort()
+    mid = len(ratios) // 2
+    median = ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
+
+    # Faktor auf realistischen Bereich begrenzen (0.5 – 1.3)
+    faktor = max(0.5, min(1.3, median))
+
+    logger.info(
+        f"Lernfaktor Anlage {anlage_id}: {faktor:.3f} "
+        f"(Median aus {len(ratios)} Tagen, Range {min(ratios):.2f}–{max(ratios):.2f})"
+    )
+
+    return round(faktor, 3)
+
+
+async def _speichere_prognose(anlage_id: int, datum: date, prognose_kwh: float):
+    """
+    Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
+
+    Nutzt eine eigene DB-Session (fire-and-forget aus dem Request-Kontext).
+    Falls der Tag schon existiert (z.B. durch Scheduler), wird nur pv_prognose_kwh aktualisiert.
+    Falls nicht, wird ein minimaler Eintrag angelegt.
+    """
+    from backend.core.database import get_session
+
+    try:
+        async with get_session() as db:
+            result = await db.execute(
+                select(TagesZusammenfassung).where(
+                    TagesZusammenfassung.anlage_id == anlage_id,
+                    TagesZusammenfassung.datum == datum,
+                )
+            )
+            tz = result.scalar_one_or_none()
+
+            if tz:
+                tz.pv_prognose_kwh = prognose_kwh
+            else:
+                tz = TagesZusammenfassung(
+                    anlage_id=anlage_id,
+                    datum=datum,
+                    pv_prognose_kwh=prognose_kwh,
+                    stunden_verfuegbar=0,
+                    datenquelle="wetter_prognose",
+                )
+                db.add(tz)
+
+            await db.commit()
+    except Exception as e:
+        logger.debug(f"Prognose speichern fehlgeschlagen: {e}")
+
+
 # ── Wetter Endpoint ──────────────────────────────────────────────────────────
 
 @router.get("/{anlage_id}/wetter", response_model=LiveWetterResponse)
@@ -1028,7 +1287,17 @@ async def get_live_wetter(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    kwp = anlage.leistung_kwp or 10.0
+    # PV-Module laden für Orientierung und kWp
+    pv_result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == "pv-module",
+            Investition.aktiv == True,
+        )
+    )
+    pv_module = list(pv_result.scalars().all())
+    gruppen = _get_pv_orientierungsgruppen(pv_module)
+    kwp = sum(g["kwp"] for g in gruppen) if gruppen else (anlage.leistung_kwp or 10.0)
 
     if demo:
         data = _generate_demo_wetter(kwp)
@@ -1039,28 +1308,64 @@ async def get_live_wetter(
         return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
 
     try:
+        # Haupt-Wetter-Request (Wetterdaten + GHI)
+        # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen
+        hat_multi_string = len(gruppen) > 1
+        haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
+        haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
+
+        hourly_vars = [
+            "temperature_2m", "weather_code", "cloud_cover",
+            "precipitation", "shortwave_radiation",
+        ]
+        if not hat_multi_string:
+            hourly_vars.append("global_tilted_irradiance")
+
         params = {
             "latitude": anlage.latitude,
             "longitude": anlage.longitude,
-            "hourly": ",".join([
-                "temperature_2m", "weather_code", "cloud_cover",
-                "precipitation", "shortwave_radiation",
-            ]),
+            "hourly": ",".join(hourly_vars),
             "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min",
             "timezone": "Europe/Berlin",
             "forecast_days": 1,
         }
+        if not hat_multi_string:
+            params["tilt"] = haupt_neigung
+            params["azimuth"] = haupt_azimut
 
+        # Bei Multi-String: paralleler GTI-Fetch + Haupt-Request gleichzeitig
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                f"{settings.open_meteo_api_url}/forecast", params=params
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            if hat_multi_string:
+                haupt_task = client.get(
+                    f"{settings.open_meteo_api_url}/forecast", params=params
+                )
+                gti_task = _fetch_multi_string_gti(
+                    anlage.latitude, anlage.longitude, gruppen
+                )
+                haupt_resp, multi_gti = await asyncio.gather(haupt_task, gti_task)
+                haupt_resp.raise_for_status()
+                data = haupt_resp.json()
+            else:
+                resp = await client.get(
+                    f"{settings.open_meteo_api_url}/forecast", params=params
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                multi_gti = None
 
         hourly = data.get("hourly", {})
         times = hourly.get("time", [])
+
+        # GTI-Werte: Bei Single-String aus Haupt-Request, bei Multi-String aus gewichtetem Ergebnis
+        if multi_gti:
+            gti_values = multi_gti
+        else:
+            gti_values = hourly.get("global_tilted_irradiance", [])
+
         now = datetime.now()
+
+        # Lernfaktor laden (historischer IST/Prognose-Vergleich)
+        lernfaktor = await _get_lernfaktor(anlage_id, db)
 
         alle_stunden = []  # 0-23 für Verbrauchsprofil
         stunden = []       # 6-20 für Wetter-Timeline
@@ -1068,6 +1373,13 @@ async def get_live_wetter(
             h = int(t[11:13])
 
             code = hourly.get("weather_code", [None] * len(times))[i]
+            gti = gti_values[i] if i < len(gti_values) else None
+
+            # Lernfaktor auf GTI anwenden (skaliert die Strahlung, nicht den Ertrag,
+            # damit Temperaturkorrektur weiterhin korrekt greift)
+            if gti is not None and lernfaktor is not None:
+                gti = gti * lernfaktor
+
             stunde = {
                 "zeit": f"{h:02d}:00",
                 "temperatur_c": hourly.get("temperature_2m", [None] * len(times))[i],
@@ -1076,6 +1388,7 @@ async def get_live_wetter(
                 "bewoelkung_prozent": hourly.get("cloud_cover", [None] * len(times))[i],
                 "niederschlag_mm": hourly.get("precipitation", [None] * len(times))[i],
                 "globalstrahlung_wm2": hourly.get("shortwave_radiation", [None] * len(times))[i],
+                "gti_wm2": gti,
             }
             alle_stunden.append(stunde)
             if 6 <= h <= 20:
@@ -1112,6 +1425,12 @@ async def get_live_wetter(
         profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
         )
+
+        # Prognose für Lernfaktor-Berechnung speichern (fire-and-forget)
+        if pv_prognose is not None and pv_prognose > 0:
+            asyncio.create_task(
+                _speichere_prognose(anlage.id, date.today(), pv_prognose)
+            )
 
         return {
             "anlage_id": anlage.id,

@@ -123,6 +123,10 @@ class TagesZusammenfassung(Base):
     # Performance Ratio: IST-Ertrag / (Strahlung × kWp × 1/1000)
     performance_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # PV-Prognose (kWh): Vom Wetter-Endpoint berechnete Tagesprognose.
+    # Dient als Referenzwert für den Lernfaktor (IST/Prognose-Vergleich).
+    pv_prognose_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Anzahl verfügbarer Stundenwerte (Qualitätsindikator)
     stunden_verfuegbar: Mapped[int] = mapped_column(Integer, default=0)
 

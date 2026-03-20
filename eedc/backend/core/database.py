@@ -142,6 +142,9 @@ async def run_migrations(conn):
             existing_columns = {col['name'] for col in inspector.get_columns('tages_zusammenfassung')}
             if 'komponenten_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_kwh JSON'))
+            # v3.3.0: PV-Prognose für Lernfaktor
+            if 'pv_prognose_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_kwh FLOAT'))
 
     await conn.run_sync(_run_migrations)
 
