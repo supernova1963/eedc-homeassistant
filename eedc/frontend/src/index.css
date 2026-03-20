@@ -2,30 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tooltip-Farben für Recharts (Light/Dark) */
-html {
-  --tooltip-bg: #fff;
-  --tooltip-fg: #1f2937;
-  --tooltip-border: #e5e7eb;
-}
-html.dark {
-  --tooltip-bg: #111827;
-  --tooltip-fg: #f3f4f6;
-  --tooltip-border: #374151;
+/* Recharts Dark Mode — Pie-Labels, Achsen, Legenden */
+html.dark .recharts-pie-label-text {
+  fill: #d1d5db !important;
 }
 
-/* Globaler Recharts-Tooltip Style — Dark/Light Mode für ALLE Charts */
-.recharts-default-tooltip {
-  background-color: var(--tooltip-bg) !important;
-  color: var(--tooltip-fg) !important;
-  border: 1px solid var(--tooltip-border) !important;
-  border-radius: 8px !important;
+/* Recharts Achsen-Text im Dark Mode */
+html.dark .recharts-cartesian-axis-tick-value {
+  fill: #9ca3af !important;
 }
-.recharts-tooltip-label {
-  color: var(--tooltip-fg) !important;
-}
-.recharts-tooltip-item {
-  color: var(--tooltip-fg) !important;
+html.dark .recharts-legend-item-text {
+  color: #d1d5db !important;
 }
 
 /* Custom base styles */

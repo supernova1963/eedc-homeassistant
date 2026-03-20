@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { Wrench, Zap, TrendingUp, Home, Leaf, Battery, AlertCircle } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
 import type { SonstigesDashboardResponse } from '../api/investitionen'
@@ -239,7 +240,7 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
                   <Cell fill="#22c55e" />
                   <Cell fill="#f59e0b" />
                 </Pie>
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -256,7 +257,7 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill="#22c55e" stroke="#16a34a" name="Eigenverbrauch" />
                 <Area type="monotone" dataKey="einspeisung" stackId="1" fill="#f59e0b" stroke="#d97706" name="Einspeisung" />
@@ -418,7 +419,7 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
                   <Cell fill="#22c55e" />
                   <Cell fill="#ef4444" />
                 </Pie>
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -435,7 +436,7 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 <Bar dataKey="bezug_pv" stackId="1" fill="#22c55e" name="PV-Strom" />
                 <Bar dataKey="bezug_netz" stackId="1" fill="#ef4444" name="Netzstrom" />
@@ -579,7 +580,7 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} />
               <YAxis />
-              <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+              <Tooltip content={<ChartTooltip />} />
               <Legend />
               <Bar dataKey="ladung" fill="#8b5cf6" name="Ladung" />
               <Bar dataKey="entladung" fill="#22c55e" name="Entladung" />

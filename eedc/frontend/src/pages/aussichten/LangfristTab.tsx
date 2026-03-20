@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, LangfristPrognose } from '../../api/aussichten'
 import {
   ResponsiveContainer,
@@ -189,15 +190,10 @@ export default function LangfristTab({ anlageId }: Props) {
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
-              <Tooltip
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                formatter={(value: number | number[], name: string) => {
-                  if (name === 'trend') return [`${(value as number).toFixed(0)} kWh`, 'Trend-korrigiert']
-                  if (name === 'pvgis') return [`${(value as number).toFixed(0)} kWh`, 'PVGIS-Prognose']
-                  if (name === 'konfidenz' && Array.isArray(value)) return [`${value[0].toFixed(0)} - ${value[1].toFixed(0)} kWh`, 'Konfidenzband']
-                  return [value, name]
-                }}
-              />
+              <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
+                  if (name === 'Konfidenzband') return null
+                  return `${value.toFixed(0)} kWh`
+                }} />} />
               <Legend />
 
               {/* Konfidenzband */}

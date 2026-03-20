@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { Sun, Zap, TrendingUp, Home, Leaf, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
 import type { BalkonkraftwerkDashboardResponse } from '../api/investitionen'
@@ -110,11 +111,9 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
   }))
 
   const verbrauchPieData = [
-    { name: 'Eigenverbrauch', value: z.gesamt_eigenverbrauch_kwh },
-    { name: 'Einspeisung', value: z.gesamt_einspeisung_kwh },
+    { name: 'Eigenverbrauch', value: z.gesamt_eigenverbrauch_kwh, fill: '#22c55e' },
+    { name: 'Einspeisung', value: z.gesamt_einspeisung_kwh, fill: '#f59e0b' },
   ]
-
-  const COLORS = ['#22c55e', '#f59e0b']
 
   return (
     <Card className="space-y-6">
@@ -233,11 +232,11 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
                   dataKey="value"
                   label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                 >
-                  {verbrauchPieData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {verbrauchPieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -264,7 +263,7 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill="#22c55e" stroke="#16a34a" name="Eigenverbrauch" />
                 <Area type="monotone" dataKey="einspeisung" stackId="1" fill="#f59e0b" stroke="#d97706" name="Einspeisung" />
@@ -312,7 +311,7 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" fontSize={10} />
                   <YAxis />
-                  <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                  <Tooltip content={<ChartTooltip />} />
                   <Legend />
                   <Bar dataKey="speicher_ladung" fill="#8b5cf6" name="Ladung" />
                   <Bar dataKey="speicher_entladung" fill="#a855f7" name="Entladung" />

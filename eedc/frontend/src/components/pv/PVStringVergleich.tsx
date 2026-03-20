@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../ui'
+import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 
 const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899']
@@ -232,7 +233,7 @@ export function PVStringVergleich({ anlageId }: Props) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis unit=" kWh" />
-                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 {data.strings.map((s, idx) => (
                   <Bar
@@ -273,7 +274,7 @@ export function PVStringVergleich({ anlageId }: Props) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis unit=" kWh" />
-                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 <Area
                   type="monotone"

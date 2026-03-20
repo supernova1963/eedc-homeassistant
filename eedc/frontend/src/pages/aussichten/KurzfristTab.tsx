@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudLightning, Thermometer, Zap, Settings2, Info } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, KurzfristPrognose } from '../../api/aussichten'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
 import {
@@ -368,15 +369,11 @@ export default function KurzfristTab({ anlageId }: Props) {
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: '°C', angle: 90, position: 'insideRight' }}
               />
-              <Tooltip
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                formatter={(value: number, name: string) => {
-                  if (name === 'pv_kwh') return [`${value.toFixed(1)} kWh`, 'PV-Prognose']
-                  if (name === 'sonnenstunden') return [`${value.toFixed(1)} h`, 'Sonnenstunden']
-                  if (name === 'temperatur') return [`${value.toFixed(0)} °C`, 'Temperatur']
-                  return [value, name]
-                }}
-              />
+              <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
+                  if (name === 'PV-Prognose') return `${value.toFixed(1)} kWh`
+                  if (name === 'Temperatur') return `${value.toFixed(0)} °C`
+                  return `${value.toFixed(1)}`
+                }} />} />
               <Legend />
               <Bar
                 yAxisId="left"

@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { Sun, Zap, TrendingUp, Download } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
@@ -175,13 +176,10 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
                   tick={{ fontSize: 11 }}
                 />
               )}
-              <Tooltip
-                formatter={(value: number, name: string) => {
-                  if (name === 'Autarkie') return [`${value.toFixed(1)}%`, name]
-                  return [`${value.toFixed(0)} kWh`, name]
-                }}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip formatter={(value, name) => {
+                  if (name === 'Autarkie') return `${value.toFixed(1)} %`
+                  return `${value.toFixed(0)} kWh`
+                }} />} />
               <Legend />
 
               {/* Erzeugung-Ansicht: Eigenverbrauch + Einspeisung gestapelt, Netzbezug separat */}
@@ -232,13 +230,10 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis yAxisId="left" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
               <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh/kWp" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number, name: string) => {
-                  if (name.includes('kWh/kWp')) return [`${value.toFixed(0)} kWh/kWp`, name]
-                  return [`${value.toFixed(1)}%`, name]
-                }}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip formatter={(value, name) => {
+                  if (name.includes('kWh/kWp')) return `${value.toFixed(0)} kWh/kWp`
+                  return `${value.toFixed(1)} %`
+                }} />} />
               <Legend />
               <Line yAxisId="left" type="monotone" dataKey="autarkie" name="Autarkie (%)" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} />
               <Line yAxisId="left" type="monotone" dataKey="evQuote" name="EV-Quote (%)" stroke={CHART_COLORS.evQuote} strokeWidth={2} dot={false} />
@@ -260,10 +255,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number) => [`${value.toFixed(0)} kWh`, 'Erzeugung']}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Line type="monotone" dataKey="erzeugung" name="PV-Erzeugung" stroke={CHART_COLORS.erzeugung} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>

@@ -16,6 +16,7 @@ import {
   Tooltip, ReferenceLine, Legend, CartesianGrid,
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
+import ChartTooltip from '../ui/ChartTooltip'
 
 interface TagesverlaufChartProps {
   serien: TagesverlaufSerie[]
@@ -137,27 +138,21 @@ export default function TagesverlaufChart({ serien, punkte }: TagesverlaufChartP
             className="fill-gray-500 dark:fill-gray-400"
             tickFormatter={(v: number) => v.toFixed(1)}
           />
-          <Tooltip
-            contentStyle={{
-              fontSize: 12,
-              borderRadius: 8,
-              backgroundColor: 'var(--tooltip-bg, #fff)',
-              color: 'var(--tooltip-fg, #1f2937)',
-              border: '1px solid var(--tooltip-border, #e5e7eb)',
-            }}
-            labelFormatter={(label: string) => `${label} Uhr`}
-            formatter={(value: number, name: string) => {
-              if (Math.abs(value) < 0.001) return [null, null]
-              // Render-Serie finden → Original-Label
+          <Tooltip content={<ChartTooltip
+            labelFormatter={(label) => `${label} Uhr`}
+            itemSorter={(item) => -(Math.abs(item.value as number))}
+            nameFormatter={(name) => {
               const rs = renderSerien.find((r) => r.dataKey === name)
               const origSerie = serien.find((s) => s.key === rs?.origKey)
-              const label = origSerie?.label || rs?.label || name
+              return origSerie?.label || rs?.label || name
+            }}
+            formatter={(value) => {
+              if (Math.abs(value) < 0.001) return null
               const absVal = Math.abs(value).toFixed(2)
               const richtung = value > 0 ? '▲' : '▼'
-              return [`${richtung} ${absVal} kW`, label]
+              return `${richtung} ${absVal} kW`
             }}
-            itemSorter={(item) => -(Math.abs(item.value as number))}
-          />
+          />} />
           <Legend
             formatter={(value: string) => {
               const rs = renderSerien.find((r) => r.dataKey === value)

@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts'
+import ChartTooltip from '../components/ui/ChartTooltip'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -216,7 +217,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
                   <Cell fill="#f97316" /> {/* Netz: orange */}
                   <Cell fill="#ef4444" /> {/* Extern: rot */}
                 </Pie>
-                <Tooltip formatter={(v: number) => `${v.toFixed(1)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" decimals={1} />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -249,7 +250,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" tickFormatter={(v) => `${v}€`} />
                 <YAxis type="category" dataKey="name" width={120} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Bar dataKey="value" />
               </BarChart>
             </ResponsiveContainer>
@@ -275,7 +276,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="km" fill="#3b82f6" name="km" />
               </BarChart>
             </ResponsiveContainer>
@@ -293,7 +294,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 <Bar dataKey="pv" stackId="a" fill="#22c55e" name="Heim: PV" />
                 <Bar dataKey="netz" stackId="a" fill="#f97316" name="Heim: Netz" />

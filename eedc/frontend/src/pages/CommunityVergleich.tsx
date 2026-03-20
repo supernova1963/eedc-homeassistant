@@ -26,6 +26,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { communityApi, anlagenApi } from '../api'
 import type {
@@ -467,10 +468,7 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} />
                     <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
-                    <Tooltip
-                      formatter={(value: number) => [`${value.toFixed(1)} kWh/kWp`, 'Spez. Ertrag']}
-                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                    />
+                    <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                     <Bar dataKey="ertrag" radius={[4, 4, 0, 0]}>
                       {benchmark.anlage.monatswerte.slice(-12).map((_, index) => (
                         <Cell key={`cell-${index}`} fill="#f97316" />

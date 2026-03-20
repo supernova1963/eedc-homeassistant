@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
 import {
   ResponsiveContainer,
@@ -23,8 +24,6 @@ import {
 interface Props {
   anlageId: number
 }
-
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899']
 
 // Icons für Komponenten-Typen
 const KOMPONENTEN_ICONS: Record<string, typeof Battery> = {
@@ -79,8 +78,8 @@ export default function FinanzenTab({ anlageId }: Props) {
 
   // Pie-Chart für Ertrags-Zusammensetzung
   const pieData = [
-    { name: 'EV-Ersparnis', value: prognose.jahres_ev_ersparnis_euro },
-    { name: 'Einspeise-Erlös', value: prognose.jahres_einspeise_erloes_euro },
+    { name: 'EV-Ersparnis', value: prognose.jahres_ev_ersparnis_euro, fill: '#10b981' },
+    { name: 'Einspeise-Erlös', value: prognose.jahres_einspeise_erloes_euro, fill: '#3b82f6' },
   ]
 
   // Amortisations-Fortschritt (kumuliert)
@@ -225,17 +224,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                   tick={{ fontSize: 12 }}
                   label={{ value: '€', angle: -90, position: 'insideLeft' }}
                 />
-                <Tooltip
-                  formatter={(value: number, name: string) => {
-                    const labels: Record<string, string> = {
-                      einspeise_erloes: 'Einspeise-Erlös',
-                      ev_ersparnis: 'EV-Ersparnis',
-                      netto_ertrag: 'Netto-Ertrag',
-                    }
-                    return [`${value.toFixed(2)} €`, labels[name] || name]
-                  }}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                />
+                <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Legend
                   formatter={(value) => {
                     const labels: Record<string, string> = {
@@ -277,11 +266,11 @@ export default function FinanzenTab({ anlageId }: Props) {
                   dataKey="value"
                   label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                 >
-                  {pieData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index]} />
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => `${value.toFixed(2)} €`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

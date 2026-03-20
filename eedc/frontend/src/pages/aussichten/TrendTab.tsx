@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
 import {
   ResponsiveContainer,
@@ -222,10 +223,7 @@ export default function TrendTab({ anlageId }: Props) {
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
-              <Tooltip
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                formatter={(value: number) => [`${value.toLocaleString('de-DE')} kWh`, 'Ertrag']}
-              />
+              <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Legend />
               <Bar dataKey="kwh" name="Jahresertrag" radius={[4, 4, 0, 0]}>
                 {jahresChartData.map((entry, index) => (
@@ -257,10 +255,7 @@ export default function TrendTab({ anlageId }: Props) {
                 className="text-gray-600 dark:text-gray-400"
                 domain={['auto', 'auto']}
               />
-              <Tooltip
-                formatter={(value: number) => [`${value.toFixed(0)} kWh/kWp`, 'Spez. Ertrag']}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={0} />} />
               <Legend />
               <Line
                 type="monotone"

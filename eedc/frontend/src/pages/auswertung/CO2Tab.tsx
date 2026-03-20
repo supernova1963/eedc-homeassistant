@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { Leaf, Download } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, createMonatsZeitreihe } from './types'
@@ -130,10 +131,7 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" kg" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number) => [`${value.toFixed(0)} kg CO2`, 'Einsparung']}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="kg CO2" decimals={0} />} />
               <Bar dataKey="co2_einsparung" name="CO2 eingespart" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -151,10 +149,7 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis tickFormatter={(v) => `${(v/1000).toFixed(1)}`} unit=" t" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number) => [`${(value/1000).toFixed(2)} t CO2`, 'Kumuliert']}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip formatter={(value) => `${(value / 1000).toFixed(2)} t CO2`} />} />
               <Area
                 type="monotone"
                 dataKey="kumuliert_co2"

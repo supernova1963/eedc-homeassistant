@@ -18,6 +18,7 @@ import {
   Award,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, Verteilung, MonatlicheDurchschnitte } from '../../api/community'
 import {
@@ -283,12 +284,13 @@ export default function PVErtragTab({ anlageId, zeitraum }: PVErtragTabProps) {
                   }}
                 />
                 <Tooltip
-                  formatter={(value: number, name: string) => {
-                    if (name === 'ertrag') return [`${value.toFixed(1)} kWh/kWp`, 'Dein Ertrag']
-                    if (name === 'durchschnitt') return [`${value.toFixed(1)} kWh/kWp`, 'Ø Community']
-                    return [value, name]
-                  }}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
+                  content={<ChartTooltip
+                    formatter={(value, name) => {
+                      if (name === 'ertrag') return `${value.toFixed(1)} kWh/kWp`
+                      if (name === 'durchschnitt') return `${value.toFixed(1)} kWh/kWp`
+                      return String(value)
+                    }}
+                  />}
                 />
                 {/* Community-Durchschnitt als Linie */}
                 <Line
@@ -417,9 +419,10 @@ export default function PVErtragTab({ anlageId, zeitraum }: PVErtragTabProps) {
                 />
                 <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [`${value} Anlagen`, 'Anzahl']}
-                  labelFormatter={(label) => `${label} kWh/kWp`}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
+                  content={<ChartTooltip
+                    formatter={(value) => `${value} Anlagen`}
+                    labelFormatter={(label) => `${label} kWh/kWp`}
+                  />}
                 />
                 <Bar dataKey="anzahl" radius={[4, 4, 0, 0]}>
                   {distribution.bins.map((bin, index) => {

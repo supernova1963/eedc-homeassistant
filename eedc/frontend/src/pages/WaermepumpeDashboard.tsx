@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { Flame, Zap, Leaf, TrendingUp, Thermometer } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
@@ -277,7 +278,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                   <Cell fill="#ef4444" />
                   <Cell fill="#3b82f6" />
                 </Pie>
-                <Tooltip formatter={(v: number) => `${v.toFixed(0)} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -304,7 +305,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" tickFormatter={(v) => `${v}€`} />
                 <YAxis type="category" dataKey="name" width={100} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(2)} €`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Bar dataKey="value" />
               </BarChart>
             </ResponsiveContainer>
@@ -330,7 +331,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 <Area type="monotone" dataKey="heizung" stackId="1" fill="#ef4444" stroke="#dc2626" name="Heizung" />
                 <Area type="monotone" dataKey="warmwasser" stackId="1" fill="#3b82f6" stroke="#2563eb" name="Warmwasser" />
@@ -368,7 +369,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={12} />
               <YAxis domain={vergleichModus === 'cop' ? [0, 6] : undefined} />
-              <Tooltip formatter={(v: number) => vergleichModus === 'cop' ? v?.toFixed(2) : `${v} kWh`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+              <Tooltip content={<ChartTooltip formatter={(v) => vergleichModus === 'cop' ? v?.toFixed(2) : `${v} kWh`} />} />
               <Legend />
               {vergleichJahre.map((jahr, i) => (
                 <Bar

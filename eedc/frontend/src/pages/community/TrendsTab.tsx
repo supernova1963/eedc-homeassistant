@@ -26,6 +26,7 @@ import {
   Minus,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, TrendDaten, DegradationsAnalyse } from '../../api/community'
 import {
@@ -262,10 +263,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                     style: { fill: '#6b7280', fontSize: 12 },
                   }}
                 />
-                <Tooltip
-                  formatter={(value: number) => [`${value.toFixed(1)} kWh/kWp`, 'Spez. Ertrag']}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                />
+                <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                 <Area
                   type="monotone"
                   dataKey="ertrag"
@@ -412,12 +410,11 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                   domain={[0, 'auto']}
                 />
                 <Tooltip
-                  formatter={(value: number, name: string) => {
-                    if (name === 'durchschnitt') return [`${value.toFixed(1)} kWh/kWp`, 'Ø Ertrag']
-                    return [value, name]
-                  }}
-                  labelFormatter={(label) => MONATSNAMEN_LANG[MONATSNAMEN.indexOf(label as string)]}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
+                  content={<ChartTooltip
+                    unit="kWh/kWp"
+                    decimals={1}
+                    labelFormatter={(label) => MONATSNAMEN_LANG[MONATSNAMEN.indexOf(label as string)]}
+                  />}
                 />
                 <Legend formatter={() => 'Durchschnittlicher Ertrag'} />
                 <Line
@@ -467,17 +464,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                   domain={[0, 100]}
                   unit="%"
                 />
-                <Tooltip
-                  formatter={(value: number, name: string) => {
-                    const labels: Record<string, string> = {
-                      speicher: 'Speicher',
-                      waermepumpe: 'Wärmepumpe',
-                      eauto: 'E-Auto',
-                    }
-                    return [`${value.toFixed(1)}%`, labels[name] || name]
-                  }}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                />
+                <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
                 <Legend
                   formatter={(value) => {
                     const labels: Record<string, string> = {
@@ -531,13 +518,14 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
                   }}
                 />
                 <Tooltip
-                  formatter={(value: number, name: string) => {
-                    if (name === 'durchschnitt_spez_ertrag') return [`${value.toFixed(0)} kWh/kWp`, 'Ø Ertrag']
-                    if (name === 'anzahl') return [value, 'Anlagen']
-                    return [value, name]
-                  }}
-                  labelFormatter={(label) => `${label} Jahre alt`}
-                  contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
+                  content={<ChartTooltip
+                    formatter={(value, name) => {
+                      if (name === 'durchschnitt_spez_ertrag') return `${value.toFixed(0)} kWh/kWp`
+                      if (name === 'anzahl') return `${value} Anlagen`
+                      return String(value)
+                    }}
+                    labelFormatter={(label) => `${label} Jahre alt`}
+                  />}
                 />
                 <Legend formatter={() => 'Durchschnittlicher spez. Ertrag'} />
                 <Line

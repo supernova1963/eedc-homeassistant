@@ -7,6 +7,7 @@
 
 import { useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts'
+import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
 
@@ -383,21 +384,15 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                 tickFormatter={(v: number) => `${v.toFixed(1)}`}
                 label={{ value: 'kW', angle: -90, position: 'insideLeft', offset: 25, fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
               />
-              <Tooltip
-                contentStyle={{
-                  fontSize: 12,
-                  borderRadius: 8,
-                  backgroundColor: 'var(--tooltip-bg, #fff)',
-                  color: 'var(--tooltip-fg, #1f2937)',
-                  border: '1px solid var(--tooltip-border, #e5e7eb)',
-                }}
-                labelFormatter={(label: string) => `${label}:00 Uhr`}
-                formatter={(value: number, name: string) => {
-                  if (value === null || value === undefined) return [null, null]
-                  return [`${value.toFixed(2)} kW`, tooltipLabels[name] ?? name]
+              <Tooltip content={<ChartTooltip
+                labelFormatter={(label) => `${label}:00 Uhr`}
+                nameFormatter={(name) => tooltipLabels[name] ?? name}
+                formatter={(value) => {
+                  if (value === null || value === undefined) return null
+                  return `${value.toFixed(2)} kW`
                 }}
                 itemSorter={() => 0}
-              />
+              />} />
               {/* Aktuelle Stunde — Trennlinie IST/Prognose */}
               <ReferenceLine
                 x={String(currentHour)}

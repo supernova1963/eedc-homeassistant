@@ -20,6 +20,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, RegionStatistik } from '../../api/community'
 import {
@@ -373,10 +374,7 @@ export default function RegionalTab({ anlageId, zeitraum }: RegionalTabProps) {
                 tick={{ fill: '#6b7280', fontSize: 12 }}
                 width={100}
               />
-              <Tooltip
-                formatter={(value: number) => [`${value.toFixed(0)} kWh/kWp`, 'Spez. Ertrag']}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="kWh/kWp" />} />
               <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
                 {vergleichsData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />

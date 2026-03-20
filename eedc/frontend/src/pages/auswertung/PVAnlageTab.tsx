@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, Download, AlertTriangle, GitCompare } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert, fmtCalc } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
@@ -342,7 +343,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis type="number" unit=" kWh" />
               <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+              <Tooltip content={<ChartTooltip unit="kWh" />} />
               <Legend />
               <Bar dataKey="SOLL" fill="#3b82f6" name="SOLL (Prognose)" />
               <Bar dataKey="IST" fill="#f59e0b" name="IST (Erzeugt)" />
@@ -372,7 +373,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
               <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(value: number) => [`${value.toFixed(0)} kWh`, '']} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+              <Tooltip content={<ChartTooltip unit="kWh" />} />
               <Legend />
               <Bar dataKey="SOLL" fill="#3b82f6" name="SOLL" opacity={0.6} />
               <Bar dataKey="IST" fill="#f59e0b" name="IST" />
@@ -405,7 +406,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
                   domain={[80, 120]}
                   ticks={[80, 90, 100, 110, 120]}
                 />
-                <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip unit="%" />} />
                 <Legend />
                 {data.strings.map((s, idx) => (
                   <Line

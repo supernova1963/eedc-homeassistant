@@ -20,6 +20,7 @@ import {
 } from 'recharts'
 import type { Investition } from '../types'
 import { PVStringVergleich } from '../components/pv'
+import ChartTooltip from '../components/ui/ChartTooltip'
 
 const COLORS = {
   solar: '#f59e0b',
@@ -303,7 +304,7 @@ export default function PVAnlageDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis unit=" kWh" />
-                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                  <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend />
                   <Bar dataKey="Erzeugung" fill={COLORS.solar} />
                   <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} />
@@ -335,7 +336,7 @@ export default function PVAnlageDashboard() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => [`${value.toLocaleString()} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                  <Tooltip content={<ChartTooltip unit="kWh" />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

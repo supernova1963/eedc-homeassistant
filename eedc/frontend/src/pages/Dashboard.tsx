@@ -20,7 +20,7 @@ import {
   ChevronRight, Calendar, Trophy, Minus, Receipt, Share2, Copy, Check
 } from 'lucide-react'
 import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell } from 'recharts'
-import { Card, Button, Modal, LoadingSpinner, Select, FormelTooltip, fmtCalc } from '../components/ui'
+import { Card, Button, Modal, LoadingSpinner, Select, FormelTooltip, fmtCalc, ChartTooltip } from '../components/ui'
 import { useAnlagen } from '../hooks'
 import { cockpitApi } from '../api'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -883,11 +883,8 @@ function SparklineChart({ monatsdaten, selectedYear }: {
       <div className="h-20">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-            <Tooltip
-              formatter={(v: number) => [`${v} kWh`, 'PV-Ertrag']}
-              contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-            />
-            <Bar dataKey="kwh" radius={[2, 2, 0, 0]}>
+            <Tooltip content={<ChartTooltip unit="kWh" />} />
+            <Bar dataKey="kwh" name="PV-Ertrag" radius={[2, 2, 0, 0]}>
               {chartData.map((entry, i) => (
                 <Cell
                   key={i}

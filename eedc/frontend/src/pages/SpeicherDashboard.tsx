@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { Battery, Zap, TrendingUp, Activity, RotateCw, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
@@ -273,7 +274,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 {z.arbitrage_faehig && z.arbitrage_kwh > 0 ? (
                   <>
@@ -300,7 +301,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
-                <Tooltip formatter={(v: number) => v.toFixed(1)} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                <Tooltip content={<ChartTooltip decimals={1} />} />
                 <Area type="monotone" dataKey="zyklen" fill="#8b5cf6" stroke="#7c3aed" name="Zyklen" />
               </AreaChart>
             </ResponsiveContainer>
@@ -319,7 +320,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} />
               <YAxis domain={[80, 100]} />
-              <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+              <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
               <Line type="monotone" dataKey="effizienz" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Effizienz" />
             </LineChart>
           </ResponsiveContainer>

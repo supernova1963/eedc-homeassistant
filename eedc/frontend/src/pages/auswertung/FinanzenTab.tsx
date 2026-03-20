@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { Euro, TrendingUp, Download, Wrench } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, COLORS, createMonatsZeitreihe } from './types'
@@ -202,10 +203,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number, name: string) => [`${value.toFixed(2)} €`, name]}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
               <Legend />
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
               <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
@@ -230,10 +228,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number) => [`${value.toFixed(0)} €`, 'Kumuliert']}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
               <Area
                 type="monotone"
                 dataKey="kumuliert_ertrag"
@@ -267,10 +262,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number, name: string) => [`${value.toFixed(2)} €`, name]}
-                contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-              />
+              <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
               <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
               <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
             </ComposedChart>

@@ -32,6 +32,7 @@ import {
   Line,
 } from 'recharts'
 import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen, useAktuellerStrompreis } from '../hooks'
 import { investitionenApi, type ROIDashboardResponse } from '../api'
 
@@ -355,22 +356,15 @@ export default function ROIDashboard() {
                       tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
                       tick={{ fontSize: 12 }}
                     />
-                    <Tooltip
-                      formatter={(value: number, name: string) => [
-                        `${value.toLocaleString('de-DE')} €`,
-                        name === 'kumulierte_einsparung' ? 'Kumulierte Einsparung' : 'Investition'
-                      ]}
+                    <Tooltip content={<ChartTooltip
                       labelFormatter={(label) => `Jahr ${label}`}
-                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                    />
-                    <Legend
-                      formatter={(value) =>
-                        value === 'kumulierte_einsparung' ? 'Kumulierte Einsparung' : 'Investition'
-                      }
-                    />
+                      unit="€"
+                    />} />
+                    <Legend />
                     <Line
                       type="monotone"
                       dataKey="kumulierte_einsparung"
+                      name="Kumulierte Einsparung"
                       stroke="#22c55e"
                       strokeWidth={2}
                       dot={false}
@@ -378,6 +372,7 @@ export default function ROIDashboard() {
                     <Line
                       type="monotone"
                       dataKey="investition"
+                      name="Investition"
                       stroke="#ef4444"
                       strokeWidth={2}
                       strokeDasharray="5 5"
@@ -417,10 +412,7 @@ export default function ROIDashboard() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(value: number) => [`${value.toLocaleString('de-DE')} €/Jahr`, 'Einsparung']}
-                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                    />
+                    <Tooltip content={<ChartTooltip unit="€/Jahr" />} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -438,22 +430,16 @@ export default function ROIDashboard() {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                   <XAxis type="number" tickFormatter={(v) => `${v.toLocaleString('de-DE')}`} />
                   <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      name === 'kosten'
+                  <Tooltip content={<ChartTooltip
+                    formatter={(value, name) =>
+                      name === 'Relevante Kosten'
                         ? `${value.toLocaleString('de-DE')} €`
-                        : `${value.toLocaleString('de-DE')} €/Jahr`,
-                      name === 'kosten' ? 'Relevante Kosten' : 'Jährliche Einsparung'
-                    ]}
-                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                  />
-                  <Legend
-                    formatter={(value) =>
-                      value === 'kosten' ? 'Relevante Kosten (€)' : 'Jährliche Einsparung (€)'
+                        : `${value.toLocaleString('de-DE')} €/Jahr`
                     }
-                  />
-                  <Bar dataKey="kosten" fill="#94a3b8" name="kosten" />
-                  <Bar dataKey="einsparung" fill="#22c55e" name="einsparung" />
+                  />} />
+                  <Legend />
+                  <Bar dataKey="kosten" fill="#94a3b8" name="Relevante Kosten" />
+                  <Bar dataKey="einsparung" fill="#22c55e" name="Jährliche Einsparung" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

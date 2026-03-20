@@ -15,6 +15,7 @@ import {
   FileSpreadsheet, Plug, Cloud, Upload,
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import {
@@ -85,36 +86,6 @@ function QuelleBadge({ quelle, aktiv }: { quelle: string; aktiv: boolean }) {
 }
 
 
-// ─── Custom Tooltip ──────────────────────────────────────────────────────────
-
-function ChartTooltipKWh({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
-  if (!active || !payload) return null
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-medium text-gray-900 dark:text-white mb-1">{label}</p>
-      {payload.map((entry, i) => (
-        <p key={i} style={{ color: entry.color }}>
-          {entry.name}: {entry.value.toLocaleString('de-DE')} kWh
-        </p>
-      ))}
-    </div>
-  )
-}
-
-function ChartTooltipEuro({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
-  if (!active || !payload) return null
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-medium text-gray-900 dark:text-white mb-1">{label}</p>
-      {payload.map((entry, i) => (
-        <p key={i} style={{ color: entry.color }}>
-          {entry.name}: {entry.value.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €
-        </p>
-      ))}
-    </div>
-  )
-}
-
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function AktuellerMonat() {
@@ -158,14 +129,12 @@ export default function AktuellerMonat() {
   const energieBilanzData = useMemo(() => {
     if (!data) return []
     return [
-      { name: 'Erzeugung', value: data.pv_erzeugung_kwh || 0, quellefeld: 'pv_erzeugung_kwh' },
-      { name: 'Einspeisung', value: data.einspeisung_kwh || 0, quellefeld: 'einspeisung_kwh' },
-      { name: 'Eigenverbr.', value: data.eigenverbrauch_kwh || 0, quellefeld: null },
-      { name: 'Netzbezug', value: data.netzbezug_kwh || 0, quellefeld: 'netzbezug_kwh' },
+      { name: 'Erzeugung', value: data.pv_erzeugung_kwh || 0, quellefeld: 'pv_erzeugung_kwh', fill: '#f59e0b' },
+      { name: 'Einspeisung', value: data.einspeisung_kwh || 0, quellefeld: 'einspeisung_kwh', fill: '#10b981' },
+      { name: 'Eigenverbr.', value: data.eigenverbrauch_kwh || 0, quellefeld: null, fill: '#8b5cf6' },
+      { name: 'Netzbezug', value: data.netzbezug_kwh || 0, quellefeld: 'netzbezug_kwh', fill: '#ef4444' },
     ].filter(d => d.value > 0)
   }, [data])
-
-  const energieBarColors = ['#f59e0b', '#10b981', '#8b5cf6', '#ef4444']
 
   const verteilungData = useMemo(() => {
     if (!data || !data.pv_erzeugung_kwh) return []
@@ -453,10 +422,10 @@ export default function AktuellerMonat() {
                       )
                     }}
                   />
-                  <Tooltip content={<ChartTooltipKWh />} />
+                  <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Bar dataKey="value" name="kWh" radius={[0, 4, 4, 0]}>
-                    {energieBilanzData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={energieBarColors[index % energieBarColors.length]} />
+                    {energieBilanzData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -488,7 +457,7 @@ export default function AktuellerMonat() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => [`${value.toLocaleString('de-DE')} kWh`]} contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }} />
+                      <Tooltip content={<ChartTooltip unit="kWh" />} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -542,7 +511,7 @@ export default function AktuellerMonat() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis unit=" kWh" />
-                <Tooltip content={<ChartTooltipKWh />} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 <Bar dataKey="Aktuell" fill={COLORS.erzeugung} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Vorjahr" fill={COLORS.vorjahr} radius={[4, 4, 0, 0]} />
@@ -667,7 +636,7 @@ export default function AktuellerMonat() {
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" unit=" €" />
                   <YAxis type="category" dataKey="name" width={120} />
-                  <Tooltip content={<ChartTooltipEuro />} />
+                  <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                   <Bar dataKey="Betrag" name="Betrag" radius={[0, 4, 4, 0]}>
                     {finanzData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -723,7 +692,7 @@ export default function AktuellerMonat() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis unit=" kWh" />
-                  <Tooltip content={<ChartTooltipKWh />} />
+                  <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend />
                   <Bar dataKey="IST" fill={COLORS.erzeugung} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="SOLL" fill={COLORS.soll} radius={[4, 4, 0, 0]} />

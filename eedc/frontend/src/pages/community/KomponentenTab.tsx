@@ -35,6 +35,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type {
   CommunityBenchmarkResponse,
@@ -395,10 +396,7 @@ function SpeicherDeepDive({
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} width={90} />
-                  <Tooltip
-                    formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
-                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                  />
+                  <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
                   <Bar dataKey="du" name="Du" fill="#22c55e" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="community" name="Community" fill="#9ca3af" radius={[0, 4, 4, 0]} />
                 </BarChart>
@@ -454,13 +452,7 @@ function SpeicherDeepDive({
                       />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      `${value} Anlagen`,
-                      name,
-                    ]}
-                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                  />
+                  <Tooltip content={<ChartTooltip unit="Anlagen" />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -646,10 +638,7 @@ function WaermepumpeDeepDive({
                       tick={{ fill: '#6b7280', fontSize: 11 }}
                       width={120}
                     />
-                    <Tooltip
-                      formatter={(value: number) => [`JAZ: ${value.toFixed(2)}`, '']}
-                      contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                    />
+                    <Tooltip content={<ChartTooltip formatter={(value) => `JAZ: ${value.toFixed(2)}`} />} />
                     <Bar dataKey="jaz" radius={[0, 4, 4, 0]}>
                       {regionData.map((entry, index) => (
                         <Cell
@@ -848,10 +837,7 @@ function EAutoDeepDive({
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} width={80} />
-                  <Tooltip
-                    formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
-                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                  />
+                  <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
                   <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
                     {ladequellenData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -900,13 +886,7 @@ function EAutoDeepDive({
                       />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      `${value} E-Autos`,
-                      name,
-                    ]}
-                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
-                  />
+                  <Tooltip content={<ChartTooltip unit="E-Autos" />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

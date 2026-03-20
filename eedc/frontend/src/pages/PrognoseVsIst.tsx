@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
+import ChartTooltip from '../components/ui/ChartTooltip'
 import { useAnlagen } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
@@ -329,11 +330,14 @@ export default function PrognoseVsIst() {
                   <YAxis yAxisId="left" tickFormatter={(v) => `${v} kWh`} />
                   <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v}%`} />
                   <Tooltip
-                    formatter={(value: number, name: string) => {
-                      if (name === 'Abweichung %') return `${value.toFixed(1)}%`
-                      return `${value.toFixed(0)} kWh`
-                    }}
-                    contentStyle={{ borderRadius: 8, backgroundColor: 'var(--tooltip-bg)', color: 'var(--tooltip-fg)', border: '1px solid var(--tooltip-border)' }}
+                    content={
+                      <ChartTooltip
+                        formatter={(value: number, name: string) => {
+                          if (name === 'Abweichung %') return `${value.toFixed(1)}%`
+                          return `${value.toFixed(0)} kWh`
+                        }}
+                      />
+                    }
                   />
                   <Legend />
                   <ReferenceLine yAxisId="right" y={0} stroke="#666" strokeDasharray="3 3" />
