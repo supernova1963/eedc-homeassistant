@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.3.1] - 2026-03-20
+
+### Behoben
+
+- **WP-Symbolwechsel im Energiefluss**: Das Icon der Wärmepumpe wechselt jetzt korrekt zwischen Heizkörper (Heizmodus) und Tropfen (Warmwasser). Bisher wurde der Symbolwechsel nur bei aktivierter „getrennter Strommessung" geprüft. Jetzt werden die optionalen Felder „Leistung Heizen" und „Leistung Warmwasser" immer im Sensor-Mapping angeboten und der dominante Betriebsmodus (höherer Wert) bestimmt das Icon.
+
 ## [3.3.0] - 2026-03-20
 
 ### Hinzugefügt
