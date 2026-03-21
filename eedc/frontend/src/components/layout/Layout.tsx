@@ -88,7 +88,9 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-6">
-        <Outlet />
+        <div className="max-w-[1920px] mx-auto">
+          <Outlet />
+        </div>
       </main>
 
       {/* Footer */}

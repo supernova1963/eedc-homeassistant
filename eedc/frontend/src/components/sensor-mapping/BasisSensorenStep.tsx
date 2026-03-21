@@ -9,6 +9,7 @@
  * - PV Gesamt (für kWp-Verteilung auf Strings)
  */
 
+import { useState } from 'react'
 import { Zap, Download, Upload, Activity } from 'lucide-react'
 import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
@@ -124,64 +125,146 @@ export default function BasisSensorenStep({
 
       {/* Live-Sensoren (Leistung in W) */}
       {onBasisLiveChange && (
-        <>
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Activity className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-              <h3 className="font-medium text-gray-900 dark:text-white">Live-Sensoren (Leistung)</h3>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-              Optional: Leistungssensoren (W) für das Live-Dashboard.
-              Diese sind unabhängig von den Energie-Sensoren (kWh) oben.
-            </p>
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+            <h3 className="font-medium text-gray-900 dark:text-white">Live-Sensoren (Leistung)</h3>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            Optional: Leistungssensoren (W) für das Live-Dashboard.
+            Diese sind unabhängig von den Energie-Sensoren (kWh) oben.
+          </p>
 
-            <div className="space-y-4">
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm text-gray-900 dark:text-white">Einspeisung</span>
-                  <span className="text-xs text-gray-500">(W)</span>
-                </div>
-                <SensorAutocomplete
-                  value={basisLive.einspeisung_w}
-                  onChange={entityId => onBasisLiveChange('einspeisung_w', entityId)}
-                  sensors={availableSensors}
-                  placeholder="Einspeise-Leistungssensor suchen..."
-                />
-              </div>
+          <div className="space-y-4">
+            <NetzLiveSensoren
+              basisLive={basisLive}
+              onBasisLiveChange={onBasisLiveChange}
+              availableSensors={availableSensors}
+            />
 
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm text-gray-900 dark:text-white">Netzbezug</span>
-                  <span className="text-xs text-gray-500">(W)</span>
-                </div>
-                <SensorAutocomplete
-                  value={basisLive.netzbezug_w}
-                  onChange={entityId => onBasisLiveChange('netzbezug_w', entityId)}
-                  sensors={availableSensors}
-                  placeholder="Netzbezug-Leistungssensor suchen..."
-                />
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-sm text-gray-900 dark:text-white">PV Gesamt</span>
+                <span className="text-xs text-gray-500">(W)</span>
               </div>
-
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm text-gray-900 dark:text-white">PV Gesamt</span>
-                  <span className="text-xs text-gray-500">(W)</span>
-                </div>
-                <SensorAutocomplete
-                  value={basisLive.pv_gesamt_w}
-                  onChange={entityId => onBasisLiveChange('pv_gesamt_w', entityId)}
-                  sensors={availableSensors}
-                  placeholder="PV-Gesamt-Leistungssensor suchen..."
-                />
-                <p className="mt-2 text-xs text-gray-500">
-                  Optional: Nur nötig wenn kein Live-Sensor pro PV-String konfiguriert ist.
-                  Wird als ein &quot;PV Gesamt&quot;-Knoten im Live-Dashboard angezeigt.
-                </p>
-              </div>
+              <SensorAutocomplete
+                value={basisLive.pv_gesamt_w}
+                onChange={entityId => onBasisLiveChange('pv_gesamt_w', entityId)}
+                sensors={availableSensors}
+                placeholder="PV-Gesamt-Leistungssensor suchen..."
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Optional: Nur nötig wenn kein Live-Sensor pro PV-String konfiguriert ist.
+                Wird als ein &quot;PV Gesamt&quot;-Knoten im Live-Dashboard angezeigt.
+              </p>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
+  )
+}
+
+
+// =============================================================================
+// NetzLiveSensoren — Getrennt oder Kombiniert
+// =============================================================================
+
+interface NetzLiveSensorenProps {
+  basisLive: Record<string, string | null>
+  onBasisLiveChange: (key: string, entityId: string | null) => void
+  availableSensors: HASensorInfo[]
+}
+
+function NetzLiveSensoren({ basisLive, onBasisLiveChange, availableSensors }: NetzLiveSensorenProps) {
+  const hasKombi = !!basisLive.netz_kombi_w
+  const hasGetrennt = !!basisLive.einspeisung_w || !!basisLive.netzbezug_w
+  const [kombiModus, setKombiModus] = useState(hasKombi && !hasGetrennt)
+
+  const handleModusChange = (useKombi: boolean) => {
+    setKombiModus(useKombi)
+    // Alte Werte zurücksetzen
+    if (useKombi) {
+      onBasisLiveChange('einspeisung_w', null)
+      onBasisLiveChange('netzbezug_w', null)
+    } else {
+      onBasisLiveChange('netz_kombi_w', null)
+    }
+  }
+
+  return (
+    <>
+      {/* Modus-Umschalter */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="font-medium text-sm text-gray-900 dark:text-white">Netz-Sensoren</span>
+          <span className="text-xs text-gray-500">(W)</span>
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => handleModusChange(false)}
+            className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+              !kombiModus
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            Getrennte Sensoren
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModusChange(true)}
+            className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+              kombiModus
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            Kombinierter Sensor
+          </button>
+        </div>
+
+        {kombiModus ? (
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Ein Sensor für Netz-Leistung: positiv = Bezug, negativ = Einspeisung.
+            </p>
+            <SensorAutocomplete
+              value={basisLive.netz_kombi_w}
+              onChange={entityId => onBasisLiveChange('netz_kombi_w', entityId)}
+              sensors={availableSensors}
+              placeholder="Kombinierten Netz-Sensor suchen..."
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Einspeisung</span>
+              </div>
+              <SensorAutocomplete
+                value={basisLive.einspeisung_w}
+                onChange={entityId => onBasisLiveChange('einspeisung_w', entityId)}
+                sensors={availableSensors}
+                placeholder="Einspeise-Leistungssensor suchen..."
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Netzbezug</span>
+              </div>
+              <SensorAutocomplete
+                value={basisLive.netzbezug_w}
+                onChange={entityId => onBasisLiveChange('netzbezug_w', entityId)}
+                sensors={availableSensors}
+                placeholder="Netzbezug-Leistungssensor suchen..."
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   )
 }

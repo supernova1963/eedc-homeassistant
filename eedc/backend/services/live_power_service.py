@@ -220,6 +220,16 @@ class LivePowerService:
                     inv_values[inv_id] = {}
                 inv_values[inv_id].update(values)
 
+        # 3. Kombinierten Netz-Sensor auflösen (positiv=Bezug, negativ=Einspeisung)
+        netz_kombi = basis_values.pop("netz_kombi_w", None)
+        if netz_kombi is not None and "einspeisung_w" not in basis_values and "netzbezug_w" not in basis_values:
+            if netz_kombi >= 0:
+                basis_values["netzbezug_w"] = netz_kombi
+                basis_values["einspeisung_w"] = 0.0
+            else:
+                basis_values["einspeisung_w"] = abs(netz_kombi)
+                basis_values["netzbezug_w"] = 0.0
+
         return basis_values, inv_values
 
     async def get_live_data(self, anlage: Anlage, db: AsyncSession) -> dict:
@@ -644,11 +654,17 @@ class LivePowerService:
         # Per-Komponente Entity-IDs {component_key: entity_id}
         component_entities: dict[str, str] = {}
 
-        # Basis: Einspeisung + Netzbezug
-        if basis_live.get("einspeisung_w"):
-            category_entities["einspeisung"].append(basis_live["einspeisung_w"])
-        if basis_live.get("netzbezug_w"):
-            category_entities["netzbezug"].append(basis_live["netzbezug_w"])
+        # Basis: Einspeisung + Netzbezug (oder kombinierter Netz-Sensor)
+        netz_kombi_eid = basis_live.get("netz_kombi_w")
+        if netz_kombi_eid and not basis_live.get("einspeisung_w") and not basis_live.get("netzbezug_w"):
+            # Kombinierter Sensor: wird separat behandelt (Vorzeichen-Split)
+            category_entities["netz_kombi"] = [netz_kombi_eid]
+        else:
+            netz_kombi_eid = None
+            if basis_live.get("einspeisung_w"):
+                category_entities["einspeisung"].append(basis_live["einspeisung_w"])
+            if basis_live.get("netzbezug_w"):
+                category_entities["netzbezug"].append(basis_live["netzbezug_w"])
 
         # Alle Investitionen mit leistung_w Sensor (oder getrennte WP-Sensoren)
         for inv_id, live in inv_live_map.items():
@@ -703,6 +719,22 @@ class LivePowerService:
 
         # Aggregierte Kategorien (pv, einspeisung, netzbezug)
         for category, entity_ids in category_entities.items():
+            if category == "netz_kombi":
+                # Kombinierter Netz-Sensor: Points nach Vorzeichen splitten
+                for entity_id in entity_ids:
+                    if entity_id not in history:
+                        continue
+                    pts = history[entity_id]
+                    bezug_pts = [(t, max(p, 0)) for t, p in pts]
+                    einsp_pts = [(t, abs(min(p, 0))) for t, p in pts]
+                    bezug_kwh = self._trapez_kwh(bezug_pts)
+                    einsp_kwh = self._trapez_kwh(einsp_pts)
+                    if bezug_kwh is not None:
+                        result["netzbezug"] = round(bezug_kwh, 1)
+                    if einsp_kwh is not None:
+                        result["einspeisung"] = round(einsp_kwh, 1)
+                continue
+
             total_kwh = 0.0
             has_data = False
             for entity_id in entity_ids:
@@ -859,9 +891,22 @@ class LivePowerService:
 
         # Netz (Einspeisung + Netzbezug als eine bidirektionale Serie)
         has_netz = False
+        netz_kombi_eid = basis_live.get("netz_kombi_w")
         netz_einspeisung_eid = basis_live.get("einspeisung_w")
         netz_bezug_eid = basis_live.get("netzbezug_w")
-        if netz_einspeisung_eid or netz_bezug_eid:
+        # Kombinierter Sensor hat Vorrang wenn keine getrennten Sensoren
+        if netz_kombi_eid and not netz_einspeisung_eid and not netz_bezug_eid:
+            has_netz = True
+            serien.append({
+                "key": "netz",
+                "label": "Stromnetz",
+                "kategorie": "netz",
+                "farbe": "#ef4444",
+                "seite": "quelle",
+                "bidirektional": True,
+            })
+        elif netz_einspeisung_eid or netz_bezug_eid:
+            netz_kombi_eid = None  # Getrennte Sensoren → kein Kombi
             has_netz = True
             serien.append({
                 "key": "netz",
@@ -876,6 +921,8 @@ class LivePowerService:
         all_ids = list(set(
             eid for eids in serie_entities.values() for eid in eids
         ))
+        if netz_kombi_eid:
+            all_ids.append(netz_kombi_eid)
         if netz_einspeisung_eid:
             all_ids.append(netz_einspeisung_eid)
         if netz_bezug_eid:
@@ -936,17 +983,28 @@ class LivePowerService:
                 bezug_kw = 0.0
                 einsp_kw = 0.0
 
-                if netz_bezug_eid:
-                    pts = history.get(netz_bezug_eid, [])
+                if netz_kombi_eid:
+                    # Kombinierter Sensor: positiv=Bezug, negativ=Einspeisung
+                    pts = history.get(netz_kombi_eid, [])
                     h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
                     if h_pts:
-                        bezug_kw = sum(h_pts) / len(h_pts) / 1000
+                        avg_w = sum(h_pts) / len(h_pts)
+                        if avg_w >= 0:
+                            bezug_kw = avg_w / 1000
+                        else:
+                            einsp_kw = abs(avg_w) / 1000
+                else:
+                    if netz_bezug_eid:
+                        pts = history.get(netz_bezug_eid, [])
+                        h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                        if h_pts:
+                            bezug_kw = sum(h_pts) / len(h_pts) / 1000
 
-                if netz_einspeisung_eid:
-                    pts = history.get(netz_einspeisung_eid, [])
-                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
-                    if h_pts:
-                        einsp_kw = sum(h_pts) / len(h_pts) / 1000
+                    if netz_einspeisung_eid:
+                        pts = history.get(netz_einspeisung_eid, [])
+                        h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                        if h_pts:
+                            einsp_kw = sum(h_pts) / len(h_pts) / 1000
 
                 netto = bezug_kw - einsp_kw  # positiv=Bezug, negativ=Einspeisung
                 if abs(netto) > 0.001:
@@ -1029,7 +1087,11 @@ class LivePowerService:
 
         einsp_eid = basis_live.get("einspeisung_w")
         bezug_eid = basis_live.get("netzbezug_w")
-        if not einsp_eid and not bezug_eid:
+        kombi_eid = basis_live.get("netz_kombi_w")
+        # Kombinierter Sensor als Fallback
+        if not einsp_eid and not bezug_eid and kombi_eid:
+            pass  # Kombi-Sensor wird unten behandelt
+        elif not einsp_eid and not bezug_eid:
             return None
 
         # PV-Entity-IDs
@@ -1053,7 +1115,7 @@ class LivePowerService:
         now = datetime.now()
         start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-        all_ids = list(set(filter(None, [einsp_eid, bezug_eid] + pv_eids)))
+        all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids)))
         history = await self._get_history_normalized(all_ids, start, now)
 
         if not history:
@@ -1083,18 +1145,28 @@ class LivePowerService:
                         pv_kw += sum(h_pts) / len(h_pts) / 1000
 
                 bezug_kw = 0.0
-                if bezug_eid:
-                    pts = history.get(bezug_eid, [])
-                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
-                    if h_pts:
-                        bezug_kw = sum(h_pts) / len(h_pts) / 1000
-
                 einsp_kw = 0.0
-                if einsp_eid:
-                    pts = history.get(einsp_eid, [])
+                if kombi_eid and not bezug_eid and not einsp_eid:
+                    pts = history.get(kombi_eid, [])
                     h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
                     if h_pts:
-                        einsp_kw = sum(h_pts) / len(h_pts) / 1000
+                        avg_w = sum(h_pts) / len(h_pts)
+                        if avg_w >= 0:
+                            bezug_kw = avg_w / 1000
+                        else:
+                            einsp_kw = abs(avg_w) / 1000
+                else:
+                    if bezug_eid:
+                        pts = history.get(bezug_eid, [])
+                        h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                        if h_pts:
+                            bezug_kw = sum(h_pts) / len(h_pts) / 1000
+
+                    if einsp_eid:
+                        pts = history.get(einsp_eid, [])
+                        h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                        if h_pts:
+                            einsp_kw = sum(h_pts) / len(h_pts) / 1000
 
                 verbrauch_kw = max(0, pv_kw + bezug_kw - einsp_kw)
 

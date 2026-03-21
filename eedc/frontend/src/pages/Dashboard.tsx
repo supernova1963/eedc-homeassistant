@@ -613,6 +613,10 @@ function HeroLeiste({ data, prevData, year }: {
       delta: trend(data.autarkie_prozent, prevData?.autarkie_prozent),
       color: 'text-blue-600 dark:text-blue-400',
       bg: 'bg-blue-50 dark:bg-blue-900/20',
+      formel: '1 − Netzbezug ÷ Gesamtverbrauch',
+      berechnung: data.gesamtverbrauch_kwh
+        ? `1 − ${fmtCalc(data.netzbezug_kwh, 0)} ÷ ${fmtCalc(data.gesamtverbrauch_kwh, 0)} kWh`
+        : undefined,
     },
     {
       label: 'Spez. Ertrag',
@@ -622,6 +626,10 @@ function HeroLeiste({ data, prevData, year }: {
       delta: trend(data.spezifischer_ertrag_kwh_kwp || 0, prevData?.spezifischer_ertrag_kwh_kwp ?? undefined),
       color: 'text-yellow-600 dark:text-yellow-400',
       bg: 'bg-yellow-50 dark:bg-yellow-900/20',
+      formel: 'PV-Erzeugung ÷ Anlagenleistung',
+      berechnung: data.pv_erzeugung_kwh && data.anlagenleistung_kwp
+        ? `${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.anlagenleistung_kwp, 1)} kWp`
+        : undefined,
     },
     {
       label: 'Netto-Ertrag',
@@ -629,6 +637,7 @@ function HeroLeiste({ data, prevData, year }: {
       delta: trend(data.netto_ertrag_euro, prevData?.netto_ertrag_euro),
       color: 'text-emerald-600 dark:text-emerald-400',
       bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+      formel: 'Einsparung + Einspeisevergütung − Fixkosten',
     },
   ]
 
@@ -637,7 +646,11 @@ function HeroLeiste({ data, prevData, year }: {
       {items.map(item => (
         <div key={item.label} className={`rounded-xl p-4 ${item.bg}`}>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
-          <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
+          <p className={`text-2xl font-bold ${item.color}`}>
+            <FormelTooltip formel={item.formel} berechnung={item.berechnung}>
+              {item.value}
+            </FormelTooltip>
+          </p>
           {item.delta !== null && year && (
             <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${
               item.delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
@@ -832,13 +845,15 @@ function RingGaugeCard({ title, value, subtitle, color, formel, berechnung, erge
   return (
     <Card className="p-3">
       <div className="flex items-center gap-3">
-        {formel
-          ? <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>{gauge}</FormelTooltip>
-          : gauge
-        }
+        {gauge}
         <div className="min-w-0">
           <p className="text-xs text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-lg font-bold text-gray-900 dark:text-white">{value.toFixed(1)} %</p>
+          <p className="text-lg font-bold text-gray-900 dark:text-white">
+            {formel
+              ? <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>{value.toFixed(1)} %</FormelTooltip>
+              : <>{value.toFixed(1)} %</>
+            }
+          </p>
           {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{subtitle}</p>}
         </div>
       </div>

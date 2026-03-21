@@ -10,7 +10,7 @@
  * - keine: Nicht erfassen
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Search, X } from 'lucide-react'
 import type { FeldMapping, StrategieTyp, HASensorInfo } from '../../api/sensorMapping'
 
@@ -51,6 +51,16 @@ interface SensorAutocompleteProps {
 function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAutocompleteProps) {
   const [search, setSearch] = useState('')
   const [isOpen, setIsOpen] = useState(false)
+  const [openUp, setOpenUp] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      setOpenUp(spaceBelow < 260)
+    }
+  }, [isOpen])
 
   const filteredSensors = sensors.filter(
     s =>
@@ -75,7 +85,7 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
   const hasValue = value && value.length > 0
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       {hasValue ? (
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
           selectedSensor
@@ -115,7 +125,7 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
       )}
 
       {isOpen && !value && (
-        <div className="absolute z-10 w-full mt-1 max-h-60 overflow-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+        <div className={`absolute z-10 w-full max-h-60 overflow-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg ${openUp ? 'bottom-full mb-1' : 'mt-1'}`}>
           {filteredSensors.length === 0 ? (
             <div className="px-4 py-3 text-sm text-gray-500">
               {search ? 'Keine Sensoren gefunden' : 'Sensor eingeben...'}

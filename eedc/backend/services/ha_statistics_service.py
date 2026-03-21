@@ -14,7 +14,7 @@ import sqlite3
 import logging
 from datetime import datetime, date
 from pathlib import Path
-from typing import Optional
+from typing import Optional, NamedTuple
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,21 @@ class AlleMonateResponse(BaseModel):
     monate: list[VerfuegbarerMonat]
 
 
+class SensorMeta(NamedTuple):
+    """Metadata eines Sensors aus statistics_meta."""
+    id: int
+    unit: Optional[str]
+
+
+# Konvertierungsfaktoren nach kWh
+_ENERGY_UNIT_TO_KWH: dict[str, float] = {
+    "kWh": 1.0,
+    "Wh": 0.001,
+    "MWh": 1000.0,
+    "GWh": 1_000_000.0,
+}
+
+
 class HAStatisticsService:
     """Service für Zugriff auf HA-Langzeitstatistiken."""
 
@@ -102,28 +117,28 @@ class HAStatisticsService:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def get_metadata_id(self, conn: sqlite3.Connection, sensor_id: str) -> Optional[int]:
+    def get_metadata(self, conn: sqlite3.Connection, sensor_id: str) -> Optional[SensorMeta]:
         """
-        Ermittelt die metadata_id für einen Sensor.
+        Ermittelt metadata_id und unit_of_measurement für einen Sensor.
 
         Args:
             conn: Datenbankverbindung
             sensor_id: HA Entity-ID (z.B. "sensor.pv_erzeugung")
 
         Returns:
-            metadata_id oder None wenn Sensor nicht in statistics
+            SensorMeta oder None wenn Sensor nicht in statistics
         """
         cursor = conn.execute(
-            "SELECT id FROM statistics_meta WHERE statistic_id = ?",
+            "SELECT id, unit_of_measurement FROM statistics_meta WHERE statistic_id = ?",
             (sensor_id,)
         )
         row = cursor.fetchone()
-        return row["id"] if row else None
+        return SensorMeta(id=row["id"], unit=row["unit_of_measurement"]) if row else None
 
     def get_sensor_monatswert(
         self,
         conn: sqlite3.Connection,
-        metadata_id: int,
+        meta: SensorMeta,
         sensor_id: str,
         jahr: int,
         monat: int
@@ -133,10 +148,11 @@ class HAStatisticsService:
 
         Die Differenz zwischen MAX(state) und MIN(state) im Monat
         ergibt den Verbrauch/Erzeugung für diesen Monat.
+        Werte werden automatisch nach kWh konvertiert (Wh, MWh, etc.).
 
         Args:
             conn: Datenbankverbindung
-            metadata_id: ID aus statistics_meta
+            meta: SensorMeta mit ID und Einheit
             sensor_id: Original sensor_id für Response
             jahr: Jahr
             monat: Monat (1-12)
@@ -159,7 +175,7 @@ class HAStatisticsService:
             WHERE metadata_id = ?
             AND datetime(start_ts, 'unixepoch', 'localtime') >= ?
             AND datetime(start_ts, 'unixepoch', 'localtime') < ?
-        """, (metadata_id, start_datum, end_datum))
+        """, (meta.id, start_datum, end_datum))
 
         row = cursor.fetchone()
         if not row or row["start_wert"] is None:
@@ -167,13 +183,21 @@ class HAStatisticsService:
 
         start_wert = row["start_wert"]
         end_wert = row["end_wert"]
-        differenz = round(end_wert - start_wert, 2)
+        differenz = end_wert - start_wert
+
+        # Einheiten-Konvertierung nach kWh
+        faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
+        if faktor != 1.0:
+            logger.info(f"Sensor {sensor_id}: Konvertiere {meta.unit} → kWh (Faktor {faktor})")
+            start_wert *= faktor
+            end_wert *= faktor
+            differenz *= faktor
 
         return SensorMonatswert(
             sensor_id=sensor_id,
             start_wert=round(start_wert, 3),
             end_wert=round(end_wert, 3),
-            differenz=differenz
+            differenz=round(differenz, 2)
         )
 
     def get_monatswerte(
@@ -200,12 +224,12 @@ class HAStatisticsService:
 
         with self._get_connection() as conn:
             for sensor_id in sensor_ids:
-                metadata_id = self.get_metadata_id(conn, sensor_id)
-                if metadata_id is None:
+                meta = self.get_metadata(conn, sensor_id)
+                if meta is None:
                     logger.warning(f"Sensor {sensor_id} nicht in HA statistics gefunden")
                     continue
 
-                wert = self.get_sensor_monatswert(conn, metadata_id, sensor_id, jahr, monat)
+                wert = self.get_sensor_monatswert(conn, meta, sensor_id, jahr, monat)
                 if wert:
                     sensoren.append(wert)
 
@@ -234,9 +258,9 @@ class HAStatisticsService:
             # Metadata-IDs ermitteln
             metadata_ids = []
             for sensor_id in sensor_ids:
-                mid = self.get_metadata_id(conn, sensor_id)
-                if mid:
-                    metadata_ids.append(mid)
+                meta = self.get_metadata(conn, sensor_id)
+                if meta:
+                    metadata_ids.append(meta.id)
 
             if not metadata_ids:
                 raise ValueError("Keine der angegebenen Sensoren hat Statistik-Daten")
@@ -339,8 +363,8 @@ class HAStatisticsService:
             end_datum = f"{jahr:04d}-{monat + 1:02d}-01"
 
         with self._get_connection() as conn:
-            metadata_id = self.get_metadata_id(conn, sensor_id)
-            if not metadata_id:
+            meta = self.get_metadata(conn, sensor_id)
+            if not meta:
                 return None
 
             cursor = conn.execute("""
@@ -349,10 +373,18 @@ class HAStatisticsService:
                 WHERE metadata_id = ?
                 AND datetime(start_ts, 'unixepoch', 'localtime') >= ?
                 AND datetime(start_ts, 'unixepoch', 'localtime') < ?
-            """, (metadata_id, start_datum, end_datum))
+            """, (meta.id, start_datum, end_datum))
 
             row = cursor.fetchone()
-            return round(row["start_wert"], 3) if row and row["start_wert"] else None
+            if not row or row["start_wert"] is None:
+                return None
+
+            wert = row["start_wert"]
+            # Einheiten-Konvertierung nach kWh
+            faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
+            if faktor != 1.0:
+                wert *= faktor
+            return round(wert, 3)
 
 
 # Singleton
