@@ -118,14 +118,15 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
     bezug_kw = jitter(0.3, 0.3)
     batt_kw = jitter(0.5)
     ist_ladung = random.random() > 0.4
-    eauto_kw = jitter(3.7) if random.random() > 0.3 else 0
+    wallbox_kw = jitter(7.4) if random.random() > 0.25 else 0
+    eauto_kw = round(wallbox_kw * random.uniform(0.85, 0.95), 2) if wallbox_kw > 0 else 0
     wp_kw = jitter(1.8)
     batt_soc = min(100, max(0, 72 + random.randint(-5, 5)))
     eauto_soc = min(100, max(0, 45 + random.randint(-3, 3)))
 
     # Energiebilanz
     summe_erz = pv_kw + bezug_kw + (batt_kw if not ist_ladung else 0)
-    bekannte_vrb = einsp_kw + (batt_kw if ist_ladung else 0) + eauto_kw + wp_kw
+    bekannte_vrb = einsp_kw + (batt_kw if ist_ladung else 0) + wallbox_kw + wp_kw
     haushalt_kw = max(0, round(summe_erz - bekannte_vrb, 2))
     summe_vrb = bekannte_vrb + haushalt_kw
 
@@ -153,8 +154,11 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
             {"key": "batterie_3", "label": "BYD HVS 10.2", "icon": "battery",
              "erzeugung_kw": batt_kw if not ist_ladung else None,
              "verbrauch_kw": batt_kw if ist_ladung else None},
+            {"key": "wallbox_6", "label": "go-eCharger", "icon": "plug",
+             "erzeugung_kw": None, "verbrauch_kw": wallbox_kw},
             {"key": "eauto_4", "label": "VW ID.4", "icon": "car",
-             "erzeugung_kw": None, "verbrauch_kw": eauto_kw},
+             "erzeugung_kw": None, "verbrauch_kw": eauto_kw,
+             "parent_key": "wallbox_6"},
             {"key": "waermepumpe_5", "label": "Viessmann Vitocal", "icon": "flame",
              "erzeugung_kw": None, "verbrauch_kw": wp_kw},
             {"key": "haushalt", "label": "Haushalt", "icon": "home",
@@ -190,6 +194,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
             "netz_bezug": round(3.1 + random.uniform(-0.3, 0.3), 1),
             "netz_einspeisung": round(9.2 + random.uniform(-0.5, 0.5), 1),
             "batterie_3": round(4.5 + random.uniform(-0.5, 0.5), 1),
+            "wallbox_6": round(14.7 + random.uniform(-1, 1), 1),
             "eauto_4": round(8.3 + random.uniform(-0.5, 0.5), 1),
             "waermepumpe_5": round(5.2 + random.uniform(-0.3, 0.3), 1),
             "haushalt": round(9.1 + random.uniform(-0.5, 0.5), 1),

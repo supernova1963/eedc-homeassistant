@@ -137,8 +137,23 @@ function layoutNodes(komponenten: LiveKomponente[]): LayoutResult {
     !kinderKeys.has(k.key)
   )
 
-  // Kinder in Verbraucher-Reihe einreihen (Flusslinie geht trotzdem zum Parent)
-  const alleUnten = [...verbraucher, ...kinder]
+  // Kinder direkt nach ihrem Parent einreihen (z.B. E-Auto neben Wallbox)
+  const kinderByParent = new Map<string, LiveKomponente[]>()
+  kinder.forEach(k => {
+    const list = kinderByParent.get(k.parent_key!) || []
+    list.push(k)
+    kinderByParent.set(k.parent_key!, list)
+  })
+  const alleUnten: LiveKomponente[] = []
+  verbraucher.forEach(v => {
+    alleUnten.push(v)
+    const kids = kinderByParent.get(v.key)
+    if (kids) kids.forEach(k => alleUnten.push(k))
+  })
+  // Kinder ohne passenden Parent am Ende anhängen
+  kinder.forEach(k => {
+    if (!alleUnten.includes(k)) alleUnten.push(k)
+  })
 
   const maxPerRow = Math.max(erzeuger.length, alleUnten.length, 1)
   const dims = computeDims(maxPerRow)
@@ -248,19 +263,324 @@ export default function EnergieFluss({
         viewBox={`0 0 ${W} ${svgH}`}
         className="w-full flex-1 min-h-0"
       >
-        {/* CSS Animation */}
         <defs>
           <style>{`
-            @keyframes flow-forward {
-              from { stroke-dashoffset: 20; }
-              to { stroke-dashoffset: 0; }
+            @keyframes pulse-ring {
+              0%, 100% { opacity: 0.15; }
+              50% { opacity: 0.04; }
             }
-            @keyframes flow-reverse {
+            @keyframes bg-stream {
               from { stroke-dashoffset: 0; }
-              to { stroke-dashoffset: 20; }
+              to { stroke-dashoffset: -60; }
+            }
+            @keyframes haus-glow {
+              0%, 100% { opacity: 0.35; }
+              50% { opacity: 0.55; }
             }
           `}</style>
+
+          {/* Maske: Perspektivgitter nahe Zentrum ausblenden */}
+          <radialGradient id="ef-grid-fade" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="white" stopOpacity="0" />
+            <stop offset="25%" stopColor="white" stopOpacity="0.3" />
+            <stop offset="60%" stopColor="white" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="white" stopOpacity="1" />
+          </radialGradient>
+          <mask id="ef-grid-mask">
+            <rect width={W} height={svgH} fill="url(#ef-grid-fade)" />
+          </mask>
+
+          {/* Radiales Glow vom Zentrum — Light (verstärkt) */}
+          <radialGradient id="ef-glow-light" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.55} gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+            <stop offset="20%" stopColor="#06b6d4" stopOpacity="0.14" />
+            <stop offset="50%" stopColor="#3b82f6" stopOpacity="0.07" />
+            <stop offset="100%" stopColor="#f8fafc" stopOpacity="0" />
+          </radialGradient>
+          {/* Radiales Glow vom Zentrum — Dark */}
+          <radialGradient id="ef-glow-dark" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.55} gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+            <stop offset="20%" stopColor="#06b6d4" stopOpacity="0.08" />
+            <stop offset="50%" stopColor="#3b82f6" stopOpacity="0.04" />
+            <stop offset="100%" stopColor="#111827" stopOpacity="0" />
+          </radialGradient>
+
+          {/* Inner-Glow (3D-Spot unter dem Haus) — Light (verstärkt) */}
+          <radialGradient id="ef-spot-light" cx={CX} cy={CY} r="80" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          </radialGradient>
+          {/* Inner-Glow — Dark */}
+          <radialGradient id="ef-spot-dark" cx={CX} cy={CY} r="80" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#34d399" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+          </radialGradient>
+
+          {/* Tiefe-Vignette — Light (verstärkt) */}
+          <radialGradient id="ef-vignette-light" cx="50%" cy="50%" r="52%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
+            <stop offset="60%" stopColor="#e2e8f0" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#94a3b8" stopOpacity="0.45" />
+          </radialGradient>
+          {/* Tiefe-Vignette — Dark */}
+          <radialGradient id="ef-vignette-dark" cx="50%" cy="50%" r="52%">
+            <stop offset="0%" stopColor="#1f2937" stopOpacity="0" />
+            <stop offset="70%" stopColor="#0f172a" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#020617" stopOpacity="0.6" />
+          </radialGradient>
+
+          {/* Innerer Schatten (3D-Einbuchtung) */}
+          <filter id="ef-inner-shadow">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="blur" />
+            <feOffset dx="0" dy="3" result="offsetBlur" />
+            <feComposite in="SourceGraphic" in2="offsetBlur" operator="over" />
+          </filter>
+
+          {/* Soft-Glow für Ringe */}
+          <filter id="ef-ring-glow">
+            <feGaussianBlur stdDeviation="3" />
+          </filter>
+
+          {/* Glow-Filter für Flusslinien (weicher Schein) */}
+          <filter id="ef-line-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
+          {/* Glow-Filter für Icons */}
+          <filter id="ef-icon-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+          </filter>
+
+          {/* Schatten für Knoten-Karten */}
+          <filter id="ef-card-shadow" x="-10%" y="-10%" width="130%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.15" />
+          </filter>
+
+          {/* Glow für Haus-Zentrum */}
+          <filter id="ef-haus-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="8" />
+          </filter>
         </defs>
+
+        {/* ═══ Hintergrund-Layer ═══ */}
+        <g className="pointer-events-none">
+          {/* Basis-Hintergrund (Light etwas dunkler für Kontrast) */}
+          <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />
+
+          {/* ─── Perspektivgitter (Fluchtpunkt = Haus-Zentrum) ─── */}
+          <g mask="url(#ef-grid-mask)">
+            {/* Radiale Strahlen vom Zentrum zu den Rändern */}
+            {Array.from({ length: 32 }, (_, i) => {
+              const angle = (i / 32) * Math.PI * 2
+              const farR = Math.max(W, svgH) * 0.9
+              const ex = CX + Math.cos(angle) * farR
+              const ey = CY + Math.sin(angle) * farR
+              const isMajor = i % 4 === 0
+              const isMid = i % 2 === 0
+              return (
+                <line
+                  key={`ray-${i}`}
+                  x1={CX} y1={CY} x2={ex} y2={ey}
+                  stroke="#64748b"
+                  strokeWidth={isMajor ? 0.9 : isMid ? 0.5 : 0.3}
+                  strokeOpacity={isMajor ? 0.3 : isMid ? 0.2 : 0.12}
+                />
+              )
+            })}
+            {/* Konzentrische Perspektiv-Ringe (Abstand wächst nach außen → Tiefe) */}
+            {[30, 55, 85, 125, 175, 240, 320].map((r, i) => (
+              <circle
+                key={`pgrid-${i}`}
+                cx={CX} cy={CY} r={r}
+                fill="none"
+                stroke="#64748b"
+                strokeWidth={i < 2 ? 0.3 : 0.5 + i * 0.1}
+                strokeOpacity={0.12 + i * 0.04}
+              />
+            ))}
+            {/* Knotenpunkte an den Schnittpunkten (äußere Ringe) */}
+            {[85, 125, 175, 240, 320].flatMap((r, ri) =>
+              Array.from({ length: 32 }, (_, ai) => {
+                if (ri < 2 && ai % 2 !== 0) return null
+                if (ri < 1 && ai % 4 !== 0) return null
+                const angle = (ai / 32) * Math.PI * 2
+                const px = CX + Math.cos(angle) * r
+                const py = CY + Math.sin(angle) * r
+                return (
+                  <circle
+                    key={`node-${ri}-${ai}`}
+                    cx={px} cy={py}
+                    r={0.7 + ri * 0.2}
+                    fill="#64748b"
+                    fillOpacity={0.18 + ri * 0.04}
+                  />
+                )
+              })
+            )}
+          </g>
+
+          {/* Radiales Energie-Glow */}
+          <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-glow-light)" rx="8" />
+          <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-glow-dark)" rx="8" />
+
+          {/* 3D-Spot unter dem Haus */}
+          <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-spot-light)" rx="8" />
+          <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-spot-dark)" rx="8" />
+
+          {/* ─── Fließende Strom-Ströme (Hintergrund-Animation, verstärkt) ─── */}
+          {/* Strom von oben (PV-Zone) zum Zentrum */}
+          <path
+            d={`M ${CX - 80} 10 Q ${CX - 40} ${CY * 0.4} ${CX} ${CY}`}
+            fill="none" stroke="#ca8a04" strokeWidth="2" strokeOpacity="0.18"
+            strokeDasharray="3 12"
+            style={{ animation: 'bg-stream 4s linear infinite' }}
+          />
+          <path
+            d={`M ${CX + 80} 10 Q ${CX + 40} ${CY * 0.4} ${CX} ${CY}`}
+            fill="none" stroke="#ca8a04" strokeWidth="1.5" strokeOpacity="0.14"
+            strokeDasharray="2 10"
+            style={{ animation: 'bg-stream 5s linear infinite' }}
+          />
+          <path
+            d={`M ${CX} 5 Q ${CX + 15} ${CY * 0.5} ${CX} ${CY}`}
+            fill="none" stroke="#eab308" strokeWidth="1.8" strokeOpacity="0.16"
+            strokeDasharray="4 14"
+            style={{ animation: 'bg-stream 3.5s linear infinite' }}
+          />
+
+          {/* Strom vom Zentrum nach unten (Verbraucher-Zone) */}
+          <path
+            d={`M ${CX} ${CY} Q ${CX - 50} ${CY + 60} ${CX - 100} ${svgH - 10}`}
+            fill="none" stroke="#059669" strokeWidth="1.8" strokeOpacity="0.16"
+            strokeDasharray="3 12"
+            style={{ animation: 'bg-stream 4.5s linear infinite' }}
+          />
+          <path
+            d={`M ${CX} ${CY} Q ${CX + 50} ${CY + 60} ${CX + 100} ${svgH - 10}`}
+            fill="none" stroke="#059669" strokeWidth="1.5" strokeOpacity="0.13"
+            strokeDasharray="2 10"
+            style={{ animation: 'bg-stream 5.5s linear infinite' }}
+          />
+
+          {/* Strom von links (Netz) */}
+          <path
+            d={`M 5 ${CY - 30} Q ${CX * 0.4} ${CY - 10} ${CX} ${CY}`}
+            fill="none" stroke="#dc2626" strokeWidth="1.5" strokeOpacity="0.14"
+            strokeDasharray="2 10"
+            style={{ animation: 'bg-stream 6s linear infinite' }}
+          />
+          <path
+            d={`M 5 ${CY + 30} Q ${CX * 0.4} ${CY + 10} ${CX} ${CY}`}
+            fill="none" stroke="#dc2626" strokeWidth="1.2" strokeOpacity="0.1"
+            strokeDasharray="3 14"
+            style={{ animation: 'bg-stream 7s linear infinite' }}
+          />
+
+          {/* Strom nach rechts (Speicher) */}
+          <path
+            d={`M ${CX} ${CY} Q ${CX + CX * 0.6} ${CY - 15} ${W - 5} ${CY - 20}`}
+            fill="none" stroke="#2563eb" strokeWidth="1.5" strokeOpacity="0.14"
+            strokeDasharray="2 10"
+            style={{ animation: 'bg-stream 5s linear infinite' }}
+          />
+          <path
+            d={`M ${CX} ${CY} Q ${CX + CX * 0.6} ${CY + 15} ${W - 5} ${CY + 20}`}
+            fill="none" stroke="#2563eb" strokeWidth="1.2" strokeOpacity="0.1"
+            strokeDasharray="3 12"
+            style={{ animation: 'bg-stream 6.5s linear infinite' }}
+          />
+
+          {/* ─── Konzentrische Energieringe mit Glow (verstärkt) ─── */}
+          {[80, 130, 190, 260].map((r, i) => (
+            <g key={`ring-${i}`}>
+              {/* Glow-Schatten */}
+              <circle
+                cx={CX} cy={CY} r={r}
+                fill="none"
+                stroke="#10b981"
+                strokeWidth={3 - i * 0.3}
+                strokeOpacity={0.08}
+                strokeDasharray="6 12"
+                filter="url(#ef-ring-glow)"
+                style={{ animation: `pulse-ring ${4 + i * 1.5}s ease-in-out infinite` }}
+              />
+              {/* Scharfer Ring */}
+              <circle
+                cx={CX} cy={CY} r={r}
+                fill="none"
+                stroke="#10b981"
+                strokeWidth={1 - i * 0.1}
+                strokeOpacity={0.22 - i * 0.03}
+                strokeDasharray="4 8"
+                style={{ animation: `pulse-ring ${4 + i * 1.5}s ease-in-out infinite` }}
+              />
+            </g>
+          ))}
+
+          {/* ─── Partikel (fließende Energie-Punkte, verstärkt) ─── */}
+          {/* Gelbe Partikel (PV → Haus) */}
+          {[0, 1, 2, 3, 4].map(i => (
+            <circle key={`p-pv-${i}`} fill="#ca8a04" r="1.5">
+              <animateMotion
+                dur={`${3 + i * 0.8}s`}
+                repeatCount="indefinite"
+                begin={`${i * 0.7}s`}
+                path={`M ${CX - 60 + i * 30} 15 Q ${CX - 20 + i * 10} ${CY * 0.45} ${CX} ${CY}`}
+              />
+              <animate attributeName="opacity" values="0;0.7;0.4;0" dur={`${3 + i * 0.8}s`} repeatCount="indefinite" begin={`${i * 0.7}s`} />
+              <animate attributeName="r" values="1;2;0.6" dur={`${3 + i * 0.8}s`} repeatCount="indefinite" begin={`${i * 0.7}s`} />
+            </circle>
+          ))}
+          {/* Grüne Partikel (Haus → Verbraucher) */}
+          {[0, 1, 2, 3].map(i => (
+            <circle key={`p-vb-${i}`} fill="#059669" r="1.3">
+              <animateMotion
+                dur={`${3.5 + i * 0.9}s`}
+                repeatCount="indefinite"
+                begin={`${i * 1.0}s`}
+                path={`M ${CX} ${CY} Q ${CX + (-1) ** i * 40} ${CY + 50} ${CX + (-1) ** i * (60 + i * 20)} ${svgH - 15}`}
+              />
+              <animate attributeName="opacity" values="0;0.65;0.35;0" dur={`${3.5 + i * 0.9}s`} repeatCount="indefinite" begin={`${i * 1.0}s`} />
+              <animate attributeName="r" values="0.8;1.8;0.5" dur={`${3.5 + i * 0.9}s`} repeatCount="indefinite" begin={`${i * 1.0}s`} />
+            </circle>
+          ))}
+          {/* Rote Partikel (Netz → Haus) */}
+          {[0, 1].map(i => (
+            <circle key={`p-nz-${i}`} fill="#dc2626" r="1.2">
+              <animateMotion
+                dur={`${5 + i * 1.5}s`}
+                repeatCount="indefinite"
+                begin={`${i * 2.5}s`}
+                path={`M 8 ${CY + (-1) ** i * 25} Q ${CX * 0.4} ${CY + (-1) ** i * 8} ${CX} ${CY}`}
+              />
+              <animate attributeName="opacity" values="0;0.6;0.3;0" dur={`${5 + i * 1.5}s`} repeatCount="indefinite" begin={`${i * 2.5}s`} />
+            </circle>
+          ))}
+          {/* Blaue Partikel (Haus → Speicher) */}
+          {[0, 1].map(i => (
+            <circle key={`p-sp-${i}`} fill="#2563eb" r="1.2">
+              <animateMotion
+                dur={`${4.5 + i * 1.5}s`}
+                repeatCount="indefinite"
+                begin={`${i * 2.0}s`}
+                path={`M ${CX} ${CY} Q ${CX + CX * 0.55} ${CY + (-1) ** i * 12} ${W - 8} ${CY + (-1) ** i * 18}`}
+              />
+              <animate attributeName="opacity" values="0;0.6;0.3;0" dur={`${4.5 + i * 1.5}s`} repeatCount="indefinite" begin={`${i * 2.0}s`} />
+            </circle>
+          ))}
+
+          {/* Dezente Achsenlinien (Kreuz durch Zentrum) */}
+          <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
+          <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
+
+          {/* Tiefe-Vignette (dunkelt Ränder ab → 3D-Einbuchtung) */}
+          <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-vignette-light)" rx="8" />
+          <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-vignette-dark)" rx="8" />
+        </g>
 
         {/* Verbindungslinien */}
         {nodes.map(node => {
@@ -279,30 +599,65 @@ export default function EnergieFluss({
 
           return (
             <g key={`line-${k.key}`}>
-              {/* Hintergrundlinie */}
-              <path
-                d={d}
-                fill="none"
-                stroke={isActive ? color : '#9ca3af'}
-                strokeWidth={thickness}
-                strokeOpacity={isActive ? 0.15 : 0.08}
-                strokeLinecap="round"
-              />
-              {/* Animierte Flusslinie */}
+              {/* Glow-Schatten (weicher farbiger Schein) */}
               {isActive && (
                 <path
                   d={d}
                   fill="none"
                   stroke={color}
-                  strokeWidth={thickness}
-                  strokeOpacity={0.7}
+                  strokeWidth={thickness + 6}
+                  strokeOpacity={0.12}
                   strokeLinecap="round"
-                  strokeDasharray="5 15"
-                  style={{
-                    animation: `${isSource ? 'flow-forward' : 'flow-reverse'} ${duration}s linear infinite`,
-                  }}
+                  filter="url(#ef-line-glow)"
                 />
               )}
+              {/* Basis-Linie (halbtransparent, breit) */}
+              <path
+                d={d}
+                fill="none"
+                stroke={isActive ? color : '#9ca3af'}
+                strokeWidth={thickness}
+                strokeOpacity={isActive ? 0.2 : 0.08}
+                strokeLinecap="round"
+              />
+              {/* Kern-Linie (leuchtend, schmal) */}
+              {isActive && (
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={Math.max(thickness * 0.4, 1.5)}
+                  strokeOpacity={0.85}
+                  strokeLinecap="round"
+                />
+              )}
+              {/* Animierte Partikel (Elektronen) auf dem Pfad */}
+              {isActive && Array.from({ length: Math.min(3, Math.ceil(kw / 2) + 1) }, (_, pi) => {
+                const dur = duration + pi * 0.3
+                // Quellen: Partikel fließen Knoten → Haus (vorwärts auf d)
+                // Senken: Partikel fließen Haus → Knoten (rückwärts auf d)
+                return (
+                  <circle key={`el-${k.key}-${pi}`} r={Math.min(thickness * 0.5, 3)} fill="white" fillOpacity="0.9">
+                    <animateMotion
+                      dur={`${dur}s`}
+                      repeatCount="indefinite"
+                      begin={`${pi * (duration / 3)}s`}
+                      path={d}
+                      keyPoints={isSource ? '0;1' : '1;0'}
+                      keyTimes="0;1"
+                      calcMode="linear"
+                    />
+                    <animate
+                      attributeName="opacity"
+                      values="0;0.9;0.9;0"
+                      keyTimes="0;0.1;0.9;1"
+                      dur={`${dur}s`}
+                      repeatCount="indefinite"
+                      begin={`${pi * (duration / 3)}s`}
+                    />
+                  </circle>
+                )
+              })}
             </g>
           )
         })}
@@ -316,10 +671,31 @@ export default function EnergieFluss({
             `Verbrauch: ${summeVerbrauch.toFixed(2)} kW`,
             ...(tagesWerte?.haushalt != null ? [`Heute: ${tagesWerte.haushalt.toFixed(1)} kWh`] : []),
           ].join('\n')}</title>
+          {/* Pulsierender Glow-Ring */}
+          <circle
+            cx={CX} cy={CY} r={HAUS_R + 6}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth={3}
+            filter="url(#ef-haus-glow)"
+            style={{ animation: 'haus-glow 3s ease-in-out infinite' }}
+          />
+          {/* Äußerer Glow */}
+          <circle
+            cx={CX} cy={CY} r={HAUS_R + 2}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth={1.5}
+            strokeOpacity={0.3}
+          />
+          {/* Haupt-Kreis (halbtransparent) */}
           <circle
             cx={CX} cy={CY} r={HAUS_R}
-            className="fill-white dark:fill-gray-800 stroke-gray-300 dark:stroke-gray-600"
+            className="fill-white dark:fill-gray-800"
+            fillOpacity={0.65}
+            stroke="#10b981"
             strokeWidth={2}
+            strokeOpacity={0.6}
           />
           <foreignObject x={CX - dims.hausIconSize / 2} y={CY - dims.hausIconSize * 0.75} width={dims.hausIconSize} height={dims.hausIconSize}>
             <IconElement name="home" size={dims.hausIconSize} className="text-emerald-500" />
@@ -384,15 +760,17 @@ export default function EnergieFluss({
             <g key={`node-${k.key}`} className="cursor-default">
               <title>{tip}</title>
 
-              {/* Knoten-Hintergrund */}
+              {/* Knoten-Hintergrund (halbtransparent, Gitter scheint durch) */}
               <rect
                 x={nx} y={ny}
                 width={NODE_W} height={NODE_H}
                 rx={NODE_R}
                 className="fill-white dark:fill-gray-800"
+                fillOpacity={0.6}
                 stroke={isActive ? color : '#9ca3af'}
                 strokeWidth={isActive ? 1.5 : 1}
                 strokeOpacity={isActive ? 0.8 : 0.4}
+                filter="url(#ef-card-shadow)"
               />
 
               {/* SoC-Pegel (Füllung von unten, kräftig sichtbar) */}
@@ -407,6 +785,16 @@ export default function EnergieFluss({
                 />
               )}
 
+              {/* Icon-Glow (farbiger Schein hinter dem Icon) */}
+              {isActive && (
+                <circle
+                  cx={node.x} cy={node.y - NODE_H / 2 + 6 + dims.iconSize / 2}
+                  r={dims.iconSize * 0.6}
+                  fill={color}
+                  fillOpacity={0.15}
+                  filter="url(#ef-icon-glow)"
+                />
+              )}
               {/* Icon */}
               <foreignObject x={node.x - dims.iconSize / 2} y={node.y - NODE_H / 2 + 6} width={dims.iconSize} height={dims.iconSize}>
                 <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : '#9ca3af'} />
