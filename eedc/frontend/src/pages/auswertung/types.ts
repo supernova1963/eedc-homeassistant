@@ -1,72 +1,16 @@
 // Gemeinsame Types für Auswertungs-Tabs
 import type { useAnlagen, useAggregierteStats, useAktuellerStrompreis } from '../../hooks'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
+import {
+  MONAT_KURZ, TYP_LABELS, CO2_FAKTOR_KG_KWH,
+  COLORS, CHART_COLORS, TYP_COLORS,
+  calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
+  calcSpeicherEffizienz, calcCOP,
+} from '../../lib'
 
-// Monatsnamen für Labels
-export const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-
-// Basis-Farben
-export const COLORS = {
-  solar: '#f59e0b',
-  grid: '#ef4444',
-  consumption: '#8b5cf6',
-  battery: '#3b82f6',
-  feedin: '#10b981',
-}
-
-// Distinct colors for charts
-export const CHART_COLORS = {
-  erzeugung: '#f59e0b',      // Amber
-  eigenverbrauch: '#8b5cf6', // Purple
-  einspeisung: '#10b981',    // Emerald
-  netzbezug: '#ef4444',      // Red
-  autarkie: '#3b82f6',       // Blue
-  evQuote: '#a855f7',        // Purple-500 (different shade)
-  direktverbrauch: '#f97316', // Orange
-  spezErtrag: '#eab308',     // Yellow
-  speicherLadung: '#22c55e', // Green
-  speicherEntladung: '#3b82f6', // Blue
-  speicherEffizienz: '#06b6d4', // Cyan
-  wpWaerme: '#ef4444',       // Red
-  wpStrom: '#8b5cf6',        // Purple
-  wpCop: '#f97316',          // Orange
-  emobKm: '#8b5cf6',         // Purple
-  emobLadung: '#3b82f6',     // Blue
-  emobPvAnteil: '#10b981',   // Green
-  co2Pv: '#10b981',          // Emerald
-  co2Wp: '#ef4444',          // Red
-  co2Emob: '#8b5cf6',        // Purple
-  einspeiseErloes: '#10b981', // Green
-  evErsparnis: '#8b5cf6',    // Purple
-  wpErsparnis: '#ef4444',    // Red
-  emobErsparnis: '#3b82f6',  // Blue
-  nettoErtrag: '#059669',    // Emerald-600
-}
-
-// Typ-Farben für Investitionen
-export const TYP_COLORS: Record<string, string> = {
-  'pv-module': '#f59e0b',
-  'wechselrichter': '#eab308',
-  'speicher': '#3b82f6',
-  'e-auto': '#8b5cf6',
-  'wallbox': '#06b6d4',
-  'waermepumpe': '#ef4444',
-  'balkonkraftwerk': '#10b981',
-  'sonstiges': '#6b7280',
-  'pv-system': '#f97316',
-}
-
-export const TYP_LABELS: Record<string, string> = {
-  'pv-module': 'PV-Module',
-  'wechselrichter': 'Wechselrichter',
-  'speicher': 'Speicher',
-  'e-auto': 'E-Auto',
-  'wallbox': 'Wallbox',
-  'waermepumpe': 'Wärmepumpe',
-  'balkonkraftwerk': 'Balkonkraftwerk',
-  'sonstiges': 'Sonstiges',
-  'pv-system': 'PV-System',
-}
+// Re-Export für Rückwärtskompatibilität (bestehende Imports brechen nicht)
+export { COLORS, CHART_COLORS, TYP_COLORS, TYP_LABELS }
+export const monatNamen = MONAT_KURZ
 
 // Tab Props - verwendet jetzt aggregierte Daten mit korrekter PV-Erzeugung
 export interface TabProps {
@@ -134,19 +78,19 @@ export function createMonatsZeitreihe(
     const direktverbrauch = md.direktverbrauch_kwh || 0
 
     // Quoten berechnen - direkt aus aggregierten Daten oder berechnet
-    const autarkie = md.autarkie_prozent ?? (gesamtverbrauch > 0 ? (eigenverbrauch / gesamtverbrauch) * 100 : 0)
-    const evQuote = md.eigenverbrauchsquote_prozent ?? (erzeugung > 0 ? (eigenverbrauch / erzeugung) * 100 : 0)
-    const spezErtrag = anlage?.leistung_kwp ? erzeugung / anlage.leistung_kwp : 0
+    const autarkie = md.autarkie_prozent ?? calcAutarkie(eigenverbrauch, gesamtverbrauch)
+    const evQuote = md.eigenverbrauchsquote_prozent ?? calcEigenverbrauchsquote(eigenverbrauch, erzeugung)
+    const spezErtrag = calcSpezifischerErtrag(erzeugung, anlage?.leistung_kwp)
 
     // Speicher - jetzt aus aggregierten InvestitionMonatsdaten
     const speicher_ladung = md.speicher_ladung_kwh || 0
     const speicher_entladung = md.speicher_entladung_kwh || 0
-    const speicher_effizienz = speicher_ladung > 0 ? (speicher_entladung / speicher_ladung) * 100 : null
+    const speicher_effizienz = calcSpeicherEffizienz(speicher_entladung, speicher_ladung)
 
     // Wärmepumpe - aus aggregierten InvestitionMonatsdaten
     const wp_waerme = (md.wp_heizung_kwh || 0) + (md.wp_warmwasser_kwh || 0)
     const wp_strom = md.wp_strom_kwh || 0
-    const wp_cop = wp_strom > 0 ? wp_waerme / wp_strom : null
+    const wp_cop = calcCOP(wp_waerme, wp_strom)
 
     // E-Auto - aus aggregierten InvestitionMonatsdaten
     const eauto_km = md.eauto_km || 0
@@ -166,11 +110,10 @@ export function createMonatsZeitreihe(
     const netto_ertrag = einspeise_erloes + ev_ersparnis
 
     // CO2
-    const CO2_FAKTOR = 0.38 // kg CO2 pro kWh
-    const co2_einsparung = erzeugung * CO2_FAKTOR
+    const co2_einsparung = erzeugung * CO2_FAKTOR_KG_KWH
 
     return {
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(-2)}`,
+      name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(-2)}`,
       jahr: md.jahr,
       monat: md.monat,
       erzeugung,
