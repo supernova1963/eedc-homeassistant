@@ -1,6 +1,6 @@
 # Frontend-Refactoring Plan
 
-> Erstellt: 2026-03-20 | Status: Geplant | Auslöser: Code-Audit
+> Erstellt: 2026-03-20 | Status: Phase 0–7 erledigt (2026-03-21) | Auslöser: Code-Audit
 
 ## Ziel
 
@@ -104,7 +104,7 @@ src/
 
 ## Phasen
 
-### Phase 0: Foundation (rein additiv, keine Breaking Changes)
+### Phase 0: Foundation (rein additiv, keine Breaking Changes) ✅ `ceba2de`
 
 | Task | Beschreibung |
 |------|-------------|
@@ -116,7 +116,7 @@ src/
 
 **Validierung:** `npx tsc --noEmit`, keine Imports geändert.
 
-### Phase 1: Shared Hooks (additiv, dann schrittweise Adoption)
+### Phase 1: Shared Hooks (additiv, dann schrittweise Adoption) ✅ `8a529b0`
 
 | Task | Beschreibung |
 |------|-------------|
@@ -127,7 +127,9 @@ src/
 
 **Validierung:** `npx tsc --noEmit`. Eine Seite migrieren als Proof (z.B. PVAnlageDashboard).
 
-### Phase 2: Chart-Komponenten (additiv)
+### Phase 2: Chart-Komponenten (additiv) ✅ `3c8d968`
+
+> BarChartCard/LineChartCard übersprungen — ChartTooltip deckt Tooltip-Pattern bereits ab, Chart-Konfigurationen sind zu spezifisch pro Seite.
 
 | Task | Beschreibung |
 |------|-------------|
@@ -141,7 +143,7 @@ src/
 
 **Validierung:** Visueller Vergleich auf Dashboard, Auswertung-Tabs.
 
-### Phase 3: Common Components (additiv)
+### Phase 3: Common Components (additiv) ✅ `1d1bcf3`
 
 | Task | Beschreibung |
 |------|-------------|
@@ -153,7 +155,9 @@ src/
 
 **Validierung:** `npx tsc --noEmit`.
 
-### Phase 4: Types aufsplitten (mechanisch, rückwärtskompatibel)
+### Phase 4: Types aufsplitten (mechanisch, rückwärtskompatibel) ⏭️ Übersprungen
+
+> types/index.ts ist mit 222 Zeilen gut strukturiert und logisch gruppiert. Aufsplitten bringt keinen Mehrwert.
 
 | Task | Beschreibung |
 |------|-------------|
@@ -167,7 +171,9 @@ src/
 
 **Validierung:** `npx tsc --noEmit`.
 
-### Phase 5: Dashboard zerlegen (der große Win)
+### Phase 5: Dashboard zerlegen (der große Win) ✅ `6220804`
+
+> Dashboard.tsx: 1297 → 595 Zeilen. 12 Komponenten extrahiert nach `components/dashboard/`.
 
 | Task | Beschreibung |
 |------|-------------|
@@ -192,7 +198,9 @@ interface DashboardSectionProps {
 }
 ```
 
-### Phase 6: MonatsabschlussWizard zerlegen
+### Phase 6: MonatsabschlussWizard zerlegen ✅ `84aaf75`
+
+> MonatsabschlussWizard.tsx: 1264 → 775 Zeilen. 9 Dateien extrahiert nach `components/monatsabschluss/`.
 
 | Task | Beschreibung |
 |------|-------------|
@@ -217,7 +225,11 @@ interface WizardStepProps {
 }
 ```
 
-### Phase 7: Schrittweise Seiten-Migration (fortlaufend)
+### Phase 7: Schrittweise Seiten-Migration (fortlaufend) — 10/27 Seiten ✅ `96e5f8c`
+
+> Migriert: Dashboard, LiveDashboard, Auswertung, PVAnlageDashboard,
+> SpeicherDashboard, WaermepumpeDashboard, EAutoDashboard, WallboxDashboard,
+> BalkonkraftwerkDashboard, SonstigesDashboard. -93 Zeilen Boilerplate.
 
 Seiten nach Größe priorisiert auf neue Hooks/Components migrieren:
 
