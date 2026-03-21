@@ -62,6 +62,13 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
     for (const s of tagesverlauf.serien) {
       keyKategorie[s.key] = s.kategorie
     }
+    // E-Auto überspringen wenn Wallbox existiert (Wallbox misst bereits die Ladeleistung)
+    const hasWallbox = tagesverlauf.serien.some(s => s.kategorie === 'wallbox')
+    const skipKeys = new Set(
+      tagesverlauf.serien
+        .filter(s => s.kategorie === 'eauto' && hasWallbox)
+        .map(s => s.key)
+    )
 
     const kategorienGesehen = new Set<string>()
     const result: Record<number, {
@@ -87,6 +94,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
       const netzValue = punkt.werte['netz'] ?? 0
 
       for (const [key, val] of Object.entries(punkt.werte)) {
+        if (skipKeys.has(key)) continue
         const kat = keyKategorie[key]
 
         if (pvKeys.includes(key)) {
@@ -102,7 +110,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
         } else if (kat === 'haushalt') {
           haushalt += Math.abs(val)
           if (val !== 0) kategorienGesehen.add('haushalt')
-        } else if (kat === 'wallbox') {
+        } else if (kat === 'wallbox' || kat === 'eauto') {
           wallbox += Math.abs(val)
           if (val !== 0) kategorienGesehen.add('wallbox')
         } else if (kat === 'waermepumpe') {
