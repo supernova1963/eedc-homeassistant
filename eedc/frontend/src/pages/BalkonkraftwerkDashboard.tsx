@@ -7,7 +7,8 @@ import { useState, useEffect } from 'react'
 import { Sun, Zap, TrendingUp, Home, Leaf, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
+import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { BalkonkraftwerkDashboardResponse } from '../api/investitionen'
 import {
@@ -15,20 +16,11 @@ import {
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts'
 
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-
 export default function BalkonkraftwerkDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<BalkonkraftwerkDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
     if (!selectedAnlageId) return
@@ -102,7 +94,7 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
   const z = zusammenfassung
 
   const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     erzeugung: md.verbrauch_daten.erzeugung_kwh || 0,
     eigenverbrauch: md.verbrauch_daten.eigenverbrauch_kwh || 0,
     einspeisung: md.verbrauch_daten.einspeisung_kwh || 0,

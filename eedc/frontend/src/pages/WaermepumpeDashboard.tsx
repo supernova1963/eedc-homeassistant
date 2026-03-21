@@ -7,7 +7,8 @@ import { useState, useEffect } from 'react'
 import { Flame, Zap, Leaf, TrendingUp, Thermometer } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
+import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
 import {
@@ -15,20 +16,11 @@ import {
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts'
 
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-
 export default function WaermepumpeDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<WaermepumpeDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
     if (!selectedAnlageId) return
@@ -111,7 +103,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
     const stromHeizen = d.strom_heizen_kwh || 0
     const stromWarmwasser = d.strom_warmwasser_kwh || 0
     return {
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+      name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
       strom,
       strom_heizen: stromHeizen,
       strom_warmwasser: stromWarmwasser,
@@ -129,7 +121,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
   const vergleichJahreColors = ['#f59e0b', '#22c55e', '#3b82f6', '#ef4444', '#8b5cf6']
   const vergleichData = Array.from({ length: 12 }, (_, i) => {
     const monat = i + 1
-    const entry: Record<string, string | number | null> = { name: monatNamen[monat] }
+    const entry: Record<string, string | number | null> = { name: MONAT_KURZ[monat] }
     for (const jahr of vergleichJahre) {
       const md = monatsdaten.find(m => m.monat === monat && m.jahr === jahr)
       if (md) {
@@ -419,7 +411,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
                 const cop = strom > 0 ? (heiz + ww) / strom : 0
                 return (
                   <tr key={md.id} className="border-b border-gray-100 dark:border-gray-800">
-                    <td className="py-2 px-2">{monatNamen[md.monat]} {md.jahr}</td>
+                    <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
                     <td className="text-right py-2 px-2">{strom.toFixed(0)}</td>
                     <td className="text-right py-2 px-2 text-red-600">{heiz.toFixed(0)}</td>
                     <td className="text-right py-2 px-2 text-blue-600">{ww.toFixed(0)}</td>

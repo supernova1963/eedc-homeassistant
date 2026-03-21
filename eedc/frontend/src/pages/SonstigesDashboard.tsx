@@ -8,15 +8,14 @@ import { useState, useEffect } from 'react'
 import { Wrench, Zap, TrendingUp, Home, Leaf, Battery, AlertCircle } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
+import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { SonstigesDashboardResponse } from '../api/investitionen'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts'
-
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
 const kategorieLabels: Record<string, string> = {
   erzeuger: 'Erzeuger',
@@ -25,17 +24,10 @@ const kategorieLabels: Record<string, string> = {
 }
 
 export default function SonstigesDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<SonstigesDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
     if (!selectedAnlageId) return
@@ -126,7 +118,7 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
 }) {
   const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     erzeugung: md.verbrauch_daten.erzeugung_kwh || 0,
     eigenverbrauch: md.verbrauch_daten.eigenverbrauch_kwh || 0,
     einspeisung: md.verbrauch_daten.einspeisung_kwh || 0,
@@ -305,7 +297,7 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
 }) {
   const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     verbrauch: md.verbrauch_daten.verbrauch_kwh || 0,
     bezug_pv: md.verbrauch_daten.bezug_pv_kwh || 0,
     bezug_netz: md.verbrauch_daten.bezug_netz_kwh || 0,
@@ -484,7 +476,7 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
 }) {
   const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     ladung: md.verbrauch_daten.ladung_kwh || 0,
     entladung: md.verbrauch_daten.entladung_kwh || 0,
   }))

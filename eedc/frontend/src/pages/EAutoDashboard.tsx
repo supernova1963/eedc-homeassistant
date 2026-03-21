@@ -6,7 +6,8 @@
 import { useState, useEffect } from 'react'
 import { Car, Zap, Leaf, TrendingUp, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
+import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { EAutoDashboardResponse } from '../api/investitionen'
 import {
@@ -15,21 +16,11 @@ import {
 } from 'recharts'
 import ChartTooltip from '../components/ui/ChartTooltip'
 
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-
 export default function EAutoDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<EAutoDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Erste Anlage automatisch auswählen
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   // Dashboard laden
   useEffect(() => {
@@ -107,7 +98,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
 
   // Daten für Charts vorbereiten
   const monthlyData = monatsdaten.map(md => ({
-    name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     km: md.verbrauch_daten.km_gefahren || 0,
     verbrauch: md.verbrauch_daten.verbrauch_kwh || 0,
     pv: md.verbrauch_daten.ladung_pv_kwh || 0,
@@ -355,7 +346,7 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
             <tbody>
               {monatsdaten.map((md) => (
                 <tr key={md.id} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2">{monatNamen[md.monat]} {md.jahr}</td>
+                  <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
                   <td className="text-right py-2 px-2">{md.verbrauch_daten.km_gefahren || 0}</td>
                   <td className="text-right py-2 px-2">{(md.verbrauch_daten.verbrauch_kwh || 0).toFixed(1)}</td>
                   <td className="text-right py-2 px-2 text-green-600">{(md.verbrauch_daten.ladung_pv_kwh || 0).toFixed(1)}</td>

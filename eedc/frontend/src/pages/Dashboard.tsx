@@ -25,31 +25,23 @@ import {
   AmortisationsBar, CommunityTeaser, Section, SectionLink, KPICard,
   QuickLink, ShareTextModal, GettingStarted
 } from '../components/dashboard'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { cockpitApi } from '../api'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { CockpitUebersicht } from '../api/cockpit'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
 
   const [data, setData] = useState<CockpitUebersicht | null>(null)
   const [prevYearData, setPrevYearData] = useState<CockpitUebersicht | null>(null)
   const [monatsdaten, setMonatsdaten] = useState<AggregierteMonatsdaten[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [showShareModal, setShowShareModal] = useState(false)
-
-  // Auto-select first anlage
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
     if (!selectedAnlageId) return
@@ -119,7 +111,6 @@ export default function Dashboard() {
     )
   }
 
-  const anlage = anlagen.find(a => a.id === selectedAnlageId) || anlagen[0]
 
   return (
     <div className="space-y-6">
@@ -130,7 +121,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Übersicht</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {anlage.anlagenname} • {data.anlagenleistung_kwp.toFixed(1)} kWp
+              {anlage?.anlagenname} • {data.anlagenleistung_kwp.toFixed(1)} kWp
             </p>
           </div>
         </div>
@@ -572,7 +563,7 @@ export default function Dashboard() {
       </Section>
 
       {/* Community-Teaser */}
-      {anlage.community_hash && <CommunityTeaser />}
+      {anlage?.community_hash && <CommunityTeaser />}
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

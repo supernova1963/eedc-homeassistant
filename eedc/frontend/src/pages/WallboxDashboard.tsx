@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react'
 import { Plug, Zap, Leaf, TrendingUp, Home, MapPin } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { investitionenApi } from '../api'
 import type { WallboxDashboardResponse } from '../api/investitionen'
 import {
@@ -17,17 +17,10 @@ import {
 import ChartTooltip from '../components/ui/ChartTooltip'
 
 export default function WallboxDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<WallboxDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
     if (!selectedAnlageId) return

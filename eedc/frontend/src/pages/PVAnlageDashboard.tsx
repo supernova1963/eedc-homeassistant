@@ -8,10 +8,10 @@
  * - SOLL-IST Vergleich pro String (neue Gesamtlaufzeit-Komponente)
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc } from '../components/ui'
-import { useAnlagen, useInvestitionen } from '../hooks'
+import { useSelectedAnlage, useApiData, useInvestitionen } from '../hooks'
 import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
@@ -21,12 +21,7 @@ import {
 import type { Investition } from '../types'
 import { PVStringVergleich } from '../components/pv'
 import ChartTooltip from '../components/ui/ChartTooltip'
-
-const COLORS = {
-  solar: '#f59e0b',
-  feedin: '#10b981',
-  consumption: '#8b5cf6',
-}
+import { COLORS } from '../lib'
 
 interface PVSystem {
   wechselrichter: Investition
@@ -36,42 +31,21 @@ interface PVSystem {
 }
 
 export default function PVAnlageDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
-  const [cockpitData, setCockpitData] = useState<CockpitUebersicht | null>(null)
-  const [aggregierteDaten, setAggregierteDaten] = useState<AggregierteMonatsdaten[]>([])
-  const [cockpitLoading, setCockpitLoading] = useState(true)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
 
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
+  const { data: cockpitData, loading: cockpitLoading } = useApiData<CockpitUebersicht>(
+    () => cockpitApi.getUebersicht(selectedAnlageId!),
+    [selectedAnlageId],
+    { enabled: selectedAnlageId != null }
+  )
+
+  const { data: aggregierteDaten } = useApiData<AggregierteMonatsdaten[]>(
+    () => monatsdatenApi.listAggregiert(selectedAnlageId!),
+    [selectedAnlageId],
+    { enabled: selectedAnlageId != null }
+  )
 
   const { investitionen, loading: invLoading } = useInvestitionen(selectedAnlageId)
-
-  // Cockpit-Daten und aggregierte Monatsdaten laden (Gesamtlaufzeit)
-  useEffect(() => {
-    if (!selectedAnlageId) return
-
-    const loadData = async () => {
-      setCockpitLoading(true)
-      try {
-        const [cockpit, aggregiert] = await Promise.all([
-          cockpitApi.getUebersicht(selectedAnlageId),
-          monatsdatenApi.listAggregiert(selectedAnlageId),
-        ])
-        setCockpitData(cockpit)
-        setAggregierteDaten(aggregiert)
-      } catch (err) {
-        // Fehler werden stillschweigend ignoriert
-      } finally {
-        setCockpitLoading(false)
-      }
-    }
-
-    loadData()
-  }, [selectedAnlageId])
 
   // PV-Systeme gruppieren (Wechselrichter + zugeordnete Module)
   const { pvSysteme, orphanModule } = useMemo(() => {
@@ -117,7 +91,7 @@ export default function PVAnlageDashboard() {
 
   // Chart-Daten: Jahresübersicht
   const jahresChartData = useMemo(() => {
-    if (aggregierteDaten.length === 0) return []
+    if (!aggregierteDaten || aggregierteDaten.length === 0) return []
 
     const byYear = new Map<number, { erzeugung: number; eigenverbrauch: number; einspeisung: number }>()
 

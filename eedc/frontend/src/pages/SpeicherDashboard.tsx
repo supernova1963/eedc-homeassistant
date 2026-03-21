@@ -7,7 +7,8 @@ import { useState, useEffect } from 'react'
 import { Battery, Zap, TrendingUp, Activity, RotateCw, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
+import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
 import {
@@ -15,20 +16,11 @@ import {
   AreaChart, Area, LineChart, Line
 } from 'recharts'
 
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-
 export default function SpeicherDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<SpeicherDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   useEffect(() => {
     if (!selectedAnlageId) return
@@ -106,7 +98,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
     const entladung = md.verbrauch_daten.entladung_kwh || 0
     const arbitrage = md.verbrauch_daten.speicher_ladung_netz_kwh || 0
     return {
-      name: `${monatNamen[md.monat]} ${md.jahr.toString().slice(2)}`,
+      name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
       ladung,
       entladung,
       arbitrage,

@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight, Calendar } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
-import { useAnlagen, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis } from '../hooks'
+import { useSelectedAnlage, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis } from '../hooks'
 import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab } from './auswertung/index'
 
 type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen'
@@ -25,11 +25,9 @@ export default function Auswertung() {
   const [activeTab, setActiveTab] = useState<TabType>('energie')
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all')
 
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
 
-  const anlageId = selectedAnlageId ?? anlagen[0]?.id
-  const anlage = anlagen.find(a => a.id === anlageId)
+  const anlageId = selectedAnlageId
   // Aggregierte Daten verwenden für korrekte PV-Erzeugung aus InvestitionMonatsdaten
   const { daten: aggregierteDaten, loading: mdLoading } = useAggregierteDaten(anlageId)
   const { strompreis } = useAktuellerStrompreis(anlageId ?? null)

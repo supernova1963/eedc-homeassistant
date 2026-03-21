@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Activity, AlertCircle } from 'lucide-react'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, MqttInboundStatus } from '../api/liveDashboard'
 import EnergieFluss from '../components/live/EnergieFluss'
@@ -23,8 +23,7 @@ const WETTER_REFRESH_INTERVAL = 300_000 // 5 Minuten
 const TAGESVERLAUF_REFRESH_INTERVAL = 60_000 // 1 Minute
 
 export default function LiveDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [data, setData] = useState<LiveDashboardResponse | null>(null)
   const [wetter, setWetter] = useState<LiveWetterResponse | null>(null)
   const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(null)
@@ -37,13 +36,6 @@ export default function LiveDashboard() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tagesverlaufIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Auto-select erste Anlage
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   // Daten laden
   const fetchData = useCallback(async (isAutoRefresh = false) => {
