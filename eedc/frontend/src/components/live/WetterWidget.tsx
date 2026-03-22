@@ -302,6 +302,15 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
               <span>~{wetter.sfml_prognose_kwh} kWh ML</span>
             </div>
           )}
+          {wetter.sfml_tomorrow_kwh != null && (
+            <div
+              className="flex items-center gap-1.5 text-purple-400 dark:text-purple-500 font-medium"
+              title="Solar Forecast ML — Morgen-Prognose"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              <span>Morgen ~{wetter.sfml_tomorrow_kwh} kWh ML</span>
+            </div>
+          )}
           {wetter.grundlast_kw != null && wetter.grundlast_kw > 0 && (
             <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <Zap className="h-3.5 w-3.5" />

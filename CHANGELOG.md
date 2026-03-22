@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.1] - 2026-03-22
+
+### Hinzugefügt
+
+- **Prognose-Vergleich (ML Phase 2)**: Neuer Vergleichsblock auf der Prognose-vs-IST-Seite — EEDC-Forecast vs. ML-Forecast vs. IST mit Abweichung in %, Balkendiagramm und Detailtabelle mit "Bessere Prognose"-Indikator. Nur sichtbar wenn SFML-Daten vorhanden.
+- **SFML Morgen-Vorschau**: Neuer Sensor `sfml_tomorrow_kwh` in der Sensorzuordnung. Zeigt "Morgen ~XX kWh ML" als KPI im Wetter-Widget.
+- **SFML-Tagesprognosen persistiert**: ML-Prognosen werden in TagesZusammenfassung gespeichert für langfristigen Vergleich.
+
 ## [3.4.0] - 2026-03-22
 
 ### Hinzugefügt

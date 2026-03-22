@@ -324,6 +324,35 @@ export interface PVStringsGesamtlaufzeitResponse {
 }
 
 // =============================================================================
+// Prognose-Vergleich Types (EEDC vs. ML vs. IST)
+// =============================================================================
+
+export interface PrognoseVergleichMonat {
+  monat: number
+  monat_name: string
+  eedc_kwh: number
+  sfml_kwh: number
+  ist_kwh: number
+  eedc_abweichung_pct: number | null
+  sfml_abweichung_pct: number | null
+  tage_mit_daten: number
+}
+
+export interface PrognoseVergleich {
+  anlage_id: number
+  jahr: number
+  hat_sfml_daten: boolean
+  eedc_jahres_kwh: number
+  sfml_jahres_kwh: number
+  ist_jahres_kwh: number
+  eedc_abweichung_pct: number | null
+  sfml_abweichung_pct: number | null
+  monatswerte: PrognoseVergleichMonat[]
+  tage_mit_eedc: number
+  tage_mit_sfml: number
+}
+
+// =============================================================================
 // Share-Text Types
 // =============================================================================
 
@@ -390,5 +419,13 @@ export const cockpitApi = {
    */
   async getShareText(anlageId: number, monat: number, jahr: number, variante: 'kompakt' | 'ausfuehrlich'): Promise<ShareTextResponse> {
     return api.get<ShareTextResponse>(`/cockpit/share-text/${anlageId}?monat=${monat}&jahr=${jahr}&variante=${variante}`)
+  },
+
+  /**
+   * Holt Prognose-Vergleich (EEDC vs. ML vs. IST) für ein Jahr.
+   * Aggregiert Tagesprognosen aus TagesZusammenfassung.
+   */
+  async getPrognoseVergleich(anlageId: number, jahr: number): Promise<PrognoseVergleich> {
+    return api.get<PrognoseVergleich>(`/cockpit/prognose-vergleich/${anlageId}?jahr=${jahr}`)
   },
 }

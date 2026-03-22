@@ -6,13 +6,14 @@
  */
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download } from 'lucide-react'
+import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download, Brain } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
-import { pvgisApi, monatsdatenApi } from '../api'
+import { pvgisApi, monatsdatenApi, cockpitApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
+import type { PrognoseVergleich } from '../api/cockpit'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   ComposedChart, Line, ReferenceLine, Bar
@@ -45,6 +46,7 @@ export default function PrognoseVsIst() {
   const [loading, setLoading] = useState(false)
   const [savingPrognose, setSavingPrognose] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [vergleich, setVergleich] = useState<PrognoseVergleich | null>(null)
 
   // Daten laden
   useEffect(() => {
@@ -63,6 +65,14 @@ export default function PrognoseVsIst() {
       // Aggregierte Monatsdaten laden (korrekte PV-Erzeugung aus InvestitionMonatsdaten)
       const monatsdatenData = await monatsdatenApi.listAggregiert(selectedAnlageId)
       setMonatsdaten(monatsdatenData)
+
+      // Prognose-Vergleich (EEDC vs. ML vs. IST) laden
+      try {
+        const vergleichData = await cockpitApi.getPrognoseVergleich(selectedAnlageId, selectedJahr)
+        setVergleich(vergleichData)
+      } catch {
+        setVergleich(null)
+      }
 
       // Versuche gespeicherte Prognose zu laden
       const gespeichertePrognose = await pvgisApi.getAktivePrognose(selectedAnlageId)
@@ -348,6 +358,143 @@ export default function PrognoseVsIst() {
               </ResponsiveContainer>
             </div>
           </Card>
+
+          {/* Prognose-Vergleich: EEDC vs. ML vs. IST */}
+          {vergleich?.hat_sfml_daten && (
+            <Card className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Prognose-Vergleich: EEDC vs. ML vs. IST
+                </h2>
+              </div>
+
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Vergleich der täglichen GTI-Prognose (EEDC) mit Solar Forecast ML auf Monatsbasis.
+                {vergleich.tage_mit_sfml < 30 && (
+                  <span className="text-amber-600 dark:text-amber-400 ml-1">
+                    Hinweis: Erst {vergleich.tage_mit_sfml} Tage mit ML-Daten — Genauigkeit steigt mit mehr Trainingsdaten.
+                  </span>
+                )}
+              </p>
+
+              {/* Jahres-KPIs */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">EEDC-Forecast</p>
+                  <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                    {vergleich.eedc_jahres_kwh.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                  </p>
+                  {vergleich.eedc_abweichung_pct !== null && (
+                    <p className={`text-xs ${vergleich.eedc_abweichung_pct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {vergleich.eedc_abweichung_pct >= 0 ? '+' : ''}{vergleich.eedc_abweichung_pct}% vs. IST
+                    </p>
+                  )}
+                </div>
+                <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">ML-Forecast</p>
+                  <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {vergleich.sfml_jahres_kwh.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                  </p>
+                  {vergleich.sfml_abweichung_pct !== null && (
+                    <p className={`text-xs ${vergleich.sfml_abweichung_pct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {vergleich.sfml_abweichung_pct >= 0 ? '+' : ''}{vergleich.sfml_abweichung_pct}% vs. IST
+                    </p>
+                  )}
+                </div>
+                <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">IST-Erzeugung</p>
+                  <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                    {vergleich.ist_jahres_kwh.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {vergleich.tage_mit_eedc} Tage EEDC / {vergleich.tage_mit_sfml} Tage ML
+                  </p>
+                </div>
+              </div>
+
+              {/* Monatlicher Vergleich Chart */}
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={vergleich.monatswerte.filter(m => m.eedc_kwh > 0 || m.sfml_kwh > 0 || m.ist_kwh > 0)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="monat_name" />
+                    <YAxis tickFormatter={(v) => `${v}%`} domain={['auto', 'auto']} />
+                    <Tooltip
+                      content={
+                        <ChartTooltip
+                          formatter={(value: number, name: string) => {
+                            if (name.includes('%')) return `${value.toFixed(1)}%`
+                            return `${value.toFixed(0)} kWh`
+                          }}
+                        />
+                      }
+                    />
+                    <Legend />
+                    <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
+                    <Bar dataKey="eedc_abweichung_pct" fill="#f97316" name="EEDC Abw. %" />
+                    <Bar dataKey="sfml_abweichung_pct" fill="#a855f7" name="ML Abw. %" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Monatstabelle */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-2 px-2">Monat</th>
+                      <th className="text-right py-2 px-2 text-orange-600">EEDC</th>
+                      <th className="text-right py-2 px-2 text-purple-600">ML</th>
+                      <th className="text-right py-2 px-2 text-green-600">IST</th>
+                      <th className="text-right py-2 px-2">EEDC Abw.</th>
+                      <th className="text-right py-2 px-2">ML Abw.</th>
+                      <th className="text-center py-2 px-2">Bessere Prognose</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vergleich.monatswerte
+                      .filter(m => m.eedc_kwh > 0 || m.sfml_kwh > 0 || m.ist_kwh > 0)
+                      .map((m) => {
+                        const eedcAbw = m.eedc_abweichung_pct !== null ? Math.abs(m.eedc_abweichung_pct) : null
+                        const sfmlAbw = m.sfml_abweichung_pct !== null ? Math.abs(m.sfml_abweichung_pct) : null
+                        const besser = eedcAbw !== null && sfmlAbw !== null
+                          ? sfmlAbw < eedcAbw ? 'ML' : eedcAbw < sfmlAbw ? 'EEDC' : 'Gleich'
+                          : null
+
+                        return (
+                          <tr key={m.monat} className="border-b border-gray-100 dark:border-gray-800">
+                            <td className="py-2 px-2 font-medium">{m.monat_name}</td>
+                            <td className="text-right py-2 px-2 text-orange-600">{m.eedc_kwh > 0 ? `${m.eedc_kwh.toFixed(0)} kWh` : '-'}</td>
+                            <td className="text-right py-2 px-2 text-purple-600">{m.sfml_kwh > 0 ? `${m.sfml_kwh.toFixed(0)} kWh` : '-'}</td>
+                            <td className="text-right py-2 px-2 text-green-600">{m.ist_kwh > 0 ? `${m.ist_kwh.toFixed(0)} kWh` : '-'}</td>
+                            <td className={`text-right py-2 px-2 ${m.eedc_abweichung_pct !== null ? (m.eedc_abweichung_pct >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                              {m.eedc_abweichung_pct !== null ? `${m.eedc_abweichung_pct >= 0 ? '+' : ''}${m.eedc_abweichung_pct.toFixed(1)}%` : '-'}
+                            </td>
+                            <td className={`text-right py-2 px-2 ${m.sfml_abweichung_pct !== null ? (m.sfml_abweichung_pct >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                              {m.sfml_abweichung_pct !== null ? `${m.sfml_abweichung_pct >= 0 ? '+' : ''}${m.sfml_abweichung_pct.toFixed(1)}%` : '-'}
+                            </td>
+                            <td className="text-center py-2 px-2">
+                              {besser === 'ML' ? (
+                                <span className="inline-flex items-center gap-1 text-purple-600 font-medium">
+                                  <Brain className="h-3 w-3" /> ML
+                                </span>
+                              ) : besser === 'EEDC' ? (
+                                <span className="text-orange-600 font-medium">EEDC</span>
+                              ) : besser === 'Gleich' ? (
+                                <span className="text-gray-500">Gleich</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           {/* Detailtabelle */}
           <Card className="space-y-4">

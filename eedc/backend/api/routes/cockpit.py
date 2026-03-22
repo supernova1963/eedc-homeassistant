@@ -2088,3 +2088,160 @@ async def get_share_text(
         text = "\n".join(lines)
 
     return ShareTextResponse(text=text, variante=variante)
+
+
+# =============================================================================
+# Prognose-Vergleich (Phase 2: EEDC vs. ML vs. IST)
+# =============================================================================
+
+class PrognoseVergleichMonat(BaseModel):
+    """Vergleich EEDC-Forecast vs. ML-Forecast vs. IST für einen Monat."""
+    monat: int
+    monat_name: str
+    eedc_kwh: float
+    sfml_kwh: float
+    ist_kwh: float
+    eedc_abweichung_pct: Optional[float]  # (IST - EEDC) / EEDC * 100
+    sfml_abweichung_pct: Optional[float]  # (IST - SFML) / SFML * 100
+    tage_mit_daten: int  # Anzahl Tage mit Prognose-Daten
+
+
+class PrognoseVergleichResponse(BaseModel):
+    """EEDC vs. ML vs. IST Prognose-Vergleich."""
+    anlage_id: int
+    jahr: int
+    hat_sfml_daten: bool
+
+    # Jahressummen
+    eedc_jahres_kwh: float
+    sfml_jahres_kwh: float
+    ist_jahres_kwh: float
+    eedc_abweichung_pct: Optional[float]
+    sfml_abweichung_pct: Optional[float]
+
+    # Monatswerte
+    monatswerte: list[PrognoseVergleichMonat]
+
+    # Meta
+    tage_mit_eedc: int
+    tage_mit_sfml: int
+
+
+@router.get("/prognose-vergleich/{anlage_id}", response_model=PrognoseVergleichResponse)
+async def get_prognose_vergleich(
+    anlage_id: int,
+    jahr: int = Query(..., description="Jahr für den Vergleich"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Vergleicht EEDC-Forecast vs. ML-Forecast vs. IST auf Monatsbasis.
+
+    Aggregiert Tages-Prognosen aus TagesZusammenfassung und vergleicht
+    mit tatsächlicher PV-Erzeugung aus InvestitionMonatsdaten.
+    """
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+
+    # Anlage prüfen
+    anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    if not anlage_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    # Tagesprognosen für das Jahr laden
+    tz_result = await db.execute(
+        select(TagesZusammenfassung)
+        .where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            func.extract("year", TagesZusammenfassung.datum) == jahr,
+        )
+        .order_by(TagesZusammenfassung.datum)
+    )
+    tages_daten = tz_result.scalars().all()
+
+    # Pro Monat aggregieren: EEDC-Prognose + SFML-Prognose
+    eedc_pro_monat: dict[int, float] = {}
+    sfml_pro_monat: dict[int, float] = {}
+    tage_eedc_pro_monat: dict[int, int] = {}
+    tage_sfml_pro_monat: dict[int, int] = {}
+
+    for tz in tages_daten:
+        monat = tz.datum.month
+        if tz.pv_prognose_kwh is not None and tz.pv_prognose_kwh > 0:
+            eedc_pro_monat[monat] = eedc_pro_monat.get(monat, 0) + tz.pv_prognose_kwh
+            tage_eedc_pro_monat[monat] = tage_eedc_pro_monat.get(monat, 0) + 1
+        if tz.sfml_prognose_kwh is not None and tz.sfml_prognose_kwh > 0:
+            sfml_pro_monat[monat] = sfml_pro_monat.get(monat, 0) + tz.sfml_prognose_kwh
+            tage_sfml_pro_monat[monat] = tage_sfml_pro_monat.get(monat, 0) + 1
+
+    # IST-Daten aus InvestitionMonatsdaten (PV-Module)
+    pv_result = await db.execute(
+        select(Investition.id)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == "pv-module")
+        .where(Investition.aktiv == True)
+    )
+    pv_ids = [row[0] for row in pv_result.all()]
+
+    ist_pro_monat: dict[int, float] = {}
+    if pv_ids:
+        imd_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
+            .where(InvestitionMonatsdaten.jahr == jahr)
+        )
+        for imd in imd_result.scalars().all():
+            data = imd.verbrauch_daten or {}
+            pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
+            ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
+
+    # Monatswerte zusammenstellen
+    monatswerte = []
+    eedc_summe = 0.0
+    sfml_summe = 0.0
+    ist_summe = 0.0
+    gesamt_tage_eedc = 0
+    gesamt_tage_sfml = 0
+
+    for monat in range(1, 13):
+        eedc = eedc_pro_monat.get(monat, 0)
+        sfml = sfml_pro_monat.get(monat, 0)
+        ist = ist_pro_monat.get(monat, 0)
+        tage_eedc = tage_eedc_pro_monat.get(monat, 0)
+        tage_sfml = tage_sfml_pro_monat.get(monat, 0)
+
+        eedc_abw = ((ist - eedc) / eedc * 100) if eedc > 0 and ist > 0 else None
+        sfml_abw = ((ist - sfml) / sfml * 100) if sfml > 0 and ist > 0 else None
+
+        monatswerte.append(PrognoseVergleichMonat(
+            monat=monat,
+            monat_name=MONATSNAMEN[monat],
+            eedc_kwh=round(eedc, 1),
+            sfml_kwh=round(sfml, 1),
+            ist_kwh=round(ist, 1),
+            eedc_abweichung_pct=round(eedc_abw, 1) if eedc_abw is not None else None,
+            sfml_abweichung_pct=round(sfml_abw, 1) if sfml_abw is not None else None,
+            tage_mit_daten=max(tage_eedc, tage_sfml),
+        ))
+
+        eedc_summe += eedc
+        sfml_summe += sfml
+        ist_summe += ist
+        gesamt_tage_eedc += tage_eedc
+        gesamt_tage_sfml += tage_sfml
+
+    # Jahres-Abweichungen
+    eedc_jahres_abw = ((ist_summe - eedc_summe) / eedc_summe * 100) if eedc_summe > 0 and ist_summe > 0 else None
+    sfml_jahres_abw = ((ist_summe - sfml_summe) / sfml_summe * 100) if sfml_summe > 0 and ist_summe > 0 else None
+
+    return PrognoseVergleichResponse(
+        anlage_id=anlage_id,
+        jahr=jahr,
+        hat_sfml_daten=gesamt_tage_sfml > 0,
+        eedc_jahres_kwh=round(eedc_summe, 1),
+        sfml_jahres_kwh=round(sfml_summe, 1),
+        ist_jahres_kwh=round(ist_summe, 1),
+        eedc_abweichung_pct=round(eedc_jahres_abw, 1) if eedc_jahres_abw is not None else None,
+        sfml_abweichung_pct=round(sfml_jahres_abw, 1) if sfml_jahres_abw is not None else None,
+        monatswerte=monatswerte,
+        tage_mit_eedc=gesamt_tage_eedc,
+        tage_mit_sfml=gesamt_tage_sfml,
+    )

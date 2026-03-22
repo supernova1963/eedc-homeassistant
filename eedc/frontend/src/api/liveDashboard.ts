@@ -79,6 +79,7 @@ export interface LiveWetterResponse {
   profil_quelle?: string | null  // "ha", "mqtt"
   profil_tage?: number | null  // Anzahl Tage im individuellen Profil
   sfml_prognose_kwh?: number | null  // Solar Forecast ML Tagesprognose
+  sfml_tomorrow_kwh?: number | null  // Solar Forecast ML Morgen-Prognose
   sfml_accuracy_pct?: number | null  // Solar Forecast ML Modellgenauigkeit
 }
 

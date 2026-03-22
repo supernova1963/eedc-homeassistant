@@ -1,6 +1,7 @@
 # Konzept: Solar Forecast ML — Leichtgewichtige Integration
 
-> Status: Phase 1 umgesetzt (v3.4.0, 2026-03-22) | Phase 2 offen | Auslöser: User-Anfragen (2 User)
+> **ARCHIVIERT** — Alle Phasen umgesetzt.
+> Phase 1 (v3.4.0): WetterWidget KPI + Chart-Linie | Phase 2 (v3.4.1): Cockpit-Vergleich + Morgen-Vorschau | Auslöser: User-Anfragen (2 User)
 
 ## Kontext
 
@@ -71,6 +72,7 @@ Konfiguriert über Sensor-Mapping → Live-Sensoren → Solar Forecast ML:
 | Mapping-Key | Tatsächlicher Sensor | Beschreibung |
 |-------------|---------------------|-------------|
 | `sfml_today_kwh` | `sensor.prognose_heute` | Tages-Forecast (kWh) — KPI + Chart-Skalierung |
+| `sfml_tomorrow_kwh` | `sensor.solar_forecast_ml_tomorrow` | Morgen-Forecast (kWh) — Morgen-Vorschau im WetterWidget |
 | `sfml_accuracy_pct` | `sensor.solar_forecast_ml_o_genauigkeit_30_tage` | Genauigkeit (%) — Tooltip-Info |
 
 Die **stündliche Chart-Linie** wird durch Verteilung des Tages-kWh-Werts auf die bestehende GTI-Kurvenform berechnet (kein separater Stunden-Sensor nötig).
@@ -94,11 +96,31 @@ sfml_factor = sfml_today_kwh / sum(pv_ertrag_kw)
 pv_ml_prognose_kw[h] = pv_ertrag_kw[h] * sfml_factor
 ```
 
-## Phase 2: Cockpit-Vergleich (offen)
+## Phase 2: Cockpit-Vergleich (umgesetzt 2026-03-22)
 
-Kleiner Vergleichsblock in der Monatsübersicht:
+Vergleichsblock in der Prognose-vs-IST-Seite:
 - EEDC-Forecast vs. ML-Forecast vs. IST (Abweichung in %)
-- Erst sinnvoll wenn SFML trainiert ist (~30 Tage Daten)
+- Jahres-KPIs mit farbcodierten Abweichungen
+- Monatliches Balkendiagramm (EEDC- vs. ML-Abweichung)
+- Detailtabelle mit "Bessere Prognose"-Indikator pro Monat
+- Nur sichtbar wenn SFML-Daten vorhanden (automatisch ausgeblendet ohne SFML)
+- Hinweis bei < 30 Tagen ML-Daten
+
+### Datenpersistierung (neu in Phase 2)
+
+`TagesZusammenfassung.sfml_prognose_kwh` speichert die tägliche ML-Prognose
+beim Wetter-Endpoint-Aufruf (analog zu `pv_prognose_kwh` für EEDC).
+Cockpit-Endpoint aggregiert dann monatlich.
+
+### Geänderte Dateien (Phase 2)
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/models/tages_energie_profil.py` | `sfml_prognose_kwh` Spalte in TagesZusammenfassung |
+| `backend/api/routes/live_dashboard.py` | `_speichere_prognose()` speichert auch SFML-Wert |
+| `backend/api/routes/cockpit.py` | Neuer Endpoint `/prognose-vergleich/{anlage_id}` |
+| `frontend/src/api/cockpit.ts` | `PrognoseVergleich` Types + API-Funktion |
+| `frontend/src/pages/PrognoseVsIst.tsx` | Vergleichsblock mit Chart + Tabelle |
 
 ## Abgrenzung
 

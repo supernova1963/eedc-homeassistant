@@ -127,6 +127,10 @@ class TagesZusammenfassung(Base):
     # Dient als Referenzwert für den Lernfaktor (IST/Prognose-Vergleich).
     pv_prognose_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Solar Forecast ML Tagesprognose (kWh): Von SFML-Sensor gelesene ML-Prognose.
+    # Für Phase 2: Cockpit-Vergleich EEDC vs. ML vs. IST.
+    sfml_prognose_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Anzahl verfügbarer Stundenwerte (Qualitätsindikator)
     stunden_verfuegbar: Mapped[int] = mapped_column(Integer, default=0)
 

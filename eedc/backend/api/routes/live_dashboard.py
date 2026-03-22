@@ -855,6 +855,7 @@ class LiveWetterResponse(BaseModel):
     profil_quelle: Optional[str] = None  # "ha", "mqtt" — woher die History kam
     profil_tage: Optional[int] = None  # Anzahl Tage die ins individuelle Profil einflossen
     sfml_prognose_kwh: Optional[float] = None  # Solar Forecast ML Tagesprognose
+    sfml_tomorrow_kwh: Optional[float] = None  # Solar Forecast ML Morgen-Prognose
     sfml_accuracy_pct: Optional[float] = None  # Solar Forecast ML Modellgenauigkeit
 
 
@@ -1246,7 +1247,12 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
     return round(faktor, 3)
 
 
-async def _speichere_prognose(anlage_id: int, datum: date, prognose_kwh: float):
+async def _speichere_prognose(
+    anlage_id: int,
+    datum: date,
+    prognose_kwh: float,
+    sfml_kwh: float | None = None,
+):
     """
     Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
 
@@ -1268,11 +1274,14 @@ async def _speichere_prognose(anlage_id: int, datum: date, prognose_kwh: float):
 
             if tz:
                 tz.pv_prognose_kwh = prognose_kwh
+                if sfml_kwh is not None:
+                    tz.sfml_prognose_kwh = sfml_kwh
             else:
                 tz = TagesZusammenfassung(
                     anlage_id=anlage_id,
                     datum=datum,
                     pv_prognose_kwh=prognose_kwh,
+                    sfml_prognose_kwh=sfml_kwh,
                     stunden_verfuegbar=0,
                     datenquelle="wetter_prognose",
                 )
@@ -1436,14 +1445,9 @@ async def get_live_wetter(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
         )
 
-        # Prognose für Lernfaktor-Berechnung speichern (fire-and-forget)
-        if pv_prognose is not None and pv_prognose > 0:
-            asyncio.create_task(
-                _speichere_prognose(anlage.id, date.today(), pv_prognose)
-            )
-
         # ── SFML: Solar Forecast ML (optional) ──
         sfml_kwh = None
+        sfml_tomorrow = None
         sfml_accuracy = None
         basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
         sfml_entity = basis_live.get("sfml_today_kwh") if basis_live else None
@@ -1453,6 +1457,10 @@ async def get_live_wetter(
                 from backend.services.ha_state_service import get_ha_state_service
                 ha_svc = get_ha_state_service()
                 sfml_kwh = await ha_svc.get_sensor_state(sfml_entity)
+
+                tomorrow_entity = basis_live.get("sfml_tomorrow_kwh")
+                if tomorrow_entity:
+                    sfml_tomorrow = await ha_svc.get_sensor_state(tomorrow_entity)
 
                 accuracy_entity = basis_live.get("sfml_accuracy_pct")
                 if accuracy_entity:
@@ -1467,6 +1475,12 @@ async def get_live_wetter(
                             p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
             except Exception as e:
                 logger.debug(f"SFML-Sensoren nicht lesbar: {e}")
+
+        # Prognose für Lernfaktor-Berechnung + SFML speichern (fire-and-forget)
+        if pv_prognose is not None and pv_prognose > 0:
+            asyncio.create_task(
+                _speichere_prognose(anlage.id, date.today(), pv_prognose, sfml_kwh)
+            )
 
         return {
             "anlage_id": anlage.id,
@@ -1483,6 +1497,7 @@ async def get_live_wetter(
             "profil_quelle": ind_profil_data.get("quelle") if ind_profil_data and ist_ind else None,
             "profil_tage": profil_tage,
             "sfml_prognose_kwh": round(sfml_kwh, 1) if sfml_kwh is not None else None,
+            "sfml_tomorrow_kwh": round(sfml_tomorrow, 1) if sfml_tomorrow is not None else None,
             "sfml_accuracy_pct": round(sfml_accuracy, 1) if sfml_accuracy is not None else None,
         }
 

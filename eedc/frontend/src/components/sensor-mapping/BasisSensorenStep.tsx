@@ -180,6 +180,15 @@ export default function BasisSensorenStep({
                   />
                 </div>
                 <div>
+                  <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Morgen-Forecast (kWh)</span>
+                  <SensorAutocomplete
+                    value={basisLive.sfml_tomorrow_kwh}
+                    onChange={entityId => onBasisLiveChange('sfml_tomorrow_kwh', entityId)}
+                    sensors={availableSensors}
+                    placeholder="sensor.solar_forecast_ml_tomorrow"
+                  />
+                </div>
+                <div>
                   <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Genauigkeit (%)</span>
                   <SensorAutocomplete
                     value={basisLive.sfml_accuracy_pct}
