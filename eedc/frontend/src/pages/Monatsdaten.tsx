@@ -1,16 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Calendar, Edit, Trash2, AlertCircle, Columns, AlertTriangle, Database, Loader2 } from 'lucide-react'
-import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert, Select } from '../components/ui'
+import { Button, Card, Modal, EmptyState, Alert, Select } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { MonatsdatenForm } from '../components/forms'
-import { useAnlagen, useMonatsdaten, useInvestitionen } from '../hooks'
+import { PageHeader, DataLoadingState } from '../components/common'
+import { useSelectedAnlage, useMonatsdaten, useInvestitionen, useApiData } from '../hooks'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import type { Monatsdaten } from '../types'
-
-const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+import { MONAT_KURZ } from '../lib'
 
 // Spalten-Gruppen für bessere Übersicht
 interface ColumnConfig {
@@ -185,15 +185,17 @@ const COLUMNS_STORAGE_KEY = 'eedc-monatsdaten-columns-v3'
 
 export default function MonatsdatenPage() {
   const navigate = useNavigate()
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>(undefined)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(selectedAnlageId)
   // Hook wird für MonatsdatenForm benötigt
   useInvestitionen(selectedAnlageId)
 
   // Aggregierte Daten
-  const [aggregierteDaten, setAggregierteDaten] = useState<AggregierteMonatsdaten[]>([])
-  const [aggregiertLoading, setAggregiertLoading] = useState(false)
+  const { data: aggregierteDaten, loading: aggregiertLoading } = useApiData(
+    () => monatsdatenApi.listAggregiert(selectedAnlageId!),
+    [selectedAnlageId, monatsdaten],
+    { enabled: selectedAnlageId != null },
+  )
 
   const [showForm, setShowForm] = useState(false)
   const [editingData, setEditingData] = useState<Monatsdaten | null>(null)
@@ -202,8 +204,11 @@ export default function MonatsdatenPage() {
 
   // HA-Statistik Laden
   const [showHaModal, setShowHaModal] = useState(false)
-  const [haVerfuegbar, setHaVerfuegbar] = useState<boolean | null>(null)
-  const [haCheckDone, setHaCheckDone] = useState(false)
+  const { data: haStatus } = useApiData(
+    () => haStatisticsApi.getStatus(),
+    [],
+  )
+  const haVerfuegbar = haStatus?.verfuegbar ?? false
   const [verfuegbareMonate, setVerfuegbareMonate] = useState<VerfuegbarerMonat[]>([])
   const [haLoading, setHaLoading] = useState(false)
   const [haError, setHaError] = useState<string | null>(null)
@@ -234,42 +239,6 @@ export default function MonatsdatenPage() {
   useEffect(() => {
     localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...visibleColumns]))
   }, [visibleColumns])
-
-  // Aggregierte Daten laden
-  useEffect(() => {
-    if (!selectedAnlageId) return
-
-    const loadAggregiert = async () => {
-      setAggregiertLoading(true)
-      try {
-        const data = await monatsdatenApi.listAggregiert(selectedAnlageId)
-        setAggregierteDaten(data)
-      } catch (e) {
-        // Fehler stillschweigend ignoriert
-      } finally {
-        setAggregiertLoading(false)
-      }
-    }
-
-    loadAggregiert()
-  }, [selectedAnlageId, monatsdaten]) // Neu laden wenn sich monatsdaten ändern
-
-  // HA-Statistik Status prüfen (einmalig)
-  useEffect(() => {
-    if (haCheckDone) return
-
-    const checkHa = async () => {
-      try {
-        const status = await haStatisticsApi.getStatus()
-        setHaVerfuegbar(status.verfuegbar)
-      } catch {
-        setHaVerfuegbar(false)
-      } finally {
-        setHaCheckDone(true)
-      }
-    }
-    checkHa()
-  }, [haCheckDone])
 
   // Verfügbare Monate laden wenn Modal geöffnet wird
   useEffect(() => {
@@ -372,16 +341,12 @@ export default function MonatsdatenPage() {
   }
 
   const activeColumns = COLUMNS.filter(c => visibleColumns.has(c.key))
-
-  // Erste Anlage als Default auswählen
-  if (!selectedAnlageId && anlagen.length > 0 && !anlagenLoading) {
-    setSelectedAnlageId(anlagen[0].id)
-  }
+  const daten = aggregierteDaten ?? []
 
   // Prüfe ob Legacy-Daten existieren
   const legacyCount = useMemo(() => {
-    return aggregierteDaten.filter(md => md.hat_legacy_daten).length
-  }, [aggregierteDaten])
+    return daten.filter(md => md.hat_legacy_daten).length
+  }, [daten])
 
   const handleCreate = async (data: Parameters<typeof createMonatsdaten>[0]) => {
     await createMonatsdaten(data)
@@ -422,13 +387,15 @@ export default function MonatsdatenPage() {
   }
 
   if (anlagenLoading || loading) {
-    return <LoadingSpinner text="Lade Daten..." />
+    return <DataLoadingState loading={true} error={null}>
+      <div />
+    </DataLoadingState>
   }
 
   if (anlagen.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Monatsdaten</h1>
+        <PageHeader title="Monatsdaten" />
         <Card>
           <EmptyState
             icon={AlertCircle}
@@ -447,26 +414,23 @@ export default function MonatsdatenPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Monatsdaten</h1>
-        <div className="flex items-center gap-4">
-          <Select
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-          {haVerfuegbar && (
-            <Button variant="secondary" onClick={() => setShowHaModal(true)}>
-              <Database className="h-5 w-5 mr-2" />
-              Aus HA laden
-            </Button>
-          )}
-          <Button onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}>
-            <Plus className="h-5 w-5 mr-2" />
-            Neuer Monat
+      <PageHeader title="Monatsdaten">
+        <Select
+          value={selectedAnlageId?.toString() || ''}
+          onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+          options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+        />
+        {haVerfuegbar && (
+          <Button variant="secondary" onClick={() => setShowHaModal(true)}>
+            <Database className="h-5 w-5 mr-2" />
+            Aus HA laden
           </Button>
-        </div>
-      </div>
+        )}
+        <Button onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}>
+          <Plus className="h-5 w-5 mr-2" />
+          Neuer Monat
+        </Button>
+      </PageHeader>
 
       {error && <Alert type="error">{error}</Alert>}
 
@@ -486,8 +450,8 @@ export default function MonatsdatenPage() {
       )}
 
       {aggregiertLoading ? (
-        <LoadingSpinner text="Lade aggregierte Daten..." />
-      ) : aggregierteDaten.length === 0 ? (
+        <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
+      ) : daten.length === 0 ? (
         <Card>
           <EmptyState
             icon={Calendar}
@@ -577,10 +541,10 @@ export default function MonatsdatenPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {aggregierteDaten.map((md) => (
+                  {daten.map((md) => (
                     <TableRow key={md.id} className={md.hat_legacy_daten ? 'bg-amber-50 dark:bg-amber-900/10' : ''}>
                       <TableCell>
-                        <span className="font-medium">{monatNamen[md.monat]} {md.jahr}</span>
+                        <span className="font-medium">{MONAT_KURZ[md.monat]} {md.jahr}</span>
                         {md.hat_legacy_daten && (
                           <span title="Legacy-Daten">
                             <AlertTriangle className="h-3 w-3 text-amber-500 inline ml-1" />
@@ -910,7 +874,7 @@ export default function MonatsdatenPage() {
       <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Monatsdaten löschen" size="sm">
         <div className="space-y-4">
           <p className="text-gray-600 dark:text-gray-300">
-            Möchtest du die Daten für <strong>{monatNamen[deleteConfirm?.monat || 0]} {deleteConfirm?.jahr}</strong> wirklich löschen?
+            Möchtest du die Daten für <strong>{MONAT_KURZ[deleteConfirm?.monat || 0]} {deleteConfirm?.jahr}</strong> wirklich löschen?
           </p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Abbrechen</Button>
