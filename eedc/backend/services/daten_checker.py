@@ -195,13 +195,23 @@ class DatenChecker:
 
         # PV-Module vorhanden
         pv_module = [i for i in anlage.investitionen if i.typ == "pv-module" and i.aktiv]
+        hat_bkw = any(i.typ == "balkonkraftwerk" and i.aktiv for i in anlage.investitionen)
         if not pv_module:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.ERROR,
-                meldung="Keine PV-Module als Investition angelegt",
-                details="PV-Module werden für Erzeugungs-Auswertung benötigt",
-                link="/einstellungen/investitionen",
-            ))
+            if hat_bkw:
+                # BKW-only Setup: kein Fehler, nur Hinweis
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.INFO,
+                    meldung="Nur Balkonkraftwerk, keine PV-Module angelegt",
+                    details="PVGIS-Prognose und String-Vergleich sind ohne PV-Module nicht verfügbar",
+                    link="/einstellungen/investitionen",
+                ))
+            else:
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
+                    meldung="Keine PV-Module als Investition angelegt",
+                    details="PV-Module werden für Erzeugungs-Auswertung benötigt",
+                    link="/einstellungen/investitionen",
+                ))
         else:
             # kWp-Vergleich
             summe_kwp = sum((m.leistung_kwp or 0) for m in pv_module)
