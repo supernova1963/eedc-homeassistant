@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.5] - 2026-03-22
+
+### Hinzugefügt
+
+- **MQTT Gateway (Stufe 1)**: Topic-Translator für externe MQTT-Geräte (Shelly, Tasmota, OpenDTU, Zigbee2MQTT etc.) — ohne Node-RED oder HA-Automationen. Manuelles Topic-Mapping mit Payload-Transformation (Plain/JSON/Array, Faktor, Offset, Invertierung), Hot-Reload, Topic-Test direkt in der UI. Neuer Bereich auf der MQTT-Inbound-Seite.
+- **Connector → MQTT Bridge (Stufe 0)**: Konfigurierte Geräte-Connectors publishen automatisch Live-Leistungswerte (Watt) auf MQTT-Inbound-Topics. Connector-Daten fließen jetzt ins Live-Dashboard und den Energiefluss. Unterstützt: Shelly 3EM, OpenDTU, Fronius, sonnenBatterie, go-eCharger.
+- **Energiefluss Lite-Modus**: Reduzierte Animationen für HA Companion App (Android WebView). Auto-Detect für Mobile/Companion + manueller Toggle auf der Live-Page. Schaltet Blur-Filter, 3D-Grid, Partikel und Glow-Effekte ab.
+- **Live-Dashboard Verbesserungen (#40)**: W/kW-Umschaltung im Energiefluss, Warmwasser-Temperatur als Gauge, Solar-Prognose Vor-/Nachmittag-Split im Wetter-Widget.
+
+### Behoben
+
+- **MQTT-Topics Parität**: 7 fehlende MQTT-Live-Topics ergänzt die im HA-Sensor-Pfad bereits funktionierten (pv_gesamt_w, netz_kombi_w, SFML-Sensoren, WP-Heizen/Warmwasser/Temperatur). Wichtig für HA-User mit MariaDB/PostgreSQL die MQTT als Fallback nutzen.
+
 ## [3.4.2] - 2026-03-22
 
 ### Behoben
