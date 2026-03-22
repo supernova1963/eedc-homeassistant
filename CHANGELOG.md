@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.8] - 2026-03-22
+
+### Geändert
+
+- **Netz-Balken aus Sidebar entfernt**: Die dynamische Netz-Farbe im Energiefluss SVG (grün/orange/rot) macht den separaten Netz-Balken überflüssig. Mehr Platz für 3-Tage-Vorschau und Temperaturen.
+
 ## [3.4.7] - 2026-03-22
 
 ### Hinzugefügt
