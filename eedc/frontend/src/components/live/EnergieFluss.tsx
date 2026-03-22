@@ -71,11 +71,13 @@ function getColor(key: string): string {
   return COLOR_MAP[basis] || '#6b7280'
 }
 
-/** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug */
+/** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug
+ *  Backend-Semantik: erzeugung_kw = Netzbezug (Netz liefert ans Haus),
+ *                    verbrauch_kw = Einspeisung (Netz nimmt vom Haus) */
 const PUFFER_W = 100
 function getNetzColor(komp: LiveKomponente): string {
-  const bezugKw = komp.verbrauch_kw ?? 0
-  const einspeisungKw = komp.erzeugung_kw ?? 0
+  const einspeisungKw = komp.verbrauch_kw ?? 0
+  const bezugKw = komp.erzeugung_kw ?? 0
   const nettoW = (bezugKw - einspeisungKw) * 1000
   if (Math.abs(nettoW) <= PUFFER_W) return '#22c55e' // grün — Balance
   if (nettoW < 0) return '#f59e0b'                    // orange — Einspeisung
