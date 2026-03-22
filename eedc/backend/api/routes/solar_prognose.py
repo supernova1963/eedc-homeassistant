@@ -251,6 +251,17 @@ async def get_solar_prognose_endpoint(
                     if i < len(sp["tageswerte"])
                 ) / len(string_prognosen)  # Durchschnitt
 
+                # VM/NM aus allen Strings summieren
+                total_morgens = sum(
+                    sp["tageswerte"][i].get("pv_ertrag_morgens_kwh") or 0
+                    for sp in string_prognosen
+                    if i < len(sp["tageswerte"])
+                )
+                total_nachmittags = sum(
+                    sp["tageswerte"][i].get("pv_ertrag_nachmittags_kwh") or 0
+                    for sp in string_prognosen
+                    if i < len(sp["tageswerte"])
+                )
                 tageswerte.append(SolarPrognoseTagSchema(
                     datum=day["datum"],
                     pv_ertrag_kwh=round(total_ertrag, 2),
@@ -262,6 +273,8 @@ async def get_solar_prognose_endpoint(
                     bewoelkung_prozent=None,
                     niederschlag_mm=None,
                     schnee_cm=None,
+                    pv_ertrag_morgens_kwh=round(total_morgens, 2) if total_morgens > 0 else None,
+                    pv_ertrag_nachmittags_kwh=round(total_nachmittags, 2) if total_nachmittags > 0 else None,
                 ))
 
         return SolarPrognoseResponse(
@@ -330,6 +343,8 @@ async def get_solar_prognose_endpoint(
                     bewoelkung_prozent=t.bewoelkung_prozent,
                     niederschlag_mm=t.niederschlag_mm,
                     schnee_cm=t.schnee_cm,
+                    pv_ertrag_morgens_kwh=t.pv_ertrag_morgens_kwh,
+                    pv_ertrag_nachmittags_kwh=t.pv_ertrag_nachmittags_kwh,
                 )
                 for t in prognose.tageswerte
             ],

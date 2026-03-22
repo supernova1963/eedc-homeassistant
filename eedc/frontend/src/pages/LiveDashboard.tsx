@@ -339,11 +339,14 @@ export default function LiveDashboard() {
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                   </div>
                   {data.heute_pv_kwh != null && (() => {
-                    const offen = wetter.pv_prognose_kwh - data.heute_pv_kwh
+                    // SFML bevorzugen wenn verfügbar, sonst EEDC-Prognose
+                    const prognoseKwh = wetter.sfml_prognose_kwh ?? wetter.pv_prognose_kwh
+                    const quelle = wetter.sfml_prognose_kwh != null ? 'ML' : 'EEDC'
+                    const offen = prognoseKwh - data.heute_pv_kwh
                     if (offen <= 0) return null
                     return (
                       <div className="flex-1 bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
-                           title={`Prognose ${wetter.pv_prognose_kwh.toFixed(1)} kWh − bisher ${data.heute_pv_kwh.toFixed(1)} kWh`}>
+                           title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${data.heute_pv_kwh.toFixed(1)} kWh`}>
                         <div className="text-xs text-gray-500 dark:text-gray-400">Noch offen</div>
                         <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{offen.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
@@ -377,13 +380,18 @@ export default function LiveDashboard() {
                     {prognose3Tage.map((tag, i) => {
                       const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
                       const hasVmNm = tag.pv_ertrag_morgens_kwh != null
+                      // SFML-Wert für Heute/Morgen (wenn verfügbar)
+                      const sfml = i === 0 ? wetter?.sfml_prognose_kwh : i === 1 ? wetter?.sfml_tomorrow_kwh : null
                       return (
                         <div key={tag.datum} className={`flex items-center justify-between rounded-lg px-3 py-1.5 ${
                           i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-gray-50 dark:bg-gray-700/50'
                         }`}>
                           <span className="text-xs text-gray-500 dark:text-gray-400 w-20">{label}</span>
-                          <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400">
-                            {tag.pv_ertrag_kwh.toFixed(1)} kWh
+                          <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400"
+                                title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
+                            {tag.pv_ertrag_kwh.toFixed(1)}
+                            {sfml != null && <span className="text-[10px] text-purple-400 font-normal ml-1">{sfml.toFixed(0)}</span>}
+                            <span className="text-xs font-normal ml-0.5">kWh</span>
                           </span>
                           {hasVmNm && (
                             <span className="text-[10px] text-gray-400 dark:text-gray-500 w-20 text-right">
