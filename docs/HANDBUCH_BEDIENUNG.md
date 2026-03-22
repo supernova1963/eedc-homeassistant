@@ -1,7 +1,7 @@
 
 # EEDC Handbuch — Teil II: Bedienung
 
-**Version 3.1** | Stand: März 2026
+**Version 3.3** | Stand: März 2026
 
 > Dieses Handbuch ist Teil der EEDC-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)

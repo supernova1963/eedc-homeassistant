@@ -1,7 +1,7 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 3.1** | Stand: März 2026
+**Version 3.3** | Stand: März 2026
 
 ---
 
@@ -857,11 +857,32 @@ useEffect(() => {
 
 | Hook | Zweck |
 |------|-------|
-| `useAnlagen()` | PV-Anlagen laden |
+| `useSelectedAnlage()` | Anlage-Selektion mit Auto-Select und localStorage-Persistierung |
+| `useApiData(fetcher, deps, opts)` | Generischer async Datenfetch mit Loading/Error-State |
+| `useYearSelection()` | Verfügbare Jahre + Selektion |
+| `useAnlagen()` | PV-Anlagen laden (nur für Anlagen-CRUD, sonst `useSelectedAnlage`) |
 | `useMonatsdaten(anlageId)` | Monatsdaten mit Filter |
 | `useInvestitionen(anlageId)` | Komponenten |
 | `useAktuellerStrompreis(anlageId)` | Aktueller Tarif |
 | `useSetupWizard()` | Wizard-State & Navigation |
+
+### Shared Components (seit v3.3)
+
+| Komponente | Zweck |
+|------------|-------|
+| `PageHeader` | Konsistenter Seitentitel mit Selektoren und Action-Buttons |
+| `DataLoadingState` | Loading/Error/Empty-Wrapper für Datenseiten |
+| `ChartTooltip` | Einheitliche Recharts-Tooltips mit Dark-Mode |
+| `RingGauge` | SVG Ring-Gauge für Autarkie/Eigenverbrauch |
+
+### Utility-Library (`lib/`)
+
+| Modul | Inhalt |
+|-------|--------|
+| `formatting.ts` | `formatKWh`, `formatEuro`, `formatPercent`, `formatCO2` |
+| `constants.ts` | `MONAT_NAMEN`, `MONAT_KURZ`, `TYP_ICONS`, `TYP_LABELS` |
+| `colors.ts` | Chart-Farbpalette, CSS-Variable-Referenzen |
+| `calculations.ts` | Pure Functions für Autarkie, Eigenverbrauch, spez. Ertrag |
 
 ---
 

@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.0.3 | **Status:** Stable Release
+**Version:** 3.3.6 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -170,24 +170,16 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
+**v3.3.x** - Frontend-Refactoring, Community, Energiefluss:
+
+- **Frontend-Refactoring (v3.3.4–v3.3.6):** 7-Phasen-Refactoring: `lib/` Utils, shared Hooks (`useSelectedAnlage`, `useApiData`), Chart-Komponenten, Common-Components (`PageHeader`, `DataLoadingState`), Dashboard + Wizard zerlegt, alle 27 Seiten migriert
+- **Energiefluss 3D (v3.3.3):** 3D-Perspektivhintergrund, leuchtende Flusslinien mit Elektronen-Partikeln
+- **GTI-Prognose (v3.3.0):** PV-Ertragsprognose mit Global Tilted Irradiance, Multi-String, Lernfaktor, Temperaturkorrektur
+
 **v3.0.0–v3.0.3** - Live Dashboard, MQTT-Inbound, Energiefluss:
 
-- **Live Dashboard:** Echtzeit-Leistungsanzeige mit Gauges (SoC), animiertem Energiefluss-Diagramm (SVG + CSS), Heute/Gestern-kWh via Mini-History
-- **Energiefluss-Diagramm (v3.0.3):** Ersetzt EnergieBilanz-Balkendiagramm. Animierte Flusslinien, SoC-Pegel, zonenbasiertes Layout (Erzeuger oben, Netz links, Speicher rechts, Verbraucher unten, Haus Mitte)
-- **MQTT-Inbound:** Universelle Datenbrücke — EEDC-definierte Topics (`eedc/{id}/live/*`, `eedc/{id}/energy/*`), funktioniert mit jedem Smarthome-System
-- **Energy→Monatsabschluss:** MQTT Energy-Daten als Monatsabschluss-Vorschläge (Konfidenz 91%)
+- **Live Dashboard:** Echtzeit-Leistungsanzeige mit Gauges, animiertem Energiefluss-Diagramm, Heute/Gestern-kWh
+- **MQTT-Inbound:** Universelle Datenbrücke für beliebige Smarthome-Systeme
 - **Sensor-Mapping:** Ersetzt alte `ha_sensor_*` Felder, konfigurierbar im Wizard
-- **GitHub Release-Workflow:** Automatische GitHub Releases bei Tag-Push
-
-**v2.9.0–v2.9.1** - HA Statistics, MQTT Export-Only:
-
-- **HA Statistics Service:** Liest HA Recorder-Statistiken für Monatsabschluss-Vorschläge
-- **MQTT Export-Only:** Vereinfachtes Setup für reine KPI-Veröffentlichung
-
-**v2.8.0–v2.8.5** - Cloud-Import, Daten-Checker, Connectors:
-
-- **Cloud-Import:** SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman + Custom CSV/JSON
-- **Daten-Checker:** Datenqualitäts-Prüfung mit PVGIS-basierter PV-Produktionsprüfung
-- **9 Geräte-Connectors:** SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
