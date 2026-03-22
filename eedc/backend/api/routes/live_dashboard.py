@@ -514,6 +514,37 @@ async def get_mqtt_topics(
             "anlage": aname,
             "typ": "basis",
         })
+        topics.append({
+            "topic": f"{live_prefix}/netz_kombi_w",
+            "label": "Netz-Kombi (W, positiv=Bezug, negativ=Einspeisung)",
+            "anlage": aname,
+            "typ": "basis",
+        })
+        topics.append({
+            "topic": f"{live_prefix}/pv_gesamt_w",
+            "label": "PV Gesamt (W, Fallback wenn kein Modul-Sensor)",
+            "anlage": aname,
+            "typ": "basis",
+        })
+        # Solar Forecast ML (Basis)
+        topics.append({
+            "topic": f"{live_prefix}/sfml_today_kwh",
+            "label": "Solar Forecast ML – Prognose heute (kWh)",
+            "anlage": aname,
+            "typ": "basis",
+        })
+        topics.append({
+            "topic": f"{live_prefix}/sfml_tomorrow_kwh",
+            "label": "Solar Forecast ML – Prognose morgen (kWh)",
+            "anlage": aname,
+            "typ": "basis",
+        })
+        topics.append({
+            "topic": f"{live_prefix}/sfml_accuracy_pct",
+            "label": "Solar Forecast ML – Modellgenauigkeit (%)",
+            "anlage": aname,
+            "typ": "basis",
+        })
 
         # Energy Basis-Topics (kWh Monatswerte)
         topics.append({
@@ -594,6 +625,25 @@ async def get_mqtt_topics(
                 topics.append({
                     "topic": f"{inv_live}/soc",
                     "label": f"{inv.bezeichnung} – SoC (%)",
+                    "anlage": aname,
+                    "typ": inv.typ,
+                })
+            if inv.typ == "waermepumpe":
+                topics.append({
+                    "topic": f"{inv_live}/leistung_heizen_w",
+                    "label": f"{inv.bezeichnung} – Heizleistung (W)",
+                    "anlage": aname,
+                    "typ": inv.typ,
+                })
+                topics.append({
+                    "topic": f"{inv_live}/leistung_warmwasser_w",
+                    "label": f"{inv.bezeichnung} – Warmwasser-Leistung (W)",
+                    "anlage": aname,
+                    "typ": inv.typ,
+                })
+                topics.append({
+                    "topic": f"{inv_live}/warmwasser_temperatur_c",
+                    "label": f"{inv.bezeichnung} – Warmwasser-Temperatur (°C)",
                     "anlage": aname,
                     "typ": inv.typ,
                 })
