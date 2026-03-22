@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME, HA_INTEGRATION_AVAILABLE
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, aktueller_monat, live_dashboard, energie_profil
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, aktueller_monat, live_dashboard, energie_profil, mqtt_gateway
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -114,6 +114,44 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logger.debug(f"Initialer MQTT Energy Snapshot fehlgeschlagen: {e}")
             asyncio.create_task(_initial_snapshot())
+
+            # MQTT-Gateway starten (nutzt gleichen Broker)
+            try:
+                from backend.services.mqtt_gateway_service import init_mqtt_gateway_service, GatewayMapping
+                from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
+                gateway = init_mqtt_gateway_service(
+                    host=host, port=port,
+                    username=mqtt_cfg.get("username") or None,
+                    password=mqtt_cfg.get("password") or None,
+                )
+                # Aktive Mappings aus DB laden
+                async with get_session() as session:
+                    result = await session.execute(
+                        select(MqttGatewayMapping).where(MqttGatewayMapping.aktiv == True)
+                    )
+                    db_mappings = result.scalars().all()
+                    if db_mappings:
+                        gw_mappings = [
+                            GatewayMapping(
+                                id=m.id, anlage_id=m.anlage_id,
+                                quell_topic=m.quell_topic, ziel_key=m.ziel_key,
+                                payload_typ=m.payload_typ or "plain",
+                                json_pfad=m.json_pfad, array_index=m.array_index,
+                                faktor=m.faktor if m.faktor is not None else 1.0,
+                                offset=m.offset if m.offset is not None else 0.0,
+                                invertieren=bool(m.invertieren),
+                            )
+                            for m in db_mappings
+                        ]
+                        gateway.load_mappings(gw_mappings)
+                        if await gateway.start():
+                            print(f"  MQTT-Gateway: aktiv ({len(gw_mappings)} Mappings)")
+                        else:
+                            print("  MQTT-Gateway: konnte nicht gestartet werden")
+                    else:
+                        print("  MQTT-Gateway: keine Mappings konfiguriert")
+            except Exception as e:
+                logger.warning("MQTT-Gateway: Fehler beim Starten: %s", e)
         else:
             print("  MQTT-Inbound: konnte nicht gestartet werden")
 
@@ -122,6 +160,14 @@ async def lifespan(app: FastAPI):
     # Shutdown
     if mqtt_inbound:
         await mqtt_inbound.stop()
+    # Gateway stoppen
+    try:
+        from backend.services.mqtt_gateway_service import get_mqtt_gateway_service
+        gw = get_mqtt_gateway_service()
+        if gw:
+            await gw.stop()
+    except Exception:
+        pass
     stop_scheduler()
     print("EEDC Backend wird beendet...")
 
@@ -174,6 +220,7 @@ app.include_router(system_logs.router, prefix="/api/system", tags=["System"])
 app.include_router(daten_checker.router, prefix="/api/system", tags=["System"])
 app.include_router(aktueller_monat.router, prefix="/api/aktueller-monat", tags=["Aktueller Monat"])
 app.include_router(live_dashboard.router, prefix="/api/live", tags=["Live Dashboard"])
+app.include_router(mqtt_gateway.router, prefix="/api/live", tags=["MQTT Gateway"])
 app.include_router(energie_profil.router, prefix="/api/energie-profil", tags=["Energie-Profil"])
 
 # =============================================================================

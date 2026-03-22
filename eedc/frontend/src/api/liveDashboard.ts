@@ -158,6 +158,80 @@ export interface MqttValuesResponse {
   werte: MqttCacheWert[]
 }
 
+// ─── MQTT Gateway Types ─────────────────────────────────────────────
+
+export interface GatewayMapping {
+  id: number
+  anlage_id: number
+  quell_topic: string
+  ziel_key: string
+  payload_typ: 'plain' | 'json' | 'json_array'
+  json_pfad: string | null
+  array_index: number | null
+  faktor: number
+  offset: number
+  invertieren: boolean
+  aktiv: boolean
+  beschreibung: string | null
+  erstellt_am: string
+}
+
+export interface GatewayMappingCreate {
+  anlage_id: number
+  quell_topic: string
+  ziel_key: string
+  payload_typ?: string
+  json_pfad?: string | null
+  array_index?: number | null
+  faktor?: number
+  offset?: number
+  invertieren?: boolean
+  aktiv?: boolean
+  beschreibung?: string | null
+}
+
+export interface GatewayMappingUpdate {
+  quell_topic?: string
+  ziel_key?: string
+  payload_typ?: string
+  json_pfad?: string | null
+  array_index?: number | null
+  faktor?: number
+  offset?: number
+  invertieren?: boolean
+  aktiv?: boolean
+  beschreibung?: string | null
+}
+
+export interface GatewayStatus {
+  verfuegbar: boolean
+  aktiv: boolean
+  broker?: string | null
+  topics_subscribed?: number
+  mappings_gesamt?: number
+  empfangen?: number
+  weitergeleitet?: number
+  transform_fehler?: number
+  gestartet_um?: string | null
+  grund?: string
+}
+
+export interface TestTopicResult {
+  empfangen: boolean
+  payload_raw?: string | null
+  payload_typ_erkannt?: string | null
+  wert?: number | null
+  wartezeit_s?: number | null
+  fehler?: string | null
+}
+
+export interface TransformTestResult {
+  erfolg: boolean
+  wert?: number
+  ziel_payload?: string
+  fehler?: string
+}
+
 export const liveDashboardApi = {
   getData: (anlageId: number, demo = false) =>
     api.get<LiveDashboardResponse>(`/live/${anlageId}${demo ? '?demo=true' : ''}`),
@@ -195,4 +269,43 @@ export const liveDashboardApi = {
       `/live/mqtt/cache${qs ? `?${qs}` : ''}`,
     )
   },
+
+  // ─── MQTT Gateway ───────────────────────────────────────────────
+
+  getGatewayMappings: (anlageId?: number) =>
+    api.get<GatewayMapping[]>(`/live/mqtt/gateway/mappings${anlageId ? `?anlage_id=${anlageId}` : ''}`),
+
+  createGatewayMapping: (data: GatewayMappingCreate) =>
+    api.post<{ mapping: GatewayMapping; gateway: Record<string, unknown> }>(
+      '/live/mqtt/gateway/mappings', data,
+    ),
+
+  updateGatewayMapping: (id: number, data: GatewayMappingUpdate) =>
+    api.put<{ mapping: GatewayMapping; gateway: Record<string, unknown> }>(
+      `/live/mqtt/gateway/mappings/${id}`, data,
+    ),
+
+  deleteGatewayMapping: (id: number) =>
+    api.delete<{ geloescht: boolean; gateway: Record<string, unknown> }>(
+      `/live/mqtt/gateway/mappings/${id}`,
+    ),
+
+  getGatewayStatus: () =>
+    api.get<GatewayStatus>('/live/mqtt/gateway/status'),
+
+  reloadGateway: () =>
+    api.post<{ reloaded: boolean; aktiv: boolean; mappings_geladen: number }>(
+      '/live/mqtt/gateway/reload',
+    ),
+
+  testGatewayTopic: (topic: string, timeoutS = 10) =>
+    api.post<TestTopicResult>(
+      '/live/mqtt/gateway/test-topic', { topic, timeout_s: timeoutS },
+    ),
+
+  testGatewayTransform: (data: {
+    payload: string; payload_typ?: string; json_pfad?: string | null;
+    array_index?: number | null; faktor?: number; offset?: number; invertieren?: boolean
+  }) =>
+    api.post<TransformTestResult>('/live/mqtt/gateway/test-transform', data),
 }

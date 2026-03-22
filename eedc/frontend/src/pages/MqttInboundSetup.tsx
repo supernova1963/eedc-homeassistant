@@ -12,6 +12,7 @@ import { liveDashboardApi } from '../api/liveDashboard'
 import type { MqttTestResult, MqttInboundStatus, MqttTopic, MqttCacheWert } from '../api/liveDashboard'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
+import MqttGateway from '../components/live/MqttGateway'
 
 export default function MqttInboundSetup() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId } = useSelectedAnlage()
@@ -414,6 +415,12 @@ export default function MqttInboundSetup() {
 
       {/* Beispiel-Flows für andere Systeme */}
       <AndereSystemeFlows topics={topics} host={host || 'localhost'} />
+
+      {/* MQTT Gateway */}
+      <MqttGateway
+        anlageId={selectedAnlageId ?? null}
+        mqttAktiv={!!status?.subscriber_aktiv}
+      />
     </div>
   )
 }
