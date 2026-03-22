@@ -59,11 +59,16 @@ Wetter heute
 - Zusätzlicher KPI `ML: ~XX kWh` neben der EEDC-Prognose
 - Tooltip: "Solar Forecast ML Tagesprognose" + Genauigkeit wenn verfügbar
 
-### 3. Cockpit — Prognose-Vergleich (optional, Phase 2)
+### 3. Prognose-vs-IST — Prognose-Vergleich (Phase 2, v3.4.1)
 
-Kleiner Vergleichsblock in der Monatsübersicht:
+Vergleichsblock auf der Prognose-vs-IST-Seite:
 - EEDC-Forecast vs. ML-Forecast vs. IST (Abweichung in %)
-- Erst sinnvoll wenn Langzeitdaten vorliegen
+- Jahres-KPIs, Balkendiagramm, Detailtabelle mit "Bessere Prognose"-Indikator
+- Nur sichtbar wenn SFML-Daten vorhanden
+
+### 4. Wetter-Widget Header — Morgen-Vorschau (Phase 2, v3.4.1)
+
+- Zusätzlicher KPI `Morgen ~XX kWh ML` wenn `sfml_tomorrow_kwh` gemappt
 
 ## Tatsächlich verwendete SFML-Sensoren
 
@@ -117,9 +122,12 @@ Cockpit-Endpoint aggregiert dann monatlich.
 | Datei | Änderung |
 |-------|----------|
 | `backend/models/tages_energie_profil.py` | `sfml_prognose_kwh` Spalte in TagesZusammenfassung |
-| `backend/api/routes/live_dashboard.py` | `_speichere_prognose()` speichert auch SFML-Wert |
+| `backend/api/routes/live_dashboard.py` | `_speichere_prognose()` speichert auch SFML-Wert, `sfml_tomorrow_kwh` lesen + Response |
 | `backend/api/routes/cockpit.py` | Neuer Endpoint `/prognose-vergleich/{anlage_id}` |
 | `frontend/src/api/cockpit.ts` | `PrognoseVergleich` Types + API-Funktion |
+| `frontend/src/api/liveDashboard.ts` | `sfml_tomorrow_kwh` im Type |
+| `frontend/src/components/live/WetterWidget.tsx` | Morgen-Vorschau KPI |
+| `frontend/src/components/sensor-mapping/BasisSensorenStep.tsx` | `sfml_tomorrow_kwh` Feld im Wizard |
 | `frontend/src/pages/PrognoseVsIst.tsx` | Vergleichsblock mit Chart + Tabelle |
 
 ## Abgrenzung
