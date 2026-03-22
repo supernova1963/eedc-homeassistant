@@ -9,6 +9,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [3.4.8] - 2026-03-22
 
+### Behoben
+
+- **VM/NM-Werte in Solar-Prognose gefixt**: Die Vormittag/Nachmittag-Aufteilung wurde im Backend berechnet aber bei der API-Antwort nicht durchgereicht (Pydantic-Konvertierung). Jetzt sichtbar in 3-Tage-Vorschau und Kurzfrist-Aussichten.
+
+### Hinzugefügt
+
+- **SFML in "Noch offen" und 3-Tage-Vorschau**: "Noch offen" nutzt jetzt die ML-Prognose wenn verfügbar (genauer als EEDC). 3-Tage-Vorschau zeigt SFML-Wert in lila neben dem EEDC-Wert für Heute und Morgen.
+
 ### Geändert
 
 - **Netz-Balken aus Sidebar entfernt**: Die dynamische Netz-Farbe im Energiefluss SVG (grün/orange/rot) macht den separaten Netz-Balken überflüssig. Mehr Platz für 3-Tage-Vorschau und Temperaturen.
