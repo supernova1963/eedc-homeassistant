@@ -26,7 +26,7 @@ LABEL \
     io.hass.name="EEDC" \
     io.hass.description="Energie Effizienz Data Center - PV-Anlagen Auswertung" \
     io.hass.type="addon" \
-    io.hass.version="3.4.7"
+    io.hass.version="3.4.8"
 
 # System-Abhängigkeiten
 RUN apt-get update && apt-get install -y --no-install-recommends \
