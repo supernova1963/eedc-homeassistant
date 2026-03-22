@@ -12,6 +12,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Hinzugefügt
 
 - **3-Tage Solar-Vorschau in der Sidebar (#41)**: Kompakte Übersicht für Heute, Morgen und Übermorgen mit Vormittag/Nachmittag-Aufteilung — direkt auf der Live-Seite, ideal für die Planung großer Verbraucher (Waschmaschine, Trockner etc.).
+- **"Noch offen" kWh-Kachel (#41)**: Zeigt das Restpotenzial für heute (Tagesprognose − bisheriger Ertrag) neben der PV-Prognose in der Sidebar. Verschwindet wenn die Prognose erreicht oder übertroffen ist.
 
 ### Behoben
 
