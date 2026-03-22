@@ -8,13 +8,13 @@
 import { useState, useRef, DragEvent, ChangeEvent } from 'react'
 import { Download, Upload, Check, FileJson, HardDrive, AlertTriangle } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
-import { useAnlagen } from '../hooks'
+import { DataLoadingState } from '../components/common'
+import { useSelectedAnlage } from '../hooks'
 import { importApi } from '../api'
 import type { JSONImportResult } from '../types'
 
 export default function Backup() {
-  const { anlagen, loading: anlagenLoading, refresh: refreshAnlagen } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading, refresh: refreshAnlagen } = useSelectedAnlage()
 
   // Import States
   const [isDragging, setIsDragging] = useState(false)
@@ -73,7 +73,7 @@ export default function Backup() {
     }
   }
 
-  if (anlagenLoading) return <LoadingSpinner text="Lade..." />
+  if (anlagenLoading) return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
 
   return (
     <div className="space-y-6">

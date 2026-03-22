@@ -4,9 +4,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, TrendingUp, Calendar, ArrowRight, Euro } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
+import { Card, Button, Alert } from '../components/ui'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
-import { useAnlagen } from '../hooks'
+import { DataLoadingState } from '../components/common'
+import { useSelectedAnlage } from '../hooks'
 import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab } from './aussichten/index'
 
 type TabType = 'kurzfristig' | 'langfristig' | 'trend' | 'finanzen'
@@ -15,13 +16,10 @@ export default function Aussichten() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('kurzfristig')
 
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
-
-  const anlageId = selectedAnlageId ?? anlagen[0]?.id
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
 
   if (anlagenLoading) {
-    return <LoadingSpinner text="Lade Aussichten..." />
+    return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
   }
 
   if (anlagen.length === 0) {
@@ -36,7 +34,7 @@ export default function Aussichten() {
   }
 
   // Prüfe ob Anlage Koordinaten hat
-  const anlage = anlagen.find(a => a.id === anlageId)
+  const anlage = anlagen.find(a => a.id === selectedAnlageId)
   const hatKoordinaten = anlage?.latitude && anlage?.longitude
 
   if (!hatKoordinaten) {
@@ -79,7 +77,7 @@ export default function Aussichten() {
             {/* Anlagen-Filter */}
             {anlagen.length > 1 && (
               <select
-                value={anlageId ?? ''}
+                value={selectedAnlageId ?? ''}
                 onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
                 className="input w-auto"
               >
@@ -117,12 +115,12 @@ export default function Aussichten() {
       </div>
 
       {/* Tab-Inhalte */}
-      {anlageId && (
+      {selectedAnlageId && (
         <>
-          {activeTab === 'kurzfristig' && <KurzfristTab anlageId={anlageId} />}
-          {activeTab === 'langfristig' && <LangfristTab anlageId={anlageId} />}
-          {activeTab === 'trend' && <TrendTab anlageId={anlageId} />}
-          {activeTab === 'finanzen' && <FinanzenTab anlageId={anlageId} />}
+          {activeTab === 'kurzfristig' && <KurzfristTab anlageId={selectedAnlageId} />}
+          {activeTab === 'langfristig' && <LangfristTab anlageId={selectedAnlageId} />}
+          {activeTab === 'trend' && <TrendTab anlageId={selectedAnlageId} />}
+          {activeTab === 'finanzen' && <FinanzenTab anlageId={selectedAnlageId} />}
         </>
       )}
     </div>

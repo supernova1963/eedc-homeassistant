@@ -23,9 +23,10 @@ import {
   AlertCircle,
   HelpCircle,
 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../components/ui'
+import { Card, Alert } from '../components/ui'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
-import { useAnlagen } from '../hooks'
+import { DataLoadingState } from '../components/common'
+import { useSelectedAnlage } from '../hooks'
 import { anlagenApi } from '../api'
 import type { ZeitraumTyp } from '../api/community'
 import {
@@ -52,8 +53,7 @@ export default function Community() {
   const [activeTab, setActiveTab] = useState<TabType>('uebersicht')
   const [zeitraum, setZeitraum] = useState<ZeitraumTyp>('letzte_12_monate')
 
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [communityHash, setCommunityHash] = useState<string | null>(null)
   const [checkingAccess, setCheckingAccess] = useState(true)
 
@@ -81,7 +81,7 @@ export default function Community() {
   }, [anlageId])
 
   if (anlagenLoading || checkingAccess) {
-    return <LoadingSpinner text="Lade Community..." />
+    return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
   }
 
   if (anlagen.length === 0) {

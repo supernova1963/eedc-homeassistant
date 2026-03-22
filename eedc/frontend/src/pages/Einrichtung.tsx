@@ -5,12 +5,11 @@
  * Geräte-Connector, Portal-Import, Cloud-Import, CSV/JSON Import/Export
  */
 
-import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Database, Cpu, FileSpreadsheet, Cloud, Upload, Table2, Radio, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage, useApiData } from '../hooks'
 import { useHAAvailable } from '../hooks/useHAAvailable'
-import { connectorApi, type ConnectorStatus } from '../api/connector'
+import { connectorApi } from '../api/connector'
 
 interface DatenquelleCard {
   title: string
@@ -84,14 +83,13 @@ const datenquellen: DatenquelleCard[] = [
 
 export default function Einrichtung() {
   const navigate = useNavigate()
-  const { anlagen } = useAnlagen()
+  const { selectedAnlageId } = useSelectedAnlage()
   const haAvailable = useHAAvailable()
-  const [connectorStatus, setConnectorStatus] = useState<ConnectorStatus | null>(null)
-
-  useEffect(() => {
-    if (!anlagen || anlagen.length === 0) return
-    connectorApi.getStatus(anlagen[0].id).then(setConnectorStatus).catch(() => {})
-  }, [anlagen])
+  const { data: connectorStatus } = useApiData(
+    () => connectorApi.getStatus(selectedAnlageId!),
+    [selectedAnlageId],
+    { enabled: selectedAnlageId != null },
+  )
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
