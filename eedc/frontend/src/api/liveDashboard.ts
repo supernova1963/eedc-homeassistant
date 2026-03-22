@@ -61,6 +61,7 @@ export interface VerbrauchsStunde {
   zeit: string
   pv_ertrag_kw: number
   verbrauch_kw: number
+  pv_ml_prognose_kw?: number | null  // Solar Forecast ML (optional)
 }
 
 export interface LiveWetterResponse {
@@ -77,6 +78,8 @@ export interface LiveWetterResponse {
   profil_typ?: string  // "individuell_werktag", "individuell_wochenende", "bdew_h0"
   profil_quelle?: string | null  // "ha", "mqtt"
   profil_tage?: number | null  // Anzahl Tage im individuellen Profil
+  sfml_prognose_kwh?: number | null  // Solar Forecast ML Tagesprognose
+  sfml_accuracy_pct?: number | null  // Solar Forecast ML Modellgenauigkeit
 }
 
 export interface TagesverlaufSerie {

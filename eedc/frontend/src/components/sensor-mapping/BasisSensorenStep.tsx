@@ -158,6 +158,38 @@ export default function BasisSensorenStep({
                 Wird als ein &quot;PV Gesamt&quot;-Knoten im Live-Dashboard angezeigt.
               </p>
             </div>
+
+            {/* Solar Forecast ML (optional) */}
+            <div className="border border-purple-200 dark:border-purple-700/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-sm text-gray-900 dark:text-white">Solar Forecast ML</span>
+                <span className="text-xs text-purple-500">optional</span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                ML-basierte PV-Prognose aus dem Solar Forecast ML Add-on.
+                Wird als zusätzliche Linie im Wetter-Chart angezeigt.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Tages-Forecast (kWh)</span>
+                  <SensorAutocomplete
+                    value={basisLive.sfml_today_kwh}
+                    onChange={entityId => onBasisLiveChange('sfml_today_kwh', entityId)}
+                    sensors={availableSensors}
+                    placeholder="sensor.solar_forecast_ml_today"
+                  />
+                </div>
+                <div>
+                  <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Genauigkeit (%)</span>
+                  <SensorAutocomplete
+                    value={basisLive.sfml_accuracy_pct}
+                    onChange={entityId => onBasisLiveChange('sfml_accuracy_pct', entityId)}
+                    sensors={availableSensors}
+                    placeholder="sensor.solar_forecast_ml_model_accuracy"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

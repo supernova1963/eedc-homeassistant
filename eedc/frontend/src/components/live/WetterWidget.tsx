@@ -155,10 +155,10 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
     if (!wetter?.verfuegbar) return []
 
     // Prognose-Daten indexieren
-    const prognoseMap: Record<number, { pv: number; verbrauch: number }> = {}
+    const prognoseMap: Record<number, { pv: number; verbrauch: number; pv_ml: number | null }> = {}
     for (const v of wetter.verbrauchsprofil) {
       const h = parseInt(v.zeit.replace(':00', ''))
-      prognoseMap[h] = { pv: v.pv_ertrag_kw, verbrauch: v.verbrauch_kw }
+      prognoseMap[h] = { pv: v.pv_ertrag_kw, verbrauch: v.verbrauch_kw, pv_ml: v.pv_ml_prognose_kw ?? null }
     }
 
     const data: Array<Record<string, number | string | null>> = []
@@ -172,6 +172,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
       if (prognose) {
         punkt.pv_prognose = prognose.pv
         punkt.verbrauch_prognose = prognose.verbrauch
+        if (prognose.pv_ml != null) {
+          punkt.pv_ml = prognose.pv_ml
+        }
       }
 
       if (h <= currentHour) {
@@ -242,6 +245,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
   const tooltipLabels: Record<string, string> = {
     pv_ist: 'PV (IST)',
     pv_prognose: 'PV (Prognose)',
+    pv_ml: 'PV (ML-Prognose)',
     haushalt_ist: 'Haushalt',
     batterie_ladung_ist: 'Speicher-Ladung',
     wallbox_ist: 'Wallbox',
@@ -287,6 +291,15 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
             <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium">
               <BatteryCharging className="h-3.5 w-3.5" />
               <span>~{wetter.pv_prognose_kwh} kWh PV</span>
+            </div>
+          )}
+          {wetter.sfml_prognose_kwh != null && (
+            <div
+              className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-medium"
+              title={wetter.sfml_accuracy_pct != null ? `ML-Genauigkeit: ${wetter.sfml_accuracy_pct}%` : 'Solar Forecast ML'}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              <span>~{wetter.sfml_prognose_kwh} kWh ML</span>
             </div>
           )}
           {wetter.grundlast_kw != null && wetter.grundlast_kw > 0 && (
@@ -352,6 +365,10 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                 <linearGradient id="pvProgGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#eab308" stopOpacity={0.2} />
                   <stop offset="95%" stopColor="#eab308" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="pvMlGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#a855f7" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#a855f7" stopOpacity={0.02} />
                 </linearGradient>
                 {/* Verbrauch-Gradienten pro Kategorie */}
                 <linearGradient id="haushaltGrad" x1="0" y1="0" x2="0" y2="1">
@@ -484,6 +501,17 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                 connectNulls={false}
                 dot={false}
               />
+              {/* ML-Prognose: PV — dotted, lila */}
+              <Area
+                type="monotone"
+                dataKey="pv_ml"
+                stroke="#a855f7"
+                fill="url(#pvMlGrad)"
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
+                connectNulls={false}
+                dot={false}
+              />
               {/* Prognose: Verbrauch — dashed, blass (nur Gesamt) */}
               <Area
                 type="monotone"
@@ -505,6 +533,11 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
             <span className="flex items-center gap-1">
               <span className="w-3 h-0.5 bg-yellow-500/40 rounded" style={{ borderTop: '1px dashed #eab308' }} /> PV (Prognose)
             </span>
+            {wetter.sfml_prognose_kwh != null && (
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-0.5 bg-purple-500/40 rounded" style={{ borderTop: '1.5px dotted #a855f7' }} /> PV (ML)
+              </span>
+            )}
             {aktiveKategorien.map(k => (
               <span key={k.key} className="flex items-center gap-1">
                 <span className="w-3 h-0.5 rounded" style={{ backgroundColor: k.farbe }} /> {k.label}

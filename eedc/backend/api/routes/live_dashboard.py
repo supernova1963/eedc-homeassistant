@@ -837,6 +837,7 @@ class VerbrauchsStunde(BaseModel):
     zeit: str  # "14:00"
     pv_ertrag_kw: float
     verbrauch_kw: float
+    pv_ml_prognose_kw: Optional[float] = None  # Solar Forecast ML (optional)
 
 
 class LiveWetterResponse(BaseModel):
@@ -853,6 +854,8 @@ class LiveWetterResponse(BaseModel):
     profil_typ: str = "bdew_h0"  # "individuell_werktag", "individuell_wochenende", "bdew_h0"
     profil_quelle: Optional[str] = None  # "ha", "mqtt" — woher die History kam
     profil_tage: Optional[int] = None  # Anzahl Tage die ins individuelle Profil einflossen
+    sfml_prognose_kwh: Optional[float] = None  # Solar Forecast ML Tagesprognose
+    sfml_accuracy_pct: Optional[float] = None  # Solar Forecast ML Modellgenauigkeit
 
 
 # ── Typisches Haushaltsprofil (BDEW H0) ──────────────────────────────────────
@@ -1439,6 +1442,32 @@ async def get_live_wetter(
                 _speichere_prognose(anlage.id, date.today(), pv_prognose)
             )
 
+        # ── SFML: Solar Forecast ML (optional) ──
+        sfml_kwh = None
+        sfml_accuracy = None
+        basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
+        sfml_entity = basis_live.get("sfml_today_kwh") if basis_live else None
+
+        if sfml_entity:
+            try:
+                from backend.services.ha_state_service import get_ha_state_service
+                ha_svc = get_ha_state_service()
+                sfml_kwh = await ha_svc.get_sensor_state(sfml_entity)
+
+                accuracy_entity = basis_live.get("sfml_accuracy_pct")
+                if accuracy_entity:
+                    sfml_accuracy = await ha_svc.get_sensor_state(accuracy_entity)
+
+                # Tages-kWh auf GTI-Kurvenform verteilen
+                if sfml_kwh is not None and sfml_kwh > 0 and profil:
+                    gti_summe = sum(p["pv_ertrag_kw"] for p in profil)
+                    if gti_summe > 0:
+                        sfml_factor = sfml_kwh / gti_summe
+                        for p in profil:
+                            p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
+            except Exception as e:
+                logger.debug(f"SFML-Sensoren nicht lesbar: {e}")
+
         return {
             "anlage_id": anlage.id,
             "verfuegbar": len(stunden) > 0,
@@ -1453,6 +1482,8 @@ async def get_live_wetter(
             "profil_typ": profil_typ if ist_ind else "bdew_h0",
             "profil_quelle": ind_profil_data.get("quelle") if ind_profil_data and ist_ind else None,
             "profil_tage": profil_tage,
+            "sfml_prognose_kwh": round(sfml_kwh, 1) if sfml_kwh is not None else None,
+            "sfml_accuracy_pct": round(sfml_accuracy, 1) if sfml_accuracy is not None else None,
         }
 
     except Exception as e:
