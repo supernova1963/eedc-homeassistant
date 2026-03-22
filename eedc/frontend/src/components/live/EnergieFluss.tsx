@@ -71,6 +71,23 @@ function getColor(key: string): string {
   return COLOR_MAP[basis] || '#6b7280'
 }
 
+/** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug */
+const PUFFER_W = 100
+function getNetzColor(komp: LiveKomponente): string {
+  const bezugKw = komp.verbrauch_kw ?? 0
+  const einspeisungKw = komp.erzeugung_kw ?? 0
+  const nettoW = (bezugKw - einspeisungKw) * 1000
+  if (Math.abs(nettoW) <= PUFFER_W) return '#22c55e' // grün — Balance
+  if (nettoW < 0) return '#f59e0b'                    // orange — Einspeisung
+  return '#ef4444'                                     // rot — Netzbezug
+}
+
+/** Farbe für eine Komponente — Netz dynamisch, Rest statisch */
+function getNodeColor(komp: LiveKomponente): string {
+  if (komp.key === 'netz') return getNetzColor(komp)
+  return getColor(komp.key)
+}
+
 /** log(1 + kW) für Liniendicke, normiert auf min..max px */
 function logThickness(kw: number, maxKw: number): number {
   if (kw <= 0) return 1.5
@@ -87,6 +104,7 @@ interface EnergieFlussProps {
   summeVerbrauch: number
   tagesWerte?: Record<string, number | null>
   gauges?: LiveGauge[]
+  pvSollKw?: number | null
 }
 
 interface NodePosition {
@@ -268,7 +286,7 @@ function socColor(pct: number): string {
 // ─── Component ──────────────────────────────────────────────────────
 
 export default function EnergieFluss({
-  komponenten, summeErzeugung, summeVerbrauch, tagesWerte, gauges,
+  komponenten, summeErzeugung, summeVerbrauch, tagesWerte, gauges, pvSollKw,
 }: EnergieFlussProps) {
   const [lite, toggleLite] = useLiteMode()
 
@@ -646,7 +664,7 @@ export default function EnergieFluss({
           const k = node.komp
           const kw = (k.erzeugung_kw ?? 0) + (k.verbrauch_kw ?? 0)
           const thickness = logThickness(kw, maxKw)
-          const color = getColor(k.key)
+          const color = getNodeColor(k)
           const isActive = kw > 0
           const isSource = (k.erzeugung_kw ?? 0) > 0
           const duration = flowDuration(kw)
@@ -782,12 +800,23 @@ export default function EnergieFluss({
         >
           Energieumsatz {Math.max(summeErzeugung, summeVerbrauch).toFixed(2)} kW
         </text>
+        {/* PV-Soll (SFML oder kWp) */}
+        {pvSollKw != null && pvSollKw > 0 && (
+          <text
+            x={CX} y={CY + HAUS_R + 16 + dims.socFontSize + 2}
+            textAnchor="middle"
+            style={{ fontSize: `${dims.socFontSize - 1}px` }}
+            className="fill-purple-500 dark:fill-purple-400"
+          >
+            Solar Soll ~{pvSollKw.toFixed(1)} kW
+          </text>
+        )}
 
         {/* Komponenten-Knoten */}
         {nodes.map(node => {
           const k = node.komp
           const kw = Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0)
-          const color = getColor(k.key)
+          const color = getNodeColor(k)
           const isActive = kw > 0
           const soc = getSoc(k.key, gauges)
           const hasSoc = soc !== null

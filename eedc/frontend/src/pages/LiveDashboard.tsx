@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Activity, AlertCircle } from 'lucide-react'
 import { useSelectedAnlage } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
@@ -24,6 +25,8 @@ const TAGESVERLAUF_REFRESH_INTERVAL = 60_000 // 1 Minute
 
 export default function LiveDashboard() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const [searchParams] = useSearchParams()
+  const isDebug = searchParams.has('debug')
   const [data, setData] = useState<LiveDashboardResponse | null>(null)
   const [wetter, setWetter] = useState<LiveWetterResponse | null>(null)
   const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(null)
@@ -157,17 +160,19 @@ export default function LiveDashboard() {
               ))}
             </select>
           )}
-          {/* Demo-Toggle */}
-          <button
-            onClick={() => setDemoMode(!demoMode)}
-            className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${
-              demoMode
-                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-            }`}
-          >
-            {demoMode ? 'Demo an' : 'Demo'}
-          </button>
+          {/* Demo-Toggle — nur sichtbar mit ?debug=1 */}
+          {isDebug && (
+            <button
+              onClick={() => setDemoMode(!demoMode)}
+              className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${
+                demoMode
+                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`}
+            >
+              {demoMode ? 'Demo an' : 'Demo'}
+            </button>
+          )}
           {/* MQTT-Status */}
           {mqttStatus?.subscriber_aktiv && (
             <span
@@ -229,6 +234,24 @@ export default function LiveDashboard() {
                 summeVerbrauch={data.summe_verbrauch_kw}
                 tagesWerte={data.heute_kwh_pro_komponente ?? undefined}
                 gauges={data.gauges}
+                pvSollKw={(() => {
+                  // SFML: aktuelle Stunde aus Verbrauchsprofil
+                  if (wetter?.verbrauchsprofil?.length) {
+                    const h = new Date().getHours()
+                    const stunde = wetter.verbrauchsprofil.find(v => {
+                      const vh = new Date(v.zeit).getHours()
+                      return vh === h
+                    })
+                    if (stunde?.pv_ml_prognose_kw != null && stunde.pv_ml_prognose_kw > 0) {
+                      return stunde.pv_ml_prognose_kw
+                    }
+                    // Fallback: EEDC-Prognose der aktuellen Stunde
+                    if (stunde && stunde.pv_ertrag_kw > 0) {
+                      return stunde.pv_ertrag_kw
+                    }
+                  }
+                  return null
+                })()}
               />
             </div>
 
@@ -342,6 +365,28 @@ export default function LiveDashboard() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Außentemperatur */}
+              {wetter?.aktuell?.temperatur_c != null && (
+                <div className="flex gap-2">
+                  <div className="flex-1 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg px-3 py-1.5">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Außentemperatur</div>
+                    <div className="text-base font-bold text-cyan-600 dark:text-cyan-400">
+                      {wetter.aktuell.temperatur_c.toFixed(1)}<span className="text-xs font-normal ml-0.5">°C</span>
+                    </div>
+                  </div>
+                  {wetter.temperatur_min_c != null && wetter.temperatur_max_c != null && (
+                    <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-1.5">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Min / Max</div>
+                      <div className="text-base font-bold text-gray-600 dark:text-gray-300">
+                        {wetter.temperatur_min_c.toFixed(0)}<span className="text-xs font-normal">°</span>
+                        {' / '}
+                        {wetter.temperatur_max_c.toFixed(0)}<span className="text-xs font-normal">°C</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

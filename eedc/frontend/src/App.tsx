@@ -55,8 +55,8 @@ function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          {/* Redirect root to Cockpit */}
-          <Route index element={<Navigate to="/cockpit" replace />} />
+          {/* Redirect root to Live Dashboard */}
+          <Route index element={<Navigate to="/live" replace />} />
 
           {/* Cockpit (Dashboards) */}
           <Route path="cockpit" element={<Dashboard />} />
