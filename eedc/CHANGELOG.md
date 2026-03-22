@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.2] - 2026-03-22
+
+### Behoben
+
+- **BKW-Erzeugung in Gesamt-PV aufgenommen (#37)**: Balkonkraftwerk-Erzeugung fließt jetzt in die PV-Gesamterzeugung ein. Autarkie, Eigenverbrauch, Prognose-Vergleich und Community-Benchmark werden für BKW-only Nutzer korrekt berechnet. BKW bleibt zusätzlich als separater Komponenten-Wert sichtbar.
+- **Daten-Checker: BKW-only kein Fehler mehr (#37)**: Nutzer mit Balkonkraftwerk ohne PV-Module sehen jetzt einen Info-Hinweis statt einer Fehlermeldung.
+- **SFML Genauigkeits-Sensor nicht auswählbar (#38)**: Sensoren mit Einheit `%` wurden vom Filter blockiert. Placeholder-Texte auf die realen SFML-Sensornamen aktualisiert.
+
 ## [3.4.1] - 2026-03-22
 
 ### Hinzugefügt
