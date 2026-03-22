@@ -145,6 +145,9 @@ async def run_migrations(conn):
             # v3.3.0: PV-Prognose für Lernfaktor
             if 'pv_prognose_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_kwh FLOAT'))
+            # v3.4.1: SFML-Tagesprognose für Prognose-Vergleich
+            if 'sfml_prognose_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_kwh FLOAT'))
 
     await conn.run_sync(_run_migrations)
 
