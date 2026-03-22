@@ -10,11 +10,11 @@ import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, Refr
 import Input from '../components/ui/Input'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { MqttTestResult, MqttInboundStatus, MqttTopic, MqttCacheWert } from '../api/liveDashboard'
-import { useAnlagen } from '../hooks'
+import { DataLoadingState } from '../components/common'
+import { useSelectedAnlage } from '../hooks'
 
 export default function MqttInboundSetup() {
-  const { anlagen } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId } = useSelectedAnlage()
 
   // Form State
   const [enabled, setEnabled] = useState(false)
@@ -24,6 +24,14 @@ export default function MqttInboundSetup() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(true)
   const [quelle, setQuelle] = useState<string>('')
+
+  // Topics laden wenn Anlage gewählt
+  useEffect(() => {
+    if (selectedAnlageId == null) return
+    liveDashboardApi.getMqttTopics(selectedAnlageId)
+      .then(resp => setTopics(resp.topics || []))
+      .catch(() => setTopics([]))
+  }, [selectedAnlageId])
 
   // Action State
   const [testing, setTesting] = useState(false)
@@ -45,13 +53,6 @@ export default function MqttInboundSetup() {
   const [cacheValues, setCacheValues] = useState<MqttCacheWert[]>([])
   const [monitorLoading, setMonitorLoading] = useState(false)
 
-  // Erste Anlage vorauswählen
-  useEffect(() => {
-    if (anlagen.length > 0 && selectedAnlageId === null) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
-
   // Settings laden
   useEffect(() => {
     Promise.all([
@@ -67,14 +68,6 @@ export default function MqttInboundSetup() {
       setStatus(mqttStatus)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
-
-  // Topics laden wenn Anlage gewählt
-  useEffect(() => {
-    if (selectedAnlageId === null) return
-    liveDashboardApi.getMqttTopics(selectedAnlageId)
-      .then(resp => setTopics(resp.topics || []))
-      .catch(() => setTopics([]))
-  }, [selectedAnlageId])
 
   const testConnection = async () => {
     setTesting(true)
@@ -135,11 +128,7 @@ export default function MqttInboundSetup() {
   }
 
   if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-      </div>
-    )
+    return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
   }
 
   // Erstes konkretes Topic für Beispiel-Befehl
