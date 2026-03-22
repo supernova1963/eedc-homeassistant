@@ -26,7 +26,6 @@ import {
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
-import { anlagenApi } from '../api/anlagen'
 import { portalImportApi } from '../api/portalImport'
 import { customImportApi } from '../api/customImport'
 import type {
@@ -37,12 +36,8 @@ import type {
   TemplateInfo,
 } from '../api/customImport'
 import type { ApplyResult } from '../api/portalImport'
-import type { Anlage } from '../types'
-
-const MONAT_NAMEN = [
-  '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-]
+import { useSelectedAnlage } from '../hooks'
+import { MONAT_NAMEN } from '../lib'
 
 export default function CustomImportWizard() {
   const navigate = useNavigate()
@@ -72,20 +67,15 @@ export default function CustomImportWizard() {
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
-  const [anlagen, setAnlagen] = useState<Anlage[]>([])
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId } = useSelectedAnlage()
   const [ueberschreiben, setUeberschreiben] = useState(false)
 
   // Step 4: Ergebnis
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ApplyResult | null>(null)
 
-  // Initialisierung
+  // Templates laden
   useEffect(() => {
-    anlagenApi.list().then((list) => {
-      setAnlagen(list)
-      if (list.length === 1) setSelectedAnlageId(list[0].id)
-    }).catch(() => {})
     customImportApi.getTemplates().then(setTemplates).catch(() => {})
   }, [])
 
@@ -646,7 +636,7 @@ export default function CustomImportWizard() {
                   </label>
                   <select
                     value={selectedAnlageId ?? ''}
-                    onChange={(e) => setSelectedAnlageId(Number(e.target.value) || null)}
+                    onChange={(e) => { const v = Number(e.target.value); if (v) setSelectedAnlageId(v) }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white
                       dark:bg-gray-700 dark:border-gray-600 dark:text-white
                       focus:ring-2 focus:ring-primary-500"
