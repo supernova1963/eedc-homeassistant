@@ -94,6 +94,8 @@ export interface SolarPrognoseTag {
   bewoelkung_prozent?: number
   niederschlag_mm?: number
   schnee_cm?: number
+  pv_ertrag_morgens_kwh?: number
+  pv_ertrag_nachmittags_kwh?: number
 }
 
 export interface StringPrognose {

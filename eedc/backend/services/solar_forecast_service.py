@@ -58,6 +58,8 @@ class SolarPrognoseTag:
     bewoelkung_prozent: Optional[int]
     niederschlag_mm: Optional[float]
     schnee_cm: Optional[float]
+    pv_ertrag_morgens_kwh: Optional[float] = None   # vor 12:00
+    pv_ertrag_nachmittags_kwh: Optional[float] = None  # ab 12:00
 
 
 @dataclass
@@ -281,6 +283,8 @@ async def get_solar_prognose(
                 "gti_sum_wh": 0,
                 "ghi_sum_wh": 0,
                 "ertrag_sum_kwh": 0,
+                "ertrag_morgens_kwh": 0,
+                "ertrag_nachmittags_kwh": 0,
                 "temp_max": None,
                 "snow_sum": 0,
                 "cloud_values": [],  # Für Durchschnittsberechnung
@@ -318,6 +322,12 @@ async def get_solar_prognose(
                 schnee_cm=snow
             )
             day["ertrag_sum_kwh"] += stunden_ertrag
+            # Vor-/Nachmittag-Split (Stunde aus ISO-Timestamp)
+            stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else 12
+            if stunde < 12:
+                day["ertrag_morgens_kwh"] += stunden_ertrag
+            else:
+                day["ertrag_nachmittags_kwh"] += stunden_ertrag
 
         # Temperatur-Maximum
         if temp is not None:
@@ -355,6 +365,9 @@ async def get_solar_prognose(
         if i < len(daily_sunshine) and daily_sunshine[i] is not None:
             sonnenstunden = daily_sunshine[i] * SECONDS_TO_HOURS
 
+        ertrag_morgens = day.get("ertrag_morgens_kwh", 0)
+        ertrag_nachmittags = day.get("ertrag_nachmittags_kwh", 0)
+
         tageswerte.append(SolarPrognoseTag(
             datum=datum,
             pv_ertrag_kwh=round(ertrag, 2),
@@ -369,6 +382,8 @@ async def get_solar_prognose(
             ),
             niederschlag_mm=daily_precip[i] if i < len(daily_precip) else None,
             schnee_cm=daily_snow[i] if i < len(daily_snow) else None,
+            pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
+            pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
         ))
 
         summe_kwh += ertrag

@@ -41,6 +41,8 @@ class SolarPrognoseTagSchema(BaseModel):
     bewoelkung_prozent: int | None
     niederschlag_mm: float | None
     schnee_cm: float | None
+    pv_ertrag_morgens_kwh: float | None = None
+    pv_ertrag_nachmittags_kwh: float | None = None
 
 
 class StringPrognoseSchema(BaseModel):

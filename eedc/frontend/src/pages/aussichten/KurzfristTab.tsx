@@ -105,11 +105,14 @@ export default function KurzfristTab({ anlageId }: Props) {
     return <Alert type="warning">Keine Prognose verfügbar</Alert>
   }
 
-  // Chart-Daten vorbereiten
+  // Chart-Daten vorbereiten — Vor-/Nachmittag gestapelt
+  const hasVmNm = prognose.tage.some(t => t.pv_ertrag_morgens_kwh != null)
   const chartData = prognose.tage.map(tag => ({
     datum: formatDatumKurz(tag.datum),
     datumFull: formatDatum(tag.datum),
     pv_kwh: tag.pv_ertrag_kwh,
+    pv_morgens: tag.pv_ertrag_morgens_kwh ?? 0,
+    pv_nachmittags: tag.pv_ertrag_nachmittags_kwh ?? 0,
     temperatur: tag.temperatur_max_c,
     gti: tag.gti_kwh_m2,
   }))
@@ -163,6 +166,11 @@ export default function KurzfristTab({ anlageId }: Props) {
                 <p className="text-xl font-bold text-gray-900 dark:text-white">
                   {(heute.pv_ertrag_kwh ?? 0).toFixed(1)} kWh
                 </p>
+                {heute.pv_ertrag_morgens_kwh != null && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    VM {heute.pv_ertrag_morgens_kwh.toFixed(1)} · NM {(heute.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}
+                  </p>
+                )}
               </div>
             </div>
           </Card>
@@ -177,6 +185,11 @@ export default function KurzfristTab({ anlageId }: Props) {
                 <p className="text-xl font-bold text-gray-900 dark:text-white">
                   {(morgen.pv_ertrag_kwh ?? 0).toFixed(1)} kWh
                 </p>
+                {morgen.pv_ertrag_morgens_kwh != null && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    VM {morgen.pv_ertrag_morgens_kwh.toFixed(1)} · NM {(morgen.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}
+                  </p>
+                )}
               </div>
             </div>
           </Card>
@@ -215,6 +228,11 @@ export default function KurzfristTab({ anlageId }: Props) {
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {tag.pv_ertrag_kwh.toFixed(1)} kWh
                 </span>
+                {tag.pv_ertrag_morgens_kwh != null && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                    {tag.pv_ertrag_morgens_kwh.toFixed(1)} · {(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}
+                  </span>
+                )}
                 <div className="flex items-center gap-1 mt-1">
                   <Thermometer className="h-3 w-3 text-gray-400" />
                   <span className="text-xs text-gray-500">
@@ -261,18 +279,38 @@ export default function KurzfristTab({ anlageId }: Props) {
                 label={{ value: '°C', angle: 90, position: 'insideRight' }}
               />
               <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
-                  if (name === 'PV-Prognose') return `${value.toFixed(1)} kWh`
+                  if (name === 'Vormittag' || name === 'Nachmittag' || name === 'PV-Prognose') return `${value.toFixed(1)} kWh`
                   if (name === 'Temperatur') return `${value.toFixed(0)} °C`
                   return `${value.toFixed(1)}`
                 }} />} />
               <Legend />
-              <Bar
-                yAxisId="left"
-                dataKey="pv_kwh"
-                name="PV-Prognose"
-                fill="#eab308"
-                radius={[4, 4, 0, 0]}
-              />
+              {hasVmNm ? (
+                <>
+                  <Bar
+                    yAxisId="left"
+                    dataKey="pv_morgens"
+                    name="Vormittag"
+                    stackId="pv"
+                    fill="#f59e0b"
+                  />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="pv_nachmittags"
+                    name="Nachmittag"
+                    stackId="pv"
+                    fill="#eab308"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </>
+              ) : (
+                <Bar
+                  yAxisId="left"
+                  dataKey="pv_kwh"
+                  name="PV-Prognose"
+                  fill="#eab308"
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
               <Line
                 yAxisId="right"
                 type="monotone"
@@ -297,6 +335,8 @@ export default function KurzfristTab({ anlageId }: Props) {
                 <th className="text-left py-2 px-3">Datum</th>
                 <th className="text-left py-2 px-3">Wetter</th>
                 <th className="text-right py-2 px-3">PV-Prognose</th>
+                {hasVmNm && <th className="text-right py-2 px-3">VM</th>}
+                {hasVmNm && <th className="text-right py-2 px-3">NM</th>}
                 <th className="text-right py-2 px-3">GTI</th>
                 <th className="text-right py-2 px-3">Bewölkung</th>
                 <th className="text-right py-2 px-3">Temperatur</th>
@@ -318,6 +358,16 @@ export default function KurzfristTab({ anlageId }: Props) {
                   <td className="py-2 px-3 text-right font-semibold text-yellow-600">
                     {tag.pv_ertrag_kwh.toFixed(1)} kWh
                   </td>
+                  {hasVmNm && (
+                    <td className="py-2 px-3 text-right text-amber-500">
+                      {tag.pv_ertrag_morgens_kwh?.toFixed(1) ?? '-'}
+                    </td>
+                  )}
+                  {hasVmNm && (
+                    <td className="py-2 px-3 text-right text-yellow-600">
+                      {tag.pv_ertrag_nachmittags_kwh?.toFixed(1) ?? '-'}
+                    </td>
+                  )}
                   <td className="py-2 px-3 text-right">
                     {tag.gti_kwh_m2?.toFixed(2) ?? '-'} kWh/m²
                   </td>
