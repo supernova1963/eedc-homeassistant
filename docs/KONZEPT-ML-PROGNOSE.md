@@ -1,6 +1,6 @@
 # Konzept: Solar Forecast ML — Leichtgewichtige Integration
 
-> Status: Entwurf v2 | Aktualisiert: 2026-03-21 | Auslöser: User-Anfragen (2 User)
+> Status: Phase 1 umgesetzt (v3.4.0, 2026-03-22) | Phase 2 offen | Auslöser: User-Anfragen (2 User)
 
 ## Kontext
 
@@ -64,62 +64,45 @@ Kleiner Vergleichsblock in der Monatsübersicht:
 - EEDC-Forecast vs. ML-Forecast vs. IST (Abweichung in %)
 - Erst sinnvoll wenn Langzeitdaten vorliegen
 
-## Benötigte SFML-Sensoren
+## Tatsächlich verwendete SFML-Sensoren
 
-Nur 3 Sensoren (statt 20+):
+Konfiguriert über Sensor-Mapping → Live-Sensoren → Solar Forecast ML:
 
-| Sensor | Beschreibung | Verwendung |
-|--------|-------------|------------|
-| `solar_forecast_ml_today` | Tages-Forecast (kWh) | Header-KPI + Chart-Skalierung |
-| `solar_forecast_ml_tomorrow` | Morgen-Forecast (kWh) | Optional: Morgen-Vorschau |
-| `solar_forecast_ml_model_accuracy` | Genauigkeit (%) | Optional: Tooltip-Info |
+| Mapping-Key | Tatsächlicher Sensor | Beschreibung |
+|-------------|---------------------|-------------|
+| `sfml_today_kwh` | `sensor.prognose_heute` | Tages-Forecast (kWh) — KPI + Chart-Skalierung |
+| `sfml_accuracy_pct` | `sensor.solar_forecast_ml_o_genauigkeit_30_tage` | Genauigkeit (%) — Tooltip-Info |
 
-Für die **stündliche Chart-Linie** wird die HA-History des `solar_forecast_ml_today`-Sensors benötigt (oder ein dedizierter Stunden-Sensor, falls vorhanden).
+Die **stündliche Chart-Linie** wird durch Verteilung des Tages-kWh-Werts auf die bestehende GTI-Kurvenform berechnet (kein separater Stunden-Sensor nötig).
 
-## Technische Umsetzung
+## Technische Umsetzung (Phase 1 — erledigt v3.4.0)
 
-### Sensor-Mapping (Backend)
+### Geänderte Dateien
 
-Neue optionale Felder in der bestehenden Sensor-Mapping-Kategorie:
+| Datei | Änderung |
+|-------|----------|
+| `backend/api/routes/live_dashboard.py` | `VerbrauchsStunde.pv_ml_prognose_kw`, `LiveWetterResponse.sfml_prognose_kwh/sfml_accuracy_pct`, SFML-Sensor-Lesen im Wetter-Endpoint |
+| `frontend/src/api/liveDashboard.ts` | TypeScript-Types erweitert |
+| `frontend/src/components/live/WetterWidget.tsx` | Lila KPI, gepunktete Chart-Linie, Gradient, Legende, Tooltip |
+| `frontend/src/components/sensor-mapping/BasisSensorenStep.tsx` | SFML-Felder im Wizard |
 
-```python
-# In sensor_mapping — neue optionale Felder
-"ml_forecast_today": "ML Tages-Forecast (kWh)",      # entity_id
-"ml_forecast_tomorrow": "ML Morgen-Forecast (kWh)",   # entity_id
-"ml_model_accuracy": "ML Modell-Genauigkeit (%)",     # entity_id
+### Verteilung Tages-kWh auf Stunden
+
+Kein separater Stunden-Sensor nötig. Die bestehende GTI-Kurve wird skaliert:
+```
+sfml_factor = sfml_today_kwh / sum(pv_ertrag_kw)
+pv_ml_prognose_kw[h] = pv_ertrag_kw[h] * sfml_factor
 ```
 
-### Wetter-Endpoint (Backend)
+## Phase 2: Cockpit-Vergleich (offen)
 
-Bestehender `/api/live/{id}/wetter`-Endpoint erweitern:
-- Wenn `ml_forecast_today` gemappt → Sensor-Wert lesen und in Response aufnehmen
-- Neue Felder in `LiveWetterResponse`: `ml_forecast_kwh`, `ml_accuracy_pct`
-
-### WetterWidget (Frontend)
-
-- `ml_forecast_kwh` als KPI neben der EEDC-Prognose anzeigen
-- Stündliche ML-Werte als dritte Linie im Chart (wenn verfügbar)
-- Alles hinter `if (data.ml_forecast_kwh != null)` — kein Fallback nötig
-
-### Kein Standalone-Support
-
-ML-Forecast-Sensoren kommen aus HA. Im Standalone-Modus sind die Felder nicht verfügbar und nichts wird angezeigt — kein spezieller Fallback nötig.
-
-## Aufwand
-
-| Komponente | Geschätzt |
-|-----------|-----------|
-| Sensor-Mapping-Felder | 15 min |
-| Backend: Sensor lesen + Response erweitern | 30 min |
-| Frontend: KPI im Header | 20 min |
-| Frontend: Chart-Linie | 30 min |
-| Testen | 30 min |
-| **Gesamt** | **~2h** |
+Kleiner Vergleichsblock in der Monatsübersicht:
+- EEDC-Forecast vs. ML-Forecast vs. IST (Abweichung in %)
+- Erst sinnvoll wenn SFML trainiert ist (~30 Tage Daten)
 
 ## Abgrenzung
 
 - **Kein eigener Tab/Seite** — Integration in bestehende Views
 - **Keine ML-Diagnose** — Accuracy/RMSE/Training gehört zu SFML Stats
-- **Keine Schatten/Wetter-Sensoren** — EEDC hat eigene Wetterdaten
 - **Rein optional** — ohne SFML ändert sich nichts an EEDC
 - **Kein Standalone** — nur mit HA-Integration verfügbar
