@@ -6,7 +6,7 @@
  * Manueller Aktualisieren-Button (kein Auto-Refresh).
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Sun, Battery, Flame, Car, Euro,
@@ -14,10 +14,11 @@ import {
   Home, TrendingUp, AlertCircle, CalendarClock,
   FileSpreadsheet, Plug, Cloud, Upload,
 } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
+import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
-import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { DataLoadingState } from '../components/common'
+import { useSelectedAnlage, useApiData } from '../hooks'
+import { aktuellerMonatApi } from '../api/aktuellerMonat'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -87,39 +88,20 @@ function QuelleBadge({ quelle, aktiv }: { quelle: string; aktiv: boolean }) {
 
 export default function AktuellerMonat() {
   const navigate = useNavigate()
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
-  const [data, setData] = useState<AktuellerMonatResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Auto-select first anlage
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
+  const { data, loading, error, refetch } = useApiData(
+    () => aktuellerMonatApi.getData(selectedAnlageId!),
+    [selectedAnlageId],
+    { enabled: selectedAnlageId != null },
+  )
 
-  const loadData = useCallback(async (isRefresh = false) => {
-    if (!selectedAnlageId) return
-    if (isRefresh) setRefreshing(true)
-    else setLoading(true)
-    setError(null)
-    try {
-      const result = await aktuellerMonatApi.getData(selectedAnlageId)
-      setData(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Daten')
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [selectedAnlageId])
-
-  useEffect(() => {
-    if (selectedAnlageId) loadData()
-  }, [selectedAnlageId, loadData])
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await refetch()
+    setRefreshing(false)
+  }
 
   // ── Chart Data ──
 
@@ -179,34 +161,15 @@ export default function AktuellerMonat() {
   // ── Loading / Error States ──
 
   if (anlagenLoading || loading) {
-    return <LoadingSpinner text="Lade aktuellen Monat..." />
+    return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
   }
 
   if (!selectedAnlageId || anlagen.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Card>
-          <div className="text-center p-8">
-            <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">Keine Anlage angelegt.</p>
-          </div>
-        </Card>
-      </div>
-    )
+    return <DataLoadingState loading={false} error={null} isEmpty={true} emptyMessage="Keine Anlage angelegt."><div /></DataLoadingState>
   }
 
   if (error) {
-    return (
-      <div className="space-y-4">
-        <Card>
-          <div className="text-center p-8">
-            <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-            <p className="text-red-500 mb-4">{error}</p>
-            <Button onClick={() => loadData()}>Erneut versuchen</Button>
-          </div>
-        </Card>
-      </div>
-    )
+    return <DataLoadingState loading={false} error={error} onRetry={refetch}><div /></DataLoadingState>
   }
 
   if (!data) return null
@@ -246,7 +209,7 @@ export default function AktuellerMonat() {
           <div className="flex flex-col items-end gap-1">
             <Button
               variant="secondary"
-              onClick={() => loadData(true)}
+              onClick={handleRefresh}
               loading={refreshing}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
