@@ -176,7 +176,7 @@ export default function BasisSensorenStep({
                     value={basisLive.sfml_today_kwh}
                     onChange={entityId => onBasisLiveChange('sfml_today_kwh', entityId)}
                     sensors={availableSensors}
-                    placeholder="sensor.solar_forecast_ml_today"
+                    placeholder="sensor.solar_forecast_ml_prognose_heute"
                   />
                 </div>
                 <div>
@@ -185,7 +185,7 @@ export default function BasisSensorenStep({
                     value={basisLive.sfml_tomorrow_kwh}
                     onChange={entityId => onBasisLiveChange('sfml_tomorrow_kwh', entityId)}
                     sensors={availableSensors}
-                    placeholder="sensor.solar_forecast_ml_tomorrow"
+                    placeholder="sensor.solar_forecast_ml_prognose_morgen"
                   />
                 </div>
                 <div>
@@ -194,7 +194,7 @@ export default function BasisSensorenStep({
                     value={basisLive.sfml_accuracy_pct}
                     onChange={entityId => onBasisLiveChange('sfml_accuracy_pct', entityId)}
                     sensors={availableSensors}
-                    placeholder="sensor.solar_forecast_ml_model_accuracy"
+                    placeholder="sensor.solar_forecast_ml_∅_genauigkeit_30_tage"
                   />
                 </div>
               </div>

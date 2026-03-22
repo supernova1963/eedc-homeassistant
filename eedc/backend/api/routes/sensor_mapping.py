@@ -264,7 +264,7 @@ async def get_available_sensors(
                     if device_class in ["energy", "power", "battery", "temperature", "distance", "monetary"]:
                         pass  # OK
                     # Erlaubt: Bestimmte Einheiten
-                    elif unit in ["kWh", "Wh", "W", "kW", "km", "°C", "EUR/kWh", "ct/kWh", "€/kWh"]:
+                    elif unit in ["kWh", "Wh", "W", "kW", "km", "°C", "%", "EUR/kWh", "ct/kWh", "€/kWh"]:
                         pass  # OK
                     # Erlaubt: Zähler-Sensoren (state_class=measurement oder total_increasing) ohne Einheit
                     # z.B. Ladevorgänge, Zyklen, etc.
