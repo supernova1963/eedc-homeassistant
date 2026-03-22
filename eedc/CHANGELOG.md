@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.0] - 2026-03-22
+
+### Hinzugefügt
+
+- **Solar Forecast ML Integration**: Optionale Anbindung von [Solar Forecast ML](https://github.com/Zara-Toorox/Solar-Forecast-ML) (SFML) im Wetter-Widget. Zeigt ML-basierte PV-Prognose als lila KPI (`~XX kWh ML`) und gepunktete lila Chart-Linie neben der EEDC-Prognose. Konfiguration über Sensor-Zuordnung → Live-Sensoren → Solar Forecast ML. Rein optional — ohne SFML ändert sich nichts.
+
+### Verbessert
+
+- **Dokumentation aktualisiert**: Versionsnummern auf v3.3 in 16 Dokumentationsdateien, Architektur-Doku mit neuen Hooks und Shared Components ergänzt.
+- **docs/ aufgeräumt**: Abgeschlossene Pläne archiviert, CSV-Testdaten verschoben, doppelte Screenshots bereinigt.
+
 ## [3.3.6] - 2026-03-22
 
 ### Verbessert
