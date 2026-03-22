@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.7] - 2026-03-22
+
+### Hinzugefügt
+
+- **3-Tage Solar-Vorschau in der Sidebar (#41)**: Kompakte Übersicht für Heute, Morgen und Übermorgen mit Vormittag/Nachmittag-Aufteilung — direkt auf der Live-Seite, ideal für die Planung großer Verbraucher (Waschmaschine, Trockner etc.).
+
+### Behoben
+
+- **Netz-Farbe im Energiefluss korrigiert**: Die dynamische Einfärbung (grün/orange/rot) hatte die Backend-Semantik vertauscht (erzeugung_kw = Netzbezug, verbrauch_kw = Einspeisung). Jetzt korrekt: orange bei Einspeisung, rot bei Netzbezug, grün bei Balance.
+
 ## [3.4.6] - 2026-03-22
 
 ### Hinzugefügt
