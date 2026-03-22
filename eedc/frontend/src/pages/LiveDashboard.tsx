@@ -394,14 +394,22 @@ export default function LiveDashboard() {
                             <span className="text-xs font-normal ml-0.5">kWh</span>
                           </span>
                           {hasVmNm && (
-                            <span className="text-[10px] text-gray-400 dark:text-gray-500 w-20 text-right">
-                              {tag.pv_ertrag_morgens_kwh!.toFixed(1)} / {(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}
+                            <span className="text-xs w-24 text-right">
+                              <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
+                              <span className="text-gray-400 mx-0.5">/</span>
+                              <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>
                             </span>
                           )}
                         </div>
                       )
                     })}
-                    <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right px-1">VM / NM</div>
+                    {prognose3Tage.some(t => t.pv_ertrag_morgens_kwh != null) && (
+                      <div className="text-[10px] text-right px-1">
+                        <span className="text-amber-500">VM</span>
+                        <span className="text-gray-400 mx-0.5">/</span>
+                        <span className="text-yellow-500">NM</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
