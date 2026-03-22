@@ -14,6 +14,8 @@ import { Activity, AlertCircle } from 'lucide-react'
 import { useSelectedAnlage } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, MqttInboundStatus } from '../api/liveDashboard'
+import { wetterApi } from '../api/wetter'
+import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
 import GaugeChart from '../components/live/GaugeChart'
 import TagesverlaufChart from '../components/live/TagesverlaufChart'
@@ -36,6 +38,7 @@ export default function LiveDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [mqttStatus, setMqttStatus] = useState<MqttInboundStatus | null>(null)
+  const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tagesverlaufIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -69,6 +72,13 @@ export default function LiveDashboard() {
       setWetter(result)
     } catch {
       // Wetter-Fehler still ignorieren — nicht kritisch
+    }
+    // 3-Tage-Prognose (VM/NM) parallel laden
+    try {
+      const prognose = await wetterApi.getSolarPrognose(selectedAnlageId, 3, false)
+      setPrognose3Tage(prognose.tage?.slice(0, 3) ?? null)
+    } catch {
+      // Prognose-Fehler still ignorieren
     }
   }, [selectedAnlageId, demoMode])
 
@@ -345,6 +355,35 @@ export default function LiveDashboard() {
                       <div className="text-base font-bold text-orange-600 dark:text-orange-400">~{wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 3-Tage Solar-Vorschau (VM/NM) */}
+              {prognose3Tage && prognose3Tage.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Solar-Aussicht</h3>
+                  <div className="space-y-1.5">
+                    {prognose3Tage.map((tag, i) => {
+                      const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
+                      const hasVmNm = tag.pv_ertrag_morgens_kwh != null
+                      return (
+                        <div key={tag.datum} className={`flex items-center justify-between rounded-lg px-3 py-1.5 ${
+                          i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-gray-50 dark:bg-gray-700/50'
+                        }`}>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 w-20">{label}</span>
+                          <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400">
+                            {tag.pv_ertrag_kwh.toFixed(1)} kWh
+                          </span>
+                          {hasVmNm && (
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 w-20 text-right">
+                              {tag.pv_ertrag_morgens_kwh!.toFixed(1)} / {(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                    <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right px-1">VM / NM</div>
+                  </div>
                 </div>
               )}
 
