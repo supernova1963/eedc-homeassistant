@@ -436,6 +436,26 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
         )}
       </div>
 
+      {/* Info-Box: Was kann das Gateway? */}
+      {mappings.length === 0 && !showForm && (
+        <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
+          <p>
+            <strong>Wann brauchst du das Gateway?</strong> Wenn deine Geräte bereits eigene MQTT-Topics
+            publishen (z.B. Shelly, Tasmota, OpenDTU, Zigbee2MQTT) und du diese Daten direkt
+            ins EEDC Live-Dashboard bringen willst.
+          </p>
+          <p>
+            <strong>Connector-Bridge:</strong> Hast du einen Geräte-Connector konfiguriert
+            (Einstellungen → Connector), der Live-Daten unterstützt? Dann werden seine Werte
+            automatisch auf MQTT-Inbound-Topics gepublisht — kein Gateway-Mapping nötig.
+          </p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">
+            Live-fähige Connectors: Shelly 3EM, OpenDTU, Fronius, sonnenBatterie, go-eCharger.
+            Reine kWh-Connectors (SMA, Kostal, Tasmota SML) liefern keine Live-Daten.
+          </p>
+        </div>
+      )}
+
       {/* Status-Zeile */}
       {status && !status.verfuegbar && status.grund && (
         <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg">

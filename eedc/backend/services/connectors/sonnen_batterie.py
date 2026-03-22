@@ -27,7 +27,7 @@ from typing import Optional
 
 import aiohttp
 
-from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult
+from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult, LiveSnapshot
 from .registry import register_connector
 
 logger = logging.getLogger(__name__)
@@ -214,3 +214,50 @@ class SonnenBatterieConnector(DeviceConnector):
                 timestamp=now,
                 pv_erzeugung_kwh=round(pv_kwh, 3) if pv_kwh is not None else None,
             )
+
+    async def read_live(
+        self, host: str, username: str, password: str
+    ) -> Optional[LiveSnapshot]:
+        """Liest aktuelle Leistungswerte von der sonnenBatterie."""
+        base_url = f"http://{host}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                # /api/v2/status ist ohne Auth zugänglich
+                status = await _fetch_json(session, f"{base_url}/api/v2/status")
+                if not status or isinstance(status, list):
+                    return None
+
+                snap = LiveSnapshot(timestamp=now)
+
+                production_w = status.get("Production_W")
+                if production_w is not None:
+                    snap.leistung_w = round(production_w, 1)
+
+                grid_w = status.get("GridFeedIn_W")
+                if grid_w is not None:
+                    # Positiv = Einspeisung, Negativ = Netzbezug
+                    if grid_w >= 0:
+                        snap.einspeisung_w = round(grid_w, 1)
+                        snap.netzbezug_w = 0
+                    else:
+                        snap.netzbezug_w = round(abs(grid_w), 1)
+                        snap.einspeisung_w = 0
+
+                pac_w = status.get("Pac_total_W")
+                if pac_w is not None:
+                    # Positiv = Entladung, Negativ = Ladung
+                    if pac_w >= 0:
+                        snap.batterie_entladung_w = round(pac_w, 1)
+                    else:
+                        snap.batterie_ladung_w = round(abs(pac_w), 1)
+
+                soc = status.get("USOC")
+                if soc is not None:
+                    snap.soc = round(soc, 1)
+
+                return snap
+        except Exception as e:
+            logger.warning("sonnenBatterie read_live fehlgeschlagen: %s", e)
+            return None

@@ -152,6 +152,49 @@ async def lifespan(app: FastAPI):
                         print("  MQTT-Gateway: keine Mappings konfiguriert")
             except Exception as e:
                 logger.warning("MQTT-Gateway: Fehler beim Starten: %s", e)
+
+            # Connector → MQTT Bridge starten (pollt Geräte-Connectoren, publisht auf MQTT)
+            try:
+                from backend.services.connector_mqtt_bridge import init_connector_mqtt_bridge, ConnectorTarget
+                import base64
+
+                bridge = init_connector_mqtt_bridge(
+                    mqtt_host=host, mqtt_port=port,
+                    mqtt_username=mqtt_cfg.get("username") or None,
+                    mqtt_password=mqtt_cfg.get("password") or None,
+                )
+                # Anlagen mit Connector-Config aus DB laden
+                targets: list[ConnectorTarget] = []
+                async with get_session() as session:
+                    result = await session.execute(select(Anlage))
+                    anlagen = result.scalars().all()
+                    for anlage in anlagen:
+                        cfg = anlage.connector_config
+                        if not cfg or not cfg.get("connector_id") or not cfg.get("host"):
+                            continue
+                        pw_encoded = cfg.get("password", "")
+                        try:
+                            pw = base64.b64decode(pw_encoded.encode()).decode() if pw_encoded else ""
+                        except Exception:
+                            pw = pw_encoded
+                        targets.append(ConnectorTarget(
+                            anlage_id=anlage.id,
+                            inv_id=None,  # TODO: Investition-Zuordnung aus Config
+                            connector_id=cfg["connector_id"],
+                            host=cfg["host"],
+                            username=cfg.get("username", ""),
+                            password=pw,
+                        ))
+                if targets:
+                    bridge.load_targets(targets)
+                    if await bridge.start():
+                        print(f"  Connector-Bridge: aktiv ({len(targets)} Geräte)")
+                    else:
+                        print("  Connector-Bridge: konnte nicht gestartet werden")
+                else:
+                    print("  Connector-Bridge: keine Connectors konfiguriert")
+            except Exception as e:
+                logger.warning("Connector-Bridge: Fehler beim Starten: %s", e)
         else:
             print("  MQTT-Inbound: konnte nicht gestartet werden")
 
@@ -160,12 +203,19 @@ async def lifespan(app: FastAPI):
     # Shutdown
     if mqtt_inbound:
         await mqtt_inbound.stop()
-    # Gateway stoppen
+    # Gateway + Bridge stoppen
     try:
         from backend.services.mqtt_gateway_service import get_mqtt_gateway_service
         gw = get_mqtt_gateway_service()
         if gw:
             await gw.stop()
+    except Exception:
+        pass
+    try:
+        from backend.services.connector_mqtt_bridge import get_connector_mqtt_bridge
+        br = get_connector_mqtt_bridge()
+        if br:
+            await br.stop()
     except Exception:
         pass
     stop_scheduler()

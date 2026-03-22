@@ -24,7 +24,7 @@ from typing import Optional
 
 import aiohttp
 
-from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult
+from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult, LiveSnapshot
 from .registry import register_connector
 
 logger = logging.getLogger(__name__)
@@ -288,3 +288,44 @@ class FroniusSolarApiConnector(DeviceConnector):
             batterie_ladung_kwh=None,  # Fronius API hat keine kumulativen Batterie-Zähler
             batterie_entladung_kwh=None,
         )
+
+    async def read_live(
+        self, host: str, username: str, password: str
+    ) -> Optional[LiveSnapshot]:
+        """Liest aktuelle Leistungswerte vom Fronius Wechselrichter."""
+        base_url = f"http://{host}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        try:
+            connector = aiohttp.TCPConnector(ssl=False)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                pf_data = await _fetch_json(session, base_url, POWERFLOW_URL)
+                if not pf_data or _get_nested(pf_data, "Head", "Status", "Code") != 0:
+                    return None
+
+                site = _get_nested(pf_data, "Body", "Data", "Site", default={})
+                p_pv = site.get("P_PV")
+                p_grid = site.get("P_Grid")
+                p_akku = site.get("P_Akku")
+
+                snap = LiveSnapshot(timestamp=now)
+                if p_pv is not None:
+                    snap.leistung_w = round(p_pv, 1)
+                if p_grid is not None:
+                    # Positiv = Netzbezug, Negativ = Einspeisung
+                    if p_grid >= 0:
+                        snap.netzbezug_w = round(p_grid, 1)
+                        snap.einspeisung_w = 0
+                    else:
+                        snap.einspeisung_w = round(abs(p_grid), 1)
+                        snap.netzbezug_w = 0
+                if p_akku is not None:
+                    if p_akku >= 0:
+                        snap.batterie_entladung_w = round(p_akku, 1)
+                    else:
+                        snap.batterie_ladung_w = round(abs(p_akku), 1)
+
+                return snap
+        except Exception as e:
+            logger.warning("Fronius read_live fehlgeschlagen: %s", e)
+            return None

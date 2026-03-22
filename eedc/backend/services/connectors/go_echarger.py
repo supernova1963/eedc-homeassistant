@@ -23,7 +23,7 @@ from typing import Optional
 
 import aiohttp
 
-from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult
+from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult, LiveSnapshot
 from .registry import register_connector
 
 logger = logging.getLogger(__name__)
@@ -213,3 +213,32 @@ class GoEChargerConnector(DeviceConnector):
             timestamp=datetime.now(timezone.utc).isoformat(),
             wallbox_ladung_kwh=wallbox_kwh,
         )
+
+    async def read_live(
+        self, host: str, username: str, password: str
+    ) -> Optional[LiveSnapshot]:
+        """Liest aktuelle Ladeleistung vom go-eCharger."""
+        base_url = f"http://{host}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        auth = None
+        if username and password:
+            auth = aiohttp.BasicAuth(username, password)
+
+        try:
+            async with aiohttp.ClientSession(auth=auth) as session:
+                # API v2 mit nrg Filter
+                data = await _fetch_json(session, f"{base_url}/api/status?filter=nrg")
+                if not data:
+                    data = await _fetch_json(session, f"{base_url}/status")
+
+                if not data:
+                    return None
+
+                nrg = data.get("nrg")
+                if isinstance(nrg, list) and len(nrg) >= 12:
+                    return LiveSnapshot(timestamp=now, leistung_w=round(nrg[11], 1))
+                return None
+        except Exception as e:
+            logger.warning("go-eCharger read_live fehlgeschlagen: %s", e)
+            return None

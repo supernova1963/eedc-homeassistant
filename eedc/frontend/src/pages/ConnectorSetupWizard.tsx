@@ -35,6 +35,15 @@ import type {
 } from '../api/connector'
 import type { Anlage } from '../types'
 
+/** Connectors die read_live() implementieren und Echtzeit-Watt liefern können. */
+const LIVE_CONNECTORS = new Set([
+  'shelly_em',        // Shelly 3EM / Pro 3EM
+  'opendtu',          // OpenDTU / AhoyDTU
+  'fronius_solar_api', // Fronius Wechselrichter
+  'sonnen_batterie',  // sonnenBatterie
+  'go_echarger',      // go-eCharger Wallbox
+])
+
 function formatKwh(val: number | null | undefined): string {
   if (val == null) return '–'
   return val.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kWh'
@@ -331,6 +340,27 @@ export default function ConnectorSetupWizard() {
                   </p>
                 )}
               </div>
+
+              {/* Live-Daten Info */}
+              {selectedConnector && (
+                LIVE_CONNECTORS.has(selectedConnector.id) ? (
+                  <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm text-green-700 dark:text-green-400">
+                    <span className="shrink-0 mt-0.5">⚡</span>
+                    <span>
+                      <strong>Live-Daten:</strong> Dieser Connector liefert Echtzeit-Leistungswerte (Watt).
+                      Bei aktiver MQTT-Verbindung erscheinen die Daten automatisch im Live-Dashboard und Energiefluss.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm text-gray-500 dark:text-gray-400">
+                    <span className="shrink-0 mt-0.5">📊</span>
+                    <span>
+                      <strong>Nur Zählerstände:</strong> Dieser Connector liest kumulative kWh-Werte.
+                      Echtzeit-Leistungsdaten für das Live-Dashboard sind nicht verfügbar.
+                    </span>
+                  </div>
+                )
+              )}
 
               {/* Anleitung */}
               {selectedConnector && (

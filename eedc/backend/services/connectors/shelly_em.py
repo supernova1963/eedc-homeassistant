@@ -30,7 +30,7 @@ from typing import Optional
 
 import aiohttp
 
-from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult
+from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult, LiveSnapshot
 from .registry import register_connector
 
 logger = logging.getLogger(__name__)
@@ -244,3 +244,39 @@ class ShellyEMConnector(DeviceConnector):
             netzbezug_kwh=round(total_import, 3) if total_import is not None else None,
             einspeisung_kwh=round(total_export, 3) if total_export is not None else None,
         ), sensoren
+
+    async def read_live(
+        self, host: str, username: str, password: str
+    ) -> Optional[LiveSnapshot]:
+        """Liest aktuelle Leistungswerte vom Shelly Energy Meter."""
+        base_url = f"http://{host}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        auth = None
+        if username and password:
+            auth = aiohttp.BasicAuth(username or "admin", password)
+
+        try:
+            async with aiohttp.ClientSession(auth=auth) as session:
+                shelly_info = await _fetch_json(session, f"{base_url}/shelly")
+                generation = _detect_generation(shelly_info) if shelly_info else "gen1"
+
+                if generation == "gen1":
+                    data = await _fetch_json(session, f"{base_url}/status")
+                    if not data:
+                        return None
+                    total_power = data.get("total_power", 0)
+                else:
+                    data = await _fetch_json(session, f"{base_url}/rpc/EM.GetStatus?id=0")
+                    if not data:
+                        return None
+                    total_power = data.get("total_act_power", 0)
+
+                # Positiv = Netzbezug, Negativ = Einspeisung
+                if total_power >= 0:
+                    return LiveSnapshot(timestamp=now, netzbezug_w=round(total_power, 1), einspeisung_w=0)
+                else:
+                    return LiveSnapshot(timestamp=now, einspeisung_w=round(abs(total_power), 1), netzbezug_w=0)
+        except Exception as e:
+            logger.warning("Shelly read_live fehlgeschlagen: %s", e)
+            return None

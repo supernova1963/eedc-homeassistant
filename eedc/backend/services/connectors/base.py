@@ -59,6 +59,22 @@ class ConnectionTestResult:
         return d
 
 
+@dataclass
+class LiveSnapshot:
+    """Aktuelle Leistungswerte eines Geräts (in Watt / Prozent)."""
+
+    timestamp: str  # ISO 8601
+    leistung_w: Optional[float] = None       # Aktuelle Leistung (PV, Wallbox, WP, ...)
+    einspeisung_w: Optional[float] = None    # Grid Export (nur Smart Meter)
+    netzbezug_w: Optional[float] = None      # Grid Import (nur Smart Meter)
+    soc: Optional[float] = None              # State of Charge % (nur Speicher)
+    batterie_ladung_w: Optional[float] = None
+    batterie_entladung_w: Optional[float] = None
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+
 class DeviceConnector(ABC):
     """Abstrakte Basisklasse für Geräte-Connectoren."""
 
@@ -77,3 +93,13 @@ class DeviceConnector(ABC):
         self, host: str, username: str, password: str
     ) -> MeterSnapshot:
         """Liest aktuelle kumulative Zählerstände vom Gerät."""
+
+    async def read_live(
+        self, host: str, username: str, password: str
+    ) -> Optional[LiveSnapshot]:
+        """Liest aktuelle Live-Leistungswerte vom Gerät (optional).
+
+        Connectors die das unterstützen, überschreiben diese Methode.
+        Default: None (nur kWh-Zähler verfügbar).
+        """
+        return None

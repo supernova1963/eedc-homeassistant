@@ -27,7 +27,7 @@ from typing import Optional
 
 import aiohttp
 
-from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult
+from .base import DeviceConnector, ConnectorInfo, MeterSnapshot, ConnectionTestResult, LiveSnapshot
 from .registry import register_connector
 
 logger = logging.getLogger(__name__)
@@ -293,3 +293,42 @@ class OpenDTUConnector(DeviceConnector):
                 )
 
             return MeterSnapshot(timestamp=now)
+
+    async def read_live(
+        self, host: str, username: str, password: str
+    ) -> Optional[LiveSnapshot]:
+        """Liest aktuelle PV-Leistung vom DTU-Gateway."""
+        base_url = f"http://{host}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        auth = None
+        if username and password:
+            auth = aiohttp.BasicAuth(username or "admin", password)
+
+        try:
+            async with aiohttp.ClientSession(auth=auth) as session:
+                # OpenDTU
+                data = await _fetch_json(session, f"{base_url}/api/livedata/status")
+                if data and "total" in data:
+                    power = _get_nested(data, "total", "Power", "v")
+                    if power is not None:
+                        return LiveSnapshot(timestamp=now, leistung_w=round(power, 1))
+
+                # AhoyDTU Fallback
+                inv_list = await _fetch_json(session, f"{base_url}/api/inverter/list")
+                if inv_list and "inverter" in inv_list:
+                    total_power = 0.0
+                    for inv in inv_list["inverter"]:
+                        if not inv.get("enabled", False):
+                            continue
+                        inv_data = await _fetch_json(
+                            session, f"{base_url}/api/inverter/id/{inv.get('id', 0)}"
+                        )
+                        if inv_data and "ch" in inv_data:
+                            ch = inv_data["ch"]
+                            if isinstance(ch, list) and len(ch) > 0 and isinstance(ch[0], list) and len(ch[0]) > 2:
+                                total_power += ch[0][2]  # PAC
+                    return LiveSnapshot(timestamp=now, leistung_w=round(total_power, 1))
+        except Exception as e:
+            logger.warning("DTU read_live fehlgeschlagen: %s", e)
+        return None
