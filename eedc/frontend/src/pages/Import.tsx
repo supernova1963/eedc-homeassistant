@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Upload, FileSpreadsheet, Download, Check, AlertTriangle, X, Sparkles, Trash2, FileJson } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { importApi } from '../api'
 import type { ImportResult, JSONImportResult } from '../types'
 import type { DemoDataResult } from '../api'
@@ -11,8 +11,7 @@ export default function Import() {
   const location = useLocation()
   const demoSectionRef = useRef<HTMLDivElement>(null)
   const isDemo = location.pathname.endsWith('/demo')
-  const { anlagen, loading: anlagenLoading, refresh: refreshAnlagen } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading, refresh: refreshAnlagen } = useSelectedAnlage()
   const [isDragging, setIsDragging] = useState(false)
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
@@ -32,8 +31,7 @@ export default function Import() {
   // Prüfen ob Demo-Anlage existiert
   const hasDemoAnlage = anlagen.some(a => a.anlagenname === 'Demo-Anlage')
 
-  // Automatisch erste Anlage auswählen
-  const anlageId = selectedAnlageId ?? anlagen[0]?.id
+  const anlageId = selectedAnlageId
 
   // Bei /demo Route zur Demo-Sektion scrollen
   useEffect(() => {

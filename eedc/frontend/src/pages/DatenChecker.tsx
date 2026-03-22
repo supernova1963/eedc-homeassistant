@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { LoadingSpinner } from '../components/ui'
 import { KPICard } from '../components/ui'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 
 // ─── Konstanten ─────────────────────────────────────────────────────────────
@@ -135,18 +135,11 @@ function KategorieSektion({
 // ─── Hauptkomponente ────────────────────────────────────────────────────────
 
 export default function DatenChecker() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [result, setResult] = useState<DatenCheckResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Erste Anlage auto-selektieren
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Check laden wenn Anlage ausgewählt
   useEffect(() => {
@@ -165,7 +158,7 @@ export default function DatenChecker() {
       }
     }
     load()
-  }, [selectedAnlageId])
+  }, [selectedAnlageId, refreshKey])
 
   // Ergebnisse nach Kategorie gruppieren
   const grouped = useMemo(() => {
@@ -222,7 +215,7 @@ export default function DatenChecker() {
             </select>
           )}
           <button
-            onClick={() => selectedAnlageId && setSelectedAnlageId((prev) => { setResult(null); return prev })}
+            onClick={() => { setResult(null); setRefreshKey(k => k + 1) }}
             disabled={loading}
             className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
             aria-label="Aktualisieren"

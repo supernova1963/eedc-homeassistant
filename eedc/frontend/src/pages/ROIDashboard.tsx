@@ -33,7 +33,7 @@ import {
 } from 'recharts'
 import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen, useAktuellerStrompreis } from '../hooks'
+import { useSelectedAnlage, useAktuellerStrompreis } from '../hooks'
 import { investitionenApi, type ROIDashboardResponse } from '../api'
 
 const typIcons: Record<string, React.ElementType> = {
@@ -70,8 +70,7 @@ const typLabels: Record<string, string> = {
 }
 
 export default function ROIDashboard() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,7 +80,7 @@ export default function ROIDashboard() {
   const [einspeiseverguetung, setEinspeiseverguetung] = useState<number>(8.2)
   const [benzinpreis, setBenzinpreis] = useState<number>(1.85)
 
-  const anlageId = selectedAnlageId ?? anlagen[0]?.id
+  const anlageId = selectedAnlageId
   const { strompreis: aktuellerStrompreis } = useAktuellerStrompreis(anlageId ?? null)
 
   // Strompreis aus DB übernehmen wenn verfügbar

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
-import { useAnlagen, useInvestitionen, useInvestitionenByTyp } from '../hooks'
+import { useSelectedAnlage, useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import InvestitionForm from '../components/forms/InvestitionForm'
 import type { Investition, InvestitionTyp } from '../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../api'
@@ -24,16 +24,14 @@ const investitionTypen: {
 ]
 
 export default function Investitionen() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: currentAnlage, loading: anlagenLoading } = useSelectedAnlage()
   const [showForm, setShowForm] = useState(false)
   const [editingInvestition, setEditingInvestition] = useState<Investition | null>(null)
   const [selectedTyp, setSelectedTyp] = useState<InvestitionTyp | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Investition | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const anlageId = selectedAnlageId ?? anlagen[0]?.id
-  const currentAnlage = anlagen.find(a => a.id === anlageId) ?? null
+  const anlageId = selectedAnlageId
   const { investitionen, loading, createInvestition, updateInvestition, deleteInvestition } = useInvestitionen(anlageId)
   const groupedByTyp = useInvestitionenByTyp(investitionen)
 

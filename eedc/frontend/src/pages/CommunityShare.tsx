@@ -25,13 +25,9 @@ import {
   Trophy,
   BarChart3,
 } from 'lucide-react'
-import { anlagenApi, communityApi } from '../api'
+import { communityApi } from '../api'
 import type { PreviewResponse, ShareResponse, CommunityStatus } from '../api'
-
-interface Anlage {
-  id: number
-  anlagenname: string
-}
+import { useSelectedAnlage } from '../hooks'
 
 // Bundesland-Namen
 const REGION_NAMEN: Record<string, string> = {
@@ -58,13 +54,11 @@ const REGION_NAMEN: Record<string, string> = {
 
 export default function CommunityShare() {
   const navigate = useNavigate()
+  const { anlagen, selectedAnlageId: selectedAnlage, setSelectedAnlageId: setSelectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
 
-  const [anlagen, setAnlagen] = useState<Anlage[]>([])
-  const [selectedAnlage, setSelectedAnlage] = useState<number | null>(null)
   const [status, setStatus] = useState<CommunityStatus | null>(null)
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [result, setResult] = useState<ShareResponse | null>(null)
-  const [loading, setLoading] = useState(true)
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -75,25 +69,6 @@ export default function CommunityShare() {
   const [resetBannerDismissed, setResetBannerDismissed] = useState(
     () => localStorage.getItem('eedc_community_reset_dismissed') === '2026-03'
   )
-
-  // Anlagen laden
-  useEffect(() => {
-    const loadAnlagen = async () => {
-      try {
-        const data = await anlagenApi.list()
-        setAnlagen(data)
-        if (data.length === 1) {
-          setSelectedAnlage(data[0].id)
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Fehler beim Laden'
-        setError(message)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadAnlagen()
-  }, [])
 
   // Community-Status prüfen
   useEffect(() => {
@@ -175,7 +150,7 @@ export default function CommunityShare() {
     }
   }
 
-  if (loading) {
+  if (anlagenLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -332,7 +307,7 @@ export default function CommunityShare() {
           </label>
           <select
             value={selectedAnlage || ''}
-            onChange={(e) => setSelectedAnlage(Number(e.target.value) || null)}
+            onChange={(e) => { const v = Number(e.target.value); if (v) setSelectedAnlage(v) }}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           >
             <option value="">-- Anlage wählen --</option>

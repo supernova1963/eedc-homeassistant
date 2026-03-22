@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { communityApi, anlagenApi } from '../api'
 import type {
   CommunityBenchmarkResponse,
@@ -84,8 +84,7 @@ interface CommunityVergleichProps {
 
 export default function CommunityVergleich({ embedded = false, anlageId: propsAnlageId }: CommunityVergleichProps) {
   const navigate = useNavigate()
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [zeitraum, setZeitraum] = useState<ZeitraumTyp>('letzte_12_monate')
   const [benchmark, setBenchmark] = useState<CommunityBenchmarkResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -97,13 +96,6 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
 
   // Effektive Anlage-ID (Props > Selected > First)
   const effectiveAnlageId = propsAnlageId ?? selectedAnlageId
-
-  useEffect(() => {
-    // Nur setzen wenn nicht embedded (dort kommt ID von Props)
-    if (!embedded && anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId, embedded])
 
   // Community Hash für die Anlage abrufen
   useEffect(() => {

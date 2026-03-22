@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud, Mountain, Upload } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { pvgisApi, wetterApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
 import type { WetterProviderList } from '../api/wetter'
@@ -22,8 +22,7 @@ import ChartTooltip from '../components/ui/ChartTooltip'
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
 export default function PVGISSettings() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
   const [aktivePrognose, setAktivePrognose] = useState<AktivePrognoseResponse | null>(null)
   const [gespeichertePrognosen, setGespeichertePrognosen] = useState<GespeichertePrognose[]>([])
   const [previewPrognose, setPreviewPrognose] = useState<PVGISPrognose | null>(null)
@@ -42,13 +41,6 @@ export default function PVGISSettings() {
 
   // Parameter für Vorschau
   const [systemLosses, setSystemLosses] = useState(14)
-
-  // Erste Anlage automatisch auswählen
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   // Daten laden wenn Anlage gewechselt wird
   useEffect(() => {
@@ -158,7 +150,7 @@ export default function PVGISSettings() {
     }
   }
 
-  const selectedAnlage = anlagen.find(a => a.id === selectedAnlageId)
+  // selectedAnlage comes from useSelectedAnlage()
   const hatKoordinaten = selectedAnlage?.latitude && selectedAnlage?.longitude
 
   if (anlagenLoading) return <LoadingSpinner text="Lade..." />

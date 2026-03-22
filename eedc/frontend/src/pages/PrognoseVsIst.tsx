@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useAnlagen } from '../hooks'
+import { useSelectedAnlage } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -38,21 +38,13 @@ interface VergleichsDaten {
 }
 
 export default function PrognoseVsIst() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | undefined>()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [selectedJahr, setSelectedJahr] = useState<number>(new Date().getFullYear())
   const [prognose, setPrognose] = useState<PrognoseData | null>(null)
   const [monatsdaten, setMonatsdaten] = useState<AggregierteMonatsdaten[]>([])
   const [loading, setLoading] = useState(false)
   const [savingPrognose, setSavingPrognose] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Erste Anlage automatisch auswählen
-  useEffect(() => {
-    if (anlagen.length > 0 && !selectedAnlageId) {
-      setSelectedAnlageId(anlagen[0].id)
-    }
-  }, [anlagen, selectedAnlageId])
 
   // Daten laden
   useEffect(() => {

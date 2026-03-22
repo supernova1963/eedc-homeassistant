@@ -2,15 +2,14 @@ import { useState, FormEvent } from 'react'
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert, Input } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
-import { useAnlagen, useStrompreise } from '../hooks'
+import { useSelectedAnlage, useStrompreise } from '../hooks'
 import type { Strompreis, StrompreisVerwendung } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
 export default function Strompreise() {
-  const { anlagen, loading: anlagenLoading } = useAnlagen()
-  const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
 
-  const anlageId = selectedAnlageId ?? anlagen[0]?.id
+  const anlageId = selectedAnlageId
   const { strompreise, loading, error, createStrompreis, updateStrompreis, deleteStrompreis } = useStrompreise(anlageId)
 
   const [showForm, setShowForm] = useState(false)
