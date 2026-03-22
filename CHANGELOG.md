@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.3.5] - 2026-03-22
+
+### Hinzugefügt
+
+- **Community-Reset-Hinweis**: Banner auf der Community-Seite informiert Nutzer, dass die Community-Daten durch einen Server-Vorfall am 22.03.2026 verloren gegangen sind und bittet um erneutes Teilen. Der Hinweis kann geschlossen werden und erscheint dann nicht mehr.
+
+### Hinweis
+
+Durch eine fehlerhafte Server-Wartung wurden alle Community-Benchmark-Daten gelöscht. Der Community-Server läuft wieder — bitte teile deine Anlagendaten erneut unter **Community → Daten teilen**, damit der Benchmark wieder aufgebaut werden kann. Wir entschuldigen uns für die Unannehmlichkeiten.
+
 ## [3.3.1] - 2026-03-20
 
 ### Behoben

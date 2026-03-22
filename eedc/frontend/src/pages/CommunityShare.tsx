@@ -72,6 +72,9 @@ export default function CommunityShare() {
   const [showPreview, setShowPreview] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [consentGiven, setConsentGiven] = useState(false)
+  const [resetBannerDismissed, setResetBannerDismissed] = useState(
+    () => localStorage.getItem('eedc_community_reset_dismissed') === '2026-03'
+  )
 
   // Anlagen laden
   useEffect(() => {
@@ -367,6 +370,32 @@ export default function CommunityShare() {
           </div>
         </div>
       </div>
+
+      {/* Server-Reset-Hinweis */}
+      {!resetBannerDismissed && status?.online && (
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <RefreshCw className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-orange-800 dark:text-orange-200">Community-Daten zurückgesetzt</h3>
+              <p className="mt-1 text-sm text-orange-700 dark:text-orange-300">
+                Durch einen Server-Vorfall am 22.03.2026 wurden alle Community-Daten gelöscht.
+                Bitte teile deine Anlagendaten erneut, damit der Benchmark wieder aufgebaut werden kann.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.setItem('eedc_community_reset_dismissed', '2026-03')
+                setResetBannerDismissed(true)
+              }}
+              className="text-orange-400 hover:text-orange-600 dark:hover:text-orange-300 flex-shrink-0"
+              title="Hinweis schließen"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Fehler-Anzeige */}
       {error && (
