@@ -1,6 +1,51 @@
 # Konzept: MQTT Gateway — Topic-Translator für EEDC
 
-> Erstellt: 2026-03-20 | Status: Konzept | Feature-Request
+> Erstellt: 2026-03-20 | Aktualisiert: 2026-03-22 | Status: **Stufe 0+1 implementiert** (v3.4.5)
+
+## Implementierungsstand
+
+| Stufe | Status | Version | Beschreibung |
+|-------|--------|---------|-------------|
+| **Stufe 0** | **Implementiert** | v3.4.5 | Connector → MQTT Bridge. Konfigurierte Geräte-Connectors publishen automatisch Live-Watt auf MQTT-Inbound-Topics. 5 Connectors mit `read_live()`: Shelly 3EM, OpenDTU, Fronius, sonnenBatterie, go-eCharger. SMA/Kostal/Tasmota SML nur kWh (kein Live). |
+| **Stufe 1** | **Implementiert** | v3.4.5 | Manuelles Topic-Mapping (MVP). DB-Modell, CRUD-API, Hot-Reload, Test-Topic-Endpoint, UI auf MQTT-Inbound-Seite. Payload-Transformation: Plain/JSON/Array, Faktor, Offset, Invertierung. |
+| **Stufe 2** | Offen | — | Geräte-Presets (Shelly, OpenDTU, Tasmota, go-eCharger, SMA, Fronius, Zigbee2MQTT, Victron). 3 Klicks statt manueller Konfiguration. |
+| **Stufe 3** | Offen | — | Topic-Discovery. Temporär auf `#` subscriben, Pattern-Erkennung, Mapping-Vorschläge. |
+
+### Implementierte Dateien
+
+**Backend:**
+- `backend/models/mqtt_gateway_mapping.py` — DB-Modell (SQLAlchemy)
+- `backend/services/mqtt_gateway_service.py` — Gateway-Service + `transform_payload()`
+- `backend/services/connector_mqtt_bridge.py` — Connector-Polling-Bridge
+- `backend/api/routes/mqtt_gateway.py` — 8 API-Endpoints (CRUD, Status, Test-Topic, Test-Transform)
+- `backend/services/connectors/base.py` — `LiveSnapshot` Dataclass + `read_live()` Base-Methode
+
+**Frontend:**
+- `frontend/src/components/live/MqttGateway.tsx` — Gateway-UI-Komponente (Mapping-Liste, Formular, Topic-Test)
+- `frontend/src/api/liveDashboard.ts` — Gateway API-Types + Endpoints
+
+### API-Endpoints (Stufe 1)
+
+```
+GET    /api/live/mqtt/gateway/mappings          — Alle Mappings listen
+POST   /api/live/mqtt/gateway/mappings          — Neues Mapping + Hot-Reload
+PUT    /api/live/mqtt/gateway/mappings/{id}     — Mapping bearbeiten + Hot-Reload
+DELETE /api/live/mqtt/gateway/mappings/{id}     — Mapping löschen + Hot-Reload
+GET    /api/live/mqtt/gateway/status            — Status + Statistiken
+POST   /api/live/mqtt/gateway/reload            — Hot-Reload
+POST   /api/live/mqtt/gateway/test-topic        — Topic subscriben + Payload anzeigen
+POST   /api/live/mqtt/gateway/test-transform    — Payload-Transformation testen
+```
+
+### Abweichungen vom Konzept
+
+- **Option A (Re-Publish)** gewählt wie empfohlen — Gateway publisht transformierte Werte per MQTT, sichtbar im Broker
+- **Connector-Bridge** nutzt ebenfalls Re-Publish (kein direkter Cache-Inject)
+- **Preset-Registry** noch nicht implementiert (Stufe 2)
+- **Wildcard-Mappings** noch nicht implementiert (exakter Topic-Match in Stufe 1)
+- **Separater Broker** nicht unterstützt — Gateway nutzt denselben Broker wie MQTT-Inbound
+
+---
 
 ## Motivation
 
@@ -504,18 +549,17 @@ MQTT-Inbound-Einrichtung eingebaut (gleiche Seite, neuer Abschnitt):
 
 ## Stufenplan
 
-### Stufe 1 — Manuelles Topic-Mapping (MVP)
+### Stufe 1 — Manuelles Topic-Mapping (MVP) ✅ v3.4.5
 
 **Scope:**
-- DB-Modell `MqttGatewayMapping` (SQLAlchemy)
-- Alembic-Migration
-- `MqttGatewayService` mit Subscribe + Transform + Re-Publish
-- CRUD-API-Endpoints
-- Test-Topic-Endpoint
-- Basis-UI: Mapping-Liste + Formular zum Anlegen/Bearbeiten/Löschen
-- Integration in `main.py` (Start neben Inbound-Service)
-
-**Aufwand:** ~2-3 Sessions
+- DB-Modell `MqttGatewayMapping` (SQLAlchemy) ✅
+- ~~Alembic-Migration~~ → `create_all` (neue Tabelle, keine Migration nötig) ✅
+- `MqttGatewayService` mit Subscribe + Transform + Re-Publish ✅
+- CRUD-API-Endpoints ✅
+- Test-Topic-Endpoint ✅
+- Test-Transform-Endpoint (Bonus) ✅
+- Basis-UI: Mapping-Liste + Formular zum Anlegen/Bearbeiten/Löschen ✅
+- Integration in `main.py` (Start neben Inbound-Service) ✅
 
 **Ergebnis:** Nutzer können beliebige MQTT-Topics auf EEDC mappen, müssen aber
 jedes Mapping manuell konfigurieren.
@@ -547,19 +591,19 @@ jedes Mapping manuell konfigurieren.
 **Risiko:** `#`-Subscribe auf einem aktiven Broker kann sehr viele Nachrichten
 produzieren. Muss zeitbegrenzt und mit Message-Limit laufen.
 
-## Stufe 0 — Connector → MQTT Bridge (Architektur-Vereinheitlichung)
+## Stufe 0 — Connector → MQTT Bridge (Architektur-Vereinheitlichung) ✅ v3.4.5
 
-### Problem: Connector-Daten sind eine Sackgasse
+### Problem: Connector-Daten ~~sind~~ waren eine Sackgasse
 
-Heute existieren drei voneinander unabhängige Wege, wie Daten ins System kommen:
+~~Heute~~ Vor v3.4.5 existierten drei voneinander unabhängige Wege, wie Daten ins System kommen:
 
 ```
 Pfad 1: HA State Service → LivePowerService._collect_values() → Live-Dashboard
 Pfad 2: MQTT Inbound     → MqttInboundCache → LivePowerService + Energy Snapshots
-Pfad 3: Connectors       → MeterSnapshot (kWh) → NUR Monatsabschluss-Vorschläge
-                            ╰── NICHT im Live-Dashboard!
-                            ╰── NICHT in Energy History!
-                            ╰── NICHT im Tagesverlauf!
+Pfad 3: Connectors       → MeterSnapshot (kWh) → NUR Monatsabschluss-Vorschläge  ← gelöst in v3.4.5
+                            ╰── JETZT auch im Live-Dashboard (via MQTT Bridge)
+                            ╰── JETZT auch in Energy History
+                            ╰── JETZT auch im Tagesverlauf
 ```
 
 Pfad 1 (HA State Service) und Pfad 2 (MQTT Inbound) **bleiben beide bestehen** —
@@ -693,22 +737,20 @@ class ConnectorMqttBridge:
 
 ### Welche Connectors können Live-Watt liefern?
 
-| Connector | Live-W möglich? | Quelle |
-|---|---|---|
-| **Shelly 3EM** | Ja | `emeter[n].power`, `total_power` |
-| **Shelly Pro 3EM** | Ja | `EM.GetStatus → total_act_power` |
-| **OpenDTU** | Ja | `livedata/status → total.Power.v` |
-| **Fronius Solar API** | Ja | `GetPowerFlowRealtimeData → P_PV` |
-| **SMA WebConnect** | Ja | `getValues → 6100_40263F00 (Pac)` |
-| **SMA ennexOS** | Ja | `measurements/live → Pac` |
-| **Kostal Plenticore** | Ja | `processdata → devices:local:Pac` |
-| **sonnenBatterie** | Ja | `/api/v2/status → Pac_total_W` |
-| **go-eCharger** | Ja | `/api/status → nrg[11]` (Watt) |
-| **Tasmota SML** | Teilweise | Abhängig vom Zähler-Readout |
+| Connector | `read_live()` | Quelle | Status |
+|---|---|---|---|
+| **Shelly 3EM** | ✅ Implementiert | `total_power` (Gen1), `total_act_power` (Gen2) | v3.4.5 |
+| **OpenDTU / AhoyDTU** | ✅ Implementiert | `livedata/status → total.Power.v` | v3.4.5 |
+| **Fronius Solar API** | ✅ Implementiert | `GetPowerFlowRealtimeData → P_PV, P_Grid, P_Akku` | v3.4.5 |
+| **sonnenBatterie** | ✅ Implementiert | `/api/v2/status → Production_W, GridFeedIn_W, Pac_total_W, USOC` | v3.4.5 |
+| **go-eCharger** | ✅ Implementiert | `/api/status → nrg[11]` (Watt) | v3.4.5 |
+| **SMA WebConnect** | ❌ Offen | `getValues → 6100_40263F00 (Pac)` — braucht pysma-plus Session |
+| **SMA ennexOS** | ❌ Offen | `measurements/live → Pac` — braucht pysma-plus Session |
+| **Kostal Plenticore** | ❌ Offen | `processdata → devices:local:Pac` — braucht pysma-plus Session |
+| **Tasmota SML** | ❌ Offen | Abhängig vom Zähler-Readout |
 
-**Ergebnis:** Alle 9 bestehenden Connectors können prinzipiell Live-Watt liefern —
-sie tun es heute nur nicht, weil die `DeviceConnector`-Schnittstelle nur `read_meters()`
-(kWh) vorsieht.
+**Ergebnis:** 5 von 9 Connectors haben `read_live()` implementiert. Die SMA/Kostal-Connectors
+brauchen pysma-plus Auth/Session-Management, das aufwändiger zu integrieren ist.
 
 ### Vorteile dieser Vereinheitlichung
 
