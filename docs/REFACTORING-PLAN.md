@@ -1,6 +1,6 @@
 # Frontend-Refactoring Plan
 
-> Erstellt: 2026-03-20 | Status: Phase 0–7 erledigt (2026-03-21) | Auslöser: Code-Audit
+> Erstellt: 2026-03-20 | Status: Phase 0–7 komplett abgeschlossen (2026-03-22) | Auslöser: Code-Audit
 
 ## Ziel
 
@@ -225,11 +225,16 @@ interface WizardStepProps {
 }
 ```
 
-### Phase 7: Schrittweise Seiten-Migration (fortlaufend) — 10/27 Seiten ✅ `96e5f8c`
+### Phase 7: Schrittweise Seiten-Migration (fortlaufend) — 27/27 Seiten ✅
 
-> Migriert: Dashboard, LiveDashboard, Auswertung, PVAnlageDashboard,
+> Alle Seiten migriert. Gesamt ca. -300 Zeilen Boilerplate entfernt.
+> Batch 1 (v3.3.4): Dashboard, LiveDashboard, Auswertung, PVAnlageDashboard,
 > SpeicherDashboard, WaermepumpeDashboard, EAutoDashboard, WallboxDashboard,
-> BalkonkraftwerkDashboard, SonstigesDashboard. -93 Zeilen Boilerplate.
+> BalkonkraftwerkDashboard, SonstigesDashboard.
+> Batch 2 (v3.3.5+): Monatsdaten, HAStatistikImport, MqttInboundSetup,
+> CustomImportWizard, AktuellerMonat, Aussichten, Einrichtung, Backup,
+> Community, ROIDashboard, Strompreise, PrognoseVsIst, DatenChecker,
+> Investitionen, CommunityVergleich, Import, CommunityShare, PVGISSettings.
 
 Seiten nach Größe priorisiert auf neue Hooks/Components migrieren:
 
