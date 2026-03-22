@@ -234,10 +234,12 @@ async def prepare_community_data(
             key = (md.jahr, md.monat)
             month_inv_data = inv_by_month.get(key, [])
 
-            # PV-Erzeugung aggregieren
+            # PV-Erzeugung aggregieren (PV-Module + BKW)
             pv_erzeugung = sum(
-                (inv_md.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "pv-module"
+                (inv_md.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
+                or (inv_md.verbrauch_daten or {}).get("erzeugung_kwh", 0)
+                or 0
+                for inv_md, typ in month_inv_data if typ in ("pv-module", "balkonkraftwerk")
             )
 
             # Speicher-KPIs aggregieren
