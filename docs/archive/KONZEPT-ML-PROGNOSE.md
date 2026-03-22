@@ -77,7 +77,7 @@ Konfiguriert über Sensor-Mapping → Live-Sensoren → Solar Forecast ML:
 | Mapping-Key | Tatsächlicher Sensor | Beschreibung |
 |-------------|---------------------|-------------|
 | `sfml_today_kwh` | `sensor.prognose_heute` | Tages-Forecast (kWh) — KPI + Chart-Skalierung |
-| `sfml_tomorrow_kwh` | `sensor.solar_forecast_ml_tomorrow` | Morgen-Forecast (kWh) — Morgen-Vorschau im WetterWidget |
+| `sfml_tomorrow_kwh` | `sensor.prognose_morgen` | Morgen-Forecast (kWh) — Morgen-Vorschau im WetterWidget |
 | `sfml_accuracy_pct` | `sensor.solar_forecast_ml_o_genauigkeit_30_tage` | Genauigkeit (%) — Tooltip-Info |
 
 Die **stündliche Chart-Linie** wird durch Verteilung des Tages-kWh-Werts auf die bestehende GTI-Kurvenform berechnet (kein separater Stunden-Sensor nötig).
