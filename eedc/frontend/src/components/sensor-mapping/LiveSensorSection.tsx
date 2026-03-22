@@ -71,6 +71,7 @@ export const LIVE_FIELDS = {
   ],
   waermepumpe: [
     { key: 'leistung_w', label: 'Leistung', einheit: 'W', placeholder: 'WP-Leistungssensor suchen...' },
+    { key: 'warmwasser_temperatur_c', label: 'Warmwassertemperatur', einheit: '°C', placeholder: 'Warmwasser-Temperatursensor suchen...' },
   ],
   wallbox: [
     { key: 'leistung_w', label: 'Ladeleistung', einheit: 'W', placeholder: 'Wallbox-Leistungssensor suchen...' },

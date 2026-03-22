@@ -45,6 +45,8 @@ export interface LiveDashboardResponse {
   gestern_eigenverbrauch_kwh: number | null
 
   heute_kwh_pro_komponente: Record<string, number> | null
+
+  warmwasser_temperatur_c: number | null
 }
 
 export interface WetterStunde {

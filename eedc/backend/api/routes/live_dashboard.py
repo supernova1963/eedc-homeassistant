@@ -78,6 +78,8 @@ class LiveDashboardResponse(BaseModel):
 
     heute_kwh_pro_komponente: Optional[dict[str, float]] = None
 
+    warmwasser_temperatur_c: Optional[float] = None
+
 
 class TagesverlaufSerie(BaseModel):
     """Beschreibung einer Kurve im Tagesverlauf-Chart."""

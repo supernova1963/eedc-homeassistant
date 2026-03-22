@@ -88,6 +88,13 @@ function getNodeColor(komp: LiveKomponente): string {
   return getColor(komp.key)
 }
 
+/** Leistung formatieren: < 1 kW → Watt, ≥ 1 kW → kW */
+function formatPower(kw: number): string {
+  if (kw <= 0) return '0 W'
+  if (kw < 1) return `${Math.round(kw * 1000)} W`
+  return `${kw.toFixed(2)} kW`
+}
+
 /** log(1 + kW) für Liniendicke, normiert auf min..max px */
 function logThickness(kw: number, maxKw: number): number {
   if (kw <= 0) return 1.5
@@ -787,7 +794,7 @@ export default function EnergieFluss({
             style={{ fontSize: `${dims.kwFontSize}px` }}
             className="font-bold fill-gray-900 dark:fill-white"
           >
-            {haushalt ? `${(haushalt.verbrauch_kw ?? 0).toFixed(2)} kW` : ''}
+            {haushalt ? formatPower(haushalt.verbrauch_kw ?? 0) : ''}
           </text>
         </g>
 
@@ -798,7 +805,7 @@ export default function EnergieFluss({
           style={{ fontSize: `${dims.socFontSize}px` }}
           className="fill-gray-500 dark:fill-gray-400"
         >
-          Energieumsatz {Math.max(summeErzeugung, summeVerbrauch).toFixed(2)} kW
+          Energieumsatz {formatPower(Math.max(summeErzeugung, summeVerbrauch))}
         </text>
         {/* PV-Soll (SFML oder kWp) */}
         {pvSollKw != null && pvSollKw > 0 && (
@@ -898,7 +905,7 @@ export default function EnergieFluss({
                 style={{ fontSize: `${dims.kwFontSize}px` }}
                 className="font-bold fill-gray-900 dark:fill-white"
               >
-                {isActive ? `${kw.toFixed(2)} kW` : '0 kW'}
+                {formatPower(kw)}
               </text>
 
               {/* SoC-Anzeige */}

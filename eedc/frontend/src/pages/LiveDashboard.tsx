@@ -368,22 +368,25 @@ export default function LiveDashboard() {
                 </div>
               )}
 
-              {/* Außentemperatur */}
-              {wetter?.aktuell?.temperatur_c != null && (
+              {/* Temperaturen */}
+              {(wetter?.aktuell?.temperatur_c != null || data.warmwasser_temperatur_c != null) && (
                 <div className="flex gap-2">
-                  <div className="flex-1 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg px-3 py-1.5">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Außentemperatur</div>
-                    <div className="text-base font-bold text-cyan-600 dark:text-cyan-400">
-                      {wetter.aktuell.temperatur_c.toFixed(1)}<span className="text-xs font-normal ml-0.5">°C</span>
+                  {wetter?.aktuell?.temperatur_c != null && (
+                    <div className="flex-1 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg px-3 py-1.5"
+                         title={wetter.temperatur_min_c != null && wetter.temperatur_max_c != null
+                           ? `Min ${wetter.temperatur_min_c.toFixed(0)}° / Max ${wetter.temperatur_max_c.toFixed(0)}°C`
+                           : undefined}>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Außen</div>
+                      <div className="text-base font-bold text-cyan-600 dark:text-cyan-400">
+                        {wetter.aktuell.temperatur_c.toFixed(1)}<span className="text-xs font-normal ml-0.5">°C</span>
+                      </div>
                     </div>
-                  </div>
-                  {wetter.temperatur_min_c != null && wetter.temperatur_max_c != null && (
-                    <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-1.5">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Min / Max</div>
-                      <div className="text-base font-bold text-gray-600 dark:text-gray-300">
-                        {wetter.temperatur_min_c.toFixed(0)}<span className="text-xs font-normal">°</span>
-                        {' / '}
-                        {wetter.temperatur_max_c.toFixed(0)}<span className="text-xs font-normal">°C</span>
+                  )}
+                  {data.warmwasser_temperatur_c != null && (
+                    <div className="flex-1 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Warmwasser</div>
+                      <div className="text-base font-bold text-orange-600 dark:text-orange-400">
+                        {data.warmwasser_temperatur_c.toFixed(1)}<span className="text-xs font-normal ml-0.5">°C</span>
                       </div>
                     </div>
                   )}

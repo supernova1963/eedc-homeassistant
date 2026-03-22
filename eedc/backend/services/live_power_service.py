@@ -513,6 +513,16 @@ class LivePowerService:
                     "einheit": "%",
                 })
 
+        # Warmwasser-Temperatur aus Wärmepumpen-Investitionen
+        warmwasser_temperatur_c = None
+        for inv_id, values in inv_values.items():
+            inv = investitionen.get(inv_id)
+            if inv and inv.typ == "waermepumpe":
+                ww_temp = values.get("warmwasser_temperatur_c")
+                if ww_temp is not None:
+                    warmwasser_temperatur_c = round(ww_temp, 1)
+                    break
+
         # Tages-kWh berechnen
         heute_kwh = await self._safe_get_tages_kwh(anlage, db, 0)
         gestern_kwh = await self._safe_get_tages_kwh(anlage, db, 1)
@@ -561,6 +571,7 @@ class LivePowerService:
             "gestern_netzbezug_kwh": gestern_bezug,
             "gestern_eigenverbrauch_kwh": gestern_ev,
             "heute_kwh_pro_komponente": heute_pro_komp or None,
+            "warmwasser_temperatur_c": warmwasser_temperatur_c,
         }
 
     def _empty_response(self, anlage: Anlage) -> dict:
@@ -583,6 +594,7 @@ class LivePowerService:
             "gestern_netzbezug_kwh": None,
             "gestern_eigenverbrauch_kwh": None,
             "heute_kwh_pro_komponente": None,
+            "warmwasser_temperatur_c": None,
         }
 
     async def _safe_get_tages_kwh(
