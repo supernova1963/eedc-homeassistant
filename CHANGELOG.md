@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.3.6] - 2026-03-22
+
+### Verbessert
+
+- **Frontend-Refactoring Phase 7 abgeschlossen**: Alle 27 Seiten auf gemeinsame Hooks (`useSelectedAnlage`, `useApiData`) und Komponenten (`DataLoadingState`, `PageHeader`) migriert. Ca. 300 Zeilen dupliziertes Boilerplate entfernt. Konsistente Anlage-Selektion mit localStorage-Persistierung über alle Seiten.
+
 ## [3.3.5] - 2026-03-22
 
 ### Hinzugefügt
