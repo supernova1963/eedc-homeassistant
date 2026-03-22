@@ -193,7 +193,7 @@ async def get_cockpit_uebersicht(
         if inv.typ == "pv-module":
             pv_erzeugung_inv += data.get("pv_erzeugung_kwh", 0) or 0
 
-        elif inv.typ == "speicher":
+        if inv.typ == "speicher":
             speicher_ladung += data.get("ladung_kwh", 0) or 0
             speicher_entladung += data.get("entladung_kwh", 0) or 0
 
@@ -228,8 +228,11 @@ async def get_cockpit_uebersicht(
                 emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
 
         elif inv.typ == "balkonkraftwerk":
-            bkw_erzeugung += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+            bkw_kwh = data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+            bkw_erzeugung += bkw_kwh
             bkw_eigenverbrauch += data.get("eigenverbrauch_kwh", 0) or 0
+            # BKW ist PV-Erzeugung → fließt in Gesamt-PV ein
+            pv_erzeugung_inv += bkw_kwh
 
         # Sonstige Positionen für ALLE Investitionstypen (Wallbox-Erstattungen, THG-Quote, etc.)
         summen = berechne_sonstige_summen(data)
@@ -570,15 +573,15 @@ async def get_prognose_vs_ist(
     )
     prognose = prognose_result.scalar_one_or_none()
 
-    # IST-Daten für das Jahr laden aus InvestitionMonatsdaten (PV-Module)
+    # IST-Daten für das Jahr laden aus InvestitionMonatsdaten (PV-Module + BKW)
     # WICHTIG: Monatsdaten.pv_erzeugung_kwh ist LEGACY und wird nicht mehr gepflegt!
-    # PV-Erzeugung wird pro PV-Modul in InvestitionMonatsdaten.verbrauch_daten gespeichert
+    # PV-Erzeugung wird pro PV-Modul/BKW in InvestitionMonatsdaten.verbrauch_daten gespeichert
 
-    # Alle PV-Module der Anlage laden
+    # Alle PV-Module und BKW der Anlage laden
     pv_result = await db.execute(
         select(Investition.id)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == "pv-module")
+        .where(Investition.typ.in_(["pv-module", "balkonkraftwerk"]))
         .where(Investition.aktiv == True)
     )
     pv_ids = [row[0] for row in pv_result.all()]
@@ -593,11 +596,8 @@ async def get_prognose_vs_ist(
         )
         for imd in imd_result.scalars().all():
             data = imd.verbrauch_daten or {}
-            pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
-            if imd.monat in ist_pro_monat:
-                ist_pro_monat[imd.monat] += pv_kwh
-            else:
-                ist_pro_monat[imd.monat] = pv_kwh
+            pv_kwh = (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
+            ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
 
     # Prognose-Monatswerte extrahieren
     prognose_pro_monat = {}
@@ -1944,9 +1944,9 @@ async def get_share_text(
             continue
         data = imd.verbrauch_daten or {}
 
-        if inv.typ == "pv-module":
-            pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
-        elif inv.typ == "speicher":
+        if inv.typ in ("pv-module", "balkonkraftwerk"):
+            pv_erzeugung += (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
+        if inv.typ == "speicher":
             speicher_ladung += data.get("ladung_kwh", 0) or 0
             speicher_entladung += data.get("entladung_kwh", 0) or 0
         elif inv.typ == "waermepumpe":
@@ -2172,11 +2172,11 @@ async def get_prognose_vergleich(
             sfml_pro_monat[monat] = sfml_pro_monat.get(monat, 0) + tz.sfml_prognose_kwh
             tage_sfml_pro_monat[monat] = tage_sfml_pro_monat.get(monat, 0) + 1
 
-    # IST-Daten aus InvestitionMonatsdaten (PV-Module)
+    # IST-Daten aus InvestitionMonatsdaten (PV-Module + BKW)
     pv_result = await db.execute(
         select(Investition.id)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == "pv-module")
+        .where(Investition.typ.in_(["pv-module", "balkonkraftwerk"]))
         .where(Investition.aktiv == True)
     )
     pv_ids = [row[0] for row in pv_result.all()]
@@ -2190,7 +2190,7 @@ async def get_prognose_vergleich(
         )
         for imd in imd_result.scalars().all():
             data = imd.verbrauch_daten or {}
-            pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
+            pv_kwh = (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
             ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
 
     # Monatswerte zusammenstellen

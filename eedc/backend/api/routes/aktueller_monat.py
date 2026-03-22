@@ -272,10 +272,13 @@ async def _collect_saved_data(
                         data.get("verbrauch_kwh", 0) or 0
                     )
             elif inv.typ == "balkonkraftwerk":
-                bkw_erzeugung_total += (
+                bkw_kwh = (
                     data.get("pv_erzeugung_kwh", 0) or
                     data.get("erzeugung_kwh", 0) or 0
                 )
+                bkw_erzeugung_total += bkw_kwh
+                # BKW ist PV-Erzeugung → fließt in Gesamt-PV ein
+                pv_erzeugung_total += bkw_kwh
 
         if pv_erzeugung_total > 0:
             resolved["pv_erzeugung_kwh"] = (pv_erzeugung_total, quelle)
@@ -363,8 +366,8 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         "netzbezug_kwh": md.netzbezug_kwh,
     }
 
-    # PV-Erzeugung aus InvestitionMonatsdaten
-    inv_ids = [i.id for i in investitionen if i.typ == "pv-module"]
+    # PV-Erzeugung aus InvestitionMonatsdaten (PV-Module + BKW)
+    inv_ids = [i.id for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
     if inv_ids:
         imd_result = await db.execute(
             select(InvestitionMonatsdaten).where(
@@ -374,7 +377,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             )
         )
         pv_vj = sum(
-            (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0
+            (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
+            or (imd.verbrauch_daten or {}).get("erzeugung_kwh", 0)
+            or 0
             for imd in imd_result.scalars().all()
         )
         if pv_vj > 0:
