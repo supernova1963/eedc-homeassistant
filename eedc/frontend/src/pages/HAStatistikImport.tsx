@@ -5,7 +5,7 @@
  * Home Assistant Statistik-Datenbank mit Konflikt-Erkennung.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Database,
@@ -20,15 +20,12 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
-import { anlagenApi, haStatisticsApi } from '../api'
+import { haStatisticsApi } from '../api'
 import type { ImportVorschau, MonatImportStatus } from '../api'
 import type { MonatFeldAuswahl } from '../api/haStatistics'
 import Alert from '../components/ui/Alert'
-
-interface Anlage {
-  id: number
-  anlagenname: string
-}
+import { DataLoadingState } from '../components/common'
+import { useSelectedAnlage, useApiData } from '../hooks'
 
 // Import-Modus für schnelle Auswahl
 type ImportModus = 'alle' | 'nur_basis' | 'nur_komponenten' | 'manuell'
@@ -41,16 +38,18 @@ interface FeldAuswahl {
 
 export default function HAStatistikImport() {
   const navigate = useNavigate()
-  const [anlagen, setAnlagen] = useState<Anlage[]>([])
-  const [selectedAnlage, setSelectedAnlage] = useState<number | null>(null)
+  const { anlagen, selectedAnlageId: selectedAnlage, setSelectedAnlageId: setSelectedAnlage, loading } = useSelectedAnlage()
 
-  const [loading, setLoading] = useState(true)
-  const [checkingStatus, setCheckingStatus] = useState(false)
   const [loadingVorschau, setLoadingVorschau] = useState(false)
   const [importing, setImporting] = useState(false)
 
-  const [haVerfuegbar, setHaVerfuegbar] = useState<boolean | null>(null)
-  const [haFehler, setHaFehler] = useState<string | null>(null)
+  const { data: haStatus, loading: checkingStatus } = useApiData(
+    () => haStatisticsApi.getStatus(),
+    [],
+  )
+  const haVerfuegbar = haStatus?.verfuegbar ?? null
+  const haFehler = haStatus?.fehler || null
+
   const [vorschau, setVorschau] = useState<ImportVorschau | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -62,42 +61,6 @@ export default function HAStatistikImport() {
   const [importModus, setImportModus] = useState<ImportModus>('alle')
   // Feld-Auswahl pro Monat: Map von "jahr-monat" -> FeldAuswahl
   const [feldAuswahl, setFeldAuswahl] = useState<Map<string, FeldAuswahl>>(new Map())
-
-  // Anlagen laden
-  useEffect(() => {
-    const loadAnlagen = async () => {
-      try {
-        const data = await anlagenApi.list()
-        setAnlagen(data.map(a => ({ id: a.id, anlagenname: a.anlagenname })))
-        if (data.length > 0) {
-          setSelectedAnlage(data[0].id)
-        }
-      } catch (e) {
-        setError('Fehler beim Laden der Anlagen')
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadAnlagen()
-  }, [])
-
-  // HA-Status prüfen
-  useEffect(() => {
-    const checkStatus = async () => {
-      setCheckingStatus(true)
-      try {
-        const status = await haStatisticsApi.getStatus()
-        setHaVerfuegbar(status.verfuegbar)
-        setHaFehler(status.fehler || null)
-      } catch (e) {
-        setHaVerfuegbar(false)
-        setHaFehler('Fehler bei der Statusprüfung')
-      } finally {
-        setCheckingStatus(false)
-      }
-    }
-    checkStatus()
-  }, [])
 
   // Vorschau laden
   const loadVorschau = async () => {
@@ -360,11 +323,7 @@ export default function HAStatistikImport() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-      </div>
-    )
+    return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
   }
 
   return (
@@ -429,7 +388,7 @@ export default function HAStatistikImport() {
                   Anlage
                 </label>
                 <select
-                  value={selectedAnlage || ''}
+                  value={selectedAnlage ?? ''}
                   onChange={(e) => {
                     setSelectedAnlage(Number(e.target.value))
                     setVorschau(null)
