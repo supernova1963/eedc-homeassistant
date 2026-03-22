@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.6] - 2026-03-22
+
+### Hinzugefügt
+
+- **Netz-Farbe dynamisch im Energiefluss (#40)**: Die Stromnetz-Linie ändert die Farbe nach Flussrichtung — grün bei Balance (±100W), orange bei Einspeisung, rot bei Netzbezug. Gleiche Logik wie der Netz-Gauge in der Sidebar.
+- **Solar-Soll-Wert im Energiefluss (#40)**: Zeigt "Solar Soll ~X.X kW" unter dem Energieumsatz — basierend auf der SFML-Prognose der aktuellen Stunde, Fallback auf EEDC-Prognose.
+- **Live als Startseite (#40)**: EEDC öffnet jetzt direkt mit dem Live-Dashboard statt dem Cockpit.
+- **Außentemperatur in der Sidebar (#40)**: Aktuelle Temperatur + Min/Max (Tooltip) aus Wetterdaten in der Live-Sidebar.
+- **Warmwasser-Temperatur (#41)**: Neuer Live-Sensor für Wärmepumpen (Sensor-Zuordnung → Wärmepumpe → Live-Sensoren). Wird in der Sidebar neben der Außentemperatur angezeigt.
+- **Automatische W/kW-Anzeige (#41)**: Energiefluss zeigt unter 1 kW in Watt (z.B. "850 W"), darüber in kW (z.B. "22.0 kW"). Gilt für alle Knoten, Haushalt und Energieumsatz.
+- **Solar-Prognose Vor-/Nachmittag (#41)**: Kurzfrist-Aussichten zeigen PV-Ertrag getrennt nach Vormittag (<12h) und Nachmittag (≥12h) — als gestapelte Balken im Chart, in KPI-Cards und Detail-Tabelle. Hilft bei der Planung großer Verbraucher.
+
+### Geändert
+
+- **Demo-Button ausgeblendet (#40)**: Nur noch sichtbar mit URL-Parameter `?debug` — weniger Verwirrung im Normalbetrieb.
+
 ## [3.4.5] - 2026-03-22
 
 ### Hinzugefügt
@@ -14,8 +30,6 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **MQTT Gateway (Stufe 1)**: Topic-Translator für externe MQTT-Geräte (Shelly, Tasmota, OpenDTU, Zigbee2MQTT etc.) — ohne Node-RED oder HA-Automationen. Manuelles Topic-Mapping mit Payload-Transformation (Plain/JSON/Array, Faktor, Offset, Invertierung), Hot-Reload, Topic-Test direkt in der UI. Neuer Bereich auf der MQTT-Inbound-Seite.
 - **Connector → MQTT Bridge (Stufe 0)**: Konfigurierte Geräte-Connectors publishen automatisch Live-Leistungswerte (Watt) auf MQTT-Inbound-Topics. Connector-Daten fließen jetzt ins Live-Dashboard und den Energiefluss. Unterstützt: Shelly 3EM, OpenDTU, Fronius, sonnenBatterie, go-eCharger.
 - **Energiefluss Lite-Modus**: Reduzierte Animationen für HA Companion App (Android WebView). Auto-Detect für Mobile/Companion + manueller Toggle auf der Live-Page. Schaltet Blur-Filter, 3D-Grid, Partikel und Glow-Effekte ab.
-- **Live-Dashboard Verbesserungen (#40)**: W/kW-Umschaltung im Energiefluss, Warmwasser-Temperatur als Gauge, Solar-Prognose Vor-/Nachmittag-Split im Wetter-Widget.
-
 ### Behoben
 
 - **MQTT-Topics Parität**: 7 fehlende MQTT-Live-Topics ergänzt die im HA-Sensor-Pfad bereits funktionierten (pv_gesamt_w, netz_kombi_w, SFML-Sensoren, WP-Heizen/Warmwasser/Temperatur). Wichtig für HA-User mit MariaDB/PostgreSQL die MQTT als Fallback nutzen.
