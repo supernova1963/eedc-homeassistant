@@ -463,7 +463,8 @@ async def get_aktueller_monat(
     resolved.update(ha_stats)
 
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
-    # Gleiche Logik wie _collect_saved_data: Typ bestimmt Ziel-Feld
+    # Nur aggregieren wenn kein direkter Top-Level-Wert existiert (sonst Doppelzählung!)
+    # Direkte Werte kommen z.B. aus gespeicherten Aggregaten oder MQTT pv_gesamt_kwh.
     typ_aggregation: dict[str, dict[str, str]] = {
         "pv-module": {"pv_erzeugung_kwh": "pv_erzeugung_kwh"},
         "speicher": {"ladung_kwh": "speicher_ladung_kwh", "entladung_kwh": "speicher_entladung_kwh"},
@@ -473,9 +474,15 @@ async def get_aktueller_monat(
         "balkonkraftwerk": {"pv_erzeugung_kwh": "bkw_erzeugung_kwh"},
     }
 
+    # Top-Level-Felder die bereits direkt von Collectoren gesetzt wurden
+    # → nicht nochmal aus Einzel-Investitionen aufaddieren
+    direct_fields = set(resolved.keys())
+
     def _aggregate(top_level_feld: str, inv_key: str) -> None:
         if inv_key not in resolved:
             return
+        if top_level_feld in direct_fields:
+            return  # Bereits direkt gesetzt → nicht doppelt zählen
         val = resolved[inv_key][0]
         quelle_info = resolved[inv_key][1]
         if top_level_feld not in resolved:
