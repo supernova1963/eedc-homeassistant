@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Activity, AlertCircle } from 'lucide-react'
+import { Activity, AlertCircle, Info } from 'lucide-react'
 import { useSelectedAnlage } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, MqttInboundStatus } from '../api/liveDashboard'
@@ -141,12 +141,12 @@ export default function LiveDashboard() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-3 sm:p-4 space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Activity className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white">
             Live-Daten
           </h1>
           {/* Pulsierender Punkt */}
@@ -234,9 +234,9 @@ export default function LiveDashboard() {
 
       {/* Dashboard Content */}
       {!loading && data?.verfuegbar && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Zeile 1: Energiebilanz (2/3) + Zustandswerte (1/3) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
               <EnergieFluss
                 komponenten={data.komponenten}
@@ -281,23 +281,31 @@ export default function LiveDashboard() {
                     )}
                     {data.heute_eigenverbrauch_kwh !== null && (
                       <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2"
-                           title={data.gestern_eigenverbrauch_kwh !== null ? `Gestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : undefined}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch</div>
+                           title={`PV-Erzeugung die direkt im Haus verbraucht wird (nicht eingespeist)${data.gestern_eigenverbrauch_kwh !== null ? `\nGestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : ''}`}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch <Info className="inline w-3 h-3 opacity-50" /></div>
                         <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
                     {data.heute_einspeisung_kwh !== null && (
                       <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2"
-                           title={data.gestern_einspeisung_kwh !== null ? `Gestern: ${data.gestern_einspeisung_kwh.toFixed(1)} kWh` : undefined}>
+                           title={`PV-Strom der ins Netz eingespeist wird${data.gestern_einspeisung_kwh !== null ? `\nGestern: ${data.gestern_einspeisung_kwh.toFixed(1)} kWh` : ''}`}>
                         <div className="text-xs text-gray-500 dark:text-gray-400">Einspeisung</div>
                         <div className="text-lg font-bold text-green-600 dark:text-green-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
                     {data.heute_netzbezug_kwh !== null && (
                       <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2"
-                           title={data.gestern_netzbezug_kwh !== null ? `Gestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : undefined}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug</div>
+                           title={`Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)${data.gestern_netzbezug_kwh !== null ? `\nGestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : ''}`}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug <Info className="inline w-3 h-3 opacity-50" /></div>
                         <div className="text-lg font-bold text-red-600 dark:text-red-400">{data.heute_netzbezug_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {/* Hausverbrauch heute */}
+                    {data.heute_kwh_pro_komponente?.haushalt != null && (
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2"
+                           title="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <Info className="inline w-3 h-3 opacity-50" /></div>
+                        <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
                   </div>
@@ -334,8 +342,9 @@ export default function LiveDashboard() {
               {/* Prognose + Noch offen */}
               {wetter?.pv_prognose_kwh != null && (
                 <div className="flex gap-2">
-                  <div className="flex-1 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose</div>
+                  <div className="flex-1 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5"
+                       title="EEDC-Tagesprognose basierend auf aktuellem Wetter und Verbrauchsprofil. Kann von Solar-Aussicht abweichen (andere Berechnungsmethode).">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose <Info className="inline w-3 h-3 opacity-50" /></div>
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                   </div>
                   {(() => {
@@ -376,7 +385,10 @@ export default function LiveDashboard() {
               {/* 3-Tage Solar-Vorschau (VM/NM) */}
               {prognose3Tage && prognose3Tage.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Solar-Aussicht</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2"
+                      title="GTI-basierte Prognose (Open-Meteo) mit Neigung/Ausrichtung der Module. VM/NM = Split an Solar Noon.">
+                    Solar-Aussicht <Info className="inline w-3 h-3 text-gray-400 opacity-50" />
+                  </h3>
                   <div className="space-y-1.5">
                     {prognose3Tage.map((tag, i) => {
                       const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
