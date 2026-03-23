@@ -23,6 +23,7 @@ from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesZusammenfassung
+from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
 from backend.services.wetter_service import wetter_code_zu_symbol
 
@@ -909,6 +910,7 @@ class LiveWetterResponse(BaseModel):
     sfml_prognose_kwh: Optional[float] = None  # Solar Forecast ML Tagesprognose
     sfml_tomorrow_kwh: Optional[float] = None  # Solar Forecast ML Morgen-Prognose
     sfml_accuracy_pct: Optional[float] = None  # Solar Forecast ML Modellgenauigkeit
+    solar_noon: Optional[str] = None  # Solar Noon als "HH:MM" (z.B. "12:27")
 
 
 # ── Typisches Haushaltsprofil (BDEW H0) ──────────────────────────────────────
@@ -922,6 +924,16 @@ _LASTPROFIL_KW = {
 }
 
 DEFAULT_SYSTEM_LOSSES = 0.14  # Kabel, Wechselrichter, Verschmutzung
+
+
+def _format_solar_noon(longitude: Optional[float]) -> Optional[str]:
+    """Solar Noon als 'HH:MM' String für heute."""
+    if longitude is None:
+        return None
+    noon = _solar_noon_hour(date.today().isoformat(), longitude)
+    h = int(noon)
+    m = int((noon - h) * 60)
+    return f"{h:02d}:{m:02d}"
 TEMP_COEFFICIENT = 0.004  # -0.4%/°C über 25°C (typisch Silizium)
 
 # Ausrichtungs-Text → Azimut (0=Süd, -90=Ost, 90=West)
@@ -1551,6 +1563,7 @@ async def get_live_wetter(
             "sfml_prognose_kwh": round(sfml_kwh, 1) if sfml_kwh is not None else None,
             "sfml_tomorrow_kwh": round(sfml_tomorrow, 1) if sfml_tomorrow is not None else None,
             "sfml_accuracy_pct": round(sfml_accuracy, 1) if sfml_accuracy is not None else None,
+            "solar_noon": _format_solar_noon(anlage.longitude),
         }
 
     except Exception as e:

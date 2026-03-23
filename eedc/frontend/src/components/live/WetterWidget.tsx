@@ -287,6 +287,13 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
               <span>{wetter.sonnenstunden.toFixed(1)}h Sonne</span>
             </div>
           )}
+          {wetter.solar_noon && (
+            <div className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400"
+                 title="Solar Noon — Sonnenhöchststand (Mitte des Solartages, Basis für VM/NM-Split)">
+              <Sun className="h-3.5 w-3.5" />
+              <span>Noon {wetter.solar_noon}</span>
+            </div>
+          )}
           {wetter.pv_prognose_kwh !== null && (
             <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium">
               <BatteryCharging className="h-3.5 w-3.5" />

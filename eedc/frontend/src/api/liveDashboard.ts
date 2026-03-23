@@ -83,6 +83,7 @@ export interface LiveWetterResponse {
   sfml_prognose_kwh?: number | null  // Solar Forecast ML Tagesprognose
   sfml_tomorrow_kwh?: number | null  // Solar Forecast ML Morgen-Prognose
   sfml_accuracy_pct?: number | null  // Solar Forecast ML Modellgenauigkeit
+  solar_noon?: string | null  // Solar Noon als "HH:MM"
 }
 
 export interface TagesverlaufSerie {
