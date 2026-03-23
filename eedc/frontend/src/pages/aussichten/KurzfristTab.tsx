@@ -61,14 +61,6 @@ function formatDatumKurz(datum: string): string {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
 }
 
-// Bewölkung zu Wetter-Symbol mappen
-function mapWetterSymbol(bewoelkung: number | null | undefined): string {
-  if (bewoelkung === null || bewoelkung === undefined) return 'sunny'
-  if (bewoelkung < 20) return 'sunny'
-  if (bewoelkung < 50) return 'partly_cloudy'
-  if (bewoelkung < 80) return 'cloudy'
-  return 'cloudy'
-}
 
 export default function KurzfristTab({ anlageId }: Props) {
   const [prognose, setPrognose] = useState<SolarPrognose | null>(null)
@@ -160,7 +152,7 @@ export default function KurzfristTab({ anlageId }: Props) {
         {heute && (
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <WetterIcon symbol={mapWetterSymbol(heute.bewoelkung_prozent)} className="h-8 w-8" />
+              <WetterIcon symbol={heute.wetter_symbol} className="h-8 w-8" />
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Heute</p>
                 <p className="text-xl font-bold text-gray-900 dark:text-white">
@@ -179,7 +171,7 @@ export default function KurzfristTab({ anlageId }: Props) {
         {morgen && (
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <WetterIcon symbol={mapWetterSymbol(morgen.bewoelkung_prozent)} className="h-8 w-8" />
+              <WetterIcon symbol={morgen.wetter_symbol} className="h-8 w-8" />
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Morgen</p>
                 <p className="text-xl font-bold text-gray-900 dark:text-white">
@@ -224,7 +216,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                 <span className="text-xs text-gray-500 dark:text-gray-400 mb-1">
                   {formatDatum(tag.datum)}
                 </span>
-                <WetterIcon symbol={mapWetterSymbol(tag.bewoelkung_prozent)} className="h-8 w-8 my-1" />
+                <WetterIcon symbol={tag.wetter_symbol} className="h-8 w-8 my-1" />
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {tag.pv_ertrag_kwh.toFixed(1)} kWh
                 </span>
@@ -353,7 +345,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                 >
                   <td className="py-2 px-3 font-medium">{formatDatum(tag.datum)}</td>
                   <td className="py-2 px-3">
-                    <WetterIcon symbol={mapWetterSymbol(tag.bewoelkung_prozent)} className="h-5 w-5" />
+                    <WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" />
                   </td>
                   <td className="py-2 px-3 text-right font-semibold text-yellow-600">
                     {tag.pv_ertrag_kwh.toFixed(1)} kWh
