@@ -340,7 +340,7 @@ class LivePowerService:
                     "key": f"pv_{inv_id}",
                     "label": inv.bezeichnung,
                     "icon": _TYP_ICON.get(typ, "sun"),
-                    "erzeugung_kw": round(kw, 2),
+                    "erzeugung_kw": round(kw, 3),
                     "verbrauch_kw": None,
                 })
                 summe_erzeugung += kw
@@ -355,8 +355,8 @@ class LivePowerService:
                     "key": f"{kategorie}_{inv_id}",
                     "label": inv.bezeichnung,
                     "icon": _TYP_ICON.get(typ, "battery"),
-                    "erzeugung_kw": round(kw, 2) if not ist_ladung else None,
-                    "verbrauch_kw": round(kw, 2) if ist_ladung else None,
+                    "erzeugung_kw": round(kw, 3) if not ist_ladung else None,
+                    "verbrauch_kw": round(kw, 3) if ist_ladung else None,
                 })
                 if ist_ladung:
                     summe_verbrauch += kw
@@ -373,7 +373,7 @@ class LivePowerService:
                     "label": inv.bezeichnung,
                     "icon": wp_icon or _TYP_ICON.get(typ, "wrench"),
                     "erzeugung_kw": None,
-                    "verbrauch_kw": round(kw, 2),
+                    "verbrauch_kw": round(kw, 3),
                 })
                 if typ == "wallbox":
                     wallbox_keys.append(komp_key)
@@ -413,7 +413,7 @@ class LivePowerService:
                 "key": "pv_gesamt",
                 "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
                 "icon": "sun",
-                "erzeugung_kw": round(kw, 2),
+                "erzeugung_kw": round(kw, 3),
                 "verbrauch_kw": None,
             })
             summe_erzeugung += kw
@@ -430,8 +430,8 @@ class LivePowerService:
                 "key": "netz",
                 "label": "Stromnetz",
                 "icon": "zap",
-                "erzeugung_kw": round(bezug_kw, 2) if bezug_kw > 0 else None,
-                "verbrauch_kw": round(einsp_kw, 2) if einsp_kw > 0 else None,
+                "erzeugung_kw": round(bezug_kw, 3) if bezug_kw > 0 else None,
+                "verbrauch_kw": round(einsp_kw, 3) if einsp_kw > 0 else None,
             })
             if bezug_kw > 0:
                 summe_erzeugung += bezug_kw
@@ -455,7 +455,7 @@ class LivePowerService:
                 "label": "Haushalt",
                 "icon": "home",
                 "erzeugung_kw": None,
-                "verbrauch_kw": round(haushalt_kw, 2),
+                "verbrauch_kw": round(haushalt_kw, 3),
             })
             summe_verbrauch += haushalt_kw
 
@@ -559,8 +559,8 @@ class LivePowerService:
             "zeitpunkt": datetime.now().isoformat(),
             "verfuegbar": len(komponenten) > 0,
             "komponenten": komponenten,
-            "summe_erzeugung_kw": round(summe_erzeugung, 2),
-            "summe_verbrauch_kw": round(summe_verbrauch, 2),
+            "summe_erzeugung_kw": round(summe_erzeugung, 3),
+            "summe_verbrauch_kw": round(summe_verbrauch, 3),
             "gauges": gauges,
             "heute_pv_kwh": heute_pv,
             "heute_einspeisung_kwh": heute_einsp,

@@ -26,6 +26,58 @@ router = APIRouter()
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+def _aggregate_string_tageswerte(
+    string_prognosen: list[dict],
+) -> list["SolarPrognoseTagSchema"]:
+    """Aggregiert Tageswerte aus mehreren Strings zu einer Gesamtliste."""
+    if not string_prognosen:
+        return []
+
+    tageswerte = []
+    first_string = string_prognosen[0]["tageswerte"]
+    for i, day in enumerate(first_string):
+        total_ertrag = sum(
+            sp["tageswerte"][i]["pv_ertrag_kwh"]
+            for sp in string_prognosen
+            if i < len(sp["tageswerte"])
+        )
+        total_gti = sum(
+            sp["tageswerte"][i]["gti_kwh_m2"]
+            for sp in string_prognosen
+            if i < len(sp["tageswerte"])
+        ) / len(string_prognosen)
+
+        total_morgens = sum(
+            sp["tageswerte"][i].get("pv_ertrag_morgens_kwh") or 0
+            for sp in string_prognosen
+            if i < len(sp["tageswerte"])
+        )
+        total_nachmittags = sum(
+            sp["tageswerte"][i].get("pv_ertrag_nachmittags_kwh") or 0
+            for sp in string_prognosen
+            if i < len(sp["tageswerte"])
+        )
+        tageswerte.append(SolarPrognoseTagSchema(
+            datum=day["datum"],
+            pv_ertrag_kwh=round(total_ertrag, 2),
+            gti_kwh_m2=round(total_gti, 2),
+            ghi_kwh_m2=0,
+            sonnenstunden=0,
+            temperatur_max_c=None,
+            temperatur_min_c=None,
+            bewoelkung_prozent=None,
+            niederschlag_mm=None,
+            schnee_cm=None,
+            pv_ertrag_morgens_kwh=round(total_morgens, 2) if total_morgens > 0 else None,
+            pv_ertrag_nachmittags_kwh=round(total_nachmittags, 2) if total_nachmittags > 0 else None,
+        ))
+    return tageswerte
+
+
+# =============================================================================
 # Pydantic Schemas
 # =============================================================================
 
@@ -209,15 +261,8 @@ async def get_solar_prognose_endpoint(
     unique_orientations = set((s.neigung, s.ausrichtung) for s in strings)
     has_multiple_orientations = len(unique_orientations) > 1
 
-    if has_multiple_orientations and not pro_string:
-        hinweise.append(
-            f"Anlage hat {len(unique_orientations)} verschiedene Ausrichtungen. "
-            "Für genauere Prognose 'pro_string=true' verwenden."
-        )
-
-    # Prognose berechnen
-    if pro_string and has_multiple_orientations:
-        # Separate Prognose pro String
+    # Bei mehreren Ausrichtungen IMMER per-String berechnen (korrekte VM/NM)
+    if has_multiple_orientations:
         multi_result = await get_multi_string_prognose(
             latitude=anlage.latitude,
             longitude=anlage.longitude,
@@ -232,50 +277,9 @@ async def get_solar_prognose_endpoint(
                 detail="Solar-Prognose konnte nicht abgerufen werden."
             )
 
-        # Aggregierte Tageswerte erstellen
+        # Aggregierte Tageswerte aus allen Strings erstellen
         string_prognosen = multi_result["string_prognosen"]
-        tageswerte = []
-
-        if string_prognosen:
-            # Tage aus erstem String
-            first_string = string_prognosen[0]["tageswerte"]
-            for i, day in enumerate(first_string):
-                total_ertrag = sum(
-                    sp["tageswerte"][i]["pv_ertrag_kwh"]
-                    for sp in string_prognosen
-                    if i < len(sp["tageswerte"])
-                )
-                total_gti = sum(
-                    sp["tageswerte"][i]["gti_kwh_m2"]
-                    for sp in string_prognosen
-                    if i < len(sp["tageswerte"])
-                ) / len(string_prognosen)  # Durchschnitt
-
-                # VM/NM aus allen Strings summieren
-                total_morgens = sum(
-                    sp["tageswerte"][i].get("pv_ertrag_morgens_kwh") or 0
-                    for sp in string_prognosen
-                    if i < len(sp["tageswerte"])
-                )
-                total_nachmittags = sum(
-                    sp["tageswerte"][i].get("pv_ertrag_nachmittags_kwh") or 0
-                    for sp in string_prognosen
-                    if i < len(sp["tageswerte"])
-                )
-                tageswerte.append(SolarPrognoseTagSchema(
-                    datum=day["datum"],
-                    pv_ertrag_kwh=round(total_ertrag, 2),
-                    gti_kwh_m2=round(total_gti, 2),
-                    ghi_kwh_m2=0,  # Nicht für jeden String verfügbar
-                    sonnenstunden=0,
-                    temperatur_max_c=None,
-                    temperatur_min_c=None,
-                    bewoelkung_prozent=None,
-                    niederschlag_mm=None,
-                    schnee_cm=None,
-                    pv_ertrag_morgens_kwh=round(total_morgens, 2) if total_morgens > 0 else None,
-                    pv_ertrag_nachmittags_kwh=round(total_nachmittags, 2) if total_nachmittags > 0 else None,
-                ))
+        tageswerte = _aggregate_string_tageswerte(string_prognosen)
 
         return SolarPrognoseResponse(
             anlage_id=anlage_id,
@@ -293,24 +297,22 @@ async def get_solar_prognose_endpoint(
             tageswerte=tageswerte,
             string_prognosen=[
                 StringPrognoseSchema(**sp) for sp in string_prognosen
-            ],
+            ] if pro_string else None,
             datenquelle=multi_result["datenquelle"],
             abgerufen_am=multi_result["abgerufen_am"],
             hinweise=hinweise,
         )
 
     else:
-        # Aggregierte Prognose (gewichtete Durchschnittswerte)
+        # Einzelne Ausrichtung — ein API-Call reicht
         total_kwp = sum(s.kwp for s in strings)
-        avg_neigung = int(sum(s.neigung * s.kwp for s in strings) / total_kwp)
-        avg_ausrichtung = int(sum(s.ausrichtung * s.kwp for s in strings) / total_kwp)
 
         prognose = await get_solar_prognose(
             latitude=anlage.latitude,
             longitude=anlage.longitude,
             kwp=total_kwp,
-            neigung=avg_neigung,
-            ausrichtung=avg_ausrichtung,
+            neigung=strings[0].neigung,
+            ausrichtung=strings[0].ausrichtung,
             days=tage,
             system_losses=system_losses,
         )

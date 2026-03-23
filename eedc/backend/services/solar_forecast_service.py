@@ -16,8 +16,10 @@ API-Dokumentation: https://open-meteo.com/en/docs
 
 import logging
 from datetime import date, datetime
+from math import radians, sin, cos
 from typing import Optional, List
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -34,6 +36,40 @@ SECONDS_TO_HOURS = 1 / 3600
 DEFAULT_SYSTEM_LOSSES = 0.14  # 14% (Kabel, Wechselrichter, etc.)
 TEMP_COEFFICIENT = 0.004  # -0.4%/°C über 25°C (typisch für Silizium)
 SNOW_LOSS_FACTOR = 0.1  # 10% Verlust bei Schnee
+
+# Timezone für Solar-Noon-Berechnung
+_BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+
+def _solar_noon_hour(datum: str, longitude: float) -> float:
+    """
+    Berechnet Solar Noon in lokaler Stunde (Europe/Berlin).
+
+    Nutzt die Equation of Time (Spencer, 1971) — genau auf ~2 Minuten.
+
+    Args:
+        datum: Datum als ISO-String (YYYY-MM-DD)
+        longitude: Längengrad des Standorts
+
+    Returns:
+        Solar Noon als float (z.B. 12.4 = 12:24)
+    """
+    d = date.fromisoformat(datum)
+    # CET (+1) oder CEST (+2)?
+    tz_offset = datetime(d.year, d.month, d.day, 12, tzinfo=_BERLIN_TZ).utcoffset()
+    tz_hours = tz_offset.total_seconds() / 3600 if tz_offset else 1.0
+
+    # Equation of Time (Spencer, 1971)
+    day_of_year = d.timetuple().tm_yday
+    B = radians(360 / 365 * (day_of_year - 81))
+    EoT_minutes = 9.87 * sin(2 * B) - 7.53 * cos(B) - 1.5 * sin(B)
+
+    # Solar Noon = 12:00 UTC - EoT + Längengradkorrektur, dann in lokale Zeit
+    # Referenzmeridian = tz_hours * 15° (CET=15°, CEST=30°)
+    timezone_meridian = tz_hours * 15
+    solar_noon = 12.0 - EoT_minutes / 60 + (timezone_meridian - longitude) / 15
+
+    return solar_noon
 
 
 @dataclass
@@ -274,6 +310,7 @@ async def get_solar_prognose(
     # Nach Tagen gruppieren und Ertrag berechnen
     daily_data = {}
     cloud_values = hourly.get("cloud_cover", [])
+    solar_noon_cache: dict[str, float] = {}  # Tag → Solar Noon (Stunde als float)
 
     for i, timestamp in enumerate(timestamps):
         tag = timestamp[:10]
@@ -289,6 +326,8 @@ async def get_solar_prognose(
                 "snow_sum": 0,
                 "cloud_values": [],  # Für Durchschnittsberechnung
             }
+            # Solar Noon für diesen Tag berechnen
+            solar_noon_cache[tag] = _solar_noon_hour(tag, longitude)
 
         day = daily_data[tag]
 
@@ -322,12 +361,19 @@ async def get_solar_prognose(
                 schnee_cm=snow
             )
             day["ertrag_sum_kwh"] += stunden_ertrag
-            # Vor-/Nachmittag-Split (Stunde aus ISO-Timestamp)
+            # Vor-/Nachmittag-Split an Solar Noon (proportional)
             stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else 12
-            if stunde < 12:
+            noon = solar_noon_cache.get(tag, 12.4)
+            noon_hour = int(noon)
+            if stunde < noon_hour:
                 day["ertrag_morgens_kwh"] += stunden_ertrag
-            else:
+            elif stunde > noon_hour:
                 day["ertrag_nachmittags_kwh"] += stunden_ertrag
+            else:
+                # Stunde enthält Solar Noon — proportional aufteilen
+                frac_vm = noon - noon_hour  # z.B. 0.4 bei 12:24
+                day["ertrag_morgens_kwh"] += stunden_ertrag * frac_vm
+                day["ertrag_nachmittags_kwh"] += stunden_ertrag * (1 - frac_vm)
 
         # Temperatur-Maximum
         if temp is not None:
@@ -463,6 +509,8 @@ async def get_multi_string_prognose(
                         "datum": t.datum,
                         "pv_ertrag_kwh": t.pv_ertrag_kwh,
                         "gti_kwh_m2": t.gti_kwh_m2,
+                        "pv_ertrag_morgens_kwh": t.pv_ertrag_morgens_kwh,
+                        "pv_ertrag_nachmittags_kwh": t.pv_ertrag_nachmittags_kwh,
                     }
                     for t in prognose.tageswerte
                 ],
