@@ -338,15 +338,16 @@ export default function LiveDashboard() {
                     <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose</div>
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                   </div>
-                  {data.heute_pv_kwh != null && (() => {
+                  {(() => {
                     // SFML bevorzugen wenn verfügbar, sonst EEDC-Prognose
                     const prognoseKwh = wetter.sfml_prognose_kwh ?? wetter.pv_prognose_kwh
                     const quelle = wetter.sfml_prognose_kwh != null ? 'ML' : 'EEDC'
-                    const offen = prognoseKwh - data.heute_pv_kwh
+                    const bisherPv = data.heute_pv_kwh ?? 0
+                    const offen = prognoseKwh - bisherPv
                     if (offen <= 0) return null
                     return (
                       <div className="flex-1 bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
-                           title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${data.heute_pv_kwh.toFixed(1)} kWh`}>
+                           title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${bisherPv.toFixed(1)} kWh`}>
                         <div className="text-xs text-gray-500 dark:text-gray-400">Noch offen</div>
                         <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{offen.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
