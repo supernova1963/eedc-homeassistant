@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.13] - 2026-03-23
+
+### Verbessert
+
+- **Sonnenstunden als Zeitformat**: Anzeige `10h 00m` statt `10.0h` im Wetter-Widget (#46)
+- **SA/SU/SolarNoon im Chart**: Sonnenaufgang, Sonnenuntergang und Solar Noon als vertikale Linien im PV-Chart (Noon-KPI oben entfernt) (#46)
+- **Speicher-Farbwechsel**: Ladung (blau) und Entladung (cyan) im Energiefluss visuell unterscheidbar (#46)
+- **Speicher-Ladung sichtbarer**: Opacity im Wetter-Chart deutlich erhöht (#46)
+- **Energieumsatz-Tooltip**: Erklärender Tooltip auf dem Energieumsatz-Label im Energiefluss (#46)
+- **Echte Gerätenamen statt "Sonstige"**: Im Wetter-Chart und Tooltip werden die tatsächlichen Investitions-Namen angezeigt (#46)
+- **PV-Prognose KPI**: Wird nur noch bei aktivem SFML angezeigt (keine Doppelung) (#46)
+- **Wallbox-Phantom-Fix**: Chart-Kategorien werden gegen vorhandene Investitionen validiert (#46)
+
 ## [3.4.12] - 2026-03-23
 
 ### Hinzugefügt
