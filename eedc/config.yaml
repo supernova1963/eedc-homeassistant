@@ -37,6 +37,7 @@ panel_title: "eedc"
 # Benutzer-Optionen
 options:
   log_level: info
+  ha_recorder_db_url: ""
   mqtt:
     enabled: false
     host: "core-mosquitto"
@@ -48,6 +49,7 @@ options:
 
 schema:
   log_level: list(debug|info|warning|error)
+  ha_recorder_db_url: str?
   mqtt:
     enabled: bool?
     host: str?

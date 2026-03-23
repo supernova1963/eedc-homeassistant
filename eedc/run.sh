@@ -17,6 +17,9 @@ if [ -f "$CONFIG_PATH" ]; then
     export MQTT_PASSWORD=$(jq -r '.mqtt.password // ""' $CONFIG_PATH)
     export MQTT_AUTO_PUBLISH=$(jq -r '.mqtt.auto_publish // false' $CONFIG_PATH)
     export MQTT_PUBLISH_INTERVAL=$(jq -r '.mqtt.publish_interval_minutes // 60' $CONFIG_PATH)
+
+    # HA Recorder Datenbank (optional, für MariaDB/MySQL)
+    export HA_RECORDER_DB_URL=$(jq -r '.ha_recorder_db_url // ""' $CONFIG_PATH)
 else
     export LOG_LEVEL="info"
 fi

@@ -8,14 +8,20 @@ Ermöglicht:
 
 Die HA-Datenbank enthält in der `statistics` Tabelle stündliche Aggregationen
 für Sensoren mit `has_sum=True` (typisch für kWh-Zähler).
+
+Unterstützt SQLite (Standard) und MariaDB/MySQL (über ha_recorder_db_url).
 """
 
-import sqlite3
 import logging
 from datetime import datetime, date
 from pathlib import Path
 from typing import Optional, NamedTuple
+
 from pydantic import BaseModel
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+
+from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +82,7 @@ _ENERGY_UNIT_TO_KWH: dict[str, float] = {
 
 
 class HAStatisticsService:
-    """Service für Zugriff auf HA-Langzeitstatistiken."""
+    """Service für Zugriff auf HA-Langzeitstatistiken (SQLite oder MariaDB)."""
 
     MONAT_NAMEN = [
         "", "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -84,60 +90,116 @@ class HAStatisticsService:
     ]
 
     def __init__(self):
-        self._db_path: Optional[Path] = None
+        self._engine: Optional[Engine] = None
+        self._is_mysql: bool = False
+        self._initialized: bool = False
 
-    @property
-    def db_path(self) -> Optional[Path]:
-        """Gibt den Pfad zur HA-Datenbank zurück, falls verfügbar."""
-        if self._db_path is not None:
-            return self._db_path
+    def _init_engine(self) -> None:
+        """Initialisiert die SQLAlchemy Engine (einmalig)."""
+        if self._initialized:
+            return
+        self._initialized = True
 
-        # Priorität: HA-Addon Pfad, dann lokaler Test-Pfad
+        # Priorität: Konfigurierte MariaDB URL → SQLite-Datei
+        if settings.ha_recorder_db_url:
+            try:
+                self._engine = create_engine(
+                    settings.ha_recorder_db_url,
+                    pool_pre_ping=True,
+                    pool_recycle=3600,
+                )
+                self._is_mysql = "mysql" in settings.ha_recorder_db_url
+                # Verbindungstest
+                with self._engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                logger.info(
+                    f"HA Recorder DB verbunden: "
+                    f"{'MariaDB/MySQL' if self._is_mysql else 'extern'}"
+                )
+                return
+            except Exception as e:
+                logger.warning(f"HA Recorder DB Verbindung fehlgeschlagen: {e}")
+                self._engine = None
+
+        # Fallback: SQLite-Datei
+        db_path = None
         if HA_DB_PATH.exists():
-            self._db_path = HA_DB_PATH
+            db_path = HA_DB_PATH
         elif HA_DB_PATH_LOCAL.exists():
-            self._db_path = HA_DB_PATH_LOCAL
+            db_path = HA_DB_PATH_LOCAL
             logger.info("Verwende lokale HA-Datenbank-Kopie für Tests")
-        else:
-            self._db_path = None
 
-        return self._db_path
+        if db_path:
+            self._engine = create_engine(
+                f"sqlite:///{db_path}",
+                connect_args={"timeout": 30},
+            )
+            self._is_mysql = False
 
     @property
     def is_available(self) -> bool:
         """Prüft ob die HA-Datenbank verfügbar ist."""
-        return self.db_path is not None
+        self._init_engine()
+        return self._engine is not None
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Erstellt eine Datenbankverbindung."""
+    @property
+    def db_path(self) -> Optional[str]:
+        """Gibt den DB-Pfad/URL für Status-Anzeige zurück."""
+        self._init_engine()
+        if self._engine is None:
+            return None
+        url = str(self._engine.url)
+        # Passwort maskieren
+        if "@" in url:
+            # mysql+pymysql://user:pass@host/db → mysql+pymysql://user:***@host/db
+            prefix, rest = url.split("@", 1)
+            if ":" in prefix.rsplit("/", 1)[-1]:
+                base = prefix.rsplit(":", 1)[0]
+                url = f"{base}:***@{rest}"
+        return url
+
+    @property
+    def backend_type(self) -> str:
+        """Gibt den Datenbank-Typ zurück."""
         if not self.is_available:
-            raise RuntimeError("HA-Datenbank nicht verfügbar")
+            return "nicht verfügbar"
+        return "MariaDB/MySQL" if self._is_mysql else "SQLite"
 
-        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _ts_to_datetime(self, col: str) -> str:
+        """Gibt den DB-spezifischen Ausdruck für Unix-Timestamp → Datetime."""
+        if self._is_mysql:
+            return f"CONVERT_TZ(FROM_UNIXTIME({col}), 'UTC', @@session.time_zone)"
+        return f"datetime({col}, 'unixepoch', 'localtime')"
 
-    def get_metadata(self, conn: sqlite3.Connection, sensor_id: str) -> Optional[SensorMeta]:
+    def _ts_to_date(self, col: str) -> str:
+        """Gibt den DB-spezifischen Ausdruck für Unix-Timestamp → Date."""
+        if self._is_mysql:
+            return f"DATE(CONVERT_TZ(FROM_UNIXTIME({col}), 'UTC', @@session.time_zone))"
+        return f"date({col}, 'unixepoch', 'localtime')"
+
+    def get_metadata(self, conn, sensor_id: str) -> Optional[SensorMeta]:
         """
         Ermittelt metadata_id und unit_of_measurement für einen Sensor.
 
         Args:
-            conn: Datenbankverbindung
+            conn: SQLAlchemy Connection
             sensor_id: HA Entity-ID (z.B. "sensor.pv_erzeugung")
 
         Returns:
             SensorMeta oder None wenn Sensor nicht in statistics
         """
-        cursor = conn.execute(
-            "SELECT id, unit_of_measurement FROM statistics_meta WHERE statistic_id = ?",
-            (sensor_id,)
+        result = conn.execute(
+            text("SELECT id, unit_of_measurement FROM statistics_meta WHERE statistic_id = :sid"),
+            {"sid": sensor_id}
         )
-        row = cursor.fetchone()
-        return SensorMeta(id=row["id"], unit=row["unit_of_measurement"]) if row else None
+        row = result.fetchone()
+        if not row:
+            return None
+        return SensorMeta(id=row[0], unit=row[1])
 
     def get_sensor_monatswert(
         self,
-        conn: sqlite3.Connection,
+        conn,
         meta: SensorMeta,
         sensor_id: str,
         jahr: int,
@@ -149,40 +211,34 @@ class HAStatisticsService:
         Die Differenz zwischen MAX(state) und MIN(state) im Monat
         ergibt den Verbrauch/Erzeugung für diesen Monat.
         Werte werden automatisch nach kWh konvertiert (Wh, MWh, etc.).
-
-        Args:
-            conn: Datenbankverbindung
-            meta: SensorMeta mit ID und Einheit
-            sensor_id: Original sensor_id für Response
-            jahr: Jahr
-            monat: Monat (1-12)
-
-        Returns:
-            SensorMonatswert oder None wenn keine Daten
         """
-        # Monatsanfang und -ende berechnen
         start_datum = f"{jahr:04d}-{monat:02d}-01"
         if monat == 12:
             end_datum = f"{jahr + 1:04d}-01-01"
         else:
             end_datum = f"{jahr:04d}-{monat + 1:02d}-01"
 
-        cursor = conn.execute("""
-            SELECT
-                MIN(state) as start_wert,
-                MAX(state) as end_wert
-            FROM statistics
-            WHERE metadata_id = ?
-            AND datetime(start_ts, 'unixepoch', 'localtime') >= ?
-            AND datetime(start_ts, 'unixepoch', 'localtime') < ?
-        """, (meta.id, start_datum, end_datum))
+        ts_expr = self._ts_to_datetime("start_ts")
 
-        row = cursor.fetchone()
-        if not row or row["start_wert"] is None:
+        result = conn.execute(
+            text(f"""
+                SELECT
+                    MIN(state) as start_wert,
+                    MAX(state) as end_wert
+                FROM statistics
+                WHERE metadata_id = :mid
+                AND {ts_expr} >= :start
+                AND {ts_expr} < :end
+            """),
+            {"mid": meta.id, "start": start_datum, "end": end_datum}
+        )
+
+        row = result.fetchone()
+        if not row or row[0] is None:
             return None
 
-        start_wert = row["start_wert"]
-        end_wert = row["end_wert"]
+        start_wert = row[0]
+        end_wert = row[1]
         differenz = end_wert - start_wert
 
         # Einheiten-Konvertierung nach kWh
@@ -206,23 +262,13 @@ class HAStatisticsService:
         jahr: int,
         monat: int
     ) -> MonatswertResponse:
-        """
-        Holt Monatswerte für mehrere Sensoren.
-
-        Args:
-            sensor_ids: Liste von HA Entity-IDs
-            jahr: Jahr
-            monat: Monat (1-12)
-
-        Returns:
-            MonatswertResponse mit allen Sensorwerten
-        """
+        """Holt Monatswerte für mehrere Sensoren."""
         if not self.is_available:
             raise RuntimeError("HA-Datenbank nicht verfügbar")
 
         sensoren: list[SensorMonatswert] = []
 
-        with self._get_connection() as conn:
+        with self._engine.connect() as conn:
             for sensor_id in sensor_ids:
                 meta = self.get_metadata(conn, sensor_id)
                 if meta is None:
@@ -242,19 +288,11 @@ class HAStatisticsService:
         )
 
     def get_verfuegbare_monate(self, sensor_ids: list[str]) -> AlleMonateResponse:
-        """
-        Ermittelt alle Monate mit verfügbaren Daten.
-
-        Args:
-            sensor_ids: Liste von HA Entity-IDs (mindestens einer muss Daten haben)
-
-        Returns:
-            AlleMonateResponse mit Liste aller verfügbaren Monate
-        """
+        """Ermittelt alle Monate mit verfügbaren Daten."""
         if not self.is_available:
             raise RuntimeError("HA-Datenbank nicht verfügbar")
 
-        with self._get_connection() as conn:
+        with self._engine.connect() as conn:
             # Metadata-IDs ermitteln
             metadata_ids = []
             for sensor_id in sensor_ids:
@@ -265,19 +303,44 @@ class HAStatisticsService:
             if not metadata_ids:
                 raise ValueError("Keine der angegebenen Sensoren hat Statistik-Daten")
 
-            # Zeitraum ermitteln
-            placeholders = ",".join("?" * len(metadata_ids))
-            cursor = conn.execute(f"""
-                SELECT
-                    date(MIN(start_ts), 'unixepoch', 'localtime') as erstes_datum,
-                    date(MAX(start_ts), 'unixepoch', 'localtime') as letztes_datum
-                FROM statistics
-                WHERE metadata_id IN ({placeholders})
-            """, metadata_ids)
+            # Zeitraum ermitteln — IN-Klausel mit benannten Parametern
+            params = {f"id_{i}": mid for i, mid in enumerate(metadata_ids)}
+            placeholders = ", ".join(f":id_{i}" for i in range(len(metadata_ids)))
+            ts_date = self._ts_to_date("MIN(start_ts)")
+            ts_date_max = self._ts_to_date("MAX(start_ts)")
 
-            row = cursor.fetchone()
-            erstes = datetime.strptime(row["erstes_datum"], "%Y-%m-%d").date()
-            letztes = datetime.strptime(row["letztes_datum"], "%Y-%m-%d").date()
+            # MIN/MAX erst ermitteln, dann Datumsfunktion anwenden
+            result = conn.execute(
+                text(f"""
+                    SELECT
+                        {self._ts_to_date('start_ts')} as datum
+                    FROM statistics
+                    WHERE metadata_id IN ({placeholders})
+                    ORDER BY start_ts ASC
+                    LIMIT 1
+                """),
+                params
+            )
+            row_first = result.fetchone()
+
+            result = conn.execute(
+                text(f"""
+                    SELECT
+                        {self._ts_to_date('start_ts')} as datum
+                    FROM statistics
+                    WHERE metadata_id IN ({placeholders})
+                    ORDER BY start_ts DESC
+                    LIMIT 1
+                """),
+                params
+            )
+            row_last = result.fetchone()
+
+            if not row_first or not row_last:
+                raise ValueError("Keine Statistik-Daten gefunden")
+
+            erstes = datetime.strptime(str(row_first[0]), "%Y-%m-%d").date()
+            letztes = datetime.strptime(str(row_last[0]), "%Y-%m-%d").date()
 
             # Alle Monate im Zeitraum generieren
             monate: list[VerfuegbarerMonat] = []
@@ -290,7 +353,6 @@ class HAStatisticsService:
                     monat=current.month,
                     monat_name=self.MONAT_NAMEN[current.month]
                 ))
-                # Nächster Monat
                 if current.month == 12:
                     current = date(current.year + 1, 1, 1)
                 else:
@@ -308,28 +370,18 @@ class HAStatisticsService:
         sensor_ids: list[str],
         ab_datum: Optional[date] = None
     ) -> list[MonatswertResponse]:
-        """
-        Holt Monatswerte für alle verfügbaren Monate.
-
-        Args:
-            sensor_ids: Liste von HA Entity-IDs
-            ab_datum: Optional - nur Monate ab diesem Datum
-
-        Returns:
-            Liste von MonatswertResponse für jeden Monat
-        """
+        """Holt Monatswerte für alle verfügbaren Monate."""
         verfuegbar = self.get_verfuegbare_monate(sensor_ids)
 
         ergebnisse: list[MonatswertResponse] = []
         for monat_info in verfuegbar.monate:
-            # Filter nach ab_datum
             if ab_datum:
                 monat_start = date(monat_info.jahr, monat_info.monat, 1)
                 if monat_start < ab_datum:
                     continue
 
             werte = self.get_monatswerte(sensor_ids, monat_info.jahr, monat_info.monat)
-            if werte.sensoren:  # Nur Monate mit Daten
+            if werte.sensoren:
                 ergebnisse.append(werte)
 
         return ergebnisse
@@ -344,14 +396,6 @@ class HAStatisticsService:
         Holt den Zählerstand am Monatsanfang.
 
         Nützlich für MQTT-Startwert-Initialisierung.
-
-        Args:
-            sensor_id: HA Entity-ID
-            jahr: Jahr
-            monat: Monat
-
-        Returns:
-            Zählerstand am Monatsanfang oder None
         """
         if not self.is_available:
             return None
@@ -362,25 +406,29 @@ class HAStatisticsService:
         else:
             end_datum = f"{jahr:04d}-{monat + 1:02d}-01"
 
-        with self._get_connection() as conn:
+        ts_expr = self._ts_to_datetime("start_ts")
+
+        with self._engine.connect() as conn:
             meta = self.get_metadata(conn, sensor_id)
             if not meta:
                 return None
 
-            cursor = conn.execute("""
-                SELECT MIN(state) as start_wert
-                FROM statistics
-                WHERE metadata_id = ?
-                AND datetime(start_ts, 'unixepoch', 'localtime') >= ?
-                AND datetime(start_ts, 'unixepoch', 'localtime') < ?
-            """, (meta.id, start_datum, end_datum))
+            result = conn.execute(
+                text(f"""
+                    SELECT MIN(state) as start_wert
+                    FROM statistics
+                    WHERE metadata_id = :mid
+                    AND {ts_expr} >= :start
+                    AND {ts_expr} < :end
+                """),
+                {"mid": meta.id, "start": start_datum, "end": end_datum}
+            )
 
-            row = cursor.fetchone()
-            if not row or row["start_wert"] is None:
+            row = result.fetchone()
+            if not row or row[0] is None:
                 return None
 
-            wert = row["start_wert"]
-            # Einheiten-Konvertierung nach kWh
+            wert = row[0]
             faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
             if faktor != 1.0:
                 wert *= faktor
