@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.9] - 2026-03-23
+
+### Behoben
+
+- **VM/NM-Split an Solar Noon (#42)**: Vormittag/Nachmittag-Aufteilung nutzt jetzt Solar Noon (Equation of Time) statt hartem 12:00-Split. Behebt die stark verzerrten VM/NM-Verhältnisse (z.B. 15/85 statt ~50/50). Bei Ost/West-Anlagen wird jetzt pro String separat berechnet statt über einen gemittelten Azimut.
+- **PV-Erzeugung Doppelzählung im Aktueller Monat (#43)**: Wenn ein Top-Level-Aggregat (z.B. aus gespeicherten Daten oder MQTT pv_gesamt) bereits existierte, wurden Einzel-Investitionswerte nochmals aufaddiert. PV-Erzeugung wurde dadurch doppelt angezeigt.
+- **Live-Dashboard: Watt-Auflösung** von 10W auf 1W verbessert (round(kw,3) statt round(kw,2)).
+
+### Hinzugefugt
+
+- **Solar Noon im Wetter-Widget**: Sonnenhöchststand als KPI in "Wetter heute" (z.B. "Noon 12:27"), mit Tooltip-Erklärung.
+- **Hausverbrauch heute**: Neue Kachel im "Heute"-Bereich des Live-Dashboards.
+- **Info-Tooltips**: Erklärungen an Eigenverbrauch, Netzbezug, PV-Prognose, Solar-Aussicht und Netz-Symbol-Farbe.
+
+### Geändert
+
+- **Live-Dashboard kompakter**: Kleinere Titelzeile, reduzierte Abstände — weniger Scrollbedarf bei maximaler Bildschirmauflösung.
+
 ## [3.4.8] - 2026-03-22
 
 ### Behoben
