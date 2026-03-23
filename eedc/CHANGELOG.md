@@ -11,7 +11,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 
-- **Wetter-Icons in Aussichten**: Kurzfrist-Prognose zeigte immer nur Sonne oder Wolken — Regen, Schnee und Gewitter wurden nie als Icon angezeigt. Ursache: Icons basierten nur auf dem Bewölkungsgrad statt dem WMO Weather Code von Open-Meteo.
+- **Wetter-Icons in Aussichten**: Kurzfrist-Prognose zeigte immer nur Sonne — Regen, Schnee und Gewitter wurden nie als Icon angezeigt. Zwei Ursachen: (1) Solar-Prognose-Backend fragte keinen WMO Weather Code von Open-Meteo ab, (2) Frontend ignorierte das wetter_symbol-Feld und nutzte nur den Bewölkungsgrad.
 
 ## [3.4.13] - 2026-03-23
 
