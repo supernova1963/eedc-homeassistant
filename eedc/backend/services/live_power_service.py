@@ -507,10 +507,20 @@ class LivePowerService:
                 "einheit": "% kWp",
             })
 
-        # Autarkie + Eigenverbrauchsquote
+        # Autarkie + Eigenverbrauchsquote (mit Batterie-Korrektur)
         if pv_total_w > 0 and (einspeisung_w is not None or netzbezug_w is not None):
             pv_kw = pv_total_w / 1000
-            eigenverbrauch_kw = pv_kw - (einspeisung_w or 0) / 1000
+            # Batterie-Leistung aus Komponenten extrahieren
+            bat_ladung_kw = sum(
+                k.get("verbrauch_kw") or 0 for k in komponenten
+                if k["key"].startswith("batterie_") or k["key"].startswith("v2h_")
+            )
+            bat_entladung_kw = sum(
+                k.get("erzeugung_kw") or 0 for k in komponenten
+                if k["key"].startswith("batterie_") or k["key"].startswith("v2h_")
+            )
+            direktverbrauch_kw = max(0, pv_kw - (einspeisung_w or 0) / 1000 - bat_ladung_kw)
+            eigenverbrauch_kw = direktverbrauch_kw + bat_entladung_kw
             gesamt_verbrauch_kw = eigenverbrauch_kw + (netzbezug_w or 0) / 1000
 
             if gesamt_verbrauch_kw > 0:
@@ -552,12 +562,12 @@ class LivePowerService:
         heute_pv = heute_kwh.get("pv")
         heute_einsp = heute_kwh.get("einspeisung")
         heute_bezug = heute_kwh.get("netzbezug")
-        heute_ev = round(heute_pv - heute_einsp, 1) if heute_pv is not None and heute_einsp is not None else None
+        heute_ev, heute_hv = self._calc_tages_ev_hv(heute_kwh)
 
         gestern_pv = gestern_kwh.get("pv")
         gestern_einsp = gestern_kwh.get("einspeisung")
         gestern_bezug = gestern_kwh.get("netzbezug")
-        gestern_ev = round(gestern_pv - gestern_einsp, 1) if gestern_pv is not None and gestern_einsp is not None else None
+        gestern_ev, gestern_hv = self._calc_tages_ev_hv(gestern_kwh)
 
         # Per-Komponente Heute-kWh für Tooltips im Energiefluss
         heute_pro_komp: dict[str, float] = {}
@@ -571,9 +581,9 @@ class LivePowerService:
             heute_pro_komp["netz_bezug"] = heute_bezug
         if heute_einsp is not None:
             heute_pro_komp["netz_einspeisung"] = heute_einsp
-        # Haushalt = Eigenverbrauch
-        if heute_ev is not None:
-            heute_pro_komp["haushalt"] = heute_ev
+        # Haushalt = Eigenverbrauch + Netzbezug (abzüglich Batterie)
+        if heute_hv is not None:
+            heute_pro_komp["haushalt"] = heute_hv
 
         return {
             "anlage_id": anlage.id,
@@ -618,6 +628,30 @@ class LivePowerService:
             "heute_kwh_pro_komponente": None,
             "warmwasser_temperatur_c": None,
         }
+
+    @staticmethod
+    def _calc_tages_ev_hv(
+        kwh: dict[str, Optional[float]],
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Berechnet Eigenverbrauch und Hausverbrauch aus Tages-kWh inkl. Batterie.
+
+        Returns:
+            (eigenverbrauch, hausverbrauch) — jeweils Optional[float]
+        """
+        pv = kwh.get("pv")
+        einsp = kwh.get("einspeisung")
+        bezug = kwh.get("netzbezug")
+        if pv is None or einsp is None:
+            return None, None
+
+        # Batterie-Ladung/-Entladung summieren (Keys: batterie_X_ladung, batterie_X_entladung)
+        bat_ladung = sum(v for k, v in kwh.items() if k.endswith("_ladung") and v)
+        bat_entladung = sum(v for k, v in kwh.items() if k.endswith("_entladung") and v)
+
+        direktverbrauch = max(0, pv - einsp - bat_ladung)
+        eigenverbrauch = round(direktverbrauch + bat_entladung, 1)
+        hausverbrauch = round(eigenverbrauch + (bezug or 0), 1) if bezug is not None or eigenverbrauch > 0 else None
+        return eigenverbrauch, hausverbrauch
 
     async def _safe_get_tages_kwh(
         self, anlage: Anlage, db: AsyncSession, tage_zurueck: int

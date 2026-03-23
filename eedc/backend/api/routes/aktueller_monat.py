@@ -366,30 +366,43 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         "netzbezug_kwh": md.netzbezug_kwh,
     }
 
-    # PV-Erzeugung aus InvestitionMonatsdaten (PV-Module + BKW)
-    inv_ids = [i.id for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
-    if inv_ids:
+    # PV-Erzeugung + Batterie aus InvestitionMonatsdaten
+    pv_inv_ids = [i.id for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
+    bat_inv_ids = [i.id for i in investitionen if i.typ == "speicher"]
+    all_inv_ids = pv_inv_ids + bat_inv_ids
+    if all_inv_ids:
         imd_result = await db.execute(
             select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(inv_ids),
+                InvestitionMonatsdaten.investition_id.in_(all_inv_ids),
                 InvestitionMonatsdaten.jahr == vj,
                 InvestitionMonatsdaten.monat == monat,
             )
         )
-        pv_vj = sum(
-            (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
-            or (imd.verbrauch_daten or {}).get("erzeugung_kwh", 0)
-            or 0
-            for imd in imd_result.scalars().all()
-        )
+        pv_vj = 0.0
+        bat_ladung_vj = 0.0
+        bat_entladung_vj = 0.0
+        for imd in imd_result.scalars().all():
+            data = imd.verbrauch_daten or {}
+            if imd.investition_id in pv_inv_ids:
+                pv_vj += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+            elif imd.investition_id in bat_inv_ids:
+                bat_ladung_vj += data.get("ladung_kwh", 0) or 0
+                bat_entladung_vj += data.get("entladung_kwh", 0) or 0
         if pv_vj > 0:
             result["pv_erzeugung_kwh"] = round(pv_vj, 1)
+        if bat_ladung_vj > 0:
+            result["speicher_ladung_kwh"] = round(bat_ladung_vj, 1)
+        if bat_entladung_vj > 0:
+            result["speicher_entladung_kwh"] = round(bat_entladung_vj, 1)
 
-    # Berechnete Werte
+    # Berechnete Werte (mit Batterie-Korrektur)
     pv = result.get("pv_erzeugung_kwh", 0) or 0
     einsp = result.get("einspeisung_kwh", 0) or 0
     netz = result.get("netzbezug_kwh", 0) or 0
-    ev = max(0, pv - einsp) if pv > 0 else 0
+    bat_ladung = result.get("speicher_ladung_kwh", 0) or 0
+    bat_entladung = result.get("speicher_entladung_kwh", 0) or 0
+    direktverbrauch = max(0, pv - einsp - bat_ladung) if pv > 0 else 0
+    ev = direktverbrauch + bat_entladung
     gv = ev + netz
     result["eigenverbrauch_kwh"] = round(ev, 1)
     result["autarkie_prozent"] = round(ev / gv * 100, 1) if gv > 0 else None

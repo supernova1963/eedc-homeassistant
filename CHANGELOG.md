@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.16] - 2026-03-23
+
+### Behoben
+
+- **Hausverbrauch-Berechnung mit Batterie (#47)**: Live Dashboard Tages-kWh (Eigenverbrauch, Hausverbrauch), Autarkie-/EV-Quote Gauges und Vorjahresvergleich berücksichtigen jetzt Batterie-Ladung/-Entladung. Bisher wurde `Eigenverbrauch = PV - Einspeisung` gerechnet (ohne Batterie), jetzt korrekt: `Direktverbrauch = PV - Einspeisung - Batterieladung`, `Eigenverbrauch = Direktverbrauch + Batterieentladung`, `Hausverbrauch = Eigenverbrauch + Netzbezug`.
+
 ## [3.4.14] - 2026-03-23
 
 ### Behoben
