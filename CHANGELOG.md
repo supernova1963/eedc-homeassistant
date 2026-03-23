@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.10] - 2026-03-23
+
+### Geändert
+
+- **SoC-Anzeige als kompakte Balken**: Halbkreis-Gauges durch farbige Fortschrittsbalken ersetzt (rot < 20%, gelb 20-50%, grün > 50%). Spart ~60% Höhe in der Sidebar.
+
+### Hinzugefügt
+
+- **Batterie heute (Ladung/Entladung)**: Neue Kachel im "Heute"-Bereich zeigt Ladung (▲) und Entladung (▼) getrennt in kWh.
+
 ## [3.4.9] - 2026-03-23
 
 ### Behoben
