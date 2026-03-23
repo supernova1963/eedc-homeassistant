@@ -71,6 +71,7 @@ def _aggregate_string_tageswerte(
             bewoelkung_prozent=None,
             niederschlag_mm=None,
             schnee_cm=None,
+            wetter_symbol=day.get("wetter_symbol", "unknown"),
             pv_ertrag_morgens_kwh=round(total_morgens, 2) if total_morgens > 0 else None,
             pv_ertrag_nachmittags_kwh=round(total_nachmittags, 2) if total_nachmittags > 0 else None,
         ))
@@ -93,6 +94,7 @@ class SolarPrognoseTagSchema(BaseModel):
     bewoelkung_prozent: int | None
     niederschlag_mm: float | None
     schnee_cm: float | None
+    wetter_symbol: str = "unknown"
     pv_ertrag_morgens_kwh: float | None = None
     pv_ertrag_nachmittags_kwh: float | None = None
 
@@ -345,6 +347,7 @@ async def get_solar_prognose_endpoint(
                     bewoelkung_prozent=t.bewoelkung_prozent,
                     niederschlag_mm=t.niederschlag_mm,
                     schnee_cm=t.schnee_cm,
+                    wetter_symbol=t.wetter_symbol,
                     pv_ertrag_morgens_kwh=t.pv_ertrag_morgens_kwh,
                     pv_ertrag_nachmittags_kwh=t.pv_ertrag_nachmittags_kwh,
                 )

@@ -18,6 +18,8 @@ import logging
 from datetime import date, datetime
 from math import radians, sin, cos
 from typing import Optional, List
+
+from backend.services.wetter_service import wetter_code_zu_symbol
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
@@ -94,6 +96,7 @@ class SolarPrognoseTag:
     bewoelkung_prozent: Optional[int]
     niederschlag_mm: Optional[float]
     schnee_cm: Optional[float]
+    wetter_symbol: str = "unknown"
     pv_ertrag_morgens_kwh: Optional[float] = None   # vor 12:00
     pv_ertrag_nachmittags_kwh: Optional[float] = None  # ab 12:00
 
@@ -178,6 +181,7 @@ async def fetch_gti_forecast(
             "temperature_2m_min",
             "precipitation_sum",
             "snowfall_sum",
+            "weather_code",
         ]),
         "tilt": neigung,
         "azimuth": azimuth_to_openmeteo(ausrichtung),
@@ -387,6 +391,7 @@ async def get_solar_prognose(
     daily_sunshine = daily.get("sunshine_duration", [])
     daily_precip = daily.get("precipitation_sum", [])
     daily_snow = daily.get("snowfall_sum", [])
+    daily_weather_code = daily.get("weather_code", [])
     daily_radiation = daily.get("shortwave_radiation_sum", [])
 
     tageswerte = []
@@ -428,6 +433,7 @@ async def get_solar_prognose(
             ),
             niederschlag_mm=daily_precip[i] if i < len(daily_precip) else None,
             schnee_cm=daily_snow[i] if i < len(daily_snow) else None,
+            wetter_symbol=wetter_code_zu_symbol(daily_weather_code[i] if i < len(daily_weather_code) else None),
             pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
             pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
         ))
@@ -509,6 +515,7 @@ async def get_multi_string_prognose(
                         "datum": t.datum,
                         "pv_ertrag_kwh": t.pv_ertrag_kwh,
                         "gti_kwh_m2": t.gti_kwh_m2,
+                        "wetter_symbol": t.wetter_symbol,
                         "pv_ertrag_morgens_kwh": t.pv_ertrag_morgens_kwh,
                         "pv_ertrag_nachmittags_kwh": t.pv_ertrag_nachmittags_kwh,
                     }
