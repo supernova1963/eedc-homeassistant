@@ -84,9 +84,14 @@ function getNetzColor(komp: LiveKomponente): string {
   return '#ef4444'                                     // rot — Netzbezug
 }
 
-/** Farbe für eine Komponente — Netz dynamisch, Rest statisch */
+/** Farbe für eine Komponente — Netz dynamisch, Batterie nach Lade-/Entladezustand, Rest statisch */
 function getNodeColor(komp: LiveKomponente): string {
   if (komp.key === 'netz') return getNetzColor(komp)
+  // Batterie/Speicher: Cyan bei Entladung, Blau bei Ladung
+  if (komp.key.startsWith('batterie_')) {
+    const entlaedt = (komp.erzeugung_kw ?? 0) > (komp.verbrauch_kw ?? 0)
+    return entlaedt ? '#06b6d4' : '#3b82f6'  // cyan = Entladung, blau = Ladung
+  }
   return getColor(komp.key)
 }
 
@@ -807,6 +812,7 @@ export default function EnergieFluss({
           style={{ fontSize: `${dims.socFontSize}px` }}
           className="fill-gray-500 dark:fill-gray-400"
         >
+          <title>Gesamtfluss aller Energieströme (Erzeugung + Verbrauch + Speicher + Netz)</title>
           Energieumsatz {formatPower(Math.max(summeErzeugung, summeVerbrauch))}
         </text>
         {/* PV-Soll (SFML oder kWp) */}

@@ -144,6 +144,18 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
       }
     }
 
+    // Nur Kategorien behalten, die tatsächlich als Investition/Serie existieren
+    const serienKategorien = new Set(tagesverlauf.serien.map(s => {
+      if (s.kategorie === 'batterie') return 'batterie_ladung'
+      if (s.kategorie === 'eauto') return 'wallbox'
+      return s.kategorie
+    }))
+    // Haushalt ist immer erlaubt (Residualwert)
+    serienKategorien.add('haushalt')
+    for (const kat of kategorienGesehen) {
+      if (!serienKategorien.has(kat)) kategorienGesehen.delete(kat)
+    }
+
     return {
       istDaten: Object.keys(result).length > 0 ? result : null,
       vorhandeneKategorien: kategorienGesehen,
@@ -200,10 +212,21 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
     return data
   }, [wetter, istDaten, currentHour])
 
+  // Echte Gerätenamen für "Sonstige" aus Tagesverlauf-Serien
+  const sonstigeLabel = useMemo(() => {
+    if (!tagesverlauf?.serien?.length) return 'Sonstige'
+    const namen = tagesverlauf.serien
+      .filter(s => s.kategorie === 'sonstige')
+      .map(s => s.label)
+    return namen.length > 0 ? namen.join(', ') : 'Sonstige'
+  }, [tagesverlauf?.serien])
+
   // Nur vorhandene Kategorien in Legende anzeigen
   const aktiveKategorien = useMemo(() =>
-    VERBRAUCH_KATEGORIEN.filter(k => vorhandeneKategorien.has(k.key)),
-    [vorhandeneKategorien]
+    VERBRAUCH_KATEGORIEN
+      .filter(k => vorhandeneKategorien.has(k.key))
+      .map(k => k.key === 'sonstige' ? { ...k, label: sonstigeLabel } : k),
+    [vorhandeneKategorien, sonstigeLabel]
   )
 
   // Stunden-Index für 24h-Timeline (Wetter-Icons über dem Chart)
@@ -250,7 +273,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
     batterie_ladung_ist: 'Speicher-Ladung',
     wallbox_ist: 'Wallbox',
     waermepumpe_ist: 'Wärmepumpe',
-    sonstige_ist: 'Sonstige',
+    sonstige_ist: sonstigeLabel,
     verbrauch_prognose: 'Verbrauch (Prognose)',
   }
 
@@ -284,18 +307,13 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
           {wetter.sonnenstunden !== null && (
             <div className="flex items-center gap-1.5 text-yellow-600 dark:text-yellow-400">
               <Sun className="h-3.5 w-3.5" />
-              <span>{wetter.sonnenstunden.toFixed(1)}h Sonne</span>
+              <span>{(() => { const h = Math.floor(wetter.sonnenstunden!); const m = Math.round((wetter.sonnenstunden! - h) * 60); return `${h}h ${m.toString().padStart(2, '0')}m Sonne` })()}</span>
             </div>
           )}
-          {wetter.solar_noon && (
-            <div className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400"
-                 title="Solar Noon — Sonnenhöchststand (Mitte des Solartages, Basis für VM/NM-Split)">
-              <Sun className="h-3.5 w-3.5" />
-              <span>Noon {wetter.solar_noon}</span>
-            </div>
-          )}
-          {wetter.pv_prognose_kwh !== null && (
-            <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium">
+{/* SA/SU/Noon werden als vertikale Linien im Chart angezeigt */}
+          {wetter.pv_prognose_kwh !== null && wetter.sfml_prognose_kwh != null && (
+            <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium"
+                 title="EEDC PV-Tagesprognose (GTI-basiert)">
               <BatteryCharging className="h-3.5 w-3.5" />
               <span>~{wetter.pv_prognose_kwh} kWh PV</span>
             </div>
@@ -392,8 +410,8 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                   <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} />
                 </linearGradient>
                 <linearGradient id="batterieGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.6} />
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.2} />
                 </linearGradient>
                 <linearGradient id="wallboxGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
@@ -442,6 +460,36 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                 strokeWidth={1}
                 label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: '#6366f1' }}
               />
+              {/* Sonnenaufgang */}
+              {wetter.sunrise && (
+                <ReferenceLine
+                  x={String(parseInt(wetter.sunrise.split(':')[0]))}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 3"
+                  strokeWidth={0.8}
+                  label={{ value: `SA ${wetter.sunrise}`, position: 'top', fontSize: 8, fill: '#f59e0b' }}
+                />
+              )}
+              {/* Solar Noon */}
+              {wetter.solar_noon && (
+                <ReferenceLine
+                  x={String(parseInt(wetter.solar_noon.split(':')[0]))}
+                  stroke="#f97316"
+                  strokeDasharray="4 3"
+                  strokeWidth={0.8}
+                  label={{ value: `Noon ${wetter.solar_noon}`, position: 'top', fontSize: 8, fill: '#f97316' }}
+                />
+              )}
+              {/* Sonnenuntergang */}
+              {wetter.sunset && (
+                <ReferenceLine
+                  x={String(parseInt(wetter.sunset.split(':')[0]))}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 3"
+                  strokeWidth={0.8}
+                  label={{ value: `SU ${wetter.sunset}`, position: 'top', fontSize: 8, fill: '#f59e0b' }}
+                />
+              )}
 
               {/* IST: PV — solid, kräftig (kein Stack) */}
               <Area

@@ -911,6 +911,8 @@ class LiveWetterResponse(BaseModel):
     sfml_tomorrow_kwh: Optional[float] = None  # Solar Forecast ML Morgen-Prognose
     sfml_accuracy_pct: Optional[float] = None  # Solar Forecast ML Modellgenauigkeit
     solar_noon: Optional[str] = None  # Solar Noon als "HH:MM" (z.B. "12:27")
+    sunrise: Optional[str] = None  # Sonnenaufgang als "HH:MM"
+    sunset: Optional[str] = None  # Sonnenuntergang als "HH:MM"
 
 
 # ── Typisches Haushaltsprofil (BDEW H0) ──────────────────────────────────────
@@ -924,6 +926,16 @@ _LASTPROFIL_KW = {
 }
 
 DEFAULT_SYSTEM_LOSSES = 0.14  # Kabel, Wechselrichter, Verschmutzung
+
+
+def _extract_time(values: Optional[list]) -> Optional[str]:
+    """Extrahiert HH:MM aus Open-Meteo ISO-Zeitstring (z.B. '2026-03-23T06:15')."""
+    if not values or not values[0]:
+        return None
+    try:
+        return values[0].split("T")[1][:5]
+    except (IndexError, AttributeError):
+        return None
 
 
 def _format_solar_noon(longitude: Optional[float]) -> Optional[str]:
@@ -1408,7 +1420,7 @@ async def get_live_wetter(
             "latitude": anlage.latitude,
             "longitude": anlage.longitude,
             "hourly": ",".join(hourly_vars),
-            "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min",
+            "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
             "timezone": "Europe/Berlin",
             "forecast_days": 1,
         }
@@ -1564,6 +1576,8 @@ async def get_live_wetter(
             "sfml_tomorrow_kwh": round(sfml_tomorrow, 1) if sfml_tomorrow is not None else None,
             "sfml_accuracy_pct": round(sfml_accuracy, 1) if sfml_accuracy is not None else None,
             "solar_noon": _format_solar_noon(anlage.longitude),
+            "sunrise": _extract_time(daily.get("sunrise", [None])),
+            "sunset": _extract_time(daily.get("sunset", [None])),
         }
 
     except Exception as e:
