@@ -19,6 +19,8 @@ interface SpeicherStepProps {
   availableSensors: HASensorInfo[]
   liveMappings?: Record<string, Record<string, string | null>>
   onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
+  liveInvertMappings?: Record<string, Record<string, boolean>>
+  onLiveInvertChange?: (invId: number, sensorKey: string, invert: boolean) => void
 }
 
 export default function SpeicherStep({
@@ -28,6 +30,8 @@ export default function SpeicherStep({
   availableSensors,
   liveMappings = {},
   onLiveChange,
+  liveInvertMappings = {},
+  onLiveInvertChange,
 }: SpeicherStepProps) {
   const basisOptionen: StrategieOption[] = [
     {
@@ -115,6 +119,8 @@ export default function SpeicherStep({
                 invId={inv.id}
                 liveMappings={liveMappings}
                 onLiveChange={onLiveChange}
+                liveInvertMappings={liveInvertMappings}
+                onLiveInvertChange={onLiveInvertChange}
                 availableSensors={availableSensors}
                 fields={[...LIVE_FIELDS.speicher]}
               />

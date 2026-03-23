@@ -29,11 +29,13 @@ export interface BasisMapping {
   netzbezug?: FeldMapping | null
   pv_gesamt?: FeldMapping | null
   live?: Record<string, string | null> | null  // Live-Sensoren: {einspeisung_w: entity_id, netzbezug_w: entity_id}
+  live_invert?: Record<string, boolean> | null  // Vorzeichen invertieren: {einspeisung_w: true}
 }
 
 export interface InvestitionFelder {
   felder: Record<string, FeldMapping>
   live?: Record<string, string | null> | null  // Live-Sensoren: {leistung_w: entity_id, soc: entity_id}
+  live_invert?: Record<string, boolean> | null  // Vorzeichen invertieren: {leistung_w: true}
 }
 
 export interface SensorMappingRequest {

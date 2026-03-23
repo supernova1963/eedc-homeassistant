@@ -21,6 +21,8 @@ interface PVModuleStepProps {
   basisPvGesamt: FeldMapping | null
   liveMappings?: Record<string, Record<string, string | null>>
   onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
+  liveInvertMappings?: Record<string, Record<string, boolean>>
+  onLiveInvertChange?: (invId: number, sensorKey: string, invert: boolean) => void
 }
 
 export default function PVModuleStep({
@@ -32,6 +34,8 @@ export default function PVModuleStep({
   basisPvGesamt,
   liveMappings = {},
   onLiveChange,
+  liveInvertMappings = {},
+  onLiveInvertChange,
 }: PVModuleStepProps) {
   const hasPvGesamtSensor = basisPvGesamt?.strategie === 'sensor' && basisPvGesamt?.sensor_id
 
@@ -120,6 +124,19 @@ export default function PVModuleStep({
                     sensors={availableSensors}
                     placeholder="PV-Leistungssensor suchen..."
                   />
+                  {liveMappings[inv.id.toString()]?.leistung_w && onLiveInvertChange && (
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!liveInvertMappings[inv.id.toString()]?.leistung_w}
+                        onChange={e => onLiveInvertChange(inv.id, 'leistung_w', e.target.checked)}
+                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        Vorzeichen invertieren (&times;&minus;1)
+                      </span>
+                    </label>
+                  )}
                 </div>
               )}
             </div>

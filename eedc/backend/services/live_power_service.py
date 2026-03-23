@@ -132,30 +132,43 @@ class LivePowerService:
 
         return history
 
-    def _extract_live_config(self, anlage: Anlage) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    def _extract_live_config(self, anlage: Anlage) -> tuple[
+        dict[str, str], dict[str, dict[str, str]],
+        dict[str, bool], dict[str, dict[str, bool]],
+    ]:
         """
         Extrahiert Live-Sensor-Konfiguration aus sensor_mapping.
 
         Returns:
-            (basis_live, inv_live_map)
+            (basis_live, inv_live_map, basis_invert, inv_invert_map)
             basis_live: {einspeisung_w: entity_id, netzbezug_w: entity_id}
             inv_live_map: {inv_id: {leistung_w: entity_id, soc: entity_id}}
+            basis_invert: {einspeisung_w: True}  — Vorzeichen invertieren
+            inv_invert_map: {inv_id: {leistung_w: True}}
         """
         mapping = anlage.sensor_mapping or {}
 
         # Neue Struktur: basis.live + investitionen[id].live
         basis_live: dict[str, str] = {}
         inv_live_map: dict[str, dict[str, str]] = {}
+        basis_invert: dict[str, bool] = {}
+        inv_invert_map: dict[str, dict[str, bool]] = {}
 
         basis = mapping.get("basis", {})
         if isinstance(basis.get("live"), dict):
             basis_live = {k: v for k, v in basis["live"].items() if v}
+        if isinstance(basis.get("live_invert"), dict):
+            basis_invert = {k: v for k, v in basis["live_invert"].items() if v}
 
         for inv_id, inv_data in mapping.get("investitionen", {}).items():
             if isinstance(inv_data, dict) and isinstance(inv_data.get("live"), dict):
                 live = {k: v for k, v in inv_data["live"].items() if v}
                 if live:
                     inv_live_map[inv_id] = live
+            if isinstance(inv_data, dict) and isinstance(inv_data.get("live_invert"), dict):
+                invert = {k: v for k, v in inv_data["live_invert"].items() if v}
+                if invert:
+                    inv_invert_map[inv_id] = invert
 
         # Fallback: altes live_sensors-Dict (Migration)
         if not basis_live and not inv_live_map:
@@ -174,13 +187,15 @@ class LivePowerService:
                         anlage.id,
                     )
 
-        return basis_live, inv_live_map
+        return basis_live, inv_live_map, basis_invert, inv_invert_map
 
     def _collect_values(
         self, anlage: Anlage,
         basis_live: dict[str, str],
         inv_live_map: dict[str, dict[str, str]],
         sensor_values: dict[str, Optional[float]],
+        basis_invert: dict[str, bool] | None = None,
+        inv_invert_map: dict[str, dict[str, bool]] | None = None,
     ) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
         """
         Sammelt Werte aus HA-Sensoren und MQTT-Inbound (MQTT überschreibt HA).
@@ -192,17 +207,23 @@ class LivePowerService:
         """
         basis_values: dict[str, float] = {}
         inv_values: dict[str, dict[str, float]] = {}
+        _basis_invert = basis_invert or {}
+        _inv_invert = inv_invert_map or {}
 
         # 1. HA-Sensor-Werte (Prio 2)
         for key, entity_id in basis_live.items():
             val = sensor_values.get(entity_id)
             if val is not None:
+                if _basis_invert.get(key):
+                    val = -val
                 basis_values[key] = val
 
         for inv_id, live in inv_live_map.items():
             for key, entity_id in live.items():
                 val = sensor_values.get(entity_id)
                 if val is not None:
+                    if _inv_invert.get(inv_id, {}).get(key):
+                        val = -val
                     if inv_id not in inv_values:
                         inv_values[inv_id] = {}
                     inv_values[inv_id][key] = val
@@ -240,7 +261,7 @@ class LivePowerService:
         Returns:
             dict mit Komponenten, Gauges, Summen und Metadaten.
         """
-        basis_live, inv_live_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
 
         # Prüfe ob MQTT-Daten vorliegen (auch ohne sensor_mapping)
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
@@ -285,7 +306,8 @@ class LivePowerService:
 
         # Werte aus HA + MQTT zusammenführen
         basis_values, inv_values = self._collect_values(
-            anlage, basis_live, inv_live_map, sensor_values
+            anlage, basis_live, inv_live_map, sensor_values,
+            basis_invert, inv_invert_map,
         )
 
         # Komponenten aufbauen
@@ -646,7 +668,7 @@ class LivePowerService:
         Aggregiert in Kategorien (pv, einspeisung, netzbezug) UND per-Komponente
         (z.B. pv_3, wallbox_6, batterie_2) für Tooltips im Energiefluss.
         """
-        basis_live, inv_live_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, _, _ = self._extract_live_config(anlage)
 
         # Investitionstypen laden
         inv_result = await db.execute(
@@ -796,7 +818,7 @@ class LivePowerService:
             Butterfly-Chart: Quellen positiv, Senken negativ.
             Bidirektionale Serien (Speicher, Netz) wechseln je nach Richtung.
         """
-        basis_live, inv_live_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, _, _ = self._extract_live_config(anlage)
 
         if not basis_live and not inv_live_map:
             return {"serien": [], "punkte": []}
@@ -1108,7 +1130,7 @@ class LivePowerService:
         if not HA_INTEGRATION_AVAILABLE:
             return None
 
-        basis_live, inv_live_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, _, _ = self._extract_live_config(anlage)
 
         einsp_eid = basis_live.get("einspeisung_w")
         bezug_eid = basis_live.get("netzbezug_w")

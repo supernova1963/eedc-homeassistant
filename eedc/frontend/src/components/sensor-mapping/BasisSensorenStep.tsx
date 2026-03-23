@@ -25,6 +25,8 @@ interface BasisSensorenStepProps {
   availableSensors: HASensorInfo[]
   basisLive?: Record<string, string | null>
   onBasisLiveChange?: (key: string, entityId: string | null) => void
+  basisLiveInvert?: Record<string, boolean>
+  onBasisLiveInvertChange?: (key: string, invert: boolean) => void
 }
 
 export default function BasisSensorenStep({
@@ -33,6 +35,8 @@ export default function BasisSensorenStep({
   availableSensors,
   basisLive = {},
   onBasisLiveChange,
+  basisLiveInvert = {},
+  onBasisLiveInvertChange,
 }: BasisSensorenStepProps) {
   const basisOptionen = [
     {
@@ -139,6 +143,8 @@ export default function BasisSensorenStep({
             <NetzLiveSensoren
               basisLive={basisLive}
               onBasisLiveChange={onBasisLiveChange}
+              basisLiveInvert={basisLiveInvert}
+              onBasisLiveInvertChange={onBasisLiveInvertChange}
               availableSensors={availableSensors}
             />
 
@@ -153,6 +159,19 @@ export default function BasisSensorenStep({
                 sensors={availableSensors}
                 placeholder="PV-Gesamt-Leistungssensor suchen..."
               />
+              {basisLive.pv_gesamt_w && onBasisLiveInvertChange && (
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!basisLiveInvert.pv_gesamt_w}
+                    onChange={e => onBasisLiveInvertChange('pv_gesamt_w', e.target.checked)}
+                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    Vorzeichen invertieren (&times;&minus;1)
+                  </span>
+                </label>
+              )}
               <p className="mt-2 text-xs text-gray-500">
                 Optional: Nur nötig wenn kein Live-Sensor pro PV-String konfiguriert ist.
                 Wird als ein &quot;PV Gesamt&quot;-Knoten im Live-Dashboard angezeigt.
@@ -214,10 +233,12 @@ export default function BasisSensorenStep({
 interface NetzLiveSensorenProps {
   basisLive: Record<string, string | null>
   onBasisLiveChange: (key: string, entityId: string | null) => void
+  basisLiveInvert?: Record<string, boolean>
+  onBasisLiveInvertChange?: (key: string, invert: boolean) => void
   availableSensors: HASensorInfo[]
 }
 
-function NetzLiveSensoren({ basisLive, onBasisLiveChange, availableSensors }: NetzLiveSensorenProps) {
+function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, onBasisLiveInvertChange, availableSensors }: NetzLiveSensorenProps) {
   const hasKombi = !!basisLive.netz_kombi_w
   const hasGetrennt = !!basisLive.einspeisung_w || !!basisLive.netzbezug_w
   const [kombiModus, setKombiModus] = useState(hasKombi && !hasGetrennt)
@@ -278,6 +299,19 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, availableSensors }: Ne
               sensors={availableSensors}
               placeholder="Kombinierten Netz-Sensor suchen..."
             />
+            {basisLive.netz_kombi_w && onBasisLiveInvertChange && (
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!basisLiveInvert.netz_kombi_w}
+                  onChange={e => onBasisLiveInvertChange('netz_kombi_w', e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  Vorzeichen invertieren (&times;&minus;1)
+                </span>
+              </label>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -291,6 +325,19 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, availableSensors }: Ne
                 sensors={availableSensors}
                 placeholder="Einspeise-Leistungssensor suchen..."
               />
+              {basisLive.einspeisung_w && onBasisLiveInvertChange && (
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!basisLiveInvert.einspeisung_w}
+                    onChange={e => onBasisLiveInvertChange('einspeisung_w', e.target.checked)}
+                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    Vorzeichen invertieren (&times;&minus;1)
+                  </span>
+                </label>
+              )}
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -302,6 +349,19 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, availableSensors }: Ne
                 sensors={availableSensors}
                 placeholder="Netzbezug-Leistungssensor suchen..."
               />
+              {basisLive.netzbezug_w && onBasisLiveInvertChange && (
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!basisLiveInvert.netzbezug_w}
+                    onChange={e => onBasisLiveInvertChange('netzbezug_w', e.target.checked)}
+                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    Vorzeichen invertieren (&times;&minus;1)
+                  </span>
+                </label>
+              )}
             </div>
           </div>
         )}

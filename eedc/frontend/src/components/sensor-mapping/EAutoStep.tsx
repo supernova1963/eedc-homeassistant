@@ -27,6 +27,8 @@ interface EAutoStepProps {
   availableSensors: HASensorInfo[]
   liveMappings?: Record<string, Record<string, string | null>>
   onLiveChange?: (invId: number, sensorKey: string, entityId: string | null) => void
+  liveInvertMappings?: Record<string, Record<string, boolean>>
+  onLiveInvertChange?: (invId: number, sensorKey: string, invert: boolean) => void
 }
 
 export default function EAutoStep({
@@ -36,6 +38,8 @@ export default function EAutoStep({
   availableSensors,
   liveMappings = {},
   onLiveChange,
+  liveInvertMappings = {},
+  onLiveInvertChange,
 }: EAutoStepProps) {
   const eAutos = investitionen.filter(i => i.typ === 'e-auto')
   const wallboxen = investitionen.filter(i => i.typ === 'wallbox')
@@ -241,6 +245,8 @@ export default function EAutoStep({
                     invId={inv.id}
                     liveMappings={liveMappings}
                     onLiveChange={onLiveChange}
+                    liveInvertMappings={liveInvertMappings}
+                    onLiveInvertChange={onLiveInvertChange}
                     availableSensors={availableSensors}
                     fields={[...LIVE_FIELDS.eauto]}
                   />
@@ -305,6 +311,8 @@ export default function EAutoStep({
                     invId={inv.id}
                     liveMappings={liveMappings}
                     onLiveChange={onLiveChange}
+                    liveInvertMappings={liveInvertMappings}
+                    onLiveInvertChange={onLiveInvertChange}
                     availableSensors={availableSensors}
                     fields={[...LIVE_FIELDS.wallbox]}
                   />

@@ -58,8 +58,10 @@ interface WizardState {
     pv_gesamt: FeldMapping | null
   }
   basisLive: Record<string, string | null>  // {einspeisung_w: entity_id, netzbezug_w: entity_id}
+  basisLiveInvert: Record<string, boolean>  // {einspeisung_w: true} — Vorzeichen invertieren
   investitionen: Record<string, Record<string, FeldMapping>>
   investitionenLive: Record<string, Record<string, string | null>>  // {inv_id: {leistung_w: entity_id, soc: entity_id}}
+  investitionenLiveInvert: Record<string, Record<string, boolean>>  // {inv_id: {leistung_w: true}}
 }
 
 interface StepConfig {
@@ -80,8 +82,10 @@ const initialState: WizardState = {
     pv_gesamt: null,
   },
   basisLive: {},
+  basisLiveInvert: {},
   investitionen: {},
   investitionenLive: {},
+  investitionenLiveInvert: {},
 }
 
 // =============================================================================
@@ -146,8 +150,8 @@ export default function SensorMappingWizard() {
         // Initialize state from existing mapping
         if (mapping?.mapping) {
           const existingMapping = mapping.mapping as {
-            basis?: Record<string, FeldMapping> & { live?: Record<string, string | null> }
-            investitionen?: Record<string, { felder: Record<string, FeldMapping>; live?: Record<string, string | null> }>
+            basis?: Record<string, FeldMapping> & { live?: Record<string, string | null>; live_invert?: Record<string, boolean> }
+            investitionen?: Record<string, { felder: Record<string, FeldMapping>; live?: Record<string, string | null>; live_invert?: Record<string, boolean> }>
           }
 
           setState({
@@ -157,6 +161,7 @@ export default function SensorMappingWizard() {
               pv_gesamt: existingMapping.basis?.pv_gesamt || null,
             },
             basisLive: existingMapping.basis?.live || {},
+            basisLiveInvert: existingMapping.basis?.live_invert || {},
             investitionen: Object.fromEntries(
               Object.entries(existingMapping.investitionen || {}).map(([id, inv]) => [
                 id,
@@ -167,6 +172,11 @@ export default function SensorMappingWizard() {
               Object.entries(existingMapping.investitionen || {})
                 .filter(([, inv]) => inv.live && Object.keys(inv.live).length > 0)
                 .map(([id, inv]) => [id, inv.live!])
+            ),
+            investitionenLiveInvert: Object.fromEntries(
+              Object.entries(existingMapping.investitionen || {})
+                .filter(([, inv]) => inv.live_invert && Object.keys(inv.live_invert).length > 0)
+                .map(([id, inv]) => [id, inv.live_invert!])
             ),
           })
         }
@@ -270,23 +280,55 @@ export default function SensorMappingWizard() {
   }, [])
 
   const updateBasisLive = useCallback((key: string, entityId: string | null) => {
+    setState(prev => {
+      const next = { ...prev, basisLive: { ...prev.basisLive, [key]: entityId } }
+      // Invert-Flag entfernen wenn Sensor gelöscht wird
+      if (!entityId && prev.basisLiveInvert[key]) {
+        const { [key]: _, ...rest } = prev.basisLiveInvert
+        next.basisLiveInvert = rest
+      }
+      return next
+    })
+  }, [])
+
+  const updateBasisLiveInvert = useCallback((key: string, invert: boolean) => {
     setState(prev => ({
       ...prev,
-      basisLive: { ...prev.basisLive, [key]: entityId },
+      basisLiveInvert: { ...prev.basisLiveInvert, [key]: invert },
     }))
   }, [])
 
   const updateInvestitionLive = useCallback((invId: number, sensorKey: string, entityId: string | null) => {
-    setState(prev => ({
-      ...prev,
-      investitionenLive: {
-        ...prev.investitionenLive,
-        [invId.toString()]: {
-          ...prev.investitionenLive[invId.toString()],
-          [sensorKey]: entityId,
+    setState(prev => {
+      const id = invId.toString()
+      const next = {
+        ...prev,
+        investitionenLive: {
+          ...prev.investitionenLive,
+          [id]: { ...prev.investitionenLive[id], [sensorKey]: entityId },
         },
-      },
-    }))
+      }
+      // Invert-Flag entfernen wenn Sensor gelöscht wird
+      if (!entityId && prev.investitionenLiveInvert[id]?.[sensorKey]) {
+        const invInvert = { ...prev.investitionenLiveInvert[id] }
+        delete invInvert[sensorKey]
+        next.investitionenLiveInvert = { ...prev.investitionenLiveInvert, [id]: invInvert }
+      }
+      return next
+    })
+  }, [])
+
+  const updateInvestitionLiveInvert = useCallback((invId: number, sensorKey: string, invert: boolean) => {
+    setState(prev => {
+      const id = invId.toString()
+      return {
+        ...prev,
+        investitionenLiveInvert: {
+          ...prev.investitionenLiveInvert,
+          [id]: { ...prev.investitionenLiveInvert[id], [sensorKey]: invert },
+        },
+      }
+    })
   }, [])
 
   // Save handler
@@ -305,12 +347,21 @@ export default function SensorMappingWizard() {
         return Object.keys(cleaned).length > 0 ? cleaned : undefined
       }
 
+      // Invert-Flags bereinigen (nur true-Werte behalten)
+      const cleanInvert = (invert: Record<string, boolean>): Record<string, boolean> | undefined => {
+        const cleaned = Object.fromEntries(
+          Object.entries(invert).filter(([, v]) => v)
+        )
+        return Object.keys(cleaned).length > 0 ? cleaned : undefined
+      }
+
       const request: SensorMappingRequest = {
         basis: {
           einspeisung: state.basis.einspeisung,
           netzbezug: state.basis.netzbezug,
           pv_gesamt: state.basis.pv_gesamt,
           live: cleanLive(state.basisLive) || null,
+          live_invert: cleanInvert(state.basisLiveInvert) || null,
         },
         investitionen: Object.fromEntries(
           Object.entries(state.investitionen).map(([id, felder]) => [
@@ -318,6 +369,7 @@ export default function SensorMappingWizard() {
             {
               felder,
               live: cleanLive(state.investitionenLive[id] || {}) || null,
+              live_invert: cleanInvert(state.investitionenLiveInvert[id] || {}) || null,
             },
           ])
         ),
@@ -577,6 +629,8 @@ export default function SensorMappingWizard() {
               availableSensors={availableSensors}
               basisLive={state.basisLive}
               onBasisLiveChange={updateBasisLive}
+              basisLiveInvert={state.basisLiveInvert}
+              onBasisLiveInvertChange={updateBasisLiveInvert}
             />
           )}
 
@@ -590,6 +644,8 @@ export default function SensorMappingWizard() {
               basisPvGesamt={state.basis.pv_gesamt}
               liveMappings={state.investitionenLive}
               onLiveChange={updateInvestitionLive}
+              liveInvertMappings={state.investitionenLiveInvert}
+              onLiveInvertChange={updateInvestitionLiveInvert}
             />
           )}
 
@@ -601,6 +657,8 @@ export default function SensorMappingWizard() {
               availableSensors={availableSensors}
               liveMappings={state.investitionenLive}
               onLiveChange={updateInvestitionLive}
+              liveInvertMappings={state.investitionenLiveInvert}
+              onLiveInvertChange={updateInvestitionLiveInvert}
             />
           )}
 
@@ -612,6 +670,8 @@ export default function SensorMappingWizard() {
               availableSensors={availableSensors}
               liveMappings={state.investitionenLive}
               onLiveChange={updateInvestitionLive}
+              liveInvertMappings={state.investitionenLiveInvert}
+              onLiveInvertChange={updateInvestitionLiveInvert}
             />
           )}
 
@@ -623,6 +683,8 @@ export default function SensorMappingWizard() {
               availableSensors={availableSensors}
               liveMappings={state.investitionenLive}
               onLiveChange={updateInvestitionLive}
+              liveInvertMappings={state.investitionenLiveInvert}
+              onLiveInvertChange={updateInvestitionLiveInvert}
             />
           )}
 
@@ -634,6 +696,8 @@ export default function SensorMappingWizard() {
               availableSensors={availableSensors}
               liveMappings={state.investitionenLive}
               onLiveChange={updateInvestitionLive}
+              liveInvertMappings={state.investitionenLiveInvert}
+              onLiveInvertChange={updateInvestitionLiveInvert}
             />
           )}
 

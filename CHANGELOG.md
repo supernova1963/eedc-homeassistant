@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.12] - 2026-03-23
+
+### Hinzugefügt
+
+- **Sensor-Vorzeichen invertieren (#44)**: Neue Checkbox "Vorzeichen invertieren (×−1)" bei allen Live-Leistungssensoren (W) in der Sensor-Zuordnung. Löst das Problem bei Wechselrichtern/BMS die umgekehrte Vorzeichen liefern (z.B. Batterie: negativ = Ladung, positiv = Entladung).
+
 ## [3.4.10] - 2026-03-23
 
 ### Geändert
