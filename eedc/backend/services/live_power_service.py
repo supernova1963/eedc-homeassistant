@@ -763,7 +763,20 @@ class LivePowerService:
         for comp_key, entity_id in component_entities.items():
             if entity_id not in history:
                 continue
-            kwh = self._trapez_kwh(history[entity_id])
+            pts = history[entity_id]
+
+            # Batterie: Ladung/Entladung getrennt berechnen (positiv=Ladung, negativ=Entladung)
+            if comp_key.startswith("batterie_"):
+                ladung_pts = [(t, max(p, 0)) for t, p in pts]
+                entladung_pts = [(t, abs(min(p, 0))) for t, p in pts]
+                ladung_kwh = self._trapez_kwh(ladung_pts)
+                entladung_kwh = self._trapez_kwh(entladung_pts)
+                if ladung_kwh is not None:
+                    result[f"{comp_key}_ladung"] = round(ladung_kwh, 1)
+                if entladung_kwh is not None:
+                    result[f"{comp_key}_entladung"] = round(entladung_kwh, 1)
+
+            kwh = self._trapez_kwh(pts)
             if kwh is not None:
                 result[comp_key] = round(abs(kwh), 1)
 

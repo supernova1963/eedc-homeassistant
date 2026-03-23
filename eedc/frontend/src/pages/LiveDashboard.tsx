@@ -17,7 +17,6 @@ import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, M
 import { wetterApi } from '../api/wetter'
 import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
-import GaugeChart from '../components/live/GaugeChart'
 import TagesverlaufChart from '../components/live/TagesverlaufChart'
 import WetterWidget from '../components/live/WetterWidget'
 
@@ -308,6 +307,30 @@ export default function LiveDashboard() {
                         <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
+                    {/* Batterie heute (Ladung/Entladung) */}
+                    {(() => {
+                      const komp = data.heute_kwh_pro_komponente
+                      if (!komp) return null
+                      // Alle batterie_*_ladung / _entladung Keys summieren
+                      let ladung = 0, entladung = 0, found = false
+                      for (const [k, v] of Object.entries(komp)) {
+                        if (k.endsWith('_ladung') && k.startsWith('batterie_')) { ladung += v; found = true }
+                        if (k.endsWith('_entladung') && k.startsWith('batterie_')) { entladung += v; found = true }
+                      }
+                      if (!found) return null
+                      return (
+                        <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg px-3 py-2"
+                             title={`Batterie heute\nLadung: ${ladung.toFixed(1)} kWh\nEntladung: ${entladung.toFixed(1)} kWh`}>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Batterie</div>
+                          <div className="text-sm font-bold text-teal-600 dark:text-teal-400">
+                            <span title="Ladung">&#9650;{ladung.toFixed(1)}</span>
+                            <span className="text-gray-400 mx-0.5">/</span>
+                            <span title="Entladung">&#9660;{entladung.toFixed(1)}</span>
+                            <span className="text-xs font-normal ml-0.5">kWh</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                   {/* Autarkie + Eigenverbrauchsquote */}
                   {(() => {
@@ -427,22 +450,27 @@ export default function LiveDashboard() {
                 </div>
               )}
 
-              {/* SoC Gauges — nur Batterie/E-Auto */}
+              {/* SoC Balken — nur Batterie/E-Auto */}
               {data.gauges.filter(g => g.key.startsWith('soc_')).length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Ladezustand</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {data.gauges.filter(g => g.key.startsWith('soc_')).map((gauge) => (
-                      <div key={gauge.key} title={`${gauge.label}: ${gauge.wert} ${gauge.einheit}`} className="cursor-default">
-                        <GaugeChart
-                          wert={gauge.wert}
-                          min={gauge.min_wert}
-                          max={gauge.max_wert}
-                          label={gauge.label}
-                          einheit={gauge.einheit}
-                        />
-                      </div>
-                    ))}
+                  <div className="space-y-2">
+                    {data.gauges.filter(g => g.key.startsWith('soc_')).map((gauge) => {
+                      const pct = gauge.max_wert > gauge.min_wert
+                        ? ((gauge.wert - gauge.min_wert) / (gauge.max_wert - gauge.min_wert)) * 100 : 0
+                      const color = pct < 20 ? 'bg-red-500' : pct < 50 ? 'bg-yellow-500' : 'bg-green-500'
+                      return (
+                        <div key={gauge.key} title={`${gauge.label}: ${gauge.wert} ${gauge.einheit}`}>
+                          <div className="flex items-center justify-between text-xs mb-0.5">
+                            <span className="text-gray-600 dark:text-gray-400 truncate mr-2">{gauge.label}</span>
+                            <span className="font-bold text-gray-900 dark:text-white shrink-0">{Math.round(gauge.wert)}{gauge.einheit}</span>
+                          </div>
+                          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
