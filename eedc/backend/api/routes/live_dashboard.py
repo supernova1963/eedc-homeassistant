@@ -1521,11 +1521,25 @@ async def get_live_wetter(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
         )
 
+        # ── Außentemperatur: HA-Sensor bevorzugen, Open-Meteo als Fallback ──
+        basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
+        temp_entity = basis_live.get("aussentemperatur_c") if basis_live else None
+        if temp_entity:
+            try:
+                from backend.services.ha_state_service import get_ha_state_service
+                ha_svc = get_ha_state_service()
+                ha_temp = await ha_svc.get_sensor_state(temp_entity)
+                if ha_temp is not None:
+                    # Aktuelle Stunde mit HA-Temperatur überschreiben
+                    if aktuelle_stunde is not None:
+                        aktuelle_stunde["temperatur_c"] = ha_temp
+            except Exception as e:
+                logger.debug(f"Außentemperatur-Sensor nicht lesbar: {e}")
+
         # ── SFML: Solar Forecast ML (optional) ──
         sfml_kwh = None
         sfml_tomorrow = None
         sfml_accuracy = None
-        basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
         sfml_entity = basis_live.get("sfml_today_kwh") if basis_live else None
 
         if sfml_entity:

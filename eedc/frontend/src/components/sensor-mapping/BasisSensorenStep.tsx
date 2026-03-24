@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react'
-import { Zap, Download, Upload, Activity } from 'lucide-react'
+import { Zap, Download, Upload, Activity, Thermometer } from 'lucide-react'
 import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
 import Alert from '../ui/Alert'
@@ -176,6 +176,27 @@ export default function BasisSensorenStep({
                 Optional: Nur nötig wenn kein Live-Sensor pro PV-String konfiguriert ist.
                 Wird als ein &quot;PV Gesamt&quot;-Knoten im Live-Dashboard angezeigt.
               </p>
+            </div>
+
+            {/* Außentemperatur (optional) */}
+            <div className="border border-sky-200 dark:border-sky-700/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Thermometer className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                  <span className="font-medium text-sm text-gray-900 dark:text-white">Außentemperatur</span>
+                </div>
+                <span className="text-xs text-sky-500">optional</span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Eigener Temperatursensor (z.B. Wetterstation am Haus).
+                Ohne Zuordnung wird die Temperatur automatisch über Open-Meteo ermittelt.
+              </p>
+              <SensorAutocomplete
+                value={basisLive.aussentemperatur_c}
+                onChange={entityId => onBasisLiveChange('aussentemperatur_c', entityId)}
+                sensors={availableSensors}
+                placeholder="sensor.aussentemperatur"
+              />
             </div>
 
             {/* Solar Forecast ML (optional) */}
