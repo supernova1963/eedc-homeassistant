@@ -467,7 +467,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                   stroke="#f59e0b"
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
-                  label={{ value: `SA ${wetter.sunrise}`, position: 'top', fontSize: 8, fill: '#f59e0b' }}
+                  label={{ value: `SA ${wetter.sunrise}`, position: 'insideTopLeft', fontSize: 10, fill: '#f59e0b' }}
                 />
               )}
               {/* Solar Noon */}
@@ -477,7 +477,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                   stroke="#f97316"
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
-                  label={{ value: `Noon ${wetter.solar_noon}`, position: 'top', fontSize: 8, fill: '#f97316' }}
+                  label={{ value: `Noon ${wetter.solar_noon}`, position: 'insideTopLeft', fontSize: 10, fill: '#f97316' }}
                 />
               )}
               {/* Sonnenuntergang */}
@@ -487,7 +487,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
                   stroke="#f59e0b"
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
-                  label={{ value: `SU ${wetter.sunset}`, position: 'top', fontSize: 8, fill: '#f59e0b' }}
+                  label={{ value: `SU ${wetter.sunset}`, position: 'insideTopLeft', fontSize: 10, fill: '#f59e0b' }}
                 />
               )}
 
