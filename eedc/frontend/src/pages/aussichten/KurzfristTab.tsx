@@ -387,8 +387,16 @@ export default function KurzfristTab({ anlageId }: Props) {
       <Card className="p-4 bg-gray-50 dark:bg-gray-800">
         <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
           <span>Anlagenleistung: {prognose.anlage.leistung_kwp.toFixed(1)} kWp</span>
-          <span>Neigung: {prognose.anlage.neigung}°</span>
-          <span>Ausrichtung: {prognose.anlage.azimut}°</span>
+          {prognose.string_prognosen && prognose.string_prognosen.length > 1 ? (
+            prognose.string_prognosen.map((s, i) => (
+              <span key={i}>{s.name}: {s.kwp} kWp, {s.neigung}°/{s.ausrichtung}°</span>
+            ))
+          ) : (
+            <>
+              <span>Neigung: {prognose.anlage.neigung}°</span>
+              <span>Ausrichtung: {prognose.anlage.azimut}°</span>
+            </>
+          )}
           <span>Datenquelle: Open-Meteo Solar (GTI)</span>
           <span>Abgerufen: {new Date(prognose.abgerufen_am).toLocaleString('de-DE')}</span>
         </div>
