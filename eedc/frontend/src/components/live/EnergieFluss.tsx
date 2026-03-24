@@ -116,6 +116,7 @@ interface EnergieFlussProps {
   komponenten: LiveKomponente[]
   summeErzeugung: number
   summeVerbrauch: number
+  summePv: number
   tagesWerte?: Record<string, number | null>
   gauges?: LiveGauge[]
   pvSollKw?: number | null
@@ -300,7 +301,7 @@ function socColor(pct: number): string {
 // ─── Component ──────────────────────────────────────────────────────
 
 export default function EnergieFluss({
-  komponenten, summeErzeugung, summeVerbrauch, tagesWerte, gauges, pvSollKw,
+  komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
 }: EnergieFlussProps) {
   const [lite, toggleLite] = useLiteMode()
 
@@ -805,21 +806,20 @@ export default function EnergieFluss({
           </text>
         </g>
 
-        {/* Solarleistung (Summe aller PV-Erzeuger) */}
-        {summeErzeugung > 0 && (
+        {/* Solarleistung + Energieumsatz + PV-Soll — oberhalb des Hauses */}
+        {summePv > 0 && (
           <text
-            x={CX} y={CY + HAUS_R + 16}
+            x={CX} y={CY - HAUS_R - 8 - dims.socFontSize - 2}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize}px` }}
             className="fill-yellow-500 dark:fill-yellow-400"
           >
-            <title>Summe aller PV-Erzeuger</title>
-            Solarleistung {formatPower(summeErzeugung)}
+            <title>Summe aller PV-Erzeuger (ohne Batterie/Netz)</title>
+            Solarleistung {formatPower(summePv)}
           </text>
         )}
-        {/* Energieumsatz unter Haus */}
         <text
-          x={CX} y={CY + HAUS_R + 16 + (summeErzeugung > 0 ? dims.socFontSize + 2 : 0)}
+          x={CX} y={CY - HAUS_R - 8}
           textAnchor="middle"
           style={{ fontSize: `${dims.socFontSize}px` }}
           className="fill-gray-500 dark:fill-gray-400"
@@ -827,10 +827,9 @@ export default function EnergieFluss({
           <title>Gesamtfluss aller Energieströme (Erzeugung + Verbrauch + Speicher + Netz)</title>
           Energieumsatz {formatPower(Math.max(summeErzeugung, summeVerbrauch))}
         </text>
-        {/* PV-Soll (SFML oder kWp) */}
         {pvSollKw != null && pvSollKw > 0 && (
           <text
-            x={CX} y={CY + HAUS_R + 16 + (summeErzeugung > 0 ? dims.socFontSize + 2 : 0) + dims.socFontSize + 2}
+            x={CX} y={CY - HAUS_R - 8 - (summePv > 0 ? dims.socFontSize + 2 : 0) - dims.socFontSize - 2}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
             className="fill-purple-500 dark:fill-purple-400"

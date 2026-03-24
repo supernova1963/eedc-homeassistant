@@ -241,6 +241,7 @@ export default function LiveDashboard() {
                 komponenten={data.komponenten}
                 summeErzeugung={data.summe_erzeugung_kw}
                 summeVerbrauch={data.summe_verbrauch_kw}
+                summePv={data.summe_pv_kw}
                 tagesWerte={data.heute_kwh_pro_komponente ?? undefined}
                 gauges={data.gauges}
                 pvSollKw={(() => {

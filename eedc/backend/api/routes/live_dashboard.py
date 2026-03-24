@@ -64,6 +64,7 @@ class LiveDashboardResponse(BaseModel):
     komponenten: list[LiveKomponente]
     summe_erzeugung_kw: float
     summe_verbrauch_kw: float
+    summe_pv_kw: float = 0
 
     gauges: list[LiveGauge]
 
@@ -169,6 +170,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         ],
         "summe_erzeugung_kw": round(summe_erz, 2),
         "summe_verbrauch_kw": round(summe_vrb, 2),
+        "summe_pv_kw": round(pv_kw, 2),
         "gauges": [
             {"key": "netz", "label": "Netz", "wert": netto_w,
              "min_wert": -max_netz, "max_wert": max_netz, "einheit": "W"},

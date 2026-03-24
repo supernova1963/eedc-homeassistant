@@ -31,6 +31,7 @@ export interface LiveDashboardResponse {
   komponenten: LiveKomponente[]
   summe_erzeugung_kw: number
   summe_verbrauch_kw: number
+  summe_pv_kw: number
 
   gauges: LiveGauge[]
 
