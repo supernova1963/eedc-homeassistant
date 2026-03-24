@@ -16,7 +16,6 @@ breaking_versions:
 arch:
   - aarch64
   - amd64
-  - armv7
 
 # Container-Einstellungen
 init: false
@@ -68,6 +67,5 @@ map:
 ports:
   8099/tcp: null
 
-# Lokaler Build (kein vorgebautes Image)
-# Wenn ein Image auf ghcr.io veröffentlicht ist, diese Zeile einkommentieren:
-# image: "ghcr.io/supernova1963/eedc-{arch}"
+# Vorgebautes Image von GitHub Container Registry
+image: "ghcr.io/supernova1963/eedc-homeassistant-{arch}"
