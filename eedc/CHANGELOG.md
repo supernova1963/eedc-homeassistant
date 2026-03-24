@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.19] - 2026-03-24
+
+### Behoben
+
+- **Installation schlägt fehl (#51)**: Pre-built Docker Images auf GitHub Container Registry (GHCR) bereitgestellt. Bisherige Releases enthielten den Build-Workflow noch nicht, sodass keine Images auf GHCR verfügbar waren (403 Denied beim Pull).
+
 ## [3.4.18] - 2026-03-24
 
 ### Behoben
