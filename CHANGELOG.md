@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.25] - 2026-03-24
+
+### Behoben
+
+- **WP-Wärme Live-Anzeige im laufenden Monat (#53)**: Heizenergie- und Warmwasser-Sensoren wurden im laufenden Monat nicht angezeigt ("Wärme: — kWh"), obwohl sie korrekt gemappt waren. Die Aggregation fehlte für HA Statistics und MQTT-Inbound. Auch getrennte Strommessung wird jetzt korrekt summiert
+
 ## [3.4.24] - 2026-03-24
 
 ### Behoben
