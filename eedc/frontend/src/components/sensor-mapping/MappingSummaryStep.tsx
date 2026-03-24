@@ -29,6 +29,8 @@ interface MappingSummaryStepProps {
     investitionen: Record<string, Record<string, FeldMapping>>
     basisLive: Record<string, string | null>
     investitionenLive: Record<string, Record<string, string | null>>
+    basisLiveInvert: Record<string, boolean>
+    investitionenLiveInvert: Record<string, Record<string, boolean>>
   }
   investitionen: InvestitionInfo[]
 }
@@ -107,14 +109,19 @@ function MappingRow({ label, mapping }: { label: string; mapping: FeldMapping | 
   )
 }
 
-function LiveSensorRow({ label, entityId }: { label: string; entityId: string | null }) {
+function LiveSensorRow({ label, entityId, inverted }: { label: string; entityId: string | null; inverted?: boolean }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
       <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
       {entityId ? (
-        <span className="text-xs text-green-700 dark:text-green-400 font-mono max-w-[250px] truncate">
-          {entityId}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-green-700 dark:text-green-400 font-mono max-w-[250px] truncate">
+            {entityId}
+          </span>
+          {inverted && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">×−1</span>
+          )}
+        </div>
       ) : (
         <span className="text-sm text-gray-400 italic">Nicht zugeordnet</span>
       )}
@@ -249,6 +256,7 @@ export default function MappingSummaryStep({
                 key={key}
                 label={LIVE_KEY_LABELS[key] || key}
                 entityId={entityId}
+                inverted={state.basisLiveInvert?.[key]}
               />
             ))}
           </div>
@@ -292,6 +300,7 @@ export default function MappingSummaryStep({
                         key={key}
                         label={LIVE_KEY_LABELS[key] || key}
                         entityId={entityId}
+                        inverted={state.investitionenLiveInvert?.[inv.id.toString()]?.[key]}
                       />
                     ) : null
                   )}

@@ -53,12 +53,14 @@ class BasisMapping(BaseModel):
     pv_gesamt: Optional[FeldMapping] = None  # Optional, für kWp-Verteilung
     strompreis: Optional[FeldMapping] = None  # Ø Strompreis bei dyn. Tarif (direktes Lesen, kein MWD)
     live: Optional[dict[str, Optional[str]]] = None  # Live-Sensoren: {einspeisung_w: entity_id, netzbezug_w: entity_id}
+    live_invert: Optional[dict[str, bool]] = None  # Vorzeichen invertieren: {einspeisung_w: true}
 
 
 class InvestitionFelder(BaseModel):
     """Felder-Mapping für eine Investition."""
     felder: dict[str, FeldMapping]
     live: Optional[dict[str, Optional[str]]] = None  # Live-Sensoren: {leistung_w: entity_id, soc: entity_id}
+    live_invert: Optional[dict[str, bool]] = None  # Vorzeichen invertieren: {leistung_w: true}
 
 
 class SensorMappingRequest(BaseModel):
@@ -326,6 +328,10 @@ async def save_sensor_mapping(
             live_clean = {k: v for k, v in mapping.basis.live.items() if v}
             if live_clean:
                 mapping_dict["basis"]["live"] = live_clean
+        if mapping.basis.live_invert:
+            invert_clean = {k: v for k, v in mapping.basis.live_invert.items() if v}
+            if invert_clean:
+                mapping_dict["basis"]["live_invert"] = invert_clean
 
         # Investitionen
         for inv_id, inv_mapping in mapping.investitionen.items():
@@ -339,6 +345,10 @@ async def save_sensor_mapping(
                 live_clean = {k: v for k, v in inv_mapping.live.items() if v}
                 if live_clean:
                     inv_data["live"] = live_clean
+            if inv_mapping.live_invert:
+                invert_clean = {k: v for k, v in inv_mapping.live_invert.items() if v}
+                if invert_clean:
+                    inv_data["live_invert"] = invert_clean
             mapping_dict["investitionen"][inv_id] = inv_data
 
         # Timestamp setzen
