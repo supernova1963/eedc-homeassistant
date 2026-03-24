@@ -257,6 +257,8 @@ async def _collect_saved_data(
             elif inv.typ == "waermepumpe":
                 wp_strom_total += (
                     data.get("stromverbrauch_kwh", 0) or
+                    (data.get("strom_heizen_kwh", 0) or 0) +
+                    (data.get("strom_warmwasser_kwh", 0) or 0) or
                     data.get("strom_kwh", 0) or
                     data.get("verbrauch_kwh", 0) or 0
                 )
@@ -481,7 +483,13 @@ async def get_aktueller_monat(
     typ_aggregation: dict[str, dict[str, str]] = {
         "pv-module": {"pv_erzeugung_kwh": "pv_erzeugung_kwh"},
         "speicher": {"ladung_kwh": "speicher_ladung_kwh", "entladung_kwh": "speicher_entladung_kwh"},
-        "waermepumpe": {"stromverbrauch_kwh": "wp_strom_kwh"},
+        "waermepumpe": {
+            "stromverbrauch_kwh": "wp_strom_kwh",
+            "strom_heizen_kwh": "wp_strom_kwh",
+            "strom_warmwasser_kwh": "wp_strom_kwh",
+            "heizenergie_kwh": "wp_waerme_kwh",
+            "warmwasser_kwh": "wp_waerme_kwh",
+        },
         "e-auto": {"ladung_kwh": "emob_ladung_kwh", "verbrauch_kwh": "emob_ladung_kwh"},
         "wallbox": {"ladung_kwh": "emob_ladung_kwh"},
         "balkonkraftwerk": {"pv_erzeugung_kwh": "bkw_erzeugung_kwh"},
