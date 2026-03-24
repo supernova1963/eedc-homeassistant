@@ -7,6 +7,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.21] - 2026-03-24
+
+### Neu
+
+- **DWD ICON-D2 Wettermodell (#48)**: Neues hochauflösendes Wettermodell (2.2 km) speziell für deutsche Standorte. Kaskade: 2 Tage ICON-D2, danach Fallback auf best_match
+- **Netto-Hausverbrauch im Energiefluss**: Haus zeigt Summe aller Verbraucher (ohne Batterie/Netz) statt Residual-Rest
+
+### Behoben
+
+- **Kurzfrist Heute-Markierung**: `ring` → `border` für die Tages-Markierung (kein Abschneiden mehr am Kartenrand)
+
+## [3.4.20] - 2026-03-24
+
+### Neu
+
+- **Community-Nudge + Auto-Share**: Nudge-Banner im Live-Dashboard und Cockpit wenn noch nicht geteilt. Auto-Share Checkbox in Stammdaten, Community-Seite und Monatsabschluss-Hinweis
+
+### Behoben
+
+- **Solarleistung ohne Batterie/Netz (#49)**: Solarleistung zeigt nur PV-Erzeugung (neues Feld `summe_pv_kw`), Position oberhalb Haus
+
 ## [3.4.19] - 2026-03-24
 
 ### Behoben
