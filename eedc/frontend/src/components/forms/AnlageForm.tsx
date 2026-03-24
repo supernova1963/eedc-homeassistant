@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Info, ExternalLink, Cloud, Sun, Receipt } from 'lucide-react'
+import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
 import VersorgerSection from './VersorgerSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
@@ -27,6 +27,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     longitude: anlage?.longitude?.toString() || '',
     mastr_id: anlage?.mastr_id || '',
     wetter_provider: (anlage as any)?.wetter_provider || 'auto',
+    wetter_modell: anlage?.wetter_modell || 'auto',
     steuerliche_behandlung: anlage?.steuerliche_behandlung || 'keine_ust',
     ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',
   })
@@ -98,6 +99,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         mastr_id: formData.mastr_id || undefined,
         versorger_daten: Object.keys(versorgerDaten).length > 0 ? versorgerDaten : undefined,
         wetter_provider: formData.wetter_provider as WetterProvider,
+        wetter_modell: formData.wetter_modell,
         steuerliche_behandlung: formData.steuerliche_behandlung || 'keine_ust',
         ust_satz_prozent: formData.ust_satz_prozent ? parseFloat(formData.ust_satz_prozent) : undefined,
       } as AnlageCreate)
@@ -388,6 +390,60 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             <Sun className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-700 dark:text-amber-300">
               Bitte zuerst Geokoordinaten eintragen, um die verfügbaren Provider zu sehen.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Prognose-Wettermodell */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+          <Mountain className="w-4 h-4 text-emerald-500" />
+          Prognose-Wettermodell
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="w-full">
+            <label
+              htmlFor="wetter_modell"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Modell für Solar-Prognose
+            </label>
+            <select
+              id="wetter_modell"
+              name="wetter_modell"
+              value={formData.wetter_modell}
+              onChange={handleChange}
+              className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
+            >
+              <option value="auto">Automatisch (best_match)</option>
+              <option value="meteoswiss_icon_ch2">MeteoSwiss Alpen (2.1 km)</option>
+              <option value="icon_eu">DWD ICON-EU (7 km)</option>
+              <option value="ecmwf_ifs04">ECMWF IFS (9 km)</option>
+            </select>
+          </div>
+          <div className="flex items-end pb-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {formData.wetter_modell === 'auto' && (
+                <span>Open-Meteo best_match — automatische Modellauswahl, 16 Tage</span>
+              )}
+              {formData.wetter_modell === 'meteoswiss_icon_ch2' && (
+                <span>Hochauflösend für Alpenraum (CH, AT-West, IT-Nord). 5-Tage-Prognose, danach Fallback auf best_match.</span>
+              )}
+              {formData.wetter_modell === 'icon_eu' && (
+                <span>DWD-Modell für Europa. 7-Tage-Prognose, danach Fallback auf best_match.</span>
+              )}
+              {formData.wetter_modell === 'ecmwf_ifs04' && (
+                <span>ECMWF-Globalmodell. 10-Tage-Prognose, danach Fallback auf best_match.</span>
+              )}
+            </div>
+          </div>
+        </div>
+        {formData.wetter_modell !== 'auto' && (
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex gap-2">
+            <Info className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+              Für alpine Standorte (Südtirol, Schweiz, Tirol) liefert MeteoSwiss deutlich genauere Prognosen als das Standardmodell. Die Herkunft der Daten wird in der Kurzfrist-Ansicht pro Tag angezeigt.
             </p>
           </div>
         )}

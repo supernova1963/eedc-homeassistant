@@ -27,6 +27,9 @@ export interface VersorgerDaten {
 // Wetter-Provider
 export type WetterProvider = 'auto' | 'open-meteo' | 'brightsky' | 'open-meteo-solar'
 
+// Wettermodell für Solar-Prognose (Open-Meteo Forecast Model)
+export type WetterModell = 'auto' | 'meteoswiss_icon_ch2' | 'icon_eu' | 'ecmwf_ifs04'
+
 // Steuerliche Behandlung
 export type SteuerlicheBehandlung = 'keine_ust' | 'regelbesteuerung'
 
@@ -56,6 +59,8 @@ export interface Anlage {
   versorger_daten?: VersorgerDaten
   // Wetterdaten-Provider
   wetter_provider?: WetterProvider
+  // Wettermodell für Solar-Prognose
+  wetter_modell?: WetterModell
   // Steuerliche Behandlung
   steuerliche_behandlung?: SteuerlicheBehandlung
   ust_satz_prozent?: number

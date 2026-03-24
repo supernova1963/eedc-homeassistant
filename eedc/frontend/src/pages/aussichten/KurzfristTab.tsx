@@ -61,6 +61,14 @@ function formatDatumKurz(datum: string): string {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
 }
 
+// Quellen-Kürzel für Tabellen-Anzeige
+const QUELLEN_KUERZEL: Record<string, { label: string; color: string }> = {
+  meteoswiss_icon_ch2: { label: 'MS', color: 'text-blue-400' },
+  icon_eu: { label: 'EU', color: 'text-green-400' },
+  ecmwf_ifs04: { label: 'EC', color: 'text-purple-400' },
+  best_match: { label: 'BM', color: 'text-gray-400' },
+}
+
 
 export default function KurzfristTab({ anlageId }: Props) {
   const [prognose, setPrognose] = useState<SolarPrognose | null>(null)
@@ -96,6 +104,9 @@ export default function KurzfristTab({ anlageId }: Props) {
   if (!prognose) {
     return <Alert type="warning">Keine Prognose verfügbar</Alert>
   }
+
+  // Kaskade aktiv wenn mindestens ein Tag eine spezifische Quelle hat
+  const hasKaskade = prognose.tage.some(t => t.datenquelle && t.datenquelle !== 'best_match')
 
   // Chart-Daten vorbereiten — Vor-/Nachmittag gestapelt
   const hasVmNm = prognose.tage.some(t => t.pv_ertrag_morgens_kwh != null)
@@ -333,6 +344,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                 <th className="text-right py-2 px-3">Bewölkung</th>
                 <th className="text-right py-2 px-3">Temperatur</th>
                 <th className="text-right py-2 px-3">Niederschlag</th>
+                {hasKaskade && <th className="text-right py-2 px-3">Quelle</th>}
               </tr>
             </thead>
             <tbody>
@@ -376,6 +388,13 @@ export default function KurzfristTab({ anlageId }: Props) {
                       '-'
                     )}
                   </td>
+                  {hasKaskade && (
+                    <td className="py-2 px-3 text-right">
+                      <span className={`text-xs font-mono ${QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.color || 'text-gray-400'}`}>
+                        {QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.label || tag.datenquelle}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -397,7 +416,7 @@ export default function KurzfristTab({ anlageId }: Props) {
               <span>Ausrichtung: {prognose.anlage.azimut}°</span>
             </>
           )}
-          <span>Datenquelle: Open-Meteo Solar (GTI)</span>
+          <span>Datenquelle: {prognose.datenquelle || 'Open-Meteo Solar (GTI)'}</span>
           <span>Abgerufen: {new Date(prognose.abgerufen_am).toLocaleString('de-DE')}</span>
         </div>
       </Card>

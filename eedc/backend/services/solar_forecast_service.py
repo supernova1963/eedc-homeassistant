@@ -14,13 +14,14 @@ Vorteile gegenüber Standard Open-Meteo:
 API-Dokumentation: https://open-meteo.com/en/docs
 """
 
+import asyncio
 import logging
 from datetime import date, datetime
 from math import radians, sin, cos
 from typing import Optional, List
 
 from backend.services.wetter_service import wetter_code_zu_symbol
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -41,6 +42,23 @@ SNOW_LOSS_FACTOR = 0.1  # 10% Verlust bei Schnee
 
 # Timezone für Solar-Noon-Berechnung
 _BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+# Wettermodell-Konfiguration: Key → (Open-Meteo model name, max Prognosetage)
+WETTER_MODELLE = {
+    "auto": (None, 16),                        # best_match, kein models-Parameter
+    "meteoswiss_icon_ch2": ("meteoswiss_icon_ch2", 5),  # Alpenraum, 2.1 km
+    "icon_eu": ("icon_eu", 7),                  # Europa, 7 km
+    "ecmwf_ifs04": ("ecmwf_ifs04", 10),         # Global, 9 km
+}
+
+# Anzeigenamen für Datenquellen
+MODELL_ANZEIGE = {
+    "auto": "Open-Meteo (best_match)",
+    "meteoswiss_icon_ch2": "MeteoSwiss ICON-CH2 (2.1 km)",
+    "icon_eu": "DWD ICON-EU (7 km)",
+    "ecmwf_ifs04": "ECMWF IFS (9 km)",
+    "best_match": "Open-Meteo (best_match)",
+}
 
 
 def _solar_noon_hour(datum: str, longitude: float) -> float:
@@ -99,6 +117,7 @@ class SolarPrognoseTag:
     wetter_symbol: str = "unknown"
     pv_ertrag_morgens_kwh: Optional[float] = None   # vor 12:00
     pv_ertrag_nachmittags_kwh: Optional[float] = None  # ab 12:00
+    datenquelle: str = "best_match"  # Welches Wettermodell die Daten lieferte
 
 
 @dataclass
@@ -136,7 +155,8 @@ async def fetch_gti_forecast(
     neigung: int = 35,
     ausrichtung: int = 0,
     days: int = 7,
-    timeout: float = 30.0
+    timeout: float = 30.0,
+    model: Optional[str] = None,
 ) -> Optional[dict]:
     """
     Ruft GTI-Prognose (Global Tilted Irradiance) von Open-Meteo ab.
@@ -189,15 +209,19 @@ async def fetch_gti_forecast(
         "forecast_days": days,
     }
 
+    if model is not None:
+        params["models"] = model
+
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.get(OPEN_METEO_FORECAST_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
+            model_info = f", Modell={model}" if model else ""
             logger.info(
                 f"Open-Meteo Solar: {days} Tage @ ({latitude}, {longitude}), "
-                f"Neigung={neigung}°, Azimut={ausrichtung}°"
+                f"Neigung={neigung}°, Azimut={ausrichtung}°{model_info}"
             )
 
             return data
@@ -278,9 +302,13 @@ async def get_solar_prognose(
     ausrichtung: int = 0,
     days: int = 7,
     system_losses: float = DEFAULT_SYSTEM_LOSSES,
+    wetter_modell: str = "auto",
 ) -> Optional[SolarPrognoseResponse]:
     """
     Berechnet PV-Ertragsprognose basierend auf GTI.
+
+    Bei wetter_modell != "auto" wird eine Kaskade verwendet:
+    bevorzugtes Modell (begrenzte Tage) + best_match Fallback für den Rest.
 
     Args:
         latitude: Breitengrad
@@ -290,17 +318,112 @@ async def get_solar_prognose(
         ausrichtung: Azimut (0=Süd)
         days: Anzahl Vorhersagetage
         system_losses: Systemverluste (0-1)
+        wetter_modell: Wettermodell-Key aus WETTER_MODELLE
 
     Returns:
         SolarPrognoseResponse mit Tageswerten oder None
     """
-    data = await fetch_gti_forecast(
-        latitude, longitude, neigung, ausrichtung, days
-    )
+    model_name, max_days = WETTER_MODELLE.get(wetter_modell, (None, 16))
 
-    if not data:
+    if wetter_modell == "auto" or days <= max_days:
+        # Einfacher Fall: ein Call reicht
+        data = await fetch_gti_forecast(
+            latitude, longitude, neigung, ausrichtung, days, model=model_name
+        )
+        if not data:
+            return None
+        datenquelle_tag = wetter_modell if wetter_modell != "auto" else "best_match"
+        return _build_prognose(data, kwp, neigung, ausrichtung, days, system_losses,
+                               longitude, datenquelle_tag=datenquelle_tag)
+
+    # Kaskade: bevorzugtes Modell + best_match Fallback (parallel)
+    primary_coro = fetch_gti_forecast(
+        latitude, longitude, neigung, ausrichtung, max_days, model=model_name
+    )
+    fallback_coro = fetch_gti_forecast(
+        latitude, longitude, neigung, ausrichtung, days, model=None
+    )
+    primary_data, fallback_data = await asyncio.gather(primary_coro, fallback_coro)
+
+    if not primary_data and not fallback_data:
         return None
 
+    if not primary_data:
+        # Bevorzugtes Modell hat keine Daten → nur Fallback
+        logger.warning(f"Wettermodell {wetter_modell} lieferte keine Daten, nutze best_match")
+        return _build_prognose(fallback_data, kwp, neigung, ausrichtung, days,
+                               system_losses, longitude, datenquelle_tag="best_match")
+
+    if not fallback_data:
+        # Nur bevorzugtes Modell verfügbar
+        return _build_prognose(primary_data, kwp, neigung, ausrichtung, max_days,
+                               system_losses, longitude, datenquelle_tag=wetter_modell)
+
+    # Beide verfügbar → zusammenführen
+    # Primary-Tage bestimmen
+    primary_dates = set(primary_data.get("daily", {}).get("time", []))
+
+    # Primary verarbeiten
+    primary_prognose = _build_prognose(
+        primary_data, kwp, neigung, ausrichtung, max_days,
+        system_losses, longitude, datenquelle_tag=wetter_modell
+    )
+    # Fallback verarbeiten
+    fallback_prognose = _build_prognose(
+        fallback_data, kwp, neigung, ausrichtung, days,
+        system_losses, longitude, datenquelle_tag="best_match"
+    )
+
+    if not primary_prognose:
+        return fallback_prognose
+    if not fallback_prognose:
+        return primary_prognose
+
+    # Tage mergen: Primary hat Vorrang, Fallback füllt auf
+    merged_tage = list(primary_prognose.tageswerte)
+    for tag in fallback_prognose.tageswerte:
+        if tag.datum not in primary_dates:
+            merged_tage.append(tag)
+
+    # Nach Datum sortieren
+    merged_tage.sort(key=lambda t: t.datum)
+
+    summe_kwh = sum(t.pv_ertrag_kwh for t in merged_tage)
+    quellen = list(dict.fromkeys(t.datenquelle for t in merged_tage))
+    datenquelle_str = " + ".join(
+        MODELL_ANZEIGE.get(q, q) for q in quellen
+    )
+
+    return SolarPrognoseResponse(
+        anlage_id=None,
+        kwp_gesamt=kwp,
+        neigung=neigung,
+        ausrichtung=ausrichtung,
+        system_losses_prozent=round(system_losses * 100, 1),
+        prognose_zeitraum={
+            "von": merged_tage[0].datum,
+            "bis": merged_tage[-1].datum,
+        },
+        summe_kwh=round(summe_kwh, 1),
+        durchschnitt_kwh_tag=round(summe_kwh / len(merged_tage), 2),
+        tageswerte=merged_tage,
+        string_prognosen=None,
+        datenquelle=datenquelle_str,
+        abgerufen_am=datetime.now().isoformat(),
+    )
+
+
+def _build_prognose(
+    data: dict,
+    kwp: float,
+    neigung: int,
+    ausrichtung: int,
+    days: int,
+    system_losses: float,
+    longitude: float,
+    datenquelle_tag: str = "best_match",
+) -> Optional[SolarPrognoseResponse]:
+    """Baut SolarPrognoseResponse aus Open-Meteo API-Daten."""
     hourly = data.get("hourly", {})
     daily = data.get("daily", {})
 
@@ -436,6 +559,7 @@ async def get_solar_prognose(
             wetter_symbol=wetter_code_zu_symbol(daily_weather_code[i] if i < len(daily_weather_code) else None),
             pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
             pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
+            datenquelle=datenquelle_tag,
         ))
 
         summe_kwh += ertrag
@@ -457,7 +581,7 @@ async def get_solar_prognose(
         durchschnitt_kwh_tag=round(summe_kwh / len(tageswerte), 2),
         tageswerte=tageswerte,
         string_prognosen=None,
-        datenquelle="open-meteo-solar-gti",
+        datenquelle=MODELL_ANZEIGE.get(datenquelle_tag, datenquelle_tag),
         abgerufen_am=datetime.now().isoformat(),
     )
 
@@ -468,6 +592,7 @@ async def get_multi_string_prognose(
     strings: List[PVStringConfig],
     days: int = 7,
     system_losses: float = DEFAULT_SYSTEM_LOSSES,
+    wetter_modell: str = "auto",
 ) -> Optional[dict]:
     """
     Berechnet Prognose für mehrere Strings mit unterschiedlicher Ausrichtung.
@@ -480,6 +605,7 @@ async def get_multi_string_prognose(
         strings: Liste von PVStringConfig
         days: Anzahl Vorhersagetage
         system_losses: Systemverluste
+        wetter_modell: Wettermodell-Key aus WETTER_MODELLE
 
     Returns:
         dict mit Gesamt- und String-Prognosen oder None
@@ -500,6 +626,7 @@ async def get_multi_string_prognose(
             ausrichtung=string.ausrichtung,
             days=days,
             system_losses=system_losses,
+            wetter_modell=wetter_modell,
         )
 
         if prognose:
@@ -515,9 +642,16 @@ async def get_multi_string_prognose(
                         "datum": t.datum,
                         "pv_ertrag_kwh": t.pv_ertrag_kwh,
                         "gti_kwh_m2": t.gti_kwh_m2,
+                        "sonnenstunden": t.sonnenstunden,
+                        "temperatur_max_c": t.temperatur_max_c,
+                        "temperatur_min_c": t.temperatur_min_c,
+                        "bewoelkung_prozent": t.bewoelkung_prozent,
+                        "niederschlag_mm": t.niederschlag_mm,
+                        "schnee_cm": t.schnee_cm,
                         "wetter_symbol": t.wetter_symbol,
                         "pv_ertrag_morgens_kwh": t.pv_ertrag_morgens_kwh,
                         "pv_ertrag_nachmittags_kwh": t.pv_ertrag_nachmittags_kwh,
+                        "datenquelle": t.datenquelle,
                     }
                     for t in prognose.tageswerte
                 ],
@@ -532,6 +666,11 @@ async def get_multi_string_prognose(
     avg_neigung = sum(s.neigung * s.kwp for s in strings) / gesamt_kwp
     avg_ausrichtung = sum(s.ausrichtung * s.kwp for s in strings) / gesamt_kwp
 
+    # Datenquelle aus erstem String ableiten (gleicher Standort)
+    first_tage = string_prognosen[0]["tageswerte"]
+    quellen = list(dict.fromkeys(t["datenquelle"] for t in first_tage))
+    datenquelle_str = " + ".join(MODELL_ANZEIGE.get(q, q) for q in quellen)
+
     return {
         "kwp_gesamt": gesamt_kwp,
         "neigung_durchschnitt": round(avg_neigung),
@@ -539,6 +678,6 @@ async def get_multi_string_prognose(
         "summe_kwh": round(gesamt_kwh, 1),
         "durchschnitt_kwh_tag": round(gesamt_kwh / days, 2),
         "string_prognosen": string_prognosen,
-        "datenquelle": "open-meteo-solar-gti",
+        "datenquelle": datenquelle_str,
         "abgerufen_am": datetime.now().isoformat(),
     }

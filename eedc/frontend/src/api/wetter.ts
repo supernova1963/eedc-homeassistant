@@ -97,6 +97,7 @@ export interface SolarPrognoseTag {
   wetter_symbol: string
   pv_ertrag_morgens_kwh?: number
   pv_ertrag_nachmittags_kwh?: number
+  datenquelle?: string
 }
 
 export interface StringPrognose {

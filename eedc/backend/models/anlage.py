@@ -81,6 +81,10 @@ class Anlage(Base):
     # Optionen: "auto", "open-meteo", "brightsky", "open-meteo-solar"
     wetter_provider: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="auto")
 
+    # Wettermodell für Solar-Prognose (Open-Meteo Forecast Model)
+    # Optionen: "auto" (best_match), "meteoswiss_icon_ch2", "icon_eu", "ecmwf_ifs04"
+    wetter_modell: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, default="auto")
+
     # Sensor-Mapping für Home Assistant Integration
     # Struktur: {"basis": {...}, "investitionen": {...}}
     # Siehe docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation

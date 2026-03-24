@@ -60,20 +60,22 @@ def _aggregate_string_tageswerte(
             for sp in string_prognosen
             if i < len(sp["tageswerte"])
         )
+        # Wetter-Daten vom ersten String übernehmen (identischer Standort)
         tageswerte.append(SolarPrognoseTagSchema(
             datum=day["datum"],
             pv_ertrag_kwh=round(total_ertrag, 2),
             gti_kwh_m2=round(total_gti, 2),
             ghi_kwh_m2=0,
-            sonnenstunden=0,
-            temperatur_max_c=None,
-            temperatur_min_c=None,
-            bewoelkung_prozent=None,
-            niederschlag_mm=None,
-            schnee_cm=None,
+            sonnenstunden=day.get("sonnenstunden", 0),
+            temperatur_max_c=day.get("temperatur_max_c"),
+            temperatur_min_c=day.get("temperatur_min_c"),
+            bewoelkung_prozent=day.get("bewoelkung_prozent"),
+            niederschlag_mm=day.get("niederschlag_mm"),
+            schnee_cm=day.get("schnee_cm"),
             wetter_symbol=day.get("wetter_symbol", "unknown"),
             pv_ertrag_morgens_kwh=round(total_morgens, 2) if total_morgens > 0 else None,
             pv_ertrag_nachmittags_kwh=round(total_nachmittags, 2) if total_nachmittags > 0 else None,
+            datenquelle=day.get("datenquelle", "best_match"),
         ))
     return tageswerte
 
@@ -97,6 +99,7 @@ class SolarPrognoseTagSchema(BaseModel):
     wetter_symbol: str = "unknown"
     pv_ertrag_morgens_kwh: float | None = None
     pv_ertrag_nachmittags_kwh: float | None = None
+    datenquelle: str = "best_match"
 
 
 class StringPrognoseSchema(BaseModel):
@@ -264,6 +267,8 @@ async def get_solar_prognose_endpoint(
     has_multiple_orientations = len(unique_orientations) > 1
 
     # Bei mehreren Ausrichtungen IMMER per-String berechnen (korrekte VM/NM)
+    wetter_modell = getattr(anlage, 'wetter_modell', None) or "auto"
+
     if has_multiple_orientations:
         multi_result = await get_multi_string_prognose(
             latitude=anlage.latitude,
@@ -271,6 +276,7 @@ async def get_solar_prognose_endpoint(
             strings=strings,
             days=tage,
             system_losses=system_losses,
+            wetter_modell=wetter_modell,
         )
 
         if not multi_result:
@@ -317,6 +323,7 @@ async def get_solar_prognose_endpoint(
             ausrichtung=strings[0].ausrichtung,
             days=tage,
             system_losses=system_losses,
+            wetter_modell=wetter_modell,
         )
 
         if not prognose:
@@ -350,6 +357,7 @@ async def get_solar_prognose_endpoint(
                     wetter_symbol=t.wetter_symbol,
                     pv_ertrag_morgens_kwh=t.pv_ertrag_morgens_kwh,
                     pv_ertrag_nachmittags_kwh=t.pv_ertrag_nachmittags_kwh,
+                    datenquelle=t.datenquelle,
                 )
                 for t in prognose.tageswerte
             ],

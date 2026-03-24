@@ -81,6 +81,8 @@ async def run_migrations(conn):
                 ('ust_satz_prozent', 'FLOAT DEFAULT 19.0'),
                 # v2.6.0: Connector-Konfiguration für direkte Geräteverbindung
                 ('connector_config', 'JSON'),
+                # v3.5.0: Wettermodell für Solar-Prognose (Kaskade mit Fallback)
+                ('wetter_modell', "VARCHAR(50) DEFAULT 'auto'"),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
