@@ -83,6 +83,8 @@ async def run_migrations(conn):
                 ('connector_config', 'JSON'),
                 # v3.5.0: Wettermodell für Solar-Prognose (Kaskade mit Fallback)
                 ('wetter_modell', "VARCHAR(50) DEFAULT 'auto'"),
+                # v3.5.0: Community Auto-Share nach Monatsabschluss
+                ('community_auto_share', 'BOOLEAN DEFAULT 0'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

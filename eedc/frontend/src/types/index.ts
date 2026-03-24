@@ -66,6 +66,7 @@ export interface Anlage {
   ust_satz_prozent?: number
   // Community-Sharing
   community_hash?: string | null
+  community_auto_share?: boolean
 }
 
 // Sensor-Konfiguration

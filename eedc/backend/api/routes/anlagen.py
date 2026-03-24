@@ -52,6 +52,7 @@ class AnlageBase(BaseModel):
     ust_satz_prozent: Optional[float] = Field(19.0, ge=0, le=30, description="USt-Satz in Prozent (DE: 19, AT: 20, CH: 8.1)")
     # Community
     community_hash: Optional[str] = Field(None, max_length=64, description="Hash für Community-Teilen (read-only)")
+    community_auto_share: Optional[bool] = Field(False, description="Monatsdaten nach Abschluss automatisch an Community senden")
 
 
 class AnlageCreate(AnlageBase):
@@ -85,6 +86,7 @@ class AnlageUpdate(BaseModel):
     wetter_modell: Optional[str] = Field(None, max_length=50)
     steuerliche_behandlung: Optional[str] = Field(None, max_length=30)
     ust_satz_prozent: Optional[float] = Field(None, ge=0, le=30)
+    community_auto_share: Optional[bool] = None
 
 
 class SensorConfigUpdate(BaseModel):

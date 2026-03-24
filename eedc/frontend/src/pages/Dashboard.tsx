@@ -22,7 +22,7 @@ import {
 import { Card, Button, LoadingSpinner, Select, fmtCalc } from '../components/ui'
 import {
   HeroLeiste, EnergyFlowDiagram, RingGaugeCard, SparklineChart,
-  AmortisationsBar, CommunityTeaser, Section, SectionLink, KPICard,
+  AmortisationsBar, CommunityTeaser, CommunityNudge, Section, SectionLink, KPICard,
   QuickLink, ShareTextModal, GettingStarted
 } from '../components/dashboard'
 import { useSelectedAnlage } from '../hooks'
@@ -562,8 +562,8 @@ export default function Dashboard() {
         </div>
       </Section>
 
-      {/* Community-Teaser */}
-      {anlage?.community_hash && <CommunityTeaser />}
+      {/* Community-Teaser / Nudge */}
+      {anlage?.community_hash ? <CommunityTeaser /> : monatsdaten.length >= 3 && <CommunityNudge />}
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

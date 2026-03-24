@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain } from 'lucide-react'
+import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain, Users } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
 import VersorgerSection from './VersorgerSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
@@ -30,6 +30,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     wetter_modell: anlage?.wetter_modell || 'auto',
     steuerliche_behandlung: anlage?.steuerliche_behandlung || 'keine_ust',
     ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',
+    community_auto_share: anlage?.community_auto_share ?? false,
   })
 
   // Track if user manually changed USt-Satz
@@ -102,6 +103,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         wetter_modell: formData.wetter_modell,
         steuerliche_behandlung: formData.steuerliche_behandlung || 'keine_ust',
         ust_satz_prozent: formData.ust_satz_prozent ? parseFloat(formData.ust_satz_prozent) : undefined,
+        community_auto_share: formData.community_auto_share,
       } as AnlageCreate)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -447,6 +449,30 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             </p>
           </div>
         )}
+      </div>
+
+      {/* Community Auto-Share */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <Users className="w-5 h-5 text-blue-500" />
+          Community
+        </h3>
+        <label className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <input
+            type="checkbox"
+            checked={formData.community_auto_share}
+            onChange={(e) => setFormData(prev => ({ ...prev, community_auto_share: e.target.checked }))}
+            className="mt-1 h-4 w-4 text-orange-500 border-gray-300 dark:border-gray-600 rounded focus:ring-orange-500"
+          />
+          <div>
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Automatisch teilen nach Monatsabschluss
+            </span>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Anonymisierte Monatsdaten werden nach jedem Abschluss automatisch an den Community-Benchmark gesendet.
+            </p>
+          </div>
+        </label>
       </div>
 
       {/* Versorger & Zähler */}

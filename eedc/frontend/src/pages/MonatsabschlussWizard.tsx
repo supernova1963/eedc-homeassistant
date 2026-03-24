@@ -479,10 +479,19 @@ export default function MonatsabschlussWizard() {
 
       if (result.success) {
         setSuccess(result.message)
-        // Nach 2s zur nächsten Seite navigieren
+        // Community-Nudge: Anlage laden und prüfen ob Auto-Share aktiv
+        try {
+          const anlageObj = await anlagenApi.get(parseInt(anlageId!))
+          if (!anlageObj.community_hash && !anlageObj.community_auto_share) {
+            setSuccess(result.message + ' — Tipp: Teile deine Daten anonym mit der Community!')
+          } else if (anlageObj.community_auto_share) {
+            setSuccess(result.message + ' — Daten werden automatisch an die Community gesendet.')
+          }
+        } catch { /* ignore */ }
+        // Nach 3s zur nächsten Seite navigieren (etwas mehr Zeit für Community-Hinweis)
         setTimeout(() => {
           navigate('/einstellungen/monatsdaten')
-        }, 2000)
+        }, 3000)
       } else {
         setError('Speichern fehlgeschlagen')
       }

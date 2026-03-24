@@ -25,7 +25,7 @@ import {
   Trophy,
   BarChart3,
 } from 'lucide-react'
-import { communityApi } from '../api'
+import { communityApi, anlagenApi } from '../api'
 import type { PreviewResponse, ShareResponse, CommunityStatus } from '../api'
 import { useSelectedAnlage } from '../hooks'
 
@@ -54,7 +54,7 @@ const REGION_NAMEN: Record<string, string> = {
 
 export default function CommunityShare() {
   const navigate = useNavigate()
-  const { anlagen, selectedAnlageId: selectedAnlage, setSelectedAnlageId: setSelectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId: selectedAnlage, setSelectedAnlageId: setSelectedAnlage, selectedAnlage: anlageObj, refresh: refreshAnlagen, loading: anlagenLoading } = useSelectedAnlage()
 
   const [status, setStatus] = useState<CommunityStatus | null>(null)
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
@@ -394,6 +394,36 @@ export default function CommunityShare() {
           </div>
         </div>
       </div>
+
+      {/* Auto-Share Toggle */}
+      {selectedAnlage && (
+        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={anlageObj?.community_auto_share ?? false}
+              onChange={async (e) => {
+                if (!selectedAnlage) return
+                try {
+                  await anlagenApi.update(selectedAnlage, { community_auto_share: e.target.checked })
+                  await refreshAnlagen()
+                } catch {
+                  // Fehler ignorieren — UI bleibt konsistent durch Refresh
+                }
+              }}
+              className="mt-1 h-4 w-4 text-orange-500 border-gray-300 dark:border-gray-600 rounded focus:ring-orange-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Automatisch teilen nach Monatsabschluss
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Gleiche Daten wie beim manuellen Teilen — vollständig anonym. Nach jedem Monatsabschluss werden deine Daten automatisch aktualisiert.
+              </p>
+            </div>
+          </label>
+        </div>
+      )}
 
       {/* Einwilligung (DSGVO Art. 6/7) - nur beim ersten Teilen */}
       {!preview?.bereits_geteilt && preview?.anzahl_monate && preview.anzahl_monate > 0 && (

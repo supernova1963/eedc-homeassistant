@@ -6,7 +6,7 @@ Repräsentiert eine PV-Anlage mit Stammdaten.
 
 from datetime import date, datetime
 from typing import Optional, Any
-from sqlalchemy import String, Float, Date, DateTime, JSON
+from sqlalchemy import String, Float, Date, DateTime, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
@@ -98,6 +98,8 @@ class Anlage(Base):
     # Community-Sharing: Hash zur Identifikation bei Löschung
     # Wird nach erfolgreichem Teilen gesetzt und für Delete-Endpoint benötigt
     community_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Auto-Share: Monatsdaten nach Abschluss automatisch an Community senden
+    community_auto_share: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     # Steuerliche Behandlung
     # keine_ust: Kein USt-Effekt (Post-2023 ≤30kWp, Kleinunternehmer)

@@ -950,6 +950,26 @@ async def save_monatsabschluss(
     except Exception as e:
         logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {e}")
 
+    # Auto-Share: Daten an Community senden wenn aktiviert
+    if anlage.community_auto_share:
+        try:
+            from backend.services.community_service import prepare_community_data, COMMUNITY_SERVER_URL
+            import httpx
+            share_data = await prepare_community_data(db, anlage_id)
+            if share_data and share_data.get("monatswerte"):
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.post(f"{COMMUNITY_SERVER_URL}/api/submit", json=share_data)
+                    if resp.status_code == 200:
+                        result_data = resp.json()
+                        if result_data.get("anlage_hash") and not anlage.community_hash:
+                            anlage.community_hash = result_data["anlage_hash"]
+                            await db.commit()
+                        logger.info(f"Auto-Share für Anlage {anlage_id} erfolgreich")
+                    else:
+                        logger.warning(f"Auto-Share HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"Auto-Share fehlgeschlagen: {e}")
+
     await log_activity(
         kategorie="monatsabschluss",
         aktion=f"Monatsabschluss {MONAT_NAMEN[monat]} {jahr} gespeichert",
