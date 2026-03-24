@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.23] - 2026-03-24
+
+### Behoben
+
+- **Pre-built Docker Images für HA Add-on (#51)**: ARM64-Builds hingen wegen QEMU-Emulation. Umstellung auf native ARM64-Runner (`ubuntu-24.04-arm`) für beide Repos. Standalone nutzt jetzt Build + Manifest-Merge statt Single-Job Multi-Arch
+
 ## [3.4.22] - 2026-03-24
 
 ### Neu
