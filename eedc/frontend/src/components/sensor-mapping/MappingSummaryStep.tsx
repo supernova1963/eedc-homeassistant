@@ -14,6 +14,8 @@ import {
   Battery,
   Thermometer,
   Car,
+  Activity,
+  AlertTriangle,
 } from 'lucide-react'
 import type { FeldMapping, InvestitionInfo, StrategieTyp } from '../../api/sensorMapping'
 
@@ -25,6 +27,8 @@ interface MappingSummaryStepProps {
       pv_gesamt: FeldMapping | null
     }
     investitionen: Record<string, Record<string, FeldMapping>>
+    basisLive: Record<string, string | null>
+    investitionenLive: Record<string, Record<string, string | null>>
   }
   investitionen: InvestitionInfo[]
 }
@@ -53,6 +57,16 @@ const TYP_ICONS: Record<string, React.ReactNode> = {
   waermepumpe: <Thermometer className="w-4 h-4" />,
   'e-auto': <Car className="w-4 h-4" />,
   wallbox: <Zap className="w-4 h-4" />,
+}
+
+const LIVE_KEY_LABELS: Record<string, string> = {
+  einspeisung_w: 'Einspeisung',
+  netzbezug_w: 'Netzbezug',
+  netz_kombi_w: 'Netz (Kombi)',
+  aussentemperatur_c: 'Außentemperatur',
+  leistung_w: 'Leistung',
+  soc: 'SoC',
+  warmwasser_temperatur_c: 'Warmwasser',
 }
 
 function MappingRow({ label, mapping }: { label: string; mapping: FeldMapping | null }) {
@@ -93,6 +107,21 @@ function MappingRow({ label, mapping }: { label: string; mapping: FeldMapping | 
   )
 }
 
+function LiveSensorRow({ label, entityId }: { label: string; entityId: string | null }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+      <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
+      {entityId ? (
+        <span className="text-xs text-green-700 dark:text-green-400 font-mono max-w-[250px] truncate">
+          {entityId}
+        </span>
+      ) : (
+        <span className="text-sm text-gray-400 italic">Nicht zugeordnet</span>
+      )}
+    </div>
+  )
+}
+
 export default function MappingSummaryStep({
   state,
   investitionen,
@@ -127,6 +156,15 @@ export default function MappingSummaryStep({
 
   const totalConfigured = stats.sensor + stats.kwp_verteilung + stats.cop_berechnung + stats.ev_quote + stats.manuell
 
+  // Live-Sensoren zählen
+  const basisLive = state.basisLive || {}
+  const invLive = state.investitionenLive || {}
+  const basisLiveEntries = Object.entries(basisLive).filter(([, v]) => v)
+  const invLiveEntries = Object.entries(invLive).flatMap(([, sensors]) =>
+    Object.entries(sensors).filter(([, v]) => v)
+  )
+  const totalLive = basisLiveEntries.length + invLiveEntries.length
+
   return (
     <div className="space-y-6">
       {/* Statistik-Übersicht */}
@@ -157,9 +195,9 @@ export default function MappingSummaryStep({
           count={stats.manuell}
         />
         <StatCard
-          icon={<MinusCircle className="w-5 h-5 text-gray-400" />}
-          label="Keine"
-          count={stats.keine}
+          icon={<Activity className="w-5 h-5 text-primary-500" />}
+          label="Live-Sensoren"
+          count={totalLive}
         />
       </div>
 
@@ -168,16 +206,28 @@ export default function MappingSummaryStep({
         <div className="flex items-center gap-2">
           <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
           <span className="font-medium text-green-800 dark:text-green-200">
-            {totalConfigured} Felder konfiguriert
+            {totalConfigured} Felder konfiguriert, {totalLive} Live-Sensoren
           </span>
         </div>
       </div>
 
-      {/* Basis-Sensoren */}
+      {/* Warnung wenn keine Live-Sensoren */}
+      {totalLive === 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            <span className="font-medium text-amber-800 dark:text-amber-200">
+              Keine Live-Sensoren zugeordnet — das Live-Dashboard bleibt leer
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Basis-Sensoren (Energie) */}
       <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2">
           <Zap className="w-5 h-5 text-amber-500" />
-          <h3 className="font-medium text-gray-900 dark:text-white">Basis-Sensoren</h3>
+          <h3 className="font-medium text-gray-900 dark:text-white">Basis-Sensoren (Energie)</h3>
         </div>
         <div className="px-4 py-2">
           <MappingRow label="Einspeisung" mapping={state.basis.einspeisung} />
@@ -186,10 +236,32 @@ export default function MappingSummaryStep({
         </div>
       </div>
 
+      {/* Basis Live-Sensoren */}
+      {Object.keys(basisLive).length > 0 && (
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary-500" />
+            <h3 className="font-medium text-gray-900 dark:text-white">Basis Live-Sensoren (W)</h3>
+          </div>
+          <div className="px-4 py-2">
+            {Object.entries(basisLive).map(([key, entityId]) => (
+              <LiveSensorRow
+                key={key}
+                label={LIVE_KEY_LABELS[key] || key}
+                entityId={entityId}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Investitionen */}
       {investitionen.map(inv => {
         const felder = state.investitionen[inv.id.toString()] || {}
-        if (Object.keys(felder).length === 0) return null
+        const live = invLive[inv.id.toString()] || {}
+        const hasFelder = Object.keys(felder).length > 0
+        const hasLive = Object.values(live).some(v => v)
+        if (!hasFelder && !hasLive) return null
 
         return (
           <div key={inv.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -208,6 +280,23 @@ export default function MappingSummaryStep({
                   mapping={mapping}
                 />
               ))}
+              {Object.entries(live).filter(([, v]) => v).length > 0 && (
+                <>
+                  <div className="flex items-center gap-1 pt-2 pb-1">
+                    <Activity className="w-3 h-3 text-primary-500" />
+                    <span className="text-xs font-medium text-primary-600 dark:text-primary-400">Live</span>
+                  </div>
+                  {Object.entries(live).map(([key, entityId]) =>
+                    entityId ? (
+                      <LiveSensorRow
+                        key={key}
+                        label={LIVE_KEY_LABELS[key] || key}
+                        entityId={entityId}
+                      />
+                    ) : null
+                  )}
+                </>
+              )}
             </div>
           </div>
         )
