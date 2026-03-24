@@ -47,6 +47,7 @@ _BERLIN_TZ = ZoneInfo("Europe/Berlin")
 WETTER_MODELLE = {
     "auto": (None, 16),                        # best_match, kein models-Parameter
     "meteoswiss_icon_ch2": ("meteoswiss_icon_ch2", 5),  # Alpenraum, 2.1 km
+    "icon_d2": ("icon_d2", 2),                  # Deutschland, 2.2 km
     "icon_eu": ("icon_eu", 7),                  # Europa, 7 km
     "ecmwf_ifs04": ("ecmwf_ifs04", 10),         # Global, 9 km
 }
@@ -55,6 +56,7 @@ WETTER_MODELLE = {
 MODELL_ANZEIGE = {
     "auto": "Open-Meteo (best_match)",
     "meteoswiss_icon_ch2": "MeteoSwiss ICON-CH2 (2.1 km)",
+    "icon_d2": "DWD ICON-D2 (2.2 km)",
     "icon_eu": "DWD ICON-EU (7 km)",
     "ecmwf_ifs04": "ECMWF IFS (9 km)",
     "best_match": "Open-Meteo (best_match)",

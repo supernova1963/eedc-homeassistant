@@ -64,6 +64,7 @@ function formatDatumKurz(datum: string): string {
 // Quellen-Kürzel für Tabellen-Anzeige
 const QUELLEN_KUERZEL: Record<string, { label: string; color: string }> = {
   meteoswiss_icon_ch2: { label: 'MS', color: 'text-blue-400' },
+  icon_d2: { label: 'D2', color: 'text-cyan-400' },
   icon_eu: { label: 'EU', color: 'text-green-400' },
   ecmwf_ifs04: { label: 'EC', color: 'text-purple-400' },
   best_match: { label: 'BM', color: 'text-gray-400' },
@@ -220,7 +221,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                 key={tag.datum}
                 className={`flex flex-col items-center p-3 rounded-lg min-w-[80px] ${
                   index === 0
-                    ? 'bg-primary-50 dark:bg-primary-900/30 ring-2 ring-primary-500'
+                    ? 'bg-primary-50 dark:bg-primary-900/30 border-2 border-primary-500'
                     : 'bg-gray-50 dark:bg-gray-800'
                 }`}
               >

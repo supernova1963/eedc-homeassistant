@@ -420,6 +420,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             >
               <option value="auto">Automatisch (best_match)</option>
               <option value="meteoswiss_icon_ch2">MeteoSwiss Alpen (2.1 km)</option>
+              <option value="icon_d2">DWD ICON-D2 (2.2 km)</option>
               <option value="icon_eu">DWD ICON-EU (7 km)</option>
               <option value="ecmwf_ifs04">ECMWF IFS (9 km)</option>
             </select>
@@ -431,6 +432,9 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               )}
               {formData.wetter_modell === 'meteoswiss_icon_ch2' && (
                 <span>Hochauflösend für Alpenraum (CH, AT-West, IT-Nord). 5-Tage-Prognose, danach Fallback auf best_match.</span>
+              )}
+              {formData.wetter_modell === 'icon_d2' && (
+                <span>DWD-Regionalmodell für Deutschland + Nachbarländer. 2-Tage-Prognose, danach Fallback auf best_match.</span>
               )}
               {formData.wetter_modell === 'icon_eu' && (
                 <span>DWD-Modell für Europa. 7-Tage-Prognose, danach Fallback auf best_match.</span>

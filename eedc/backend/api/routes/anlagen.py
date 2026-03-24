@@ -46,7 +46,7 @@ class AnlageBase(BaseModel):
     # Wetterdaten-Provider
     wetter_provider: Optional[str] = Field(None, max_length=30, description="Wetterdaten-Provider (auto, brightsky, open-meteo, open-meteo-solar)")
     # Wettermodell für Solar-Prognose
-    wetter_modell: Optional[str] = Field("auto", max_length=50, description="Wettermodell: auto, meteoswiss_icon_ch2, icon_eu, ecmwf_ifs04")
+    wetter_modell: Optional[str] = Field("auto", max_length=50, description="Wettermodell: auto, meteoswiss_icon_ch2, icon_d2, icon_eu, ecmwf_ifs04")
     # Steuerliche Behandlung
     steuerliche_behandlung: Optional[str] = Field("keine_ust", max_length=30, description="Steuerliche Behandlung: keine_ust oder regelbesteuerung")
     ust_satz_prozent: Optional[float] = Field(19.0, ge=0, le=30, description="USt-Satz in Prozent (DE: 19, AT: 20, CH: 8.1)")

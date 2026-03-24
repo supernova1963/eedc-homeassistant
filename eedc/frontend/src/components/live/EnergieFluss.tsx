@@ -313,6 +313,12 @@ export default function EnergieFluss({
   const nodeMap = new Map(nodes.map(n => [n.komp.key, n]))
   const haushalt = komponenten.find(k => k.key === 'haushalt')
 
+  // Netto-Hausverbrauch: Summe aller Verbraucher (inkl. Haushalt-Rest, WP, Wallbox etc.)
+  // ohne Batterie, Netz und PV-Erzeuger
+  const nettoHausverbrauch = komponenten
+    .filter(k => !k.key.startsWith('pv_') && k.key !== 'netz' && !k.key.startsWith('batterie_'))
+    .reduce((sum, k) => sum + (k.verbrauch_kw ?? 0), 0)
+
   // Dynamische Höhe: Basis 380, erweitert wenn Knoten tiefer liegen
   const maxY = Math.max(...nodes.map(n => n.y), dims.verbraucherY)
   const svgH = Math.max(380, maxY + NODE_H / 2 + 10)
@@ -795,21 +801,21 @@ export default function EnergieFluss({
           <foreignObject x={CX - dims.hausIconSize / 2} y={CY - dims.hausIconSize * 0.75} width={dims.hausIconSize} height={dims.hausIconSize}>
             <IconElement name="home" size={dims.hausIconSize} className="text-emerald-500" />
           </foreignObject>
-          {/* Haushalt kW */}
+          {/* Netto-Hausverbrauch im Kreis */}
           <text
             x={CX} y={CY + dims.hausIconSize * 0.7}
             textAnchor="middle"
             style={{ fontSize: `${dims.kwFontSize}px` }}
             className="font-bold fill-gray-900 dark:fill-white"
           >
-            {haushalt ? formatPower(haushalt.verbrauch_kw ?? 0) : ''}
+            {formatPower(nettoHausverbrauch)}
           </text>
         </g>
 
-        {/* Solarleistung + Energieumsatz + PV-Soll — oberhalb des Hauses */}
+        {/* Solarleistung + PV-Soll — oberhalb des Hauses */}
         {summePv > 0 && (
           <text
-            x={CX} y={CY - HAUS_R - 8 - dims.socFontSize - 2}
+            x={CX} y={CY - HAUS_R - 8}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize}px` }}
             className="fill-yellow-500 dark:fill-yellow-400"
@@ -818,18 +824,9 @@ export default function EnergieFluss({
             Solarleistung {formatPower(summePv)}
           </text>
         )}
-        <text
-          x={CX} y={CY - HAUS_R - 8}
-          textAnchor="middle"
-          style={{ fontSize: `${dims.socFontSize}px` }}
-          className="fill-gray-500 dark:fill-gray-400"
-        >
-          <title>Gesamtfluss aller Energieströme (Erzeugung + Verbrauch + Speicher + Netz)</title>
-          Energieumsatz {formatPower(Math.max(summeErzeugung, summeVerbrauch))}
-        </text>
         {pvSollKw != null && pvSollKw > 0 && (
           <text
-            x={CX} y={CY - HAUS_R - 8 - (summePv > 0 ? dims.socFontSize + 2 : 0) - dims.socFontSize - 2}
+            x={CX} y={CY - HAUS_R - 8 - (summePv > 0 ? dims.socFontSize + 2 : 0)}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
             className="fill-purple-500 dark:fill-purple-400"
