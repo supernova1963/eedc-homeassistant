@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.22] - 2026-03-24
+
+### Neu
+
+- **ARM64 Docker-Image für Standalone (#52)**: Multi-Arch-Build (amd64 + arm64) für das Standalone-Docker-Image. Raspberry Pi und andere ARM-Geräte werden jetzt unterstützt
+
 ## [3.4.21] - 2026-03-24
 
 ### Neu
