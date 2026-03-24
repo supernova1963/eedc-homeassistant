@@ -292,26 +292,10 @@ export default function LiveDashboard() {
                         <div className="text-lg font-bold text-green-600 dark:text-green-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
-                    {data.heute_netzbezug_kwh !== null && (
-                      <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2"
-                           title={`Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)${data.gestern_netzbezug_kwh !== null ? `\nGestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : ''}`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug <Info className="inline w-3 h-3 opacity-50" /></div>
-                        <div className="text-lg font-bold text-red-600 dark:text-red-400">{data.heute_netzbezug_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                      </div>
-                    )}
-                    {/* Hausverbrauch heute */}
-                    {data.heute_kwh_pro_komponente?.haushalt != null && (
-                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2"
-                           title="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)">
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <Info className="inline w-3 h-3 opacity-50" /></div>
-                        <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                      </div>
-                    )}
-                    {/* Batterie heute (Ladung/Entladung) */}
+                    {/* Batterie heute (Ladung/Entladung) — neben Einspeisung (Überschuss-Verwertung) */}
                     {(() => {
                       const komp = data.heute_kwh_pro_komponente
                       if (!komp) return null
-                      // Alle batterie_*_ladung / _entladung Keys summieren
                       let ladung = 0, entladung = 0, found = false
                       for (const [k, v] of Object.entries(komp)) {
                         if (k.endsWith('_ladung') && k.startsWith('batterie_')) { ladung += v; found = true }
@@ -322,7 +306,7 @@ export default function LiveDashboard() {
                         <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg px-3 py-2"
                              title={`Batterie heute\nLadung: ${ladung.toFixed(1)} kWh\nEntladung: ${entladung.toFixed(1)} kWh`}>
                           <div className="text-xs text-gray-500 dark:text-gray-400">Batterie</div>
-                          <div className="text-sm font-bold text-teal-600 dark:text-teal-400">
+                          <div className="text-lg font-bold text-teal-600 dark:text-teal-400">
                             <span title="Ladung">&#9650;{ladung.toFixed(1)}</span>
                             <span className="text-gray-400 mx-0.5">/</span>
                             <span title="Entladung">&#9660;{entladung.toFixed(1)}</span>
@@ -331,6 +315,21 @@ export default function LiveDashboard() {
                         </div>
                       )
                     })()}
+                    {/* Hausverbrauch heute */}
+                    {data.heute_kwh_pro_komponente?.haushalt != null && (
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2"
+                           title="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <Info className="inline w-3 h-3 opacity-50" /></div>
+                        <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {data.heute_netzbezug_kwh !== null && (
+                      <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2"
+                           title={`Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)${data.gestern_netzbezug_kwh !== null ? `\nGestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : ''}`}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug <Info className="inline w-3 h-3 opacity-50" /></div>
+                        <div className="text-lg font-bold text-red-600 dark:text-red-400">{data.heute_netzbezug_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
                   </div>
                   {/* Autarkie + Eigenverbrauchsquote */}
                   {(() => {

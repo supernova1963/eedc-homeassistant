@@ -805,9 +805,21 @@ export default function EnergieFluss({
           </text>
         </g>
 
+        {/* Solarleistung (Summe aller PV-Erzeuger) */}
+        {summeErzeugung > 0 && (
+          <text
+            x={CX} y={CY + HAUS_R + 16}
+            textAnchor="middle"
+            style={{ fontSize: `${dims.socFontSize}px` }}
+            className="fill-yellow-500 dark:fill-yellow-400"
+          >
+            <title>Summe aller PV-Erzeuger</title>
+            Solarleistung {formatPower(summeErzeugung)}
+          </text>
+        )}
         {/* Energieumsatz unter Haus */}
         <text
-          x={CX} y={CY + HAUS_R + 16}
+          x={CX} y={CY + HAUS_R + 16 + (summeErzeugung > 0 ? dims.socFontSize + 2 : 0)}
           textAnchor="middle"
           style={{ fontSize: `${dims.socFontSize}px` }}
           className="fill-gray-500 dark:fill-gray-400"
@@ -818,7 +830,7 @@ export default function EnergieFluss({
         {/* PV-Soll (SFML oder kWp) */}
         {pvSollKw != null && pvSollKw > 0 && (
           <text
-            x={CX} y={CY + HAUS_R + 16 + dims.socFontSize + 2}
+            x={CX} y={CY + HAUS_R + 16 + (summeErzeugung > 0 ? dims.socFontSize + 2 : 0) + dims.socFontSize + 2}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
             className="fill-purple-500 dark:fill-purple-400"
