@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.18] - 2026-03-24
+
+### Behoben
+
+- **Multi-String Wetter-Daten (#48)**: Kurzfrist-Tabelle zeigte bei Multi-String-Anlagen keine Temperatur, Bewölkung und Niederschlag (Felder wurden bei der String-Aggregation nicht durchgereicht)
+
+### Neu
+
+- **Wettermodell-Kaskade (#48)**: Neues Dropdown "Prognose-Wettermodell" in Anlage-Stammdaten. Auswahl zwischen Automatisch (best_match), MeteoSwiss Alpen (2.1 km), DWD ICON-EU (7 km) und ECMWF IFS (9 km). Bei spezifischem Modell wird eine Kaskade verwendet: bevorzugtes Modell für die ersten Tage + best_match Fallback für den Rest (parallele API-Calls). Ideal für alpine Standorte (Südtirol, Schweiz, Tirol), die mit dem Standardmodell ungenaue Wetterprognosen erhalten.
+- **Datenquellen-Anzeige**: Herkunft der Wetterdaten wird pro Tag in der Kurzfrist-Tabelle als Kürzel (MS/EU/EC/BM) und in der Fußzeile zusammengefasst angezeigt
+
 ## [3.4.16] - 2026-03-23
 
 ### Behoben
