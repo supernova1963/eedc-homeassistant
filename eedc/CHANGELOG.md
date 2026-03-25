@@ -7,6 +7,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.28] - 2026-03-25
+
+### Behoben
+
+- **Monatsabschluss TypeError (#54)**: `monatsdaten_id` wurde an `InvestitionMonatsdaten`-Konstruktor übergeben, obwohl das Feld im Model nicht existiert — erster Monatsabschluss schlug fehl
+- **Health-Check Log-Spam (#54)**: HA Supervisor Health-Checks (`/api/health` alle paar Sekunden) werden aus den Uvicorn Access-Logs gefiltert
+
+### Neu
+
+- **Dynamische Cockpit-Tabs (#56)**: Investitions-Tabs (E-Auto, Wallbox, Speicher etc.) werden nur angezeigt wenn eine entsprechende Investition existiert. Basis-Tabs (Übersicht, Aktueller Monat, PV-Anlage) bleiben immer sichtbar
+- **Mobile-Optimierung (#56)**: Komplette Überarbeitung der Mobile-Ansicht:
+  - Responsive Padding (Layout, Sticky-Header)
+  - KPI-Kacheln: responsive Font-Size, kein Text-Overflow, einspaltig auf Phones
+  - EnergieFluss SVG: ResizeObserver + dynamische viewBox (360/450/600px)
+  - HeroLeiste + RingGaugeCard: kompakter auf Mobile
+  - SubTabs: Scroll-Snap + versteckte Scrollbar
+  - Touch-Feedback (active:scale-95) auf Buttons
+  - ARIA-Labels und Live-Regions für Screenreader
+
+### Verbessert
+
+- **Anlage-Select vereinheitlicht (#56)**: Kompakte Breite (`compact`-Prop) auf allen Cockpit-Seiten, Anlage-Wechsel synchronisiert alle Komponenten via CustomEvent
+- **Header-Layout konsistent (#56)**: Einheitliches Flex-Layout auf Übersicht, Aktueller Monat und allen Investitions-Dashboards
+
 ## [3.4.27] - 2026-03-25
 
 ### Behoben
