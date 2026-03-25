@@ -67,6 +67,8 @@ export interface Anlage {
   // Community-Sharing
   community_hash?: string | null
   community_auto_share?: boolean
+  // Energiefluss-Anzeige
+  netz_puffer_w?: number
 }
 
 // Sensor-Konfiguration

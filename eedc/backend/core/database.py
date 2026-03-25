@@ -85,6 +85,8 @@ async def run_migrations(conn):
                 ('wetter_modell', "VARCHAR(50) DEFAULT 'auto'"),
                 # v3.5.0: Community Auto-Share nach Monatsabschluss
                 ('community_auto_share', 'BOOLEAN DEFAULT 0'),
+                # v3.5.0: Netz-Puffer für Energiefluss-Farbwechsel (Watt)
+                ('netz_puffer_w', 'INTEGER DEFAULT 100'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

@@ -245,6 +245,7 @@ export default function LiveDashboard() {
                 summePv={data.summe_pv_kw}
                 tagesWerte={data.heute_kwh_pro_komponente ?? undefined}
                 gauges={data.gauges}
+                netzPufferW={selectedAnlage?.netz_puffer_w ?? 100}
                 pvSollKw={(() => {
                   // SFML: aktuelle Stunde aus Verbrauchsprofil
                   if (wetter?.verbrauchsprofil?.length) {

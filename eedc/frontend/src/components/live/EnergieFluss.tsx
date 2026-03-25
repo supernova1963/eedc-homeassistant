@@ -74,19 +74,18 @@ function getColor(key: string): string {
 /** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug
  *  Backend-Semantik: erzeugung_kw = Netzbezug (Netz liefert ans Haus),
  *                    verbrauch_kw = Einspeisung (Netz nimmt vom Haus) */
-const PUFFER_W = 100
-function getNetzColor(komp: LiveKomponente): string {
+function getNetzColor(komp: LiveKomponente, pufferW: number): string {
   const einspeisungKw = komp.verbrauch_kw ?? 0
   const bezugKw = komp.erzeugung_kw ?? 0
   const nettoW = (bezugKw - einspeisungKw) * 1000
-  if (Math.abs(nettoW) <= PUFFER_W) return '#22c55e' // grün — Balance
+  if (Math.abs(nettoW) <= pufferW) return '#22c55e' // grün — Balance
   if (nettoW < 0) return '#f59e0b'                    // orange — Einspeisung
   return '#ef4444'                                     // rot — Netzbezug
 }
 
 /** Farbe für eine Komponente — Netz dynamisch, Batterie nach Lade-/Entladezustand, Rest statisch */
-function getNodeColor(komp: LiveKomponente): string {
-  if (komp.key === 'netz') return getNetzColor(komp)
+function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
+  if (komp.key === 'netz') return getNetzColor(komp, netzPufferW)
   // Batterie/Speicher: Cyan bei Entladung, Blau bei Ladung
   if (komp.key.startsWith('batterie_')) {
     const entlaedt = (komp.erzeugung_kw ?? 0) > (komp.verbrauch_kw ?? 0)
@@ -120,6 +119,7 @@ interface EnergieFlussProps {
   tagesWerte?: Record<string, number | null>
   gauges?: LiveGauge[]
   pvSollKw?: number | null
+  netzPufferW?: number
 }
 
 interface NodePosition {
@@ -302,6 +302,7 @@ function socColor(pct: number): string {
 
 export default function EnergieFluss({
   komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
+  netzPufferW = 100,
 }: EnergieFlussProps) {
   const [lite, toggleLite] = useLiteMode()
 
@@ -685,7 +686,7 @@ export default function EnergieFluss({
           const k = node.komp
           const kw = (k.erzeugung_kw ?? 0) + (k.verbrauch_kw ?? 0)
           const thickness = logThickness(kw, maxKw)
-          const color = getNodeColor(k)
+          const color = getNodeColor(k, netzPufferW)
           const isActive = kw > 0
           const isSource = (k.erzeugung_kw ?? 0) > 0
           const duration = flowDuration(kw)
@@ -839,7 +840,7 @@ export default function EnergieFluss({
         {nodes.map(node => {
           const k = node.komp
           const kw = Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0)
-          const color = getNodeColor(k)
+          const color = getNodeColor(k, netzPufferW)
           const isActive = kw > 0
           const soc = getSoc(k.key, gauges)
           const hasSoc = soc !== null
@@ -858,7 +859,7 @@ export default function EnergieFluss({
             const einsp = tagesWerte?.netz_einspeisung
             if (bezug != null) tipParts.push(`Heute Bezug: ${bezug.toFixed(1)} kWh`)
             if (einsp != null) tipParts.push(`Heute Einspeisung: ${einsp.toFixed(1)} kWh`)
-            tipParts.push(`Farbe: grün = Balance (< ${PUFFER_W} W), orange = Einspeisung, rot = Bezug`)
+            tipParts.push(`Farbe: grün = Balance (< ${netzPufferW} W), orange = Einspeisung, rot = Bezug`)
           } else if (tagesKwh != null) {
             tipParts.push(`Heute: ${tagesKwh.toFixed(1)} kWh`)
           }
@@ -883,8 +884,8 @@ export default function EnergieFluss({
                 className="fill-white dark:fill-gray-800"
                 fillOpacity={0.6}
                 stroke={isActive ? color : '#9ca3af'}
-                strokeWidth={isActive ? 1.5 : 1}
-                strokeOpacity={isActive ? 0.8 : 0.4}
+                strokeWidth={isActive ? 1 : 0.5}
+                strokeOpacity={isActive ? 0.7 : 0.3}
                 filter="url(#ef-card-shadow)"
               />
 

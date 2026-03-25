@@ -6,7 +6,7 @@ Repräsentiert eine PV-Anlage mit Stammdaten.
 
 from datetime import date, datetime
 from typing import Optional, Any
-from sqlalchemy import String, Float, Date, DateTime, JSON, Boolean
+from sqlalchemy import String, Float, Integer, Date, DateTime, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
@@ -100,6 +100,9 @@ class Anlage(Base):
     community_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Auto-Share: Monatsdaten nach Abschluss automatisch an Community senden
     community_auto_share: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
+    # Energiefluss-Anzeige: Netz-Puffer in Watt (unterhalb = Balance/grün)
+    netz_puffer_w: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=100)
 
     # Steuerliche Behandlung
     # keine_ust: Kein USt-Effekt (Post-2023 ≤30kWp, Kleinunternehmer)

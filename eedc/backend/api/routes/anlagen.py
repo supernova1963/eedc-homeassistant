@@ -53,6 +53,8 @@ class AnlageBase(BaseModel):
     # Community
     community_hash: Optional[str] = Field(None, max_length=64, description="Hash für Community-Teilen (read-only)")
     community_auto_share: Optional[bool] = Field(False, description="Monatsdaten nach Abschluss automatisch an Community senden")
+    # Energiefluss-Anzeige
+    netz_puffer_w: Optional[int] = Field(100, ge=0, le=1000, description="Netz-Puffer in Watt: unterhalb wird Balance (grün) angezeigt")
 
 
 class AnlageCreate(AnlageBase):
@@ -87,6 +89,7 @@ class AnlageUpdate(BaseModel):
     steuerliche_behandlung: Optional[str] = Field(None, max_length=30)
     ust_satz_prozent: Optional[float] = Field(None, ge=0, le=30)
     community_auto_share: Optional[bool] = None
+    netz_puffer_w: Optional[int] = Field(None, ge=0, le=1000)
 
 
 class SensorConfigUpdate(BaseModel):

@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain, Users } from 'lucide-react'
+import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain, Users, Zap } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
 import VersorgerSection from './VersorgerSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
@@ -31,6 +31,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     steuerliche_behandlung: anlage?.steuerliche_behandlung || 'keine_ust',
     ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',
     community_auto_share: anlage?.community_auto_share ?? false,
+    netz_puffer_w: anlage?.netz_puffer_w?.toString() || '100',
   })
 
   // Track if user manually changed USt-Satz
@@ -104,6 +105,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         steuerliche_behandlung: formData.steuerliche_behandlung || 'keine_ust',
         ust_satz_prozent: formData.ust_satz_prozent ? parseFloat(formData.ust_satz_prozent) : undefined,
         community_auto_share: formData.community_auto_share,
+        netz_puffer_w: formData.netz_puffer_w ? parseInt(formData.netz_puffer_w) : 100,
       } as AnlageCreate)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -453,6 +455,35 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             </p>
           </div>
         )}
+      </div>
+
+      {/* Energiefluss-Einstellungen */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <Zap className="w-5 h-5 text-green-500" />
+          Energiefluss
+        </h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="netz_puffer_w">
+            Netz-Puffer (Watt)
+          </label>
+          <div className="flex items-center gap-3">
+            <Input
+              id="netz_puffer_w"
+              name="netz_puffer_w"
+              type="number"
+              min="0"
+              max="1000"
+              step="10"
+              value={formData.netz_puffer_w}
+              onChange={handleChange}
+              className="w-28"
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Unterhalb dieses Werts wird das Netz als Balance (grün) angezeigt. Standard: 100 W
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Community Auto-Share */}
