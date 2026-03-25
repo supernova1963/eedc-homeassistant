@@ -803,6 +803,17 @@ async def save_monatsabschluss(
     2. Speichern in Monatsdaten + InvestitionMonatsdaten
     3. Optional: Startwerte für nächsten Monat auf MQTT publizieren
     """
+    logger.info(
+        f"Monatsabschluss speichern: Anlage {anlage_id}, {monat:02d}/{jahr}, "
+        f"Basis: einspeisung={daten.einspeisung_kwh}, netzbezug={daten.netzbezug_kwh}, "
+        f"Investitionen: {len(daten.investitionen)} Stück"
+    )
+    for inv_w in daten.investitionen:
+        logger.info(
+            f"  Investition {inv_w.investition_id}: "
+            f"{len(inv_w.felder)} Felder [{', '.join(f'{f.feld}={f.wert}' for f in inv_w.felder)}]"
+        )
+
     # Anlage laden
     result = await db.execute(
         select(Anlage).where(Anlage.id == anlage_id)
@@ -866,7 +877,11 @@ async def save_monatsabschluss(
     if daten.datenquelle:
         monatsdaten.datenquelle = daten.datenquelle
 
-    await db.flush()
+    try:
+        await db.flush()
+    except Exception as e:
+        logger.error(f"Monatsabschluss flush Monatsdaten fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern der Monatsdaten: {e}")
     monatsdaten_id = monatsdaten.id
 
     # Investition-Monatsdaten speichern
@@ -909,10 +924,21 @@ async def save_monatsabschluss(
         imd.verbrauch_daten = verbrauch_daten
         flag_modified(imd, "verbrauch_daten")
 
-        await db.flush()
+        try:
+            await db.flush()
+        except Exception as e:
+            logger.error(f"Monatsabschluss flush Investition {inv_werte.investition_id} fehlgeschlagen: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Fehler beim Speichern der Investition {inv_werte.investition_id}: {e}"
+            )
         inv_ids.append(imd.id)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Monatsabschluss commit fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail=f"Fehler beim Commit: {e}")
 
     # Optional: MQTT Monatsdaten publizieren
     mqtt_sync = get_ha_mqtt_sync_service()

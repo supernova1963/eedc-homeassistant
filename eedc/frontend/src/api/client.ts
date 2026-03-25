@@ -9,9 +9,14 @@
 // './api' wird relativ zur aktuellen Seite aufgelöst
 const API_BASE = './api'
 
-interface ApiError {
-  detail: string
+class ApiError extends Error {
   status: number
+
+  constructor(detail: string, status: number) {
+    super(detail)
+    this.name = 'ApiError'
+    this.status = status
+  }
 }
 
 class ApiClient {
@@ -38,19 +43,20 @@ class ApiClient {
     const response = await fetch(url, config)
 
     if (!response.ok) {
-      const error: ApiError = {
-        detail: 'Ein Fehler ist aufgetreten',
-        status: response.status,
-      }
+      let detail = 'Ein Fehler ist aufgetreten'
 
       try {
         const data = await response.json()
-        error.detail = data.detail || error.detail
+        if (typeof data.detail === 'string') {
+          detail = data.detail
+        } else if (data.detail) {
+          detail = JSON.stringify(data.detail)
+        }
       } catch {
         // JSON parsing failed, use default error
       }
 
-      throw error
+      throw new ApiError(detail, response.status)
     }
 
     // Handle 204 No Content
@@ -110,4 +116,4 @@ class ApiClient {
 
 // Singleton instance
 export const api = new ApiClient()
-export type { ApiError }
+export { ApiError }
