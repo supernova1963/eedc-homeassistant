@@ -153,7 +153,7 @@ export default function TopNavigation() {
             <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">eedc</span>
 
             {/* Haupttabs (Desktop) */}
-            <nav className="ml-8 hidden md:flex space-x-1">
+            <nav aria-label="Hauptnavigation" className="ml-8 hidden md:flex space-x-1">
               {mainTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -267,7 +267,7 @@ export default function TopNavigation() {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200 dark:border-gray-700 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
           {/* Hauptnavigation */}
-          <nav className="px-4 py-3 space-y-1">
+          <nav aria-label="Hauptnavigation" className="px-4 py-3 space-y-1">
             {mainTabs.map((tab) => {
               const Icon = tab.icon
               return (

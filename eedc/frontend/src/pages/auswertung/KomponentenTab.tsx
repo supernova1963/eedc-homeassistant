@@ -220,7 +220,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
           </div>
 
           {/* Speicher KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="Ladung gesamt"
               value={(speicherSummen.ladung / 1000).toFixed(2)}
@@ -319,7 +319,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
           </div>
 
           {/* WP KPIs - Erste Zeile */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="Wärme erzeugt"
               value={(wpSummen.waerme / 1000).toFixed(2)}
@@ -367,7 +367,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
 
           {/* WP KPIs - Zweite Zeile: Heizung vs. Warmwasser (nur wenn beide > 0) */}
           {(wpSummen.heizung > 0 || wpSummen.warmwasser > 0) && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <KPICard
                 title="Heizung"
                 value={(wpSummen.heizung / 1000).toFixed(2)}
@@ -441,7 +441,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
           </div>
 
           {/* E-Auto KPIs - Erste Zeile */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="Gefahrene km"
               value={(emobSummen.km / 1000).toFixed(1)}
@@ -490,7 +490,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
 
           {/* E-Auto KPIs - Zweite Zeile: Ladequellen + V2H */}
           {(emobSummen.pvLadung > 0 || emobSummen.netzLadung > 0 || emobSummen.externLadung > 0 || emobSummen.v2h > 0) && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <KPICard
                 title="PV-Ladung"
                 value={emobSummen.pvLadung.toFixed(0)}
@@ -592,7 +592,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
           </div>
 
           {/* BKW KPIs - Erste Zeile */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="Erzeugung gesamt"
               value={bkwSummen.erzeugung.toFixed(0)}
@@ -639,7 +639,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
 
           {/* BKW KPIs - Zweite Zeile: Speicher (nur wenn vorhanden) */}
           {bkwSummen.speicherLadung > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <KPICard
                 title="Speicher Ladung"
                 value={bkwSummen.speicherLadung.toFixed(0)}
@@ -712,7 +712,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
           </div>
 
           {/* Sonstiges KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {sonstigesSummen.erzeugung > 0 && (
               <KPICard
                 title="Erzeugung gesamt"

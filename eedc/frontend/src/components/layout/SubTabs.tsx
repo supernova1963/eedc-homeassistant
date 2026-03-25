@@ -196,7 +196,7 @@ function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <div className="px-4 sm:px-6">
-        <nav className="flex items-center gap-1 py-2 overflow-x-auto">
+        <nav aria-label={groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs'} className="flex items-center gap-1 py-2 overflow-x-auto">
           {groupLabel && (
             <>
               <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap pr-2">

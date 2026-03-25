@@ -223,7 +223,7 @@ export default function PVGISSettings() {
             ) : aktivePrognose ? (
               <div className="space-y-4">
                 {/* KPIs */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                   <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
                     <p className="text-sm text-yellow-600 dark:text-yellow-400">Jahresertrag</p>
                     <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
@@ -466,7 +466,7 @@ export default function PVGISSettings() {
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                     <p className="text-sm text-gray-500">Jahresertrag</p>
                     <p className="text-xl font-bold">{previewPrognose.jahresertrag_kwh.toLocaleString('de-DE')} kWh</p>

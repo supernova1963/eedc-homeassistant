@@ -165,7 +165,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           title="Ø COP"
           value={z.durchschnitt_cop.toFixed(2)}
@@ -209,7 +209,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
       </div>
       {/* Getrennte COP-Anzeige (wenn separate Strommessung) */}
       {hatGetrennteStrom && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <KPICard
             title="COP Heizen"
             value={z.cop_heizen?.toFixed(2) || '–'}

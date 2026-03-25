@@ -287,7 +287,7 @@ export default function TrendsTab({ anlageId, zeitraum }: TrendsTabProps) {
             </h3>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {saisonaleAnalyse.map((jz) => {
               const Icon = jz.icon
               const colorClasses: Record<string, { bg: string; text: string; icon: string }> = {

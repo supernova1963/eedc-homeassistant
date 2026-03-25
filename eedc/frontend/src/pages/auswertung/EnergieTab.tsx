@@ -57,7 +57,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           title="PV-Erzeugung"
           value={(stats.gesamtErzeugung / 1000).toFixed(1)}
@@ -267,7 +267,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: T
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Zusammenfassung
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
           <div>
             <p className="text-gray-500 dark:text-gray-400">Zeitraum</p>
             <p className="font-medium text-gray-900 dark:text-white">{stats.anzahlMonate} Monate</p>

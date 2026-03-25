@@ -134,7 +134,7 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
       ) : (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="Heimladung"
               value={((z.gesamt_heim_ladung_kwh || 0) / 1000).toFixed(2)}

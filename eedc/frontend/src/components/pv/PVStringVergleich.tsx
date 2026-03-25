@@ -158,7 +158,7 @@ export function PVStringVergleich({ anlageId }: Props) {
   return (
     <div className="space-y-6">
       {/* KPI Übersicht */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
           <p className="text-sm text-blue-600 dark:text-blue-400">SOLL (Prognose)</p>
           <p className="text-xl font-bold text-blue-700 dark:text-blue-300">

@@ -190,7 +190,7 @@ export default function StatistikenTab({ anlageId, zeitraum }: StatistikenTabPro
           <span className="ml-auto text-sm text-gray-500">{benchmark.zeitraum_label}</span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             label="Anlagen gesamt"
             value={communityStats.anzahlAnlagen}
@@ -284,7 +284,7 @@ export default function StatistikenTab({ anlageId, zeitraum }: StatistikenTabPro
           </h3>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <DetailCard
             label="Leistung"
             value={`${benchmark.anlage.kwp} kWp`}
@@ -372,7 +372,7 @@ export default function StatistikenTab({ anlageId, zeitraum }: StatistikenTabPro
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
               Die typische Community-Anlage
             </h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
               <div>
                 <span className="text-gray-500">Leistung:</span>
                 <span className="ml-2 font-medium">{globalStats.typische_anlage.kwp} kWp</span>

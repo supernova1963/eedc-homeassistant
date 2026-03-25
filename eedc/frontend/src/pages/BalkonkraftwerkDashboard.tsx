@@ -124,7 +124,7 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           title="Erzeugung"
           value={z.gesamt_erzeugung_kwh.toFixed(0)}
@@ -172,7 +172,7 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
       </p>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
           <p className="text-sm text-yellow-600 dark:text-yellow-400">Spez. Ertrag</p>
           <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">

@@ -88,7 +88,7 @@ export default function FinanzenTab({ anlageId }: Props) {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
@@ -321,7 +321,7 @@ export default function FinanzenTab({ anlageId }: Props) {
           {/* Zusammenfassung */}
           {(prognose.speicher_ev_erhoehung_kwh > 0 || prognose.v2h_rueckspeisung_kwh > 0 || prognose.wp_pv_anteil_kwh > 0) && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
                 {prognose.speicher_ev_erhoehung_kwh > 0 && (
                   <div>
                     <p className="text-gray-500">Speicher EV+</p>

@@ -87,7 +87,7 @@ export default function Layout() {
       <SubTabs />
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 overflow-auto p-3 sm:p-6">
         <div className="max-w-[1920px] mx-auto">
           <Outlet />
         </div>

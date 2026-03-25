@@ -52,11 +52,11 @@ export default function HeroLeiste({ data, prevData, year }: {
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       {items.map(item => (
-        <div key={item.label} className={`rounded-xl p-4 ${item.bg}`}>
+        <div key={item.label} className={`rounded-xl p-2 sm:p-4 ${item.bg}`}>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
-          <p className={`text-2xl font-bold ${item.color}`}>
+          <p className={`text-base sm:text-2xl font-bold ${item.color} whitespace-nowrap`}>
             <FormelTooltip formel={item.formel} berechnung={item.berechnung}>
               {item.value}
             </FormelTooltip>

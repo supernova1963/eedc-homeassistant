@@ -211,7 +211,7 @@ export default function CommunityShare() {
               </div>
 
               {/* Vergleichswerte */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-center">
                 <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Durchschnitt</p>
                   <p className="text-lg font-semibold">
@@ -479,7 +479,7 @@ export default function CommunityShare() {
           {showPreview && (
             <div className="border-t dark:border-gray-700 p-4 space-y-4">
               {/* Anlagendaten */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                   <div>

@@ -143,7 +143,7 @@ export default function Community() {
   return (
     <div className="space-y-6">
       {/* Sticky Header mit Filter */}
-      <div className="sticky -top-6 z-10 bg-gray-50 dark:bg-gray-900 pb-4 -mx-6 px-6 pt-6">
+      <div className="sticky -top-3 sm:-top-6 z-10 bg-gray-50 dark:bg-gray-900 pb-4 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-3 sm:pt-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Users className="h-8 w-8 text-primary-500" />

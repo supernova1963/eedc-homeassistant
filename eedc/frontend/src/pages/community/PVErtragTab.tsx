@@ -441,7 +441,7 @@ export default function PVErtragTab({ anlageId, zeitraum }: PVErtragTabProps) {
             </ResponsiveContainer>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
             <div className="text-center">
               <p className="text-gray-500">Minimum</p>
               <p className="font-semibold">{distribution.statistik.min.toFixed(0)} kWh/kWp</p>

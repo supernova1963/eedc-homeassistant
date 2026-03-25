@@ -15,8 +15,8 @@ export interface KPICardProps {
 
 export default function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, onClick, formel, berechnung, ergebnis }: KPICardProps) {
   const valueContent = (
-    <span className="text-xl font-bold text-gray-900 dark:text-white">
-      {value} <span className="text-sm font-normal text-gray-500">{unit}</span>
+    <span className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
+      {value} <span className="text-xs sm:text-sm font-normal text-gray-500">{unit}</span>
     </span>
   )
 
@@ -32,8 +32,8 @@ export default function KPICard({ title, value, unit, subtitle, icon: Icon, colo
         </div>
         {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{subtitle}</p>}
       </div>
-      <div className={`p-2 rounded-lg ${bgColor} ml-2 flex-shrink-0`}>
-        <Icon className={`h-5 w-5 ${color}`} />
+      <div className={`p-1.5 sm:p-2 rounded-lg ${bgColor} ml-2 flex-shrink-0`}>
+        <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${color}`} />
       </div>
     </div>
   )

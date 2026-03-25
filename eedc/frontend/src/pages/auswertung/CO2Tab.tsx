@@ -68,7 +68,7 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
       </div>
 
       {/* CO2 KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           title="CO2 eingespart"
           value={(gesamtCO2 / 1000).toFixed(2)}
@@ -176,7 +176,7 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
           Die CO2-Einsparung wird mit dem deutschen Strommix von <strong>{CO2_FAKTOR * 1000} g CO2/kWh</strong> berechnet.
           Jede kWh selbst erzeugter Solarstrom, die fossilen Strom ersetzt, spart entsprechend CO2 ein.
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
           <div>
             <p className="text-gray-500">Ø pro Monat</p>
             <p className="font-medium text-green-600">{(gesamtCO2 / stats.anzahlMonate).toFixed(0)} kg</p>
