@@ -546,7 +546,7 @@ async def get_aktueller_monat(
                 autarkie = round(eigenverbrauch / gesamtverbrauch * 100, 1)
 
         if pv > 0:
-            ev_quote = round(eigenverbrauch / pv * 100, 1)
+            ev_quote = round(min(eigenverbrauch / pv * 100, 100), 1)
 
     # ── Finanzen ──
     einspeise_erloes = None

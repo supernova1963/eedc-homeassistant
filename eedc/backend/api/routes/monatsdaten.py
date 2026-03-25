@@ -247,7 +247,7 @@ async def list_monatsdaten_aggregiert(
         gesamtverbrauch = eigenverbrauch + netzbezug
 
         autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-        ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
+        ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
 
         # Legacy-Daten prüfen - nur warnen wenn:
         # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)

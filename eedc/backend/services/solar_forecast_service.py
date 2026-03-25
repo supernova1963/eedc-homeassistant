@@ -16,11 +16,12 @@ API-Dokumentation: https://open-meteo.com/en/docs
 
 import asyncio
 import logging
+import random
 from datetime import date, datetime
 from math import radians, sin, cos
 from typing import Optional, List
 
-from backend.services.wetter_service import wetter_code_zu_symbol
+from backend.services.wetter_service import wetter_code_zu_symbol, _cache_get, _cache_set, FORECAST_CACHE_TTL, JITTER_MAX_SECONDS
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -182,6 +183,14 @@ async def fetch_gti_forecast(
 
     days = min(days, 16)  # API-Maximum
 
+    # Cache prüfen (GTI-Forecast → 60 Min TTL)
+    model_key = model or "auto"
+    cache_key = f"gti:{latitude:.2f}:{longitude:.2f}:{neigung}:{ausrichtung}:{days}:{model_key}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"Open-Meteo Solar: Cache-Hit ({days} Tage, {model_key})")
+        return cached
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -214,6 +223,9 @@ async def fetch_gti_forecast(
     if model is not None:
         params["models"] = model
 
+    # Random-Jitter vor API-Call
+    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
+
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.get(OPEN_METEO_FORECAST_URL, params=params)
@@ -226,6 +238,7 @@ async def fetch_gti_forecast(
                 f"Neigung={neigung}°, Azimut={ausrichtung}°{model_info}"
             )
 
+            _cache_set(cache_key, data, FORECAST_CACHE_TTL)
             return data
 
     except httpx.TimeoutException:

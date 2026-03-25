@@ -19,7 +19,10 @@ Konvertierungen:
 - Bright Sky: solar (bereits kWh/m²), sunshine (Minuten → Stunden)
 """
 
+import asyncio
 import logging
+import random
+import time
 from datetime import date, datetime
 from calendar import monthrange
 from typing import Optional, Literal
@@ -38,6 +41,27 @@ OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 MJ_TO_KWH = 1 / 3.6  # 1 MJ = 0.2778 kWh
 SECONDS_TO_HOURS = 1 / 3600
+
+# ── In-Memory-Cache für Open-Meteo API-Antworten ──
+# Reduziert API-Aufrufe: Forecast 60 Min, Archiv 24h Cache-TTL.
+# Random-Jitter (1-30s) vor API-Calls verhindert Lastspitzen bei Open-Meteo.
+_cache: dict[str, tuple[float, any]] = {}  # key → (expires_at, data)
+FORECAST_CACHE_TTL = 3600       # 60 Minuten
+ARCHIVE_CACHE_TTL = 86400       # 24 Stunden
+JITTER_MAX_SECONDS = 30         # Max. zufällige Verzögerung vor API-Call
+
+
+def _cache_get(key: str) -> Optional[any]:
+    """Liefert gecachtes Ergebnis oder None wenn abgelaufen/nicht vorhanden."""
+    entry = _cache.get(key)
+    if entry and entry[0] > time.monotonic():
+        return entry[1]
+    return None
+
+
+def _cache_set(key: str, data: any, ttl: int) -> None:
+    """Speichert Ergebnis mit TTL im Cache."""
+    _cache[key] = (time.monotonic() + ttl, data)
 
 # PVGIS TMY Durchschnittswerte für verschiedene Breitengrade (Fallback)
 # Basierend auf typischen Werten für Mitteleuropa (45-55°N)
@@ -91,6 +115,13 @@ async def fetch_open_meteo_archive(
         logger.debug(f"Open-Meteo: Monat {monat}/{jahr} liegt nicht vollständig in Vergangenheit")
         return None
 
+    # Cache prüfen (Archivdaten ändern sich nicht → 24h TTL)
+    cache_key = f"archive:{latitude:.2f}:{longitude:.2f}:{jahr}:{monat}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"Open-Meteo Archive: Cache-Hit für {monat}/{jahr}")
+        return cached
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -99,6 +130,9 @@ async def fetch_open_meteo_archive(
         "daily": "shortwave_radiation_sum,sunshine_duration",
         "timezone": "Europe/Berlin",
     }
+
+    # Random-Jitter vor API-Call (verhindert Lastspitzen bei Open-Meteo)
+    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -128,12 +162,14 @@ async def fetch_open_meteo_archive(
                 f"Sonnenstunden: {sonnenstunden}h"
             )
 
-            return {
+            result = {
                 "globalstrahlung_kwh_m2": globalstrahlung_kwh,
                 "sonnenstunden": sonnenstunden,
                 "tage_mit_daten": len([v for v in radiation_values if v is not None]),
                 "tage_gesamt": last_day,
             }
+            _cache_set(cache_key, result, ARCHIVE_CACHE_TTL)
+            return result
 
     except httpx.TimeoutException:
         logger.error(f"Open-Meteo: Timeout für {monat}/{jahr}")
@@ -169,6 +205,13 @@ async def fetch_pvgis_tmy_monat(
     Returns:
         dict mit globalstrahlung_kwh_m2 und sonnenstunden oder None bei Fehler
     """
+    # Cache prüfen (TMY-Daten sind statistisch → 24h TTL)
+    cache_key = f"pvgis_tmy:{latitude:.2f}:{longitude:.2f}:{monat}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"PVGIS TMY: Cache-Hit für Monat {monat}")
+        return cached
+
     # PVGIS TMY Endpoint
     url = f"{settings.pvgis_api_url}/tmy"
     params = {
@@ -176,6 +219,9 @@ async def fetch_pvgis_tmy_monat(
         "lon": longitude,
         "outputformat": "json",
     }
+
+    # Random-Jitter vor API-Call
+    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -222,10 +268,12 @@ async def fetch_pvgis_tmy_monat(
                 f"Sonnenstunden: {sonnenstunden}h"
             )
 
-            return {
+            result = {
                 "globalstrahlung_kwh_m2": globalstrahlung_kwh,
                 "sonnenstunden": sonnenstunden,
             }
+            _cache_set(cache_key, result, ARCHIVE_CACHE_TTL)
+            return result
 
     except httpx.TimeoutException:
         logger.error(f"PVGIS TMY: Timeout für Monat {monat}")
@@ -380,6 +428,13 @@ async def fetch_open_meteo_forecast(
     """
     days = min(days, 16)  # Open-Meteo Maximum
 
+    # Cache prüfen (Forecast → 60 Min TTL)
+    cache_key = f"forecast:{latitude:.2f}:{longitude:.2f}:{days}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"Open-Meteo Forecast: Cache-Hit ({days} Tage)")
+        return cached
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -395,6 +450,9 @@ async def fetch_open_meteo_forecast(
         "timezone": "Europe/Berlin",
         "forecast_days": days,
     }
+
+    # Random-Jitter vor API-Call
+    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -429,7 +487,7 @@ async def fetch_open_meteo_forecast(
                 f"Open-Meteo Forecast: {len(tage)} Tage @ ({latitude}, {longitude})"
             )
 
-            return {
+            result = {
                 "tage": tage,
                 "abgerufen_am": datetime.now().isoformat(),
                 "standort": {
@@ -437,6 +495,8 @@ async def fetch_open_meteo_forecast(
                     "longitude": longitude,
                 },
             }
+            _cache_set(cache_key, result, FORECAST_CACHE_TTL)
+            return result
 
     except httpx.TimeoutException:
         logger.error("Open-Meteo Forecast: Timeout")

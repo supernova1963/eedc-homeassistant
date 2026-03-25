@@ -343,7 +343,7 @@ async def prepare_community_data(
             gesamtverbrauch = eigenverbrauch + netzbezug
 
             autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else None
-            ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else None
+            ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else None
 
             if pv_erzeugung > 0 or einspeisung > 0 or netzbezug > 0:
                 monatswert_data = {

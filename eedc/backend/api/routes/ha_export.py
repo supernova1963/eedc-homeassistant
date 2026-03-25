@@ -184,7 +184,7 @@ async def calculate_anlage_sensors(
 
     # Quoten
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-    ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
+    ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
     spez_ertrag = (pv_erzeugung / anlage.leistung_kwp) if anlage.leistung_kwp else 0
 
     # Finanzen

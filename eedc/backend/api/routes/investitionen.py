@@ -1957,7 +1957,7 @@ async def get_balkonkraftwerk_dashboard(
             gesamt_einspeisung = max(0, gesamt_erzeugung - gesamt_eigenverbrauch)
 
         # Eigenverbrauchsquote
-        eigenverbrauch_quote = (gesamt_eigenverbrauch / gesamt_erzeugung * 100) if gesamt_erzeugung > 0 else 0
+        eigenverbrauch_quote = min(gesamt_eigenverbrauch / gesamt_erzeugung * 100, 100) if gesamt_erzeugung > 0 else 0
 
         # Speicher-Effizienz
         speicher_effizienz = (gesamt_speicher_entladung / gesamt_speicher_ladung * 100) if gesamt_speicher_ladung > 0 else 0
@@ -2078,7 +2078,7 @@ async def get_sonstiges_dashboard(
 
         # Berechnungen je nach Kategorie
         if kategorie == 'erzeuger':
-            eigenverbrauch_quote = (gesamt_eigenverbrauch / gesamt_erzeugung * 100) if gesamt_erzeugung > 0 else 0
+            eigenverbrauch_quote = min(gesamt_eigenverbrauch / gesamt_erzeugung * 100, 100) if gesamt_erzeugung > 0 else 0
             ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
             erloes_einspeisung = gesamt_einspeisung * einspeiseverguetung_cent / 100
             gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung + gesamt_sonstige_netto

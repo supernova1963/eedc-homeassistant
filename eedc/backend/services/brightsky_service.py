@@ -15,7 +15,9 @@ Vorteile gegenüber direktem DWD-Zugang:
 Dokumentation: https://brightsky.dev/docs/
 """
 
+import asyncio
 import logging
+import random
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 from typing import Optional, List
@@ -23,6 +25,7 @@ from typing import Optional, List
 import httpx
 
 from backend.core.config import settings
+from backend.services.wetter_service import _cache_get, _cache_set, FORECAST_CACHE_TTL, ARCHIVE_CACHE_TTL, JITTER_MAX_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +79,16 @@ async def fetch_brightsky_weather(
         logger.debug("Bright Sky ist deaktiviert")
         return None
 
+    # Cache prüfen (historisch → 24h, Zukunft → 60 Min)
+    end_key = last_date_str or date_str
+    is_historical = end_key < date.today().isoformat()
+    ttl = ARCHIVE_CACHE_TTL if is_historical else FORECAST_CACHE_TTL
+    cache_key = f"brightsky:{latitude:.2f}:{longitude:.2f}:{date_str}:{end_key}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"Bright Sky: Cache-Hit für {date_str}")
+        return cached
+
     params = {
         "lat": latitude,
         "lon": longitude,
@@ -84,6 +97,9 @@ async def fetch_brightsky_weather(
 
     if last_date_str:
         params["last_date"] = last_date_str
+
+    # Random-Jitter vor API-Call
+    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -99,10 +115,12 @@ async def fetch_brightsky_weather(
                 f"({latitude}, {longitude}) am {date_str}"
             )
 
-            return {
+            result = {
                 "weather": weather,
                 "sources": sources,
             }
+            _cache_set(cache_key, result, ttl)
+            return result
 
     except httpx.TimeoutException:
         logger.error(f"Bright Sky: Timeout für {date_str}")

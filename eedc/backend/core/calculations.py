@@ -133,7 +133,7 @@ def berechne_monatskennzahlen(
     gesamtverbrauch = eigenverbrauch + netzbezug_kwh
 
     # Quoten berechnen
-    ev_quote = (eigenverbrauch / pv_erzeugung_kwh * 100) if pv_erzeugung_kwh > 0 else 0
+    ev_quote = min(eigenverbrauch / pv_erzeugung_kwh * 100, 100) if pv_erzeugung_kwh > 0 else 0
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
 
     # Spezifischer Ertrag (kWh pro kWp)

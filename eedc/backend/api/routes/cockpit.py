@@ -269,7 +269,7 @@ async def get_cockpit_uebersicht(
 
     # Quoten berechnen
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-    ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
+    ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
     dv_quote = (direktverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
 
     # ==========================================================================
@@ -1977,7 +1977,7 @@ async def get_share_text(
     eigenverbrauch = direktverbrauch + speicher_entladung
     gesamtverbrauch = eigenverbrauch + netzbezug
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-    ev_quote = (eigenverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
+    ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
     spez_ertrag = pv_erzeugung / kwp if kwp > 0 else 0
 
     # Speicher
