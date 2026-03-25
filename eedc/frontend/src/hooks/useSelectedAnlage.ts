@@ -12,6 +12,7 @@ import { useAnlagen } from './useAnlagen'
 import type { Anlage } from '../types'
 
 const STORAGE_KEY = 'eedc-selected-anlage-id'
+const CHANGE_EVENT = 'eedc-anlage-changed'
 
 interface UseSelectedAnlageReturn {
   /** Alle verfügbaren Anlagen. */
@@ -50,9 +51,20 @@ export function useSelectedAnlage(): UseSelectedAnlageReturn {
     localStorage.setItem(STORAGE_KEY, String(anlagen[0].id))
   }, [anlagen, selectedAnlageId])
 
+  // Auf Änderungen von anderen Hook-Instanzen reagieren
+  useEffect(() => {
+    const handleChange = (e: Event) => {
+      const newId = (e as CustomEvent<number>).detail
+      setSelectedAnlageIdRaw(newId)
+    }
+    window.addEventListener(CHANGE_EVENT, handleChange)
+    return () => window.removeEventListener(CHANGE_EVENT, handleChange)
+  }, [])
+
   const setSelectedAnlageId = useCallback((id: number) => {
     setSelectedAnlageIdRaw(id)
     localStorage.setItem(STORAGE_KEY, String(id))
+    window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: id }))
   }, [])
 
   const selectedAnlage = anlagen.find(a => a.id === selectedAnlageId)

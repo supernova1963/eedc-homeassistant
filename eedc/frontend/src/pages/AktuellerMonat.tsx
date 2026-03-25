@@ -184,7 +184,7 @@ export default function AktuellerMonat() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <CalendarClock className="h-8 w-8 text-blue-500" />
           <div>
@@ -198,33 +198,32 @@ export default function AktuellerMonat() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {anlagen.length > 1 && (
             <Select
+              compact
               value={selectedAnlageId?.toString() || ''}
               onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
               options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
             />
           )}
-          <div className="flex flex-col items-end gap-1">
-            <Button
-              variant="secondary"
-              onClick={handleRefresh}
-              loading={refreshing}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Aktualisieren
-            </Button>
-            {data?.aktualisiert_um && (
-              <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                <Clock className="h-3 w-3" />
-                {new Date(data.aktualisiert_um).toLocaleString('de-DE', {
-                  day: '2-digit', month: '2-digit', year: 'numeric',
-                  hour: '2-digit', minute: '2-digit',
-                })}
-              </span>
-            )}
-          </div>
+          <Button
+            variant="secondary"
+            onClick={handleRefresh}
+            loading={refreshing}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Aktualisieren
+          </Button>
+          {data?.aktualisiert_um && (
+            <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+              <Clock className="h-3 w-3" />
+              {new Date(data.aktualisiert_um).toLocaleString('de-DE', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            </span>
+          )}
         </div>
       </div>
 

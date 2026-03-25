@@ -10,14 +10,16 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   error?: string
   options: SelectOption[]
   placeholder?: string
+  /** Kompakte Breite (w-auto statt w-full) — für Header-Bereiche */
+  compact?: boolean
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className = '', label, error, options, placeholder, id, ...props }, ref) => {
+  ({ className = '', label, error, options, placeholder, compact, id, ...props }, ref) => {
     const selectId = id || props.name
 
     return (
-      <div className="w-full">
+      <div className={compact ? 'shrink-0' : 'w-full'}>
         {label && (
           <label htmlFor={selectId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             {label}
@@ -28,7 +30,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={selectId}
           className={`
-            w-full px-3 py-2 rounded-lg border
+            ${compact ? 'w-auto' : 'w-full'} px-3 py-2 rounded-lg border
             bg-white dark:bg-gray-800
             text-gray-900 dark:text-gray-100
             focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent

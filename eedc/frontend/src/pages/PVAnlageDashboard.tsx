@@ -157,6 +157,7 @@ export default function PVAnlageDashboard() {
         </div>
         {anlagen.length > 1 && (
           <Select
+            compact
             value={selectedAnlageId?.toString() || ''}
             onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
             options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}

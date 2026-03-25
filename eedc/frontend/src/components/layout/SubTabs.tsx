@@ -7,6 +7,8 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
+import { useSelectedAnlage, useInvestitionen } from '../../hooks'
+import type { InvestitionTyp } from '../../types'
 import {
   LayoutDashboard,
   Car,
@@ -46,17 +48,22 @@ interface TabGroup {
   prefixes: string[]
 }
 
-// ─── Cockpit Tabs (statisch) ─────────────────────────────────────────────────
-const cockpitTabs: TabItem[] = [
+// ─── Cockpit Tabs ────────────────────────────────────────────────────────────
+// Basis-Tabs werden immer angezeigt
+const cockpitBaseTabs: TabItem[] = [
   { name: 'Übersicht',       href: '/cockpit',                  icon: LayoutDashboard, exact: true },
   { name: 'Aktueller Monat', href: '/cockpit/aktueller-monat',  icon: CalendarClock },
   { name: 'PV-Anlage',       href: '/cockpit/pv-anlage',        icon: Sun },
-  { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car },
-  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame },
-  { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery },
-  { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug },
-  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun },
-  { name: 'Sonstiges',       href: '/cockpit/sonstiges',        icon: Wrench },
+]
+
+// Investitions-Tabs: werden nur angezeigt wenn der Typ als Investition existiert
+const cockpitInvestitionTabs: (TabItem & { typen: InvestitionTyp[] })[] = [
+  { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car,     typen: ['e-auto'] },
+  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame,   typen: ['waermepumpe'] },
+  { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery, typen: ['speicher'] },
+  { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug,    typen: ['wallbox'] },
+  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun,     typen: ['balkonkraftwerk'] },
+  { name: 'Sonstiges',       href: '/cockpit/sonstiges',        icon: Wrench,  typen: ['sonstiges'] },
 ]
 
 // ─── Einstellungen-Gruppen ────────────────────────────────────────────────────
@@ -145,7 +152,7 @@ export default function SubTabs() {
 
   // ── Cockpit ──────────────────────────────────────────────────────────────
   if (path.startsWith('/cockpit')) {
-    return <TabBar tabs={cockpitTabs} />
+    return <CockpitTabBar />
   }
 
   // ── Einstellungen – gruppen-aware ────────────────────────────────────────
@@ -162,6 +169,24 @@ export default function SubTabs() {
   }
 
   return null
+}
+
+// ─── Cockpit Tab-Leiste (dynamisch nach Investitionen) ───────────────────────
+function CockpitTabBar() {
+  const { selectedAnlageId } = useSelectedAnlage()
+  const { investitionen, loading } = useInvestitionen(selectedAnlageId)
+
+  const vorhandeneTypen = new Set(investitionen.map(i => i.typ))
+
+  const tabs = [
+    ...cockpitBaseTabs,
+    ...cockpitInvestitionTabs.filter(tab =>
+      tab.typen.some(typ => vorhandeneTypen.has(typ))
+    ),
+  ]
+
+  // Während dem Laden nur Basis-Tabs zeigen (kein Flicker)
+  return <TabBar tabs={loading ? cockpitBaseTabs : tabs} />
 }
 
 // ─── Wiederverwendbare Tab-Leiste ─────────────────────────────────────────────
