@@ -7,6 +7,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.27] - 2026-03-25
+
+### Behoben
+
+- **Fehler „[object Object]" im Monatsabschluss (#54)**: ApiClient warf Plain Object statt Error-Instanz, dadurch wurden Backend-Fehlermeldungen im gesamten Frontend als „[object Object]" oder generische Texte angezeigt. ApiError ist jetzt eine Error-Subklasse
+- **Update-Hinweis für HA Add-on präzisiert (#55)**: Statt „Update über Einstellungen → Add-ons" jetzt konkreter Pfad zum manuellen Update-Check mit Hinweis auf automatische Prüfung
+
+### Verbessert
+
+- **Monatsabschluss Save-Logging**: Detailliertes Logging der Eingabedaten und DB-Operationen für Fehlerdiagnose
+
+## [3.4.26] - 2026-03-25
+
+### Neu
+
+- **MQTT Gateway mit Geräte-Presets**: Universelle MQTT-Brücke für beliebige Smarthome-Systeme mit vorgefertigten Geräte-Presets
+- **Dashboard Refactoring**: Aufsplitten in wiederverwendbare Komponenten (HeroLeiste, KPICard, RingGaugeCard, EnergyFlowDiagram, etc.)
+- **Frontend-Bibliothek** (`lib/`): Zentrale Utilities für Formatierung, Farben, Berechnungen und Konstanten
+- **Custom Hooks** (`hooks/`): useApiData, useSelectedAnlage, useYearSelection für einheitliche Datenlade-Patterns
+- **Monatsabschluss-Komponenten**: Wizard-Steps als eigenständige Komponenten (BasisStep, InvestitionStep, SummaryStep, etc.)
+- **Sensor-Mapping erweitert**: Verbesserte BasisSensorenStep mit Live-Sensor-Vorschau und Mapping-Summary
+
+### Verbessert
+
+- **Solar-Prognose**: Erweiterte API mit Forecast-Daten
+- **Live Dashboard**: Erweiterte Power-Service-Integration und Wetter-Widget
+- **Cockpit**: Zusätzliche Analyse-Endpoints (Komponenten, PV-Strings, Prognose-Vergleich)
+- **Connectors**: MQTT-Bridge für Connector-Daten, verbesserte Geräte-Adapter
+- **HA Statistics Service**: Robustere Monatswert-Berechnung
+
 ## [3.4.25] - 2026-03-24
 
 ### Behoben
