@@ -901,7 +901,6 @@ async def save_monatsabschluss(
         if not imd:
             imd = InvestitionMonatsdaten(
                 investition_id=inv_werte.investition_id,
-                monatsdaten_id=monatsdaten_id,
                 jahr=jahr,
                 monat=monat,
                 verbrauch_daten={},

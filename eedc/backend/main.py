@@ -16,6 +16,18 @@ from pathlib import Path
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+class HealthCheckFilter(logging.Filter):
+    """Unterdrückt Health-Check-Logeinträge (HA Supervisor pollt alle paar Sekunden)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return "/api/health" not in message
+
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
