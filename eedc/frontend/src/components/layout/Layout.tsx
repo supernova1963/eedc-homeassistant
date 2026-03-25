@@ -58,7 +58,7 @@ export default function Layout() {
               <div className="mt-1.5 text-xs text-blue-600 dark:text-blue-400 space-y-0.5">
                 <p>Je nach Installation:</p>
                 <p className="font-mono">• Docker: docker-compose pull && docker-compose up -d</p>
-                <p className="font-mono">• Home Assistant Add-on: Update über Einstellungen → Add-ons</p>
+                <p className="font-mono">• Home Assistant Add-on: Einstellungen → Add-ons → ⋮ → „Nach Updates suchen" oder auf HA Aktualisierung warten</p>
                 <p className="font-mono">• Manuell (Git): git pull && cd frontend && npm run build</p>
               </div>
               {update!.release_url && (
