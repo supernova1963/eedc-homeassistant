@@ -197,7 +197,7 @@ export default function LiveDashboard() {
             {isRefreshing && (
               <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary-500" />
             )}
-            {lastUpdate && <span>Update: {lastUpdate}</span>}
+            {lastUpdate && <span aria-live="polite">Update: {lastUpdate}</span>}
             <span className="text-xs">(5s)</span>
           </div>
         </div>
@@ -205,7 +205,7 @@ export default function LiveDashboard() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-400">
+        <div role="alert" className="flex items-center gap-2 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-400">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -424,7 +424,7 @@ export default function LiveDashboard() {
                         <div key={tag.datum} className={`flex items-center justify-between rounded-lg px-3 py-1.5 ${
                           i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-gray-50 dark:bg-gray-700/50'
                         }`}>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 w-20">{label}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{label}</span>
                           <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400"
                                 title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
                             {tag.pv_ertrag_kwh.toFixed(1)}
@@ -432,7 +432,7 @@ export default function LiveDashboard() {
                             <span className="text-xs font-normal ml-0.5">kWh</span>
                           </span>
                           {hasVmNm && (
-                            <span className="text-xs w-24 text-right">
+                            <span className="text-xs text-right shrink-0">
                               <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
                               <span className="text-gray-400 mx-0.5">/</span>
                               <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>

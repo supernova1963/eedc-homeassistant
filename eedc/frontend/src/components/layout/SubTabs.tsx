@@ -196,7 +196,7 @@ function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <div className="px-4 sm:px-6">
-        <nav aria-label={groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs'} className="flex items-center gap-1 py-2 overflow-x-auto">
+        <nav aria-label={groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs'} className="flex items-center gap-1 py-2 overflow-x-auto snap-x snap-proximity scrollbar-none">
           {groupLabel && (
             <>
               <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap pr-2">
@@ -211,7 +211,7 @@ function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) 
               to={tab.href}
               end={tab.exact}
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors snap-start ${
                   isActive
                     ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
                     : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
