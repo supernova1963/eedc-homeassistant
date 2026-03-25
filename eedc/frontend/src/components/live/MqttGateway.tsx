@@ -7,10 +7,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Edit3, Play, Check, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Loader2, Radio, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Edit3, Play, Check, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Loader2, Radio, AlertCircle, Zap, Tag } from 'lucide-react'
 import Input from '../ui/Input'
 import { liveDashboardApi } from '../../api/liveDashboard'
-import type { GatewayMapping, GatewayMappingCreate, GatewayStatus, TestTopicResult } from '../../api/liveDashboard'
+import type { GatewayMapping, GatewayMappingCreate, GatewayStatus, TestTopicResult, MqttPreset } from '../../api/liveDashboard'
 
 interface MqttGatewayProps {
   anlageId: number | null
@@ -292,6 +292,161 @@ function MappingForm({
   )
 }
 
+// ─── Preset-Auswahl ──────────────────────────────────────────────────
+
+function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: () => void }) {
+  const [presets, setPresets] = useState<MqttPreset[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [variablen, setVariablen] = useState<Record<string, string>>({})
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    liveDashboardApi.getGatewayPresets().then(setPresets).catch(() => {})
+  }, [])
+
+  const selected = presets.find(p => p.id === selectedId) ?? null
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id)
+    setVariablen({})
+    setError(null)
+    setSuccess(null)
+  }
+
+  const handleApply = async () => {
+    if (!selected) return
+    setApplying(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const result = await liveDashboardApi.applyGatewayPreset({
+        preset_id: selected.id,
+        anlage_id: anlageId,
+        variablen,
+      })
+      setSuccess(`${result.erstellt} Mapping${result.erstellt !== 1 ? 's' : ''} erstellt`)
+      setSelectedId('')
+      setVariablen({})
+      onApplied()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Anwenden')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const allVarsFilled = selected?.variablen.every(v => variablen[v.key]?.trim()) ?? false
+
+  // Vorschau: Topics mit ausgefüllten Variablen
+  const preview = selected && allVarsFilled
+    ? selected.mappings.map(m => {
+        let topic = m.topic_template
+        let pfad = m.json_pfad
+        for (const [k, v] of Object.entries(variablen)) {
+          topic = topic.split(`{${k}}`).join(v)
+          if (pfad) pfad = pfad.split(`{${k}}`).join(v)
+        }
+        return { topic, ziel_key: m.ziel_key, beschreibung: m.beschreibung, pfad }
+      })
+    : null
+
+  if (presets.length === 0) return null
+
+  return (
+    <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-900/10 space-y-3">
+      <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+        <Zap className="w-4 h-4 text-purple-500" />
+        Geräte-Preset (Schnelleinrichtung)
+      </h3>
+
+      {/* Preset-Auswahl */}
+      <div>
+        <select
+          value={selectedId}
+          onChange={e => handleSelect(e.target.value)}
+          className="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+        >
+          <option value="">Gerät auswählen…</option>
+          {presets.map(p => (
+            <option key={p.id} value={p.id}>{p.name} ({p.hersteller})</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Gewähltes Preset: Beschreibung + Variablen */}
+      {selected && (
+        <>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{selected.beschreibung}</p>
+
+          {selected.anleitung && (
+            <p className="text-xs text-gray-500 dark:text-gray-500 italic">{selected.anleitung}</p>
+          )}
+
+          {/* Variablen-Eingabe */}
+          <div className="space-y-2">
+            {selected.variablen.map(v => (
+              <div key={v.key}>
+                <Input
+                  label={v.label}
+                  placeholder={v.placeholder}
+                  value={variablen[v.key] || ''}
+                  onChange={e => setVariablen(prev => ({ ...prev, [v.key]: e.target.value }))}
+                />
+                {v.hinweis && (
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{v.hinweis}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Vorschau */}
+          {preview && (
+            <div className="text-xs space-y-1 bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mb-1">
+                Erstellt {preview.length} Mapping{preview.length !== 1 ? 's' : ''}:
+              </div>
+              {preview.map((p, i) => (
+                <div key={i} className="font-mono text-[11px]">
+                  <span className="text-gray-700 dark:text-gray-300">{p.topic}</span>
+                  <span className="text-gray-400 mx-1">→</span>
+                  <span className="text-primary-600 dark:text-primary-400">{p.ziel_key}</span>
+                  {p.beschreibung && (
+                    <span className="text-gray-400 ml-2">({p.beschreibung})</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Fehler / Erfolg */}
+          {error && (
+            <div className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {error}
+            </div>
+          )}
+          {success && (
+            <div className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <Check className="w-3 h-3" /> {success}
+            </div>
+          )}
+
+          {/* Anwenden-Button */}
+          <button
+            onClick={handleApply}
+            disabled={!allVarsFilled || applying}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+          >
+            {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Anwenden
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Hauptkomponente ─────────────────────────────────────────────────
 
 export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
@@ -436,6 +591,11 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
         )}
       </div>
 
+      {/* Geräte-Preset Schnelleinrichtung */}
+      {anlageId && (
+        <PresetSection anlageId={anlageId} onApplied={loadData} />
+      )}
+
       {/* Info-Box: Was kann das Gateway? */}
       {mappings.length === 0 && !showForm && (
         <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
@@ -529,6 +689,12 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
                     {m.invertieren && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
                         ×(−1)
+                      </span>
+                    )}
+                    {m.preset_id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center gap-0.5">
+                        <Tag className="w-2.5 h-2.5" />
+                        Preset
                       </span>
                     )}
                   </div>

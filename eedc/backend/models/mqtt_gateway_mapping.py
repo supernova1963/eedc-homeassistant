@@ -31,6 +31,7 @@ class MqttGatewayMapping(Base):
     invertieren: Mapped[bool] = mapped_column(Boolean, default=False)
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True)
     beschreibung: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preset_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     erstellt_am: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

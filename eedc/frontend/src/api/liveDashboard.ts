@@ -179,7 +179,37 @@ export interface GatewayMapping {
   invertieren: boolean
   aktiv: boolean
   beschreibung: string | null
+  preset_id: string | null
   erstellt_am: string
+}
+
+// ─── MQTT Gateway Presets ─────────────────────────────────────────
+
+export interface PresetVariable {
+  key: string
+  label: string
+  placeholder: string
+  hinweis: string
+}
+
+export interface PresetMappingInfo {
+  topic_template: string
+  ziel_key: string
+  beschreibung: string
+  payload_typ: string
+  json_pfad: string | null
+  faktor: number
+  invertieren: boolean
+}
+
+export interface MqttPreset {
+  id: string
+  name: string
+  hersteller: string
+  beschreibung: string
+  anleitung: string
+  variablen: PresetVariable[]
+  mappings: PresetMappingInfo[]
 }
 
 export interface GatewayMappingCreate {
@@ -314,4 +344,14 @@ export const liveDashboardApi = {
     array_index?: number | null; faktor?: number; offset?: number; invertieren?: boolean
   }) =>
     api.post<TransformTestResult>('/live/mqtt/gateway/test-transform', data),
+
+  // ─── MQTT Gateway Presets ─────────────────────────────────────────
+
+  getGatewayPresets: () =>
+    api.get<MqttPreset[]>('/live/mqtt/gateway/presets'),
+
+  applyGatewayPreset: (data: { preset_id: string; anlage_id: number; variablen: Record<string, string> }) =>
+    api.post<{ preset_id: string; erstellt: number; mappings: Record<string, unknown>[] }>(
+      '/live/mqtt/gateway/presets/apply', data,
+    ),
 }

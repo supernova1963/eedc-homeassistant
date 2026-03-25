@@ -41,6 +41,7 @@ class MappingCreate(BaseModel):
     invertieren: bool = False
     aktiv: bool = True
     beschreibung: Optional[str] = None
+    preset_id: Optional[str] = None
 
 
 class MappingUpdate(BaseModel):
@@ -69,6 +70,7 @@ class MappingResponse(BaseModel):
     invertieren: bool
     aktiv: bool
     beschreibung: Optional[str]
+    preset_id: Optional[str]
     erstellt_am: str
 
 
@@ -112,6 +114,7 @@ def _db_to_response(m: MqttGatewayMapping) -> dict:
         "invertieren": m.invertieren,
         "aktiv": m.aktiv,
         "beschreibung": m.beschreibung,
+        "preset_id": m.preset_id,
         "erstellt_am": m.erstellt_am.isoformat() if m.erstellt_am else "",
     }
 
