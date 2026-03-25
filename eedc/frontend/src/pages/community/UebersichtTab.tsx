@@ -81,6 +81,7 @@ interface UebersichtTabProps {
 interface PerformanceMetrik {
   label: string
   abweichungProzent: number
+  einheit: '%' | 'PP'  // PP = Prozentpunkte (für Metriken die selbst % sind)
   icon: React.ReactNode
   kategorie: 'pv' | 'speicher' | 'waermepumpe' | 'eauto' | 'wallbox'
 }
@@ -306,6 +307,7 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
     metriken.push({
       label: 'PV-Ertrag',
       abweichungProzent: pvAbw,
+      einheit: '%',
       icon: <Sun className="h-4 w-4" />,
       kategorie: 'pv',
     })
@@ -314,20 +316,22 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
     if (benchmark.benchmark_erweitert?.speicher) {
       const sp = benchmark.benchmark_erweitert.speicher
       if (sp.wirkungsgrad?.community_avg) {
-        const abw = ((sp.wirkungsgrad.wert - sp.wirkungsgrad.community_avg) / sp.wirkungsgrad.community_avg) * 100
+        const abw = sp.wirkungsgrad.wert - sp.wirkungsgrad.community_avg
         metriken.push({
           label: 'Speicher-Effizienz',
           abweichungProzent: abw,
+          einheit: 'PP',
           icon: <Battery className="h-4 w-4" />,
           kategorie: 'speicher',
         })
       }
       if (sp.netz_anteil?.community_avg) {
-        // Invertiert: weniger ist besser
-        const abw = ((sp.netz_anteil.community_avg - sp.netz_anteil.wert) / sp.netz_anteil.community_avg) * 100
+        // Invertiert: weniger Netz-Anteil ist besser → positive PP = gut
+        const abw = sp.netz_anteil.community_avg - sp.netz_anteil.wert
         metriken.push({
           label: 'PV-Ladeanteil Speicher',
           abweichungProzent: abw,
+          einheit: 'PP',
           icon: <Zap className="h-4 w-4" />,
           kategorie: 'speicher',
         })
@@ -341,6 +345,7 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
       metriken.push({
         label: 'Wärmepumpe JAZ',
         abweichungProzent: abw,
+        einheit: '%',
         icon: <Home className="h-4 w-4" />,
         kategorie: 'waermepumpe',
       })
@@ -349,10 +354,11 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
     // E-Auto
     if (benchmark.benchmark_erweitert?.eauto?.pv_anteil?.community_avg) {
       const ea = benchmark.benchmark_erweitert.eauto
-      const abw = ((ea.pv_anteil!.wert - ea.pv_anteil!.community_avg!) / ea.pv_anteil!.community_avg!) * 100
+      const abw = ea.pv_anteil!.wert - ea.pv_anteil!.community_avg!
       metriken.push({
         label: 'E-Auto PV-Anteil',
         abweichungProzent: abw,
+        einheit: 'PP',
         icon: <Car className="h-4 w-4" />,
         kategorie: 'eauto',
       })
@@ -361,10 +367,11 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
     // Wallbox
     if (benchmark.benchmark_erweitert?.wallbox?.pv_anteil?.community_avg) {
       const wb = benchmark.benchmark_erweitert.wallbox
-      const abw = ((wb.pv_anteil!.wert - wb.pv_anteil!.community_avg!) / wb.pv_anteil!.community_avg!) * 100
+      const abw = wb.pv_anteil!.wert - wb.pv_anteil!.community_avg!
       metriken.push({
         label: 'Wallbox PV-Anteil',
         abweichungProzent: abw,
+        einheit: 'PP',
         icon: <Plug className="h-4 w-4" />,
         kategorie: 'wallbox',
       })
@@ -554,7 +561,7 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
                         <span className="text-gray-700 dark:text-gray-300">{s.label}</span>
                       </div>
                       <span className="font-semibold text-green-600 dark:text-green-400">
-                        +{s.abweichungProzent.toFixed(1)}%
+                        +{s.abweichungProzent.toFixed(1)}{s.einheit === 'PP' ? ' PP' : '%'}
                       </span>
                     </div>
                   ))}
@@ -576,7 +583,7 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
                         <span className="text-gray-700 dark:text-gray-300">{s.label}</span>
                       </div>
                       <span className="font-semibold text-red-600 dark:text-red-400">
-                        {s.abweichungProzent.toFixed(1)}%
+                        {s.abweichungProzent.toFixed(1)}{s.einheit === 'PP' ? ' PP' : '%'}
                       </span>
                     </div>
                   ))}
