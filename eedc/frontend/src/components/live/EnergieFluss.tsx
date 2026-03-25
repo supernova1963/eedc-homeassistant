@@ -7,7 +7,7 @@
  * Tages-kWh Tooltips, Σ Erzeugung/Verbrauch.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 
@@ -130,8 +130,7 @@ interface NodePosition {
 
 // ─── Layout ─────────────────────────────────────────────────────────
 
-const W = 600
-const CX = W / 2
+const W_DEFAULT = 600
 
 /** Verteile n Items gleichmäßig auf einer Linie */
 function distribute(n: number, minX: number, maxX: number): number[] {
@@ -190,7 +189,7 @@ interface LayoutResult {
   dims: LayoutDims
 }
 
-function layoutNodes(komponenten: LiveKomponente[]): LayoutResult {
+function layoutNodes(komponenten: LiveKomponente[], W: number = W_DEFAULT): LayoutResult {
   const erzeuger = komponenten.filter(k => k.key.startsWith('pv_'))
   const netz = komponenten.filter(k => k.key === 'netz')
   const speicher = komponenten.filter(k => k.key.startsWith('batterie_'))
@@ -305,10 +304,27 @@ export default function EnergieFluss({
   netzPufferW = 100,
 }: EnergieFlussProps) {
   const [lite, toggleLite] = useLiteMode()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerW, setContainerW] = useState(W_DEFAULT)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width ?? W_DEFAULT
+      setContainerW(w)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   if (komponenten.length === 0) return null
 
-  const { nodes, dims } = layoutNodes(komponenten)
+  // SVG-Breite: Container < 375 → 360, 375-499 → 450, ≥500 → 600
+  const W = containerW < 375 ? 360 : containerW < 500 ? 450 : 600
+  const CX = W / 2
+
+  const { nodes, dims } = layoutNodes(komponenten, W)
   const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
   const CY = dims.cy
   const nodeMap = new Map(nodes.map(n => [n.komp.key, n]))
@@ -329,7 +345,7 @@ export default function EnergieFluss({
   const maxKw = Math.max(...allKw, 0.1)
 
   return (
-    <div className="flex flex-col h-full">
+    <div ref={containerRef} className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-2 shrink-0">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           Energiefluss
