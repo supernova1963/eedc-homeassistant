@@ -63,20 +63,27 @@ Alternativen (verworfen): "Dokumentation" (klingt nach Software-Docs), "Wichtige
 | `created_at` | DateTime | |
 | `updated_at` | DateTime | |
 
-### Model: `InfothekFoto` (Tabelle: `infothek_fotos`)
+### Model: `InfothekDatei` (Tabelle: `infothek_dateien`)
+
+> Umbenannt von "Foto" zu "Datei" — unterstützt jetzt auch PDF-Upload.
 
 | Feld | Typ | Beschreibung |
 |------|-----|-------------|
 | `id` | Integer, PK | |
 | `eintrag_id` | FK → InfothekEintrag, CASCADE | |
 | `dateiname` | String(255) | Original-Dateiname |
-| `daten` | LargeBinary | BLOB, serverseitig auf max 500kb resized |
-| `thumbnail` | LargeBinary | Kleines Vorschaubild (~50kb) |
-| `mime_type` | String(50) | image/jpeg, image/png |
-| `beschreibung` | String(255), nullable | Optionale Bildbeschreibung |
+| `daten` | LargeBinary | BLOB — Bilder: serverseitig auf max 500kb resized, PDFs: max 2 MB |
+| `thumbnail` | LargeBinary, nullable | Kleines Vorschaubild (~50kb) für Bilder, NULL für PDFs |
+| `dateityp` | String(10) | `image` oder `pdf` |
+| `mime_type` | String(50) | image/jpeg, image/png, application/pdf |
+| `beschreibung` | String(255), nullable | Optionale Beschreibung |
 | `created_at` | DateTime | |
 
-**Constraint:** Max 3 Fotos pro Eintrag (Backend-Validierung).
+**Constraints:**
+- Max 3 Dateien pro Eintrag (Backend-Validierung)
+- Bilder: JPEG, PNG, HEIC (wird zu JPEG konvertiert), max 500kb nach Resize
+- PDFs: max 2 MB, keine Konvertierung
+- Thumbnail nur für Bilder; PDFs zeigen ein PDF-Icon in der UI
 
 ---
 
@@ -102,6 +109,11 @@ Alternativen (verworfen): "Dokumentation" (klingt nach Software-Docs), "Wichtige
 | **Pellets / Flüssiggas** | 🪵 | `lieferant`, `tankgroesse_l_oder_kg`, `letzte_lieferung`, `preis_pro_einheit`, `einheit` (Liter/kg/Ster), `kundennummer` |
 | **Versicherung** | 🛡️ | `versicherungsnummer`, `anbieter`, `deckungssumme_euro`, `jahresbeitrag_euro`, `vertragsbeginn`, `kuendigungsfrist_monate` |
 | **Ansprechpartner** | 👤 | `firma`, `name`, `telefon`, `email`, `ticketsystem_url`, `kundennummer`, `position` |
+| **Wartungs-/Pflegevertrag** | 🔧 | `anbieter`, `vertragsnummer`, `leistungsumfang`, `gueltig_bis`, `kuendigungsfrist_monate`, `jahreskosten_euro` |
+| **Marktstammdatenregister** | 🏛️ | `mastr_nummer`, `anlage_typ`, `inbetriebnahme_datum`, `status`, `letzte_aktualisierung` |
+| **Förderung** | 💰 | `aktenzeichen`, `foerderprogramm`, `betrag_euro`, `bewilligungsdatum`, `laufzeit_monate`, `auflagen` |
+| **Garantie** | ✅ | `hersteller`, `produkt`, `garantie_nummer`, `garantie_bis`, `erweiterung` (ja/nein), `bedingungen` |
+| **Steuerdaten** | 📊 | `finanzamt`, `steuernummer`, `abschreibungszeitraum_jahre`, `afa_typ` (linear/degressiv), `restwert_euro` |
 | **Sonstiges** | 📋 | Nur Kernfelder, keine zusätzlichen Vorlagen-Felder |
 
 > **Erweiterbar:** Neue Kategorien können jederzeit hinzugefügt werden (nur Frontend-Schema, kein DB-Change nötig dank JSON-Feld).
@@ -225,11 +237,11 @@ PUT    /api/infothek/sortierung               — Reihenfolge aktualisieren (Bat
 ### Etappe 2 — Fotos
 
 ```
-POST   /api/infothek/{id}/fotos               — Foto hochladen (multipart/form-data)
-GET    /api/infothek/{id}/fotos               — Fotos eines Eintrags listen
-GET    /api/infothek/{id}/fotos/{foto_id}     — Foto abrufen (volle Auflösung)
-GET    /api/infothek/{id}/fotos/{foto_id}/thumb — Thumbnail abrufen
-DELETE /api/infothek/{id}/fotos/{foto_id}     — Foto löschen
+POST   /api/infothek/{id}/dateien               — Foto hochladen (multipart/form-data)
+GET    /api/infothek/{id}/dateien               — Fotos eines Eintrags listen
+GET    /api/infothek/{id}/dateien/{datei_id}     — Foto abrufen (volle Auflösung)
+GET    /api/infothek/{id}/dateien/{datei_id}/thumb — Thumbnail abrufen
+DELETE /api/infothek/{id}/dateien/{datei_id}     — Foto löschen
 ```
 
 ### Etappe 3 — Verknüpfungen
@@ -273,28 +285,28 @@ GET    /api/investitionen/{id}/infothek       — Infothek-Einträge einer Inves
 | 1.15 | **Menü-Integration** — Bedingter Menüpunkt, Route registrieren | `frontend/src/App.tsx` + Navigation |
 | 1.16 | **Mobile-Optimierung** — Responsive Karten, Touch-freundlich | Bestandteil von 1.12–1.14 |
 
-### Etappe 2 — Foto-Upload (geschätzt: 1-2 Sessions)
+### Etappe 2 — Datei-Upload: Fotos + PDFs (geschätzt: 1-2 Sessions)
 
-**Ziel:** Bis zu 3 Fotos pro Eintrag, serverseitig resized, mit Thumbnail-Vorschau und Lightbox.
+**Ziel:** Bis zu 3 Dateien pro Eintrag (Fotos + PDFs), serverseitig verarbeitet, mit Vorschau und Lightbox.
 
 #### Backend
 
 | # | Maßnahme | Dateien |
 |---|----------|---------|
-| 2.1 | **Model: InfothekFoto** — BLOB-Speicherung mit Thumbnail | `backend/models/infothek.py` |
-| 2.2 | **Migration** — Neue Tabelle `infothek_fotos` | `backend/core/database.py` |
-| 2.3 | **Bild-Service** — Resize auf max 500kb, Thumbnail-Generierung (~50kb), EXIF-Rotation | `backend/services/infothek_foto_service.py` (neu) |
+| 2.1 | **Model: InfothekDatei** — BLOB-Speicherung mit Thumbnail (Bilder) und Typ-Unterscheidung (image/pdf) | `backend/models/infothek.py` |
+| 2.2 | **Migration** — Neue Tabelle `infothek_dateien` | `backend/core/database.py` |
+| 2.3 | **Datei-Service** — Bilder: Resize max 500kb, Thumbnail ~50kb, EXIF-Rotation, HEIC→JPEG. PDFs: Größenvalidierung max 2MB, kein Resize. | `backend/services/infothek_datei_service.py` (neu) |
 | 2.4 | **API-Endpunkte** — Upload (multipart), Abruf, Thumbnail, Löschen | `backend/api/routes/infothek.py` |
-| 2.5 | **Pillow-Dependency** — Prüfen ob bereits vorhanden, sonst requirements.txt | `requirements.txt` |
+| 2.5 | **Dependencies** — Pillow + pillow-heif in requirements.txt | `requirements.txt` |
 
 #### Frontend
 
 | # | Maßnahme | Dateien |
 |---|----------|---------|
-| 2.6 | **Foto-Upload-Komponente** — Drag & Drop oder Klick, Vorschau vor Upload | `frontend/src/components/infothek/FotoUpload.tsx` (neu) |
-| 2.7 | **Thumbnail-Anzeige** — In InfothekKarte, Klick öffnet Lightbox | `frontend/src/components/infothek/InfothekKarte.tsx` |
-| 2.8 | **Lightbox-Komponente** — Vollbild-Ansicht, Blättern, Schließen | `frontend/src/components/infothek/FotoLightbox.tsx` (neu) |
-| 2.9 | **Form-Integration** — Foto-Upload im Bearbeitungs-Formular | `frontend/src/components/forms/InfothekForm.tsx` |
+| 2.6 | **Datei-Upload-Komponente** — Drag & Drop oder Klick, akzeptiert Bilder + PDFs, Vorschau vor Upload | `frontend/src/components/infothek/DateiUpload.tsx` (neu) |
+| 2.7 | **Vorschau-Anzeige** — In InfothekKarte: Bild-Thumbnails + PDF-Icons mit Dateiname, Klick öffnet Lightbox/PDF | `frontend/src/components/infothek/InfothekKarte.tsx` |
+| 2.8 | **Lightbox-Komponente** — Vollbild-Ansicht für Bilder (Blättern, Schließen), PDF öffnet in neuem Tab | `frontend/src/components/infothek/DateiLightbox.tsx` (neu) |
+| 2.9 | **Form-Integration** — Datei-Upload im Bearbeitungs-Formular | `frontend/src/components/forms/InfothekForm.tsx` |
 
 ### Etappe 3 — Verknüpfung & Migration (geschätzt: 1-2 Sessions)
 
