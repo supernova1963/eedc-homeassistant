@@ -106,7 +106,7 @@ Alternativen (verworfen): "Dokumentation" (klingt nach Software-Docs), "Wichtige
 | **Gasvertrag** | 🔥 | `zaehler_nummer`, `anbieter`, `tarif_ct_kwh`, `jahresverbrauch_kwh`, `kundennummer`, `vertragsbeginn`, `kuendigungsfrist_monate` |
 | **Wasservertrag** | 💧 | `zaehler_nummer`, `anbieter`, `eichdatum`, `naechste_ablesung`, `kundennummer` |
 | **Fernwärme** | 🌡️ | `zaehler_nummer`, `anbieter`, `anschlussleistung_kw`, `tarif_ct_kwh`, `kundennummer` |
-| **Pellets / Flüssiggas** | 🪵 | `lieferant`, `tankgroesse_l_oder_kg`, `letzte_lieferung`, `preis_pro_einheit`, `einheit` (Liter/kg/Ster), `kundennummer` |
+| **Brennstoff (Heizöl / Flüssiggas / Pellets)** | 🪵 | `brennstoff_art` (Heizöl/Flüssiggas/Pellets/Holz), `lieferant`, `tankgroesse`, `letzte_lieferung_datum`, `letzte_lieferung_menge`, `preis_pro_einheit`, `einheit` (Liter/kg/Ster), `kundennummer` |
 | **Versicherung** | 🛡️ | `versicherungsnummer`, `anbieter`, `deckungssumme_euro`, `jahresbeitrag_euro`, `vertragsbeginn`, `kuendigungsfrist_monate` |
 | **Ansprechpartner** | 👤 | `firma`, `name`, `telefon`, `email`, `ticketsystem_url`, `kundennummer`, `position` |
 | **Wartungs-/Pflegevertrag** | 🔧 | `anbieter`, `vertragsnummer`, `leistungsumfang`, `gueltig_bis`, `kuendigungsfrist_monate`, `jahreskosten_euro` |
