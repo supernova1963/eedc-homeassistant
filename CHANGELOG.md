@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.29] - 2026-03-25
+
+### Behoben
+
+- **EV-Quote >100% Cap**: Eigenverbrauchsquote wird auf maximal 100% begrenzt
+- **API-Cache Random-Jitter**: Cache-Expiry mit zufälligem Offset, verhindert gleichzeitige Cache-Invalidierung aller Clients
+
+### Neu
+
+- **Infothek-Konzept (#57)**: Konzeptdokumentation für optionales Modul (Verträge, Zähler, Kontakte, Fotos) mit UI-Mockups und 5 neuen Kategorien (Gas, Wasser, Fernwärme, Pellets, Versicherung)
+
+---
+
 ## [3.4.28] - 2026-03-25
 
 ### Behoben
