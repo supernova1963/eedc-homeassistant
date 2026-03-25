@@ -561,6 +561,12 @@ export default function AktuellerMonat() {
                     <span className="text-gray-500">Ladung:</span>
                     <span className="font-medium">{fmt(data.emob_ladung_kwh)} kWh</span>
                   </div>
+                  {(data.emob_km ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Gefahren:</span>
+                      <span className="font-medium">{fmt(data.emob_km)} km</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

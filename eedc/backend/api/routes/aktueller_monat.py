@@ -77,6 +77,7 @@ class AktuellerMonatResponse(BaseModel):
     wp_waerme_kwh: Optional[float] = None
     hat_waermepumpe: bool = False
     emob_ladung_kwh: Optional[float] = None
+    emob_km: Optional[float] = None
     hat_emobilitaet: bool = False
     bkw_erzeugung_kwh: Optional[float] = None
     hat_balkonkraftwerk: bool = False
@@ -490,7 +491,7 @@ async def get_aktueller_monat(
             "heizenergie_kwh": "wp_waerme_kwh",
             "warmwasser_kwh": "wp_waerme_kwh",
         },
-        "e-auto": {"ladung_kwh": "emob_ladung_kwh", "verbrauch_kwh": "emob_ladung_kwh"},
+        "e-auto": {"ladung_kwh": "emob_ladung_kwh", "verbrauch_kwh": "emob_ladung_kwh", "km_gefahren": "emob_km"},
         "wallbox": {"ladung_kwh": "emob_ladung_kwh"},
         "balkonkraftwerk": {"pv_erzeugung_kwh": "bkw_erzeugung_kwh"},
     }
@@ -622,6 +623,7 @@ async def get_aktueller_monat(
         wp_waerme_kwh=get_val("wp_waerme_kwh"),
         hat_waermepumpe=hat_waermepumpe,
         emob_ladung_kwh=get_val("emob_ladung_kwh"),
+        emob_km=get_val("emob_km"),
         hat_emobilitaet=hat_emobilitaet,
         bkw_erzeugung_kwh=get_val("bkw_erzeugung_kwh"),
         hat_balkonkraftwerk=hat_balkonkraftwerk,

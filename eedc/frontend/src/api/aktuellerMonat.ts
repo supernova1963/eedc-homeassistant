@@ -41,6 +41,7 @@ export interface AktuellerMonatResponse {
   wp_waerme_kwh: number | null
   hat_waermepumpe: boolean
   emob_ladung_kwh: number | null
+  emob_km: number | null
   hat_emobilitaet: boolean
   bkw_erzeugung_kwh: number | null
   hat_balkonkraftwerk: boolean
