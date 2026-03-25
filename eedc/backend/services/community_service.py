@@ -53,6 +53,7 @@ _AUSRICHTUNG_ZU_KOMPASS = {
     "nordwest": 315, "northwest": 315, "nw": 315,
     "west": 270, "w": 270,
     "südwest": 225, "southwest": 225, "sw": 225,
+    "ost-west": 180,  # Sonderfall: wird als "gemischt" behandelt
 }
 
 
@@ -170,12 +171,16 @@ async def prepare_community_data(
         neigungen = [inv.neigung_grad if inv.neigung_grad is not None else 30 for inv in pv_module]
         neigung_grad = int(sum(neigungen) / len(neigungen))
 
-        azimute = [_ausrichtung_zu_kompass(inv.ausrichtung) for inv in pv_module]
-        # Prüfen ob gemischt (z.B. Ost-West)
-        if max(azimute) - min(azimute) > 45:
-            ausrichtung = "ost-west" if any(60 <= a <= 120 for a in azimute) and any(240 <= a <= 300 for a in azimute) else "gemischt"
+        # Sonderfall: Einzelnes Modul mit "Ost-West" → direkt übernehmen
+        if len(pv_module) == 1 and (pv_module[0].ausrichtung or "").lower() == "ost-west":
+            ausrichtung = "ost-west"
         else:
-            ausrichtung = get_ausrichtung_label(int(sum(azimute) / len(azimute)))
+            azimute = [_ausrichtung_zu_kompass(inv.ausrichtung) for inv in pv_module]
+            # Prüfen ob gemischt (z.B. Ost-West)
+            if max(azimute) - min(azimute) > 45:
+                ausrichtung = "ost-west" if any(60 <= a <= 120 for a in azimute) and any(240 <= a <= 300 for a in azimute) else "gemischt"
+            else:
+                ausrichtung = get_ausrichtung_label(int(sum(azimute) / len(azimute)))
     else:
         neigung_grad = 30
         ausrichtung = "süd"
