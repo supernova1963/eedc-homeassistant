@@ -97,6 +97,13 @@ if git -C "$EEDC_STANDALONE" tag -l "v$VERSION" | grep -q .; then
     exit 1
 fi
 
+# CHANGELOG-Eintrag vorhanden?
+if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
+    echo -e "${RED}Fehler: Kein CHANGELOG-Eintrag für Version $VERSION gefunden!${NC}"
+    echo "  Bitte erst ## [$VERSION] in CHANGELOG.md ergänzen."
+    exit 1
+fi
+
 # Aktuelle Version lesen
 CURRENT=$(grep -oP '(?<=APP_VERSION = ")[^"]*' eedc/backend/core/config.py)
 echo -e "  Aktuell:  ${YELLOW}$CURRENT${NC}"
