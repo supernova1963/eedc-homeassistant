@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased] - Infothek-Modul (#57)
+## [3.5.0] - 2026-03-26
 
 ### Hinzugefügt
 
