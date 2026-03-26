@@ -56,3 +56,13 @@ export interface KategorienResponse {
   kategorien: Record<string, KategorieSchema>
   uebergreifende_felder: Record<string, UebergreifendeSektion>
 }
+
+export interface InfothekDatei {
+  id: number
+  eintrag_id: number
+  dateiname: string
+  dateityp: 'image' | 'pdf'
+  mime_type: string
+  beschreibung?: string | null
+  created_at?: string | null
+}

@@ -9,6 +9,7 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { Button, Alert } from '../ui'
 import { infothekApi } from '../../api/infothek'
 import { KATEGORIE_KEYS, getKategorieConfig } from '../../config/infothekKategorien'
+import DateiUpload from '../infothek/DateiUpload'
 import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate, KategorieFeld, KategorienResponse } from '../../types/infothek'
 
 interface InfothekFormProps {
@@ -226,6 +227,16 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
           placeholder="Freitext für beliebige Informationen..."
         />
       </div>
+
+      {/* Dateien (nur beim Bearbeiten — braucht eintrag_id) */}
+      {eintrag && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Dateien (max. 3 — Fotos + PDFs)
+          </label>
+          <DateiUpload eintragId={eintrag.id} />
+        </div>
+      )}
 
       {/* Aktiv-Status (nur beim Bearbeiten) */}
       {eintrag && (

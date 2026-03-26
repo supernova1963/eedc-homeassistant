@@ -3,7 +3,7 @@
  */
 
 import { api } from './client'
-import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate, KategorienResponse } from '../types/infothek'
+import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate, InfothekDatei, KategorienResponse } from '../types/infothek'
 
 export const infothekApi = {
   async list(anlageId: number, kategorie?: string, aktiv?: boolean): Promise<InfothekEintrag[]> {
@@ -40,5 +40,28 @@ export const infothekApi = {
 
   async updateSortierung(items: { id: number; sortierung: number }[]): Promise<void> {
     await api.put('/infothek/sortierung/batch', items)
+  },
+
+  // Datei-Endpunkte
+  async listDateien(eintragId: number): Promise<InfothekDatei[]> {
+    return api.get<InfothekDatei[]>(`/infothek/${eintragId}/dateien`)
+  },
+
+  async uploadDatei(eintragId: number, file: File): Promise<InfothekDatei> {
+    return api.upload<InfothekDatei>(`/infothek/${eintragId}/dateien`, file, 'datei')
+  },
+
+  async deleteDatei(eintragId: number, dateiId: number): Promise<void> {
+    return api.delete(`/infothek/${eintragId}/dateien/${dateiId}`)
+  },
+
+  /** URL für Bild/PDF (volle Auflösung) */
+  dateiUrl(eintragId: number, dateiId: number): string {
+    return `./api/infothek/${eintragId}/dateien/${dateiId}`
+  },
+
+  /** URL für Thumbnail */
+  thumbnailUrl(eintragId: number, dateiId: number): string {
+    return `./api/infothek/${eintragId}/dateien/${dateiId}/thumb`
   },
 }

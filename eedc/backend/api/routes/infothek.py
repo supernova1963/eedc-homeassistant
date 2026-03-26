@@ -4,14 +4,20 @@ Infothek API Router
 CRUD-Endpunkte für Infothek-Einträge (Verträge, Zähler, Kontakte, Dokumentation).
 """
 
+from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
-from backend.models.infothek import InfothekEintrag
+from backend.models.infothek import InfothekEintrag, InfothekDatei
+from backend.services.infothek_datei_service import (
+    validiere_dateityp, verarbeite_bild, validiere_pdf,
+    ERLAUBTE_TYPES, MAX_DATEIEN_PRO_EINTRAG,
+)
 
 
 # =============================================================================
@@ -240,8 +246,8 @@ class InfothekEintragResponse(InfothekEintragBase):
     id: int
     anlage_id: int
     investition_id: Optional[int] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -251,6 +257,20 @@ class SortierungItem(BaseModel):
     """Ein Item für Batch-Sortierung."""
     id: int
     sortierung: int
+
+
+class InfothekDateiResponse(BaseModel):
+    """Schema für Datei-Response (ohne BLOB-Daten)."""
+    id: int
+    eintrag_id: int
+    dateiname: str
+    dateityp: str
+    mime_type: str
+    beschreibung: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
 
 
 # =============================================================================
@@ -390,3 +410,156 @@ async def update_sortierung(
 
     await db.commit()
     return {"status": "ok", "updated": len(items)}
+
+
+# =============================================================================
+# Datei-Endpunkte (Etappe 2)
+# =============================================================================
+
+@router.post("/{eintrag_id}/dateien", response_model=InfothekDateiResponse, status_code=status.HTTP_201_CREATED)
+async def upload_datei(
+    eintrag_id: int,
+    datei: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lädt eine Datei (Bild oder PDF) zu einem Eintrag hoch."""
+    # Eintrag prüfen
+    result = await db.execute(
+        select(InfothekEintrag).where(InfothekEintrag.id == eintrag_id)
+    )
+    eintrag = result.scalar_one_or_none()
+    if not eintrag:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+
+    # Anzahl prüfen
+    count_result = await db.execute(
+        select(func.count(InfothekDatei.id))
+        .where(InfothekDatei.eintrag_id == eintrag_id)
+    )
+    count = count_result.scalar() or 0
+    if count >= MAX_DATEIEN_PRO_EINTRAG:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximal {MAX_DATEIEN_PRO_EINTRAG} Dateien pro Eintrag erlaubt."
+        )
+
+    # Dateityp validieren
+    mime_type = datei.content_type or "application/octet-stream"
+    try:
+        dateityp = validiere_dateityp(mime_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Daten lesen
+    raw_daten = await datei.read()
+
+    # Verarbeiten
+    thumbnail = None
+    if dateityp == "image":
+        try:
+            daten, thumbnail, mime_type = verarbeite_bild(raw_daten, mime_type)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    else:
+        try:
+            daten = validiere_pdf(raw_daten)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Speichern
+    db_datei = InfothekDatei(
+        eintrag_id=eintrag_id,
+        dateiname=datei.filename or "unbekannt",
+        dateityp=dateityp,
+        mime_type=mime_type,
+        daten=daten,
+        thumbnail=thumbnail,
+    )
+    db.add(db_datei)
+    await db.commit()
+    await db.refresh(db_datei)
+    return db_datei
+
+
+@router.get("/{eintrag_id}/dateien", response_model=list[InfothekDateiResponse])
+async def list_dateien(
+    eintrag_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Listet alle Dateien eines Eintrags (ohne BLOB-Daten)."""
+    result = await db.execute(
+        select(InfothekDatei)
+        .where(InfothekDatei.eintrag_id == eintrag_id)
+        .order_by(InfothekDatei.created_at)
+    )
+    return result.scalars().all()
+
+
+@router.get("/{eintrag_id}/dateien/{datei_id}")
+async def get_datei(
+    eintrag_id: int,
+    datei_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Gibt eine Datei (volle Auflösung) zurück."""
+    result = await db.execute(
+        select(InfothekDatei).where(
+            InfothekDatei.id == datei_id,
+            InfothekDatei.eintrag_id == eintrag_id,
+        )
+    )
+    datei = result.scalar_one_or_none()
+    if not datei:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+
+    return Response(
+        content=datei.daten,
+        media_type=datei.mime_type,
+        headers={"Content-Disposition": f'inline; filename="{datei.dateiname}"'},
+    )
+
+
+@router.get("/{eintrag_id}/dateien/{datei_id}/thumb")
+async def get_thumbnail(
+    eintrag_id: int,
+    datei_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Gibt das Thumbnail eines Bildes zurück."""
+    result = await db.execute(
+        select(InfothekDatei).where(
+            InfothekDatei.id == datei_id,
+            InfothekDatei.eintrag_id == eintrag_id,
+        )
+    )
+    datei = result.scalar_one_or_none()
+    if not datei:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+
+    if datei.thumbnail is None:
+        raise HTTPException(status_code=404, detail="Kein Thumbnail vorhanden (PDF)")
+
+    return Response(
+        content=datei.thumbnail,
+        media_type="image/jpeg",
+    )
+
+
+@router.delete("/{eintrag_id}/dateien/{datei_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_datei(
+    eintrag_id: int,
+    datei_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Löscht eine Datei."""
+    result = await db.execute(
+        select(InfothekDatei).where(
+            InfothekDatei.id == datei_id,
+            InfothekDatei.eintrag_id == eintrag_id,
+        )
+    )
+    datei = result.scalar_one_or_none()
+    if not datei:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+    await db.delete(datei)
+    await db.commit()

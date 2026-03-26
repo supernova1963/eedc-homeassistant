@@ -5,13 +5,14 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Archive, BookOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, Archive, BookOpen, FileText } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import InfothekForm from '../components/forms/InfothekForm'
+import DateiLightbox from '../components/infothek/DateiLightbox'
 import { infothekApi } from '../api/infothek'
 import { getKategorieConfig, KATEGORIE_KEYS } from '../config/infothekKategorien'
-import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate } from '../types/infothek'
+import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate, InfothekDatei } from '../types/infothek'
 
 export default function Infothek() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -285,7 +286,7 @@ export default function Infothek() {
 }
 
 
-/** Einzelne Infothek-Karte */
+/** Einzelne Infothek-Karte mit Datei-Vorschau */
 function InfothekKarte({
   eintrag,
   onEdit,
@@ -297,9 +298,18 @@ function InfothekKarte({
   onDelete: () => void
   onToggleAktiv: () => void
 }) {
+  const [dateien, setDateien] = useState<InfothekDatei[]>([])
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const config = getKategorieConfig(eintrag.kategorie)
   const Icon = config.icon
   const params = (eintrag.parameter ?? {}) as Record<string, unknown>
+
+  // Dateien laden
+  useEffect(() => {
+    infothekApi.listDateien(eintrag.id).then(setDateien).catch(() => {})
+  }, [eintrag.id])
+
+  const bilderDateien = dateien.filter(d => d.dateityp === 'image')
 
   // Zeige die wichtigsten Parameter als Details
   const highlights: string[] = []
@@ -320,65 +330,113 @@ function InfothekKarte({
   if (params.jahreskosten_euro) highlights.push(`${params.jahreskosten_euro} €/Jahr`)
   if (params.betrag_euro) highlights.push(`${Number(params.betrag_euro).toLocaleString('de-DE')} €`)
 
-  return (
-    <Card className={!eintrag.aktiv ? 'opacity-50' : undefined}>
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div className={`p-2.5 rounded-lg shrink-0 ${config.bgColor}`}>
-          <Icon className={`h-5 w-5 ${config.color}`} />
-        </div>
+  const handleDateiClick = (datei: InfothekDatei) => {
+    if (datei.dateityp === 'pdf') {
+      window.open(infothekApi.dateiUrl(eintrag.id, datei.id), '_blank')
+    } else {
+      const idx = bilderDateien.findIndex(d => d.id === datei.id)
+      setLightboxIndex(idx >= 0 ? idx : 0)
+    }
+  }
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium text-gray-900 dark:text-white truncate">
-              {eintrag.bezeichnung}
-            </h3>
-            {!eintrag.aktiv && (
-              <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
-                Archiviert
-              </span>
+  return (
+    <>
+      <Card className={!eintrag.aktiv ? 'opacity-50' : undefined}>
+        <div className="flex items-start gap-4">
+          {/* Icon */}
+          <div className={`p-2.5 rounded-lg shrink-0 ${config.bgColor}`}>
+            <Icon className={`h-5 w-5 ${config.color}`} />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-gray-900 dark:text-white truncate">
+                {eintrag.bezeichnung}
+              </h3>
+              {!eintrag.aktiv && (
+                <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                  Archiviert
+                </span>
+              )}
+            </div>
+
+            {highlights.length > 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {highlights.slice(0, 4).join(' · ')}
+              </p>
+            )}
+
+            {eintrag.notizen && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2">
+                {eintrag.notizen}
+              </p>
+            )}
+
+            {/* Datei-Vorschau */}
+            {dateien.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {dateien.map(datei => (
+                  <button
+                    key={datei.id}
+                    onClick={() => handleDateiClick(datei)}
+                    className="w-14 h-14 rounded border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800 hover:ring-2 hover:ring-primary-400 transition-all"
+                    title={datei.dateiname}
+                  >
+                    {datei.dateityp === 'image' ? (
+                      <img
+                        src={infothekApi.thumbnailUrl(eintrag.id, datei.id)}
+                        alt={datei.dateiname}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FileText className="h-6 w-6 text-red-500" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
-          {highlights.length > 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {highlights.slice(0, 4).join(' · ')}
-            </p>
-          )}
-
-          {eintrag.notizen && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2">
-              {eintrag.notizen}
-            </p>
-          )}
+          {/* Actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={onToggleAktiv}
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              title={eintrag.aktiv ? 'Archivieren' : 'Wiederherstellen'}
+            >
+              <Archive className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onEdit}
+              className="p-2 text-gray-400 hover:text-primary-600 transition-colors"
+              title="Bearbeiten"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+              title="Löschen"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
+      </Card>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={onToggleAktiv}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            title={eintrag.aktiv ? 'Archivieren' : 'Wiederherstellen'}
-          >
-            <Archive className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onEdit}
-            className="p-2 text-gray-400 hover:text-primary-600 transition-colors"
-            title="Bearbeiten"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-            title="Löschen"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </Card>
+      {/* Lightbox */}
+      {lightboxIndex !== null && bilderDateien.length > 0 && (
+        <DateiLightbox
+          dateien={bilderDateien}
+          eintragId={eintrag.id}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
+      )}
+    </>
   )
 }

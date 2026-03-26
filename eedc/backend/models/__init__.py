@@ -8,7 +8,7 @@ from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.models.activity_log import ActivityLog
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
-from backend.models.infothek import InfothekEintrag
+from backend.models.infothek import InfothekEintrag, InfothekDatei
 
 __all__ = [
     "Anlage",
@@ -25,4 +25,5 @@ __all__ = [
     "TagesEnergieProfil",
     "TagesZusammenfassung",
     "InfothekEintrag",
+    "InfothekDatei",
 ]
