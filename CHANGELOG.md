@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.31] - 2026-03-26
+
+### Behoben
+
+- **Bezug/Einspeisung in Heute-kWh vertauscht (#58)**: Die Vorzeichen-Invertierung aus den Basis-Sensoren wurde bei der History-basierten Tages-kWh-Berechnung nicht angewendet. Betrifft Heute/Gestern-Widgets, Tagesverlauf-Chart und Energieprofil. Live-Leistungsanzeige (W) war korrekt.
+
 ## [3.4.30] - 2026-03-26
 
 ### Behoben
