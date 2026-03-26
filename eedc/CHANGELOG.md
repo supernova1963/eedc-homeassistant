@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.33] - 2026-03-26
+
+### Verbessert
+
+- **Performance: API-Calls drastisch reduziert**: Shared Module-Level Cache für `useAnlagen` und `useInvestitionen` — alle Komponenten (TopNavigation, SubTabs, Seiten) teilen einen API-Call statt jeweils eigene zu machen.
+- **Performance: Live-Dashboard Backend**: Investitionen-Queries von 3 auf 1 pro 5s-Poll, Gestern-kWh Cache (bis Mitternacht), HA Sensor-Abfragen gebatcht (1 HTTP-Call statt 5–15).
+- **Performance: Lernfaktor Cache**: 30-Tage TagesZusammenfassung-Query nur noch 1× pro Tag statt bei jedem Wetter-Abruf.
+- **Live-Dashboard Wetter+Prognose**: Parallel via `Promise.allSettled` statt sequentiell — halbe Wartezeit.
+
 ## [3.4.32] - 2026-03-26
 
 ### Behoben
