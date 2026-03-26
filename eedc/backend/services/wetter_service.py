@@ -522,8 +522,12 @@ def wetter_code_zu_symbol(code: Optional[int]) -> str:
 
     if code == 0:
         return "sunny"
-    elif code in (1, 2, 3):
+    elif code == 1:
+        return "mostly_sunny"
+    elif code == 2:
         return "partly_cloudy"
+    elif code == 3:
+        return "cloudy"
     elif code in (45, 48):
         return "foggy"
     elif code in (51, 53, 55, 56, 57):
