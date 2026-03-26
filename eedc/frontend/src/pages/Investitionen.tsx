@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, BookOpen } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, BookOpen, ArrowRight } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage, useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import InvestitionForm from '../components/forms/InvestitionForm'
@@ -36,6 +36,38 @@ export default function Investitionen() {
   const anlageId = selectedAnlageId
   const { investitionen, loading, createInvestition, updateInvestition, deleteInvestition } = useInvestitionen(anlageId)
   const groupedByTyp = useInvestitionenByTyp(investitionen)
+  const [migrationCount, setMigrationCount] = useState(0)
+  const [migrating, setMigrating] = useState(false)
+  const [migrationDone, setMigrationDone] = useState<string | null>(null)
+
+  // Migrations-Status prüfen
+  const checkMigration = useCallback(async () => {
+    if (!anlageId) return
+    try {
+      const status = await infothekApi.getMigrationStatus(anlageId)
+      setMigrationCount(status.total)
+    } catch {
+      // Fehler ignorieren
+    }
+  }, [anlageId])
+
+  useEffect(() => {
+    checkMigration()
+  }, [checkMigration])
+
+  const handleMigrateBatch = async () => {
+    if (!anlageId) return
+    setMigrating(true)
+    try {
+      const result = await infothekApi.migrateBatch(anlageId)
+      setMigrationCount(0)
+      setMigrationDone(`${result.count} Einträge in die Infothek übernommen.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler bei der Migration')
+    } finally {
+      setMigrating(false)
+    }
+  }
 
   // Zähle Investitionen pro Typ
   const typCounts = useMemo(() => {
@@ -125,6 +157,38 @@ export default function Investitionen() {
         <Alert type="error" onClose={() => setError(null)}>
           {error}
         </Alert>
+      )}
+
+      {/* Migration-Hinweis */}
+      {migrationDone && (
+        <Alert type="success" onClose={() => setMigrationDone(null)}>
+          {migrationDone}{' '}
+          <a href="#/einstellungen/infothek" className="underline font-medium">Zur Infothek</a>
+        </Alert>
+      )}
+      {migrationCount > 0 && !migrationDone && (
+        <div className="flex items-center justify-between p-4 rounded-lg bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+          <div>
+            <p className="text-sm font-medium text-primary-900 dark:text-primary-100">
+              Stammdaten in Infothek übernehmen?
+            </p>
+            <p className="text-xs text-primary-700 dark:text-primary-300 mt-0.5">
+              {migrationCount} Investition{migrationCount !== 1 ? 'en' : ''} mit Kontakt-, Garantie- oder Wartungsdaten gefunden.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleMigrateBatch}
+            disabled={migrating}
+          >
+            {migrating ? 'Wird übernommen...' : (
+              <>
+                Übernehmen
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </>
+            )}
+          </Button>
+        </div>
       )}
 
       {/* Typ-Übersicht */}

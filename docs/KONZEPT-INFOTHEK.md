@@ -6,10 +6,10 @@
 
 | Etappe | Status | Version | Beschreibung |
 |--------|--------|---------|-------------|
-| **Etappe 1** | Offen | — | Datenmodell, CRUD-API, Frontend-Seite (Kernfelder + Kategorien) |
-| **Etappe 2** | Offen | — | Foto-Upload mit Resize, Thumbnails, Lightbox |
-| **Etappe 3** | Offen | — | Verknüpfung mit Investitionen, Migration bestehender `stamm_*`-Felder |
-| **Etappe 4** | Offen | — | PDF-Export, erweiterte Vorlagen |
+| **Etappe 1** | Fertig | 3.5.0 | Datenmodell, CRUD-API, Frontend-Seite (Kernfelder + 14 Kategorien) |
+| **Etappe 2** | Fertig | 3.5.0 | Datei-Upload (Fotos + PDFs) mit Resize, Thumbnails, Lightbox |
+| **Etappe 3** | Fertig | 3.5.0 | Verknüpfung mit Investitionen, Vertragspartner, Vorbelegung, Migration |
+| **Etappe 4** | Fertig | 3.5.0 | PDF-Export, Markdown-Notizen |
 
 ---
 

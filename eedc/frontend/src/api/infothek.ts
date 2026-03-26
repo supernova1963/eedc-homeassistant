@@ -56,6 +56,19 @@ export const infothekApi = {
     return api.get<InfothekEintrag[]>(`/infothek/investition/${investitionId}`)
   },
 
+  // Migration
+  async getMigrationStatus(anlageId: number): Promise<{ investitionen: { id: number; bezeichnung: string; typ: string; felder: string[] }[]; total: number }> {
+    return api.get(`/infothek/migration/status?anlage_id=${anlageId}`)
+  },
+
+  async migrateInvestition(investitionId: number): Promise<{ created: { kategorie: string; bezeichnung: string }[]; count: number }> {
+    return api.post(`/infothek/migration/${investitionId}`, {})
+  },
+
+  async migrateBatch(anlageId: number): Promise<{ created: { kategorie: string; bezeichnung: string }[]; count: number }> {
+    return api.post(`/infothek/migration/batch?anlage_id=${anlageId}`, {})
+  },
+
   // Datei-Endpunkte
   async listDateien(eintragId: number): Promise<InfothekDatei[]> {
     return api.get<InfothekDatei[]>(`/infothek/${eintragId}/dateien`)
