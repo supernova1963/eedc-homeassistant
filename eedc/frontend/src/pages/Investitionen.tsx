@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react'
-import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, BookOpen } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage, useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import InvestitionForm from '../components/forms/InvestitionForm'
 import type { Investition, InvestitionTyp } from '../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../api'
+import { infothekApi } from '../api/infothek'
+import type { InfothekEintrag } from '../types/infothek'
 
 const investitionTypen: {
   typ: InvestitionTyp
@@ -252,7 +254,12 @@ interface InvestitionCardProps {
 }
 
 function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps) {
+  const [infothekEintraege, setInfothekEintraege] = useState<InfothekEintrag[]>([])
   const params = investition.parameter || {}
+
+  useEffect(() => {
+    infothekApi.listFuerInvestition(investition.id).then(setInfothekEintraege).catch(() => {})
+  }, [investition.id])
 
   // Typspezifische Parameter anzeigen
   const getDetails = () => {
@@ -327,6 +334,14 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
             </span>
           )}
         </div>
+        {infothekEintraege.length > 0 && (
+          <div className="flex items-center gap-1 mt-1 text-xs text-primary-600 dark:text-primary-400">
+            <BookOpen className="h-3 w-3" />
+            <a href={`#/einstellungen/infothek`} className="hover:underline">
+              {infothekEintraege.length} Infothek-{infothekEintraege.length === 1 ? 'Eintrag' : 'Einträge'}
+            </a>
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-1 ml-4">
         <button

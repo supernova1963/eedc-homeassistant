@@ -39,6 +39,12 @@ class InfothekEintrag(Base):
         nullable=True
     )
 
+    # Verknüpfung mit Ansprechpartner (anderer Infothek-Eintrag, Kategorie "ansprechpartner")
+    ansprechpartner_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("infothek_eintraege.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
     # Sortierung und Status
     sortierung: Mapped[int] = mapped_column(Integer, default=0)
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True)

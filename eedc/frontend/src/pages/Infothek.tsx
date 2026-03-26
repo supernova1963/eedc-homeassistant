@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Archive, BookOpen, FileText } from 'lucide-react'
+import { Plus, Pencil, Trash2, Archive, BookOpen, FileText, User, Phone, Mail } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import InfothekForm from '../components/forms/InfothekForm'
@@ -45,9 +45,19 @@ export default function Infothek() {
     loadEintraege()
   }, [loadEintraege])
 
-  // Gefilterte Einträge
+  // Vertragspartner und Einträge trennen
+  const vertragspartner = useMemo(
+    () => eintraege.filter(e => e.kategorie === 'ansprechpartner'),
+    [eintraege]
+  )
+  const normalEintraege = useMemo(
+    () => eintraege.filter(e => e.kategorie !== 'ansprechpartner'),
+    [eintraege]
+  )
+
+  // Gefilterte Einträge (ohne Ansprechpartner)
   const filteredEintraege = useMemo(() => {
-    let result = eintraege
+    let result = normalEintraege
     if (filterKategorie) {
       result = result.filter(e => e.kategorie === filterKategorie)
     }
@@ -55,21 +65,21 @@ export default function Infothek() {
       result = result.filter(e => e.aktiv)
     }
     return result
-  }, [eintraege, filterKategorie, showArchived])
+  }, [normalEintraege, filterKategorie, showArchived])
 
-  // Zähle Einträge pro Kategorie (für Filter-Badges)
+  // Zähle Einträge pro Kategorie (ohne Ansprechpartner)
   const kategorieCounts = useMemo(() => {
     const counts: Record<string, number> = {}
-    const aktive = showArchived ? eintraege : eintraege.filter(e => e.aktiv)
+    const aktive = showArchived ? normalEintraege : normalEintraege.filter(e => e.aktiv)
     aktive.forEach(e => {
       counts[e.kategorie] = (counts[e.kategorie] || 0) + 1
     })
     return counts
-  }, [eintraege, showArchived])
+  }, [normalEintraege, showArchived])
 
-  const archivedCount = useMemo(() => eintraege.filter(e => !e.aktiv).length, [eintraege])
+  const archivedCount = useMemo(() => normalEintraege.filter(e => !e.aktiv).length, [normalEintraege])
   const vorhandeneKategorien = useMemo(
-    () => KATEGORIE_KEYS.filter(k => kategorieCounts[k]),
+    () => KATEGORIE_KEYS.filter(k => k !== 'ansprechpartner' && kategorieCounts[k]),
     [kategorieCounts]
   )
 
@@ -150,6 +160,10 @@ export default function Infothek() {
               ))}
             </select>
           )}
+          <Button variant="secondary" onClick={() => handleCreate('ansprechpartner')}>
+            <User className="h-4 w-4 mr-2" />
+            Neuer Vertragspartner
+          </Button>
           <Button onClick={() => handleCreate()}>
             <Plus className="h-4 w-4 mr-2" />
             Neuer Eintrag
@@ -210,6 +224,55 @@ export default function Infothek() {
         </div>
       )}
 
+      {/* Vertragspartner-Sektion */}
+      {vertragspartner.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+            Vertragspartner
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {vertragspartner.map(vp => {
+              const p = (vp.parameter ?? {}) as Record<string, unknown>
+              return (
+                <div
+                  key={vp.id}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                >
+                  <User className="h-4 w-4 text-gray-400 shrink-0" />
+                  <span className="font-medium text-sm text-gray-900 dark:text-white">
+                    {vp.bezeichnung}
+                  </span>
+                  {p.telefon ? (
+                    <a href={`tel:${String(p.telefon)}`} className="text-gray-400 hover:text-primary-600" title={String(p.telefon)}>
+                      <Phone className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                  {p.email ? (
+                    <a href={`mailto:${String(p.email)}`} className="text-gray-400 hover:text-primary-600" title={String(p.email)}>
+                      <Mail className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                  <button
+                    onClick={() => handleEdit(vp)}
+                    className="p-1 text-gray-400 hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Bearbeiten"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(vp)}
+                    className="p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Löschen"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Einträge */}
       {filteredEintraege.length === 0 ? (
         <EmptyState
@@ -229,6 +292,7 @@ export default function Infothek() {
             <InfothekKarte
               key={eintrag.id}
               eintrag={eintrag}
+              alleEintraege={eintraege}
               onEdit={() => handleEdit(eintrag)}
               onDelete={() => setDeleteConfirm(eintrag)}
               onToggleAktiv={() => handleToggleAktiv(eintrag)}
@@ -244,7 +308,11 @@ export default function Infothek() {
           setShowForm(false)
           setEditingEintrag(null)
         }}
-        title={editingEintrag ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}
+        title={
+          editingEintrag
+            ? (editingEintrag.kategorie === 'ansprechpartner' ? 'Vertragspartner bearbeiten' : 'Eintrag bearbeiten')
+            : (initialKategorie === 'ansprechpartner' ? 'Neuer Vertragspartner' : 'Neuer Eintrag')
+        }
         size="lg"
       >
         {anlageId && (
@@ -289,11 +357,13 @@ export default function Infothek() {
 /** Einzelne Infothek-Karte mit Datei-Vorschau */
 function InfothekKarte({
   eintrag,
+  alleEintraege,
   onEdit,
   onDelete,
   onToggleAktiv,
 }: {
   eintrag: InfothekEintrag
+  alleEintraege: InfothekEintrag[]
   onEdit: () => void
   onDelete: () => void
   onToggleAktiv: () => void
@@ -311,8 +381,14 @@ function InfothekKarte({
 
   const bilderDateien = dateien.filter(d => d.dateityp === 'image')
 
+  // Verknüpfter Ansprechpartner
+  const ansprechpartner = eintrag.ansprechpartner_id
+    ? alleEintraege.find(e => e.id === eintrag.ansprechpartner_id)
+    : null
+
   // Zeige die wichtigsten Parameter als Details
   const highlights: string[] = []
+  if (ansprechpartner) highlights.push(`↗ ${ansprechpartner.bezeichnung}`)
   if (params.zaehler_nummer) highlights.push(`Zähler: ${params.zaehler_nummer}`)
   if (params.anbieter) highlights.push(String(params.anbieter))
   if (params.firma) highlights.push(String(params.firma))

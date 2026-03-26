@@ -5,12 +5,14 @@
  * die kategorie-spezifischen Felder.
  */
 
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { Button, Alert } from '../ui'
 import { infothekApi } from '../../api/infothek'
+import { investitionenApi } from '../../api/investitionen'
 import { KATEGORIE_KEYS, getKategorieConfig } from '../../config/infothekKategorien'
 import DateiUpload from '../infothek/DateiUpload'
 import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate, KategorieFeld, KategorienResponse } from '../../types/infothek'
+import type { Investition } from '../../types'
 
 interface InfothekFormProps {
   eintrag: InfothekEintrag | null
@@ -28,24 +30,48 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
     (eintrag?.parameter as Record<string, unknown>) ?? {}
   )
   const [aktiv, setAktiv] = useState(eintrag?.aktiv ?? true)
+  const [investitionId, setInvestitionId] = useState<number | null>(eintrag?.investition_id ?? null)
+  const [ansprechpartnerId, setAnsprechpartnerId] = useState<number | null>(eintrag?.ansprechpartner_id ?? null)
+  const [investitionen, setInvestitionen] = useState<Investition[]>([])
+  const [ansprechpartnerList, setAnsprechpartnerList] = useState<{ id: number; bezeichnung: string }[]>([])
   const [schemas, setSchemas] = useState<KategorienResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showKontakt, setShowKontakt] = useState(false)
   const [showVertrag, setShowVertrag] = useState(false)
 
-  // Lade Kategorie-Schemas vom Backend
+  // Lade Kategorie-Schemas, Investitionen und Ansprechpartner
   useEffect(() => {
     infothekApi.getKategorien().then(setSchemas)
-  }, [])
+    investitionenApi.list(anlageId).then(setInvestitionen)
+    infothekApi.list(anlageId, 'ansprechpartner').then(list =>
+      setAnsprechpartnerList(list.map(e => ({ id: e.id, bezeichnung: e.bezeichnung })))
+    )
+  }, [anlageId])
+
+  // Vorbelegung aus Systemdaten bei Kategorie-Wechsel (nur bei neuem Eintrag)
+  const loadVorbelegung = useCallback(async (kat: string) => {
+    if (eintrag) return // Keine Vorbelegung beim Bearbeiten
+    try {
+      const result = await infothekApi.getVorbelegung(kat, anlageId)
+      if (result.parameter && Object.keys(result.parameter).length > 0) {
+        setParameter(result.parameter as Record<string, unknown>)
+      }
+    } catch {
+      // Vorbelegung ist optional, Fehler ignorieren
+    }
+  }, [eintrag, anlageId])
+
+  // Vorbelegung beim Öffnen (neuer Eintrag mit vorgewählter Kategorie)
+  useEffect(() => {
+    if (!eintrag && kategorie !== 'sonstiges') {
+      loadVorbelegung(kategorie)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prüfe ob übergreifende Sektionen Daten haben (für Edit-Modus)
   useEffect(() => {
     if (eintrag?.parameter) {
       const p = eintrag.parameter as Record<string, unknown>
-      if (p.kontakt_firma || p.kontakt_name || p.kontakt_telefon || p.kontakt_email) {
-        setShowKontakt(true)
-      }
       if (p.vertragsnummer || p.vertragsbeginn || p.kuendigungsfrist_monate) {
         setShowVertrag(true)
       }
@@ -58,12 +84,15 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
     setError(null)
 
     try {
+      const params = Object.keys(parameter).length > 0 ? parameter : null
       if (eintrag) {
         const data: InfothekEintragUpdate = {
           bezeichnung,
           kategorie,
           notizen: notizen || null,
-          parameter: Object.keys(parameter).length > 0 ? parameter : null,
+          parameter: params,
+          investition_id: investitionId,
+          ansprechpartner_id: ansprechpartnerId,
           aktiv,
         }
         await onSubmit(data)
@@ -73,7 +102,9 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
           bezeichnung,
           kategorie,
           notizen: notizen || null,
-          parameter: Object.keys(parameter).length > 0 ? parameter : null,
+          parameter: params,
+          investition_id: investitionId,
+          ansprechpartner_id: ansprechpartnerId,
           aktiv,
         }
         await onSubmit(data)
@@ -98,7 +129,6 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
   }
 
   const kategorieFelder = schemas?.kategorien[kategorie]?.felder ?? {}
-  const kontaktFelder = schemas?.uebergreifende_felder?.kontakt?.felder ?? {}
   const vertragFelder = schemas?.uebergreifende_felder?.vertrag?.felder ?? {}
 
   return (
@@ -120,30 +150,36 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
         />
       </div>
 
-      {/* Kategorie */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Kategorie *
-        </label>
-        <select
-          value={kategorie}
-          onChange={e => {
-            setKategorie(e.target.value)
-            // Parameter zurücksetzen bei Kategorie-Wechsel (nur bei neuem Eintrag)
-            if (!eintrag) setParameter({})
-          }}
-          className="input w-full"
-        >
-          {KATEGORIE_KEYS.map(key => {
-            const config = getKategorieConfig(key)
-            return (
-              <option key={key} value={key}>
-                {config.label}
-              </option>
-            )
-          })}
-        </select>
-      </div>
+      {/* Kategorie (nicht bei Ansprechpartnern — dort ist sie fest) */}
+      {kategorie !== 'ansprechpartner' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Kategorie *
+          </label>
+          <select
+            value={kategorie}
+            title="Kategorie"
+            onChange={e => {
+              const newKat = e.target.value
+              setKategorie(newKat)
+              if (!eintrag) {
+                setParameter({})
+                loadVorbelegung(newKat)
+              }
+            }}
+            className="input w-full"
+          >
+            {KATEGORIE_KEYS.filter(k => k !== 'ansprechpartner').map(key => {
+              const config = getKategorieConfig(key)
+              return (
+                <option key={key} value={key}>
+                  {config.label}
+                </option>
+              )
+            })}
+          </select>
+        </div>
+      )}
 
       {/* Kategorie-spezifische Felder */}
       {Object.keys(kategorieFelder).length > 0 && (
@@ -164,29 +200,23 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
         </fieldset>
       )}
 
-      {/* Übergreifende Kontakt-Sektion */}
-      {kategorie !== 'ansprechpartner' && (
+      {/* Vertragspartner (Ansprechpartner-Verknüpfung) */}
+      {kategorie !== 'ansprechpartner' && ansprechpartnerList.length > 0 && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowKontakt(!showKontakt)}
-            className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Vertragspartner
+          </label>
+          <select
+            value={ansprechpartnerId ?? ''}
+            onChange={e => setAnsprechpartnerId(e.target.value ? Number(e.target.value) : null)}
+            className="input w-full"
+            title="Vertragspartner"
           >
-            <span>{showKontakt ? '▾' : '▸'}</span>
-            Kontakt (optional)
-          </button>
-          {showKontakt && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-              {Object.entries(kontaktFelder).map(([key, feld]) => (
-                <ParameterFeld
-                  key={key}
-                  feld={feld}
-                  value={parameter[key]}
-                  onChange={val => updateParam(key, val)}
-                />
-              ))}
-            </div>
-          )}
+            <option value="">— Kein Vertragspartner —</option>
+            {ansprechpartnerList.map(asp => (
+              <option key={asp.id} value={asp.id}>{asp.bezeichnung}</option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -213,6 +243,28 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
           </div>
         )}
       </div>
+
+      {/* Verknüpfte Investition (nicht bei Ansprechpartnern) */}
+      {kategorie !== 'ansprechpartner' && investitionen.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Verknüpfte Investition
+          </label>
+          <select
+            value={investitionId ?? ''}
+            onChange={e => setInvestitionId(e.target.value ? Number(e.target.value) : null)}
+            className="input w-full"
+            title="Verknüpfte Investition"
+          >
+            <option value="">— Keine Verknüpfung —</option>
+            {investitionen.map(inv => (
+              <option key={inv.id} value={inv.id}>
+                {inv.bezeichnung} ({inv.typ})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Notizen */}
       <div>
@@ -287,6 +339,7 @@ function ParameterFeld({
           value={strValue}
           onChange={e => onChange(e.target.value || null)}
           className="input w-full"
+          title={feld.label}
         >
           <option value="">— Auswählen —</option>
           {feld.options.map(opt => (
@@ -297,6 +350,7 @@ function ParameterFeld({
         <input
           type={feld.type === 'number' ? 'number' : feld.type === 'date' ? 'date' : 'text'}
           value={strValue}
+          title={feld.label}
           onChange={e => {
             const v = e.target.value
             if (feld.type === 'number') {

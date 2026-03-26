@@ -63,7 +63,7 @@ export const KATEGORIE_CONFIG: Record<string, KategorieConfig> = {
     bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
   },
   ansprechpartner: {
-    label: 'Ansprechpartner',
+    label: 'Vertragspartner',
     icon: User,
     color: 'text-teal-500',
     bgColor: 'bg-teal-50 dark:bg-teal-900/20',

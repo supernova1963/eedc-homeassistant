@@ -14,10 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.models.infothek import InfothekEintrag, InfothekDatei
+from backend.models.anlage import Anlage
+from backend.models.strompreis import Strompreis
+from backend.models.investition import Investition
 from backend.services.infothek_datei_service import (
     validiere_dateityp, verarbeite_bild, validiere_pdf,
     ERLAUBTE_TYPES, MAX_DATEIEN_PRO_EINTRAG,
 )
+
+from sqlalchemy import desc
+from backend.services.infothek_migration import check_migration_status, migrate_investition
 
 
 # =============================================================================
@@ -113,16 +119,18 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
         },
     },
     "ansprechpartner": {
-        "label": "Ansprechpartner",
+        "label": "Vertragspartner",
         "icon": "User",
         "felder": {
             "firma": {"type": "string", "label": "Firma"},
-            "name": {"type": "string", "label": "Name"},
+            "strasse": {"type": "string", "label": "Straße + Nr."},
+            "plz_ort": {"type": "string", "label": "PLZ / Ort"},
+            "kundennummer": {"type": "string", "label": "Kundennummer"},
+            "name": {"type": "string", "label": "Name (Ansprechpartner)"},
+            "position": {"type": "string", "label": "Position"},
             "telefon": {"type": "string", "label": "Telefon"},
             "email": {"type": "string", "label": "E-Mail"},
-            "ticketsystem_url": {"type": "string", "label": "Ticketsystem URL"},
-            "kundennummer": {"type": "string", "label": "Kundennummer"},
-            "position": {"type": "string", "label": "Position"},
+            "ticketsystem_url": {"type": "string", "label": "Ticketsystem / Portal"},
         },
     },
     "wartungsvertrag": {
@@ -229,6 +237,8 @@ class InfothekEintragBase(BaseModel):
 class InfothekEintragCreate(InfothekEintragBase):
     """Schema für Erstellung."""
     anlage_id: int
+    investition_id: Optional[int] = None
+    ansprechpartner_id: Optional[int] = None
 
 
 class InfothekEintragUpdate(BaseModel):
@@ -237,6 +247,8 @@ class InfothekEintragUpdate(BaseModel):
     kategorie: Optional[str] = Field(None, min_length=1, max_length=50)
     notizen: Optional[str] = None
     parameter: Optional[dict] = None
+    investition_id: Optional[int] = None
+    ansprechpartner_id: Optional[int] = None
     sortierung: Optional[int] = None
     aktiv: Optional[bool] = None
 
@@ -246,6 +258,7 @@ class InfothekEintragResponse(InfothekEintragBase):
     id: int
     anlage_id: int
     investition_id: Optional[int] = None
+    ansprechpartner_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -410,6 +423,163 @@ async def update_sortierung(
 
     await db.commit()
     return {"status": "ok", "updated": len(items)}
+
+
+# =============================================================================
+# Vorbelegung (Etappe 3) — Felder aus Systemdaten vorbelegen
+# =============================================================================
+
+@router.get("/vorbelegung/{kategorie}")
+async def get_vorbelegung(
+    kategorie: str,
+    anlage_id: int = Query(..., description="Anlage-ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Gibt Vorbelegungsdaten für eine Kategorie aus vorhandenen Systemdaten zurück."""
+    prefill: dict[str, object] = {}
+
+    if kategorie == "stromvertrag":
+        # Aktuellsten Strompreis-Tarif laden (verwendung=allgemein)
+        result = await db.execute(
+            select(Strompreis)
+            .where(Strompreis.anlage_id == anlage_id, Strompreis.verwendung == "allgemein")
+            .order_by(desc(Strompreis.gueltig_ab))
+            .limit(1)
+        )
+        tarif = result.scalar_one_or_none()
+        if tarif:
+            if tarif.anbieter:
+                prefill["anbieter"] = tarif.anbieter
+            if tarif.netzbezug_arbeitspreis_cent_kwh is not None:
+                prefill["tarif_ct_kwh"] = tarif.netzbezug_arbeitspreis_cent_kwh
+
+        # versorger_daten aus Anlage
+        anlage_result = await db.execute(
+            select(Anlage).where(Anlage.id == anlage_id)
+        )
+        anlage = anlage_result.scalar_one_or_none()
+        if anlage and anlage.versorger_daten:
+            strom = anlage.versorger_daten.get("strom", {})
+            if strom.get("kundennummer"):
+                prefill.setdefault("kundennummer", strom["kundennummer"])
+            if strom.get("name") and "anbieter" not in prefill:
+                prefill["anbieter"] = strom["name"]
+
+    elif kategorie == "einspeisevertrag":
+        # Einspeisevergütung aus Strompreis
+        result = await db.execute(
+            select(Strompreis)
+            .where(Strompreis.anlage_id == anlage_id)
+            .order_by(desc(Strompreis.gueltig_ab))
+            .limit(1)
+        )
+        tarif = result.scalar_one_or_none()
+        if tarif and tarif.einspeiseverguetung_cent_kwh is not None:
+            prefill["verguetung_ct_kwh"] = tarif.einspeiseverguetung_cent_kwh
+
+        # Inbetriebnahme aus Anlage
+        anlage_result = await db.execute(
+            select(Anlage).where(Anlage.id == anlage_id)
+        )
+        anlage = anlage_result.scalar_one_or_none()
+        if anlage and anlage.installationsdatum:
+            prefill["inbetriebnahme_datum"] = str(anlage.installationsdatum)
+
+    elif kategorie == "marktstammdatenregister":
+        anlage_result = await db.execute(
+            select(Anlage).where(Anlage.id == anlage_id)
+        )
+        anlage = anlage_result.scalar_one_or_none()
+        if anlage:
+            if anlage.mastr_id:
+                prefill["mastr_nummer"] = anlage.mastr_id
+            if anlage.installationsdatum:
+                prefill["inbetriebnahme_datum"] = str(anlage.installationsdatum)
+
+    return {"kategorie": kategorie, "parameter": prefill}
+
+
+# =============================================================================
+# Investition-Verknüpfung (Etappe 3)
+# =============================================================================
+
+@router.put("/{eintrag_id}/verknuepfung", response_model=InfothekEintragResponse)
+async def update_verknuepfung(
+    eintrag_id: int,
+    investition_id: Optional[int] = Query(None, description="Investition-ID (null zum Lösen)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verknüpft oder löst einen Infothek-Eintrag mit/von einer Investition."""
+    result = await db.execute(
+        select(InfothekEintrag).where(InfothekEintrag.id == eintrag_id)
+    )
+    eintrag = result.scalar_one_or_none()
+    if not eintrag:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+
+    if investition_id is not None:
+        inv_result = await db.execute(
+            select(Investition).where(Investition.id == investition_id)
+        )
+        if not inv_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+
+    eintrag.investition_id = investition_id
+    db.add(eintrag)
+    await db.commit()
+    await db.refresh(eintrag)
+    return eintrag
+
+
+@router.get("/investition/{investition_id}", response_model=list[InfothekEintragResponse])
+async def list_eintraege_fuer_investition(
+    investition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Gibt alle Infothek-Einträge zurück, die mit einer Investition verknüpft sind."""
+    result = await db.execute(
+        select(InfothekEintrag)
+        .where(InfothekEintrag.investition_id == investition_id)
+        .order_by(InfothekEintrag.sortierung)
+    )
+    return result.scalars().all()
+
+
+# =============================================================================
+# Migration (Etappe 3) — stamm_* → Infothek
+# =============================================================================
+
+@router.get("/migration/status")
+async def get_migration_status(
+    anlage_id: int = Query(..., description="Anlage-ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Prüft welche Investitionen migrierbate Stammdaten haben."""
+    return await check_migration_status(db, anlage_id)
+
+
+@router.post("/migration/{investition_id}")
+async def migrate_stammdaten(
+    investition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Migriert stamm_*-Daten einer Investition in Infothek-Einträge."""
+    created = await migrate_investition(db, investition_id)
+    return {"created": created, "count": len(created)}
+
+
+@router.post("/migration/batch")
+async def migrate_all(
+    anlage_id: int = Query(..., description="Anlage-ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Migriert alle Investitionen einer Anlage auf einmal."""
+    status = await check_migration_status(db, anlage_id)
+    total_created = []
+    for inv in status["investitionen"]:
+        created = await migrate_investition(db, inv["id"])
+        total_created.extend(created)
+    return {"created": total_created, "count": len(total_created)}
 
 
 # =============================================================================

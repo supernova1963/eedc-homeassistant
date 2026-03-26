@@ -42,6 +42,20 @@ export const infothekApi = {
     await api.put('/infothek/sortierung/batch', items)
   },
 
+  // Vorbelegung + Verknüpfung (Etappe 3)
+  async getVorbelegung(kategorie: string, anlageId: number): Promise<{ parameter: Record<string, unknown> }> {
+    return api.get(`/infothek/vorbelegung/${kategorie}?anlage_id=${anlageId}`)
+  },
+
+  async updateVerknuepfung(eintragId: number, investitionId: number | null): Promise<InfothekEintrag> {
+    const params = investitionId !== null ? `?investition_id=${investitionId}` : ''
+    return api.put<InfothekEintrag>(`/infothek/${eintragId}/verknuepfung${params}`, {})
+  },
+
+  async listFuerInvestition(investitionId: number): Promise<InfothekEintrag[]> {
+    return api.get<InfothekEintrag[]>(`/infothek/investition/${investitionId}`)
+  },
+
   // Datei-Endpunkte
   async listDateien(eintragId: number): Promise<InfothekDatei[]> {
     return api.get<InfothekDatei[]>(`/infothek/${eintragId}/dateien`)

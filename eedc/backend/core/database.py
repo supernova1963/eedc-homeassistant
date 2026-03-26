@@ -161,6 +161,12 @@ async def run_migrations(conn):
             if 'sfml_prognose_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_kwh FLOAT'))
 
+        # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
+        if 'infothek_eintraege' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}
+            if 'ansprechpartner_id' not in existing_columns:
+                connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN ansprechpartner_id INTEGER REFERENCES infothek_eintraege(id) ON DELETE SET NULL'))
+
     await conn.run_sync(_run_migrations)
 
 
