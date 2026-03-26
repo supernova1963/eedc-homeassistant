@@ -10,6 +10,7 @@ Ermöglicht:
 - MQTT-Startwerte initialisieren
 """
 
+import logging
 from datetime import date
 from typing import Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,6 +30,8 @@ from backend.services.ha_statistics_service import (
     AlleMonateResponse,
     SensorMonatswert,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -81,6 +84,8 @@ class StatusResponse(BaseModel):
     """Status der HA-Statistics-Integration."""
     verfuegbar: bool
     db_pfad: Optional[str]
+    db_typ: Optional[str] = None
+    anzahl_sensoren: Optional[int] = None
     hinweis: str
 
 
@@ -277,10 +282,21 @@ async def get_ha_statistics_status():
     service = get_ha_statistics_service()
 
     if service.is_available:
+        anzahl = service.count_statistics_sensors()
+        db_typ = service.backend_type
+        if anzahl == 0:
+            hinweis = (
+                f"HA-Datenbank verbunden ({db_typ}), aber keine Statistik-Daten gefunden. "
+                f"Ist der HA Recorder auf diese Datenbank konfiguriert?"
+            )
+        else:
+            hinweis = f"HA-Datenbank verbunden ({db_typ}), {anzahl} Sensoren mit Statistik-Daten."
         return StatusResponse(
             verfuegbar=True,
             db_pfad=str(service.db_path),
-            hinweis="HA-Datenbank verfügbar. Statistik-Abfragen möglich."
+            db_typ=db_typ,
+            anzahl_sensoren=anzahl,
+            hinweis=hinweis,
         )
     else:
         return StatusResponse(
@@ -470,7 +486,10 @@ async def get_alle_monatswerte(
 
     try:
         raw_responses = service.get_alle_monatswerte(sensor_ids, ab_datum)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"HA-Statistik-Abfrage fehlgeschlagen: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler bei DB-Abfrage: {e}")
 
     # Auf EEDC-Felder mappen
@@ -644,7 +663,10 @@ async def get_import_vorschau(
     # Alle HA-Monatswerte holen
     try:
         ha_monate = service.get_alle_monatswerte(sensor_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"HA-Statistik-Abfrage fehlgeschlagen: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler bei DB-Abfrage: {e}")
 
     # Alle existierenden Monatsdaten laden

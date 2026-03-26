@@ -165,16 +165,30 @@ class HAStatisticsService:
             return "nicht verfügbar"
         return "MariaDB/MySQL" if self._is_mysql else "SQLite"
 
+    def count_statistics_sensors(self) -> int:
+        """Zählt die Anzahl der Sensoren in statistics_meta."""
+        if not self.is_available:
+            return 0
+        try:
+            with self._engine.connect() as conn:
+                result = conn.execute(text("SELECT COUNT(*) FROM statistics_meta"))
+                row = result.fetchone()
+                return row[0] if row else 0
+        except Exception:
+            return 0
+
     def _ts_to_datetime(self, col: str) -> str:
         """Gibt den DB-spezifischen Ausdruck für Unix-Timestamp → Datetime."""
         if self._is_mysql:
-            return f"CONVERT_TZ(FROM_UNIXTIME({col}), 'UTC', @@session.time_zone)"
+            # FROM_UNIXTIME liefert bereits Session-Timezone, kein CONVERT_TZ nötig
+            # (CONVERT_TZ kann NULL liefern wenn Timezone-Tabellen nicht geladen sind)
+            return f"FROM_UNIXTIME({col})"
         return f"datetime({col}, 'unixepoch', 'localtime')"
 
     def _ts_to_date(self, col: str) -> str:
         """Gibt den DB-spezifischen Ausdruck für Unix-Timestamp → Date."""
         if self._is_mysql:
-            return f"DATE(CONVERT_TZ(FROM_UNIXTIME({col}), 'UTC', @@session.time_zone))"
+            return f"DATE(FROM_UNIXTIME({col}))"
         return f"date({col}, 'unixepoch', 'localtime')"
 
     def get_metadata(self, conn, sensor_id: str) -> Optional[SensorMeta]:
@@ -194,6 +208,7 @@ class HAStatisticsService:
         )
         row = result.fetchone()
         if not row:
+            logger.debug(f"Sensor '{sensor_id}' nicht in statistics_meta gefunden")
             return None
         return SensorMeta(id=row[0], unit=row[1])
 
@@ -295,13 +310,26 @@ class HAStatisticsService:
         with self._engine.connect() as conn:
             # Metadata-IDs ermitteln
             metadata_ids = []
+            nicht_gefunden = []
             for sensor_id in sensor_ids:
                 meta = self.get_metadata(conn, sensor_id)
                 if meta:
                     metadata_ids.append(meta.id)
+                else:
+                    nicht_gefunden.append(sensor_id)
+
+            if nicht_gefunden:
+                logger.warning(
+                    f"Sensoren nicht in HA statistics_meta gefunden: {nicht_gefunden}. "
+                    f"Ist der HA Recorder auf diese Datenbank konfiguriert?"
+                )
 
             if not metadata_ids:
-                raise ValueError("Keine der angegebenen Sensoren hat Statistik-Daten")
+                raise ValueError(
+                    f"Keiner der zugeordneten Sensoren ({', '.join(sensor_ids)}) wurde in der "
+                    f"HA-Datenbank gefunden. Bitte prüfen: Ist der HA Recorder auf diese "
+                    f"Datenbank konfiguriert (configuration.yaml → recorder → db_url)?"
+                )
 
             # Zeitraum ermitteln — IN-Klausel mit benannten Parametern
             params = {f"id_{i}": mid for i, mid in enumerate(metadata_ids)}
@@ -336,8 +364,11 @@ class HAStatisticsService:
             )
             row_last = result.fetchone()
 
-            if not row_first or not row_last:
-                raise ValueError("Keine Statistik-Daten gefunden")
+            if not row_first or not row_last or row_first[0] is None or row_last[0] is None:
+                raise ValueError(
+                    f"Sensoren in statistics_meta gefunden, aber keine Messwerte in der "
+                    f"statistics-Tabelle vorhanden"
+                )
 
             erstes = datetime.strptime(str(row_first[0]), "%Y-%m-%d").date()
             letztes = datetime.strptime(str(row_last[0]), "%Y-%m-%d").date()
