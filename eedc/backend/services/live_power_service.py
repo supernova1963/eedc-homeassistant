@@ -132,6 +132,34 @@ class LivePowerService:
 
         return history
 
+    @staticmethod
+    def _apply_invert_to_history(
+        history: dict[str, list[tuple[datetime, float]]],
+        basis_live: dict[str, str],
+        basis_invert: dict[str, bool],
+        inv_live_map: dict[str, dict[str, str]] | None = None,
+        inv_invert_map: dict[str, dict[str, bool]] | None = None,
+    ) -> None:
+        """Invertiert History-Werte für Sensoren mit Vorzeichen-Invertierung.
+
+        Mutiert das history-Dict in-place (negiert Werte invertierter Sensoren).
+        """
+        invert_eids: set[str] = set()
+        for key, should_invert in basis_invert.items():
+            if should_invert and key in basis_live:
+                invert_eids.add(basis_live[key])
+
+        if inv_live_map and inv_invert_map:
+            for inv_id, invert_flags in inv_invert_map.items():
+                live = inv_live_map.get(inv_id, {})
+                for key, should_invert in invert_flags.items():
+                    if should_invert and key in live:
+                        invert_eids.add(live[key])
+
+        for eid in invert_eids:
+            if eid in history:
+                history[eid] = [(ts, -val) for ts, val in history[eid]]
+
     def _extract_live_config(self, anlage: Anlage) -> tuple[
         dict[str, str], dict[str, dict[str, str]],
         dict[str, bool], dict[str, dict[str, bool]],
@@ -704,7 +732,7 @@ class LivePowerService:
         Aggregiert in Kategorien (pv, einspeisung, netzbezug) UND per-Komponente
         (z.B. pv_3, wallbox_6, batterie_2) für Tooltips im Energiefluss.
         """
-        basis_live, inv_live_map, _, _ = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
 
         # Investitionstypen laden
         inv_result = await db.execute(
@@ -785,6 +813,11 @@ class LivePowerService:
 
         history = await self._get_history_normalized(all_ids, start, end)
 
+        # Vorzeichen-Invertierung auf History anwenden (#58)
+        self._apply_invert_to_history(
+            history, basis_live, basis_invert, inv_live_map, inv_invert_map
+        )
+
         result: dict[str, Optional[float]] = {}
 
         # Aggregierte Kategorien (pv, einspeisung, netzbezug)
@@ -854,7 +887,7 @@ class LivePowerService:
             Butterfly-Chart: Quellen positiv, Senken negativ.
             Bidirektionale Serien (Speicher, Netz) wechseln je nach Richtung.
         """
-        basis_live, inv_live_map, _, _ = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
 
         if not basis_live and not inv_live_map:
             return {"serien": [], "punkte": []}
@@ -1017,6 +1050,11 @@ class LivePowerService:
 
         history = await self._get_history_normalized(all_ids, start, end)
 
+        # Vorzeichen-Invertierung auf History anwenden (#58)
+        self._apply_invert_to_history(
+            history, basis_live, basis_invert, inv_live_map, inv_invert_map
+        )
+
         # Stündliche Mittelwerte berechnen
         punkte: list[dict] = []
         for h in range(24):
@@ -1166,7 +1204,7 @@ class LivePowerService:
         if not HA_INTEGRATION_AVAILABLE:
             return None
 
-        basis_live, inv_live_map, _, _ = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
 
         einsp_eid = basis_live.get("einspeisung_w")
         bezug_eid = basis_live.get("netzbezug_w")
@@ -1200,6 +1238,11 @@ class LivePowerService:
 
         all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids)))
         history = await self._get_history_normalized(all_ids, start, now)
+
+        # Vorzeichen-Invertierung auf History anwenden (#58)
+        self._apply_invert_to_history(
+            history, basis_live, basis_invert, inv_live_map, inv_invert_map
+        )
 
         if not history:
             return None
