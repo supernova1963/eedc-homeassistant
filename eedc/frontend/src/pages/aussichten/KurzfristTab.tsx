@@ -5,7 +5,7 @@
  * die Modulneigung und -ausrichtung für genauere Prognosen berücksichtigt.
  */
 import { useState, useEffect } from 'react'
-import { Sun, Cloud, CloudRain, CloudSnow, CloudLightning, Thermometer, Zap } from 'lucide-react'
+import { Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer, Zap } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
@@ -30,8 +30,10 @@ function WetterIcon({ symbol, className = "h-6 w-6" }: { symbol: string; classNa
   switch (symbol) {
     case 'sunny':
       return <Sun className={`${className} text-yellow-500`} />
+    case 'mostly_sunny':
+      return <CloudSun className={`${className} text-yellow-400`} />
     case 'partly_cloudy':
-      return <Cloud className={`${className} text-gray-400`} />
+      return <CloudSun className={`${className} text-yellow-300`} />
     case 'cloudy':
       return <Cloud className={`${className} text-gray-500`} />
     case 'rainy':
