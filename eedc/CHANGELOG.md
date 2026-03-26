@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.0] - 2026-03-26
+
+### Hinzugefügt
+
+- **Infothek-Modul**: Neues optionales Modul zur Verwaltung von Verträgen, Zählern, Kontakten und Dokumentation.
+  - **14 Kategorien** mit dynamischen Vorlagen-Feldern: Stromvertrag, Einspeisevertrag, Gasvertrag, Wasservertrag, Fernwärme, Brennstoff, Versicherung, Vertragspartner, Wartungsvertrag, MaStR, Förderung, Garantie, Steuerdaten, Sonstiges.
+  - **Datei-Upload**: Bis zu 3 Dateien pro Eintrag (Fotos + PDFs). Bilder werden serverseitig auf max 500kb resized, Thumbnails generiert, EXIF-Rotation korrigiert, HEIC→JPEG konvertiert. PDFs max 5 MB.
+  - **Lightbox** für Bilder, PDF öffnet in neuem Tab.
+  - **Vertragspartner**: Eigene Sektion mit separatem Button, Badges mit Telefon/Mail-Links. Zuordnung per Dropdown bei Verträgen — einmal pflegen, mehrfach zuordnen (z.B. Gemeindewerke → Strom, Gas, Wasser).
+  - **Vorbelegung**: Felder werden beim Anlegen aus vorhandenen Systemdaten befüllt (Strompreise → Tarif/Anbieter, Anlage → MaStR/Inbetriebnahme).
+  - **Investition-Verknüpfung**: Bidirektional — Infothek-Einträge können mit Investitionen verknüpft werden, Investitions-Karten zeigen verknüpfte Einträge.
+  - **Migration**: Bestehende Stammdaten (Kontakte, Garantien, Wartungsverträge) aus Investitionen per Klick in die Infothek übernehmen. Button auf der Investitionen-Seite.
+  - **PDF-Export**: Alle oder gefilterte Einträge als PDF, nach Kategorie gruppiert.
+  - **Markdown-Notizen**: Toolbar (Bold/Italic/Liste/Link) mit Vorschau-Toggle, Rendering in Karten und im PDF.
+
+### Dependencies
+
+- `react-markdown` (Frontend)
+- `Pillow`, `pillow-heif` (Backend — Bildverarbeitung)
+
 ## [3.4.34] - 2026-03-26
 
 ### Verbessert
