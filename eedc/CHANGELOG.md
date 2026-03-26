@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.32] - 2026-03-26
+
+### Behoben
+
+- **Aussichten-Ladezeit 30s+ (#59)**: Externe API-Abfragen auf Hintergrund-Caching umgestellt. Prognose-Prefetch läuft alle 45 Min automatisch, Seiten laden sofort aus dem Cache.
+- **Wallbox/E-Auto Doppelzählung**: Wenn Wallbox und E-Auto denselben Leistungs-Sensor nutzen, wird die Leistung nur einmal gezählt. SoC (Ladezustand) wird weiterhin separat angezeigt.
+- **Netto-Hausverbrauch im Energiefluss**: Kind-Komponenten (E-Auto mit parent_key) werden im Zentrum des Energieflusses nicht mehr doppelt mitgezählt.
+- **Live-Dashboard Mobile (#56)**: Autarkie/Eigenverbrauch und Prognose-Kacheln einheitlich linksbündig im Grid-Layout. Prognose-Zeile bricht auf schmalen Screens (< 400px) auf 2 Spalten um.
+- **Logo Dark Mode**: Halbtransparenter Hintergrund für Full-Logo, "dc" und Subtitel aufgehellt.
+
+### Verbessert
+
+- **Multi-String Solar-Prognose**: Parallel statt sequentiell (asyncio.gather) — deutlich schneller bei mehreren PV-Ausrichtungen.
+
 ## [3.4.31] - 2026-03-26
 
 ### Behoben
