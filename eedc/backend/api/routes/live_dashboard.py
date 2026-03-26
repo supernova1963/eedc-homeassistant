@@ -25,7 +25,7 @@ from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
-from backend.services.wetter_service import wetter_code_zu_symbol
+from backend.services.wetter_service import wetter_code_zu_symbol, _cache_get, _cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -1426,44 +1426,57 @@ async def get_live_wetter(
         haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
         haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
 
-        hourly_vars = [
-            "temperature_2m", "weather_code", "cloud_cover",
-            "precipitation", "shortwave_radiation",
-        ]
-        if not hat_multi_string:
-            hourly_vars.append("global_tilted_irradiance")
+        # Cache prüfen (5 Min TTL — Open-Meteo aktualisiert stündlich)
+        LIVE_WETTER_CACHE_TTL = 300  # 5 Minuten
+        cache_key = (
+            f"live_wetter:{anlage.latitude:.2f}:{anlage.longitude:.2f}"
+            f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}"
+        )
+        cached_wetter = _cache_get(cache_key)
 
-        params = {
-            "latitude": anlage.latitude,
-            "longitude": anlage.longitude,
-            "hourly": ",".join(hourly_vars),
-            "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
-            "timezone": "Europe/Berlin",
-            "forecast_days": 1,
-        }
-        if not hat_multi_string:
-            params["tilt"] = haupt_neigung
-            params["azimuth"] = haupt_azimut
+        if cached_wetter is not None:
+            data, multi_gti = cached_wetter
+        else:
+            hourly_vars = [
+                "temperature_2m", "weather_code", "cloud_cover",
+                "precipitation", "shortwave_radiation",
+            ]
+            if not hat_multi_string:
+                hourly_vars.append("global_tilted_irradiance")
 
-        # Bei Multi-String: paralleler GTI-Fetch + Haupt-Request gleichzeitig
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            if hat_multi_string:
-                haupt_task = client.get(
-                    f"{settings.open_meteo_api_url}/forecast", params=params
-                )
-                gti_task = _fetch_multi_string_gti(
-                    anlage.latitude, anlage.longitude, gruppen
-                )
-                haupt_resp, multi_gti = await asyncio.gather(haupt_task, gti_task)
-                haupt_resp.raise_for_status()
-                data = haupt_resp.json()
-            else:
-                resp = await client.get(
-                    f"{settings.open_meteo_api_url}/forecast", params=params
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                multi_gti = None
+            params = {
+                "latitude": anlage.latitude,
+                "longitude": anlage.longitude,
+                "hourly": ",".join(hourly_vars),
+                "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
+                "timezone": "Europe/Berlin",
+                "forecast_days": 1,
+            }
+            if not hat_multi_string:
+                params["tilt"] = haupt_neigung
+                params["azimuth"] = haupt_azimut
+
+            # Bei Multi-String: paralleler GTI-Fetch + Haupt-Request gleichzeitig
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                if hat_multi_string:
+                    haupt_task = client.get(
+                        f"{settings.open_meteo_api_url}/forecast", params=params
+                    )
+                    gti_task = _fetch_multi_string_gti(
+                        anlage.latitude, anlage.longitude, gruppen
+                    )
+                    haupt_resp, multi_gti = await asyncio.gather(haupt_task, gti_task)
+                    haupt_resp.raise_for_status()
+                    data = haupt_resp.json()
+                else:
+                    resp = await client.get(
+                        f"{settings.open_meteo_api_url}/forecast", params=params
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    multi_gti = None
+
+            _cache_set(cache_key, (data, multi_gti), LIVE_WETTER_CACHE_TTL)
 
         hourly = data.get("hourly", {})
         times = hourly.get("time", [])
