@@ -119,6 +119,7 @@ class Anlage(Base):
     investitionen = relationship("Investition", back_populates="anlage", cascade="all, delete-orphan")
     strompreise = relationship("Strompreis", back_populates="anlage", cascade="all, delete-orphan")
     pvgis_prognosen = relationship("PVGISPrognose", back_populates="anlage", cascade="all, delete-orphan")
+    infothek_eintraege = relationship("InfothekEintrag", back_populates="anlage", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Anlage(id={self.id}, name='{self.anlagenname}', kWp={self.leistung_kwp})>"

@@ -30,6 +30,7 @@ const settingsMenu = [
       { name: 'Anlage', href: '/einstellungen/anlage' },
       { name: 'Strompreise', href: '/einstellungen/strompreise' },
       { name: 'Investitionen', href: '/einstellungen/investitionen' },
+      { name: 'Infothek', href: '/einstellungen/infothek' },
       { name: 'Solarprognose', href: '/einstellungen/solarprognose' },
     ],
   },

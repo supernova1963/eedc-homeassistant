@@ -25,6 +25,7 @@ import Aussichten from './pages/Aussichten'
 import Anlagen from './pages/Anlagen'
 import Strompreise from './pages/Strompreise'
 import Investitionen from './pages/Investitionen'
+import Infothek from './pages/Infothek'
 
 // Einstellungen - Daten
 import Monatsdaten from './pages/Monatsdaten'
@@ -88,6 +89,7 @@ function App() {
           <Route path="einstellungen/anlage" element={<Anlagen />} />
           <Route path="einstellungen/strompreise" element={<Strompreise />} />
           <Route path="einstellungen/investitionen" element={<Investitionen />} />
+          <Route path="einstellungen/infothek" element={<Infothek />} />
           <Route path="einstellungen/solarprognose" element={<PVGISSettings />} />
 
           {/* Einstellungen - Daten */}
