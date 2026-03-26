@@ -275,6 +275,8 @@ Die letzten Abschlüsse werden angezeigt:
 
 ## 6. Fehlerbehebung
 
+> **Tipp:** Die **Protokolle-Seite** (Einstellungen → System → Protokolle) ist das wichtigste Werkzeug zur Fehlersuche. Dort kannst du den **Debug-Modus** aktivieren, System-Logs nach Fehlern filtern und **Logs per Copy-Button** direkt in ein GitHub Issue einfügen. Details siehe [Handbuch Einstellungen §8](HANDBUCH_EINSTELLUNGEN.md#8-protokolle).
+
 ### SOLL-IST Vergleich zeigt 0 kWh
 
 **Problem**: Im PV-Anlage Dashboard werden keine IST-Werte angezeigt.
@@ -303,6 +305,7 @@ Die letzten Abschlüsse werden angezeigt:
 1. Koordinaten der Anlage prüfen
 2. Internetverbindung prüfen
 3. Open-Meteo API könnte überlastet sein (später erneut versuchen)
+4. **Protokolle → System-Logs**: Suche nach "Open-Meteo" oder "Bright Sky" für Details
 
 ### MQTT-Verbindung fehlgeschlagen
 
@@ -313,6 +316,8 @@ Die letzten Abschlüsse werden angezeigt:
 2. Host/Port korrekt? (`core-mosquitto` bei HA, sonst IP)
 3. Benutzer/Passwort korrekt?
 4. Firewall-Regeln prüfen
+5. **Protokolle → Aktivitäten**: Kategorie "MQTT" zeigt Start-/Verbindungsfehler
+6. **Protokolle → Aktivitäten**: Kategorie "Connector-Test" zeigt Verbindungstest-Details
 
 ### Dashboard zeigt keine Daten
 
@@ -323,6 +328,7 @@ Die letzten Abschlüsse werden angezeigt:
 2. Richtiges Jahr ausgewählt?
 3. Strompreise konfiguriert?
 4. Browser-Cache leeren (Strg+Shift+R)
+5. **Protokolle → Aktivitäten**: Kategorie "HA-Statistiken" prüfen ob HA-Import funktioniert hat
 
 ### Setup-Wizard erscheint erneut
 

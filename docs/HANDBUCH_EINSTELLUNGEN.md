@@ -778,20 +778,83 @@ Die PV-Produktionsprüfung vergleicht deine tatsächliche Erzeugung mit der PVGI
 
 **Pfad**: Einstellungen → System → Protokolle
 
-Das Protokoll-System protokolliert automatisch alle wichtigen Aktivitäten:
+Die Protokolle-Seite ist das zentrale Werkzeug zur Fehlersuche. Sie besteht aus zwei Tabs und bietet Debug-Modus sowie Neustart direkt im Header.
 
-### Protokollierte Ereignisse
+### Header-Aktionen
 
-- **Monatsabschluss** — Wann welcher Monat abgeschlossen wurde
-- **Connector-Abruf** — Geräte-Connector Datenabfragen
-- **Cloud-Fetch** — Cloud-Import-Abrufe
-- **Portal-Import** — Portal-CSV-Imports
+| Button | Funktion |
+|--------|----------|
+| **Debug** (Käfer-Icon) | Schaltet den Log-Level zwischen INFO und DEBUG um. Debug zeigt alle Detail-Meldungen — ideal für Fehlersuche, danach wieder deaktivieren (erhöhter Speicherverbrauch). Kein Restart nötig. |
+| **Neustart** (Pfeil-Icon) | Startet EEDC neu. Bei HA über die Supervisor-API, Standalone über Container-Restart. Bestätigungsdialog vor Ausführung. |
 
-### Funktionen
+### Tab 1: System-Logs
 
-- **Live-Filter** nach Kategorie und Zeitraum
-- **In-Memory Log-Buffer** für schnellen Zugriff
-- **DB-Persistierung** für langfristige Historie
+Echtzeit-Logviewer mit In-Memory Ring Buffer (max. 500 Einträge, gehen bei Restart verloren).
+
+**Filter:**
+- **Level** — DEBUG, INFO, WARNING, ERROR (Minimum-Filter: WARNING zeigt auch ERROR)
+- **Modul** — Freitextsuche im Logger-Namen (z.B. "connector", "mqtt", "wetter")
+- **Suche** — Freitextsuche in Log-Nachrichten
+
+**Aktionen:**
+- **Auto-Refresh** (Play/Pause) — Aktualisiert alle 5 Sekunden
+- **Copy** (Clipboard-Icon) — Kopiert alle sichtbaren Logs als Markdown-Tabelle in die Zwischenablage, ideal zum Einfügen in GitHub Issues
+- **Download** (Pfeil-Icon) — Exportiert gefilterte Logs als `.txt`-Datei
+
+**Typische Fehlersuche im System-Logs Tab:**
+
+| Problem | Filter-Tipp |
+|---------|-------------|
+| API-Fehler | Level: ERROR |
+| MQTT-Probleme | Suche: "MQTT" oder Modul: "mqtt" |
+| Wetter-API schlägt fehl | Suche: "Open-Meteo" oder "Bright Sky" |
+| Solar-Prognose fehlt | Suche: "Solar" |
+| Connector liest nicht | Modul: "connector", Level: WARNING |
+
+### Tab 2: Aktivitäten
+
+Persistentes Aktivitätsprotokoll in der Datenbank (überlebt Restarts, automatisch bereinigt nach 90 Tagen / max. 1000 Einträge).
+
+**Filter:**
+- **Kategorie** — Dropdown mit allen 16 Kategorien
+- **Status** — Erfolgreich / Fehlgeschlagen
+- **Suche** — Freitextsuche in Aktion und Details (z.B. "sma_ennexos", "fehlgeschlagen")
+
+**Aktionen:**
+- **Copy** (Clipboard-Icon) — Kopiert sichtbare Aktivitäten als Markdown-Liste
+- **Bereinigen** (Papierkorb) — Löscht Einträge älter als 90 Tage, zeigt Toast mit Anzahl
+- **Pagination** — Blättern durch ältere Einträge
+
+**Protokollierte Kategorien:**
+
+| Kategorie | Was wird protokolliert |
+|-----------|----------------------|
+| Connector-Test | Verbindungstests zu Geräten (SMA, Fronius etc.) |
+| Connector-Einrichtung | Neue Connector-Konfigurationen |
+| Connector-Abruf | Zählerstand-Abfragen (Erfolg/Fehler) |
+| Portal-Import | CSV-/Portal-Imports |
+| Cloud-Import | Cloud-Verbindungstests (Growatt, Fronius etc.) |
+| Cloud-Fetch | Monatliche Cloud-Datenabrufe |
+| Backup-Export | JSON-Anlagen-Exporte |
+| Backup-Import | JSON-Anlagen-Imports mit Details |
+| Monatsabschluss | Monatsdaten speichern |
+| HA-Statistiken | HA Recorder DB-Abfragen und Bulk-Imports |
+| Scheduler-Jobs | Hintergrund-Tasks (Monatswechsel, Energie-Profil, MQTT-Snapshots) |
+| MQTT | Inbound/Gateway/Bridge Start und Verbindungsverluste |
+| Community | Daten teilen/löschen, Server-Timeout |
+| Sensor-Mapping | Sensor-Zuordnungen speichern/löschen |
+| HA-Export | MQTT-Sensoren publizieren/entfernen |
+
+### Fehlersuche-Workflow
+
+Bei einem Support-Fall empfehlen wir diesen Ablauf:
+
+1. **Debug-Modus aktivieren** (Button im Header)
+2. **Problem reproduzieren** (Aktion wiederholen die fehlschlägt)
+3. **System-Logs prüfen** — Level: WARNING, Suche nach dem betroffenen Modul
+4. **Aktivitäten prüfen** — Kategorie filtern oder nach Stichwort suchen
+5. **Logs kopieren** — Copy-Button drücken, in GitHub Issue einfügen
+6. **Debug-Modus deaktivieren** (nicht vergessen!)
 
 ---
 
