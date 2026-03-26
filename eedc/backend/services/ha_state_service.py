@@ -85,6 +85,58 @@ class HAStateService:
         except Exception:
             return None
 
+    async def get_sensor_states_batch(
+        self, entity_ids: list[str]
+    ) -> dict[str, Optional[tuple[float, str]]]:
+        """
+        Holt State + Einheit für mehrere Entities in einem Request.
+
+        Nutzt /api/states und filtert lokal — 1 HTTP-Call statt N.
+
+        Returns:
+            Dict entity_id → (wert, einheit) oder entity_id → None
+        """
+        if not self.is_available or not entity_ids:
+            return {}
+
+        wanted = set(entity_ids)
+        result: dict[str, Optional[tuple[float, str]]] = {}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.api_url}/states",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    return {}
+
+                for item in response.json():
+                    eid = item.get("entity_id", "")
+                    if eid not in wanted:
+                        continue
+
+                    state = item.get("state")
+                    if state in [None, "unknown", "unavailable", ""]:
+                        result[eid] = None
+                        continue
+
+                    try:
+                        value = float(state)
+                    except (ValueError, TypeError):
+                        result[eid] = None
+                        continue
+
+                    unit = (item.get("attributes") or {}).get("unit_of_measurement", "")
+                    result[eid] = (value, unit or "")
+
+        except Exception:
+            return {}
+
+        return result
+
     async def get_sensor_units(self, entity_ids: list[str]) -> dict[str, str]:
         """Holt unit_of_measurement für mehrere Entities in einem Batch."""
         if not self.is_available or not entity_ids:

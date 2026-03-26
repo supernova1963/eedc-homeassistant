@@ -1269,7 +1269,10 @@ async def _fetch_multi_string_gti(
     return kombiniert
 
 
-# ── Lernfaktor ────────────────────────────────────────────────────────────────
+# ── Lernfaktor (mit täglichem Cache) ─────────────────────────────────────────
+
+_lernfaktor_cache: dict[int, tuple[str, Optional[float]]] = {}  # {anlage_id: (datum_str, faktor)}
+
 
 async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
     """
@@ -1279,10 +1282,19 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
     - IST = Summe aller PV-Komponenten-kWh (positive Werte in komponenten_kwh)
     - Prognose = pv_prognose_kwh (gespeichert beim Wetter-Abruf)
 
+    Ergebnis wird tageweise gecacht (ändert sich max 1x/Tag nach Tagesabschluss).
+
     Returns:
         Korrekturfaktor (z.B. 0.92 = Anlage liefert 8% weniger als Prognose)
         oder None wenn nicht genug Daten (< 7 Tage).
     """
+    # Cache prüfen
+    heute = date.today().isoformat()
+    if anlage_id in _lernfaktor_cache:
+        cached_datum, cached_faktor = _lernfaktor_cache[anlage_id]
+        if cached_datum == heute:
+            return cached_faktor
+
     vor_30_tagen = date.today() - timedelta(days=30)
 
     result = await db.execute(
@@ -1307,6 +1319,7 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
             ratios.append(ist_kwh / tag.pv_prognose_kwh)
 
     if len(ratios) < 7:
+        _lernfaktor_cache[anlage_id] = (heute, None)
         return None
 
     # Median statt Mean — robust gegen einzelne Ausreißer (Schnee, Schatten, Störung)
@@ -1322,7 +1335,9 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
         f"(Median aus {len(ratios)} Tagen, Range {min(ratios):.2f}–{max(ratios):.2f})"
     )
 
-    return round(faktor, 3)
+    faktor = round(faktor, 3)
+    _lernfaktor_cache[anlage_id] = (heute, faktor)
+    return faktor
 
 
 async def _speichere_prognose(

@@ -322,10 +322,12 @@ class LivePowerService:
         if all_entity_ids and HA_INTEGRATION_AVAILABLE:
             from backend.services.ha_state_service import get_ha_state_service
             ha_service = get_ha_state_service()
+            # Batch-Abruf: 1 HTTP-Call statt N einzelne
+            batch_result = await ha_service.get_sensor_states_batch(list(all_entity_ids))
             for entity_id in all_entity_ids:
-                result = await ha_service.get_sensor_state_with_unit(entity_id)
-                if result is not None:
-                    value, unit = result
+                state = batch_result.get(entity_id)
+                if state is not None:
+                    value, unit = state
                     # Automatische Einheiten-Konvertierung zu W
                     # HA gibt den State in suggested_unit zurück (z.B. kW statt W)
                     sensor_values[entity_id] = _normalize_to_w(value, unit)
@@ -633,9 +635,10 @@ class LivePowerService:
                     warmwasser_temperatur_c = round(ww_temp, 1)
                     break
 
-        # Tages-kWh berechnen
-        heute_kwh = await self._safe_get_tages_kwh(anlage, db, 0)
-        gestern_kwh = await self._safe_get_tages_kwh(anlage, db, 1)
+        # Tages-kWh berechnen (inv_types durchreichen um DB-Queries zu sparen)
+        inv_types = {str(inv.id): inv.typ for inv in investitionen.values()}
+        heute_kwh = await self._safe_get_tages_kwh(anlage, db, 0, inv_types=inv_types)
+        gestern_kwh = await self._safe_get_tages_kwh(anlage, db, 1, inv_types=inv_types)
 
         heute_pv = heute_kwh.get("pv")
         heute_einsp = heute_kwh.get("einspeisung")
@@ -734,14 +737,26 @@ class LivePowerService:
         return eigenverbrauch, hausverbrauch
 
     async def _safe_get_tages_kwh(
-        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int
+        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int,
+        inv_types: dict[str, str] | None = None,
     ) -> dict[str, Optional[float]]:
-        """Wrapper mit Fehlerbehandlung für _get_tages_kwh (HA + MQTT Fallback)."""
+        """Wrapper mit Fehlerbehandlung für _get_tages_kwh (HA + MQTT Fallback).
+
+        Gestern-kWh wird gecacht (ändert sich nach Mitternacht nicht mehr).
+        """
+        # Gestern-Cache prüfen (spart HA-History-Query alle 5s)
+        if tage_zurueck >= 1:
+            cached = self._get_gestern_kwh_cache(anlage.id)
+            if cached is not None:
+                return cached
+
         # 1. Versuche HA-History (Trapezregel)
         if HA_INTEGRATION_AVAILABLE:
             try:
-                result = await self._get_tages_kwh(anlage, db, tage_zurueck)
+                result = await self._get_tages_kwh(anlage, db, tage_zurueck, inv_types=inv_types)
                 if result:
+                    if tage_zurueck >= 1:
+                        self._set_gestern_kwh_cache(anlage.id, result)
                     return result
             except Exception as e:
                 label = "Heute" if tage_zurueck == 0 else "Gestern"
@@ -752,6 +767,8 @@ class LivePowerService:
             from backend.services.mqtt_energy_history_service import get_tages_kwh
             result = await get_tages_kwh(anlage.id, tage_zurueck)
             if result:
+                if tage_zurueck >= 1:
+                    self._set_gestern_kwh_cache(anlage.id, result)
                 return result
         except Exception as e:
             label = "Heute" if tage_zurueck == 0 else "Gestern"
@@ -774,7 +791,8 @@ class LivePowerService:
         return energy_wh / 1000  # Wh → kWh
 
     async def _get_tages_kwh(
-        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0
+        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+        inv_types: dict[str, str] | None = None,
     ) -> dict[str, Optional[float]]:
         """
         Berechnet Tages-kWh aus HA-History (Leistungssensoren → Energie via Trapezregel).
@@ -784,13 +802,14 @@ class LivePowerService:
         """
         basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
 
-        # Investitionstypen laden
-        inv_result = await db.execute(
-            select(Investition.id, Investition.typ).where(
-                Investition.anlage_id == anlage.id, Investition.aktiv == True
+        # Investitionstypen: durchgereicht oder aus DB laden
+        if inv_types is None:
+            inv_result = await db.execute(
+                select(Investition.id, Investition.typ).where(
+                    Investition.anlage_id == anlage.id, Investition.aktiv == True
+                )
             )
-        )
-        inv_types = {str(row[0]): row[1] for row in inv_result.all()}
+            inv_types = {str(row[0]): row[1] for row in inv_result.all()}
 
         # Entity-IDs nach Kategorie gruppieren
         category_entities: dict[str, list[str]] = {
@@ -1504,6 +1523,23 @@ class LivePowerService:
     def _set_profil_cache(self, anlage_id: int, profil: dict) -> None:
         """Speichert Profil mit heutigem Datum."""
         self._profil_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), profil)
+
+    # ── Gestern-kWh Cache (ändert sich nicht mehr nach Mitternacht) ────
+
+    _gestern_kwh_cache: dict[int, tuple[str, dict]] = {}  # {anlage_id: (datum_str, kwh_dict)}
+
+    def _get_gestern_kwh_cache(self, anlage_id: int) -> Optional[dict]:
+        """Gibt gecachte Gestern-kWh zurück wenn noch derselbe Tag."""
+        if anlage_id not in self._gestern_kwh_cache:
+            return None
+        datum, kwh = self._gestern_kwh_cache[anlage_id]
+        if datum == datetime.now().strftime("%Y-%m-%d"):
+            return kwh
+        return None
+
+    def _set_gestern_kwh_cache(self, anlage_id: int, kwh: dict) -> None:
+        """Speichert Gestern-kWh mit heutigem Datum als Cache-Key."""
+        self._gestern_kwh_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), kwh)
 
 
 # Singleton

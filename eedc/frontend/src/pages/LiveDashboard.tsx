@@ -64,21 +64,17 @@ export default function LiveDashboard() {
     }
   }, [selectedAnlageId, demoMode])
 
-  // Wetter laden (seltener, alle 5 Min)
+  // Wetter + 3-Tage-Prognose parallel laden (alle 5 Min — ICON-D2 aktualisiert 3-stündlich)
   const fetchWetter = useCallback(async () => {
     if (!selectedAnlageId) return
-    try {
-      const result = await liveDashboardApi.getWetter(selectedAnlageId, demoMode)
-      setWetter(result)
-    } catch {
-      // Wetter-Fehler still ignorieren — nicht kritisch
-    }
-    // 3-Tage-Prognose (VM/NM) parallel laden
-    try {
-      const prognose = await wetterApi.getSolarPrognose(selectedAnlageId, 3, false)
-      setPrognose3Tage(prognose.tage?.slice(0, 3) ?? null)
-    } catch {
-      // Prognose-Fehler still ignorieren
+    // Beide Calls parallel statt sequentiell
+    const [wetterResult, prognoseResult] = await Promise.allSettled([
+      liveDashboardApi.getWetter(selectedAnlageId, demoMode),
+      wetterApi.getSolarPrognose(selectedAnlageId, 3, false),
+    ])
+    if (wetterResult.status === 'fulfilled') setWetter(wetterResult.value)
+    if (prognoseResult.status === 'fulfilled') {
+      setPrognose3Tage(prognoseResult.value.tage?.slice(0, 3) ?? null)
     }
   }, [selectedAnlageId, demoMode])
 

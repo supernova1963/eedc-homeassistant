@@ -85,14 +85,14 @@ export default function TopNavigation() {
     [haAvailable]
   )
 
-  // Monatsabschluss-Badge: Prüfe ob ein Monat offen ist
+  // Monatsabschluss-Badge: Prüfe ob ein Monat offen ist (nur bei Anlage-Wechsel)
+  const firstAnlageId = anlagen.length > 0 ? anlagen[0].id : undefined
   useEffect(() => {
-    if (!anlagen || anlagen.length === 0) return
-    const anlageId = anlagen[0].id
-    monatsabschlussApi.getNaechsterMonat(anlageId).then((result) => {
+    if (!firstAnlageId) return
+    monatsabschlussApi.getNaechsterMonat(firstAnlageId).then((result) => {
       setHasOpenMonth(result !== null)
     })
-  }, [anlagen])
+  }, [firstAnlageId])
 
   // Bestimme aktiven Haupttab
   const getActiveMainTab = () => {
