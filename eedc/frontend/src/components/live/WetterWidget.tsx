@@ -15,6 +15,7 @@ import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDas
 function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; className?: string }) {
   switch (symbol) {
     case 'sunny': return <Sun className={`${className} text-yellow-400`} />
+    case 'mostly_sunny': return <CloudSun className={`${className} text-yellow-400`} />
     case 'partly_cloudy': return <CloudSun className={`${className} text-yellow-300`} />
     case 'cloudy': return <Cloud className={`${className} text-gray-400`} />
     case 'foggy': return <CloudFog className={`${className} text-gray-400`} />
