@@ -105,6 +105,15 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Prognose-Prefetch: Alle 45 Min (innerhalb des 60-Min Cache-TTL)
+            self._scheduler.add_job(
+                prognose_prefetch_job,
+                IntervalTrigger(minutes=45),
+                id="prognose_prefetch",
+                name="Prognose-Prefetch",
+                replace_existing=True,
+            )
+
             self._scheduler.start()
             self._running = True
             logger.info("EEDC Scheduler gestartet")
@@ -270,6 +279,15 @@ async def energie_profil_aggregation_job() -> None:
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )
+
+
+async def prognose_prefetch_job() -> None:
+    """Prefetcht Solar- und Wetterprognosen für alle Anlagen (alle 45 Min)."""
+    try:
+        from backend.services.prefetch_service import prefetch_all_prognosen
+        await prefetch_all_prognosen()
+    except Exception as e:
+        logger.warning(f"Prognose-Prefetch fehlgeschlagen: {type(e).__name__}: {e}")
 
 
 # Singleton-Instanz

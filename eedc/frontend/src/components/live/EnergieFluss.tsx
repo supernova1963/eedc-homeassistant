@@ -331,9 +331,9 @@ export default function EnergieFluss({
   const haushalt = komponenten.find(k => k.key === 'haushalt')
 
   // Netto-Hausverbrauch: Summe aller Verbraucher (inkl. Haushalt-Rest, WP, Wallbox etc.)
-  // ohne Batterie, Netz und PV-Erzeuger
+  // ohne Batterie, Netz, PV-Erzeuger und Kind-Komponenten (z.B. E-Auto wenn Wallbox gleichen Sensor hat)
   const nettoHausverbrauch = komponenten
-    .filter(k => !k.key.startsWith('pv_') && k.key !== 'netz' && !k.key.startsWith('batterie_'))
+    .filter(k => !k.key.startsWith('pv_') && k.key !== 'netz' && !k.key.startsWith('batterie_') && !k.parent_key)
     .reduce((sum, k) => sum + (k.verbrauch_kw ?? 0), 0)
 
   // Dynamische Höhe: Basis 380, erweitert wenn Knoten tiefer liegen

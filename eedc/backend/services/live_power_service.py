@@ -349,6 +349,13 @@ class LivePowerService:
         # Wallbox-Keys sammeln für E-Auto → Wallbox Zuordnung
         wallbox_keys: list[str] = []
 
+        # Entity-IDs tracken um Duplikate zu erkennen (z.B. gleicher Sensor bei Wallbox + E-Auto)
+        used_leistung_eids: dict[str, str] = {}  # entity_id → inv_id (erster Nutzer)
+        for inv_id, live in inv_live_map.items():
+            eid = live.get("leistung_w")
+            if eid and eid not in used_leistung_eids:
+                used_leistung_eids[eid] = inv_id
+
         # Per-Investition Komponenten
         for inv_id, values in inv_values.items():
             inv = investitionen.get(inv_id)
@@ -373,9 +380,52 @@ class LivePowerService:
                         wp_icon = "heater" if h >= w else "droplets"
 
             if val_w is None:
+                # Kein Leistungswert → trotzdem SoC-Gauge prüfen (weiter unten)
+                typ = inv.typ if inv else None
+                if typ in _SOC_TYPEN:
+                    soc_val = values.get("soc")
+                    if soc_val is not None:
+                        gauges.append({
+                            "key": f"soc_{inv_id}",
+                            "label": inv.bezeichnung,
+                            "wert": round(soc_val, 0),
+                            "min_wert": 0,
+                            "max_wert": 100,
+                            "einheit": "%",
+                        })
                 continue
 
             typ = inv.typ
+
+            # Duplikat-Sensor-Erkennung: Wenn ein E-Auto denselben Leistungs-Sensor
+            # wie eine Wallbox nutzt, Leistung überspringen (Wallbox zeigt sie bereits).
+            # SoC wird weiter unten trotzdem erfasst.
+            leistung_eid = inv_live_map.get(inv_id, {}).get("leistung_w")
+            if typ == "e-auto" and leistung_eid:
+                first_user = used_leistung_eids.get(leistung_eid)
+                if first_user and first_user != inv_id:
+                    first_inv = investitionen.get(first_user)
+                    if first_inv and first_inv.typ == "wallbox":
+                        logger.debug(
+                            f"E-Auto {inv.bezeichnung}: gleicher Sensor wie Wallbox "
+                            f"{first_inv.bezeichnung} — Leistung übersprungen"
+                        )
+                        val_w = None
+
+            if val_w is None:
+                # Duplikat erkannt oder kein Wert → nur SoC-Gauge
+                if typ in _SOC_TYPEN:
+                    soc_val = values.get("soc")
+                    if soc_val is not None:
+                        gauges.append({
+                            "key": f"soc_{inv_id}",
+                            "label": inv.bezeichnung,
+                            "wert": round(soc_val, 0),
+                            "min_wert": 0,
+                            "max_wert": 100,
+                            "einheit": "%",
+                        })
+                continue
 
             # E-Auto mit V2H ist bidirektional (negativ = Entladung ins Haus)
             ist_v2h = (typ == "e-auto"

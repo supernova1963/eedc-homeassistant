@@ -160,6 +160,7 @@ async def fetch_gti_forecast(
     days: int = 7,
     timeout: float = 30.0,
     model: Optional[str] = None,
+    skip_jitter: bool = False,
 ) -> Optional[dict]:
     """
     Ruft GTI-Prognose (Global Tilted Irradiance) von Open-Meteo ab.
@@ -223,8 +224,9 @@ async def fetch_gti_forecast(
     if model is not None:
         params["models"] = model
 
-    # Random-Jitter vor API-Call
-    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
+    # Random-Jitter vor API-Call (entfällt bei Prefetch)
+    if not skip_jitter:
+        await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -318,6 +320,7 @@ async def get_solar_prognose(
     days: int = 7,
     system_losses: float = DEFAULT_SYSTEM_LOSSES,
     wetter_modell: str = "auto",
+    skip_jitter: bool = False,
 ) -> Optional[SolarPrognoseResponse]:
     """
     Berechnet PV-Ertragsprognose basierend auf GTI.
@@ -343,7 +346,8 @@ async def get_solar_prognose(
     if wetter_modell == "auto" or days <= max_days:
         # Einfacher Fall: ein Call reicht
         data = await fetch_gti_forecast(
-            latitude, longitude, neigung, ausrichtung, days, model=model_name
+            latitude, longitude, neigung, ausrichtung, days,
+            model=model_name, skip_jitter=skip_jitter,
         )
         if not data:
             return None
@@ -353,10 +357,12 @@ async def get_solar_prognose(
 
     # Kaskade: bevorzugtes Modell + best_match Fallback (parallel)
     primary_coro = fetch_gti_forecast(
-        latitude, longitude, neigung, ausrichtung, max_days, model=model_name
+        latitude, longitude, neigung, ausrichtung, max_days,
+        model=model_name, skip_jitter=skip_jitter,
     )
     fallback_coro = fetch_gti_forecast(
-        latitude, longitude, neigung, ausrichtung, days, model=None
+        latitude, longitude, neigung, ausrichtung, days,
+        model=None, skip_jitter=skip_jitter,
     )
     primary_data, fallback_data = await asyncio.gather(primary_coro, fallback_coro)
 
@@ -608,6 +614,7 @@ async def get_multi_string_prognose(
     days: int = 7,
     system_losses: float = DEFAULT_SYSTEM_LOSSES,
     wetter_modell: str = "auto",
+    skip_jitter: bool = False,
 ) -> Optional[dict]:
     """
     Berechnet Prognose für mehrere Strings mit unterschiedlicher Ausrichtung.
@@ -628,12 +635,9 @@ async def get_multi_string_prognose(
     if not strings:
         return None
 
-    string_prognosen = []
-    gesamt_kwh = 0.0
-    gesamt_kwp = 0.0
-
-    for string in strings:
-        prognose = await get_solar_prognose(
+    # Alle Strings parallel abfragen (statt sequentiell mit je 1-30s Jitter)
+    coros = [
+        get_solar_prognose(
             latitude=latitude,
             longitude=longitude,
             kwp=string.kwp,
@@ -642,8 +646,17 @@ async def get_multi_string_prognose(
             days=days,
             system_losses=system_losses,
             wetter_modell=wetter_modell,
+            skip_jitter=skip_jitter,
         )
+        for string in strings
+    ]
+    results = await asyncio.gather(*coros)
 
+    string_prognosen = []
+    gesamt_kwh = 0.0
+    gesamt_kwp = 0.0
+
+    for string, prognose in zip(strings, results):
         if prognose:
             string_prognosen.append({
                 "name": string.name,

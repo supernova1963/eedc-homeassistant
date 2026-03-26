@@ -210,6 +210,19 @@ async def lifespan(app: FastAPI):
         else:
             print("  MQTT-Inbound: konnte nicht gestartet werden")
 
+    # Initialer Prognose-Prefetch nach kurzem Delay (DB + Scheduler müssen bereit sein)
+    async def _initial_prefetch():
+        await asyncio.sleep(30)
+        try:
+            from backend.services.prefetch_service import prefetch_all_prognosen
+            results = await prefetch_all_prognosen()
+            ok = sum(1 for r in results.values() if r.get("status") == "ok")
+            if ok > 0:
+                logger.info(f"Initialer Prognose-Prefetch: {ok}/{len(results)} Anlagen")
+        except Exception as e:
+            logger.debug(f"Initialer Prognose-Prefetch fehlgeschlagen: {e}")
+    asyncio.create_task(_initial_prefetch())
+
     yield
 
     # Shutdown

@@ -345,15 +345,15 @@ export default function LiveDashboard() {
                       ? (ev / pv) * 100 : null
                     if (autarkie === null && evQuote === null) return null
                     return (
-                      <div className="flex gap-3 mt-2">
+                      <div className="grid grid-cols-2 gap-2 mt-2">
                         {autarkie !== null && (
-                          <div className="flex-1 text-center bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-2 py-1.5">
+                          <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-1.5">
                             <div className="text-xs text-gray-500 dark:text-gray-400">Autarkie</div>
                             <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{autarkie.toFixed(0)}<span className="text-xs font-normal">%</span></div>
                           </div>
                         )}
                         {evQuote !== null && (
-                          <div className="flex-1 text-center bg-sky-50 dark:bg-sky-900/20 rounded-lg px-2 py-1.5">
+                          <div className="bg-sky-50 dark:bg-sky-900/20 rounded-lg px-3 py-1.5">
                             <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbr.</div>
                             <div className="text-base font-bold text-sky-600 dark:text-sky-400">{evQuote.toFixed(0)}<span className="text-xs font-normal">%</span></div>
                           </div>
@@ -366,8 +366,8 @@ export default function LiveDashboard() {
 
               {/* Prognose + Noch offen */}
               {wetter?.pv_prognose_kwh != null && (
-                <div className="flex gap-2">
-                  <div className="flex-1 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5"
+                <div className="grid grid-cols-2 min-[400px]:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
+                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5"
                        title="EEDC-Tagesprognose basierend auf aktuellem Wetter und Verbrauchsprofil. Kann von Solar-Aussicht abweichen (andere Berechnungsmethode).">
                     <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose <Info className="inline w-3 h-3 opacity-50" /></div>
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
@@ -380,7 +380,7 @@ export default function LiveDashboard() {
                     const offen = prognoseKwh - bisherPv
                     if (offen <= 0) return null
                     return (
-                      <div className="flex-1 bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
+                      <div className="bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
                            title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${bisherPv.toFixed(1)} kWh`}>
                         <div className="text-xs text-gray-500 dark:text-gray-400">Noch offen</div>
                         <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{offen.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
@@ -388,16 +388,16 @@ export default function LiveDashboard() {
                     )
                   })()}
                   {wetter?.verbrauchsprofil && wetter.verbrauchsprofil.length > 0 && (
-                    <div className="flex-1 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5"
+                    <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5"
                          title={wetter.profil_typ?.startsWith('individuell')
                            ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage, Quelle: ${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
                            : 'BDEW H0 Standardlastprofil (keine History verfügbar)'
                          }>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Verbr.-Prognose
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        Verbr.-Progn.
                         {wetter.profil_typ?.startsWith('individuell') && (
                           <span className="ml-1 text-[9px] text-emerald-500" title="Basiert auf deinem individuellen Verbrauchsmuster">
-                            (individuell)
+                            (ind.)
                           </span>
                         )}
                       </div>

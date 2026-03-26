@@ -395,7 +395,8 @@ async def fetch_open_meteo_forecast(
     latitude: float,
     longitude: float,
     days: int = 16,
-    timeout: float = 30.0
+    timeout: float = 30.0,
+    skip_jitter: bool = False,
 ) -> Optional[dict]:
     """
     Ruft Wettervorhersage von Open-Meteo Forecast API ab (bis 16 Tage).
@@ -451,8 +452,9 @@ async def fetch_open_meteo_forecast(
         "forecast_days": days,
     }
 
-    # Random-Jitter vor API-Call
-    await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
+    # Random-Jitter vor API-Call (entfällt bei Prefetch)
+    if not skip_jitter:
+        await asyncio.sleep(random.uniform(1, JITTER_MAX_SECONDS))
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
