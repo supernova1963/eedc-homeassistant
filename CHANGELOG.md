@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.34] - 2026-03-26
+
+### Verbessert
+
+- **Performance: Live-Wetter sofort aus Cache**: Open-Meteo Wetter-Response wird 5 Min gecacht — Wetter-Widget lädt sofort statt 5–10s auf API-Antwort zu warten.
+
 ## [3.4.33] - 2026-03-26
 
 ### Verbessert
