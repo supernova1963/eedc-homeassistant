@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Archive, BookOpen, FileText, User, Phone, Mail } from 'lucide-react'
+import { Plus, Pencil, Trash2, Archive, BookOpen, FileText, User, Phone, Mail, Download } from 'lucide-react'
+import Markdown from 'react-markdown'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import InfothekForm from '../components/forms/InfothekForm'
@@ -159,6 +160,16 @@ export default function Infothek() {
                 <option key={a.id} value={a.id}>{a.anlagenname}</option>
               ))}
             </select>
+          )}
+          {eintraege.length > 0 && (
+            <a
+              href={`./api/infothek/export/pdf?anlage_id=${anlageId}${filterKategorie ? `&kategorie=${filterKategorie}` : ''}`}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              title="Als PDF exportieren"
+            >
+              <Download className="h-4 w-4" />
+              PDF
+            </a>
           )}
           <Button variant="secondary" onClick={() => handleCreate('ansprechpartner')}>
             <User className="h-4 w-4 mr-2" />
@@ -444,9 +455,9 @@ function InfothekKarte({
             )}
 
             {eintrag.notizen && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2">
-                {eintrag.notizen}
-              </p>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-3 prose prose-sm dark:prose-invert max-w-none prose-p:my-0.5 prose-ul:my-0.5">
+                <Markdown>{eintrag.notizen}</Markdown>
+              </div>
             )}
 
             {/* Datei-Vorschau */}

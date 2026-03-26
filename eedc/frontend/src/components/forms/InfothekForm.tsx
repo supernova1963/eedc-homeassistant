@@ -11,6 +11,7 @@ import { infothekApi } from '../../api/infothek'
 import { investitionenApi } from '../../api/investitionen'
 import { KATEGORIE_KEYS, getKategorieConfig } from '../../config/infothekKategorien'
 import DateiUpload from '../infothek/DateiUpload'
+import MarkdownNotizen from '../infothek/MarkdownNotizen'
 import type { InfothekEintrag, InfothekEintragCreate, InfothekEintragUpdate, KategorieFeld, KategorienResponse } from '../../types/infothek'
 import type { Investition } from '../../types'
 
@@ -266,17 +267,14 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
         </div>
       )}
 
-      {/* Notizen */}
+      {/* Notizen (Markdown) */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Notizen
         </label>
-        <textarea
+        <MarkdownNotizen
           value={notizen}
-          onChange={e => setNotizen(e.target.value)}
-          className="input w-full"
-          rows={4}
-          placeholder="Freitext für beliebige Informationen..."
+          onChange={setNotizen}
         />
       </div>
 

@@ -7,7 +7,7 @@ CRUD-Endpunkte für Infothek-Einträge (Verträge, Zähler, Kontakte, Dokumentat
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from backend.models.infothek import InfothekEintrag, InfothekDatei
 from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition
+from backend.services.infothek_pdf_service import generate_infothek_pdf
 from backend.services.infothek_datei_service import (
     validiere_dateityp, verarbeite_bild, validiere_pdf,
     ERLAUBTE_TYPES, MAX_DATEIEN_PRO_EINTRAG,
@@ -543,6 +544,76 @@ async def list_eintraege_fuer_investition(
         .order_by(InfothekEintrag.sortierung)
     )
     return result.scalars().all()
+
+
+# =============================================================================
+# PDF-Export (Etappe 4)
+# =============================================================================
+
+@router.get("/export/pdf")
+async def export_pdf(
+    anlage_id: int = Query(..., description="Anlage-ID"),
+    kategorie: Optional[str] = Query(None, description="Nur diese Kategorie exportieren"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Exportiert Infothek-Einträge als PDF."""
+    # Anlage laden
+    anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = anlage_result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    # Einträge laden (nur aktive)
+    query = (
+        select(InfothekEintrag)
+        .where(InfothekEintrag.anlage_id == anlage_id, InfothekEintrag.aktiv == True)
+        .order_by(InfothekEintrag.sortierung, InfothekEintrag.created_at.desc())
+    )
+    if kategorie:
+        query = query.where(InfothekEintrag.kategorie == kategorie)
+    result = await db.execute(query)
+    eintraege_obj = result.scalars().all()
+
+    if not eintraege_obj:
+        raise HTTPException(status_code=404, detail="Keine Einträge zum Exportieren")
+
+    # Vertragspartner-Map aufbauen
+    vp_result = await db.execute(
+        select(InfothekEintrag)
+        .where(InfothekEintrag.anlage_id == anlage_id, InfothekEintrag.kategorie == "ansprechpartner")
+    )
+    vp_map = {e.id: e.bezeichnung for e in vp_result.scalars().all()}
+
+    # Einträge als Dicts
+    eintraege = [
+        {
+            "bezeichnung": e.bezeichnung,
+            "kategorie": e.kategorie,
+            "parameter": e.parameter or {},
+            "notizen": e.notizen,
+            "ansprechpartner_id": e.ansprechpartner_id,
+        }
+        for e in eintraege_obj
+    ]
+
+    pdf_bytes = generate_infothek_pdf(
+        anlagen_name=anlage.anlagenname,
+        eintraege=eintraege,
+        vertragspartner_map=vp_map,
+        kategorie_schemas=INFOTHEK_KATEGORIEN,
+        filter_kategorie=kategorie,
+    )
+
+    filename = f"infothek_{anlage.anlagenname.replace(' ', '_')}"
+    if kategorie:
+        filename += f"_{kategorie}"
+    filename += f"_{datetime.now().strftime('%Y%m%d')}.pdf"
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # =============================================================================
