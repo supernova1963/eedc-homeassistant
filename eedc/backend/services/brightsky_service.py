@@ -129,7 +129,7 @@ async def fetch_brightsky_weather(
         logger.error(f"Bright Sky: HTTP-Fehler {e.response.status_code}")
         return None
     except Exception as e:
-        logger.error(f"Bright Sky: Fehler: {e}")
+        logger.error(f"Bright Sky: Fehler: {type(e).__name__}: {e}")
         return None
 
 
@@ -386,5 +386,5 @@ async def get_brightsky_sources(
             return data.get("sources", [])
 
     except Exception as e:
-        logger.error(f"Bright Sky Sources: Fehler: {e}")
+        logger.error(f"Bright Sky Sources: Fehler: {type(e).__name__}: {e}")
         return None

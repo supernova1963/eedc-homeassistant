@@ -19,6 +19,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel
 
 from backend.api.deps import get_db
+from backend.services.activity_service import log_activity
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -336,6 +337,13 @@ async def get_monatswerte(
     try:
         response = service.get_monatswerte(sensor_ids, jahr, monat)
     except Exception as e:
+        await log_activity(
+            kategorie="ha_statistics",
+            aktion=f"Monatswerte {monat:02d}/{jahr} fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+            anlage_id=anlage_id,
+        )
         raise HTTPException(status_code=500, detail=f"Fehler bei DB-Abfrage: {e}")
 
     # Auf EEDC-Felder mappen
@@ -1019,6 +1027,14 @@ async def import_ha_statistics(
             fehler.append(f"{jahr}/{monat:02d}: {str(e)}")
 
     await db.commit()
+
+    await log_activity(
+        kategorie="ha_statistics",
+        aktion=f"HA-Import: {importiert} Monate",
+        erfolg=len(fehler) == 0,
+        details=f"Importiert: {importiert}, Übersprungen: {uebersprungen}" + (f", Fehler: {len(fehler)}" if fehler else ""),
+        anlage_id=anlage_id,
+    )
 
     return ImportResultat(
         erfolg=len(fehler) == 0,

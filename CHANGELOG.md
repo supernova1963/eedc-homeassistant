@@ -7,6 +7,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.30] - 2026-03-26
+
+### Behoben
+
+- **Leere Exception-Logs**: Alle 32 `logger.warning/error`-Stellen im Backend loggen jetzt den Exception-Typ (`ConnectError: ...` statt nur `:`). Betrifft 20 Dateien: HA Statistics, Wetter, Solar Forecast, MQTT, Connector, Monatsabschluss u.a.
+- **Protokolle Limit-Inkonsistenz**: Frontend forderte 300 Einträge an, Text sagte "max. 500" — beides auf 500 vereinheitlicht
+- **Offset=0 nicht gesendet**: API-Client übersprang `offset=0` (JavaScript falsy) — korrigiert auf `!= null` Check
+
+### Neu
+
+- **Aktivitäts-Logging für alle kritischen Operationen**: 6 neue Kategorien mit ~20 `log_activity()`-Aufrufen:
+  - **HA-Statistiken**: DB-Abfrage-Fehler, Import-Ergebnisse (Monate importiert/übersprungen/Fehler)
+  - **Scheduler-Jobs**: Monatswechsel-Snapshot, Energie-Profil Aggregation, MQTT Energy Snapshot/Cleanup
+  - **MQTT**: Inbound/Gateway/Bridge Start + Verbindungsverlust
+  - **Community**: Daten teilen/löschen + Timeout/Verbindungsfehler
+  - **Sensor-Mapping**: Speichern/Löschen mit Sensor-Anzahl
+  - **HA-Export**: MQTT-Sensoren publiziert/entfernt
+  - **Backup-Export/Import**: JSON-Export/Import mit Details
+- **Textsuche in Aktivitäten**: Suchfeld mit Debounce (400ms), sucht case-insensitive in Aktion und Details (Backend: `ILIKE` auf `aktion` + `details`)
+- **Copy-Button (beide Tabs)**: Kopiert sichtbare Einträge als Markdown — ideal zum Einfügen in GitHub Issues. Button zeigt grünes Häkchen als Feedback
+- **Download-Button (System-Logs)**: Exportiert gefilterte Logs als `.txt`-Datei
+- **Cleanup-Feedback**: Nach Bereinigung alter Aktivitäten (>90 Tage) zeigt ein grüner Toast die Anzahl entfernter Einträge
+- **Debug-Modus**: Log-Level zur Laufzeit zwischen DEBUG/INFO umschaltbar (kein Restart nötig). Amber-farbiger Button + Warnhinweis bei aktivem Debug
+- **Neustart-Button**: EEDC direkt aus den Protokollen neu starten (HA: Supervisor-API, Standalone: Container-Restart)
+
+---
+
 ## [3.4.29] - 2026-03-25
 
 ### Behoben

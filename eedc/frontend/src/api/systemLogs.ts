@@ -65,15 +65,17 @@ export const systemLogsApi = {
     kategorie?: string
     erfolg?: boolean
     anlage_id?: number
+    search?: string
     limit?: number
     offset?: number
   }): Promise<ActivityListResponse> {
     const searchParams = new URLSearchParams()
     if (params?.kategorie) searchParams.set('kategorie', params.kategorie)
     if (params?.erfolg !== undefined) searchParams.set('erfolg', String(params.erfolg))
+    if (params?.search) searchParams.set('search', params.search)
     if (params?.anlage_id) searchParams.set('anlage_id', String(params.anlage_id))
-    if (params?.limit) searchParams.set('limit', String(params.limit))
-    if (params?.offset) searchParams.set('offset', String(params.offset))
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
     const qs = searchParams.toString()
     return api.get<ActivityListResponse>(`/system/activities${qs ? '?' + qs : ''}`)
   },
@@ -90,5 +92,26 @@ export const systemLogsApi = {
    */
   async cleanupActivities(): Promise<{ erfolg: boolean; message: string }> {
     return api.post('/system/activities/cleanup')
+  },
+
+  /**
+   * Aktuelles Log-Level abfragen.
+   */
+  async getLogLevel(): Promise<{ level: string }> {
+    return api.get<{ level: string }>('/system/log-level')
+  },
+
+  /**
+   * Log-Level zur Laufzeit ändern (kein Restart nötig).
+   */
+  async setLogLevel(level: string): Promise<{ erfolg: boolean; level: string }> {
+    return api.put<{ erfolg: boolean; level: string }>(`/system/log-level?level=${level}`, {})
+  },
+
+  /**
+   * EEDC Add-on / Container neu starten.
+   */
+  async restart(): Promise<{ erfolg: boolean; message: string }> {
+    return api.post('/system/restart')
   },
 }

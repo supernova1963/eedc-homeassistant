@@ -248,7 +248,7 @@ async def fetch_gti_forecast(
         logger.error(f"Open-Meteo Solar: HTTP-Fehler {e.response.status_code}")
         return None
     except Exception as e:
-        logger.error(f"Open-Meteo Solar: Fehler: {e}")
+        logger.error(f"Open-Meteo Solar: Fehler: {type(e).__name__}: {e}")
         return None
 
 

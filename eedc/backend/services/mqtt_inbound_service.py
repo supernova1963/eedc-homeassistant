@@ -23,6 +23,8 @@ import re
 from datetime import datetime
 from typing import Optional
 
+from backend.services.activity_service import log_activity
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -198,6 +200,12 @@ class MqttInboundService:
         self._running = True
         self._task = asyncio.create_task(self._subscribe_loop())
         logger.info("MQTT-Inbound: Subscriber gestartet (%s:%d)", self.host, self.port)
+        await log_activity(
+            kategorie="mqtt",
+            aktion="MQTT-Inbound gestartet",
+            erfolg=True,
+            details=f"Broker: {self.host}:{self.port}",
+        )
         return True
 
     async def stop(self) -> None:
@@ -238,6 +246,12 @@ class MqttInboundService:
             except Exception as e:
                 if self._running:
                     logger.warning("MQTT-Inbound: Verbindung verloren (%s), Reconnect in 10s...", e)
+                    await log_activity(
+                        kategorie="mqtt",
+                        aktion="MQTT-Inbound Verbindung verloren",
+                        erfolg=False,
+                        details=f"{type(e).__name__}: {e}",
+                    )
                     await asyncio.sleep(10)
 
     def get_status(self) -> dict:

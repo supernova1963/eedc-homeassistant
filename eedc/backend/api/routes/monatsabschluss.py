@@ -880,7 +880,7 @@ async def save_monatsabschluss(
     try:
         await db.flush()
     except Exception as e:
-        logger.error(f"Monatsabschluss flush Monatsdaten fehlgeschlagen: {e}")
+        logger.error(f"Monatsabschluss flush Monatsdaten fehlgeschlagen: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler beim Speichern der Monatsdaten: {e}")
     monatsdaten_id = monatsdaten.id
 
@@ -926,7 +926,7 @@ async def save_monatsabschluss(
         try:
             await db.flush()
         except Exception as e:
-            logger.error(f"Monatsabschluss flush Investition {inv_werte.investition_id} fehlgeschlagen: {e}")
+            logger.error(f"Monatsabschluss flush Investition {inv_werte.investition_id} fehlgeschlagen: {type(e).__name__}: {e}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Fehler beim Speichern der Investition {inv_werte.investition_id}: {e}"
@@ -936,7 +936,7 @@ async def save_monatsabschluss(
     try:
         await db.commit()
     except Exception as e:
-        logger.error(f"Monatsabschluss commit fehlgeschlagen: {e}")
+        logger.error(f"Monatsabschluss commit fehlgeschlagen: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler beim Commit: {e}")
 
     # Optional: MQTT Monatsdaten publizieren
@@ -951,7 +951,7 @@ async def save_monatsabschluss(
         await mqtt_sync.publish_final_month_data(anlage_id, jahr, monat, monatsdaten_dict)
     except Exception as e:
         # MQTT-Fehler nicht als Fatal behandeln
-        logger.warning(f"MQTT-Publish fehlgeschlagen: {e}")
+        logger.warning(f"MQTT-Publish fehlgeschlagen: {type(e).__name__}: {e}")
 
     # Energie-Profil Rollup: TagesZusammenfassungen → Monatsdaten-Felder
     try:
@@ -973,7 +973,7 @@ async def save_monatsabschluss(
         await rollup_month(anlage_id, jahr, monat, db)
         await db.commit()
     except Exception as e:
-        logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {e}")
+        logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {type(e).__name__}: {e}")
 
     # Auto-Share: Daten an Community senden wenn aktiviert
     if anlage.community_auto_share:
@@ -993,7 +993,7 @@ async def save_monatsabschluss(
                     else:
                         logger.warning(f"Auto-Share HTTP {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            logger.warning(f"Auto-Share fehlgeschlagen: {e}")
+            logger.warning(f"Auto-Share fehlgeschlagen: {type(e).__name__}: {e}")
 
     await log_activity(
         kategorie="monatsabschluss",

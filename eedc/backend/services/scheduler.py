@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from backend.services.activity_service import log_activity
+
 try:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
@@ -109,7 +111,7 @@ class EEDCScheduler:
             return True
 
         except Exception as e:
-            logger.error(f"Fehler beim Starten des Schedulers: {e}")
+            logger.error(f"Fehler beim Starten des Schedulers: {type(e).__name__}: {e}")
             return False
 
     def stop(self) -> None:
@@ -208,6 +210,12 @@ async def monthly_snapshot_job(anlage_id: Optional[int] = None) -> dict:
     }
 
     logger.info("Monatswechsel-Snapshot abgeschlossen")
+    await log_activity(
+        kategorie="scheduler",
+        aktion="Monatswechsel-Snapshot",
+        erfolg=True,
+        details=results["message"],
+    )
     return results
 
 
@@ -217,7 +225,13 @@ async def mqtt_energy_snapshot_job() -> None:
         from backend.services.mqtt_energy_history_service import snapshot_energy_cache
         await snapshot_energy_cache()
     except Exception as e:
-        logger.warning(f"MQTT Energy Snapshot fehlgeschlagen: {e}")
+        logger.warning(f"MQTT Energy Snapshot fehlgeschlagen: {type(e).__name__}: {e}")
+        await log_activity(
+            kategorie="scheduler",
+            aktion="MQTT Energy Snapshot fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
 
 
 async def mqtt_energy_cleanup_job() -> None:
@@ -226,7 +240,13 @@ async def mqtt_energy_cleanup_job() -> None:
         from backend.services.mqtt_energy_history_service import cleanup_old_snapshots
         await cleanup_old_snapshots()
     except Exception as e:
-        logger.warning(f"MQTT Energy Cleanup fehlgeschlagen: {e}")
+        logger.warning(f"MQTT Energy Cleanup fehlgeschlagen: {type(e).__name__}: {e}")
+        await log_activity(
+            kategorie="scheduler",
+            aktion="MQTT Energy Cleanup fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
 
 
 async def energie_profil_aggregation_job() -> None:
@@ -236,8 +256,20 @@ async def energie_profil_aggregation_job() -> None:
         results = await aggregate_yesterday_all()
         ok = sum(1 for r in results.values() if r["status"] == "ok")
         logger.info(f"Energie-Profil Aggregation: {ok}/{len(results)} Anlagen erfolgreich")
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Energie-Profil Aggregation",
+            erfolg=True,
+            details=f"{ok}/{len(results)} Anlagen erfolgreich",
+        )
     except Exception as e:
-        logger.warning(f"Energie-Profil Aggregation fehlgeschlagen: {e}")
+        logger.warning(f"Energie-Profil Aggregation fehlgeschlagen: {type(e).__name__}: {e}")
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Energie-Profil Aggregation fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
 
 
 # Singleton-Instanz

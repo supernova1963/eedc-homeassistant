@@ -5,12 +5,15 @@ Endpoints für den Log-Viewer und das Aktivitätsprotokoll.
 """
 
 import logging
-from typing import Optional
+import os
+from typing import Optional, Literal
 
+import httpx
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from backend.core.log_buffer import get_log_buffer
+from backend.core.config import HA_INTEGRATION_AVAILABLE, settings
 from backend.services.activity_service import get_activities, cleanup_old_activities
 
 logger = logging.getLogger(__name__)
@@ -71,6 +74,7 @@ async def get_activity_log(
     kategorie: Optional[str] = Query(None, description="Filter nach Kategorie"),
     erfolg: Optional[bool] = Query(None, description="Filter nach Erfolg/Fehler"),
     anlage_id: Optional[int] = Query(None, description="Filter nach Anlage"),
+    search: Optional[str] = Query(None, description="Suche in Aktion und Details"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
@@ -79,6 +83,7 @@ async def get_activity_log(
         kategorie=kategorie,
         erfolg=erfolg,
         anlage_id=anlage_id,
+        search=search,
         limit=limit,
         offset=offset,
     )
@@ -98,6 +103,12 @@ async def get_activity_kategorien():
         {"id": "backup_export", "label": "Backup-Export"},
         {"id": "backup_import", "label": "Backup-Import"},
         {"id": "monatsabschluss", "label": "Monatsabschluss"},
+        {"id": "ha_statistics", "label": "HA-Statistiken"},
+        {"id": "scheduler", "label": "Scheduler-Jobs"},
+        {"id": "mqtt", "label": "MQTT"},
+        {"id": "community", "label": "Community"},
+        {"id": "sensor_mapping", "label": "Sensor-Mapping"},
+        {"id": "ha_export", "label": "HA-Export"},
     ]
 
 
@@ -106,3 +117,54 @@ async def trigger_activity_cleanup():
     """Alte Aktivitätsprotokoll-Einträge manuell bereinigen."""
     await cleanup_old_activities()
     return {"erfolg": True, "message": "Alte Einträge bereinigt"}
+
+
+# =============================================================================
+# Debug-Modus & Restart
+# =============================================================================
+
+@router.get("/log-level")
+async def get_log_level():
+    """Aktuelles Log-Level des Root-Loggers abfragen."""
+    root = logging.getLogger()
+    current = logging.getLevelName(root.level)
+    return {"level": current}
+
+
+@router.put("/log-level")
+async def set_log_level(level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Query(...)):
+    """
+    Log-Level zur Laufzeit ändern (kein Restart nötig).
+
+    DEBUG zeigt alle Detail-Meldungen, INFO ist der Standard.
+    """
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, level))
+    logger.info(f"Log-Level auf {level} geändert")
+    return {"erfolg": True, "level": level}
+
+
+@router.post("/restart")
+async def restart_addon():
+    """
+    EEDC Add-on neu starten.
+
+    Im HA-Modus: Supervisor API. Standalone: Prozess beenden (Container-Runtime startet neu).
+    """
+    if HA_INTEGRATION_AVAILABLE and settings.supervisor_token:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    "http://supervisor/addons/self/restart",
+                    headers={"Authorization": f"Bearer {settings.supervisor_token}"},
+                )
+                if response.status_code == 200:
+                    return {"erfolg": True, "message": "Add-on wird neu gestartet..."}
+                return {"erfolg": False, "message": f"Supervisor-Fehler: {response.status_code}"}
+        except Exception as e:
+            return {"erfolg": False, "message": f"{type(e).__name__}: {e}"}
+    else:
+        # Standalone: Prozess beenden, Container/Systemd startet neu
+        import asyncio
+        asyncio.get_event_loop().call_later(1.0, lambda: os._exit(0))
+        return {"erfolg": True, "message": "EEDC wird neu gestartet..."}

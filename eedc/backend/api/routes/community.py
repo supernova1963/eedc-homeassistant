@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.models import Anlage
+from backend.services.activity_service import log_activity
 from backend.services.community_service import (
     prepare_community_data,
     get_community_preview,
@@ -127,6 +128,13 @@ async def share_to_community(
                         anlage.community_hash = anlage_hash
                         await db.commit()
 
+                await log_activity(
+                    kategorie="community",
+                    aktion="Community-Daten geteilt",
+                    erfolg=True,
+                    details=f"{result.get('anzahl_monate', 0)} Monate",
+                    anlage_id=anlage_id,
+                )
                 return ShareResponse(
                     success=True,
                     message="Daten erfolgreich geteilt!",
@@ -149,11 +157,25 @@ async def share_to_community(
                 )
 
     except httpx.TimeoutException:
+        await log_activity(
+            kategorie="community",
+            aktion="Community-Sharing fehlgeschlagen",
+            erfolg=False,
+            details="Timeout — Server antwortet nicht",
+            anlage_id=anlage_id,
+        )
         raise HTTPException(
             status_code=504,
             detail="Community-Server antwortet nicht. Bitte später erneut versuchen."
         )
     except httpx.RequestError as e:
+        await log_activity(
+            kategorie="community",
+            aktion="Community-Sharing fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+            anlage_id=anlage_id,
+        )
         raise HTTPException(
             status_code=503,
             detail=f"Verbindung zum Community-Server fehlgeschlagen: {str(e)}"
@@ -228,6 +250,13 @@ async def delete_from_community(
                 anlage.community_hash = None
                 await db.commit()
 
+                await log_activity(
+                    kategorie="community",
+                    aktion="Community-Daten gelöscht",
+                    erfolg=True,
+                    details=f"{result_data.get('anzahl_geloeschte_monate', 0)} Monate entfernt",
+                    anlage_id=anlage_id,
+                )
                 return DeleteResponse(
                     success=True,
                     message=result_data.get("message", "Daten erfolgreich gelöscht."),

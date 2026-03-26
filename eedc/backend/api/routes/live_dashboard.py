@@ -1224,7 +1224,7 @@ async def _fetch_gti_for_gruppe(
         data = resp.json()
         return data.get("hourly", {}).get("global_tilted_irradiance", [])
     except Exception as e:
-        logger.warning(f"GTI-Fetch Neigung={neigung}° Azimut={ausrichtung}°: {e}")
+        logger.warning(f"GTI-Fetch Neigung={neigung}° Azimut={ausrichtung}°: {type(e).__name__}: {e}")
         return None
 
 
@@ -1597,7 +1597,7 @@ async def get_live_wetter(
         }
 
     except Exception as e:
-        logger.warning(f"Live-Wetter Fehler: {e}")
+        logger.warning(f"Live-Wetter Fehler: {type(e).__name__}: {e}")
         return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
 
 

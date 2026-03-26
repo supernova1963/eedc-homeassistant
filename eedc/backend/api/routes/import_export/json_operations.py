@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.core.config import APP_VERSION
+from backend.services.activity_service import log_activity
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -236,11 +237,25 @@ async def export_anlage_full(
     - PVGIS-Prognosen mit Monatswerten
     """
     try:
-        return await _export_anlage_full_impl(anlage_id, db)
+        result = await _export_anlage_full_impl(anlage_id, db)
+        await log_activity(
+            kategorie="backup_export",
+            aktion="Anlage exportiert",
+            erfolg=True,
+            anlage_id=anlage_id,
+        )
+        return result
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Export fehlgeschlagen für Anlage {anlage_id}")
+        await log_activity(
+            kategorie="backup_export",
+            aktion="Export fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+            anlage_id=anlage_id,
+        )
         raise HTTPException(status_code=500, detail=f"Export-Fehler: {type(e).__name__}: {str(e)}")
 
 
@@ -744,6 +759,14 @@ async def import_json(
 
         logger.info(f"JSON-Import abgeschlossen: {importiert}")
 
+        await log_activity(
+            kategorie="backup_import",
+            aktion=f"Anlage '{anlage_name}' importiert",
+            erfolg=True,
+            details=f"{importiert['monatsdaten']} Monate, {importiert['investitionen']} Investitionen",
+            anlage_id=anlage_id,
+        )
+
         return JSONImportResult(
             erfolg=True,
             anlage_id=anlage_id,
@@ -755,6 +778,12 @@ async def import_json(
     except Exception as e:
         await db.rollback()
         logger.exception(f"Fehler beim JSON-Import: {e}")
+        await log_activity(
+            kategorie="backup_import",
+            aktion="Import fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
         return JSONImportResult(
             erfolg=False,
             fehler=[f"Import-Fehler: {str(e)}"],

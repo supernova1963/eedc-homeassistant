@@ -45,13 +45,14 @@ async def log_activity(
             )
             session.add(entry)
     except Exception as e:
-        logger.warning(f"Aktivitätsprotokoll konnte nicht geschrieben werden: {e}")
+        logger.warning(f"Aktivitätsprotokoll konnte nicht geschrieben werden: {type(e).__name__}: {e}")
 
 
 async def get_activities(
     kategorie: Optional[str] = None,
     erfolg: Optional[bool] = None,
     anlage_id: Optional[int] = None,
+    search: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
@@ -74,6 +75,11 @@ async def get_activities(
         if anlage_id is not None:
             query = query.where(ActivityLog.anlage_id == anlage_id)
             count_query = count_query.where(ActivityLog.anlage_id == anlage_id)
+        if search:
+            pattern = f"%{search}%"
+            search_filter = ActivityLog.aktion.ilike(pattern) | ActivityLog.details.ilike(pattern)
+            query = query.where(search_filter)
+            count_query = count_query.where(search_filter)
 
         total_result = await session.execute(count_query)
         total = total_result.scalar() or 0

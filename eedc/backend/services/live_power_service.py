@@ -667,7 +667,7 @@ class LivePowerService:
                     return result
             except Exception as e:
                 label = "Heute" if tage_zurueck == 0 else "Gestern"
-                logger.warning(f"Fehler bei {label}-kWh Berechnung (HA): {e}")
+                logger.warning(f"Fehler bei {label}-kWh Berechnung (HA): {type(e).__name__}: {e}")
 
         # 2. Fallback: MQTT Energy Snapshots
         try:

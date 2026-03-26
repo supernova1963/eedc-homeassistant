@@ -354,7 +354,7 @@ async def import_csv(
                         globalstrahlung = wetter.get("globalstrahlung_kwh_m2")
                         sonnenstunden = wetter.get("sonnenstunden")
                     except Exception as e:
-                        logger.warning(f"Wetterdaten für {monat}/{jahr} nicht abrufbar: {e}")
+                        logger.warning(f"Wetterdaten für {monat}/{jahr} nicht abrufbar: {type(e).__name__}: {e}")
 
             # Personalisierte Spalten verarbeiten
             summen = {"pv_erzeugung_sum": 0.0, "batterie_ladung_sum": 0.0, "batterie_entladung_sum": 0.0}

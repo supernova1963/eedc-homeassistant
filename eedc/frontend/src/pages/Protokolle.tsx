@@ -8,11 +8,40 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  ScrollText, Activity, RefreshCw, Search,
-  CheckCircle, XCircle, ChevronLeft, ChevronRight, Pause, Play,
+  ScrollText, Activity, RefreshCw, Search, Trash2, ClipboardCopy, Download,
+  CheckCircle, XCircle, ChevronLeft, ChevronRight, Pause, Play, Check,
+  Bug, RotateCw, AlertTriangle,
 } from 'lucide-react'
 import { systemLogsApi } from '../api/systemLogs'
 import type { LogEntry, ActivityEntry, ActivityKategorie } from '../api/systemLogs'
+
+// ─── Shared: Copy-to-Clipboard mit Feedback ─────────────────────────────────
+
+function useCopyFeedback() {
+  const [copied, setCopied] = useState(false)
+  const copy = useCallback(async (text: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [])
+  return { copied, copy }
+}
+
+// ─── Shared: Toast-Nachricht ─────────────────────────────────────────────────
+
+function Toast({ message, onDone }: { message: string; onDone: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDone, 3000)
+    return () => clearTimeout(timer)
+  }, [onDone])
+
+  return (
+    <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 text-sm flex items-center gap-2">
+      <Check className="h-4 w-4" />
+      {message}
+    </div>
+  )
+}
 
 // ─── Tab: System-Logs ──────────────────────────────────────────────────────
 
@@ -27,6 +56,7 @@ function SystemLogsTab() {
 
   const [autoRefresh, setAutoRefresh] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const { copied, copy } = useCopyFeedback()
 
   const loadLogs = useCallback(async () => {
     try {
@@ -35,7 +65,7 @@ function SystemLogsTab() {
         level: level || undefined,
         module: module || undefined,
         search: search || undefined,
-        limit: 300,
+        limit: 500,
       })
       setLogs(data)
       setError(null)
@@ -66,6 +96,32 @@ function SystemLogsTab() {
       case 'DEBUG': return 'text-gray-400 dark:text-gray-500'
       default: return 'text-gray-700 dark:text-gray-300'
     }
+  }
+
+  const formatLogsMarkdown = () => {
+    const filter = [level && `Level: ${level}`, module && `Modul: ${module}`, search && `Suche: "${search}"`].filter(Boolean).join(', ')
+    const header = `## EEDC System-Logs${filter ? ` (${filter})` : ''}\n\n`
+    const table = '| Zeit | Level | Modul | Nachricht |\n|------|-------|-------|-----------|\n'
+    const rows = logs.map((log) => {
+      const zeit = new Date(log.timestamp).toLocaleString('de-DE')
+      const msg = log.message.replace(/\|/g, '\\|')
+      return `| ${zeit} | ${log.level} | ${log.module} | ${msg} |`
+    }).join('\n')
+    return header + table + rows
+  }
+
+  const downloadLogs = () => {
+    const lines = logs.map((log) => {
+      const zeit = new Date(log.timestamp).toLocaleString('de-DE')
+      return `[${zeit}] ${log.level.padEnd(8)} ${log.module.padEnd(24)} ${log.message}`
+    }).join('\n')
+    const blob = new Blob([lines], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `eedc-system-logs-${new Date().toISOString().slice(0, 10)}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -100,6 +156,26 @@ function SystemLogsTab() {
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 pl-9 pr-3 py-2 text-sm"
           />
         </div>
+        <button
+          onClick={() => copy(formatLogsMarkdown())}
+          disabled={logs.length === 0}
+          className={`p-2 rounded-lg transition-colors ${
+            copied
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+          } disabled:opacity-30`}
+          title="Als Markdown kopieren (f\u00fcr GitHub Issue)"
+        >
+          {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+        </button>
+        <button
+          onClick={downloadLogs}
+          disabled={logs.length === 0}
+          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
+          title="Als Textdatei herunterladen"
+        >
+          <Download className="h-4 w-4" />
+        </button>
         <button
           onClick={() => setAutoRefresh(!autoRefresh)}
           className={`p-2 rounded-lg transition-colors ${
@@ -160,7 +236,7 @@ function SystemLogsTab() {
               {logs.length === 0 && (
                 <tr>
                   <td colSpan={4} className="p-8 text-center text-gray-400">
-                    Keine Log-Einträge gefunden
+                    Keine Log-Eintr\u00e4ge gefunden
                   </td>
                 </tr>
               )}
@@ -169,7 +245,7 @@ function SystemLogsTab() {
         </div>
       </div>
       <p className="text-xs text-gray-400 dark:text-gray-500">
-        {logs.length} Einträge angezeigt (max. 500 im Speicher, gehen bei Restart verloren)
+        {logs.length} Eintr\u00e4ge angezeigt (max. 500 im Speicher, gehen bei Restart verloren)
       </p>
     </div>
   )
@@ -183,11 +259,24 @@ function AktivitaetenTab() {
   const [kategorien, setKategorien] = useState<ActivityKategorie[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const [kategorie, setKategorie] = useState<string>('')
   const [erfolg, setErfolg] = useState<string>('')
+  const [searchInput, setSearchInput] = useState<string>('')
+  const [search, setSearch] = useState<string>('')
   const [offset, setOffset] = useState(0)
   const limit = 30
+  const { copied, copy } = useCopyFeedback()
+
+  // Debounce: Suche erst nach 400ms Tipp-Pause auslösen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setOffset(0)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   const loadData = useCallback(async () => {
     try {
@@ -195,6 +284,7 @@ function AktivitaetenTab() {
       const data = await systemLogsApi.getActivities({
         kategorie: kategorie || undefined,
         erfolg: erfolg === '' ? undefined : erfolg === 'true',
+        search: search || undefined,
         limit,
         offset,
       })
@@ -202,11 +292,11 @@ function AktivitaetenTab() {
       setTotal(data.total)
       setError(null)
     } catch {
-      setError('Fehler beim Laden der Aktivitäten')
+      setError('Fehler beim Laden der Aktivit\u00e4ten')
     } finally {
       setLoading(false)
     }
-  }, [kategorie, erfolg, offset])
+  }, [kategorie, erfolg, search, offset])
 
   useEffect(() => {
     systemLogsApi.getKategorien().then(setKategorien).catch(() => {})
@@ -216,6 +306,24 @@ function AktivitaetenTab() {
 
   const totalPages = Math.ceil(total / limit)
   const currentPage = Math.floor(offset / limit) + 1
+
+  const formatActivitiesMarkdown = () => {
+    const filter = [
+      kategorie && `Kategorie: ${kategorien.find((k) => k.id === kategorie)?.label || kategorie}`,
+      erfolg === 'true' && 'Erfolgreich',
+      erfolg === 'false' && 'Fehlgeschlagen',
+      search && `Suche: "${search}"`,
+    ].filter(Boolean).join(', ')
+    const header = `## EEDC Aktivit\u00e4ten${filter ? ` (${filter})` : ''}\n\n`
+    const rows = activities.map((a) => {
+      const icon = a.erfolg ? '\u2705' : '\u274c'
+      const label = kategorien.find((k) => k.id === a.kategorie)?.label || a.kategorie
+      const zeit = a.timestamp ? new Date(a.timestamp).toLocaleString('de-DE') : '\u2013'
+      const details = a.details ? ` \u2014 ${a.details}` : ''
+      return `- ${icon} **${a.aktion}** [${label}]${details} (${zeit})`
+    }).join('\n')
+    return header + rows
+  }
 
   return (
     <div className="space-y-4">
@@ -240,7 +348,46 @@ function AktivitaetenTab() {
           <option value="true">Erfolgreich</option>
           <option value="false">Fehlgeschlagen</option>
         </select>
-        <div className="flex-1" />
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Suche in Aktionen..."
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 pl-9 pr-3 py-2 text-sm"
+          />
+        </div>
+        <button
+          onClick={() => copy(formatActivitiesMarkdown())}
+          disabled={activities.length === 0}
+          className={`p-2 rounded-lg transition-colors ${
+            copied
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+          } disabled:opacity-30`}
+          title="Als Markdown kopieren (f\u00fcr GitHub Issue)"
+        >
+          {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+        </button>
+        <button
+          onClick={async () => {
+            if (!confirm('Alte Eintr\u00e4ge (>90 Tage) bereinigen?')) return
+            try {
+              const before = total
+              await systemLogsApi.cleanupActivities()
+              await loadData()
+              const removed = before - total
+              setToast(removed > 0 ? `${removed} alte Eintr\u00e4ge bereinigt` : 'Keine alten Eintr\u00e4ge vorhanden')
+            } catch {
+              setError('Bereinigung fehlgeschlagen')
+            }
+          }}
+          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+          title="Alte Eintr\u00e4ge bereinigen (>90 Tage)"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
         <button
           onClick={loadData}
           disabled={loading}
@@ -250,6 +397,8 @@ function AktivitaetenTab() {
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
+
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
 
       {error && (
         <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
@@ -286,14 +435,14 @@ function AktivitaetenTab() {
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                 {a.timestamp
                   ? new Date(a.timestamp).toLocaleString('de-DE')
-                  : '–'}
+                  : '\u2013'}
               </p>
             </div>
           </div>
         ))}
         {activities.length === 0 && !loading && (
           <div className="text-center py-8 text-gray-400 dark:text-gray-500">
-            Keine Aktivitäten gefunden
+            Keine Aktivit\u00e4ten gefunden
           </div>
         )}
       </div>
@@ -328,20 +477,73 @@ function AktivitaetenTab() {
 
 export default function Protokolle() {
   const [activeTab, setActiveTab] = useState<'logs' | 'activities'>('logs')
+  const [logLevel, setLogLevel] = useState<string>('INFO')
+  const [restarting, setRestarting] = useState(false)
+
+  useEffect(() => {
+    systemLogsApi.getLogLevel().then((r) => setLogLevel(r.level)).catch(() => {})
+  }, [])
+
+  const isDebug = logLevel === 'DEBUG'
+
+  const toggleDebug = async () => {
+    const newLevel = isDebug ? 'INFO' : 'DEBUG'
+    try {
+      const result = await systemLogsApi.setLogLevel(newLevel)
+      if (result.erfolg) setLogLevel(result.level)
+    } catch { /* ignore */ }
+  }
+
+  const handleRestart = async () => {
+    if (!confirm('EEDC wirklich neu starten? Die Verbindung wird kurz unterbrochen.')) return
+    setRestarting(true)
+    try {
+      await systemLogsApi.restart()
+    } catch { /* Verbindung bricht ab — erwartet */ }
+  }
 
   const tabs = [
     { id: 'logs' as const, label: 'System-Logs', icon: ScrollText },
-    { id: 'activities' as const, label: 'Aktivitäten', icon: Activity },
+    { id: 'activities' as const, label: 'Aktivit\u00e4ten', icon: Activity },
   ]
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <ScrollText className="w-6 h-6 text-gray-500" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Protokolle
         </h1>
+        <div className="flex-1" />
+        <button
+          onClick={toggleDebug}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            isDebug
+              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-1 ring-amber-300 dark:ring-amber-700'
+              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+          }`}
+          title={isDebug ? 'Debug-Modus deaktivieren (zur\u00fcck auf INFO)' : 'Debug-Modus aktivieren (zeigt alle Detail-Meldungen)'}
+        >
+          <Bug className="h-4 w-4" />
+          {isDebug ? 'Debug aktiv' : 'Debug'}
+        </button>
+        <button
+          onClick={handleRestart}
+          disabled={restarting}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+          title="EEDC neu starten"
+        >
+          <RotateCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
+          {restarting ? 'Startet neu...' : 'Neustart'}
+        </button>
       </div>
+
+      {isDebug && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          Debug-Modus aktiv — alle Detail-Logs werden aufgezeichnet. Erh\u00f6hter Speicherverbrauch. Nach der Fehlersuche wieder deaktivieren.
+        </div>
+      )}
 
       {/* Tab Bar */}
       <div className="flex border-b border-gray-200 dark:border-gray-700">

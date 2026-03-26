@@ -110,7 +110,7 @@ class SMAennexOSConnector(DeviceConnector):
                         except (ValueError, TypeError):
                             pass
             except Exception as e:
-                logger.warning(f"Fehler beim Lesen von Gerät {did}: {e}")
+                logger.warning(f"Fehler beim Lesen von Gerät {did}: {type(e).__name__}: {e}")
 
         return all_sensor_values, all_sensor_keys, device_list
 

@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from backend.services.activity_service import log_activity
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -146,6 +148,12 @@ class MqttGatewayService:
         self._task = asyncio.create_task(self._subscribe_loop())
         logger.info("MQTT-Gateway: gestartet (%s:%d, %d Topics)",
                      self.host, self.port, len(self._mappings))
+        await log_activity(
+            kategorie="mqtt",
+            aktion="MQTT-Gateway gestartet",
+            erfolg=True,
+            details=f"Broker: {self.host}:{self.port}, {len(self._mappings)} Topics",
+        )
         return True
 
     async def stop(self) -> None:
@@ -187,6 +195,12 @@ class MqttGatewayService:
             except Exception as e:
                 if self._running:
                     logger.warning("MQTT-Gateway: Verbindung verloren (%s), Reconnect in 10s...", e)
+                    await log_activity(
+                        kategorie="mqtt",
+                        aktion="MQTT-Gateway Verbindung verloren",
+                        erfolg=False,
+                        details=f"{type(e).__name__}: {e}",
+                    )
                     await asyncio.sleep(10)
 
     async def _handle_message(self, client: "aiomqtt.Client", message) -> None:

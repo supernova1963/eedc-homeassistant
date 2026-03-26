@@ -309,7 +309,7 @@ class DeyeSolarmanProvider(CloudImportProvider):
             return data.get("body", {}).get("access_token")
 
         except Exception as e:
-            logger.warning(f"Solarman Token-Anfrage fehlgeschlagen: {e}")
+            logger.warning(f"Solarman Token-Anfrage fehlgeschlagen: {type(e).__name__}: {e}")
             return None
 
 

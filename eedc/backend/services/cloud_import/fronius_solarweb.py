@@ -239,7 +239,7 @@ class FroniusSolarWebProvider(CloudImportProvider):
                         results.append(month_data)
 
             except Exception as e:
-                logger.warning(f"Fronius aggdata Jahr {year} fehlgeschlagen: {e}")
+                logger.warning(f"Fronius aggdata Jahr {year} fehlgeschlagen: {type(e).__name__}: {e}")
 
         return results
 

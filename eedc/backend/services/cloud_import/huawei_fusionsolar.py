@@ -317,7 +317,7 @@ class HuaweiFusionSolarProvider(CloudImportProvider):
             return token
 
         except Exception as e:
-            logger.warning(f"FusionSolar Login fehlgeschlagen: {e}")
+            logger.warning(f"FusionSolar Login fehlgeschlagen: {type(e).__name__}: {e}")
             return None
 
     async def _fetch_single_month(

@@ -18,6 +18,7 @@ from typing import Optional
 
 from backend.services.connectors.base import LiveSnapshot
 from backend.services.connectors.registry import get_connector
+from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,12 @@ class ConnectorMqttBridge:
         self._task = asyncio.create_task(self._poll_loop())
         logger.info("Connector-Bridge: gestartet (%d Targets, %ds Intervall)",
                      len(self._targets), self._live_interval)
+        await log_activity(
+            kategorie="mqtt",
+            aktion="Connector-Bridge gestartet",
+            erfolg=True,
+            details=f"{len(self._targets)} Targets, {self._live_interval}s Intervall",
+        )
         return True
 
     async def stop(self) -> None:
@@ -135,6 +142,12 @@ class ConnectorMqttBridge:
             except Exception as e:
                 if self._running:
                     logger.warning("Connector-Bridge: Fehler (%s), Retry in 30s...", e)
+                    await log_activity(
+                        kategorie="mqtt",
+                        aktion="Connector-Bridge Verbindungsfehler",
+                        erfolg=False,
+                        details=f"{type(e).__name__}: {e}",
+                    )
                     await asyncio.sleep(30)
 
     async def _poll_all(self, client: "aiomqtt.Client") -> None:

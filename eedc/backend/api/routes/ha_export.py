@@ -16,6 +16,7 @@ import os
 
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
+from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
@@ -813,6 +814,14 @@ async def publish_sensors_mqtt(
         anlage.anlagenname
     )
 
+    await log_activity(
+        kategorie="ha_export",
+        aktion="MQTT-Sensoren publiziert",
+        erfolg=True,
+        details=f"{result.get('published', 0)} Sensoren für {anlage.anlagenname}",
+        anlage_id=anlage.id,
+    )
+
     return {
         "message": f"Sensoren für {anlage.anlagenname} publiziert",
         "anlage_id": anlage.id,
@@ -862,6 +871,14 @@ async def remove_sensors_mqtt(
     for sensor in ANLAGE_SENSOREN:
         if await client.remove_sensor(sensor, anlage.id):
             removed += 1
+
+    await log_activity(
+        kategorie="ha_export",
+        aktion="MQTT-Sensoren entfernt",
+        erfolg=True,
+        details=f"{removed} Sensoren für {anlage.anlagenname}",
+        anlage_id=anlage.id,
+    )
 
     return {
         "message": f"Sensoren für {anlage.anlagenname} entfernt",

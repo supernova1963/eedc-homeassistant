@@ -199,7 +199,7 @@ class HAStateService:
             return result
 
         except Exception as e:
-            logger.warning(f"HA History API Fehler: {e}")
+            logger.warning(f"HA History API Fehler: {type(e).__name__}: {e}")
             return {}
 
 

@@ -76,7 +76,7 @@ async def aggregate_day(
             anlage, db, tage_zurueck=_tage_zurueck(datum),
         )
     except Exception as e:
-        logger.warning(f"Anlage {anlage.id}, {datum}: Tagesverlauf-Fehler: {e}")
+        logger.warning(f"Anlage {anlage.id}, {datum}: Tagesverlauf-Fehler: {type(e).__name__}: {e}")
         return None
 
     serien = tv_data.get("serien", [])
@@ -351,7 +351,7 @@ async def aggregate_yesterday_all() -> dict:
                     "datum": gestern.isoformat(),
                 }
             except Exception as e:
-                logger.error(f"Anlage {anlage.id}: Aggregation fehlgeschlagen: {e}")
+                logger.error(f"Anlage {anlage.id}: Aggregation fehlgeschlagen: {type(e).__name__}: {e}")
                 results[anlage.id] = {"status": "fehler", "error": str(e)}
 
     return results
@@ -386,7 +386,7 @@ async def backfill_range(
             if result:
                 count += 1
         except Exception as e:
-            logger.warning(f"Backfill {current}: {e}")
+            logger.warning(f"Backfill {current}: {type(e).__name__}: {e}")
         current += timedelta(days=1)
 
     if count > 0:

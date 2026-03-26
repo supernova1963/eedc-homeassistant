@@ -178,7 +178,7 @@ async def fetch_open_meteo_archive(
         logger.error(f"Open-Meteo: HTTP-Fehler {e.response.status_code} für {monat}/{jahr}")
         return None
     except Exception as e:
-        logger.error(f"Open-Meteo: Fehler für {monat}/{jahr}: {e}")
+        logger.error(f"Open-Meteo: Fehler für {monat}/{jahr}: {type(e).__name__}: {e}")
         return None
 
 
@@ -282,7 +282,7 @@ async def fetch_pvgis_tmy_monat(
         logger.error(f"PVGIS TMY: HTTP-Fehler {e.response.status_code}")
         return None
     except Exception as e:
-        logger.error(f"PVGIS TMY: Fehler für Monat {monat}: {e}")
+        logger.error(f"PVGIS TMY: Fehler für Monat {monat}: {type(e).__name__}: {e}")
         return None
 
 
@@ -505,7 +505,7 @@ async def fetch_open_meteo_forecast(
         logger.error(f"Open-Meteo Forecast: HTTP-Fehler {e.response.status_code}")
         return None
     except Exception as e:
-        logger.error(f"Open-Meteo Forecast: Fehler: {e}")
+        logger.error(f"Open-Meteo Forecast: Fehler: {type(e).__name__}: {e}")
         return None
 
 

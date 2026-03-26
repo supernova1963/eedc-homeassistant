@@ -209,7 +209,7 @@ class GrowattProvider(CloudImportProvider):
                             results.append(month_data)
 
                 except Exception as e:
-                    logger.warning(f"Growatt Jahresdaten {year} fehlgeschlagen: {e}")
+                    logger.warning(f"Growatt Jahresdaten {year} fehlgeschlagen: {type(e).__name__}: {e}")
 
         return results
 
@@ -249,7 +249,7 @@ class GrowattProvider(CloudImportProvider):
             return None
 
         except Exception as e:
-            logger.warning(f"Growatt Login fehlgeschlagen: {e}")
+            logger.warning(f"Growatt Login fehlgeschlagen: {type(e).__name__}: {e}")
             return None
 
     async def _fetch_year_data(

@@ -118,7 +118,7 @@ class HAStatisticsService:
                 )
                 return
             except Exception as e:
-                logger.warning(f"HA Recorder DB Verbindung fehlgeschlagen: {e}")
+                logger.warning(f"HA Recorder DB Verbindung fehlgeschlagen: {type(e).__name__}: {e}")
                 self._engine = None
 
         # Fallback: SQLite-Datei

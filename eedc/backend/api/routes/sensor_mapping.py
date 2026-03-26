@@ -19,6 +19,7 @@ import httpx
 from backend.core.database import get_session
 from backend.core.config import settings
 from backend.models.anlage import Anlage
+from backend.services.activity_service import log_activity
 from backend.models.investition import Investition
 
 
@@ -371,6 +372,14 @@ async def save_sensor_mapping(
                     if isinstance(feld_data, dict) and feld_data.get("strategie") == "sensor":
                         sensor_count += 1
 
+        await log_activity(
+            kategorie="sensor_mapping",
+            aktion="Sensor-Mapping gespeichert",
+            erfolg=True,
+            details=f"{sensor_count} Sensor(en) zugeordnet",
+            anlage_id=anlage_id,
+        )
+
         return SetupResult(
             success=True,
             message=f"Sensor-Mapping gespeichert. {sensor_count} Sensor(en) zugeordnet.",
@@ -395,6 +404,13 @@ async def delete_sensor_mapping(anlage_id: int):
         flag_modified(anlage, "sensor_mapping")
 
         await session.commit()
+
+        await log_activity(
+            kategorie="sensor_mapping",
+            aktion="Sensor-Mapping gelöscht",
+            erfolg=True,
+            anlage_id=anlage_id,
+        )
 
         return {
             "success": True,
