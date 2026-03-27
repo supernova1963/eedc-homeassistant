@@ -42,17 +42,14 @@ def _plausibles_wetter_symbol(
     if bewoelkung_pct is None:
         return symbol
 
-    # Bewölkung < 20% → sonnig, auch wenn WMO-Code cloudy sagt
-    if bewoelkung_pct < 20 and symbol in ("cloudy", "partly_cloudy"):
+    # Bewölkung rein → Symbol bestimmen (unabhängig vom WMO-Code)
+    if bewoelkung_pct < 20:
         return "sunny"
-    # Bewölkung < 40% → höchstens partly_cloudy
-    if bewoelkung_pct < 40 and symbol == "cloudy":
+    if bewoelkung_pct < 40:
         return "mostly_sunny"
-    # Bewölkung > 80% → mindestens cloudy
-    if bewoelkung_pct > 80 and symbol in ("sunny", "mostly_sunny"):
-        return "cloudy"
-
-    return symbol
+    if bewoelkung_pct < 70:
+        return "partly_cloudy"
+    return "cloudy"
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
