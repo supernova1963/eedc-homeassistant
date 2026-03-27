@@ -111,11 +111,15 @@ class LivePowerService:
     @staticmethod
     async def _get_history_normalized(
         entity_ids: list[str], start: datetime, end: datetime,
-    ) -> dict[str, list[tuple[datetime, float]]]:
+    ) -> tuple[dict[str, list[tuple[datetime, float]]], dict[str, str]]:
         """Holt Sensor-History und normalisiert kW→W anhand der Einheit.
 
         HA gibt History-Werte in der suggested_unit zurück (z.B. kW statt W).
         Wir fragen die Einheit pro Entity einmal ab und skalieren alle Punkte.
+
+        Returns:
+            (history, units) — history mit normalisierten W-Werten,
+            units dict für nachgelagerte Einheit-Erkennung (z.B. kWh-Sensoren).
         """
         from backend.services.ha_state_service import get_ha_state_service
         ha_service = get_ha_state_service()
@@ -124,13 +128,13 @@ class LivePowerService:
         units = await ha_service.get_sensor_units(entity_ids)
         history = await ha_service.get_sensor_history(entity_ids, start, end)
 
-        # History-Werte normalisieren
+        # History-Werte normalisieren (nur W/kW/MW — kWh-Sensoren bleiben unverändert)
         for eid, points in history.items():
             factor = _UNIT_TO_W.get(units.get(eid, ""), None)
             if factor is not None and factor != 1.0:
                 history[eid] = [(ts, val * factor) for ts, val in points]
 
-        return history
+        return history, units
 
     @staticmethod
     def _apply_invert_to_history(
@@ -880,12 +884,46 @@ class LivePowerService:
         start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1) if tage_zurueck > 0 else now
 
-        history = await self._get_history_normalized(all_ids, start, end)
+        history, sensor_units = await self._get_history_normalized(all_ids, start, end)
 
         # Vorzeichen-Invertierung auf History anwenden (#58)
         self._apply_invert_to_history(
             history, basis_live, basis_invert, inv_live_map, inv_invert_map
         )
+
+        # kWh-Sensor-Delta: Energie-Sensoren (kWh) liefern kumulative Werte.
+        # Statt Trapez-Integration: Delta = letzter Wert - erster Wert des Tages.
+        def _kwh_delta(pts: list[tuple[datetime, float]]) -> Optional[float]:
+            """Tages-kWh aus kumulativem Sensor via Delta (erster/letzter Wert)."""
+            if not pts:
+                return None
+            val_start = pts[0][1]
+            val_end = pts[-1][1]
+            delta = val_end - val_start
+            # Negativer Delta = Sensor-Reset (z.B. Utility Meter um Mitternacht)
+            # → letzter Wert ist schon der Tageswert
+            if delta < -0.001:
+                return max(0.0, val_end)
+            return max(0.0, delta)
+
+        # Wh-Sensoren auch unterstützen (1 Wh = 0.001 kWh)
+        _KWH_UNITS = {"kWh", "Wh", "MWh"}
+        _KWH_SCALE = {"kWh": 1.0, "Wh": 0.001, "MWh": 1000.0}
+
+        def _is_energy_sensor(eid: str) -> bool:
+            return sensor_units.get(eid, "") in _KWH_UNITS
+
+        def _energy_delta(eid: str) -> Optional[float]:
+            pts = history.get(eid)
+            if not pts:
+                return None
+            scale = _KWH_SCALE.get(sensor_units.get(eid, "kWh"), 1.0)
+            val_start = pts[0][1] * scale
+            val_end = pts[-1][1] * scale
+            delta = val_end - val_start
+            if delta < -0.001:
+                return max(0.0, val_end * scale)
+            return max(0.0, delta)
 
         result: dict[str, Optional[float]] = {}
 
@@ -912,7 +950,10 @@ class LivePowerService:
             for entity_id in entity_ids:
                 if entity_id not in history:
                     continue
-                kwh = self._trapez_kwh(history[entity_id])
+                if _is_energy_sensor(entity_id):
+                    kwh = _energy_delta(entity_id)
+                else:
+                    kwh = self._trapez_kwh(history[entity_id])
                 if kwh is not None:
                     total_kwh += kwh
                     has_data = True
@@ -925,18 +966,28 @@ class LivePowerService:
                 continue
             pts = history[entity_id]
 
-            # Batterie: Ladung/Entladung getrennt berechnen (positiv=Ladung, negativ=Entladung)
+            # Batterie: Ladung/Entladung getrennt berechnen
             if comp_key.startswith("batterie_"):
-                ladung_pts = [(t, max(p, 0)) for t, p in pts]
-                entladung_pts = [(t, abs(min(p, 0))) for t, p in pts]
-                ladung_kwh = self._trapez_kwh(ladung_pts)
-                entladung_kwh = self._trapez_kwh(entladung_pts)
+                if _is_energy_sensor(entity_id):
+                    # kWh-Sensor: Delta direkt nutzen (kein positiv/negativ-Split nötig
+                    # wenn getrennte Sensoren für Laden/Entladen vorhanden sind)
+                    ladung_kwh = _energy_delta(entity_id)
+                    entladung_kwh = None  # Separat konfigurieren wenn nötig
+                else:
+                    # W-Sensor: nach Vorzeichen aufteilen (positiv=Laden, negativ=Entladen)
+                    ladung_pts = [(t, max(p, 0)) for t, p in pts]
+                    entladung_pts = [(t, abs(min(p, 0))) for t, p in pts]
+                    ladung_kwh = self._trapez_kwh(ladung_pts)
+                    entladung_kwh = self._trapez_kwh(entladung_pts)
                 if ladung_kwh is not None:
                     result[f"{comp_key}_ladung"] = round(ladung_kwh, 1)
                 if entladung_kwh is not None:
                     result[f"{comp_key}_entladung"] = round(entladung_kwh, 1)
 
-            kwh = self._trapez_kwh(pts)
+            if _is_energy_sensor(entity_id):
+                kwh = _energy_delta(entity_id)
+            else:
+                kwh = self._trapez_kwh(pts)
             if kwh is not None:
                 result[comp_key] = round(abs(kwh), 1)
 
@@ -1117,7 +1168,7 @@ class LivePowerService:
         if not all_ids:
             return {"serien": [], "punkte": []}
 
-        history = await self._get_history_normalized(all_ids, start, end)
+        history, _ = await self._get_history_normalized(all_ids, start, end)
 
         # Vorzeichen-Invertierung auf History anwenden (#58)
         self._apply_invert_to_history(
@@ -1306,7 +1357,7 @@ class LivePowerService:
         start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids)))
-        history = await self._get_history_normalized(all_ids, start, now)
+        history, _ = await self._get_history_normalized(all_ids, start, now)
 
         # Vorzeichen-Invertierung auf History anwenden (#58)
         self._apply_invert_to_history(
