@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.3] - 2026-03-27
+
+### Behoben
+
+- **Wetter-Symbole plausibilisiert**: WMO weather_code von MeteoSwiss passte nicht zur Bewölkung (z.B. "bewölkt" bei 27%). Symbole werden jetzt anhand der tatsächlichen Bewölkung korrigiert: <20% → Sonne, <40% → Sonne+Wolke, >80% → Wolke.
+- **Migration-Batch Routing-Fehler**: "Übernehmen"-Button auf Investitionen-Seite gab `int_parsing`-Fehler (FastAPI Route-Konflikt).
+
 ## [3.5.2] - 2026-03-27
 
 ### Hinzugefügt
