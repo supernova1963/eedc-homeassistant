@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon, Mountain } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
@@ -46,19 +46,21 @@ function useLiteMode(): [boolean, () => void] {
 // ─── Hintergrund-Variante ────────────────────────────────────────────
 
 const BG_VARIANT_KEY = 'eedc-energiefluss-bg'
-type BgVariant = 'default' | 'sunset'
+type BgVariant = 'default' | 'sunset' | 'alps'
 
 function useBgVariant(): [BgVariant, () => void] {
   const [bgVariant, setBgVariant] = useState<BgVariant>(() => {
     const stored = localStorage.getItem(BG_VARIANT_KEY)
-    return stored === 'sunset' ? 'sunset' : 'default'
+    return (stored === 'sunset' || stored === 'alps') ? stored as BgVariant : 'default'
   })
 
   useEffect(() => {
     localStorage.setItem(BG_VARIANT_KEY, bgVariant)
   }, [bgVariant])
 
-  const toggle = () => setBgVariant(prev => prev === 'default' ? 'sunset' : 'default')
+  const toggle = () => setBgVariant(prev =>
+    prev === 'default' ? 'sunset' : prev === 'sunset' ? 'alps' : 'default'
+  )
   return [bgVariant, toggle]
 }
 
@@ -377,12 +379,18 @@ export default function EnergieFluss({
             className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-colors ${
               bgVariant === 'sunset'
                 ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                : bgVariant === 'alps'
+                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
             }`}
-            title={bgVariant === 'sunset' ? 'Technischen Hintergrund aktivieren' : 'Sonnenuntergang-Hintergrund aktivieren'}
+            title={
+              bgVariant === 'sunset' ? 'Weiter zu: Alpenpanorama' :
+              bgVariant === 'alps'   ? 'Weiter zu: Technisch' :
+                                       'Weiter zu: Sonnenuntergang'
+            }
           >
-            <Sun className="w-3 h-3" />
-            {bgVariant === 'sunset' ? 'Sunset' : 'Tech'}
+            {bgVariant === 'sunset' ? <Sun className="w-3 h-3" /> : bgVariant === 'alps' ? <Mountain className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+            {bgVariant === 'sunset' ? 'Sunset' : bgVariant === 'alps' ? 'Alpen' : 'Tech'}
           </button>
           <button
             type="button"
@@ -637,12 +645,93 @@ export default function EnergieFluss({
               <rect x={-W} y={CY} width={W * 3} height={svgH * 2} />
             </clipPath>
           </>}
+
+          {/* ─── Alps-Variante: Gradients ─── */}
+          {bgVariant === 'alps' && <>
+            {!lite && <style>{`
+              @keyframes cloud-drift {
+                from { transform: translateX(0); }
+                to   { transform: translateX(${W * 0.18}px); }
+              }
+              @keyframes snow-sparkle {
+                0%, 100% { opacity: 0; }
+                50%       { opacity: 0.85; }
+              }
+              @keyframes star-twinkle {
+                0%, 100% { opacity: 0.15; }
+                50%       { opacity: 0.65; }
+              }
+            `}</style>}
+
+            {/* Himmel Light: klares Bergblau oben → dunstiger Horizont */}
+            <linearGradient id="ef-sky-alps-light" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#5ba3d8" />
+              <stop offset="45%"  stopColor="#96c8f0" />
+              <stop offset="100%" stopColor="#d0e8f8" />
+            </linearGradient>
+            {/* Himmel Dark: Nachtgrün / Sternennacht über den Alpen */}
+            <linearGradient id="ef-sky-alps-dark" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#07090a" />
+              <stop offset="40%"  stopColor="#0e1610" />
+              <stop offset="100%" stopColor="#1a2a1c" />
+            </linearGradient>
+
+            {/* Tal-Boden Light: alpines Grün */}
+            <linearGradient id="ef-valley-alps-light" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#6a9870" />
+              <stop offset="100%" stopColor="#3a6040" />
+            </linearGradient>
+            {/* Tal-Boden Dark: dunkler Nadelwald */}
+            <linearGradient id="ef-valley-alps-dark" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#0e1a0e" />
+              <stop offset="100%" stopColor="#060c06" />
+            </linearGradient>
+
+            {/* Zentrum-Glow Light: kühles Blau (Bergluft) */}
+            <radialGradient id="ef-alps-glow-light" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.45} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#60a8e8" stopOpacity="0.30" />
+              <stop offset="35%"  stopColor="#4488c0" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#ffffff"  stopOpacity="0" />
+            </radialGradient>
+            {/* Zentrum-Glow Dark: Mondlicht grün-grau */}
+            <radialGradient id="ef-alps-glow-dark" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.45} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#50a060" stopOpacity="0.18" />
+              <stop offset="35%"  stopColor="#306040" stopOpacity="0.08" />
+              <stop offset="100%" stopColor="#000000"  stopOpacity="0" />
+            </radialGradient>
+
+            {/* Vignette Light: kühle Ränder */}
+            <radialGradient id="ef-vignette-alps-light" cx="50%" cy="50%" r="52%">
+              <stop offset="0%"   stopColor="#ffffff"  stopOpacity="0" />
+              <stop offset="60%"  stopColor="#4a80b0"  stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#1a3050"  stopOpacity="0.30" />
+            </radialGradient>
+            {/* Vignette Dark: dunkelgrüne Ränder */}
+            <radialGradient id="ef-vignette-alps-dark" cx="50%" cy="50%" r="52%">
+              <stop offset="0%"   stopColor="#000000"  stopOpacity="0" />
+              <stop offset="60%"  stopColor="#030a04"  stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#010401"  stopOpacity="0.65" />
+            </radialGradient>
+
+            {/* Schneefunkeln-Maske: Fade nahe Zentrum */}
+            <radialGradient id="ef-alps-fade" cx="50%" cy="30%" r="55%">
+              <stop offset="0%"   stopColor="white" stopOpacity="0.2" />
+              <stop offset="50%"  stopColor="white" stopOpacity="0.7" />
+              <stop offset="100%" stopColor="white" stopOpacity="1" />
+            </radialGradient>
+            <mask id="ef-alps-mask">
+              <rect width={W} height={svgH} fill="url(#ef-alps-fade)" />
+            </mask>
+            <clipPath id="ef-alps-sky-clip">
+              <rect x={-W} y={-svgH} width={W * 3} height={CY + svgH} />
+            </clipPath>
+          </>}
         </defs>
 
         {/* ═══ Hintergrund-Layer ═══ */}
         <g className="pointer-events-none">
           {/* Basis-Hintergrund (Light etwas dunkler für Kontrast) */}
-          {bgVariant !== 'sunset' && <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />}
+          {bgVariant !== 'sunset' && bgVariant !== 'alps' && <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />}
           {/* Sunset: Himmel + Meer — Light Mode */}
           {bgVariant === 'sunset' && <>
             <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-light)" className="opacity-100 dark:opacity-0" />
@@ -654,8 +743,91 @@ export default function EnergieFluss({
             <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-dark)" className="opacity-0 dark:opacity-100" />
           </>}
 
+          {/* Alps: Himmel + Tal + Bergsilhouetten */}
+          {bgVariant === 'alps' && (() => {
+            // Bergpfad-Generator: peaks = [[xFraction, höhe über CY], ...]
+            const mkMtn = (peaks: [number, number][]): string => {
+              const pts: [number, number][] = [
+                [0, CY],
+                ...peaks.map(([xf, h]) => [xf * W, CY - h] as [number, number]),
+                [W, CY],
+              ]
+              let d = `M ${pts[0][0]} ${pts[0][1]}`
+              for (let i = 0; i < pts.length - 2; i++) {
+                const [qx, qy] = pts[i + 1]
+                const nx = (pts[i + 1][0] + pts[i + 2][0]) / 2
+                const ny = (pts[i + 1][1] + pts[i + 2][1]) / 2
+                if (i === 0) d += ` L ${(pts[0][0] + pts[1][0]) / 2} ${(pts[0][1] + pts[1][1]) / 2}`
+                d += ` Q ${qx} ${qy} ${nx} ${ny}`
+              }
+              return d + ` L ${W} ${CY} Z`
+            }
+            // Hintere Bergkette (höchste Gipfel, atmosphärisch)
+            const farPeaks: [number, number][] = [
+              [0.00,45],[0.08,95],[0.17,58],[0.27,128],[0.37,72],
+              [0.47,118],[0.57,65],[0.68,140],[0.78,88],[0.88,110],
+              [0.96,55],[1.00,42],
+            ]
+            // Mittlere Bergkette
+            const midPeaks: [number, number][] = [
+              [0.00,28],[0.07,78],[0.16,44],[0.25,102],[0.34,58],
+              [0.44,88],[0.54,38],[0.64,96],[0.73,56],[0.83,76],
+              [0.92,40],[1.00,24],
+            ]
+            // Vordergrund (dunkelste, niedrigste)
+            const nearPeaks: [number, number][] = [
+              [0.00,16],[0.06,50],[0.14,28],[0.23,64],[0.32,38],
+              [0.43,56],[0.53,22],[0.63,70],[0.72,46],[0.82,60],
+              [0.92,34],[1.00,16],
+            ]
+            // Schneekuppen: Pfad über alle Gipfel > minH
+            const mkSnow = (peaks: [number, number][], minH: number, sz: number) =>
+              peaks.filter(([, h]) => h > minH).map(([xf, h]) => {
+                const px = xf * W, py = CY - h
+                return `M ${px - sz} ${py + sz * 0.55} Q ${px - sz * 0.2} ${py + sz * 0.05} ${px} ${py - sz * 0.3} Q ${px + sz * 0.2} ${py + sz * 0.05} ${px + sz} ${py + sz * 0.55} Q ${px} ${py + sz * 0.3} ${px - sz} ${py + sz * 0.55}`
+              }).join(' ')
+
+            const farPath  = mkMtn(farPeaks)
+            const midPath  = mkMtn(midPeaks)
+            const nearPath = mkMtn(nearPeaks)
+            const snowFar  = mkSnow(farPeaks, 90, 14)
+            const snowMid  = mkSnow(midPeaks, 75, 10)
+
+            return (
+              <>
+                {/* Himmel */}
+                <rect x="0" y="0" width={W} height={CY} fill="url(#ef-sky-alps-light)" className="opacity-100 dark:opacity-0" />
+                <rect x="0" y="0" width={W} height={CY} fill="url(#ef-sky-alps-dark)"  className="opacity-0 dark:opacity-100" />
+                {/* Talboden */}
+                <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-valley-alps-light)" className="opacity-100 dark:opacity-0" />
+                <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-valley-alps-dark)"  className="opacity-0 dark:opacity-100" />
+
+                {/* ── Light Mode Berge ── */}
+                <g className="opacity-100 dark:opacity-0">
+                  <path d={farPath}  fill="#8aafc8" fillOpacity="0.55" />
+                  <path d={midPath}  fill="#4e7898" fillOpacity="0.80" />
+                  <path d={nearPath} fill="#2c5070" fillOpacity="0.95" />
+                  <path d={snowFar}  fill="#eef6ff" fillOpacity="0.88" />
+                  <path d={snowMid}  fill="#f4f9ff" fillOpacity="0.78" />
+                </g>
+                {/* ── Dark Mode Berge: Granit-Grau + Nadelwald-Grün ── */}
+                <g className="opacity-0 dark:opacity-100">
+                  {/* Hintere Kette: Granit-Hellgrau — deutlich vom Himmel abhebend */}
+                  <path d={farPath}  fill="#4a5248" fillOpacity="0.82" />
+                  {/* Mittlere Kette: dunkleres Grau-Grün (Nadelwald-Hänge) */}
+                  <path d={midPath}  fill="#2a3828" fillOpacity="0.93" />
+                  {/* Vordergrund: fast schwarz mit grünem Unterton */}
+                  <path d={nearPath} fill="#141e12" fillOpacity="0.98" />
+                  {/* Mondlichtschnee: kühles Weißgrau */}
+                  <path d={snowFar}  fill="#ccd8c8" fillOpacity="0.82" />
+                  <path d={snowMid}  fill="#baccb8" fillOpacity="0.68" />
+                </g>
+              </>
+            )
+          })()}
+
           {/* ─── Perspektivgitter (Fluchtpunkt = Haus-Zentrum) — nur im Effekt-Modus ─── */}
-          {!lite && bgVariant !== 'sunset' && (
+          {!lite && bgVariant !== 'sunset' && bgVariant !== 'alps' && (
             <g mask="url(#ef-grid-mask)">
               {/* Radiale Strahlen vom Zentrum zu den Rändern */}
               {Array.from({ length: 32 }, (_, i) => {
@@ -828,15 +1000,80 @@ export default function EnergieFluss({
             )
           })()}
 
+          {/* Alps-Gitter: Sonnenstrahlen im Bergkamm-Himmel */}
+          {!lite && bgVariant === 'alps' && (() => {
+            // Sonne sitzt rechts oben (10-Uhr-Position)
+            const sunX = CX + W * 0.22, sunY = CY * 0.28
+            const farR  = Math.max(W, svgH) * 1.1
+            const rays  = Array.from({ length: 14 }, (_, i) => {
+              const angle = -Math.PI * 0.85 + (i / 13) * Math.PI * 0.7
+              return { ex: sunX + Math.cos(angle) * farR, ey: sunY + Math.sin(angle) * farR, isMajor: i % 3 === 0 }
+            })
+            return (
+              <>
+                {/* Light: goldene Sonnenstrahlen */}
+                <g mask="url(#ef-alps-mask)" className="opacity-100 dark:opacity-0">
+                  {rays.map(({ ex, ey, isMajor }, i) => (
+                    <line key={`alray-${i}`} x1={sunX} y1={sunY} x2={ex} y2={ey}
+                      stroke="#f0d060" strokeWidth={isMajor ? farR * 0.10 : farR * 0.05}
+                      strokeOpacity={isMajor ? 0.07 : 0.04} clipPath="url(#ef-alps-sky-clip)" />
+                  ))}
+                  {rays.map(({ ex, ey, isMajor }, i) => (
+                    <line key={`althin-${i}`} x1={sunX} y1={sunY} x2={ex} y2={ey}
+                      stroke="#ffe080" strokeWidth={isMajor ? 0.8 : 0.3}
+                      strokeOpacity={isMajor ? 0.35 : 0.16} clipPath="url(#ef-alps-sky-clip)" />
+                  ))}
+                  {/* Sonnenscheibe */}
+                  <circle cx={sunX} cy={sunY} r={8} fill="#fff8d0" fillOpacity="0.70" clipPath="url(#ef-alps-sky-clip)" />
+                  <circle cx={sunX} cy={sunY} r={14} fill="#ffe060" fillOpacity="0.20" clipPath="url(#ef-alps-sky-clip)" />
+                </g>
+                {/* Dark: Mond + Sterne */}
+                <g mask="url(#ef-alps-mask)" className="opacity-0 dark:opacity-100">
+                  {/* Mondscheibe — warm-weißes Mondlicht */}
+                  <circle cx={sunX} cy={sunY} r={9}  fill="#e8eee4" fillOpacity="0.82" clipPath="url(#ef-alps-sky-clip)" />
+                  <circle cx={sunX} cy={sunY} r={16} fill="#c0cebb" fillOpacity="0.20" clipPath="url(#ef-alps-sky-clip)" />
+                  {/* Mondlicht-Strahlen (grau-grünlich) */}
+                  {rays.map(({ ex, ey, isMajor }, i) => (
+                    <line key={`moon-${i}`} x1={sunX} y1={sunY} x2={ex} y2={ey}
+                      stroke="#90aa88" strokeWidth={isMajor ? 0.9 : 0.35}
+                      strokeOpacity={isMajor ? 0.40 : 0.18} clipPath="url(#ef-alps-sky-clip)" />
+                  ))}
+                  {/* Sterne (weißlich auf dunkelgrünem Himmel) */}
+                  {Array.from({ length: 28 }, (_, i) => {
+                    const sx = (W * 0.05) + (i * W * 0.033) % (W * 0.90)
+                    const sy = (CY * 0.06) + ((i * 47 + 13) % 100) / 100 * CY * 0.75
+                    const sz = i % 5 === 0 ? 1.5 : i % 3 === 0 ? 1.0 : 0.65
+                    return <circle key={`star-${i}`} cx={sx} cy={sy} r={sz} fill="#ddeedd" fillOpacity="0.80" clipPath="url(#ef-alps-sky-clip)" />
+                  })}
+                  {/* Aurora-Hauch (grüne Bänder knapp über den Berggipfeln) */}
+                  {[0, 1, 2].map(i => (
+                    <ellipse key={`aurora-${i}`}
+                      cx={CX + (i - 1) * W * 0.22} cy={CY - 60 - i * 18}
+                      rx={W * (0.22 + i * 0.08)} ry={12 + i * 4}
+                      fill="none" stroke="#4a9060" strokeWidth={6 + i * 3}
+                      strokeOpacity={0.12 + i * 0.03}
+                      filter="url(#ef-ring-glow)"
+                      clipPath="url(#ef-alps-sky-clip)" />
+                  ))}
+                </g>
+              </>
+            )
+          })()}
+
           {/* Radiales Energie-Glow (Default) */}
-          {bgVariant !== 'sunset' && <>
+          {bgVariant === 'default' && <>
             <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-glow-light)" rx="8" />
             <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-glow-dark)" rx="8" />
           </>}
           {/* 3D-Spot unter dem Haus (Default) */}
-          {bgVariant !== 'sunset' && <>
+          {bgVariant === 'default' && <>
             <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-spot-light)" rx="8" />
             <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-spot-dark)" rx="8" />
+          </>}
+          {/* Alps: Bergluft-Glow */}
+          {bgVariant === 'alps' && <>
+            <rect width={W} height={svgH} fill="url(#ef-alps-glow-light)" className="opacity-100 dark:opacity-0" />
+            <rect width={W} height={svgH} fill="url(#ef-alps-glow-dark)"  className="opacity-0 dark:opacity-100" />
           </>}
           {/* Sunset: Sonnen-Glow-Layer Light */}
           {bgVariant === 'sunset' && <>
@@ -1072,8 +1309,52 @@ export default function EnergieFluss({
             ))}
           </>)}
 
+          {/* ─── Alps-Animationen — nur im Effekt-Modus ─── */}
+          {!lite && bgVariant === 'alps' && (<>
+            {/* Wolkenwisps (leichter Drift über den Bergkamm) */}
+            {[0, 1, 2].map(i => {
+              const cy2 = CY * (0.18 + i * 0.18)
+              const x0  = -W * 0.15 + i * W * 0.12
+              return (
+                <g key={`cloud-${i}`} style={{ animation: `cloud-drift ${18 + i * 6}s linear infinite ${i * 4}s` }} clipPath="url(#ef-alps-sky-clip)">
+                  <ellipse cx={x0 + W * 0.1} cy={cy2} rx={W * (0.08 + i * 0.04)} ry={CY * 0.04}
+                    fill="#ffffff" fillOpacity={0.12 + i * 0.04} />
+                  <ellipse cx={x0 + W * 0.14} cy={cy2 - 4} rx={W * (0.05 + i * 0.02)} ry={CY * 0.03}
+                    fill="#ffffff" fillOpacity={0.09 + i * 0.03} />
+                </g>
+              )
+            })}
+            {/* Schneefunkeln auf den Gipfeln (Light + Dark je eigene Farbe) */}
+            {([[0.27,128],[0.68,140],[0.47,118],[0.88,110]] as [number,number][]).map(([xf, h], i) => {
+              const px = xf * W, py = CY - h
+              return (
+                <g key={`snowsp-${i}`}>
+                  <circle cx={px} cy={py} r="1.8" className="opacity-100 dark:opacity-0" fill="#d8eeff"
+                    style={{ animation: `snow-sparkle ${2.5 + i * 0.9}s ease-in-out infinite ${i * 0.7}s` }} />
+                  <circle cx={px} cy={py} r="1.8" className="opacity-0 dark:opacity-100" fill="#c8d8c0"
+                    style={{ animation: `snow-sparkle ${2.5 + i * 0.9}s ease-in-out infinite ${i * 0.7}s` }} />
+                  <circle cx={px - 6} cy={py + 4} r="1.2" className="opacity-100 dark:opacity-0" fill="#e8f4ff"
+                    style={{ animation: `snow-sparkle ${3 + i * 0.7}s ease-in-out infinite ${i * 1.1 + 0.4}s` }} />
+                  <circle cx={px + 5} cy={py + 3} r="1.0" className="opacity-100 dark:opacity-0" fill="#e8f4ff"
+                    style={{ animation: `snow-sparkle ${3.5 + i * 0.6}s ease-in-out infinite ${i * 0.9 + 0.8}s` }} />
+                </g>
+              )
+            })}
+            {/* Sterne animiert (Dark only) */}
+            {Array.from({ length: 12 }, (_, i) => {
+              const sx = W * 0.05 + (i * W * 0.077) % (W * 0.88)
+              const sy = CY * 0.06 + ((i * 53 + 7) % 100) / 100 * CY * 0.70
+              return (
+                <circle key={`astar-${i}`} cx={sx} cy={sy} r={i % 3 === 0 ? 1.2 : 0.7}
+                  fill="#c8dcf0" className="opacity-0 dark:opacity-100"
+                  style={{ animation: `star-twinkle ${2 + i * 0.4}s ease-in-out infinite ${i * 0.3}s` }}
+                  clipPath="url(#ef-alps-sky-clip)" />
+              )
+            })}
+          </>)}
+
           {/* Dezente Achsenlinien (Kreuz durch Zentrum) */}
-          {bgVariant !== 'sunset' && <>
+          {bgVariant !== 'sunset' && bgVariant !== 'alps' && <>
             <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
             <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
           </>}
@@ -1081,9 +1362,13 @@ export default function EnergieFluss({
             <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#ff8c00" strokeWidth="0.5" strokeOpacity={0.18} strokeDasharray="2 6" />
             <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#ffd700" strokeWidth="0.8" strokeOpacity={0.24} strokeDasharray="4 4" />
           </>}
+          {bgVariant === 'alps' && <>
+            <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#7aaad0" strokeWidth="0.5" strokeOpacity={0.20} strokeDasharray="2 6" />
+            <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#88b8d8" strokeWidth="0.6" strokeOpacity={0.18} strokeDasharray="3 5" />
+          </>}
 
           {/* Tiefe-Vignette (dunkelt Ränder ab → 3D-Einbuchtung) — nur im Effekt-Modus */}
-          {!lite && bgVariant !== 'sunset' && (
+          {!lite && bgVariant === 'default' && (
             <>
               <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-vignette-light)" rx="8" />
               <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-vignette-dark)" rx="8" />
@@ -1092,6 +1377,10 @@ export default function EnergieFluss({
           {!lite && bgVariant === 'sunset' && <>
             <rect width={W} height={svgH} fill="url(#ef-vignette-sunset-light)" rx="8" className="opacity-100 dark:opacity-0" />
             <rect width={W} height={svgH} fill="url(#ef-vignette-sunset-dark)"  rx="8" className="opacity-0 dark:opacity-100" />
+          </>}
+          {!lite && bgVariant === 'alps' && <>
+            <rect width={W} height={svgH} fill="url(#ef-vignette-alps-light)" rx="8" className="opacity-100 dark:opacity-0" />
+            <rect width={W} height={svgH} fill="url(#ef-vignette-alps-dark)"  rx="8" className="opacity-0 dark:opacity-100" />
           </>}
         </g>
 
@@ -1235,7 +1524,9 @@ export default function EnergieFluss({
             style={{ fontSize: `${dims.socFontSize}px` }}
             className={bgVariant === 'sunset'
               ? 'fill-amber-800 dark:fill-yellow-400'
-              : 'fill-yellow-500 dark:fill-yellow-400'}
+              : bgVariant === 'alps'
+                ? 'fill-blue-800 dark:fill-blue-300'
+                : 'fill-yellow-500 dark:fill-yellow-400'}
           >
             <title>Summe aller PV-Erzeuger (ohne Batterie/Netz)</title>
             Solarleistung {formatPower(summePv)}
@@ -1248,7 +1539,9 @@ export default function EnergieFluss({
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
             className={bgVariant === 'sunset'
               ? 'fill-purple-800 dark:fill-purple-400'
-              : 'fill-purple-500 dark:fill-purple-400'}
+              : bgVariant === 'alps'
+                ? 'fill-indigo-800 dark:fill-indigo-300'
+                : 'fill-purple-500 dark:fill-purple-400'}
           >
             Solar Soll ~{pvSollKw.toFixed(1)} kW
           </text>
