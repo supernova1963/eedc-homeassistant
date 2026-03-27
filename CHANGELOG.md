@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.9] - 2026-03-27
+
+### Neu
+
+- **Hintergrund-Varianten im Energiefluss-Diagramm**: Neuer Toggle-Button (Tech → Sunset → Alpen) mit automatischer Speicherung der Auswahl.
+  - **Sunset**: Krepuskulare Sonnenstrahlen im Himmel, elliptische Wellenebenen auf dem Meer, goldene Lichtfunken auf dem Wasser — vollständig in Light und Dark Mode.
+  - **Alpen**: Drei Bergketten-Silhouetten mit Schneekuppen. Light Mode mit Sonnenscheibe und goldenen Strahlen. Dark Mode mit Granit-Grau, Nadelwald-Grün, Mondlicht, Sternenhimmel und Aurora-Hauch.
+
 ## [3.5.8] - 2026-03-27
 
 ### Behoben
