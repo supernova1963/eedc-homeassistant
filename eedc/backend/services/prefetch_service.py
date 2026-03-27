@@ -144,8 +144,14 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
             ))
 
     # Wetter-Forecast (für Aussichten kurzfristig)
+    # days=7  → /aussichten/wetter/{id} (default)
+    # days=14 → /aussichten/kurzfristig/{id} (default, Kurzfrist-Prognose)
+    # days=16 → 14-Tage-Ansicht
     coros.append(fetch_open_meteo_forecast(
         anlage.latitude, anlage.longitude, days=7, skip_jitter=True,
+    ))
+    coros.append(fetch_open_meteo_forecast(
+        anlage.latitude, anlage.longitude, days=14, skip_jitter=True,
     ))
     coros.append(fetch_open_meteo_forecast(
         anlage.latitude, anlage.longitude, days=16, skip_jitter=True,
