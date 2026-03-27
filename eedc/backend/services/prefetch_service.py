@@ -2,7 +2,7 @@
 Prefetch-Service für Solar- und Wetterprognosen.
 
 Füllt den In-Memory-Cache proaktiv im Hintergrund, damit
-Aussichten-Seiten sofort bedient werden können.
+Aussichten-Seiten und das Live-Wetter-Widget sofort bedient werden können.
 Läuft alle 45 Minuten (innerhalb des 60-Min Cache-TTL).
 """
 
@@ -10,8 +10,10 @@ import asyncio
 import logging
 import random
 
+import httpx
 from sqlalchemy import select
 
+from backend.core.config import settings
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
@@ -22,7 +24,7 @@ from backend.services.solar_forecast_service import (
     PVStringConfig,
     DEFAULT_SYSTEM_LOSSES,
 )
-from backend.services.wetter_service import fetch_open_meteo_forecast
+from backend.services.wetter_service import fetch_open_meteo_forecast, _cache_get, _cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +151,68 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
         anlage.latitude, anlage.longitude, days=16, skip_jitter=True,
     ))
 
+    # Live-Wetter (für WetterWidget auf Live-Seite)
+    haupt_neigung = strings[0].neigung if strings else 35
+    haupt_azimut = strings[0].ausrichtung if strings else 0
+    hat_multi = len(unique_orientations) > 1
+    coros.append(_prefetch_live_wetter(
+        anlage.latitude, anlage.longitude,
+        haupt_neigung, haupt_azimut, hat_multi,
+    ))
+
     await asyncio.gather(*coros, return_exceptions=True)
 
     return {"status": "ok", "strings": len(strings), "multi": has_multi}
+
+
+async def _prefetch_live_wetter(
+    latitude: float, longitude: float,
+    neigung: int, azimut: int, hat_multi: bool,
+) -> None:
+    """
+    Prefetcht Live-Wetter-Daten (gleicher Cache-Key wie der Endpoint).
+
+    Füllt den Cache mit den gleichen Parametern wie /api/live/{id}/wetter,
+    damit der erste Seitenaufruf sofort bedient werden kann.
+    """
+    LIVE_WETTER_CACHE_TTL = 300  # 5 Minuten (wie im Endpoint)
+    cache_key = (
+        f"live_wetter:{latitude:.2f}:{longitude:.2f}"
+        f":{neigung}:{azimut}:multi={hat_multi}"
+    )
+
+    # Nur holen wenn nicht bereits im Cache
+    if _cache_get(cache_key) is not None:
+        return
+
+    hourly_vars = [
+        "temperature_2m", "weather_code", "cloud_cover",
+        "precipitation", "shortwave_radiation",
+    ]
+    if not hat_multi:
+        hourly_vars.append("global_tilted_irradiance")
+
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "hourly": ",".join(hourly_vars),
+        "daily": "sunshine_duration,temperature_2m_max,temperature_2m_min,sunrise,sunset",
+        "timezone": "Europe/Berlin",
+        "forecast_days": 1,
+    }
+    if not hat_multi:
+        params["tilt"] = neigung
+        params["azimuth"] = azimut
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{settings.open_meteo_api_url}/forecast", params=params
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        _cache_set(cache_key, (data, None), LIVE_WETTER_CACHE_TTL)
+        logger.debug(f"Live-Wetter Prefetch: {latitude:.2f}/{longitude:.2f}")
+    except Exception as e:
+        logger.debug(f"Live-Wetter Prefetch fehlgeschlagen: {e}")
