@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.1] - 2026-03-27
+
+### Hinzugefügt
+
+- **Kaskadierender 2-Stufen-Cache (L1/L2)**: Persistenter SQLite-Cache unter dem RAM-Cache für Wetter- und Solar-Daten. Erster Seitenaufruf nach Server-Neustart wird sofort aus L2 bedient (~5ms statt 5-30s). Startup-Warmup lädt L2 direkt nach DB-Init in L1. Cleanup-Job täglich um 04:00 + Fallback beim Boot.
+- **Live-Wetter Prefetch**: Das WetterWidget auf der Live-Seite wird jetzt proaktiv alle 45 Min vom Prefetch-Service vorgeladen (bisher nur on-demand bei Client-Aufruf).
+- **Wärmepumpenart (wp_art)**: Neues Dropdown im WP-Investitions-Formular (Luft-Wasser, Sole-Wasser, Grundwasser, Luft-Luft). Wird beim Community-Share mitgesendet für fairen JAZ-Vergleich nach WP-Art. Auslöser: Rainer-Feedback.
+
+### Geändert (Community-Server)
+
+- **JAZ-Benchmark nach WP-Art**: Community-Vergleich zeigt zusätzlich den typ-spezifischen Durchschnitt (z.B. Ø Luft-Wasser: 3.0 statt nur Ø Alle: 3.8).
+- **Neuer Endpoint** `GET /api/components/waermepumpe/by-art`: JAZ-Statistiken gruppiert nach Wärmepumpenart.
+
 ## [3.5.0] - 2026-03-26
 
 ### Hinzugefügt
