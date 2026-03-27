@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.6] - 2026-03-27
+
+### Behoben
+
+- **Live Dashboard Batterie kWh zu hoch (#64)**: Energie-Sensoren (kWh/Wh/MWh) wurden bisher nochmals über Zeit integriert → massiv überhöhte Werte. Automatische Erkennung: wenn ein Sensor kWh meldet, wird `heute = aktueller_Wert − Mitternacht` berechnet. Keine Mapping-Änderung nötig.
+
 ## [3.5.5] - 2026-03-27
 
 ### Behoben
