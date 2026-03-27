@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.7] - 2026-03-27
+
+### Behoben
+
+- **Wärmepumpenart im Investitionsformular (#63)**: Das Dropdown "Wärmepumpenart" (Luft-Wasser, Sole-Wasser, Grundwasser, Luft-Luft) war im Backend bereits definiert, fehlte aber im Frontend-Formular. Jetzt sichtbar unter Investitionen → Wärmepumpe.
+- **Historische Tarife in Finanzauswertung (#63)**: Tarif-Auflösung komplett ins Frontend verlagert — alle Stromtarife werden geladen und pro Monat der zum 1. des Monats gültige Tarif verwendet. Funktioniert jetzt auch ohne Investitions-Komponenten.
+
 ## [3.5.6] - 2026-03-27
 
 ### Behoben
