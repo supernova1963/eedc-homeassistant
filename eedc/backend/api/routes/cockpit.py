@@ -333,21 +333,37 @@ async def get_cockpit_uebersicht(
     # Finanzen
     # ==========================================================================
 
-    # Gewichteter Ø-Netzbezugspreis (für dynamische Tarife)
-    gew_preis_sum = sum(
-        resolve_netzbezug_preis_cent(m, netzbezug_preis_cent) * (m.netzbezug_kwh or 0)
-        for m in monatsdaten_list
-    )
-    gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in monatsdaten_list)
+    # Gewichteter Ø-Netzbezugspreis + Netzbezugkosten pro Monat mit historischem Tarif
+    # Tarif-Cache: {date -> tarife-dict} um pro Monat nur einmal abzufragen
+    _tarif_cache: dict[date, dict] = {}
+
+    async def _tarif_fuer_monat(m: Monatsdaten) -> dict:
+        stichtag = date(m.jahr, m.monat, 1)
+        if stichtag not in _tarif_cache:
+            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag)
+        return _tarif_cache[stichtag]
+
+    gew_preis_sum = 0.0
+    gew_kwh_sum = 0.0
+    netzbezug_kosten = 0.0
+    einspeise_erloes_sum = 0.0
+
+    for m in monatsdaten_list:
+        m_tarife = await _tarif_fuer_monat(m)
+        m_allgemein = m_tarife.get("allgemein")
+        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else 30.0
+        m_grundpreis = (m_allgemein.grundpreis_euro_monat or 0) if m_allgemein else 0
+        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else 8.2
+        eff_preis = resolve_netzbezug_preis_cent(m, m_preis_cent)
+        kwh = m.netzbezug_kwh or 0
+        gew_preis_sum += eff_preis * kwh
+        gew_kwh_sum += kwh
+        netzbezug_kosten += kwh * eff_preis / 100 + m_grundpreis
+        einspeise_erloes_sum += (m.einspeisung_kwh or 0) * m_einspeis_cent / 100
+
     eff_netzbezug_preis = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else netzbezug_preis_cent
 
-    grundpreis = allgemein_tarif.grundpreis_euro_monat or 0 if allgemein_tarif else 0
-    netzbezug_kosten = sum(
-        (m.netzbezug_kwh or 0) * resolve_netzbezug_preis_cent(m, netzbezug_preis_cent) / 100 + grundpreis
-        for m in monatsdaten_list
-    )
-
-    einspeise_erloes = einspeisung * einspeise_verguetung_cent / 100
+    einspeise_erloes = einspeise_erloes_sum
     ev_ersparnis = eigenverbrauch * eff_netzbezug_preis / 100
     netto_ertrag = einspeise_erloes + ev_ersparnis
 

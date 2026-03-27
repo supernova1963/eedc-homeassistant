@@ -64,19 +64,27 @@ class StrompreisResponse(StrompreisBase):
 # Helper: Tarife nach Verwendung laden
 # =============================================================================
 
-async def lade_tarife_fuer_anlage(db: AsyncSession, anlage_id: int) -> dict[str, Strompreis | None]:
+async def lade_tarife_fuer_anlage(
+    db: AsyncSession,
+    anlage_id: int,
+    target_date: Optional[date] = None,
+) -> dict[str, Strompreis | None]:
     """
-    Lädt die aktuell gültigen Tarife nach Verwendung.
+    Lädt die zum target_date gültigen Tarife nach Verwendung.
+
+    Args:
+        target_date: Stichtag für den Tarif (default: heute).
+                     Für historische Berechnungen den 1. des jeweiligen Monats übergeben.
 
     Returns:
         Dict mit Keys 'allgemein', 'waermepumpe', 'wallbox'.
         WP/Wallbox fallen auf allgemein zurück wenn kein Spezialtarif existiert.
     """
-    today = date.today()
+    stichtag = target_date or date.today()
     query = select(Strompreis).where(
         Strompreis.anlage_id == anlage_id,
-        Strompreis.gueltig_ab <= today,
-        (Strompreis.gueltig_bis.is_(None) | (Strompreis.gueltig_bis >= today))
+        Strompreis.gueltig_ab <= stichtag,
+        (Strompreis.gueltig_bis.is_(None) | (Strompreis.gueltig_bis >= stichtag))
     ).order_by(Strompreis.gueltig_ab.desc())
 
     result = await db.execute(query)

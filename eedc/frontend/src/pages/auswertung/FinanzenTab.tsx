@@ -83,15 +83,16 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
   }, [zeitreihe, sonstigeByMonth])
 
   // Gesamt-Finanzen (inkl. Sonderkosten)
+  // netzbezugKosten aus Monatssummen — dort wird pro Monat inkl. Grundpreis gerechnet
   const gesamt = useMemo(() => {
-    const einspeiseErloes = stats.gesamtEinspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
-    const netzbezugKosten = stats.gesamtNetzbezug * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
-    const eigenverbrauchErsparnis = stats.gesamtEigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+    const einspeiseErloes = zeitreihe.reduce((s, z) => s + z.einspeise_erloes, 0)
+    const netzbezugKosten = zeitreihe.reduce((s, z) => s + z.netzbezug_kosten, 0)
+    const eigenverbrauchErsparnis = zeitreihe.reduce((s, z) => s + z.ev_ersparnis, 0)
     const sonderkosten = chartDataWithKumuliert.reduce((sum, z) => sum + (z.sonderkosten || 0), 0)
     const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
     const nettoNachSonderkosten = nettoErtrag - sonderkosten
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag, sonderkosten, nettoNachSonderkosten }
-  }, [stats, strompreis, chartDataWithKumuliert])
+  }, [zeitreihe, chartDataWithKumuliert])
 
   // CSV Export
   const handleExportCSV = () => {
@@ -150,12 +151,12 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
           title="Netzbezug-Kosten"
           value={gesamt.netzbezugKosten.toFixed(0)}
           unit="€"
-          subtitle={`${strompreis.netzbezug_arbeitspreis_cent_kwh.toFixed(1)} ct/kWh`}
+          subtitle="inkl. Grundpreis, historische Tarife"
           icon={Euro}
           color="text-red-500"
           bgColor="bg-red-50 dark:bg-red-900/20"
-          formel="Netzbezug × Netzbezugspreis"
-          berechnung={`${fmtCalc(stats.gesamtNetzbezug, 0)} kWh × ${fmtCalc(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh`}
+          formel="Σ (Netzbezug × Tarif + Grundpreis) pro Monat"
+          berechnung={`${fmtCalc(stats.gesamtNetzbezug, 0)} kWh gesamt`}
           ergebnis={`= ${fmtCalc(gesamt.netzbezugKosten, 2)} €`}
         />
         <KPICard
