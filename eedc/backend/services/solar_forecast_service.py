@@ -22,6 +22,37 @@ from math import radians, sin, cos
 from typing import Optional, List
 
 from backend.services.wetter_service import wetter_code_zu_symbol, _cache_get, _cache_set, FORECAST_CACHE_TTL, JITTER_MAX_SECONDS
+
+
+def _plausibles_wetter_symbol(
+    symbol: str,
+    bewoelkung_pct: Optional[float],
+    niederschlag_mm: Optional[float],
+) -> str:
+    """
+    Korrigiert das WMO-basierte Wetter-Symbol anhand der tatsächlichen Bewölkung.
+
+    Manche Modelle (z.B. MeteoSwiss) liefern weather_code inkonsistent zur
+    gemessenen Bewölkung. Diese Funktion plausibilisiert das Symbol.
+    """
+    # Niederschlag hat Vorrang — Symbol nicht überschreiben
+    if niederschlag_mm is not None and niederschlag_mm > 0.5:
+        return symbol
+
+    if bewoelkung_pct is None:
+        return symbol
+
+    # Bewölkung < 20% → sonnig, auch wenn WMO-Code cloudy sagt
+    if bewoelkung_pct < 20 and symbol in ("cloudy", "partly_cloudy"):
+        return "sunny"
+    # Bewölkung < 40% → höchstens partly_cloudy
+    if bewoelkung_pct < 40 and symbol == "cloudy":
+        return "mostly_sunny"
+    # Bewölkung > 80% → mindestens cloudy
+    if bewoelkung_pct > 80 and symbol in ("sunny", "mostly_sunny"):
+        return "cloudy"
+
+    return symbol
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -577,7 +608,11 @@ def _build_prognose(
             ),
             niederschlag_mm=daily_precip[i] if i < len(daily_precip) else None,
             schnee_cm=daily_snow[i] if i < len(daily_snow) else None,
-            wetter_symbol=wetter_code_zu_symbol(daily_weather_code[i] if i < len(daily_weather_code) else None),
+            wetter_symbol=_plausibles_wetter_symbol(
+                wetter_code_zu_symbol(daily_weather_code[i] if i < len(daily_weather_code) else None),
+                round(sum(day.get("cloud_values", [])) / len(day["cloud_values"])) if day.get("cloud_values") else None,
+                daily_precip[i] if i < len(daily_precip) else None,
+            ),
             pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
             pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
             datenquelle=datenquelle_tag,
