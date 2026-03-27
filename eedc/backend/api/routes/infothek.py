@@ -645,16 +645,6 @@ async def get_migration_status(
     return await check_migration_status(db, anlage_id)
 
 
-@router.post("/migration/{investition_id}")
-async def migrate_stammdaten(
-    investition_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    """Migriert stamm_*-Daten einer Investition in Infothek-Einträge."""
-    created = await migrate_investition(db, investition_id)
-    return {"created": created, "count": len(created)}
-
-
 @router.post("/migration/batch")
 async def migrate_all(
     anlage_id: int = Query(..., description="Anlage-ID"),
@@ -667,6 +657,16 @@ async def migrate_all(
         created = await migrate_investition(db, inv["id"])
         total_created.extend(created)
     return {"created": total_created, "count": len(total_created)}
+
+
+@router.post("/migration/{investition_id}")
+async def migrate_stammdaten(
+    investition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Migriert stamm_*-Daten einer Investition in Infothek-Einträge."""
+    created = await migrate_investition(db, investition_id)
+    return {"created": created, "count": len(created)}
 
 
 # =============================================================================
