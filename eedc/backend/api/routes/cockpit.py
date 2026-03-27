@@ -939,6 +939,10 @@ class KomponentenMonat(BaseModel):
     sonstige_ausgaben_euro: float = 0
     sonstige_netto_euro: float = 0
 
+    # Finanzen mit historisch korrektem Tarif
+    netzbezug_kosten_euro: float = 0
+    einspeise_erloes_euro: float = 0
+
 
 class KomponentenZeitreiheResponse(BaseModel):
     """Zeitreihe aller Komponenten für Auswertungen."""
@@ -1023,6 +1027,15 @@ async def get_komponenten_zeitreihe(
 
     imd_result = await db.execute(imd_query)
     all_imd = imd_result.scalars().all()
+
+    # Monatsdaten laden für historische Finanzkennzahlen
+    md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+    if jahr is not None:
+        md_query = md_query.where(Monatsdaten.jahr == jahr)
+    md_result = await db.execute(md_query)
+    monatsdaten_by_key: dict[tuple[int, int], Monatsdaten] = {
+        (m.jahr, m.monat): m for m in md_result.scalars().all()
+    }
 
     inv_by_id = {i.id: i for i in investitionen}
 
@@ -1129,6 +1142,8 @@ async def get_komponenten_zeitreihe(
 
     # Monatswerte erstellen
     monatswerte = []
+    _tarif_cache_kz: dict[date, dict] = {}
+
     for key in sorted(inv_data_by_month.keys()):
         jahr, monat = key
         d = inv_data_by_month[key]
@@ -1147,6 +1162,24 @@ async def get_komponenten_zeitreihe(
         emob_pv_anteil = (
             d["emob_pv_ladung"] / d["emob_ladung"] * 100
         ) if d["emob_ladung"] > 0 else None
+
+        # Historisch korrekte Finanzkennzahlen
+        stichtag = date(jahr, monat, 1)
+        if stichtag not in _tarif_cache_kz:
+            _tarif_cache_kz[stichtag] = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag)
+        m_tarife = _tarif_cache_kz[stichtag]
+        m_allgemein = m_tarife.get("allgemein")
+        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else 30.0
+        m_grundpreis = (m_allgemein.grundpreis_euro_monat or 0) if m_allgemein else 0
+        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else 8.2
+        md = monatsdaten_by_key.get((jahr, monat))
+        if md:
+            eff_preis = resolve_netzbezug_preis_cent(md, m_preis_cent)
+            m_netzbezug_kosten = (md.netzbezug_kwh or 0) * eff_preis / 100 + m_grundpreis
+            m_einspeise_erloes = (md.einspeisung_kwh or 0) * m_einspeis_cent / 100
+        else:
+            m_netzbezug_kosten = 0.0
+            m_einspeise_erloes = 0.0
 
         monatswerte.append(KomponentenMonat(
             jahr=jahr,
@@ -1186,6 +1219,9 @@ async def get_komponenten_zeitreihe(
             sonstige_ertraege_euro=round(d["sonstige_ertraege"], 2),
             sonstige_ausgaben_euro=round(d["sonstige_ausgaben"], 2),
             sonstige_netto_euro=round(d["sonstige_ertraege"] - d["sonstige_ausgaben"], 2),
+            # Finanzen mit historisch korrektem Tarif
+            netzbezug_kosten_euro=round(m_netzbezug_kosten, 2),
+            einspeise_erloes_euro=round(m_einspeise_erloes, 2),
         ))
 
     return KomponentenZeitreiheResponse(

@@ -51,30 +51,40 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
     [data, strompreis]
   )
 
-  // Sonderkosten nach Jahr/Monat mappen
+  // Sonderkosten + historische Finanzwerte nach Jahr/Monat mappen
   const sonstigeByMonth = useMemo(() => {
-    const map = new Map<string, { ertraege: number; ausgaben: number; netto: number }>()
+    const map = new Map<string, { ertraege: number; ausgaben: number; netto: number; netzbezug_kosten: number; einspeise_erloes: number }>()
     sonderkostenData?.monatswerte?.forEach(m => {
       const key = `${m.jahr}-${m.monat}`
       map.set(key, {
         ertraege: m.sonstige_ertraege_euro || 0,
         ausgaben: m.sonstige_ausgaben_euro || 0,
         netto: m.sonstige_netto_euro || 0,
+        netzbezug_kosten: m.netzbezug_kosten_euro || 0,
+        einspeise_erloes: m.einspeise_erloes_euro || 0,
       })
     })
     return map
   }, [sonderkostenData])
 
   // Kumulierte Werte berechnen (inkl. sonstige Erträge/Ausgaben)
+  // netzbezug_kosten + einspeise_erloes aus Backend-Daten wenn verfügbar (historisch korrekte Tarife)
   const chartDataWithKumuliert = useMemo(() => {
     let kumuliert = 0
     return zeitreihe.map(z => {
-      const sonstige = sonstigeByMonth.get(`${z.jahr}-${z.monat}`)
-      const sonderkosten = sonstige?.ausgaben || 0
-      const nettoMitSonderkosten = z.netto_ertrag + (sonstige?.netto || 0)
+      const hist = sonstigeByMonth.get(`${z.jahr}-${z.monat}`)
+      const sonderkosten = hist?.ausgaben || 0
+      const netzbezug_kosten = hist?.netzbezug_kosten ?? z.netzbezug_kosten
+      const einspeise_erloes = hist?.einspeise_erloes ?? z.einspeise_erloes
+      const ev_ersparnis = z.ev_ersparnis
+      const netto_ertrag = einspeise_erloes + ev_ersparnis
+      const nettoMitSonderkosten = netto_ertrag + (hist?.netto || 0)
       kumuliert += nettoMitSonderkosten
       return {
         ...z,
+        netzbezug_kosten,
+        einspeise_erloes,
+        netto_ertrag,
         sonderkosten,
         netto_nach_sonderkosten: nettoMitSonderkosten,
         kumuliert_ertrag: kumuliert
@@ -82,17 +92,16 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
     })
   }, [zeitreihe, sonstigeByMonth])
 
-  // Gesamt-Finanzen (inkl. Sonderkosten)
-  // netzbezugKosten aus Monatssummen — dort wird pro Monat inkl. Grundpreis gerechnet
+  // Gesamt-Finanzen aus den bereits korrigierten Monatswerten
   const gesamt = useMemo(() => {
-    const einspeiseErloes = zeitreihe.reduce((s, z) => s + z.einspeise_erloes, 0)
-    const netzbezugKosten = zeitreihe.reduce((s, z) => s + z.netzbezug_kosten, 0)
-    const eigenverbrauchErsparnis = zeitreihe.reduce((s, z) => s + z.ev_ersparnis, 0)
+    const einspeiseErloes = chartDataWithKumuliert.reduce((s, z) => s + z.einspeise_erloes, 0)
+    const netzbezugKosten = chartDataWithKumuliert.reduce((s, z) => s + z.netzbezug_kosten, 0)
+    const eigenverbrauchErsparnis = chartDataWithKumuliert.reduce((s, z) => s + z.ev_ersparnis, 0)
     const sonderkosten = chartDataWithKumuliert.reduce((sum, z) => sum + (z.sonderkosten || 0), 0)
     const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
     const nettoNachSonderkosten = nettoErtrag - sonderkosten
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag, sonderkosten, nettoNachSonderkosten }
-  }, [zeitreihe, chartDataWithKumuliert])
+  }, [chartDataWithKumuliert])
 
   // CSV Export
   const handleExportCSV = () => {

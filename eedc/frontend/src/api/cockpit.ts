@@ -182,6 +182,10 @@ export interface KomponentenMonat {
   sonstige_ertraege_euro: number
   sonstige_ausgaben_euro: number
   sonstige_netto_euro: number
+
+  // Finanzen mit historisch korrektem Tarif
+  netzbezug_kosten_euro: number
+  einspeise_erloes_euro: number
 }
 
 export interface KomponentenZeitreihe {
