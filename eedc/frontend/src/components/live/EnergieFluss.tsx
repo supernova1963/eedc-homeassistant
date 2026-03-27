@@ -43,6 +43,25 @@ function useLiteMode(): [boolean, () => void] {
   return [lite, toggle]
 }
 
+// ─── Hintergrund-Variante ────────────────────────────────────────────
+
+const BG_VARIANT_KEY = 'eedc-energiefluss-bg'
+type BgVariant = 'default' | 'sunset'
+
+function useBgVariant(): [BgVariant, () => void] {
+  const [bgVariant, setBgVariant] = useState<BgVariant>(() => {
+    const stored = localStorage.getItem(BG_VARIANT_KEY)
+    return stored === 'sunset' ? 'sunset' : 'default'
+  })
+
+  useEffect(() => {
+    localStorage.setItem(BG_VARIANT_KEY, bgVariant)
+  }, [bgVariant])
+
+  const toggle = () => setBgVariant(prev => prev === 'default' ? 'sunset' : 'default')
+  return [bgVariant, toggle]
+}
+
 // ─── Shared Utilities (aus EnergieBilanz) ───────────────────────────
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -304,6 +323,7 @@ export default function EnergieFluss({
   netzPufferW = 100,
 }: EnergieFlussProps) {
   const [lite, toggleLite] = useLiteMode()
+  const [bgVariant, toggleBgVariant] = useBgVariant()
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerW, setContainerW] = useState(W_DEFAULT)
 
@@ -350,18 +370,34 @@ export default function EnergieFluss({
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           Energiefluss
         </h3>
-        <button
-          onClick={toggleLite}
-          className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-colors ${
-            lite
-              ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-              : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-          }`}
-          title={lite ? 'Effekte aktivieren (mehr Animationen)' : 'Lite-Modus (weniger Animationen, besser für Mobile)'}
-        >
-          {lite ? <ZapIcon className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
-          {lite ? 'Lite' : 'Effekte'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={toggleBgVariant}
+            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+              bgVariant === 'sunset'
+                ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+            }`}
+            title={bgVariant === 'sunset' ? 'Technischen Hintergrund aktivieren' : 'Sonnenuntergang-Hintergrund aktivieren'}
+          >
+            <Sun className="w-3 h-3" />
+            {bgVariant === 'sunset' ? 'Sunset' : 'Tech'}
+          </button>
+          <button
+            type="button"
+            onClick={toggleLite}
+            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+              lite
+                ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+            }`}
+            title={lite ? 'Effekte aktivieren (mehr Animationen)' : 'Lite-Modus (weniger Animationen, besser für Mobile)'}
+          >
+            {lite ? <ZapIcon className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+            {lite ? 'Lite' : 'Effekte'}
+          </button>
+        </div>
       </div>
 
       <svg
@@ -483,15 +519,136 @@ export default function EnergieFluss({
               </filter>
             </>
           )}
+
+          {/* ─── Sunset-Variante: Gradients ─── */}
+          {bgVariant === 'sunset' && <>
+            {!lite && <style>{`
+              @keyframes pulse-ring-sunset {
+                0%, 100% { opacity: 0.20; }
+                50% { opacity: 0.06; }
+              }
+              @keyframes sunset-stream {
+                from { stroke-dashoffset: 0; }
+                to { stroke-dashoffset: -60; }
+              }
+              @keyframes shimmer {
+                0%, 100% { opacity: 0.12; }
+                50% { opacity: 0.30; }
+              }
+            `}</style>}
+
+            {/* ── Dark Mode: Himmel dunkel-lila → warmes Orange am Horizont ── */}
+            <linearGradient id="ef-sky-sunset-dark" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#0f0520" />
+              <stop offset="30%"  stopColor="#2d1b4e" />
+              <stop offset="70%"  stopColor="#7b2d00" />
+              <stop offset="100%" stopColor="#c84b11" />
+            </linearGradient>
+            {/* ── Dark Mode: Meer dunkles Kupfer → tiefes Marineblau ── */}
+            <linearGradient id="ef-sea-sunset-dark" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#5c2a00" />
+              <stop offset="40%"  stopColor="#0a1a3a" />
+              <stop offset="100%" stopColor="#030d1e" />
+            </linearGradient>
+
+            {/* ── Light Mode: Himmel hellblau → Pfirsich → warmes Orange ── */}
+            <linearGradient id="ef-sky-sunset-light" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#c8dff5" />
+              <stop offset="35%"  stopColor="#f7d8b0" />
+              <stop offset="75%"  stopColor="#f5a040" />
+              <stop offset="100%" stopColor="#e8731a" />
+            </linearGradient>
+            {/* ── Light Mode: Meer goldene Spiegelung → Türkis → tieferes Blaugrün ── */}
+            <linearGradient id="ef-sea-sunset-light" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#e8b86a" />
+              <stop offset="30%"  stopColor="#5bbdc8" />
+              <stop offset="100%" stopColor="#2f8a9a" />
+            </linearGradient>
+
+            {/* ── Sonnen-Glow Dark ── */}
+            <radialGradient id="ef-sun-glow-dark" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.35} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#ffd700" stopOpacity="0.55" />
+              <stop offset="15%"  stopColor="#ff8c00" stopOpacity="0.30" />
+              <stop offset="40%"  stopColor="#c84b11" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+            </radialGradient>
+            {/* ── Sonnen-Glow Light ── */}
+            <radialGradient id="ef-sun-glow-light" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.35} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#ffd700" stopOpacity="0.65" />
+              <stop offset="15%"  stopColor="#ff8c00" stopOpacity="0.35" />
+              <stop offset="45%"  stopColor="#f5a040" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#ffffff"  stopOpacity="0" />
+            </radialGradient>
+
+            {/* ── Atmosphärisches Leuchten Dark ── */}
+            <radialGradient id="ef-sun-atmo-dark" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.65} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#ff6b00" stopOpacity="0.18" />
+              <stop offset="35%"  stopColor="#ff4500" stopOpacity="0.08" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+            </radialGradient>
+            {/* ── Atmosphärisches Leuchten Light ── */}
+            <radialGradient id="ef-sun-atmo-light" cx={CX} cy={CY} r={Math.max(W, svgH) * 0.65} gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#ff8c00" stopOpacity="0.22" />
+              <stop offset="35%"  stopColor="#ffa040" stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#ffffff"  stopOpacity="0" />
+            </radialGradient>
+
+            {/* ── Innerer Sonnen-Spot Dark ── */}
+            <radialGradient id="ef-sun-spot-dark" cx={CX} cy={CY} r="70" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#ffd700" stopOpacity="0.45" />
+              <stop offset="60%"  stopColor="#ffa500" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#ffa500" stopOpacity="0" />
+            </radialGradient>
+            {/* ── Innerer Sonnen-Spot Light ── */}
+            <radialGradient id="ef-sun-spot-light" cx={CX} cy={CY} r="70" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#ffd700" stopOpacity="0.55" />
+              <stop offset="60%"  stopColor="#ffb020" stopOpacity="0.20" />
+              <stop offset="100%" stopColor="#ffb020" stopOpacity="0" />
+            </radialGradient>
+
+            {/* ── Vignette Dark (Ränder lila-dunkel) ── */}
+            <radialGradient id="ef-vignette-sunset-dark" cx="50%" cy="50%" r="52%">
+              <stop offset="0%"   stopColor="#000000" stopOpacity="0" />
+              <stop offset="65%"  stopColor="#1a0533"  stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#0a0015"  stopOpacity="0.55" />
+            </radialGradient>
+            {/* ── Vignette Light (Ränder warm-beige) ── */}
+            <radialGradient id="ef-vignette-sunset-light" cx="50%" cy="50%" r="52%">
+              <stop offset="0%"   stopColor="#ffffff"  stopOpacity="0" />
+              <stop offset="60%"  stopColor="#c87820"  stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#8b4010"  stopOpacity="0.28" />
+            </radialGradient>
+
+            {/* Grid-Fade-Maske für Sunset-Perspektivgitter */}
+            <radialGradient id="ef-grid-fade-s" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"   stopColor="white" stopOpacity="0" />
+              <stop offset="25%"  stopColor="white" stopOpacity="0.3" />
+              <stop offset="60%"  stopColor="white" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="white" stopOpacity="1" />
+            </radialGradient>
+            <mask id="ef-grid-mask-s">
+              <rect width={W} height={svgH} fill="url(#ef-grid-fade-s)" />
+            </mask>
+          </>}
         </defs>
 
         {/* ═══ Hintergrund-Layer ═══ */}
         <g className="pointer-events-none">
           {/* Basis-Hintergrund (Light etwas dunkler für Kontrast) */}
-          <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />
+          {bgVariant !== 'sunset' && <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />}
+          {/* Sunset: Himmel + Meer — Light Mode */}
+          {bgVariant === 'sunset' && <>
+            <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-light)" className="opacity-100 dark:opacity-0" />
+            <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-light)" className="opacity-100 dark:opacity-0" />
+          </>}
+          {/* Sunset: Himmel + Meer — Dark Mode */}
+          {bgVariant === 'sunset' && <>
+            <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-dark)" className="opacity-0 dark:opacity-100" />
+            <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-dark)" className="opacity-0 dark:opacity-100" />
+          </>}
 
           {/* ─── Perspektivgitter (Fluchtpunkt = Haus-Zentrum) — nur im Effekt-Modus ─── */}
-          {!lite && (
+          {!lite && bgVariant !== 'sunset' && (
             <g mask="url(#ef-grid-mask)">
               {/* Radiale Strahlen vom Zentrum zu den Rändern */}
               {Array.from({ length: 32 }, (_, i) => {
@@ -543,17 +700,88 @@ export default function EnergieFluss({
               )}
             </g>
           )}
+          {/* ─── Sunset-Perspektivgitter: warm-golden unten, lila oben ─── */}
+          {!lite && bgVariant === 'sunset' && (
+            <g mask="url(#ef-grid-mask-s)">
+              {Array.from({ length: 32 }, (_, i) => {
+                const angle = (i / 32) * Math.PI * 2
+                const farR = Math.max(W, svgH) * 0.9
+                const ex = CX + Math.cos(angle) * farR
+                const ey = CY + Math.sin(angle) * farR
+                const isMajor = i % 4 === 0
+                const isMid = i % 2 === 0
+                const isDown = Math.sin(angle) > 0
+                return (
+                  <line
+                    key={`ray-s-${i}`}
+                    x1={CX} y1={CY} x2={ex} y2={ey}
+                    stroke={isDown ? '#c47310' : '#5b3a8c'}
+                    strokeWidth={isMajor ? 0.9 : isMid ? 0.5 : 0.3}
+                    strokeOpacity={isMajor ? 0.38 : isMid ? 0.24 : 0.14}
+                  />
+                )
+              })}
+              {[30, 55, 85, 125, 175, 240, 320].map((r, i) => (
+                <circle
+                  key={`pgrid-s-${i}`}
+                  cx={CX} cy={CY} r={r}
+                  fill="none"
+                  stroke="#c47310"
+                  strokeWidth={i < 2 ? 0.3 : 0.5 + i * 0.1}
+                  strokeOpacity={0.10 + i * 0.04}
+                />
+              ))}
+              {[85, 125, 175, 240, 320].flatMap((r, ri) =>
+                Array.from({ length: 32 }, (_, ai) => {
+                  if (ri < 2 && ai % 2 !== 0) return null
+                  if (ri < 1 && ai % 4 !== 0) return null
+                  const angle = (ai / 32) * Math.PI * 2
+                  const px = CX + Math.cos(angle) * r
+                  const py = CY + Math.sin(angle) * r
+                  const isDown = Math.sin(angle) > 0
+                  return (
+                    <circle
+                      key={`node-s-${ri}-${ai}`}
+                      cx={px} cy={py}
+                      r={0.7 + ri * 0.2}
+                      fill={isDown ? '#c47310' : '#5b3a8c'}
+                      fillOpacity={0.22 + ri * 0.04}
+                    />
+                  )
+                })
+              )}
+            </g>
+          )}
 
-          {/* Radiales Energie-Glow */}
-          <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-glow-light)" rx="8" />
-          <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-glow-dark)" rx="8" />
-
-          {/* 3D-Spot unter dem Haus */}
-          <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-spot-light)" rx="8" />
-          <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-spot-dark)" rx="8" />
+          {/* Radiales Energie-Glow (Default) */}
+          {bgVariant !== 'sunset' && <>
+            <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-glow-light)" rx="8" />
+            <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-glow-dark)" rx="8" />
+          </>}
+          {/* 3D-Spot unter dem Haus (Default) */}
+          {bgVariant !== 'sunset' && <>
+            <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-spot-light)" rx="8" />
+            <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-spot-dark)" rx="8" />
+          </>}
+          {/* Sunset: Sonnen-Glow-Layer Light */}
+          {bgVariant === 'sunset' && <>
+            <rect width={W} height={svgH} fill="url(#ef-sun-glow-light)"  className="opacity-100 dark:opacity-0" />
+            <rect width={W} height={svgH} fill="url(#ef-sun-atmo-light)"  className="opacity-100 dark:opacity-0" />
+            <rect width={W} height={svgH} fill="url(#ef-sun-spot-light)"  className="opacity-100 dark:opacity-0" />
+          </>}
+          {/* Sunset: Sonnen-Glow-Layer Dark */}
+          {bgVariant === 'sunset' && <>
+            <rect width={W} height={svgH} fill="url(#ef-sun-glow-dark)"  className="opacity-0 dark:opacity-100" />
+            <rect width={W} height={svgH} fill="url(#ef-sun-atmo-dark)"  className="opacity-0 dark:opacity-100" />
+            <rect width={W} height={svgH} fill="url(#ef-sun-spot-dark)"  className="opacity-0 dark:opacity-100" />
+          </>}
+          {/* Horizontlinie (goldener Schimmer) */}
+          {bgVariant === 'sunset' && (
+            <line x1={0} y1={CY} x2={W} y2={CY} stroke="#ffd700" strokeWidth="0.8" strokeOpacity="0.38" />
+          )}
 
           {/* ─── Hintergrund-Animationen — nur im Effekt-Modus ─── */}
-          {!lite && (<>
+          {!lite && bgVariant !== 'sunset' && (<>
           {/* Fließende Strom-Ströme */}
           <path
             d={`M ${CX - 80} 10 Q ${CX - 40} ${CY * 0.4} ${CX} ${CY}`}
@@ -684,17 +912,112 @@ export default function EnergieFluss({
           ))}
           </>)}
 
+          {/* ─── Sunset-Animationen — nur im Effekt-Modus ─── */}
+          {!lite && bgVariant === 'sunset' && (<>
+            {/* Sonnenstrahlen von oben → Horizont */}
+            <path d={`M ${CX - 80} 10 Q ${CX - 40} ${CY * 0.5} ${CX} ${CY}`}
+              fill="none" stroke="#ffa500" strokeWidth="2" strokeOpacity="0.22" strokeDasharray="3 12"
+              style={{ animation: 'sunset-stream 4s linear infinite' }} />
+            <path d={`M ${CX + 80} 10 Q ${CX + 40} ${CY * 0.5} ${CX} ${CY}`}
+              fill="none" stroke="#ffa500" strokeWidth="1.5" strokeOpacity="0.18" strokeDasharray="2 10"
+              style={{ animation: 'sunset-stream 5s linear infinite' }} />
+            <path d={`M ${CX} 5 Q ${CX + 15} ${CY * 0.5} ${CX} ${CY}`}
+              fill="none" stroke="#ffd700" strokeWidth="1.8" strokeOpacity="0.20" strokeDasharray="4 14"
+              style={{ animation: 'sunset-stream 3.5s linear infinite' }} />
+            <path d={`M ${CX - 160} 5 Q ${CX - 80} ${CY * 0.3} ${CX} ${CY}`}
+              fill="none" stroke="#ec4899" strokeWidth="1.2" strokeOpacity="0.14" strokeDasharray="2 10"
+              style={{ animation: 'sunset-stream 6s linear infinite' }} />
+            <path d={`M ${CX + 160} 5 Q ${CX + 80} ${CY * 0.3} ${CX} ${CY}`}
+              fill="none" stroke="#ec4899" strokeWidth="1.2" strokeOpacity="0.12" strokeDasharray="3 12"
+              style={{ animation: 'sunset-stream 7s linear infinite' }} />
+            {/* Seitliche Lichtstreifen vom Horizont */}
+            <path d={`M 5 ${CY - 20} Q ${CX * 0.4} ${CY - 8} ${CX} ${CY}`}
+              fill="none" stroke="#ff6b35" strokeWidth="1.5" strokeOpacity="0.16" strokeDasharray="2 10"
+              style={{ animation: 'sunset-stream 6s linear infinite' }} />
+            <path d={`M ${W - 5} ${CY - 20} Q ${CX + CX * 0.6} ${CY - 8} ${CX} ${CY}`}
+              fill="none" stroke="#ff6b35" strokeWidth="1.5" strokeOpacity="0.16" strokeDasharray="2 10"
+              style={{ animation: 'sunset-stream 5.5s linear infinite' }} />
+            {/* Wasserreflektionen — horizontale Shimmer-Bögen unter CY */}
+            <path d={`M ${CX - 120} ${CY + 30} Q ${CX} ${CY + 25} ${CX + 120} ${CY + 30}`}
+              fill="none" stroke="#ffa500" strokeWidth="1.5" strokeOpacity="0.22" strokeDasharray="8 20"
+              style={{ animation: 'shimmer 3s ease-in-out infinite' }} />
+            <path d={`M ${CX - 100} ${CY + 55} Q ${CX} ${CY + 50} ${CX + 100} ${CY + 55}`}
+              fill="none" stroke="#ff8c00" strokeWidth="1.2" strokeOpacity="0.17" strokeDasharray="6 18"
+              style={{ animation: 'shimmer 4s ease-in-out infinite 0.5s' }} />
+            <path d={`M ${CX - 80} ${CY + 80} Q ${CX} ${CY + 75} ${CX + 80} ${CY + 80}`}
+              fill="none" stroke="#ffa500" strokeWidth="1" strokeOpacity="0.14" strokeDasharray="5 16"
+              style={{ animation: 'shimmer 3.5s ease-in-out infinite 1s' }} />
+            <path d={`M ${CX - 160} ${CY + 115} Q ${CX} ${CY + 108} ${CX + 160} ${CY + 115}`}
+              fill="none" stroke="#c47310" strokeWidth="0.8" strokeOpacity="0.12" strokeDasharray="4 14"
+              style={{ animation: 'shimmer 5s ease-in-out infinite 1.5s' }} />
+            <path d={`M 20 ${CY + 155} Q ${CX} ${CY + 145} ${W - 20} ${CY + 155}`}
+              fill="none" stroke="#c47310" strokeWidth="0.7" strokeOpacity="0.10" strokeDasharray="3 12"
+              style={{ animation: 'shimmer 6s ease-in-out infinite 2s' }} />
+
+            {/* Sonnen-Halo Ringe (orange/gold statt emerald) */}
+            {[80, 130, 190, 260].map((r, i) => (
+              <g key={`ring-sunset-${i}`}>
+                <circle cx={CX} cy={CY} r={r} fill="none"
+                  stroke="#ff8c00" strokeWidth={3 - i * 0.3} strokeOpacity={0.08}
+                  strokeDasharray="6 12" filter="url(#ef-ring-glow)"
+                  style={{ animation: `pulse-ring-sunset ${5 + i * 1.5}s ease-in-out infinite` }} />
+                <circle cx={CX} cy={CY} r={r} fill="none"
+                  stroke={i < 2 ? '#ffd700' : '#ff6b00'}
+                  strokeWidth={1 - i * 0.1} strokeOpacity={0.20 - i * 0.025}
+                  strokeDasharray="4 8"
+                  style={{ animation: `pulse-ring-sunset ${5 + i * 1.5}s ease-in-out infinite` }} />
+              </g>
+            ))}
+
+            {/* Sonnen-Partikel (golden, von oben → Horizont) */}
+            {[0, 1, 2, 3, 4].map(i => (
+              <circle key={`p-sun-${i}`} fill="#ffd700" r="1.5">
+                <animateMotion dur={`${3 + i * 0.8}s`} repeatCount="indefinite" begin={`${i * 0.7}s`}
+                  path={`M ${CX - 60 + i * 30} 15 Q ${CX - 20 + i * 10} ${CY * 0.45} ${CX} ${CY}`} />
+                <animate attributeName="opacity" values="0;0.75;0.45;0" dur={`${3 + i * 0.8}s`} repeatCount="indefinite" begin={`${i * 0.7}s`} />
+                <animate attributeName="r" values="1;2.2;0.6" dur={`${3 + i * 0.8}s`} repeatCount="indefinite" begin={`${i * 0.7}s`} />
+              </circle>
+            ))}
+            {/* Wasser-Reflexionspartikel (orange, schimmern auf dem Meer) */}
+            {[0, 1, 2, 3].map(i => (
+              <circle key={`p-reflect-${i}`} fill="#ff8c00" r="1.2">
+                <animateMotion dur={`${4 + i * 1.2}s`} repeatCount="indefinite" begin={`${i * 1.1}s`}
+                  path={`M ${CX + (-1) ** i * 80} ${CY + 20 + i * 25} Q ${CX + (-1) ** i * 30} ${CY + 30 + i * 20} ${CX} ${CY + 10}`} />
+                <animate attributeName="opacity" values="0;0.62;0.30;0" dur={`${4 + i * 1.2}s`} repeatCount="indefinite" begin={`${i * 1.1}s`} />
+                <animate attributeName="r" values="0.8;1.8;0.5" dur={`${4 + i * 1.2}s`} repeatCount="indefinite" begin={`${i * 1.1}s`} />
+              </circle>
+            ))}
+            {/* Pink/Magenta Sky-Partikel (von oben-seitlich → Horizont) */}
+            {[0, 1].map(i => (
+              <circle key={`p-sky-${i}`} fill="#ec4899" r="1.2">
+                <animateMotion dur={`${5.5 + i * 1.5}s`} repeatCount="indefinite" begin={`${i * 2.0}s`}
+                  path={`M ${i === 0 ? CX - 140 : CX + 140} 8 Q ${CX + (i === 0 ? -60 : 60)} ${CY * 0.4} ${CX} ${CY}`} />
+                <animate attributeName="opacity" values="0;0.55;0.25;0" dur={`${5.5 + i * 1.5}s`} repeatCount="indefinite" begin={`${i * 2.0}s`} />
+              </circle>
+            ))}
+          </>)}
+
           {/* Dezente Achsenlinien (Kreuz durch Zentrum) */}
-          <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
-          <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
+          {bgVariant !== 'sunset' && <>
+            <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
+            <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#9ca3af" strokeWidth="0.5" strokeOpacity={0.15} strokeDasharray="2 6" />
+          </>}
+          {bgVariant === 'sunset' && <>
+            <line x1={CX} y1={12} x2={CX} y2={svgH - 12} stroke="#ff8c00" strokeWidth="0.5" strokeOpacity={0.18} strokeDasharray="2 6" />
+            <line x1={12} y1={CY} x2={W - 12} y2={CY} stroke="#ffd700" strokeWidth="0.8" strokeOpacity={0.24} strokeDasharray="4 4" />
+          </>}
 
           {/* Tiefe-Vignette (dunkelt Ränder ab → 3D-Einbuchtung) — nur im Effekt-Modus */}
-          {!lite && (
+          {!lite && bgVariant !== 'sunset' && (
             <>
               <rect width={W} height={svgH} className="opacity-100 dark:opacity-0" fill="url(#ef-vignette-light)" rx="8" />
               <rect width={W} height={svgH} className="opacity-0 dark:opacity-100" fill="url(#ef-vignette-dark)" rx="8" />
             </>
           )}
+          {!lite && bgVariant === 'sunset' && <>
+            <rect width={W} height={svgH} fill="url(#ef-vignette-sunset-light)" rx="8" className="opacity-100 dark:opacity-0" />
+            <rect width={W} height={svgH} fill="url(#ef-vignette-sunset-dark)"  rx="8" className="opacity-0 dark:opacity-100" />
+          </>}
         </g>
 
         {/* Verbindungslinien */}
