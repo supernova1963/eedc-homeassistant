@@ -1,6 +1,7 @@
 // Gemeinsame Types für Auswertungs-Tabs
-import type { useAnlagen, useAggregierteStats, useAktuellerStrompreis } from '../../hooks'
+import type { useAnlagen, useAggregierteStats } from '../../hooks'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
+import type { Strompreis } from '../../types'
 import {
   MONAT_KURZ, TYP_LABELS, CO2_FAKTOR_KG_KWH,
   COLORS, CHART_COLORS, TYP_COLORS,
@@ -17,7 +18,8 @@ export interface TabProps {
   data: AggregierteMonatsdaten[]
   stats: ReturnType<typeof useAggregierteStats>
   anlage?: ReturnType<typeof useAnlagen>['anlagen'][0]
-  strompreis?: ReturnType<typeof useAktuellerStrompreis>['strompreis']
+  strompreis?: Strompreis | null
+  alleTarife?: Strompreis[]
   zeitraumLabel?: string  // z.B. "2025" oder "2023–2025"
 }
 
@@ -58,13 +60,33 @@ export interface MonatsZeitreihe {
   co2_einsparung: number
 }
 
+/**
+ * Findet den zum Stichtag (1. des Monats) gültigen Tarif.
+ * Tarife sind nach gueltig_ab DESC sortiert → erster Treffer gewinnt.
+ */
+function findGueltigerTarif(tarife: Strompreis[], jahr: number, monat: number): Strompreis | null {
+  const stichtag = `${jahr}-${String(monat).padStart(2, '0')}-01`
+  for (const t of tarife) {
+    if (t.gueltig_ab <= stichtag && (!t.gueltig_bis || t.gueltig_bis >= stichtag)) {
+      return t
+    }
+  }
+  return null
+}
+
 // Helper-Funktion zum Erstellen der Monatszeitreihen
 // Verwendet jetzt AggregierteMonatsdaten mit korrekter PV-Erzeugung aus InvestitionMonatsdaten
 export function createMonatsZeitreihe(
   data: AggregierteMonatsdaten[],
   anlage?: TabProps['anlage'],
-  strompreis?: TabProps['strompreis']
+  strompreis?: Strompreis | null,
+  alleTarife?: Strompreis[],
 ): MonatsZeitreihe[] {
+  // Tarife nach gueltig_ab DESC sortieren für findGueltigerTarif
+  const tarifeDesc = alleTarife?.length
+    ? [...alleTarife].sort((a, b) => b.gueltig_ab.localeCompare(a.gueltig_ab))
+    : []
+
   const sorted = [...data].sort((a, b) => {
     if (a.jahr !== b.jahr) return a.jahr - b.jahr
     return a.monat - b.monat
@@ -97,15 +119,16 @@ export function createMonatsZeitreihe(
     const eauto_ladung = md.eauto_ladung_kwh || 0
     const eauto_pv_anteil = null // Wird später berechnet wenn PV-Anteil verfügbar
 
-    // Finanzen
-    const einspeise_erloes = strompreis
-      ? md.einspeisung_kwh * strompreis.einspeiseverguetung_cent_kwh / 100
+    // Finanzen: historisch korrekter Tarif pro Monat, Fallback auf aktuellen
+    const tarif = (tarifeDesc.length > 0 ? findGueltigerTarif(tarifeDesc, md.jahr, md.monat) : null) || strompreis
+    const einspeise_erloes = tarif
+      ? md.einspeisung_kwh * tarif.einspeiseverguetung_cent_kwh / 100
       : 0
-    const ev_ersparnis = strompreis
-      ? eigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
+    const ev_ersparnis = tarif
+      ? eigenverbrauch * tarif.netzbezug_arbeitspreis_cent_kwh / 100
       : 0
-    const netzbezug_kosten = strompreis
-      ? md.netzbezug_kwh * strompreis.netzbezug_arbeitspreis_cent_kwh / 100 + (strompreis.grundpreis_euro_monat || 0)
+    const netzbezug_kosten = tarif
+      ? md.netzbezug_kwh * tarif.netzbezug_arbeitspreis_cent_kwh / 100 + (tarif.grundpreis_euro_monat || 0)
       : 0
     const netto_ertrag = einspeise_erloes + ev_ersparnis
 

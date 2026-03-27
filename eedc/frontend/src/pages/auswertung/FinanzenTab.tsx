@@ -11,16 +11,18 @@ import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, COLORS, createMonatsZeitreihe } from './types'
 import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
+import type { Strompreis } from '../../types'
 
 interface FinanzenTabProps {
   data: TabProps['data']
   stats: TabProps['stats']
   strompreis: TabProps['strompreis']
+  alleTarife?: Strompreis[]
   anlageId?: number
   zeitraumLabel?: string
 }
 
-export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }: FinanzenTabProps) {
+export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zeitraumLabel }: FinanzenTabProps) {
   // Lade Sonderkosten aus Komponenten-Zeitreihe
   const [sonderkostenData, setSonderkostenData] = useState<KomponentenZeitreihe | null>(null)
 
@@ -45,46 +47,36 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
     )
   }
 
-  // Monatszeitreihen erstellen
+  // Monatszeitreihen mit historisch korrekten Tarifen
   const zeitreihe = useMemo(
-    () => createMonatsZeitreihe(data, undefined, strompreis),
-    [data, strompreis]
+    () => createMonatsZeitreihe(data, undefined, strompreis, alleTarife),
+    [data, strompreis, alleTarife]
   )
 
-  // Sonderkosten + historische Finanzwerte nach Jahr/Monat mappen
+  // Sonderkosten nach Jahr/Monat mappen
   const sonstigeByMonth = useMemo(() => {
-    const map = new Map<string, { ertraege: number; ausgaben: number; netto: number; netzbezug_kosten: number; einspeise_erloes: number }>()
+    const map = new Map<string, { ertraege: number; ausgaben: number; netto: number }>()
     sonderkostenData?.monatswerte?.forEach(m => {
       const key = `${m.jahr}-${m.monat}`
       map.set(key, {
         ertraege: m.sonstige_ertraege_euro || 0,
         ausgaben: m.sonstige_ausgaben_euro || 0,
         netto: m.sonstige_netto_euro || 0,
-        netzbezug_kosten: m.netzbezug_kosten_euro || 0,
-        einspeise_erloes: m.einspeise_erloes_euro || 0,
       })
     })
     return map
   }, [sonderkostenData])
 
   // Kumulierte Werte berechnen (inkl. sonstige Erträge/Ausgaben)
-  // netzbezug_kosten + einspeise_erloes aus Backend-Daten wenn verfügbar (historisch korrekte Tarife)
   const chartDataWithKumuliert = useMemo(() => {
     let kumuliert = 0
     return zeitreihe.map(z => {
-      const hist = sonstigeByMonth.get(`${z.jahr}-${z.monat}`)
-      const sonderkosten = hist?.ausgaben || 0
-      const netzbezug_kosten = hist?.netzbezug_kosten ?? z.netzbezug_kosten
-      const einspeise_erloes = hist?.einspeise_erloes ?? z.einspeise_erloes
-      const ev_ersparnis = z.ev_ersparnis
-      const netto_ertrag = einspeise_erloes + ev_ersparnis
-      const nettoMitSonderkosten = netto_ertrag + (hist?.netto || 0)
+      const sonstige = sonstigeByMonth.get(`${z.jahr}-${z.monat}`)
+      const sonderkosten = sonstige?.ausgaben || 0
+      const nettoMitSonderkosten = z.netto_ertrag + (sonstige?.netto || 0)
       kumuliert += nettoMitSonderkosten
       return {
         ...z,
-        netzbezug_kosten,
-        einspeise_erloes,
-        netto_ertrag,
         sonderkosten,
         netto_nach_sonderkosten: nettoMitSonderkosten,
         kumuliert_ertrag: kumuliert
@@ -92,7 +84,7 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
     })
   }, [zeitreihe, sonstigeByMonth])
 
-  // Gesamt-Finanzen aus den bereits korrigierten Monatswerten
+  // Gesamt-Finanzen aus den Monatswerten (bereits historisch korrekte Tarife)
   const gesamt = useMemo(() => {
     const einspeiseErloes = chartDataWithKumuliert.reduce((s, z) => s + z.einspeise_erloes, 0)
     const netzbezugKosten = chartDataWithKumuliert.reduce((s, z) => s + z.netzbezug_kosten, 0)
@@ -102,6 +94,9 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
     const nettoNachSonderkosten = nettoErtrag - sonderkosten
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag, sonderkosten, nettoNachSonderkosten }
   }, [chartDataWithKumuliert])
+
+  // Mehrere Tarife? Subtitle anpassen
+  const hatMehrereTarife = (alleTarife?.length || 0) > 1
 
   // CSV Export
   const handleExportCSV = () => {
@@ -136,12 +131,12 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
           title="Einspeiseerlös"
           value={gesamt.einspeiseErloes.toFixed(0)}
           unit="€"
-          subtitle={`${strompreis.einspeiseverguetung_cent_kwh.toFixed(1)} ct/kWh`}
+          subtitle={hatMehrereTarife ? 'historische Tarife' : `${strompreis.einspeiseverguetung_cent_kwh.toFixed(1)} ct/kWh`}
           icon={TrendingUp}
           color="text-green-500"
           bgColor="bg-green-50 dark:bg-green-900/20"
-          formel="Einspeisung × Einspeisevergütung"
-          berechnung={`${fmtCalc(stats.gesamtEinspeisung, 0)} kWh × ${fmtCalc(strompreis.einspeiseverguetung_cent_kwh, 2)} ct/kWh`}
+          formel={hatMehrereTarife ? "Σ (Einspeisung × Tarif) pro Monat" : "Einspeisung × Einspeisevergütung"}
+          berechnung={`${fmtCalc(stats.gesamtEinspeisung, 0)} kWh gesamt`}
           ergebnis={`= ${fmtCalc(gesamt.einspeiseErloes, 2)} €`}
         />
         <KPICard
@@ -152,8 +147,10 @@ export function FinanzenTab({ data, stats, strompreis, anlageId, zeitraumLabel }
           icon={Euro}
           color="text-purple-500"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
-          formel="Eigenverbrauch × Netzbezugspreis"
-          berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh × ${fmtCalc(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh`}
+          formel={hatMehrereTarife ? "Σ (Eigenverbrauch × Tarif) pro Monat" : "Eigenverbrauch × Netzbezugspreis"}
+          berechnung={hatMehrereTarife
+            ? `${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh gesamt`
+            : `${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh × ${fmtCalc(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh`}
           ergebnis={`= ${fmtCalc(gesamt.eigenverbrauchErsparnis, 2)} €`}
         />
         <KPICard

@@ -11,14 +11,14 @@ import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
 
-export function EnergieTab({ data, stats, anlage, strompreis, zeitraumLabel }: TabProps) {
+export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitraumLabel }: TabProps) {
   const [bilanzView, setBilanzView] = useState<'erzeugung' | 'verbrauch'>('erzeugung')
   const [showAutarkie, setShowAutarkie] = useState(false)
 
   // Monatszeitreihen erstellen
   const zeitreihe = useMemo(
-    () => createMonatsZeitreihe(data, anlage, strompreis),
-    [data, anlage, strompreis]
+    () => createMonatsZeitreihe(data, anlage, strompreis, alleTarife),
+    [data, anlage, strompreis, alleTarife]
   )
 
   // CSV Export
