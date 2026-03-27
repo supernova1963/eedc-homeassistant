@@ -191,6 +191,13 @@ async def prepare_community_data(
     else:
         installation_jahr = datetime.now().year
 
+    # Wärmepumpenart ermitteln (für fairen Community-JAZ-Vergleich)
+    wp_art = None
+    if hat_waermepumpe:
+        wps = [inv for inv in investitionen if inv.typ == "waermepumpe"]
+        if wps:
+            wp_art = (wps[0].parameter or {}).get("wp_art")
+
     # Basis-Daten
     data = {
         "region": region,
@@ -204,6 +211,7 @@ async def prepare_community_data(
         "hat_wallbox": hat_wallbox,
         "hat_balkonkraftwerk": hat_balkonkraftwerk,
         "hat_sonstiges": hat_sonstiges,
+        "wp_art": wp_art,
         "wallbox_kw": wallbox_kw,
         "bkw_wp": bkw_wp,
         "sonstiges_bezeichnung": sonstiges_bezeichnung,

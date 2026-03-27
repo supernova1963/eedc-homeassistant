@@ -119,6 +119,13 @@ async def list_investition_typen():
             label="Wärmepumpe",
             beschreibung="Wärmepumpe für Heizung/Warmwasser",
             parameter_schema={
+                # Wärmepumpenart (für fairen Community-Vergleich)
+                "wp_art": {
+                    "type": "select",
+                    "label": "Wärmepumpenart",
+                    "options": ["luft_wasser", "sole_wasser", "grundwasser", "luft_luft"],
+                    "default": "luft_wasser",
+                },
                 # Modus-Auswahl: JAZ (gemessen), SCOP (EU-Label), COPs (präzise)
                 "effizienz_modus": {
                     "type": "select",
