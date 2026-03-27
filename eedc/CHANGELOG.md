@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.4] - 2026-03-27
+
+### Behoben
+
+- **Historische Tarife in Finanzauswertung (#63)**: Netzbezugkosten wurden bisher immer mit dem aktuell gültigen Tarif berechnet. Jetzt wird pro Monat der zum Monatsersten gültige Tarif verwendet — inkl. korrektem Grundpreis. Info-Kasten zeigt jetzt die Summe der monatlichen Kosten statt einer Neuberechnung mit aktuellem Tarif.
+- **Wetter-Symbole aus Bewölkung (#59)**: Symbol wird jetzt direkt aus der Bewölkung bestimmt (unabhängig vom WMO-Code): <20% → Sonne, <40% → Sonne+Wolke (warm), <70% → Sonne+Wolke, ≥70% → Wolke. Behebt Inkonsistenz bei MeteoSwiss.
+- **Balkonkraftwerk in Live-Dashboard Orientierung (#62)**: BKW wurde bei der Wetter-Orientierungsgruppe nicht berücksichtigt.
+
 ## [3.5.3] - 2026-03-27
 
 ### Behoben
