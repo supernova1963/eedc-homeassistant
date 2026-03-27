@@ -8,7 +8,7 @@
 import {
   Zap, Sun, Flame, Droplets, Thermometer, TreePine,
   Shield, User, Wrench, Landmark, Coins, BadgeCheck,
-  Calculator, FileText,
+  Calculator, Gauge, FileText,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -97,6 +97,12 @@ export const KATEGORIE_CONFIG: Record<string, KategorieConfig> = {
     icon: Calculator,
     color: 'text-cyan-500',
     bgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
+  },
+  messstellenbetreiber: {
+    label: 'Messstellenbetreiber',
+    icon: Gauge,
+    color: 'text-sky-500',
+    bgColor: 'bg-sky-50 dark:bg-sky-900/20',
   },
   sonstiges: {
     label: 'Sonstiges',
