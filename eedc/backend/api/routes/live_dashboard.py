@@ -1403,7 +1403,7 @@ async def get_live_wetter(
     pv_result = await db.execute(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
-            Investition.typ == "pv-module",
+            Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
             Investition.aktiv == True,
         )
     )
