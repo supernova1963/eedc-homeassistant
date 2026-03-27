@@ -94,6 +94,17 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("Datenbank initialisiert.")
 
+    # L2-Cache → L1-Cache Warmup (sofort, bevor irgendein Request kommt)
+    try:
+        from backend.services.wetter_service import warmup_l1_from_l2, _loop_running
+        import backend.services.wetter_service as _ws
+        _ws._loop_running = True
+        count = await warmup_l1_from_l2()
+        if count > 0:
+            print(f"Cache-Warmup: {count} Einträge aus L2 geladen.")
+    except Exception as e:
+        logger.debug(f"Cache-Warmup fehlgeschlagen: {e}")
+
     # Scheduler starten
     if start_scheduler():
         print("Scheduler gestartet.")

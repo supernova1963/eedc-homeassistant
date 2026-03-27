@@ -114,6 +114,15 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # L2-Cache Cleanup: Täglich um 04:00 (abgelaufene Einträge löschen)
+            self._scheduler.add_job(
+                api_cache_cleanup_job,
+                CronTrigger(hour=4, minute=0),
+                id="api_cache_cleanup",
+                name="API-Cache Cleanup",
+                replace_existing=True,
+            )
+
             self._scheduler.start()
             self._running = True
             logger.info("EEDC Scheduler gestartet")
@@ -288,6 +297,22 @@ async def prognose_prefetch_job() -> None:
         await prefetch_all_prognosen()
     except Exception as e:
         logger.warning(f"Prognose-Prefetch fehlgeschlagen: {type(e).__name__}: {e}")
+
+
+async def api_cache_cleanup_job() -> None:
+    """Löscht abgelaufene L2-Cache-Einträge aus SQLite (täglich um 04:00)."""
+    try:
+        from backend.services.wetter_service import cleanup_l2_cache
+        count = await cleanup_l2_cache()
+        if count > 0:
+            await log_activity(
+                kategorie="scheduler",
+                aktion="API-Cache Cleanup",
+                erfolg=True,
+                details=f"{count} abgelaufene Einträge gelöscht",
+            )
+    except Exception as e:
+        logger.warning(f"API-Cache Cleanup fehlgeschlagen: {type(e).__name__}: {e}")
 
 
 # Singleton-Instanz
