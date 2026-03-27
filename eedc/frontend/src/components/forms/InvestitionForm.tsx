@@ -182,6 +182,8 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         return {
           ...stammdaten,
           leistung_kw: params.leistung_kw?.toString() || '',
+          // Wärmepumpenart für fairen Community-Vergleich
+          wp_art: params.wp_art?.toString() || 'luft_wasser',
           // Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
           effizienz_modus: params.effizienz_modus?.toString() || 'gesamt_jaz',
           // Für Modus "gesamt_jaz"
@@ -785,6 +787,28 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
       return (
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">Wärmepumpe Parameter</h3>
+
+          {/* Wärmepumpenart */}
+          <div>
+            <label htmlFor="param_wp_art" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Wärmepumpenart
+            </label>
+            <select
+              id="param_wp_art"
+              name="param_wp_art"
+              value={paramData.wp_art as string}
+              onChange={(e) => onChange({ target: { name: 'param_wp_art', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
+              className="input w-full"
+            >
+              <option value="luft_wasser">Luft-Wasser (Außenluft → Wasser)</option>
+              <option value="sole_wasser">Sole-Wasser (Erdwärme → Wasser)</option>
+              <option value="grundwasser">Grundwasser-Wärmepumpe</option>
+              <option value="luft_luft">Luft-Luft (Klimaanlage)</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Wird für den fairen JAZ-Vergleich in der Community verwendet
+            </p>
+          </div>
 
           {/* Modus-Auswahl */}
           <div className="space-y-2">
