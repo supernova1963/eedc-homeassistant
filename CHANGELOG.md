@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.8] - 2026-03-27
+
+### Behoben
+
+- **Kurzfrist-Prognose lädt langsam**: Cache-Key-Mismatch — Frontend fragt standardmäßig `tage=14` an, Prefetch wärmte aber nur `days=7` und `days=16`. Dadurch traf jeder Aufruf der Kurzfrist-Seite einen leeren Cache und wartete 1–30s Jitter + API-Call. Prefetch jetzt für alle drei Werte (7, 14, 16).
+
 ## [3.5.7] - 2026-03-27
 
 ### Behoben
