@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.2] - 2026-03-27
+
+### Hinzugefügt
+
+- **Infothek: Kategorie Messstellenbetreiber** (#60): Neue Vorlage für Nutzer mit separatem Zähleranbieter. Felder: Zählernummer, Messstellenbetreiber, Zähler-Typ (Konventionell/mME/iMSys), Zähler-Hersteller, Einbau-/Eichdatum, Eichfrist, Vertragsnummer, Jahresgebühr, Kundennummer. Auslöser: Rainer.
+
 ## [3.5.1] - 2026-03-27
 
 ### Hinzugefügt
