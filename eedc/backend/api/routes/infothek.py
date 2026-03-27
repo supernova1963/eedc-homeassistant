@@ -192,6 +192,22 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
             "restwert_euro": {"type": "number", "label": "Restwert (€)"},
         },
     },
+    "messstellenbetreiber": {
+        "label": "Messstellenbetreiber",
+        "icon": "Gauge",
+        "felder": {
+            "zaehler_nummer": {"type": "string", "label": "Zählernummer"},
+            "betreiber": {"type": "string", "label": "Messstellenbetreiber"},
+            "zaehler_typ": {"type": "select", "label": "Zähler-Typ", "options": ["Konventionell", "Moderne Messeinrichtung (mME)", "Intelligentes Messsystem (iMSys/Smart Meter)"]},
+            "zaehler_hersteller": {"type": "string", "label": "Zähler-Hersteller"},
+            "einbaudatum": {"type": "date", "label": "Einbaudatum"},
+            "eichdatum": {"type": "date", "label": "Eichdatum"},
+            "naechster_wechsel": {"type": "date", "label": "Nächster Wechsel / Eichfrist"},
+            "messstellenvertrag_nr": {"type": "string", "label": "Vertragsnummer"},
+            "jahresgebuehr_euro": {"type": "number", "label": "Jahresgebühr (€)"},
+            "kundennummer": {"type": "string", "label": "Kundennummer"},
+        },
+    },
     "sonstiges": {
         "label": "Sonstiges",
         "icon": "FileText",
