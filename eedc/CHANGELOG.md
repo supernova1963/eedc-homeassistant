@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.5] - 2026-03-27
+
+### Behoben
+
+- **Historische Tarife in Monatsbalken (#63)**: Finanzauswertung zeigt jetzt pro Monat die Kosten mit dem historisch korrekten Tarif (inkl. Grundpreis). Auch die Balken in "Finanzielle Bilanz pro Monat" nutzen jetzt historische Tarife statt des aktuellen.
+
 ## [3.5.4] - 2026-03-27
 
 ### Behoben
