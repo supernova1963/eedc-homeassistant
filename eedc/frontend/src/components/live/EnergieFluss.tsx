@@ -629,6 +629,13 @@ export default function EnergieFluss({
             <mask id="ef-grid-mask-s">
               <rect width={W} height={svgH} fill="url(#ef-grid-fade-s)" />
             </mask>
+            {/* ClipPaths: Himmel / Meer trennen */}
+            <clipPath id="ef-sky-clip">
+              <rect x={-W} y={-svgH} width={W * 3} height={CY + svgH} />
+            </clipPath>
+            <clipPath id="ef-sea-clip">
+              <rect x={-W} y={CY} width={W * 3} height={svgH * 2} />
+            </clipPath>
           </>}
         </defs>
 
@@ -700,58 +707,126 @@ export default function EnergieFluss({
               )}
             </g>
           )}
-          {/* ─── Sunset-Perspektivgitter: warm-golden unten, lila oben ─── */}
-          {!lite && bgVariant === 'sunset' && (
-            <g mask="url(#ef-grid-mask-s)">
-              {Array.from({ length: 32 }, (_, i) => {
-                const angle = (i / 32) * Math.PI * 2
-                const farR = Math.max(W, svgH) * 0.9
-                const ex = CX + Math.cos(angle) * farR
-                const ey = CY + Math.sin(angle) * farR
-                const isMajor = i % 4 === 0
-                const isMid = i % 2 === 0
-                const isDown = Math.sin(angle) > 0
-                return (
-                  <line
-                    key={`ray-s-${i}`}
-                    x1={CX} y1={CY} x2={ex} y2={ey}
-                    stroke={isDown ? '#c47310' : '#5b3a8c'}
-                    strokeWidth={isMajor ? 0.9 : isMid ? 0.5 : 0.3}
-                    strokeOpacity={isMajor ? 0.38 : isMid ? 0.24 : 0.14}
-                  />
-                )
-              })}
-              {[30, 55, 85, 125, 175, 240, 320].map((r, i) => (
-                <circle
-                  key={`pgrid-s-${i}`}
-                  cx={CX} cy={CY} r={r}
-                  fill="none"
-                  stroke="#c47310"
-                  strokeWidth={i < 2 ? 0.3 : 0.5 + i * 0.1}
-                  strokeOpacity={0.10 + i * 0.04}
-                />
-              ))}
-              {[85, 125, 175, 240, 320].flatMap((r, ri) =>
-                Array.from({ length: 32 }, (_, ai) => {
-                  if (ri < 2 && ai % 2 !== 0) return null
-                  if (ri < 1 && ai % 4 !== 0) return null
-                  const angle = (ai / 32) * Math.PI * 2
-                  const px = CX + Math.cos(angle) * r
-                  const py = CY + Math.sin(angle) * r
-                  const isDown = Math.sin(angle) > 0
+          {/* ─── Sunset-Gitter: Krepuskulare Strahlen (Himmel) + Meerperspektive ─── */}
+          {!lite && bgVariant === 'sunset' && (() => {
+            // Gemeinsame Geometrie-Berechnung für beide Modi
+            const farR = Math.max(W, svgH) * 1.2
+            const skyRays = Array.from({ length: 20 }, (_, i) => ({
+              angle: -Math.PI + (i / 19) * Math.PI,
+              isEven: i % 2 === 0,
+              isMajor: i % 4 === 0,
+            }))
+            const seaLines = Array.from({ length: 20 }, (_, i) => ({
+              angle: (i / 19) * Math.PI,
+              isMajor: i % 4 === 0,
+              isMid: i % 2 === 0,
+            }))
+            const waveEllipses = [22, 50, 90, 140, 200, 270]
+            const sparkRows = [50, 90, 140, 200]
+            const arcRadii = [65, 115, 175, 250, 340]
+
+            const renderGrid = (
+              rayWide1: string, rayWide2: string,
+              rayThin: string,
+              arc1: string, arc2: string,
+              seaLine: string, wave: string, spark: string,
+            ) => (
+              <>
+                {/* ══ HIMMEL: Krepuskulare Strahlen ══ */}
+                {skyRays.map(({ angle, isEven }, i) => {
+                  const ex = CX + Math.cos(angle) * farR
+                  const ey = CY + Math.sin(angle) * farR
                   return (
-                    <circle
-                      key={`node-s-${ri}-${ai}`}
-                      cx={px} cy={py}
-                      r={0.7 + ri * 0.2}
-                      fill={isDown ? '#c47310' : '#5b3a8c'}
-                      fillOpacity={0.22 + ri * 0.04}
-                    />
+                    <line key={`cray-wide-${i}`}
+                      x1={CX} y1={CY} x2={ex} y2={ey}
+                      stroke={isEven ? rayWide1 : rayWide2}
+                      strokeWidth={farR * 0.14}
+                      strokeOpacity={isEven ? 0.07 : 0.04}
+                      clipPath="url(#ef-sky-clip)" />
                   )
-                })
-              )}
-            </g>
-          )}
+                })}
+                {skyRays.map(({ angle, isMajor }, i) => {
+                  const ex = CX + Math.cos(angle) * farR
+                  const ey = CY + Math.sin(angle) * farR
+                  return (
+                    <line key={`cray-thin-${i}`}
+                      x1={CX} y1={CY} x2={ex} y2={ey}
+                      stroke={rayThin}
+                      strokeWidth={isMajor ? 0.9 : 0.4}
+                      strokeOpacity={isMajor ? 0.38 : 0.18}
+                      clipPath="url(#ef-sky-clip)" />
+                  )
+                })}
+                {/* Atmosphären-Bögen */}
+                {arcRadii.map((r, i) => (
+                  <path key={`arc-${i}`}
+                    d={`M ${CX - r} ${CY} A ${r} ${r} 0 0 1 ${CX + r} ${CY}`}
+                    fill="none"
+                    stroke={i < 2 ? arc1 : arc2}
+                    strokeWidth={0.4 + i * 0.15}
+                    strokeOpacity={0.14 + i * 0.025}
+                    clipPath="url(#ef-sky-clip)" />
+                ))}
+
+                {/* ══ MEER: Perspektivlinien ══ */}
+                {seaLines.map(({ angle, isMajor, isMid }, i) => {
+                  const ex = CX + Math.cos(angle) * (Math.max(W, svgH) * 0.95)
+                  const ey = CY + Math.sin(angle) * (Math.max(W, svgH) * 0.95)
+                  return (
+                    <line key={`pline-${i}`}
+                      x1={CX} y1={CY} x2={ex} y2={ey}
+                      stroke={seaLine}
+                      strokeWidth={isMajor ? 0.9 : isMid ? 0.5 : 0.3}
+                      strokeOpacity={isMajor ? 0.32 : isMid ? 0.20 : 0.12}
+                      clipPath="url(#ef-sea-clip)" />
+                  )
+                })}
+                {/* Elliptische Wellenebenen */}
+                {waveEllipses.map((dy, i) => (
+                  <ellipse key={`wave-${i}`}
+                    cx={CX} cy={CY + dy}
+                    rx={CX * (0.22 + i * 0.14)}
+                    ry={Math.max(3, dy * 0.10)}
+                    fill="none"
+                    stroke={wave}
+                    strokeWidth={0.4 + i * 0.12}
+                    strokeOpacity={0.12 + i * 0.03}
+                    clipPath="url(#ef-sea-clip)" />
+                ))}
+                {/* Lichtfunken auf dem Wasser */}
+                {sparkRows.flatMap((dy, ri) =>
+                  Array.from({ length: 14 }, (_, ai) => {
+                    if (ri < 1 && ai % 2 !== 0) return null
+                    const angle = (ai / 13) * Math.PI
+                    const rx = CX * (0.36 + ri * 0.14)
+                    const px = CX + Math.cos(angle) * rx
+                    const py = CY + dy + Math.sin(angle) * Math.max(3, dy * 0.10)
+                    if (py <= CY + 2) return null
+                    return (
+                      <circle key={`spark-${ri}-${ai}`}
+                        cx={px} cy={py}
+                        r={0.6 + ri * 0.25}
+                        fill={spark}
+                        fillOpacity={0.22 + ri * 0.05} />
+                    )
+                  })
+                )}
+              </>
+            )
+
+            return (
+              <>
+                {/* Light Mode */}
+                <g mask="url(#ef-grid-mask-s)" className="opacity-100 dark:opacity-0">
+                  {renderGrid('#c47820', '#c05808', '#c47820', '#c05808', '#8b1a50', '#0e6070', '#0e6070', '#c47820')}
+                </g>
+                {/* Dark Mode */}
+                <g mask="url(#ef-grid-mask-s)" className="opacity-0 dark:opacity-100">
+                  {renderGrid('#ffd700', '#ff8c00', '#ffd700', '#ff8c00', '#ec4899', '#c47310', '#c47310', '#ffd700')}
+                </g>
+              </>
+            )
+          })()}
 
           {/* Radiales Energie-Glow (Default) */}
           {bgVariant !== 'sunset' && <>
@@ -1133,7 +1208,7 @@ export default function EnergieFluss({
           <circle
             cx={CX} cy={CY} r={HAUS_R}
             className="fill-white dark:fill-gray-800"
-            fillOpacity={0.65}
+            fillOpacity={bgVariant === 'sunset' ? 0.92 : 0.65}
             stroke="#10b981"
             strokeWidth={2}
             strokeOpacity={0.6}
@@ -1158,7 +1233,9 @@ export default function EnergieFluss({
             x={CX} y={CY - HAUS_R - 8}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize}px` }}
-            className="fill-yellow-500 dark:fill-yellow-400"
+            className={bgVariant === 'sunset'
+              ? 'fill-amber-800 dark:fill-yellow-400'
+              : 'fill-yellow-500 dark:fill-yellow-400'}
           >
             <title>Summe aller PV-Erzeuger (ohne Batterie/Netz)</title>
             Solarleistung {formatPower(summePv)}
@@ -1169,7 +1246,9 @@ export default function EnergieFluss({
             x={CX} y={CY - HAUS_R - 8 - (summePv > 0 ? dims.socFontSize + 2 : 0)}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
-            className="fill-purple-500 dark:fill-purple-400"
+            className={bgVariant === 'sunset'
+              ? 'fill-purple-800 dark:fill-purple-400'
+              : 'fill-purple-500 dark:fill-purple-400'}
           >
             Solar Soll ~{pvSollKw.toFixed(1)} kW
           </text>
@@ -1221,7 +1300,7 @@ export default function EnergieFluss({
                 width={NODE_W} height={NODE_H}
                 rx={NODE_R}
                 className="fill-white dark:fill-gray-800"
-                fillOpacity={0.6}
+                fillOpacity={bgVariant === 'sunset' ? 0.92 : 0.6}
                 stroke={isActive ? color : '#9ca3af'}
                 strokeWidth={isActive ? 1 : 0.5}
                 strokeOpacity={isActive ? 0.7 : 0.3}
