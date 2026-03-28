@@ -44,6 +44,7 @@ export default defineConfig({
 						{ label: 'Teil I: Installation & Einrichtung', slug: 'handbuch-installation' },
 						{ label: 'Teil II: Bedienung', slug: 'handbuch-bedienung' },
 						{ label: 'Teil III: Einstellungen', slug: 'handbuch-einstellungen' },
+						{ label: 'Modul: Infothek', slug: 'handbuch-infothek' },
 						{ label: 'Glossar', slug: 'glossar' },
 					],
 				},
@@ -51,6 +52,7 @@ export default defineConfig({
 					label: 'Dokumentation',
 					items: [
 						{ label: 'Architektur', slug: 'architektur' },
+						{ label: 'Berechnungsreferenz', slug: 'berechnungen' },
 						{ label: 'Entwicklung', slug: 'entwicklung' },
 						{ label: 'Dev-Machine Setup', slug: 'setup-devmachine' },
 					],

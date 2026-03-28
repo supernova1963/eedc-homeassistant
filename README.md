@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 3.3</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 3.6</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
 
 - **Animiertes Energiefluss-Diagramm** – SVG mit Flusslinien, SoC-Pegelanzeige, Tooltips mit Tages-kWh
 - **Tagesverlauf** – 24h-Chart mit PV, Verbrauch, Netz, Speicher (auch historisch abrufbar)
-- **Wetter-Widget** – Stunden-Prognose mit IST/Prognose-Overlay zum Vergleich
+- **Wetter-Widget** – Stunden-Prognose mit IST/Prognose-Overlay und Solar Forecast ML (SFML) Vergleich
 - **Heute/Gestern kWh** – Tagessummen pro Komponente
 - **Demo-Modus** für Erstnutzer ohne konfigurierte Sensoren
 
@@ -43,7 +43,12 @@
 - **Jedes Smarthome-System** – HA, Node-RED, ioBroker, FHEM, openHAB
 - **HA Automation Generator** – Wizard erstellt fertige YAML-Automationen
 - **Energy → Monatsabschluss** – MQTT-Energiedaten als Vorschläge (Konfidenz 91%)
-- **Alternative für MariaDB/MySQL** – Wenn HA-Statistik (SQLite) nicht verfügbar ist
+
+### MQTT-Gateway – Geräte direkt anbinden
+
+- **Topic-Translator** – Eigene MQTT-Topics von Shelly, OpenDTU, Tasmota und Co. auf EEDC-Felder mappen
+- **Geräte-Presets** – Vordefinierte Mappings für gängige Geräte (Shelly, OpenDTU, Tasmota, ...)
+- **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota, EcoFlow
 
 ### Aktueller Monat
 
@@ -57,10 +62,12 @@
 - **8 spezialisierte Dashboards** für jede Komponente
 - **Amortisations-Fortschrittsbalken** – Investitionsrückfluss auf einen Blick
 - **Formel-Tooltips** zeigen Berechnungsgrundlagen per Hover
+- **Mobile-optimiert** – Responsive Cockpit-Tabs, angepasste KPI-Darstellung auf Smartphones
 
 ### Auswertungen & Reporting
 
-- **6 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen
+- **7 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen, **Tabelle (Energie-Explorer)**
+- **Interaktiver Energie-Explorer** – Alle 22 Monatsspalten in sortierbarer Tabelle, Spaltenauswahl per localStorage, Vorjahresvergleich mit Δ-Farbkodierung
 - **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
 - **SOLL-IST Vergleich** gegen PVGIS-Prognosen
 - **CSV/JSON Export** für externe Weiterverarbeitung
@@ -68,22 +75,27 @@
 ### Aussichten (Prognosen)
 
 - **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
-- **Kurzfrist-Prognose** mit Wetter-Daten (Open-Meteo)
+- **Kurzfrist-Prognose** mit Wetter-Daten (Open-Meteo) und mehreren Wettermodellen (MeteoSwiss ICON-CH2, ICON-D2, ICON-EU, ECMWF IFS, auto)
+- **Solar Forecast ML (SFML)** – KI-basierter Ertragsprognose-Vergleich: EEDC vs. SFML vs. IST
 - **Langfrist-Prognose** mit PVGIS-Daten und Performance-Ratio
 - **Trend-Analyse** mit Degradationsberechnung und saisonalen Mustern
 
 ### Datenerfassung – Viele Wege führen nach EEDC
 
-- **HA-Statistik** – Direkt aus der HA Recorder-Langzeitstatistik (SQLite)
-- **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman
+- **HA-Statistik** – Direkt aus der HA Recorder-Langzeitstatistik (SQLite **und MariaDB/MySQL**)
+- **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow PowerOcean
 - **Custom-Import** – Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping
-- **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
 - **MQTT Energy** – Monatswerte aus MQTT-Topics (91% Konfidenz)
 - **Portal-Import** – CSV-Upload von Herstellerportalen (SMA Sunny Portal, Fronius Solarweb, evcc)
 - **Monatsabschluss-Wizard** – Geführte monatliche Datenerfassung mit Datenquellen-Status
 - **Demo-Daten** zum Ausprobieren
 
-> **Hinweis für MariaDB/MySQL-Nutzer:** Die HA-Statistik-Funktion liest direkt aus der SQLite-Datenbank. Wer MariaDB oder MySQL als Recorder-Backend nutzt, kann stattdessen **MQTT-Inbound** als gleichwertige Alternative verwenden.
+### Infothek – Verträge & Dokumente
+
+- **14 Kategorien** mit Vorlagen: Strom-, Gas-, Wasser-, Einspeisevertrag, Versicherung, Wartung, MaStR, ...
+- **Datei-Upload** – Fotos (JPEG, PNG, HEIC) und PDFs pro Eintrag, direkt in der Datenbank gespeichert
+- **Investitions-Verknüpfung** – Wartungsvertrag → Wechselrichter, Garantie → Speicher, ...
+- **PDF-Export** aller Infothek-Einträge für den klassischen Hefter
 
 ### Steuerliche Features
 
@@ -132,6 +144,8 @@ docker compose up -d
 open http://localhost:8099
 ```
 
+> **Multi-Arch:** Das Docker-Image steht für `amd64` und `arm64` (Raspberry Pi 4/5, Apple Silicon) bereit.
+
 > **Hinweis:** Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://github.com/supernova1963/eedc).
 
 ### Option 3: Lokale Entwicklung
@@ -157,6 +171,7 @@ open http://localhost:3000
 | Dokument | Beschreibung |
 |----------|--------------|
 | [Benutzerhandbuch](docs/BENUTZERHANDBUCH.md) | Vollständige Anleitung für Endbenutzer |
+| [Infothek-Handbuch](docs/HANDBUCH_INFOTHEK.md) | Verträge, Zähler & Dokumente verwalten |
 | [Architektur](docs/ARCHITEKTUR.md) | Technische Dokumentation für Entwickler |
 | [Changelog](CHANGELOG.md) | Versionshistorie und Änderungen |
 | [Entwicklung](docs/DEVELOPMENT.md) | Setup für lokale Entwicklung |
@@ -174,10 +189,10 @@ Die Hauptansicht zeigt alle wichtigen KPIs auf einen Blick:
 ![Cockpit Übersicht](./docs/images/cockpit_main.png)
 
 ### Auswertungen
-Detaillierte Analysen in 6 Kategorien:
+Detaillierte Analysen in 7 Kategorien:
 - Jahresvergleich mit Delta-Indikatoren
 - PV-String-Performance nach Ausrichtung
-- Arbitrage-Analyse für Speicher
+- Interaktiver Energie-Explorer (Tabellen-Tab)
 - Amortisationskurven für alle Investitionen
 ![Auswertungen - Komponenten](./docs/images/auswertungen_komponenten.png)
 
@@ -217,11 +232,12 @@ EEDC bietet flexible Home Assistant Integration mit mehreren Ansätzen:
 ### Sensor-Mapping (Empfohlen)
 
 Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den EEDC-Feldern zu:
-- Basis-Sensoren: PV-Erzeugung, Einspeisung, Netzbezug
+- Basis-Sensoren: PV-Erzeugung, Einspeisung, Netzbezug, Außentemperatur
 - PV-Module: Pro String oder kWp-Verteilung
 - Speicher: Ladung, Entladung, Netz-Ladung
 - E-Auto: km, Ladung (PV/Netz/Extern), V2H
 - Wärmepumpe: Strom, Heizung (COP-Berechnung möglich)
+- **Vorzeichen-Inversion** pro Sensor (bei bidirektionalen Sensoren)
 
 ### MQTT-Inbound (Universell)
 

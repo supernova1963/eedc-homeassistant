@@ -9,25 +9,27 @@ Drei Varianten für verschiedene Kanäle.
 
 ---
 
-### EEDC – Free, local PV analysis for Home Assistant (and standalone) [v3.1]
+### EEDC – Free, local PV analysis for Home Assistant (and standalone) [v3.6]
 
-I built a Home Assistant add-on that gives you a complete analysis of your PV system – fully local, no cloud, no subscription fees. Major v3 update with real-time monitoring.
+I built a Home Assistant add-on that gives you a complete analysis of your PV system – fully local, no cloud, no subscription fees.
 
 **What does it do?**
 
-- **Live Dashboard** – Real-time power monitoring with animated energy flow diagram, SoC gauges, 24h timeline, weather forecast with actual vs. predicted overlay
+- **Live Dashboard** – Real-time power monitoring with animated energy flow diagram, SoC gauges, 24h timeline, weather forecast with actual vs. predicted overlay, Solar Forecast ML (SFML) comparison line
 - **MQTT-Inbound** – Universal data bridge: works with any smart home system (HA, Node-RED, ioBroker, FHEM, openHAB) via standardized MQTT topics. Built-in HA automation generator.
-- **Current Month** – Live energy balance from HA statistics, connectors, or MQTT – with data source indicators per field
+- **MQTT-Gateway** – Map your own Shelly/OpenDTU/Tasmota MQTT topics directly to EEDC fields. Device presets included.
+- **Current Month** – Live energy balance from HA statistics (SQLite and MariaDB/MySQL), connectors, or MQTT – with data source indicators per field
 - **Dashboard** – Hero KPIs with year-over-year trends, energy flow diagram, ring gauges for self-sufficiency & self-consumption, sparklines
-- **6 Analysis Tabs + Community** – Energy, PV system, components, finances, CO2, investments + dedicated community section
+- **7 Analysis Tabs + Community** – Energy, PV system, components, finances, CO2, investments + interactive **Table/Explorer tab** (22 sortable columns, year-over-year delta)
+- **Infothek** – Optional document vault: store contracts, meters, contacts, warranties, subsidies. 14 categories with templates, photo/PDF upload, linked to investments.
 - **ROI Tracking** – When will your system pay for itself? Progress bar with estimated payback date
 - **Multi-Component** – PV, battery storage, EV, heat pump, wallbox, balcony PV
-- **Forecasting** – 7-day weather forecast, 12-month PVGIS projection, trend analysis with degradation detection, financial forecast
-- **Cloud Import** – Pull historical data from SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman + custom CSV/JSON
+- **Forecasting** – 7-day weather forecast (MeteoSwiss ICON-CH2, ICON-D2, ICON-EU, ECMWF or auto), 12-month PVGIS projection, trend analysis with degradation detection, financial forecast
+- **Cloud Import** – Pull historical data from SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow PowerOcean + custom CSV/JSON
 - **9 Device Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
 - **Community Benchmark** – Anonymous comparison with other PV systems via [live community server](https://energy.raunet.eu) (optional, data deletable anytime)
 - **Tax Features** – Small business regulation (Germany), special tariffs for heat pump/wallbox, company car support
-- **Standalone** – Also runs without Home Assistant (Docker)
+- **Standalone** – Also runs without Home Assistant (Docker, multi-arch: amd64 + arm64)
 - **DACH Support** – Germany, Austria, Switzerland
 
 **Installation:** Add the repository to your HA add-on store:
@@ -63,23 +65,29 @@ ich möchte euch mein selbst entwickeltes Home Assistant Add-on vorstellen: **EE
 
 ---
 
-#### Live Dashboard (NEU in v3.0)
+#### Live Dashboard
 
 Echtzeit-Monitoring eurer PV-Anlage:
 - **Animiertes Energiefluss-Diagramm** – SVG mit Flusslinien, SoC-Pegelanzeige für Speicher und E-Auto
 - **Tagesverlauf** – 24h-Chart mit PV, Verbrauch, Netz, Speicher (auch historisch abrufbar)
-- **Wetter-Widget** – Stunden-Prognose mit IST/Prognose-Overlay zum Vergleich
+- **Wetter-Widget** – Stunden-Prognose mit IST/Prognose-Overlay und Solar Forecast ML Vergleich
 - **Heute/Gestern kWh** – Tagessummen pro Komponente
 - **Demo-Modus** für Erstnutzer ohne konfigurierte Sensoren
 
 ---
 
-#### MQTT-Inbound – Universelle Datenbrücke (NEU in v3.0)
+#### MQTT-Inbound – Universelle Datenbrücke
 
 EEDC ist nicht auf Home Assistant beschränkt. Über vordefinierte MQTT-Topics kann **jedes Smarthome-System** Daten liefern:
 - **HA Automation Generator** – Wizard ordnet HA-Sensoren den EEDC-Topics zu und generiert fertige YAML-Automationen
 - **Beispiel-Flows** für Node-RED, ioBroker, FHEM, openHAB
 - **Energy → Monatsabschluss** – MQTT-Energiedaten als Vorschläge im Monatsabschluss-Wizard (Konfidenz 91%)
+
+#### MQTT-Gateway – Geräte direkt anbinden
+
+Shelly, OpenDTU, Tasmota und Co. sprechen ihr eigenes MQTT-Format. Das **Gateway** übersetzt beliebige Topics auf EEDC-Felder:
+- **Geräte-Presets** – Vordefinierte Mappings, einfach auswählen und anpassen
+- **Manuelles Topic-Mapping** – JSON-Pfad, Einheit, Live-Test
 
 ---
 
@@ -103,7 +111,7 @@ Das Dashboard zeigt auf einen Blick:
 
 ---
 
-#### Auswertungen (6 Tabs)
+#### Auswertungen (7 Tabs)
 
 | Tab | Inhalt |
 |-----|--------|
@@ -113,6 +121,7 @@ Das Dashboard zeigt auf einen Blick:
 | **Finanzen** | Einspeisung, Einsparungen, Netto-Ertrag, Amortisation |
 | **CO2** | Vermiedene Emissionen, Vergleich zu Netzbezug |
 | **Investitionen** | ROI pro Komponente, Jahres-Rendite p.a. |
+| **Tabelle** | Interaktiver Energie-Explorer: 22 Spalten, sortierbar, Vorjahres-Δ |
 
 #### Community (eigener Hauptmenüpunkt, 6 Tabs)
 
@@ -122,24 +131,32 @@ Anonymer Benchmark mit anderen PV-Anlagen: Übersicht, PV-Ertrag, Komponenten, R
 
 #### Aussichten (4 Prognose-Module)
 
-- **Kurzfristig** – 7-Tage Wetterprognose mit GTI-basierter PV-Erzeugung
+- **Kurzfristig** – 7-Tage Wetterprognose mit wählbarem Wettermodell (MeteoSwiss ICON-CH2, ICON-D2, ICON-EU, ECMWF, auto) und Solar Forecast ML Vergleich
 - **Langfristig** – 12-Monats-Prognose basierend auf PVGIS-Daten
 - **Trend-Analyse** – Degradationserkennung und saisonale Muster
 - **Finanzen** – Amortisationsprognose und Finanzplanung bis zum Break-Even
 
 ---
 
+#### Infothek – Verträge & Dokumente
+
+Ein optionales Modul für alles rund um die Anlage:
+- **14 Kategorien** mit Vorlagen (Strom-, Gas-, Wasservertrag, Einspeisevertrag, Versicherung, MaStR, Garantie, ...)
+- **Fotos und PDFs** pro Eintrag (bis zu 3 Dateien, HEIC-Support)
+- Verknüpfung mit Investitionen (Wartungsvertrag → Wechselrichter)
+- **PDF-Export** aller Einträge
+
+---
+
 #### Datenimport – Viele Wege führen nach EEDC
 
-- **HA-Statistik** – Direkt aus der HA Recorder-Langzeitstatistik (SQLite)
-- **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman
+- **HA-Statistik** – Direkt aus der HA Recorder-Langzeitstatistik (SQLite **und MariaDB/MySQL**)
+- **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow PowerOcean
 - **Custom-Import** – Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping
 - **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota
 - **MQTT Energy** – Monatswerte aus MQTT-Topics (91% Konfidenz)
 - **Portal-Import** – CSV-Upload von Herstellerportalen (SMA Sunny Portal, Fronius Solarweb, evcc)
 - **Manuell** – Geführter Monatsabschluss-Wizard
-
-> **Hinweis für MariaDB/MySQL-Nutzer:** Die HA-Statistik-Funktion liest direkt aus der SQLite-Datenbank. Wer MariaDB oder MySQL als Recorder-Backend nutzt, kann stattdessen **MQTT-Inbound** als gleichwertige Alternative verwenden – der integrierte Automations-Generator erstellt die passenden HA-Automationen automatisch.
 
 ---
 
@@ -178,7 +195,7 @@ PV-Anlage (inkl. String-Vergleich) | Batteriespeicher (AC & DC) | E-Auto (V2H-f�
 3. "EEDC" installieren, starten, in Sidebar anzeigen aktivieren
 4. Demo-Daten laden (ein Klick) – sofort alle Features ausprobieren
 
-Alternativ als **Docker-Container** ohne HA:
+Alternativ als **Docker-Container** ohne HA (amd64 + arm64):
 ```bash
 git clone https://github.com/supernova1963/eedc.git && cd eedc
 docker compose up -d
@@ -239,20 +256,22 @@ Ich habe ein Tool entwickelt, das mich selbst bei meiner eigenen PV-Anlage begei
 
 **Steuerlich korrekt** – Kleinunternehmerregelung, Spezialtarife für WP/Wallbox, sonstige Erträge & Ausgaben
 
+**Verträge und Dokumente** – Die optionale Infothek verwaltet Stromverträge, Einspeiseverträge, Zähler, Garantien und Ansprechpartner – mit Foto-Upload und PDF-Export
+
 ---
 
 **Für wen ist das?**
 
 - Home Assistant Nutzer → als Add-on mit einem Klick installierbar
-- Alle anderen → läuft auch standalone als Docker-Container oder lokal
+- Alle anderen → läuft auch standalone als Docker-Container (amd64 + arm64 / Raspberry Pi)
 - Nicht nur HA: Per MQTT kann jedes Smarthome-System Daten liefern (Node-RED, ioBroker, FHEM, openHAB)
 - Deutschland, Österreich und die Schweiz
 
 ---
 
 **Daten eingeben geht ganz einfach:**
-- Automatisch aus der Home Assistant Langzeitstatistik
-- Cloud-Import: SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman
+- Automatisch aus der Home Assistant Langzeitstatistik (auch MariaDB/MySQL)
+- Cloud-Import: SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow PowerOcean
 - 9 Geräte-Connectors: SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal u.a.
 - Per CSV/JSON-Import (auch mit eigenen Spaltenbezeichnungen)
 - Manuell über ein geführtes Formular (Monatsabschluss-Wizard)
@@ -272,9 +291,9 @@ Fragen und Feedback sind herzlich willkommen!
 ## Kurz-Version (für Kommentare / Kurzbeschreibungen)
 
 ### Deutsch
-> **EEDC** ist ein kostenloses, lokal laufendes PV-Analyse-Tool für Home Assistant (auch standalone). Live Dashboard mit animiertem Energiefluss, Echtzeit-Monitoring via MQTT (funktioniert mit jedem Smarthome-System), ROI-Tracking, Prognosen, Cloud-Import (SolarEdge, Fronius, Huawei u.a.), Speicher/WP/E-Auto-Auswertung, steuerliche Behandlung und optionaler Community-Benchmark. DACH-Support (DE/AT/CH). Demo-Daten inklusive.
+> **EEDC** ist ein kostenloses, lokal laufendes PV-Analyse-Tool für Home Assistant (auch standalone, amd64+arm64). Live Dashboard mit animiertem Energiefluss und Solar Forecast ML, Echtzeit-Monitoring via MQTT (funktioniert mit jedem Smarthome-System), MQTT-Gateway für Shelly/OpenDTU/Tasmota, ROI-Tracking, Prognosen, Cloud-Import (SolarEdge, Fronius, Huawei u.a.), HA-Statistik (SQLite + MariaDB), Speicher/WP/E-Auto-Auswertung, interaktiver Energie-Explorer, Infothek für Verträge & Dokumente, steuerliche Behandlung und optionaler Community-Benchmark. DACH-Support (DE/AT/CH). Demo-Daten inklusive.
 > https://supernova1963.github.io/eedc-homeassistant/
 
 ### English
-> **EEDC** is a free, fully local PV analysis tool for Home Assistant (also standalone). Live dashboard with animated energy flow, real-time monitoring via MQTT (works with any smart home system), ROI tracking, forecasting, cloud import (SolarEdge, Fronius, Huawei & more), battery/heat pump/EV analysis, tax features, and optional anonymous community benchmark. Supports Germany, Austria, Switzerland. Demo data included.
+> **EEDC** is a free, fully local PV analysis tool for Home Assistant (also standalone, amd64+arm64). Live dashboard with animated energy flow and Solar Forecast ML comparison, real-time monitoring via MQTT (works with any smart home system), MQTT-Gateway for Shelly/OpenDTU/Tasmota topic mapping, ROI tracking, forecasting, cloud import (SolarEdge, Fronius, Huawei & more), HA statistics (SQLite + MariaDB), battery/heat pump/EV analysis, interactive data explorer, document vault (Infothek), tax features, and optional anonymous community benchmark. Supports Germany, Austria, Switzerland. Demo data included.
 > https://supernova1963.github.io/eedc-homeassistant/

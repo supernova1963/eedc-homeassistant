@@ -1,7 +1,7 @@
 
 # EEDC Development Guide
 
-**Version 3.3** | Stand: März 2026
+**Version 3.6** | Stand: März 2026
 
 ---
 
@@ -203,20 +203,26 @@ eedc-homeassistant/
 │
 ├── scripts/
 │   ├── release.sh               # Release + Sync (ein Script für alles)
-│   └── sync-docs.sh             # Docs → Website Frontmatter-Sync
+│   └── github-traffic.sh        # GitHub Traffic-Statistiken
 │
 ├── docs/
-│   ├── BENUTZERHANDBUCH.md      # Endbenutzer-Anleitung
+│   ├── BENUTZERHANDBUCH.md      # Endbenutzer-Index (verlinkt Handbucher)
+│   ├── HANDBUCH_INSTALLATION.md # Teil I: Installation & Einrichtung
+│   ├── HANDBUCH_BEDIENUNG.md    # Teil II: Bedienung
+│   ├── HANDBUCH_EINSTELLUNGEN.md# Teil III: Einstellungen & Sensor-Mapping
+│   ├── HANDBUCH_INFOTHEK.md     # Modul: Infothek
 │   ├── ARCHITEKTUR.md           # Technische Dokumentation
+│   ├── BERECHNUNGEN.md          # Berechnungsreferenz
 │   ├── DEVELOPMENT.md           # Diese Datei
-│   ├── RELEASE-WORKFLOW.md      # Release-Prozess Dokumentation
+│   ├── RELEASE-WORKFLOW.md      # Release-Prozess
+│   ├── GLOSSAR.md               # Begriffe & Support
 │   ├── MQTT_INBOUND.md          # MQTT-Inbound Doku
 │   ├── FLYER.md                 # Promotional Texte
 │   └── archive/                 # Archivierte Dokumente
 │
 ├── website/                     # Astro Starlight Website
-│   ├── astro.config.mjs
-│   └── src/content/docs/        # Generiert aus docs/ via sync-docs.sh
+│   ├── astro.config.mjs         # Sidebar-Konfiguration
+│   └── src/content/docs/        # Website-Seiten (manuell mit docs/ sync halten)
 │
 └── eedc/                        # Die Anwendung
     ├── config.yaml              # HA Add-on Konfiguration
@@ -406,8 +412,10 @@ Nach dem Start des Backends verfügbar unter:
 | **Solar-Prognose** | `/api/solar-prognose` | Open-Meteo Solar GTI |
 | **System** | `/api/system` | Daten-Checker, Logs, Energieprofile |
 | **HA Integration** | `/api/ha` | HA-Status, MQTT Export |
-| **HA Statistics** | `/api/ha-statistics` | HA-DB Langzeitstatistik (SQLite) |
+| **HA Statistics** | `/api/ha-statistics` | HA-DB Langzeitstatistik (SQLite + MariaDB) |
 | **HA Import** | `/api/ha-import` | HA Datenimport |
+| **Infothek** | `/api/infothek` | Verträge, Zähler, Dokumente (CRUD + Datei-Upload) |
+| **MQTT-Gateway** | `/api/mqtt-gateway` | Topic-Mapping, Geräte-Presets |
 | **Scheduler** | `/api/scheduler` | Cron-Jobs, Monatswechsel |
 
 > **Hinweis:** HA-spezifische Routen (`/api/ha*`, `/api/sensor-mapping`, `/api/ha-statistics`) sind nur aktiv wenn `HA_MODE=true`.
@@ -417,7 +425,9 @@ Nach dem Start des Backends verfügbar unter:
 ## Weiterführende Dokumentation
 
 - [Architektur](ARCHITEKTUR.md) - Detaillierte technische Dokumentation
+- [Berechnungen](BERECHNUNGEN.md) - Alle Berechnungsformeln und -ketten
 - [Benutzerhandbuch](BENUTZERHANDBUCH.md) - Für Endbenutzer
+- [Infothek-Handbuch](HANDBUCH_INFOTHEK.md) - Verträge & Dokumente
 - [MQTT-Inbound](MQTT_INBOUND.md) - Topic-Struktur und Beispiel-Flows
 - [CLAUDE.md](../CLAUDE.md) - KI-Entwicklungskontext
 

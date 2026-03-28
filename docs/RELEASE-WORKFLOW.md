@@ -67,6 +67,27 @@ Wenn jemand einen PR gegen `eedc` stellt:
 | Website | `eedc-homeassistant/website/` |
 | Standalone-Dockerfile | `eedc/Dockerfile` (einzige Ausnahme, lebt nur dort) |
 
+## Dokumentation → Website synchronisieren
+
+Die Website-Seiten in `website/src/content/docs/` sind **keine automatisch generierten Kopien** von `docs/` — sie müssen manuell aktuell gehalten werden. Jede Datei hat einen Astro-Frontmatter-Header (4 Zeilen), danach folgt der Inhalt aus `docs/`.
+
+Beim Ändern einer Doku-Datei immer auch die korrespondierende Website-Datei aktualisieren:
+
+| `docs/` | `website/src/content/docs/` |
+| --- | --- |
+| `BENUTZERHANDBUCH.md` | `benutzerhandbuch.md` |
+| `HANDBUCH_INSTALLATION.md` | `handbuch-installation.md` |
+| `HANDBUCH_BEDIENUNG.md` | `handbuch-bedienung.md` |
+| `HANDBUCH_EINSTELLUNGEN.md` | `handbuch-einstellungen.md` |
+| `HANDBUCH_INFOTHEK.md` | `handbuch-infothek.md` |
+| `GLOSSAR.md` | `glossar.md` |
+| `ARCHITEKTUR.md` | `architektur.md` |
+| `BERECHNUNGEN.md` | `berechnungen.md` |
+| `DEVELOPMENT.md` | `entwicklung.md` |
+| `SETUP_DEVMACHINE.md` | `setup-devmachine.md` |
+
+Neue Seiten auch in `website/astro.config.mjs` in die Sidebar eintragen.
+
 ## Verboten
 
 - Direkt im `eedc`-Repo Code ändern

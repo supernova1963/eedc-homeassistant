@@ -1,3 +1,8 @@
+---
+title: "Berechnungsreferenz"
+description: "Alle Berechnungsketten: Energiebilanz, Finanzen, ROI, Prognosen, SFML und Energieprofile"
+---
+
 # EEDC Berechnungsreferenz
 
 **Version 3.6** | Stand: März 2026

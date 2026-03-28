@@ -6,7 +6,7 @@ description: "Teil II: Navigation, Dashboards, Auswertungen, Community und Aussi
 
 # EEDC Handbuch — Teil II: Bedienung
 
-**Version 3.3** | Stand: März 2026
+**Version 3.6** | Stand: März 2026
 
 > Dieses Handbuch ist Teil der EEDC-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
@@ -22,6 +22,7 @@ description: "Teil II: Navigation, Dashboards, Auswertungen, Community und Aussi
 5. [Auswertungen](#5-auswertungen)
 6. [Community](#6-community)
 7. [Aussichten (Prognosen)](#7-aussichten-prognosen)
+8. [Infothek](#8-infothek)
 
 ---
 
@@ -39,7 +40,7 @@ Die horizontale Navigation enthält vier Hauptbereiche:
 | **Community** | Anonymer Benchmark-Vergleich mit anderen PV-Anlagen |
 | **Aussichten** | Prognosen: 7-Tage, Langfristig, Trend, Finanzen |
 
-Plus ein Dropdown-Menü für **Einstellungen**.
+Plus ein Dropdown-Menü für **Einstellungen** und – sobald mindestens ein Eintrag existiert – den Hauptmenüpunkt **Infothek**.
 
 ### Einstellungen-Dropdown
 
@@ -375,6 +376,28 @@ Ein neues Panel vergleicht die historischen Erträge mit der konfigurierten Prog
 - Einzelkomponenten sind in aufklappbaren Unterzeilen sichtbar
 - Einsparungen werden proportional nach kWp verteilt
 
+### 5.7 Tabellen-Tab (Energie-Explorer)
+
+Der **Tabellen-Tab** bietet einen interaktiven Überblick aller Monatswerte in einer sortierbaren Tabelle — ideal für eigene Analysen und schnelle Jahresvergleiche.
+
+#### Inhalt
+
+- **22 Spalten**: Alle Energiefelder (Erzeugung, Einspeisung, Bezug, Direktverbrauch, Speicher, Wärmepumpe, E-Auto, Wallbox, Finanzen, CO2, ...)
+- **Vorjahresvergleich**: Jede Zeile zeigt optional den Δ-Wert zum gleichen Monat im Vorjahr, farbkodiert (grün = besser, rot = schlechter)
+- **Deutsches Zahlenformat**: Komma als Dezimaltrennzeichen, Punkt als Tausender
+
+#### Sortierung
+
+Klicke auf einen Spalten-Header, um nach dieser Spalte zu sortieren. Erneuter Klick wechselt die Richtung. Standard: chronologisch.
+
+#### Spaltenauswahl
+
+Über den Button **"Spalten"** (oben rechts in der Tabelle) wählst du aus, welche Spalten angezeigt werden. Die Auswahl wird im Browser gespeichert (localStorage) und bleibt auch nach einem Neustart erhalten.
+
+#### Export
+
+Den sichtbaren Tabelleninhalt kannst du als **CSV exportieren** (Button "CSV" oben rechts). Exportiert werden alle Zeilen und die aktuell eingeblendeten Spalten.
+
 ---
 
 ## 6. Community
@@ -459,6 +482,10 @@ Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
 - **Datenquelle**: Open-Meteo Wetterprognose
 - **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung
 - **Wettersymbole**: Sonnig, bewölkt, regnerisch
+- **Datenquelle-Kürzel** pro Tag: MS (MeteoSwiss ICON-CH2), D2 (ICON-D2), EU (ICON-EU), EC (ECMWF IFS), BM (best_match)
+- **Solar Forecast ML (SFML)**: Wenn SFML konfiguriert ist, erscheint im Chart eine zweite Linie mit dem KI-basierten Ertrag zum Vergleich mit der EEDC-Prognose und dem tatsächlichen IST-Wert
+
+Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z.B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt EEDC automatisch (auto).
 
 ### 7.2 Langfristig (12 Monate)
 
@@ -501,6 +528,25 @@ Amortisations-Prognose und Komponenten-Beiträge:
 > **Hinweis:** Die Finanz-Prognose zeigt den **Amortisations-Fortschritt** (kumulierte Erträge / Investition).
 > Im Cockpit und in Auswertung/Investitionen wird dagegen die **Jahres-Rendite** (Jahres-Ertrag / Investition) angezeigt.
 > Beide Metriken sind korrekt, aber für unterschiedliche Zwecke gedacht.
+
+---
+
+---
+
+## 8. Infothek
+
+Die **Infothek** ist ein optionales Modul für Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung. Der Menüpunkt erscheint sobald der erste Eintrag angelegt wurde.
+
+**Funktionen im Überblick:**
+- 14 Kategorien mit passenden Vorlagen-Feldern (Strom-, Gas-, Wasservertrag, Versicherung, Wartung, MaStR, ...)
+- Bis zu 3 Fotos oder PDFs pro Eintrag (JPEG, PNG, HEIC, PDF)
+- Optionale Verknüpfung mit EEDC-Investitionen
+- PDF-Export aller Einträge für den Hefter
+- Archivierung statt Löschung
+
+Eine vollständige Beschreibung aller Kategorien, Upload-Optionen und des PDF-Exports findest du im separaten Handbuch:
+
+→ [HANDBUCH_INFOTHEK.md](HANDBUCH_INFOTHEK.md)
 
 ---
 
