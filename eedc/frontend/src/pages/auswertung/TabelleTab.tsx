@@ -95,6 +95,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     return new Set(COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   })
   const [showVorjahr, setShowVorjahr] = useState(false)
+  const [compareYear, setCompareYear] = useState<number | null>(null)
   const [colPickerOpen, setColPickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
@@ -116,6 +117,28 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     return () => document.removeEventListener('mousedown', onOutsideClick)
   }, [colPickerOpen])
 
+  // Verfügbare Vergleichsjahre (alle Jahre außer dem gewählten, neueste zuerst)
+  const availableCompareYears = useMemo(() => {
+    if (selectedYear === 'all') return []
+    return [...new Set(alleDaten.map(d => d.jahr))]
+      .filter(y => y !== selectedYear)
+      .sort((a, b) => b - a)
+  }, [alleDaten, selectedYear])
+
+  // compareYear bei Jahreswechsel auto-setzen (Vorjahr bevorzugen)
+  useEffect(() => {
+    if (selectedYear === 'all' || availableCompareYears.length === 0) {
+      setCompareYear(null)
+      return
+    }
+    const prevYear = (selectedYear as number) - 1
+    if (availableCompareYears.includes(prevYear)) {
+      setCompareYear(prevYear)
+    } else {
+      setCompareYear(availableCompareYears[0])
+    }
+  }, [selectedYear, availableCompareYears])
+
   const zeitreihe = useMemo(
     () => createMonatsZeitreihe(data, anlage, strompreis, alleTarife),
     [data, anlage, strompreis, alleTarife]
@@ -123,15 +146,14 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
 
   // Vorjahresdaten — createMonatsZeitreihe nutzt alleTarife für historisch korrekte Tarife
   const vorjahrLookup = useMemo<Record<number, MonatsZeitreihe> | null>(() => {
-    if (!showVorjahr || selectedYear === 'all') return null
-    const prevYear = selectedYear - 1
-    const prevData = alleDaten.filter(d => d.jahr === prevYear)
+    if (!showVorjahr || selectedYear === 'all' || compareYear === null) return null
+    const prevData = alleDaten.filter(d => d.jahr === compareYear)
     if (prevData.length === 0) return null
     const prevZeitreihe = createMonatsZeitreihe(prevData, anlage, strompreis, alleTarife)
     return Object.fromEntries(prevZeitreihe.map(r => [r.monat, r]))
-  }, [showVorjahr, selectedYear, alleDaten, anlage, strompreis, alleTarife])
+  }, [showVorjahr, selectedYear, compareYear, alleDaten, anlage, strompreis, alleTarife])
 
-  const vorjahrVerfuegbar = selectedYear !== 'all' && vorjahrLookup !== null
+  const vorjahrVerfuegbar = selectedYear !== 'all' && compareYear !== null && vorjahrLookup !== null
 
   // Sortierte Zeilen
   const sortedRows = useMemo(() => {
@@ -182,7 +204,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     const headers: string[] = ['Jahr', 'Monat']
     activeCols.forEach(c => {
       headers.push(c.unit ? `${c.label} (${c.unit})` : c.label)
-      if (vorjahrVerfuegbar) headers.push(`Δ Vorjahr`)
+      if (vorjahrVerfuegbar) headers.push(`Δ vs. ${compareYear}`)
     })
 
     const rows: (string | number)[][] = sortedRows.map(r => {
@@ -262,28 +284,42 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
           {' '}·{' '}{zeitreihe.length} Monate
           {vorjahrVerfuegbar && showVorjahr && (
             <span className="ml-2 text-primary-500 dark:text-primary-400">
-              · Vergleich mit {(selectedYear as number) - 1}
+              · Vergleich mit {compareYear}
             </span>
           )}
         </p>
         <div className="flex items-center gap-2 flex-wrap">
 
-          {/* Vorjahr-Vergleich Toggle */}
-          <button
-            type="button"
-            onClick={() => canShowVorjahr && setShowVorjahr(v => !v)}
-            title={!canShowVorjahr ? 'Bitte ein konkretes Jahr auswählen' : undefined}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              !canShowVorjahr
-                ? 'border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                : showVorjahr
-                  ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                  : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-          >
-            <GitCompareArrows className="h-3.5 w-3.5" />
-            Vorjahr-Vergleich
-          </button>
+          {/* Vorjahr-Vergleich Toggle + Jahresauswahl */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => canShowVorjahr && setShowVorjahr(v => !v)}
+              title={!canShowVorjahr ? 'Bitte ein konkretes Jahr auswählen' : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                !canShowVorjahr
+                  ? 'border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                  : showVorjahr
+                    ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              <GitCompareArrows className="h-3.5 w-3.5" />
+              Jahresvergleich
+            </button>
+            {showVorjahr && canShowVorjahr && availableCompareYears.length > 0 && (
+              <select
+                value={compareYear ?? ''}
+                onChange={e => setCompareYear(Number(e.target.value))}
+                title="Vergleichsjahr auswählen"
+                className="text-xs px-2 py-1.5 rounded-lg border border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 focus:outline-none focus:ring-1 focus:ring-primary-400"
+              >
+                {availableCompareYears.map(y => (
+                  <option key={y} value={y}>vs. {y}</option>
+                ))}
+              </select>
+            )}
+          </div>
 
           {/* Spaltenauswahl */}
           <div className="relative" ref={pickerRef}>
@@ -329,18 +365,23 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
       </div>
 
       {/* Hinweis wenn Vorjahr aktiv aber keine Daten */}
-      {showVorjahr && canShowVorjahr && !vorjahrVerfuegbar && (
+      {showVorjahr && canShowVorjahr && !vorjahrVerfuegbar && compareYear !== null && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Keine Vorjahresdaten für {(selectedYear as number) - 1} vorhanden.
+          Keine Daten für {compareYear} vorhanden.
+        </p>
+      )}
+      {showVorjahr && canShowVorjahr && availableCompareYears.length === 0 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Keine weiteren Jahre für einen Vergleich vorhanden.
         </p>
       )}
 
       {/* Tabelle */}
       <Card padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[600px]">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                 <th
                   className="px-3 py-2.5 text-left font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 whitespace-nowrap select-none"
                   onClick={() => handleSort('jahr')}
@@ -371,7 +412,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
               </tr>
               {/* Vorjahr-Subheader */}
               {vorjahrVerfuegbar && showVorjahr && (
-                <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/30">
+                <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                   <td colSpan={2} />
                   {activeCols.map(col => (
                     <Fragment key={col.key}>
@@ -379,7 +420,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                         {selectedYear as number}
                       </td>
                       <td className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap border-r border-gray-200 dark:border-gray-700">
-                        Δ vs. {(selectedYear as number) - 1}
+                        Δ vs. {compareYear}
                       </td>
                     </Fragment>
                   ))}
