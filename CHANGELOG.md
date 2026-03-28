@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.0] - 2026-03-28
+
+### Verbessert
+
+- **Batterie Live-kWh: optionale Tages-kWh-Slots (#64)**: Neue optionale Felder im Live-Sensor-Mapping für Speicher: „Ladung heute (kWh)" und „Entladung heute (kWh)". Wer separate Tages-kWh-Sensoren hat (die täglich auf 0 zurückgesetzt werden), kann diese direkt eintragen — sie haben Vorrang vor der bisherigen Berechnung. Vollständige Prioritätskette: (1) Live-Tages-kWh-Sensoren, (2) kumulative Monatsabschluss-Sensoren mit Delta ab Mitternacht, (3) W-Sensor mit Trapez-Integration.
+- **WP und Wallbox Live-kWh aus Monatsabschluss-Mapping**: Sind `stromverbrauch_kwh` (WP) bzw. `ladung_kwh` (Wallbox) im Monatsabschluss-Sensor-Mapping konfiguriert, werden diese jetzt ebenfalls für die Live-Dashboard-Tooltips genutzt statt der Trapez-Integration.
+
 ## [3.6.9] - 2026-03-28
 
 ### Verbessert
