@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.9] - 2026-03-28
+
+### Verbessert
+
+- **Energieprofil-Revision (Etappe 1)**: Vorzeichenbasierte Aggregation ersetzt die fehlerhafte kategorie-basierte Logik. BHKW und Sonstiges-Erzeuger fließen korrekt in `pv_kw` ein, V2H wird in `batterie_kw` einbezogen, Wärmepumpe und Wallbox erhalten eigene Spalten (`waermepumpe_kw`, `wallbox_kw`) für spätere Effizienz- und Musteranalyse.
+- **Rollierender Energieprofil-Scheduler**: Neuer Job alle 15 Minuten schreibt abgeschlossene Stunden des laufenden Tages — heute's Profil wächst jetzt laufend mit statt erst um 00:15 des Folgetags verfügbar zu sein.
+- **Retention-Cleanup**: `TagesEnergieProfil`-Stundenwerte älter als 2 Jahre werden täglich um 00:15 gelöscht. `TagesZusammenfassung` bleibt dauerhaft erhalten.
+
+### Hinweis
+
+Bestehende Energieprofil-Daten werden bei diesem Update einmalig gelöscht und neu aufgebaut (fehlerhafte Aggregation der Vorgängerversion). Die Neusammlung beginnt automatisch.
+
 ## [3.6.8] - 2026-03-28
 
 ### Behoben
