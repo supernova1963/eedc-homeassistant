@@ -312,7 +312,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                 value={compareYear ?? ''}
                 onChange={e => setCompareYear(Number(e.target.value))}
                 title="Vergleichsjahr auswählen"
-                className="text-xs px-2 py-1.5 rounded-lg border border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                className="text-xs px-2 py-1.5 rounded-lg border border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-gray-800 text-primary-700 dark:text-primary-300 focus:outline-none focus:ring-1 focus:ring-primary-400"
               >
                 {availableCompareYears.map(y => (
                   <option key={y} value={y}>vs. {y}</option>
