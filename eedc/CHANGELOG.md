@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.8] - 2026-03-28
+
+### Behoben
+
+- **Batterie Laden/Entladen kWh im Live-Dashboard zu hoch (#64)**: Wenn Batterie-Sensoren Leistung (W) mit Rauschen um 0 W meldeten, summierte die Trapez-Integration das Rauschen über den Tag auf → überhöhte Werte. Fix: Sind `ladung_kwh`/`entladung_kwh` bereits im Monatsabschluss-Sensor-Mapping konfiguriert, werden diese kumulativen Sensoren direkt via Delta (aktuell − Mitternacht) genutzt — kein Trapez, kein Rauschen. Der W-Sensor-Pfad bleibt als Fallback erhalten.
+
 ## [3.6.7] - 2026-03-28
 
 ### Behoben
