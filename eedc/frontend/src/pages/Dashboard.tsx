@@ -57,11 +57,10 @@ export default function Dashboard() {
         setData(result)
         setMonatsdaten(monate)
 
-        if (result.zeitraum_von && result.zeitraum_bis) {
-          const vonJahr = parseInt(result.zeitraum_von.split('-')[0])
-          const bisJahr = parseInt(result.zeitraum_bis.split('-')[0])
-          const years: number[] = []
-          for (let y = vonJahr; y <= bisJahr; y++) years.push(y)
+        // availableYears aus ungefilterten Monatsdaten — nicht aus result.zeitraum_von/bis,
+        // da result bei gesetztem selectedYear nur den gefilterten Zeitraum zurückgibt
+        if (monate.length > 0) {
+          const years = [...new Set(monate.map(m => m.jahr))].sort((a, b) => a - b)
           setAvailableYears(years)
         }
 
