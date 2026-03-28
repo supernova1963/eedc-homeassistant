@@ -687,8 +687,11 @@ if frontend_dist.exists():
         if resolved.is_file():
             return FileResponse(resolved)
 
-        # Sonst index.html für SPA Routing
-        return FileResponse(frontend_dist / "index.html")
+        # Sonst index.html für SPA Routing — kein Cache damit Browser nach Updates neue Bundle-Hashes lädt
+        return FileResponse(
+            frontend_dist / "index.html",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
 else:
     @app.get("/")
     async def no_frontend():

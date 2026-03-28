@@ -1,5 +1,5 @@
 // TabelleTab - Interaktiver Energie-Explorer: Tabellenansicht mit Filter, Sortierung, Spaltenauswahl
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
 import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns, GitCompareArrows } from 'lucide-react'
 import { Card, Button } from '../../components/ui'
 import { exportToCSV } from '../../utils/export'
@@ -374,14 +374,14 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                 <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/30">
                   <td colSpan={2} />
                   {activeCols.map(col => (
-                    <>
-                      <td key={`${col.key}-cur`} className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                    <Fragment key={col.key}>
+                      <td className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
                         {selectedYear as number}
                       </td>
-                      <td key={`${col.key}-delta`} className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap border-r border-gray-200 dark:border-gray-700">
+                      <td className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap border-r border-gray-200 dark:border-gray-700">
                         Δ vs. {(selectedYear as number) - 1}
                       </td>
-                    </>
+                    </Fragment>
                   ))}
                 </tr>
               )}
@@ -403,14 +403,14 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                       const pv = prevRow ? (prevRow as unknown as RowData)[col.key] : null
                       if (vorjahrVerfuegbar && showVorjahr) {
                         return (
-                          <>
-                            <td key={`${col.key}-v`} className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                          <Fragment key={col.key}>
+                            <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
                               {fmtVal(v, col.decimals)}
                             </td>
-                            <td key={`${col.key}-d`} className="px-3 py-2 text-right tabular-nums text-xs border-r border-gray-100 dark:border-gray-800">
+                            <td className="px-3 py-2 text-right tabular-nums text-xs border-r border-gray-100 dark:border-gray-800">
                               <DeltaCell current={v} prev={pv} col={col} />
                             </td>
-                          </>
+                          </Fragment>
                         )
                       }
                       return (
@@ -439,12 +439,12 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                     const prefix = col.aggregation === 'avg' ? 'Ø ' : ''
                     if (vorjahrVerfuegbar && showVorjahr) {
                       return (
-                        <>
-                          <td key={`${col.key}-v`} className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
+                        <Fragment key={col.key}>
+                          <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
                             {v != null ? `${prefix}${fmtVal(v, col.decimals)}` : '—'}
                           </td>
-                          <td key={`${col.key}-d`} className="px-3 py-2.5 border-r border-gray-300 dark:border-gray-600" />
-                        </>
+                          <td className="px-3 py-2.5 border-r border-gray-300 dark:border-gray-600" />
+                        </Fragment>
                       )
                     }
                     return (
