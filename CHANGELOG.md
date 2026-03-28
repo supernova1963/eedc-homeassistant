@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.7] - 2026-03-28
+
+### Behoben
+
+- **MQTT Auto-Publish war nicht aktiv**: Die Einstellung `MQTT_AUTO_PUBLISH=true` wurde zwar gespeichert, aber nie ausgewertet — kein Scheduler-Job war verknüpft. Fix: Bei aktiviertem `MQTT_AUTO_PUBLISH` wird jetzt ein periodischer Job gestartet, der alle `MQTT_PUBLISH_INTERVAL` Minuten (Default: 60) die KPIs aller Anlagen via MQTT Discovery nach Home Assistant publiziert.
+
 ## [3.6.6] - 2026-03-28
 
 ### Behoben
