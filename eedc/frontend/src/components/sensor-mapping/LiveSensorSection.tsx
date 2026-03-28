@@ -85,7 +85,9 @@ export const LIVE_FIELDS = {
     { key: 'leistung_w', label: 'Leistung', einheit: 'W', placeholder: 'PV-Leistungssensor suchen...' },
   ],
   speicher: [
-    { key: 'leistung_w', label: 'Leistung', einheit: 'W, +Ladung/−Entladung', placeholder: 'Batterie-Leistungssensor suchen...' },
+    { key: 'leistung_w', label: 'Leistung (bidirektional)', einheit: 'W, +Ladung/−Entladung', placeholder: 'Batterie-Leistungssensor suchen...' },
+    { key: 'ladung_kwh', label: 'Ladung heute (optional)', einheit: 'kWh, Tageswert', placeholder: 'Tages-Ladeenergie-Sensor suchen...' },
+    { key: 'entladung_kwh', label: 'Entladung heute (optional)', einheit: 'kWh, Tageswert', placeholder: 'Tages-Entladeenergie-Sensor suchen...' },
     { key: 'soc', label: 'Ladezustand (SoC)', einheit: '%', placeholder: 'SoC-Sensor suchen...' },
   ],
   eauto: [
