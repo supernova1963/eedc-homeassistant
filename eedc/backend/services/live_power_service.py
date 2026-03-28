@@ -837,23 +837,47 @@ class LivePowerService:
             if basis_live.get("netzbezug_w"):
                 category_entities["netzbezug"].append(basis_live["netzbezug_w"])
 
-        # Separate kWh-Sensoren für Speicher aus Monatsabschluss-Mapping (#64)
-        # Nutzt ladung_kwh/entladung_kwh aus dem sensors-Abschnitt (bereits konfiguriert)
-        # statt Trapez-Integration auf dem W-Sensor → exakte Tageswerte ohne Rauschen
-        # {inv_id: {"ladung": entity_id_or_None, "entladung": entity_id_or_None}}
+        # kWh-Sensoren aus Monatsabschluss-Mapping für exakte Tageswerte (#64)
+        # Nutzt bereits konfigurierte kumulative Sensoren statt Trapez-Integration
+        # auf W-Sensoren → kein Rauschen, keine Akkumulationsfehler.
+        #
+        # Speicher: {inv_id: {"ladung": eid, "entladung": eid}}
+        # Sonstige: {comp_key: entity_id}  (WP → stromverbrauch_kwh, Wallbox → ladung_kwh)
+        _MONATSABSCHLUSS_KWH: dict[str, tuple[str, str]] = {
+            # typ: (sensor_field, comp_key_prefix)
+            "waermepumpe": ("stromverbrauch_kwh", "waermepumpe"),
+            "wallbox":     ("ladung_kwh",          "wallbox"),
+        }
+
         separate_battery_sensors: dict[str, dict[str, Optional[str]]] = {}
+        separate_kwh_sensors: dict[str, str] = {}  # comp_key → entity_id
         mapping_investitionen = (anlage.sensor_mapping or {}).get("investitionen", {})
         for inv_id, inv_data in mapping_investitionen.items():
-            if inv_types and inv_types.get(inv_id) != "speicher":
+            typ = inv_types.get(inv_id) if inv_types else None
+            if not isinstance(inv_data, dict):
                 continue
-            inv_sensors = inv_data.get("sensors", {}) if isinstance(inv_data, dict) else {}
-            ladung_eid = inv_sensors.get("ladung_kwh") or None
-            entladung_eid = inv_sensors.get("entladung_kwh") or None
-            if ladung_eid or entladung_eid:
-                separate_battery_sensors[inv_id] = {
-                    "ladung": ladung_eid,
-                    "entladung": entladung_eid,
-                }
+            inv_live = inv_data.get("live", {}) or {}
+            inv_sensors = inv_data.get("sensors", {}) or {}
+
+            if typ == "speicher":
+                # Priorität 1: Live-Slots (Tageswerte, reset täglich)
+                ladung_eid = inv_live.get("ladung_kwh") or None
+                entladung_eid = inv_live.get("entladung_kwh") or None
+                # Priorität 2: Monatsabschluss-Sensoren (kumulativ, delta ab Mitternacht)
+                if not ladung_eid:
+                    ladung_eid = inv_sensors.get("ladung_kwh") or None
+                if not entladung_eid:
+                    entladung_eid = inv_sensors.get("entladung_kwh") or None
+                if ladung_eid or entladung_eid:
+                    separate_battery_sensors[inv_id] = {
+                        "ladung": ladung_eid,
+                        "entladung": entladung_eid,
+                    }
+            elif typ in _MONATSABSCHLUSS_KWH:
+                sensor_field, prefix = _MONATSABSCHLUSS_KWH[typ]
+                kwh_eid = inv_sensors.get(sensor_field) or None
+                if kwh_eid:
+                    separate_kwh_sensors[f"{prefix}_{inv_id}"] = kwh_eid
 
         # Alle Investitionen mit leistung_w Sensor (oder getrennte WP-Sensoren)
         for inv_id, live in inv_live_map.items():
@@ -895,12 +919,13 @@ class LivePowerService:
             category_entities["pv"].append(pv_gesamt_eid)
             component_entities["pv_gesamt"] = pv_gesamt_eid
 
-        # Alle Entity-IDs sammeln (dedupliziert, inkl. separater Batterie-Sensoren)
+        # Alle Entity-IDs sammeln (dedupliziert, inkl. aller Monatsabschluss-kWh-Sensoren)
         all_ids = list(set(
             [eid for eids in category_entities.values() for eid in eids]
             + list(component_entities.values())
             + [eid for sep in separate_battery_sensors.values()
                for eid in sep.values() if eid]
+            + list(separate_kwh_sensors.values())
         ))
         if not all_ids:
             return {}
@@ -1038,7 +1063,11 @@ class LivePowerService:
                     if kwh is not None:
                         result[comp_key] = round(abs(kwh), 1)
             else:
-                if _is_energy_sensor(entity_id):
+                # WP/Wallbox: kWh-Sensor aus Monatsabschluss bevorzugen (#64 Follow-up)
+                sep_eid = separate_kwh_sensors.get(comp_key)
+                if sep_eid and sep_eid in history:
+                    kwh = _energy_delta(sep_eid)
+                elif _is_energy_sensor(entity_id):
                     kwh = _energy_delta(entity_id)
                 else:
                     kwh = self._trapez_kwh(pts)
