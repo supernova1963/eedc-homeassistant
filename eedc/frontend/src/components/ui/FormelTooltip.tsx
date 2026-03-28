@@ -25,13 +25,18 @@ export default function FormelTooltip({
 }: FormelTooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [position, setPosition] = useState<'top' | 'bottom'>('top')
+  const [offsetX, setOffsetX] = useState(0)
   const triggerRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     if (isVisible && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      // Wenn weniger als 120px Platz oben, zeige unten
       setPosition(rect.top < 120 ? 'bottom' : 'top')
+      // Horizontal verschieben falls Tooltip über Viewport-Rand ragt (min. 8px Abstand)
+      const tooltipWidth = 280 // ca. Mitte von minWidth/maxWidth
+      const center = rect.left + rect.width / 2
+      const overflow = center - tooltipWidth / 2
+      setOffsetX(overflow < 8 ? Math.abs(overflow) + 8 : 0)
     }
   }, [isVisible])
 
@@ -54,13 +59,12 @@ export default function FormelTooltip({
         <div
           className={`absolute z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg
             ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
-            left-1/2 -translate-x-1/2
           `}
-          style={{ minWidth: '200px', maxWidth: '350px', whiteSpace: 'normal' }}
+          style={{ minWidth: '200px', maxWidth: '350px', whiteSpace: 'normal', left: `calc(50% + ${offsetX}px)`, transform: 'translateX(-50%)' }}
         >
           {/* Pfeil */}
           <div
-            className={`absolute left-1/2 -translate-x-1/2 w-0 h-0
+            className={`absolute w-0 h-0
               border-l-[6px] border-l-transparent
               border-r-[6px] border-r-transparent
               ${position === 'top'
@@ -68,6 +72,7 @@ export default function FormelTooltip({
                 : 'bottom-full border-b-[6px] border-b-gray-900 dark:border-b-gray-950'
               }
             `}
+            style={{ left: `calc(50% - ${offsetX}px)`, transform: 'translateX(-50%)' }}
           />
 
           {/* Inhalt */}
