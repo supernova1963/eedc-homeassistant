@@ -67,7 +67,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
   }, [chartData])
 
   const wpSummen = useMemo(() => {
-    if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0, stromHeizen: 0, stromWarmwasser: 0 }
+    if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0, stromHeizen: 0, stromWarmwasser: 0, heizungGetrennt: 0, warmwasserGetrennt: 0 }
     const waerme = chartData.reduce((sum, z) => sum + z.wp_waerme_kwh, 0)
     const strom = chartData.reduce((sum, z) => sum + z.wp_strom_kwh, 0)
     const heizung = chartData.reduce((sum, z) => sum + z.wp_heizung_kwh, 0)
