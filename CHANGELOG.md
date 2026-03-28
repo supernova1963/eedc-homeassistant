@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.3] - 2026-03-28
+
+### Behoben
+
+- **Cockpit Zeitraum und Jahresauswahl (#71)**: Bei Anlagen mit Monatsdaten (z.B. Netzbezug) vor der ersten PV-Investition wurde der Zeitraum nur aus InvestitionMonatsdaten berechnet — ältere Monate und Jahre fehlten in der Auswahl. Fix: frühestes und spätestes Datum aus beiden Quellen (Monatsdaten + InvestitionMonatsdaten) kombiniert.
+- **FormelTooltip am linken Rand (#70)**: Tooltip wurde am linken Viewport-Rand abgeschnitten. Fix: horizontale Position wird jetzt viewport-bewusst berechnet und bei Bedarf nach rechts verschoben.
+
 ## [3.6.2] - 2026-03-28
 
 ### Behoben
