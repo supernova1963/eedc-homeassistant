@@ -10,7 +10,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
 import { useAnlagen } from '../../hooks'
-import { monatsabschlussApi } from '../../api/monatsabschluss'
+import { monatsabschlussApi, type NaechsterMonat } from '../../api/monatsabschluss'
 import eedcIcon from '../../assets/eedc-icon.svg'
 
 // Haupttabs mit Icons
@@ -73,7 +73,7 @@ export default function TopNavigation() {
   const navigate = useNavigate()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [hasOpenMonth, setHasOpenMonth] = useState(false)
+  const [openMonth, setOpenMonth] = useState<NaechsterMonat | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const haAvailable = useHAAvailable()
   const { anlagen } = useAnlagen()
@@ -91,7 +91,7 @@ export default function TopNavigation() {
   useEffect(() => {
     if (!firstAnlageId) return
     monatsabschlussApi.getNaechsterMonat(firstAnlageId).then((result) => {
-      setHasOpenMonth(result !== null)
+      setOpenMonth(result)
     })
   }, [firstAnlageId])
 
@@ -208,9 +208,10 @@ export default function TopNavigation() {
                   : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
               }`}
               aria-label="Monatsabschluss"
+              title={openMonth ? `Monatsabschluss ${openMonth.monat_name} ${openMonth.jahr} offen` : 'Monatsabschluss'}
             >
               <CalendarCheck className="h-5 w-5" />
-              {hasOpenMonth && (
+              {openMonth && (
                 <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white dark:border-gray-800" />
               )}
             </button>
@@ -300,7 +301,7 @@ export default function TopNavigation() {
             >
               <div className="relative">
                 <CalendarCheck className="h-4 w-4" />
-                {hasOpenMonth && (
+                {openMonth && (
                   <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500" />
                 )}
               </div>
