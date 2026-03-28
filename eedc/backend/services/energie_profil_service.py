@@ -86,12 +86,18 @@ async def aggregate_day(
         logger.debug(f"Anlage {anlage.id}, {datum}: Keine Tagesverlauf-Daten")
         return None
 
-    # Serien-Kategorien indexieren
+    # Serien-Kategorien indexieren (vorzeichenbasiert, zukunftssicher)
     pv_keys = {s["key"] for s in serien if s["kategorie"] == "pv"}
     batterie_keys = {s["key"] for s in serien if s["kategorie"] == "batterie"}
+    # V2H: E-Auto mit V2H-Funktion → Schlüssel starten mit "v2h_", Kategorie "eauto"
+    v2h_keys = {s["key"] for s in serien if s["key"].startswith("v2h_")}
     netz_keys = {s["key"] for s in serien if s["kategorie"] == "netz"}
-    verbraucher_keys = {s["key"] for s in serien
-                        if s["kategorie"] not in ("pv", "batterie", "netz")}
+    wp_keys = {s["key"] for s in serien if s["kategorie"] == "waermepumpe"}
+    wallbox_keys = {s["key"] for s in serien
+                    if s["kategorie"] in ("wallbox", "eauto")
+                    and not s["key"].startswith("v2h_")}
+    # Alle Schlüssel die separat behandelt werden (nicht in generischer Summe)
+    _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys
 
     # ── Wetter-IST-Daten holen ────────────────────────────────────────────
     wetter_stunden = await _get_wetter_ist(anlage, datum)
@@ -134,20 +140,36 @@ async def aggregate_day(
         h = int(punkt["zeit"].split(":")[0])
         werte = punkt.get("werte", {})
 
-        # PV gesamt (kW, positiv)
-        pv_kw = sum(werte.get(k, 0) for k in pv_keys if werte.get(k, 0) > 0)
-
-        # Echte Verbraucher (kW, absolut — ohne Batterie und Netz)
-        verbrauch_kw = sum(abs(werte.get(k, 0)) for k in verbraucher_keys
-                          if werte.get(k, 0) < 0)
-
-        # Einspeisung / Netzbezug (aus Netz-Serie oder Basis)
+        # Netz (Einspeisung/Netzbezug)
         netz_val = sum(werte.get(k, 0) for k in netz_keys)
         einspeisung_kw = abs(netz_val) if netz_val < 0 else 0.0
         netzbezug_kw = netz_val if netz_val > 0 else 0.0
 
-        # Batterie (kW mit Vorzeichen: positiv=Entladung, negativ=Ladung)
-        batterie_kw = sum(werte.get(k, 0) for k in batterie_keys)
+        # Batterie: alle Speicher + V2H (vorzeichenbehaftet: positiv=Entladung, negativ=Ladung)
+        batterie_kw = (
+            sum(werte.get(k, 0) for k in batterie_keys) +
+            sum(werte.get(k, 0) for k in v2h_keys)
+        )
+
+        # WP + Wallbox separat (Absolutwert, nur wenn negativ = Senke)
+        waermepumpe_kw = sum(abs(werte.get(k, 0)) for k in wp_keys
+                             if (werte.get(k) or 0) < 0)
+        wallbox_kw = sum(abs(werte.get(k, 0)) for k in wallbox_keys
+                         if (werte.get(k) or 0) < 0)
+
+        # PV + Verbrauch: vorzeichenbasiert über alle übrigen Schlüssel
+        # positiv = lokaler Erzeuger (PV, BKW, BHKW, Sonstiges-Erzeuger)
+        # negativ = Verbraucher (Haushalt, Sonstiges-Verbraucher, WP, Wallbox)
+        pv_kw = sum(v for k in pv_keys
+                    if (v := werte.get(k, 0)) > 0)
+        verbrauch_kw = waermepumpe_kw + wallbox_kw
+        for k, v in werte.items():
+            if v is None or k in _sonderschluessel:
+                continue
+            if v > 0:
+                pv_kw += v       # BHKW, Sonstiges-Erzeuger → lokale Erzeugung
+            elif v < 0:
+                verbrauch_kw += abs(v)  # Haushalt, Sonstiges-Verbraucher
 
         # Bilanz: PV vs. Verbrauch
         ueberschuss = max(0, pv_kw - verbrauch_kw)
@@ -191,6 +213,8 @@ async def aggregate_day(
             einspeisung_kw=round(einspeisung_kw, 3) if einspeisung_kw else None,
             netzbezug_kw=round(netzbezug_kw, 3) if netzbezug_kw else None,
             batterie_kw=round(batterie_kw, 3) if batterie_kw else None,
+            waermepumpe_kw=round(waermepumpe_kw, 3) if waermepumpe_kw else None,
+            wallbox_kw=round(wallbox_kw, 3) if wallbox_kw else None,
             ueberschuss_kw=round(ueberschuss, 3) if ueberschuss else None,
             defizit_kw=round(defizit, 3) if defizit else None,
             temperatur_c=round(temperatur, 1) if temperatur is not None else None,
@@ -329,7 +353,13 @@ async def rollup_month(
 
 async def aggregate_yesterday_all() -> dict:
     """
-    Scheduler-Job: Aggregiert den Vortag für alle Anlagen.
+    Scheduler-Job: Finalisiert den Vortag für alle Anlagen (täglich um 00:15).
+
+    Schreibt den Vortag final (inkl. Wetter-IST-Daten aus Archive-API),
+    berechnet TagesZusammenfassung und räumt alte TagesEnergieProfil-Einträge auf.
+
+    Retention: TagesEnergieProfil-Einträge älter als 2 Jahre werden gelöscht.
+    TagesZusammenfassung bleibt dauerhaft erhalten.
 
     Returns:
         Dict mit Ergebnissen pro Anlage
@@ -352,6 +382,63 @@ async def aggregate_yesterday_all() -> dict:
                 }
             except Exception as e:
                 logger.error(f"Anlage {anlage.id}: Aggregation fehlgeschlagen: {type(e).__name__}: {e}")
+                results[anlage.id] = {"status": "fehler", "error": str(e)}
+
+        # Retention-Cleanup: TagesEnergieProfil älter als 2 Jahre löschen
+        cutoff = date.today() - timedelta(days=730)
+        result = await db.execute(
+            delete(TagesEnergieProfil).where(TagesEnergieProfil.datum < cutoff)
+        )
+        deleted = result.rowcount
+        if deleted > 0:
+            logger.info(f"Energie-Profil Cleanup: {deleted} Stundenwerte älter als 2 Jahre gelöscht")
+        await db.commit()
+
+    return results
+
+
+async def aggregate_today_all() -> dict:
+    """
+    Rollierender Job: Aggregiert den laufenden Tag für alle Anlagen.
+
+    Läuft alle 15 Minuten. Schreibt alle abgeschlossenen Stunden des heutigen
+    Tages (mit 10-Minuten-Puffer, damit HA-History die Daten garantiert hat).
+    Überschreibt bestehende Stunden-Einträge (Upsert via Delete+Insert).
+
+    Die 00:15-Aggregation des Vortags finalisiert dann die Wetter-IST-Daten
+    und schreibt die TagesZusammenfassung endgültig.
+
+    Returns:
+        Dict mit Ergebnissen pro Anlage
+    """
+    from datetime import datetime as dt
+    now = dt.now()
+    heute = date.today()
+
+    # Nur abgeschlossene Stunden mit 10-Min-Puffer schreiben
+    # (Stunde H ist abgeschlossen wenn es mindestens H:10 Uhr ist)
+    letzte_abgeschlossene_stunde = now.hour - 1 if now.minute < 10 else now.hour
+    if letzte_abgeschlossene_stunde < 0:
+        return {}  # Kurz nach Mitternacht — nichts zu tun
+
+    results = {}
+
+    async with get_session() as db:
+        anlagen_result = await db.execute(select(Anlage))
+        anlagen = anlagen_result.scalars().all()
+
+        for anlage in anlagen:
+            try:
+                zusammenfassung = await aggregate_day(
+                    anlage, heute, db, datenquelle="scheduler",
+                )
+                results[anlage.id] = {
+                    "status": "ok" if zusammenfassung else "keine_daten",
+                    "datum": heute.isoformat(),
+                    "bis_stunde": letzte_abgeschlossene_stunde,
+                }
+            except Exception as e:
+                logger.debug(f"Anlage {anlage.id}: Heute-Aggregation: {type(e).__name__}: {e}")
                 results[anlage.id] = {"status": "fehler", "error": str(e)}
 
     return results

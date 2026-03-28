@@ -47,13 +47,18 @@ class TagesEnergieProfil(Base):
     datum: Mapped[date] = mapped_column(Date, nullable=False)
     stunde: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-23
 
-    # Gesamtwerte (kW Stundenmittel)
+    # Gesamtwerte (kW Stundenmittel) — vorzeichenbasiert aggregiert
+    # pv_kw: alle lokalen Erzeuger (PV-Module, BKW, BHKW, Sonstiges wenn positiv)
     pv_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # verbrauch_kw: alle Senken gesamt (Haushalt + WP + Wallbox + Sonstiges wenn negativ)
     verbrauch_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     einspeisung_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     netzbezug_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # batterie_kw: alle Speicher inkl. V2H — positiv=Entladung(Quelle), negativ=Ladung(Senke)
     batterie_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    # Batterie: positiv=Entladung(Quelle), negativ=Ladung(Senke)
+    # Einzelne Verbraucher (kW, Absolutwert) — für Effizienz- und Musteranalyse
+    waermepumpe_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    wallbox_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Bilanz
     ueberschuss_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

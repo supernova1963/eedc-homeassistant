@@ -161,6 +161,18 @@ async def run_migrations(conn):
             if 'sfml_prognose_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_kwh FLOAT'))
 
+        # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
+        # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),
+        # neue Spalten waermepumpe_kw und wallbox_kw werden ergänzt.
+        if 'tages_energie_profil' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('tages_energie_profil')}
+            if 'waermepumpe_kw' not in existing_columns:
+                # Altdaten löschen (einmalig, nur wenn neue Spalten noch nicht existieren)
+                connection.execute(text('DELETE FROM tages_energie_profil'))
+                connection.execute(text('DELETE FROM tages_zusammenfassung'))
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN waermepumpe_kw FLOAT'))
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wallbox_kw FLOAT'))
+
         # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
         if 'infothek_eintraege' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}

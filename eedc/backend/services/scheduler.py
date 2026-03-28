@@ -109,12 +109,21 @@ class EEDCScheduler:
                 )
                 logger.info(f"MQTT Auto-Publish aktiviert: alle {interval} Minuten")
 
-            # Energie-Profil Aggregation: Täglich um 00:15 (Vortag)
+            # Energie-Profil Heute: Alle 15 Minuten (rollierend, laufender Tag)
+            self._scheduler.add_job(
+                energie_profil_heute_job,
+                IntervalTrigger(minutes=15),
+                id="energie_profil_heute",
+                name="Energie-Profil Heute (rollierend)",
+                replace_existing=True,
+            )
+
+            # Energie-Profil Vortag: Täglich um 00:15 (Finalisierung + Cleanup)
             self._scheduler.add_job(
                 energie_profil_aggregation_job,
                 CronTrigger(hour=0, minute=15),
                 id="energie_profil_aggregation",
-                name="Energie-Profil Aggregation",
+                name="Energie-Profil Vortag (Finalisierung)",
                 replace_existing=True,
             )
 
@@ -280,13 +289,25 @@ async def mqtt_energy_cleanup_job() -> None:
         )
 
 
+async def energie_profil_heute_job() -> None:
+    """Schreibt abgeschlossene Stunden des laufenden Tages (alle 15 Min)."""
+    try:
+        from backend.services.energie_profil_service import aggregate_today_all
+        results = await aggregate_today_all()
+        if results:
+            ok = sum(1 for r in results.values() if r["status"] == "ok")
+            logger.debug(f"Energie-Profil Heute: {ok}/{len(results)} Anlagen aktualisiert")
+    except Exception as e:
+        logger.debug(f"Energie-Profil Heute fehlgeschlagen: {type(e).__name__}: {e}")
+
+
 async def energie_profil_aggregation_job() -> None:
-    """Aggregiert Energieprofil des Vortags für alle Anlagen (täglich um 00:15)."""
+    """Finalisiert Energieprofil des Vortags für alle Anlagen (täglich um 00:15)."""
     try:
         from backend.services.energie_profil_service import aggregate_yesterday_all
         results = await aggregate_yesterday_all()
         ok = sum(1 for r in results.values() if r["status"] == "ok")
-        logger.info(f"Energie-Profil Aggregation: {ok}/{len(results)} Anlagen erfolgreich")
+        logger.info(f"Energie-Profil Vortag: {ok}/{len(results)} Anlagen finalisiert")
         await log_activity(
             kategorie="scheduler",
             aktion="Energie-Profil Aggregation",
