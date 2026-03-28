@@ -6,7 +6,7 @@ description: "Teil III: Einstellungen, Datenerfassung, Sensor-Mapping und HA-Int
 
 # EEDC Handbuch — Teil III: Einstellungen & Sensormapping
 
-**Version 3.3** | Stand: März 2026
+**Version 3.6** | Stand: März 2026
 
 > Dieses Handbuch ist Teil der EEDC-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Glossar](GLOSSAR.md)
@@ -21,9 +21,10 @@ description: "Teil III: Einstellungen, Datenerfassung, Sensor-Mapping und HA-Int
 4. [HA-Statistik Import](#4-ha-statistik-import)
 5. [Home Assistant Integration](#5-home-assistant-integration)
 6. [MQTT-Inbound](#6-mqtt-inbound)
-7. [Daten-Checker](#7-daten-checker)
-8. [Protokolle](#8-protokolle)
-9. [Energieprofile](#9-energieprofile)
+7. [MQTT-Gateway](#7-mqtt-gateway)
+8. [Daten-Checker](#8-daten-checker)
+9. [Protokolle](#9-protokolle)
+10. [Energieprofile](#10-energieprofile)
 
 ---
 
@@ -41,6 +42,15 @@ Bearbeite die Stammdaten deiner PV-Anlage:
   - Klicke auf "+ Strom-Versorger hinzufügen" etc.
   - Erfasse Versorger-Name, Kundennummer, Portal-URL
   - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
+
+**Wettermodell:**
+- **auto** (Standard): EEDC wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match)
+- **MeteoSwiss ICON-CH2**: Empfohlen für alpine Standorte in der Schweiz und Südtirol (2 km Auflösung)
+- **ICON-D2**: Hochauflösendes DWD-Modell für Deutschland (2,2 km)
+- **ICON-EU**: Europäisches Modell mit mittlerer Auflösung
+- **ECMWF IFS**: Globales ECMWF-Modell (0,25°)
+
+Bei spezifischer Modellauswahl versucht EEDC zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Datenquelle wird pro Tag in der Kurzfrist-Ansicht mit einem Kürzel angezeigt (MS/D2/EU/EC/BM).
 
 **Steuerliche Behandlung:**
 - **Keine USt-Auswirkung** (Standard): Für Anlagen ab 2023 mit Nullsteuersatz (≤30 kWp) oder Kleinunternehmer
@@ -410,6 +420,9 @@ Ordne die grundlegenden Energie-Sensoren zu:
 | **Netzbezug** | Bezug aus dem Netz | HA-Sensor, Manuell |
 | **Batterie-Ladung** | Gesamt-Ladung (alle Speicher) | HA-Sensor, Manuell |
 | **Batterie-Entladung** | Gesamt-Entladung | HA-Sensor, Manuell |
+| **Außentemperatur** | Aktuelle Außentemperatur in °C | HA-Sensor (bevorzugt), Open-Meteo Fallback |
+
+**Vorzeichen-Inversion:** Manche Sensoren liefern Leistungswerte mit invertiertem Vorzeichen (z.B. Einspeisung als negativer Wert). Pro Leistungs-Sensor gibt es eine Checkbox **"Vorzeichen invertieren"** — aktiviere sie, wenn der Sensor negative statt positive Werte liefert. EEDC rechnet intern immer mit positiven Werten.
 
 #### Schritt 2: PV-Module
 
@@ -492,6 +505,8 @@ Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der I
 - **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den EEDC-Feldern zugeordnet sein
 - **Home Assistant Langzeitstatistiken**: Deine Sensoren müssen in der HA-Datenbank gespeichert werden
 - **EEDC v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
+
+> **MariaDB/MySQL-Nutzer:** Der HA-Statistik Import unterstützt seit v3.4.11 auch MariaDB und MySQL als Recorder-Backend — nicht nur SQLite. EEDC erkennt den Datenbanktyp automatisch anhand der konfigurierten Verbindungsdaten.
 
 > ⚠️ **Wichtig**: Bei Update von v1.x auf v2.0.0 ist eine Neuinstallation des Add-ons erforderlich! Siehe CHANGELOG für Upgrade-Anleitung.
 
@@ -750,7 +765,58 @@ MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfiden
 
 ---
 
-## 7. Daten-Checker
+## 7. MQTT-Gateway
+
+**Pfad**: Einstellungen → Home Assistant → MQTT-Gateway
+
+Das **MQTT-Gateway** ergänzt den MQTT-Inbound um ein flexibles Topic-Mapping: Du kannst die MQTT-Topics deiner eigenen Geräte (Shelly, OpenDTU, Tasmota, ...) direkt auf EEDC-Felder mappen — ohne dein Smarthome-System zu ändern.
+
+> **Unterschied zu MQTT-Inbound:** MQTT-Inbound erwartet Daten auf fixen EEDC-Topics (`eedc/{id}/live/...`). Das Gateway übersetzt beliebige eigene Topics in diese Struktur.
+
+### 7.1 Geräte-Presets
+
+Für gängige Geräte sind fertige Mapping-Vorlagen hinterlegt. Klicke auf **"Preset laden"** und wähle dein Gerät:
+
+| Preset | Unterstützte Geräte |
+|--------|-------------------|
+| **Shelly** | Shelly Pro 3EM, Shelly EM, Shelly Plus 1PM |
+| **OpenDTU** | OpenDTU (alle Wechselrichter-Typen) |
+| **Tasmota** | Tasmota Energy-Template |
+| **Fronius Push** | Fronius Solar API Push |
+| **SMA** | SMA Speedwire MQTT Bridge |
+
+Nach dem Laden eines Presets werden die Topic-Pfade mit deinen Gerätedaten (z.B. Seriennummer) befüllt.
+
+### 7.2 Manuelles Topic-Mapping
+
+Für Geräte ohne Preset kannst du das Mapping manuell konfigurieren:
+
+1. **EEDC-Zielfeld wählen** (z.B. "PV-Leistung gesamt")
+2. **Quell-Topic eingeben** (z.B. `solar/openDTU12345/total/Power`)
+3. **JSON-Pfad** angeben falls das Payload ein JSON-Objekt ist (z.B. `data.power`)
+4. **Einheit** wählen (W oder kW — wird automatisch umgerechnet)
+5. **Testen**: Klicke "Letzte Nachricht" um den empfangenen Wert sofort zu prüfen
+
+### 7.3 Bridge-Modus (Connector → MQTT)
+
+Geräte-Connectors (SMA, Fronius etc.) können ihre Messwerte über die MQTT-Bridge regelmäßig auf EEDC-Topics publishen — auch wenn das Gerät kein natives MQTT spricht:
+
+**Pfad**: Einstellungen → Datenerfassung → Connector → "Als MQTT-Bridge aktivieren"
+
+- Abruf-Intervall: 30s, 60s, 5min (je nach Gerät)
+- Published auf: `eedc/{anlage_id}/live/{key}`
+- Ersetzt manuelles MQTT-Senden aus dem Smarthome-System
+
+### 7.4 Diagnose
+
+Der Gateway-Tab zeigt live:
+- Verbindungsstatus zum MQTT-Broker
+- Letzte empfangene Nachricht pro Topic (Wert, Zeitstempel)
+- Fehlermeldungen bei nicht auflösbaren JSON-Pfaden
+
+---
+
+## 8. Daten-Checker
 
 **Pfad**: Einstellungen → System → Daten-Checker
 
@@ -779,28 +845,91 @@ Die PV-Produktionsprüfung vergleicht deine tatsächliche Erzeugung mit der PVGI
 
 ---
 
-## 8. Protokolle
+## 9. Protokolle
 
 **Pfad**: Einstellungen → System → Protokolle
 
-Das Protokoll-System protokolliert automatisch alle wichtigen Aktivitäten:
+Die Protokolle-Seite ist das zentrale Werkzeug zur Fehlersuche. Sie besteht aus zwei Tabs und bietet Debug-Modus sowie Neustart direkt im Header.
 
-### Protokollierte Ereignisse
+### Header-Aktionen
 
-- **Monatsabschluss** — Wann welcher Monat abgeschlossen wurde
-- **Connector-Abruf** — Geräte-Connector Datenabfragen
-- **Cloud-Fetch** — Cloud-Import-Abrufe
-- **Portal-Import** — Portal-CSV-Imports
+| Button | Funktion |
+|--------|----------|
+| **Debug** (Käfer-Icon) | Schaltet den Log-Level zwischen INFO und DEBUG um. Debug zeigt alle Detail-Meldungen — ideal für Fehlersuche, danach wieder deaktivieren (erhöhter Speicherverbrauch). Kein Restart nötig. |
+| **Neustart** (Pfeil-Icon) | Startet EEDC neu. Bei HA über die Supervisor-API, Standalone über Container-Restart. Bestätigungsdialog vor Ausführung. |
 
-### Funktionen
+### Tab 1: System-Logs
 
-- **Live-Filter** nach Kategorie und Zeitraum
-- **In-Memory Log-Buffer** für schnellen Zugriff
-- **DB-Persistierung** für langfristige Historie
+Echtzeit-Logviewer mit In-Memory Ring Buffer (max. 500 Einträge, gehen bei Restart verloren).
+
+**Filter:**
+- **Level** — DEBUG, INFO, WARNING, ERROR (Minimum-Filter: WARNING zeigt auch ERROR)
+- **Modul** — Freitextsuche im Logger-Namen (z.B. "connector", "mqtt", "wetter")
+- **Suche** — Freitextsuche in Log-Nachrichten
+
+**Aktionen:**
+- **Auto-Refresh** (Play/Pause) — Aktualisiert alle 5 Sekunden
+- **Copy** (Clipboard-Icon) — Kopiert alle sichtbaren Logs als Markdown-Tabelle in die Zwischenablage, ideal zum Einfügen in GitHub Issues
+- **Download** (Pfeil-Icon) — Exportiert gefilterte Logs als `.txt`-Datei
+
+**Typische Fehlersuche im System-Logs Tab:**
+
+| Problem | Filter-Tipp |
+|---------|-------------|
+| API-Fehler | Level: ERROR |
+| MQTT-Probleme | Suche: "MQTT" oder Modul: "mqtt" |
+| Wetter-API schlägt fehl | Suche: "Open-Meteo" oder "Bright Sky" |
+| Solar-Prognose fehlt | Suche: "Solar" |
+| Connector liest nicht | Modul: "connector", Level: WARNING |
+
+### Tab 2: Aktivitäten
+
+Persistentes Aktivitätsprotokoll in der Datenbank (überlebt Restarts, automatisch bereinigt nach 90 Tagen / max. 1000 Einträge).
+
+**Filter:**
+- **Kategorie** — Dropdown mit allen 16 Kategorien
+- **Status** — Erfolgreich / Fehlgeschlagen
+- **Suche** — Freitextsuche in Aktion und Details (z.B. "sma_ennexos", "fehlgeschlagen")
+
+**Aktionen:**
+- **Copy** (Clipboard-Icon) — Kopiert sichtbare Aktivitäten als Markdown-Liste
+- **Bereinigen** (Papierkorb) — Löscht Einträge älter als 90 Tage, zeigt Toast mit Anzahl
+- **Pagination** — Blättern durch ältere Einträge
+
+**Protokollierte Kategorien:**
+
+| Kategorie | Was wird protokolliert |
+|-----------|----------------------|
+| Connector-Test | Verbindungstests zu Geräten (SMA, Fronius etc.) |
+| Connector-Einrichtung | Neue Connector-Konfigurationen |
+| Connector-Abruf | Zählerstand-Abfragen (Erfolg/Fehler) |
+| Portal-Import | CSV-/Portal-Imports |
+| Cloud-Import | Cloud-Verbindungstests (Growatt, Fronius etc.) |
+| Cloud-Fetch | Monatliche Cloud-Datenabrufe |
+| Backup-Export | JSON-Anlagen-Exporte |
+| Backup-Import | JSON-Anlagen-Imports mit Details |
+| Monatsabschluss | Monatsdaten speichern |
+| HA-Statistiken | HA Recorder DB-Abfragen und Bulk-Imports |
+| Scheduler-Jobs | Hintergrund-Tasks (Monatswechsel, Energie-Profil, MQTT-Snapshots) |
+| MQTT | Inbound/Gateway/Bridge Start und Verbindungsverluste |
+| Community | Daten teilen/löschen, Server-Timeout |
+| Sensor-Mapping | Sensor-Zuordnungen speichern/löschen |
+| HA-Export | MQTT-Sensoren publizieren/entfernen |
+
+### Fehlersuche-Workflow
+
+Bei einem Support-Fall empfehlen wir diesen Ablauf:
+
+1. **Debug-Modus aktivieren** (Button im Header)
+2. **Problem reproduzieren** (Aktion wiederholen die fehlschlägt)
+3. **System-Logs prüfen** — Level: WARNING, Suche nach dem betroffenen Modul
+4. **Aktivitäten prüfen** — Kategorie filtern oder nach Stichwort suchen
+5. **Logs kopieren** — Copy-Button drücken, in GitHub Issue einfügen
+6. **Debug-Modus deaktivieren** (nicht vergessen!)
 
 ---
 
-## 9. Energieprofile
+## 10. Energieprofile
 
 **Pfad**: Einstellungen → System → Energieprofile
 

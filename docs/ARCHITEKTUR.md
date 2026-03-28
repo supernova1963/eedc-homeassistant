@@ -1,7 +1,7 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 3.3** | Stand: März 2026
+**Version 3.6** | Stand: März 2026
 
 ---
 
@@ -168,7 +168,9 @@ eedc-homeassistant/
     │   │   ├── settings.py         # App-Einstellungen
     │   │   ├── activity_log.py    # Aktivitäts-Protokolle
     │   │   ├── mqtt_energy_snapshot.py # MQTT Energy Snapshots (NEU v3.0.0)
-    │   │   └── tages_energie_profil.py # Energieprofil: Stundenwerte + Tagessummary (NEU v3.1.0)
+    │   │   ├── tages_energie_profil.py # Energieprofil: Stundenwerte + Tagessummary (NEU v3.1.0)
+    │   │   ├── infothek.py             # Infothek-Einträge + Dateien (NEU v3.5.0)
+    │   │   └── solar_forecast_ml.py    # Solar Forecast ML Persistierung (NEU v3.4.0)
     │   │
     │   ├── utils/                # Hilfsfunktionen
     │   │   └── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
@@ -176,7 +178,10 @@ eedc-homeassistant/
     │   └── services/            # Business Logic
     │       ├── wetter_service.py
     │       ├── brightsky_service.py       # DWD-Daten via Bright Sky API
-    │       ├── solar_forecast_service.py  # Open-Meteo Solar mit GTI
+    │       ├── solar_forecast_service.py  # Open-Meteo Solar GTI + Solar Forecast ML (SFML)
+    │       ├── mqtt_gateway_service.py    # MQTT-Gateway Topic-Mapping + Presets (NEU v3.4.5)
+    │       ├── infothek_service.py        # Infothek CRUD + Datei-Handling (NEU v3.5.0)
+    │       ├── infothek_datei_service.py  # Bild-Resize, HEIC→JPEG, PDF-Validierung
     │       ├── prognose_service.py        # Prognose-Berechnungen
     │       ├── pdf_service.py             # PDF-Generierung
     │       ├── ha_sensors_export.py
@@ -234,7 +239,8 @@ eedc-homeassistant/
         │   ├── pages/           # Seiten-Komponenten
         │   │   ├── Dashboard.tsx
         │   │   ├── Auswertung.tsx
-        │   │   ├── auswertung/  # Auswertungs-Tabs
+        │   │   ├── auswertung/  # Auswertungs-Tabs (Energie, PV, Komponenten, Finanzen, CO2, Investitionen, Tabelle)
+        │   │   ├── Infothek.tsx             # Infothek (NEU v3.5.0)
         │   │   ├── CloudImportWizard.tsx
         │   │   ├── CustomImportWizard.tsx
         │   │   ├── Einrichtung.tsx          # Datenquellen-Hub
@@ -295,7 +301,7 @@ eedc-homeassistant/
 | wechselrichter_hersteller | VARCHAR(50) | sma, fronius, kostal, etc. |
 | mastr_id | VARCHAR(20) | MaStR-ID der Anlage |
 | versorger_daten | JSON | Versorger & Zähler |
-| wetter_provider | VARCHAR(30) | auto, open-meteo, brightsky, open-meteo-solar |
+| wettermodell | VARCHAR(30) | auto, meteoswiss_icon_ch2, icon_d2, icon_eu, ecmwf_ifs04 |
 | sensor_mapping | JSON | HA-Sensor-Mapping |
 | community_hash | VARCHAR(64) | Hash für Community-Löschung |
 | steuerliche_behandlung | VARCHAR(30) | `keine_ust` oder `regelbesteuerung` |
@@ -578,6 +584,8 @@ Sonstiges [Eigenständig]
 | `/api/portal-import` | portal_import.py | Portal-CSV Import (SMA, Fronius, EVCC) |
 | `/api/cloud-import` | cloud_import.py | Cloud-API Import (SolarEdge, Fronius, Huawei, Growatt, Deye, EcoFlow) |
 | `/api/custom-import` | custom_import.py | Custom CSV/JSON Import mit Feld-Mapping |
+| `/api/infothek` | infothek.py | Infothek CRUD + Datei-Upload (NEU v3.5.0) |
+| `/api/mqtt-gateway` | mqtt_gateway.py | MQTT-Gateway Topic-Mapping (NEU v3.4.5) |
 
 ### Wichtige Endpoints
 

@@ -6,7 +6,7 @@ description: "Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Feh
 
 # EEDC Handbuch — Teil I: Installation & Einrichtung
 
-**Version 3.3** | Stand: März 2026
+**Version 3.6** | Stand: März 2026
 
 > Dieses Handbuch ist Teil der EEDC-Dokumentation.
 > Siehe auch: [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
@@ -71,8 +71,25 @@ description: "Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Feh
 
 ### Option B: Docker (Standalone)
 
+Das Docker-Image ist für `amd64` und `arm64` (Raspberry Pi 4/5, Apple Silicon) verfügbar.
+
+**Empfohlen: Docker Compose**
+
 ```bash
-# In das eedc-Verzeichnis wechseln
+# Standalone-Repository klonen
+git clone https://github.com/supernova1963/eedc.git
+cd eedc
+
+# Mit Docker Compose starten (holt pre-built Image automatisch)
+docker compose up -d
+
+# Browser öffnen
+open http://localhost:8099
+```
+
+**Alternativ: Manuell bauen**
+
+```bash
 cd eedc
 
 # Image bauen
@@ -85,9 +102,6 @@ docker run -d \
   -v $(pwd)/data:/data \
   --restart unless-stopped \
   eedc
-
-# Browser öffnen
-open http://localhost:8099
 ```
 
 ### Option C: Entwicklungsumgebung
@@ -280,6 +294,8 @@ Die letzten Abschlüsse werden angezeigt:
 
 ## 6. Fehlerbehebung
 
+> **Tipp:** Die **Protokolle-Seite** (Einstellungen → System → Protokolle) ist das wichtigste Werkzeug zur Fehlersuche. Dort kannst du den **Debug-Modus** aktivieren, System-Logs nach Fehlern filtern und **Logs per Copy-Button** direkt in ein GitHub Issue einfügen. Details siehe [Handbuch Einstellungen §9](HANDBUCH_EINSTELLUNGEN.md#9-protokolle).
+
 ### SOLL-IST Vergleich zeigt 0 kWh
 
 **Problem**: Im PV-Anlage Dashboard werden keine IST-Werte angezeigt.
@@ -308,6 +324,7 @@ Die letzten Abschlüsse werden angezeigt:
 1. Koordinaten der Anlage prüfen
 2. Internetverbindung prüfen
 3. Open-Meteo API könnte überlastet sein (später erneut versuchen)
+4. **Protokolle → System-Logs**: Suche nach "Open-Meteo" oder "Bright Sky" für Details
 
 ### MQTT-Verbindung fehlgeschlagen
 
@@ -318,6 +335,8 @@ Die letzten Abschlüsse werden angezeigt:
 2. Host/Port korrekt? (`core-mosquitto` bei HA, sonst IP)
 3. Benutzer/Passwort korrekt?
 4. Firewall-Regeln prüfen
+5. **Protokolle → Aktivitäten**: Kategorie "MQTT" zeigt Start-/Verbindungsfehler
+6. **Protokolle → Aktivitäten**: Kategorie "Connector-Test" zeigt Verbindungstest-Details
 
 ### Dashboard zeigt keine Daten
 
@@ -328,6 +347,7 @@ Die letzten Abschlüsse werden angezeigt:
 2. Richtiges Jahr ausgewählt?
 3. Strompreise konfiguriert?
 4. Browser-Cache leeren (Strg+Shift+R)
+5. **Protokolle → Aktivitäten**: Kategorie "HA-Statistiken" prüfen ob HA-Import funktioniert hat
 
 ### Setup-Wizard erscheint erneut
 
