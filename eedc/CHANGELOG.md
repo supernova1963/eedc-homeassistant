@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.6] - 2026-03-28
+
+### Behoben
+
+- **Energie-Explorer Tabelle: Jahresvergleich-Dropdown im Dark Mode unleserlich**: Vergleichsjahr-Select hatte semi-transparenten Hintergrund (`primary-900/30`), der von nativen Dropdowns ignoriert wird. Fix: opaker Dark-Mode-Hintergrund (`gray-800`).
+
 ## [3.6.5] - 2026-03-28
 
 ### Behoben
