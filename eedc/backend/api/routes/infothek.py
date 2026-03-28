@@ -707,8 +707,11 @@ async def upload_datei(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Daten lesen
-    raw_daten = await datei.read()
+    # Daten lesen (max. 50 MB)
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    raw_daten = await datei.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw_daten) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Datei zu groß (max. 50 MB).")
 
     # Verarbeiten
     thumbnail = None

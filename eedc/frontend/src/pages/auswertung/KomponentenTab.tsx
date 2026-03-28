@@ -67,17 +67,21 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
   }, [chartData])
 
   const wpSummen = useMemo(() => {
-    if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0 }
+    if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0, stromHeizen: 0, stromWarmwasser: 0 }
     const waerme = chartData.reduce((sum, z) => sum + z.wp_waerme_kwh, 0)
     const strom = chartData.reduce((sum, z) => sum + z.wp_strom_kwh, 0)
     const heizung = chartData.reduce((sum, z) => sum + z.wp_heizung_kwh, 0)
     const warmwasser = chartData.reduce((sum, z) => sum + z.wp_warmwasser_kwh, 0)
+    const stromHeizen = chartData.reduce((sum, z) => sum + z.wp_strom_heizen_kwh, 0)
+    const stromWarmwasser = chartData.reduce((sum, z) => sum + z.wp_strom_warmwasser_kwh, 0)
     return {
       waerme,
       strom,
       cop: strom > 0 ? waerme / strom : null,
       heizung,
-      warmwasser
+      warmwasser,
+      stromHeizen,
+      stromWarmwasser,
     }
   }, [chartData])
 
@@ -343,16 +347,16 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               ergebnis={`= ${fmtCalc(wpSummen.strom / 1000, 2)} MWh`}
             />
             <KPICard
-              title="Ø COP"
+              title="JAZ"
               value={wpSummen.cop?.toFixed(2) || '---'}
               unit=""
-              subtitle="Jahresarbeitszahl"
+              subtitle={zeitraumLabel ? `Jahresarbeitszahl ${zeitraumLabel}` : 'Jahresarbeitszahl'}
               icon={Flame}
               color="text-orange-500"
               bgColor="bg-orange-50 dark:bg-orange-900/20"
-              formel="Wärme ÷ Strom"
+              formel="JAZ = Wärme ÷ Strom"
               berechnung={`${fmtCalc(wpSummen.waerme, 0)} kWh ÷ ${fmtCalc(wpSummen.strom, 0)} kWh`}
-              ergebnis={wpSummen.cop ? `= ${fmtCalc(wpSummen.cop, 2)} COP` : '---'}
+              ergebnis={wpSummen.cop ? `= ${fmtCalc(wpSummen.cop, 2)}` : '---'}
             />
             <KPICard
               title="Ersparnis vs. Gas"
@@ -365,7 +369,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             />
           </div>
 
-          {/* WP KPIs - Zweite Zeile: Heizung vs. Warmwasser (nur wenn beide > 0) */}
+          {/* WP KPIs - Zweite Zeile: Heizung vs. Warmwasser + getrennte JAZ */}
           {(wpSummen.heizung > 0 || wpSummen.warmwasser > 0) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <KPICard
@@ -388,6 +392,34 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 bgColor="bg-blue-50 dark:bg-blue-900/20"
                 formel="Σ Warmwasser-Energie aller Monate"
               />
+              {wpSummen.stromHeizen > 0 && (
+                <KPICard
+                  title="JAZ Heizen"
+                  value={(wpSummen.heizung / wpSummen.stromHeizen).toFixed(2)}
+                  unit=""
+                  subtitle={zeitraumLabel || undefined}
+                  icon={Flame}
+                  color="text-red-500"
+                  bgColor="bg-red-50 dark:bg-red-900/20"
+                  formel="JAZ Heizen = Heizenergie ÷ Strom Heizen"
+                  berechnung={`${fmtCalc(wpSummen.heizung, 0)} kWh ÷ ${fmtCalc(wpSummen.stromHeizen, 0)} kWh`}
+                  ergebnis={`= ${(wpSummen.heizung / wpSummen.stromHeizen).toFixed(2)}`}
+                />
+              )}
+              {wpSummen.stromWarmwasser > 0 && (
+                <KPICard
+                  title="JAZ Warmwasser"
+                  value={(wpSummen.warmwasser / wpSummen.stromWarmwasser).toFixed(2)}
+                  unit=""
+                  subtitle={zeitraumLabel || undefined}
+                  icon={Flame}
+                  color="text-blue-500"
+                  bgColor="bg-blue-50 dark:bg-blue-900/20"
+                  formel="JAZ WW = Warmwasser ÷ Strom WW"
+                  berechnung={`${fmtCalc(wpSummen.warmwasser, 0)} kWh ÷ ${fmtCalc(wpSummen.stromWarmwasser, 0)} kWh`}
+                  ergebnis={`= ${(wpSummen.warmwasser / wpSummen.stromWarmwasser).toFixed(2)}`}
+                />
+              )}
             </div>
           )}
 

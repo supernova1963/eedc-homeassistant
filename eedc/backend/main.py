@@ -275,8 +275,8 @@ app = FastAPI(
 # CORS Middleware (für Development)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In Produktion einschränken
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -680,9 +680,12 @@ if frontend_dist.exists():
         Alle Routen die nicht mit /api beginnen werden an das Frontend weitergeleitet.
         """
         # Versuche zuerst die Datei direkt zu finden
-        file_path = frontend_dist / full_path
-        if file_path.is_file():
-            return FileResponse(file_path)
+        # Path-Traversal-Schutz: resolved path muss innerhalb frontend_dist liegen
+        resolved = (frontend_dist / full_path).resolve()
+        if not str(resolved).startswith(str(frontend_dist.resolve())):
+            raise HTTPException(status_code=404)
+        if resolved.is_file():
+            return FileResponse(resolved)
 
         # Sonst index.html für SPA Routing
         return FileResponse(frontend_dist / "index.html")

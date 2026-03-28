@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.10] - 2026-03-28
+
+### Behoben
+
+- **JAZ Heizen/Warmwasser falsch berechnet (#67)**: Wärmemenge summierte über alle Monate, Strom nur über Monate mit getrennter Strommessung → absurde Werte (z.B. 89, 297). Fix: Wärme und Strom werden jetzt aus denselben Monaten summiert.
+- **BKW-Anlagenleistung ignoriert Anzahl Module (#66)**: Im Cockpit wurde nur die Leistung eines einzelnen Moduls in kWp umgerechnet, die Modulanzahl blieb unberücksichtigt. 2 × 490 Wp ergab fälschlicherweise 0,49 statt 0,98 kWp.
+- **Security: Path Traversal in SPA-Serving (#65)**: `.resolve()` + Prefix-Check verhindert jetzt das Auslesen von Dateien außerhalb des Frontend-Ordners über präparierte URL-Pfade.
+- **Security: CORS allow_credentials (#65)**: Ungültige Kombination `allow_origins=["*"]` + `allow_credentials=True` korrigiert (`allow_credentials=False`).
+- **Security: Infothek-Upload ohne Größenlimit (#65)**: 50 MB Limit für Datei-Uploads eingebaut.
+
+### Geändert
+
+- **JAZ statt COP im WP-Dashboard (#67)**: Labels umbenannt — "Ø COP" → "JAZ (gesamt)", "COP Heizen" → "JAZ Heizen", "COP Warmwasser" → "JAZ Warmwasser". Hinweistext erklärt Gesamtlaufzeit-Bezug.
+- **JAZ in Auswertungen → Komponenten (#67)**: JAZ, JAZ Heizen und JAZ Warmwasser jetzt auch im Auswertungs-Tab mit Jahresfilter verfügbar (nur wenn getrennte Strommessung vorhanden).
+
 ## [3.5.9] - 2026-03-27
 
 ### Neu

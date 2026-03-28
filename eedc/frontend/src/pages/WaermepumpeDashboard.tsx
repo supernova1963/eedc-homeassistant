@@ -167,11 +167,11 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
-          title="Ø COP"
+          title="JAZ (gesamt)"
           value={z.durchschnitt_cop.toFixed(2)}
           icon={Thermometer}
           color="orange"
-          formel="COP = Wärme ÷ Strom"
+          formel="JAZ = Wärme ÷ Strom (Gesamtlaufzeit)"
           berechnung={`${z.gesamt_waerme_kwh.toFixed(0)} kWh ÷ ${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
           ergebnis={`= ${z.durchschnitt_cop.toFixed(2)}`}
         />
@@ -207,25 +207,25 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           ergebnis={`= ${z.ersparnis_euro.toFixed(2)} €`}
         />
       </div>
-      {/* Getrennte COP-Anzeige (wenn separate Strommessung) */}
+      {/* Getrennte JAZ-Anzeige (wenn separate Strommessung) */}
       {hatGetrennteStrom && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <KPICard
-            title="COP Heizen"
+            title="JAZ Heizen"
             value={z.cop_heizen?.toFixed(2) || '–'}
             icon={Thermometer}
             color="blue"
-            formel="COP Heizen = Heizenergie ÷ Strom Heizen"
-            berechnung={`${z.gesamt_heizenergie_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
+            formel="JAZ Heizen = Heizenergie ÷ Strom Heizen"
+            berechnung={`${z.gesamt_heizung_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
             ergebnis={`= ${z.cop_heizen?.toFixed(2) || '–'}`}
           />
           <KPICard
-            title="COP Warmwasser"
+            title="JAZ Warmwasser"
             value={z.cop_warmwasser?.toFixed(2) || '–'}
             icon={Thermometer}
             color="purple"
-            formel="COP WW = Warmwasser ÷ Strom WW"
-            berechnung={`${z.gesamt_warmwasser_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
+            formel="JAZ WW = Warmwasser ÷ Strom WW"
+            berechnung={`${z.gesamt_warmwasser_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
             ergebnis={`= ${z.cop_warmwasser?.toFixed(2) || '–'}`}
           />
           <KPICard
@@ -245,7 +245,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
         </div>
       )}
       <p className="text-xs text-gray-400 dark:text-gray-500 italic -mt-2">
-        Basis: tatsächlich erfasste Wärmemengen (Heizung + Warmwasser) aus Monatsdaten
+        JAZ = Jahresarbeitszahl über die gesamte Laufzeit ({z.anzahl_monate} Monate). Jahresweise Auswertung unter Auswertungen → Komponenten.
       </p>
 
       {/* Charts Row 1 */}

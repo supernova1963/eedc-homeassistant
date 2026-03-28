@@ -156,6 +156,8 @@ export interface KomponentenMonat {
   wp_cop: number | null
   wp_heizung_kwh: number
   wp_warmwasser_kwh: number
+  wp_strom_heizen_kwh: number
+  wp_strom_warmwasser_kwh: number
 
   // E-Mobilität
   emob_km: number

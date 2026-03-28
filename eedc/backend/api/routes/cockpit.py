@@ -281,9 +281,12 @@ async def get_cockpit_uebersicht(
         if inv.typ == "pv-module" and inv.leistung_kwp:
             anlagenleistung_kwp += inv.leistung_kwp
         elif inv.typ == "balkonkraftwerk":
-            params = inv.parameter or {}
-            bkw_leistung = params.get("leistung_wp", 0) / 1000
-            anlagenleistung_kwp += bkw_leistung
+            if inv.leistung_kwp:
+                anlagenleistung_kwp += inv.leistung_kwp
+            else:
+                params = inv.parameter or {}
+                bkw_anzahl = params.get("anzahl", 1) or 1
+                anlagenleistung_kwp += params.get("leistung_wp", 0) * bkw_anzahl / 1000
 
     # Fallback auf Anlage.leistung_kwp wenn keine PV-Module als Investitionen
     if anlagenleistung_kwp == 0 and anlage.leistung_kwp:
@@ -910,8 +913,10 @@ class KomponentenMonat(BaseModel):
     wp_waerme_kwh: float
     wp_strom_kwh: float
     wp_cop: Optional[float]
-    wp_heizung_kwh: float  # NEU: getrennt
-    wp_warmwasser_kwh: float  # NEU: getrennt
+    wp_heizung_kwh: float
+    wp_warmwasser_kwh: float
+    wp_strom_heizen_kwh: float
+    wp_strom_warmwasser_kwh: float
 
     # E-Mobilität
     emob_km: float
@@ -1047,6 +1052,7 @@ async def get_komponenten_zeitreihe(
             "speicher_arbitrage": 0, "speicher_arbitrage_preis_sum": 0, "speicher_arbitrage_count": 0,
             # Wärmepumpe
             "wp_waerme": 0, "wp_strom": 0, "wp_heizung": 0, "wp_warmwasser": 0,
+            "wp_strom_heizen": 0, "wp_strom_warmwasser": 0,
             # E-Mobilität
             "emob_km": 0, "emob_ladung": 0, "emob_pv_ladung": 0,
             "emob_netz_ladung": 0, "emob_extern_ladung": 0, "emob_extern_euro": 0, "emob_v2h": 0,
@@ -1109,6 +1115,9 @@ async def get_komponenten_zeitreihe(
                 data.get("strom_kwh", 0) or
                 data.get("verbrauch_kwh", 0) or 0
             )
+            if "strom_heizen_kwh" in data:
+                d["wp_strom_heizen"] += data.get("strom_heizen_kwh", 0) or 0
+                d["wp_strom_warmwasser"] += data.get("strom_warmwasser_kwh", 0) or 0
 
         elif inv.typ in ("e-auto", "wallbox"):
             d["emob_km"] += data.get("km_gefahren", 0) or 0
@@ -1197,6 +1206,8 @@ async def get_komponenten_zeitreihe(
             wp_cop=round(wp_cop, 2) if wp_cop else None,
             wp_heizung_kwh=round(d["wp_heizung"], 1),
             wp_warmwasser_kwh=round(d["wp_warmwasser"], 1),
+            wp_strom_heizen_kwh=round(d["wp_strom_heizen"], 1),
+            wp_strom_warmwasser_kwh=round(d["wp_strom_warmwasser"], 1),
             # E-Mobilität
             emob_km=round(d["emob_km"], 0),
             emob_ladung_kwh=round(d["emob_ladung"], 1),
