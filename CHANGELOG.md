@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.0] - 2026-03-28
+
+### Neu
+
+- **Interaktiver Energie-Explorer (Auswertungen → Tabelle)**: Neuer Tab mit vollständiger Tabellenansicht aller Monatsdaten — als Ergänzung zu den Grafiken für präzise Zahlen und individuelle Auswertungen.
+  - **22 Spalten** in 7 Gruppen: Energie, Quoten, Speicher, Wärmepumpe, E-Auto, Finanzen, CO₂
+  - **Sortierung** per Klick auf jeden Spaltenheader (auf-/absteigend)
+  - **Spaltenauswahl** via Dropdown mit Gruppen-Gliederung — Konfiguration wird automatisch im Browser gespeichert (localStorage)
+  - **Aggregationszeile** am Ende: Summe für kWh/km/€, Durchschnitt (Ø) für Prozentwerte und COP
+  - **Vorjahres-Vergleich**: Toggle-Button zeigt Δ-Spalte pro Metrik mit farbiger Bewertung (grün/rot je nach Richtung)
+  - **Finanzen** mit historisch korrektem Tarif pro Monat aus der Strompreise-Tabelle
+  - **Deutsches Zahlenformat** mit Tausender-Punkt und Komma-Dezimalstelle
+  - **CSV-Export** inkl. Δ-Spalten bei aktivem Vorjahresvergleich
+
 ## [3.5.10] - 2026-03-28
 
 ### Behoben
