@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.5] - 2026-03-28
+
+### Behoben
+
+- **Cockpit Jahresauswahl: Optionen verschwinden nach Jahreswechsel (#71)**: Beim Wechsel auf ein konkretes Jahr wurden die anderen Jahre aus dem Dropdown entfernt, weil `availableYears` aus der gefilterten API-Antwort berechnet wurde. Fix: Jahre werden jetzt aus den ungefilterten Monatsdaten abgeleitet.
+
 ## [3.6.4] - 2026-03-28
 
 ### Verbessert
