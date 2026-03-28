@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.1] - 2026-03-28
+
+### Behoben
+
+- **Browser-Cache nach Updates (#69)**: Nach einem Add-on-Update zeigte der Browser weiterhin die alte Oberfläche, weil `index.html` aus dem Browser-Cache geladen wurde. Fix: `Cache-Control: no-cache` Header für `index.html` — der Browser prüft nun bei jedem Aufruf ob eine neue Version vorliegt. JS/CSS-Bundles bleiben weiterhin gecacht (kein Performance-Verlust).
+- **Tabellen-Tab: Render-Crash bei Vorjahresvergleich**: Fehlende Keys auf `React.Fragment` in `map()`-Aufrufen konnten die Auswertungs-Seite zum Absturz bringen sobald der Vorjahresvergleich aktiviert wurde.
+- **Monatsabschluss-Tooltip**: Hover über den roten Punkt in der Kopfzeile zeigt jetzt welcher Monat offen ist (z.B. "Monatsabschluss Februar 2026 offen").
+
 ## [3.6.0] - 2026-03-28
 
 ### Neu
