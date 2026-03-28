@@ -29,6 +29,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - **Deutsches Zahlenformat** mit Tausender-Punkt und Komma-Dezimalstelle
   - **CSV-Export** inkl. Δ-Spalten bei aktivem Vorjahresvergleich
 
+## [3.5.11] - 2026-03-28
+
+### Behoben
+
+- **JAZ Heizen/Warmwasser in Auswertungen → Komponenten (#67)**: Gleicher Monate-Bug wie im WP-Dashboard — Heizung/Warmwasser wurde über alle Monate summiert, Strom nur über Monate mit getrennter Messung. Fix: Nur Monate mit vorhandener getrennter Strommessung fließen in JAZ Heizen/Warmwasser ein.
+
 ## [3.5.10] - 2026-03-28
 
 ### Behoben
