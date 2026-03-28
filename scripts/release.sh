@@ -97,6 +97,18 @@ if git -C "$EEDC_STANDALONE" tag -l "v$VERSION" | grep -q .; then
     exit 1
 fi
 
+# Neue Version höher als alle existierenden Tags?
+LATEST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1 | sed 's/^v//')
+if [ -n "$LATEST_TAG" ]; then
+    # Versions-Vergleich via sort -V
+    HIGHER=$(printf '%s\n%s\n' "$LATEST_TAG" "$VERSION" | sort -V | tail -1)
+    if [ "$HIGHER" != "$VERSION" ]; then
+        echo -e "${RED}Fehler: Neue Version v$VERSION ist nicht höher als aktuellster Tag v$LATEST_TAG!${NC}"
+        echo -e "  Bitte eine höhere Versionsnummer wählen."
+        exit 1
+    fi
+fi
+
 # CHANGELOG-Eintrag vorhanden?
 if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
     echo -e "${RED}Fehler: Kein CHANGELOG-Eintrag für Version $VERSION gefunden!${NC}"
