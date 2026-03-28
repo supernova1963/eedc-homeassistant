@@ -7,6 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.4] - 2026-03-28
+
+### Verbessert
+
+- **Energie-Explorer Tabelle: Sticky Header**: Der Tabellenkopf bleibt beim Scrollen durch lange Datenlisten fixiert (max. 600 px Tabellenhöhe, scrollbar). Wunsch: MartyBr.
+- **Energie-Explorer Tabelle: Freie Jahreswahl im Jahresvergleich**: Beim Jahresvergleich kann jetzt ein beliebiges Vergleichsjahr aus einem Dropdown gewählt werden (statt fix Vorjahr). Standard bleibt das Vorjahr, sofern Daten vorhanden. Wunsch: MartyBr.
+
 ## [3.6.3] - 2026-03-28
 
 ### Behoben
