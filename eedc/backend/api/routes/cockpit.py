@@ -440,21 +440,18 @@ async def get_cockpit_uebersicht(
     zeitraum_bis = None
     anzahl_monate = 0
 
-    # Primär: Zeitraum aus InvestitionMonatsdaten
-    if zeitraum_monate:
-        sorted_monate = sorted(zeitraum_monate)
-        first = sorted_monate[0]
-        last = sorted_monate[-1]
+    # Zeitraum: Frühestes und spätestes Datum aus BEIDEN Quellen
+    alle_monate: set[tuple[int, int]] = set(zeitraum_monate)
+    for md in monatsdaten_list:
+        alle_monate.add((md.jahr, md.monat))
+
+    if alle_monate:
+        sorted_alle = sorted(alle_monate)
+        first = sorted_alle[0]
+        last = sorted_alle[-1]
         zeitraum_von = f"{first[0]}-{first[1]:02d}"
         zeitraum_bis = f"{last[0]}-{last[1]:02d}"
-        anzahl_monate = len(zeitraum_monate)
-    # Fallback: Zeitraum aus Monatsdaten
-    elif monatsdaten_list:
-        first = monatsdaten_list[0]
-        last = monatsdaten_list[-1]
-        zeitraum_von = f"{first.jahr}-{first.monat:02d}"
-        zeitraum_bis = f"{last.jahr}-{last.monat:02d}"
-        anzahl_monate = len(monatsdaten_list)
+        anzahl_monate = len(alle_monate)
 
     # Kumulative Ersparnis inkl. anteilige Betriebskosten
     betriebskosten_zeitraum = betriebskosten_ges * anzahl_monate / 12 if anzahl_monate > 0 else 0
