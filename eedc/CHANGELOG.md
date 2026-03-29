@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.4] - 2026-03-29
+
+### Verbessert
+
+- **Kostentabelle im Energie-Explorer**: Die Finanzspalten (Einspeise-Erlös, EV-Ersparnis, Netzbezug-Kosten) sind jetzt standardmäßig sichtbar. Neue Spalte **Netto-Bilanz** (Erlös + Ersparnis − Netzbezugskosten) zeigt das monatliche Gesamtergebnis. Vorjahresvergleich mit Δ-Farbkodierung funktioniert wie bei allen anderen Spalten.
+
 ## [3.7.2] - 2026-03-29
 
 ### Behoben
