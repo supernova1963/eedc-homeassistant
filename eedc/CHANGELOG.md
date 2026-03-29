@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.0] - 2026-03-29
+
+### Verbessert
+
+- **Tagesverlauf-Chart: 10-Minuten-Auflösung** (#77): Der Live-Tagesverlauf zeigt jetzt 10-Minuten-Mittelwerte statt Stundenwerte (144 Datenpunkte statt 24). WP-Zyklen, Batterie-Ladekurven und kurzfristige Verbrauchsspitzen werden damit sichtbar. Die "Jetzt"-Referenzlinie wird auf den korrekten 10-Min-Bucket gerundet. Gilt für HA-Nutzer (HA Recorder liefert Sub-Minuten-Rohdaten).
+- **Kurzfristig-Prognose: Immer 14 Tage** (#75): Das Tage-Auswahlfeld (7/14/16) wurde entfernt. 14 Tage sind fest eingestellt — Open-Meteo liefert diese Auflösung zuverlässig und schnell. Die 16-Tage-Option entfällt (höhere Ladezeit, kein Mehrwert).
+- **KPI-Kacheln leicht transparent** (#78): Hintergrund der Werte-Kacheln auf 90% (Light) bzw. 85% (Dark) Deckkraft reduziert für bessere optische Integration.
+
+### Behoben
+
+- **BKW-Leistung in kWp-Vergleich und Solarprognose** (#74): Der Daten-Checker verglich bisher nur PV-Module gegen den manuellen kWp-Wert und ignorierte Balkonkraftwerke. Jetzt fließt BKW-Leistung korrekt in den Checker-Vergleich ein (Meldung: "Summe PV-Module + BKW"). Außerdem berücksichtigt die Solarprognose (`prognose_service`) die BKW-Leistung beim Gesamt-kWp — BKW ist genauso wetterabhängig wie normale PV.
+
+---
+
 ## [3.7.6] - 2026-03-29
 
 ### Verbessert
