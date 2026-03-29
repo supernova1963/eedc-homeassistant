@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.1] - 2026-03-29
+
+### Verbessert
+
+- **Foto-Hintergründe im Energiefluss**: 6 neue Foto-Varianten wählbar — Alpenpanorama, Milchstraße, Dolomiten, Nebula, Sternennacht, Exoplanet. Der bisherige Wechsel-Button wurde durch ein Dropdown mit allen 9 Varianten (inkl. Tech, Sunset, Alpen) ersetzt. Bilder liegen als WebP vor (413 KB gesamt). Die Auswahl wird per localStorage gespeichert.
+
 ## [3.7.0] - 2026-03-28
 
 ### Verbessert
