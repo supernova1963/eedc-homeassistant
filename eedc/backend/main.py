@@ -95,6 +95,7 @@ async def lifespan(app: FastAPI):
     print("Datenbank initialisiert.")
 
     # L2-Cache → L1-Cache Warmup (sofort, bevor irgendein Request kommt)
+    _cache_cold = True
     try:
         from backend.services.wetter_service import warmup_l1_from_l2, _loop_running
         import backend.services.wetter_service as _ws
@@ -102,8 +103,19 @@ async def lifespan(app: FastAPI):
         count = await warmup_l1_from_l2()
         if count > 0:
             print(f"Cache-Warmup: {count} Einträge aus L2 geladen.")
+            _cache_cold = False
     except Exception as e:
         logger.debug(f"Cache-Warmup fehlgeschlagen: {e}")
+
+    # Kein L2-Inhalt → Prefetch sofort im Hintergrund starten
+    # Damit ist der Cache warm bevor der erste User die Seite lädt.
+    if _cache_cold:
+        try:
+            from backend.services.prefetch_service import prefetch_all_prognosen
+            asyncio.create_task(prefetch_all_prognosen(skip_jitter=True))
+            print("Cache kalt — Sofort-Prefetch gestartet.")
+        except Exception as e:
+            logger.debug(f"Sofort-Prefetch fehlgeschlagen: {e}")
 
     # Scheduler starten
     if start_scheduler():

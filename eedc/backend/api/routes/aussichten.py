@@ -355,7 +355,8 @@ async def get_kurzfrist_prognose(
     wetter = await fetch_open_meteo_forecast(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
-        days=tage
+        days=tage,
+        skip_jitter=True,
     )
 
     if not wetter:
@@ -854,7 +855,8 @@ async def get_wetter_vorhersage(
     wetter = await fetch_open_meteo_forecast(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
-        days=tage
+        days=tage,
+        skip_jitter=True,
     )
 
     if not wetter:

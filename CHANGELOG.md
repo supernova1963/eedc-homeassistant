@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.6] - 2026-03-29
+
+### Verbessert
+
+- **Ladezeit Kurzfristig & Live deutlich reduziert**: Zwei gezielte Optimierungen für den ersten Seitenaufruf:
+  1. **Jitter bei User-Request deaktiviert**: Der zufällige Verzögerung (bisher 1–30 Sekunden) vor Open-Meteo-API-Calls greift jetzt nur noch beim Hintergrund-Prefetch, nicht beim direkten Aufruf durch den User. Cache-Miss-Latenz sinkt um bis zu 30 Sekunden.
+  2. **Sofort-Prefetch nach Kaltstart**: Wenn der Container mit leerem L2-Cache startet (z. B. Erstinstallation oder abgelaufene SQLite-Daten), wird der Prefetch sofort im Hintergrund ausgelöst — ohne den Job-Jitter (5–60s). Der Cache ist warm, bevor der erste User die Seite öffnet.
+
 ## [3.7.5] - 2026-03-29
 
 ### Behoben
