@@ -780,15 +780,18 @@ def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
         21: 0.40, 22: 0.30, 23: 0.22,
     }
 
-    for h in range(24):
-        if h > now.hour:
+    for m in range(144):
+        h_int = m * 10 // 60
+        min_int = m * 10 % 60
+        if h_int > now.hour or (h_int == now.hour and min_int > now.minute):
             break
 
+        h_float = m / 6.0
         werte: dict[str, float] = {}
 
         # PV: Glockenkurve, String A (Süd) stärker als String B (Ost, Peak früher)
-        pv_a_base = max(0, 5.5 * math.exp(-((h - 13) ** 2) / 18))
-        pv_b_base = max(0, 2.8 * math.exp(-((h - 11) ** 2) / 14))
+        pv_a_base = max(0, 5.5 * math.exp(-((h_float - 13) ** 2) / 18))
+        pv_b_base = max(0, 2.8 * math.exp(-((h_float - 11) ** 2) / 14))
         pv_a = round(pv_a_base * (0.85 + random.uniform(0, 0.3)), 2) if pv_a_base > 0.1 else 0
         pv_b = round(pv_b_base * (0.85 + random.uniform(0, 0.3)), 2) if pv_b_base > 0.1 else 0
         pv_total = pv_a + pv_b
@@ -799,23 +802,23 @@ def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
             werte["pv_2"] = pv_b  # Quelle → positiv
 
         # Haushalt (BDEW H0)
-        haushalt = round(lastprofil.get(h, 0.3) * (0.8 + random.uniform(0, 0.4)), 2)
+        haushalt = round(lastprofil.get(h_int, 0.3) * (0.8 + random.uniform(0, 0.4)), 2)
 
         # Wallbox: Nachmittags laden
-        wallbox = round(random.uniform(3, 7), 2) if (15 <= h <= 17 and random.random() > 0.4) else 0
+        wallbox = round(random.uniform(3, 7), 2) if (15 <= h_float <= 17 and random.random() > 0.4) else 0
 
         # WP: Morgens und abends stärker
-        wp = round(random.uniform(1.2, 2.5), 2) if h in (6, 7, 8, 17, 18, 19) else round(0.3 * random.uniform(0.5, 1.5), 2)
+        wp = round(random.uniform(1.2, 2.5), 2) if h_int in (6, 7, 8, 17, 18, 19) else round(0.3 * random.uniform(0.5, 1.5), 2)
 
         verbrauch_gesamt = haushalt + wallbox + wp
 
         # Batterie: Laden bei PV-Überschuss, Entladen abends
         batt = 0.0
-        if 10 <= h <= 15 and pv_total > verbrauch_gesamt + 0.5:
+        if 10 <= h_float <= 15 and pv_total > verbrauch_gesamt + 0.5:
             batt = round(min(pv_total - verbrauch_gesamt, 3.0) * random.uniform(0.4, 0.8), 2)
             # Ladung → negativ (Senke)
             werte["batterie_3"] = round(-batt, 2)
-        elif 18 <= h <= 22 and pv_total < verbrauch_gesamt:
+        elif 18 <= h_float <= 22 and pv_total < verbrauch_gesamt:
             batt = round(min(verbrauch_gesamt - pv_total, 2.5) * random.uniform(0.3, 0.7), 2)
             # Entladung → positiv (Quelle)
             werte["batterie_3"] = round(batt, 2)
@@ -836,7 +839,7 @@ def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
             werte["waermepumpe_5"] = round(-wp, 2)
         werte["haushalt"] = round(-haushalt, 2)
 
-        punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
+        punkte.append({"zeit": f"{h_int:02d}:{min_int:02d}", "werte": werte})
 
     return {
         "anlage_id": anlage_id,

@@ -109,7 +109,8 @@ export default function TagesverlaufChart({ serien, punkte }: TagesverlaufChartP
   if (punkte.length === 0 || serien.length === 0) return null
 
   const now = new Date()
-  const currentHour = `${now.getHours().toString().padStart(2, '0')}:00`
+  const currentMinBucket = Math.floor(now.getMinutes() / 10) * 10
+  const currentHour = `${now.getHours().toString().padStart(2, '0')}:${currentMinBucket.toString().padStart(2, '0')}`
 
   // Prüfen ob eine Render-Serie tatsächlich Daten hat
   const hatDaten = (dataKey: string) =>

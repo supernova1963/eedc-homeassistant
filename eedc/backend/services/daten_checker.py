@@ -213,19 +213,24 @@ class DatenChecker:
                     link="/einstellungen/investitionen",
                 ))
         else:
-            # kWp-Vergleich
+            # kWp-Vergleich (PV-Module + BKW)
+            bkw_inv = [i for i in anlage.investitionen if i.typ == "balkonkraftwerk" and i.aktiv]
             summe_kwp = sum((m.leistung_kwp or 0) for m in pv_module)
+            summe_kwp += sum(
+                b.leistung_kwp or ((b.parameter or {}).get("leistung_wp", 0) * ((b.parameter or {}).get("anzahl", 1) or 1) / 1000)
+                for b in bkw_inv
+            )
             if anlage.leistung_kwp and abs(summe_kwp - anlage.leistung_kwp) > 0.1:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.WARNING,
                     meldung="PV-Module kWp stimmt nicht mit Anlagenleistung überein",
-                    details=f"Summe PV-Module: {summe_kwp:.1f} kWp, Anlage: {anlage.leistung_kwp:.1f} kWp",
+                    details=f"Summe PV-Module + BKW: {summe_kwp:.1f} kWp, Anlage: {anlage.leistung_kwp:.1f} kWp",
                     link="/einstellungen/investitionen",
                 ))
             else:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.OK,
-                    meldung=f"PV-Module: {summe_kwp:.1f} kWp ({len(pv_module)} Modul-Gruppen)",
+                    meldung=f"PV-Module: {summe_kwp:.1f} kWp ({len(pv_module)} Modul-Gruppen{', inkl. BKW' if bkw_inv else ''})",
                 ))
 
         # Performance Ratio Hinweis (PVGIS-Systemverluste ggf. zu hoch)

@@ -1306,11 +1306,11 @@ class LivePowerService:
             history, basis_live, basis_invert, inv_live_map, inv_invert_map
         )
 
-        # Stündliche Mittelwerte berechnen
+        # 10-Minuten-Mittelwerte berechnen
         punkte: list[dict] = []
-        for h in range(24):
-            h_start = start + timedelta(hours=h)
-            h_end = h_start + timedelta(hours=1)
+        for m in range(144):
+            h_start = start + timedelta(minutes=m * 10)
+            h_end = h_start + timedelta(minutes=10)
             if h_start > end:
                 break
 
@@ -1390,7 +1390,7 @@ class LivePowerService:
             if quellen_sum > 0 and haushalt > 0:
                 werte["haushalt"] = round(-haushalt, 2)  # Haushalt ist Senke → negativ
 
-            punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
+            punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
 
         # Haushalt-Serie hinzufügen wenn Daten vorhanden
         if any("haushalt" in p["werte"] for p in punkte):

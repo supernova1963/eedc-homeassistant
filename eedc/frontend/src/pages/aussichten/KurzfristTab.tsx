@@ -77,11 +77,11 @@ export default function KurzfristTab({ anlageId }: Props) {
   const [prognose, setPrognose] = useState<SolarPrognose | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tage, setTage] = useState(14)
+  const tage = 14
 
   useEffect(() => {
     loadPrognose()
-  }, [anlageId, tage])
+  }, [anlageId])
 
   async function loadPrognose() {
     setLoading(true)
@@ -206,15 +206,6 @@ export default function KurzfristTab({ anlageId }: Props) {
       <Card className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-gray-900 dark:text-white">Solar-Prognose</h3>
-          <select
-            value={tage}
-            onChange={(e) => setTage(Number(e.target.value))}
-            className="input w-auto text-sm"
-          >
-            <option value={7}>7 Tage</option>
-            <option value={14}>14 Tage</option>
-            <option value={16}>16 Tage</option>
-          </select>
         </div>
         <div className="overflow-x-auto">
           <div className="flex gap-2 min-w-max pb-2">
