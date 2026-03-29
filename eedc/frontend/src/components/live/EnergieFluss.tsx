@@ -64,12 +64,12 @@ const BG_LABELS: Record<BgVariant, string> = {
 
 /** Foto-Varianten: Dateiname in /backgrounds/ */
 const BG_PHOTO_FILE: Partial<Record<BgVariant, string>> = {
-  alpenpanorama: '/backgrounds/alpenpanorama.webp',
-  milchstrasse:  '/backgrounds/milchstrasse.webp',
-  dolomiten:     '/backgrounds/dolomiten.webp',
-  nebula:        '/backgrounds/nebula.webp',
-  sternennacht:  '/backgrounds/sternennacht.webp',
-  exoplanet:     '/backgrounds/exoplanet.webp',
+  alpenpanorama: './backgrounds/alpenpanorama.webp',
+  milchstrasse:  './backgrounds/milchstrasse.webp',
+  dolomiten:     './backgrounds/dolomiten.webp',
+  nebula:        './backgrounds/nebula.webp',
+  sternennacht:  './backgrounds/sternennacht.webp',
+  exoplanet:     './backgrounds/exoplanet.webp',
 }
 
 function useBgVariant(): [BgVariant, (v: BgVariant) => void] {
