@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon, Mountain } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
@@ -46,22 +46,43 @@ function useLiteMode(): [boolean, () => void] {
 // ─── Hintergrund-Variante ────────────────────────────────────────────
 
 const BG_VARIANT_KEY = 'eedc-energiefluss-bg'
-type BgVariant = 'default' | 'sunset' | 'alps'
+type BgVariant = 'default' | 'sunset' | 'alps' | 'alpenpanorama' | 'milchstrasse' | 'dolomiten' | 'nebula' | 'sternennacht' | 'exoplanet'
 
-function useBgVariant(): [BgVariant, () => void] {
+const BG_VARIANTS: BgVariant[] = ['default', 'sunset', 'alps', 'alpenpanorama', 'milchstrasse', 'dolomiten', 'nebula', 'sternennacht', 'exoplanet']
+
+const BG_LABELS: Record<BgVariant, string> = {
+  default:       'Tech',
+  sunset:        'Sunset',
+  alps:          'Alpen',
+  alpenpanorama: 'Alpenpanorama',
+  milchstrasse:  'Milchstraße',
+  dolomiten:     'Dolomiten',
+  nebula:        'Nebula',
+  sternennacht:  'Sternennacht',
+  exoplanet:     'Exoplanet',
+}
+
+/** Foto-Varianten: Dateiname in /backgrounds/ */
+const BG_PHOTO_FILE: Partial<Record<BgVariant, string>> = {
+  alpenpanorama: '/backgrounds/alpenpanorama.webp',
+  milchstrasse:  '/backgrounds/milchstrasse.webp',
+  dolomiten:     '/backgrounds/dolomiten.webp',
+  nebula:        '/backgrounds/nebula.webp',
+  sternennacht:  '/backgrounds/sternennacht.webp',
+  exoplanet:     '/backgrounds/exoplanet.webp',
+}
+
+function useBgVariant(): [BgVariant, (v: BgVariant) => void] {
   const [bgVariant, setBgVariant] = useState<BgVariant>(() => {
-    const stored = localStorage.getItem(BG_VARIANT_KEY)
-    return (stored === 'sunset' || stored === 'alps') ? stored as BgVariant : 'default'
+    const stored = localStorage.getItem(BG_VARIANT_KEY) as BgVariant | null
+    return stored && BG_VARIANTS.includes(stored) ? stored : 'default'
   })
 
   useEffect(() => {
     localStorage.setItem(BG_VARIANT_KEY, bgVariant)
   }, [bgVariant])
 
-  const toggle = () => setBgVariant(prev =>
-    prev === 'default' ? 'sunset' : prev === 'sunset' ? 'alps' : 'default'
-  )
-  return [bgVariant, toggle]
+  return [bgVariant, setBgVariant]
 }
 
 // ─── Shared Utilities (aus EnergieBilanz) ───────────────────────────
@@ -325,7 +346,7 @@ export default function EnergieFluss({
   netzPufferW = 100,
 }: EnergieFlussProps) {
   const [lite, toggleLite] = useLiteMode()
-  const [bgVariant, toggleBgVariant] = useBgVariant()
+  const [bgVariant, setBgVariant] = useBgVariant()
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerW, setContainerW] = useState(W_DEFAULT)
 
@@ -373,25 +394,16 @@ export default function EnergieFluss({
           Energiefluss
         </h3>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={toggleBgVariant}
-            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-colors ${
-              bgVariant === 'sunset'
-                ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
-                : bgVariant === 'alps'
-                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-            }`}
-            title={
-              bgVariant === 'sunset' ? 'Weiter zu: Alpenpanorama' :
-              bgVariant === 'alps'   ? 'Weiter zu: Technisch' :
-                                       'Weiter zu: Sonnenuntergang'
-            }
+          <select
+            value={bgVariant}
+            onChange={e => setBgVariant(e.target.value as BgVariant)}
+            className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            title="Hintergrund wählen"
           >
-            {bgVariant === 'sunset' ? <Sun className="w-3 h-3" /> : bgVariant === 'alps' ? <Mountain className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
-            {bgVariant === 'sunset' ? 'Sunset' : bgVariant === 'alps' ? 'Alpen' : 'Tech'}
-          </button>
+            {BG_VARIANTS.map(v => (
+              <option key={v} value={v}>{BG_LABELS[v]}</option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={toggleLite}
@@ -413,6 +425,9 @@ export default function EnergieFluss({
         className="w-full flex-1 min-h-0"
       >
         <defs>
+          <clipPath id="ef-photo-clip">
+            <rect width={W} height={svgH} rx="8" />
+          </clipPath>
           {!lite && <style>{`
             @keyframes pulse-ring {
               0%, 100% { opacity: 0.15; }
@@ -731,7 +746,25 @@ export default function EnergieFluss({
         {/* ═══ Hintergrund-Layer ═══ */}
         <g className="pointer-events-none">
           {/* Basis-Hintergrund (Light etwas dunkler für Kontrast) */}
-          {bgVariant !== 'sunset' && bgVariant !== 'alps' && <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />}
+          {bgVariant !== 'sunset' && bgVariant !== 'alps' && !BG_PHOTO_FILE[bgVariant] && <rect width={W} height={svgH} className="fill-gray-100 dark:fill-gray-900" rx="8" />}
+
+          {/* Foto-Hintergrund */}
+          {BG_PHOTO_FILE[bgVariant] && <>
+            <rect width={W} height={svgH} fill="#000" rx="8" />
+            <image
+              href={BG_PHOTO_FILE[bgVariant]}
+              x="0" y="0" width={W} height={svgH}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath="url(#ef-photo-clip)"
+            />
+            {/* Overlay: hell im Light-Mode, dunkel im Dark-Mode — für Lesbarkeit der Knoten */}
+            <rect width={W} height={svgH}
+              className="opacity-100 dark:opacity-0"
+              fill="rgba(255,255,255,0.35)" clipPath="url(#ef-photo-clip)" />
+            <rect width={W} height={svgH}
+              className="opacity-0 dark:opacity-100"
+              fill="rgba(0,0,0,0.45)" clipPath="url(#ef-photo-clip)" />
+          </>}
           {/* Sunset: Himmel + Meer — Light Mode */}
           {bgVariant === 'sunset' && <>
             <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-light)" className="opacity-100 dark:opacity-0" />
