@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.2] - 2026-03-29
+
+### Behoben
+
+- **Heute-kWh: kumulierte Monatsabschluss-Sensoren korrekt genutzt (#64 Follow-up)**: Seit v3.6.8 wurden die bereits konfigurierten Energy-Sensoren (Einspeisung, Netzbezug, PV-Erzeugung, Batterie-Ladung/-Entladung) aus dem Monatsabschluss-Mapping für die Live-Dashboard „Heute"-Berechnung nicht genutzt, weil der interne Schlüssel `sensors` statt des korrekten `felder` verwendet wurde und die `FeldMapping`-Struktur (`{strategie, sensor_id}`) nicht ausgelesen wurde. Folge: nach Container-Neustart am Morgen (vor Sonnenaufgang) fehlten PV, Einspeisung, Eigenverbrauch und Batterie-kWh im „Heute"-Abschnitt.
+- **Prioritätskette jetzt vollständig**: Basis Einspeisung/Netzbezug und PV-Investitionen nutzen jetzt ebenfalls kumulative Energy-Sensoren als Priorität 1 — keine Trapez-Abhängigkeit mehr wenn kWh-Sensoren konfiguriert sind.
+- **`_trapez_kwh` mit 1 Datenpunkt**: Gibt jetzt `0.0` zurück statt `None` (mathematisch korrekt: kein Intervall = 0 kWh). Safety-Net für W-only Setups ohne konfigurierte Energy-Sensoren.
+
 ## [3.7.1] - 2026-03-29
 
 ### Verbessert

@@ -783,8 +783,10 @@ class LivePowerService:
     @staticmethod
     def _trapez_kwh(points: list) -> Optional[float]:
         """Berechnet kWh aus Leistungs-History via Trapezregel."""
-        if len(points) < 2:
+        if not points:
             return None
+        if len(points) < 2:
+            return 0.0  # 1 Messpunkt: kein Intervall → 0 kWh (Sensor bekannt, keine Energie berechenbar)
         energy_wh = 0.0
         for i in range(len(points) - 1):
             t1, p1 = points[i]
@@ -839,25 +841,43 @@ class LivePowerService:
 
         # kWh-Sensoren aus Monatsabschluss-Mapping für exakte Tageswerte (#64)
         # Nutzt bereits konfigurierte kumulative Sensoren statt Trapez-Integration
-        # auf W-Sensoren → kein Rauschen, keine Akkumulationsfehler.
+        # auf W-Sensoren → kein Rauschen, keine Akkumulationsfehler, immer Daten
+        # (auch morgens nach Neustart, wenn W-Sensor noch keine Datenpunkte hat).
         #
         # Speicher: {inv_id: {"ladung": eid, "entladung": eid}}
-        # Sonstige: {comp_key: entity_id}  (WP → stromverbrauch_kwh, Wallbox → ladung_kwh)
+        # Sonstige: {comp_key: entity_id}  (PV, WP, Wallbox, Basis Einsp/Bezug)
+
+        def _feld_eid(conf: object) -> Optional[str]:
+            """Extrahiert entity_id aus FeldMapping-Dict {strategie, sensor_id}."""
+            if isinstance(conf, dict) and conf.get("strategie") == "sensor":
+                return conf.get("sensor_id") or None
+            return None
+
         _MONATSABSCHLUSS_KWH: dict[str, tuple[str, str]] = {
             # typ: (sensor_field, comp_key_prefix)
             "waermepumpe": ("stromverbrauch_kwh", "waermepumpe"),
             "wallbox":     ("ladung_kwh",          "wallbox"),
         }
 
+        # Basis-Sensoren: Einspeisung + Netzbezug kWh direkt aus Monatszuordnung
+        mapping_full = anlage.sensor_mapping or {}
+        basis_map = mapping_full.get("basis", {})
+        basis_kwh_sensors: dict[str, str] = {}  # category → entity_id
+        if (eid := _feld_eid(basis_map.get("einspeisung", {}))):
+            basis_kwh_sensors["einspeisung"] = eid
+        if (eid := _feld_eid(basis_map.get("netzbezug", {}))):
+            basis_kwh_sensors["netzbezug"] = eid
+
         separate_battery_sensors: dict[str, dict[str, Optional[str]]] = {}
         separate_kwh_sensors: dict[str, str] = {}  # comp_key → entity_id
-        mapping_investitionen = (anlage.sensor_mapping or {}).get("investitionen", {})
+        mapping_investitionen = mapping_full.get("investitionen", {})
         for inv_id, inv_data in mapping_investitionen.items():
             typ = inv_types.get(inv_id) if inv_types else None
             if not isinstance(inv_data, dict):
                 continue
             inv_live = inv_data.get("live", {}) or {}
-            inv_sensors = inv_data.get("sensors", {}) or {}
+            # Sensor-IDs stecken in "felder" als FeldMapping {strategie, sensor_id}
+            inv_felder = inv_data.get("felder", {}) or {}
 
             if typ == "speicher":
                 # Priorität 1: Live-Slots (Tageswerte, reset täglich)
@@ -865,17 +885,22 @@ class LivePowerService:
                 entladung_eid = inv_live.get("entladung_kwh") or None
                 # Priorität 2: Monatsabschluss-Sensoren (kumulativ, delta ab Mitternacht)
                 if not ladung_eid:
-                    ladung_eid = inv_sensors.get("ladung_kwh") or None
+                    ladung_eid = _feld_eid(inv_felder.get("ladung_kwh", {}))
                 if not entladung_eid:
-                    entladung_eid = inv_sensors.get("entladung_kwh") or None
+                    entladung_eid = _feld_eid(inv_felder.get("entladung_kwh", {}))
                 if ladung_eid or entladung_eid:
                     separate_battery_sensors[inv_id] = {
                         "ladung": ladung_eid,
                         "entladung": entladung_eid,
                     }
+            elif typ in _ERZEUGER_TYPEN:
+                # PV + BKW: pv_erzeugung_kwh als genaue kumulierte Quelle
+                pv_eid = _feld_eid(inv_felder.get("pv_erzeugung_kwh", {}))
+                if pv_eid:
+                    separate_kwh_sensors[f"pv_{inv_id}"] = pv_eid
             elif typ in _MONATSABSCHLUSS_KWH:
                 sensor_field, prefix = _MONATSABSCHLUSS_KWH[typ]
-                kwh_eid = inv_sensors.get(sensor_field) or None
+                kwh_eid = _feld_eid(inv_felder.get(sensor_field, {}))
                 if kwh_eid:
                     separate_kwh_sensors[f"{prefix}_{inv_id}"] = kwh_eid
 
@@ -926,6 +951,7 @@ class LivePowerService:
             + [eid for sep in separate_battery_sensors.values()
                for eid in sep.values() if eid]
             + list(separate_kwh_sensors.values())
+            + list(basis_kwh_sensors.values())
         ))
         if not all_ids:
             return {}
@@ -996,6 +1022,28 @@ class LivePowerService:
                         result["einspeisung"] = round(einsp_kwh, 1)
                 continue
 
+            # Priorität 1: kumulierter kWh-Sensor (Basis oder PV-Investition)
+            if category in basis_kwh_sensors:
+                kwh_eid = basis_kwh_sensors[category]
+                if kwh_eid in history:
+                    kwh = _energy_delta(kwh_eid)
+                    if kwh is not None:
+                        result[category] = round(kwh, 1)
+                        continue
+            elif category == "pv":
+                pv_total = 0.0
+                pv_has_kwh = False
+                for comp_key, kwh_eid in separate_kwh_sensors.items():
+                    if comp_key.startswith("pv_") and kwh_eid in history:
+                        kwh = _energy_delta(kwh_eid)
+                        if kwh is not None:
+                            pv_total += kwh
+                            pv_has_kwh = True
+                if pv_has_kwh:
+                    result["pv"] = round(pv_total, 1)
+                    continue
+
+            # Fallback: W-Sensoren + Trapezregel
             total_kwh = 0.0
             has_data = False
             for entity_id in entity_ids:
