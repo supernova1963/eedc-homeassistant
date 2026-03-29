@@ -51,7 +51,7 @@ html.dark .recharts-legend-item-text {
   }
 
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm;
+    @apply bg-white/90 dark:bg-gray-800/85 rounded-xl shadow-sm;
     @apply border border-gray-200 dark:border-gray-700;
   }
 

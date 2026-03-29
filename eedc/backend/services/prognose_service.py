@@ -120,16 +120,25 @@ async def get_kurzfrist_prognose(
         logger.error(f"Anlage {anlage_id} hat keine Koordinaten")
         return None
 
-    # Anlagenleistung aus PV-Modulen berechnen
+    # Anlagenleistung aus PV-Modulen + BKW berechnen
     pv_module = db.query(Investition).filter(
         Investition.anlage_id == anlage_id,
         Investition.typ == "pv_module",
         Investition.aktiv == True
     ).all()
 
-    anlagenleistung_kwp = sum(
-        m.leistung_kwp or 0 for m in pv_module
-    ) or anlage.leistung_kwp or 0
+    bkw = db.query(Investition).filter(
+        Investition.anlage_id == anlage_id,
+        Investition.typ == "balkonkraftwerk",
+        Investition.aktiv == True
+    ).all()
+
+    anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
+    anlagenleistung_kwp += sum(
+        b.leistung_kwp or ((b.parameter or {}).get("leistung_wp", 0) * ((b.parameter or {}).get("anzahl", 1) or 1) / 1000)
+        for b in bkw
+    )
+    anlagenleistung_kwp = anlagenleistung_kwp or anlage.leistung_kwp or 0
 
     if anlagenleistung_kwp <= 0:
         logger.error(f"Anlage {anlage_id} hat keine Leistung konfiguriert")
