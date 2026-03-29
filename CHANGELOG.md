@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.5] - 2026-03-29
+
+### Behoben
+
+- **„Noch offen" nach Sonnenuntergang ausgeblendet (#72)**: Nach Sonnenuntergang wurde fälschlicherweise noch eine verbleibende Solarprognose angezeigt (z.B. >5 kWh um 21:30 Uhr). Ursache: die Berechnung `Tagesprognose − bisher erzeugte kWh` berücksichtigte nicht, ob die Sonne bereits untergegangen ist. Fix: `wetter.sunset` wird geprüft — nach Sonnenuntergang wird das KPI ausgeblendet.
+
 ## [3.7.4] - 2026-03-29
 
 ### Verbessert
