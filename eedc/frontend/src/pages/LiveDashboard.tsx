@@ -375,6 +375,12 @@ export default function LiveDashboard() {
                     const bisherPv = data.heute_pv_kwh ?? 0
                     const offen = prognoseKwh - bisherPv
                     if (offen <= 0) return null
+                    // Nach Sonnenuntergang keine weitere Produktion möglich
+                    if (wetter.sunset) {
+                      const now = new Date()
+                      const [sunsetH, sunsetM] = wetter.sunset.split(':').map(Number)
+                      if (now.getHours() * 60 + now.getMinutes() >= sunsetH * 60 + sunsetM) return null
+                    }
                     return (
                       <div className="bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
                            title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${bisherPv.toFixed(1)} kWh`}>
