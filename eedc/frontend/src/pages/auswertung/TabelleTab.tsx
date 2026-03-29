@@ -47,10 +47,11 @@ const COLUMNS: ColumnDef[] = [
   { key: 'eauto_km',          label: 'E-Auto',             unit: 'km',      group: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, higherIsBetter: undefined },
   { key: 'eauto_ladung',      label: 'E-Auto Ladung',      unit: 'kWh',     group: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, higherIsBetter: undefined },
   // Finanzen — Berechnung via createMonatsZeitreihe mit historisch korrektem Tarif pro Monat
-  { key: 'einspeise_erloes',  label: 'Einspeise-Erlös',    unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, higherIsBetter: true  },
-  { key: 'ev_ersparnis',      label: 'EV-Ersparnis',       unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, higherIsBetter: true  },
-  { key: 'netzbezug_kosten',  label: 'Netzbezug-Kosten',   unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, higherIsBetter: false },
+  { key: 'einspeise_erloes',  label: 'Einspeise-Erlös',    unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  higherIsBetter: true  },
+  { key: 'ev_ersparnis',      label: 'EV-Ersparnis',       unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  higherIsBetter: true  },
+  { key: 'netzbezug_kosten',  label: 'Netzbezug-Kosten',   unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  higherIsBetter: false },
   { key: 'netto_ertrag',      label: 'Netto-Ertrag',       unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, higherIsBetter: true  },
+  { key: 'netto_bilanz',      label: 'Netto-Bilanz',       unit: '€',       group: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  higherIsBetter: true  },
   // CO2
   { key: 'co2_einsparung',    label: 'CO₂-Einsparung',     unit: 'kg',      group: 'co2',         decimals: 1, aggregation: 'sum', defaultVisible: false, higherIsBetter: true  },
 ]

@@ -56,6 +56,7 @@ export interface MonatsZeitreihe {
   ev_ersparnis: number
   netzbezug_kosten: number
   netto_ertrag: number
+  netto_bilanz: number
   // CO2
   co2_einsparung: number
 }
@@ -131,6 +132,7 @@ export function createMonatsZeitreihe(
       ? md.netzbezug_kwh * tarif.netzbezug_arbeitspreis_cent_kwh / 100 + (tarif.grundpreis_euro_monat || 0)
       : 0
     const netto_ertrag = einspeise_erloes + ev_ersparnis
+    const netto_bilanz = einspeise_erloes + ev_ersparnis - netzbezug_kosten
 
     // CO2
     const co2_einsparung = erzeugung * CO2_FAKTOR_KG_KWH
@@ -161,6 +163,7 @@ export function createMonatsZeitreihe(
       ev_ersparnis,
       netzbezug_kosten,
       netto_ertrag,
+      netto_bilanz,
       co2_einsparung,
     }
   })
