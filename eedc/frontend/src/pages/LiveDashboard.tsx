@@ -67,7 +67,7 @@ export default function LiveDashboard() {
   // Wetter + 3-Tage-Prognose parallel laden (alle 5 Min — ICON-D2 aktualisiert 3-stündlich)
   const fetchWetter = useCallback(async () => {
     if (!selectedAnlageId) return
-    // Beide Calls parallel statt sequentiell
+    // Beide Calls parallel statt sequentiell + 14-Tage-Cache-Warmup im Hintergrund
     const [wetterResult, prognoseResult] = await Promise.allSettled([
       liveDashboardApi.getWetter(selectedAnlageId, demoMode),
       wetterApi.getSolarPrognose(selectedAnlageId, 3, false),
@@ -76,6 +76,9 @@ export default function LiveDashboard() {
     if (prognoseResult.status === 'fulfilled') {
       setPrognose3Tage(prognoseResult.value.tage?.slice(0, 3) ?? null)
     }
+    // 14-Tage-Prognose im Hintergrund vorwärmen — kein await, Ergebnis wird ignoriert
+    // Damit ist der Cache warm wenn der User zu Aussichten navigiert
+    wetterApi.getSolarPrognose(selectedAnlageId, 14, false).catch(() => {})
   }, [selectedAnlageId, demoMode])
 
   // Tagesverlauf laden (alle 60s)

@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.2] - 2026-03-30
+
+### Verbessert
+
+- **Aussichten Kurzfristig: 14-Tage-Cache beim Start vorwärmen**: Beim Laden des Live-Dashboards wird die 14-Tage-Solarprognose jetzt im Hintergrund vorab gecacht (fire-and-forget). Wenn der User zu Aussichten navigiert, ist der Cache bereits warm — kein Warten mehr auf Open-Meteo (#82).
+
+---
+
 ## [3.8.1] - 2026-03-30
 
 ### Behoben
