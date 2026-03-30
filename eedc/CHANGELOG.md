@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.8.4] - 2026-03-30
+## [3.8.5] - 2026-03-30
 
 ### Hinzugefügt
 
@@ -16,7 +16,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 
-- **Community: JAZ-Vergleich nach WP-Typ (#85)**: Luft-/Wasser-Wärmepumpen wurden bisher mit allen WP-Typen verglichen (inkl. Sole/Wasser mit typisch höherer JAZ). Der Community-Schnitt wird jetzt typ-spezifisch berechnet — erst wenn ≥ 3 Vergleichsanlagen desselben Typs vorhanden sind, sonst Fallback auf alle. Der WP-Typ wird im Performance-Chart als Label angezeigt.
+- **Community: JAZ-Vergleich nach WP-Typ (#85)**: Die Stärken/Schwächen-Berechnung nutzt jetzt den typ-spezifischen JAZ-Vergleich (`jaz_typ`) statt dem globalen Schnitt. Das Backend hatte den korrekten Wert seit v3.8.4 bereits geliefert — das Frontend ignorierte ihn jedoch und verwendete weiterhin den globalen `jaz.community_avg`. Jetzt wird `jaz_typ` bevorzugt (gleiche WP-Art), mit Fallback auf global wenn zu wenig Vergleichsdaten. Unterstützt alle 4 WP-Arten: Luft/Wasser, Sole/Wasser, Grundwasser, Luft/Luft.
 
 ---
 
