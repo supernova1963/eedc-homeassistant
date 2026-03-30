@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.1] - 2026-03-30
+
+### Behoben
+
+- **Monatsabschluss: UNIQUE constraint bei Energieprofil (#80)**: Seit v3.8.0 liefert `get_tagesverlauf()` 10-Minuten-Daten (144 Punkte). Der `energie_profil_service` las diese Punkte direkt ein und versuchte pro Stunde 6× dieselbe `stunde`-Zeile zu INSERT-en → UNIQUE constraint. Fix: Sub-stündliche Punkte werden vor der Verarbeitung auf Stundenmittelwerte aggregiert.
+- **Sensor-Mapping Dropdown: ESC und Click-outside schließen jetzt (#81)**: Im `FeldMappingInput` fehlten ESC-Handler und Click-outside-Handler. Das Dropdown ließ sich nur durch Auswahl eines Eintrags schließen. Beide Handler sind jetzt per `useEffect` registriert.
+
+---
+
 ## [3.8.0] - 2026-03-29
 
 ### Verbessert
