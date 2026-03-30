@@ -338,20 +338,26 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
       }
     }
 
-    // Wärmepumpe
-    if (benchmark.benchmark_erweitert?.waermepumpe?.jaz?.community_avg) {
-      const wp = benchmark.benchmark_erweitert.waermepumpe
-      const abw = ((wp.jaz!.wert - wp.jaz!.community_avg!) / wp.jaz!.community_avg!) * 100
-      const wpArtLabel = benchmark.anlage.wp_art === 'luft_wasser' ? ' (Luft/Wasser)'
-        : benchmark.anlage.wp_art === 'sole_wasser' ? ' (Sole/Wasser)'
-        : ''
-      metriken.push({
-        label: `WP JAZ${wpArtLabel}`,
-        abweichungProzent: abw,
-        einheit: '%',
-        icon: <Home className="h-4 w-4" />,
-        kategorie: 'waermepumpe',
-      })
+    // Wärmepumpe — typ-spezifischen Vergleich bevorzugen (jaz_typ), Fallback auf globalen (jaz)
+    {
+      const wp = benchmark.benchmark_erweitert?.waermepumpe
+      const vergleich = wp?.jaz_typ?.community_avg ? wp.jaz_typ : wp?.jaz?.community_avg ? wp.jaz : null
+      if (wp && vergleich?.community_avg) {
+        const abw = ((vergleich.wert - vergleich.community_avg) / vergleich.community_avg) * 100
+        const wpArt = wp.wp_art ?? benchmark.anlage.wp_art
+        const wpArtLabel = wpArt === 'luft_wasser' ? ' (Luft/Wasser)'
+          : wpArt === 'sole_wasser' ? ' (Sole/Wasser)'
+          : wpArt === 'grundwasser' ? ' (Grundwasser)'
+          : wpArt === 'luft_luft' ? ' (Luft/Luft)'
+          : ''
+        metriken.push({
+          label: `WP JAZ${wpArtLabel}`,
+          abweichungProzent: abw,
+          einheit: '%',
+          icon: <Home className="h-4 w-4" />,
+          kategorie: 'waermepumpe',
+        })
+      }
     }
 
     // E-Auto

@@ -96,6 +96,8 @@ export interface SpeicherBenchmark {
 
 export interface WaermepumpeBenchmark {
   jaz?: KPIVergleich | null
+  jaz_typ?: KPIVergleich | null  // typ-spezifischer Vergleich (nur gleiche WP-Art)
+  wp_art?: string | null
   stromverbrauch?: KPIVergleich | null
   waermeerzeugung?: KPIVergleich | null
 }
