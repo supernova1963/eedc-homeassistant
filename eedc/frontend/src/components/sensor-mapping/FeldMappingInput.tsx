@@ -62,6 +62,24 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setIsOpen(false); setSearch('') }
+    }
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false); setSearch('')
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen])
+
   const filteredSensors = sensors.filter(
     s =>
       s.entity_id.toLowerCase().includes(search.toLowerCase()) ||

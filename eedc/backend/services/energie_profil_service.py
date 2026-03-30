@@ -80,11 +80,28 @@ async def aggregate_day(
         return None
 
     serien = tv_data.get("serien", [])
-    punkte = tv_data.get("punkte", [])
+    punkte_raw = tv_data.get("punkte", [])
 
-    if not punkte:
+    if not punkte_raw:
         logger.debug(f"Anlage {anlage.id}, {datum}: Keine Tagesverlauf-Daten")
         return None
+
+    # Sub-stündliche Punkte (z.B. 10-Min) auf Stundenmittelwerte aggregieren
+    stunden_buckets: dict[int, list[dict]] = {}
+    for p in punkte_raw:
+        h = int(p["zeit"].split(":")[0])
+        stunden_buckets.setdefault(h, []).append(p)
+
+    punkte = []
+    for h in sorted(stunden_buckets):
+        bucket = stunden_buckets[h]
+        alle_keys = {k for p in bucket for k in p.get("werte", {})}
+        gemittelt: dict[str, float] = {}
+        for k in alle_keys:
+            vals = [p["werte"][k] for p in bucket if k in p.get("werte", {})]
+            if vals:
+                gemittelt[k] = sum(vals) / len(vals)
+        punkte.append({"zeit": f"{h:02d}:00", "werte": gemittelt})
 
     # Serien-Kategorien indexieren (vorzeichenbasiert, zukunftssicher)
     pv_keys = {s["key"] for s in serien if s["kategorie"] == "pv"}
