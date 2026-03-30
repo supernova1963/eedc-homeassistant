@@ -1942,18 +1942,37 @@ async def get_share_text(
     )
     investitionen = inv_result.scalars().all()
 
-    # Hauptausrichtung: PV-Modul mit größter Leistung
+    # Ausrichtung: nur anzeigen wenn eindeutig (1 String oder alle gleich)
     pv_module = [i for i in investitionen if i.typ == "pv-module"]
-    if pv_module:
-        haupt_pv = max(pv_module, key=lambda i: i.leistung_kwp or 0)
-        ausrichtung = haupt_pv.ausrichtung or "Süd"
-        neigung = haupt_pv.neigung_grad if haupt_pv.neigung_grad is not None else 30
-    else:
-        ausrichtung = "Süd"
-        neigung = 30
 
-    # Anlagenleistung
+    def _ausrichtung_label(inv) -> str:
+        """Gibt den besten verfügbaren Ausrichtungs-String zurück.
+        Bevorzugt ausrichtung_grad aus parameter (exakter Wert), sonst Label."""
+        grad = (inv.parameter or {}).get("ausrichtung_grad")
+        if grad is not None:
+            try:
+                return f"{float(grad):+.0f}°"
+            except (TypeError, ValueError):
+                pass
+        return inv.ausrichtung or "Süd"
+
+    ausrichtung_anzeigen: str | None = None
+    neigung = 30
+    if len(pv_module) == 1:
+        ausrichtung_anzeigen = _ausrichtung_label(pv_module[0])
+        neigung = pv_module[0].neigung_grad if pv_module[0].neigung_grad is not None else 30
+    elif len(pv_module) > 1:
+        labels = [_ausrichtung_label(m) for m in pv_module]
+        if len(set(labels)) == 1:
+            ausrichtung_anzeigen = labels[0]
+            neigung = pv_module[0].neigung_grad if pv_module[0].neigung_grad is not None else 30
+        # else: mehrere verschiedene → kein Ausrichtungs-Label
+
+    # Anlagenleistung (PV-Module + Balkonkraftwerk)
     kwp = sum(i.leistung_kwp or 0 for i in investitionen if i.typ == "pv-module")
+    for i in investitionen:
+        if i.typ == "balkonkraftwerk":
+            kwp += (i.parameter or {}).get("leistung_wp", 0) / 1000
     if kwp == 0 and anlage.leistung_kwp:
         kwp = anlage.leistung_kwp
 
@@ -2092,13 +2111,14 @@ async def get_share_text(
 
     monat_name = MONATSNAMEN[monat]
     standort = f" | {bundesland}" if bundesland else ""
+    ausrichtung_str = f" | {ausrichtung_anzeigen}" if ausrichtung_anzeigen else ""
 
     # Text generieren
     if variante == "ausfuehrlich":
         lines = [
             f"☀️ PV-Monatsreport {monat_name} {jahr}",
             "",
-            f"🔧 Anlage: {f(kwp, 1)} kWp | {ausrichtung} {neigung}°{standort}",
+            f"🔧 Anlage: {f(kwp, 1)} kWp{ausrichtung_str}{standort}",
             f"⚡ Erzeugung: {f(pv_erzeugung)} kWh ({f(spez_ertrag, 1)} kWh/kWp)",
         ]
 
@@ -2136,7 +2156,7 @@ async def get_share_text(
     else:
         # Kompakt
         lines = [
-            f"☀️ PV-Bilanz {monat_name} {jahr} | {f(kwp, 1)} kWp | {ausrichtung} {neigung}°{standort}",
+            f"☀️ PV-Bilanz {monat_name} {jahr} | {f(kwp, 1)} kWp{ausrichtung_str}{standort}",
             "",
             f"Erzeugung: {f(pv_erzeugung)} kWh ({f(spez_ertrag, 1)} kWh/kWp)",
             f"Autarkie: {f(autarkie)}% | Eigenverbrauch: {f(ev_quote)}%",
