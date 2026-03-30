@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.3] - 2026-03-30
+
+### Behoben
+
+- **Social-Media-Text: Ausrichtung + Anlagengröße (#84)**: Balkonkraftwerk-Leistung wird zur Gesamtleistung addiert. Ausrichtung wird nur angezeigt wenn eindeutig (1 String oder alle gleich) — Multi-String-Anlagen mit verschiedenen Ausrichtungen zeigen kein Label. Exakter Azimut-Grad aus den Einstellungen hat Vorrang vor dem Dropdown-Label.
+
 ## [3.8.2] - 2026-03-30
 
 ### Verbessert
