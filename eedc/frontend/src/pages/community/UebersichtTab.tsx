@@ -342,8 +342,11 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
     if (benchmark.benchmark_erweitert?.waermepumpe?.jaz?.community_avg) {
       const wp = benchmark.benchmark_erweitert.waermepumpe
       const abw = ((wp.jaz!.wert - wp.jaz!.community_avg!) / wp.jaz!.community_avg!) * 100
+      const wpArtLabel = benchmark.anlage.wp_art === 'luft_wasser' ? ' (Luft/Wasser)'
+        : benchmark.anlage.wp_art === 'sole_wasser' ? ' (Sole/Wasser)'
+        : ''
       metriken.push({
-        label: 'Wärmepumpe JAZ',
+        label: `WP JAZ${wpArtLabel}`,
         abweichungProzent: abw,
         einheit: '%',
         icon: <Home className="h-4 w-4" />,
@@ -711,7 +714,7 @@ export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps
               icon={<Home className="h-6 w-6 text-blue-500" />}
             >
               <KPIRow
-                label="JAZ (Jahresarbeitszahl)"
+                label={`JAZ${benchmark.anlage.wp_art === 'luft_wasser' ? ' · Luft/Wasser' : benchmark.anlage.wp_art === 'sole_wasser' ? ' · Sole/Wasser' : ''}`}
                 kpi={benchmark.benchmark_erweitert.waermepumpe.jaz}
                 einheit=""
               />

@@ -150,6 +150,16 @@ export default function Community() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Community</h1>
           </div>
           <div className="flex items-center gap-3">
+            {/* Link zum Community-Server */}
+            <a
+              href="https://energy.raunet.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Community-Server im Browser öffnen"
+              className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <ExternalLink className="h-5 w-5" />
+            </a>
             {/* Anlagen-Filter */}
             {anlagen.length > 1 && (
               <select

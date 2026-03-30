@@ -45,6 +45,7 @@ import SpeicherStep from '../components/sensor-mapping/SpeicherStep'
 import WaermepumpeStep from '../components/sensor-mapping/WaermepumpeStep'
 import EAutoStep from '../components/sensor-mapping/EAutoStep'
 import BalkonkraftwerkStep from '../components/sensor-mapping/BalkonkraftwerkStep'
+import SonstigesStep from '../components/sensor-mapping/SonstigesStep'
 import MappingSummaryStep from '../components/sensor-mapping/MappingSummaryStep'
 
 // =============================================================================
@@ -249,6 +250,15 @@ export default function SensorMappingWizard() {
         title: 'Balkonkraftwerk',
         icon: <Sun className="w-5 h-5" />,
         investitionen: invByTyp['balkonkraftwerk'],
+      })
+    }
+
+    if (invByTyp['sonstiges']?.length) {
+      s.push({
+        id: 'sonstiges',
+        title: 'Sonstige',
+        icon: <Settings2 className="w-5 h-5" />,
+        investitionen: invByTyp['sonstiges'],
       })
     }
 
@@ -690,6 +700,19 @@ export default function SensorMappingWizard() {
 
           {currentStepConfig.id === 'bkw' && (
             <BalkonkraftwerkStep
+              investitionen={currentStepConfig.investitionen || []}
+              mappings={state.investitionen}
+              onChange={updateInvestition}
+              availableSensors={availableSensors}
+              liveMappings={state.investitionenLive}
+              onLiveChange={updateInvestitionLive}
+              liveInvertMappings={state.investitionenLiveInvert}
+              onLiveInvertChange={updateInvestitionLiveInvert}
+            />
+          )}
+
+          {currentStepConfig.id === 'sonstiges' && (
+            <SonstigesStep
               investitionen={currentStepConfig.investitionen || []}
               mappings={state.investitionen}
               onChange={updateInvestition}

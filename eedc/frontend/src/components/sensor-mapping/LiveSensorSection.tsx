@@ -104,4 +104,7 @@ export const LIVE_FIELDS = {
   balkonkraftwerk: [
     { key: 'leistung_w', label: 'Leistung', einheit: 'W', placeholder: 'BKW-Leistungssensor suchen...' },
   ],
+  sonstiges: [
+    { key: 'leistung_w', label: 'Leistung', einheit: 'W', placeholder: 'Leistungssensor suchen...' },
+  ],
 } as const

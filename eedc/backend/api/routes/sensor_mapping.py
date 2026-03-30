@@ -121,6 +121,14 @@ ERWARTETE_FELDER = {
     "e-auto": ["ladung_pv_kwh", "ladung_netz_kwh", "km_gefahren", "v2h_entladung_kwh", "verbrauch_kwh", "ladung_extern_kwh"],
     "wallbox": ["ladung_kwh", "ladung_pv_kwh", "ladevorgaenge"],
     "balkonkraftwerk": ["pv_erzeugung_kwh", "eigenverbrauch_kwh", "speicher_ladung_kwh", "speicher_entladung_kwh"],
+    # Sonstiges: Basisfelder — werden unten per kategorie überschrieben
+    "sonstiges": ["verbrauch_sonstig_kwh"],
+}
+
+ERWARTETE_FELDER_SONSTIGES = {
+    "verbraucher": ["verbrauch_sonstig_kwh"],
+    "erzeuger": ["erzeugung_kwh"],
+    "speicher": ["verbrauch_sonstig_kwh", "erzeugung_kwh"],
 }
 
 
@@ -174,6 +182,11 @@ async def get_sensor_mapping(anlage_id: int):
             # Wärmepumpe: getrennte Strommessung → andere Felder
             if inv.typ == "waermepumpe" and inv.parameter and inv.parameter.get("getrennte_strommessung"):
                 felder = ["strom_heizen_kwh", "strom_warmwasser_kwh", "heizenergie_kwh", "warmwasser_kwh"]
+
+            # Sonstiges: Felder je nach kategorie (erzeuger/verbraucher/speicher)
+            if inv.typ == "sonstiges" and inv.parameter:
+                kat = inv.parameter.get("kategorie", "verbraucher")
+                felder = list(ERWARTETE_FELDER_SONSTIGES.get(kat, ERWARTETE_FELDER_SONSTIGES["verbraucher"]))
 
             # kWp für PV-Module
             kwp = None

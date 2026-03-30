@@ -176,6 +176,7 @@ export interface AnlageOutput {
   wallbox_kw?: number | null
   bkw_wp?: number | null
   sonstiges_bezeichnung?: string | null
+  wp_art?: string | null
   monatswerte: MonatswertOutput[]
 }
 

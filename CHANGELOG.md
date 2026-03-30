@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.4] - 2026-03-30
+
+### Hinzugefügt
+
+- **Sensor-Zuordnung: Sonstige Investitionen (#85)**: Investitionen vom Typ „Sonstige" erscheinen jetzt im Sensor-Zuordnungs-Wizard. Felder werden kategorie-abhängig angezeigt: Verbraucher → Verbrauch (kWh), Erzeuger → Erzeugung (kWh), Speicher → beide Felder. Live-Leistungssensor (W) ebenfalls konfigurierbar.
+- **Community: Link zum Community-Server (#85)**: Kleines ExternalLink-Icon im Community-Header öffnet energy.raunet.eu direkt im Browser.
+
+### Behoben
+
+- **Community: JAZ-Vergleich nach WP-Typ (#85)**: Luft-/Wasser-Wärmepumpen wurden bisher mit allen WP-Typen verglichen (inkl. Sole/Wasser mit typisch höherer JAZ). Der Community-Schnitt wird jetzt typ-spezifisch berechnet — erst wenn ≥ 3 Vergleichsanlagen desselben Typs vorhanden sind, sonst Fallback auf alle. Der WP-Typ wird im Performance-Chart als Label angezeigt.
+
+---
+
 ## [3.8.3] - 2026-03-30
 
 ### Behoben
