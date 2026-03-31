@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.6] - 2026-03-31
+
+### Behoben
+
+- **Live-Dashboard: Ladezeit Wetter/Prognose bei Seitennavigation**: Die `live_wetter`-Cache-TTL wurde von 5 auf 60 Minuten erhöht. Open-Meteo aktualisiert Wetterdaten stündlich (ICON-D2 3-stündlich), die 5-Minuten-TTL war unnötig aggressiv. Der Scheduler-Prefetch läuft alle 45 Minuten — dazwischen konnte der Cache ablaufen und jeder Seitenaufruf blockierte bis zu 15 Sekunden auf einen externen API-Call. Betraf alle Seitennavigationen (nicht nur nach Updates).
+
+---
+
 ## [3.8.5] - 2026-03-30
 
 ### Hinzugefügt
