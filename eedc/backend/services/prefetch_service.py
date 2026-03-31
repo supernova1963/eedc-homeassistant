@@ -185,7 +185,7 @@ async def _prefetch_live_wetter(
     Füllt den Cache mit den gleichen Parametern wie /api/live/{id}/wetter,
     damit der erste Seitenaufruf sofort bedient werden kann.
     """
-    LIVE_WETTER_CACHE_TTL = 300  # 5 Minuten (wie im Endpoint)
+    LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten (wie im Endpoint)
     cache_key = (
         f"live_wetter:{latitude:.2f}:{longitude:.2f}"
         f":{neigung}:{azimut}:multi={hat_multi}"

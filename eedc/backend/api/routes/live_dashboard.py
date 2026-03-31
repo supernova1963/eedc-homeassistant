@@ -1429,8 +1429,8 @@ async def get_live_wetter(
         haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
         haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
 
-        # Cache prüfen (5 Min TTL — Open-Meteo aktualisiert stündlich)
-        LIVE_WETTER_CACHE_TTL = 300  # 5 Minuten
+        # Cache prüfen (60 Min TTL — Open-Meteo aktualisiert stündlich, ICON-D2 3-stündlich)
+        LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten
         cache_key = (
             f"live_wetter:{anlage.latitude:.2f}:{anlage.longitude:.2f}"
             f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}"
