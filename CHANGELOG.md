@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.11] - 2026-04-01
+
+### Intern
+
+- **Logging-Konfiguration**: Root-Logger wird jetzt korrekt mit `basicConfig` initialisiert. Bisher gingen alle `logger.info/debug()` Aufrufe der App ins Leere (Uvicorn konfiguriert nur seine eigenen Logger). Diagnose-Logging für `get_verbrauchsprofil()` jetzt auf INFO-Level sichtbar.
+
+---
+
 ## [3.8.10] - 2026-04-01
 
 ### Intern
