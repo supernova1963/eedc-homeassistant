@@ -1438,10 +1438,20 @@ class LivePowerService:
 
         # 1. Versuche HA-History
         result = await self._profil_from_ha(anlage, db)
+        logger.debug(
+            "Verbrauchsprofil Anlage %s: HA=%s",
+            anlage.id,
+            "None" if result is None else f"ok(quelle={result.get('quelle')},wt={result.get('tage_werktag')})",
+        )
 
         # 2. Fallback: MQTT Energy Snapshots
         if result is None:
             result = await self._profil_from_mqtt(anlage.id)
+            logger.debug(
+                "Verbrauchsprofil Anlage %s: MQTT=%s",
+                anlage.id,
+                "None" if result is None else f"ok(wt={result.get('tage_werktag')},we={result.get('tage_wochenende')})",
+            )
 
         if result is not None:
             self._set_profil_cache(anlage.id, result)
