@@ -1431,9 +1431,16 @@ class LivePowerService:
             }
             oder None wenn keine History verfügbar.
         """
-        # Cache prüfen
+        # Cache prüfen (unterscheidet "nicht gecacht" von "gecacht als keine Daten")
         cache = self._get_profil_cache(anlage.id)
         if cache is not None:
+            if cache is self._PROFIL_UNAVAILABLE:
+                logger.info("Verbrauchsprofil Anlage %s: Cache-Hit (keine Daten)", anlage.id)
+                return None
+            logger.info(
+                "Verbrauchsprofil Anlage %s: Cache-Hit (ok, quelle=%s)",
+                anlage.id, cache.get("quelle"),
+            )
             return cache
 
         # 1. Versuche HA-History
@@ -1453,8 +1460,8 @@ class LivePowerService:
                 "None" if result is None else f"ok(wt={result.get('tage_werktag')},we={result.get('tage_wochenende')})",
             )
 
-        if result is not None:
-            self._set_profil_cache(anlage.id, result)
+        # IMMER cachen — auch None, damit der teure Timeout sich nicht wiederholt
+        self._set_profil_cache(anlage.id, result)
 
         return result
 
@@ -1495,7 +1502,7 @@ class LivePowerService:
             pv_eids.append(basis_live["pv_gesamt_w"])
 
         now = datetime.now()
-        start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids)))
         history, _ = await self._get_history_normalized(all_ids, start, now)
@@ -1513,7 +1520,7 @@ class LivePowerService:
         werktage_set: set[str] = set()
         wochenende_set: set[str] = set()
 
-        for day_offset in range(14):
+        for day_offset in range(7):
             tag = start + timedelta(days=day_offset)
             tag_str = tag.strftime("%Y-%m-%d")
             ist_wochenende = tag.weekday() >= 5
@@ -1580,9 +1587,9 @@ class LivePowerService:
         from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
         now = datetime.now()
-        start = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # Alle Snapshots der letzten 14 Tage laden
+        # Alle Snapshots der letzten 7 Tage laden
         async with get_session() as session:
             result = await session.execute(
                 select(
@@ -1620,7 +1627,7 @@ class LivePowerService:
         werktage_set: set[str] = set()
         wochenende_set: set[str] = set()
 
-        for day_offset in range(14):
+        for day_offset in range(7):
             tag = start + timedelta(days=day_offset)
             tag_str = tag.strftime("%Y-%m-%d")
             ist_wochenende = tag.weekday() >= 5
@@ -1701,10 +1708,19 @@ class LivePowerService:
 
     # ── Profil-Cache (1x täglich) ────────────────────────────────────────
 
-    _profil_cache: dict[int, tuple[str, dict]] = {}  # {anlage_id: (datum_str, profil)}
+    # Sentinel: unterscheidet "nicht gecacht" (None) von "gecacht als keine Daten"
+    _PROFIL_UNAVAILABLE: object = object()
 
-    def _get_profil_cache(self, anlage_id: int) -> Optional[dict]:
-        """Gibt gecachtes Profil zurück wenn es von heute ist."""
+    _profil_cache: dict = {}  # {anlage_id: (datum_str, profil_or_sentinel)}
+
+    def _get_profil_cache(self, anlage_id: int):
+        """
+        Gibt gecachten Wert zurück wenn er von heute ist.
+        Returns:
+            None: nicht gecacht (Berechnung notwendig)
+            _PROFIL_UNAVAILABLE: gecacht als "kein Profil verfügbar"
+            dict: gecachtes Profil
+        """
         if anlage_id not in self._profil_cache:
             return None
         datum, profil = self._profil_cache[anlage_id]
@@ -1712,9 +1728,10 @@ class LivePowerService:
             return profil
         return None
 
-    def _set_profil_cache(self, anlage_id: int, profil: dict) -> None:
-        """Speichert Profil mit heutigem Datum."""
-        self._profil_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), profil)
+    def _set_profil_cache(self, anlage_id: int, profil: Optional[dict]) -> None:
+        """Speichert Profil mit heutigem Datum. None wird als Sentinel gespeichert."""
+        value = self._PROFIL_UNAVAILABLE if profil is None else profil
+        self._profil_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), value)
 
     # ── Gestern-kWh Cache (ändert sich nicht mehr nach Mitternacht) ────
 
