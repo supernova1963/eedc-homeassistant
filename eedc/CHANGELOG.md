@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.10] - 2026-04-01
+
+### Intern
+
+- **Diagnose-Logging Verbrauchsprofil**: Debug-Ausgabe in `get_verbrauchsprofil()` zeigt ob HA-History oder MQTT-Fallback erfolgreich war — hilft Performance-Problem im Wetter-Endpoint zu lokalisieren.
+
+---
+
 ## [3.8.9] - 2026-04-01
 
 ### Hinzugefügt
