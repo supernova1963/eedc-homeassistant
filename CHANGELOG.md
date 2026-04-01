@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.9] - 2026-04-01
+
+### Hinzugefügt
+
+- **Live-Dashboard: Sonnentags-Fortschrittsbalken** ([#89](https://github.com/supernova1963/eedc-homeassistant/issues/89)): Visueller Trenner zwischen Ist-Werten und Prognose-Tiles in der Sidebar. Zeigt den Tagesfortschritt von Sonnenauf- bis -untergang mit Solar-Noon-Markierung und verbleibender Sonnenscheindauer.
+- **Energie-Tabelle: Spalten-Reihenfolge konfigurierbar** ([#88](https://github.com/supernova1963/eedc-homeassistant/issues/88)): ↑↓-Buttons im Spalten-Picker erlauben Umsortierung innerhalb jeder Gruppe. Reihenfolge wird persistent gespeichert, CSV-Export folgt der gewählten Reihenfolge. Reset-Link stellt Default-Reihenfolge wieder her.
+
+---
+
 ## [3.8.8] - 2026-04-01
 
 ### Behoben
