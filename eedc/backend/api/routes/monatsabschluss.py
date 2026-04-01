@@ -10,14 +10,14 @@ Endpoints für den Monatsabschluss-Wizard:
 import logging
 from datetime import date, datetime
 from typing import Optional, Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from backend.core.database import get_db
+from backend.core.database import get_db, async_session_maker
 
 logger = logging.getLogger(__name__)
 from backend.models.anlage import Anlage
@@ -787,12 +787,74 @@ async def fetch_cloud_monatswerte(
     return CloudMonatswerteResponse(basis=basis, investitionen=inv_result)
 
 
+async def _post_save_hintergrund(
+    anlage_id: int,
+    jahr: int,
+    monat: int,
+    monatsdaten_dict: dict,
+    community_auto_share: bool,
+    community_hash: str | None,
+) -> None:
+    """MQTT-Publish, Energie-Profil Rollup und Community Auto-Share im Hintergrund."""
+    from datetime import timedelta
+
+    # 1. MQTT Publish
+    mqtt_sync = get_ha_mqtt_sync_service()
+    try:
+        await mqtt_sync.publish_final_month_data(anlage_id, jahr, monat, monatsdaten_dict)
+    except Exception as e:
+        logger.warning(f"MQTT-Publish fehlgeschlagen: {type(e).__name__}: {e}")
+
+    # 2. Energie-Profil Backfill + Rollup (eigene DB-Session)
+    async with async_session_maker() as db:
+        try:
+            from backend.services.energie_profil_service import rollup_month, backfill_range
+            result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+            anlage = result.scalar_one_or_none()
+            if anlage:
+                erster_tag = date(jahr, monat, 1)
+                letzter_tag = date(jahr + 1, 1, 1) - timedelta(days=1) if monat == 12 \
+                    else date(jahr, monat + 1, 1) - timedelta(days=1)
+                backfill_count = await backfill_range(anlage, erster_tag, letzter_tag, db)
+                if backfill_count > 0:
+                    await db.commit()
+                await rollup_month(anlage_id, jahr, monat, db)
+                await db.commit()
+        except Exception as e:
+            logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {type(e).__name__}: {e}")
+
+    # 3. Community Auto-Share
+    if community_auto_share:
+        async with async_session_maker() as db:
+            try:
+                from backend.services.community_service import prepare_community_data, COMMUNITY_SERVER_URL
+                import httpx
+                share_data = await prepare_community_data(db, anlage_id)
+                if share_data and share_data.get("monatswerte"):
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        resp = await client.post(f"{COMMUNITY_SERVER_URL}/api/submit", json=share_data)
+                        if resp.status_code == 200:
+                            result_data = resp.json()
+                            if result_data.get("anlage_hash") and not community_hash:
+                                result2 = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+                                anlage_obj = result2.scalar_one_or_none()
+                                if anlage_obj:
+                                    anlage_obj.community_hash = result_data["anlage_hash"]
+                                    await db.commit()
+                            logger.info(f"Auto-Share für Anlage {anlage_id} erfolgreich")
+                        else:
+                            logger.warning(f"Auto-Share HTTP {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                logger.warning(f"Auto-Share fehlgeschlagen: {type(e).__name__}: {e}")
+
+
 @router.post("/{anlage_id}/{jahr}/{monat}", response_model=MonatsabschlussResult)
 async def save_monatsabschluss(
     anlage_id: int,
     jahr: int,
     monat: int,
     daten: MonatsabschlussInput,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -939,61 +1001,21 @@ async def save_monatsabschluss(
         logger.error(f"Monatsabschluss commit fehlgeschlagen: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler beim Commit: {e}")
 
-    # Optional: MQTT Monatsdaten publizieren
-    mqtt_sync = get_ha_mqtt_sync_service()
-    try:
-        monatsdaten_dict = {
+    # MQTT, Energie-Profil Rollup und Community Auto-Share im Hintergrund
+    background_tasks.add_task(
+        _post_save_hintergrund,
+        anlage_id=anlage_id,
+        jahr=jahr,
+        monat=monat,
+        monatsdaten_dict={
             "jahr": jahr,
             "monat": monat,
             "einspeisung_kwh": daten.einspeisung_kwh,
             "netzbezug_kwh": daten.netzbezug_kwh,
-        }
-        await mqtt_sync.publish_final_month_data(anlage_id, jahr, monat, monatsdaten_dict)
-    except Exception as e:
-        # MQTT-Fehler nicht als Fatal behandeln
-        logger.warning(f"MQTT-Publish fehlgeschlagen: {type(e).__name__}: {e}")
-
-    # Energie-Profil Rollup: TagesZusammenfassungen → Monatsdaten-Felder
-    try:
-        from backend.services.energie_profil_service import rollup_month, backfill_range
-        from datetime import timedelta
-
-        # Backfill: Fehlende Tage nachberechnen (soweit History verfügbar)
-        erster_tag = date(jahr, monat, 1)
-        if monat == 12:
-            letzter_tag = date(jahr + 1, 1, 1) - timedelta(days=1)
-        else:
-            letzter_tag = date(jahr, monat + 1, 1) - timedelta(days=1)
-
-        backfill_count = await backfill_range(anlage, erster_tag, letzter_tag, db)
-        if backfill_count > 0:
-            await db.commit()
-
-        # Rollup in Monatsdaten
-        await rollup_month(anlage_id, jahr, monat, db)
-        await db.commit()
-    except Exception as e:
-        logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {type(e).__name__}: {e}")
-
-    # Auto-Share: Daten an Community senden wenn aktiviert
-    if anlage.community_auto_share:
-        try:
-            from backend.services.community_service import prepare_community_data, COMMUNITY_SERVER_URL
-            import httpx
-            share_data = await prepare_community_data(db, anlage_id)
-            if share_data and share_data.get("monatswerte"):
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    resp = await client.post(f"{COMMUNITY_SERVER_URL}/api/submit", json=share_data)
-                    if resp.status_code == 200:
-                        result_data = resp.json()
-                        if result_data.get("anlage_hash") and not anlage.community_hash:
-                            anlage.community_hash = result_data["anlage_hash"]
-                            await db.commit()
-                        logger.info(f"Auto-Share für Anlage {anlage_id} erfolgreich")
-                    else:
-                        logger.warning(f"Auto-Share HTTP {resp.status_code}: {resp.text[:200]}")
-        except Exception as e:
-            logger.warning(f"Auto-Share fehlgeschlagen: {type(e).__name__}: {e}")
+        },
+        community_auto_share=bool(anlage.community_auto_share),
+        community_hash=anlage.community_hash,
+    )
 
     await log_activity(
         kategorie="monatsabschluss",
