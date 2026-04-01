@@ -28,6 +28,17 @@ class HealthCheckFilter(logging.Filter):
 
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
+# Root-Logger konfigurieren damit application-level Logging sichtbar ist.
+# Uvicorn konfiguriert nur seine eigenen Logger; ohne basicConfig gehen
+# alle logger.info/debug() Aufrufe der App ins Leere.
+from backend.core.config import settings as _boot_settings
+_log_level = getattr(logging, _boot_settings.log_level.upper(), logging.INFO)
+logging.basicConfig(
+    level=_log_level,
+    format="%(levelname)s:     %(name)s - %(message)s",
+    force=True,
+)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
