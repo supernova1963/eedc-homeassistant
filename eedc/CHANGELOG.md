@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.8] - 2026-04-01
+
+### Behoben
+
+- **Monatsabschluss: Speichern dauerte 30–60 Sekunden**: MQTT-Publish, Energie-Profil Rollup (inkl. Open-Meteo-Calls für jeden Tag des Monats) und Community Auto-Share blockierten bisher den HTTP-Request. Alle drei laufen jetzt als FastAPI BackgroundTasks nach dem DB-Commit — der Wizard kehrt sofort zurück.
+
+---
+
 ## [3.8.7] - 2026-04-01
 
 ### Hinzugefügt
