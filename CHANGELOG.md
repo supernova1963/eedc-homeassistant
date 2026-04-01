@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.12] - 2026-04-01
+
+### Behoben
+
+- **Wetter-Endpoint: Verbrauchsprofil blockiert bei HA-Timeout nicht mehr dauerhaft**: `get_verbrauchsprofil()` cachte bisher kein `None`-Ergebnis. Wenn die 14-Tage-HA-History-Anfrage mit `ReadTimeout` scheiterte (und MQTT-Fallback ebenfalls leer war), wiederholte sich der teure Timeout bei jedem Wetter-Refresh (alle 5 Minuten). Fix: `None`-Ergebnis wird jetzt ebenfalls gecacht (Sentinel-Pattern) — der Timeout tritt maximal 1× pro Tag auf statt dauerhaft. Zusätzlich: History-Fenster von 14 auf 7 Tage reduziert (ausreichend für Werktag/Wochenende-Profil, halbiert die HA-Datenmenge).
+
+---
+
 ## [3.8.11] - 2026-04-01
 
 ### Intern
