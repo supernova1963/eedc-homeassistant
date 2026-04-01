@@ -19,6 +19,7 @@ import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
 import TagesverlaufChart from '../components/live/TagesverlaufChart'
 import WetterWidget from '../components/live/WetterWidget'
+import SunProgressBar from '../components/live/SunProgressBar'
 import { CommunityNudge } from '../components/dashboard'
 
 const REFRESH_INTERVAL = 5_000 // 5 Sekunden
@@ -361,6 +362,15 @@ export default function LiveDashboard() {
                     )
                   })()}
                 </div>
+              )}
+
+              {/* Sonnentags-Fortschritt — Trenner Ist / Prognose */}
+              {wetter?.sunrise && wetter?.sunset && (
+                <SunProgressBar
+                  sunrise={wetter.sunrise}
+                  sunset={wetter.sunset}
+                  solar_noon={wetter.solar_noon ?? undefined}
+                />
               )}
 
               {/* Prognose + Noch offen */}
