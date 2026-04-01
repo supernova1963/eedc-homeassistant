@@ -196,6 +196,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         } else if (inv.typ === 'wallbox') {
           initial[inv.id] = {
             ladung_kwh: '',
+            ladung_pv_kwh: '',
             ladevorgaenge: '',
           }
         } else if (inv.typ === 'waermepumpe') {
@@ -521,6 +522,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (hasValue(daten.speicher_ladepreis_cent)) parsed.speicher_ladepreis_cent = pf(daten.speicher_ladepreis_cent)
         } else if (inv.typ === 'wallbox') {
           if (hasValue(daten.ladung_kwh)) parsed.ladung_kwh = pf(daten.ladung_kwh)
+          if (hasValue(daten.ladung_pv_kwh)) parsed.ladung_pv_kwh = pf(daten.ladung_pv_kwh)
           if (hasValue(daten.ladevorgaenge)) parsed.ladevorgaenge = pi(daten.ladevorgaenge)
         } else if (inv.typ === 'waermepumpe') {
           if (hasValue(daten.stromverbrauch_kwh)) parsed.stromverbrauch_kwh = pf(daten.stromverbrauch_kwh)
@@ -801,6 +803,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onPositionenChange={handlePositionenChange}
           felder={[
             { key: 'ladung_kwh', label: 'Ladung', unit: 'kWh', placeholder: 'z.B. 200' },
+            { key: 'ladung_pv_kwh', label: 'Ladung PV', unit: 'kWh', placeholder: 'z.B. 80' },
             { key: 'ladevorgaenge', label: 'Ladevorgänge', unit: '', placeholder: 'z.B. 12' },
           ]}
         />

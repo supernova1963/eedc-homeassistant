@@ -11,6 +11,7 @@
  *
  * Wallbox Felder:
  * - Ladung gesamt (kWh)
+ * - Ladung PV (kWh) - optional, wenn Wallbox PV-Anteil separat misst
  * - Ladevorgänge (Anzahl)
  */
 
@@ -267,7 +268,7 @@ export default function EAutoStep({
 
           <Alert type="info">
             Wallbox-Ladung wird für die Gesamtübersicht verwendet.
-            Die Zuordnung PV/Netz erfolgt über die E-Auto-Konfiguration.
+            Ladung PV optional: direkt messen oder manuell im Monatsabschluss-Wizard eingeben.
           </Alert>
 
           {wallboxen.map(inv => (
@@ -293,6 +294,16 @@ export default function EAutoStep({
                   onChange={mapping => onChange(inv.id, 'ladung_kwh', mapping)}
                   availableSensors={availableSensors}
                   strategieOptionen={ladungOptionen}
+                />
+
+                <FeldMappingInput
+                  label="Ladung PV"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.ladung_pv_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'ladung_pv_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={[...ladungOptionen, { value: 'keine', label: 'Nicht erfassen', description: 'Manuell im Wizard eingeben' }]}
+                  defaultStrategie="keine"
                 />
 
                 <FeldMappingInput

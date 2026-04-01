@@ -133,6 +133,7 @@ class AggregierteMonatsdatenResponse(BaseModel):
     eauto_km: float
     # Aggregiert aus InvestitionMonatsdaten - Wallbox
     wallbox_ladung_kwh: float
+    wallbox_ladung_pv_kwh: float
     # Berechnet
     direktverbrauch_kwh: float
     eigenverbrauch_kwh: float
@@ -216,6 +217,7 @@ async def list_monatsdaten_aggregiert(
         eauto_ladung = 0.0
         eauto_km = 0.0
         wallbox_ladung = 0.0
+        wallbox_ladung_pv = 0.0
 
         for inv, data in inv_data:
             if inv.typ == "pv-module":
@@ -237,6 +239,7 @@ async def list_monatsdaten_aggregiert(
                 eauto_km += data.get("km_gefahren", 0) or 0
             elif inv.typ == "wallbox":
                 wallbox_ladung += data.get("ladung_kwh", 0) or 0
+                wallbox_ladung_pv += data.get("ladung_pv_kwh", 0) or 0
 
         # Berechnungen
         einspeisung = md.einspeisung_kwh or 0
@@ -284,6 +287,7 @@ async def list_monatsdaten_aggregiert(
             eauto_ladung_kwh=round(eauto_ladung, 1),
             eauto_km=round(eauto_km, 1),
             wallbox_ladung_kwh=round(wallbox_ladung, 1),
+            wallbox_ladung_pv_kwh=round(wallbox_ladung_pv, 1),
             direktverbrauch_kwh=round(direktverbrauch, 1),
             eigenverbrauch_kwh=round(eigenverbrauch, 1),
             gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
