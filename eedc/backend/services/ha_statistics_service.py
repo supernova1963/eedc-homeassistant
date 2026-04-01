@@ -373,6 +373,16 @@ class HAStatisticsService:
             erstes = datetime.strptime(str(row_first[0]), "%Y-%m-%d").date()
             letztes = datetime.strptime(str(row_last[0]), "%Y-%m-%d").date()
 
+            # Aktuellen (unvollständigen) Monat ausschließen
+            today = date.today()
+            first_of_current_month = date(today.year, today.month, 1)
+            if letztes >= first_of_current_month:
+                # Auf Vormonat begrenzen
+                if first_of_current_month.month == 1:
+                    letztes = date(first_of_current_month.year - 1, 12, 1)
+                else:
+                    letztes = date(first_of_current_month.year, first_of_current_month.month - 1, 1)
+
             # Alle Monate im Zeitraum generieren
             monate: list[VerfuegbarerMonat] = []
             current = date(erstes.year, erstes.month, 1)

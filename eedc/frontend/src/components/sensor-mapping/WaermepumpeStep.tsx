@@ -45,6 +45,11 @@ export default function WaermepumpeStep({
       label: 'Manuell eingeben',
       description: 'Im Monatsabschluss-Wizard erfassen',
     },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Wird so übernommen / kein Sensor vorhanden',
+    },
   ]
 
   const heizOptionen: StrategieOption[] = [
@@ -57,6 +62,11 @@ export default function WaermepumpeStep({
       value: 'cop_berechnung',
       label: 'COP-Berechnung',
       description: 'Stromverbrauch × COP (JAZ)',
+    },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Wird so übernommen / kein Wärmemengenzähler vorhanden',
     },
   ]
 
