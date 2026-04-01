@@ -10,7 +10,7 @@
  * - keine: Nicht erfassen
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useId } from 'react'
 import { Search, X } from 'lucide-react'
 import type { FeldMapping, StrategieTyp, HASensorInfo } from '../../api/sensorMapping'
 
@@ -187,6 +187,7 @@ export default function FeldMappingInput({
   kwpAnteil,
   copDefault,
 }: FeldMappingInputProps) {
+  const groupId = useId()
   const currentStrategie = value?.strategie || defaultStrategie
 
   const handleStrategieChange = (strategie: StrategieTyp) => {
@@ -251,7 +252,7 @@ export default function FeldMappingInput({
           >
             <input
               type="radio"
-              name={`strategie-${label}`}
+              name={`strategie-${groupId}`}
               checked={currentStrategie === option.value}
               onChange={() => handleStrategieChange(option.value)}
               className="mt-1 w-4 h-4 text-amber-500 focus:ring-amber-500"
