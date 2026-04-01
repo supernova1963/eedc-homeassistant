@@ -68,6 +68,7 @@ export interface AggregierteMonatsdaten {
   eauto_km: number
   // Aggregiert aus InvestitionMonatsdaten - Wallbox
   wallbox_ladung_kwh: number
+  wallbox_ladung_pv_kwh: number
   // Berechnet
   direktverbrauch_kwh: number
   eigenverbrauch_kwh: number

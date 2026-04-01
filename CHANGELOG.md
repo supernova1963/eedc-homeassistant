@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.7] - 2026-04-01
+
+### Hinzugefügt
+
+- **Wallbox: Ladung PV durchgängig**: Das Feld `ladung_pv_kwh` (PV-Anteil der Wallbox-Ladung) war zwar im Monatsabschluss-Wizard sichtbar, fehlte aber an allen anderen Stellen. Jetzt vollständig: Sensor-Mapping (optional, HA-Sensor oder manuell), Monatsdaten-Formular, HA Bulk-Import, Monatsaggregation und Energie-Explorer-Tabelle (neue Spalte „Wallbox PV-Ladung").
+- **Monatsabschluss: Wetterdaten automatisch laden**: Globalstrahlung und Sonnenstunden werden beim Öffnen des Wizards automatisch im Hintergrund von Open-Meteo geholt — falls die Felder noch leer sind. Kein Button-Klick mehr nötig.
+
+---
+
 ## [3.8.6] - 2026-03-31
 
 ### Behoben

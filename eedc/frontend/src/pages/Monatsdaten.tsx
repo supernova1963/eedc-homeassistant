@@ -131,6 +131,15 @@ const COLUMNS: ColumnConfig[] = [
     format: 'kwh',
     defaultVisible: false,
   },
+  {
+    key: 'wallbox_ladung_pv',
+    label: 'Wallbox PV-Ladung',
+    shortLabel: 'WB PV',
+    group: 'komponenten',
+    getValue: (md) => md.wallbox_ladung_pv_kwh,
+    format: 'kwh',
+    defaultVisible: false,
+  },
   // Berechnete Werte
   {
     key: 'direktverbrauch',

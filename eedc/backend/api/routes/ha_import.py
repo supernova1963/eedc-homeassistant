@@ -95,6 +95,7 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
     elif typ == "wallbox":
         return [
             SensorFeld(key="ladung_kwh", label="Heimladung", unit="kWh", required=True),
+            SensorFeld(key="ladung_pv_kwh", label="Ladung PV", unit="kWh", optional=True),
             SensorFeld(key="ladevorgaenge", label="Ladevorgänge", unit="Anzahl", optional=True),
         ]
 

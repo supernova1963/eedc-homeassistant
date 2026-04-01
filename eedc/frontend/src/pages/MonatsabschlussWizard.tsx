@@ -23,7 +23,7 @@ import {
   Cloud,
   Cpu,
 } from 'lucide-react'
-import { anlagenApi, monatsabschlussApi, haStatisticsApi } from '../api'
+import { anlagenApi, monatsabschlussApi, haStatisticsApi, wetterApi } from '../api'
 import { connectorApi } from '../api/connector'
 import type {
   MonatsabschlussResponse,
@@ -161,6 +161,22 @@ export default function MonatsabschlussWizard() {
           investitionen: invValues,
           sonstigePositionen: invSonstigePos,
         })
+
+        // Wetterdaten automatisch im Hintergrund holen, falls noch nicht vorhanden
+        if (basisValues.globalstrahlung_kwh_m2 == null && basisValues.sonnenstunden == null) {
+          wetterApi.getMonatsdaten(parseInt(anlageId!), targetJahr, targetMonat)
+            .then(wetter => {
+              setValues(prev => ({
+                ...prev,
+                basis: {
+                  ...prev.basis,
+                  globalstrahlung_kwh_m2: wetter.globalstrahlung_kwh_m2,
+                  sonnenstunden: wetter.sonnenstunden,
+                },
+              }))
+            })
+            .catch(() => { /* optional, kein Fehler anzeigen */ })
+        }
       } catch (e) {
         setError('Fehler beim Laden der Monatsdaten')
       } finally {
