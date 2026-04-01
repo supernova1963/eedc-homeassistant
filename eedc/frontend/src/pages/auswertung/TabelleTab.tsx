@@ -8,6 +8,7 @@ import { TabProps, createMonatsZeitreihe, MonatsZeitreihe } from './types'
 
 const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 const STORAGE_KEY = 'eedc_tabelle_visible_cols'
+const STORAGE_KEY_ORDER = 'eedc_tabelle_col_order'
 
 type AggType = 'sum' | 'avg' | 'none'
 type Group = 'basis' | 'quoten' | 'speicher' | 'waermepumpe' | 'eauto' | 'finanzen' | 'co2'
@@ -95,17 +96,52 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     } catch { /* ignore */ }
     return new Set(COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   })
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_ORDER)
+      if (stored) {
+        const keys = JSON.parse(stored) as string[]
+        if (COLUMNS.every(c => keys.includes(c.key))) return keys
+      }
+    } catch { /* ignore */ }
+    return COLUMNS.map(c => c.key)
+  })
   const [showVorjahr, setShowVorjahr] = useState(false)
   const [compareYear, setCompareYear] = useState<number | null>(null)
   const [colPickerOpen, setColPickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
-  // Spaltenauswahl in localStorage speichern
+  // Spaltenauswahl + Reihenfolge in localStorage speichern
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify([...visibleCols]))
     } catch { /* ignore */ }
   }, [visibleCols])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ORDER, JSON.stringify(colOrder))
+    } catch { /* ignore */ }
+  }, [colOrder])
+
+  function moveCol(key: string, dir: 'up' | 'down') {
+    const col = COLUMNS.find(c => c.key === key)!
+    const groupKeys = COLUMNS.filter(c => c.group === col.group).map(c => c.key)
+    const ordered = colOrder.filter(k => groupKeys.includes(k))
+    const idx = ordered.indexOf(key)
+    const newIdx = dir === 'up' ? idx - 1 : idx + 1
+    if (newIdx < 0 || newIdx >= ordered.length) return
+    const swapped = [...ordered]
+    ;[swapped[idx], swapped[newIdx]] = [swapped[newIdx], swapped[idx]]
+    setColOrder(prev => {
+      const result = [...prev]
+      let gi = 0
+      for (let i = 0; i < result.length; i++) {
+        if (groupKeys.includes(result[i])) result[i] = swapped[gi++]
+      }
+      return result
+    })
+  }
 
   // Picker bei Klick außerhalb schließen
   useEffect(() => {
@@ -201,7 +237,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
   }
 
   function handleExport() {
-    const activeCols = COLUMNS.filter(c => visibleCols.has(c.key))
+    const activeCols = colOrder.map(k => COLUMNS.find(c => c.key === k)!).filter(c => visibleCols.has(c.key))
     const headers: string[] = ['Jahr', 'Monat']
     activeCols.forEach(c => {
       headers.push(c.unit ? `${c.label} (${c.unit})` : c.label)
@@ -240,7 +276,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     exportToCSV(headers, rows, `energie_tabelle_${anlage?.anlagenname || 'export'}.csv`)
   }
 
-  const activeCols = COLUMNS.filter(c => visibleCols.has(c.key))
+  const activeCols = colOrder.map(k => COLUMNS.find(c => c.key === k)!).filter(c => visibleCols.has(c.key))
   const canShowVorjahr = selectedYear !== 'all'
 
   function SortIcon({ colKey }: { colKey: string }) {
@@ -329,30 +365,61 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
               Spalten ({visibleCols.size})
             </Button>
             {colPickerOpen && (
-              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 w-52 max-h-96 overflow-y-auto">
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 w-64 max-h-96 overflow-y-auto">
                 {GROUPS.map(group => {
-                  const groupCols = COLUMNS.filter(c => c.group === group)
+                  const groupKeys = COLUMNS.filter(c => c.group === group).map(c => c.key)
+                  const orderedGroupCols = colOrder
+                    .filter(k => groupKeys.includes(k))
+                    .map(k => COLUMNS.find(c => c.key === k)!)
                   return (
                     <div key={group} className="mb-3 last:mb-0">
                       <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">
                         {GROUP_LABELS[group]}
                       </p>
-                      {groupCols.map(col => (
-                        <label key={col.key} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                      {orderedGroupCols.map((col, idx) => (
+                        <div key={col.key} className="flex items-center gap-1 py-0.5">
                           <input
                             type="checkbox"
                             checked={visibleCols.has(col.key)}
                             onChange={() => toggleCol(col.key)}
-                            className="rounded"
+                            className="rounded shrink-0"
+                            title={col.label}
                           />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                          <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate">
                             {col.label}{col.unit ? ` (${col.unit})` : ''}
                           </span>
-                        </label>
+                          <div className="flex flex-col shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => moveCol(col.key, 'up')}
+                              disabled={idx === 0}
+                              className="h-3.5 w-4 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 disabled:cursor-default leading-none"
+                              title="Nach oben"
+                            >
+                              <ChevronUp className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveCol(col.key, 'down')}
+                              disabled={idx === orderedGroupCols.length - 1}
+                              className="h-3.5 w-4 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 disabled:cursor-default leading-none"
+                              title="Nach unten"
+                            >
+                              <ChevronDown className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )
                 })}
+                <button
+                  type="button"
+                  onClick={() => setColOrder(COLUMNS.map(c => c.key))}
+                  className="mt-1 w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1"
+                >
+                  Reihenfolge zurücksetzen
+                </button>
               </div>
             )}
           </div>
