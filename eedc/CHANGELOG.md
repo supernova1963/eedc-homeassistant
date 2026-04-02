@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.17] - 2026-04-02
+
+### Behoben
+
+- **HA-Statistik-Import: Komponenten-Felder (PV, Speicher, Wallbox, …) werden nie übernommen**: Die Import-Vorschau lieferte Investitions-Felder mit Labels als Schlüssel (`"PV Erzeugung"`, `"Ladung"` …), der Import-Endpoint verglich diese jedoch gegen interne DB-Feldnamen (`"pv_erzeugung_kwh"`, `"ladung_kwh"` …) → alle Investitionsfelder wurden als „nicht ausgewählt" übersprungen, `inv_importiert` blieb immer `False`. Fix: Der Endpoint akzeptiert jetzt sowohl raw Keys als auch Label-Form in `erlaubte_felder`.
+
+---
+
 ## [3.8.16] - 2026-04-02
 
 ### Behoben
