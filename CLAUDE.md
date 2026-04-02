@@ -224,6 +224,25 @@ Für Standalone-Nutzer ohne HA fehlt der Tagesverlauf-Chart. Lösungsansatz:
 - **WP-Temperaturkorrektur Verbrauchsprognose** — Wärmepumpen-Verbrauch temperaturabhängig skalieren (Heizgradtage). Zurückgestellt bis GTI-Prognose stabil validiert ist.
 - **Kraftstoffpreis E-Auto — Monatsdurchschnitt** — Statt statischem `benzinpreis_euro` monatliche Preishistorie pflegen. Diskutiert 2026-04-01, zurückgestellt. Öffentliche Quelle für DE-Durchschnittspreise noch zu klären.
 
+### Live Dashboard Generalüberholung — NÄCHSTE AKTION
+
+**Ansatz (2026-04-02 festgelegt):** In lokaler Testumgebung neu bauen — ein Modul pro Session, testen, committen. KEIN In-Place-Refactoring (4× gescheitert).
+
+**Lokale Testumgebung:**
+- Backend Port 8099 (uvicorn PID 1158939), Frontend Port 3000 (vite PID 1158981) — starten falls nicht aktiv
+- Anlage 2 "Winterborn", MQTT-Broker 10.100.1.22:1883
+- Verifikation: `heute_kwh`-Werte im Dashboard müssen realen Tageswerten entsprechen
+
+**Zwei voneinander unabhängige Einzel-Sessions möglich:**
+
+**Session A — Performance-Bottleneck #1 (größter Gewinn):**
+`ha_state_service.py`: `get_sensor_units()` macht N einzelne HA-HTTP-Calls vor jedem History-Abruf (1 Call pro Sensor-Entity). Bei 10 Sensoren = bis 50s Timeout-Kette möglich. Fix: Units beim ersten Aufruf cachen (TTL 1h), kein Abruf mehr bei jedem Live-Refresh.
+
+**Session B — Struktureller Einstieg (risikolos):**
+`live_sensor_config.py` neu erstellen: Alle Konstanten (`_TYP_ICON`, `_ERZEUGER_TYPEN`, `_BIDIREKTIONAL_TYPEN`, `_SOC_TYPEN`, `_SKIP_TYPEN`, `_TV_SERIE_CONFIG` etc.) + `_extract_live_config()` als Standalone-Funktion auslagern. Kein I/O, sofort unit-testbar.
+
+**Vollständiger Plan (7 Backend-Schritte + Frontend):** → Memory `project_perf_live_service.md`
+
 ### Ungeklärte Punkte (anderer Rechner)
 
 - **Umfrage** — Intensiv diskutiert auf dem anderen Rechner, Inhalt hier nicht bekannt. Bitte beim nächsten Mal kurz zusammenfassen und hier eintragen.
