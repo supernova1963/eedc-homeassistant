@@ -993,8 +993,11 @@ async def import_ha_statistics(
                 inv_werte = {}
                 for feld, feld_config in felder.items():
                     # Nur importieren wenn Feld erlaubt
-                    if erlaubte_felder is not None and feld not in erlaubte_felder:
-                        continue
+                    # erlaubte_felder kann raw Keys ("pv_erzeugung_kwh") ODER Labels ("PV Erzeugung") enthalten
+                    if erlaubte_felder is not None:
+                        feld_label = FELD_LABELS.get(feld, feld)
+                        if feld not in erlaubte_felder and feld_label not in erlaubte_felder:
+                            continue
 
                     if feld_config and feld_config.get("sensor_id"):
                         sensor_id = feld_config["sensor_id"]
