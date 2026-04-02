@@ -196,7 +196,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
           cop_heizung: params.cop_heizung?.toString() || '3.9',
           cop_warmwasser: params.cop_warmwasser?.toString() || '3.0',
           // Getrennte Strommessung (Heizen/Warmwasser)
-          getrennte_strommessung: params.getrennte_strommessung === true ? 'true' : 'false',
+          getrennte_strommessung: (params.getrennte_strommessung === true || params.getrennte_strommessung === 'true') ? 'true' : 'false',
           // Wärmebedarf (getrennt)
           heizwaermebedarf_kwh: params.heizwaermebedarf_kwh?.toString() || '12000',
           warmwasserbedarf_kwh: params.warmwasserbedarf_kwh?.toString() || '3000',
