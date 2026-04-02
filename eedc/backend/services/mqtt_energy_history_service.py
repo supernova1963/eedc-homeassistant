@@ -28,6 +28,21 @@ _KEY_TO_CATEGORY = {
     "netzbezug_kwh": "netzbezug",
 }
 
+# Mapping MQTT Energy inv-field → Live-Key-Format (wie HA-Pfad in _get_tages_kwh)
+# HA-Pfad liefert z.B. "pv_14", "batterie_15_ladung", "wallbox_12"
+# MQTT-Pfad liefert "inv/14/pv_erzeugung_kwh", "inv/15/ladung_kwh", "inv/12/ladung_kwh"
+# Diese Tabelle übersetzt MQTT → HA-Format, damit das Frontend identische Keys bekommt.
+_MQTT_FIELD_TO_LIVE_KEY: dict[str, dict[str, str]] = {
+    # field → {typ → key_pattern}  (Pattern: {prefix}_{inv_id} wird im Code gebaut)
+    "pv_erzeugung_kwh": {"pv-module": "pv", "balkonkraftwerk": "pv", "wechselrichter": "pv"},
+    "ladung_kwh": {"speicher": "batterie:ladung", "wallbox": "wallbox", "e-auto": "eauto"},
+    "entladung_kwh": {"speicher": "batterie:entladung"},
+    "stromverbrauch_kwh": {"waermepumpe": "waermepumpe"},
+    "eigenverbrauch_kwh": {"balkonkraftwerk": "pv"},
+    "erzeugung_kwh": {"sonstiges": "sonstige"},
+    "verbrauch_sonstig_kwh": {"sonstiges": "sonstige"},
+}
+
 
 async def snapshot_energy_cache() -> int:
     """
@@ -87,7 +102,8 @@ async def cleanup_old_snapshots(retention_days: int = 31) -> int:
 
 
 async def get_tages_kwh(
-    anlage_id: int, tage_zurueck: int = 0
+    anlage_id: int, tage_zurueck: int = 0,
+    inv_types: dict[str, str] | None = None,
 ) -> dict[str, Optional[float]]:
     """
     Berechnet Tages-kWh aus MQTT Energy Snapshots.
@@ -96,8 +112,12 @@ async def get_tages_kwh(
       heute (0):   current_cache_value - snapshot_midnight_today
       gestern (1): snapshot_midnight_today - snapshot_midnight_yesterday
 
+    Args:
+        inv_types: {inv_id: typ} für Key-Translation (inv/14/... → pv_14 etc.)
+
     Returns:
-        {"pv": X, "einspeisung": Y, "netzbezug": Z} — gleiche Keys wie HA-Pfad.
+        {"pv": X, "einspeisung": Y, "netzbezug": Z, "pv_14": ..., "batterie_15_ladung": ...}
+        — gleiche Keys wie HA-Pfad.
     """
     now = datetime.now()
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -116,7 +136,7 @@ async def get_tages_kwh(
             midnight_snap = await _get_earliest_snapshot_after(anlage_id, today_midnight)
         if not midnight_snap:
             return {}
-        return _compute_deltas(current, midnight_snap)
+        return _compute_deltas(current, midnight_snap, inv_types)
 
     else:
         # Gestern (oder weiter zurück)
@@ -126,7 +146,7 @@ async def get_tages_kwh(
         start_snap = await _get_closest_snapshot(anlage_id, prev_midnight)
         if not end_snap or not start_snap:
             return {}
-        return _compute_deltas(end_snap, start_snap)
+        return _compute_deltas(end_snap, start_snap, inv_types)
 
 
 async def _get_closest_snapshot(
@@ -211,14 +231,16 @@ async def _get_earliest_snapshot_after(
 
 
 def _compute_deltas(
-    end: dict[str, float], start: dict[str, float]
+    end: dict[str, float], start: dict[str, float],
+    inv_types: dict[str, str] | None = None,
 ) -> dict[str, Optional[float]]:
     """
     Berechnet Deltas zwischen zwei Snapshot-Zuständen.
 
     Mapped MQTT Energy Keys auf die Kategorien die live_power_service erwartet.
     Behandelt Monatswechsel (negative Deltas → Counter-Reset).
-    Investitions-Keys (inv/...) werden direkt durchgereicht.
+    Investitions-Keys (inv/...) werden in das HA-kompatible Format übersetzt
+    (z.B. inv/14/pv_erzeugung_kwh → pv_14).
     """
     result: dict[str, Optional[float]] = {}
 
@@ -236,7 +258,7 @@ def _compute_deltas(
 
         result[category] = round(delta, 1)
 
-    # Investitions-Keys (inv/{id}/{key}) dynamisch durchreichen
+    # Investitions-Keys (inv/{id}/{field}) → HA-kompatible Keys
     for key in end:
         if not key.startswith("inv/"):
             continue
@@ -249,6 +271,25 @@ def _compute_deltas(
         if delta < 0:
             delta = end_val
 
-        result[key] = round(delta, 2)
+        # Key-Translation: inv/{inv_id}/{field} → {typ_prefix}_{inv_id}
+        parts = key.split("/", 2)  # ["inv", "14", "pv_erzeugung_kwh"]
+        if len(parts) == 3 and inv_types:
+            inv_id, field = parts[1], parts[2]
+            typ = inv_types.get(inv_id)
+            field_map = _MQTT_FIELD_TO_LIVE_KEY.get(field)
+            if field_map and typ and typ in field_map:
+                pattern = field_map[typ]
+                if ":" in pattern:
+                    # "batterie:ladung" → "batterie_{inv_id}_ladung"
+                    prefix, suffix = pattern.split(":", 1)
+                    target_key = f"{prefix}_{inv_id}_{suffix}"
+                else:
+                    target_key = f"{pattern}_{inv_id}"
+            else:
+                target_key = key  # Unbekanntes Feld: unverändert durchreichen
+        else:
+            target_key = key
+
+        result[target_key] = round(delta, 2)
 
     return result

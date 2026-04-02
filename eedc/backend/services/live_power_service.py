@@ -776,7 +776,7 @@ class LivePowerService:
         # 2. Fallback: MQTT Energy Snapshots
         try:
             from backend.services.mqtt_energy_history_service import get_tages_kwh
-            result = await get_tages_kwh(anlage.id, tage_zurueck)
+            result = await get_tages_kwh(anlage.id, tage_zurueck, inv_types=inv_types)
             if result:
                 if tage_zurueck == 0:
                     self._set_heute_kwh_cache(anlage.id, result)
