@@ -217,7 +217,45 @@ Relevante Stellen:
 
 **Testumgebung:** HA-Sensor-Zuordnung in der lokalen Testinstanz rausnehmen (damit nicht auf HA-API zugegriffen wird und der MQTT-Fallback / Cache greift).
 
-**Option B (später, grüne Wiese):** MQTT Energy Topics als primäre Quelle für heute/gestern kWh. MQTT Energy Automation publisht bereits alle 5 Min alle nötigen Werte (`eedc/2_Winterborn/energy/...`). `mqtt_energy_history_service` existiert als Fallback-Code bereits, wird aber nie genutzt weil HA immer zuerst antwortet. Für Option B: Priorität umdrehen. Erst angehen wenn Option A im Produktivbetrieb läuft.
+**Option B (Refactoring, nach Option A):** Vollständige Ablösung HA-History für Live-Dashboard. Details siehe nächster Abschnitt.
+
+### Live-Dashboard Performance — Option B Refactoring-Plan
+
+**Analyse (2026-04-02):** Die MQTT-Infrastruktur ist weiter als erwartet. Kein echter Neubau nötig — nur Umpriorisierung + eine neue Tabelle.
+
+**Ist-Zustand der Datenquellen:**
+
+| Datenbedarf | Aktuell | MQTT-Pfad vorhanden? |
+|---|---|---|
+| Live-Wattage (W) | MQTT-Cache | fertig |
+| Heute/Gestern kWh | HA-History bei jedem Refresh | MqttEnergySnapshot — nie genutzt |
+| Tagesverlauf-Chart | HA-History (separater Endpoint) | fehlt |
+| Verbrauchsprofil | TagesEnergieProfil stündlich, sentinel-gecacht | ausreichend, kein Handlungsbedarf |
+
+**`MqttEnergySnapshot`** (bereits vorhanden in `eedc/backend/services/mqtt_energy_history_service.py`):
+
+- Macht alle 5 Min Snapshots der Energy-Cache-Werte in SQLite
+- `get_tages_kwh()` liefert heute/gestern kWh mit denselben Keys wie HA-Pfad
+- Wird nie genutzt, weil HA immer zuerst antwortet (Priorität falsch herum)
+- **Lücke:** `_KEY_TO_CATEGORY` kennt nur `pv_gesamt_kwh`, `einspeisung_kwh`, `netzbezug_kwh` — per-Komponenten-Keys (Batterie, Wallbox) fehlen, obwohl die MQTT Energy Automation sie bereits publisht
+
+**Schritt 1 — Option A (Quick-Fix, separater Schritt):**
+60s TTL-Cache für `heute_kwh` — stoppt den HA-History-Flood sofort.
+
+**Schritt 2 — MqttEnergySnapshot als primäre Quelle für heute/gestern kWh:**
+
+1. `_KEY_TO_CATEGORY` in `mqtt_energy_history_service.py` um Komponenten-Keys erweitern: `inv/{id}_{name}/ladung_kwh`, `inv/{id}_{name}/entladung_kwh`, etc.
+2. Priorität in `_safe_get_tages_kwh()` (Zeile 757ff) umdrehen: MQTT zuerst, HA als Fallback
+3. Kein HA-History-Call mehr für heute/gestern kWh
+
+**Schritt 3 — Tagesverlauf-Chart aus lokaler DB (einziger echter Neubau):**
+
+- Neuer periodischer Task (alle 5 Min): MQTT Live-W-Werte als Snapshot speichern — neue Tabelle `MqttLiveSnapshot` mit `(anlage_id, timestamp, key, value_w)`
+- `get_tagesverlauf()` (Zeile 1127 in `live_power_service.py`) liest dann aus lokaler DB statt HA-History
+- Modell analog zu `MqttEnergySnapshot`, Retention 2 Tage reicht
+
+**Testumgebung für Option B:**
+HA-Sensor-Zuordnung rausnehmen → Code fällt auf MQTT-Pfad durch → leerer Tagesverlauf zeigt wo Schritt 3 noch fehlt, gefüllte kWh-Werte bestätigen Schritt 2.
 
 ### Zurückgestellte Features / Ideen
 
