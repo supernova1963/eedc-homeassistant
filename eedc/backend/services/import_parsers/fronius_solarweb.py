@@ -37,11 +37,11 @@ COLUMN_PATTERNS: dict[str, list[str]] = {
     ],
     "einspeisung": [
         "energy to grid", "einspeisung", "einspeisen", "feed-in",
-        "feed in", "netzeinspeisung",
+        "feed in", "netzeinspeisung", "eingespeist", "ins netz",
     ],
     "netzbezug": [
         "energy from grid", "netzbezug", "bezug", "from grid",
-        "gridbezug", "grid consumption",
+        "gridbezug", "grid consumption", "netz bezogen", "vom netz",
     ],
     "eigenverbrauch": [
         "consumed directly", "eigenverbrauch", "self-consumption",
@@ -131,7 +131,7 @@ class FroniusSolarwebParser(PortalExportParser):
                 "5. Die heruntergeladene CSV-Datei hier hochladen"
             ),
             beispiel_header="Date and time;PV production [Wh];Energy to grid [Wh];Energy from grid [Wh];Consumed directly [Wh]",
-            getestet=False,
+            getestet=True,
         )
 
     def can_parse(self, content: str, filename: str) -> bool:
@@ -147,6 +147,7 @@ class FroniusSolarwebParser(PortalExportParser):
             "pv production", "energy to grid", "energy from grid",
             "consumed directly", "fronius",
             "gesamtenergie", "netzeinspeisung", "netzbezug",
+            "gesamt erzeugung", "eingespeist", "netz bezogen",
         ]
         matches = sum(1 for ind in fronius_indicators if ind in header_line)
         return matches >= 2
