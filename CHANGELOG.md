@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.18] - 2026-04-02
+
+### Behoben
+
+- **Live-Dashboard: heute-kWh Cache (60s TTL)**: Bei jedem Live-Refresh (alle paar Sekunden) wurde ein voller HA-History-API-Call für alle Sensoren von Mitternacht bis jetzt gemacht. Jetzt wird das Ergebnis 60 Sekunden gecacht — analog zum bestehenden Gestern-Cache.
+- **MQTT Energy: Key-Format-Mismatch HA↔MQTT behoben**: MQTT Energy Snapshots lieferten `inv/{inv_id}/{field}` Keys, das Frontend erwartet aber `{typ}_{inv_id}` (wie der HA-Pfad). Neues Mapping übersetzt automatisch anhand der Investitionstypen (z.B. `inv/15/ladung_kwh` → `batterie_15_ladung`).
+
+---
+
 ## [3.8.17] - 2026-04-02
 
 ### Behoben
