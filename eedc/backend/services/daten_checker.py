@@ -125,7 +125,7 @@ class DatenChecker:
         ergebnisse: list[CheckErgebnis] = []
         ergebnisse.extend(self._check_stammdaten(anlage, pvgis_prognose, pr, pr_count))
         ergebnisse.extend(self._check_strompreise(anlage))
-        ergebnisse.extend(self._check_investitionen(anlage))
+        ergebnisse.extend(self._check_investitionen(anlage, monatsdaten))
         ergebnisse.extend(self._check_monatsdaten_vollstaendigkeit(anlage, monatsdaten))
         ergebnisse.extend(self._check_monatsdaten_plausibilitaet(
             anlage, monatsdaten, pvgis_prognose, pv_erzeugung_map, pvgis_monat_map, pr, pr_count
@@ -190,6 +190,15 @@ class DatenChecker:
                 kategorie=kat, schwere=CheckSeverity.INFO,
                 meldung="Keine Koordinaten hinterlegt",
                 details="Koordinaten werden für die PVGIS-Solarprognose benötigt",
+                link="/einstellungen/anlage",
+            ))
+
+        # Standort für Community-Vergleich
+        if not anlage.standort_ort and not anlage.standort_plz:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung="Kein Standort hinterlegt (Ort/PLZ)",
+                details="Wird für den Community-Benchmark-Vergleich nach Region benötigt",
                 link="/einstellungen/anlage",
             ))
 
@@ -292,6 +301,25 @@ class DatenChecker:
                 else:
                     start = date.today()  # Offenes Ende = aktuell gültig
 
+        # Spezialtarife prüfen (WP / E-Auto)
+        verwendungen = {s.verwendung for s in anlage.strompreise}
+        hat_wp = any(i.typ == "waermepumpe" and i.aktiv for i in anlage.investitionen)
+        hat_eauto = any(i.typ == "e-auto" and i.aktiv for i in anlage.investitionen)
+        if hat_wp and "waermepumpe" not in verwendungen:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung="Kein WP-Spezialtarif hinterlegt",
+                details="Wärmepumpe vorhanden – bei eigenem WP-Tarif (Wärmestrom) hier ergänzen",
+                link="/einstellungen/strompreise",
+            ))
+        if hat_eauto and "e-auto" not in verwendungen:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung="Kein E-Auto-Spezialtarif hinterlegt",
+                details="E-Auto vorhanden – bei eigenem Ladetarif hier ergänzen",
+                link="/einstellungen/strompreise",
+            ))
+
         # Plausibilität der Werte
         for tarif in tarife:
             name = tarif.tarifname or f"ab {tarif.gueltig_ab.strftime('%d.%m.%Y')}"
@@ -317,7 +345,7 @@ class DatenChecker:
 
     # ─── Investitionen ───────────────────────────────────────────────────
 
-    def _check_investitionen(self, anlage: Anlage) -> list[CheckErgebnis]:
+    def _check_investitionen(self, anlage: Anlage, monatsdaten: list[Monatsdaten]) -> list[CheckErgebnis]:
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.INVESTITIONEN
 
@@ -349,6 +377,20 @@ class DatenChecker:
                         details="Wird für PVGIS-Solarprognose benötigt",
                         link="/einstellungen/investitionen",
                     ))
+                ergebnisse.extend(self._check_investition_monatsdaten(
+                    inv, name, "pv_erzeugung_kwh", "PV-Erzeugung", CheckSeverity.WARNING, monatsdaten,
+                ))
+
+            elif inv.typ == "balkonkraftwerk":
+                if not param.get("leistung_wp"):
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{name}: Leistung (Wp) fehlt",
+                        link="/einstellungen/investitionen",
+                    ))
+                ergebnisse.extend(self._check_investition_monatsdaten(
+                    inv, name, "pv_erzeugung_kwh", "PV-Erzeugung", CheckSeverity.WARNING, monatsdaten,
+                ))
 
             elif inv.typ == "speicher":
                 kap = param.get("kapazitaet_kwh")
@@ -358,6 +400,24 @@ class DatenChecker:
                         meldung=f"{name}: Kapazität (kWh) fehlt",
                         link="/einstellungen/investitionen",
                     ))
+                if param.get("nutzt_arbitrage"):
+                    if not param.get("lade_durchschnittspreis_cent"):
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=f"{name}: Arbitrage aktiv, aber Ø Ladepreis fehlt",
+                            details="Wird für Arbitrage-Einsparungsberechnung benötigt",
+                            link="/einstellungen/investitionen",
+                        ))
+                    if not param.get("entlade_vermiedener_preis_cent"):
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=f"{name}: Arbitrage aktiv, aber Ø Entladepreis fehlt",
+                            details="Wird für Arbitrage-Einsparungsberechnung benötigt",
+                            link="/einstellungen/investitionen",
+                        ))
+                ergebnisse.extend(self._check_investition_monatsdaten(
+                    inv, name, "ladung_kwh", "Speicher-Ladung", CheckSeverity.WARNING, monatsdaten,
+                ))
 
             elif inv.typ == "e-auto":
                 if not param.get("km_jahr") and not param.get("verbrauch_kwh_100km"):
@@ -374,6 +434,35 @@ class DatenChecker:
                         details="Werden für ROI-Berechnung benötigt (Vergleich mit Verbrenner-Alternative)",
                         link="/einstellungen/investitionen",
                     ))
+                if param.get("nutzt_v2h") and not param.get("v2h_entlade_preis_cent"):
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.INFO,
+                        meldung=f"{name}: V2H aktiv, aber Entladepreis fehlt",
+                        details="Wird für V2H-Einsparungsberechnung benötigt",
+                        link="/einstellungen/investitionen",
+                    ))
+                ergebnisse.extend(self._check_investition_monatsdaten(
+                    inv, name, "ladung_pv_kwh", "Ladung PV", CheckSeverity.INFO, monatsdaten,
+                ))
+
+            elif inv.typ == "wallbox":
+                if not param.get("leistung_kw"):
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{name}: Ladeleistung (kW) fehlt",
+                        link="/einstellungen/investitionen",
+                    ))
+                ergebnisse.extend(self._check_investition_monatsdaten(
+                    inv, name, "ladung_kwh", "Ladung gesamt", CheckSeverity.INFO, monatsdaten,
+                ))
+
+            elif inv.typ == "wechselrichter":
+                if not param.get("leistung_ac_kw"):
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{name}: AC-Leistung (kW) fehlt",
+                        link="/einstellungen/investitionen",
+                    ))
 
             elif inv.typ == "waermepumpe":
                 if inv.anschaffungskosten_alternativ is None:
@@ -383,6 +472,69 @@ class DatenChecker:
                         details="Werden für ROI-Berechnung benötigt (Vergleich mit konventioneller Heizung)",
                         link="/einstellungen/investitionen",
                     ))
+
+                # Effizienz-Parameter je nach Berechnungsmodus prüfen
+                effizienz_modus = param.get("effizienz_modus", "gesamt_jaz")
+                if effizienz_modus == "gesamt_jaz":
+                    jaz = param.get("jaz")
+                    if jaz is None:
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=f"{name}: JAZ nicht gesetzt",
+                            details="Jahresarbeitszahl wird für COP-Berechnung der Heizenergie benötigt",
+                            link="/einstellungen/investitionen",
+                        ))
+                    elif not (1.5 <= jaz <= 7.0):
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=f"{name}: JAZ unplausibel ({jaz:.1f})",
+                            details="Typischer Bereich: 1,5–7,0 (Luft-WP ca. 2,5–4,5, Sole-WP ca. 3,5–5,5)",
+                            link="/einstellungen/investitionen",
+                        ))
+                elif effizienz_modus == "scop":
+                    scop_h = param.get("scop_heizung")
+                    scop_ww = param.get("scop_warmwasser")
+                    if scop_h is None or scop_ww is None:
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=f"{name}: SCOP-Werte fehlen (Modus: EU-Label SCOP)",
+                            details="SCOP Heizung und SCOP Warmwasser werden für Einsparungs-Berechnung benötigt",
+                            link="/einstellungen/investitionen",
+                        ))
+                elif effizienz_modus == "getrennte_cops":
+                    cop_h = param.get("cop_heizung")
+                    cop_ww = param.get("cop_warmwasser")
+                    if cop_h is None or cop_ww is None:
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=f"{name}: COP-Werte fehlen (Modus: Getrennte COPs)",
+                            details="COP Heizung und COP Warmwasser werden für Einsparungs-Berechnung benötigt",
+                            link="/einstellungen/investitionen",
+                        ))
+
+                # Alter Energieträger / Preis für Vergleichsrechnung
+                alter_preis = param.get("alter_preis_cent_kwh")
+                if alter_preis is None:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.INFO,
+                        meldung=f"{name}: Alter Energiepreis nicht gesetzt",
+                        details="Wird für Einsparungs-Berechnung vs. Gas-/Ölheizung benötigt",
+                        link="/einstellungen/investitionen",
+                    ))
+
+                # Wärmebedarf für Jahres-Einsparungsschätzung
+                if not param.get("heizwaermebedarf_kwh"):
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.INFO,
+                        meldung=f"{name}: Heizwärmebedarf nicht gesetzt",
+                        details="Wird für Jahres-Einsparungsschätzung verwendet (kWh/Jahr)",
+                        link="/einstellungen/investitionen",
+                    ))
+
+                # Monatsdaten-Vollständigkeit der WP prüfen
+                ergebnisse.extend(
+                    self._check_wp_monatsdaten(inv, name, param, monatsdaten)
+                )
 
             # Allgemeine Prüfungen für alle Typen
             if inv.anschaffungsdatum is None:
@@ -508,6 +660,10 @@ class DatenChecker:
         md_map = {(md.jahr, md.monat): md for md in monatsdaten}
         gesamt_kwp = anlage.leistung_kwp or 0
 
+        # Kontext: aktive Investitionstypen (für feldabhängige Checks)
+        aktive_typen = {i.typ for i in anlage.investitionen if i.aktiv}
+        hat_speicher = "speicher" in aktive_typen
+
         for md in monatsdaten:
             prefix = f"{md.monat:02d}/{md.jahr}"
             md_link = f"/monatsabschluss/{anlage.id}/{md.jahr}/{md.monat}"
@@ -516,6 +672,37 @@ class DatenChecker:
             pv_erzeugung = pv_erzeugung_map.get((md.jahr, md.monat))
             if pv_erzeugung is None and md.pv_erzeugung_kwh is not None:
                 pv_erzeugung = md.pv_erzeugung_kwh
+
+            # 0. Pflichtfelder nicht befüllt
+            if md.einspeisung_kwh is None:
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
+                    meldung=f"{prefix}: Einspeisung nicht erfasst",
+                    details="Kernfeld – ohne Einspeisung sind Eigenverbrauch und Autarkie nicht berechenbar",
+                    link=md_link,
+                ))
+            if md.netzbezug_kwh is None:
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
+                    meldung=f"{prefix}: Netzbezug nicht erfasst",
+                    details="Kernfeld – ohne Netzbezug sind Hausverbrauch und Stromkosten nicht berechenbar",
+                    link=md_link,
+                ))
+            if hat_speicher:
+                if md.batterie_ladung_kwh is None:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{prefix}: Batterie-Ladung nicht erfasst (Speicher vorhanden)",
+                        details="Ohne Batterie-Daten wird der Hausverbrauch falsch berechnet",
+                        link=md_link,
+                    ))
+                if md.batterie_entladung_kwh is None:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{prefix}: Batterie-Entladung nicht erfasst (Speicher vorhanden)",
+                        details="Ohne Batterie-Daten wird der Hausverbrauch falsch berechnet",
+                        link=md_link,
+                    ))
 
             # 1. Negative Werte
             for feld, wert in [
@@ -568,6 +755,7 @@ class DatenChecker:
             if (
                 pv_erzeugung is not None
                 and pv_erzeugung > 0
+                and md.einspeisung_kwh is not None
                 and md.einspeisung_kwh > pv_erzeugung
             ):
                 ergebnisse.append(CheckErgebnis(
@@ -577,7 +765,7 @@ class DatenChecker:
                     link=md_link,
                 ))
 
-            # 4. Beide Werte 0
+            # 4. Beide Kernfelder 0
             if md.einspeisung_kwh == 0 and md.netzbezug_kwh == 0:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.WARNING,
@@ -593,13 +781,41 @@ class DatenChecker:
                     ("Einspeisung", md.einspeisung_kwh, vorjahr.einspeisung_kwh),
                     ("Netzbezug", md.netzbezug_kwh, vorjahr.netzbezug_kwh),
                 ]:
-                    if vj_wert and vj_wert > 50 and wert > 3 * vj_wert:
+                    if vj_wert and vj_wert > 50 and wert is not None and wert > 3 * vj_wert:
                         ergebnisse.append(CheckErgebnis(
                             kategorie=kat, schwere=CheckSeverity.WARNING,
                             meldung=f"{prefix}: {feld} > 3× Vorjahr ({wert:.0f} vs. {vj_wert:.0f} kWh)",
                             details="Deutliche Abweichung zum Vorjahresmonat",
                             link=md_link,
                         ))
+
+            # 6. Energiebilanz: Hausverbrauch = PV - Einspeisung + Netzbezug ± Batterie
+            # Nur prüfbar wenn alle Kernfelder vorhanden
+            if (
+                md.einspeisung_kwh is not None
+                and md.netzbezug_kwh is not None
+            ):
+                pv = pv_erzeugung or 0
+                bat_ladung = md.batterie_ladung_kwh or 0
+                bat_entladung = md.batterie_entladung_kwh or 0
+                hausverbrauch = pv - md.einspeisung_kwh + md.netzbezug_kwh + bat_entladung - bat_ladung
+
+                if hausverbrauch < -0.5:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.ERROR,
+                        meldung=f"{prefix}: Energiebilanz ergibt negativen Hausverbrauch ({hausverbrauch:.1f} kWh)",
+                        details=(
+                            f"PV {pv:.0f} – Einspeisung {md.einspeisung_kwh:.0f} "
+                            f"+ Netzbezug {md.netzbezug_kwh:.0f} "
+                            f"+ Bat.Entladung {bat_entladung:.0f} "
+                            f"– Bat.Ladung {bat_ladung:.0f} = {hausverbrauch:.1f} kWh. "
+                            f"Hinweis: Fehlende Batterie-Daten können diesen Fehler verursachen."
+                        ),
+                        link=md_link,
+                    ))
+                elif hat_speicher and (md.batterie_ladung_kwh is None or md.batterie_entladung_kwh is None):
+                    # Bilanz rechnerisch positiv, aber Batterie-Daten fehlen → Warnung dass Wert unzuverlässig
+                    pass  # bereits durch Check 0 abgedeckt
 
         if not ergebnisse:
             ergebnisse.append(CheckErgebnis(
@@ -653,6 +869,143 @@ class DatenChecker:
         ratios = [r[2] for r in letzte]
 
         return sum(ratios) / len(ratios), len(ratios)
+
+    def _erwartete_monate(
+        self, inv: Investition, monatsdaten: list[Monatsdaten]
+    ) -> list[tuple[int, int]]:
+        """Gibt sortierte Liste der Monate zurück, für die diese Investition Daten haben sollte.
+
+        Basis: alle vorhandenen Monatsdaten-Monate ab anschaffungsdatum der Investition.
+        """
+        if not monatsdaten:
+            return []
+
+        start: tuple[int, int] | None = None
+        if inv.anschaffungsdatum:
+            start = (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month)
+
+        return sorted(
+            (md.jahr, md.monat) for md in monatsdaten
+            if start is None or (md.jahr, md.monat) >= start
+        )
+
+    def _check_investition_monatsdaten(
+        self,
+        inv: Investition,
+        name: str,
+        pflicht_feld: str,
+        feld_label: str,
+        schwere: str,
+        monatsdaten: list[Monatsdaten],
+    ) -> list[CheckErgebnis]:
+        """Prüft ob ein Pflichtfeld für alle erwarteten Monate in InvestitionMonatsdaten gefüllt ist.
+
+        Erwartete Monate = alle Monatsdaten-Einträge ab anschaffungsdatum der Investition.
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.INVESTITIONEN
+
+        erwartete = self._erwartete_monate(inv, monatsdaten)
+        if not erwartete:
+            return ergebnisse
+
+        imd_map = {
+            (imd.jahr, imd.monat): (imd.verbrauch_daten or {})
+            for imd in inv.monatsdaten
+        }
+
+        fehlend: list[str] = []
+        for (jahr, monat) in erwartete:
+            daten = imd_map.get((jahr, monat), {})
+            if daten.get(pflicht_feld) is None:
+                fehlend.append(f"{monat:02d}/{jahr}")
+
+        if fehlend:
+            monate_str = ", ".join(fehlend[:6])
+            if len(fehlend) > 6:
+                monate_str += f" (+{len(fehlend) - 6} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=schwere,
+                meldung=f"{name}: {feld_label} fehlt in {len(fehlend)} Monat(en)",
+                details=monate_str,
+                link="/einstellungen/monatsdaten",
+            ))
+        else:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=f"{name}: Monatsdaten vollständig ({len(erwartete)} Monate)",
+            ))
+
+        return ergebnisse
+
+    def _check_wp_monatsdaten(
+        self, inv: Investition, name: str, param: dict, monatsdaten: list[Monatsdaten]
+    ) -> list[CheckErgebnis]:
+        """Prüft WP-Monatsdaten für alle erwarteten Monate ab anschaffungsdatum.
+
+        Berücksichtigt getrennte_strommessung und prüft zusätzlich heizenergie_kwh.
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.INVESTITIONEN
+
+        erwartete = self._erwartete_monate(inv, monatsdaten)
+        if not erwartete:
+            return ergebnisse
+
+        getrennte_strommessung = param.get("getrennte_strommessung", False)
+
+        imd_map = {
+            (imd.jahr, imd.monat): (imd.verbrauch_daten or {})
+            for imd in inv.monatsdaten
+        }
+
+        fehlend_strom: list[str] = []
+        fehlend_heiz: list[str] = []
+
+        for (jahr, monat) in erwartete:
+            daten = imd_map.get((jahr, monat), {})
+            label = f"{monat:02d}/{jahr}"
+
+            if getrennte_strommessung:
+                if daten.get("strom_heizen_kwh") is None and daten.get("strom_warmwasser_kwh") is None:
+                    fehlend_strom.append(label)
+            else:
+                if daten.get("stromverbrauch_kwh") is None:
+                    fehlend_strom.append(label)
+
+            if daten.get("heizenergie_kwh") is None:
+                fehlend_heiz.append(label)
+
+        if fehlend_strom:
+            monate_str = ", ".join(fehlend_strom[:6])
+            if len(fehlend_strom) > 6:
+                monate_str += f" (+{len(fehlend_strom) - 6} weitere)"
+            strom_label = "Strom Heizen/Warmwasser" if getrennte_strommessung else "Stromverbrauch"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"{name}: {strom_label} fehlt in {len(fehlend_strom)} Monat(en)",
+                details=monate_str,
+                link="/einstellungen/monatsdaten",
+            ))
+
+        if fehlend_heiz:
+            monate_str = ", ".join(fehlend_heiz[:6])
+            if len(fehlend_heiz) > 6:
+                monate_str += f" (+{len(fehlend_heiz) - 6} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung=f"{name}: Heizenergie fehlt in {len(fehlend_heiz)} Monat(en)",
+                details=monate_str,
+                link="/einstellungen/monatsdaten",
+            ))
+
+        if not fehlend_strom and not fehlend_heiz:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=f"{name}: Monatsdaten vollständig ({len(erwartete)} Monate)",
+            ))
+
+        return ergebnisse
 
     def _get_pvgis_monat_map(self, prognose: Optional[PVGISPrognose]) -> dict[int, float]:
         """Baut Lookup Monat → erwartete kWh aus aktiver PVGIS-Prognose."""
