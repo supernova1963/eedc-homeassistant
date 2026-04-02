@@ -446,7 +446,7 @@ class DatenChecker:
                 ))
 
             elif inv.typ == "wallbox":
-                if not param.get("leistung_kw"):
+                if not param.get("max_ladeleistung_kw") and not param.get("leistung_kw"):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Ladeleistung (kW) fehlt",
@@ -457,10 +457,10 @@ class DatenChecker:
                 ))
 
             elif inv.typ == "wechselrichter":
-                if not param.get("leistung_ac_kw"):
+                if not param.get("max_leistung_kw") and not param.get("leistung_ac_kw"):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
-                        meldung=f"{name}: AC-Leistung (kW) fehlt",
+                        meldung=f"{name}: Leistung (kW) fehlt",
                         link="/einstellungen/investitionen",
                     ))
 
