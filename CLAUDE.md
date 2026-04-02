@@ -194,41 +194,30 @@ Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/A
 - **Issue #90** (OPEN) — Statistik-Import zeigt aktuellen (unvollständigen) Monat + WP-Sensor-Mapping Bugs (Rainer/simon42-Feedback). Analyse liegt im Issue, noch nicht gefixt.
 - **MariaDB CONVERT_TZ Bug** — Import-Vorschau wirft 500, weil `CONVERT_TZ()` auf HA-MariaDB `NULL` zurückgibt. Betrifft nur MariaDB-Nutzer. Noch offen.
 
-### Live-Dashboard Performance — Option B Refactoring-Plan (zurückgestellt)
+### Live-Dashboard Performance — Analyse abgeschlossen (2026-04-02)
 
 **Option A erledigt in v3.8.15** — 60s TTL-Cache für `heute_kwh` verhindert HA-History-Flood.
 
-**Option B (offen):** Vollständige Ablösung HA-History für Live-Dashboard. Kein echter Neubau nötig — nur Umpriorisierung + eine neue Tabelle.
+**Option B Schritt 1 (Priority-Flip) — NICHT umsetzen.**
+Analyse ergab: Der MQTT-Fallback-Pfad funktioniert korrekt (verifiziert mit Testumgebung Winterborn).
+Das eigentliche Problem war ein FK-Bug im Snapshot-Scheduler (→ v3.8.20 gefixt).
+Ein Priority-Flip würde für HA-Nutzer Genauigkeit kosten (Trapez-Integration echter Sensorhistorie
+ist präziser als Utility-Meter-Deltas). Aktuelles Verhalten (HA zuerst, MQTT Fallback) ist korrekt.
 
-**Ist-Zustand der Datenquellen:**
+**Ist-Zustand nach v3.8.20:**
 
-| Datenbedarf | Aktuell | MQTT-Pfad vorhanden? |
+| Datenbedarf | Aktuell | Status |
 |---|---|---|
-| Live-Wattage (W) | MQTT-Cache | fertig |
-| Heute/Gestern kWh | HA-History (60s gecacht) | MqttEnergySnapshot — nie genutzt |
-| Tagesverlauf-Chart | HA-History (separater Endpoint) | fehlt |
-| Verbrauchsprofil | TagesEnergieProfil stündlich, sentinel-gecacht | ausreichend, kein Handlungsbedarf |
+| Live-Wattage (W) | MQTT-Cache | ✅ fertig |
+| Heute/Gestern kWh (HA) | HA-History, 60s gecacht | ✅ fertig |
+| Heute/Gestern kWh (Standalone) | MqttEnergySnapshot Fallback | ✅ funktioniert |
+| Tagesverlauf-Chart | HA-History | offen für Standalone |
 
-**`MqttEnergySnapshot`** (bereits vorhanden in `eedc/backend/services/mqtt_energy_history_service.py`):
-
-- Macht alle 5 Min Snapshots der Energy-Cache-Werte in SQLite
-- `get_tages_kwh()` liefert heute/gestern kWh mit denselben Keys wie HA-Pfad
-- Wird nie genutzt, weil HA immer zuerst antwortet (Priorität falsch herum)
-- **Lücke:** `_KEY_TO_CATEGORY` kennt nur `pv_gesamt_kwh`, `einspeisung_kwh`, `netzbezug_kwh` — per-Komponenten-Keys (Batterie, Wallbox) fehlen, obwohl die MQTT Energy Automation sie bereits publisht
-
-**Schritt 1 — MqttEnergySnapshot als primäre Quelle für heute/gestern kWh:**
-
-1. `_KEY_TO_CATEGORY` in `mqtt_energy_history_service.py` um Komponenten-Keys erweitern: `inv/{id}_{name}/ladung_kwh`, `inv/{id}_{name}/entladung_kwh`, etc.
-2. Priorität in `_safe_get_tages_kwh()` (Zeile 757ff) umdrehen: MQTT zuerst, HA als Fallback
-3. Kein HA-History-Call mehr für heute/gestern kWh
-
-**Schritt 2 — Tagesverlauf-Chart aus lokaler DB (einziger echter Neubau):**
-
-- Neuer periodischer Task (alle 5 Min): MQTT Live-W-Werte als Snapshot speichern — neue Tabelle `MqttLiveSnapshot` mit `(anlage_id, timestamp, key, value_w)`
-- `get_tagesverlauf()` (Zeile 1127 in `live_power_service.py`) liest dann aus lokaler DB statt HA-History
-- Modell analog zu `MqttEnergySnapshot`, Retention 2 Tage reicht
-
-**Testumgebung:** HA-Sensor-Zuordnung rausnehmen → Code fällt auf MQTT-Pfad durch → leerer Tagesverlauf zeigt wo Schritt 2 noch fehlt, gefüllte kWh-Werte bestätigen Schritt 1.
+**Option B Schritt 2 (Tagesverlauf-Chart aus lokaler DB) — zurückgestellt:**
+Für Standalone-Nutzer ohne HA fehlt der Tagesverlauf-Chart. Lösungsansatz:
+- Neue Tabelle `MqttLiveSnapshot` mit periodischen W-Snapshots (alle 5 Min)
+- `get_tagesverlauf()` liest aus lokaler DB statt HA-History
+- Nur sinnvoll wenn konkreter Nutzerbedarf entsteht (bisher kein Issue dazu)
 
 ### Zurückgestellte Features / Ideen
 
