@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.21] - 2026-04-02
+
+### Behoben
+
+- **WP getrennte Strommessung: Einstellung ging nach Update verloren (#95 Regression)**: Wer die Checkbox vor v3.8.19 aktiviert hatte, konnte den Wert als String `'true'` in der DB gespeichert haben. Der neue strikte `=== true`-Vergleich erkannte diesen String nicht → Checkbox wurde nach dem Update als deaktiviert angezeigt. Fix: beide Typen (`boolean true` und String `'true'`) werden beim Laden akzeptiert. Gemeldet von Rainer.
+
+---
+
 ## [3.8.20] - 2026-04-02
 
 ### Behoben
