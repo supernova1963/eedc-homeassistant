@@ -969,19 +969,22 @@ class LivePowerService:
         )
 
         # kWh-Sensor-Delta: Energie-Sensoren (kWh) liefern kumulative Werte.
-        # Statt Trapez-Integration: Delta = letzter Wert - erster Wert des Tages.
+        # Statt Trapez-Integration: Delta = letzter Wert - Minimalwert des Tages.
+        #
+        # Warum min() statt pts[0]:
+        # Die HA History API liefert als ersten Datenpunkt den letzten bekannten
+        # State VOR dem Abfragezeitraum (z.B. 23:59 gestern mit 10,48 kWh), auch
+        # wenn der Sensor kurz nach Mitternacht auf 0 zurückgesetzt wurde.
+        # pts[0] wäre dann der Vor-Reset-Wert → delta nur 0,1 statt 10,58 kWh.
+        # min() findet den Post-Reset-Minimalwert (≈ 0) und liefert die korrekte
+        # Tages-Akkumulation — unabhängig davon ob der Reset-Punkt im Fenster liegt.
         def _kwh_delta(pts: list[tuple[datetime, float]]) -> Optional[float]:
-            """Tages-kWh aus kumulativem Sensor via Delta (erster/letzter Wert)."""
+            """Tages-kWh aus kumulativem Sensor via Delta (min → letzter Wert)."""
             if not pts:
                 return None
-            val_start = pts[0][1]
+            val_start = min(p[1] for p in pts)
             val_end = pts[-1][1]
-            delta = val_end - val_start
-            # Negativer Delta = Sensor-Reset (z.B. Utility Meter um Mitternacht)
-            # → letzter Wert ist schon der Tageswert
-            if delta < -0.001:
-                return max(0.0, val_end)
-            return max(0.0, delta)
+            return max(0.0, val_end - val_start)
 
         # Wh-Sensoren auch unterstützen (1 Wh = 0.001 kWh)
         _KWH_UNITS = {"kWh", "Wh", "MWh"}
@@ -995,12 +998,9 @@ class LivePowerService:
             if not pts:
                 return None
             scale = _KWH_SCALE.get(sensor_units.get(eid, "kWh"), 1.0)
-            val_start = pts[0][1] * scale
+            val_start = min(p[1] for p in pts) * scale
             val_end = pts[-1][1] * scale
-            delta = val_end - val_start
-            if delta < -0.001:
-                return max(0.0, val_end * scale)
-            return max(0.0, delta)
+            return max(0.0, val_end - val_start)
 
         result: dict[str, Optional[float]] = {}
 
