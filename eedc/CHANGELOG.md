@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.15] - 2026-04-02
+
+### Behoben
+
+- **Daten-Checker: 66 falsche Batterie-Warnungen bei InvestitionMonatsdaten-Speicher**: Batterie-Checks in „Monatsdaten – Plausibilität" prüften die Legacy-Felder `batterie_ladung_kwh` / `batterie_entladung_kwh` in `Monatsdaten`, die bei investitionsbasierter Speicher-Erfassung (neuer Weg) bewusst leer sind. Fix: Vor dem Legacy-Check wird geprüft ob der Monat bereits durch Speicher-`InvestitionMonatsdaten` abgedeckt ist — wenn ja, entfällt die Warnung. Zusätzlich nutzt die Energiebilanz-Prüfung jetzt die IMD-Werte statt der Legacy-Felder, damit kein falscher negativer Hausverbrauch gemeldet wird.
+
+---
+
 ## [3.8.14] - 2026-04-02
 
 ### Behoben
