@@ -67,6 +67,9 @@ export default function MonatsabschlussWizard() {
 
   const [anlageName, setAnlageName] = useState('')
   const [data, setData] = useState<MonatsabschlussResponse | null>(null)
+  const [showMonatPicker, setShowMonatPicker] = useState(false)
+  const [pickerJahr, setPickerJahr] = useState<number>(new Date().getFullYear())
+  const [pickerMonat, setPickerMonat] = useState<number>(new Date().getMonth() + 1)
   const [currentStep, setCurrentStep] = useState(0)
   const [values, setValues] = useState<WizardState>({
     basis: {},
@@ -554,6 +557,54 @@ export default function MonatsabschlussWizard() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Monatsabschluss {MONAT_NAMEN[selectedMonat]} {selectedJahr}
         </h1>
+
+        {/* Anderen Monat wählen */}
+        {!showMonatPicker ? (
+          <button
+            type="button"
+            onClick={() => { setPickerJahr(selectedJahr); setPickerMonat(selectedMonat); setShowMonatPicker(true) }}
+            className="mt-1 text-xs text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 underline underline-offset-2"
+          >
+            Anderen Monat wählen
+          </button>
+        ) : (
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              title="Monat"
+              value={pickerMonat}
+              onChange={e => setPickerMonat(parseInt(e.target.value))}
+              className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            >
+              {MONAT_NAMEN.slice(1).map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </select>
+            <select
+              title="Jahr"
+              value={pickerJahr}
+              onChange={e => setPickerJahr(parseInt(e.target.value))}
+              className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            >
+              {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => { setShowMonatPicker(false); navigate(`/monatsabschluss/${anlageId}/${pickerJahr}/${pickerMonat}`) }}
+              className="text-sm px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+            >
+              Wechseln
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMonatPicker(false)}
+              className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              Abbrechen
+            </button>
+          </div>
+        )}
 
         {/* Datenquellen-Status & Aktionen */}
         <div className="mt-4 space-y-3">
