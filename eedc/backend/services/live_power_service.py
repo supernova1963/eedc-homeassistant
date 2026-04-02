@@ -746,10 +746,15 @@ class LivePowerService:
     ) -> dict[str, Optional[float]]:
         """Wrapper mit Fehlerbehandlung für _get_tages_kwh (HA + MQTT Fallback).
 
-        Gestern-kWh wird gecacht (ändert sich nach Mitternacht nicht mehr).
+        Heute-kWh: 60s TTL-Cache (verhindert HA-History-Flood bei jedem Live-Refresh).
+        Gestern-kWh: Tages-Cache (ändert sich nach Mitternacht nicht mehr).
         """
-        # Gestern-Cache prüfen (spart HA-History-Query alle 5s)
-        if tage_zurueck >= 1:
+        # Cache prüfen (spart HA-History-Query alle paar Sekunden)
+        if tage_zurueck == 0:
+            cached = self._get_heute_kwh_cache(anlage.id)
+            if cached is not None:
+                return cached
+        elif tage_zurueck >= 1:
             cached = self._get_gestern_kwh_cache(anlage.id)
             if cached is not None:
                 return cached
@@ -759,7 +764,9 @@ class LivePowerService:
             try:
                 result = await self._get_tages_kwh(anlage, db, tage_zurueck, inv_types=inv_types)
                 if result:
-                    if tage_zurueck >= 1:
+                    if tage_zurueck == 0:
+                        self._set_heute_kwh_cache(anlage.id, result)
+                    else:
                         self._set_gestern_kwh_cache(anlage.id, result)
                     return result
             except Exception as e:
@@ -771,7 +778,9 @@ class LivePowerService:
             from backend.services.mqtt_energy_history_service import get_tages_kwh
             result = await get_tages_kwh(anlage.id, tage_zurueck)
             if result:
-                if tage_zurueck >= 1:
+                if tage_zurueck == 0:
+                    self._set_heute_kwh_cache(anlage.id, result)
+                else:
                     self._set_gestern_kwh_cache(anlage.id, result)
                 return result
         except Exception as e:
@@ -1772,6 +1781,24 @@ class LivePowerService:
         """Speichert Profil mit heutigem Datum. None wird als Sentinel gespeichert."""
         value = self._PROFIL_UNAVAILABLE if profil is None else profil
         self._profil_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), value)
+
+    # ── Heute-kWh Cache (60s TTL — vermeidet HA-History-Flood) ─────────
+
+    _heute_kwh_cache: dict[int, tuple[float, dict]] = {}  # {anlage_id: (timestamp, kwh_dict)}
+    _HEUTE_CACHE_TTL = 60  # Sekunden
+
+    def _get_heute_kwh_cache(self, anlage_id: int) -> Optional[dict]:
+        """Gibt gecachte Heute-kWh zurück wenn jünger als 60s."""
+        if anlage_id not in self._heute_kwh_cache:
+            return None
+        ts, kwh = self._heute_kwh_cache[anlage_id]
+        if (datetime.now().timestamp() - ts) < self._HEUTE_CACHE_TTL:
+            return kwh
+        return None
+
+    def _set_heute_kwh_cache(self, anlage_id: int, kwh: dict) -> None:
+        """Speichert Heute-kWh mit aktuellem Timestamp."""
+        self._heute_kwh_cache[anlage_id] = (datetime.now().timestamp(), kwh)
 
     # ── Gestern-kWh Cache (ändert sich nicht mehr nach Mitternacht) ────
 
