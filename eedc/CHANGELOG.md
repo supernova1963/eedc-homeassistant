@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.20] - 2026-04-02
+
+### Behoben
+
+- **MQTT Energy Snapshots schlugen für alle Anlagen fehl**: Retained MQTT-Topics einer gelöschten Anlage (ID ohne DB-Eintrag) verursachten einen `FOREIGN KEY constraint failed`-Fehler. Da alle Inserts in einer Transaktion lagen, wurden auch gültige Anlagen nicht gespeichert — über Tage hinweg kein Snapshot → `heute_kWh` im Live-Dashboard blieb `null`. Fix: anlage_ids werden vor dem Insert gegen die DB validiert, unbekannte IDs werden übersprungen.
+- **Fronius Solar.web Import: Einspeisung und Netzbezug fehlten bei deutschem Export**: Das deutsche Interface liefert `Energie ins Netz eingespeist` und `Energie vom Netz bezogen` statt `Einspeisung`/`Netzbezug`. Der Parser erkannte diese Varianten nicht → beide Felder wurden als leer importiert. Außerdem wurde das deutsche Format nicht automatisch erkannt. Parser als getestet markiert (verifiziert mit echten Nutzerdaten — Danke Joachim!).
+
+---
+
 ## [3.8.19] - 2026-04-02
 
 ### Behoben
