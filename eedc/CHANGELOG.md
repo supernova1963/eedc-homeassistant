@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.16] - 2026-04-02
+
+### Behoben
+
+- **Daten-Checker: Wallbox und Wechselrichter melden „Leistung fehlt" obwohl eingetragen**: Das Formular speichert `max_ladeleistung_kw` (Wallbox) und `max_leistung_kw` (Wechselrichter), der Checker suchte aber `leistung_kw` bzw. `leistung_ac_kw` → falsche Warnung trotz eingetragener Werte. Beide Schlüssel werden jetzt geprüft.
+
+---
+
 ## [3.8.15] - 2026-04-02
 
 ### Behoben
