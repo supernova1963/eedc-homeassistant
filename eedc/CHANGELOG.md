@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.19] - 2026-04-02
+
+### Behoben
+
+- **Getrennte Strommessung WP lässt sich nicht abwählen (#95)**: `'false'` (String) ist in JavaScript truthy — die Checkbox blieb nach einmaligem Aktivieren dauerhaft gesetzt. Fix: Laden mit striktem `=== true`-Vergleich, Speichern mit expliziter Boolean-Konvertierung.
+
+### Verbessert
+
+- **Monatsabschluss: Anderen Monat wählen**: Kleiner Link unter dem Titel öffnet einen kompakten Monat/Jahr-Picker, um direkt zu vergangenen Monaten zu navigieren (z.B. für einen nachgeholten Abschluss).
+
+---
+
 ## [3.8.18] - 2026-04-02
 
 ### Behoben
