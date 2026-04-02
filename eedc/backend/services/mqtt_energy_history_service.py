@@ -16,6 +16,7 @@ from typing import Optional
 from sqlalchemy import delete, func, select
 
 from backend.core.database import get_session
+from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 
@@ -59,11 +60,19 @@ async def snapshot_energy_cache() -> int:
     if not all_energy:
         return 0
 
+    # Gültige Anlage-IDs aus DB holen (verhindert FK-Fehler bei gelöschten/fremden Anlagen)
+    async with get_session() as session:
+        result = await session.execute(select(Anlage.id))
+        valid_ids = {row[0] for row in result.all()}
+
     now = datetime.now()
     count = 0
 
     async with get_session() as session:
         for anlage_id, cache in all_energy.items():
+            if anlage_id not in valid_ids:
+                logger.debug("MQTT Energy Snapshot: anlage_id=%d unbekannt, übersprungen", anlage_id)
+                continue
             for key, (value, _ts) in cache.items():
                 session.add(MqttEnergySnapshot(
                     anlage_id=anlage_id,
