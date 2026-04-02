@@ -1026,6 +1026,8 @@ def _berechne_verbrauchsprofil(
     kwp: float,
     jahresverbrauch_kwh: float = 4000,
     individuelles_profil: Optional[dict] = None,
+    wp_profil: Optional[dict] = None,
+    referenz_temp_c: Optional[float] = None,
 ) -> tuple[list[dict], Optional[float], Optional[float], bool]:
     """
     Berechnet stündliches PV-Ertrag + Verbrauchsprofil.
@@ -1073,6 +1075,16 @@ def _berechne_verbrauchsprofil(
         if individuelles_profil is not None:
             # Individuelles Profil: Schlüssel sind int oder str
             verbrauch_kw = round(individuelles_profil.get(h, individuelles_profil.get(str(h), 0.3)), 2)
+
+            # WP-Temperaturkorrektur: WP-Anteil mit Forecast-Temperatur skalieren
+            if wp_profil and referenz_temp_c is not None:
+                temp = s.get("temperatur_c")
+                nenn = max(1.0, 15.0 - referenz_temp_c)
+                if temp is not None:
+                    faktor = max(0.3, min(3.0, (15.0 - temp) / nenn))
+                    wp_kw = wp_profil.get(h, wp_profil.get(str(h), 0.0))
+                    haus_kw = max(0.0, verbrauch_kw - wp_kw)
+                    verbrauch_kw = round(max(0.0, haus_kw + wp_kw * faktor), 2)
         else:
             # BDEW H0 Fallback
             verbrauch_kw = round(_LASTPROFIL_KW.get(h, 0.3) * tages_faktor, 2)
@@ -1550,8 +1562,16 @@ async def get_live_wetter(
                 profil_typ = "individuell_werktag"
                 profil_tage = ind_profil_data["tage_werktag"]
 
+        wp_stunden_profil = None
+        referenz_temp_c = None
+        if ind_profil_data:
+            wp_key = "wp_wochenende" if now.weekday() >= 5 else "wp_werktag"
+            wp_stunden_profil = ind_profil_data.get(wp_key)
+            referenz_temp_c = ind_profil_data.get("referenz_temp_c")
+
         profil, pv_prognose, grundlast, ist_ind = _berechne_verbrauchsprofil(
             alle_stunden, kwp, individuelles_profil=ind_stunden_profil,
+            wp_profil=wp_stunden_profil, referenz_temp_c=referenz_temp_c,
         )
 
         # ── Außentemperatur: HA-Sensor bevorzugen, Open-Meteo als Fallback ──

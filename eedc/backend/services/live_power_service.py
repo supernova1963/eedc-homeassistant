@@ -1492,19 +1492,24 @@ class LivePowerService:
         inv_types = {str(row[0]): row[1] for row in inv_result.all()}
 
         pv_eids: list[str] = []
+        wp_eids: list[str] = []
         for inv_id, live in inv_live_map.items():
             typ = inv_types.get(inv_id)
             if typ in _ERZEUGER_TYPEN and live.get("leistung_w"):
                 pv_eids.append(live["leistung_w"])
+            elif typ == "waermepumpe" and live.get("leistung_w"):
+                wp_eids.append(live["leistung_w"])
 
         # PV Gesamt aus Basis als Fallback
         if not pv_eids and basis_live.get("pv_gesamt_w"):
             pv_eids.append(basis_live["pv_gesamt_w"])
 
+        temp_eid = basis_live.get("aussentemperatur_c")
+
         now = datetime.now()
         start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-        all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids)))
+        all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids + wp_eids + ([temp_eid] if temp_eid else []))))
         history, _ = await self._get_history_normalized(all_ids, start, now)
 
         # Vorzeichen-Invertierung auf History anwenden (#58)
@@ -1517,8 +1522,11 @@ class LivePowerService:
 
         werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
         wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+        wp_werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+        wp_wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
         werktage_set: set[str] = set()
         wochenende_set: set[str] = set()
+        temp_werte: list[float] = []
 
         for day_offset in range(7):
             tag = start + timedelta(days=day_offset)
@@ -1564,15 +1572,35 @@ class LivePowerService:
 
                 verbrauch_kw = max(0, pv_kw + bezug_kw - einsp_kw)
 
+                wp_kw = 0.0
+                for eid in wp_eids:
+                    pts = history.get(eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        wp_kw += abs(sum(h_pts) / len(h_pts)) / 1000
+
+                if temp_eid:
+                    pts = history.get(temp_eid, [])
+                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+                    if h_pts:
+                        temp_werte.append(sum(h_pts) / len(h_pts))
+
                 if ist_wochenende:
                     wochenende_sums[h].append(verbrauch_kw)
+                    wp_wochenende_sums[h].append(wp_kw)
                     wochenende_set.add(tag_str)
                 else:
                     werktag_sums[h].append(verbrauch_kw)
+                    wp_werktag_sums[h].append(wp_kw)
                     werktage_set.add(tag_str)
 
+        referenz_temp_c = round(sum(temp_werte) / len(temp_werte), 1) if temp_werte else None
+
         return self._build_profil_result(
-            werktag_sums, wochenende_sums, werktage_set, wochenende_set, "ha"
+            werktag_sums, wochenende_sums, werktage_set, wochenende_set, "ha",
+            wp_werktag_sums=wp_werktag_sums if wp_eids else None,
+            wp_wochenende_sums=wp_wochenende_sums if wp_eids else None,
+            referenz_temp_c=referenz_temp_c,
         )
 
     async def _profil_from_mqtt(self, anlage_id: int) -> Optional[dict]:
@@ -1683,6 +1711,9 @@ class LivePowerService:
         werktage_set: set[str],
         wochenende_set: set[str],
         quelle: str,
+        wp_werktag_sums: Optional[dict[int, list[float]]] = None,
+        wp_wochenende_sums: Optional[dict[int, list[float]]] = None,
+        referenz_temp_c: Optional[float] = None,
     ) -> Optional[dict]:
         """Baut das Profil-Ergebnis aus den gesammelten Stundenwerten."""
         tage_wt = len(werktage_set)
@@ -1698,13 +1729,22 @@ class LivePowerService:
         def build_profil(sums: dict[int, list[float]]) -> dict[int, float]:
             return {h: avg(sums[h]) for h in range(24) if sums[h]}
 
-        return {
+        result: dict = {
             "werktag": build_profil(werktag_sums) if tage_wt >= 2 else None,
             "wochenende": build_profil(wochenende_sums) if tage_we >= 2 else None,
             "tage_werktag": tage_wt,
             "tage_wochenende": tage_we,
             "quelle": quelle,
         }
+
+        if wp_werktag_sums is not None:
+            result["wp_werktag"] = build_profil(wp_werktag_sums) if tage_wt >= 2 else None
+            result["wp_wochenende"] = build_profil(wp_wochenende_sums) if tage_we >= 2 else None
+
+        if referenz_temp_c is not None:
+            result["referenz_temp_c"] = referenz_temp_c
+
+        return result
 
     # ── Profil-Cache (1x täglich) ────────────────────────────────────────
 
