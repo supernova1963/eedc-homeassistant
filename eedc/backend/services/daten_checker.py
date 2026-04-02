@@ -664,6 +664,26 @@ class DatenChecker:
         aktive_typen = {i.typ for i in anlage.investitionen if i.aktiv}
         hat_speicher = "speicher" in aktive_typen
 
+        # Monate mit Speicher-Daten in InvestitionMonatsdaten (neuer Weg).
+        # Legacy-Felder batterie_ladung/entladung_kwh in Monatsdaten sind dann NULL –
+        # das ist korrekt und darf keine Warnung auslösen.
+        # Werte werden auch für die Energiebilanz gebraucht (aggregiert über alle Speicher).
+        speicher_imd_bat: dict[tuple[int, int], tuple[float, float]] = {}  # (jahr,monat) → (ladung, entladung)
+        for inv in anlage.investitionen:
+            if inv.typ == "speicher" and inv.aktiv:
+                for imd in inv.monatsdaten:
+                    daten = imd.verbrauch_daten or {}
+                    ladung = daten.get("ladung_kwh")
+                    entladung = daten.get("entladung_kwh")
+                    if ladung is not None or entladung is not None:
+                        key = (imd.jahr, imd.monat)
+                        prev = speicher_imd_bat.get(key, (0.0, 0.0))
+                        speicher_imd_bat[key] = (
+                            prev[0] + (ladung or 0),
+                            prev[1] + (entladung or 0),
+                        )
+        speicher_imd_monate = set(speicher_imd_bat.keys())
+
         for md in monatsdaten:
             prefix = f"{md.monat:02d}/{md.jahr}"
             md_link = f"/monatsabschluss/{anlage.id}/{md.jahr}/{md.monat}"
@@ -688,7 +708,8 @@ class DatenChecker:
                     details="Kernfeld – ohne Netzbezug sind Hausverbrauch und Stromkosten nicht berechenbar",
                     link=md_link,
                 ))
-            if hat_speicher:
+            if hat_speicher and (md.jahr, md.monat) not in speicher_imd_monate:
+                # Legacy-Felder nur prüfen wenn keine InvestitionMonatsdaten vorhanden
                 if md.batterie_ladung_kwh is None:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
@@ -796,8 +817,13 @@ class DatenChecker:
                 and md.netzbezug_kwh is not None
             ):
                 pv = pv_erzeugung or 0
-                bat_ladung = md.batterie_ladung_kwh or 0
-                bat_entladung = md.batterie_entladung_kwh or 0
+                # Batterie: InvestitionMonatsdaten bevorzugen (neuer Weg), Legacy als Fallback
+                imd_key = (md.jahr, md.monat)
+                if imd_key in speicher_imd_bat:
+                    bat_ladung, bat_entladung = speicher_imd_bat[imd_key]
+                else:
+                    bat_ladung = md.batterie_ladung_kwh or 0
+                    bat_entladung = md.batterie_entladung_kwh or 0
                 hausverbrauch = pv - md.einspeisung_kwh + md.netzbezug_kwh + bat_entladung - bat_ladung
 
                 if hausverbrauch < -0.5:
