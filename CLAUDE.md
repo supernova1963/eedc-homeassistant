@@ -183,3 +183,47 @@ EEDC Add-on                              Community Server
 - **Sensor-Mapping:** Ersetzt alte `ha_sensor_*` Felder, konfigurierbar im Wizard
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
+
+## Parkplatz — Offene Punkte & zurückgestellte Ideen
+
+> Dieser Abschnitt ist rechnerübergreifend. Nach jeder Session: kurz eintragen, committen, pushen.
+> Format: `- **Thema** — Was/Warum/Stand`
+
+### Bugs / Offene Issues
+
+- **Issue #90** (OPEN) — Statistik-Import zeigt aktuellen (unvollständigen) Monat + WP-Sensor-Mapping Bugs (Rainer/simon42-Feedback). Analyse liegt im Issue, noch nicht gefixt.
+- **MariaDB CONVERT_TZ Bug** — Import-Vorschau wirft 500, weil `CONVERT_TZ()` auf HA-MariaDB `NULL` zurückgibt. Betrifft nur MariaDB-Nutzer. Noch offen.
+
+### Live-Dashboard Performance — NÄCHSTE AKTION (Option A)
+
+**Diagnose (2026-04-02, vollständig analysiert):**
+
+`get_live_data()` ruft bei jedem Live-Refresh (alle paar Sekunden) `_safe_get_tages_kwh()` zweimal auf:
+
+- `gestern` → gecacht ✓
+- `heute` → **kein Cache** ✗ → bei jedem Aufruf voller HA-History-API-Call für alle Sensoren von Mitternacht bis jetzt
+
+Relevante Stellen:
+
+- `eedc/backend/services/live_power_service.py` Zeile 644–645: die beiden `_safe_get_tages_kwh`-Aufrufe
+- `eedc/backend/services/live_power_service.py` Zeile 743–781: `_safe_get_tages_kwh()` — gestern-Cache ist ab Zeile 752, heute hat keinen
+- `eedc/backend/services/live_power_service.py` Zeile 1780–1796: `_get_gestern_kwh_cache()` / `_set_gestern_kwh_cache()` — das ist das Cache-Pattern das für heute zu kopieren ist
+
+**Fix (Option A) — heute-kWh Cache mit 60s TTL:**
+
+1. Analog zu `_gestern_kwh_cache` ein `_heute_kwh_cache` Dict + Timestamp anlegen (Zeile ~1780ff)
+2. `_get_heute_kwh_cache()` / `_set_heute_kwh_cache()` als neue Methoden (60s TTL statt bis Mitternacht)
+3. In `_safe_get_tages_kwh()` bei `tage_zurueck == 0` denselben Cache-Check einbauen wie bei `tage_zurueck >= 1`
+
+**Testumgebung:** HA-Sensor-Zuordnung in der lokalen Testinstanz rausnehmen (damit nicht auf HA-API zugegriffen wird und der MQTT-Fallback / Cache greift).
+
+**Option B (später, grüne Wiese):** MQTT Energy Topics als primäre Quelle für heute/gestern kWh. MQTT Energy Automation publisht bereits alle 5 Min alle nötigen Werte (`eedc/2_Winterborn/energy/...`). `mqtt_energy_history_service` existiert als Fallback-Code bereits, wird aber nie genutzt weil HA immer zuerst antwortet. Für Option B: Priorität umdrehen. Erst angehen wenn Option A im Produktivbetrieb läuft.
+
+### Zurückgestellte Features / Ideen
+
+- **WP-Temperaturkorrektur Verbrauchsprognose** — Wärmepumpen-Verbrauch temperaturabhängig skalieren (Heizgradtage). Zurückgestellt bis GTI-Prognose stabil validiert ist.
+- **Kraftstoffpreis E-Auto — Monatsdurchschnitt** — Statt statischem `benzinpreis_euro` monatliche Preishistorie pflegen. Diskutiert 2026-04-01, zurückgestellt. Öffentliche Quelle für DE-Durchschnittspreise noch zu klären.
+
+### Ungeklärte Punkte (anderer Rechner)
+
+- **Umfrage** — Intensiv diskutiert auf dem anderen Rechner, Inhalt hier nicht bekannt. Bitte beim nächsten Mal kurz zusammenfassen und hier eintragen.
