@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.4] - 2026-04-03
+
+### Behoben
+
+- **Statistik-Import: Verwaiste Sensor-Zuordnungen**: Gelöschte Investitionen hinterließen verwaiste Einträge im Sensor-Mapping, die als "Investition X" mit Warndreieck im Import erschienen. Verwaiste Einträge werden jetzt übersprungen. Beim Löschen einer Investition wird der Mapping-Eintrag automatisch mitentfernt.
+- **Fronius CSV-Import: Batterie + Eigenverbrauch**: Batterie-Spalten (Ladung/Entladung) werden jetzt erkannt. "Direkt verbraucht" wird korrekt als Eigenverbrauch statt als Verbrauch gemappt. Spalten-Deduplizierung verhindert Doppelzuordnungen bei ähnlichen Spaltennamen.
+
+### Verbessert
+
+- **Live-Dashboard: Prognose-Übererfüllung**: Wenn die PV-Erzeugung die Tagesprognose übertrifft, wird jetzt "Über Prognose +X kWh" in Grün angezeigt statt das Feld komplett auszublenden.
+
+---
+
 ## [3.9.3] - 2026-04-03
 
 ### Verbessert
