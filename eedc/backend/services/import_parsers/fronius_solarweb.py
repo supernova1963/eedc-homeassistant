@@ -40,15 +40,23 @@ COLUMN_PATTERNS: dict[str, list[str]] = {
         "feed in", "netzeinspeisung", "eingespeist", "ins netz",
     ],
     "netzbezug": [
-        "energy from grid", "netzbezug", "bezug", "from grid",
+        "energy from grid", "netzbezug", "from grid",
         "gridbezug", "grid consumption", "netz bezogen", "vom netz",
     ],
     "eigenverbrauch": [
         "consumed directly", "eigenverbrauch", "self-consumption",
-        "self consumption", "direktverbrauch",
+        "self consumption", "direktverbrauch", "direkt verbraucht",
     ],
     "verbrauch": [
-        "consumption", "verbrauch", "gesamtverbrauch", "total consumption",
+        "consumption", "gesamtverbrauch", "total consumption", "verbrauch",
+    ],
+    "batterie_ladung": [
+        "energy into battery", "in batterie gespeichert", "batterie ladung",
+        "battery charge", "in batterie", "speicher ladung",
+    ],
+    "batterie_entladung": [
+        "energy from battery", "aus batterie bezogen", "batterie entladung",
+        "battery discharge", "aus batterie", "speicher entladung",
     ],
 }
 
@@ -164,10 +172,14 @@ class FroniusSolarwebParser(PortalExportParser):
         headers = [h.strip() for h in rows[0]]
         normalized = [_normalize(h) for h in headers]
 
-        # Spalten-Indizes finden
+        # Spalten-Indizes finden (bereits belegte Indizes nicht doppelt vergeben)
         col_map: dict[str, Optional[int]] = {}
+        used_indices: set[int] = set()
         for field, patterns in COLUMN_PATTERNS.items():
-            col_map[field] = self._find_col(normalized, patterns)
+            idx = self._find_col(normalized, patterns, used_indices)
+            col_map[field] = idx
+            if idx is not None:
+                used_indices.add(idx)
 
         # Datum-Spalte: erste Spalte ist typischerweise das Datum
         col_date = 0
@@ -222,13 +234,18 @@ class FroniusSolarwebParser(PortalExportParser):
                 einspeisung_kwh=round(data["einspeisung"], 2) if data.get("einspeisung") else None,
                 netzbezug_kwh=round(data["netzbezug"], 2) if data.get("netzbezug") else None,
                 eigenverbrauch_kwh=round(eigenverbrauch, 2) if eigenverbrauch else None,
+                batterie_ladung_kwh=round(data["batterie_ladung"], 2) if data.get("batterie_ladung") else None,
+                batterie_entladung_kwh=round(data["batterie_entladung"], 2) if data.get("batterie_entladung") else None,
             ))
 
         return result
 
-    def _find_col(self, normalized_headers: list[str], patterns: list[str]) -> Optional[int]:
+    def _find_col(self, normalized_headers: list[str], patterns: list[str],
+                  used: set[int] | None = None) -> Optional[int]:
         """Findet den Index einer Spalte anhand von Suchbegriffen."""
         for idx, header in enumerate(normalized_headers):
+            if used and idx in used:
+                continue
             for pattern in patterns:
                 if pattern in header:
                     return idx

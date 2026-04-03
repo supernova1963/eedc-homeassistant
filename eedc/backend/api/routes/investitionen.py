@@ -8,6 +8,7 @@ from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel, Field
 from datetime import date
 
@@ -559,6 +560,15 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
 
     if not inv:
         raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+
+    # sensor_mapping der Anlage aufräumen (verwaiste Einträge vermeiden)
+    anlage_result = await db.execute(select(Anlage).where(Anlage.id == inv.anlage_id))
+    anlage = anlage_result.scalar_one_or_none()
+    if anlage and anlage.sensor_mapping:
+        inv_mapping = anlage.sensor_mapping.get("investitionen", {})
+        if str(investition_id) in inv_mapping:
+            del inv_mapping[str(investition_id)]
+            flag_modified(anlage, "sensor_mapping")
 
     await db.delete(inv)
 

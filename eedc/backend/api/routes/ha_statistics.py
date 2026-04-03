@@ -731,10 +731,13 @@ async def get_import_vorschau(
             if not ha_felder:
                 continue
 
-            inv_id = int(inv_id_str)
             inv = investitionen.get(inv_id_str)
-            bezeichnung = inv.bezeichnung if inv else f"Investition {inv_id}"
-            typ = inv.typ if inv else ""
+            if not inv:
+                # Verwaister sensor_mapping-Eintrag (Investition gelöscht) → überspringen
+                continue
+            inv_id = inv.id
+            bezeichnung = inv.bezeichnung
+            typ = inv.typ
 
             # Vorhandene Werte für diese Investition
             imd = vorhandene_imd.get((inv_id, jahr, monat))
@@ -974,7 +977,15 @@ async def import_ha_statistics(
             inv_mapping = sensor_mapping.get("investitionen", {})
             inv_importiert = False
 
+            # Gültige Investitions-IDs laden (verwaiste Mapping-Einträge ignorieren)
+            inv_result = await db.execute(
+                select(Investition.id).where(Investition.anlage_id == anlage_id)
+            )
+            gueltige_inv_ids = {str(r[0]) for r in inv_result.all()}
+
             for inv_id_str, inv_config in inv_mapping.items():
+                if inv_id_str not in gueltige_inv_ids:
+                    continue  # Verwaister sensor_mapping-Eintrag
                 inv_id = int(inv_id_str)
 
                 # Prüfen ob diese Investition importiert werden soll
