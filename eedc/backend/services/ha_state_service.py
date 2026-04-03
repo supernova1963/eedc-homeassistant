@@ -7,6 +7,7 @@ Wird verwendet für:
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -20,9 +21,13 @@ logger = logging.getLogger(__name__)
 class HAStateService:
     """Holt Sensor-States aus Home Assistant via Supervisor API."""
 
+    _UNIT_CACHE_TTL = 3600  # 1 Stunde
+
     def __init__(self):
         self.api_url = settings.ha_api_url
         self.token = settings.supervisor_token
+        self._unit_cache: dict[str, str] = {}
+        self._unit_cache_ts: float = 0.0
 
     @property
     def is_available(self) -> bool:
@@ -138,30 +143,44 @@ class HAStateService:
         return result
 
     async def get_sensor_units(self, entity_ids: list[str]) -> dict[str, str]:
-        """Holt unit_of_measurement für mehrere Entities in einem Batch."""
+        """
+        Holt unit_of_measurement für mehrere Entities.
+
+        Nutzt 1-Call-Batch (/api/states) + In-Memory-Cache (1h TTL).
+        Vorher: N sequentielle HTTP-Calls → bis 50s bei 10 Sensoren.
+        Jetzt: 1 Call (gecacht) → <10ms bei Cache-Hit.
+        """
         if not self.is_available or not entity_ids:
             return {}
 
-        units: dict[str, str] = {}
+        now = time.monotonic()
+
+        # Cache gültig? Alle angefragten IDs vorhanden?
+        if (now - self._unit_cache_ts) < self._UNIT_CACHE_TTL:
+            missing = [eid for eid in entity_ids if eid not in self._unit_cache]
+            if not missing:
+                return {eid: self._unit_cache[eid] for eid in entity_ids if eid in self._unit_cache}
+
+        # Cache neu befüllen via Batch-Endpoint (1 HTTP-Call)
         try:
             async with httpx.AsyncClient() as client:
-                for entity_id in entity_ids:
-                    try:
-                        response = await client.get(
-                            f"{self.api_url}/states/{entity_id}",
-                            headers={"Authorization": f"Bearer {self.token}"},
-                            timeout=5.0,
-                        )
-                        if response.status_code == 200:
-                            data = response.json()
-                            unit = (data.get("attributes") or {}).get("unit_of_measurement", "")
-                            if unit:
-                                units[entity_id] = unit
-                    except Exception:
-                        continue
+                response = await client.get(
+                    f"{self.api_url}/states",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    timeout=10.0,
+                )
+                if response.status_code == 200:
+                    new_cache: dict[str, str] = {}
+                    for item in response.json():
+                        unit = (item.get("attributes") or {}).get("unit_of_measurement", "")
+                        if unit:
+                            new_cache[item.get("entity_id", "")] = unit
+                    self._unit_cache = new_cache
+                    self._unit_cache_ts = now
         except Exception:
             pass
-        return units
+
+        return {eid: self._unit_cache[eid] for eid in entity_ids if eid in self._unit_cache}
 
     async def get_sensor_history(
         self,

@@ -43,19 +43,26 @@ export default function LiveDashboard() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tagesverlaufIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Stale-Guard: aktuelle Anlage-ID als Ref, damit in-flight Requests
+  // nach Anlage-Wechsel kein setState auf veraltete Daten machen
+  const activeAnlageRef = useRef(selectedAnlageId)
+  activeAnlageRef.current = selectedAnlageId
 
   // Daten laden
   const fetchData = useCallback(async (isAutoRefresh = false) => {
     if (!selectedAnlageId) return
+    const requestAnlageId = selectedAnlageId
     if (!isAutoRefresh) setLoading(true)
     else setIsRefreshing(true)
 
     try {
-      const result = await liveDashboardApi.getData(selectedAnlageId, demoMode)
+      const result = await liveDashboardApi.getData(requestAnlageId, demoMode)
+      if (activeAnlageRef.current !== requestAnlageId) return // Anlage gewechselt → verwerfen
       setData(result)
       setLastUpdate(new Date().toLocaleTimeString('de-DE'))
       setError(null)
     } catch (err) {
+      if (activeAnlageRef.current !== requestAnlageId) return
       if (!isAutoRefresh) {
         setError(err instanceof Error ? err.message : 'Fehler beim Laden der Live-Daten')
       }
@@ -68,25 +75,29 @@ export default function LiveDashboard() {
   // Wetter + 3-Tage-Prognose parallel laden (alle 5 Min — ICON-D2 aktualisiert 3-stündlich)
   const fetchWetter = useCallback(async () => {
     if (!selectedAnlageId) return
+    const requestAnlageId = selectedAnlageId
     // Beide Calls parallel statt sequentiell + 14-Tage-Cache-Warmup im Hintergrund
     const [wetterResult, prognoseResult] = await Promise.allSettled([
-      liveDashboardApi.getWetter(selectedAnlageId, demoMode),
-      wetterApi.getSolarPrognose(selectedAnlageId, 3, false),
+      liveDashboardApi.getWetter(requestAnlageId, demoMode),
+      wetterApi.getSolarPrognose(requestAnlageId, 3, false),
     ])
+    if (activeAnlageRef.current !== requestAnlageId) return // Anlage gewechselt → verwerfen
     if (wetterResult.status === 'fulfilled') setWetter(wetterResult.value)
     if (prognoseResult.status === 'fulfilled') {
       setPrognose3Tage(prognoseResult.value.tage?.slice(0, 3) ?? null)
     }
     // 14-Tage-Prognose im Hintergrund vorwärmen — kein await, Ergebnis wird ignoriert
     // Damit ist der Cache warm wenn der User zu Aussichten navigiert
-    wetterApi.getSolarPrognose(selectedAnlageId, 14, false).catch(() => {})
+    wetterApi.getSolarPrognose(requestAnlageId, 14, false).catch(() => {})
   }, [selectedAnlageId, demoMode])
 
   // Tagesverlauf laden (alle 60s)
   const fetchTagesverlauf = useCallback(async () => {
     if (!selectedAnlageId) return
+    const requestAnlageId = selectedAnlageId
     try {
-      const result = await liveDashboardApi.getTagesverlauf(selectedAnlageId, demoMode)
+      const result = await liveDashboardApi.getTagesverlauf(requestAnlageId, demoMode)
+      if (activeAnlageRef.current !== requestAnlageId) return // Anlage gewechselt → verwerfen
       setTagesverlauf(result)
     } catch {
       // Tagesverlauf-Fehler still ignorieren

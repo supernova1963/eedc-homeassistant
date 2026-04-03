@@ -727,40 +727,37 @@ async def get_live_wetter(
             wp_profil=wp_stunden_profil, referenz_temp_c=referenz_temp_c,
         )
 
-        # ── Außentemperatur: HA-Sensor bevorzugen, Open-Meteo als Fallback ──
+        # ── HA-Sensoren parallel lesen (Temperatur + SFML in 1 Batch-Call) ──
         basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
         temp_entity = basis_live.get("aussentemperatur_c") if basis_live else None
-        if temp_entity:
-            try:
-                from backend.services.ha_state_service import get_ha_state_service
-                ha_svc = get_ha_state_service()
-                ha_temp = await ha_svc.get_sensor_state(temp_entity)
-                if ha_temp is not None:
-                    # Aktuelle Stunde mit HA-Temperatur überschreiben
-                    if aktuelle_stunde is not None:
-                        aktuelle_stunde["temperatur_c"] = ha_temp
-            except Exception as e:
-                logger.debug(f"Außentemperatur-Sensor nicht lesbar: {e}")
+        sfml_entity = basis_live.get("sfml_today_kwh") if basis_live else None
+        tomorrow_entity = basis_live.get("sfml_tomorrow_kwh") if basis_live else None
+        accuracy_entity = basis_live.get("sfml_accuracy_pct") if basis_live else None
 
-        # ── SFML: Solar Forecast ML (optional) ──
         sfml_kwh = None
         sfml_tomorrow = None
         sfml_accuracy = None
-        sfml_entity = basis_live.get("sfml_today_kwh") if basis_live else None
 
-        if sfml_entity:
+        ha_entities = [e for e in [temp_entity, sfml_entity, tomorrow_entity, accuracy_entity] if e]
+        if ha_entities:
             try:
                 from backend.services.ha_state_service import get_ha_state_service
                 ha_svc = get_ha_state_service()
-                sfml_kwh = await ha_svc.get_sensor_state(sfml_entity)
+                ha_batch = await ha_svc.get_sensor_states_batch(ha_entities)
 
-                tomorrow_entity = basis_live.get("sfml_tomorrow_kwh")
-                if tomorrow_entity:
-                    sfml_tomorrow = await ha_svc.get_sensor_state(tomorrow_entity)
+                # Außentemperatur
+                if temp_entity and ha_batch.get(temp_entity):
+                    ha_temp = ha_batch[temp_entity][0]
+                    if aktuelle_stunde is not None:
+                        aktuelle_stunde["temperatur_c"] = ha_temp
 
-                accuracy_entity = basis_live.get("sfml_accuracy_pct")
-                if accuracy_entity:
-                    sfml_accuracy = await ha_svc.get_sensor_state(accuracy_entity)
+                # SFML
+                if sfml_entity and ha_batch.get(sfml_entity):
+                    sfml_kwh = ha_batch[sfml_entity][0]
+                if tomorrow_entity and ha_batch.get(tomorrow_entity):
+                    sfml_tomorrow = ha_batch[tomorrow_entity][0]
+                if accuracy_entity and ha_batch.get(accuracy_entity):
+                    sfml_accuracy = ha_batch[accuracy_entity][0]
 
                 # Tages-kWh auf GTI-Kurvenform verteilen
                 if sfml_kwh is not None and sfml_kwh > 0 and profil:
@@ -770,7 +767,7 @@ async def get_live_wetter(
                         for p in profil:
                             p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
             except Exception as e:
-                logger.debug(f"SFML-Sensoren nicht lesbar: {e}")
+                logger.debug(f"HA-Sensoren (Wetter) nicht lesbar: {e}")
 
         # Prognose für Lernfaktor-Berechnung + SFML speichern (fire-and-forget)
         if pv_prognose is not None and pv_prognose > 0:
