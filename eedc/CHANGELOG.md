@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.3] - 2026-04-03
+
+### Verbessert
+
+- **Sonnenstunden im Live-Dashboard (#96)**: Neue Anzeige über der SunProgressBar — links Ist-Sonnenstunden bis jetzt, rechts prognostizierte Sonnenstunden bis Sonnenuntergang. Nach Sonnenuntergang wird die Tagessumme angezeigt. Werte basieren auf stündlichen Open-Meteo-Daten (Ist für vergangene Stunden, Prognose für zukünftige).
+- **Live-Wetter respektiert Wettermodell**: Der Live-Wetter-Endpoint nutzt jetzt das in den Anlage-Stammdaten konfigurierte Wettermodell (ICON-D2, MeteoSwiss, ECMWF etc.) statt immer best_match.
+- **"Sonnenschein" → "Tageslicht"**: Die verbleibende Zeit bis Sonnenuntergang wird jetzt als "Tageslicht" bezeichnet (korrekterer Begriff, da auch bei Bewölkung).
+
+---
+
 ## [3.9.2] - 2026-04-03
 
 ### Behoben
