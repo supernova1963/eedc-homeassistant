@@ -250,7 +250,9 @@ eedc-homeassistant/
     │   │   ├── ha_statistics.py     # HA-DB Statistik (SQLite)
     │   │   ├── import_export/       # CSV, JSON, Demo, PDF
     │   │   ├── investitionen.py     # Komponenten, ROI
-    │   │   ├── live_dashboard.py    # Live Dashboard + MQTT-Inbound
+    │   │   ├── live_dashboard.py    # Live Dashboard Kern-API
+    │   │   ├── live_mqtt_inbound.py # Live MQTT Endpoints
+    │   │   ├── live_wetter.py      # Live Wetter + Verbrauchsprofil
     │   │   ├── monatsabschluss.py   # Monatsabschluss-Wizard
     │   │   ├── monatsdaten.py       # Monatsdaten CRUD
     │   │   ├── pvgis.py             # PVGIS-Daten
@@ -308,8 +310,9 @@ eedc-homeassistant/
         │   ├── components/
         │   │   ├── ui/              # Shared UI (Card, Button, etc.)
         │   │   ├── live/            # Live Dashboard Komponenten
-        │   │   │   ├── EnergieFluss.tsx     # Animiertes SVG-Diagramm
-        │   │   │   ├── EnergieBilanz.tsx    # Gespiegelte Balken
+        │   │   │   ├── EnergieFluss.tsx           # Animiertes SVG-Diagramm (Kern)
+        │   │   │   ├── EnergieFlussBackground.tsx # SVG Hintergrund + Animationen
+        │   │   │   ├── EnergieBilanz.tsx          # Gespiegelte Balken
         │   │   │   ├── TagesverlaufChart.tsx # 24h-Chart
         │   │   │   └── WetterWidget.tsx     # Wetter IST/Prognose
         │   │   ├── sensor-mapping/  # Sensor-Wizard Steps

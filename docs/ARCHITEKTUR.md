@@ -148,7 +148,9 @@ eedc-homeassistant/
     │   │       ├── portal_import.py         # Portal-CSV-Parser
     │   │       ├── custom_import.py          # Custom CSV/JSON Import
     │   │       ├── cloud_import.py           # Cloud-API Import
-    │   │       ├── live_dashboard.py        # Live Dashboard API (NEU v3.0.0)
+    │   │       ├── live_dashboard.py        # Live Dashboard Kern-API (v3.0.0, refactored v3.9.0)
+    │   │       ├── live_mqtt_inbound.py    # Live MQTT Endpoints (extrahiert v3.9.0)
+    │   │       ├── live_wetter.py          # Live Wetter + Verbrauchsprofil (extrahiert v3.9.0)
     │   │       ├── aktueller_monat.py       # Aktueller Monat API
     │   │       ├── daten_checker.py         # Daten-Checker API
     │   │       ├── system_logs.py           # Protokolle API
@@ -193,7 +195,13 @@ eedc-homeassistant/
     │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
     │       ├── community_service.py       # Community-Datenaufbereitung
     │       ├── plz_to_state.py           # PLZ→Bundesland Mapping (8.308 Einträge)
-    │       ├── live_power_service.py      # Live Dashboard Aggregation (NEU v3.0.0)
+    │       ├── live_power_service.py      # Live Dashboard Orchestrierung (v3.0.0, refactored v3.9.0)
+    │       ├── live_sensor_config.py     # Konstanten, Config-Extraktion, Normalisierung (v3.9.0)
+    │       ├── live_kwh_cache.py         # TTL-Caches für heute/gestern/profil kWh (v3.9.0)
+    │       ├── live_history_service.py   # HA-History, Trapez-kWh, Tages-kWh (v3.9.0)
+    │       ├── live_verbrauchsprofil_service.py # Verbrauchsprofil aus HA + MQTT (v3.9.0)
+    │       ├── live_tagesverlauf_service.py     # Butterfly-Chart Daten (v3.9.0)
+    │       ├── live_komponenten_builder.py      # Komponenten, Gauges, Summen (v3.9.0)
     │       ├── mqtt_inbound_service.py   # MQTT-Inbound Subscribe + Cache (NEU v3.0.0)
     │       ├── mqtt_energy_history_service.py # MQTT Snapshots (NEU v3.0.0)
     │       ├── energie_profil_service.py  # Energieprofil: Aggregation + Rollup (NEU v3.1.0)
@@ -577,7 +585,7 @@ Sonstiges [Eigenständig]
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** |
 | `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** |
-| `/api/live` | live_dashboard.py | **Live Dashboard + MQTT-Inbound** (NEU v3.0.0) |
+| `/api/live` | live_dashboard.py, live_mqtt_inbound.py, live_wetter.py | **Live Dashboard + MQTT + Wetter** (v3.0.0, refactored v3.9.0) |
 | `/api/aktueller-monat` | aktueller_monat.py | **Aktueller Monat Dashboard** |
 | `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** |
 | `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** |
@@ -1047,11 +1055,19 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 - `setup_sensors_for_anlage()` - Erstellt alle MQTT Entities
 - `trigger_month_rollover()` - Führt Monatswechsel durch
 
-### Live Power Service (NEU v3.0.0)
+### Live Power Service (v3.0.0, refactored v3.9.0)
 
-**Datei:** `backend/services/live_power_service.py`
+**Dateien:** 7 Module in `backend/services/`
 
-**Funktion:** Aggregiert Echtzeit-Leistungsdaten aus HA-Sensoren oder MQTT-Inbound für das Live Dashboard.
+| Modul | Verantwortlichkeit |
+|---|---|
+| `live_power_service.py` (313 Z.) | Orchestrierung: ruft die anderen Module auf |
+| `live_sensor_config.py` | Konstanten, `extract_live_config()`, `normalize_to_w()` |
+| `live_kwh_cache.py` | TTL-Caches für heute/gestern/profil kWh-Werte |
+| `live_history_service.py` | HA-History-Abruf, Trapez-Integration, Tages-kWh |
+| `live_verbrauchsprofil_service.py` | Verbrauchsprofil aus HA-History oder MQTT |
+| `live_tagesverlauf_service.py` | Butterfly-Chart Datenaufbereitung |
+| `live_komponenten_builder.py` | Komponenten, Gauges, Summenbildung |
 
 **Datenquellen (Priorität):**
 1. HA-Sensoren (via Sensor-Mapping) — direkte REST-API-Abfrage
@@ -1063,11 +1079,13 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 - SoC-Gauges für Speicher und E-Auto (Key: `soc_{invId}`)
 - Tages-kWh: HA-Statistiken → MQTT-Snapshots → leer (Fallback-Kette)
 
-**API-Endpoints:**
-```
-GET /api/live/power/{anlage_id}        # Alle Leistungsdaten + Gauges + Tagesverlauf
-GET /api/live/power/{anlage_id}/demo   # Demo-Modus mit Zufallswerten
-```
+**API-Router** (3 Dateien in `backend/api/routes/`):
+
+| Router | Endpoints |
+|---|---|
+| `live_dashboard.py` (356 Z.) | `GET /api/live/{id}`, `GET /api/live/{id}/tagesverlauf` |
+| `live_mqtt_inbound.py` | `GET/POST/DELETE /api/live/mqtt/*` |
+| `live_wetter.py` | `GET /api/live/{id}/wetter` + Helfer |
 
 ### MQTT Inbound Service (NEU v3.0.0)
 

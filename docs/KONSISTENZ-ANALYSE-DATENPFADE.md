@@ -5,7 +5,7 @@
 ## Überblick
 
 Drei Datenpfade liefern Energiedaten in EEDC:
-1. **HA Sensor-Mapping** → `sensor_mapping` in Anlage, gelesen in `live_power_service.py`, `monatsabschluss.py`, `ha_statistics.py`
+1. **HA Sensor-Mapping** → `sensor_mapping` in Anlage, gelesen in `live_power_service.py` + Submodule (v3.9.0), `monatsabschluss.py`, `ha_statistics.py`
 2. **MQTT Inbound/Gateway** → Topics `eedc/{id}_{name}/live/...` und `eedc/{id}_{name}/energy/...`, verarbeitet in `mqtt_inbound_service.py`, `mqtt_energy_history_service.py`
 3. **Monatsdaten/InvestitionMonatsdaten** → DB-Felder in `monatsdaten.py`, `investition.py` (verbrauch_daten JSON)
 
@@ -22,9 +22,9 @@ Drei Datenpfade liefern Energiedaten in EEDC:
 **Auswirkung:** Der MQTT-Fallback für per-Komponente kWh liefert Keys die das Frontend nicht zuordnen kann. Nur die 3 Basis-Kategorien (`pv`, `einspeisung`, `netzbezug`) funktionieren.
 
 **Stellen im Code:**
-- HA-Pfad: `live_power_service.py` Zeile 934–939 (baut `{prefix}_{inv_id}` Keys)
-- MQTT-Pfad: `mqtt_energy_history_service.py` Zeile 239–252 (reicht `inv/{id}/{field}` durch)
-- Prefix-Definitionen: `live_power_service.py` Zeile 81–89 (`_TAGESVERLAUF_KATEGORIE`) und Zeile 103–105 (`_LIVE_KEY_PREFIX`)
+- HA-Pfad: `live_history_service.py` Zeile 257 + `live_komponenten_builder.py` Zeile 162 (baut `{prefix}_{inv_id}` Keys)
+- MQTT-Pfad: `mqtt_energy_history_service.py` Zeile 257 (reicht `inv/{id}/{field}` durch)
+- Prefix-Definitionen: `live_sensor_config.py` Zeile 59 (`TAGESVERLAUF_KATEGORIE`) und Zeile 81 (`LIVE_KEY_PREFIX`)
 
 **Fix-Vorschlag:** In `_compute_deltas()` ein Mapping von `inv/{inv_id}/{field}` → `{typ_prefix}_{inv_id}` einbauen. Benötigt Investitionstyp-Information (aus DB oder durchgereicht).
 
