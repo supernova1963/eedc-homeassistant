@@ -381,6 +381,9 @@ export default function LiveDashboard() {
                   sunrise={wetter.sunrise}
                   sunset={wetter.sunset}
                   solar_noon={wetter.solar_noon ?? undefined}
+                  sonnenstunden={wetter.sonnenstunden}
+                  sonnenstundenBisher={wetter.sonnenstunden_bisher}
+                  sonnenstundenRest={wetter.sonnenstunden_rest}
                 />
               )}
 

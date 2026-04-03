@@ -59,6 +59,8 @@ class LiveWetterResponse(BaseModel):
     temperatur_min_c: Optional[float] = None
     temperatur_max_c: Optional[float] = None
     sonnenstunden: Optional[float] = None
+    sonnenstunden_bisher: Optional[float] = None  # Ist-Sonnenstunden bis aktuelle Stunde
+    sonnenstunden_rest: Optional[float] = None    # Prognostizierte Sonnenstunden ab aktueller Stunde
     pv_prognose_kwh: Optional[float] = None
     grundlast_kw: Optional[float] = None
     verbrauchsprofil: list[VerbrauchsStunde] = []
@@ -596,9 +598,10 @@ async def get_live_wetter(
 
         # Cache prüfen (60 Min TTL — Open-Meteo aktualisiert stündlich, ICON-D2 3-stündlich)
         LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten
+        wetter_modell_key = getattr(anlage, "wetter_modell", "auto") or "auto"
         cache_key = (
             f"live_wetter:{anlage.latitude:.2f}:{anlage.longitude:.2f}"
-            f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}"
+            f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}:m={wetter_modell_key}"
         )
         cached_wetter = _cache_get(cache_key)
 
@@ -623,6 +626,13 @@ async def get_live_wetter(
             if not hat_multi_string:
                 params["tilt"] = haupt_neigung
                 params["azimuth"] = haupt_azimut
+
+            # Wettermodell der Anlage berücksichtigen
+            from backend.services.solar_forecast_service import WETTER_MODELLE
+            wetter_modell = getattr(anlage, "wetter_modell", "auto") or "auto"
+            model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
+            if model_name:
+                params["models"] = model_name
 
             # Bei Multi-String: paralleler GTI-Fetch + Haupt-Request gleichzeitig
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -695,11 +705,21 @@ async def get_live_wetter(
 
         daily = data.get("daily", {})
 
-        # Sonnenstunden aus stündlichen Werten summieren (Sekunden → Stunden).
-        # Für vergangene Stunden liefert Open-Meteo Ist-Werte,
-        # für zukünftige Stunden Prognosewerte — so entsteht ein Hybrid.
+        # Sonnenstunden: Tagessumme + Ist (bis jetzt) + Rest (ab jetzt)
         hourly_sunshine = hourly.get("sunshine_duration", [])
         sunshine_s = sum(s for s in hourly_sunshine if s is not None) if hourly_sunshine else None
+        sunshine_bisher_s = None
+        sunshine_remaining_s = None
+        if hourly_sunshine:
+            current_h = now.hour
+            sunshine_bisher_s = sum(
+                s for i, s in enumerate(hourly_sunshine)
+                if s is not None and i < current_h
+            )
+            sunshine_remaining_s = sum(
+                s for i, s in enumerate(hourly_sunshine)
+                if s is not None and i >= current_h
+            )
 
         # Individuelles Verbrauchsprofil laden (Werktag/Wochenende)
         service = get_live_power_service()
@@ -788,6 +808,8 @@ async def get_live_wetter(
             "temperatur_min_c": (daily.get("temperature_2m_min", [None]) or [None])[0],
             "temperatur_max_c": (daily.get("temperature_2m_max", [None]) or [None])[0],
             "sonnenstunden": round(sunshine_s / 3600, 1) if sunshine_s is not None else None,
+            "sonnenstunden_bisher": round(sunshine_bisher_s / 3600, 1) if sunshine_bisher_s is not None else None,
+            "sonnenstunden_rest": round(sunshine_remaining_s / 3600, 1) if sunshine_remaining_s is not None else None,
             "pv_prognose_kwh": pv_prognose,
             "grundlast_kw": grundlast,
             "verbrauchsprofil": profil,
