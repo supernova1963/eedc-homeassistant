@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.2] - 2026-04-03
+
+### Behoben
+
+- **Live-Wetter: NameError nach Sonnenstunden-Refactoring**: `daily`-Variable fehlte nach Umbau auf stündliche `sunshine_duration` — Wetter-Widget zeigte keine Daten (Sunrise, Sunset, Temperatur Min/Max fehlten).
+
+---
+
 ## [3.9.1] - 2026-04-03
 
 ### Verbessert
