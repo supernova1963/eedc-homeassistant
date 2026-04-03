@@ -31,7 +31,6 @@ from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.live_sensor_config import (
-    UNIT_TO_W,
     normalize_to_w,
     TYP_ICON,
     ERZEUGER_TYPEN,
@@ -43,6 +42,12 @@ from backend.services.live_sensor_config import (
     LIVE_KEY_PREFIX,
     extract_live_config,
 )
+from backend.services.live_history_service import (
+    get_history_normalized,
+    apply_invert_to_history,
+    trapez_kwh,
+    safe_get_tages_kwh,
+)
 
 
 class LivePowerService:
@@ -51,62 +56,6 @@ class LivePowerService:
     def __init__(self):
         from backend.services.live_kwh_cache import LiveKwhCache
         self._kwh_cache = LiveKwhCache()
-
-    @staticmethod
-    async def _get_history_normalized(
-        entity_ids: list[str], start: datetime, end: datetime,
-    ) -> tuple[dict[str, list[tuple[datetime, float]]], dict[str, str]]:
-        """Holt Sensor-History und normalisiert kW→W anhand der Einheit.
-
-        HA gibt History-Werte in der suggested_unit zurück (z.B. kW statt W).
-        Wir fragen die Einheit pro Entity einmal ab und skalieren alle Punkte.
-
-        Returns:
-            (history, units) — history mit normalisierten W-Werten,
-            units dict für nachgelagerte Einheit-Erkennung (z.B. kWh-Sensoren).
-        """
-        from backend.services.ha_state_service import get_ha_state_service
-        ha_service = get_ha_state_service()
-
-        # Einheiten + History parallel-ish abfragen
-        units = await ha_service.get_sensor_units(entity_ids)
-        history = await ha_service.get_sensor_history(entity_ids, start, end)
-
-        # History-Werte normalisieren (nur W/kW/MW — kWh-Sensoren bleiben unverändert)
-        for eid, points in history.items():
-            factor = UNIT_TO_W.get(units.get(eid, ""), None)
-            if factor is not None and factor != 1.0:
-                history[eid] = [(ts, val * factor) for ts, val in points]
-
-        return history, units
-
-    @staticmethod
-    def _apply_invert_to_history(
-        history: dict[str, list[tuple[datetime, float]]],
-        basis_live: dict[str, str],
-        basis_invert: dict[str, bool],
-        inv_live_map: dict[str, dict[str, str]] | None = None,
-        inv_invert_map: dict[str, dict[str, bool]] | None = None,
-    ) -> None:
-        """Invertiert History-Werte für Sensoren mit Vorzeichen-Invertierung.
-
-        Mutiert das history-Dict in-place (negiert Werte invertierter Sensoren).
-        """
-        invert_eids: set[str] = set()
-        for key, should_invert in basis_invert.items():
-            if should_invert and key in basis_live:
-                invert_eids.add(basis_live[key])
-
-        if inv_live_map and inv_invert_map:
-            for inv_id, invert_flags in inv_invert_map.items():
-                live = inv_live_map.get(inv_id, {})
-                for key, should_invert in invert_flags.items():
-                    if should_invert and key in live:
-                        invert_eids.add(live[key])
-
-        for eid in invert_eids:
-            if eid in history:
-                history[eid] = [(ts, -val) for ts, val in history[eid]]
 
     def _collect_values(
         self, anlage: Anlage,
@@ -528,8 +477,8 @@ class LivePowerService:
 
         # Tages-kWh berechnen (inv_types durchreichen um DB-Queries zu sparen)
         inv_types = {str(inv.id): inv.typ for inv in investitionen.values()}
-        heute_kwh = await self._safe_get_tages_kwh(anlage, db, 0, inv_types=inv_types)
-        gestern_kwh = await self._safe_get_tages_kwh(anlage, db, 1, inv_types=inv_types)
+        heute_kwh = await safe_get_tages_kwh(anlage, db, 0, self._kwh_cache, inv_types=inv_types)
+        gestern_kwh = await safe_get_tages_kwh(anlage, db, 1, self._kwh_cache, inv_types=inv_types)
 
         heute_pv = heute_kwh.get("pv")
         heute_einsp = heute_kwh.get("einspeisung")
@@ -626,399 +575,6 @@ class LivePowerService:
         eigenverbrauch = round(direktverbrauch + bat_entladung, 1)
         hausverbrauch = round(eigenverbrauch + (bezug or 0), 1) if bezug is not None or eigenverbrauch > 0 else None
         return eigenverbrauch, hausverbrauch
-
-    async def _safe_get_tages_kwh(
-        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int,
-        inv_types: dict[str, str] | None = None,
-    ) -> dict[str, Optional[float]]:
-        """Wrapper mit Fehlerbehandlung für _get_tages_kwh (HA + MQTT Fallback).
-
-        Heute-kWh: 60s TTL-Cache (verhindert HA-History-Flood bei jedem Live-Refresh).
-        Gestern-kWh: Tages-Cache (ändert sich nach Mitternacht nicht mehr).
-        """
-        # Cache prüfen (spart HA-History-Query alle paar Sekunden)
-        if tage_zurueck == 0:
-            cached = self._kwh_cache.get_heute(anlage.id)
-            if cached is not None:
-                return cached
-        elif tage_zurueck >= 1:
-            cached = self._kwh_cache.get_gestern(anlage.id)
-            if cached is not None:
-                return cached
-
-        # 1. Versuche HA-History (Trapezregel)
-        if HA_INTEGRATION_AVAILABLE:
-            try:
-                result = await self._get_tages_kwh(anlage, db, tage_zurueck, inv_types=inv_types)
-                if result:
-                    if tage_zurueck == 0:
-                        self._kwh_cache.set_heute(anlage.id, result)
-                    else:
-                        self._kwh_cache.set_gestern(anlage.id, result)
-                    return result
-            except Exception as e:
-                label = "Heute" if tage_zurueck == 0 else "Gestern"
-                logger.warning(f"Fehler bei {label}-kWh Berechnung (HA): {type(e).__name__}: {e}")
-
-        # 2. Fallback: MQTT Energy Snapshots
-        try:
-            from backend.services.mqtt_energy_history_service import get_tages_kwh
-            result = await get_tages_kwh(anlage.id, tage_zurueck, inv_types=inv_types)
-            if result:
-                if tage_zurueck == 0:
-                    self._kwh_cache.set_heute(anlage.id, result)
-                else:
-                    self._kwh_cache.set_gestern(anlage.id, result)
-                return result
-        except Exception as e:
-            label = "Heute" if tage_zurueck == 0 else "Gestern"
-            logger.debug(f"MQTT Energy History nicht verfügbar für {label}: {e}")
-
-        return {}
-
-    @staticmethod
-    def _trapez_kwh(points: list) -> Optional[float]:
-        """Berechnet kWh aus Leistungs-History via Trapezregel."""
-        if not points:
-            return None
-        if len(points) < 2:
-            return 0.0  # 1 Messpunkt: kein Intervall → 0 kWh (Sensor bekannt, keine Energie berechenbar)
-        energy_wh = 0.0
-        for i in range(len(points) - 1):
-            t1, p1 = points[i]
-            t2, p2 = points[i + 1]
-            dt_hours = (t2 - t1).total_seconds() / 3600
-            if 0 < dt_hours < 2:  # Max 2h Lücke
-                energy_wh += (p1 + p2) / 2 * dt_hours
-        return energy_wh / 1000  # Wh → kWh
-
-    async def _get_tages_kwh(
-        self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
-        inv_types: dict[str, str] | None = None,
-    ) -> dict[str, Optional[float]]:
-        """
-        Berechnet Tages-kWh aus HA-History (Leistungssensoren → Energie via Trapezregel).
-
-        Aggregiert in Kategorien (pv, einspeisung, netzbezug) UND per-Komponente
-        (z.B. pv_3, wallbox_6, batterie_2) für Tooltips im Energiefluss.
-        """
-        basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
-
-        # Investitionstypen: durchgereicht oder aus DB laden
-        if inv_types is None:
-            inv_result = await db.execute(
-                select(Investition.id, Investition.typ).where(
-                    Investition.anlage_id == anlage.id, Investition.aktiv == True
-                )
-            )
-            inv_types = {str(row[0]): row[1] for row in inv_result.all()}
-
-        # Entity-IDs nach Kategorie gruppieren
-        category_entities: dict[str, list[str]] = {
-            "pv": [],
-            "einspeisung": [],
-            "netzbezug": [],
-        }
-
-        # Per-Komponente Entity-IDs {component_key: entity_id}
-        component_entities: dict[str, str] = {}
-
-        # Basis: Einspeisung + Netzbezug (oder kombinierter Netz-Sensor)
-        netz_kombi_eid = basis_live.get("netz_kombi_w")
-        if netz_kombi_eid and not basis_live.get("einspeisung_w") and not basis_live.get("netzbezug_w"):
-            # Kombinierter Sensor: wird separat behandelt (Vorzeichen-Split)
-            category_entities["netz_kombi"] = [netz_kombi_eid]
-        else:
-            netz_kombi_eid = None
-            if basis_live.get("einspeisung_w"):
-                category_entities["einspeisung"].append(basis_live["einspeisung_w"])
-            if basis_live.get("netzbezug_w"):
-                category_entities["netzbezug"].append(basis_live["netzbezug_w"])
-
-        # kWh-Sensoren aus Monatsabschluss-Mapping für exakte Tageswerte (#64)
-        # Nutzt bereits konfigurierte kumulative Sensoren statt Trapez-Integration
-        # auf W-Sensoren → kein Rauschen, keine Akkumulationsfehler, immer Daten
-        # (auch morgens nach Neustart, wenn W-Sensor noch keine Datenpunkte hat).
-        #
-        # Speicher: {inv_id: {"ladung": eid, "entladung": eid}}
-        # Sonstige: {comp_key: entity_id}  (PV, WP, Wallbox, Basis Einsp/Bezug)
-
-        def _feld_eid(conf: object) -> Optional[str]:
-            """Extrahiert entity_id aus FeldMapping-Dict {strategie, sensor_id}."""
-            if isinstance(conf, dict) and conf.get("strategie") == "sensor":
-                return conf.get("sensor_id") or None
-            return None
-
-        _MONATSABSCHLUSS_KWH: dict[str, tuple[str, str]] = {
-            # typ: (sensor_field, comp_key_prefix)
-            "waermepumpe": ("stromverbrauch_kwh", "waermepumpe"),
-            "wallbox":     ("ladung_kwh",          "wallbox"),
-        }
-
-        # Basis-Sensoren: Einspeisung + Netzbezug kWh direkt aus Monatszuordnung
-        mapping_full = anlage.sensor_mapping or {}
-        basis_map = mapping_full.get("basis", {})
-        basis_kwh_sensors: dict[str, str] = {}  # category → entity_id
-        if (eid := _feld_eid(basis_map.get("einspeisung", {}))):
-            basis_kwh_sensors["einspeisung"] = eid
-        if (eid := _feld_eid(basis_map.get("netzbezug", {}))):
-            basis_kwh_sensors["netzbezug"] = eid
-
-        separate_battery_sensors: dict[str, dict[str, Optional[str]]] = {}
-        separate_kwh_sensors: dict[str, str] = {}  # comp_key → entity_id
-        mapping_investitionen = mapping_full.get("investitionen", {})
-        for inv_id, inv_data in mapping_investitionen.items():
-            typ = inv_types.get(inv_id) if inv_types else None
-            if not isinstance(inv_data, dict):
-                continue
-            inv_live = inv_data.get("live", {}) or {}
-            # Sensor-IDs stecken in "felder" als FeldMapping {strategie, sensor_id}
-            inv_felder = inv_data.get("felder", {}) or {}
-
-            if typ == "speicher":
-                # Priorität 1: Live-Slots (Tageswerte, reset täglich)
-                ladung_eid = inv_live.get("ladung_kwh") or None
-                entladung_eid = inv_live.get("entladung_kwh") or None
-                # Priorität 2: Monatsabschluss-Sensoren (kumulativ, delta ab Mitternacht)
-                if not ladung_eid:
-                    ladung_eid = _feld_eid(inv_felder.get("ladung_kwh", {}))
-                if not entladung_eid:
-                    entladung_eid = _feld_eid(inv_felder.get("entladung_kwh", {}))
-                if ladung_eid or entladung_eid:
-                    separate_battery_sensors[inv_id] = {
-                        "ladung": ladung_eid,
-                        "entladung": entladung_eid,
-                    }
-            elif typ in ERZEUGER_TYPEN:
-                # PV + BKW: pv_erzeugung_kwh als genaue kumulierte Quelle
-                pv_eid = _feld_eid(inv_felder.get("pv_erzeugung_kwh", {}))
-                if pv_eid:
-                    separate_kwh_sensors[f"pv_{inv_id}"] = pv_eid
-            elif typ in _MONATSABSCHLUSS_KWH:
-                sensor_field, prefix = _MONATSABSCHLUSS_KWH[typ]
-                kwh_eid = _feld_eid(inv_felder.get(sensor_field, {}))
-                if kwh_eid:
-                    separate_kwh_sensors[f"{prefix}_{inv_id}"] = kwh_eid
-
-        # Alle Investitionen mit leistung_w Sensor (oder getrennte WP-Sensoren)
-        for inv_id, live in inv_live_map.items():
-            typ = inv_types.get(inv_id)
-            if not typ or typ in SKIP_TYPEN:
-                continue
-
-            entity_id = live.get("leistung_w")
-
-            # WP: getrennte Leistungssensoren → beide als Komponenten
-            if not entity_id and typ == "waermepumpe":
-                heiz_eid = live.get("leistung_heizen_w")
-                ww_eid = live.get("leistung_warmwasser_w")
-                if heiz_eid:
-                    component_entities[f"waermepumpe_{inv_id}_heizen"] = heiz_eid
-                if ww_eid:
-                    component_entities[f"waermepumpe_{inv_id}_warmwasser"] = ww_eid
-                continue
-
-            # Speicher ohne leistung_w aber mit separaten kWh-Sensoren:
-            # ladung_kwh als primäre Entity damit der Loop weiterläuft
-            if not entity_id and typ == "speicher":
-                sep = separate_battery_sensors.get(inv_id, {})
-                entity_id = sep.get("ladung") or None
-
-            if not entity_id:
-                continue
-
-            if typ in ERZEUGER_TYPEN:
-                category_entities["pv"].append(entity_id)
-                component_entities[f"pv_{inv_id}"] = entity_id
-            else:
-                prefix = LIVE_KEY_PREFIX.get(typ, TAGESVERLAUF_KATEGORIE.get(typ, typ))
-                component_entities[f"{prefix}_{inv_id}"] = entity_id
-
-        # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
-        if not category_entities["pv"] and basis_live.get("pv_gesamt_w"):
-            pv_gesamt_eid = basis_live["pv_gesamt_w"]
-            category_entities["pv"].append(pv_gesamt_eid)
-            component_entities["pv_gesamt"] = pv_gesamt_eid
-
-        # Alle Entity-IDs sammeln (dedupliziert, inkl. aller Monatsabschluss-kWh-Sensoren)
-        all_ids = list(set(
-            [eid for eids in category_entities.values() for eid in eids]
-            + list(component_entities.values())
-            + [eid for sep in separate_battery_sensors.values()
-               for eid in sep.values() if eid]
-            + list(separate_kwh_sensors.values())
-            + list(basis_kwh_sensors.values())
-        ))
-        if not all_ids:
-            return {}
-
-        now = datetime.now()
-        tag = now - timedelta(days=tage_zurueck)
-        start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1) if tage_zurueck > 0 else now
-
-        history, sensor_units = await self._get_history_normalized(all_ids, start, end)
-
-        # Vorzeichen-Invertierung auf History anwenden (#58)
-        self._apply_invert_to_history(
-            history, basis_live, basis_invert, inv_live_map, inv_invert_map
-        )
-
-        # kWh-Sensor-Delta: Energie-Sensoren (kWh) liefern kumulative Werte.
-        # Statt Trapez-Integration: Delta = letzter Wert - Minimalwert des Tages.
-        #
-        # Warum min() statt pts[0]:
-        # Die HA History API liefert als ersten Datenpunkt den letzten bekannten
-        # State VOR dem Abfragezeitraum (z.B. 23:59 gestern mit 10,48 kWh), auch
-        # wenn der Sensor kurz nach Mitternacht auf 0 zurückgesetzt wurde.
-        # pts[0] wäre dann der Vor-Reset-Wert → delta nur 0,1 statt 10,58 kWh.
-        # min() findet den Post-Reset-Minimalwert (≈ 0) und liefert die korrekte
-        # Tages-Akkumulation — unabhängig davon ob der Reset-Punkt im Fenster liegt.
-        def _kwh_delta(pts: list[tuple[datetime, float]]) -> Optional[float]:
-            """Tages-kWh aus kumulativem Sensor via Delta (min → letzter Wert)."""
-            if not pts:
-                return None
-            val_start = min(p[1] for p in pts)
-            val_end = pts[-1][1]
-            return max(0.0, val_end - val_start)
-
-        # Wh-Sensoren auch unterstützen (1 Wh = 0.001 kWh)
-        _KWH_UNITS = {"kWh", "Wh", "MWh"}
-        _KWH_SCALE = {"kWh": 1.0, "Wh": 0.001, "MWh": 1000.0}
-
-        def _is_energy_sensor(eid: str) -> bool:
-            return sensor_units.get(eid, "") in _KWH_UNITS
-
-        def _energy_delta(eid: str) -> Optional[float]:
-            pts = history.get(eid)
-            if not pts:
-                return None
-            scale = _KWH_SCALE.get(sensor_units.get(eid, "kWh"), 1.0)
-            val_start = min(p[1] for p in pts) * scale
-            val_end = pts[-1][1] * scale
-            return max(0.0, val_end - val_start)
-
-        result: dict[str, Optional[float]] = {}
-
-        # Aggregierte Kategorien (pv, einspeisung, netzbezug)
-        for category, entity_ids in category_entities.items():
-            if category == "netz_kombi":
-                # Kombinierter Netz-Sensor: Points nach Vorzeichen splitten
-                for entity_id in entity_ids:
-                    if entity_id not in history:
-                        continue
-                    pts = history[entity_id]
-                    bezug_pts = [(t, max(p, 0)) for t, p in pts]
-                    einsp_pts = [(t, abs(min(p, 0))) for t, p in pts]
-                    bezug_kwh = self._trapez_kwh(bezug_pts)
-                    einsp_kwh = self._trapez_kwh(einsp_pts)
-                    if bezug_kwh is not None:
-                        result["netzbezug"] = round(bezug_kwh, 1)
-                    if einsp_kwh is not None:
-                        result["einspeisung"] = round(einsp_kwh, 1)
-                continue
-
-            # Priorität 1: kumulierter kWh-Sensor (Basis oder PV-Investition)
-            if category in basis_kwh_sensors:
-                kwh_eid = basis_kwh_sensors[category]
-                if kwh_eid in history:
-                    kwh = _energy_delta(kwh_eid)
-                    if kwh is not None:
-                        result[category] = round(kwh, 1)
-                        continue
-            elif category == "pv":
-                pv_total = 0.0
-                pv_has_kwh = False
-                for comp_key, kwh_eid in separate_kwh_sensors.items():
-                    if comp_key.startswith("pv_") and kwh_eid in history:
-                        kwh = _energy_delta(kwh_eid)
-                        if kwh is not None:
-                            pv_total += kwh
-                            pv_has_kwh = True
-                if pv_has_kwh:
-                    result["pv"] = round(pv_total, 1)
-                    continue
-
-            # Fallback: W-Sensoren + Trapezregel
-            total_kwh = 0.0
-            has_data = False
-            for entity_id in entity_ids:
-                if entity_id not in history:
-                    continue
-                if _is_energy_sensor(entity_id):
-                    kwh = _energy_delta(entity_id)
-                else:
-                    kwh = self._trapez_kwh(history[entity_id])
-                if kwh is not None:
-                    total_kwh += kwh
-                    has_data = True
-            if has_data:
-                result[category] = round(total_kwh, 1)
-
-        # Per-Komponente kWh (für Tooltips)
-        for comp_key, entity_id in component_entities.items():
-            if entity_id not in history:
-                continue
-            pts = history[entity_id]
-
-            # Batterie: Ladung/Entladung getrennt berechnen
-            if comp_key.startswith("batterie_"):
-                inv_id = comp_key[len("batterie_"):]
-                sep = separate_battery_sensors.get(inv_id, {})
-                ladung_eid = sep.get("ladung")
-                entladung_eid = sep.get("entladung")
-
-                if ladung_eid and ladung_eid in history:
-                    # Separater kumulativer Lade-Sensor (#64)
-                    ladung_kwh = _energy_delta(ladung_eid)
-                elif _is_energy_sensor(entity_id):
-                    ladung_kwh = _energy_delta(entity_id)
-                else:
-                    # W-Sensor: positive Werte = Laden
-                    ladung_pts = [(t, max(p, 0)) for t, p in pts]
-                    ladung_kwh = self._trapez_kwh(ladung_pts)
-
-                if entladung_eid and entladung_eid in history:
-                    # Separater kumulativer Entlade-Sensor (#64)
-                    entladung_kwh = _energy_delta(entladung_eid)
-                elif not _is_energy_sensor(entity_id):
-                    # W-Sensor: negative Werte = Entladen
-                    entladung_pts = [(t, abs(min(p, 0))) for t, p in pts]
-                    entladung_kwh = self._trapez_kwh(entladung_pts)
-                else:
-                    entladung_kwh = None
-
-                if ladung_kwh is not None:
-                    result[f"{comp_key}_ladung"] = round(ladung_kwh, 1)
-                if entladung_kwh is not None:
-                    result[f"{comp_key}_entladung"] = round(entladung_kwh, 1)
-
-                # Gesamtaktivität: mit separaten Sensoren = Laden + Entladen
-                if ladung_eid or entladung_eid:
-                    total = (ladung_kwh or 0) + (entladung_kwh or 0)
-                    if total > 0:
-                        result[comp_key] = round(total, 1)
-                elif _is_energy_sensor(entity_id):
-                    kwh = _energy_delta(entity_id)
-                    if kwh is not None:
-                        result[comp_key] = round(abs(kwh), 1)
-                else:
-                    kwh = self._trapez_kwh(pts)
-                    if kwh is not None:
-                        result[comp_key] = round(abs(kwh), 1)
-            else:
-                # WP/Wallbox: kWh-Sensor aus Monatsabschluss bevorzugen (#64 Follow-up)
-                sep_eid = separate_kwh_sensors.get(comp_key)
-                if sep_eid and sep_eid in history:
-                    kwh = _energy_delta(sep_eid)
-                elif _is_energy_sensor(entity_id):
-                    kwh = _energy_delta(entity_id)
-                else:
-                    kwh = self._trapez_kwh(pts)
-                if kwh is not None:
-                    result[comp_key] = round(abs(kwh), 1)
-
-        return result
 
     async def get_tagesverlauf(
         self, anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
@@ -1195,10 +751,10 @@ class LivePowerService:
         if not all_ids:
             return {"serien": [], "punkte": []}
 
-        history, _ = await self._get_history_normalized(all_ids, start, end)
+        history, _ = await get_history_normalized(all_ids, start, end)
 
         # Vorzeichen-Invertierung auf History anwenden (#58)
-        self._apply_invert_to_history(
+        apply_invert_to_history(
             history, basis_live, basis_invert, inv_live_map, inv_invert_map
         )
 
@@ -1406,10 +962,10 @@ class LivePowerService:
         start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         all_ids = list(set(filter(None, [einsp_eid, bezug_eid, kombi_eid] + pv_eids + wp_eids + ([temp_eid] if temp_eid else []))))
-        history, _ = await self._get_history_normalized(all_ids, start, now)
+        history, _ = await get_history_normalized(all_ids, start, now)
 
         # Vorzeichen-Invertierung auf History anwenden (#58)
-        self._apply_invert_to_history(
+        apply_invert_to_history(
             history, basis_live, basis_invert, inv_live_map, inv_invert_map
         )
 
