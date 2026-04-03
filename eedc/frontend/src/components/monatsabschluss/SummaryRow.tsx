@@ -3,11 +3,13 @@ export default function SummaryRow({
   wert,
   einheit,
   isText = false,
+  optional = false,
 }: {
   label: string
   wert: number | string | null | undefined
   einheit: string
   isText?: boolean
+  optional?: boolean
 }) {
   const hasValue = wert !== null && wert !== undefined && wert !== ''
 
@@ -25,6 +27,8 @@ export default function SummaryRow({
                 : wert} {einheit}
             </>
           )
+        ) : optional ? (
+          <span className="text-gray-400">—</span>
         ) : (
           <span className="text-gray-400 italic">nicht ausgefüllt</span>
         )}
