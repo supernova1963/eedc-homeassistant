@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.1] - 2026-04-03
+
+### Verbessert
+
+- **Monatsabschluss: Anderen Monat bearbeiten (#97)**: Monat-Picker im Wizard entfernt (war fehleranfällig). Stattdessen neuer Kalender-Button (📅) pro Zeile in der Monatsdaten-Tabelle — navigiert direkt zum Monatsabschluss-Assistenten mit korrekt vorgeladenen Daten. Im Wizard selbst ein dezenter Link zurück zur Monatsdaten-Tabelle.
+- **Sonnenstunden genauer (#96)**: Stündliche `sunshine_duration`-Werte summiert statt Tages-Prognosewert. Für bereits vergangene Stunden liefert Open-Meteo Ist-Werte, für zukünftige die Prognose — ein Hybrid aus Messung und Vorhersage. Respektiert das konfigurierte Wettermodell (ICON-D2, MeteoSwiss etc.).
+
+---
+
 ## [3.9.0] - 2026-04-03
 
 ### Refactoring
