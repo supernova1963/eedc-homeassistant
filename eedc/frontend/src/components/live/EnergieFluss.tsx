@@ -7,7 +7,7 @@
  * Tages-kWh Tooltips, Σ Erzeugung/Verbrauch.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 import EnergieFlussBackground from './EnergieFlussBackground'
@@ -368,25 +368,27 @@ export default function EnergieFluss({
   const W = containerW < 375 ? 360 : containerW < 500 ? 450 : 600
   const CX = W / 2
 
-  const { nodes, dims } = layoutNodes(komponenten, W)
+  // Layout + abgeleitete Werte memoizen (teuerste Berechnung, O(n²) Filter/Map)
+  const { nodes, dims, nodeMap, maxKw, nettoHausverbrauch, svgH } = useMemo(() => {
+    const layout = layoutNodes(komponenten, W)
+    const _nodeMap = new Map(layout.nodes.map(n => [n.komp.key, n]))
+
+    const _nettoHausverbrauch = komponenten
+      .filter(k => !k.key.startsWith('pv_') && k.key !== 'netz' && !k.key.startsWith('batterie_') && !k.parent_key)
+      .reduce((sum, k) => sum + (k.verbrauch_kw ?? 0), 0)
+
+    const _maxY = Math.max(...layout.nodes.map(n => n.y), layout.dims.verbraucherY)
+    const _svgH = Math.max(380, _maxY + layout.dims.nodeH / 2 + 10)
+
+    const allKw = komponenten.flatMap(k => [k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0])
+    const _maxKw = Math.max(...allKw, 0.1)
+
+    return { nodes: layout.nodes, dims: layout.dims, nodeMap: _nodeMap, maxKw: _maxKw, nettoHausverbrauch: _nettoHausverbrauch, svgH: _svgH }
+  }, [komponenten, W])
+
   const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
   const CY = dims.cy
-  const nodeMap = new Map(nodes.map(n => [n.komp.key, n]))
   const haushalt = komponenten.find(k => k.key === 'haushalt')
-
-  // Netto-Hausverbrauch: Summe aller Verbraucher (inkl. Haushalt-Rest, WP, Wallbox etc.)
-  // ohne Batterie, Netz, PV-Erzeuger und Kind-Komponenten (z.B. E-Auto wenn Wallbox gleichen Sensor hat)
-  const nettoHausverbrauch = komponenten
-    .filter(k => !k.key.startsWith('pv_') && k.key !== 'netz' && !k.key.startsWith('batterie_') && !k.parent_key)
-    .reduce((sum, k) => sum + (k.verbrauch_kw ?? 0), 0)
-
-  // Dynamische Höhe: Basis 380, erweitert wenn Knoten tiefer liegen
-  const maxY = Math.max(...nodes.map(n => n.y), dims.verbraucherY)
-  const svgH = Math.max(380, maxY + NODE_H / 2 + 10)
-
-  // Max kW für Dicken-Normierung
-  const allKw = komponenten.flatMap(k => [k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0])
-  const maxKw = Math.max(...allKw, 0.1)
 
   return (
     <div ref={containerRef} className="flex flex-col h-full">
