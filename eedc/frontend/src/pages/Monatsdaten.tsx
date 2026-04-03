@@ -573,6 +573,14 @@ export default function MonatsdatenPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            title="Monatsabschluss-Assistent"
+                            onClick={() => navigate(`/monatsabschluss/${selectedAnlageId}/${md.jahr}/${md.monat}`)}
+                          >
+                            <Calendar className="h-4 w-4 text-primary-500" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => {
                               const original = findOriginalMonatsdaten(md)
                               if (original) setEditingData(original)

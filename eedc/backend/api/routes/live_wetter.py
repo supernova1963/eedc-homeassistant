@@ -607,7 +607,7 @@ async def get_live_wetter(
         else:
             hourly_vars = [
                 "temperature_2m", "weather_code", "cloud_cover",
-                "precipitation", "shortwave_radiation",
+                "precipitation", "shortwave_radiation", "sunshine_duration",
             ]
             if not hat_multi_string:
                 hourly_vars.append("global_tilted_irradiance")
@@ -693,8 +693,11 @@ async def get_live_wetter(
             if h <= now.hour:
                 aktuelle_stunde = s
 
-        daily = data.get("daily", {})
-        sunshine_s = (daily.get("sunshine_duration", [None]) or [None])[0]
+        # Sonnenstunden aus stündlichen Werten summieren (Sekunden → Stunden).
+        # Für vergangene Stunden liefert Open-Meteo Ist-Werte,
+        # für zukünftige Stunden Prognosewerte — so entsteht ein Hybrid.
+        hourly_sunshine = hourly.get("sunshine_duration", [])
+        sunshine_s = sum(s for s in hourly_sunshine if s is not None) if hourly_sunshine else None
 
         # Individuelles Verbrauchsprofil laden (Werktag/Wochenende)
         service = get_live_power_service()
