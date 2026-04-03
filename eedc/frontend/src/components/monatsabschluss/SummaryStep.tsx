@@ -27,11 +27,13 @@ export default function SummaryStep({
 
   for (const inv of data.investitionen) {
     for (const feld of inv.felder) {
+      const wert = values.investitionen[inv.id]?.[feld.feld]
+      const hatWert = wert !== null && wert !== undefined
+      const hatQuelle = feld.strategie || feld.vorschlaege.length > 0 || feld.aktueller_wert != null
+      // Felder ohne Wert und ohne Datenquelle nicht als "fehlend" zählen
+      if (!hatWert && !hatQuelle) continue
       gesamt++
-      if (values.investitionen[inv.id]?.[feld.feld] !== null &&
-          values.investitionen[inv.id]?.[feld.feld] !== undefined) {
-        gefuellt++
-      }
+      if (hatWert) gefuellt++
     }
   }
 
@@ -82,14 +84,19 @@ export default function SummaryStep({
             <h3 className="font-medium text-gray-900 dark:text-white">{inv.bezeichnung}</h3>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            {inv.felder.map(feld => (
-              <SummaryRow
-                key={feld.feld}
-                label={feld.label}
-                wert={values.investitionen[inv.id]?.[feld.feld]}
-                einheit={feld.einheit}
-              />
-            ))}
+            {inv.felder.map(feld => {
+              const wert = values.investitionen[inv.id]?.[feld.feld]
+              const hatQuelle = feld.strategie || feld.vorschlaege.length > 0 || feld.aktueller_wert != null
+              return (
+                <SummaryRow
+                  key={feld.feld}
+                  label={feld.label}
+                  wert={wert}
+                  einheit={feld.einheit}
+                  optional={!hatQuelle}
+                />
+              )
+            })}
           </div>
         </div>
       ))}
