@@ -5,6 +5,9 @@ interface SunProgressBarProps {
   sunrise: string   // "06:12"
   sunset: string    // "19:47"
   solar_noon?: string // "12:54"
+  sonnenstunden?: number | null       // Tagessumme (Ist + Prognose)
+  sonnenstundenBisher?: number | null // Ist-Sonnenstunden bis jetzt
+  sonnenstundenRest?: number | null   // Prognostizierte Sonnenstunden ab jetzt
 }
 
 function timeToMinutes(t: string): number {
@@ -18,7 +21,7 @@ function minutesToHM(minutes: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-export default function SunProgressBar({ sunrise, sunset, solar_noon }: SunProgressBarProps) {
+export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstunden, sonnenstundenBisher, sonnenstundenRest }: SunProgressBarProps) {
   const [now, setNow] = useState(() => {
     const d = new Date()
     return d.getHours() * 60 + d.getMinutes()
@@ -46,8 +49,29 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon }: SunProgr
   const afterSunset = now >= sunsetMin
   const remainingMin = sunsetMin - now
 
+  const fmtH = (h: number) => `${Math.floor(h)}h ${Math.round((h - Math.floor(h)) * 60).toString().padStart(2, '0')}m`
+
   return (
     <div className="py-1">
+      {/* Sonnenstunden über der ProgressBar */}
+      {sonnenstunden != null && !beforeSunrise && (
+        <div className="flex items-center justify-between mb-1 text-[10px]">
+          <span className="text-yellow-600 dark:text-yellow-400 font-medium" title="Sonnenstunden bis jetzt (Ist-Werte)">
+            ☀ {sonnenstundenBisher != null ? fmtH(sonnenstundenBisher) : '—'} bisher
+          </span>
+          {!afterSunset && sonnenstundenRest != null && sonnenstundenRest > 0 && (
+            <span className="text-amber-500 dark:text-amber-400 font-medium" title="Prognostizierte Sonnenstunden bis Sonnenuntergang">
+              ~{fmtH(sonnenstundenRest)} erwartet
+            </span>
+          )}
+          {afterSunset && (
+            <span className="text-gray-400 dark:text-gray-500">
+              {fmtH(sonnenstunden)} gesamt
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Balken */}
       <div className="relative h-3 rounded-full overflow-visible bg-gray-200 dark:bg-gray-700">
         {/* Gradient-Fortschritt */}
@@ -83,7 +107,7 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon }: SunProgr
           {beforeSunrise && `Sonnenaufgang in ${minutesToHM(sunriseMin - now)}`}
           {!beforeSunrise && !afterSunset && (
             <span className="text-amber-500 dark:text-amber-400">
-              noch {minutesToHM(remainingMin)} Sonnenschein
+              noch {minutesToHM(remainingMin)} Tageslicht
             </span>
           )}
           {afterSunset && 'Sonne untergegangen'}

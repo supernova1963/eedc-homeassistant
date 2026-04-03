@@ -75,6 +75,8 @@ export interface LiveWetterResponse {
   temperatur_min_c: number | null
   temperatur_max_c: number | null
   sonnenstunden: number | null
+  sonnenstunden_bisher: number | null
+  sonnenstunden_rest: number | null
   pv_prognose_kwh: number | null
   grundlast_kw: number | null
   verbrauchsprofil: VerbrauchsStunde[]
