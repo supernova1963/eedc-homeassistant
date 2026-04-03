@@ -409,7 +409,7 @@ export default function AktuellerMonat() {
                         cy="50%"
                         innerRadius={45}
                         outerRadius={75}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
                         {verteilungData.map((entry, index) => (
