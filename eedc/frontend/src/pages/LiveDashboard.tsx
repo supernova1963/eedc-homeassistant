@@ -400,19 +400,28 @@ export default function LiveDashboard() {
                     const prognoseKwh = wetter.sfml_prognose_kwh ?? wetter.pv_prognose_kwh
                     const quelle = wetter.sfml_prognose_kwh != null ? 'ML' : 'EEDC'
                     const bisherPv = data.heute_pv_kwh ?? 0
-                    const offen = prognoseKwh - bisherPv
-                    if (offen <= 0) return null
-                    // Nach Sonnenuntergang keine weitere Produktion möglich
-                    if (wetter.sunset) {
+                    const diff = prognoseKwh - bisherPv
+                    const nachSU = (() => {
+                      if (!wetter.sunset) return false
                       const now = new Date()
                       const [sunsetH, sunsetM] = wetter.sunset.split(':').map(Number)
-                      if (now.getHours() * 60 + now.getMinutes() >= sunsetH * 60 + sunsetM) return null
+                      return now.getHours() * 60 + now.getMinutes() >= sunsetH * 60 + sunsetM
+                    })()
+                    if (diff > 0 && nachSU) return null
+                    if (diff > 0) {
+                      return (
+                        <div className="bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
+                             title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${bisherPv.toFixed(1)} kWh`}>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Noch offen</div>
+                          <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{diff.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                        </div>
+                      )
                     }
                     return (
-                      <div className="bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
-                           title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${bisherPv.toFixed(1)} kWh`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Noch offen</div>
-                        <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{offen.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-1.5"
+                           title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh, bisher ${bisherPv.toFixed(1)} kWh`}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Über Prognose</div>
+                        <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">+{Math.abs(diff).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )
                   })()}
