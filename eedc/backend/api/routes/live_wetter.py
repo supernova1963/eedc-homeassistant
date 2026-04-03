@@ -693,6 +693,8 @@ async def get_live_wetter(
             if h <= now.hour:
                 aktuelle_stunde = s
 
+        daily = data.get("daily", {})
+
         # Sonnenstunden aus stündlichen Werten summieren (Sekunden → Stunden).
         # Für vergangene Stunden liefert Open-Meteo Ist-Werte,
         # für zukünftige Stunden Prognosewerte — so entsteht ein Hybrid.
