@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.0] - 2026-04-03
+
+### Refactoring
+
+- **Live Dashboard Backend komplett neu strukturiert**: `live_power_service.py` von 1830 auf 313 Zeilen aufgeteilt in 6 fokussierte Module (`live_sensor_config`, `live_kwh_cache`, `live_history_service`, `live_verbrauchsprofil_service`, `live_tagesverlauf_service`, `live_komponenten_builder`). `live_dashboard.py` von 1656 auf 356 Zeilen durch Extraktion von MQTT- und Wetter-Routes in eigene Router-Dateien.
+- **EnergieFluss Frontend**: Statischer SVG-Hintergrund (1019 Zeilen) in `EnergieFlussBackground.tsx` extrahiert — Kernkomponente von 1701 auf 712 Zeilen reduziert.
+
+### Verbessert
+
+- **Performance: HA-Sensor-Einheiten gecacht**: `get_sensor_units()` nutzt jetzt 1 Batch-Call + 1h TTL-Cache statt N sequentieller HTTP-Calls (bei 10 Sensoren bis 50s → jetzt <10ms bei Cache-Hit).
+- **Performance: Wetter HA-Sensoren gebatcht**: Außentemperatur + SFML-Sensoren werden in 1 Batch-Call gelesen statt 4 sequentieller Requests (~2s → ~500ms).
+- **Performance: EnergieFluss Layout memoized**: `useMemo` für Layout-Berechnung, maxKw und SVG-Höhe — vermeidet vollständige Neuberechnung bei jedem 5s-Refresh-Cycle.
+- **Fix: Race Condition bei Anlage-Wechsel im Live Dashboard**: In-flight API-Responses werden verworfen wenn der Nutzer zwischenzeitlich die Anlage gewechselt hat. Verhindert kurzes Flimmern mit Daten der vorherigen Anlage.
+
+---
+
 ## [3.8.21] - 2026-04-02
 
 ### Behoben
