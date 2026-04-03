@@ -30,83 +30,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
-
-
-# Einheiten-Konvertierung: HA gibt State in suggested_unit zurück (z.B. kW statt W).
-# Wir normalisieren alles zu W, damit die Berechnung einheitlich ist.
-_UNIT_TO_W: dict[str, float] = {
-    "W": 1.0,
-    "kW": 1000.0,
-    "MW": 1_000_000.0,
-}
-
-
-def _normalize_to_w(value: float, unit: str) -> float:
-    """Konvertiert einen Leistungswert in W basierend auf der HA-Einheit.
-
-    SoC (%) und unbekannte Einheiten werden unverändert durchgereicht.
-    """
-    factor = _UNIT_TO_W.get(unit)
-    if factor is not None:
-        return value * factor
-    # Nicht-Leistungseinheiten (%, °C, etc.) unverändert lassen
-    return value
-
-
-# Icon-Zuordnung pro Investitionstyp
-_TYP_ICON = {
-    "pv-module": "sun",
-    "balkonkraftwerk": "sun",
-    "speicher": "battery",
-    "e-auto": "car",
-    "wallbox": "plug",
-    "waermepumpe": "flame",
-    "sonstiges": "wrench",
-    "wechselrichter": "zap",
-}
-
-# Investitionstypen die als Erzeuger zählen
-_ERZEUGER_TYPEN = {"pv-module", "balkonkraftwerk"}
-
-# Bidirektionale Typen (positiv = Ladung/Verbrauch, negativ = Entladung/Erzeugung)
-_BIDIREKTIONAL_TYPEN = {"speicher"}
-
-# Typen die SoC-Gauges bekommen
-_SOC_TYPEN = {"speicher", "e-auto"}
-
-# Typen die im Live-Dashboard übersprungen werden (Durchleiter, keine eigene Messgröße)
-_SKIP_TYPEN = {"wechselrichter"}
-
-# Kategorien für Tagesverlauf-Aggregation (Legacy, wird noch für Live-Komponenten-Keys genutzt)
-_TAGESVERLAUF_KATEGORIE = {
-    "pv-module": "pv",
-    "balkonkraftwerk": "pv",
-    "speicher": "batterie",
-    "e-auto": "eauto",
-    "wallbox": "eauto",
-    "waermepumpe": "waermepumpe",
-    "sonstiges": "sonstige",
-}
-
-# Tagesverlauf: Kategorie + Seite (quelle/senke) + Farbe pro Investitionstyp
-_TV_SERIE_CONFIG: dict[str, dict] = {
-    "pv-module":       {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False},
-    "balkonkraftwerk": {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False},
-    "speicher":        {"kategorie": "batterie",    "seite": "quelle", "farbe": "#3b82f6", "bidirektional": True},
-    "wallbox":         {"kategorie": "wallbox",     "seite": "senke",  "farbe": "#a855f7", "bidirektional": False},
-    "e-auto":          {"kategorie": "eauto",       "seite": "senke",  "farbe": "#a855f7", "bidirektional": False},
-    "waermepumpe":     {"kategorie": "waermepumpe", "seite": "senke",  "farbe": "#f97316", "bidirektional": False},
-    "sonstiges":       {"kategorie": "sonstige",    "seite": "senke",  "farbe": "#64748b", "bidirektional": False},
-}
-
-# Separate Key-Prefixe für Live-Komponenten (Energiefluss)
-_LIVE_KEY_PREFIX = {
-    "wallbox": "wallbox",
-}
+from backend.services.live_sensor_config import (
+    UNIT_TO_W,
+    normalize_to_w,
+    TYP_ICON,
+    ERZEUGER_TYPEN,
+    BIDIREKTIONAL_TYPEN,
+    SOC_TYPEN,
+    SKIP_TYPEN,
+    TAGESVERLAUF_KATEGORIE,
+    TV_SERIE_CONFIG,
+    LIVE_KEY_PREFIX,
+    extract_live_config,
+)
 
 
 class LivePowerService:
     """Sammelt aktuelle Leistungswerte aus verfügbaren Quellen."""
+
+    def __init__(self):
+        from backend.services.live_kwh_cache import LiveKwhCache
+        self._kwh_cache = LiveKwhCache()
 
     @staticmethod
     async def _get_history_normalized(
@@ -130,7 +74,7 @@ class LivePowerService:
 
         # History-Werte normalisieren (nur W/kW/MW — kWh-Sensoren bleiben unverändert)
         for eid, points in history.items():
-            factor = _UNIT_TO_W.get(units.get(eid, ""), None)
+            factor = UNIT_TO_W.get(units.get(eid, ""), None)
             if factor is not None and factor != 1.0:
                 history[eid] = [(ts, val * factor) for ts, val in points]
 
@@ -163,63 +107,6 @@ class LivePowerService:
         for eid in invert_eids:
             if eid in history:
                 history[eid] = [(ts, -val) for ts, val in history[eid]]
-
-    def _extract_live_config(self, anlage: Anlage) -> tuple[
-        dict[str, str], dict[str, dict[str, str]],
-        dict[str, bool], dict[str, dict[str, bool]],
-    ]:
-        """
-        Extrahiert Live-Sensor-Konfiguration aus sensor_mapping.
-
-        Returns:
-            (basis_live, inv_live_map, basis_invert, inv_invert_map)
-            basis_live: {einspeisung_w: entity_id, netzbezug_w: entity_id}
-            inv_live_map: {inv_id: {leistung_w: entity_id, soc: entity_id}}
-            basis_invert: {einspeisung_w: True}  — Vorzeichen invertieren
-            inv_invert_map: {inv_id: {leistung_w: True}}
-        """
-        mapping = anlage.sensor_mapping or {}
-
-        # Neue Struktur: basis.live + investitionen[id].live
-        basis_live: dict[str, str] = {}
-        inv_live_map: dict[str, dict[str, str]] = {}
-        basis_invert: dict[str, bool] = {}
-        inv_invert_map: dict[str, dict[str, bool]] = {}
-
-        basis = mapping.get("basis", {})
-        if isinstance(basis.get("live"), dict):
-            basis_live = {k: v for k, v in basis["live"].items() if v}
-        if isinstance(basis.get("live_invert"), dict):
-            basis_invert = {k: v for k, v in basis["live_invert"].items() if v}
-
-        for inv_id, inv_data in mapping.get("investitionen", {}).items():
-            if isinstance(inv_data, dict) and isinstance(inv_data.get("live"), dict):
-                live = {k: v for k, v in inv_data["live"].items() if v}
-                if live:
-                    inv_live_map[inv_id] = live
-            if isinstance(inv_data, dict) and isinstance(inv_data.get("live_invert"), dict):
-                invert = {k: v for k, v in inv_data["live_invert"].items() if v}
-                if invert:
-                    inv_invert_map[inv_id] = invert
-
-        # Fallback: altes live_sensors-Dict (Migration)
-        if not basis_live and not inv_live_map:
-            legacy = mapping.get("live_sensors", {})
-            if legacy:
-                if legacy.get("einspeisung_w"):
-                    basis_live["einspeisung_w"] = legacy["einspeisung_w"]
-                if legacy.get("netzbezug_w"):
-                    basis_live["netzbezug_w"] = legacy["netzbezug_w"]
-                # Legacy kann nicht per-Investition aufgelöst werden,
-                # aber wir loggen es als Hinweis
-                if any(k not in ("einspeisung_w", "netzbezug_w") for k in legacy):
-                    logger.info(
-                        "Anlage %s nutzt noch legacy live_sensors — "
-                        "bitte Sensor-Zuordnung im Wizard aktualisieren",
-                        anlage.id,
-                    )
-
-        return basis_live, inv_live_map, basis_invert, inv_invert_map
 
     def _collect_values(
         self, anlage: Anlage,
@@ -293,7 +180,7 @@ class LivePowerService:
         Returns:
             dict mit Komponenten, Gauges, Summen und Metadaten.
         """
-        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
 
         # Prüfe ob MQTT-Daten vorliegen (auch ohne sensor_mapping)
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
@@ -334,7 +221,7 @@ class LivePowerService:
                     value, unit = state
                     # Automatische Einheiten-Konvertierung zu W
                     # HA gibt den State in suggested_unit zurück (z.B. kW statt W)
-                    sensor_values[entity_id] = _normalize_to_w(value, unit)
+                    sensor_values[entity_id] = normalize_to_w(value, unit)
                 else:
                     sensor_values[entity_id] = None
 
@@ -365,7 +252,7 @@ class LivePowerService:
         # Per-Investition Komponenten
         for inv_id, values in inv_values.items():
             inv = investitionen.get(inv_id)
-            if not inv or inv.typ in _SKIP_TYPEN:
+            if not inv or inv.typ in SKIP_TYPEN:
                 continue
 
             val_w = values.get("leistung_w")
@@ -388,7 +275,7 @@ class LivePowerService:
             if val_w is None:
                 # Kein Leistungswert → trotzdem SoC-Gauge prüfen (weiter unten)
                 typ = inv.typ if inv else None
-                if typ in _SOC_TYPEN:
+                if typ in SOC_TYPEN:
                     soc_val = values.get("soc")
                     if soc_val is not None:
                         gauges.append({
@@ -420,7 +307,7 @@ class LivePowerService:
 
             if val_w is None:
                 # Duplikat erkannt oder kein Wert → nur SoC-Gauge
-                if typ in _SOC_TYPEN:
+                if typ in SOC_TYPEN:
                     soc_val = values.get("soc")
                     if soc_val is not None:
                         gauges.append({
@@ -437,15 +324,15 @@ class LivePowerService:
             ist_v2h = (typ == "e-auto"
                        and isinstance(inv.parameter, dict)
                        and inv.parameter.get("nutzt_v2h"))
-            ist_bidirektional = typ in _BIDIREKTIONAL_TYPEN or ist_v2h
+            ist_bidirektional = typ in BIDIREKTIONAL_TYPEN or ist_v2h
 
-            if typ in _ERZEUGER_TYPEN:
+            if typ in ERZEUGER_TYPEN:
                 # PV / BKW — nur Erzeugung
                 kw = val_w / 1000
                 komponenten.append({
                     "key": f"pv_{inv_id}",
                     "label": inv.bezeichnung,
-                    "icon": _TYP_ICON.get(typ, "sun"),
+                    "icon": TYP_ICON.get(typ, "sun"),
                     "erzeugung_kw": round(kw, 3),
                     "verbrauch_kw": None,
                 })
@@ -456,11 +343,11 @@ class LivePowerService:
                 # Speicher / E-Auto mit V2H — bidirektional (positiv = Ladung, negativ = Entladung)
                 kw = abs(val_w) / 1000
                 ist_ladung = val_w > 0
-                kategorie = _TAGESVERLAUF_KATEGORIE.get(typ, "batterie")
+                kategorie = TAGESVERLAUF_KATEGORIE.get(typ, "batterie")
                 komponenten.append({
                     "key": f"{kategorie}_{inv_id}",
                     "label": inv.bezeichnung,
-                    "icon": _TYP_ICON.get(typ, "battery"),
+                    "icon": TYP_ICON.get(typ, "battery"),
                     "erzeugung_kw": round(kw, 3) if not ist_ladung else None,
                     "verbrauch_kw": round(kw, 3) if ist_ladung else None,
                 })
@@ -472,12 +359,12 @@ class LivePowerService:
             else:
                 # Verbraucher (E-Auto ohne V2H, WP, Wallbox, Sonstige)
                 kw = abs(val_w) / 1000
-                prefix = _LIVE_KEY_PREFIX.get(typ, _TAGESVERLAUF_KATEGORIE.get(typ, typ))
+                prefix = LIVE_KEY_PREFIX.get(typ, TAGESVERLAUF_KATEGORIE.get(typ, typ))
                 komp_key = f"{prefix}_{inv_id}"
                 komponenten.append({
                     "key": komp_key,
                     "label": inv.bezeichnung,
-                    "icon": wp_icon or _TYP_ICON.get(typ, "wrench"),
+                    "icon": wp_icon or TYP_ICON.get(typ, "wrench"),
                     "erzeugung_kw": None,
                     "verbrauch_kw": round(kw, 3),
                 })
@@ -489,7 +376,7 @@ class LivePowerService:
                     summe_verbrauch += kw
 
             # SoC-Gauge pro Investition
-            if typ in _SOC_TYPEN:
+            if typ in SOC_TYPEN:
                 soc_val = values.get("soc")
                 if soc_val is not None:
                     gauges.append({
@@ -751,11 +638,11 @@ class LivePowerService:
         """
         # Cache prüfen (spart HA-History-Query alle paar Sekunden)
         if tage_zurueck == 0:
-            cached = self._get_heute_kwh_cache(anlage.id)
+            cached = self._kwh_cache.get_heute(anlage.id)
             if cached is not None:
                 return cached
         elif tage_zurueck >= 1:
-            cached = self._get_gestern_kwh_cache(anlage.id)
+            cached = self._kwh_cache.get_gestern(anlage.id)
             if cached is not None:
                 return cached
 
@@ -765,9 +652,9 @@ class LivePowerService:
                 result = await self._get_tages_kwh(anlage, db, tage_zurueck, inv_types=inv_types)
                 if result:
                     if tage_zurueck == 0:
-                        self._set_heute_kwh_cache(anlage.id, result)
+                        self._kwh_cache.set_heute(anlage.id, result)
                     else:
-                        self._set_gestern_kwh_cache(anlage.id, result)
+                        self._kwh_cache.set_gestern(anlage.id, result)
                     return result
             except Exception as e:
                 label = "Heute" if tage_zurueck == 0 else "Gestern"
@@ -779,9 +666,9 @@ class LivePowerService:
             result = await get_tages_kwh(anlage.id, tage_zurueck, inv_types=inv_types)
             if result:
                 if tage_zurueck == 0:
-                    self._set_heute_kwh_cache(anlage.id, result)
+                    self._kwh_cache.set_heute(anlage.id, result)
                 else:
-                    self._set_gestern_kwh_cache(anlage.id, result)
+                    self._kwh_cache.set_gestern(anlage.id, result)
                 return result
         except Exception as e:
             label = "Heute" if tage_zurueck == 0 else "Gestern"
@@ -815,7 +702,7 @@ class LivePowerService:
         Aggregiert in Kategorien (pv, einspeisung, netzbezug) UND per-Komponente
         (z.B. pv_3, wallbox_6, batterie_2) für Tooltips im Energiefluss.
         """
-        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
 
         # Investitionstypen: durchgereicht oder aus DB laden
         if inv_types is None:
@@ -902,7 +789,7 @@ class LivePowerService:
                         "ladung": ladung_eid,
                         "entladung": entladung_eid,
                     }
-            elif typ in _ERZEUGER_TYPEN:
+            elif typ in ERZEUGER_TYPEN:
                 # PV + BKW: pv_erzeugung_kwh als genaue kumulierte Quelle
                 pv_eid = _feld_eid(inv_felder.get("pv_erzeugung_kwh", {}))
                 if pv_eid:
@@ -916,7 +803,7 @@ class LivePowerService:
         # Alle Investitionen mit leistung_w Sensor (oder getrennte WP-Sensoren)
         for inv_id, live in inv_live_map.items():
             typ = inv_types.get(inv_id)
-            if not typ or typ in _SKIP_TYPEN:
+            if not typ or typ in SKIP_TYPEN:
                 continue
 
             entity_id = live.get("leistung_w")
@@ -940,11 +827,11 @@ class LivePowerService:
             if not entity_id:
                 continue
 
-            if typ in _ERZEUGER_TYPEN:
+            if typ in ERZEUGER_TYPEN:
                 category_entities["pv"].append(entity_id)
                 component_entities[f"pv_{inv_id}"] = entity_id
             else:
-                prefix = _LIVE_KEY_PREFIX.get(typ, _TAGESVERLAUF_KATEGORIE.get(typ, typ))
+                prefix = LIVE_KEY_PREFIX.get(typ, TAGESVERLAUF_KATEGORIE.get(typ, typ))
                 component_entities[f"{prefix}_{inv_id}"] = entity_id
 
         # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
@@ -1147,7 +1034,7 @@ class LivePowerService:
             Butterfly-Chart: Quellen positiv, Senken negativ.
             Bidirektionale Serien (Speicher, Netz) wechseln je nach Richtung.
         """
-        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
 
         if not basis_live and not inv_live_map:
             return {"serien": [], "punkte": []}
@@ -1184,7 +1071,7 @@ class LivePowerService:
             if not inv:
                 continue
             typ = inv.typ
-            if typ in _SKIP_TYPEN:
+            if typ in SKIP_TYPEN:
                 continue
 
             has_leistung = live.get("leistung_w")
@@ -1193,7 +1080,7 @@ class LivePowerService:
             if not has_leistung and typ == "waermepumpe":
                 heiz_eid = live.get("leistung_heizen_w")
                 ww_eid = live.get("leistung_warmwasser_w")
-                config = _TV_SERIE_CONFIG.get("waermepumpe")
+                config = TV_SERIE_CONFIG.get("waermepumpe")
                 if config and (heiz_eid or ww_eid):
                     if heiz_eid:
                         key_h = f"waermepumpe_{inv_id}_heizen"
@@ -1226,7 +1113,7 @@ class LivePowerService:
             if typ == "e-auto" and inv.parent_investition_id is not None:
                 continue
 
-            config = _TV_SERIE_CONFIG.get(typ)
+            config = TV_SERIE_CONFIG.get(typ)
             if not config:
                 continue
 
@@ -1441,9 +1328,9 @@ class LivePowerService:
             oder None wenn keine History verfügbar.
         """
         # Cache prüfen (unterscheidet "nicht gecacht" von "gecacht als keine Daten")
-        cache = self._get_profil_cache(anlage.id)
+        cache = self._kwh_cache.get_profil(anlage.id)
         if cache is not None:
-            if cache is self._PROFIL_UNAVAILABLE:
+            if cache is self._kwh_cache.PROFIL_UNAVAILABLE:
                 logger.info("Verbrauchsprofil Anlage %s: Cache-Hit (keine Daten)", anlage.id)
                 return None
             logger.info(
@@ -1470,7 +1357,7 @@ class LivePowerService:
             )
 
         # IMMER cachen — auch None, damit der teure Timeout sich nicht wiederholt
-        self._set_profil_cache(anlage.id, result)
+        self._kwh_cache.set_profil(anlage.id, result)
 
         return result
 
@@ -1481,7 +1368,7 @@ class LivePowerService:
         if not HA_INTEGRATION_AVAILABLE:
             return None
 
-        basis_live, inv_live_map, basis_invert, inv_invert_map = self._extract_live_config(anlage)
+        basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
 
         einsp_eid = basis_live.get("einspeisung_w")
         bezug_eid = basis_live.get("netzbezug_w")
@@ -1504,7 +1391,7 @@ class LivePowerService:
         wp_eids: list[str] = []
         for inv_id, live in inv_live_map.items():
             typ = inv_types.get(inv_id)
-            if typ in _ERZEUGER_TYPEN and live.get("leistung_w"):
+            if typ in ERZEUGER_TYPEN and live.get("leistung_w"):
                 pv_eids.append(live["leistung_w"])
             elif typ == "waermepumpe" and live.get("leistung_w"):
                 wp_eids.append(live["leistung_w"])
@@ -1755,67 +1642,6 @@ class LivePowerService:
 
         return result
 
-    # ── Profil-Cache (1x täglich) ────────────────────────────────────────
-
-    # Sentinel: unterscheidet "nicht gecacht" (None) von "gecacht als keine Daten"
-    _PROFIL_UNAVAILABLE: object = object()
-
-    _profil_cache: dict = {}  # {anlage_id: (datum_str, profil_or_sentinel)}
-
-    def _get_profil_cache(self, anlage_id: int):
-        """
-        Gibt gecachten Wert zurück wenn er von heute ist.
-        Returns:
-            None: nicht gecacht (Berechnung notwendig)
-            _PROFIL_UNAVAILABLE: gecacht als "kein Profil verfügbar"
-            dict: gecachtes Profil
-        """
-        if anlage_id not in self._profil_cache:
-            return None
-        datum, profil = self._profil_cache[anlage_id]
-        if datum == datetime.now().strftime("%Y-%m-%d"):
-            return profil
-        return None
-
-    def _set_profil_cache(self, anlage_id: int, profil: Optional[dict]) -> None:
-        """Speichert Profil mit heutigem Datum. None wird als Sentinel gespeichert."""
-        value = self._PROFIL_UNAVAILABLE if profil is None else profil
-        self._profil_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), value)
-
-    # ── Heute-kWh Cache (60s TTL — vermeidet HA-History-Flood) ─────────
-
-    _heute_kwh_cache: dict[int, tuple[float, dict]] = {}  # {anlage_id: (timestamp, kwh_dict)}
-    _HEUTE_CACHE_TTL = 60  # Sekunden
-
-    def _get_heute_kwh_cache(self, anlage_id: int) -> Optional[dict]:
-        """Gibt gecachte Heute-kWh zurück wenn jünger als 60s."""
-        if anlage_id not in self._heute_kwh_cache:
-            return None
-        ts, kwh = self._heute_kwh_cache[anlage_id]
-        if (datetime.now().timestamp() - ts) < self._HEUTE_CACHE_TTL:
-            return kwh
-        return None
-
-    def _set_heute_kwh_cache(self, anlage_id: int, kwh: dict) -> None:
-        """Speichert Heute-kWh mit aktuellem Timestamp."""
-        self._heute_kwh_cache[anlage_id] = (datetime.now().timestamp(), kwh)
-
-    # ── Gestern-kWh Cache (ändert sich nicht mehr nach Mitternacht) ────
-
-    _gestern_kwh_cache: dict[int, tuple[str, dict]] = {}  # {anlage_id: (datum_str, kwh_dict)}
-
-    def _get_gestern_kwh_cache(self, anlage_id: int) -> Optional[dict]:
-        """Gibt gecachte Gestern-kWh zurück wenn noch derselbe Tag."""
-        if anlage_id not in self._gestern_kwh_cache:
-            return None
-        datum, kwh = self._gestern_kwh_cache[anlage_id]
-        if datum == datetime.now().strftime("%Y-%m-%d"):
-            return kwh
-        return None
-
-    def _set_gestern_kwh_cache(self, anlage_id: int, kwh: dict) -> None:
-        """Speichert Gestern-kWh mit heutigem Datum als Cache-Key."""
-        self._gestern_kwh_cache[anlage_id] = (datetime.now().strftime("%Y-%m-%d"), kwh)
 
 
 # Singleton
