@@ -10,46 +10,54 @@ interface SunProgressBarProps {
   sonnenstundenRest?: number | null   // Prognostizierte Sonnenstunden ab jetzt
 }
 
-function timeToMinutes(t: string): number {
+function timeToSeconds(t: string): number {
   const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
+  return h * 3600 + m * 60
 }
 
-function minutesToHM(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = Math.floor(minutes % 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
+function secondsToHMS(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
+  if (m > 0) return `${m}m ${s.toString().padStart(2, '0')}s`
+  return `${s}s`
+}
+
+// Rückwärtskompatibilität für sonnenstunden-Formatierung
+function fmtH(h: number): string {
+  const hh = Math.floor(h)
+  const mm = Math.round((h - hh) * 60).toString().padStart(2, '0')
+  return hh > 0 ? `${hh}h ${mm}m` : `${mm}m`
 }
 
 export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstunden, sonnenstundenBisher, sonnenstundenRest }: SunProgressBarProps) {
   const [now, setNow] = useState(() => {
     const d = new Date()
-    return d.getHours() * 60 + d.getMinutes()
+    return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
   })
 
   useEffect(() => {
     const timer = setInterval(() => {
       const d = new Date()
-      setNow(d.getHours() * 60 + d.getMinutes())
-    }, 30000)
+      setNow(d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds())
+    }, 1000)
     return () => clearInterval(timer)
   }, [])
 
-  const sunriseMin = timeToMinutes(sunrise)
-  const sunsetMin = timeToMinutes(sunset)
-  const totalMin = sunsetMin - sunriseMin
-  if (totalMin <= 0) return null
+  const sunriseS = timeToSeconds(sunrise)
+  const sunsetS = timeToSeconds(sunset)
+  const totalS = sunsetS - sunriseS
+  if (totalS <= 0) return null
 
-  const pct = Math.min(100, Math.max(0, ((now - sunriseMin) / totalMin) * 100))
+  const pct = Math.min(100, Math.max(0, ((now - sunriseS) / totalS) * 100))
   const noonPct = solar_noon
-    ? Math.min(100, Math.max(0, ((timeToMinutes(solar_noon) - sunriseMin) / totalMin) * 100))
+    ? Math.min(100, Math.max(0, ((timeToSeconds(solar_noon) - sunriseS) / totalS) * 100))
     : 50
 
-  const beforeSunrise = now < sunriseMin
-  const afterSunset = now >= sunsetMin
-  const remainingMin = sunsetMin - now
-
-  const fmtH = (h: number) => `${Math.floor(h)}h ${Math.round((h - Math.floor(h)) * 60).toString().padStart(2, '0')}m`
+  const beforeSunrise = now < sunriseS
+  const afterSunset = now >= sunsetS
+  const remainingS = sunsetS - now
 
   return (
     <div className="py-1">
@@ -104,10 +112,10 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstun
           {sunrise}
         </span>
         <span className="text-center font-medium">
-          {beforeSunrise && `Sonnenaufgang in ${minutesToHM(sunriseMin - now)}`}
+          {beforeSunrise && `Sonnenaufgang in ${secondsToHMS(sunriseS - now)}`}
           {!beforeSunrise && !afterSunset && (
             <span className="text-amber-500 dark:text-amber-400">
-              noch {minutesToHM(remainingMin)} Tageslicht
+              noch {secondsToHMS(remainingS)} Tageslicht
             </span>
           )}
           {afterSunset && 'Sonne untergegangen'}

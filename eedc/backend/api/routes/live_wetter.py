@@ -706,20 +706,32 @@ async def get_live_wetter(
         daily = data.get("daily", {})
 
         # Sonnenstunden: Tagessumme + Ist (bis jetzt) + Rest (ab jetzt)
+        # Aktuelle Stunde wird anteilig nach Minuten aufgeteilt (Minuten-Präzision)
         hourly_sunshine = hourly.get("sunshine_duration", [])
         sunshine_s = sum(s for s in hourly_sunshine if s is not None) if hourly_sunshine else None
         sunshine_bisher_s = None
         sunshine_remaining_s = None
         if hourly_sunshine:
             current_h = now.hour
+            minute_fraction = now.minute / 60  # Anteil der aktuellen Stunde (0.0–1.0)
+            # Vergangene vollständige Stunden
             sunshine_bisher_s = sum(
                 s for i, s in enumerate(hourly_sunshine)
                 if s is not None and i < current_h
             )
-            sunshine_remaining_s = sum(
-                s for i, s in enumerate(hourly_sunshine)
-                if s is not None and i >= current_h
-            )
+            # Aktuell laufende Stunde anteilig dazu
+            if current_h < len(hourly_sunshine) and hourly_sunshine[current_h] is not None:
+                sunshine_bisher_s += hourly_sunshine[current_h] * minute_fraction
+                sunshine_remaining_s = (
+                    sum(s for i, s in enumerate(hourly_sunshine)
+                        if s is not None and i > current_h)
+                    + hourly_sunshine[current_h] * (1 - minute_fraction)
+                )
+            else:
+                sunshine_remaining_s = sum(
+                    s for i, s in enumerate(hourly_sunshine)
+                    if s is not None and i > current_h
+                )
 
         # Individuelles Verbrauchsprofil laden (Werktag/Wochenende)
         service = get_live_power_service()
