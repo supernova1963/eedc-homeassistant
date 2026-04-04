@@ -391,9 +391,16 @@ export default function LiveDashboard() {
               {wetter?.pv_prognose_kwh != null && (
                 <div className="grid grid-cols-2 min-[400px]:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
                   <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5"
-                       title="EEDC-Tagesprognose basierend auf aktuellem Wetter und Verbrauchsprofil. Kann von Solar-Aussicht abweichen (andere Berechnungsmethode).">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose <Info className="inline w-3 h-3 opacity-50" /></div>
-                    <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                       title={`EEDC-Tagesprognose ${wetter.pv_prognose_kwh.toFixed(1)} kWh (GTI-basiert).${wetter.sfml_prognose_kwh != null ? ` ML-Prognose: ${wetter.sfml_prognose_kwh.toFixed(1)} kWh.` : ''} Kann von Solar-Aussicht abweichen (andere Berechnungsmethode).`}>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose (EEDC) <Info className="inline w-3 h-3 opacity-50" /></div>
+                    <div className="text-base font-bold text-amber-600 dark:text-amber-400">
+                      ~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span>
+                      {wetter.sfml_prognose_kwh != null && (
+                        <span className="text-xs font-normal text-purple-500 dark:text-purple-400 ml-1.5" title={`ML-Prognose: ${wetter.sfml_prognose_kwh.toFixed(1)} kWh`}>
+                          ML {wetter.sfml_prognose_kwh.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {(() => {
                     // SFML bevorzugen wenn verfügbar, sonst EEDC-Prognose
@@ -408,19 +415,24 @@ export default function LiveDashboard() {
                       return now.getHours() * 60 + now.getMinutes() >= sunsetH * 60 + sunsetM
                     })()
                     if (diff > 0 && nachSU) return null
+                    const tooltipText = `${quelle}-Tagesprognose ${prognoseKwh.toFixed(1)} kWh − bisher erzeugt ${bisherPv.toFixed(1)} kWh = ${diff.toFixed(1)} kWh verbleibend`
                     if (diff > 0) {
                       return (
                         <div className="bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
-                             title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh − bisher ${bisherPv.toFixed(1)} kWh`}>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">Noch offen</div>
+                             title={tooltipText}>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            Verbleibend <span className="text-gray-400 dark:text-gray-500">({quelle})</span>
+                          </div>
                           <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{diff.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                         </div>
                       )
                     }
                     return (
                       <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-1.5"
-                           title={`${quelle}-Prognose ${prognoseKwh.toFixed(1)} kWh, bisher ${bisherPv.toFixed(1)} kWh`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Über Prognose</div>
+                           title={`${quelle}-Tagesprognose ${prognoseKwh.toFixed(1)} kWh, bisher erzeugt ${bisherPv.toFixed(1)} kWh`}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Über Prognose <span className="text-gray-400 dark:text-gray-500">({quelle})</span>
+                        </div>
                         <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">+{Math.abs(diff).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )
