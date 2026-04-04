@@ -336,7 +336,7 @@ async def prognose_prefetch_job() -> None:
 async def api_cache_cleanup_job() -> None:
     """Löscht abgelaufene L2-Cache-Einträge aus SQLite (täglich um 04:00)."""
     try:
-        from backend.services.wetter_service import cleanup_l2_cache
+        from backend.services.wetter.cache import cleanup_l2_cache
         count = await cleanup_l2_cache()
         if count > 0:
             await log_activity(

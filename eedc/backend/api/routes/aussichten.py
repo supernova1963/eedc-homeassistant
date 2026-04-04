@@ -23,11 +23,11 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.calculations import berechne_ust_eigenverbrauch
 from backend.utils.sonstige_positionen import berechne_sonstige_netto
-from backend.services.wetter_service import (
-    fetch_open_meteo_forecast,
-    wetter_code_zu_symbol,
-    get_pvgis_tmy_defaults,
-)
+from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
+from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.pvgis import get_pvgis_tmy_defaults
+from backend.services.wetter.models import WETTER_MODELLE
+from backend.services.prognose_service import berechne_pv_ertrag_tag
 
 
 # =============================================================================
@@ -251,29 +251,6 @@ MONATSNAMEN = [
 
 
 # =============================================================================
-# Helper Functions
-# =============================================================================
-
-def berechne_pv_ertrag_tag(
-    globalstrahlung_kwh_m2: Optional[float],
-    anlagenleistung_kwp: float,
-    temperatur_max_c: Optional[float] = None,
-    system_losses: float = DEFAULT_SYSTEM_LOSSES,
-) -> float:
-    """Berechnet erwarteten PV-Ertrag für einen Tag."""
-    if globalstrahlung_kwh_m2 is None or globalstrahlung_kwh_m2 <= 0:
-        return 0.0
-
-    ertrag = globalstrahlung_kwh_m2 * anlagenleistung_kwp * (1 - system_losses)
-
-    if temperatur_max_c is not None and temperatur_max_c > 25:
-        temp_verlust = (temperatur_max_c - 25) * TEMP_COEFFICIENT
-        ertrag *= (1 - temp_verlust)
-
-    return round(max(0, ertrag), 2)
-
-
-# =============================================================================
 # Router
 # =============================================================================
 
@@ -351,12 +328,15 @@ async def get_kurzfrist_prognose(
     pvgis = result.scalar_one_or_none()
     system_losses = pvgis.system_losses / 100 if pvgis and pvgis.system_losses else DEFAULT_SYSTEM_LOSSES
 
-    # Wettervorhersage abrufen
+    # Wettervorhersage abrufen (Wettermodell der Anlage berücksichtigen)
+    wetter_modell = anlage.wetter_modell or "auto"
+    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
     wetter = await fetch_open_meteo_forecast(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
         days=tage,
         skip_jitter=True,
+        model=model_name,
     )
 
     if not wetter:
@@ -851,12 +831,15 @@ async def get_wetter_vorhersage(
     if not anlage.latitude or not anlage.longitude:
         raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten")
 
-    # Wettervorhersage
+    # Wettervorhersage (Wettermodell der Anlage berücksichtigen)
+    wetter_modell = anlage.wetter_modell or "auto"
+    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
     wetter = await fetch_open_meteo_forecast(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
         days=tage,
         skip_jitter=True,
+        model=model_name,
     )
 
     if not wetter:

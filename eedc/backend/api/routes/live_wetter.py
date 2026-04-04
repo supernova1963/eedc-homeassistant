@@ -25,7 +25,9 @@ from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
-from backend.services.wetter_service import wetter_code_zu_symbol, _cache_get, _cache_set
+from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.cache import _cache_get, _cache_set
+from backend.services.wetter.models import WETTER_MODELLE
 
 logger = logging.getLogger(__name__)
 
@@ -627,7 +629,6 @@ async def get_live_wetter(
                 params["azimuth"] = haupt_azimut
 
             # Wettermodell der Anlage berücksichtigen
-            from backend.services.solar_forecast_service import WETTER_MODELLE
             wetter_modell = getattr(anlage, "wetter_modell", "auto") or "auto"
             model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
             if model_name:

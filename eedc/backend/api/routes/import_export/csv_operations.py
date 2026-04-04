@@ -17,7 +17,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.services.wetter_service import get_wetterdaten
+from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 

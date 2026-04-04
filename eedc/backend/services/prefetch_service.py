@@ -24,7 +24,9 @@ from backend.services.solar_forecast_service import (
     PVStringConfig,
     DEFAULT_SYSTEM_LOSSES,
 )
-from backend.services.wetter_service import fetch_open_meteo_forecast, _cache_get, _cache_set
+from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
+from backend.services.wetter.cache import _cache_get, _cache_set
+from backend.services.wetter.models import WETTER_MODELLE
 
 logger = logging.getLogger(__name__)
 
@@ -147,18 +149,19 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
                 wetter_modell=wetter_modell, skip_jitter=True,
             ))
 
-    # Wetter-Forecast (für Aussichten kurzfristig)
+    # Wetter-Forecast (für Aussichten kurzfristig) — mit Wettermodell der Anlage
     # days=7  → /aussichten/wetter/{id} (default)
     # days=14 → /aussichten/kurzfristig/{id} (default, Kurzfrist-Prognose)
     # days=16 → 14-Tage-Ansicht
+    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
     coros.append(fetch_open_meteo_forecast(
-        anlage.latitude, anlage.longitude, days=7, skip_jitter=True,
+        anlage.latitude, anlage.longitude, days=7, skip_jitter=True, model=model_name,
     ))
     coros.append(fetch_open_meteo_forecast(
-        anlage.latitude, anlage.longitude, days=14, skip_jitter=True,
+        anlage.latitude, anlage.longitude, days=14, skip_jitter=True, model=model_name,
     ))
     coros.append(fetch_open_meteo_forecast(
-        anlage.latitude, anlage.longitude, days=16, skip_jitter=True,
+        anlage.latitude, anlage.longitude, days=16, skip_jitter=True, model=model_name,
     ))
 
     # Live-Wetter (für WetterWidget auf Live-Seite)
@@ -168,6 +171,7 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
     coros.append(_prefetch_live_wetter(
         anlage.latitude, anlage.longitude,
         haupt_neigung, haupt_azimut, hat_multi,
+        wetter_modell=wetter_modell,
     ))
 
     await asyncio.gather(*coros, return_exceptions=True)
@@ -178,6 +182,7 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
 async def _prefetch_live_wetter(
     latitude: float, longitude: float,
     neigung: int, azimut: int, hat_multi: bool,
+    wetter_modell: str = "auto",
 ) -> None:
     """
     Prefetcht Live-Wetter-Daten (gleicher Cache-Key wie der Endpoint).
@@ -186,9 +191,10 @@ async def _prefetch_live_wetter(
     damit der erste Seitenaufruf sofort bedient werden kann.
     """
     LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten (wie im Endpoint)
+    # Cache-Key muss exakt mit live_wetter.py übereinstimmen (inkl. :m= Suffix)
     cache_key = (
         f"live_wetter:{latitude:.2f}:{longitude:.2f}"
-        f":{neigung}:{azimut}:multi={hat_multi}"
+        f":{neigung}:{azimut}:multi={hat_multi}:m={wetter_modell}"
     )
 
     # Nur holen wenn nicht bereits im Cache
@@ -213,6 +219,11 @@ async def _prefetch_live_wetter(
     if not hat_multi:
         params["tilt"] = neigung
         params["azimuth"] = azimut
+
+    # Wettermodell ergänzen (None = best_match = Parameter weglassen)
+    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
+    if model_name:
+        params["models"] = model_name
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

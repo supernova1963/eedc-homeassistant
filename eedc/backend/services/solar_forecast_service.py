@@ -21,7 +21,9 @@ from datetime import date, datetime
 from math import radians, sin, cos
 from typing import Optional, List
 
-from backend.services.wetter_service import wetter_code_zu_symbol, _cache_get, _cache_set, FORECAST_CACHE_TTL, JITTER_MAX_SECONDS
+from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.cache import _cache_get, _cache_set, FORECAST_CACHE_TTL, JITTER_MAX_SECONDS
+from backend.services.wetter.models import WETTER_MODELLE, MODELL_ANZEIGE
 
 
 def _plausibles_wetter_symbol(
@@ -72,24 +74,7 @@ SNOW_LOSS_FACTOR = 0.1  # 10% Verlust bei Schnee
 # Timezone für Solar-Noon-Berechnung
 _BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
-# Wettermodell-Konfiguration: Key → (Open-Meteo model name, max Prognosetage)
-WETTER_MODELLE = {
-    "auto": (None, 16),                        # best_match, kein models-Parameter
-    "meteoswiss_icon_ch2": ("meteoswiss_icon_ch2", 5),  # Alpenraum, 2.1 km
-    "icon_d2": ("icon_d2", 2),                  # Deutschland, 2.2 km
-    "icon_eu": ("icon_eu", 7),                  # Europa, 7 km
-    "ecmwf_ifs04": ("ecmwf_ifs04", 10),         # Global, 9 km
-}
-
-# Anzeigenamen für Datenquellen
-MODELL_ANZEIGE = {
-    "auto": "Open-Meteo (best_match)",
-    "meteoswiss_icon_ch2": "MeteoSwiss ICON-CH2 (2.1 km)",
-    "icon_d2": "DWD ICON-D2 (2.2 km)",
-    "icon_eu": "DWD ICON-EU (7 km)",
-    "ecmwf_ifs04": "ECMWF IFS (9 km)",
-    "best_match": "Open-Meteo (best_match)",
-}
+# WETTER_MODELLE und MODELL_ANZEIGE werden aus wetter.models importiert
 
 
 def _solar_noon_hour(datum: str, longitude: float) -> float:

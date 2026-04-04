@@ -25,7 +25,7 @@ from typing import Optional, List
 import httpx
 
 from backend.core.config import settings
-from backend.services.wetter_service import _cache_get, _cache_set, FORECAST_CACHE_TTL, ARCHIVE_CACHE_TTL, JITTER_MAX_SECONDS
+from backend.services.wetter.cache import _cache_get, _cache_set, FORECAST_CACHE_TTL, ARCHIVE_CACHE_TTL, JITTER_MAX_SECONDS
 
 logger = logging.getLogger(__name__)
 

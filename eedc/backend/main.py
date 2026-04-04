@@ -108,9 +108,9 @@ async def lifespan(app: FastAPI):
     # L2-Cache → L1-Cache Warmup (sofort, bevor irgendein Request kommt)
     _cache_cold = True
     try:
-        from backend.services.wetter_service import warmup_l1_from_l2, _loop_running
-        import backend.services.wetter_service as _ws
-        _ws._loop_running = True
+        from backend.services.wetter.cache import warmup_l1_from_l2
+        import backend.services.wetter.cache as _wc
+        _wc._loop_running = True
         count = await warmup_l1_from_l2()
         if count > 0:
             print(f"Cache-Warmup: {count} Einträge aus L2 geladen.")

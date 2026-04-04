@@ -421,37 +421,61 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
             >
               <option value="auto">Automatisch (best_match)</option>
-              <option value="meteoswiss_icon_ch2">MeteoSwiss Alpen (2.1 km)</option>
-              <option value="icon_d2">DWD ICON-D2 (2.2 km)</option>
-              <option value="icon_eu">DWD ICON-EU (7 km)</option>
-              <option value="ecmwf_ifs04">ECMWF IFS (9 km)</option>
+              <optgroup label="── Seamless (empfohlen) ──">
+                <option value="icon_seamless">DWD ICON Seamless — Deutschland/Europa</option>
+                <option value="meteoswiss_seamless">MeteoSwiss Seamless — Alpenraum</option>
+                <option value="ecmwf_seamless">ECMWF Seamless — Global (15 Tage)</option>
+              </optgroup>
+              <optgroup label="── Einzelmodelle ──">
+                <option value="meteoswiss_icon_ch2">MeteoSwiss ICON-CH2 (2.1 km, 5 Tage)</option>
+                <option value="icon_d2">DWD ICON-D2 (2.2 km, 2 Tage)</option>
+                <option value="icon_eu">DWD ICON-EU (7 km, 5 Tage)</option>
+                <option value="ecmwf_ifs04">ECMWF IFS (9 km, 10 Tage)</option>
+              </optgroup>
             </select>
           </div>
           <div className="flex items-end pb-1">
             <div className="text-xs text-gray-500 dark:text-gray-400">
               {formData.wetter_modell === 'auto' && (
-                <span>Open-Meteo best_match — automatische Modellauswahl, 16 Tage</span>
+                <span>Open-Meteo best_match — automatische Modellauswahl weltweit, bis 16 Tage.</span>
+              )}
+              {formData.wetter_modell === 'icon_seamless' && (
+                <span>Empfohlen für Deutschland/Österreich/Schweiz. Open-Meteo kaskadiert intern: ICON-D2 (2.2 km) → ICON-EU → ICON-Global, bis 7.5 Tage.</span>
+              )}
+              {formData.wetter_modell === 'meteoswiss_seamless' && (
+                <span>Empfohlen für Alpenraum (CH, AT-West, IT-Nord, FL). MeteoSwiss kombiniert alle Schweizer Modelle nahtlos, bis 5 Tage, danach Fallback auf best_match.</span>
+              )}
+              {formData.wetter_modell === 'ecmwf_seamless' && (
+                <span>Empfohlen für globale Standorte und Langfrist. ECMWF kombiniert alle Modelle nahtlos, bis 15 Tage.</span>
               )}
               {formData.wetter_modell === 'meteoswiss_icon_ch2' && (
-                <span>Hochauflösend für Alpenraum (CH, AT-West, IT-Nord). 5-Tage-Prognose, danach Fallback auf best_match.</span>
+                <span>Einzelmodell: Hochauflösend für Alpenraum (2.1 km). Nur 5 Tage, danach Fallback auf best_match. Für die meisten Fälle ist MeteoSwiss Seamless besser.</span>
               )}
               {formData.wetter_modell === 'icon_d2' && (
-                <span>DWD-Regionalmodell für Deutschland + Nachbarländer. 2-Tage-Prognose, danach Fallback auf best_match.</span>
+                <span>Einzelmodell: DWD-Regionalmodell für Deutschland (2.2 km). Nur 2 Tage, danach Fallback auf best_match. Für die meisten Fälle ist ICON Seamless besser.</span>
               )}
               {formData.wetter_modell === 'icon_eu' && (
-                <span>DWD-Modell für Europa. 7-Tage-Prognose, danach Fallback auf best_match.</span>
+                <span>Einzelmodell: DWD-Modell für Europa (7 km). 5 Tage, danach Fallback auf best_match.</span>
               )}
               {formData.wetter_modell === 'ecmwf_ifs04' && (
-                <span>ECMWF-Globalmodell. 10-Tage-Prognose, danach Fallback auf best_match.</span>
+                <span>Einzelmodell: ECMWF-Globalmodell (9 km). 10 Tage, danach Fallback auf best_match. Für die meisten Fälle ist ECMWF Seamless besser.</span>
               )}
             </div>
           </div>
         </div>
-        {formData.wetter_modell !== 'auto' && (
+        {['icon_seamless', 'meteoswiss_seamless', 'ecmwf_seamless'].includes(formData.wetter_modell) && (
           <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex gap-2">
             <Info className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-emerald-700 dark:text-emerald-300">
-              Für alpine Standorte (Südtirol, Schweiz, Tirol) liefert MeteoSwiss deutlich genauere Prognosen als das Standardmodell. Die Herkunft der Daten wird in der Kurzfrist-Ansicht pro Tag angezeigt.
+              Seamless-Modelle kaskadieren intern bei Open-Meteo automatisch zwischen Hoch- und Grobauflösung — für die beste Prognosequalität über den gesamten Vorhersagezeitraum. Die Herkunft der Daten wird in der Kurzfrist-Ansicht pro Tag angezeigt.
+            </p>
+          </div>
+        )}
+        {['meteoswiss_icon_ch2', 'icon_d2', 'icon_eu', 'ecmwf_ifs04'].includes(formData.wetter_modell) && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
+            <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Einzelmodell: nach Ablauf des Modell-Horizonts wird automatisch auf best_match zurückgefallen. Für die meisten Standorte ist das entsprechende Seamless-Modell die bessere Wahl.
             </p>
           </div>
         )}

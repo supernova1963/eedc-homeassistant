@@ -17,13 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
-from backend.services.wetter_service import (
+from backend.services.wetter.orchestrator import (
     get_wetterdaten,
     get_wetterdaten_multi,
     get_available_providers,
     get_provider_comparison,
-    WetterProvider,
 )
+from backend.services.wetter.models import WetterProvider
 
 router = APIRouter()
 

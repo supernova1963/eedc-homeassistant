@@ -17,12 +17,10 @@ from sqlalchemy.orm import Session
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
-from backend.services.wetter_service import (
-    fetch_open_meteo_forecast,
-    wetter_code_zu_symbol,
-    fetch_pvgis_tmy_monat,
-    get_pvgis_tmy_defaults,
-)
+from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
+from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.pvgis import fetch_pvgis_tmy_monat, get_pvgis_tmy_defaults
+from backend.services.wetter.models import WETTER_MODELLE
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +68,11 @@ def berechne_pv_ertrag_tag(
 
     Formel:
     PV_kwh = Globalstrahlung × kWp × (1 - Systemverluste) × Temperaturkorrektur
+
+    HINWEIS Temperaturkorrektur: Nutzt Lufttemperatur direkt (kein Modul-Aufheizungsmodell).
+    solar_forecast_service nutzt stündliche GTI-basierte Modultemperatur-Schätzung
+    (Modultemp = Lufttemp + min(25, GTI/40)), die genauer ist, aber stündliche Daten
+    erfordert, die für Tages-Aggregat-Prognosen hier nicht verfügbar sind.
 
     Args:
         globalstrahlung_kwh_m2: Globalstrahlung in kWh/m²
@@ -151,11 +154,14 @@ async def get_kurzfrist_prognose(
     ).first()
     system_losses = pvgis.system_losses / 100 if pvgis and pvgis.system_losses else DEFAULT_SYSTEM_LOSSES
 
-    # Wettervorhersage abrufen
+    # Wettervorhersage abrufen (Wettermodell der Anlage berücksichtigen)
+    wetter_modell = getattr(anlage, "wetter_modell", "auto") or "auto"
+    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
     wetter = await fetch_open_meteo_forecast(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
-        days=min(tage, 16)
+        days=min(tage, 16),
+        model=model_name,
     )
 
     if not wetter:

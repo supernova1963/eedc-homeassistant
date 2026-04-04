@@ -65,11 +65,16 @@ function formatDatumKurz(datum: string): string {
 
 // Quellen-Kürzel für Tabellen-Anzeige
 const QUELLEN_KUERZEL: Record<string, { label: string; color: string }> = {
-  meteoswiss_icon_ch2: { label: 'MeteoSwiss', color: 'text-blue-400' },
-  icon_d2: { label: 'ICON-D2', color: 'text-cyan-400' },
-  icon_eu: { label: 'ICON-EU', color: 'text-green-400' },
-  ecmwf_ifs04: { label: 'ECMWF', color: 'text-purple-400' },
-  best_match: { label: 'Best Match', color: 'text-gray-400' },
+  // Seamless
+  icon_seamless:        { label: 'ICON-SL', color: 'text-cyan-400' },
+  meteoswiss_seamless:  { label: 'MS-SL',   color: 'text-blue-400' },
+  ecmwf_seamless:       { label: 'ECMWF-SL', color: 'text-purple-400' },
+  // Einzelmodelle
+  meteoswiss_icon_ch2:  { label: 'MeteoSwiss', color: 'text-blue-400' },
+  icon_d2:              { label: 'ICON-D2', color: 'text-cyan-400' },
+  icon_eu:              { label: 'ICON-EU', color: 'text-green-400' },
+  ecmwf_ifs04:          { label: 'ECMWF', color: 'text-purple-400' },
+  best_match:           { label: 'Best Match', color: 'text-gray-400' },
 }
 
 
