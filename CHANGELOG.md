@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.5] - 2026-04-04
+
+### Behoben
+
+- **Außentemperatur im Live-Dashboard**: Temperatur-Anzeige fehlte, weil die aktuelle Stunde nur in den Stunden 6–20 gesucht wurde. Jetzt werden alle 24 Stunden berücksichtigt. Zusätzlich wird `datetime.now()` mit Europe/Berlin-Timezone aufgerufen, damit Docker-Container mit UTC korrekt funktionieren.
+- **Außentemperatur MQTT-Fallback**: Wenn der HA-Sensor nicht erreichbar ist (Standalone-Betrieb), wird die Außentemperatur jetzt aus dem MQTT-Inbound-Cache gelesen.
+- **MQTT-Inbound Topic für Außentemperatur**: Das Topic `aussentemperatur_c` fehlte in der generierten Topic-Liste und konnte daher nicht per MQTT-Automation befüllt werden.
+
+---
+
 ## [3.9.4] - 2026-04-03
 
 ### Behoben
