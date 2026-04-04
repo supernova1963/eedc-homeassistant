@@ -539,7 +539,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             }
             if jahr >= 2025:
                 arbitrage_anteil = 0.15 + (monat % 3) * 0.05
-                speicher_daten["speicher_ladung_netz_kwh"] = round(batt_ladung * arbitrage_anteil, 1)
+                speicher_daten["ladung_netz_kwh"] = round(batt_ladung * arbitrage_anteil, 1)
                 speicher_daten["speicher_ladepreis_cent"] = round(18 + (monat % 4) * 2, 1)
 
             if jahr == 2025 and monat == 3:

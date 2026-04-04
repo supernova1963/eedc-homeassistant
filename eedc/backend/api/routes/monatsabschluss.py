@@ -18,6 +18,10 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.core.database import get_db, async_session_maker
+from backend.core.field_definitions import (
+    BASIS_FELDER, OPTIONALE_FELDER, INVESTITION_FELDER,
+    get_felder_fuer_investition, get_felder_fuer_sonstiges,
+)
 
 logger = logging.getLogger(__name__)
 from backend.models.anlage import Anlage
@@ -169,71 +173,8 @@ MONAT_NAMEN = [
     "Juli", "August", "September", "Oktober", "November", "Dezember"
 ]
 
-# Basis-Felder Konfiguration
-# HINWEIS: direktverbrauch_kwh wird berechnet (PV-Erzeugung - Einspeisung), daher NICHT hier
-BASIS_FELDER = [
-    {"feld": "einspeisung_kwh", "label": "Einspeisung", "einheit": "kWh", "mapping_key": "einspeisung"},
-    {"feld": "netzbezug_kwh", "label": "Netzbezug", "einheit": "kWh", "mapping_key": "netzbezug"},
-    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung"},
-    {"feld": "sonnenstunden", "label": "Sonnenstunden", "einheit": "h", "mapping_key": "sonnenstunden"},
-    {"feld": "durchschnittstemperatur", "label": "Ø Temperatur", "einheit": "°C", "mapping_key": "temperatur"},
-]
-
-# Optionale Felder die nicht aus HA kommen (manuelle Eingabe)
-OPTIONALE_FELDER = [
-    {"feld": "sonderkosten_euro", "label": "Sonderkosten", "einheit": "€"},
-    {"feld": "sonderkosten_beschreibung", "label": "Beschreibung", "einheit": "", "typ": "text"},
-    {"feld": "notizen", "label": "Notizen", "einheit": "", "typ": "text"},
-]
-
-# Investition-Felder nach Typ
-INVESTITION_FELDER = {
-    "pv-module": [
-        {"feld": "pv_erzeugung_kwh", "label": "PV Erzeugung", "einheit": "kWh"},
-    ],
-    "speicher": [
-        {"feld": "ladung_kwh", "label": "Ladung", "einheit": "kWh"},
-        {"feld": "entladung_kwh", "label": "Entladung", "einheit": "kWh"},
-        {"feld": "ladung_netz_kwh", "label": "Netzladung", "einheit": "kWh"},
-    ],
-    "waermepumpe": [
-        {"feld": "stromverbrauch_kwh", "label": "Stromverbrauch", "einheit": "kWh"},
-        {"feld": "heizenergie_kwh", "label": "Heizenergie", "einheit": "kWh"},
-        {"feld": "warmwasser_kwh", "label": "Warmwasser", "einheit": "kWh"},
-    ],
-    "e-auto": [
-        {"feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh"},
-        {"feld": "ladung_netz_kwh", "label": "Ladung Netz", "einheit": "kWh"},
-        {"feld": "ladung_extern_kwh", "label": "Externe Ladung", "einheit": "kWh"},
-        {"feld": "ladung_extern_euro", "label": "Externe Ladekosten", "einheit": "€"},
-        {"feld": "km_gefahren", "label": "Gefahrene km", "einheit": "km"},
-        {"feld": "v2h_entladung_kwh", "label": "V2H Entladung", "einheit": "kWh"},
-    ],
-    "wallbox": [
-        {"feld": "ladung_kwh", "label": "Ladung gesamt", "einheit": "kWh"},
-        {"feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh"},
-        {"feld": "ladevorgaenge", "label": "Ladevorgänge", "einheit": "Anzahl"},
-    ],
-    "balkonkraftwerk": [
-        {"feld": "pv_erzeugung_kwh", "label": "PV Erzeugung", "einheit": "kWh"},
-        {"feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh"},
-        {"feld": "speicher_ladung_kwh", "label": "Speicher Ladung", "einheit": "kWh"},
-        {"feld": "speicher_entladung_kwh", "label": "Speicher Entladung", "einheit": "kWh"},
-    ],
-    # Sonstige Positionen – Felder je nach kategorie (erzeuger/verbraucher/speicher)
-    "sonstiges": {
-        "erzeuger": [
-            {"feld": "erzeugung_kwh", "label": "Erzeugung", "einheit": "kWh"},
-        ],
-        "verbraucher": [
-            {"feld": "verbrauch_sonstig_kwh", "label": "Verbrauch", "einheit": "kWh"},
-        ],
-        "speicher": [
-            {"feld": "erzeugung_kwh", "label": "Erzeugung/Entladung", "einheit": "kWh"},
-            {"feld": "verbrauch_sonstig_kwh", "label": "Verbrauch/Ladung", "einheit": "kWh"},
-        ],
-    },
-}
+# BASIS_FELDER, OPTIONALE_FELDER, INVESTITION_FELDER werden aus
+# backend.core.field_definitions importiert (Single Source of Truth)
 
 
 def _vorschlag_to_response(v: Vorschlag) -> VorschlagResponse:
@@ -503,27 +444,8 @@ async def get_monatsabschluss(
     # Investitionen aufbereiten
     investitionen_status: list[InvestitionStatus] = []
     for inv in anlage.investitionen:
-        inv_felder_def = INVESTITION_FELDER.get(inv.typ)
-        if not inv_felder_def:
-            continue
-
-        # Für "sonstiges": kategorie-spezifische Felder auflösen
-        if inv.typ == "sonstiges" and isinstance(inv_felder_def, dict):
-            kategorie = (inv.parameter or {}).get("kategorie", "verbraucher")
-            felder_config = inv_felder_def.get(kategorie, inv_felder_def.get("verbraucher", []))
-        else:
-            felder_config = list(inv_felder_def)
-            kategorie = None
-
-        # Wärmepumpe: getrennte Strommessung → andere Felder
-        if inv.typ == "waermepumpe" and (inv.parameter or {}).get("getrennte_strommessung"):
-            felder_config = [
-                {"feld": "strom_heizen_kwh", "label": "Strom Heizen", "einheit": "kWh"},
-                {"feld": "strom_warmwasser_kwh", "label": "Strom Warmwasser", "einheit": "kWh"},
-                {"feld": "heizenergie_kwh", "label": "Heizenergie", "einheit": "kWh"},
-                {"feld": "warmwasser_kwh", "label": "Warmwasser", "einheit": "kWh"},
-            ]
-
+        # Felder für diese Investition auflösen (Bedingungen berücksichtigen)
+        felder_config = get_felder_fuer_investition(inv.typ, inv.parameter)
         if not felder_config:
             continue
 

@@ -28,7 +28,17 @@ export interface VersorgerDaten {
 export type WetterProvider = 'auto' | 'open-meteo' | 'brightsky' | 'open-meteo-solar'
 
 // Wettermodell für Solar-Prognose (Open-Meteo Forecast Model)
-export type WetterModell = 'auto' | 'meteoswiss_icon_ch2' | 'icon_d2' | 'icon_eu' | 'ecmwf_ifs04'
+export type WetterModell =
+  | 'auto'
+  // Seamless (empfohlen — interne Kaskade bei Open-Meteo)
+  | 'icon_seamless'
+  | 'meteoswiss_seamless'
+  | 'ecmwf_seamless'
+  // Einzelmodelle
+  | 'meteoswiss_icon_ch2'
+  | 'icon_d2'
+  | 'icon_eu'
+  | 'ecmwf_ifs04'
 
 // Steuerliche Behandlung
 export type SteuerlicheBehandlung = 'keine_ust' | 'regelbesteuerung'
@@ -109,6 +119,9 @@ export interface Monatsdaten {
   netzbezug_durchschnittspreis_cent?: number
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
+  durchschnittstemperatur?: number
+  sonderkosten_euro?: number
+  sonderkosten_beschreibung?: string
   datenquelle?: string
   notizen?: string
 }
