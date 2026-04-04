@@ -6,6 +6,30 @@
 import { useState, useRef, useEffect, ReactNode } from 'react'
 import { Info } from 'lucide-react'
 
+/**
+ * Zentralisierte Tooltip-Interaktionslogik (Desktop + Mobile).
+ * - Desktop: onMouseEnter/Leave
+ * - Mobile:  onClick toggle + document-click schließt
+ */
+function useTooltipInteraction() {
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    if (!isVisible) return
+    const close = () => setIsVisible(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [isVisible])
+
+  const interactionProps = {
+    onMouseEnter: () => setIsVisible(true),
+    onMouseLeave: () => setIsVisible(false),
+    onClick: (e: React.MouseEvent) => { e.stopPropagation(); setIsVisible(v => !v) },
+  }
+
+  return { isVisible, setIsVisible, interactionProps }
+}
+
 interface FormelTooltipProps {
   children: ReactNode
   formel: string           // Die Formel als Text, z.B. "Eigenverbrauch × Netzbezugspreis"
@@ -23,7 +47,7 @@ export default function FormelTooltip({
   className = '',
   showIcon = true
 }: FormelTooltipProps) {
-  const [isVisible, setIsVisible] = useState(false)
+  const { isVisible, interactionProps } = useTooltipInteraction()
   const [position, setPosition] = useState<'top' | 'bottom'>('top')
   const [offsetX, setOffsetX] = useState(0)
   const triggerRef = useRef<HTMLSpanElement>(null)
@@ -44,8 +68,7 @@ export default function FormelTooltip({
     <span
       ref={triggerRef}
       className={`relative inline-block cursor-help ${className}`}
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
+      {...interactionProps}
     >
       {children}
 
@@ -134,7 +157,7 @@ export function SimpleTooltip({
   className = '',
   position: fixedPosition = 'auto'
 }: SimpleTooltipProps) {
-  const [isVisible, setIsVisible] = useState(false)
+  const { isVisible, interactionProps } = useTooltipInteraction()
   const [position, setPosition] = useState<'top' | 'bottom'>('bottom')
   const [coords, setCoords] = useState({ top: 0, left: 0 })
   const triggerRef = useRef<HTMLSpanElement>(null)
@@ -160,8 +183,7 @@ export function SimpleTooltip({
     <span
       ref={triggerRef}
       className={`relative inline-block cursor-help ${className}`}
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
+      {...interactionProps}
     >
       {children}
 
