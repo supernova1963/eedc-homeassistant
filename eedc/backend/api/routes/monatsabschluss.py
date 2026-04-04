@@ -537,12 +537,15 @@ async def get_monatsabschluss(
         if verbrauch_daten and isinstance(verbrauch_daten.get("sonstige_positionen"), list):
             inv_sonstige_pos = verbrauch_daten["sonstige_positionen"]
 
+        # Kategorie nur für Typ "sonstiges" relevant
+        inv_kategorie = (inv.parameter or {}).get("kategorie") if inv.typ == "sonstiges" else None
+
         investitionen_status.append(InvestitionStatus(
             id=inv.id,
             typ=inv.typ,
             bezeichnung=inv.bezeichnung,
             felder=felder,
-            kategorie=kategorie,
+            kategorie=inv_kategorie,
             sonstige_positionen=inv_sonstige_pos,
         ))
 
