@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.9] - 2026-04-04
+
+### Behoben
+
+- **Monatsabschluss 500-Fehler**: `NameError: kategorie` beim Aufruf des Monatsabschluss-Wizards. Die Variable wurde im Refactoring v3.9.7 entfernt, der Aufruf `InvestitionStatus(kategorie=kategorie)` blieb aber übrig. Fix: `inv_kategorie` wird jetzt korrekt aus `inv.parameter` gelesen (nur für Typ "sonstiges" relevant).
+
+---
+
 ## [3.9.8] - 2026-04-04
 
 ### Behoben
