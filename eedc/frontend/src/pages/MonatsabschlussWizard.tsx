@@ -699,21 +699,45 @@ export default function MonatsabschlussWizard() {
 
       {/* Step Navigation */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
-          {steps.map((step, idx) => (
-            <button
-              key={step.id}
-              onClick={() => setCurrentStep(idx)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                currentStep === idx
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
-              }`}
-            >
-              {step.icon}
-              <span className="hidden sm:inline">{step.title}</span>
-            </button>
-          ))}
+        <div className="flex items-center">
+          {steps.map((step, idx) => {
+            const isActive = currentStep === idx
+            const isCompleted = idx < currentStep
+            const isLast = idx === steps.length - 1
+            return (
+              <div key={step.id} className={`flex items-center ${!isLast ? 'flex-1' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(idx)}
+                  className="flex flex-col items-center gap-1.5 group"
+                >
+                  <div className={`flex items-center justify-center w-9 h-9 rounded-full border-2 transition-all ${
+                    isCompleted
+                      ? 'bg-green-500 border-green-500 text-white'
+                      : isActive
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {isCompleted ? <CheckCircle className="w-4 h-4" /> : step.icon}
+                  </div>
+                  <span className={`hidden sm:block text-xs font-medium whitespace-nowrap transition-colors ${
+                    isActive
+                      ? 'text-primary-700 dark:text-primary-300'
+                      : isCompleted
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {step.title}
+                  </span>
+                </button>
+                {!isLast && (
+                  <div className={`flex-1 h-0.5 mx-2 mb-5 transition-colors ${
+                    idx < currentStep ? 'bg-green-400' : 'bg-gray-200 dark:bg-gray-700'
+                  }`} />
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
