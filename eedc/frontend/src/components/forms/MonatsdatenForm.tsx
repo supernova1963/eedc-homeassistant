@@ -7,8 +7,14 @@ import { useState, useEffect, useMemo, FormEvent } from 'react'
 import { Button, Input, Alert, Select } from '../ui'
 import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi } from '../../api'
-import type { Monatsdaten, Investition } from '../../types'
-import { Car, Battery, Plug, Sun, Flame, Zap, MoreHorizontal, Cloud, Loader2 } from 'lucide-react'
+import type { Monatsdaten } from '../../types'
+import { Plug, Sun, Flame, Cloud, Loader2 } from 'lucide-react'
+import { SpeicherSection } from './sections/SpeicherSection'
+import { EAutoSection } from './sections/EAutoSection'
+import { BalkonkraftwerkSection } from './sections/BalkonkraftwerkSection'
+import { SonstigesSection } from './sections/SonstigesSection'
+import { InvestitionSection } from './sections/InvestitionSection'
+import type { SonstigePosition } from './sections/types'
 
 interface MonatsdatenFormProps {
   monatsdaten?: Monatsdaten | null
@@ -42,6 +48,9 @@ export interface MonatsdatenSubmitData {
   netzbezug_durchschnittspreis_cent?: number
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
+  durchschnittstemperatur?: number
+  sonderkosten_euro?: number
+  sonderkosten_beschreibung?: string
   notizen?: string
   // Investitions-spezifische Daten
   investitionen_daten?: Record<string, InvestitionMonatsdaten>
@@ -86,11 +95,7 @@ interface InvestitionMonatsdaten {
   sonstige_positionen?: SonstigePosition[]
 }
 
-interface SonstigePosition {
-  bezeichnung: string
-  betrag: number
-  typ: 'ertrag' | 'ausgabe'
-}
+// SonstigePosition wird aus ./sections/types importiert
 
 const monatOptions = [
   { value: '1', label: 'Januar' },
@@ -153,7 +158,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     batterie_entladung_kwh: monatsdaten?.batterie_entladung_kwh?.toString() || '',
     globalstrahlung_kwh_m2: monatsdaten?.globalstrahlung_kwh_m2?.toString() || '',
     sonnenstunden: monatsdaten?.sonnenstunden?.toString() || '',
+    durchschnittstemperatur: monatsdaten?.durchschnittstemperatur?.toString() || '',
     netzbezug_durchschnittspreis_cent: monatsdaten?.netzbezug_durchschnittspreis_cent?.toString() || '',
+    sonderkosten_euro: monatsdaten?.sonderkosten_euro?.toString() || '',
+    sonderkosten_beschreibung: monatsdaten?.sonderkosten_beschreibung || '',
     notizen: monatsdaten?.notizen || '',
   })
 
@@ -599,6 +607,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         netzbezug_durchschnittspreis_cent: formData.netzbezug_durchschnittspreis_cent ? parseFloat(formData.netzbezug_durchschnittspreis_cent) : undefined,
         globalstrahlung_kwh_m2: formData.globalstrahlung_kwh_m2 ? parseFloat(formData.globalstrahlung_kwh_m2) : undefined,
         sonnenstunden: formData.sonnenstunden ? parseFloat(formData.sonnenstunden) : undefined,
+        durchschnittstemperatur: formData.durchschnittstemperatur ? parseFloat(formData.durchschnittstemperatur) : undefined,
+        sonderkosten_euro: formData.sonderkosten_euro ? parseFloat(formData.sonderkosten_euro) : undefined,
+        sonderkosten_beschreibung: formData.sonderkosten_beschreibung || undefined,
         notizen: formData.notizen || undefined,
         investitionen_daten: Object.keys(invDaten).length > 0 ? invDaten : undefined,
       })
@@ -911,7 +922,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             {wetterInfo}
           </p>
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <Input
             label="Globalstrahlung"
             name="globalstrahlung_kwh_m2"
@@ -934,7 +945,39 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             placeholder="z.B. 245"
             hint="Stunden"
           />
+          <Input
+            label="Ø Temperatur"
+            name="durchschnittstemperatur"
+            type="number"
+            step="0.1"
+            value={formData.durchschnittstemperatur}
+            onChange={handleChange}
+            placeholder="z.B. 14.5"
+            hint="°C (optional)"
+          />
         </div>
+      </div>
+
+      {/* Sonderkosten */}
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Sonderkosten"
+          name="sonderkosten_euro"
+          type="number"
+          step="0.01"
+          min="0"
+          value={formData.sonderkosten_euro}
+          onChange={handleChange}
+          placeholder="z.B. 120.00"
+          hint="€ — Reparatur, Wartung, etc. (optional)"
+        />
+        <Input
+          label="Sonderkosten Beschreibung"
+          name="sonderkosten_beschreibung"
+          value={formData.sonderkosten_beschreibung}
+          onChange={handleChange}
+          placeholder="z.B. Wechselrichter-Wartung"
+        />
       </div>
 
       {/* Notizen */}
@@ -962,662 +1005,5 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         </Button>
       </div>
     </form>
-  )
-}
-
-// Spezielle Speicher Sektion mit konditionellem Arbitrage pro Speicher
-interface SpeicherSectionProps {
-  investitionen: Investition[]
-  investitionsDaten: Record<string, Record<string, string>>
-  onInvChange: (invId: number, field: string, value: string) => void
-  sonstigePositionen: Record<string, SonstigePosition[]>
-  onPositionenChange: (invId: number, positionen: SonstigePosition[]) => void
-}
-
-function SpeicherSection({ investitionen, investitionsDaten, onInvChange, sonstigePositionen, onPositionenChange }: SpeicherSectionProps) {
-  if (investitionen.length === 0) return null
-
-  type SpeicherFeld = { key: string; label: string; unit: string; placeholder: string; hint?: string }
-
-  const basisFelder: SpeicherFeld[] = [
-    { key: 'ladung_kwh', label: 'Ladung', unit: 'kWh', placeholder: 'z.B. 150' },
-    { key: 'entladung_kwh', label: 'Entladung', unit: 'kWh', placeholder: 'z.B. 140' },
-  ]
-
-  const arbitrageFelder: SpeicherFeld[] = [
-    { key: 'speicher_ladung_netz_kwh', label: 'Netzladung', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Arbitrage: Laden aus Netz' },
-    { key: 'speicher_ladepreis_cent', label: 'Ø Ladepreis', unit: 'ct/kWh', placeholder: 'z.B. 15', hint: 'Durchschnittl. Strompreis beim Netzladen' },
-  ]
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Battery className="h-5 w-5 text-green-500" />
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Speicher</h3>
-      </div>
-
-      {investitionen.map((inv) => {
-        // Prüfe ob dieser Speicher Arbitrage-fähig ist
-        const hatArbitrage = inv.parameter?.arbitrage_faehig
-        const felder = hatArbitrage ? [...basisFelder, ...arbitrageFelder] : basisFelder
-
-        return (
-          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              {inv.bezeichnung}
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {felder.map((feld) => (
-                <div key={feld.key}>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    {feld.label} {feld.unit && <span className="text-gray-400">({feld.unit})</span>}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={investitionsDaten[inv.id]?.[feld.key] || ''}
-                    onChange={(e) => onInvChange(inv.id, feld.key, e.target.value)}
-                    placeholder={feld.placeholder}
-                    className="input text-sm py-1.5"
-                    title={feld.hint}
-                  />
-                  {feld.hint && (
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={feld.hint}>
-                      {feld.hint}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* Sonstige Erträge & Ausgaben */}
-            <SonstigePositionenFields
-              invId={inv.id}
-              positionen={sonstigePositionen[String(inv.id)] || []}
-              onChange={(pos) => onPositionenChange(inv.id, pos)}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Spezielle E-Auto Sektion mit konditionellem V2H pro Fahrzeug
-interface EAutoSectionProps {
-  investitionen: Investition[]
-  investitionsDaten: Record<string, Record<string, string>>
-  onInvChange: (invId: number, field: string, value: string) => void
-  sonstigePositionen: Record<string, SonstigePosition[]>
-  onPositionenChange: (invId: number, positionen: SonstigePosition[]) => void
-}
-
-function EAutoSection({ investitionen, investitionsDaten, onInvChange, sonstigePositionen, onPositionenChange }: EAutoSectionProps) {
-  if (investitionen.length === 0) return null
-
-  type EAutoFeld = { key: string; label: string; unit: string; placeholder: string; hint?: string }
-
-  const basisFelder: EAutoFeld[] = [
-    { key: 'km_gefahren', label: 'km gefahren', unit: 'km', placeholder: 'z.B. 1200' },
-    { key: 'verbrauch_kwh', label: 'Verbrauch gesamt', unit: 'kWh', placeholder: 'z.B. 216' },
-    { key: 'ladung_pv_kwh', label: 'Heim: PV', unit: 'kWh', placeholder: 'z.B. 130', hint: 'Wallbox mit PV-Strom' },
-    { key: 'ladung_netz_kwh', label: 'Heim: Netz', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Wallbox mit Netzstrom' },
-    { key: 'ladung_extern_kwh', label: 'Extern', unit: 'kWh', placeholder: 'z.B. 36', hint: 'Autobahn, Arbeit, etc.' },
-    { key: 'ladung_extern_euro', label: 'Extern Kosten', unit: '€', placeholder: 'z.B. 18.00' },
-  ]
-
-  const v2hFeld: EAutoFeld = { key: 'entladung_v2h_kwh', label: 'V2H Entladung', unit: 'kWh', placeholder: 'z.B. 25' }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Car className="h-5 w-5 text-blue-500" />
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">E-Auto</h3>
-      </div>
-
-      {investitionen.map((inv) => {
-        // Prüfe ob dieses E-Auto V2H-fähig ist
-        const hatV2H = inv.parameter?.v2h_faehig || inv.parameter?.nutzt_v2h
-        const felder = hatV2H ? [...basisFelder, v2hFeld] : basisFelder
-
-        return (
-          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              {inv.bezeichnung}
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {felder.map((feld) => (
-                <div key={feld.key}>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    {feld.label} {feld.unit && <span className="text-gray-400">({feld.unit})</span>}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={investitionsDaten[inv.id]?.[feld.key] || ''}
-                    onChange={(e) => onInvChange(inv.id, feld.key, e.target.value)}
-                    placeholder={feld.placeholder}
-                    className="input text-sm py-1.5"
-                    title={feld.hint}
-                  />
-                  {feld.hint && (
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={feld.hint}>
-                      {feld.hint}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* Sonstige Erträge & Ausgaben */}
-            <SonstigePositionenFields
-              invId={inv.id}
-              positionen={sonstigePositionen[String(inv.id)] || []}
-              onChange={(pos) => onPositionenChange(inv.id, pos)}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Hilfskomponente für Investitions-Sektionen
-interface InvestitionSectionProps {
-  title: string
-  icon: React.ElementType
-  iconColor: string
-  investitionen: Investition[]
-  investitionsDaten: Record<string, Record<string, string>>
-  onInvChange: (invId: number, field: string, value: string) => void
-  felder: { key: string; label: string; unit: string; placeholder: string; hint?: string }[]
-  felderFn?: (inv: Investition) => { key: string; label: string; unit: string; placeholder: string; hint?: string }[] | undefined
-  sonstigePositionen: Record<string, SonstigePosition[]>
-  onPositionenChange: (invId: number, positionen: SonstigePosition[]) => void
-}
-
-function InvestitionSection({
-  title,
-  icon: Icon,
-  iconColor,
-  investitionen,
-  investitionsDaten,
-  onInvChange,
-  felder,
-  felderFn,
-  sonstigePositionen,
-  onPositionenChange,
-}: InvestitionSectionProps) {
-  if (investitionen.length === 0) return null
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-5 w-5 ${iconColor}`} />
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">{title}</h3>
-      </div>
-
-      {investitionen.map((inv) => {
-        const aktiveFelder = (felderFn ? felderFn(inv) : undefined) ?? felder
-        return (
-        <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            {inv.bezeichnung}
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {aktiveFelder.map((feld) => (
-              <div key={feld.key}>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {feld.label} {feld.unit && <span className="text-gray-400">({feld.unit})</span>}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={investitionsDaten[inv.id]?.[feld.key] || ''}
-                  onChange={(e) => onInvChange(inv.id, feld.key, e.target.value)}
-                  placeholder={feld.placeholder}
-                  className="input text-sm py-1.5"
-                  title={feld.hint}
-                />
-                {feld.hint && (
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={feld.hint}>
-                    {feld.hint}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-          {/* Sonstige Erträge & Ausgaben */}
-          <SonstigePositionenFields
-            invId={inv.id}
-            positionen={sonstigePositionen[String(inv.id)] || []}
-            onChange={(pos) => onPositionenChange(inv.id, pos)}
-          />
-        </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Balkonkraftwerk Sektion mit konditionellem Speicher
-interface BalkonkraftwerkSectionProps {
-  investitionen: Investition[]
-  investitionsDaten: Record<string, Record<string, string>>
-  onInvChange: (invId: number, field: string, value: string) => void
-  sonstigePositionen: Record<string, SonstigePosition[]>
-  onPositionenChange: (invId: number, positionen: SonstigePosition[]) => void
-}
-
-function BalkonkraftwerkSection({ investitionen, investitionsDaten, onInvChange, sonstigePositionen, onPositionenChange }: BalkonkraftwerkSectionProps) {
-  if (investitionen.length === 0) return null
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Zap className="h-5 w-5 text-amber-500" />
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Balkonkraftwerk</h3>
-      </div>
-
-      {investitionen.map((inv) => {
-        const hatSpeicher = Boolean(inv.parameter?.hat_speicher)
-
-        return (
-          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {inv.bezeichnung}
-              {inv.leistung_kwp && <span className="text-xs text-gray-500 ml-2">({inv.leistung_kwp} kWp)</span>}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              {hatSpeicher
-                ? 'Mit Speicher: Bei Nulleinspeisung entspricht Eigenverbrauch meist der Erzeugung.'
-                : 'Ohne Speicher: Eigenverbrauch ist der direkt genutzte Anteil (typisch 30-40% der Erzeugung).'
-              }
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  Erzeugung <span className="text-gray-400">(kWh)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={investitionsDaten[inv.id]?.pv_erzeugung_kwh || ''}
-                  onChange={(e) => onInvChange(inv.id, 'pv_erzeugung_kwh', e.target.value)}
-                  placeholder="z.B. 45"
-                  className="input text-sm py-1.5"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  Eigenverbrauch <span className="text-gray-400">(kWh)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={investitionsDaten[inv.id]?.eigenverbrauch_kwh || ''}
-                  onChange={(e) => onInvChange(inv.id, 'eigenverbrauch_kwh', e.target.value)}
-                  placeholder={hatSpeicher ? 'z.B. 43 (≈Erzeugung)' : 'z.B. 15 (30-40%)'}
-                  className="input text-sm py-1.5"
-                />
-              </div>
-              {/* Einspeisung wird berechnet: Erzeugung - Eigenverbrauch */}
-              {hatSpeicher && (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Speicher Ladung <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.speicher_ladung_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'speicher_ladung_kwh', e.target.value)}
-                      placeholder="z.B. 30"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Speicher Entladung <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.speicher_entladung_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'speicher_entladung_kwh', e.target.value)}
-                      placeholder="z.B. 28"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            {/* Sonstige Erträge & Ausgaben */}
-            <SonstigePositionenFields
-              invId={inv.id}
-              positionen={sonstigePositionen[String(inv.id)] || []}
-              onChange={(pos) => onPositionenChange(inv.id, pos)}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Sonstiges Sektion - dynamisch basierend auf Kategorie
-interface SonstigesSectionProps {
-  investitionen: Investition[]
-  investitionsDaten: Record<string, Record<string, string>>
-  onInvChange: (invId: number, field: string, value: string) => void
-  sonstigePositionen: Record<string, SonstigePosition[]>
-  onPositionenChange: (invId: number, positionen: SonstigePosition[]) => void
-}
-
-function SonstigesSection({ investitionen, investitionsDaten, onInvChange, sonstigePositionen, onPositionenChange }: SonstigesSectionProps) {
-  if (investitionen.length === 0) return null
-
-  const kategorieLabels: Record<string, string> = {
-    erzeuger: 'Erzeuger',
-    verbraucher: 'Verbraucher',
-    speicher: 'Speicher',
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <MoreHorizontal className="h-5 w-5 text-gray-500" />
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Sonstiges</h3>
-      </div>
-
-      {investitionen.map((inv) => {
-        const kategorie = (inv.parameter?.kategorie as string) || 'erzeuger'
-
-        return (
-          <div key={inv.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              {inv.bezeichnung}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              {kategorieLabels[kategorie] || kategorie}
-              {inv.parameter?.beschreibung ? ` - ${String(inv.parameter.beschreibung)}` : ''}
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {kategorie === 'erzeuger' && (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Erzeugung <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.erzeugung_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'erzeugung_kwh', e.target.value)}
-                      placeholder="z.B. 100"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Eigenverbrauch <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.eigenverbrauch_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'eigenverbrauch_kwh', e.target.value)}
-                      placeholder="z.B. 85"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Einspeisung <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.einspeisung_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'einspeisung_kwh', e.target.value)}
-                      placeholder="z.B. 15"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                </>
-              )}
-              {kategorie === 'verbraucher' && (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Verbrauch <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.verbrauch_sonstig_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'verbrauch_sonstig_kwh', e.target.value)}
-                      placeholder="z.B. 50"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      davon PV <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.bezug_pv_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'bezug_pv_kwh', e.target.value)}
-                      placeholder="z.B. 30"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      davon Netz <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.bezug_netz_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'bezug_netz_kwh', e.target.value)}
-                      placeholder="z.B. 20"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                </>
-              )}
-              {kategorie === 'speicher' && (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Ladung <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.ladung_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'ladung_kwh', e.target.value)}
-                      placeholder="z.B. 20"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Entladung <span className="text-gray-400">(kWh)</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={investitionsDaten[inv.id]?.entladung_kwh || ''}
-                      onChange={(e) => onInvChange(inv.id, 'entladung_kwh', e.target.value)}
-                      placeholder="z.B. 18"
-                      className="input text-sm py-1.5"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            {/* Sonstige Erträge & Ausgaben */}
-            <SonstigePositionenFields
-              invId={inv.id}
-              positionen={sonstigePositionen[String(inv.id)] || []}
-              onChange={(pos) => onPositionenChange(inv.id, pos)}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Sonstige Erträge & Ausgaben für alle Investitionstypen
-interface SonstigePositionenFieldsProps {
-  invId: number
-  positionen: SonstigePosition[]
-  onChange: (positionen: SonstigePosition[]) => void
-}
-
-function SonstigePositionenFields({ positionen, onChange }: SonstigePositionenFieldsProps) {
-  const [expanded, setExpanded] = useState(positionen.length > 0)
-
-  const addPosition = () => {
-    onChange([...positionen, { bezeichnung: '', betrag: 0, typ: 'ausgabe' }])
-    setExpanded(true)
-  }
-
-  const removePosition = (index: number) => {
-    onChange(positionen.filter((_, i) => i !== index))
-  }
-
-  const updatePosition = (index: number, field: keyof SonstigePosition, value: string | number) => {
-    const updated = [...positionen]
-    updated[index] = { ...updated[index], [field]: value }
-    onChange(updated)
-  }
-
-  const ertraege = positionen
-    .filter(p => p.typ === 'ertrag')
-    .reduce((sum, p) => sum + (p.betrag || 0), 0)
-  const ausgaben = positionen
-    .filter(p => p.typ === 'ausgabe')
-    .reduce((sum, p) => sum + (p.betrag || 0), 0)
-  const netto = ertraege - ausgaben
-
-  return (
-    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-      {!expanded && positionen.length === 0 ? (
-        <button
-          type="button"
-          onClick={addPosition}
-          className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          + Sonstige Ertr&auml;ge &amp; Ausgaben erfassen
-        </button>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-              Sonstige Ertr&auml;ge &amp; Ausgaben
-            </span>
-            <button
-              type="button"
-              onClick={addPosition}
-              className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-            >
-              + Position
-            </button>
-          </div>
-
-          {positionen.map((pos, index) => (
-            <div key={index} className="grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-5">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Bezeichnung</label>
-                )}
-                <input
-                  type="text"
-                  value={pos.bezeichnung}
-                  onChange={(e) => updatePosition(index, 'bezeichnung', e.target.value)}
-                  placeholder="z.B. THG-Quote, Reparatur"
-                  className="input text-sm py-1.5"
-                />
-              </div>
-              <div className="col-span-3">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Betrag (EUR)</label>
-                )}
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={pos.betrag || ''}
-                  onChange={(e) => updatePosition(index, 'betrag', parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                  className="input text-sm py-1.5"
-                />
-              </div>
-              <div className="col-span-3">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Typ</label>
-                )}
-                <select
-                  value={pos.typ}
-                  onChange={(e) => updatePosition(index, 'typ', e.target.value)}
-                  className="input text-sm py-1.5"
-                  title="Typ: Ertrag oder Ausgabe"
-                >
-                  <option value="ertrag">Ertrag</option>
-                  <option value="ausgabe">Ausgabe</option>
-                </select>
-              </div>
-              <div className="col-span-1 flex justify-center">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">&nbsp;</label>
-                )}
-                <button
-                  type="button"
-                  onClick={() => removePosition(index)}
-                  className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 p-1 text-sm"
-                  title="Position entfernen"
-                >
-                  &times;
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {positionen.length > 0 && (
-            <div className="text-xs flex gap-3 pt-1">
-              <span className="text-green-600 dark:text-green-400">
-                Ertr&auml;ge: {ertraege.toFixed(2)} &euro;
-              </span>
-              <span className="text-red-600 dark:text-red-400">
-                Ausgaben: {ausgaben.toFixed(2)} &euro;
-              </span>
-              <span className={`font-medium ${netto >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                Netto: {netto >= 0 ? '+' : ''}{netto.toFixed(2)} &euro;
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   )
 }

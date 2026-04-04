@@ -238,11 +238,11 @@ async def _import_investition_monatsdaten_v09(
                     field_key = "entladung_kwh"
                     field_value = val
                     summen["batterie_entladung_sum"] += val
-            # Arbitrage-Felder
+            # Arbitrage-Felder (kanonischer Key: ladung_netz_kwh)
             elif suffix == "Netzladung_kWh":
                 val = parse_float_positive(value, col_name)
                 if val is not None:
-                    field_key = "speicher_ladung_netz_kwh"
+                    field_key = "ladung_netz_kwh"
                     field_value = val
             elif suffix == "Ladepreis_Cent":
                 val = parse_float_positive(value, col_name)

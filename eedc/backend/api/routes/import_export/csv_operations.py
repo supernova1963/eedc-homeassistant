@@ -20,6 +20,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.core.field_definitions import get_felder_fuer_investition, get_felder_fuer_sonstiges
 
 from .schemas import ImportResult, CSVTemplateInfo
 from .helpers import (
@@ -72,105 +73,66 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     investitionen = inv_result.scalars().all()
 
     # Personalisierte Spalten je nach Investition (v0.9)
+    # Spaltennamen: leserliche Bezeichnungen mit Einheit
+    # Feldnamen-Mapping: aus field_definitions (kanonische Keys)
+    CSV_SPALTEN_SUFFIX = {
+        "pv_erzeugung_kwh":       ("_kWh",                  "{label} {bez} (kWh)"),
+        "ladung_kwh":             ("_Ladung_kWh",            "Ladung {bez} (kWh)"),
+        "entladung_kwh":          ("_Entladung_kWh",         "Entladung {bez} (kWh)"),
+        "ladung_netz_kwh":        ("_Netzladung_kWh",        "Netzladung {bez} (kWh) - Arbitrage"),
+        "speicher_ladepreis_cent":("_Ladepreis_Cent",        "Ø Ladepreis {bez} (ct/kWh) - Arbitrage"),
+        "stromverbrauch_kwh":     ("_Strom_kWh",             "Stromverbrauch {bez} (kWh)"),
+        "strom_heizen_kwh":       ("_Strom_Heizen_kWh",      "Strom Heizen {bez} (kWh)"),
+        "strom_warmwasser_kwh":   ("_Strom_Warmwasser_kWh",  "Strom Warmwasser {bez} (kWh)"),
+        "heizenergie_kwh":        ("_Heizung_kWh",           "Heizenergie {bez} (kWh)"),
+        "warmwasser_kwh":         ("_Warmwasser_kWh",        "Warmwasser {bez} (kWh)"),
+        "km_gefahren":            ("_km",                    "Gefahrene km {bez}"),
+        "verbrauch_kwh":          ("_Verbrauch_kWh",         "Verbrauch {bez} (kWh)"),
+        "ladung_pv_kwh":          ("_Ladung_PV_kWh",         "PV-Ladung {bez} (kWh)"),
+        "ladung_netz_kwh":        ("_Ladung_Netz_kWh",       "Netz-Ladung {bez} (kWh)"),
+        "ladung_extern_kwh":      ("_Ladung_Extern_kWh",     "Externe Ladung {bez} (kWh)"),
+        "ladung_extern_euro":     ("_Ladung_Extern_Euro",    "Externe Ladekosten {bez} (€)"),
+        "v2h_entladung_kwh":      ("_V2H_kWh",               "V2H-Entladung {bez} (kWh)"),
+        "ladevorgaenge":          ("_Ladevorgaenge",          "Ladevorgänge {bez}"),
+        "eigenverbrauch_kwh":     ("_Eigenverbrauch_kWh",    "Eigenverbrauch {bez} (kWh)"),
+        "speicher_ladung_kwh":    ("_Speicher_Ladung_kWh",   "Speicher-Ladung {bez} (kWh)"),
+        "speicher_entladung_kwh": ("_Speicher_Entladung_kWh","Speicher-Entladung {bez} (kWh)"),
+        "erzeugung_kwh":          ("_Erzeugung_kWh",         "Erzeugung {bez} (kWh)"),
+        "verbrauch_sonstig_kwh":  ("_Verbrauch_kWh",         "Verbrauch {bez} (kWh)"),
+        "bezug_pv_kwh":           ("_Bezug_PV_kWh",          "Bezug PV {bez} (kWh)"),
+        "bezug_netz_kwh":         ("_Bezug_Netz_kWh",        "Bezug Netz {bez} (kWh)"),
+        "einspeisung_kwh":        ("_Einspeisung_kWh",       "Einspeisung {bez} (kWh)"),
+    }
+    # e-auto: ladung_netz_kwh und ladung_pv_kwh haben spezifische Suffixe
+    EAUTO_SUFFIX_OVERRIDE = {
+        "ladung_netz_kwh": ("_Ladung_Netz_kWh", "Netz-Ladung {bez} (kWh)"),
+        "ladung_pv_kwh":   ("_Ladung_PV_kWh",   "PV-Ladung {bez} (kWh)"),
+    }
+
     for inv in investitionen:
+        if inv.typ in ("wechselrichter",):
+            continue
         prefix = _sanitize_column_name(inv.bezeichnung)
+        bez = inv.bezeichnung
 
-        if inv.typ == "pv-module":
-            col = f"{prefix}_kWh"
-            spalten.append(col)
-            beschreibung[col] = f"PV-Erzeugung {inv.bezeichnung} (kWh)"
-
-        elif inv.typ == "speicher":
-            col_ladung = f"{prefix}_Ladung_kWh"
-            col_entladung = f"{prefix}_Entladung_kWh"
-            spalten.extend([col_ladung, col_entladung])
-            beschreibung[col_ladung] = f"Ladung {inv.bezeichnung} (kWh)"
-            beschreibung[col_entladung] = f"Entladung {inv.bezeichnung} (kWh)"
-            if inv.parameter and inv.parameter.get("arbitrage_faehig"):
-                col_netz = f"{prefix}_Netzladung_kWh"
-                col_preis = f"{prefix}_Ladepreis_Cent"
-                spalten.extend([col_netz, col_preis])
-                beschreibung[col_netz] = f"Netzladung {inv.bezeichnung} (kWh) - Arbitrage"
-                beschreibung[col_preis] = f"Ø Ladepreis {inv.bezeichnung} (ct/kWh) - Arbitrage"
-
-        elif inv.typ == "e-auto":
-            cols = [
-                (f"{prefix}_km", f"Gefahrene km {inv.bezeichnung}"),
-                (f"{prefix}_Verbrauch_kWh", f"Verbrauch {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Ladung_PV_kWh", f"PV-Ladung {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Ladung_Netz_kWh", f"Netz-Ladung {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Ladung_Extern_kWh", f"Externe Ladung {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Ladung_Extern_Euro", f"Externe Ladekosten {inv.bezeichnung} (€)"),
-            ]
-            if inv.parameter and (inv.parameter.get("nutzt_v2h") or inv.parameter.get("v2h_faehig")):
-                cols.append((f"{prefix}_V2H_kWh", f"V2H-Entladung {inv.bezeichnung} (kWh)"))
-            for col, desc in cols:
-                spalten.append(col)
-                beschreibung[col] = desc
-
-        elif inv.typ == "wallbox":
-            cols = [
-                (f"{prefix}_Ladung_kWh", f"Ladung {inv.bezeichnung} (kWh)"),
-                (f"{prefix}_Ladevorgaenge", f"Ladevorgänge {inv.bezeichnung}"),
-            ]
-            for col, desc in cols:
-                spalten.append(col)
-                beschreibung[col] = desc
-
-        elif inv.typ == "waermepumpe":
-            if (inv.parameter or {}).get("getrennte_strommessung"):
-                cols = [
-                    (f"{prefix}_Strom_Heizen_kWh", f"Strom Heizen {inv.bezeichnung} (kWh)"),
-                    (f"{prefix}_Strom_Warmwasser_kWh", f"Strom Warmwasser {inv.bezeichnung} (kWh)"),
-                    (f"{prefix}_Heizung_kWh", f"Heizenergie {inv.bezeichnung} (kWh)"),
-                    (f"{prefix}_Warmwasser_kWh", f"Warmwasser {inv.bezeichnung} (kWh)"),
-                ]
+        felder = get_felder_fuer_investition(inv.typ, inv.parameter)
+        for feld_def in felder:
+            feld = feld_def["feld"]
+            # Suffix-Auflösung: E-Auto hat Sonderregel für ladung_netz_kwh
+            if inv.typ == "e-auto" and feld in EAUTO_SUFFIX_OVERRIDE:
+                suffix, desc_tmpl = EAUTO_SUFFIX_OVERRIDE[feld]
             else:
-                cols = [
-                    (f"{prefix}_Strom_kWh", f"Stromverbrauch {inv.bezeichnung} (kWh)"),
-                    (f"{prefix}_Heizung_kWh", f"Heizenergie {inv.bezeichnung} (kWh)"),
-                    (f"{prefix}_Warmwasser_kWh", f"Warmwasser {inv.bezeichnung} (kWh)"),
-                ]
-            for col, desc in cols:
-                spalten.append(col)
-                beschreibung[col] = desc
-
-        elif inv.typ == "balkonkraftwerk":
-            col_pv = f"{prefix}_Erzeugung_kWh"
-            col_ev = f"{prefix}_Eigenverbrauch_kWh"
-            spalten.extend([col_pv, col_ev])
-            beschreibung[col_pv] = f"PV-Erzeugung {inv.bezeichnung} (kWh)"
-            beschreibung[col_ev] = f"Eigenverbrauch {inv.bezeichnung} (kWh)"
-            if inv.parameter and inv.parameter.get("hat_speicher"):
-                col_sp_l = f"{prefix}_Speicher_Ladung_kWh"
-                col_sp_e = f"{prefix}_Speicher_Entladung_kWh"
-                spalten.extend([col_sp_l, col_sp_e])
-                beschreibung[col_sp_l] = f"Speicher-Ladung {inv.bezeichnung} (kWh)"
-                beschreibung[col_sp_e] = f"Speicher-Entladung {inv.bezeichnung} (kWh)"
-
-        elif inv.typ == "sonstiges":
-            kategorie = inv.parameter.get("kategorie", "erzeuger") if inv.parameter else "erzeuger"
-            if kategorie == "erzeuger":
-                col = f"{prefix}_Erzeugung_kWh"
-                spalten.append(col)
-                beschreibung[col] = f"Erzeugung {inv.bezeichnung} (kWh)"
-            elif kategorie == "verbraucher":
-                col = f"{prefix}_Verbrauch_kWh"
-                spalten.append(col)
-                beschreibung[col] = f"Verbrauch {inv.bezeichnung} (kWh)"
-            elif kategorie == "speicher":
-                col_l = f"{prefix}_Ladung_kWh"
-                col_e = f"{prefix}_Entladung_kWh"
-                spalten.extend([col_l, col_e])
-                beschreibung[col_l] = f"Ladung {inv.bezeichnung} (kWh)"
-                beschreibung[col_e] = f"Entladung {inv.bezeichnung} (kWh)"
+                suffix, desc_tmpl = CSV_SPALTEN_SUFFIX.get(feld, (f"_{feld}", f"{feld_def['label']} {{bez}}"))
+            col = f"{prefix}{suffix}"
+            spalten.append(col)
+            beschreibung[col] = desc_tmpl.format(bez=bez, label=feld_def["label"])
 
         # Sonderkosten für alle Investitionen (optional)
         col_sk = f"{prefix}_Sonderkosten_Euro"
         col_skn = f"{prefix}_Sonderkosten_Notiz"
         spalten.extend([col_sk, col_skn])
-        beschreibung[col_sk] = f"Sonderkosten {inv.bezeichnung} (€) - Reparatur, Wartung, etc."
-        beschreibung[col_skn] = f"Sonderkosten-Beschreibung {inv.bezeichnung}"
+        beschreibung[col_sk] = f"Sonderkosten {bez} (€) - Reparatur, Wartung, etc."
+        beschreibung[col_skn] = f"Sonderkosten-Beschreibung {bez}"
 
     spalten.append("Notizen")
     beschreibung["Notizen"] = "Notizen (optional)"
