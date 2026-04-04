@@ -466,7 +466,7 @@ export default function AktuellerMonat() {
           </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={vorjahrData}>
+              <BarChart data={vorjahrData} margin={{ left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis unit=" kWh" />

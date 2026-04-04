@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.8] - 2026-04-04
+
+### Behoben
+
+- **Y-Achse in Vorjahresvergleich abgeschnitten**: Beschriftungen wie "300 kWh" wurden links abgeschnitten. `margin={{ left: 10 }}` im BarChart behebt das. (Gemeldet von MartyBr, community.simon42.com #186)
+- **Touch-Tooltips auf Mobile (#104)**: Info-Icons und `title=""`-Attribute funktionierten auf Mobilgeräten nicht (kein Hover). Zweistufige Lösung: `FormelTooltip`/`SimpleTooltip` erhalten zentralen `useTooltipInteraction`-Hook mit onClick-Toggle; globaler `useTouchTitleTooltip`-Hook in `App.tsx` aktiviert Touch-Support für alle `title=""`-Attribute im gesamten Frontend automatisch. (Gemeldet von dietmar1968 + joachim-xo, community.simon42.com #183/#184)
+
+---
+
 ## [3.9.7] - 2026-04-04
 
 ### Behoben

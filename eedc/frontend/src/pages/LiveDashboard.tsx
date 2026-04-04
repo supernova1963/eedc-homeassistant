@@ -21,6 +21,7 @@ import TagesverlaufChart from '../components/live/TagesverlaufChart'
 import WetterWidget from '../components/live/WetterWidget'
 import SunProgressBar from '../components/live/SunProgressBar'
 import { CommunityNudge } from '../components/dashboard'
+import { SimpleTooltip } from '../components/ui/FormelTooltip'
 
 const REFRESH_INTERVAL = 5_000 // 5 Sekunden
 const WETTER_REFRESH_INTERVAL = 300_000 // 5 Minuten
@@ -293,9 +294,8 @@ export default function LiveDashboard() {
                       </div>
                     )}
                     {data.heute_eigenverbrauch_kwh !== null && (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2"
-                           title={`Selbst genutzter PV-Strom (Direktverbrauch + Batterieentladung)${data.gestern_eigenverbrauch_kwh !== null ? `\nGestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : ''}`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch <Info className="inline w-3 h-3 opacity-50" /></div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch <SimpleTooltip text={`Selbst genutzter PV-Strom (Direktverbrauch + Batterieentladung)${data.gestern_eigenverbrauch_kwh !== null ? ` | Gestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : ''}`}><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
                         <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
@@ -331,16 +331,14 @@ export default function LiveDashboard() {
                     })()}
                     {/* Hausverbrauch heute */}
                     {data.heute_kwh_pro_komponente?.haushalt != null && (
-                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2"
-                           title="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)">
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <Info className="inline w-3 h-3 opacity-50" /></div>
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <SimpleTooltip text="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)"><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
                         <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
                     {data.heute_netzbezug_kwh !== null && (
-                      <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2"
-                           title={`Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)${data.gestern_netzbezug_kwh !== null ? `\nGestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : ''}`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug <Info className="inline w-3 h-3 opacity-50" /></div>
+                      <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug <SimpleTooltip text={`Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)${data.gestern_netzbezug_kwh !== null ? ` | Gestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : ''}`}><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
                         <div className="text-lg font-bold text-red-600 dark:text-red-400">{data.heute_netzbezug_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
@@ -390,9 +388,8 @@ export default function LiveDashboard() {
               {/* Prognose + Noch offen */}
               {wetter?.pv_prognose_kwh != null && (
                 <div className="grid grid-cols-2 min-[400px]:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
-                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5"
-                       title="EEDC-Tagesprognose basierend auf aktuellem Wetter und Verbrauchsprofil. Kann von Solar-Aussicht abweichen (andere Berechnungsmethode).">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose <Info className="inline w-3 h-3 opacity-50" /></div>
+                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose <SimpleTooltip text="EEDC-Tagesprognose basierend auf aktuellem Wetter und Verbrauchsprofil. Kann von Solar-Aussicht abweichen (andere Berechnungsmethode)."><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
                     <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                   </div>
                   {(() => {
@@ -447,9 +444,8 @@ export default function LiveDashboard() {
               {/* 3-Tage Solar-Vorschau (VM/NM) */}
               {prognose3Tage && prognose3Tage.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2"
-                      title="GTI-basierte Prognose (Open-Meteo) mit Neigung/Ausrichtung der Module. VM/NM = Split an Solar Noon.">
-                    Solar-Aussicht <Info className="inline w-3 h-3 text-gray-400 opacity-50" />
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Solar-Aussicht <SimpleTooltip text="GTI-basierte Prognose (Open-Meteo) mit Neigung/Ausrichtung der Module. VM/NM = Split an Solar Noon."><Info className="inline w-3 h-3 text-gray-400 opacity-50 cursor-help" /></SimpleTooltip>
                   </h3>
                   <div className="space-y-1.5">
                     {prognose3Tage.map((tag, i) => {

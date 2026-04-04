@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import { useTouchTitleTooltip } from './hooks/useTouchTitleTooltip'
 
 // Cockpit (Dashboards)
 import Dashboard from './pages/Dashboard'
@@ -51,6 +52,7 @@ import Protokolle from './pages/Protokolle'
 import DatenChecker from './pages/DatenChecker'
 
 function App() {
+  useTouchTitleTooltip()
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
   return (
     <HashRouter>
