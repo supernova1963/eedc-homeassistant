@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.7] - 2026-04-04
+
+### Behoben
+
+- **KPI-Zeile: ML aus Verbleibend entfernt**: "PV-Prognose" und "Verbleibend" verwenden jetzt ausschließlich EEDC-Werte. ML-Vergleich ist bereits in der Solar-Aussicht-Sektion vorhanden.
+
+---
+
 ## [3.9.6] - 2026-04-04
 
 ### Neu
