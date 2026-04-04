@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.9.6] - 2026-04-04
+
+### Neu
+
+- **Seamless-Wettermodelle**: Neue Optionen in den Anlage-Stammdaten — ICON Seamless (D2→EU→Global, empfohlen für DE/AT/CH), MeteoSwiss Seamless (Alpenraum) und ECMWF Seamless (Global, 15 Tage). Diese kaskadieren intern bei Open-Meteo automatisch zwischen Hoch- und Grobauflösung.
+
+### Behoben
+
+- **Tageslicht-Zeitschiene ändert sich nicht (#102)**: Countdown "noch Xh Ym Zs Tageslicht" aktualisiert sich jetzt sekündlich statt alle 30 Sekunden. Progress-Bar-Marker bewegt sich flüssig. Sonnenstunden-Bisher/Rest werden jetzt minuten-präzise berechnet (anteilige aktuelle Stunde) statt nur stündlich zu wechseln.
+- **"Verbleibend"-KPI unklar (#103)**: Label zeigt jetzt "Verbleibend (EEDC)" bzw. "Verbleibend (ML)" — der User sieht sofort welches Modell verwendet wird. PV-Prognose-Box zeigt zusätzlich den ML-Vergleichswert wenn SFML verfügbar. Tooltip erklärt die Formel: Tagesprognose − bisher erzeugt = verbleibend.
+- **Wettermodell-Einstellung ignoriert in Kurzfrist-Aussichten**: `anlage.wetter_modell` wurde nur in der Solar-Prognose berücksichtigt, nicht in Kurzfrist-Aussichten, Prognose-Service und Prefetch. Alle drei Kanäle verwenden jetzt das konfigurierte Modell.
+- **Prefetch Cache-Key-Mismatch Live-Wetter**: Der Prefetch hat den Live-Wetter-Cache unter einem anderen Key gespeichert als der Endpoint gelesen hat (`:m=` Suffix fehlte). Dadurch wärmte der Prefetch den Cache nutzlos. Jetzt verwenden beide denselben Key.
+
+### Refactoring (intern, kein User-Impact)
+
+- Wetter-Modul aufgeteilt: `wetter_service.py` (979 Z.) → `services/wetter/` Package (cache, open_meteo, pvgis, orchestrator, models, utils)
+- Felddefinitions-Schicht: `backend/core/field_definitions.py` als Single Source of Truth für Monatsdaten-Felder — MonatsabschlussWizard, MonatsdatenForm und CSV-Template nutzen jetzt dieselben kanonischen Feldnamen
+- Naming-Fixes in `verbrauch_daten`: `speicher_ladung_netz_kwh` → `ladung_netz_kwh`, `entladung_v2h_kwh` → `v2h_entladung_kwh`
+- MonatsdatenForm: 6 Section-Komponenten ausgelagert (1.627 → 970 Zeilen)
+- Cockpit-Router aufgeteilt: `cockpit.py` (2.327 Z.) → `cockpit/` Package (6 Module)
+
+---
+
 ## [3.9.5] - 2026-04-04
 
 ### Behoben
