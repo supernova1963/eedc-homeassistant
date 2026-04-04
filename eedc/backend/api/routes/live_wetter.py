@@ -9,6 +9,7 @@ import asyncio
 import logging
 import random
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 import httpx
@@ -273,7 +274,7 @@ def _berechne_verbrauchsprofil(
 
 def _generate_demo_wetter(kwp: float = 10.0) -> dict:
     """Simuliertes Wetter für Demo-Modus."""
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Europe/Berlin"))
     alle_stunden = []  # 0-23 für Verbrauchsprofil
     stunden = []       # 6-20 für Wetter-Timeline
 
@@ -313,12 +314,10 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
             stunden.append(stunde)
 
     aktuelle_stunde = None
-    for s in stunden:
+    for s in alle_stunden:
         h = int(s["zeit"].split(":")[0])
         if h <= now.hour:
             aktuelle_stunde = s
-    if aktuelle_stunde is None and stunden:
-        aktuelle_stunde = stunden[0]
 
     temps = [s["temperatur_c"] for s in stunden]
 
@@ -665,7 +664,7 @@ async def get_live_wetter(
         else:
             gti_values = hourly.get("global_tilted_irradiance", [])
 
-        now = datetime.now()
+        now = datetime.now(ZoneInfo("Europe/Berlin"))
 
         # Lernfaktor laden (historischer IST/Prognose-Vergleich)
         lernfaktor = await _get_lernfaktor(anlage_id, db)
@@ -698,7 +697,7 @@ async def get_live_wetter(
                 stunden.append(stunde)
 
         aktuelle_stunde = None
-        for s in stunden:
+        for s in alle_stunden:
             h = int(s["zeit"].split(":")[0])
             if h <= now.hour:
                 aktuelle_stunde = s
@@ -762,6 +761,7 @@ async def get_live_wetter(
         sfml_kwh = None
         sfml_tomorrow = None
         sfml_accuracy = None
+        ha_temp_found = False
 
         ha_entities = [e for e in [temp_entity, sfml_entity, tomorrow_entity, accuracy_entity] if e]
         if ha_entities:
@@ -775,6 +775,7 @@ async def get_live_wetter(
                     ha_temp = ha_batch[temp_entity][0]
                     if aktuelle_stunde is not None:
                         aktuelle_stunde["temperatur_c"] = ha_temp
+                        ha_temp_found = True
 
                 # SFML
                 if sfml_entity and ha_batch.get(sfml_entity):
@@ -793,6 +794,19 @@ async def get_live_wetter(
                             p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
             except Exception as e:
                 logger.debug(f"HA-Sensoren (Wetter) nicht lesbar: {e}")
+
+        # ── MQTT-Fallback für Außentemperatur (Standalone / HA-Sensor nicht erreichbar) ──
+        if not ha_temp_found and aktuelle_stunde is not None:
+            try:
+                from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+                mqtt_svc = get_mqtt_inbound_service()
+                if mqtt_svc and mqtt_svc.cache.has_data(anlage.id):
+                    mqtt_basis = mqtt_svc.cache.get_live_basis(anlage.id)
+                    mqtt_temp = mqtt_basis.get("aussentemperatur_c")
+                    if mqtt_temp is not None:
+                        aktuelle_stunde["temperatur_c"] = mqtt_temp
+            except Exception:
+                pass
 
         # Prognose für Lernfaktor-Berechnung + SFML speichern (fire-and-forget)
         if pv_prognose is not None and pv_prognose > 0:

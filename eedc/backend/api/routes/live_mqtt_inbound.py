@@ -311,6 +311,7 @@ async def get_mqtt_topics(
         topics.append({"topic": f"{live_prefix}/sfml_today_kwh", "label": "Solar Forecast ML – Prognose heute (kWh)", "anlage": aname, "typ": "basis"})
         topics.append({"topic": f"{live_prefix}/sfml_tomorrow_kwh", "label": "Solar Forecast ML – Prognose morgen (kWh)", "anlage": aname, "typ": "basis"})
         topics.append({"topic": f"{live_prefix}/sfml_accuracy_pct", "label": "Solar Forecast ML – Modellgenauigkeit (%)", "anlage": aname, "typ": "basis"})
+        topics.append({"topic": f"{live_prefix}/aussentemperatur_c", "label": "Außentemperatur (°C)", "anlage": aname, "typ": "basis"})
         topics.append({"topic": f"{energy_prefix}/pv_gesamt_kwh", "label": "PV-Erzeugung Monat (kWh)", "anlage": aname, "typ": "energy"})
         topics.append({"topic": f"{energy_prefix}/einspeisung_kwh", "label": "Einspeisung Monat (kWh)", "anlage": aname, "typ": "energy"})
         topics.append({"topic": f"{energy_prefix}/netzbezug_kwh", "label": "Netzbezug Monat (kWh)", "anlage": aname, "typ": "energy"})
