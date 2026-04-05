@@ -17,6 +17,14 @@ export interface EedcField {
   group: string
 }
 
+export interface InvestitionSpalteInfo {
+  spalte: string
+  inv_id: number
+  inv_bezeichnung: string
+  inv_typ: string
+  suffix: string
+}
+
 export interface AnalyzeResult {
   dateiname: string
   format: string
@@ -24,11 +32,22 @@ export interface AnalyzeResult {
   zeilen_gesamt: number
   eedc_felder: EedcField[]
   auto_mapping: Record<string, string>
+  investitions_spalten: InvestitionSpalteInfo[]
+  investitions_felder: EedcField[]  // dynamische Zielfelder für Dropdown (inv:ID:feld)
+}
+
+export interface ApplyResult {
+  erfolg: boolean
+  importiert: number
+  uebersprungen: number
+  fehler: string[]
+  warnungen: string[]
 }
 
 export interface FieldMapping {
   spalte: string
   eedc_feld: string
+  invertieren?: boolean
 }
 
 export interface MappingConfig {
@@ -67,16 +86,18 @@ export interface TemplateInfo {
 
 export const customImportApi = {
   /**
-   * Datei hochladen und Spalten analysieren
+   * Datei hochladen und Spalten analysieren.
+   * Mit anlageId werden Investitions-Spalten automatisch erkannt.
    */
-  async analyze(file: File): Promise<AnalyzeResult> {
+  async analyze(file: File, anlageId?: number | null): Promise<AnalyzeResult> {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await fetch(`${API_BASE}/custom-import/analyze`, {
-      method: 'POST',
-      body: formData,
-    })
+    const params = new URLSearchParams()
+    if (anlageId) params.append('anlage_id', String(anlageId))
+
+    const url = `${API_BASE}/custom-import/analyze${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetch(url, { method: 'POST', body: formData })
 
     if (!response.ok) {
       const error = await response.json()
@@ -152,5 +173,37 @@ export const customImportApi = {
       const error = await response.json()
       throw new Error(error.detail || 'Löschen fehlgeschlagen')
     }
+  },
+
+  /**
+   * Daten importieren: generische Felder + Investitions-Spalten.
+   * Ersetzt portalImportApi.apply für den Custom-Import-Wizard.
+   */
+  async apply(
+    anlageId: number,
+    file: File,
+    mapping: MappingConfig,
+    selectedMonths: Array<{ jahr: number; monat: number }>,
+    ueberschreiben: boolean = false,
+  ): Promise<ApplyResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const params = new URLSearchParams()
+    params.append('mapping_json', JSON.stringify(mapping))
+    params.append('monate_json', JSON.stringify(selectedMonths))
+    if (ueberschreiben) params.append('ueberschreiben', 'true')
+
+    const response = await fetch(
+      `${API_BASE}/custom-import/apply/${anlageId}?${params.toString()}`,
+      { method: 'POST', body: formData }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Import fehlgeschlagen')
+    }
+
+    return response.json()
   },
 }

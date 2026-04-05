@@ -18,7 +18,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
+from backend.models.anlage import Anlage
+from backend.models.investition import Investition
+from backend.models.monatsdaten import Monatsdaten
 from backend.models.settings import Settings
+from backend.api.routes.import_export.helpers import (
+    _import_investition_monatsdaten_v09,
+    _upsert_investition_monatsdaten,
+    _sanitize_column_name,
+    _distribute_legacy_pv_to_modules,
+    _distribute_legacy_battery_to_storages,
+)
+from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +63,14 @@ class ColumnInfo(BaseModel):
     sample_values: list[str]
 
 
+class InvestitionSpalteInfo(BaseModel):
+    spalte: str           # CSV-Spaltenname, z.B. "BYD_HVS_12_8_Ladung_kWh"
+    inv_id: int
+    inv_bezeichnung: str  # z.B. "BYD HVS 12.8"
+    inv_typ: str          # z.B. "speicher"
+    suffix: str           # z.B. "Ladung_kWh"
+
+
 class AnalyzeResponse(BaseModel):
     dateiname: str
     format: str  # "csv" oder "json"
@@ -59,11 +78,14 @@ class AnalyzeResponse(BaseModel):
     zeilen_gesamt: int
     eedc_felder: list[dict]
     auto_mapping: dict[str, str]  # spalte → eedc_feld
+    investitions_spalten: list[InvestitionSpalteInfo] = []
+    investitions_felder: list[dict] = []  # dynamische Zielfelder für Mapping-Dropdown
 
 
 class FieldMapping(BaseModel):
     spalte: str
     eedc_feld: str
+    invertieren: bool = False  # Vorzeichen invertieren (negative → positive)
 
 
 class MappingConfig(BaseModel):
@@ -106,6 +128,14 @@ class TemplateInfo(BaseModel):
 
 class TemplateListResponse(BaseModel):
     templates: list[TemplateInfo]
+
+
+class ApplyResponse(BaseModel):
+    erfolg: bool
+    importiert: int
+    uebersprungen: int
+    fehler: list[str]
+    warnungen: list[str]
 
 
 # ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
@@ -305,10 +335,13 @@ def _apply_mapping(
     config: MappingConfig,
 ) -> tuple[list[PreviewMonth], list[str]]:
     """Wendet das Mapping auf die Daten an und gibt PreviewMonths zurück."""
-    # Mapping aufbauen: spalte → eedc_feld
+    # Mapping aufbauen: spalte → eedc_feld, invertieren
     field_map: dict[str, str] = {}
+    invert_map: dict[str, bool] = {}
     for m in config.mappings:
         field_map[m.spalte] = m.eedc_feld
+        if m.invertieren:
+            invert_map[m.spalte] = True
 
     results: list[PreviewMonth] = []
     warnungen: list[str] = []
@@ -344,7 +377,10 @@ def _apply_mapping(
             else:
                 num = _parse_number(raw, config.dezimalzeichen)
                 if num is not None:
-                    values[eedc_feld] = _convert_unit(num, config.einheit)
+                    val = _convert_unit(num, config.einheit)
+                    if val is not None and invert_map.get(spalte):
+                        val = abs(val)
+                    values[eedc_feld] = val
 
         if jahr is None or monat is None or monat < 1 or monat > 12:
             skipped += 1
@@ -385,6 +421,127 @@ def _apply_mapping(
     return results, warnungen
 
 
+def _build_investition_felder(investitionen: list) -> list[dict]:
+    """
+    Erzeugt dynamische Zielfelder für das Mapping-Dropdown aus den Investitionen einer Anlage.
+    Format: {"id": "inv:42:pv_erzeugung_kwh", "label": "PV-Modul: Bauer 385 – Erzeugung (kWh)", ...}
+    """
+    felder = []
+    for inv in investitionen:
+        bez = inv.bezeichnung
+        inv_id = inv.id
+        typ = inv.typ
+
+        if typ == "pv-module":
+            felder.append({"id": f"inv:{inv_id}:pv_erzeugung_kwh", "label": f"PV-Modul: {bez} – Erzeugung (kWh)", "required": False, "group": f"inv_pv"})
+
+        elif typ == "speicher":
+            felder.append({"id": f"inv:{inv_id}:ladung_kwh",          "label": f"Speicher: {bez} – Ladung (kWh)",          "required": False, "group": "inv_speicher"})
+            felder.append({"id": f"inv:{inv_id}:entladung_kwh",       "label": f"Speicher: {bez} – Entladung (kWh)",       "required": False, "group": "inv_speicher"})
+            felder.append({"id": f"inv:{inv_id}:ladung_netz_kwh",     "label": f"Speicher: {bez} – Netzladung/Arbitrage (kWh)", "required": False, "group": "inv_speicher"})
+            felder.append({"id": f"inv:{inv_id}:speicher_ladepreis_cent", "label": f"Speicher: {bez} – Ladepreis Arbitrage (Cent)", "required": False, "group": "inv_speicher"})
+
+        elif typ == "e-auto":
+            felder.append({"id": f"inv:{inv_id}:km_gefahren",       "label": f"E-Auto: {bez} – km gefahren",         "required": False, "group": "inv_eauto"})
+            felder.append({"id": f"inv:{inv_id}:verbrauch_kwh",     "label": f"E-Auto: {bez} – Verbrauch (kWh)",      "required": False, "group": "inv_eauto"})
+            felder.append({"id": f"inv:{inv_id}:ladung_pv_kwh",     "label": f"E-Auto: {bez} – Ladung PV (kWh)",      "required": False, "group": "inv_eauto"})
+            felder.append({"id": f"inv:{inv_id}:ladung_netz_kwh",   "label": f"E-Auto: {bez} – Ladung Netz (kWh)",    "required": False, "group": "inv_eauto"})
+            felder.append({"id": f"inv:{inv_id}:ladung_extern_kwh", "label": f"E-Auto: {bez} – Laden extern (kWh)",   "required": False, "group": "inv_eauto"})
+            felder.append({"id": f"inv:{inv_id}:ladung_extern_euro","label": f"E-Auto: {bez} – Laden extern (€)",     "required": False, "group": "inv_eauto"})
+            felder.append({"id": f"inv:{inv_id}:v2h_entladung_kwh", "label": f"E-Auto: {bez} – V2H Entladung (kWh)", "required": False, "group": "inv_eauto"})
+
+        elif typ == "wallbox":
+            felder.append({"id": f"inv:{inv_id}:ladung_kwh",    "label": f"Wallbox: {bez} – Ladung (kWh)",  "required": False, "group": "inv_wallbox"})
+            felder.append({"id": f"inv:{inv_id}:ladevorgaenge", "label": f"Wallbox: {bez} – Ladevorgänge",  "required": False, "group": "inv_wallbox"})
+
+        elif typ == "waermepumpe":
+            felder.append({"id": f"inv:{inv_id}:stromverbrauch_kwh",  "label": f"WP: {bez} – Stromverbrauch gesamt (kWh)",  "required": False, "group": "inv_wp"})
+            felder.append({"id": f"inv:{inv_id}:strom_heizen_kwh",    "label": f"WP: {bez} – Strom Heizung (kWh)",          "required": False, "group": "inv_wp"})
+            felder.append({"id": f"inv:{inv_id}:strom_warmwasser_kwh","label": f"WP: {bez} – Strom Warmwasser (kWh)",       "required": False, "group": "inv_wp"})
+            felder.append({"id": f"inv:{inv_id}:heizenergie_kwh",     "label": f"WP: {bez} – Heizenergie (kWh)",            "required": False, "group": "inv_wp"})
+            felder.append({"id": f"inv:{inv_id}:warmwasser_kwh",      "label": f"WP: {bez} – Warmwasser Wärme (kWh)",       "required": False, "group": "inv_wp"})
+
+        elif typ == "balkonkraftwerk":
+            felder.append({"id": f"inv:{inv_id}:pv_erzeugung_kwh",    "label": f"BKW: {bez} – Erzeugung (kWh)",         "required": False, "group": "inv_bkw"})
+            felder.append({"id": f"inv:{inv_id}:eigenverbrauch_kwh",  "label": f"BKW: {bez} – Eigenverbrauch (kWh)",    "required": False, "group": "inv_bkw"})
+            felder.append({"id": f"inv:{inv_id}:speicher_ladung_kwh", "label": f"BKW: {bez} – Speicher Ladung (kWh)",   "required": False, "group": "inv_bkw"})
+            felder.append({"id": f"inv:{inv_id}:speicher_entladung_kwh","label": f"BKW: {bez} – Speicher Entladung (kWh)","required": False, "group": "inv_bkw"})
+
+        elif typ == "sonstiges":
+            kategorie = (inv.parameter or {}).get("kategorie", "erzeuger")
+            if kategorie == "erzeuger":
+                felder.append({"id": f"inv:{inv_id}:erzeugung_kwh",      "label": f"Sonstiges: {bez} – Erzeugung (kWh)",  "required": False, "group": "inv_sonstiges"})
+            elif kategorie == "verbraucher":
+                felder.append({"id": f"inv:{inv_id}:verbrauch_sonstig_kwh", "label": f"Sonstiges: {bez} – Verbrauch (kWh)", "required": False, "group": "inv_sonstiges"})
+            elif kategorie == "speicher":
+                felder.append({"id": f"inv:{inv_id}:ladung_kwh",    "label": f"Sonstiges: {bez} – Ladung (kWh)",    "required": False, "group": "inv_sonstiges"})
+                felder.append({"id": f"inv:{inv_id}:entladung_kwh", "label": f"Sonstiges: {bez} – Entladung (kWh)", "required": False, "group": "inv_sonstiges"})
+
+    return felder
+
+
+async def _detect_investition_spalten(
+    headers: list[str],
+    anlage_id: int,
+    db: AsyncSession,
+) -> list[InvestitionSpalteInfo]:
+    """Erkennt welche CSV-Spalten zu Investitionen der Anlage gehören."""
+    result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    investitionen = result.scalars().all()
+    if not investitionen:
+        return []
+
+    # Bekannte Suffixe (sortiert nach Länge: längste zuerst)
+    known_suffixes = sorted([
+        "kWh", "km", "Verbrauch_kWh", "Ladung_PV_kWh", "Ladung_Netz_kWh",
+        "Ladung_Extern_kWh", "Ladung_Extern_Euro", "V2H_kWh",
+        "Ladung_kWh", "Entladung_kWh", "Ladevorgaenge",
+        "Netzladung_kWh", "Ladepreis_Cent",
+        "Strom_kWh", "Heizung_kWh", "Warmwasser_kWh",
+        "Speicher_Ladung_kWh", "Speicher_Entladung_kWh",
+        "Erzeugung_kWh", "Sonderkosten_Euro", "Sonderkosten_Notiz",
+    ], key=len, reverse=True)
+
+    inv_variants = [(
+        _sanitize_column_name(inv.bezeichnung), inv
+    ) for inv in investitionen]
+
+    detected: list[InvestitionSpalteInfo] = []
+    for col in headers:
+        for sanitized, inv in inv_variants:
+            # Strategie 1: Spaltenname beginnt mit sanitized_name + "_"
+            if col.startswith(sanitized + "_"):
+                suffix = col[len(sanitized) + 1:]
+                detected.append(InvestitionSpalteInfo(
+                    spalte=col,
+                    inv_id=inv.id,
+                    inv_bezeichnung=inv.bezeichnung,
+                    inv_typ=inv.typ,
+                    suffix=suffix,
+                ))
+                break
+            # Strategie 2: Suffix-basiertes Matching
+            for known_suffix in known_suffixes:
+                if col.endswith("_" + known_suffix):
+                    prefix = col[:-len(known_suffix) - 1]
+                    if prefix == sanitized:
+                        detected.append(InvestitionSpalteInfo(
+                            spalte=col,
+                            inv_id=inv.id,
+                            inv_bezeichnung=inv.bezeichnung,
+                            inv_typ=inv.typ,
+                            suffix=known_suffix,
+                        ))
+                        break
+            else:
+                continue
+            break
+
+    return detected
+
+
 # ─── Temporärer Speicher für Upload-Sessions ─────────────────────────────────
 # In-Memory Cache für die aktuelle Upload-Session (zwischen Analyze und Preview)
 # Key: session_id (filename hash), Value: (headers, rows)
@@ -404,6 +561,8 @@ def _cache_key(filename: str, content: str) -> str:
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_file(
     file: UploadFile = File(...),
+    anlage_id: Optional[int] = Query(None, description="Anlage-ID für Investitions-Erkennung"),
+    db: AsyncSession = Depends(get_db),
 ):
     """Datei hochladen und Spalten erkennen. Gibt Spalten mit Beispielwerten zurück."""
     content_bytes = await file.read()
@@ -438,6 +597,17 @@ async def analyze_file(
     # Auto-Mapping versuchen
     auto_mapping = _auto_detect_mapping(headers)
 
+    # Investitions-Spalten erkennen + Zielfelder für Dropdown generieren (wenn anlage_id bekannt)
+    investitions_spalten: list[InvestitionSpalteInfo] = []
+    investitions_felder: list[dict] = []
+    if anlage_id:
+        inv_result = await db.execute(
+            select(Investition).where(Investition.anlage_id == anlage_id)
+        )
+        investitionen_list = list(inv_result.scalars().all())
+        investitions_spalten = await _detect_investition_spalten(headers, anlage_id, db)
+        investitions_felder = _build_investition_felder(investitionen_list)
+
     # In Cache speichern für Preview
     key = _cache_key(filename, content)
     _upload_cache[key] = (headers, rows, filename)
@@ -454,6 +624,8 @@ async def analyze_file(
         zeilen_gesamt=len(rows),
         eedc_felder=EEDC_FIELDS,
         auto_mapping=auto_mapping,
+        investitions_spalten=investitions_spalten,
+        investitions_felder=investitions_felder,
     )
 
 
@@ -574,6 +746,292 @@ async def delete_template(
     await db.flush()
 
     return {"erfolg": True, "message": f"Template '{name}' gelöscht."}
+
+
+@router.post("/apply/{anlage_id}", response_model=ApplyResponse)
+async def apply_custom_import(
+    anlage_id: int,
+    file: UploadFile = File(...),
+    mapping_json: str = Query(..., description="JSON-String mit MappingConfig"),
+    monate_json: str = Query(..., description="JSON-Array mit [{jahr, monat}] der zu importierenden Monate"),
+    ueberschreiben: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Wendet das Custom-Mapping auf die Datei an und importiert die Daten.
+
+    Verarbeitet:
+    1. Generische Felder (via MappingConfig) → Monatsdaten
+    2. Investitions-Spalten (automatisch erkannt) → InvestitionMonatsdaten
+       via _import_investition_monatsdaten_v09 (identisch mit regulärem CSV-Import)
+    """
+    # Anlage prüfen
+    anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = anlage_result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(404, f"Anlage {anlage_id} nicht gefunden.")
+
+    # Parameter parsen
+    try:
+        mapping_data = json.loads(mapping_json)
+        config = MappingConfig(**(mapping_data.get("mapping", mapping_data)))
+    except Exception as e:
+        raise HTTPException(400, f"Ungültiges Mapping-Format: {e}")
+
+    try:
+        selected_raw = json.loads(monate_json)
+        selected: set[tuple[int, int]] = {(m["jahr"], m["monat"]) for m in selected_raw}
+    except Exception as e:
+        raise HTTPException(400, f"Ungültiges Monate-Format: {e}")
+
+    # Datei lesen und parsen
+    content_bytes = await file.read()
+    content = _read_file_content(content_bytes)
+    if not content.strip():
+        raise HTTPException(400, "Die Datei ist leer.")
+
+    filename = file.filename or "upload"
+    is_json = filename.lower().endswith(".json") or content.strip().startswith(("{", "["))
+    if is_json:
+        headers, rows = _parse_json_rows(content)
+    else:
+        headers, rows = _parse_csv_rows(content)
+
+    if not rows:
+        raise HTTPException(400, "Keine Datenzeilen in der Datei gefunden.")
+
+    # Investitionen laden
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    investitionen = list(inv_result.scalars().all())
+    pv_module = [i for i in investitionen if i.typ == "pv-module"]
+    speicher = [i for i in investitionen if i.typ == "speicher"]
+
+    # Mapping aufbauen: spalte → eedc_feld / invertieren
+    field_map: dict[str, str] = {m.spalte: m.eedc_feld for m in config.mappings}
+    invert_map: dict[str, bool] = {m.spalte: True for m in config.mappings if m.invertieren}
+
+    importiert = 0
+    uebersprungen = 0
+    fehler: list[str] = []
+    warnungen: list[str] = []
+
+    def parse_float(val: str) -> Optional[float]:
+        return _parse_number(val, config.dezimalzeichen)
+
+    def parse_float_inv(val: str, spalte: str) -> Optional[float]:
+        """parse_float + Vorzeichen-Inversion wenn konfiguriert."""
+        num = _parse_number(val, config.dezimalzeichen)
+        if num is not None and invert_map.get(spalte):
+            num = abs(num)
+        return num
+
+    for row in rows:
+        try:
+            # Jahr + Monat extrahieren
+            jahr: Optional[int] = None
+            monat: Optional[int] = None
+
+            if config.datum_spalte and config.datum_spalte in row:
+                j, m = _parse_date_column(row[config.datum_spalte], config.datum_format or "")
+                if j and m:
+                    jahr, monat = j, m
+
+            for spalte, eedc_feld in field_map.items():
+                raw = row.get(spalte, "")
+                if not raw:
+                    continue
+                if eedc_feld == "jahr" and jahr is None:
+                    try:
+                        jahr = int(float(raw))
+                    except (ValueError, TypeError):
+                        pass
+                elif eedc_feld == "monat" and monat is None:
+                    try:
+                        monat = int(float(raw))
+                    except (ValueError, TypeError):
+                        pass
+
+            if not jahr or not monat or monat < 1 or monat > 12:
+                continue
+
+            # Nur ausgewählte Monate importieren
+            if (jahr, monat) not in selected:
+                continue
+
+            # Bestehende Monatsdaten prüfen
+            existing = await db.execute(
+                select(Monatsdaten).where(
+                    Monatsdaten.anlage_id == anlage_id,
+                    Monatsdaten.jahr == jahr,
+                    Monatsdaten.monat == monat,
+                )
+            )
+            existing_md = existing.scalar_one_or_none()
+            if existing_md and not ueberschreiben:
+                uebersprungen += 1
+                continue
+
+            # ── Investitions-Spalten verarbeiten ──────────────────────────────
+            # Liefert Summen: pv_erzeugung_sum, batterie_ladung_sum, batterie_entladung_sum
+            summen = {"pv_erzeugung_sum": 0.0, "batterie_ladung_sum": 0.0, "batterie_entladung_sum": 0.0}
+            if investitionen:
+                summen = await _import_investition_monatsdaten_v09(
+                    db, row, parse_float, investitionen, jahr, monat, ueberschreiben
+                )
+
+            # ── Investitions-Felder aus manuellem Mapping (inv:ID:feld) ──────
+            # z.B. {"Ertrag_Sued": "inv:42:pv_erzeugung_kwh"}
+            inv_collected: dict[int, dict] = {}
+            for spalte, eedc_feld in field_map.items():
+                if not eedc_feld.startswith("inv:"):
+                    continue
+                raw = row.get(spalte, "")
+                if not raw:
+                    continue
+                parts = eedc_feld.split(":", 2)
+                if len(parts) != 3:
+                    continue
+                inv_id_str, field_key = parts[1], parts[2]
+                try:
+                    inv_id_int = int(inv_id_str)
+                except ValueError:
+                    continue
+                val = _convert_unit(parse_float_inv(raw, spalte), config.einheit)
+                if val is None:
+                    continue
+                if field_key == "ladevorgaenge":
+                    val = int(val)
+                if inv_id_int not in inv_collected:
+                    inv_collected[inv_id_int] = {}
+                inv_collected[inv_id_int][field_key] = val
+
+            # Manuell gemappte Investitions-Felder speichern + Summen berechnen
+            for inv_id_int, verbrauch_daten in inv_collected.items():
+                await _upsert_investition_monatsdaten(
+                    db, inv_id_int, jahr, monat, verbrauch_daten, ueberschreiben
+                )
+                # PV- und Batterie-Summen für Monatsdaten-Aggregat pflegen
+                if "pv_erzeugung_kwh" in verbrauch_daten:
+                    summen["pv_erzeugung_sum"] += verbrauch_daten["pv_erzeugung_kwh"]
+                if "erzeugung_kwh" in verbrauch_daten:
+                    summen["pv_erzeugung_sum"] += verbrauch_daten["erzeugung_kwh"]
+                if "ladung_kwh" in verbrauch_daten:
+                    summen["batterie_ladung_sum"] += verbrauch_daten["ladung_kwh"]
+                if "entladung_kwh" in verbrauch_daten:
+                    summen["batterie_entladung_sum"] += verbrauch_daten["entladung_kwh"]
+                # BKW-Speicher
+                if "speicher_ladung_kwh" in verbrauch_daten:
+                    summen["batterie_ladung_sum"] += verbrauch_daten["speicher_ladung_kwh"]
+                if "speicher_entladung_kwh" in verbrauch_daten:
+                    summen["batterie_entladung_sum"] += verbrauch_daten["speicher_entladung_kwh"]
+
+            # ── Generische Felder aus Mapping ─────────────────────────────────
+            einspeisung: Optional[float] = None
+            netzbezug: Optional[float] = None
+            eigenverbrauch: Optional[float] = None
+            pv_mapped: Optional[float] = None
+            bat_ladung_mapped: Optional[float] = None
+            bat_entladung_mapped: Optional[float] = None
+
+            for spalte, eedc_feld in field_map.items():
+                raw = row.get(spalte, "")
+                if not raw or eedc_feld in ("jahr", "monat") or eedc_feld.startswith("inv:"):
+                    continue
+                val = _convert_unit(parse_float_inv(raw, spalte), config.einheit)
+                if val is None:
+                    continue
+                if eedc_feld == "einspeisung_kwh":
+                    einspeisung = val
+                elif eedc_feld == "netzbezug_kwh":
+                    netzbezug = val
+                elif eedc_feld == "eigenverbrauch_kwh":
+                    eigenverbrauch = val
+                elif eedc_feld == "pv_erzeugung_kwh":
+                    pv_mapped = val
+                elif eedc_feld == "batterie_ladung_kwh":
+                    bat_ladung_mapped = val
+                elif eedc_feld == "batterie_entladung_kwh":
+                    bat_entladung_mapped = val
+
+            # ── PV-Erzeugung: Investitions-Summe hat Vorrang ──────────────────
+            pv_erzeugung: Optional[float] = None
+            if summen["pv_erzeugung_sum"] > 0:
+                # Individuelle PV-Modul-Werte vorhanden → Summe verwenden
+                pv_erzeugung = summen["pv_erzeugung_sum"]
+            elif pv_mapped is not None and pv_mapped > 0:
+                # Nur generischer Wert → auf PV-Module verteilen (wenn vorhanden)
+                if pv_module:
+                    w = await _distribute_legacy_pv_to_modules(
+                        db, pv_mapped, pv_module, jahr, monat, ueberschreiben
+                    )
+                    if importiert == 0:
+                        warnungen.extend(w)
+                pv_erzeugung = pv_mapped
+
+            # ── Batterie: Investitions-Summe hat Vorrang ──────────────────────
+            bat_ladung: Optional[float] = None
+            bat_entladung: Optional[float] = None
+            if summen["batterie_ladung_sum"] > 0 or summen["batterie_entladung_sum"] > 0:
+                bat_ladung = summen["batterie_ladung_sum"] or None
+                bat_entladung = summen["batterie_entladung_sum"] or None
+            else:
+                if bat_ladung_mapped is not None and bat_ladung_mapped > 0 and speicher:
+                    w = await _distribute_legacy_battery_to_storages(
+                        db, bat_ladung_mapped, bat_entladung_mapped or 0,
+                        speicher, jahr, monat, ueberschreiben
+                    )
+                    if importiert == 0:
+                        warnungen.extend(w)
+                bat_ladung = bat_ladung_mapped
+                bat_entladung = bat_entladung_mapped
+
+            # ── Monatsdaten schreiben ─────────────────────────────────────────
+            if existing_md:
+                md = existing_md
+            else:
+                md = Monatsdaten(anlage_id=anlage_id, jahr=jahr, monat=monat)
+                db.add(md)
+
+            if einspeisung is not None:
+                md.einspeisung_kwh = einspeisung
+            if netzbezug is not None:
+                md.netzbezug_kwh = netzbezug
+            if eigenverbrauch is not None:
+                md.eigenverbrauch_kwh = eigenverbrauch
+            if pv_erzeugung is not None:
+                md.pv_erzeugung_kwh = pv_erzeugung
+            if bat_ladung is not None:
+                md.batterie_ladung_kwh = bat_ladung
+            if bat_entladung is not None:
+                md.batterie_entladung_kwh = bat_entladung
+            md.datenquelle = "custom_import"
+
+            importiert += 1
+
+        except Exception as e:
+            logger.exception(f"Fehler bei Zeile (Jahr={jahr}, Monat={monat})")
+            fehler.append(f"{jahr}/{monat:02d}: {str(e)}")
+
+    await db.flush()
+
+    await log_activity(
+        kategorie="portal_import",
+        aktion=f"Custom-Import: {importiert} Monate importiert",
+        erfolg=len(fehler) == 0,
+        details=f"Anlage {anlage_id}, übersprungen: {uebersprungen}",
+        details_json={"importiert": importiert, "uebersprungen": uebersprungen, "fehler": fehler[:5]},
+        anlage_id=anlage_id,
+    )
+
+    return ApplyResponse(
+        erfolg=len(fehler) == 0,
+        importiert=importiert,
+        uebersprungen=uebersprungen,
+        fehler=fehler[:20],
+        warnungen=warnungen[:10],
+    )
 
 
 @router.get("/fields")

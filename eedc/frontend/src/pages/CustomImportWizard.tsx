@@ -21,12 +21,12 @@ import {
   Settings2,
   Save,
   ArrowRight,
+  ArrowUpDown,
   X,
 } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
-import { portalImportApi } from '../api/portalImport'
 import { customImportApi } from '../api/customImport'
 import type {
   AnalyzeResult,
@@ -34,8 +34,8 @@ import type {
   FieldMapping,
   PreviewResult,
   TemplateInfo,
+  ApplyResult,
 } from '../api/customImport'
-import type { ApplyResult } from '../api/portalImport'
 import { useSelectedAnlage } from '../hooks'
 import { MONAT_NAMEN } from '../lib'
 
@@ -55,6 +55,7 @@ export default function CustomImportWizard() {
 
   // Step 2: Mapping
   const [mappings, setMappings] = useState<Record<string, string>>({})
+  const [invertierungen, setInvertierungen] = useState<Record<string, boolean>>({})
   const [einheit, setEinheit] = useState('kwh')
   const [dezimalzeichen, setDezimalzeichen] = useState('auto')
   const [datumSpalte, setDatumSpalte] = useState<string | null>(null)
@@ -87,11 +88,16 @@ export default function CustomImportWizard() {
     setIsAnalyzing(true)
 
     try {
-      const result = await customImportApi.analyze(f)
+      const result = await customImportApi.analyze(f, selectedAnlageId)
       setAnalysis(result)
 
-      // Auto-Mapping setzen
-      setMappings(result.auto_mapping)
+      // Auto-Mapping setzen — Investitions-Spalten ausfiltern (werden automatisch importiert)
+      const invSpaltenNames = new Set((result.investitions_spalten ?? []).map(i => i.spalte))
+      const filteredMapping: Record<string, string> = {}
+      for (const [k, v] of Object.entries(result.auto_mapping)) {
+        if (!invSpaltenNames.has(k)) filteredMapping[k] = v
+      }
+      setMappings(filteredMapping)
 
       // Prüfe ob Jahr/Monat im Auto-Mapping fehlen → vielleicht Datumsspalte?
       const hasJahr = Object.values(result.auto_mapping).includes('jahr')
@@ -150,7 +156,11 @@ export default function CustomImportWizard() {
   const buildMappingConfig = useCallback((): MappingConfig => {
     const fieldMappings: FieldMapping[] = Object.entries(mappings)
       .filter(([, v]) => v !== '')
-      .map(([spalte, eedc_feld]) => ({ spalte, eedc_feld }))
+      .map(([spalte, eedc_feld]) => ({
+        spalte,
+        eedc_feld,
+        ...(invertierungen[spalte] ? { invertieren: true } : {}),
+      }))
 
     return {
       mappings: fieldMappings,
@@ -159,14 +169,17 @@ export default function CustomImportWizard() {
       datum_spalte: datumSpalte,
       datum_format: datumFormat,
     }
-  }, [mappings, einheit, dezimalzeichen, datumSpalte, datumFormat])
+  }, [mappings, invertierungen, einheit, dezimalzeichen, datumSpalte, datumFormat])
 
   const applyTemplate = useCallback((template: TemplateInfo) => {
     const newMappings: Record<string, string> = {}
+    const newInvertierungen: Record<string, boolean> = {}
     for (const m of template.mapping.mappings) {
       newMappings[m.spalte] = m.eedc_feld
+      if (m.invertieren) newInvertierungen[m.spalte] = true
     }
     setMappings(newMappings)
+    setInvertierungen(newInvertierungen)
     setEinheit(template.mapping.einheit)
     setDezimalzeichen(template.mapping.dezimalzeichen)
     setDatumSpalte(template.mapping.datum_spalte || null)
@@ -200,9 +213,9 @@ export default function CustomImportWizard() {
   // Mapping-Validierung
   const hasJahrMapping = Object.values(mappings).includes('jahr') || datumSpalte != null
   const hasMonatMapping = Object.values(mappings).includes('monat') || datumSpalte != null
-  const hasAnyValueMapping = Object.values(mappings).some(v =>
-    v !== 'jahr' && v !== 'monat' && v !== ''
-  )
+  const hasAnyValueMapping =
+    Object.values(mappings).some(v => v !== 'jahr' && v !== 'monat' && v !== '') ||
+    (analysis?.investitions_spalten?.length ?? 0) > 0
   const mappingValid = hasJahrMapping && hasMonatMapping && hasAnyValueMapping
 
   // ── Step 3: Preview ───────────────────────────────────────────────────────
@@ -248,20 +261,21 @@ export default function CustomImportWizard() {
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
   const handleImport = useCallback(async () => {
-    if (!preview || !selectedAnlageId) return
+    if (!preview || !selectedAnlageId || !file) return
     setIsImporting(true)
     setError(null)
 
-    const monate = preview.monate.filter(m =>
-      selectedMonths.has(`${m.jahr}-${m.monat}`)
-    )
+    const selectedMonthList = preview.monate
+      .filter(m => selectedMonths.has(`${m.jahr}-${m.monat}`))
+      .map(m => ({ jahr: m.jahr, monat: m.monat }))
 
     try {
-      const result = await portalImportApi.apply(
+      const result = await customImportApi.apply(
         selectedAnlageId,
-        monate,
+        file,
+        buildMappingConfig(),
+        selectedMonthList,
         ueberschreiben,
-        'custom_import'
       )
       setResult(result)
       setCurrentStep(3)
@@ -270,7 +284,7 @@ export default function CustomImportWizard() {
     } finally {
       setIsImporting(false)
     }
-  }, [preview, selectedAnlageId, selectedMonths, ueberschreiben])
+  }, [preview, selectedAnlageId, file, selectedMonths, ueberschreiben, buildMappingConfig])
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -334,6 +348,26 @@ export default function CustomImportWizard() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               CSV- oder JSON-Datei mit monatlichen Energiedaten. Die Spalten werden automatisch erkannt.
             </p>
+
+            {/* Anlage wählen (optional, für EEDC-Vorlage) */}
+            {anlagen.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Anlage wählen <span className="font-normal text-gray-400">(empfohlen – für automatische Erkennung von Investitions-Spalten)</span>
+                </label>
+                <select
+                  value={selectedAnlageId ?? ''}
+                  onChange={(e) => { const v = Number(e.target.value); if (v) setSelectedAnlageId(v) }}
+                  title="Anlage auswählen"
+                  className="w-full sm:w-80 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-white dark:[color-scheme:dark]"
+                >
+                  <option value="">Anlage wählen...</option>
+                  {anlagen.map(a => (
+                    <option key={a.id} value={a.id}>{a.anlagenname} ({a.leistung_kwp} kWp)</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
@@ -366,6 +400,7 @@ export default function CustomImportWizard() {
                 type="file"
                 accept=".csv,.CSV,.json,.JSON"
                 onChange={handleFileSelect}
+                aria-label="CSV oder JSON Datei auswählen"
                 className="hidden"
               />
             </div>
@@ -394,12 +429,14 @@ export default function CustomImportWizard() {
                   {templates.map(t => (
                     <div key={t.name} className="flex items-center gap-1">
                       <button
+                        type="button"
                         onClick={() => applyTemplate(t)}
                         className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
                       >
                         {t.name}
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDeleteTemplate(t.name)}
                         className="p-1 text-gray-400 hover:text-red-500"
                         title="Template löschen"
@@ -416,9 +453,20 @@ export default function CustomImportWizard() {
           {/* Mapping-Tabelle */}
           <Card>
             <div className="p-4">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 Spalten zuordnen
               </h3>
+              {(analysis.investitions_spalten?.length ?? 0) > 0 ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Spalten die weiter unten als <span className="text-green-600 dark:text-green-400 font-medium">EEDC-Investitions-Spalten erkannt</span> sind,
+                  stehen hier auf <em>– Ignorieren –</em> und müssen nicht zugeordnet werden — sie werden automatisch importiert.
+                  Alle anderen Spalten können hier manuell zugeordnet werden.
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Weise jeder Spalte ein EEDC-Zielfeld zu. Nicht benötigte Spalten auf <em>– Ignorieren –</em> lassen.
+                </p>
+              )}
               <div className="space-y-2">
                 {analysis.spalten.map(col => {
                   const currentMapping = mappings[col.name] || ''
@@ -437,11 +485,31 @@ export default function CustomImportWizard() {
                       {/* Pfeil */}
                       <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
 
+                      {/* Vorzeichen invertieren */}
+                      {currentMapping && currentMapping !== 'jahr' && currentMapping !== 'monat' && (
+                        <button
+                          type="button"
+                          onClick={() => setInvertierungen(prev => ({
+                            ...prev,
+                            [col.name]: !prev[col.name],
+                          }))}
+                          title={invertierungen[col.name] ? 'Vorzeichen wird invertiert (±→+) — klicken zum Deaktivieren' : 'Vorzeichen invertieren (negative Werte werden positiv)'}
+                          className={`flex-shrink-0 p-1 rounded transition-colors ${
+                            invertierungen[col.name]
+                              ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30'
+                              : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'
+                          }`}
+                        >
+                          <ArrowUpDown className="w-4 h-4" />
+                        </button>
+                      )}
+
                       {/* Dropdown */}
                       <select
                         value={currentMapping}
                         onChange={(e) => setMapping(col.name, e.target.value)}
-                        className={`w-48 px-2 py-1.5 text-sm border rounded-lg
+                        title={`Zielfeld für ${col.name}`}
+                        className={`w-56 px-2 py-1.5 text-sm border rounded-lg dark:[color-scheme:dark]
                           ${currentMapping
                             ? 'border-primary-300 bg-primary-50 dark:bg-primary-900/20 dark:border-primary-600 text-primary-700 dark:text-primary-300'
                             : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
@@ -453,22 +521,48 @@ export default function CustomImportWizard() {
                           <option value="jahr" disabled={Object.values(mappings).includes('jahr') && currentMapping !== 'jahr'}>Jahr</option>
                           <option value="monat" disabled={Object.values(mappings).includes('monat') && currentMapping !== 'monat'}>Monat</option>
                         </optgroup>
-                        <optgroup label="Energie">
-                          <option value="pv_erzeugung_kwh">PV-Erzeugung (kWh)</option>
+                        <optgroup label="Energie (Anlage gesamt)">
+                          <option value="pv_erzeugung_kwh">PV-Erzeugung gesamt (kWh)</option>
                           <option value="einspeisung_kwh">Einspeisung (kWh)</option>
                           <option value="netzbezug_kwh">Netzbezug (kWh)</option>
                           <option value="eigenverbrauch_kwh">Eigenverbrauch (kWh)</option>
                         </optgroup>
-                        <optgroup label="Batterie">
-                          <option value="batterie_ladung_kwh">Batterie Ladung (kWh)</option>
-                          <option value="batterie_entladung_kwh">Batterie Entladung (kWh)</option>
+                        <optgroup label="Batterie (Anlage gesamt)">
+                          <option value="batterie_ladung_kwh">Batterie Ladung gesamt (kWh)</option>
+                          <option value="batterie_entladung_kwh">Batterie Entladung gesamt (kWh)</option>
                         </optgroup>
-                        <optgroup label="Wallbox / E-Auto">
+                        <optgroup label="Wallbox / E-Auto (Anlage gesamt)">
                           <option value="wallbox_ladung_kwh">Wallbox Ladung (kWh)</option>
                           <option value="wallbox_ladung_pv_kwh">Wallbox PV-Ladung (kWh)</option>
                           <option value="wallbox_ladevorgaenge">Wallbox Ladevorgänge</option>
                           <option value="eauto_km_gefahren">E-Auto km gefahren</option>
                         </optgroup>
+                        {/* Dynamische Investitions-Felder */}
+                        {(() => {
+                          const invFelder = analysis.investitions_felder ?? []
+                          if (invFelder.length === 0) return null
+                          const groups: Record<string, typeof invFelder> = {}
+                          for (const f of invFelder) {
+                            if (!groups[f.group]) groups[f.group] = []
+                            groups[f.group].push(f)
+                          }
+                          const groupLabels: Record<string, string> = {
+                            inv_pv: 'PV-Module (einzeln)',
+                            inv_speicher: 'Speicher (einzeln)',
+                            inv_eauto: 'E-Autos (einzeln)',
+                            inv_wallbox: 'Wallboxen (einzeln)',
+                            inv_wp: 'Wärmepumpen (einzeln)',
+                            inv_bkw: 'Balkonkraftwerke (einzeln)',
+                            inv_sonstiges: 'Sonstiges (einzeln)',
+                          }
+                          return Object.entries(groups).map(([group, felder]) => (
+                            <optgroup key={group} label={groupLabels[group] ?? group}>
+                              {felder.map(f => (
+                                <option key={f.id} value={f.id}>{f.label}</option>
+                              ))}
+                            </optgroup>
+                          ))
+                        })()}
                       </select>
                     </div>
                   )
@@ -476,6 +570,35 @@ export default function CustomImportWizard() {
               </div>
             </div>
           </Card>
+
+          {/* Investitions-Spalten (EEDC-Vorlage) */}
+          {(analysis.investitions_spalten?.length ?? 0) > 0 && (
+            <Card>
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  EEDC-Investitions-Spalten erkannt
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Diese Spalten werden beim Import automatisch den jeweiligen Investitionen zugeordnet.
+                </p>
+                <div className="space-y-1">
+                  {analysis.investitions_spalten.map(inv => (
+                    <div key={inv.spalte} className="flex items-center gap-2 text-sm py-1">
+                      <span className="font-mono text-gray-600 dark:text-gray-400 text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">
+                        {inv.spalte}
+                      </span>
+                      <ArrowRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {inv.inv_bezeichnung}
+                        <span className="text-gray-400 ml-1">({inv.suffix})</span>
+                      </span>
+                      <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0 ml-auto" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Optionen */}
           <Card>
@@ -491,7 +614,8 @@ export default function CustomImportWizard() {
                   <select
                     value={einheit}
                     onChange={(e) => setEinheit(e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    title="Einheit der Werte"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 dark:[color-scheme:dark]"
                   >
                     <option value="kwh">Kilowattstunden (kWh)</option>
                     <option value="wh">Wattstunden (Wh) → wird in kWh umgerechnet</option>
@@ -505,7 +629,8 @@ export default function CustomImportWizard() {
                   <select
                     value={dezimalzeichen}
                     onChange={(e) => setDezimalzeichen(e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    title="Dezimalzeichen"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 dark:[color-scheme:dark]"
                   >
                     <option value="auto">Automatisch erkennen</option>
                     <option value="punkt">Punkt (1234.56)</option>
@@ -523,7 +648,8 @@ export default function CustomImportWizard() {
                   <select
                     value={datumSpalte || ''}
                     onChange={(e) => setDatumSpalte(e.target.value || null)}
-                    className="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    title="Kombinierte Datumsspalte"
+                    className="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 dark:[color-scheme:dark]"
                   >
                     <option value="">Nicht verwendet (separate Jahr/Monat-Spalten)</option>
                     {analysis.spalten.map(col => (
@@ -536,7 +662,7 @@ export default function CustomImportWizard() {
                       value={datumFormat || ''}
                       onChange={(e) => setDatumFormat(e.target.value || null)}
                       placeholder="z.B. %Y-%m"
-                      className="w-36 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                      className="w-36 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 dark:[color-scheme:dark]"
                     />
                   )}
                 </div>
@@ -561,7 +687,7 @@ export default function CustomImportWizard() {
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
                   placeholder="Template-Name (z.B. 'Mein Netzbetreiber')"
-                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 dark:[color-scheme:dark]"
                 />
                 <Button
                   variant="secondary"
@@ -626,10 +752,10 @@ export default function CustomImportWizard() {
             )}
           </Alert>
 
-          {/* Anlage-Auswahl */}
+          {/* Anlage + Optionen */}
           <Card>
-            <div className="p-5">
-              <div className="flex flex-wrap items-end gap-4">
+            <div className="p-4 flex flex-wrap items-center gap-4">
+              {!selectedAnlageId && (
                 <div className="flex-1 min-w-[200px]">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Ziel-Anlage
@@ -637,8 +763,9 @@ export default function CustomImportWizard() {
                   <select
                     value={selectedAnlageId ?? ''}
                     onChange={(e) => { const v = Number(e.target.value); if (v) setSelectedAnlageId(v) }}
+                    title="Ziel-Anlage auswählen"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white
-                      dark:bg-gray-700 dark:border-gray-600 dark:text-white
+                      dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:[color-scheme:dark]
                       focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">Anlage wählen...</option>
@@ -649,16 +776,21 @@ export default function CustomImportWizard() {
                     ))}
                   </select>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 pb-2">
-                  <input
-                    type="checkbox"
-                    checked={ueberschreiben}
-                    onChange={(e) => setUeberschreiben(e.target.checked)}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  Bestehende Monate überschreiben
-                </label>
-              </div>
+              )}
+              {selectedAnlageId && (
+                <div className="text-sm text-gray-700 dark:text-gray-300">
+                  Ziel-Anlage: <strong>{anlagen.find(a => a.id === selectedAnlageId)?.anlagenname}</strong>
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={ueberschreiben}
+                  onChange={(e) => setUeberschreiben(e.target.checked)}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Bestehende Monate überschreiben
+              </label>
             </div>
           </Card>
 
