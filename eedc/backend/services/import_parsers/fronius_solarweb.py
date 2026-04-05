@@ -102,18 +102,32 @@ def _parse_date(val: str) -> Optional[tuple[int, int]]:
     return None
 
 
-def _wh_to_kwh(value: Optional[float], header: str) -> Optional[float]:
-    """Konvertiert Wh zu kWh, falls der Header auf Wh hindeutet."""
+def _wh_to_kwh(value: Optional[float], header: str, unit: str = "") -> Optional[float]:
+    """Konvertiert Wh zu kWh.
+
+    Nutzt die explizite Einheit aus der Einheitenzeile (bevorzugt).
+    Fallback: Heuristik über den Spaltenheader.
+
+    WICHTIG: Die alte Heuristik (value > 1000) ist bewusst NICHT mehr vorhanden —
+    sie versagt bei kleinen Tageswerten (z.B. 97 Wh an trüben Wintertagen),
+    die dann fälschlicherweise als 97 kWh importiert werden.
+    """
     if value is None:
         return None
-    # Fronius liefert typischerweise Wh; wenn explizit kWh im Header → nicht konvertieren
-    normalized = header.lower()
-    if "kwh" in normalized:
+
+    # Explizite Einheit aus Einheitenzeile (z.B. "[Wh]" → "Wh")
+    u = unit.strip().lower()
+    if u == "kwh":
         return value
-    if "wh" in normalized or value > 1000:
-        # Heuristik: Werte > 1000 sind wahrscheinlich Wh
+    if u == "wh":
         return value / 1000.0
-    return value
+
+    # Fallback: Einheit aus Spaltenheader ableiten
+    h = header.lower()
+    if "kwh" in h:
+        return value
+    # Fronius-Standard: alle Energiespalten in Wh → immer konvertieren
+    return value / 1000.0
 
 
 @register_parser
@@ -172,6 +186,20 @@ class FroniusSolarwebParser(PortalExportParser):
         headers = [h.strip() for h in rows[0]]
         normalized = [_normalize(h) for h in headers]
 
+        # Einheitenzeile erkennen: Fronius schreibt z.B.
+        # "[dd.MM.yyyy],[Wh],[Wh],[Wh],[Wh],[Wh]" als zweite Zeile.
+        # _parse_date schlägt auf "[dd.MM.yyyy]" fehl → die Zeile wurde bisher
+        # still übersprungen und die Einheiten gingen verloren.
+        units: list[str] = [""] * len(headers)
+        data_start = 1
+        if len(rows) >= 2:
+            candidate = rows[1]
+            # Einheitenzeile: erste Zelle kein gültiges Datum, Rest in [...]-Notation
+            if candidate and not _parse_date(candidate[0]):
+                parsed_units = [c.strip().strip("[]") for c in candidate]
+                units = parsed_units + [""] * (len(headers) - len(parsed_units))
+                data_start = 2
+
         # Spalten-Indizes finden (bereits belegte Indizes nicht doppelt vergeben)
         col_map: dict[str, Optional[int]] = {}
         used_indices: set[int] = set()
@@ -193,7 +221,7 @@ class FroniusSolarwebParser(PortalExportParser):
             lambda: defaultdict(float)
         )
 
-        for row in rows[1:]:
+        for row in rows[data_start:]:
             if not row or len(row) <= col_date:
                 continue
 
@@ -209,7 +237,8 @@ class FroniusSolarwebParser(PortalExportParser):
             for field, col_idx in col_map.items():
                 if col_idx is not None and col_idx < len(row):
                     val = _parse_float(row[col_idx])
-                    val = _wh_to_kwh(val, headers[col_idx])
+                    unit = units[col_idx] if col_idx < len(units) else ""
+                    val = _wh_to_kwh(val, headers[col_idx], unit)
                     if val is not None and val >= 0:
                         monthly[key][field] += val
 
