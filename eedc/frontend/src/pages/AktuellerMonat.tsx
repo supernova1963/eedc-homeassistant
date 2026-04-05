@@ -466,10 +466,10 @@ export default function AktuellerMonat() {
           </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={vorjahrData} margin={{ left: 10 }}>
+              <BarChart data={vorjahrData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis unit=" kWh" />
+                <YAxis unit=" kWh" width={70} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 <Bar dataKey="Aktuell" fill={COLORS.erzeugung} radius={[4, 4, 0, 0]} />
@@ -656,7 +656,7 @@ export default function AktuellerMonat() {
                 <BarChart data={sollIstData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis unit=" kWh" />
+                  <YAxis unit=" kWh" width={70} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend />
                   <Bar dataKey="IST" fill={COLORS.erzeugung} radius={[4, 4, 0, 0]} />
