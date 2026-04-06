@@ -141,6 +141,34 @@ def build_komponenten(
             summe_erzeugung += kw
             pv_total_w += val_w
 
+            # BKW mit integriertem Speicher → zusätzlicher Batterie-Knoten
+            bat_w = values.get("batterieleistung_w")
+            if bat_w is not None:
+                bat_kw = abs(bat_w) / 1000
+                ist_ladung = bat_w > 0
+                komponenten.append({
+                    "key": f"batterie_{inv_id}",
+                    "label": f"{inv.bezeichnung} Speicher",
+                    "icon": "battery",
+                    "erzeugung_kw": round(bat_kw, 3) if not ist_ladung else None,
+                    "verbrauch_kw": round(bat_kw, 3) if ist_ladung else None,
+                })
+                if ist_ladung:
+                    summe_verbrauch += bat_kw
+                else:
+                    summe_erzeugung += bat_kw
+                # SoC-Gauge für BKW-Speicher
+                soc_val = values.get("soc")
+                if soc_val is not None:
+                    gauges.append({
+                        "key": f"soc_{inv_id}",
+                        "label": f"{inv.bezeichnung} Speicher",
+                        "wert": round(soc_val, 0),
+                        "min_wert": 0,
+                        "max_wert": 100,
+                        "einheit": "%",
+                    })
+
         elif ist_bidirektional:
             kw = abs(val_w) / 1000
             ist_ladung = val_w > 0
