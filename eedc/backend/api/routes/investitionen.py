@@ -470,7 +470,7 @@ async def _validate_parent_child(
                 detail="Parent-Investition gehört zu einer anderen Anlage"
             )
 
-    # Speicher: Parent (Wechselrichter) ist optional
+    # Speicher: Parent (Wechselrichter oder Balkonkraftwerk) ist optional
     elif typ == InvestitionTyp.SPEICHER.value:
         if parent_id:
             parent_result = await db.execute(
@@ -479,10 +479,14 @@ async def _validate_parent_child(
             parent = parent_result.scalar_one_or_none()
             if not parent:
                 raise HTTPException(status_code=404, detail="Parent-Investition nicht gefunden")
-            if parent.typ != InvestitionTyp.WECHSELRICHTER.value:
+            erlaubte_parent_typen = {
+                InvestitionTyp.WECHSELRICHTER.value,
+                InvestitionTyp.BALKONKRAFTWERK.value,
+            }
+            if parent.typ not in erlaubte_parent_typen:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Speicher können nur Wechselrichtern (Hybrid-WR) zugeordnet werden, nicht '{parent.typ}'"
+                    detail=f"Speicher können nur Wechselrichtern oder Balkonkraftwerken zugeordnet werden, nicht '{parent.typ}'"
                 )
             if parent.anlage_id != anlage_id:
                 raise HTTPException(
