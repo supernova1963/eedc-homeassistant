@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.4] - 2026-04-06
+
+### Neu
+
+- **BKW mit integriertem Speicher: Speicher-Investition dem Balkonkraftwerk zuordnen**: Für Geräte wie den Anker Solix (BKW + integrierter Akku) kann die Speicher-Investition jetzt direkt dem zugehörigen Balkonkraftwerk zugeordnet werden. Das Dropdown „Gehört zu" im Speicher-Formular zeigt jetzt Wechselrichter und Balkonkraftwerke zur Auswahl. Für die vollständige Live-Dashboard-Anzeige (Batterie-Knoten im Energiefluss) muss die Batterieleistung als separate **Speicher-Investition** mit eigenem bidirektionalen Sensor erfasst werden.
+- **UX-Hinweis bei BKW „Mit Speicher"**: Beim Aktivieren der „Mit Speicher"-Option im Balkonkraftwerk-Formular erscheint ein Hinweis, dass für vollständige Auswertungen eine separate Speicher-Investition erforderlich ist.
+
+### Refactoring (intern, kein User-Impact)
+
+- **Basis-MQTT-Live-Topics aus Registry**: Die 8 Basis-Live-Topics (einspeisung_w, netzbezug_w, pv_gesamt_w, sfml_*, aussentemperatur_c) werden jetzt dynamisch aus `BASIS_LIVE_FELDER` in `field_definitions.py` generiert. Neues Basis-Live-Feld → nur noch dort eintragen.
+
+---
+
 ## [3.10.3] - 2026-04-06
 
 ### Behoben
