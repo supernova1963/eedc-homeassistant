@@ -85,8 +85,24 @@ class ApplyMonthInput(BaseModel):
     eauto_km_gefahren: Optional[float] = None
 
 
+class InvestitionsZuordnung(BaseModel):
+    """
+    Optionale manuelle Zuordnung von Import-Werten zu Investitionen.
+    Wird nur benötigt wenn mehrere Investitionen desselben Typs vorhanden sind.
+    """
+    # PV: {inv_id: anteil_prozent} — muss 100 ergeben, sonst proportional
+    pv: dict[int, float] = {}
+    # Batterie: {inv_id: anteil_prozent} — muss 100 ergeben, sonst proportional
+    batterie: dict[int, float] = {}
+    # Wallbox: ID der zu verwendenden Wallbox (None = erste)
+    wallbox_id: Optional[int] = None
+    # E-Auto: ID des zu verwendenden E-Autos (None = erste)
+    eauto_id: Optional[int] = None
+
+
 class ApplyRequest(BaseModel):
     monate: list[ApplyMonthInput]
+    zuordnung: Optional[InvestitionsZuordnung] = None
 
 
 class ApplyResponse(BaseModel):
@@ -97,6 +113,22 @@ class ApplyResponse(BaseModel):
     warnungen: list[str]
 
 
+class ZuordnungInvestition(BaseModel):
+    id: int
+    bezeichnung: str
+    kwp: Optional[float] = None       # PV-Module
+    kwh: Optional[float] = None       # Speicher
+    default_anteil: float = 0.0       # vorberechneter Default-Anteil in %
+
+
+class ZuordnungInfo(BaseModel):
+    benoetigt_zuordnung: bool
+    pv_module: list[ZuordnungInvestition] = []
+    speicher: list[ZuordnungInvestition] = []
+    wallboxen: list[ZuordnungInvestition] = []
+    eautos: list[ZuordnungInvestition] = []
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 
@@ -104,6 +136,75 @@ class ApplyResponse(BaseModel):
 async def get_parsers():
     """Verfügbare Portal-Export-Parser mit Anleitungen."""
     return [p.to_dict() for p in list_parsers()]
+
+
+@router.get("/zuordnung-info/{anlage_id}", response_model=ZuordnungInfo)
+async def get_zuordnung_info(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Gibt Investitions-Informationen zurück die für den Zuordnungs-Schritt benötigt werden.
+
+    benoetigt_zuordnung=True wenn mindestens ein Investitionstyp mehrfach vorhanden ist
+    (z.B. 2 PV-Module, 2 Speicher). In diesem Fall sollte der Wizard den Zuordnungs-Schritt
+    anzeigen.
+
+    Default-Anteile werden proportional nach kWp (PV) bzw. Kapazität (Speicher) berechnet.
+    """
+    result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    investitionen = result.scalars().all()
+
+    pv_module = [i for i in investitionen if i.typ == "pv-module"]
+    speicher = [i for i in investitionen if i.typ == "speicher"]
+    wallboxen = [i for i in investitionen if i.typ == "wallbox"]
+    eautos = [i for i in investitionen if i.typ == "e-auto"]
+
+    benoetigt = len(pv_module) > 1 or len(speicher) > 1 or len(wallboxen) > 1 or len(eautos) > 1
+
+    def pv_anteil(inv: Investition, alle: list[Investition]) -> float:
+        total = sum((i.parameter or {}).get("leistung_kwp", 0) or 0 for i in alle)
+        kwp = (inv.parameter or {}).get("leistung_kwp", 0) or 0
+        if total > 0:
+            return round(kwp / total * 100, 1)
+        return round(100.0 / len(alle), 1) if alle else 0.0
+
+    def bat_anteil(inv: Investition, alle: list[Investition]) -> float:
+        total = sum((i.parameter or {}).get("kapazitaet_kwh", 0) or 0 for i in alle)
+        kwh = (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        if total > 0:
+            return round(kwh / total * 100, 1)
+        return round(100.0 / len(alle), 1) if alle else 0.0
+
+    return ZuordnungInfo(
+        benoetigt_zuordnung=benoetigt,
+        pv_module=[
+            ZuordnungInvestition(
+                id=i.id,
+                bezeichnung=i.bezeichnung or i.typ,
+                kwp=(i.parameter or {}).get("leistung_kwp"),
+                default_anteil=pv_anteil(i, pv_module),
+            ) for i in pv_module
+        ],
+        speicher=[
+            ZuordnungInvestition(
+                id=i.id,
+                bezeichnung=i.bezeichnung or i.typ,
+                kwh=(i.parameter or {}).get("kapazitaet_kwh"),
+                default_anteil=bat_anteil(i, speicher),
+            ) for i in speicher
+        ],
+        wallboxen=[
+            ZuordnungInvestition(id=i.id, bezeichnung=i.bezeichnung or i.typ)
+            for i in wallboxen
+        ],
+        eautos=[
+            ZuordnungInvestition(id=i.id, bezeichnung=i.bezeichnung or i.typ)
+            for i in eautos
+        ],
+    )
 
 
 @router.post("/preview", response_model=PreviewResponse)
@@ -215,32 +316,60 @@ async def apply_import(
                 md = Monatsdaten(anlage_id=anlage_id, jahr=jahr, monat=monat)
                 db.add(md)
 
+            zuordnung = data.zuordnung
+
             # ── PV-Erzeugung ─────────────────────────────────────────────────
-            # Auf PV-Module verteilen wenn vorhanden; Aggregat immer in md setzen
             pv_erzeugung: Optional[float] = None
             if monat_input.pv_erzeugung_kwh is not None and monat_input.pv_erzeugung_kwh > 0:
                 if pv_module:
-                    w = await _distribute_legacy_pv_to_modules(
-                        db, monat_input.pv_erzeugung_kwh, pv_module, jahr, monat, ueberschreiben
-                    )
-                    if importiert == 0:
-                        warnungen.extend(w)
-                pv_erzeugung = monat_input.pv_erzeugung_kwh  # Aggregat immer setzen
+                    pv_kwh = monat_input.pv_erzeugung_kwh
+                    if zuordnung and zuordnung.pv:
+                        # Manuelle Zuordnung: % pro Modul
+                        for inv in pv_module:
+                            anteil = zuordnung.pv.get(inv.id, 0) / 100.0
+                            pv_anteil = round(pv_kwh * anteil, 1)
+                            if pv_anteil > 0:
+                                await _upsert_investition_monatsdaten(
+                                    db, inv.id, jahr, monat,
+                                    {"pv_erzeugung_kwh": pv_anteil}, ueberschreiben
+                                )
+                    else:
+                        # Proportional nach kWp (Default)
+                        w = await _distribute_legacy_pv_to_modules(
+                            db, pv_kwh, pv_module, jahr, monat, ueberschreiben
+                        )
+                        if importiert == 0:
+                            warnungen.extend(w)
+                pv_erzeugung = monat_input.pv_erzeugung_kwh
 
             # ── Batterie ──────────────────────────────────────────────────────
-            # Auf Speicher verteilen wenn vorhanden; Aggregat als md-Feld (einmal, nicht doppelt)
             bat_ladung: Optional[float] = None
             bat_entladung: Optional[float] = None
             bat_ladung_raw = monat_input.batterie_ladung_kwh
             bat_entladung_raw = monat_input.batterie_entladung_kwh
             if (bat_ladung_raw or 0) > 0 or (bat_entladung_raw or 0) > 0:
                 if speicher:
-                    w = await _distribute_legacy_battery_to_storages(
-                        db, bat_ladung_raw or 0, bat_entladung_raw or 0,
-                        speicher, jahr, monat, ueberschreiben
-                    )
-                    if importiert == 0:
-                        warnungen.extend(w)
+                    if zuordnung and zuordnung.batterie:
+                        # Manuelle Zuordnung: % pro Speicher
+                        for inv in speicher:
+                            anteil = zuordnung.batterie.get(inv.id, 0) / 100.0
+                            vd = {}
+                            if bat_ladung_raw and bat_ladung_raw > 0:
+                                vd["ladung_kwh"] = round(bat_ladung_raw * anteil, 1)
+                            if bat_entladung_raw and bat_entladung_raw > 0:
+                                vd["entladung_kwh"] = round(bat_entladung_raw * anteil, 1)
+                            if vd:
+                                await _upsert_investition_monatsdaten(
+                                    db, inv.id, jahr, monat, vd, ueberschreiben
+                                )
+                    else:
+                        # Proportional nach Kapazität (Default)
+                        w = await _distribute_legacy_battery_to_storages(
+                            db, bat_ladung_raw or 0, bat_entladung_raw or 0,
+                            speicher, jahr, monat, ueberschreiben
+                        )
+                        if importiert == 0:
+                            warnungen.extend(w)
                 bat_ladung = bat_ladung_raw
                 bat_entladung = bat_entladung_raw
 
@@ -262,7 +391,11 @@ async def apply_import(
             # ── Wallbox ───────────────────────────────────────────────────────
             if monat_input.wallbox_ladung_kwh is not None and monat_input.wallbox_ladung_kwh > 0:
                 if wallboxen:
-                    wb = wallboxen[0]
+                    # Manuelle Zuordnung oder erste Wallbox
+                    wb = next(
+                        (w for w in wallboxen if zuordnung and w.id == zuordnung.wallbox_id),
+                        wallboxen[0]
+                    )
                     verbrauch = {"ladung_kwh": monat_input.wallbox_ladung_kwh}
                     if monat_input.wallbox_ladung_pv_kwh is not None:
                         verbrauch["ladung_pv_kwh"] = monat_input.wallbox_ladung_pv_kwh
@@ -271,7 +404,7 @@ async def apply_import(
                     await _upsert_investition_monatsdaten(
                         db, wb.id, jahr, monat, verbrauch, ueberschreiben
                     )
-                    if len(wallboxen) > 1 and importiert == 0:
+                    if len(wallboxen) > 1 and not (zuordnung and zuordnung.wallbox_id) and importiert == 0:
                         warnungen.append(
                             f"Mehrere Wallboxen vorhanden – Ladedaten wurden der ersten "
                             f"Wallbox '{wb.bezeichnung or wb.typ}' zugeordnet."
@@ -287,8 +420,12 @@ async def apply_import(
             if monat_input.eauto_km_gefahren is not None and monat_input.eauto_km_gefahren > 0:
                 eautos = [i for i in investitionen if i.typ == "e-auto"]
                 if eautos:
+                    ea = next(
+                        (e for e in eautos if zuordnung and e.id == zuordnung.eauto_id),
+                        eautos[0]
+                    )
                     await _upsert_investition_monatsdaten(
-                        db, eautos[0].id, jahr, monat,
+                        db, ea.id, jahr, monat,
                         {"km_gefahren": monat_input.eauto_km_gefahren},
                         ueberschreiben,
                     )

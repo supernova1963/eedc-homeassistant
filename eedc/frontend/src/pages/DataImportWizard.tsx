@@ -1,10 +1,10 @@
 /**
  * DataImportWizard – Portal-Import Wizard
  *
- * 3-Schritt-Wizard zum Importieren von Energiedaten aus Hersteller-Portal-Exporten (CSV).
  * Schritt 1: Hersteller & Datei wählen
- * Schritt 2: Vorschau & Auswahl
- * Schritt 3: Ergebnis
+ * Schritt 2: Vorschau & Monats-Auswahl
+ * Schritt 3: Zuordnung (optional — nur wenn mehrere Investments gleichen Typs)
+ * Schritt 4: Ergebnis
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -19,13 +19,21 @@ import {
   Search,
   Info,
   X,
+  GitMerge,
 } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
 import { anlagenApi } from '../api/anlagen'
 import { portalImportApi } from '../api/portalImport'
-import type { ParserInfo, PreviewResult, ApplyResult } from '../api/portalImport'
+import type {
+  ParserInfo,
+  PreviewResult,
+  ApplyResult,
+  ZuordnungInfo,
+  ZuordnungInvestition,
+  InvestitionsZuordnung,
+} from '../api/portalImport'
 import type { Anlage } from '../types'
 
 const MONAT_NAMEN = [
@@ -33,33 +41,134 @@ const MONAT_NAMEN = [
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
 ]
 
+// ── Zuordnungs-Hilfsfunktionen ──────────────────────────────────────────────
+
+function initPvZuordnung(module: ZuordnungInvestition[]): Record<number, number> {
+  return Object.fromEntries(module.map((m) => [m.id, m.default_anteil]))
+}
+
+function initBatZuordnung(speicher: ZuordnungInvestition[]): Record<number, number> {
+  return Object.fromEntries(speicher.map((s) => [s.id, s.default_anteil]))
+}
+
+function summeAnteil(zuordnung: Record<number, number>): number {
+  return Object.values(zuordnung).reduce((a, b) => a + b, 0)
+}
+
+// ── Zuordnungs-Eingabe für eine Gruppe (PV oder Batterie) ───────────────────
+
+function AnteilEingabe({
+  investitionen,
+  zuordnung,
+  onChange,
+  einheit,
+}: {
+  investitionen: ZuordnungInvestition[]
+  zuordnung: Record<number, number>
+  onChange: (id: number, wert: number) => void
+  einheit: string
+}) {
+  const summe = summeAnteil(zuordnung)
+  const fehler = Math.abs(summe - 100) > 0.5
+
+  return (
+    <div className="space-y-2">
+      {investitionen.map((inv) => (
+        <div key={inv.id} className="flex items-center gap-3">
+          <div className="flex-1 text-sm text-gray-800 dark:text-gray-200">
+            <span className="font-medium">{inv.bezeichnung}</span>
+            {(inv.kwp != null || inv.kwh != null) && (
+              <span className="text-gray-500 dark:text-gray-400 ml-1">
+                ({inv.kwp != null ? `${inv.kwp} kWp` : `${inv.kwh} kWh`})
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 w-32">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              aria-label={`Anteil ${inv.bezeichnung} in Prozent`}
+              value={zuordnung[inv.id] ?? 0}
+              onChange={(e) => onChange(inv.id, parseFloat(e.target.value) || 0)}
+              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:border-gray-600
+                dark:bg-gray-700 dark:text-white text-right focus:ring-1 focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-500">{einheit}</span>
+          </div>
+        </div>
+      ))}
+      <div className={`text-xs text-right pt-1 ${fehler ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+        Summe: {summe.toFixed(1)} % {fehler && '— muss 100 % ergeben'}
+      </div>
+    </div>
+  )
+}
+
+// ── Auswahl-Radio für Wallbox / E-Auto ──────────────────────────────────────
+
+function AuswahlRadio({
+  investitionen,
+  selectedId,
+  onChange,
+}: {
+  investitionen: ZuordnungInvestition[]
+  selectedId: number | undefined
+  onChange: (id: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      {investitionen.map((inv) => (
+        <label key={inv.id} className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name={`inv-${inv.id}`}
+            checked={selectedId === inv.id}
+            onChange={() => onChange(inv.id)}
+            className="text-primary-600 focus:ring-primary-500"
+          />
+          <span className="text-sm text-gray-800 dark:text-gray-200">{inv.bezeichnung}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+// ── Hauptkomponente ──────────────────────────────────────────────────────────
+
 export default function DataImportWizard() {
   const navigate = useNavigate()
 
-  // Wizard state
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  // Step 1: Parser & Datei
+  // Step 1
   const [parsers, setParsers] = useState<ParserInfo[]>([])
-  const [selectedParserId, setSelectedParserId] = useState<string>('')
+  const [selectedParserId, setSelectedParserId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isParsing, setIsParsing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Step 2: Vorschau
+  // Step 2
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
   const [anlagen, setAnlagen] = useState<Anlage[]>([])
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
   const [ueberschreiben, setUeberschreiben] = useState(false)
 
-  // Step 3: Ergebnis
+  // Step 3 (Zuordnung)
+  const [zuordnungInfo, setZuordnungInfo] = useState<ZuordnungInfo | null>(null)
+  const [isLoadingZuordnung, setIsLoadingZuordnung] = useState(false)
+  const [pvZuordnung, setPvZuordnung] = useState<Record<number, number>>({})
+  const [batZuordnung, setBatZuordnung] = useState<Record<number, number>>({})
+  const [wallboxId, setWallboxId] = useState<number | undefined>()
+  const [eautoId, setEautoId] = useState<number | undefined>()
+
+  // Step 4
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ApplyResult | null>(null)
-
-  // ── Daten laden ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     portalImportApi.getParsers().then(setParsers).catch(() => {})
@@ -69,22 +178,36 @@ export default function DataImportWizard() {
     }).catch(() => {})
   }, [])
 
+  // Zuordnungs-Info laden wenn Anlage gewählt
+  useEffect(() => {
+    if (!selectedAnlageId) {
+      setZuordnungInfo(null)
+      return
+    }
+    setIsLoadingZuordnung(true)
+    portalImportApi.getZuordnungInfo(selectedAnlageId)
+      .then((info) => {
+        setZuordnungInfo(info)
+        // Defaults initialisieren
+        setPvZuordnung(initPvZuordnung(info.pv_module))
+        setBatZuordnung(initBatZuordnung(info.speicher))
+        setWallboxId(info.wallboxen[0]?.id)
+        setEautoId(info.eautos[0]?.id)
+      })
+      .catch(() => setZuordnungInfo(null))
+      .finally(() => setIsLoadingZuordnung(false))
+  }, [selectedAnlageId])
+
   // ── Step 1: Datei-Handling ────────────────────────────────────────────────
 
   const handleFile = useCallback(async (f: File) => {
     setFile(f)
     setError(null)
     setIsParsing(true)
-
     try {
-      const result = await portalImportApi.preview(
-        f,
-        selectedParserId || undefined
-      )
-      setPreview(result)
-      // Alle Monate vorselektieren
-      const keys = new Set(result.monate.map((m) => `${m.jahr}-${m.monat}`))
-      setSelectedMonths(keys)
+      const res = await portalImportApi.preview(f, selectedParserId || undefined)
+      setPreview(res)
+      setSelectedMonths(new Set(res.monate.map((m) => `${m.jahr}-${m.monat}`)))
       setCurrentStep(1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Vorschau fehlgeschlagen')
@@ -96,13 +219,11 @@ export default function DataImportWizard() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    const files = e.dataTransfer.files
-    if (files.length > 0) handleFile(files[0])
+    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0])
   }, [handleFile])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files && files.length > 0) handleFile(files[0])
+    if (e.target.files && e.target.files.length > 0) handleFile(e.target.files[0])
   }, [handleFile])
 
   // ── Step 2: Monats-Auswahl ───────────────────────────────────────────────
@@ -119,14 +240,22 @@ export default function DataImportWizard() {
   const toggleAll = useCallback(() => {
     if (!preview) return
     const allKeys = preview.monate.map((m) => `${m.jahr}-${m.monat}`)
-    if (selectedMonths.size === allKeys.length) {
-      setSelectedMonths(new Set())
-    } else {
-      setSelectedMonths(new Set(allKeys))
-    }
+    setSelectedMonths(
+      selectedMonths.size === allKeys.length ? new Set() : new Set(allKeys)
+    )
   }, [preview, selectedMonths])
 
-  // ── Step 3: Import ausführen ──────────────────────────────────────────────
+  // ── Step 2 → 3/4: Weiter-Button ──────────────────────────────────────────
+
+  const handleWeiter = useCallback(() => {
+    if (zuordnungInfo?.benoetigt_zuordnung) {
+      setCurrentStep(2)   // Zuordnungs-Schritt zeigen
+    } else {
+      handleImport()       // Direkt importieren
+    }
+  }, [zuordnungInfo])
+
+  // ── Step 3/4: Import ausführen ────────────────────────────────────────────
 
   const handleImport = useCallback(async () => {
     if (!preview || !selectedAnlageId) return
@@ -137,28 +266,59 @@ export default function DataImportWizard() {
       selectedMonths.has(`${m.jahr}-${m.monat}`)
     )
 
+    // Zuordnung nur übergeben wenn Zuordnungs-Schritt angezeigt wurde
+    let zuordnung: InvestitionsZuordnung | undefined
+    if (zuordnungInfo?.benoetigt_zuordnung) {
+      zuordnung = {
+        pv: pvZuordnung,
+        batterie: batZuordnung,
+        wallbox_id: wallboxId,
+        eauto_id: eautoId,
+      }
+    }
+
     try {
-      const result = await portalImportApi.apply(
-        selectedAnlageId,
-        monate,
-        ueberschreiben
+      const res = await portalImportApi.apply(
+        selectedAnlageId, monate, ueberschreiben, 'portal_import', zuordnung
       )
-      setResult(result)
-      setCurrentStep(2)
+      setResult(res)
+      setCurrentStep(zuordnungInfo?.benoetigt_zuordnung ? 3 : 2)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import fehlgeschlagen')
     } finally {
       setIsImporting(false)
     }
-  }, [preview, selectedAnlageId, selectedMonths, ueberschreiben])
+  }, [preview, selectedAnlageId, selectedMonths, ueberschreiben, zuordnungInfo,
+      pvZuordnung, batZuordnung, wallboxId, eautoId])
+
+  // ── Validierung Zuordnungs-Schritt ────────────────────────────────────────
+
+  const pvGueltig = zuordnungInfo && zuordnungInfo.pv_module.length > 1
+    ? Math.abs(summeAnteil(pvZuordnung) - 100) <= 0.5
+    : true
+  const batGueltig = zuordnungInfo && zuordnungInfo.speicher.length > 1
+    ? Math.abs(summeAnteil(batZuordnung) - 100) <= 0.5
+    : true
+  const zuordnungGueltig = pvGueltig && batGueltig
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const steps = [
-    { title: 'Datei wählen', icon: <Upload className="w-4 h-4" /> },
-    { title: 'Vorschau', icon: <Search className="w-4 h-4" /> },
-    { title: 'Ergebnis', icon: <CheckCircle className="w-4 h-4" /> },
-  ]
+  const hatZuordnung = zuordnungInfo?.benoetigt_zuordnung ?? false
+  const steps = hatZuordnung
+    ? [
+        { title: 'Datei wählen', icon: <Upload className="w-4 h-4" /> },
+        { title: 'Vorschau', icon: <Search className="w-4 h-4" /> },
+        { title: 'Zuordnung', icon: <GitMerge className="w-4 h-4" /> },
+        { title: 'Ergebnis', icon: <CheckCircle className="w-4 h-4" /> },
+      ]
+    : [
+        { title: 'Datei wählen', icon: <Upload className="w-4 h-4" /> },
+        { title: 'Vorschau', icon: <Search className="w-4 h-4" /> },
+        { title: 'Ergebnis', icon: <CheckCircle className="w-4 h-4" /> },
+      ]
+
+  // Ergebnis-Schritt-Index ist 2 ohne Zuordnung, 3 mit
+  const ergebnisStep = hatZuordnung ? 3 : 2
 
   const selectedParser = parsers.find((p) => p.id === selectedParserId)
 
@@ -181,14 +341,13 @@ export default function DataImportWizard() {
             {idx > 0 && (
               <div className={`h-px w-8 ${idx <= currentStep ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
             )}
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium
-                ${idx === currentStep
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
-                  : idx < currentStep
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                    : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                }`}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium
+              ${idx === currentStep
+                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
+                : idx < currentStep
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`}
             >
               {step.icon}
               {step.title}
@@ -203,16 +362,16 @@ export default function DataImportWizard() {
         </Alert>
       )}
 
-      {/* Step 1: Datei & Hersteller wählen */}
+      {/* ── Step 1: Datei & Hersteller ───────────────────────────────────── */}
       {currentStep === 0 && (
         <div className="space-y-6">
-          {/* Parser-Auswahl */}
           <Card>
             <div className="p-5">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
                 Hersteller wählen
               </h2>
               <select
+                aria-label="Hersteller wählen"
                 value={selectedParserId}
                 onChange={(e) => setSelectedParserId(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white
@@ -226,14 +385,11 @@ export default function DataImportWizard() {
                   </option>
                 ))}
               </select>
-
               {parsers.some((p) => !p.getestet) && (
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  (*) Ungetestet – basiert auf Hersteller-Dokumentation, aber noch nicht mit echten
-                  Gerätedaten verifiziert. Feedback willkommen!
+                  (*) Ungetestet – Feedback willkommen!
                 </p>
               )}
-
               {selectedParser && (
                 <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <div className="flex items-start gap-2">
@@ -253,7 +409,6 @@ export default function DataImportWizard() {
             </div>
           </Card>
 
-          {/* Drag & Drop Zone */}
           <Card>
             <div className="p-5">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
@@ -290,16 +445,21 @@ export default function DataImportWizard() {
                   ref={fileInputRef}
                   type="file"
                   accept=".csv,.CSV"
+                  aria-label="CSV-Datei auswählen"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
               </div>
-
               {file && !isParsing && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                   <FileSpreadsheet className="w-4 h-4" />
                   {file.name}
-                  <button onClick={() => { setFile(null); setPreview(null) }} className="ml-auto text-gray-400 hover:text-gray-600">
+                  <button
+                    type="button"
+                    aria-label="Datei entfernen"
+                    onClick={() => { setFile(null); setPreview(null) }}
+                    className="ml-auto text-gray-400 hover:text-gray-600"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -309,15 +469,13 @@ export default function DataImportWizard() {
         </div>
       )}
 
-      {/* Step 2: Vorschau & Auswahl */}
+      {/* ── Step 2: Vorschau & Auswahl ───────────────────────────────────── */}
       {currentStep === 1 && preview && (
         <div className="space-y-4">
-          {/* Parser-Info */}
           <Alert type="info">
             Erkannt: <strong>{preview.parser.name}</strong> – {preview.anzahl_monate} Monate gefunden
           </Alert>
 
-          {/* Anlage-Auswahl */}
           <Card>
             <div className="p-5">
               <div className="flex flex-wrap items-end gap-4">
@@ -326,6 +484,7 @@ export default function DataImportWizard() {
                     Ziel-Anlage
                   </label>
                   <select
+                    aria-label="Ziel-Anlage wählen"
                     value={selectedAnlageId ?? ''}
                     onChange={(e) => setSelectedAnlageId(Number(e.target.value) || null)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white
@@ -339,6 +498,17 @@ export default function DataImportWizard() {
                       </option>
                     ))}
                   </select>
+                  {isLoadingZuordnung && (
+                    <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Investitionen werden geprüft...
+                    </p>
+                  )}
+                  {zuordnungInfo?.benoetigt_zuordnung && !isLoadingZuordnung && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                      <GitMerge className="w-3 h-3" />
+                      Mehrere Investitionen — Zuordnungs-Schritt folgt
+                    </p>
+                  )}
                 </div>
                 <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 pb-2">
                   <input
@@ -353,7 +523,6 @@ export default function DataImportWizard() {
             </div>
           </Card>
 
-          {/* Monatsdaten-Tabelle */}
           <Card>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -424,35 +593,131 @@ export default function DataImportWizard() {
             </div>
           </Card>
 
-          {/* Navigation */}
           <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={() => { setCurrentStep(0); setPreview(null); setFile(null) }}
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Zurück
+            <Button variant="ghost" onClick={() => { setCurrentStep(0); setPreview(null); setFile(null) }}>
+              <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
             </Button>
             <div className="text-sm text-gray-500 dark:text-gray-400">
               {selectedMonths.size} von {preview.monate.length} Monaten ausgewählt
             </div>
             <Button
               variant="primary"
-              onClick={handleImport}
+              onClick={handleWeiter}
               loading={isImporting}
-              disabled={selectedMonths.size === 0 || !selectedAnlageId}
+              disabled={selectedMonths.size === 0 || !selectedAnlageId || isLoadingZuordnung}
             >
-              {isImporting ? 'Importiere...' : `${selectedMonths.size} Monate importieren`}
-              {!isImporting && <ChevronRight className="w-4 h-4 ml-1" />}
+              {zuordnungInfo?.benoetigt_zuordnung
+                ? <>Weiter <ChevronRight className="w-4 h-4 ml-1" /></>
+                : isImporting
+                  ? 'Importiere...'
+                  : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
+              }
             </Button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Ergebnis */}
-      {currentStep === 2 && result && (
+      {/* ── Step 3: Zuordnung ────────────────────────────────────────────── */}
+      {currentStep === 2 && hatZuordnung && zuordnungInfo && (
         <div className="space-y-4">
-          <Alert type={result.erfolg ? 'success' : 'warning'} title={result.erfolg ? 'Import erfolgreich' : 'Import mit Hinweisen'}>
+          <Alert type="info" title="Investitions-Zuordnung">
+            Für diese Anlage sind mehrere Investitionen des gleichen Typs vorhanden.
+            Bitte legen Sie fest, wie die Import-Werte aufgeteilt werden sollen.
+            Die Vorauswahl entspricht der proportionalen Verteilung.
+          </Alert>
+
+          {/* PV-Module */}
+          {zuordnungInfo.pv_module.length > 1 && (
+            <Card>
+              <div className="p-5">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  PV-Erzeugung aufteilen
+                </h3>
+                <AnteilEingabe
+                  investitionen={zuordnungInfo.pv_module}
+                  zuordnung={pvZuordnung}
+                  onChange={(id, wert) => setPvZuordnung((prev) => ({ ...prev, [id]: wert }))}
+                  einheit="%"
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* Speicher */}
+          {zuordnungInfo.speicher.length > 1 && (
+            <Card>
+              <div className="p-5">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  Batterie-Werte aufteilen
+                </h3>
+                <AnteilEingabe
+                  investitionen={zuordnungInfo.speicher}
+                  zuordnung={batZuordnung}
+                  onChange={(id, wert) => setBatZuordnung((prev) => ({ ...prev, [id]: wert }))}
+                  einheit="%"
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* Wallboxen */}
+          {zuordnungInfo.wallboxen.length > 1 && (
+            <Card>
+              <div className="p-5">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  Wallbox auswählen
+                </h3>
+                <AuswahlRadio
+                  investitionen={zuordnungInfo.wallboxen}
+                  selectedId={wallboxId}
+                  onChange={setWallboxId}
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* E-Autos */}
+          {zuordnungInfo.eautos.length > 1 && (
+            <Card>
+              <div className="p-5">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  E-Auto auswählen
+                </h3>
+                <AuswahlRadio
+                  investitionen={zuordnungInfo.eautos}
+                  selectedId={eautoId}
+                  onChange={setEautoId}
+                />
+              </div>
+            </Card>
+          )}
+
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => setCurrentStep(1)}>
+              <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleImport}
+              loading={isImporting}
+              disabled={!zuordnungGueltig}
+            >
+              {isImporting
+                ? 'Importiere...'
+                : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
+              }
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 4 / 3: Ergebnis ─────────────────────────────────────────── */}
+      {currentStep === ergebnisStep && result && (
+        <div className="space-y-4">
+          <Alert
+            type={result.erfolg ? 'success' : 'warning'}
+            title={result.erfolg ? 'Import erfolgreich' : 'Import mit Hinweisen'}
+          >
             <div className="space-y-1">
               <p>{result.importiert} Monate importiert</p>
               {result.uebersprungen > 0 && (
@@ -482,7 +747,7 @@ export default function DataImportWizard() {
               <p>
                 Der Portal-Import erfasst PV-Erzeugung, Einspeisung, Netzbezug und Batterie-Daten.
                 Für einen vollständigen Monatsabschluss müssen ggf. noch weitere Daten ergänzt werden
-                (z.B. Wallbox, Wärmepumpe, E-Auto).
+                (z.B. Wärmepumpe, manuelle Korrekturen).
               </p>
             </Alert>
           )}
@@ -491,30 +756,19 @@ export default function DataImportWizard() {
             <Button
               variant="ghost"
               onClick={() => {
-                setCurrentStep(0)
-                setFile(null)
-                setPreview(null)
-                setResult(null)
-                setError(null)
+                setCurrentStep(0); setFile(null); setPreview(null)
+                setResult(null); setError(null)
               }}
             >
-              <Upload className="w-4 h-4 mr-1" />
-              Weiteren Import starten
+              <Upload className="w-4 h-4 mr-1" /> Weiteren Import starten
             </Button>
             {selectedAnlageId && (
-              <Button
-                variant="secondary"
-                onClick={() => navigate(`/monatsabschluss/${selectedAnlageId}`)}
-              >
+              <Button variant="secondary" onClick={() => navigate(`/monatsabschluss/${selectedAnlageId}`)}>
                 Monatsabschluss starten
               </Button>
             )}
-            <Button
-              variant="primary"
-              onClick={() => navigate('/einstellungen/monatsdaten')}
-            >
-              <CheckCircle className="w-4 h-4 mr-1" />
-              Zur Monatsübersicht
+            <Button variant="primary" onClick={() => navigate('/einstellungen/monatsdaten')}>
+              <CheckCircle className="w-4 h-4 mr-1" /> Zur Monatsübersicht
             </Button>
           </div>
         </div>

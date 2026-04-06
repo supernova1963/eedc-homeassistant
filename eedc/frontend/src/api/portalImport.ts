@@ -41,69 +41,80 @@ export interface ApplyResult {
   warnungen: string[]
 }
 
+export interface ZuordnungInvestition {
+  id: number
+  bezeichnung: string
+  kwp?: number
+  kwh?: number
+  default_anteil: number
+}
+
+export interface ZuordnungInfo {
+  benoetigt_zuordnung: boolean
+  pv_module: ZuordnungInvestition[]
+  speicher: ZuordnungInvestition[]
+  wallboxen: ZuordnungInvestition[]
+  eautos: ZuordnungInvestition[]
+}
+
+export interface InvestitionsZuordnung {
+  pv: Record<number, number>       // {inv_id: anteil_prozent}
+  batterie: Record<number, number> // {inv_id: anteil_prozent}
+  wallbox_id?: number
+  eauto_id?: number
+}
+
 export const portalImportApi = {
-  /**
-   * Verfügbare Parser abrufen
-   */
   async getParsers(): Promise<ParserInfo[]> {
     const response = await fetch(`${API_BASE}/portal-import/parsers`)
     if (!response.ok) throw new Error('Fehler beim Laden der Parser')
     return response.json()
   },
 
-  /**
-   * CSV-Datei hochladen und Vorschau erhalten (ohne Speichern)
-   */
   async preview(file: File, parserId?: string): Promise<PreviewResult> {
     const formData = new FormData()
     formData.append('file', file)
-
     const params = new URLSearchParams()
     if (parserId) params.append('parser_id', parserId)
-
     const response = await fetch(
       `${API_BASE}/portal-import/preview?${params.toString()}`,
-      {
-        method: 'POST',
-        body: formData,
-      }
+      { method: 'POST', body: formData }
     )
-
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.detail || 'Vorschau fehlgeschlagen')
     }
-
     return response.json()
   },
 
-  /**
-   * Bestätigte Monatswerte importieren
-   */
+  async getZuordnungInfo(anlageId: number): Promise<ZuordnungInfo> {
+    const response = await fetch(`${API_BASE}/portal-import/zuordnung-info/${anlageId}`)
+    if (!response.ok) throw new Error('Fehler beim Laden der Zuordnungs-Info')
+    return response.json()
+  },
+
   async apply(
     anlageId: number,
     monate: ParsedMonth[],
     ueberschreiben: boolean = false,
-    datenquelle: string = 'portal_import'
+    datenquelle: string = 'portal_import',
+    zuordnung?: InvestitionsZuordnung
   ): Promise<ApplyResult> {
     const params = new URLSearchParams()
     if (ueberschreiben) params.append('ueberschreiben', 'true')
     if (datenquelle !== 'portal_import') params.append('datenquelle', datenquelle)
-
     const response = await fetch(
       `${API_BASE}/portal-import/apply/${anlageId}?${params.toString()}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monate }),
+        body: JSON.stringify({ monate, zuordnung: zuordnung ?? null }),
       }
     )
-
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.detail || 'Import fehlgeschlagen')
     }
-
     return response.json()
   },
 }
