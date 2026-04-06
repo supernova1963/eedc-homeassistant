@@ -5,6 +5,7 @@ export interface SerieInfo {
   label: string
   typ: string       // z.B. "sonstiges", "pv-module", "virtual"
   kategorie: string // z.B. "sonstige", "pv", "netz"
+  seite: string     // "quelle" | "senke" | "bidirektional"
 }
 
 export interface StundenWert {

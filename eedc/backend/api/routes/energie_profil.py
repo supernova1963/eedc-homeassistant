@@ -22,11 +22,22 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
+# seite je Investitionstyp
+_TYP_SEITE: dict[str, str] = {
+    "pv-module":       "quelle",
+    "balkonkraftwerk": "quelle",
+    "wechselrichter":  "quelle",
+    "speicher":        "bidirektional",
+    "e-auto":          "bidirektional",
+    "wallbox":         "senke",
+    "waermepumpe":     "senke",
+}
+
 # Virtuelle Serien (kein Investment dahinter)
 _VIRTUAL_SERIEN: dict[str, dict] = {
-    "haushalt":   {"label": "Haushalt",    "typ": "virtual", "kategorie": "haushalt"},
-    "netz":       {"label": "Stromnetz",   "typ": "virtual", "kategorie": "netz"},
-    "pv_gesamt":  {"label": "PV Gesamt",   "typ": "virtual", "kategorie": "pv"},
+    "haushalt":   {"label": "Haushalt",    "typ": "virtual", "kategorie": "haushalt",  "seite": "senke"},
+    "netz":       {"label": "Stromnetz",   "typ": "virtual", "kategorie": "netz",      "seite": "bidirektional"},
+    "pv_gesamt":  {"label": "PV Gesamt",   "typ": "virtual", "kategorie": "pv",        "seite": "quelle"},
 }
 
 # Optionale Suffixe bei WP-Serien (waermepumpe_{id}_heizen)
@@ -57,11 +68,21 @@ def _key_to_serie_info(
     if suffix and suffix in _SUFFIX_LABELS:
         label += _SUFFIX_LABELS[suffix]
 
+    # seite bestimmen
+    seite = _TYP_SEITE.get(inv.typ, "senke")
+    if inv.typ == "sonstiges" and isinstance(inv.parameter, dict):
+        kat = inv.parameter.get("kategorie", "verbraucher")
+        if kat == "erzeuger":
+            seite = "quelle"
+        elif kat == "speicher":
+            seite = "bidirektional"
+
     return {
         "key": key,
         "label": label,
         "typ": inv.typ,
         "kategorie": m.group(1),
+        "seite": seite,
     }
 
 logger = logging.getLogger(__name__)
@@ -77,6 +98,7 @@ class SerieInfo(BaseModel):
     label: str
     typ: str        # z.B. "sonstiges", "pv-module", "virtual"
     kategorie: str  # z.B. "sonstige", "pv", "netz"
+    seite: str      # "quelle" | "senke" | "bidirektional"
 
 
 class StundenWertResponse(BaseModel):
