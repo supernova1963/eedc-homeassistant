@@ -2,7 +2,7 @@
 // Etappe 2: Auswertung persistierter Stundenwerte aus TagesEnergieProfil
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import ChartTooltip from '../../components/ui/ChartTooltip'
@@ -112,56 +112,49 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       .finally(() => setLoading(false))
   }, [anlageId, datum])
 
-  const extraErzeuger  = extraSerien.filter(s => s.seite === 'quelle')
+  const extraErzeuger    = extraSerien.filter(s => s.seite === 'quelle')
   const extraVerbraucher = extraSerien.filter(s => s.seite === 'senke')
+
+  // Chart-Serien analog TagesverlaufChart: bidirektionale in _pos/_neg aufgespalten
+  interface ChartSerie { dataKey: string; label: string; farbe: string; stackId: 'quellen' | 'senken'; hideLabel?: boolean }
+  const chartSerien = useMemo<ChartSerie[]>(() => {
+    const r: ChartSerie[] = []
+    r.push({ dataKey: 'pv', label: 'PV', farbe: '#eab308', stackId: 'quellen' })
+    extraErzeuger.forEach((es, i) =>
+      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_FARBEN[i % EXTRA_FARBEN.length], stackId: 'quellen' }))
+    r.push({ dataKey: 'bat_pos', label: 'Batterie', farbe: '#3b82f6', stackId: 'quellen' })
+    r.push({ dataKey: 'bat_neg', label: 'Batterie ↓', farbe: '#3b82f6', stackId: 'senken', hideLabel: true })
+    r.push({ dataKey: 'netz_pos', label: 'Stromnetz', farbe: '#ef4444', stackId: 'quellen' })
+    r.push({ dataKey: 'netz_neg', label: 'Stromnetz ↓', farbe: '#ef4444', stackId: 'senken', hideLabel: true })
+    r.push({ dataKey: 'hausverbrauch', label: 'Hausverbrauch', farbe: '#10b981', stackId: 'senken' })
+    r.push({ dataKey: 'wp', label: 'Wärmepumpe', farbe: '#f97316', stackId: 'senken' })
+    r.push({ dataKey: 'wb', label: 'Wallbox', farbe: '#a855f7', stackId: 'senken' })
+    extraVerbraucher.forEach((es, i) =>
+      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_FARBEN[(extraErzeuger.length + i) % EXTRA_FARBEN.length], stackId: 'senken' }))
+    return r
+  }, [extraErzeuger, extraVerbraucher])
 
   const chartDaten = useMemo(() =>
     Array.from({ length: 24 }, (_, h) => {
-      const s = daten.find(d => d.stunde === h)
-      const bat    = s?.batterie_kw ?? 0
-      const batE   = bat > 0 ? round2(bat)  : null   // Entladung (positiv)
-      const batL   = bat < 0 ? round2(bat)  : null   // Ladung (negativ)
-      const wp     = s?.waermepumpe_kw != null ? -s.waermepumpe_kw : null
-      const wb     = s?.wallbox_kw     != null ? -s.wallbox_kw     : null
-      const einsp  = s?.einspeisung_kw != null ? -s.einspeisung_kw : null
-
-      // Hausverbrauch = Gesamtverbrauch − WP − Wallbox − sonstige Verbraucher
-      const vbrSonstige = extraVerbraucher.reduce(
-        (sum, es) => sum + Math.abs(Math.min(0, s?.komponenten?.[es.key] ?? 0)), 0)
-      const hausverbrauch = s != null
-        ? -Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrSonstige)
-        : null
-
-      // Gesamterzeugung = PV + Batterie-Entladung + sonstige Erzeuger (Linie)
-      const erzSonstige = extraErzeuger.reduce(
-        (sum, es) => sum + Math.max(0, s?.komponenten?.[es.key] ?? 0), 0)
-      const gesamterzeugung = s != null
-        ? round2((s.pv_kw ?? 0) + Math.max(0, bat) + erzSonstige)
-        : null
-
-      const punkt: Record<string, number | string | null> = {
-        stunde:          `${h}:00`,
-        // ─ Erzeuger (positiv)
-        pv:              s?.pv_kw    ?? null,
-        bat_entl:        batE,
-        netzbezug:       s?.netzbezug_kw ?? null,
-        // ─ Verbraucher (negativ)
-        hausverbrauch,
-        wp,
-        wb,
-        bat_lad:         batL,
-        einspeisung:     einsp,
-        // ─ Gesamterzeugung-Linie
-        gesamterzeugung,
+      const s   = daten.find(d => d.stunde === h)
+      const bat = s?.batterie_kw ?? 0
+      const ntz = (s?.netzbezug_kw ?? 0) - (s?.einspeisung_kw ?? 0)
+      const vbrSons = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s?.komponenten?.[es.key] ?? 0)), 0)
+      const erzSons = extraErzeuger.reduce((a, es) => a + Math.max(0, s?.komponenten?.[es.key] ?? 0), 0)
+      const punkt: Record<string, number | string> = {
+        stunde:       `${h}:00`,
+        pv:           s?.pv_kw ?? 0,
+        bat_pos:      Math.max(0, bat),
+        bat_neg:      Math.min(0, bat),
+        netz_pos:     Math.max(0, ntz),
+        netz_neg:     Math.min(0, ntz),
+        hausverbrauch: -Math.max(0, (s?.verbrauch_kw ?? 0) - (s?.waermepumpe_kw ?? 0) - (s?.wallbox_kw ?? 0) - vbrSons),
+        wp:           -(s?.waermepumpe_kw ?? 0),
+        wb:           -(s?.wallbox_kw ?? 0),
+        gesamterzeugung: round2((s?.pv_kw ?? 0) + Math.max(0, bat) + erzSons),
       }
-      for (const es of extraErzeuger) {
-        const v = s?.komponenten?.[es.key] ?? null
-        punkt[es.key] = v != null && v > 0 ? round2(v) : null
-      }
-      for (const es of extraVerbraucher) {
-        const v = s?.komponenten?.[es.key] ?? null
-        punkt[es.key] = v != null && v < 0 ? round2(v) : null
-      }
+      for (const es of extraErzeuger)    punkt[es.key] = Math.max(0, s?.komponenten?.[es.key] ?? 0)
+      for (const es of extraVerbraucher) punkt[es.key] = Math.min(0, s?.komponenten?.[es.key] ?? 0)
       return punkt
     }), [daten, extraErzeuger, extraVerbraucher])
 
@@ -213,41 +206,45 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
         </Card>
       ) : (
         <Card>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            kW · oben = Erzeugung/Bezug gestapelt · unten = Verbrauch gestapelt · Linie = Gesamterzeugung
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between">
+            <span>▲ Quellen (Erzeugung, Bezug)</span>
+            <span>Stundenmittelwerte aus Energieprofil · gestrichelt = Gesamterzeugung</span>
+            <span>▼ Senken (Verbrauch, Einspeisung)</span>
           </div>
-          <ResponsiveContainer width="100%" height={340}>
-            <ComposedChart data={chartDaten} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={chartDaten} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <ReferenceLine y={0} stroke="rgba(128,128,128,0.5)" />
-              <Tooltip content={<ChartTooltip unit=" kW" decimals={2} />} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
+              <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1.5} />
+              <Tooltip content={<ChartTooltip
+                unit=" kW" decimals={2}
+                formatter={(v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`}
+              />} />
+              <Legend
+                wrapperStyle={{ fontSize: 11 }}
+                formatter={(value: string) => chartSerien.find(cs => cs.dataKey === value)?.label ?? value}
+              />
 
-              {/* ── Erzeuger-Stack (positiv) ── */}
-              <Bar dataKey="pv"       name="PV"              stackId="e" fill="#eab308" fillOpacity={0.85} />
-              {extraErzeuger.map((es, i) => (
-                <Bar key={es.key} dataKey={es.key} name={es.label}
-                  stackId="e" fill={EXTRA_FARBEN[i % EXTRA_FARBEN.length]} fillOpacity={0.85} />
+              {chartSerien.map(cs => (
+                <Area
+                  key={cs.dataKey}
+                  type="monotone"
+                  dataKey={cs.dataKey}
+                  name={cs.dataKey}
+                  fill={cs.farbe}
+                  stroke={cs.farbe}
+                  fillOpacity={0.3}
+                  strokeWidth={1.5}
+                  stackId={cs.stackId}
+                  isAnimationActive={false}
+                  legendType={cs.hideLabel ? 'none' : undefined}
+                />
               ))}
-              <Bar dataKey="bat_entl" name="Batterie Entl."  stackId="e" fill="#fb923c" fillOpacity={0.85} />
-              <Bar dataKey="netzbezug" name="Netzbezug"      stackId="e" fill="#ef4444" fillOpacity={0.85} />
 
-              {/* ── Verbraucher-Stack (negativ) ── */}
-              <Bar dataKey="hausverbrauch" name="Hausverbrauch" stackId="e" fill="#10b981" fillOpacity={0.85} />
-              <Bar dataKey="wp"        name="Wärmepumpe"    stackId="e" fill="#a855f7" fillOpacity={0.85} />
-              <Bar dataKey="wb"        name="Wallbox"        stackId="e" fill="#8b5cf6" fillOpacity={0.85} />
-              {extraVerbraucher.map((es, i) => (
-                <Bar key={es.key} dataKey={es.key} name={es.label}
-                  stackId="e" fill={EXTRA_FARBEN[(extraErzeuger.length + i) % EXTRA_FARBEN.length]} fillOpacity={0.85} />
-              ))}
-              <Bar dataKey="bat_lad"  name="Batterie Lad."  stackId="e" fill="#60a5fa" fillOpacity={0.85} />
-              <Bar dataKey="einspeisung" name="Einspeisung"  stackId="e" fill="#3b82f6" fillOpacity={0.85} />
-
-              {/* ── Gesamterzeugung-Linie ── */}
-              <Line dataKey="gesamterzeugung" name="Gesamterzeugung"
-                stroke="#fbbf24" strokeWidth={2.5} dot={false} connectNulls strokeDasharray="4 2" />
+              <Line dataKey="gesamterzeugung" name="gesamterzeugung"
+                stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 3"
+                dot={false} connectNulls legendType="none" />
             </ComposedChart>
           </ResponsiveContainer>
         </Card>
