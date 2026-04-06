@@ -7,7 +7,21 @@ import {
 } from 'recharts'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { Card } from '../../components/ui'
-import { energieProfilApi, type StundenWert, type WochenmusterPunkt } from '../../api/energie_profil'
+import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
+
+// Kategorien die bereits dedizierte Spalten/Felder haben → kein Extra-Tracking
+const DEDIZIERTE_KATEGORIEN = new Set(['pv', 'batterie', 'netz', 'haushalt', 'waermepumpe', 'wallbox', 'eauto', 'virtual'])
+
+// Farben für extra Sonstiges-Serien (Rotation) — hex für Recharts, Tailwind-Klassen für Tabelle
+const EXTRA_FARBEN = ['#8b5cf6', '#06b6d4', '#84cc16', '#f43f5e', '#fb923c', '#a78bfa']
+const EXTRA_FARBEN_CSS = [
+  'text-violet-500 dark:text-violet-400',
+  'text-cyan-500 dark:text-cyan-400',
+  'text-lime-500 dark:text-lime-400',
+  'text-rose-500 dark:text-rose-400',
+  'text-orange-400 dark:text-orange-300',
+  'text-purple-400 dark:text-purple-300',
+]
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
@@ -83,31 +97,40 @@ interface TagesdetailProps {
 function Tagesdetail({ anlageId }: TagesdetailProps) {
   const [datum, setDatum] = useState(gesternISO())
   const [daten, setDaten] = useState<StundenWert[]>([])
+  const [extraSerien, setExtraSerien] = useState<SerieInfo[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!anlageId || !datum) return
     setLoading(true)
     energieProfilApi.getStunden(anlageId, datum)
-      .then(setDaten)
-      .catch(() => setDaten([]))
+      .then(antwort => {
+        setDaten(antwort.stunden)
+        // Nur Serien die nicht bereits dedizierte Spalten haben
+        setExtraSerien(antwort.serien.filter(s => !DEDIZIERTE_KATEGORIEN.has(s.kategorie)))
+      })
+      .catch(() => { setDaten([]); setExtraSerien([]) })
       .finally(() => setLoading(false))
   }, [anlageId, datum])
 
   const chartDaten = useMemo(() =>
     Array.from({ length: 24 }, (_, h) => {
       const s = daten.find(d => d.stunde === h)
-      return {
+      const punkt: Record<string, number | string | null> = {
         stunde: `${h}:00`,
         pv: s?.pv_kw ?? null,
         verbrauch: s?.verbrauch_kw != null ? -s.verbrauch_kw : null,
         netzbezug: s?.netzbezug_kw ?? null,
         einspeisung: s?.einspeisung_kw != null ? -s.einspeisung_kw : null,
         batterie: s?.batterie_kw ?? null,
-        soc: s?.soc_prozent ?? null,
-        temp: s?.temperatur_c ?? null,
       }
-    }), [daten])
+      // Extra-Serien (Sonstiges etc.) aus komponenten
+      for (const serie of extraSerien) {
+        const v = s?.komponenten?.[serie.key] ?? null
+        punkt[serie.key] = v != null ? round2(v) : null
+      }
+      return punkt
+    }), [daten, extraSerien])
 
   // KPIs aus Stundenwerten
   const kpis = useMemo(() => {
@@ -174,6 +197,10 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
               <Bar dataKey="netzbezug" name="Netzbezug" fill="#ef4444" fillOpacity={0.7} />
               <Bar dataKey="einspeisung" name="Einspeisung" fill="#3b82f6" fillOpacity={0.7} />
               <Bar dataKey="batterie" name="Batterie" fill="#f97316" fillOpacity={0.7} />
+              {extraSerien.map((s, i) => (
+                <Bar key={s.key} dataKey={s.key} name={s.label}
+                  fill={EXTRA_FARBEN[i % EXTRA_FARBEN.length]} fillOpacity={0.7} />
+              ))}
               <Line dataKey="verbrauch" name="Verbrauch" stroke="#6b7280" strokeWidth={2} dot={false} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
@@ -181,7 +208,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       )}
 
       {/* Detailtabelle alle Felder */}
-      {daten.length > 0 && <TagesdetailTabelle daten={daten} />}
+      {daten.length > 0 && <TagesdetailTabelle daten={daten} extraSerien={extraSerien} />}
     </div>
   )
 }
@@ -387,18 +414,29 @@ type TdColKey = typeof TD_COLS[number]['key']
 const SUMMIERBAR = new Set<TdColKey>(['pv_kw','verbrauch_kw','netzbezug_kw','einspeisung_kw',
   'batterie_kw','waermepumpe_kw','wallbox_kw','ueberschuss_kw','defizit_kw'])
 
-function TagesdetailTabelle({ daten }: { daten: StundenWert[] }) {
+function TagesdetailTabelle({ daten, extraSerien }: { daten: StundenWert[], extraSerien: SerieInfo[] }) {
   const summen: Partial<Record<TdColKey, number>> = {}
   for (const col of TD_COLS) {
     if (!SUMMIERBAR.has(col.key)) continue
     const vals = daten.map(d => (d as unknown as Record<string, number | null>)[col.key]).filter(v => v != null) as number[]
     if (vals.length) summen[col.key] = vals.reduce((a, b) => a + b, 0)
   }
+  // Summen für Extra-Serien (Sonstiges etc.)
+  const extraSummen: Record<string, number> = {}
+  for (const serie of extraSerien) {
+    const vals = daten.map(d => d.komponenten?.[serie.key] ?? null).filter(v => v != null) as number[]
+    if (vals.length) extraSummen[serie.key] = vals.reduce((a, b) => a + b, 0)
+  }
 
   return (
     <Card>
       <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
         Stundenwerte · kW-Felder aufsummiert = kWh/Tag
+        {extraSerien.length > 0 && (
+          <span className="ml-2 text-violet-500 dark:text-violet-400">
+            · {extraSerien.map(s => s.label).join(', ')} aus Sonstiges-Investitionen
+          </span>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -408,6 +446,11 @@ function TagesdetailTabelle({ daten }: { daten: StundenWert[] }) {
               {TD_COLS.map(c => (
                 <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
                   {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
+                </th>
+              ))}
+              {extraSerien.map((s, i) => (
+                <th key={s.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap border-l border-gray-200 dark:border-gray-700 ${EXTRA_FARBEN_CSS[i % EXTRA_FARBEN_CSS.length]}`}>
+                  {s.label}<br /><span className="font-normal opacity-70">kW</span>
                 </th>
               ))}
             </tr>
@@ -426,6 +469,14 @@ function TagesdetailTabelle({ daten }: { daten: StundenWert[] }) {
                       </td>
                     )
                   })}
+                  {extraSerien.map(serie => {
+                    const v = s?.komponenten?.[serie.key] ?? null
+                    return (
+                      <td key={serie.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300 border-l border-gray-100 dark:border-gray-800">
+                        {v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      </td>
+                    )
+                  })}
                 </tr>
               )
             })}
@@ -439,6 +490,14 @@ function TagesdetailTabelle({ daten }: { daten: StundenWert[] }) {
                 return (
                   <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
                     {isSum && v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  </td>
+                )
+              })}
+              {extraSerien.map(serie => {
+                const v = extraSummen[serie.key]
+                return (
+                  <td key={serie.key} className="text-right py-2 px-2 tabular-nums text-violet-600 dark:text-violet-400 border-l border-gray-200 dark:border-gray-700">
+                    {v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                   </td>
                 )
               })}

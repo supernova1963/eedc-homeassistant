@@ -1,5 +1,12 @@
 import { api } from './client'
 
+export interface SerieInfo {
+  key: string
+  label: string
+  typ: string       // z.B. "sonstiges", "pv-module", "virtual"
+  kategorie: string // z.B. "sonstige", "pv", "netz"
+}
+
 export interface StundenWert {
   stunde: number
   pv_kw: number | null
@@ -14,6 +21,12 @@ export interface StundenWert {
   temperatur_c: number | null
   globalstrahlung_wm2: number | null
   soc_prozent: number | null
+  komponenten: Record<string, number> | null
+}
+
+export interface StundenAntwort {
+  stunden: StundenWert[]
+  serien: SerieInfo[]
 }
 
 export interface WochenmusterPunkt {
@@ -45,7 +58,7 @@ export interface TagesZusammenfassung {
 }
 
 export const energieProfilApi = {
-  getStunden: (anlageId: number, datum: string): Promise<StundenWert[]> =>
+  getStunden: (anlageId: number, datum: string): Promise<StundenAntwort> =>
     api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
 
   getWochenmuster: (anlageId: number, von: string, bis: string): Promise<WochenmusterPunkt[]> =>

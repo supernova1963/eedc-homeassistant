@@ -7,6 +7,7 @@ GET /api/energie-profil/{anlage_id}/wochenmuster — Ø-Tagesprofil je Wochentag
 """
 
 import logging
+import re
 from collections import defaultdict
 from datetime import date
 from typing import Optional
@@ -18,7 +19,50 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+
+# Virtuelle Serien (kein Investment dahinter)
+_VIRTUAL_SERIEN: dict[str, dict] = {
+    "haushalt":   {"label": "Haushalt",    "typ": "virtual", "kategorie": "haushalt"},
+    "netz":       {"label": "Stromnetz",   "typ": "virtual", "kategorie": "netz"},
+    "pv_gesamt":  {"label": "PV Gesamt",   "typ": "virtual", "kategorie": "pv"},
+}
+
+# Optionale Suffixe bei WP-Serien (waermepumpe_{id}_heizen)
+_SUFFIX_LABELS = {"heizen": " Heizen", "warmwasser": " Warmwasser"}
+
+# Kategorien die bereits in dedizierten Spalten landen (kein Extra-Tracking nötig)
+_DEDIZIERTE_KATEGORIEN = {"pv", "batterie", "netz", "haushalt", "waermepumpe", "wallbox", "eauto"}
+
+
+def _key_to_serie_info(
+    key: str, inv_map: dict[int, "Investition"]
+) -> Optional[dict]:
+    """Löst einen Komponenten-Key zu Label + Typ auf."""
+    if key in _VIRTUAL_SERIEN:
+        return {"key": key, **_VIRTUAL_SERIEN[key]}
+
+    m = re.match(r'^([a-z]+)_(\d+)(?:_([a-z]+))?$', key)
+    if not m:
+        return None
+
+    inv_id = int(m.group(2))
+    suffix = m.group(3)
+    inv = inv_map.get(inv_id)
+    if not inv:
+        return None
+
+    label = inv.bezeichnung
+    if suffix and suffix in _SUFFIX_LABELS:
+        label += _SUFFIX_LABELS[suffix]
+
+    return {
+        "key": key,
+        "label": label,
+        "typ": inv.typ,
+        "kategorie": m.group(1),
+    }
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +70,14 @@ router = APIRouter()
 
 
 # ── Response Models ──────────────────────────────────────────────────────────
+
+class SerieInfo(BaseModel):
+    """Metadaten einer Komponenten-Serie (für Label-Auflösung im Frontend)."""
+    key: str
+    label: str
+    typ: str        # z.B. "sonstiges", "pv-module", "virtual"
+    kategorie: str  # z.B. "sonstige", "pv", "netz"
+
 
 class StundenWertResponse(BaseModel):
     """Stündlicher Energiewert eines Tages."""
@@ -42,6 +94,13 @@ class StundenWertResponse(BaseModel):
     temperatur_c: Optional[float] = None
     globalstrahlung_wm2: Optional[float] = None
     soc_prozent: Optional[float] = None
+    komponenten: Optional[dict] = None  # Rohwerte aller Serien (key → kW)
+
+
+class StundenAntwort(BaseModel):
+    """Tagesdetail-Antwort: Stundenwerte + aufgelöste Serie-Labels."""
+    stunden: list[StundenWertResponse]
+    serien: list[SerieInfo]  # alle in komponenten vorkommenden Serien mit Label
 
 
 class WochenmusterPunkt(BaseModel):
@@ -134,7 +193,7 @@ async def get_tages_zusammenfassungen(
     ]
 
 
-@router.get("/{anlage_id}/stunden", response_model=list[StundenWertResponse])
+@router.get("/{anlage_id}/stunden", response_model=StundenAntwort)
 async def get_stundenwerte(
     anlage_id: int,
     datum: date = Query(..., description="Tag (YYYY-MM-DD)"),
@@ -143,7 +202,9 @@ async def get_stundenwerte(
     """
     Gibt die 24 Stundenwerte eines Tages aus TagesEnergieProfil zurück.
 
-    Basis für den Tagesdetail-Chart im Energieprofil-Tab.
+    Enthält zusätzlich `serien` mit aufgelösten Labels für alle in `komponenten`
+    vorkommenden Einträge — damit Sonstiges-Investments (Poolpumpe, Sauna …)
+    namentlich im Frontend angezeigt werden können.
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
@@ -159,7 +220,32 @@ async def get_stundenwerte(
     )
     rows = result.scalars().all()
 
-    return [
+    # Investments für Label-Auflösung laden
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    inv_map: dict[int, Investition] = {
+        inv.id: inv for inv in inv_result.scalars().all()
+    }
+
+    # Alle vorkommenden Komponenten-Keys sammeln (über alle Stunden)
+    alle_keys: set[str] = set()
+    for r in rows:
+        if r.komponenten:
+            alle_keys.update(r.komponenten.keys())
+
+    # Keys zu SerieInfo auflösen (nur einmal pro Key, geordnet)
+    serien: list[SerieInfo] = []
+    seen: set[str] = set()
+    for key in sorted(alle_keys):
+        if key in seen:
+            continue
+        info = _key_to_serie_info(key, inv_map)
+        if info:
+            serien.append(SerieInfo(**info))
+            seen.add(key)
+
+    stunden = [
         StundenWertResponse(
             stunde=r.stunde,
             pv_kw=r.pv_kw,
@@ -174,9 +260,12 @@ async def get_stundenwerte(
             temperatur_c=r.temperatur_c,
             globalstrahlung_wm2=r.globalstrahlung_wm2,
             soc_prozent=r.soc_prozent,
+            komponenten=r.komponenten,
         )
         for r in rows
     ]
+
+    return StundenAntwort(stunden=stunden, serien=serien)
 
 
 @router.get("/{anlage_id}/wochenmuster", response_model=list[WochenmusterPunkt])
