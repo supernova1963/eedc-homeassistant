@@ -72,6 +72,16 @@ async def get_tagesverlauf(
     # Mapping: serie_key → list[entity_id] (für Multi-Sensor-Aggregation)
     serie_entities: dict[str, list[str]] = {}
 
+    # Investments ohne leistung_w-Konfiguration sammeln (für Hinweis im Frontend)
+    uebersprungen: list[str] = []
+    for inv in investitionen.values():
+        if inv.typ in SKIP_TYPEN or inv.typ not in TV_SERIE_CONFIG:
+            continue
+        inv_id_str = str(inv.id)
+        live_cfg = inv_live_map.get(inv_id_str, {})
+        if not live_cfg.get("leistung_w"):
+            uebersprungen.append(inv.bezeichnung or inv.typ)
+
     # Investitionen → Serien
     for inv_id, live in inv_live_map.items():
         inv = investitionen.get(inv_id)
@@ -300,4 +310,4 @@ async def get_tagesverlauf(
             "bidirektional": False,
         })
 
-    return {"serien": serien, "punkte": punkte}
+    return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}

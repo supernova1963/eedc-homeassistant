@@ -110,6 +110,7 @@ export interface TagesverlaufResponse {
   datum: string
   serien: TagesverlaufSerie[]
   punkte: TagesverlaufPunkt[]
+  uebersprungen?: string[]  // Investments ohne HA-Leistungssensor
 }
 
 export interface MqttInboundStatus {

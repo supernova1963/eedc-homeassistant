@@ -21,6 +21,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 interface TagesverlaufChartProps {
   serien: TagesverlaufSerie[]
   punkte: TagesverlaufPunkt[]
+  uebersprungen?: string[]
 }
 
 /** Interne Darstellung einer Render-Serie (nach Aufspaltung bidirektionaler Serien). */
@@ -33,7 +34,7 @@ interface RenderSerie {
   origKey: string
 }
 
-export default function TagesverlaufChart({ serien, punkte }: TagesverlaufChartProps) {
+export default function TagesverlaufChart({ serien, punkte, uebersprungen }: TagesverlaufChartProps) {
   const [hidden, setHidden] = useState<Set<string>>(new Set())
 
   const toggleSerie = useCallback((origKey: string) => {
@@ -118,9 +119,19 @@ export default function TagesverlaufChart({ serien, punkte }: TagesverlaufChartP
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-        Tagesverlauf (kW)
-      </h3>
+      <div className="flex items-baseline gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Tagesverlauf (kW)
+        </h3>
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+          10-Min-Durchschnitte aus HA-History
+        </span>
+      </div>
+      {uebersprungen && uebersprungen.length > 0 && (
+        <p className="text-[10px] text-amber-500 dark:text-amber-400 mb-2">
+          Nicht dargestellt (kein HA-Leistungssensor): {uebersprungen.join(', ')}
+        </p>
+      )}
       <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between px-1">
         <span>▲ Quellen (Erzeugung, Bezug)</span>
         <span>▼ Senken (Verbrauch, Einspeisung)</span>
