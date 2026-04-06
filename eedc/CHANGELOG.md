@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.0] - 2026-04-06
+
+### Neu
+
+- **Custom-Import-Wizard: Investitions-Spalten (#111)**: Der Custom-Import-Wizard erkennt und importiert jetzt Investitions-Daten korrekt. Backend: neuer `/apply/{anlage_id}`-Endpoint ruft `_import_investition_monatsdaten_v09` auf und schreibt direkt in `InvestitionMonatsdaten` pro Modul (PV, Speicher, E-Auto etc.). `/analyze` erkennt automatisch EEDC-Investitions-Spalten und generiert personalisierte Dropdown-Felder gruppiert nach Investitionstypen. Vorzeichen-Inversion (↕-Toggle) pro Mapping-Zeile. Frontend: Anlage-Auswahl in Schritt 1, erkannte Investitions-Spalten als grüne Read-only-Sektion, Dark-Mode-Fix für select-Elemente.
+
+### Geändert
+
+- **Stepper-Navigation im Monatsabschluss-Wizard**: Kreise mit Verbindungslinien statt flacher Buttonreihe. Abgeschlossene Schritte grün mit Haken, aktiver Schritt primary-farbig.
+- **Layout Padding**: Hauptbereich-Padding oben reduziert (`pt-3` → `pt-1`) für kompakteres Erscheinungsbild.
+
+### Behoben
+
+- **Fronius CSV-Parser Wh→kWh (#107)**: Fronius exportiert Energiedaten in Wh, EEDC hat diese als kWh eingelesen. Konvertierungsfaktor 1/1000 ergänzt.
+- **Y-Achse in AktuellerMonat-Charts abgeschnitten (#186)**: `YAxis width={70}` auf allen kWh-Achsen — verhindert Abschneiden bei Werten >3.000 kWh.
+
+---
+
 ## [3.9.9] - 2026-04-04
 
 ### Behoben
