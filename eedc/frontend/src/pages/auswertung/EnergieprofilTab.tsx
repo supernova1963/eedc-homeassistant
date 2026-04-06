@@ -2,7 +2,7 @@
 // Etappe 2: Auswertung persistierter Stundenwerte aus TagesEnergieProfil
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import ChartTooltip from '../../components/ui/ChartTooltip'
@@ -106,72 +106,103 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
     energieProfilApi.getStunden(anlageId, datum)
       .then(antwort => {
         setDaten(antwort.stunden)
-        // Nur Serien die nicht bereits dedizierte Spalten haben
         setExtraSerien(antwort.serien.filter(s => !DEDIZIERTE_KATEGORIEN.has(s.kategorie)))
       })
       .catch(() => { setDaten([]); setExtraSerien([]) })
       .finally(() => setLoading(false))
   }, [anlageId, datum])
 
+  const extraErzeuger  = extraSerien.filter(s => s.seite === 'quelle')
+  const extraVerbraucher = extraSerien.filter(s => s.seite === 'senke')
+
   const chartDaten = useMemo(() =>
     Array.from({ length: 24 }, (_, h) => {
       const s = daten.find(d => d.stunde === h)
+      const bat    = s?.batterie_kw ?? 0
+      const batE   = bat > 0 ? round2(bat)  : null   // Entladung (positiv)
+      const batL   = bat < 0 ? round2(bat)  : null   // Ladung (negativ)
+      const wp     = s?.waermepumpe_kw != null ? -s.waermepumpe_kw : null
+      const wb     = s?.wallbox_kw     != null ? -s.wallbox_kw     : null
+      const einsp  = s?.einspeisung_kw != null ? -s.einspeisung_kw : null
+
+      // Hausverbrauch = Gesamtverbrauch − WP − Wallbox − sonstige Verbraucher
+      const vbrSonstige = extraVerbraucher.reduce(
+        (sum, es) => sum + Math.abs(Math.min(0, s?.komponenten?.[es.key] ?? 0)), 0)
+      const hausverbrauch = s != null
+        ? -Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrSonstige)
+        : null
+
+      // Gesamterzeugung = PV + Batterie-Entladung + sonstige Erzeuger (Linie)
+      const erzSonstige = extraErzeuger.reduce(
+        (sum, es) => sum + Math.max(0, s?.komponenten?.[es.key] ?? 0), 0)
+      const gesamterzeugung = s != null
+        ? round2((s.pv_kw ?? 0) + Math.max(0, bat) + erzSonstige)
+        : null
+
       const punkt: Record<string, number | string | null> = {
-        stunde: `${h}:00`,
-        pv: s?.pv_kw ?? null,
-        verbrauch: s?.verbrauch_kw != null ? -s.verbrauch_kw : null,
-        netzbezug: s?.netzbezug_kw ?? null,
-        einspeisung: s?.einspeisung_kw != null ? -s.einspeisung_kw : null,
-        batterie: s?.batterie_kw ?? null,
+        stunde:          `${h}:00`,
+        // ─ Erzeuger (positiv)
+        pv:              s?.pv_kw    ?? null,
+        bat_entl:        batE,
+        netzbezug:       s?.netzbezug_kw ?? null,
+        // ─ Verbraucher (negativ)
+        hausverbrauch,
+        wp,
+        wb,
+        bat_lad:         batL,
+        einspeisung:     einsp,
+        // ─ Gesamterzeugung-Linie
+        gesamterzeugung,
       }
-      // Extra-Serien (Sonstiges etc.) aus komponenten
-      for (const serie of extraSerien) {
-        const v = s?.komponenten?.[serie.key] ?? null
-        punkt[serie.key] = v != null ? round2(v) : null
+      for (const es of extraErzeuger) {
+        const v = s?.komponenten?.[es.key] ?? null
+        punkt[es.key] = v != null && v > 0 ? round2(v) : null
+      }
+      for (const es of extraVerbraucher) {
+        const v = s?.komponenten?.[es.key] ?? null
+        punkt[es.key] = v != null && v < 0 ? round2(v) : null
       }
       return punkt
-    }), [daten, extraSerien])
+    }), [daten, extraErzeuger, extraVerbraucher])
 
-  // KPIs aus Stundenwerten
+  // KPIs
   const kpis = useMemo(() => {
     if (!daten.length) return null
-    const pvKwh = daten.reduce((s, d) => s + (d.pv_kw ?? 0), 0)
-    const vKwh = daten.reduce((s, d) => s + (d.verbrauch_kw ?? 0), 0)
-    const netzbezugKwh = daten.reduce((s, d) => s + (d.netzbezug_kw ?? 0), 0)
-    const einspeisungKwh = daten.reduce((s, d) => s + (d.einspeisung_kw ?? 0), 0)
-    const ueberschussKwh = daten.reduce((s, d) => s + (d.ueberschuss_kw ?? 0), 0)
-    const autarkie = vKwh > 0 ? Math.min(100, (1 - netzbezugKwh / vKwh) * 100) : null
-    const tempMin = Math.min(...daten.filter(d => d.temperatur_c != null).map(d => d.temperatur_c!))
-    const tempMax = Math.max(...daten.filter(d => d.temperatur_c != null).map(d => d.temperatur_c!))
-    return { pvKwh, vKwh, netzbezugKwh, einspeisungKwh, ueberschussKwh, autarkie, tempMin, tempMax }
-  }, [daten])
+    const pvKwh        = daten.reduce((a, d) => a + (d.pv_kw ?? 0), 0)
+    const batEntlKwh   = daten.reduce((a, d) => a + Math.max(0, d.batterie_kw ?? 0), 0)
+    const erzSonstKwh  = extraErzeuger.reduce((a, es) =>
+      a + daten.reduce((b, d) => b + Math.max(0, d.komponenten?.[es.key] ?? 0), 0), 0)
+    const gesamterzKwh = pvKwh + batEntlKwh + erzSonstKwh
+    const vKwh         = daten.reduce((a, d) => a + (d.verbrauch_kw ?? 0), 0)
+    const netzbezugKwh = daten.reduce((a, d) => a + (d.netzbezug_kw ?? 0), 0)
+    const einspeisKwh  = daten.reduce((a, d) => a + (d.einspeisung_kw ?? 0), 0)
+    const autarkie     = vKwh > 0 ? Math.min(100, (1 - netzbezugKwh / vKwh) * 100) : null
+    const temps        = daten.filter(d => d.temperatur_c != null).map(d => d.temperatur_c!)
+    return { gesamterzKwh, pvKwh, vKwh, netzbezugKwh, einspeisKwh, autarkie,
+             tempMin: temps.length ? Math.min(...temps) : null,
+             tempMax: temps.length ? Math.max(...temps) : null }
+  }, [daten, extraErzeuger])
 
   return (
     <div className="space-y-4">
       {/* Datum-Picker */}
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tag:</label>
-        <input
-          type="date"
-          aria-label="Tag auswählen"
-          value={datum}
-          max={gesternISO()}
-          onChange={e => setDatum(e.target.value)}
-          className="input w-auto text-sm"
-        />
+        <input type="date" aria-label="Tag auswählen" value={datum} max={gesternISO()}
+          onChange={e => setDatum(e.target.value)} className="input w-auto text-sm" />
         {loading && <span className="text-xs text-gray-400">Lade…</span>}
       </div>
 
       {/* KPI-Zeile */}
       {kpis && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <KpiCard label="PV-Ertrag" value={`${fmt1(kpis.pvKwh)} kWh`} color="text-yellow-600 dark:text-yellow-400" />
-          <KpiCard label="Verbrauch" value={`${fmt1(kpis.vKwh)} kWh`} color="text-gray-600 dark:text-gray-300" />
-          <KpiCard label="Netzbezug" value={`${fmt1(kpis.netzbezugKwh)} kWh`} color="text-red-600 dark:text-red-400" />
-          <KpiCard label="Einspeisung" value={`${fmt1(kpis.einspeisungKwh)} kWh`} color="text-blue-600 dark:text-blue-400" />
-          <KpiCard label="Überschuss" value={`${fmt1(kpis.ueberschussKwh)} kWh`} color="text-green-600 dark:text-green-400" />
-          <KpiCard label="Autarkie" value={kpis.autarkie != null ? `${fmt0(kpis.autarkie)} %` : '—'} color="text-primary-600 dark:text-primary-400" />
-          <KpiCard label="Temperatur" value={kpis.tempMin !== Infinity ? `${fmt1(kpis.tempMin)} / ${fmt1(kpis.tempMax)} °C` : '—'} color="text-orange-600 dark:text-orange-400" />
+          <KpiCard label="Gesamterzeugung" value={`${fmt1(kpis.gesamterzKwh)} kWh`} color="text-yellow-600 dark:text-yellow-400" />
+          <KpiCard label="PV-Anteil"       value={`${fmt1(kpis.pvKwh)} kWh`}         color="text-amber-500 dark:text-amber-400" />
+          <KpiCard label="Gesamtverbrauch" value={`${fmt1(kpis.vKwh)} kWh`}          color="text-gray-600 dark:text-gray-300" />
+          <KpiCard label="Netzbezug"       value={`${fmt1(kpis.netzbezugKwh)} kWh`}  color="text-red-600 dark:text-red-400" />
+          <KpiCard label="Einspeisung"     value={`${fmt1(kpis.einspeisKwh)} kWh`}   color="text-blue-600 dark:text-blue-400" />
+          <KpiCard label="Autarkie"        value={kpis.autarkie != null ? `${fmt0(kpis.autarkie)} %` : '—'} color="text-primary-600 dark:text-primary-400" />
+          <KpiCard label="Temperatur"      value={kpis.tempMin != null ? `${fmt1(kpis.tempMin)} / ${fmt1(kpis.tempMax)} °C` : '—'} color="text-orange-600 dark:text-orange-400" />
         </div>
       )}
 
@@ -183,31 +214,46 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       ) : (
         <Card>
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Leistung in kW · positiv = Erzeugung/Bezug · negativ = Verbrauch/Einspeisung
+            kW · oben = Erzeugung/Bezug gestapelt · unten = Verbrauch gestapelt · Linie = Gesamterzeugung
           </div>
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={340}>
             <ComposedChart data={chartDaten} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${v}`} />
-              <ReferenceLine y={0} stroke="rgba(128,128,128,0.4)" />
+              <YAxis tick={{ fontSize: 11 }} />
+              <ReferenceLine y={0} stroke="rgba(128,128,128,0.5)" />
               <Tooltip content={<ChartTooltip unit=" kW" decimals={2} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area dataKey="pv" name="PV" fill="#fef08a" stroke="#eab308" fillOpacity={0.5} dot={false} connectNulls />
-              <Bar dataKey="netzbezug" name="Netzbezug" fill="#ef4444" fillOpacity={0.7} />
-              <Bar dataKey="einspeisung" name="Einspeisung" fill="#3b82f6" fillOpacity={0.7} />
-              <Bar dataKey="batterie" name="Batterie" fill="#f97316" fillOpacity={0.7} />
-              {extraSerien.map((s, i) => (
-                <Bar key={s.key} dataKey={s.key} name={s.label}
-                  fill={EXTRA_FARBEN[i % EXTRA_FARBEN.length]} fillOpacity={0.7} />
+
+              {/* ── Erzeuger-Stack (positiv) ── */}
+              <Bar dataKey="pv"       name="PV"              stackId="e" fill="#eab308" fillOpacity={0.85} />
+              {extraErzeuger.map((es, i) => (
+                <Bar key={es.key} dataKey={es.key} name={es.label}
+                  stackId="e" fill={EXTRA_FARBEN[i % EXTRA_FARBEN.length]} fillOpacity={0.85} />
               ))}
-              <Line dataKey="verbrauch" name="Verbrauch" stroke="#6b7280" strokeWidth={2} dot={false} connectNulls />
+              <Bar dataKey="bat_entl" name="Batterie Entl."  stackId="e" fill="#fb923c" fillOpacity={0.85} />
+              <Bar dataKey="netzbezug" name="Netzbezug"      stackId="e" fill="#ef4444" fillOpacity={0.85} />
+
+              {/* ── Verbraucher-Stack (negativ) ── */}
+              <Bar dataKey="hausverbrauch" name="Hausverbrauch" stackId="e" fill="#10b981" fillOpacity={0.85} />
+              <Bar dataKey="wp"        name="Wärmepumpe"    stackId="e" fill="#a855f7" fillOpacity={0.85} />
+              <Bar dataKey="wb"        name="Wallbox"        stackId="e" fill="#8b5cf6" fillOpacity={0.85} />
+              {extraVerbraucher.map((es, i) => (
+                <Bar key={es.key} dataKey={es.key} name={es.label}
+                  stackId="e" fill={EXTRA_FARBEN[(extraErzeuger.length + i) % EXTRA_FARBEN.length]} fillOpacity={0.85} />
+              ))}
+              <Bar dataKey="bat_lad"  name="Batterie Lad."  stackId="e" fill="#60a5fa" fillOpacity={0.85} />
+              <Bar dataKey="einspeisung" name="Einspeisung"  stackId="e" fill="#3b82f6" fillOpacity={0.85} />
+
+              {/* ── Gesamterzeugung-Linie ── */}
+              <Line dataKey="gesamterzeugung" name="Gesamterzeugung"
+                stroke="#fbbf24" strokeWidth={2.5} dot={false} connectNulls strokeDasharray="4 2" />
             </ComposedChart>
           </ResponsiveContainer>
         </Card>
       )}
 
-      {/* Detailtabelle alle Felder */}
+      {/* Detailtabelle */}
       {daten.length > 0 && <TagesdetailTabelle daten={daten} extraSerien={extraSerien} />}
     </div>
   )
@@ -393,63 +439,103 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
 
 // ─── Tabellen ─────────────────────────────────────────────────────────────────
 
+// ── Feste Tabellenspalten (Reihenfolge: Erzeugung | Netz | Verbrauch | Bilanz | Wetter)
+// Berechnete Spalten 'gesamterzeugung' und 'hausverbrauch' werden dynamisch ergänzt
 const TD_COLS = [
-  { key: 'pv_kw',              label: 'PV',       unit: 'kW',   color: 'text-yellow-600 dark:text-yellow-400' },
-  { key: 'verbrauch_kw',       label: 'Verbrauch', unit: 'kW',   color: 'text-gray-600 dark:text-gray-300' },
-  { key: 'netzbezug_kw',       label: 'Bezug',     unit: 'kW',   color: 'text-red-600 dark:text-red-400' },
-  { key: 'einspeisung_kw',     label: 'Einsp.',    unit: 'kW',   color: 'text-blue-600 dark:text-blue-400' },
-  { key: 'batterie_kw',        label: 'Batterie',  unit: 'kW',   color: 'text-orange-500 dark:text-orange-400' },
-  { key: 'waermepumpe_kw',     label: 'WP',        unit: 'kW',   color: 'text-purple-600 dark:text-purple-400' },
-  { key: 'wallbox_kw',         label: 'Wallbox',   unit: 'kW',   color: 'text-violet-600 dark:text-violet-400' },
-  { key: 'ueberschuss_kw',     label: 'Übersch.',  unit: 'kW',   color: 'text-green-600 dark:text-green-400' },
-  { key: 'defizit_kw',         label: 'Defizit',   unit: 'kW',   color: 'text-rose-600 dark:text-rose-400' },
-  { key: 'soc_prozent',        label: 'SoC',       unit: '%',    color: 'text-cyan-600 dark:text-cyan-400' },
-  { key: 'temperatur_c',       label: 'Temp',      unit: '°C',   color: 'text-amber-600 dark:text-amber-400' },
-  { key: 'globalstrahlung_wm2',label: 'Strahlung', unit: 'W/m²', color: 'text-yellow-500 dark:text-yellow-300' },
+  // Erzeugung
+  { key: 'pv_kw',              label: 'PV',            unit: 'kW',   color: 'text-yellow-500 dark:text-yellow-400', sum: true },
+  { key: 'batterie_kw',        label: 'Batterie',       unit: 'kW',   color: 'text-orange-500 dark:text-orange-400', sum: true },
+  // Netz
+  { key: 'netzbezug_kw',       label: 'Netzbezug',     unit: 'kW',   color: 'text-red-600 dark:text-red-400',    sum: true },
+  { key: 'einspeisung_kw',     label: 'Einspeisung',   unit: 'kW',   color: 'text-blue-600 dark:text-blue-400',  sum: true },
+  // Verbrauch
+  { key: 'verbrauch_kw',       label: 'Gesamtverbr.',  unit: 'kW',   color: 'text-gray-600 dark:text-gray-300',  sum: true },
+  { key: 'waermepumpe_kw',     label: 'WP',            unit: 'kW',   color: 'text-purple-600 dark:text-purple-400', sum: true },
+  { key: 'wallbox_kw',         label: 'Wallbox',       unit: 'kW',   color: 'text-violet-600 dark:text-violet-400', sum: true },
+  // Bilanz
+  { key: 'ueberschuss_kw',     label: 'Überschuss',    unit: 'kW',   color: 'text-green-600 dark:text-green-400', sum: true },
+  { key: 'defizit_kw',         label: 'Defizit',       unit: 'kW',   color: 'text-rose-600 dark:text-rose-400',  sum: true },
+  // Qualität
+  { key: 'soc_prozent',        label: 'SoC',           unit: '%',    color: 'text-cyan-600 dark:text-cyan-400',  sum: false },
+  { key: 'temperatur_c',       label: 'Temp',          unit: '°C',   color: 'text-amber-600 dark:text-amber-400', sum: false },
+  { key: 'globalstrahlung_wm2',label: 'Strahlung',     unit: 'W/m²', color: 'text-yellow-400 dark:text-yellow-300', sum: false },
 ] as const
 
 type TdColKey = typeof TD_COLS[number]['key']
 
-// Spalten die aufsummiert werden (kW → kWh)
-const SUMMIERBAR = new Set<TdColKey>(['pv_kw','verbrauch_kw','netzbezug_kw','einspeisung_kw',
-  'batterie_kw','waermepumpe_kw','wallbox_kw','ueberschuss_kw','defizit_kw'])
-
 function TagesdetailTabelle({ daten, extraSerien }: { daten: StundenWert[], extraSerien: SerieInfo[] }) {
+  const extraErzeuger    = extraSerien.filter(s => s.seite === 'quelle')
+  const extraVerbraucher = extraSerien.filter(s => s.seite === 'senke')
+
+  // Berechnete Werte pro Stunde
+  function gesamterzeugung(s: StundenWert): number {
+    const erzSonstige = extraErzeuger.reduce((a, es) => a + Math.max(0, s.komponenten?.[es.key] ?? 0), 0)
+    return round2((s.pv_kw ?? 0) + Math.max(0, s.batterie_kw ?? 0) + erzSonstige)
+  }
+  function hausverbrauch(s: StundenWert): number {
+    const vbrSonstige = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0)
+    return round2(Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrSonstige))
+  }
+
+  // Summen
   const summen: Partial<Record<TdColKey, number>> = {}
   for (const col of TD_COLS) {
-    if (!SUMMIERBAR.has(col.key)) continue
+    if (!col.sum) continue
     const vals = daten.map(d => (d as unknown as Record<string, number | null>)[col.key]).filter(v => v != null) as number[]
     if (vals.length) summen[col.key] = vals.reduce((a, b) => a + b, 0)
   }
-  // Summen für Extra-Serien (Sonstiges etc.)
+  const sumGesamterz  = daten.reduce((a, d) => a + gesamterzeugung(d), 0)
+  const sumHausverbr  = daten.reduce((a, d) => a + hausverbrauch(d), 0)
   const extraSummen: Record<string, number> = {}
   for (const serie of extraSerien) {
     const vals = daten.map(d => d.komponenten?.[serie.key] ?? null).filter(v => v != null) as number[]
     if (vals.length) extraSummen[serie.key] = vals.reduce((a, b) => a + b, 0)
   }
 
+  const tdCell = (v: number | null, dec = 2) => v != null
+    ? v.toFixed(dec)
+    : <span className="text-gray-300 dark:text-gray-600">—</span>
+
   return (
     <Card>
       <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
-        Stundenwerte · kW-Felder aufsummiert = kWh/Tag
-        {extraSerien.length > 0 && (
-          <span className="ml-2 text-violet-500 dark:text-violet-400">
-            · {extraSerien.map(s => s.label).join(', ')} aus Sonstiges-Investitionen
-          </span>
-        )}
+        Stundenwerte in kW · Summenzeile = kWh/Tag
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-700">
+            <tr className="border-b-2 border-gray-200 dark:border-gray-700">
               <th className="text-left py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Std</th>
-              {TD_COLS.map(c => (
+
+              {/* Berechnete Spalten: Gesamterzeugung + Hausverbrauch — direkt nach PV/Verbrauch */}
+              <th className="text-right py-2 px-2 font-semibold whitespace-nowrap text-yellow-600 dark:text-yellow-400">
+                Ges.erz.<br /><span className="font-normal opacity-70">kW</span>
+              </th>
+              {TD_COLS.slice(0, 2).map(c => (   /* PV + Batterie */
                 <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
                   {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
                 </th>
               ))}
-              {extraSerien.map((s, i) => (
-                <th key={s.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap border-l border-gray-200 dark:border-gray-700 ${EXTRA_FARBEN_CSS[i % EXTRA_FARBEN_CSS.length]}`}>
+              {extraErzeuger.map((s, i) => (
+                <th key={s.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${EXTRA_FARBEN_CSS[i % EXTRA_FARBEN_CSS.length]}`}>
+                  {s.label}<br /><span className="font-normal opacity-70">kW</span>
+                </th>
+              ))}
+              {TD_COLS.slice(2, 4).map(c => (   /* Netzbezug + Einspeisung */
+                <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
+                  {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
+                </th>
+              ))}
+              <th className="text-right py-2 px-2 font-semibold whitespace-nowrap text-emerald-600 dark:text-emerald-400 border-l border-gray-200 dark:border-gray-700">
+                Hausverbr.<br /><span className="font-normal opacity-70">kW</span>
+              </th>
+              {TD_COLS.slice(4).map(c => (      /* Gesamtverbr., WP, Wallbox, Bilanz, Qualität */
+                <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
+                  {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
+                </th>
+              ))}
+              {extraVerbraucher.map((s, i) => (
+                <th key={s.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${EXTRA_FARBEN_CSS[(extraErzeuger.length + i) % EXTRA_FARBEN_CSS.length]}`}>
                   {s.label}<br /><span className="font-normal opacity-70">kW</span>
                 </th>
               ))}
@@ -461,46 +547,68 @@ function TagesdetailTabelle({ daten, extraSerien }: { daten: StundenWert[], extr
               return (
                 <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="py-1.5 pr-3 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{h}:00</td>
-                  {TD_COLS.map(c => {
+                  <td className="text-right py-1.5 px-2 tabular-nums text-yellow-600 dark:text-yellow-400 font-medium">
+                    {s ? tdCell(gesamterzeugung(s)) : tdCell(null)}
+                  </td>
+                  {TD_COLS.slice(0, 2).map(c => {
                     const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
-                    return (
-                      <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">
-                        {v != null ? v.toFixed(c.unit === 'W/m²' ? 0 : 2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                      </td>
-                    )
+                    return <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">{tdCell(v, c.unit === 'W/m²' ? 0 : 2)}</td>
                   })}
-                  {extraSerien.map(serie => {
-                    const v = s?.komponenten?.[serie.key] ?? null
-                    return (
-                      <td key={serie.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300 border-l border-gray-100 dark:border-gray-800">
-                        {v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                      </td>
-                    )
+                  {extraErzeuger.map(es => (
+                    <td key={es.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">
+                      {tdCell(s?.komponenten?.[es.key] ?? null)}
+                    </td>
+                  ))}
+                  {TD_COLS.slice(2, 4).map(c => {
+                    const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
+                    return <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">{tdCell(v)}</td>
                   })}
+                  <td className="text-right py-1.5 px-2 tabular-nums text-emerald-600 dark:text-emerald-400 font-medium border-l border-gray-100 dark:border-gray-800">
+                    {s ? tdCell(hausverbrauch(s)) : tdCell(null)}
+                  </td>
+                  {TD_COLS.slice(4).map(c => {
+                    const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
+                    return <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">{tdCell(v, c.unit === 'W/m²' || c.unit === '%' ? (c.unit === 'W/m²' ? 0 : 1) : 2)}</td>
+                  })}
+                  {extraVerbraucher.map(es => (
+                    <td key={es.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">
+                      {tdCell(s?.komponenten?.[es.key] ?? null)}
+                    </td>
+                  ))}
                 </tr>
               )
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-              <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">Σ/Ø</td>
-              {TD_COLS.map(c => {
-                const v = summen[c.key]
-                const isSum = SUMMIERBAR.has(c.key)
-                return (
-                  <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
-                    {isSum && v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                  </td>
-                )
-              })}
-              {extraSerien.map(serie => {
-                const v = extraSummen[serie.key]
-                return (
-                  <td key={serie.key} className="text-right py-2 px-2 tabular-nums text-violet-600 dark:text-violet-400 border-l border-gray-200 dark:border-gray-700">
-                    {v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                  </td>
-                )
-              })}
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
+              <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">Σ kWh</td>
+              <td className="text-right py-2 px-2 tabular-nums text-yellow-600 dark:text-yellow-400">{sumGesamterz.toFixed(2)}</td>
+              {TD_COLS.slice(0, 2).map(c => (
+                <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
+                  {c.sum && summen[c.key] != null ? summen[c.key]!.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
+              ))}
+              {extraErzeuger.map(es => (
+                <td key={es.key} className="text-right py-2 px-2 tabular-nums text-violet-600 dark:text-violet-400">
+                  {extraSummen[es.key] != null ? extraSummen[es.key].toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
+              ))}
+              {TD_COLS.slice(2, 4).map(c => (
+                <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
+                  {c.sum && summen[c.key] != null ? summen[c.key]!.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
+              ))}
+              <td className="text-right py-2 px-2 tabular-nums text-emerald-600 dark:text-emerald-400 border-l border-gray-200 dark:border-gray-700">{sumHausverbr.toFixed(2)}</td>
+              {TD_COLS.slice(4).map(c => (
+                <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
+                  {c.sum && summen[c.key] != null ? summen[c.key]!.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
+              ))}
+              {extraVerbraucher.map(es => (
+                <td key={es.key} className="text-right py-2 px-2 tabular-nums text-violet-600 dark:text-violet-400">
+                  {extraSummen[es.key] != null ? extraSummen[es.key].toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
+              ))}
             </tr>
           </tfoot>
         </table>
