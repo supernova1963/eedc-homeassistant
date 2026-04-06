@@ -126,6 +126,13 @@ class MqttInboundCache:
         """Gibt alle Energy-Daten mit Timestamps zurück (für History-Snapshots)."""
         return self._energy
 
+    def get_all_live_raw(self) -> dict[int, dict]:
+        """Gibt alle Live-Daten zurück (für Power-Snapshots).
+
+        Struktur: {anlage_id: {"basis": {key: (val, ts)}, "inv": {inv_id: {key: (val, ts)}}}}
+        """
+        return self._live
+
     def has_data(self, anlage_id: int) -> bool:
         """Prüft ob MQTT-Daten für eine Anlage vorliegen."""
         cache = self._live.get(anlage_id, {})

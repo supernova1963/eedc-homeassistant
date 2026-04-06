@@ -47,7 +47,7 @@ async def get_tagesverlauf(
         return {"serien": [], "punkte": []}
 
     if not HA_INTEGRATION_AVAILABLE:
-        return {"serien": [], "punkte": []}
+        return await _get_tagesverlauf_mqtt(anlage, db, tage_zurueck)
 
     # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id)
     inv_result = await db.execute(
@@ -300,6 +300,234 @@ async def get_tagesverlauf(
         punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
 
     # Haushalt-Serie hinzufügen wenn Daten vorhanden
+    if any("haushalt" in p["werte"] for p in punkte):
+        serien.append({
+            "key": "haushalt",
+            "label": "Haushalt",
+            "kategorie": "haushalt",
+            "farbe": "#10b981",
+            "seite": "senke",
+            "bidirektional": False,
+        })
+
+    return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}
+
+
+async def _get_tagesverlauf_mqtt(
+    anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+) -> dict:
+    """
+    MQTT-Fallback für Tagesverlauf: liest aus MqttLiveSnapshot statt HA-History.
+
+    Wird aufgerufen wenn HA_INTEGRATION_AVAILABLE == False (Docker-Standalone).
+    Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
+    """
+    from backend.services.mqtt_live_history_service import get_snapshots_for_range
+
+    now = datetime.now()
+    if tage_zurueck > 0:
+        tag = now - timedelta(days=tage_zurueck)
+        start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+    else:
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now
+
+    rows = await get_snapshots_for_range(anlage.id, start, end, db)
+    if not rows:
+        return {"serien": [], "punkte": []}
+
+    # History aufbauen: {component_key: [(timestamp, value_w)]}
+    history: dict[str, list[tuple[datetime, float]]] = {}
+    for row in rows:
+        history.setdefault(row.component_key, []).append((row.timestamp, row.value_w))
+
+    available_keys = set(history.keys())
+
+    # Investitionen laden
+    inv_result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage.id,
+            Investition.aktiv == True,
+        )
+    )
+    investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
+
+    serien: list[dict] = []
+    serie_comp_keys: dict[str, list[str]] = {}
+    uebersprungen: list[str] = []
+
+    # WP mit getrennter Strommessung
+    for inv_id, inv in investitionen.items():
+        if inv.typ != "waermepumpe":
+            continue
+        config = TV_SERIE_CONFIG.get("waermepumpe")
+        if not config:
+            continue
+        heiz_key = f"inv:{inv_id}:leistung_heizen_w"
+        ww_key = f"inv:{inv_id}:leistung_warmwasser_w"
+        gesamt_key = f"inv:{inv_id}:leistung_w"
+        if gesamt_key in available_keys:
+            continue  # Gesamtleistung vorhanden → wird unten verarbeitet
+        if heiz_key in available_keys:
+            key_h = f"waermepumpe_{inv_id}_heizen"
+            serien.append({
+                "key": key_h,
+                "label": f"{inv.bezeichnung} Heizen",
+                "kategorie": config["kategorie"],
+                "farbe": config["farbe"],
+                "seite": config["seite"],
+                "bidirektional": config["bidirektional"],
+            })
+            serie_comp_keys[key_h] = [heiz_key]
+        if ww_key in available_keys:
+            key_w = f"waermepumpe_{inv_id}_warmwasser"
+            serien.append({
+                "key": key_w,
+                "label": f"{inv.bezeichnung} Warmwasser",
+                "kategorie": config["kategorie"],
+                "farbe": "#f59e0b",
+                "seite": config["seite"],
+                "bidirektional": config["bidirektional"],
+            })
+            serie_comp_keys[key_w] = [ww_key]
+
+    # Investitions-Serien (alle außer WP die bereits oben verarbeitet wurden)
+    for inv_id, inv in investitionen.items():
+        typ = inv.typ
+        if typ in SKIP_TYPEN or typ not in TV_SERIE_CONFIG:
+            continue
+        # WP: nur wenn Gesamtleistung vorhanden (getrennte Messung wurde oben behandelt)
+        comp_key = f"inv:{inv_id}:leistung_w"
+        if comp_key not in available_keys:
+            if typ != "waermepumpe":
+                uebersprungen.append(inv.bezeichnung or typ)
+            continue
+
+        # E-Auto mit Parent (Wallbox) überspringen
+        if typ == "e-auto" and inv.parent_investition_id is not None:
+            continue
+
+        config = TV_SERIE_CONFIG[typ]
+        seite = config["seite"]
+        bidirektional = config["bidirektional"]
+        if typ == "sonstiges" and isinstance(inv.parameter, dict):
+            kat = inv.parameter.get("kategorie", "verbraucher")
+            if kat == "erzeuger":
+                seite = "quelle"
+            elif kat == "speicher":
+                bidirektional = True
+
+        serie_key = f"{config['kategorie']}_{inv_id}"
+        serien.append({
+            "key": serie_key,
+            "label": inv.bezeichnung,
+            "kategorie": config["kategorie"],
+            "farbe": config["farbe"],
+            "seite": seite,
+            "bidirektional": bidirektional,
+        })
+        serie_comp_keys[serie_key] = [comp_key]
+
+    # PV Gesamt als Fallback (wenn keine individuellen PV-Sensoren)
+    has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
+    if not has_individual_pv and "basis:pv_gesamt_w" in available_keys:
+        gesamt_kwp = anlage.leistung_kwp or 0
+        serien.append({
+            "key": "pv_gesamt",
+            "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
+            "kategorie": "pv",
+            "farbe": "#eab308",
+            "seite": "quelle",
+            "bidirektional": False,
+        })
+        serie_comp_keys["pv_gesamt"] = ["basis:pv_gesamt_w"]
+
+    # Netz
+    has_netz_kombi = "basis:netz_kombi_w" in available_keys
+    has_einsp = "basis:einspeisung_w" in available_keys
+    has_bezug = "basis:netzbezug_w" in available_keys
+    has_netz = has_netz_kombi or has_einsp or has_bezug
+    if has_netz:
+        serien.append({
+            "key": "netz",
+            "label": "Stromnetz",
+            "kategorie": "netz",
+            "farbe": "#ef4444",
+            "seite": "quelle",
+            "bidirektional": True,
+        })
+
+    if not serien:
+        return {"serien": [], "punkte": []}
+
+    # 10-Minuten-Mittelwerte berechnen (144 Intervalle pro Tag)
+    punkte: list[dict] = []
+    for m in range(144):
+        h_start = start + timedelta(minutes=m * 10)
+        h_end = h_start + timedelta(minutes=10)
+        if h_start >= end:
+            break
+
+        werte: dict[str, float] = {}
+        raw_values: dict[str, float] = {}
+
+        for serie in serien:
+            skey = serie["key"]
+            if skey == "netz":
+                continue
+            comp_keys = serie_comp_keys.get(skey, [])
+            serie_sum = 0.0
+            has_data = False
+            for ckey in comp_keys:
+                pts = [v for ts, v in history.get(ckey, []) if h_start <= ts < h_end]
+                if pts:
+                    serie_sum += sum(pts) / len(pts) / 1000  # W → kW
+                    has_data = True
+            if has_data:
+                if serie["bidirektional"]:
+                    raw_val = -serie_sum
+                elif serie["seite"] == "senke":
+                    raw_val = -abs(serie_sum)
+                else:
+                    raw_val = abs(serie_sum)
+                raw_values[skey] = raw_val
+                werte[skey] = round(raw_val, 2)
+
+        # Netz: Bezug (positiv) - Einspeisung (negativ)
+        if has_netz:
+            bezug_kw = 0.0
+            einsp_kw = 0.0
+            if has_netz_kombi and not has_einsp and not has_bezug:
+                pts = [v for ts, v in history.get("basis:netz_kombi_w", []) if h_start <= ts < h_end]
+                if pts:
+                    avg = sum(pts) / len(pts) / 1000
+                    if avg >= 0:
+                        bezug_kw = avg
+                    else:
+                        einsp_kw = abs(avg)
+            else:
+                pts = [v for ts, v in history.get("basis:netzbezug_w", []) if h_start <= ts < h_end]
+                if pts:
+                    bezug_kw = sum(pts) / len(pts) / 1000
+                pts = [v for ts, v in history.get("basis:einspeisung_w", []) if h_start <= ts < h_end]
+                if pts:
+                    einsp_kw = sum(pts) / len(pts) / 1000
+            netto = bezug_kw - einsp_kw
+            if abs(netto) > 0.001:
+                raw_values["netz"] = netto
+                werte["netz"] = round(netto, 2)
+
+        # Haushalt berechnen
+        quellen_sum = sum(v for v in raw_values.values() if v > 0)
+        senken_sum = sum(v for v in raw_values.values() if v < 0)
+        haushalt = quellen_sum + senken_sum
+        if quellen_sum > 0 and haushalt > 0:
+            werte["haushalt"] = round(-haushalt, 2)
+
+        punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
+
+    # Haushalt-Serie ergänzen wenn Daten vorhanden
     if any("haushalt" in p["werte"] for p in punkte):
         serien.append({
             "key": "haushalt",

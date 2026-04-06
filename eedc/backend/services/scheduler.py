@@ -96,6 +96,24 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # MQTT Live Snapshot: Alle 5 Minuten (W-Werte für Tagesverlauf-Chart)
+            self._scheduler.add_job(
+                mqtt_live_snapshot_job,
+                IntervalTrigger(minutes=5),
+                id="mqtt_live_snapshot",
+                name="MQTT Live Snapshot",
+                replace_existing=True,
+            )
+
+            # MQTT Live Cleanup: Täglich um 03:05 (15 Tage Retention)
+            self._scheduler.add_job(
+                mqtt_live_cleanup_job,
+                CronTrigger(hour=3, minute=5),
+                id="mqtt_live_cleanup",
+                name="MQTT Live Cleanup",
+                replace_existing=True,
+            )
+
             # MQTT Auto-Publish: Intervall aus settings (nur wenn MQTT_AUTO_PUBLISH=true)
             from backend.core.config import settings as app_settings
             if app_settings.mqtt_auto_publish:
@@ -287,6 +305,24 @@ async def mqtt_energy_cleanup_job() -> None:
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )
+
+
+async def mqtt_live_snapshot_job() -> None:
+    """Snapshots MQTT Live-W-Werte in SQLite (alle 5 Min, für Tagesverlauf-Chart)."""
+    try:
+        from backend.services.mqtt_live_history_service import snapshot_live_cache
+        await snapshot_live_cache()
+    except Exception as e:
+        logger.warning(f"MQTT Live Snapshot fehlgeschlagen: {type(e).__name__}: {e}")
+
+
+async def mqtt_live_cleanup_job() -> None:
+    """Löscht alte MQTT Live Snapshots (täglich um 03:05, 15 Tage Retention)."""
+    try:
+        from backend.services.mqtt_live_history_service import cleanup_old_snapshots
+        await cleanup_old_snapshots()
+    except Exception as e:
+        logger.warning(f"MQTT Live Cleanup fehlgeschlagen: {type(e).__name__}: {e}")
 
 
 async def energie_profil_heute_job() -> None:
