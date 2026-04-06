@@ -11,6 +11,8 @@ import { energieProfilApi, type StundenWert, type WochenmusterPunkt } from '../.
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
+const WOCHENTAG_KURZ = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+
 // Gruppierungen für Wochenvergleich
 const GRUPPEN = [
   { label: 'Mo–Fr', tage: [0, 1, 2, 3, 4] },
@@ -177,6 +179,9 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
           </ResponsiveContainer>
         </Card>
       )}
+
+      {/* Detailtabelle alle Felder */}
+      {daten.length > 0 && <TagesdetailTabelle daten={daten} />}
     </div>
   )
 }
@@ -352,7 +357,167 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
           </ResponsiveContainer>
         </Card>
       )}
+
+      {/* Detailtabelle alle Wochentage × Felder */}
+      {daten.length > 0 && <WochenmusterTabelle daten={daten} />}
     </div>
+  )
+}
+
+// ─── Tabellen ─────────────────────────────────────────────────────────────────
+
+const TD_COLS = [
+  { key: 'pv_kw',              label: 'PV',       unit: 'kW',   color: 'text-yellow-600 dark:text-yellow-400' },
+  { key: 'verbrauch_kw',       label: 'Verbrauch', unit: 'kW',   color: 'text-gray-600 dark:text-gray-300' },
+  { key: 'netzbezug_kw',       label: 'Bezug',     unit: 'kW',   color: 'text-red-600 dark:text-red-400' },
+  { key: 'einspeisung_kw',     label: 'Einsp.',    unit: 'kW',   color: 'text-blue-600 dark:text-blue-400' },
+  { key: 'batterie_kw',        label: 'Batterie',  unit: 'kW',   color: 'text-orange-500 dark:text-orange-400' },
+  { key: 'waermepumpe_kw',     label: 'WP',        unit: 'kW',   color: 'text-purple-600 dark:text-purple-400' },
+  { key: 'wallbox_kw',         label: 'Wallbox',   unit: 'kW',   color: 'text-violet-600 dark:text-violet-400' },
+  { key: 'ueberschuss_kw',     label: 'Übersch.',  unit: 'kW',   color: 'text-green-600 dark:text-green-400' },
+  { key: 'defizit_kw',         label: 'Defizit',   unit: 'kW',   color: 'text-rose-600 dark:text-rose-400' },
+  { key: 'soc_prozent',        label: 'SoC',       unit: '%',    color: 'text-cyan-600 dark:text-cyan-400' },
+  { key: 'temperatur_c',       label: 'Temp',      unit: '°C',   color: 'text-amber-600 dark:text-amber-400' },
+  { key: 'globalstrahlung_wm2',label: 'Strahlung', unit: 'W/m²', color: 'text-yellow-500 dark:text-yellow-300' },
+] as const
+
+type TdColKey = typeof TD_COLS[number]['key']
+
+// Spalten die aufsummiert werden (kW → kWh)
+const SUMMIERBAR = new Set<TdColKey>(['pv_kw','verbrauch_kw','netzbezug_kw','einspeisung_kw',
+  'batterie_kw','waermepumpe_kw','wallbox_kw','ueberschuss_kw','defizit_kw'])
+
+function TagesdetailTabelle({ daten }: { daten: StundenWert[] }) {
+  const summen: Partial<Record<TdColKey, number>> = {}
+  for (const col of TD_COLS) {
+    if (!SUMMIERBAR.has(col.key)) continue
+    const vals = daten.map(d => (d as unknown as Record<string, number | null>)[col.key]).filter(v => v != null) as number[]
+    if (vals.length) summen[col.key] = vals.reduce((a, b) => a + b, 0)
+  }
+
+  return (
+    <Card>
+      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
+        Stundenwerte · kW-Felder aufsummiert = kWh/Tag
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="text-left py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Std</th>
+              {TD_COLS.map(c => (
+                <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
+                  {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 24 }, (_, h) => {
+              const s = daten.find(d => d.stunde === h)
+              return (
+                <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <td className="py-1.5 pr-3 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{h}:00</td>
+                  {TD_COLS.map(c => {
+                    const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
+                    return (
+                      <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">
+                        {v != null ? v.toFixed(c.unit === 'W/m²' ? 0 : 2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+              <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">Σ/Ø</td>
+              {TD_COLS.map(c => {
+                const v = summen[c.key]
+                const isSum = SUMMIERBAR.has(c.key)
+                return (
+                  <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
+                    {isSum && v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  </td>
+                )
+              })}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+const WM_FELDER = [
+  { key: 'pv_kw' as const,          label: 'PV kW',      color: 'text-yellow-600 dark:text-yellow-400' },
+  { key: 'verbrauch_kw' as const,    label: 'Verbr. kW',  color: 'text-gray-600 dark:text-gray-300' },
+  { key: 'netzbezug_kw' as const,    label: 'Bezug kW',   color: 'text-red-600 dark:text-red-400' },
+  { key: 'einspeisung_kw' as const,  label: 'Einsp. kW',  color: 'text-blue-600 dark:text-blue-400' },
+  { key: 'batterie_kw' as const,     label: 'Batt. kW',   color: 'text-orange-500 dark:text-orange-400' },
+]
+
+function WochenmusterTabelle({ daten }: { daten: WochenmusterPunkt[] }) {
+  // Lookup: {wochentag: {stunde: WochenmusterPunkt}}
+  const lookup = new Map<number, Map<number, WochenmusterPunkt>>()
+  for (const d of daten) {
+    if (!lookup.has(d.wochentag)) lookup.set(d.wochentag, new Map())
+    lookup.get(d.wochentag)!.set(d.stunde, d)
+  }
+  const verfuegbareWT = [0,1,2,3,4,5,6].filter(wt => lookup.has(wt))
+
+  return (
+    <Card>
+      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
+        Ø-Stundenwerte je Wochentag · alle Felder
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="text-left py-2 pr-2 font-medium text-gray-500 dark:text-gray-400 sticky left-0 bg-white dark:bg-gray-900">Std</th>
+              {verfuegbareWT.map(wt => (
+                <th key={wt} colSpan={WM_FELDER.length}
+                  className="text-center py-2 px-2 font-medium text-gray-700 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700">
+                  {WOCHENTAG_KURZ[wt]}
+                </th>
+              ))}
+            </tr>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th scope="col" className="sticky left-0 bg-white dark:bg-gray-900">Feld</th>
+              {verfuegbareWT.map(wt => (
+                WM_FELDER.map(f => (
+                  <th key={`${wt}-${f.key}`}
+                    className={`text-right py-1 px-1.5 font-normal whitespace-nowrap ${f.color} border-l first:border-l border-gray-100 dark:border-gray-800`}>
+                    {f.label.split(' ')[0]}
+                  </th>
+                ))
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 24 }, (_, h) => (
+              <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <td className="py-1.5 pr-2 font-medium text-gray-600 dark:text-gray-300 sticky left-0 bg-white dark:bg-gray-900">{h}:00</td>
+                {verfuegbareWT.map(wt => {
+                  const p = lookup.get(wt)?.get(h)
+                  return WM_FELDER.map(f => {
+                    const v = p ? p[f.key] : null
+                    return (
+                      <td key={`${wt}-${f.key}`}
+                        className="text-right py-1.5 px-1.5 tabular-nums text-gray-700 dark:text-gray-300 border-l border-gray-100 dark:border-gray-800">
+                        {v != null ? v.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      </td>
+                    )
+                  })
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   )
 }
 

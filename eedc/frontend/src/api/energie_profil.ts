@@ -46,11 +46,11 @@ export interface TagesZusammenfassung {
 
 export const energieProfilApi = {
   getStunden: (anlageId: number, datum: string): Promise<StundenWert[]> =>
-    api.get(`/api/energie-profil/${anlageId}/stunden?datum=${datum}`),
+    api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
 
   getWochenmuster: (anlageId: number, von: string, bis: string): Promise<WochenmusterPunkt[]> =>
-    api.get(`/api/energie-profil/${anlageId}/wochenmuster?von=${von}&bis=${bis}`),
+    api.get(`/energie-profil/${anlageId}/wochenmuster?von=${von}&bis=${bis}`),
 
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
-    api.get(`/api/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
+    api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
 }
