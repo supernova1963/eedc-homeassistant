@@ -16,6 +16,11 @@ from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.core.field_definitions import (
+    get_alle_felder_fuer_investition,
+    get_live_felder_fuer_investition,
+    SOC_TYPEN,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -323,31 +328,8 @@ async def get_mqtt_topics(
             )
         )).scalars().all()
 
-        soc_typen = {"speicher", "e-auto"}
-        energy_keys_by_typ = {
-            "pv-module": [("pv_erzeugung_kwh", "PV-Erzeugung (kWh)")],
-            "speicher": [("ladung_kwh", "Ladung (kWh)"), ("entladung_kwh", "Entladung (kWh)")],
-            "waermepumpe": [
-                ("stromverbrauch_kwh", "Stromverbrauch (kWh)"),
-                ("heizenergie_kwh", "Heizenergie (kWh)"),
-                ("warmwasser_kwh", "Warmwasser (kWh)"),
-            ],
-            "e-auto": [
-                ("ladung_kwh", "Ladung (kWh)"),
-                ("km_gefahren", "Gefahrene km"),
-                ("v2h_entladung_kwh", "V2H-Entladung (kWh)"),
-            ],
-            "wallbox": [
-                ("ladung_kwh", "Ladung (kWh)"),
-                ("ladevorgaenge", "Ladevorgaenge (Anzahl)"),
-            ],
-            "balkonkraftwerk": [
-                ("pv_erzeugung_kwh", "Erzeugung (kWh)"),
-                ("eigenverbrauch_kwh", "Eigenverbrauch (kWh)"),
-                ("speicher_ladung_kwh", "Speicher Ladung (kWh)"),
-                ("speicher_entladung_kwh", "Speicher Entladung (kWh)"),
-            ],
-        }
+        # energy_keys_by_typ und soc_typen werden aus Registry abgeleitet —
+        # kein hardcodierter Block mehr. Neue Felder nur in field_definitions eintragen.
         skip_typen = {"wechselrichter"}
 
         for inv in investitionen:
@@ -358,30 +340,24 @@ async def get_mqtt_topics(
             inv_live = f"{live_prefix}/inv/{inv.id}_{islug}"
             inv_energy = f"{energy_prefix}/inv/{inv.id}_{islug}"
 
-            topics.append({"topic": f"{inv_live}/leistung_w", "label": f"{inv.bezeichnung} – Leistung (W)", "anlage": aname, "typ": inv.typ})
-            if inv.typ in soc_typen:
-                topics.append({"topic": f"{inv_live}/soc", "label": f"{inv.bezeichnung} – SoC (%)", "anlage": aname, "typ": inv.typ})
-            if inv.typ == "waermepumpe":
-                topics.append({"topic": f"{inv_live}/leistung_heizen_w", "label": f"{inv.bezeichnung} – Heizleistung (W)", "anlage": aname, "typ": inv.typ})
-                topics.append({"topic": f"{inv_live}/leistung_warmwasser_w", "label": f"{inv.bezeichnung} – Warmwasser-Leistung (W)", "anlage": aname, "typ": inv.typ})
-                topics.append({"topic": f"{inv_live}/warmwasser_temperatur_c", "label": f"{inv.bezeichnung} – Warmwasser-Temperatur (°C)", "anlage": aname, "typ": inv.typ})
+            # Live-Topics aus Registry (leistung_w, soc, WP-spezifische, etc.)
+            for live_feld in get_live_felder_fuer_investition(inv.typ, inv.parameter):
+                topics.append({
+                    "topic": f"{inv_live}/{live_feld['key']}",
+                    "label": f"{inv.bezeichnung} – {live_feld['label']} ({live_feld['einheit']})",
+                    "anlage": aname,
+                    "typ": inv.typ,
+                })
 
-            energy_keys = list(energy_keys_by_typ.get(inv.typ, []))
-            if inv.typ == "sonstiges":
-                param = inv.parameter if isinstance(inv.parameter, dict) else {}
-                kategorie = param.get("kategorie", "verbraucher")
-                if kategorie == "erzeuger":
-                    energy_keys = [("erzeugung_kwh", "Erzeugung (kWh)")]
-                elif kategorie == "speicher":
-                    energy_keys = [
-                        ("erzeugung_kwh", "Erzeugung/Entladung (kWh)"),
-                        ("verbrauch_sonstig_kwh", "Verbrauch/Ladung (kWh)"),
-                    ]
-                else:
-                    energy_keys = [("verbrauch_sonstig_kwh", "Verbrauch (kWh)")]
-
-            for key, label in energy_keys:
-                topics.append({"topic": f"{inv_energy}/{key}", "label": f"{inv.bezeichnung} – {label}", "anlage": aname, "typ": "energy"})
+            # Energy-Topics aus Registry (kWh/km/€-Monatswerte)
+            for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter):
+                einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
+                topics.append({
+                    "topic": f"{inv_energy}/{feld['feld']}",
+                    "label": f"{inv.bezeichnung} – {feld['label']}{einheit_str}",
+                    "anlage": aname,
+                    "typ": "energy",
+                })
 
     return {"topics": topics}
 

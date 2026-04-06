@@ -270,6 +270,68 @@ INVESTITION_FELDER: dict = {
     },
 }
 
+# =============================================================================
+# Live-Felder pro Investitionstyp (Echtzeit: W, kW, %, °C)
+#
+# Diese Felder werden als MQTT-Topics und im Sensor-Mapping-Wizard verwendet.
+# "key"     — MQTT-Topic-Suffix / Sensor-Mapping-Key
+# "label"   — Anzeigename
+# "einheit" — W, %, °C
+# "bedingung" — optional, gleiche Semantik wie in INVESTITION_FELDER
+# =============================================================================
+
+LIVE_FELDER_INV: dict = {
+    "pv-module": [
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+    ],
+    "wechselrichter": [
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+    ],
+    "speicher": [
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "soc",        "label": "Ladestand", "einheit": "%"},
+    ],
+    "e-auto": [
+        {"key": "leistung_w", "label": "Ladeleistung", "einheit": "W"},
+        {"key": "soc",        "label": "Ladestand",    "einheit": "%"},
+    ],
+    "wallbox": [
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+    ],
+    "waermepumpe": [
+        {"key": "leistung_w",              "label": "Leistung gesamt",      "einheit": "W"},
+        {"key": "leistung_heizen_w",       "label": "Leistung Heizen",      "einheit": "W"},
+        {"key": "leistung_warmwasser_w",   "label": "Leistung Warmwasser",  "einheit": "W"},
+        {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C"},
+    ],
+    "balkonkraftwerk": [
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+    ],
+    "sonstiges": [
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+    ],
+}
+
+# Live-Felder auf Anlage-Ebene (kein Investment-Bezug)
+BASIS_LIVE_FELDER: list[dict] = [
+    {"key": "einspeisung_w",       "label": "Einspeisung",              "einheit": "W"},
+    {"key": "netzbezug_w",         "label": "Netzbezug",                "einheit": "W"},
+    {"key": "netz_kombi_w",        "label": "Netz kombiniert (±)",      "einheit": "W"},
+    {"key": "pv_gesamt_w",         "label": "PV gesamt",                "einheit": "W"},
+    {"key": "aussentemperatur_c",  "label": "Außentemperatur",          "einheit": "°C"},
+    {"key": "sfml_today_kwh",      "label": "Solar Forecast heute",     "einheit": "kWh"},
+    {"key": "sfml_tomorrow_kwh",   "label": "Solar Forecast morgen",    "einheit": "kWh"},
+    {"key": "sfml_accuracy_pct",   "label": "Solar Forecast Genauigkeit","einheit": "%"},
+]
+
+# Typen mit SoC-Live-Sensor (aus LIVE_FELDER_INV abgeleitet)
+SOC_TYPEN: frozenset[str] = frozenset(
+    typ for typ, felder in LIVE_FELDER_INV.items()
+    if any(f["key"] == "soc" for f in felder)
+)
+
+
+# =============================================================================
 # Alte Feldnamen → neue kanonische Namen (für Lese-Kompatibilität mit alten DB-Einträgen)
 LEGACY_FELDNAMEN: dict[str, str] = {
     "speicher_ladung_netz_kwh": "ladung_netz_kwh",   # Speicher Arbitrage
@@ -378,3 +440,85 @@ def resolve_legacy_key(key: str) -> str:
     Für Rückwärtskompatibilität beim Lesen alter DB-Einträge.
     """
     return LEGACY_FELDNAMEN.get(key, key)
+
+
+def get_live_felder_fuer_investition(typ: str, parameter: Optional[dict] = None) -> list[dict]:
+    """
+    Gibt die Live-Felder (W/kW/%) für einen Investitionstyp zurück.
+
+    Bedingungen werden anhand der Parameter aufgelöst (gleiche Semantik wie
+    get_felder_fuer_investition). Gibt immer eine leere Liste zurück wenn der
+    Typ keine Live-Felder hat.
+
+    Args:
+        typ: Investitionstyp
+        parameter: Investitions-Parameter-Dict (für konditionelle Felder)
+
+    Returns:
+        Liste von Live-Feld-Dicts (key, label, einheit)
+    """
+    params = parameter or {}
+    alle = LIVE_FELDER_INV.get(typ, [])
+    result = []
+    getrennte_strommessung = bool(params.get("getrennte_strommessung"))
+
+    for feld in alle:
+        bedingung = feld.get("bedingung")
+        if bedingung is None:
+            result.append({k: v for k, v in feld.items() if k != "bedingung"})
+        elif bedingung == "getrennte_strommessung" and getrennte_strommessung:
+            result.append({k: v for k, v in feld.items() if k != "bedingung"})
+        elif bedingung == "!getrennte_strommessung" and not getrennte_strommessung:
+            result.append({k: v for k, v in feld.items() if k != "bedingung"})
+
+    return result
+
+
+def build_feld_labels() -> dict[str, str]:
+    """
+    Baut ein vollständiges Label-Dict aus der Registry auf.
+
+    Kombiniert:
+    - BASIS_FELDER (mapping_key → label)
+    - INVESTITION_FELDER (feld → label, alle Typen/Kategorien)
+    - LIVE_FELDER_INV (key → label)
+    - Basis-Level-Extras (pv_gesamt, etc.)
+
+    Returns:
+        dict: {feldname_oder_key: anzeigelabel}
+    """
+    labels: dict[str, str] = {}
+
+    # Basis-Felder (mapping_key-Form: "einspeisung", "netzbezug", ...)
+    for f in BASIS_FELDER:
+        labels[f["mapping_key"]] = f["label"]
+        labels[f["feld"]] = f["label"]  # auch DB-Feldname → Label
+
+    # Basis-Live-Felder
+    for f in BASIS_LIVE_FELDER:
+        labels[f["key"]] = f["label"]
+
+    # Investitions-Felder (alle Typen)
+    for typ, felder in INVESTITION_FELDER.items():
+        if isinstance(felder, dict):
+            # Sonstiges — Kategorien
+            for kat_felder in felder.values():
+                for f in kat_felder:
+                    labels[f["feld"]] = f["label"]
+        else:
+            for f in felder:
+                labels[f["feld"]] = f["label"]
+
+    # Live-Felder (Investitions-Ebene)
+    for felder in LIVE_FELDER_INV.values():
+        for f in felder:
+            labels[f["key"]] = f["label"]
+
+    # Extras die nicht in oben definierter Struktur stecken
+    labels["pv_gesamt"] = "PV Erzeugung Gesamt"
+
+    return labels
+
+
+# Vorgefertigtes Label-Dict (einmalig berechnet)
+FELD_LABELS: dict[str, str] = build_feld_labels()

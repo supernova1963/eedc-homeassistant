@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.services.activity_service import log_activity
+from backend.core.field_definitions import FELD_LABELS as _FELD_LABELS_REGISTRY
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -107,40 +108,8 @@ MAPPING_KEY_TO_DB_FELD = {
 # Feld-Labels für bessere Lesbarkeit
 # =============================================================================
 
-FELD_LABELS = {
-    # Basis (mapping_key-Form)
-    "einspeisung": "Einspeisung",
-    "netzbezug": "Netzbezug",
-    "globalstrahlung": "Globalstrahlung",
-    "sonnenstunden": "Sonnenstunden",
-    "temperatur": "Ø Temperatur",
-    "pv_gesamt": "PV Erzeugung Gesamt",
-    # PV-Module
-    "pv_erzeugung_kwh": "PV Erzeugung",
-    # Speicher
-    "ladung_kwh": "Ladung",
-    "entladung_kwh": "Entladung",
-    "ladung_netz_kwh": "Ladung aus Netz",
-    # E-Auto
-    "ladung_pv_kwh": "Ladung PV",
-    "ladung_netz_kwh": "Ladung Netz",
-    "km_gefahren": "Kilometer",
-    "v2h_entladung_kwh": "V2H Entladung",
-    "verbrauch_kwh": "Verbrauch gesamt",
-    "ladung_extern_kwh": "Ladung Extern",
-    # Wallbox
-    "ladevorgaenge": "Ladevorgänge",
-    # Wärmepumpe
-    "stromverbrauch_kwh": "Stromverbrauch",
-    "strom_heizen_kwh": "Strom Heizen",
-    "strom_warmwasser_kwh": "Strom Warmwasser",
-    "heizenergie_kwh": "Heizenergie",
-    "warmwasser_kwh": "Warmwasser",
-    # Balkonkraftwerk
-    "eigenverbrauch_kwh": "Eigenverbrauch",
-    "speicher_ladung_kwh": "Speicher Ladung",
-    "speicher_entladung_kwh": "Speicher Entladung",
-}
+# FELD_LABELS aus field_definitions-Registry abgeleitet — kein hardcodierter Block mehr.
+FELD_LABELS = _FELD_LABELS_REGISTRY
 
 
 # =============================================================================

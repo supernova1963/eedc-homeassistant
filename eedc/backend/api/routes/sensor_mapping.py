@@ -18,6 +18,7 @@ import httpx
 
 from backend.core.database import get_session
 from backend.core.config import settings
+from backend.core.field_definitions import get_felder_fuer_investition
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.investition import Investition
@@ -110,26 +111,8 @@ class SetupResult(BaseModel):
     errors: list[str] = []
 
 
-# =============================================================================
-# Erwartete Felder pro Investitionstyp
-# =============================================================================
-
-ERWARTETE_FELDER = {
-    "pv-module": ["pv_erzeugung_kwh"],
-    "speicher": ["ladung_kwh", "entladung_kwh", "ladung_netz_kwh"],
-    "waermepumpe": ["stromverbrauch_kwh", "heizenergie_kwh", "warmwasser_kwh"],
-    "e-auto": ["ladung_pv_kwh", "ladung_netz_kwh", "km_gefahren", "v2h_entladung_kwh", "verbrauch_kwh", "ladung_extern_kwh"],
-    "wallbox": ["ladung_kwh", "ladung_pv_kwh", "ladevorgaenge"],
-    "balkonkraftwerk": ["pv_erzeugung_kwh", "eigenverbrauch_kwh", "speicher_ladung_kwh", "speicher_entladung_kwh"],
-    # Sonstiges: Basisfelder — werden unten per kategorie überschrieben
-    "sonstiges": ["verbrauch_sonstig_kwh"],
-}
-
-ERWARTETE_FELDER_SONSTIGES = {
-    "verbraucher": ["verbrauch_sonstig_kwh"],
-    "erzeuger": ["erzeugung_kwh"],
-    "speicher": ["verbrauch_sonstig_kwh", "erzeugung_kwh"],
-}
+# Erwartete Felder werden aus field_definitions.INVESTITION_FELDER abgeleitet —
+# kein hardcodierter Block mehr. Neue Felder nur in field_definitions eintragen.
 
 
 # =============================================================================
@@ -176,17 +159,8 @@ async def get_sensor_mapping(anlage_id: int):
         gesamt_kwp = 0.0
 
         for inv in investitionen_db:
-            # Erwartete Felder basierend auf Typ
-            felder = list(ERWARTETE_FELDER.get(inv.typ, []))
-
-            # Wärmepumpe: getrennte Strommessung → andere Felder
-            if inv.typ == "waermepumpe" and inv.parameter and inv.parameter.get("getrennte_strommessung"):
-                felder = ["strom_heizen_kwh", "strom_warmwasser_kwh", "heizenergie_kwh", "warmwasser_kwh"]
-
-            # Sonstiges: Felder je nach kategorie (erzeuger/verbraucher/speicher)
-            if inv.typ == "sonstiges" and inv.parameter:
-                kat = inv.parameter.get("kategorie", "verbraucher")
-                felder = list(ERWARTETE_FELDER_SONSTIGES.get(kat, ERWARTETE_FELDER_SONSTIGES["verbraucher"]))
+            # Erwartete Felder aus Registry (Bedingungen werden anhand der Parameter aufgelöst)
+            felder = [f["feld"] for f in get_felder_fuer_investition(inv.typ, inv.parameter)]
 
             # kWp für PV-Module
             kwp = None
