@@ -323,7 +323,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
 
       // Validierung: Parent erforderlich?
       if (isParentRequired && possibleParents.length > 0 && !formData.parent_investition_id) {
-        setError(`${typLabels[typ]} müssen einem ${PARENT_TYPE_LABELS[parentTyp!] || parentTyp} zugeordnet werden`)
+        setError(`${typLabels[typ]} müssen einem ${parentLabel} zugeordnet werden`)
         return
       }
 
@@ -484,12 +484,12 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   {isParentRequired ? (
                     <span>
-                      Bitte legen Sie zuerst einen <strong>{PARENT_TYPE_LABELS[parentTyp] || parentTyp}</strong> an,
+                      Bitte legen Sie zuerst einen <strong>{parentLabel}</strong> an,
                       bevor Sie {typLabels[typ]} erstellen können.
                     </span>
                   ) : (
                     <span>
-                      Kein {PARENT_TYPE_LABELS[parentTyp] || parentTyp} vorhanden.
+                      Kein {parentLabel} vorhanden.
                       Zuordnung ist optional.
                     </span>
                   )}
