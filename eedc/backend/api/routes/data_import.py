@@ -215,48 +215,53 @@ async def apply_import(
                 md = Monatsdaten(anlage_id=anlage_id, jahr=jahr, monat=monat)
                 db.add(md)
 
-            # Basis-Felder setzen
+            # ── PV-Erzeugung ─────────────────────────────────────────────────
+            # Auf PV-Module verteilen wenn vorhanden; Aggregat immer in md setzen
+            pv_erzeugung: Optional[float] = None
+            if monat_input.pv_erzeugung_kwh is not None and monat_input.pv_erzeugung_kwh > 0:
+                if pv_module:
+                    w = await _distribute_legacy_pv_to_modules(
+                        db, monat_input.pv_erzeugung_kwh, pv_module, jahr, monat, ueberschreiben
+                    )
+                    if importiert == 0:
+                        warnungen.extend(w)
+                pv_erzeugung = monat_input.pv_erzeugung_kwh  # Aggregat immer setzen
+
+            # ── Batterie ──────────────────────────────────────────────────────
+            # Auf Speicher verteilen wenn vorhanden; Aggregat als md-Feld (einmal, nicht doppelt)
+            bat_ladung: Optional[float] = None
+            bat_entladung: Optional[float] = None
+            bat_ladung_raw = monat_input.batterie_ladung_kwh
+            bat_entladung_raw = monat_input.batterie_entladung_kwh
+            if (bat_ladung_raw or 0) > 0 or (bat_entladung_raw or 0) > 0:
+                if speicher:
+                    w = await _distribute_legacy_battery_to_storages(
+                        db, bat_ladung_raw or 0, bat_entladung_raw or 0,
+                        speicher, jahr, monat, ueberschreiben
+                    )
+                    if importiert == 0:
+                        warnungen.extend(w)
+                bat_ladung = bat_ladung_raw
+                bat_entladung = bat_entladung_raw
+
+            # ── Monatsdaten schreiben ─────────────────────────────────────────
             if monat_input.einspeisung_kwh is not None:
                 md.einspeisung_kwh = monat_input.einspeisung_kwh
             if monat_input.netzbezug_kwh is not None:
                 md.netzbezug_kwh = monat_input.netzbezug_kwh
             if monat_input.eigenverbrauch_kwh is not None:
                 md.eigenverbrauch_kwh = monat_input.eigenverbrauch_kwh
-
-            # Legacy-Felder für Batterie auf Monatsdaten-Ebene
-            if monat_input.batterie_ladung_kwh is not None:
-                md.batterie_ladung_kwh = monat_input.batterie_ladung_kwh
-            if monat_input.batterie_entladung_kwh is not None:
-                md.batterie_entladung_kwh = monat_input.batterie_entladung_kwh
-
+            if pv_erzeugung is not None:
+                md.pv_erzeugung_kwh = pv_erzeugung
+            if bat_ladung is not None:
+                md.batterie_ladung_kwh = bat_ladung
+            if bat_entladung is not None:
+                md.batterie_entladung_kwh = bat_entladung
             md.datenquelle = datenquelle
 
-            # PV-Erzeugung auf PV-Module verteilen
-            if monat_input.pv_erzeugung_kwh is not None and monat_input.pv_erzeugung_kwh > 0:
-                if pv_module:
-                    w = await _distribute_legacy_pv_to_modules(
-                        db, monat_input.pv_erzeugung_kwh, pv_module, jahr, monat, ueberschreiben
-                    )
-                    if importiert == 0:  # Warnung nur einmal
-                        warnungen.extend(w)
-                else:
-                    # Kein PV-Modul angelegt → Legacy-Feld nutzen
-                    md.pv_erzeugung_kwh = monat_input.pv_erzeugung_kwh
-
-            # Batterie-Werte auf Speicher verteilen
-            bat_ladung = monat_input.batterie_ladung_kwh or 0
-            bat_entladung = monat_input.batterie_entladung_kwh or 0
-            if (bat_ladung > 0 or bat_entladung > 0) and speicher:
-                w = await _distribute_legacy_battery_to_storages(
-                    db, bat_ladung, bat_entladung, speicher, jahr, monat, ueberschreiben
-                )
-                if importiert == 0:
-                    warnungen.extend(w)
-
-            # Wallbox-Ladung auf Wallbox-Investition verteilen
+            # ── Wallbox ───────────────────────────────────────────────────────
             if monat_input.wallbox_ladung_kwh is not None and monat_input.wallbox_ladung_kwh > 0:
                 if wallboxen:
-                    # Erste Wallbox verwenden (bei mehreren: proportional wäre Overkill)
                     wb = wallboxen[0]
                     verbrauch = {"ladung_kwh": monat_input.wallbox_ladung_kwh}
                     if monat_input.wallbox_ladung_pv_kwh is not None:
@@ -278,13 +283,12 @@ async def apply_import(
                             "Bitte zuerst eine Wallbox unter Investitionen anlegen."
                         )
 
-            # E-Auto km_gefahren auf E-Auto-Investition verteilen
+            # ── E-Auto ────────────────────────────────────────────────────────
             if monat_input.eauto_km_gefahren is not None and monat_input.eauto_km_gefahren > 0:
-                eautos = [i for i in investitionen if i.typ == "eauto"]
+                eautos = [i for i in investitionen if i.typ == "e-auto"]
                 if eautos:
-                    ea = eautos[0]
                     await _upsert_investition_monatsdaten(
-                        db, ea.id, jahr, monat,
+                        db, eautos[0].id, jahr, monat,
                         {"km_gefahren": monat_input.eauto_km_gefahren},
                         ueberschreiben,
                     )
