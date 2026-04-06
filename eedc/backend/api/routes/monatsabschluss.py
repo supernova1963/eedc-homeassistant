@@ -445,7 +445,7 @@ async def get_monatsabschluss(
     investitionen_status: list[InvestitionStatus] = []
     for inv in anlage.investitionen:
         # Felder für diese Investition auflösen (Bedingungen berücksichtigen)
-        felder_config = get_felder_fuer_investition(inv.typ, inv.parameter)
+        felder_config = get_felder_fuer_investition(inv.typ, inv.parameter, anlage_investitionen=anlage.investitionen)
         if not felder_config:
             continue
 

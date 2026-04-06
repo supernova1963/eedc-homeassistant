@@ -81,6 +81,9 @@ INVESTITION_FELDER: dict = {
             "feld": "pv_erzeugung_kwh", "label": "PV-Erzeugung", "einheit": "kWh",
             "csv_suffix": "kWh",
             "aggregiert_in": "pv_erzeugung_sum",
+            # Nur anzeigen wenn keine separaten PV-Modul-Investments existieren.
+            # Sonst wird die Erzeugung bei den einzelnen PV-Modul-Segmenten erfasst.
+            "bedingung_anlage": "keine_pv_module",
         },
     ],
 
@@ -346,19 +349,28 @@ IMPORT_SUMMEN_KEYS = ("pv_erzeugung_sum", "batterie_ladung_sum", "batterie_entla
 # Hilfsfunktionen
 # =============================================================================
 
-def get_felder_fuer_investition(typ: str, parameter: Optional[dict]) -> list[dict]:
+def get_felder_fuer_investition(
+    typ: str,
+    parameter: Optional[dict],
+    anlage_investitionen: Optional[list] = None,
+) -> list[dict]:
     """
     Gibt die relevanten Felder für eine Investition zurück (Bedingungen aufgelöst).
 
-    Filtert konditionelle Felder basierend auf Investitions-Parametern heraus.
+    Filtert konditionelle Felder basierend auf:
+    - Investitions-Parametern ("bedingung", z.B. "arbitrage_faehig")
+    - Anlage-Kontext ("bedingung_anlage", z.B. "keine_pv_module")
+
     Für Typ "sonstiges" bitte get_felder_fuer_sonstiges() verwenden.
 
     Args:
         typ: Investitionstyp (z.B. "speicher", "e-auto")
         parameter: Investitions-Parameter-Dict (inv.parameter)
+        anlage_investitionen: Alle Investitionen der Anlage (für bedingung_anlage).
+                              None → bedingung_anlage wird nicht ausgewertet.
 
     Returns:
-        Liste von Feld-Dicts ohne "bedingung"-Key (bereits aufgelöst)
+        Liste von Feld-Dicts ohne "bedingung"-Keys (bereits aufgelöst)
     """
     params = parameter or {}
     alle_felder = INVESTITION_FELDER.get(typ, [])
@@ -368,26 +380,43 @@ def get_felder_fuer_investition(typ: str, parameter: Optional[dict]) -> list[dic
         kategorie = params.get("kategorie", "erzeuger")
         return get_felder_fuer_sonstiges(kategorie)
 
+    # Anlage-Kontext vorberechnen (einmalig, nicht pro Feld)
+    anlage_typen: set[str] = set()
+    if anlage_investitionen is not None:
+        anlage_typen = {getattr(i, "typ", None) for i in anlage_investitionen}
+
     result = []
     getrennte_strommessung = bool(params.get("getrennte_strommessung"))
     arbitrage_faehig = bool(params.get("arbitrage_faehig"))
     v2h_faehig = bool(params.get("v2h_faehig") or params.get("nutzt_v2h"))
     hat_speicher = bool(params.get("hat_speicher"))
 
+    SKIP_KEYS = {"bedingung", "bedingung_anlage"}
+
     for feld in alle_felder:
         bedingung = feld.get("bedingung")
+        bedingung_anlage = feld.get("bedingung_anlage")
+
+        # ── Anlage-Kontext-Bedingung ─────────────────────────────────────────
+        if bedingung_anlage and anlage_investitionen is not None:
+            if bedingung_anlage == "keine_pv_module" and "pv-module" in anlage_typen:
+                continue  # Feld ausblenden: PV-Module separat erfasst
+
+        # ── Investment-Parameter-Bedingung ───────────────────────────────────
         if bedingung is None:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "getrennte_strommessung" and getrennte_strommessung:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "!getrennte_strommessung" and not getrennte_strommessung:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "arbitrage_faehig" and arbitrage_faehig:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "v2h_faehig" and v2h_faehig:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
-        elif bedingung == "hat_speicher" and hat_speicher:
-            result.append({k: v for k, v in feld.items() if k != "bedingung"})
+            pass  # immer zeigen
+        elif bedingung == "getrennte_strommessung" and not getrennte_strommessung:
+            continue
+        elif bedingung == "!getrennte_strommessung" and getrennte_strommessung:
+            continue
+        elif bedingung == "arbitrage_faehig" and not arbitrage_faehig:
+            continue
+        elif bedingung == "v2h_faehig" and not v2h_faehig:
+            continue
+        elif bedingung == "hat_speicher" and not hat_speicher:
+            continue
+
+        result.append({k: v for k, v in feld.items() if k not in SKIP_KEYS})
 
     return result
 

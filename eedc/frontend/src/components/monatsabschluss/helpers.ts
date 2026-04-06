@@ -21,11 +21,13 @@ export const TYP_ICONS: Record<string, React.ReactNode> = {
 export function getTypLabel(typ: string): string {
   const labels: Record<string, string> = {
     'pv-module': 'PV-Module',
+    wechselrichter: 'Wechselrichter',
     speicher: 'Speicher',
     waermepumpe: 'Wärmepumpe',
     'e-auto': 'E-Auto',
     wallbox: 'Wallbox',
     balkonkraftwerk: 'Balkonkraftwerk',
+    sonstiges: 'Sonstiges',
   }
   return labels[typ] || typ
 }
