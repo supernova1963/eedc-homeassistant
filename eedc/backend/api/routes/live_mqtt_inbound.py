@@ -20,6 +20,7 @@ from backend.core.field_definitions import (
     get_alle_felder_fuer_investition,
     get_live_felder_fuer_investition,
     SOC_TYPEN,
+    BASIS_LIVE_FELDER,
 )
 
 logger = logging.getLogger(__name__)
@@ -309,14 +310,15 @@ async def get_mqtt_topics(
         live_prefix = f"eedc/{aid}_{aslug}/live"
         energy_prefix = f"eedc/{aid}_{aslug}/energy"
 
-        topics.append({"topic": f"{live_prefix}/einspeisung_w", "label": "Einspeisung (W)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/netzbezug_w", "label": "Netzbezug (W)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/netz_kombi_w", "label": "Netz-Kombi (W, positiv=Bezug, negativ=Einspeisung)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/pv_gesamt_w", "label": "PV Gesamt (W, Fallback wenn kein Modul-Sensor)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/sfml_today_kwh", "label": "Solar Forecast ML – Prognose heute (kWh)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/sfml_tomorrow_kwh", "label": "Solar Forecast ML – Prognose morgen (kWh)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/sfml_accuracy_pct", "label": "Solar Forecast ML – Modellgenauigkeit (%)", "anlage": aname, "typ": "basis"})
-        topics.append({"topic": f"{live_prefix}/aussentemperatur_c", "label": "Außentemperatur (°C)", "anlage": aname, "typ": "basis"})
+        # Basis-Live-Topics aus Registry — kein hardcodierter Block mehr
+        for feld in BASIS_LIVE_FELDER:
+            einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
+            topics.append({
+                "topic": f"{live_prefix}/{feld['key']}",
+                "label": f"{feld['label']}{einheit_str}",
+                "anlage": aname,
+                "typ": "basis",
+            })
         topics.append({"topic": f"{energy_prefix}/pv_gesamt_kwh", "label": "PV-Erzeugung Monat (kWh)", "anlage": aname, "typ": "energy"})
         topics.append({"topic": f"{energy_prefix}/einspeisung_kwh", "label": "Einspeisung Monat (kWh)", "anlage": aname, "typ": "energy"})
         topics.append({"topic": f"{energy_prefix}/netzbezug_kwh", "label": "Netzbezug Monat (kWh)", "anlage": aname, "typ": "energy"})
