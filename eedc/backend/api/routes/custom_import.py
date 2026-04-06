@@ -26,9 +26,11 @@ from backend.api.routes.import_export.helpers import (
     _import_investition_monatsdaten_v09,
     _upsert_investition_monatsdaten,
     _sanitize_column_name,
+    _normalize_for_matching,
     _distribute_legacy_pv_to_modules,
     _distribute_legacy_battery_to_storages,
 )
+from backend.core.field_definitions import get_alle_felder_fuer_investition
 from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -425,57 +427,38 @@ def _build_investition_felder(investitionen: list) -> list[dict]:
     """
     Erzeugt dynamische Zielfelder für das Mapping-Dropdown aus den Investitionen einer Anlage.
     Format: {"id": "inv:42:pv_erzeugung_kwh", "label": "PV-Modul: Bauer 385 – Erzeugung (kWh)", ...}
+
+    Felddefinitionen kommen aus field_definitions.INVESTITION_FELDER — kein hardcodierter Typ-Check.
     """
+    # Typ → Gruppen-ID + Anzeige-Präfix
+    TYP_META = {
+        "pv-module":      ("inv_pv",        "PV-Modul"),
+        "wechselrichter": ("inv_pv",        "Wechselrichter"),
+        "speicher":       ("inv_speicher",   "Speicher"),
+        "e-auto":         ("inv_eauto",      "E-Auto"),
+        "wallbox":        ("inv_wallbox",    "Wallbox"),
+        "waermepumpe":    ("inv_wp",         "WP"),
+        "balkonkraftwerk":("inv_bkw",        "BKW"),
+        "sonstiges":      ("inv_sonstiges",  "Sonstiges"),
+    }
+
     felder = []
     for inv in investitionen:
+        group, prefix = TYP_META.get(inv.typ, ("inv_sonstiges", inv.typ))
         bez = inv.bezeichnung
         inv_id = inv.id
-        typ = inv.typ
 
-        if typ == "pv-module":
-            felder.append({"id": f"inv:{inv_id}:pv_erzeugung_kwh", "label": f"PV-Modul: {bez} – Erzeugung (kWh)", "required": False, "group": f"inv_pv"})
-
-        elif typ == "speicher":
-            felder.append({"id": f"inv:{inv_id}:ladung_kwh",          "label": f"Speicher: {bez} – Ladung (kWh)",          "required": False, "group": "inv_speicher"})
-            felder.append({"id": f"inv:{inv_id}:entladung_kwh",       "label": f"Speicher: {bez} – Entladung (kWh)",       "required": False, "group": "inv_speicher"})
-            felder.append({"id": f"inv:{inv_id}:ladung_netz_kwh",     "label": f"Speicher: {bez} – Netzladung/Arbitrage (kWh)", "required": False, "group": "inv_speicher"})
-            felder.append({"id": f"inv:{inv_id}:speicher_ladepreis_cent", "label": f"Speicher: {bez} – Ladepreis Arbitrage (Cent)", "required": False, "group": "inv_speicher"})
-
-        elif typ == "e-auto":
-            felder.append({"id": f"inv:{inv_id}:km_gefahren",       "label": f"E-Auto: {bez} – km gefahren",         "required": False, "group": "inv_eauto"})
-            felder.append({"id": f"inv:{inv_id}:verbrauch_kwh",     "label": f"E-Auto: {bez} – Verbrauch (kWh)",      "required": False, "group": "inv_eauto"})
-            felder.append({"id": f"inv:{inv_id}:ladung_pv_kwh",     "label": f"E-Auto: {bez} – Ladung PV (kWh)",      "required": False, "group": "inv_eauto"})
-            felder.append({"id": f"inv:{inv_id}:ladung_netz_kwh",   "label": f"E-Auto: {bez} – Ladung Netz (kWh)",    "required": False, "group": "inv_eauto"})
-            felder.append({"id": f"inv:{inv_id}:ladung_extern_kwh", "label": f"E-Auto: {bez} – Laden extern (kWh)",   "required": False, "group": "inv_eauto"})
-            felder.append({"id": f"inv:{inv_id}:ladung_extern_euro","label": f"E-Auto: {bez} – Laden extern (€)",     "required": False, "group": "inv_eauto"})
-            felder.append({"id": f"inv:{inv_id}:v2h_entladung_kwh", "label": f"E-Auto: {bez} – V2H Entladung (kWh)", "required": False, "group": "inv_eauto"})
-
-        elif typ == "wallbox":
-            felder.append({"id": f"inv:{inv_id}:ladung_kwh",    "label": f"Wallbox: {bez} – Ladung (kWh)",  "required": False, "group": "inv_wallbox"})
-            felder.append({"id": f"inv:{inv_id}:ladevorgaenge", "label": f"Wallbox: {bez} – Ladevorgänge",  "required": False, "group": "inv_wallbox"})
-
-        elif typ == "waermepumpe":
-            felder.append({"id": f"inv:{inv_id}:stromverbrauch_kwh",  "label": f"WP: {bez} – Stromverbrauch gesamt (kWh)",  "required": False, "group": "inv_wp"})
-            felder.append({"id": f"inv:{inv_id}:strom_heizen_kwh",    "label": f"WP: {bez} – Strom Heizung (kWh)",          "required": False, "group": "inv_wp"})
-            felder.append({"id": f"inv:{inv_id}:strom_warmwasser_kwh","label": f"WP: {bez} – Strom Warmwasser (kWh)",       "required": False, "group": "inv_wp"})
-            felder.append({"id": f"inv:{inv_id}:heizenergie_kwh",     "label": f"WP: {bez} – Heizenergie (kWh)",            "required": False, "group": "inv_wp"})
-            felder.append({"id": f"inv:{inv_id}:warmwasser_kwh",      "label": f"WP: {bez} – Warmwasser Wärme (kWh)",       "required": False, "group": "inv_wp"})
-
-        elif typ == "balkonkraftwerk":
-            felder.append({"id": f"inv:{inv_id}:pv_erzeugung_kwh",    "label": f"BKW: {bez} – Erzeugung (kWh)",         "required": False, "group": "inv_bkw"})
-            felder.append({"id": f"inv:{inv_id}:eigenverbrauch_kwh",  "label": f"BKW: {bez} – Eigenverbrauch (kWh)",    "required": False, "group": "inv_bkw"})
-            felder.append({"id": f"inv:{inv_id}:speicher_ladung_kwh", "label": f"BKW: {bez} – Speicher Ladung (kWh)",   "required": False, "group": "inv_bkw"})
-            felder.append({"id": f"inv:{inv_id}:speicher_entladung_kwh","label": f"BKW: {bez} – Speicher Entladung (kWh)","required": False, "group": "inv_bkw"})
-
-        elif typ == "sonstiges":
-            kategorie = (inv.parameter or {}).get("kategorie", "erzeuger")
-            if kategorie == "erzeuger":
-                felder.append({"id": f"inv:{inv_id}:erzeugung_kwh",      "label": f"Sonstiges: {bez} – Erzeugung (kWh)",  "required": False, "group": "inv_sonstiges"})
-            elif kategorie == "verbraucher":
-                felder.append({"id": f"inv:{inv_id}:verbrauch_sonstig_kwh", "label": f"Sonstiges: {bez} – Verbrauch (kWh)", "required": False, "group": "inv_sonstiges"})
-            elif kategorie == "speicher":
-                felder.append({"id": f"inv:{inv_id}:ladung_kwh",    "label": f"Sonstiges: {bez} – Ladung (kWh)",    "required": False, "group": "inv_sonstiges"})
-                felder.append({"id": f"inv:{inv_id}:entladung_kwh", "label": f"Sonstiges: {bez} – Entladung (kWh)", "required": False, "group": "inv_sonstiges"})
+        for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter):
+            feld_name = feld["feld"]
+            einheit = feld["einheit"]
+            label_teil = feld["label"]
+            einheit_str = f" ({einheit})" if einheit else ""
+            felder.append({
+                "id": f"inv:{inv_id}:{feld_name}",
+                "label": f"{prefix}: {bez} – {label_teil}{einheit_str}",
+                "required": False,
+                "group": group,
+            })
 
     return felder
 
@@ -485,7 +468,10 @@ async def _detect_investition_spalten(
     anlage_id: int,
     db: AsyncSession,
 ) -> list[InvestitionSpalteInfo]:
-    """Erkennt welche CSV-Spalten zu Investitionen der Anlage gehören."""
+    """Erkennt welche CSV-Spalten zu Investitionen der Anlage gehören.
+
+    known_suffixes werden aus field_definitions abgeleitet — kein hardcodierter Suffix-Block.
+    """
     result = await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id)
     )
@@ -493,51 +479,71 @@ async def _detect_investition_spalten(
     if not investitionen:
         return []
 
-    # Bekannte Suffixe (sortiert nach Länge: längste zuerst)
-    known_suffixes = sorted([
-        "kWh", "km", "Verbrauch_kWh", "Ladung_PV_kWh", "Ladung_Netz_kWh",
-        "Ladung_Extern_kWh", "Ladung_Extern_Euro", "V2H_kWh",
-        "Ladung_kWh", "Entladung_kWh", "Ladevorgaenge",
-        "Netzladung_kWh", "Ladepreis_Cent",
-        "Strom_kWh", "Heizung_kWh", "Warmwasser_kWh",
-        "Speicher_Ladung_kWh", "Speicher_Entladung_kWh",
-        "Erzeugung_kWh", "Sonderkosten_Euro", "Sonderkosten_Notiz",
-    ], key=len, reverse=True)
+    # Lookup-Tabelle + known_suffixes aus Registry
+    inv_field_entries = []
+    for inv in investitionen:
+        sanitized = _sanitize_column_name(inv.bezeichnung)
+        normalized = _normalize_for_matching(inv.bezeichnung)
+        for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter):
+            csv_suffix = feld.get("csv_suffix")
+            if csv_suffix:
+                inv_field_entries.append((inv, sanitized, normalized, csv_suffix))
+            alt = feld.get("csv_suffix_alt")
+            if alt:
+                inv_field_entries.append((inv, sanitized, normalized, alt))
 
-    inv_variants = [(
-        _sanitize_column_name(inv.bezeichnung), inv
-    ) for inv in investitionen]
+    # Sonderkosten für alle Typen ergänzen
+    SONDERKOSTEN_SUFFIXE = ("Sonderkosten_Euro", "Sonderkosten_Notiz")
+    for inv in investitionen:
+        sanitized = _sanitize_column_name(inv.bezeichnung)
+        normalized = _normalize_for_matching(inv.bezeichnung)
+        for sk in SONDERKOSTEN_SUFFIXE:
+            inv_field_entries.append((inv, sanitized, normalized, sk))
+
+    known_suffixes = sorted(
+        {entry[3] for entry in inv_field_entries},
+        key=len, reverse=True
+    )
 
     detected: list[InvestitionSpalteInfo] = []
     for col in headers:
-        for sanitized, inv in inv_variants:
-            # Strategie 1: Spaltenname beginnt mit sanitized_name + "_"
-            if col.startswith(sanitized + "_"):
-                suffix = col[len(sanitized) + 1:]
+        matched = False
+        for inv, sanitized, normalized, csv_suffix in inv_field_entries:
+            # Strategie 1: exaktes Präfix-Match
+            if col == f"{sanitized}_{csv_suffix}" or col == sanitized:
                 detected.append(InvestitionSpalteInfo(
                     spalte=col,
                     inv_id=inv.id,
                     inv_bezeichnung=inv.bezeichnung,
                     inv_typ=inv.typ,
-                    suffix=suffix,
+                    suffix=csv_suffix,
                 ))
+                matched = True
                 break
-            # Strategie 2: Suffix-basiertes Matching
-            for known_suffix in known_suffixes:
-                if col.endswith("_" + known_suffix):
-                    prefix = col[:-len(known_suffix) - 1]
-                    if prefix == sanitized:
+
+        if matched:
+            continue
+
+        # Strategie 2: Suffix-basiertes Matching
+        for suffix in known_suffixes:
+            if col.endswith("_" + suffix):
+                prefix = col[: -len(suffix) - 1]
+                prefix_norm = _normalize_for_matching(prefix)
+                for inv, sanitized, normalized, csv_suffix in inv_field_entries:
+                    if csv_suffix == suffix and (
+                        prefix_norm == normalized or prefix == sanitized
+                    ):
                         detected.append(InvestitionSpalteInfo(
                             spalte=col,
                             inv_id=inv.id,
                             inv_bezeichnung=inv.bezeichnung,
                             inv_typ=inv.typ,
-                            suffix=known_suffix,
+                            suffix=suffix,
                         ))
+                        matched = True
                         break
-            else:
-                continue
-            break
+            if matched:
+                break
 
     return detected
 
