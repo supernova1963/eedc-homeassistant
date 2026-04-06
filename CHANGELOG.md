@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.2] - 2026-04-06
+
+### Behoben
+
+- **WP Dashboard: JAZ/Strom Warmwasser zeigt 0.00 statt "–"**: Wenn `strom_warmwasser_kwh = 0` (keine Daten eingetragen), zeigen JAZ Warmwasser und Strom Warmwasser jetzt korrekt "–" statt "0.00" bzw. "0.0 MWh". (Gemeldet von Rainer)
+- **Monatsabschluss Wechselrichter: PV-Erzeugung-Feld bei getrennten PV-Arrays**: Das Eingabefeld "PV-Erzeugung (kWh)" im Wechselrichter-Schritt des Monatsabschlusses wird jetzt automatisch ausgeblendet wenn separate PV-Modul-Investments vorhanden sind — die Erzeugung wird dort bei den einzelnen Segmenten erfasst. (Gemeldet von Rainer)
+- **Monatsabschluss: Tab-Label "wechselrichter" klein geschrieben**: Tab und Abschnittsüberschrift zeigen jetzt korrekt "Wechselrichter" (Großschreibung). Gleiches für "Sonstiges". (Gemeldet von Rainer)
+
+### Refactoring (intern, kein User-Impact)
+
+- **`bedingung_anlage` in field_definitions.py**: Neue Bedingungsebene in der Investitions-Feld-Registry. Bisher gab es nur `bedingung` (Investment-Parameter, z.B. `arbitrage_faehig`). Mit `bedingung_anlage` können Felder jetzt auch abhängig vom Anlage-Kontext (andere Investments) ein-/ausgeblendet werden. Erster Einsatz: Wechselrichter `pv_erzeugung_kwh` mit `bedingung_anlage: "keine_pv_module"`.
+- **Phase 4a abgeschlossen**: Backend-Ableitung von `ERWARTETE_FELDER`, `energy_keys_by_typ`, `SOC_TYPEN` und `FELD_LABELS` aus Registry (kein hardcodierter Block mehr in sensor_mapping.py, live_mqtt_inbound.py, ha_statistics.py).
+
+---
+
 ## [3.10.1] - 2026-04-06
 
 ### Neu
