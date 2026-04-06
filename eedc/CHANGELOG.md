@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.3] - 2026-04-06
+
+### Behoben
+
+- **Tagesverlauf: Fehlende Investments sichtbar machen (#109)**: Wenn ein Investment (z.B. Wallbox) keinen HA-Leistungssensor konfiguriert hat, wird es im Tagesverlauf-Chart nicht dargestellt — das war bisher lautlos. Jetzt erscheint ein amber-farbener Hinweis: "Nicht dargestellt (kein HA-Leistungssensor): Wallbox XY". Hinweis: Der Tagesverlauf benötigt zwingend eine HA-Entity für `leistung_w` in der Sensor-Zuordnung — MQTT-only Investments können mangels HA-History nicht angezeigt werden.
+- **Live-Dashboard: Datenquellen-Unterschied kennzeichnen (#108)**: Die beiden Charts zeigen konzeptionell unterschiedliche Daten. Kleine Labels machen das jetzt sichtbar: EnergieFluss zeigt "Momentwerte · aktualisiert alle ~30s", Tagesverlauf-Chart zeigt "10-Min-Durchschnitte aus HA-History". (Gemeldet von Joachim-xo)
+
+---
+
 ## [3.10.2] - 2026-04-06
 
 ### Behoben
