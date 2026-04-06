@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.5] - 2026-04-06
+
+### Neu
+
+- **MQTT-Gateway: 7 neue Geräte-Presets**: Shelly EM (1-phasig), Shelly Plus Plug S / PM Mini, AhoyDTU, Victron Venus OS, sonnenBatterie, Tasmota Steckdose und Zigbee2MQTT Steckdose. Gesamt jetzt 12 Presets in 5 Gruppen (Shelly / Solar+WR / Speicher / Wallbox / Sonstiges).
+- **MQTT-Gateway: Investitions-Kontext für Wallbox und Speicher-Presets**: Presets für Geräte die einer konkreten Investition zuzuordnen sind (go-eCharger, sonnenBatterie, Shelly PM, Tasmota Steckdose, Zigbee2MQTT) fragen jetzt die Ziel-Investition ab und mappen auf `live/inv/{id}/leistung_w` statt auf ein globales Topic. Die Preset-Auswahl zeigt jetzt Gruppen statt einer flachen Liste.
+
+### Fix
+
+- **MQTT-Gateway go-eCharger**: Ziel-Topic korrigiert von `live/wallbox_w` auf `live/inv/{id}/leistung_w` — Ladeleistung wird jetzt korrekt der Wallbox-Investition zugeordnet.
+
+---
+
 ## [3.10.4] - 2026-04-06
 
 ### Neu
