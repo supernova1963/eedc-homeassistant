@@ -5,8 +5,10 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
+import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
-import { Card } from '../../components/ui'
+import { Card, Button } from '../../components/ui'
+import { exportToCSV } from '../../utils/export'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
 
 // Kategorien die bereits dedizierte Spalten/Felder haben → kein Extra-Tracking
@@ -14,14 +16,6 @@ const DEDIZIERTE_KATEGORIEN = new Set(['pv', 'batterie', 'netz', 'haushalt', 'wa
 
 // Farben für extra Sonstiges-Serien (Rotation) — hex für Recharts, Tailwind-Klassen für Tabelle
 const EXTRA_FARBEN = ['#8b5cf6', '#06b6d4', '#84cc16', '#f43f5e', '#fb923c', '#a78bfa']
-const EXTRA_FARBEN_CSS = [
-  'text-violet-500 dark:text-violet-400',
-  'text-cyan-500 dark:text-cyan-400',
-  'text-lime-500 dark:text-lime-400',
-  'text-rose-500 dark:text-rose-400',
-  'text-orange-400 dark:text-orange-300',
-  'text-purple-400 dark:text-purple-300',
-]
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
@@ -50,6 +44,19 @@ const GRUPPEN_FARBEN: Record<string, string> = {
   'Fr': '#84cc16',
   'Sa': '#f59e0b',
   'So': '#ef4444',
+}
+
+// Tailwind-Klassen für aktive Wochentag-Buttons (kein inline style)
+const GRUPPEN_BG_CSS: Record<string, string> = {
+  'Mo–Fr': 'bg-blue-500',
+  'Sa–So': 'bg-orange-500',
+  'Mo':    'bg-indigo-500',
+  'Di':    'bg-violet-500',
+  'Mi':    'bg-pink-500',
+  'Do':    'bg-teal-500',
+  'Fr':    'bg-lime-500',
+  'Sa':    'bg-amber-500',
+  'So':    'bg-red-500',
 }
 
 // Zeitraum-Optionen für Wochenvergleich
@@ -251,7 +258,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       )}
 
       {/* Detailtabelle */}
-      {daten.length > 0 && <TagesdetailTabelle daten={daten} extraSerien={extraSerien} />}
+      {daten.length > 0 && <TagesdetailTabelle daten={daten} extraSerien={extraSerien} datum={datum} />}
     </div>
   )
 }
@@ -382,10 +389,9 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
               title={anzahl ? `${anzahl} Tage im Zeitraum` : undefined}
               className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${
                 aktiv
-                  ? 'border-transparent text-white'
+                  ? `border-transparent text-white ${GRUPPEN_BG_CSS[g.label] ?? 'bg-primary-500'}`
                   : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-transparent'
               }`}
-              style={aktiv ? { backgroundColor: GRUPPEN_FARBEN[g.label] } : {}}
             >
               {g.label}
               {anzahl != null && <span className="ml-1 opacity-70">({anzahl})</span>}
@@ -436,174 +442,286 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
 
 // ─── Tabellen ─────────────────────────────────────────────────────────────────
 
-// ── Feste Tabellenspalten (Reihenfolge: Erzeugung | Netz | Verbrauch | Bilanz | Wetter)
-// Berechnete Spalten 'gesamterzeugung' und 'hausverbrauch' werden dynamisch ergänzt
-const TD_COLS = [
+// ── Tabellenspalten-Definitionen (analog TabelleTab) ─────────────────────────
+
+type TdGroup = 'erzeugung' | 'netz' | 'verbrauch' | 'bilanz' | 'qualitaet'
+
+interface TdColDef {
+  key: string
+  label: string
+  unit: string
+  group: TdGroup
+  decimals: number
+  isSum: boolean        // kW × 1h = kWh in Summenzeile
+  defaultVisible: boolean
+  calc?: boolean        // berechnete Spalte (kein direktes StundenWert-Feld)
+}
+
+const TD_COLUMNS: TdColDef[] = [
   // Erzeugung
-  { key: 'pv_kw',              label: 'PV',            unit: 'kW',   color: 'text-yellow-500 dark:text-yellow-400', sum: true },
-  { key: 'batterie_kw',        label: 'Batterie',       unit: 'kW',   color: 'text-orange-500 dark:text-orange-400', sum: true },
+  { key: 'gesamterzeugung', label: 'Gesamterzeugung', unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true,  calc: true  },
+  { key: 'pv_kw',           label: 'PV',              unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true                },
+  { key: 'batterie_kw',     label: 'Batterie',        unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true                },
   // Netz
-  { key: 'netzbezug_kw',       label: 'Netzbezug',     unit: 'kW',   color: 'text-red-600 dark:text-red-400',    sum: true },
-  { key: 'einspeisung_kw',     label: 'Einspeisung',   unit: 'kW',   color: 'text-blue-600 dark:text-blue-400',  sum: true },
+  { key: 'netzbezug_kw',   label: 'Netzbezug',       unit: 'kW', group: 'netz',      decimals: 2, isSum: true,  defaultVisible: true                },
+  { key: 'einspeisung_kw', label: 'Einspeisung',     unit: 'kW', group: 'netz',      decimals: 2, isSum: true,  defaultVisible: false               },
   // Verbrauch
-  { key: 'verbrauch_kw',       label: 'Gesamtverbr.',  unit: 'kW',   color: 'text-gray-600 dark:text-gray-300',  sum: true },
-  { key: 'waermepumpe_kw',     label: 'WP',            unit: 'kW',   color: 'text-purple-600 dark:text-purple-400', sum: true },
-  { key: 'wallbox_kw',         label: 'Wallbox',       unit: 'kW',   color: 'text-violet-600 dark:text-violet-400', sum: true },
+  { key: 'verbrauch_kw',   label: 'Gesamtverbrauch', unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true                },
+  { key: 'hausverbrauch',  label: 'Hausverbrauch',   unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true,  calc: true   },
+  { key: 'waermepumpe_kw', label: 'Wärmepumpe',      unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true                },
+  { key: 'wallbox_kw',     label: 'Wallbox',         unit: 'kW', group: 'verbrauch', decimals: 2, isSum: true,  defaultVisible: true                },
   // Bilanz
-  { key: 'ueberschuss_kw',     label: 'Überschuss',    unit: 'kW',   color: 'text-green-600 dark:text-green-400', sum: true },
-  { key: 'defizit_kw',         label: 'Defizit',       unit: 'kW',   color: 'text-rose-600 dark:text-rose-400',  sum: true },
+  { key: 'ueberschuss_kw', label: 'Überschuss',      unit: 'kW', group: 'bilanz',    decimals: 2, isSum: true,  defaultVisible: false               },
+  { key: 'defizit_kw',     label: 'Defizit',         unit: 'kW', group: 'bilanz',    decimals: 2, isSum: true,  defaultVisible: false               },
   // Qualität
-  { key: 'soc_prozent',        label: 'SoC',           unit: '%',    color: 'text-cyan-600 dark:text-cyan-400',  sum: false },
-  { key: 'temperatur_c',       label: 'Temp',          unit: '°C',   color: 'text-amber-600 dark:text-amber-400', sum: false },
-  { key: 'globalstrahlung_wm2',label: 'Strahlung',     unit: 'W/m²', color: 'text-yellow-400 dark:text-yellow-300', sum: false },
-] as const
+  { key: 'soc_prozent',        label: 'SoC',         unit: '%',    group: 'qualitaet', decimals: 1, isSum: false, defaultVisible: false             },
+  { key: 'temperatur_c',       label: 'Temperatur',  unit: '°C',   group: 'qualitaet', decimals: 1, isSum: false, defaultVisible: false             },
+  { key: 'globalstrahlung_wm2',label: 'Strahlung',   unit: 'W/m²', group: 'qualitaet', decimals: 0, isSum: false, defaultVisible: false             },
+]
 
-type TdColKey = typeof TD_COLS[number]['key']
+const TD_GROUP_LABELS: Record<TdGroup, string> = {
+  erzeugung: 'Erzeugung',
+  netz:      'Netz',
+  verbrauch: 'Verbrauch',
+  bilanz:    'Bilanz',
+  qualitaet: 'Qualität',
+}
+const TD_GROUPS: TdGroup[] = ['erzeugung', 'netz', 'verbrauch', 'bilanz', 'qualitaet']
+const TD_STORAGE_KEY = 'eedc_tagesprofil_visible_cols'
 
-function TagesdetailTabelle({ daten, extraSerien }: { daten: StundenWert[], extraSerien: SerieInfo[] }) {
+function TagesdetailTabelle({ daten, extraSerien, datum }: { daten: StundenWert[], extraSerien: SerieInfo[], datum: string }) {
   const extraErzeuger    = extraSerien.filter(s => s.seite === 'quelle')
   const extraVerbraucher = extraSerien.filter(s => s.seite === 'senke')
 
   // Berechnete Werte pro Stunde
-  function gesamterzeugung(s: StundenWert): number {
-    const erzSonstige = extraErzeuger.reduce((a, es) => a + Math.max(0, s.komponenten?.[es.key] ?? 0), 0)
-    return round2((s.pv_kw ?? 0) + Math.max(0, s.batterie_kw ?? 0) + erzSonstige)
+  function calcGesamterzeugung(s: StundenWert): number {
+    const erzS = extraErzeuger.reduce((a, es) => a + Math.max(0, s.komponenten?.[es.key] ?? 0), 0)
+    return round2((s.pv_kw ?? 0) + Math.max(0, s.batterie_kw ?? 0) + erzS)
   }
-  function hausverbrauch(s: StundenWert): number {
-    const vbrSonstige = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0)
-    return round2(Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrSonstige))
-  }
-
-  // Summen
-  const summen: Partial<Record<TdColKey, number>> = {}
-  for (const col of TD_COLS) {
-    if (!col.sum) continue
-    const vals = daten.map(d => (d as unknown as Record<string, number | null>)[col.key]).filter(v => v != null) as number[]
-    if (vals.length) summen[col.key] = vals.reduce((a, b) => a + b, 0)
-  }
-  const sumGesamterz  = daten.reduce((a, d) => a + gesamterzeugung(d), 0)
-  const sumHausverbr  = daten.reduce((a, d) => a + hausverbrauch(d), 0)
-  const extraSummen: Record<string, number> = {}
-  for (const serie of extraSerien) {
-    const vals = daten.map(d => d.komponenten?.[serie.key] ?? null).filter(v => v != null) as number[]
-    if (vals.length) extraSummen[serie.key] = vals.reduce((a, b) => a + b, 0)
+  function calcHausverbrauch(s: StundenWert): number {
+    const vbrS = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0)
+    return round2(Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrS))
   }
 
-  const tdCell = (v: number | null, dec = 2) => v != null
-    ? v.toFixed(dec)
-    : <span className="text-gray-300 dark:text-gray-600">—</span>
+  // Sichtbare Spalten aus localStorage
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(TD_STORAGE_KEY)
+      if (stored) {
+        const keys = JSON.parse(stored) as string[]
+        return new Set(keys)
+      }
+    } catch { /* ignore */ }
+    const defaults = new Set(TD_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+    extraSerien.forEach(es => defaults.add(es.key))
+    return defaults
+  })
+  useEffect(() => {
+    // Neue extra Serien immer als sichtbar hinzufügen
+    setVisibleCols(prev => {
+      const next = new Set(prev)
+      extraSerien.forEach(es => { if (!next.has(es.key)) next.add(es.key) })
+      return next
+    })
+  }, [extraSerien])
+  useEffect(() => {
+    try { localStorage.setItem(TD_STORAGE_KEY, JSON.stringify([...visibleCols])) } catch { /* ignore */ }
+  }, [visibleCols])
+
+  function toggleCol(key: string) {
+    setVisibleCols(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  }
+
+  // Spaltenauswahl-Picker
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function onOut(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false)
+    }
+    if (pickerOpen) document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [pickerOpen])
+
+  // Sortierung
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  function handleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('desc') }
+  }
+
+  // Stunden-Daten (0-23, mit berechneten Feldern)
+  const rows = useMemo(() => {
+    const all = Array.from({ length: 24 }, (_, h) => {
+      const s = daten.find(d => d.stunde === h)
+      const raw = s ? (s as unknown as Record<string, number | null>) : {}
+      return {
+        h,
+        s,
+        vals: {
+          ...raw,
+          gesamterzeugung: s ? calcGesamterzeugung(s) : null,
+          hausverbrauch:   s ? calcHausverbrauch(s)   : null,
+          ...Object.fromEntries(extraSerien.map(es => [es.key, s?.komponenten?.[es.key] ?? null])),
+        } as Record<string, number | null>,
+      }
+    })
+    if (!sortKey) return all
+    return [...all].sort((a, b) => {
+      const av = a.vals[sortKey] ?? (sortDir === 'desc' ? -Infinity : Infinity)
+      const bv = b.vals[sortKey] ?? (sortDir === 'desc' ? -Infinity : Infinity)
+      return sortDir === 'asc' ? av - bv : bv - av
+    })
+  }, [daten, sortKey, sortDir, extraSerien])
+
+  // Aktive Spalten in Reihenfolge: TD_COLUMNS + extra Serien (eingebettet in Gruppe)
+  const allCols = useMemo(() => {
+    const cols: (TdColDef | (SerieInfo & { unit: string; decimals: number; isSum: boolean; group: TdGroup }))[] = []
+    for (const c of TD_COLUMNS) {
+      cols.push(c)
+      if (c.key === 'batterie_kw') extraErzeuger.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'erzeugung' }))
+      if (c.key === 'wallbox_kw') extraVerbraucher.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'verbrauch' }))
+    }
+    return cols.filter(c => visibleCols.has(c.key))
+  }, [visibleCols, extraErzeuger, extraVerbraucher])
+
+  // Summenzeile
+  const summen = useMemo(() => {
+    const r: Record<string, number | null> = {}
+    for (const col of allCols) {
+      if (!col.isSum) { r[col.key] = null; continue }
+      const vals = rows.map(row => row.vals[col.key]).filter(v => v != null) as number[]
+      r[col.key] = vals.length ? vals.reduce((a, b) => a + b, 0) : null
+    }
+    return r
+  }, [rows, allCols])
+
+  // CSV Export
+  function handleExport() {
+    const headers = ['Stunde', ...allCols.map(c => c.unit ? `${c.label} (${c.unit})` : c.label)]
+    const csvRows = rows.map(row => [
+      `${row.h}:00`,
+      ...allCols.map(c => {
+        const v = row.vals[c.key]
+        return v != null ? v.toFixed(c.decimals) : ''
+      }),
+    ])
+    // Summenzeile
+    csvRows.push(['Σ/kWh', ...allCols.map(c => {
+      const v = summen[c.key]
+      return v != null ? v.toFixed(c.decimals) : '—'
+    })])
+    exportToCSV(headers, csvRows, `energieprofil_${datum}.csv`)
+  }
+
+  function SortIcon({ colKey }: { colKey: string }) {
+    if (sortKey !== colKey) return <ChevronsUpDown className="h-3 w-3 opacity-30 shrink-0" />
+    return sortDir === 'asc'
+      ? <ChevronUp className="h-3 w-3 text-primary-500 shrink-0" />
+      : <ChevronDown className="h-3 w-3 text-primary-500 shrink-0" />
+  }
+
+  const dash = <span className="text-gray-300 dark:text-gray-600">—</span>
+  function cell(v: number | null, dec: number) {
+    return v != null ? v.toLocaleString('de-DE', { minimumFractionDigits: dec, maximumFractionDigits: dec }) : dash
+  }
 
   return (
-    <Card>
-      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
-        Stundenwerte in kW · Summenzeile = kWh/Tag
+    <Card padding="none" className="overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-wrap">
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          Stundenwerte in kW · Σ-Zeile = kWh/Tag
+        </span>
+        <div className="flex items-center gap-2">
+          {/* Spaltenauswahl */}
+          <div className="relative" ref={pickerRef}>
+            <Button variant="secondary" size="sm" onClick={() => setPickerOpen(o => !o)}>
+              <Columns className="h-4 w-4 mr-1.5" />
+              Spalten ({visibleCols.size})
+            </Button>
+            {pickerOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 w-56 max-h-96 overflow-y-auto">
+                {TD_GROUPS.map(group => {
+                  const fixedInGroup = TD_COLUMNS.filter(c => c.group === group)
+                  const extraInGroup = group === 'erzeugung' ? extraErzeuger
+                    : group === 'verbrauch' ? extraVerbraucher : []
+                  const allInGroup = [...fixedInGroup, ...extraInGroup.map(es => ({ key: es.key, label: es.label }))]
+                  return (
+                    <div key={group} className="mb-3 last:mb-0">
+                      <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">
+                        {TD_GROUP_LABELS[group]}
+                      </p>
+                      {allInGroup.map(c => (
+                        <label key={c.key} className="flex items-center gap-2 py-0.5 cursor-pointer">
+                          <input type="checkbox" className="rounded shrink-0"
+                            checked={visibleCols.has(c.key)}
+                            onChange={() => toggleCol(c.key)} />
+                          <span className="text-xs text-gray-700 dark:text-gray-300 truncate">{c.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )
+                })}
+                <button type="button"
+                  onClick={() => setVisibleCols(new Set(TD_COLUMNS.filter(c => c.defaultVisible).map(c => c.key)))}
+                  className="mt-1 w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1">
+                  Standard wiederherstellen
+                </button>
+              </div>
+            )}
+          </div>
+          <Button variant="secondary" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-1.5" />
+            CSV
+          </Button>
+        </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b-2 border-gray-200 dark:border-gray-700">
-              <th className="text-left py-2 pr-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Std</th>
 
-              {/* Berechnete Spalten: Gesamterzeugung + Hausverbrauch — direkt nach PV/Verbrauch */}
-              <th className="text-right py-2 px-2 font-semibold whitespace-nowrap text-yellow-600 dark:text-yellow-400">
-                Ges.erz.<br /><span className="font-normal opacity-70">kW</span>
+      {/* Tabelle */}
+      <div className="overflow-auto max-h-[560px]">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800">
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th
+                className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-pointer select-none"
+                onClick={() => { setSortKey(null); setSortDir('asc') }}
+              >
+                <span className="flex items-center gap-1">Std {!sortKey && <ChevronUp className="h-3 w-3 text-primary-500" />}</span>
               </th>
-              {TD_COLS.slice(0, 2).map(c => (   /* PV + Batterie */
-                <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
-                  {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
-                </th>
-              ))}
-              {extraErzeuger.map((s, i) => (
-                <th key={s.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${EXTRA_FARBEN_CSS[i % EXTRA_FARBEN_CSS.length]}`}>
-                  {s.label}<br /><span className="font-normal opacity-70">kW</span>
-                </th>
-              ))}
-              {TD_COLS.slice(2, 4).map(c => (   /* Netzbezug + Einspeisung */
-                <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
-                  {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
-                </th>
-              ))}
-              <th className="text-right py-2 px-2 font-semibold whitespace-nowrap text-emerald-600 dark:text-emerald-400 border-l border-gray-200 dark:border-gray-700">
-                Hausverbr.<br /><span className="font-normal opacity-70">kW</span>
-              </th>
-              {TD_COLS.slice(4).map(c => (      /* Gesamtverbr., WP, Wallbox, Bilanz, Qualität */
-                <th key={c.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${c.color}`}>
-                  {c.label}<br /><span className="font-normal opacity-70">{c.unit}</span>
-                </th>
-              ))}
-              {extraVerbraucher.map((s, i) => (
-                <th key={s.key} className={`text-right py-2 px-2 font-medium whitespace-nowrap ${EXTRA_FARBEN_CSS[(extraErzeuger.length + i) % EXTRA_FARBEN_CSS.length]}`}>
-                  {s.label}<br /><span className="font-normal opacity-70">kW</span>
+              {allCols.map(c => (
+                <th key={c.key}
+                  className="px-2 py-2 text-right font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
+                  onClick={() => handleSort(c.key)}
+                >
+                  <span className="flex items-center justify-end gap-1">
+                    <SortIcon colKey={c.key} />
+                    <span>{c.label}</span>
+                  </span>
+                  <span className="font-normal text-[10px] opacity-60">{c.unit}</span>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: 24 }, (_, h) => {
-              const s = daten.find(d => d.stunde === h)
-              return (
-                <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <td className="py-1.5 pr-3 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{h}:00</td>
-                  <td className="text-right py-1.5 px-2 tabular-nums text-yellow-600 dark:text-yellow-400 font-medium">
-                    {s ? tdCell(gesamterzeugung(s)) : tdCell(null)}
+            {rows.map(({ h, vals }) => (
+              <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                <td className="px-3 py-1.5 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{h}:00</td>
+                {allCols.map(c => (
+                  <td key={c.key} className="px-2 py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                    {cell(vals[c.key], c.decimals)}
                   </td>
-                  {TD_COLS.slice(0, 2).map(c => {
-                    const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
-                    return <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">{tdCell(v, c.unit === 'W/m²' ? 0 : 2)}</td>
-                  })}
-                  {extraErzeuger.map(es => (
-                    <td key={es.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">
-                      {tdCell(s?.komponenten?.[es.key] ?? null)}
-                    </td>
-                  ))}
-                  {TD_COLS.slice(2, 4).map(c => {
-                    const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
-                    return <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">{tdCell(v)}</td>
-                  })}
-                  <td className="text-right py-1.5 px-2 tabular-nums text-emerald-600 dark:text-emerald-400 font-medium border-l border-gray-100 dark:border-gray-800">
-                    {s ? tdCell(hausverbrauch(s)) : tdCell(null)}
-                  </td>
-                  {TD_COLS.slice(4).map(c => {
-                    const v = s ? (s as unknown as Record<string, number | null>)[c.key] : null
-                    return <td key={c.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">{tdCell(v, c.unit === 'W/m²' || c.unit === '%' ? (c.unit === 'W/m²' ? 0 : 1) : 2)}</td>
-                  })}
-                  {extraVerbraucher.map(es => (
-                    <td key={es.key} className="text-right py-1.5 px-2 tabular-nums text-gray-700 dark:text-gray-300">
-                      {tdCell(s?.komponenten?.[es.key] ?? null)}
-                    </td>
-                  ))}
-                </tr>
-              )
-            })}
+                ))}
+              </tr>
+            ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-              <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">Σ kWh</td>
-              <td className="text-right py-2 px-2 tabular-nums text-yellow-600 dark:text-yellow-400">{sumGesamterz.toFixed(2)}</td>
-              {TD_COLS.slice(0, 2).map(c => (
-                <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
-                  {c.sum && summen[c.key] != null ? summen[c.key]!.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                </td>
-              ))}
-              {extraErzeuger.map(es => (
-                <td key={es.key} className="text-right py-2 px-2 tabular-nums text-violet-600 dark:text-violet-400">
-                  {extraSummen[es.key] != null ? extraSummen[es.key].toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                </td>
-              ))}
-              {TD_COLS.slice(2, 4).map(c => (
-                <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
-                  {c.sum && summen[c.key] != null ? summen[c.key]!.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                </td>
-              ))}
-              <td className="text-right py-2 px-2 tabular-nums text-emerald-600 dark:text-emerald-400 border-l border-gray-200 dark:border-gray-700">{sumHausverbr.toFixed(2)}</td>
-              {TD_COLS.slice(4).map(c => (
-                <td key={c.key} className={`text-right py-2 px-2 tabular-nums ${c.color}`}>
-                  {c.sum && summen[c.key] != null ? summen[c.key]!.toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                </td>
-              ))}
-              {extraVerbraucher.map(es => (
-                <td key={es.key} className="text-right py-2 px-2 tabular-nums text-violet-600 dark:text-violet-400">
-                  {extraSummen[es.key] != null ? extraSummen[es.key].toFixed(2) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold sticky bottom-0">
+              <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Σ kWh</td>
+              {allCols.map(c => (
+                <td key={c.key} className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">
+                  {cell(summen[c.key], c.decimals)}
                 </td>
               ))}
             </tr>
