@@ -221,12 +221,12 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           />
           <KPICard
             title="JAZ Warmwasser"
-            value={z.cop_warmwasser?.toFixed(2) || '–'}
+            value={(z.cop_warmwasser && z.cop_warmwasser > 0) ? z.cop_warmwasser.toFixed(2) : '–'}
             icon={Thermometer}
             color="purple"
             formel="JAZ WW = Warmwasser ÷ Strom WW"
             berechnung={`${z.gesamt_warmwasser_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
-            ergebnis={`= ${z.cop_warmwasser?.toFixed(2) || '–'}`}
+            ergebnis={(z.cop_warmwasser && z.cop_warmwasser > 0) ? `= ${z.cop_warmwasser.toFixed(2)}` : '– (keine Daten)'}
           />
           <KPICard
             title="Strom Heizen"
@@ -237,8 +237,8 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
           />
           <KPICard
             title="Strom Warmwasser"
-            value={(z.gesamt_strom_warmwasser_kwh! / 1000).toFixed(1)}
-            unit="MWh"
+            value={z.gesamt_strom_warmwasser_kwh ? (z.gesamt_strom_warmwasser_kwh / 1000).toFixed(1) : '–'}
+            unit={z.gesamt_strom_warmwasser_kwh ? 'MWh' : ''}
             icon={Zap}
             color="yellow"
           />
