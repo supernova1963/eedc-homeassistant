@@ -1,6 +1,6 @@
 // Energieprofil-Tab — Tagesdetail + Wochenvergleich
 // Etappe 2: Auswertung persistierter Stundenwerte aus TagesEnergieProfil
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
@@ -536,6 +536,94 @@ function KpiCard({ label, value, color }: { label: string; value: string; color?
   )
 }
 
+// ─── Info-Panel ───────────────────────────────────────────────────────────────
+
+function InfoPanel() {
+  const [offen, setOffen] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40">
+      <button
+        type="button"
+        onClick={() => setOffen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-blue-800 dark:text-blue-300"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-base">ℹ</span>
+          Wie werden die Daten erhoben und verdichtet?
+        </span>
+        <span className="text-xs opacity-60">{offen ? '▲ schließen' : '▼ anzeigen'}</span>
+      </button>
+
+      {offen && (
+        <div ref={contentRef} className="px-4 pb-4 text-sm text-blue-900 dark:text-blue-200 space-y-4 border-t border-blue-200 dark:border-blue-800 pt-4">
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <section>
+              <h4 className="font-semibold mb-1">Datenquellen</h4>
+              <p className="text-xs leading-relaxed opacity-90">
+                <strong>HA Add-on:</strong> Stündliche Mittelwerte aus der Home Assistant Sensor-History.
+                HA speichert diese nur ~10 Tage — deshalb werden die Daten täglich persistent in der
+                EEDC-Datenbank gespeichert.
+              </p>
+              <p className="text-xs leading-relaxed opacity-90 mt-1">
+                <strong>Docker Standalone:</strong> MQTT Live-Snapshots werden alle 5 Minuten in der DB
+                gesichert und daraus stündliche Mittelwerte berechnet. Retention: 15 Tage.
+              </p>
+            </section>
+
+            <section>
+              <h4 className="font-semibold mb-1">Aggregations-Zeitplan</h4>
+              <ul className="text-xs leading-relaxed opacity-90 space-y-0.5">
+                <li><strong>00:15 Uhr täglich</strong> — Vortag wird finalisiert (alle Stunden 0–23)</li>
+                <li><strong>alle 15 Min</strong> — laufender Tag rollierend (abgeschlossene Stunden)</li>
+                <li><strong>Monatsabschluss</strong> — rückwirkende Nachberechnung falls Lücken</li>
+              </ul>
+            </section>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <section>
+              <h4 className="font-semibold mb-1">Felder erklärt</h4>
+              <ul className="text-xs leading-relaxed opacity-90 space-y-0.5">
+                <li><strong>PV kW</strong> — Summe aller lokalen Erzeuger (PV-Module, BKW)</li>
+                <li><strong>Verbrauch kW</strong> — Gesamtverbrauch (Haushalt + WP + Wallbox + …)</li>
+                <li><strong>Bezug / Einspeisung</strong> — Netto-Austausch mit dem Stromnetz</li>
+                <li><strong>Batterie kW</strong> — <span className="text-orange-600 dark:text-orange-400 font-medium">positiv = Entladung</span> (Quelle), <span className="text-blue-600 dark:text-blue-400 font-medium">negativ = Ladung</span> (Senke)</li>
+                <li><strong>WP / Wallbox kW</strong> — Absolut-Wert des jeweiligen Verbrauchers</li>
+                <li><strong>Überschuss kW</strong> — max(0, PV − Verbrauch) je Stunde</li>
+                <li><strong>Defizit kW</strong> — max(0, Verbrauch − PV) je Stunde</li>
+                <li><strong>SoC %</strong> — Batterie-Ladestand (Stundenmittel)</li>
+                <li><strong>Strahlung W/m²</strong> — Globalstrahlung (Open-Meteo Historical)</li>
+              </ul>
+            </section>
+
+            <section>
+              <h4 className="font-semibold mb-1">Wochenvergleich</h4>
+              <p className="text-xs leading-relaxed opacity-90">
+                Für jeden Wochentag (Mo–So) und jede Stunde wird der <strong>arithmetische
+                Mittelwert</strong> aller verfügbaren Tage im gewählten Zeitraum berechnet.
+                Die Zahl in Klammern hinter jedem Wochentag-Button zeigt, wie viele Tage
+                in die Berechnung einfließen.
+              </p>
+              <p className="text-xs leading-relaxed opacity-90 mt-1">
+                <strong>Empfehlung:</strong> Mindestens 4 Wochen Daten für aussagekräftige Muster.
+                Ab 8 Wochen sind saisonale Einflüsse erkennbar.
+              </p>
+            </section>
+          </div>
+
+          <div className="text-xs opacity-70 border-t border-blue-200 dark:border-blue-700 pt-2">
+            Summenzeile in der Tagesdetail-Tabelle: kW-Felder aufsummiert ergeben kWh/Tag
+            (1 Stundenwert × 1h = kWh). SoC, Temperatur und Strahlung werden nicht summiert.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Haupt-Tab ────────────────────────────────────────────────────────────────
 
 interface EnergieprofilTabProps {
@@ -552,6 +640,9 @@ export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
 
   return (
     <div className="space-y-4">
+      {/* Info-Panel */}
+      <InfoPanel />
+
       {/* Sub-Tab-Navigation */}
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
         {subTabs.map(t => (
