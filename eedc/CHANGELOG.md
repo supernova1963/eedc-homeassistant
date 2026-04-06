@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.0] - 2026-04-06
+
+### Neu
+
+- **Energieprofil Etappe 2 — Tagesdetail + Wochenvergleich** (Beta): Neuer Tab "Energieprofil" in den Auswertungen. Persistierte Stundenwerte aus `TagesEnergieProfil` werden als interaktiver Butterfly-Chart (analog Live-Tagesverlauf) und vollständige Tabelle dargestellt.
+  - **Tagesdetail**: Datum-Picker, gestapelter AreaChart (Erzeuger oben / Verbraucher unten), gestrichelte Gesamterzeugungslinie. Alle Sonstiges-Investments (Poolpumpe, BHKW, …) erscheinen namentlich als eigene Serien. KPI-Zeile: Gesamterzeugung, Verbrauch, Netzbezug, Einspeisung, Autarkie, Temperatur.
+  - **Wochenvergleich**: 9 Gruppen (Mo–Fr, Sa–So, einzelne Wochentage), 4 Zeiträume (30/90/180/365 Tage), 3 Kennzahlen (Verbrauch / PV / Netzbezug).
+  - **Tabellen**: Spaltenauswahl mit Gruppen, sortierbare Header, CSV-Export, localStorage-Persistenz — analog Auswertung-Tabelle. Berechnete Spalten Gesamterzeugung und Hausverbrauch.
+  - **Beta-Badge + Sammel-Screen**: Tab trägt "Beta"-Kennzeichnung. Solange < 8 Tage Stundenwerte vorhanden sind, erscheint ein Fortschrittsbalken statt leerer Charts.
+  - **Info-Panel**: Ausklappbare Erläuterung zu Datenquellen (HA-History / MQTT-Snapshots), Aggregations-Zeitplan und Felddefinitionen.
+
+### Fix
+
+- **Energieprofil — Anlage-Wechsel**: `key={anlageId}` erzwingt vollständigen Remount bei Anlagenwechsel, damit alle internen States (Datum, Daten, extraSerien) korrekt zurückgesetzt werden.
+
+---
+
 ## [3.10.6] - 2026-04-06
 
 ### Fix
