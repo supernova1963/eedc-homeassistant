@@ -1285,16 +1285,23 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
             <span className="text-gray-700 dark:text-gray-300">Mit Speicher (z.B. Anker SOLIX)</span>
           </label>
           {paramData.hat_speicher && (
-            <Input
-              label="Speicher-Kapazität (Wh)"
-              name="param_speicher_kapazitaet_wh"
-              type="number"
-              step="1"
-              min="0"
-              value={paramData.speicher_kapazitaet_wh as string}
-              onChange={onChange}
-              hint="z.B. 1600 Wh für Anker SOLIX"
-            />
+            <>
+              <Input
+                label="Speicher-Kapazität (Wh)"
+                name="param_speicher_kapazitaet_wh"
+                type="number"
+                step="1"
+                min="0"
+                value={paramData.speicher_kapazitaet_wh as string}
+                onChange={onChange}
+                hint="z.B. 1600 Wh für Anker SOLIX"
+              />
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                Für vollständige Auswertungen (Live-Dashboard, Cockpit, Tagesverlauf) bitte den Speicher
+                zusätzlich als separate <strong>Speicher-Investition</strong> erfassen und dort die
+                Batterieleistung sowie den SoC-Sensor zuordnen.
+              </p>
+            </>
           )}
         </div>
       )
