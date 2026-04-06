@@ -103,6 +103,8 @@ export const LIVE_FIELDS = {
   ],
   balkonkraftwerk: [
     { key: 'leistung_w', label: 'Leistung', einheit: 'W', placeholder: 'BKW-Leistungssensor suchen...' },
+    { key: 'batterieleistung_w', label: 'Batterieleistung (optional, bei integriertem Speicher)', einheit: 'W, +Ladung/−Entladung', placeholder: 'Batterie-Leistungssensor suchen...' },
+    { key: 'soc', label: 'Ladestand Speicher (optional)', einheit: '%', placeholder: 'SoC-Sensor suchen...' },
   ],
   sonstiges: [
     { key: 'leistung_w', label: 'Leistung', einheit: 'W', placeholder: 'Leistungssensor suchen...' },

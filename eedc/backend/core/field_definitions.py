@@ -308,7 +308,9 @@ LIVE_FELDER_INV: dict = {
         {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C"},
     ],
     "balkonkraftwerk": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "leistung_w",         "label": "Leistung",                            "einheit": "W"},
+        {"key": "batterieleistung_w", "label": "Batterieleistung (integrierter Speicher)", "einheit": "W"},
+        {"key": "soc",                "label": "Ladestand Speicher",                  "einheit": "%"},
     ],
     "sonstiges": [
         {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
