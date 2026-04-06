@@ -3,9 +3,15 @@
 Demo-Seed: Generiert realistische TagesEnergieProfil + TagesZusammenfassung
 für lokale Testumgebungen (ohne echte HA-History).
 
+Standardmäßig wird NUR die erste Anlage (Demo-Anlage) befüllt.
+Andere Anlagen bleiben ohne Daten → zeigen Sammel-Screen im Energieprofil-Tab.
+Das spiegelt das reale Verhalten wider: neue Anlagen sammeln erst ab Einrichtung.
+
 Verwendung:
   cd /home/gernot/claude/eedc-homeassistant/eedc
-  python ../scripts/seed_demo_profil.py [--anlage-id 1] [--tage 60]
+  python ../scripts/seed_demo_profil.py              # Demo-Anlage (ID 1)
+  python ../scripts/seed_demo_profil.py --anlage-id 2  # explizit andere Anlage
+  python ../scripts/seed_demo_profil.py --alle         # alle Anlagen
 
 Muster:
   PV        — Sinuskurve, aufgespalten auf vorhandene PV/BKW-Investitionen
@@ -312,7 +318,9 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
 def main():
     parser = argparse.ArgumentParser(description="Demo-Profildaten generieren")
     parser.add_argument("--anlage-id", type=int, default=None,
-                        help="Anlage-ID (Standard: alle Anlagen)")
+                        help="Bestimmte Anlage-ID befüllen")
+    parser.add_argument("--alle", action="store_true",
+                        help="Alle Anlagen befüllen (Standard: nur erste Anlage)")
     parser.add_argument("--tage", type=int, default=60,
                         help="Anzahl Tage zurück (Standard: 60)")
     args = parser.parse_args()
@@ -324,7 +332,7 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
 
-    rows = conn.execute("SELECT id, anlagenname, leistung_kwp FROM anlagen").fetchall()
+    rows = conn.execute("SELECT id, anlagenname, leistung_kwp FROM anlagen ORDER BY id").fetchall()
     if not rows:
         print("Keine Anlagen in der DB gefunden.", file=sys.stderr)
         sys.exit(1)
@@ -333,8 +341,15 @@ def main():
     random.seed(42)
 
     for anlage_id, name, kwp in rows:
-        if args.anlage_id and anlage_id != args.anlage_id:
-            continue
+        # Auswahl: explizite ID, --alle, oder nur die erste Anlage
+        if args.anlage_id:
+            if anlage_id != args.anlage_id:
+                continue
+        elif not args.alle:
+            if anlage_id != rows[0][0]:  # nur erste Anlage
+                print(f"  ↷ {name} (ID {anlage_id}) übersprungen — nutze --alle für alle Anlagen")
+                continue
+
         kwp = kwp or 10.0
         print(f"  → {name} (ID {anlage_id}, {kwp} kWp)")
         seed_anlage(conn, anlage_id, kwp, tage=args.tage)
