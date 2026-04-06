@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.1] - 2026-04-06
+
+### Neu
+
+- **Portal-Import: Zuordnungs-Wizard**: Bei mehreren Investments gleichen Typs (z.B. 2 PV-Strings, 2 Speicher) zeigt der Portal-Import-Wizard jetzt einen optionalen Zuordnungs-Schritt. PV-Erzeugung und Batterie-Werte können prozentual aufgeteilt werden, Wallbox und E-Auto per Auswahl zugeordnet werden. Standard: proportionale Verteilung nach kWp/Kapazität. Bei eindeutiger Zuordnung entfällt der Schritt.
+
+### Behoben
+
+- **Portal-Import: Batterie-Doppelzählung**: `md.batterie_ladung_kwh` / `md.batterie_entladung_kwh` wurden bisher immer in `Monatsdaten` gesetzt, auch wenn gleichzeitig `_distribute_legacy_battery_to_storages()` dieselben Werte in `InvestitionMonatsdaten` schrieb. Die Legacy-Felder werden jetzt nur noch als Fallback gesetzt (kein Speicher angelegt).
+- **Portal-Import: `md.pv_erzeugung_kwh` fehlte**: Bei vorhandenen PV-Modulen wurde `md.pv_erzeugung_kwh` nicht gesetzt. Berechnungen die dieses Aggregat-Feld lesen (z.B. Cockpit) sahen 0 statt des tatsächlichen Werts.
+- **Portal-Import: E-Auto-Typ-String**: `i.typ == "eauto"` → `"e-auto"` — E-Auto-km-Daten wurden nie in `InvestitionMonatsdaten` geschrieben.
+
+### Refactoring (intern, kein User-Impact)
+
+- **Import-Registry — `field_definitions.py` als Single Source of Truth**: Alle Investitions-Felder sind jetzt mit CSV-Suffix, Aggregat-Zuordnung und Datentyp annotiert. `_import_investition_monatsdaten_v09` (helpers.py) und `_build_investition_felder` / `_detect_investition_spalten` (custom_import.py) werden vollständig aus der Registry abgeleitet — kein hardcodierter Typ-Check mehr. Neue Felder oder Investitionstypen nur noch in `field_definitions.py` eintragen.
+- **Lücken L1–L6 geschlossen**: Wallbox `ladung_pv_kwh` (L1), WP `Strom_Heizen/Warmwasser_kWh` (L2), BKW `Eigenverbrauch_kWh` (L3), Sonstiges/Erzeuger `eigenverbrauch_kwh` + `einspeisung_kwh` (L4), Sonstiges/Verbraucher `bezug_pv/netz_kwh` (L5), Sonstiges/Speicher Feldnamen-Korrektur (L6 — Daten wurden bisher in Berechnungen ignoriert).
+
+---
+
 ## [3.10.0] - 2026-04-06
 
 ### Neu
