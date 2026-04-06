@@ -11,6 +11,8 @@ import { Plus, Trash2, Edit3, Play, Check, ChevronDown, ChevronRight, ToggleLeft
 import Input from '../ui/Input'
 import { liveDashboardApi } from '../../api/liveDashboard'
 import type { GatewayMapping, GatewayMappingCreate, GatewayStatus, TestTopicResult, MqttPreset } from '../../api/liveDashboard'
+import { investitionenApi } from '../../api/investitionen'
+import type { Investition } from '../../types'
 
 interface MqttGatewayProps {
   anlageId: number | null
@@ -296,7 +298,9 @@ function MappingForm({
 
 function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: () => void }) {
   const [presets, setPresets] = useState<MqttPreset[]>([])
+  const [investitionen, setInvestitionen] = useState<Investition[]>([])
   const [selectedId, setSelectedId] = useState('')
+  const [selectedInvId, setSelectedInvId] = useState<number | null>(null)
   const [variablen, setVariablen] = useState<Record<string, string>>({})
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -304,12 +308,17 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
 
   useEffect(() => {
     liveDashboardApi.getGatewayPresets().then(setPresets).catch(() => {})
-  }, [])
+    investitionenApi.list(anlageId, undefined, true).then(setInvestitionen).catch(() => {})
+  }, [anlageId])
 
   const selected = presets.find(p => p.id === selectedId) ?? null
 
+  // Gruppen für <optgroup>
+  const gruppen = Array.from(new Set(presets.map(p => p.gruppe)))
+
   const handleSelect = (id: string) => {
     setSelectedId(id)
+    setSelectedInvId(null)
     setVariablen({})
     setError(null)
     setSuccess(null)
@@ -325,9 +334,11 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
         preset_id: selected.id,
         anlage_id: anlageId,
         variablen,
+        ...(selected.erfordert_investition && selectedInvId ? { investition_id: selectedInvId } : {}),
       })
       setSuccess(`${result.erstellt} Mapping${result.erstellt !== 1 ? 's' : ''} erstellt`)
       setSelectedId('')
+      setSelectedInvId(null)
       setVariablen({})
       onApplied()
     } catch (err) {
@@ -338,6 +349,8 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
   }
 
   const allVarsFilled = selected?.variablen.every(v => variablen[v.key]?.trim()) ?? false
+  const invOk = !selected?.erfordert_investition || selectedInvId !== null
+  const canApply = allVarsFilled && invOk
 
   // Vorschau: Topics mit ausgefüllten Variablen
   const preview = selected && allVarsFilled
@@ -348,7 +361,13 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
           topic = topic.split(`{${k}}`).join(v)
           if (pfad) pfad = pfad.split(`{${k}}`).join(v)
         }
-        return { topic, ziel_key: m.ziel_key, beschreibung: m.beschreibung, pfad }
+        const invLabel = selectedInvId
+          ? investitionen.find(i => i.id === selectedInvId)?.bezeichnung ?? `#${selectedInvId}`
+          : null
+        const ziel = invOk && selectedInvId
+          ? m.ziel_key.replace('{inv_id}', String(selectedInvId))
+          : m.ziel_key
+        return { topic, ziel_key: ziel, beschreibung: m.beschreibung, pfad, invLabel }
       })
     : null
 
@@ -361,7 +380,7 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
         Geräte-Preset (Schnelleinrichtung)
       </h3>
 
-      {/* Preset-Auswahl */}
+      {/* Preset-Auswahl gruppiert */}
       <div>
         <select
           value={selectedId}
@@ -369,8 +388,12 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
           className="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
         >
           <option value="">Gerät auswählen…</option>
-          {presets.map(p => (
-            <option key={p.id} value={p.id}>{p.name} ({p.hersteller})</option>
+          {gruppen.map(gruppe => (
+            <optgroup key={gruppe} label={gruppe}>
+              {presets.filter(p => p.gruppe === gruppe).map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
@@ -382,6 +405,26 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
 
           {selected.anleitung && (
             <p className="text-xs text-gray-500 dark:text-gray-500 italic">{selected.anleitung}</p>
+          )}
+
+          {/* Investitions-Auswahl (nur wenn erfordert_investition) */}
+          {selected.erfordert_investition && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Investition
+              </label>
+              <select
+                value={selectedInvId ?? ''}
+                onChange={e => setSelectedInvId(e.target.value ? Number(e.target.value) : null)}
+                title="Investition auswählen"
+                className="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value="">Investition auswählen…</option>
+                {investitionen.map(inv => (
+                  <option key={inv.id} value={inv.id}>{inv.bezeichnung}</option>
+                ))}
+              </select>
+            </div>
           )}
 
           {/* Variablen-Eingabe */}
@@ -435,7 +478,7 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
           {/* Anwenden-Button */}
           <button
             onClick={handleApply}
-            disabled={!allVarsFilled || applying}
+            disabled={!canApply || applying}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
           >
             {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}

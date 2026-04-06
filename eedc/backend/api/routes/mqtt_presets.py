@@ -43,8 +43,10 @@ class PresetResponse(BaseModel):
     id: str
     name: str
     hersteller: str
+    gruppe: str
     beschreibung: str
     anleitung: str
+    erfordert_investition: bool
     variablen: list[PresetVariableResponse]
     mappings: list[PresetMappingResponse]
 
@@ -53,6 +55,7 @@ class ApplyPresetRequest(BaseModel):
     preset_id: str = Field(..., min_length=1)
     anlage_id: int
     variablen: dict[str, str] = Field(default_factory=dict)
+    investition_id: Optional[int] = None
 
 
 class ApplyPresetResponse(BaseModel):
@@ -72,8 +75,10 @@ async def get_presets():
             id=p.id,
             name=p.name,
             hersteller=p.hersteller,
+            gruppe=p.gruppe,
             beschreibung=p.beschreibung,
             anleitung=p.anleitung,
+            erfordert_investition=p.erfordert_investition,
             variablen=[
                 PresetVariableResponse(
                     key=v.key, label=v.label,
@@ -100,7 +105,7 @@ async def get_presets():
 async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_db)):
     """Preset anwenden: Generiert Mappings und speichert sie in der DB."""
     try:
-        mapping_dicts = generate_mappings(req.preset_id, req.anlage_id, req.variablen)
+        mapping_dicts = generate_mappings(req.preset_id, req.anlage_id, req.variablen, req.investition_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

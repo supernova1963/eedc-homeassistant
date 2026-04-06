@@ -209,8 +209,10 @@ export interface MqttPreset {
   id: string
   name: string
   hersteller: string
+  gruppe: string
   beschreibung: string
   anleitung: string
+  erfordert_investition: boolean
   variablen: PresetVariable[]
   mappings: PresetMappingInfo[]
 }
@@ -353,7 +355,7 @@ export const liveDashboardApi = {
   getGatewayPresets: () =>
     api.get<MqttPreset[]>('/live/mqtt/gateway/presets'),
 
-  applyGatewayPreset: (data: { preset_id: string; anlage_id: number; variablen: Record<string, string> }) =>
+  applyGatewayPreset: (data: { preset_id: string; anlage_id: number; variablen: Record<string, string>; investition_id?: number }) =>
     api.post<{ preset_id: string; erstellt: number; mappings: Record<string, unknown>[] }>(
       '/live/mqtt/gateway/presets/apply', data,
     ),
