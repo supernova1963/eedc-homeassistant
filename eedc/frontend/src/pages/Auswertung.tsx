@@ -188,7 +188,7 @@ export default function Auswertung() {
           <TabelleTab data={filteredData} stats={filteredStats} anlage={anlage} strompreis={strompreis} alleTarife={alleTarife} zeitraumLabel={zeitraumLabel} alleDaten={aggregierteDaten} selectedYear={selectedYear} />
         )}
         {activeTab === 'energieprofil' && anlageId && (
-          <EnergieprofilTab anlageId={anlageId} />
+          <EnergieprofilTab key={anlageId} anlageId={anlageId} />
         )}
       </div>
     </div>
