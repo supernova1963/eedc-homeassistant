@@ -86,7 +86,7 @@ export default function Auswertung() {
     )
   }
 
-  const tabs: { key: TabType; label: string }[] = [
+  const tabs: { key: TabType; label: string; beta?: boolean }[] = [
     { key: 'energie', label: 'Energie' },
     { key: 'pv', label: 'PV-Anlage' },
     { key: 'komponenten', label: 'Komponenten' },
@@ -94,7 +94,7 @@ export default function Auswertung() {
     { key: 'co2', label: 'CO2' },
     { key: 'investitionen', label: 'Investitionen' },
     { key: 'tabelle', label: 'Tabelle' },
-    { key: 'energieprofil', label: 'Energieprofil' },
+    { key: 'energieprofil', label: 'Energieprofil', beta: true },
   ]
 
   // Zeitraum-Label berechnen
@@ -150,7 +150,14 @@ export default function Auswertung() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
-                {tab.label}
+                <span className="flex items-center gap-1.5">
+                  {tab.label}
+                  {tab.beta && (
+                    <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 leading-none">
+                      Beta
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
           </nav>

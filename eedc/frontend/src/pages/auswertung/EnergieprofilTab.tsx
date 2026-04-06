@@ -912,13 +912,65 @@ interface EnergieprofilTabProps {
   anlageId: number
 }
 
+const MIN_TAGE = 8  // 1 Woche + 1 Tag
+
 export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
   const [subTab, setSubTab] = useState<'tagesdetail' | 'wochenvergleich'>('tagesdetail')
+  const [tageMitDaten, setTageMitDaten] = useState<number | null>(null)
+
+  // Datenbestand prüfen: letzte 90 Tage abfragen und zählen
+  useEffect(() => {
+    if (!anlageId) return
+    const bis = toISODate(new Date())
+    const von = vorTagenISO(90)
+    energieProfilApi.getTage(anlageId, von, bis)
+      .then(tage => setTageMitDaten(tage.filter(t => t.stunden_verfuegbar > 0).length))
+      .catch(() => setTageMitDaten(0))
+  }, [anlageId])
 
   const subTabs = [
     { key: 'tagesdetail' as const, label: 'Tagesdetail' },
     { key: 'wochenvergleich' as const, label: 'Wochenvergleich' },
   ]
+
+  // Noch nicht genug Daten → Sammelscreen
+  // Fortschrittsbalken: 8 mögliche Werte (0–8 Tage), statische Tailwind-Klassen
+  const PROGRESS_W = ['w-0','w-[12.5%]','w-1/4','w-[37.5%]','w-1/2','w-[62.5%]','w-3/4','w-[87.5%]','w-full']
+
+  if (tageMitDaten !== null && tageMitDaten < MIN_TAGE) {
+    const progressClass = PROGRESS_W[Math.min(tageMitDaten, MIN_TAGE)]
+    return (
+      <div className="space-y-4">
+        <InfoPanel />
+        <Card>
+          <div className="py-6 text-center space-y-4 max-w-md mx-auto">
+            <div className="text-4xl">📊</div>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+              Energieprofil sammelt Daten
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Für aussagekräftige Tagesprofile und den Wochenvergleich werden mindestens{' '}
+              <strong>{MIN_TAGE} Tage</strong> mit vollständigen Stundenwerten benötigt.
+            </p>
+            {/* Fortschrittsbalken */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                <span>{tageMitDaten} von {MIN_TAGE} Tagen</span>
+                <span>{Math.round(tageMitDaten / MIN_TAGE * 100)} %</span>
+              </div>
+              <div className="h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className={`h-full bg-primary-500 rounded-full transition-all ${progressClass}`} />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Stundenwerte werden täglich um 00:15 Uhr für den Vortag gespeichert
+              und alle 15 Minuten für den laufenden Tag aktualisiert.
+            </p>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
