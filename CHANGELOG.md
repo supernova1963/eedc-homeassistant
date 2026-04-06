@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.10.6] - 2026-04-06
+
+### Fix
+
+- **MQTT-Standalone: Tagesverlauf-Chart und Energieprofil-Stundenwerte fehlten**: Docker-Standalone-Installationen ohne HA-Integration sammelten keine `TagesEnergieProfil`-Daten, weil `get_tagesverlauf()` ohne HA sofort leere Serien zurückgab. Neue Tabelle `mqtt_live_snapshots` speichert alle 5 Min die aktuellen MQTT Live-Watt-Werte (Einspeisung, Netzbezug, Investitionsleistungen). `live_tagesverlauf_service` nutzt diese als Fallback — damit laufen Tagesverlauf-Chart und Energieprofil-Aggregation auch im reinen MQTT-Modus.
+
+---
+
 ## [3.10.5] - 2026-04-06
 
 ### Neu
