@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight, Calendar } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { useSelectedAnlage, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis, useStrompreise } from '../hooks'
-import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab, TabelleTab } from './auswertung/index'
+import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab, TabelleTab, EnergieprofilTab } from './auswertung/index'
 
-type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen' | 'tabelle'
+type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen' | 'tabelle' | 'energieprofil'
 
 // Zeitraum-Label für Anzeige erstellen
 function getZeitraumLabel(selectedYear: number | 'all', verfuegbareJahre: number[]): string {
@@ -94,6 +94,7 @@ export default function Auswertung() {
     { key: 'co2', label: 'CO2' },
     { key: 'investitionen', label: 'Investitionen' },
     { key: 'tabelle', label: 'Tabelle' },
+    { key: 'energieprofil', label: 'Energieprofil' },
   ]
 
   // Zeitraum-Label berechnen
@@ -178,6 +179,9 @@ export default function Auswertung() {
         )}
         {activeTab === 'tabelle' && (
           <TabelleTab data={filteredData} stats={filteredStats} anlage={anlage} strompreis={strompreis} alleTarife={alleTarife} zeitraumLabel={zeitraumLabel} alleDaten={aggregierteDaten} selectedYear={selectedYear} />
+        )}
+        {activeTab === 'energieprofil' && anlageId && (
+          <EnergieprofilTab anlageId={anlageId} />
         )}
       </div>
     </div>
