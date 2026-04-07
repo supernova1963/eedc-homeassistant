@@ -11,6 +11,7 @@ export interface LiveKomponente {
   erzeugung_kw: number | null
   verbrauch_kw: number | null
   parent_key?: string | null
+  leistung_kwp?: number | null  // PV-Strings: installierte Leistung für Auslastungs-Anzeige
 }
 
 export interface LiveGauge {

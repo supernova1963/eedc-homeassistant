@@ -602,6 +602,12 @@ export default function EnergieFluss({
           const soc = getSoc(k.key, gauges)
           const hasSoc = soc !== null
 
+          // PV-Auslastung: Ist-Leistung / installierte kWp
+          const isPv = k.key.startsWith('pv_')
+          const auslastungPct = isPv && k.leistung_kwp && k.leistung_kwp > 0 && (k.erzeugung_kw ?? 0) > 0
+            ? Math.min(100, ((k.erzeugung_kw ?? 0) / k.leistung_kwp) * 100)
+            : null
+
           // Tooltip — tagesWerte per exaktem Key oder Prefix matchen
           const tagesKwh = tagesWerte?.[k.key]
             ?? tagesWerte?.[k.key.replace(/_\d+$/, '')]
@@ -610,6 +616,7 @@ export default function EnergieFluss({
           if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.erzeugung_kw!.toFixed(2)} kW (Erzeugung)`)
           if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.verbrauch_kw!.toFixed(2)} kW (Verbrauch)`)
           if (hasSoc) tipParts.push(`SoC: ${soc}%`)
+          if (auslastungPct !== null) tipParts.push(`Auslastung: ${auslastungPct.toFixed(0)}% von ${k.leistung_kwp} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {
             const bezug = tagesWerte?.netz_bezug
@@ -655,6 +662,18 @@ export default function EnergieFluss({
                   rx={NODE_R - 1}
                   fill={socColor(soc)}
                   fillOpacity={0.3}
+                />
+              )}
+
+              {/* PV-Auslastungs-Pegel (Füllung von unten, gelb/orange) */}
+              {auslastungPct !== null && (
+                <rect
+                  x={nx + 1.5} y={ny + 1.5 + (NODE_H - 3) * (1 - auslastungPct / 100)}
+                  width={NODE_W - 3}
+                  height={(NODE_H - 3) * (auslastungPct / 100)}
+                  rx={NODE_R - 1}
+                  fill={auslastungPct >= 80 ? '#f59e0b' : auslastungPct >= 40 ? '#eab308' : '#86efac'}
+                  fillOpacity={0.25}
                 />
               )}
 

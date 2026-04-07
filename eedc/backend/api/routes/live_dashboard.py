@@ -35,6 +35,7 @@ class LiveKomponente(BaseModel):
     erzeugung_kw: Optional[float] = None
     verbrauch_kw: Optional[float] = None
     parent_key: Optional[str] = None
+    leistung_kwp: Optional[float] = None  # PV-Strings: installierte Leistung für Auslastungs-Anzeige
 
 
 class LiveGauge(BaseModel):

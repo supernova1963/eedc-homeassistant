@@ -137,6 +137,7 @@ def build_komponenten(
                 "icon": TYP_ICON.get(typ, "sun"),
                 "erzeugung_kw": round(kw, 3),
                 "verbrauch_kw": None,
+                "leistung_kwp": inv.leistung_kwp,
             })
             summe_erzeugung += kw
             pv_total_w += val_w
