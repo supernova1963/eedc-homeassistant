@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.2] - 2026-04-07
+
+### Fix
+
+- **Negative Cache für Open-Meteo API-Fehler**: Bei Open-Meteo-Ausfällen (502 Bad Gateway) wurde bisher bei jedem Request sofort wieder angefragt, was zu 429 Rate Limiting führte. Jetzt wird nach einem Fehler der Cache-Key für 1–5 Minuten gesperrt (429→5 Min, 502→2 Min, Timeout→1 Min). Betrifft Live-Wetter, Solar-Prognose, Forecast und Archiv. Auslöser: Open-Meteo Ausfall 2026-04-07.
+
+---
+
 ## [3.11.1] - 2026-04-07
 
 ### Fix
