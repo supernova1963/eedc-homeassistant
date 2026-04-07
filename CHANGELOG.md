@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.3] - 2026-04-07
+
+### Fix
+
+- **Plausibilitätsfilter für Sensor-Spikes im Tagesverlauf**: Beim HA-Neustart liefern Sensoren kurzzeitig Extremwerte statt `unavailable`. Diese werden jetzt per Typ-Grenze herausgefiltert (Wallbox/E-Auto/Speicher: 50 kW, WP: 20 kW, BKW: 2 kW, PV: 100 kW). Betrifft HA- und MQTT-Pfad. Auslöser: Fronius Wattpilot HACS-Integration (Joachim-xo).
+- **kWp Nachkommastellen in Investitionen**: Im Investitionen-Formular war `step="0.1"` statt `step="0.01"` gesetzt. Betrifft besonders 750W-Module (0.75 kWp). (eedc#3)
+
+---
+
 ## [3.11.2] - 2026-04-07
 
 ### Fix
