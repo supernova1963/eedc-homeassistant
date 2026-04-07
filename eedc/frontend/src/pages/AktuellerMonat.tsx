@@ -148,6 +148,18 @@ export default function AktuellerMonat() {
     ]
   }, [data])
 
+  const vorjahrFormatter = useMemo(() => {
+    const maxVal = vorjahrData.length > 0 ? Math.max(...vorjahrData.flatMap(d => [d.Aktuell, d.Vorjahr])) : 0
+    const mwh = maxVal > 10000
+    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+  }, [vorjahrData])
+
+  const sollIstFormatter = useMemo(() => {
+    const maxVal = sollIstData.length > 0 ? Math.max(...sollIstData.flatMap(d => [d.IST, d.SOLL])) : 0
+    const mwh = maxVal > 10000
+    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+  }, [sollIstData])
+
   const finanzData = useMemo(() => {
     if (!data) return []
     const items: Array<{ name: string; Betrag: number; fill: string }> = []
@@ -469,7 +481,7 @@ export default function AktuellerMonat() {
               <BarChart data={vorjahrData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis unit=" kWh" width={70} />
+                <YAxis tickFormatter={vorjahrFormatter} width={90} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 <Bar dataKey="Aktuell" fill={COLORS.erzeugung} radius={[4, 4, 0, 0]} />
@@ -656,7 +668,7 @@ export default function AktuellerMonat() {
                 <BarChart data={sollIstData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis unit=" kWh" width={70} />
+                  <YAxis tickFormatter={sollIstFormatter} width={90} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend />
                   <Bar dataKey="IST" fill={COLORS.erzeugung} radius={[4, 4, 0, 0]} />
