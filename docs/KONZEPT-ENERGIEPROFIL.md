@@ -218,3 +218,307 @@ Nur Gernot ist betroffen, kein anderer Nutzer weiß von diesen Daten.
 - `TagesZusammenfassung` erst nach 00:15 finalisieren (nicht mehr rollierend)
 
 ### Schritt 5: Testen + Release
+
+---
+
+## Etappe 2: Analyse & Statistik
+
+### Kontext
+
+Die Datenbasis (TagesEnergieProfil + TagesZusammenfassung) wächst täglich. Etappe 2 nutzt
+diese Daten für strukturierte Musteridentifikation, Abhängigkeitsanalyse und — perspektivisch —
+personalisierte Prognosen. Berechnungsergebnisse sollen in einem eigenen Tab sichtbar sein und
+gleichzeitig Live Dashboard und Aussichten versorgen.
+
+---
+
+### Frontend-Struktur
+
+Die bestehende Seite "Energieprofil" in Auswertungen erhält einen dritten Tab:
+
+```
+Energieprofil
+├── Tagesdetail          (stündliches Butterfly-Profil — unverändert)
+├── Wochenvergleich      (typische Tages-Muster — unverändert)
+└── Analyse & Statistik  ← NEU
+```
+
+Der Tab "Analyse & Statistik" ist die zentrale Anlaufstelle für Details zu Berechnungen,
+Ergebnissen und Wahrscheinlichkeiten. Prognosen aus diesem Modul werden zusätzlich im
+Live Dashboard und in Aussichten als Schnellanzeige + Konfidenzintervall eingeblendet.
+
+---
+
+### Inhalt "Analyse & Statistik"
+
+#### Abschnitt 1 — Tagestyp-Verteilung
+- **Tagestyp-Klassifikation** (Schwellwert-basiert auf `TagesZusammenfassung`):
+  - `sonnentag`: Performance Ratio > 0.65 oder Strahlung > Saisonschwelle
+  - `mischtag`: mittlere Variabilität
+  - `schlechtwetter`: PR < 0.25
+  - `anomalie`: Verbrauch oder Ertrag > 2× Saisonmedian
+- **Visualisierung:**
+  - Balkendiagramm Tagestyp-Verteilung (letzten 30/90/180/365 Tage wählbar)
+  - Typisches Stundenprofil je Tagestyp als P25/P50/P75-Band ("So sieht dein typischer Sonnentag aus")
+
+#### Abschnitt 2 — Korrelationen & Abhängigkeiten
+- **Korrelationsmatrix (Heatmap):**
+  - PV-Ertrag ↔ Globalstrahlung (sollte > 0.95 sein — Abweichung deutet auf Degradation hin)
+  - Verbrauch ↔ Außentemperatur (Heizperiode vs. Sommer)
+  - Autarkie ↔ Tagestyp
+  - Batterie-Zyklen ↔ PV-Überschuss
+  - Netzbezug ↔ Bewölkung
+- **WP-Regression** (wenn WP vorhanden):
+  - Streudiagramm: WP-Verbrauch vs. Außentemperatur
+  - Regressionsgerade + R²-Koeffizient sichtbar
+  - Klartext: "Pro Grad unter 15 °C verbraucht deine WP ~X kWh mehr pro Tag"
+- **Technik:** Pearson-Korrelation + lineare Regression mit `numpy` (bereits Dependency)
+
+#### Abschnitt 3 — Prognose-Scorecard *(ab Phase C)*
+- MAE (Mean Absolute Error) in kWh
+- MAPE (Mean Absolute Percentage Error) in %
+- Bias (systematische Über-/Unterschätzung)
+- Skill Score vs. Naiv-Prognose (Vorjahreswert)
+- Zeitreihe des Prognosefehlers (wird der Algorithmus über Zeit besser?)
+- Getrennt für PV-Ertrag und Verbrauch
+
+#### Abschnitt 4 — Wahrscheinlichkeiten & Konfidenz *(ab Phase C)*
+- Für jede Prognose: nicht nur Punktwert, sondern Konfidenzintervall
+- Beispiel: "18 kWh Verbrauch [14–22 kWh, 80 % Konfidenz]"
+- Basiert auf der Streuung der historischen Analogietage (P10/P50/P90)
+- Dieselben Werte erscheinen in Live Dashboard und Aussichten als Fehlerbalken
+
+---
+
+### Schema-Vorbereitung: 3 neue Spalten in TagesZusammenfassung
+
+Wird zusammen mit Etappe 1 (Revision) migriert:
+
+```python
+tagestyp                 = Column(String(20), nullable=True)
+# Prognose-Persistierung (damit Scorecard rückwirkend berechenbar):
+verbrauch_prognose_kwh   = Column(Float, nullable=True)
+# pv_prognose_kwh existiert bereits → wird für Scorecard genutzt
+```
+
+**Warum jetzt:** Wenn Prognosen nicht zum Zeitpunkt der Vorhersage gespeichert werden, ist
+der spätere Fehlervergleich (IST vs. Prognose) nicht möglich. Die Rohdaten wachsen sowieso —
+nur die Prognose-Persistierung muss früh vorbereitet werden.
+
+---
+
+### Verwendung in Live Dashboard + Aussichten
+
+Die Analyse-Engine liefert Punktwert + Konfidenzintervall an drei Stellen:
+
+| Ort | Anzeige |
+|---|---|
+| **Analyse-Tab** | Vollständige Methodik, Koeffizienten, Scorecard |
+| **Live Dashboard** | "Noch ~3.2 kWh PV bis Abend [2.1–4.8 kWh]" + Speicher-Ladeprognose (#101) |
+| **Aussichten** | Tages-Verbrauchsprognose mit Unsicherheitsband, temperaturbereinigt |
+
+Technisch: eine gemeinsame Backend-Funktion `analyse_service.prognose_heute()` /
+`prognose_tag(datum)`, die von allen drei Endpunkten aufgerufen wird.
+
+---
+
+### Implementierungsphasen
+
+| Phase | Inhalt | Voraussetzung | Neue Libs |
+|---|---|---|---|
+| **A** | Tagestyp-Klassifikation, Percentile-Profile, Tab-Grundgerüst | ~30 Tage Daten | keine |
+| **B** | Korrelationsmatrix, WP-Regression, Abhängigkeits-Heatmap | ~60 Tage | `numpy` (vorhanden) |
+| **C** | Historische Analogie-Prognose + Scorecard + Konfidenz | ~90 Tage | keine |
+| **D** | Holt-Winters Trend/Saison-Zerlegung (Monatsebene) | ~6 Monate | `statsmodels` |
+| **E** | SARIMAX + Auto-Tuning (optional, bei nachgewiesenem Mehrwert) | ~18 Monate | `pmdarima` |
+
+**Priorität Phase D/E:** Holt-Winters und ARIMA können jederzeit auf historischen Daten
+gerechnet werden — kein Datenverlust durch späteren Start. Phasen A–C mit vorhandenen
+Abhängigkeiten realisieren, D/E wenn Datenbasis und konkreter Bedarf vorliegen.
+
+---
+
+### Bewusste Entscheidungen (Community)
+
+- **Kein Community-Upload von Profildaten** — Analyse läuft ausschließlich lokal
+- Community-Benchmark (normierter PR-Vergleich) ist davon unabhängig und bleibt anonym-aggregiert
+
+---
+
+## Phase A — Implementierungsplan (bereit zur Umsetzung)
+
+### Betroffene Dateien
+
+| Datei | Änderung |
+|---|---|
+| `backend/models/tages_energie_profil.py` | 2 neue Spalten in TagesZusammenfassung |
+| `backend/core/database.py` | Migration für neue Spalten |
+| `backend/services/energie_profil_service.py` | Klassifikationsfunktion + Analyse-Service-Funktion + Rückfüllung |
+| `backend/api/routes/energie_profil.py` | 3 neue Response Models + 1 neuer Endpoint |
+| `frontend/src/api/energie_profil.ts` | TypeScript Interfaces + API-Methode |
+| `frontend/src/pages/auswertung/EnergieprofilTab.tsx` | 3. Tab + AnalyseStatistik-Komponente |
+
+### Schritt 1 — DB-Model
+
+`tages_energie_profil.py` — nach `komponenten_kwh` (Zeile ~149):
+
+```python
+tagestyp               = Column(String(20), nullable=True)   # sonnentag/mischtag/schlechtwetter/anomalie
+verbrauch_prognose_kwh = Column(Float, nullable=True)        # persistierte Vorhersage für spätere Scorecard
+```
+
+### Schritt 2 — DB-Migration
+
+`database.py` — nach `sfml_prognose_kwh`-Migration (Zeile ~162):
+
+```python
+for col, coltype in [("tagestyp", "VARCHAR(20)"), ("verbrauch_prognose_kwh", "FLOAT")]:
+    result = await db.execute(text(
+        f"SELECT COUNT(*) FROM pragma_table_info('tages_zusammenfassung') WHERE name='{col}'"
+    ))
+    if result.scalar() == 0:
+        await db.execute(text(f"ALTER TABLE tages_zusammenfassung ADD COLUMN {col} {coltype}"))
+```
+
+### Schritt 3 — Klassifikationsfunktion
+
+`energie_profil_service.py` — neue Funktion vor `aggregate_day()`:
+
+```python
+def _classify_tagestyp(
+    strahlung_wh_m2: float | None,
+    performance_ratio: float | None,
+    pv_kwh: float,
+    verbrauch_kwh: float,
+    median_verbrauch: float | None,
+) -> str:
+    if median_verbrauch and verbrauch_kwh > 2 * median_verbrauch:
+        return "anomalie"
+    if strahlung_wh_m2 is not None:
+        if strahlung_wh_m2 >= 4000:  return "sonnentag"
+        if strahlung_wh_m2 >= 1500:  return "mischtag"
+        return "schlechtwetter"
+    if performance_ratio is not None:
+        if performance_ratio >= 0.65: return "sonnentag"
+        if performance_ratio >= 0.25: return "mischtag"
+        return "schlechtwetter"
+    return "mischtag"
+```
+
+Einbindung in `aggregate_day()` beim Schreiben der `TagesZusammenfassung` (ca. Zeile 270):
+
+```python
+tz.tagestyp = _classify_tagestyp(
+    strahlung_wh_m2=strahlung_summe,
+    performance_ratio=tz.performance_ratio,
+    pv_kwh=pv_kwh_summe,
+    verbrauch_kwh=verbrauch_kwh_summe,
+    median_verbrauch=None,  # Phase B: aus DB abfragen
+)
+```
+
+### Schritt 4 — Analyse-Service-Funktion
+
+`energie_profil_service.py` — neue Funktion nach `backfill_range()` (Zeile ~500):
+
+```python
+async def get_tagestyp_analyse(anlage_id: int, von: date, bis: date, db: AsyncSession) -> dict:
+    """
+    Gibt zurück:
+    - verteilung: {sonnentag: N, mischtag: N, schlechtwetter: N, anomalie: N}
+    - profile: {tagestyp: [{stunde, pv_p25, pv_p50, pv_p75, verbrauch_p25, ...}, ...]}
+    """
+    # 1. TagesZusammenfassung im Zeitraum → Verteilung + Tage-je-Typ
+    # 2. Für jeden Typ: TagesEnergieProfil-Stunden laden
+    # 3. Per Stunde: numpy.percentile([25, 50, 75]) auf pv_kw, verbrauch_kw, netzbezug_kw, batterie_kw
+```
+
+### Schritt 5 — Pydantic Models + Endpoint
+
+`energie_profil.py` — nach Zeile ~156:
+
+```python
+class StundenPerzentile(BaseModel):
+    stunde: int
+    pv_p25: float | None; pv_p50: float | None; pv_p75: float | None
+    verbrauch_p25: float | None; verbrauch_p50: float | None; verbrauch_p75: float | None
+    netzbezug_p25: float | None; netzbezug_p50: float | None; netzbezug_p75: float | None
+    batterie_p25: float | None; batterie_p50: float | None; batterie_p75: float | None
+
+class TagestypProfil(BaseModel):
+    tagestyp: str; anzahl: int; stunden: list[StundenPerzentile]
+
+class TagestypAnalyseResponse(BaseModel):
+    verteilung: dict[str, int]
+    profile: list[TagestypProfil]
+    zeitraum_tage: int
+```
+
+Endpoint nach `wochenmuster` (Zeile ~356):
+
+```python
+@router.get("/{anlage_id}/analyse/tagestypen", response_model=TagestypAnalyseResponse)
+async def get_tagestyp_analyse_endpoint(
+    anlage_id: int, von: date = Query(...), bis: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+```
+
+### Schritt 6 — TypeScript API-Client
+
+`energie_profil.ts` — neue Interfaces + Methode:
+
+```typescript
+export interface StundenPerzentile {
+  stunde: number;
+  pv_p25: number | null; pv_p50: number | null; pv_p75: number | null;
+  verbrauch_p25: number | null; verbrauch_p50: number | null; verbrauch_p75: number | null;
+  netzbezug_p25: number | null; netzbezug_p50: number | null; netzbezug_p75: number | null;
+  batterie_p25: number | null; batterie_p50: number | null; batterie_p75: number | null;
+}
+export interface TagestypProfil { tagestyp: string; anzahl: number; stunden: StundenPerzentile[]; }
+export interface TagestypAnalyse {
+  verteilung: Record<string, number>; profile: TagestypProfil[]; zeitraum_tage: number;
+}
+// in energieProfilApi:
+getTagestypAnalyse: (anlageId: number, von: string, bis: string) =>
+  apiGet<TagestypAnalyse>(`/energie-profil/${anlageId}/analyse/tagestypen?von=${von}&bis=${bis}`),
+```
+
+### Schritt 7 — Frontend: 3. Tab + AnalyseStatistik-Komponente
+
+`EnergieprofilTab.tsx`:
+
+**7a — Tab-Eintrag** (Tab-Switcher, Zeile ~450):
+```tsx
+{ key: 'analyse', label: 'Analyse & Statistik' }
+```
+
+**7b — Komponente `AnalyseStatistik`** (vor Export, nach Zeile ~442):
+
+- **Abschnitt 1 — Verteilung:**
+  - Zeitraum-Selector: 30 / 90 / 180 / 365 Tage
+  - `BarChart`: X = Tagestyp, Y = Anzahl Tage
+  - Farben: sonnentag=#f59e0b, mischtag=#94a3b8, schlechtwetter=#6b7280, anomalie=#ef4444
+  - Klartext: "In den letzten 90 Tagen: 28 Sonnentage (31%), 35 Mischtage (39%), ..."
+
+- **Abschnitt 2 — Typisches Profil je Tagestyp:**
+  - Tagestyp-Toggle (analog Wochentag-Toggle)
+  - `ComposedChart`: Area für P25–P75-Band (niedrige Opacity) + Line für P50-Median
+  - Getrennt: PV (grün) und Verbrauch (blau/rot)
+  - Legende: "Schattierung = 50% der Tage liegen in diesem Bereich"
+
+### Schritt 8 — Rückfüllung bestehender Daten
+
+`energie_profil_service.py` — neue Utility-Funktion:
+
+```python
+async def backfill_tagestyp(db: AsyncSession):
+    """Klassifiziert alle TagesZusammenfassung-Einträge ohne tagestyp (einmalig beim ersten Start)."""
+    result = await db.execute(select(TagesZusammenfassung).where(TagesZusammenfassung.tagestyp == None))
+    for tz in result.scalars():
+        tz.tagestyp = _classify_tagestyp(tz.strahlung_summe_wh_m2, tz.performance_ratio, ...)
+    await db.commit()
+```
+
+Aufruf einmalig in `lifespan` (App-Start) mit Guard gegen Doppelausführung.

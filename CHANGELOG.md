@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.4] - 2026-04-07
+
+### Änderung
+
+- **Live Dashboard Solar-Aussicht überarbeitet**: PV-Prognose-Card entfernt — Solar-Aussicht Heute zeigt den Wert direkt. Verbleibend/Über Prognose klein darunter. Neue kompakte Zeile "Verbrauchsprognose" (Haus + Batterie + WP + Wallbox + Sonstige) mit ⓘ-Tooltip. VM/NM als Spaltenüberschrift. Alle drei Tage einheitlich prominent. Vertikale Ausrichtung der kWh-Werte per Grid. Auslöser: Rainer-Feedback.
+
+---
+
 ## [3.11.3] - 2026-04-07
 
 ### Fix
