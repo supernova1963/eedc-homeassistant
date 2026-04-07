@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, DragEvent, ChangeEvent } from 'react'
-import { Download, Upload, Check, FileJson, HardDrive, AlertTriangle } from 'lucide-react'
+import { Download, Upload, Check, FileJson, HardDrive, AlertTriangle, Info } from 'lucide-react'
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
@@ -85,8 +85,8 @@ export default function Backup() {
       </div>
 
       <p className="text-gray-500 dark:text-gray-400">
-        Erstelle ein vollständiges Backup deiner Anlage (Stammdaten, Investitionen, Monatsdaten,
-        Strompreise, PVGIS-Prognosen) oder stelle eine Anlage aus einem Backup wieder her.
+        Exportiere die Konfiguration deiner Anlage (Stammdaten, Investitionen, Monatsdaten,
+        Strompreise, PVGIS-Prognosen) als JSON oder stelle eine Anlage aus einem Export wieder her.
       </p>
 
       {error && <Alert type="error" onClose={() => setError(null)}>{error}</Alert>}
@@ -126,12 +126,25 @@ export default function Backup() {
               Backup als JSON herunterladen
             </Button>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              Enthält alle Daten der Anlage. Sensor-Mapping wird mitexportiert,
+              Enthält Konfiguration und Messdaten. Sensor-Mapping wird mitexportiert,
               MQTT-Setup muss nach Restore neu eingerichtet werden.
             </p>
           </div>
         )}
       </Card>
+
+      {/* Infothek-Hinweis */}
+      <div className="flex gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+        <Info className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
+          <p className="font-medium">Infothek-Anhänge (PDFs, Fotos) sind nicht im JSON enthalten.</p>
+          <p>Diese werden direkt in der Datenbank gespeichert und sind nur über ein vollständiges Datenbank-Backup gesichert:</p>
+          <ul className="list-disc list-inside space-y-0.5 mt-1">
+            <li><span className="font-medium">HA Add-on:</span> Regelmäßige HA-Backups (selektiv EEDC) sichern die komplette <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> inkl. aller Anhänge.</li>
+            <li><span className="font-medium">Standalone:</span> Die Datei <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> im Datenverzeichnis manuell sichern.</li>
+          </ul>
+        </div>
+      </div>
 
       {/* Restore */}
       <Card>
