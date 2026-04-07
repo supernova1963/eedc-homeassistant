@@ -509,7 +509,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
               label="Leistung (kWp)"
               name="leistung_kwp"
               type="number"
-              step="0.1"
+              step="0.01"
               min="0"
               value={formData.leistung_kwp}
               onChange={handleChange}
