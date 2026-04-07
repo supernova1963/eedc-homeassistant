@@ -152,6 +152,7 @@ async def get_tagesverlauf(
             "farbe": config["farbe"],
             "seite": seite,
             "bidirektional": bidirektional,
+            "max_w": config.get("max_w"),
         })
         serie_entities[serie_key] = [live["leistung_w"]]
 
@@ -240,9 +241,12 @@ async def get_tagesverlauf(
             serie_sum = 0.0
             has_data = False
 
+            max_w = serie.get("max_w")
             for entity_id in entity_ids:
                 points = history.get(entity_id, [])
                 h_points = [p[1] for p in points if h_start <= p[0] < h_end]
+                if max_w is not None:
+                    h_points = [v for v in h_points if abs(v) <= max_w]
                 if h_points:
                     avg_w = sum(h_points) / len(h_points)
                     serie_sum += avg_w / 1000  # W → kW
@@ -426,6 +430,7 @@ async def _get_tagesverlauf_mqtt(
             "farbe": config["farbe"],
             "seite": seite,
             "bidirektional": bidirektional,
+            "max_w": config.get("max_w"),
         })
         serie_comp_keys[serie_key] = [comp_key]
 
@@ -479,8 +484,11 @@ async def _get_tagesverlauf_mqtt(
             comp_keys = serie_comp_keys.get(skey, [])
             serie_sum = 0.0
             has_data = False
+            max_w = serie.get("max_w")
             for ckey in comp_keys:
                 pts = [v for ts, v in history.get(ckey, []) if h_start <= ts < h_end]
+                if max_w is not None:
+                    pts = [v for v in pts if abs(v) <= max_w]
                 if pts:
                     serie_sum += sum(pts) / len(pts) / 1000  # W → kW
                     has_data = True

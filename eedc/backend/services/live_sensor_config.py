@@ -68,13 +68,13 @@ TAGESVERLAUF_KATEGORIE = {
 
 # Tagesverlauf: Kategorie + Seite (quelle/senke) + Farbe pro Investitionstyp
 TV_SERIE_CONFIG: dict[str, dict] = {
-    "pv-module":       {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False},
-    "balkonkraftwerk": {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False},
-    "speicher":        {"kategorie": "batterie",    "seite": "quelle", "farbe": "#3b82f6", "bidirektional": True},
-    "wallbox":         {"kategorie": "wallbox",     "seite": "senke",  "farbe": "#a855f7", "bidirektional": False},
-    "e-auto":          {"kategorie": "eauto",       "seite": "senke",  "farbe": "#a855f7", "bidirektional": False},
-    "waermepumpe":     {"kategorie": "waermepumpe", "seite": "senke",  "farbe": "#f97316", "bidirektional": False},
-    "sonstiges":       {"kategorie": "sonstige",    "seite": "senke",  "farbe": "#64748b", "bidirektional": False},
+    "pv-module":       {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False, "max_w": 100_000},
+    "balkonkraftwerk": {"kategorie": "pv",          "seite": "quelle", "farbe": "#eab308", "bidirektional": False, "max_w":   2_000},
+    "speicher":        {"kategorie": "batterie",    "seite": "quelle", "farbe": "#3b82f6", "bidirektional": True,  "max_w":  50_000},
+    "wallbox":         {"kategorie": "wallbox",     "seite": "senke",  "farbe": "#a855f7", "bidirektional": False, "max_w":  50_000},
+    "e-auto":          {"kategorie": "eauto",       "seite": "senke",  "farbe": "#a855f7", "bidirektional": False, "max_w":  50_000},
+    "waermepumpe":     {"kategorie": "waermepumpe", "seite": "senke",  "farbe": "#f97316", "bidirektional": False, "max_w":  20_000},
+    "sonstiges":       {"kategorie": "sonstige",    "seite": "senke",  "farbe": "#64748b", "bidirektional": False, "max_w": 100_000},
 }
 
 # Separate Key-Prefixe für Live-Komponenten (Energiefluss)
