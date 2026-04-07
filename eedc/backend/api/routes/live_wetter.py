@@ -26,7 +26,10 @@ from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
 from backend.services.wetter.utils import wetter_code_zu_symbol
-from backend.services.wetter.cache import _cache_get, _cache_set
+from backend.services.wetter.cache import (
+    _cache_get, _cache_set, _error_cache_check, _error_cache_set,
+    ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
+)
 from backend.services.wetter.models import WETTER_MODELLE
 
 logger = logging.getLogger(__name__)
@@ -590,24 +593,28 @@ async def get_live_wetter(
     if not anlage.latitude or not anlage.longitude:
         return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
 
-    try:
-        # Haupt-Wetter-Request (Wetterdaten + GHI)
-        # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen
-        hat_multi_string = len(gruppen) > 1
-        haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
-        haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
+    # Haupt-Wetter-Request (Wetterdaten + GHI)
+    # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen
+    hat_multi_string = len(gruppen) > 1
+    haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
+    haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
 
-        # Cache prüfen (60 Min TTL — Open-Meteo aktualisiert stündlich, ICON-D2 3-stündlich)
-        LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten
-        wetter_modell_key = getattr(anlage, "wetter_modell", "auto") or "auto"
-        cache_key = (
-            f"live_wetter:{anlage.latitude:.2f}:{anlage.longitude:.2f}"
-            f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}:m={wetter_modell_key}"
-        )
+    # Cache prüfen (60 Min TTL — Open-Meteo aktualisiert stündlich, ICON-D2 3-stündlich)
+    LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten
+    wetter_modell_key = getattr(anlage, "wetter_modell", "auto") or "auto"
+    cache_key = (
+        f"live_wetter:{anlage.latitude:.2f}:{anlage.longitude:.2f}"
+        f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}:m={wetter_modell_key}"
+    )
+
+    try:
         cached_wetter = _cache_get(cache_key)
 
         if cached_wetter is not None:
             data, multi_gti = cached_wetter
+        elif _error_cache_check(cache_key):
+            logger.debug(f"Live-Wetter: Negative-Cache-Hit für Anlage {anlage_id}")
+            return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
         else:
             hourly_vars = [
                 "temperature_2m", "weather_code", "cloud_cover",
@@ -851,8 +858,15 @@ async def get_live_wetter(
             "sunset": _extract_time(daily.get("sunset", [None])),
         }
 
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code
+        ttl = ERROR_TTL_RATE_LIMIT if status == 429 else ERROR_TTL_SERVER_ERROR
+        logger.warning(f"Live-Wetter Fehler: HTTP {status}")
+        _error_cache_set(cache_key, ttl)
+        return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
     except Exception as e:
         logger.warning(f"Live-Wetter Fehler: {type(e).__name__}: {e}")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
 
 

@@ -27,6 +27,29 @@ FORECAST_CACHE_TTL = 3600       # 60 Minuten
 ARCHIVE_CACHE_TTL = 86400       # 24 Stunden
 JITTER_MAX_SECONDS = 30         # Max. zufällige Verzögerung vor API-Call
 
+# ── Negative Cache (Error-TTL) ──
+# Verhindert API-Hammering bei Open-Meteo-Ausfällen.
+# Bei Fehler wird der Cache-Key kurzzeitig gesperrt.
+_error_cache: dict[str, float] = {}  # key → expires_at (monotonic)
+
+ERROR_TTL_RATE_LIMIT = 300      # 429 Too Many Requests: 5 Minuten
+ERROR_TTL_SERVER_ERROR = 120    # 502/503 Bad Gateway: 2 Minuten
+ERROR_TTL_NETWORK = 60          # Timeout/ConnectError: 1 Minute
+
+
+def _error_cache_check(key: str) -> bool:
+    """True wenn dieser Key kürzlich einen Fehler hatte → API-Call überspringen."""
+    expires = _error_cache.get(key)
+    if expires and expires > time.monotonic():
+        return True
+    return False
+
+
+def _error_cache_set(key: str, ttl: int) -> None:
+    """Sperrt einen Cache-Key für ttl Sekunden nach einem API-Fehler."""
+    _error_cache[key] = time.monotonic() + ttl
+    logger.debug(f"Negative-Cache: {key} gesperrt für {ttl}s")
+
 
 def _cache_get(key: str) -> Optional[any]:
     """Liefert gecachtes Ergebnis oder None wenn abgelaufen/nicht vorhanden."""

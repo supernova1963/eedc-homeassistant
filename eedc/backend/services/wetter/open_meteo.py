@@ -15,8 +15,9 @@ from typing import Optional
 import httpx
 
 from backend.services.wetter.cache import (
-    _cache_get, _cache_set,
+    _cache_get, _cache_set, _error_cache_check, _error_cache_set,
     FORECAST_CACHE_TTL, ARCHIVE_CACHE_TTL, JITTER_MAX_SECONDS,
+    ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
 )
 from backend.services.wetter.utils import MJ_TO_KWH, SECONDS_TO_HOURS
 
@@ -65,6 +66,11 @@ async def fetch_open_meteo_archive(
     if cached is not None:
         logger.debug(f"Open-Meteo Archive: Cache-Hit für {monat}/{jahr}")
         return cached
+
+    # Negative Cache: kürzlich fehlgeschlagen → API-Call überspringen
+    if _error_cache_check(cache_key):
+        logger.debug(f"Open-Meteo Archive: Negative-Cache-Hit für {monat}/{jahr}")
+        return None
 
     params = {
         "latitude": latitude,
@@ -117,12 +123,17 @@ async def fetch_open_meteo_archive(
 
     except httpx.TimeoutException:
         logger.error(f"Open-Meteo: Timeout für {monat}/{jahr}")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return None
     except httpx.HTTPStatusError as e:
-        logger.error(f"Open-Meteo: HTTP-Fehler {e.response.status_code} für {monat}/{jahr}")
+        status = e.response.status_code
+        ttl = ERROR_TTL_RATE_LIMIT if status == 429 else ERROR_TTL_SERVER_ERROR
+        logger.error(f"Open-Meteo: HTTP-Fehler {status} für {monat}/{jahr}")
+        _error_cache_set(cache_key, ttl)
         return None
     except Exception as e:
         logger.error(f"Open-Meteo: Fehler für {monat}/{jahr}: {type(e).__name__}: {e}")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return None
 
 
@@ -158,6 +169,11 @@ async def fetch_open_meteo_forecast(
     if cached is not None:
         logger.debug(f"Open-Meteo Forecast: Cache-Hit ({days} Tage, {model_key})")
         return cached
+
+    # Negative Cache: kürzlich fehlgeschlagen → API-Call überspringen
+    if _error_cache_check(cache_key):
+        logger.debug(f"Open-Meteo Forecast: Negative-Cache-Hit ({days} Tage, {model_key})")
+        return None
 
     params = {
         "latitude": latitude,
@@ -231,10 +247,15 @@ async def fetch_open_meteo_forecast(
 
     except httpx.TimeoutException:
         logger.error("Open-Meteo Forecast: Timeout")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return None
     except httpx.HTTPStatusError as e:
-        logger.error(f"Open-Meteo Forecast: HTTP-Fehler {e.response.status_code}")
+        status = e.response.status_code
+        ttl = ERROR_TTL_RATE_LIMIT if status == 429 else ERROR_TTL_SERVER_ERROR
+        logger.error(f"Open-Meteo Forecast: HTTP-Fehler {status}")
+        _error_cache_set(cache_key, ttl)
         return None
     except Exception as e:
         logger.error(f"Open-Meteo Forecast: Fehler: {type(e).__name__}: {e}")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return None

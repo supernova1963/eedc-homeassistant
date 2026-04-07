@@ -22,7 +22,11 @@ from math import radians, sin, cos
 from typing import Optional, List
 
 from backend.services.wetter.utils import wetter_code_zu_symbol
-from backend.services.wetter.cache import _cache_get, _cache_set, FORECAST_CACHE_TTL, JITTER_MAX_SECONDS
+from backend.services.wetter.cache import (
+    _cache_get, _cache_set, _error_cache_check, _error_cache_set,
+    FORECAST_CACHE_TTL, JITTER_MAX_SECONDS,
+    ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
+)
 from backend.services.wetter.models import WETTER_MODELLE, MODELL_ANZEIGE
 
 
@@ -205,6 +209,11 @@ async def fetch_gti_forecast(
         logger.debug(f"Open-Meteo Solar: Cache-Hit ({days} Tage, {model_key})")
         return cached
 
+    # Negative Cache: kürzlich fehlgeschlagen → API-Call überspringen
+    if _error_cache_check(cache_key):
+        logger.debug(f"Open-Meteo Solar: Negative-Cache-Hit ({days} Tage, {model_key})")
+        return None
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -258,12 +267,17 @@ async def fetch_gti_forecast(
 
     except httpx.TimeoutException:
         logger.error("Open-Meteo Solar: Timeout")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return None
     except httpx.HTTPStatusError as e:
-        logger.error(f"Open-Meteo Solar: HTTP-Fehler {e.response.status_code}")
+        status = e.response.status_code
+        ttl = ERROR_TTL_RATE_LIMIT if status == 429 else ERROR_TTL_SERVER_ERROR
+        logger.error(f"Open-Meteo Solar: HTTP-Fehler {status}")
+        _error_cache_set(cache_key, ttl)
         return None
     except Exception as e:
         logger.error(f"Open-Meteo Solar: Fehler: {type(e).__name__}: {e}")
+        _error_cache_set(cache_key, ERROR_TTL_NETWORK)
         return None
 
 
