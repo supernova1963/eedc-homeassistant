@@ -388,13 +388,9 @@ export default function LiveDashboard() {
                 />
               )}
 
-              {/* Prognose + Noch offen */}
+              {/* Verbleibend + Verbr.-Prognose */}
               {wetter?.pv_prognose_kwh != null && (
-                <div className="grid grid-cols-2 min-[400px]:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
-                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-1.5">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">PV-Prognose <SimpleTooltip text="EEDC-Tagesprognose basierend auf aktuellem Wetter und Verbrauchsprofil. Kann von Solar-Aussicht abweichen (andere Berechnungsmethode)."><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
-                    <div className="text-base font-bold text-amber-600 dark:text-amber-400">~{wetter.pv_prognose_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
                   {(() => {
                     // Immer EEDC-Prognose für diese Zeile — ML-Vergleich ist in Solar-Aussicht
                     const prognoseKwh = wetter.pv_prognose_kwh
@@ -454,21 +450,25 @@ export default function LiveDashboard() {
                     {prognose3Tage.map((tag, i) => {
                       const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
                       const hasVmNm = tag.pv_ertrag_morgens_kwh != null
-                      // SFML-Wert für Heute/Morgen (wenn verfügbar)
                       const sfml = i === 0 ? wetter?.sfml_prognose_kwh : i === 1 ? wetter?.sfml_tomorrow_kwh : null
+                      const isProminent = i < 2  // Heute + Morgen prominenter
                       return (
-                        <div key={tag.datum} className={`flex items-center justify-between rounded-lg px-3 py-1.5 ${
-                          i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-gray-50 dark:bg-gray-700/50'
+                        <div key={tag.datum} className={`flex items-center justify-between rounded-lg px-3 ${
+                          isProminent ? 'py-2' : 'py-1'
+                        } ${
+                          i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' :
+                          i === 1 ? 'bg-amber-50/60 dark:bg-amber-900/10' :
+                          'bg-gray-50 dark:bg-gray-700/50'
                         }`}>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{label}</span>
-                          <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400"
+                          <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
+                          <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}
                                 title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
                             {tag.pv_ertrag_kwh.toFixed(1)}
                             {sfml != null && <span className="text-[10px] text-purple-400 font-normal ml-1">{sfml.toFixed(0)}</span>}
                             <span className="text-xs font-normal ml-0.5">kWh</span>
                           </span>
                           {hasVmNm && (
-                            <span className="text-xs text-right shrink-0">
+                            <span className={`text-right shrink-0 ${isProminent ? 'text-xs' : 'text-[10px]'}`}>
                               <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
                               <span className="text-gray-400 mx-0.5">/</span>
                               <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>
