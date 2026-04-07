@@ -438,7 +438,7 @@ export default function LiveDashboard() {
                           <div className="flex flex-col items-end">
                             <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}
                                   title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
-                              {tag.pv_ertrag_kwh.toFixed(1)}
+                              {(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : tag.pv_ertrag_kwh).toFixed(1)}
                               {sfml != null && <span className="text-[10px] text-purple-400 font-normal ml-1">{sfml.toFixed(0)}</span>}
                               <span className="text-xs font-normal ml-0.5">kWh</span>
                             </span>
