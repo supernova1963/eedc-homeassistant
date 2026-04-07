@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.1] - 2026-04-07
+
+### Fix
+
+- **Y-Achse in Aktueller-Monat-Charts abgeschnitten** (#112): Dynamischer Formatter für Vorjahresvergleich und SOLL/IST-Vergleich. Werte ≤ 10.000 kWh werden ganzzahlig in kWh angezeigt, darüber in MWh mit einer Nachkommastelle (z.B. `10.5 MWh`). YAxis-Breite auf 90 px erhöht.
+- **Backup-Seite — Infothek-Anhänge**: Klarstellung dass PDFs und Fotos nicht im JSON-Export enthalten sind — sie werden als BLOB in der `eedc.db` gespeichert. Hinweis-Block mit Anleitung für HA Add-on (HA-Backup) und Standalone (eedc.db manuell sichern).
+
+---
+
 ## [3.11.0] - 2026-04-06
 
 ### Neu
