@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.5] - 2026-04-07
+
+### Neu
+
+- **PV-String Auslastungs-Füllung im Energiefluss**: PV-String-Boxen füllen sich analog zur Batterie-SoC-Anzeige von unten proportional zur aktuellen Auslastung (Ist-W / kWp). Farbe: hellgrün (< 40%), gelb (40–80%), amber (> 80%). Tooltip zeigt Auslastung in % und installierte kWp. Auslöser: dietmar1968 (#208).
+
+### Fix
+
+- **Y-Achse abgeschnitten in PV/Auswertungs-Charts**: `width={60}` + k-Notation (≥ 1000 kWh → "x.xk kWh") in PVAnlageDashboard, PVAnlageTab, EnergieTab, KomponentenTab. Auslöser: dietmar1968 (#208).
+
+---
+
 ## [3.11.4] - 2026-04-07
 
 ### Änderung
