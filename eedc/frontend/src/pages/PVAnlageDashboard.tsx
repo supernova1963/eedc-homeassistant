@@ -278,7 +278,7 @@ export default function PVAnlageDashboard() {
                 <BarChart data={jahresChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis unit=" kWh" />
+                  <YAxis unit=" kWh" width={60} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend />
                   <Bar dataKey="Erzeugung" fill={COLORS.solar} />

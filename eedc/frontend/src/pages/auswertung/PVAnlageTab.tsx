@@ -371,7 +371,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
             >
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-              <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
+              <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
               <Tooltip content={<ChartTooltip unit="kWh" />} />
               <Legend />
               <Bar dataKey="SOLL" fill="#3b82f6" name="SOLL" opacity={0.6} />

@@ -254,7 +254,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
             <LineChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis unit=" kWh" tick={{ fontSize: 11 }} />
+              <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
               <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Line type="monotone" dataKey="erzeugung" name="PV-Erzeugung" stroke={CHART_COLORS.erzeugung} strokeWidth={2} dot={false} />
             </LineChart>
