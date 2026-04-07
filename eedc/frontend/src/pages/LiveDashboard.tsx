@@ -388,57 +388,6 @@ export default function LiveDashboard() {
                 />
               )}
 
-              {/* Verbleibend + Verbr.-Prognose */}
-              {wetter?.pv_prognose_kwh != null && (
-                <div className="grid grid-cols-2 gap-2">
-                  {(() => {
-                    // Immer EEDC-Prognose für diese Zeile — ML-Vergleich ist in Solar-Aussicht
-                    const prognoseKwh = wetter.pv_prognose_kwh
-                    const bisherPv = data.heute_pv_kwh ?? 0
-                    const diff = prognoseKwh - bisherPv
-                    const nachSU = (() => {
-                      if (!wetter.sunset) return false
-                      const now = new Date()
-                      const [sunsetH, sunsetM] = wetter.sunset.split(':').map(Number)
-                      return now.getHours() * 60 + now.getMinutes() >= sunsetH * 60 + sunsetM
-                    })()
-                    if (diff > 0 && nachSU) return null
-                    if (diff > 0) {
-                      return (
-                        <div className="bg-lime-50 dark:bg-lime-900/20 rounded-lg px-3 py-1.5"
-                             title={`EEDC-Tagesprognose ${prognoseKwh.toFixed(1)} kWh − bisher erzeugt ${bisherPv.toFixed(1)} kWh = ${diff.toFixed(1)} kWh verbleibend`}>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">Verbleibend</div>
-                          <div className="text-base font-bold text-lime-600 dark:text-lime-400">~{diff.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                        </div>
-                      )
-                    }
-                    return (
-                      <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-1.5"
-                           title={`EEDC-Tagesprognose ${prognoseKwh.toFixed(1)} kWh, bisher erzeugt ${bisherPv.toFixed(1)} kWh`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Über Prognose</div>
-                        <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">+{Math.abs(diff).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                      </div>
-                    )
-                  })()}
-                  {wetter?.verbrauchsprofil && wetter.verbrauchsprofil.length > 0 && (
-                    <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5"
-                         title={wetter.profil_typ?.startsWith('individuell')
-                           ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage, Quelle: ${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
-                           : 'BDEW H0 Standardlastprofil (keine History verfügbar)'
-                         }>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        Verbr.-Progn.
-                        {wetter.profil_typ?.startsWith('individuell') && (
-                          <span className="ml-1 text-[9px] text-emerald-500" title="Basiert auf deinem individuellen Verbrauchsmuster">
-                            (ind.)
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-base font-bold text-orange-600 dark:text-orange-400">~{wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0).toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* 3-Tage Solar-Vorschau (VM/NM) */}
               {prognose3Tage && prognose3Tage.length > 0 && (
@@ -446,44 +395,93 @@ export default function LiveDashboard() {
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Solar-Aussicht <SimpleTooltip text="GTI-basierte Prognose (Open-Meteo) mit Neigung/Ausrichtung der Module. VM/NM = Split an Solar Noon."><Info className="inline w-3 h-3 text-gray-400 opacity-50 cursor-help" /></SimpleTooltip>
                   </h3>
+                  {prognose3Tage.some(t => t.pv_ertrag_morgens_kwh != null) && (
+                    <div className="grid grid-cols-[auto_1fr_7rem] px-3 mb-0.5">
+                      <span />
+                      <span />
+                      <span className="text-[10px] text-right">
+                        <span className="text-amber-500">VM</span>
+                        <span className="text-gray-400 mx-0.5">/</span>
+                        <span className="text-yellow-500">NM</span>
+                      </span>
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     {prognose3Tage.map((tag, i) => {
                       const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
                       const hasVmNm = tag.pv_ertrag_morgens_kwh != null
                       const sfml = i === 0 ? wetter?.sfml_prognose_kwh : i === 1 ? wetter?.sfml_tomorrow_kwh : null
-                      const isProminent = i < 2  // Heute + Morgen prominenter
+                      const isProminent = i < 3
+                      const verbrPrognKwh = i === 0 && wetter?.verbrauchsprofil?.length
+                        ? wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0)
+                        : null
+                      const verbrTooltip = wetter?.profil_typ?.startsWith('individuell')
+                        ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage) — Haus + Batterie + WP + Wallbox + Sonstige`
+                        : 'BDEW H0 Standardlastprofil — Haus + Batterie + WP + Wallbox + Sonstige'
+                      const verbleibenKwh = i === 0 && wetter?.pv_prognose_kwh != null ? (() => {
+                        const diff = wetter.pv_prognose_kwh - (data.heute_pv_kwh ?? 0)
+                        const nachSU = wetter.sunset ? (() => {
+                          const now = new Date()
+                          const [h, m] = wetter.sunset!.split(':').map(Number)
+                          return now.getHours() * 60 + now.getMinutes() >= h * 60 + m
+                        })() : false
+                        if (nachSU) return null
+                        return diff
+                      })() : null
                       return (
-                        <div key={tag.datum} className={`flex items-center justify-between rounded-lg px-3 ${
-                          isProminent ? 'py-2' : 'py-1'
-                        } ${
+                        <div key={tag.datum}>
+                        <div className={`grid grid-cols-[auto_1fr_7rem] items-center gap-x-2 rounded-lg px-3 py-2 ${
                           i === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' :
-                          i === 1 ? 'bg-amber-50/60 dark:bg-amber-900/10' :
-                          'bg-gray-50 dark:bg-gray-700/50'
+                          'bg-amber-50/60 dark:bg-amber-900/10'
                         }`}>
                           <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
-                          <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}
-                                title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
-                            {tag.pv_ertrag_kwh.toFixed(1)}
-                            {sfml != null && <span className="text-[10px] text-purple-400 font-normal ml-1">{sfml.toFixed(0)}</span>}
-                            <span className="text-xs font-normal ml-0.5">kWh</span>
-                          </span>
-                          {hasVmNm && (
-                            <span className={`text-right shrink-0 ${isProminent ? 'text-xs' : 'text-[10px]'}`}>
-                              <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
-                              <span className="text-gray-400 mx-0.5">/</span>
-                              <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>
+                          <div className="flex flex-col items-end">
+                            <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}
+                                  title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
+                              {tag.pv_ertrag_kwh.toFixed(1)}
+                              {sfml != null && <span className="text-[10px] text-purple-400 font-normal ml-1">{sfml.toFixed(0)}</span>}
+                              <span className="text-xs font-normal ml-0.5">kWh</span>
                             </span>
-                          )}
+                            {verbleibenKwh != null && (
+                              <span className={`text-[10px] ${verbleibenKwh > 0 ? 'text-lime-600 dark:text-lime-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                                    title={verbleibenKwh > 0
+                                      ? `Noch ~${verbleibenKwh.toFixed(1)} kWh ausstehend`
+                                      : `Prognose um ${Math.abs(verbleibenKwh).toFixed(1)} kWh übertroffen`}>
+                                {verbleibenKwh > 0 ? `~${verbleibenKwh.toFixed(1)} verbl.` : `+${Math.abs(verbleibenKwh).toFixed(1)} über Progn.`}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-right text-xs w-28">
+                            {hasVmNm ? (
+                              <>
+                                <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
+                                <span className="text-gray-400 mx-0.5">/</span>
+                                <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>
+                              </>
+                            ) : null}
+                          </span>
+                        </div>
+                        {/* Verbrauchsprognose im Stil der Prognose-Zeilen — nur unter Heute */}
+                        {verbrPrognKwh != null && (
+                          <div className="grid grid-cols-[auto_1fr_7rem] items-center gap-x-2 rounded-lg px-3 py-1 bg-gray-50 dark:bg-gray-700/50">
+                            <span className="text-xs text-gray-400 dark:text-gray-300 flex items-center gap-1">
+                              Verbrauchsprognose
+                              {wetter?.profil_typ?.startsWith('individuell') && (
+                                <span className="text-[9px] text-emerald-500">(ind.)</span>
+                              )}
+                              <SimpleTooltip text={verbrTooltip}><Info className="w-3 h-3 opacity-40 cursor-help" /></SimpleTooltip>
+                            </span>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs font-bold text-orange-500 dark:text-orange-400">
+                                ~{verbrPrognKwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span>
+                              </span>
+                            </div>
+                            <span className="w-28" />
+                          </div>
+                        )}
                         </div>
                       )
                     })}
-                    {prognose3Tage.some(t => t.pv_ertrag_morgens_kwh != null) && (
-                      <div className="text-[10px] text-right px-1">
-                        <span className="text-amber-500">VM</span>
-                        <span className="text-gray-400 mx-0.5">/</span>
-                        <span className="text-yellow-500">NM</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
