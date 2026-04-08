@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.10] - 2026-04-08
+
+### Fix
+
+- **Live-Dashboard: Verzögerung beim Öffnen nach HA-Neustart behoben**: Verbrauchsprofil für das WetterWidget liest jetzt primär aus der EEDC-DB (`TagesEnergieProfil`) statt über die HA-History-API. Eliminiert den 7-Tage-HA-History-Call der nach jedem Add-on-Neustart bis zu 15s Verzögerung verursachte. HA-History bleibt als Fallback für neue Installationen (< 2 Tage DB-Daten). Auslöser: Joachim-xo (#225).
+
+---
+
 ## [3.11.9] - 2026-04-08
 
 ### Feat

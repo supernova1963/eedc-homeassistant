@@ -1,11 +1,16 @@
 """
-Verbrauchsprofil-Service — stündliches Verbrauchsprofil aus HA-History oder MQTT.
+Verbrauchsprofil-Service — stündliches Verbrauchsprofil aus EEDC-DB, HA-History oder MQTT.
 
 Ausgelagert aus live_power_service.py (Schritt 4 des Refactorings).
+
+Priorität der Datenquellen:
+  1. TagesEnergieProfil (EEDC-DB) — lokal, kein HA-Call, überlebt Neustarts
+  2. HA-History — Fallback für neue Installationen ohne DB-Daten
+  3. MQTT Energy Snapshots — Fallback für Standalone ohne HA
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional
 
 from sqlalchemy import select
@@ -61,15 +66,24 @@ async def get_verbrauchsprofil(
         )
         return cache
 
-    # 1. Versuche HA-History
-    result = await _profil_from_ha(anlage, db)
+    # 1. Versuche EEDC-DB (TagesEnergieProfil) — lokal, kein HA-Call
+    result = await _profil_from_db(anlage.id, db)
     logger.info(
-        "Verbrauchsprofil Anlage %s: HA=%s",
+        "Verbrauchsprofil Anlage %s: DB=%s",
         anlage.id,
-        "None" if result is None else f"ok(quelle={result.get('quelle')},wt={result.get('tage_werktag')})",
+        "None" if result is None else f"ok(wt={result.get('tage_werktag')},we={result.get('tage_wochenende')})",
     )
 
-    # 2. Fallback: MQTT Energy Snapshots
+    # 2. Fallback: HA-History (neue Installation, noch keine DB-Daten)
+    if result is None:
+        result = await _profil_from_ha(anlage, db)
+        logger.info(
+            "Verbrauchsprofil Anlage %s: HA=%s",
+            anlage.id,
+            "None" if result is None else f"ok(quelle={result.get('quelle')},wt={result.get('tage_werktag')})",
+        )
+
+    # 3. Fallback: MQTT Energy Snapshots
     if result is None:
         result = await _profil_from_mqtt(anlage.id)
         logger.info(
@@ -82,6 +96,80 @@ async def get_verbrauchsprofil(
     kwh_cache.set_profil(anlage.id, result)
 
     return result
+
+
+async def _profil_from_db(
+    anlage_id: int, db: AsyncSession
+) -> Optional[dict]:
+    """
+    Verbrauchsprofil aus TagesEnergieProfil (EEDC-DB).
+
+    Kein HA-Call, kein Netzwerk — reine DB-Abfrage. Überlebt jeden Neustart.
+    Liefert Daten ab dem Moment, wo der Scheduler täglich aggregiert hat.
+    """
+    from backend.models.tages_energie_profil import TagesEnergieProfil
+
+    heute = date.today()
+    start_date = heute - timedelta(days=7)
+
+    result = await db.execute(
+        select(
+            TagesEnergieProfil.datum,
+            TagesEnergieProfil.stunde,
+            TagesEnergieProfil.verbrauch_kw,
+            TagesEnergieProfil.waermepumpe_kw,
+            TagesEnergieProfil.temperatur_c,
+        ).where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= start_date,
+            TagesEnergieProfil.datum < heute,  # Heute ausschließen (noch unvollständig)
+        )
+    )
+    rows = result.all()
+
+    if not rows:
+        return None
+
+    werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+    wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+    wp_werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+    wp_wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
+    werktage_set: set[str] = set()
+    wochenende_set: set[str] = set()
+    temp_werte: list[float] = []
+    hat_wp = False
+
+    for datum, stunde, verbrauch_kw, waermepumpe_kw, temperatur_c in rows:
+        if verbrauch_kw is None:
+            continue
+
+        ist_wochenende = datum.weekday() >= 5
+        tag_str = datum.isoformat()
+
+        if ist_wochenende:
+            wochenende_sums[stunde].append(verbrauch_kw)
+            wochenende_set.add(tag_str)
+            if waermepumpe_kw is not None:
+                wp_wochenende_sums[stunde].append(waermepumpe_kw)
+                hat_wp = True
+        else:
+            werktag_sums[stunde].append(verbrauch_kw)
+            werktage_set.add(tag_str)
+            if waermepumpe_kw is not None:
+                wp_werktag_sums[stunde].append(waermepumpe_kw)
+                hat_wp = True
+
+        if temperatur_c is not None:
+            temp_werte.append(temperatur_c)
+
+    referenz_temp_c = round(sum(temp_werte) / len(temp_werte), 1) if temp_werte else None
+
+    return _build_profil_result(
+        werktag_sums, wochenende_sums, werktage_set, wochenende_set, "db",
+        wp_werktag_sums=wp_werktag_sums if hat_wp else None,
+        wp_wochenende_sums=wp_wochenende_sums if hat_wp else None,
+        referenz_temp_c=referenz_temp_c,
+    )
 
 
 async def _profil_from_ha(
