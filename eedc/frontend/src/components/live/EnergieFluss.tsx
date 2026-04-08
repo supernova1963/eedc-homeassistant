@@ -511,13 +511,13 @@ export default function EnergieFluss({
         })}
 
         {/* Haus-Knoten (Zentrum) */}
-        <g className="cursor-default" {...{title: [
+        <g className="cursor-default" data-title={[
             'Haushalt',
             `Aktuell: ${haushalt ? (haushalt.verbrauch_kw ?? 0).toFixed(2) : '—'} kW`,
             `Quellen: ${summeErzeugung.toFixed(2)} kW`,
             `Verbrauch: ${summeVerbrauch.toFixed(2)} kW`,
             ...(tagesWerte?.haushalt != null ? [`Heute: ${tagesWerte.haushalt.toFixed(1)} kWh`] : []),
-          ].join('\n')} as any}>
+          ].join('\n')}>
           {/* Pulsierender Glow-Ring — nur im Effekt-Modus */}
           {!lite && (
             <>
@@ -572,7 +572,7 @@ export default function EnergieFluss({
               : bgVariant === 'alps'
                 ? 'fill-blue-800 dark:fill-blue-300'
                 : 'fill-yellow-500 dark:fill-yellow-400'}
-          {...{title: "Summe aller PV-Erzeuger (ohne Batterie/Netz)"} as any}
+          data-title="Summe aller PV-Erzeuger (ohne Batterie/Netz)"
           >
             Solarleistung {formatPower(summePv)}
           </text>
@@ -636,7 +636,7 @@ export default function EnergieFluss({
           const ny = node.y - NODE_H / 2
 
           return (
-            <g key={`node-${k.key}`} className="cursor-default" {...{title: tip} as any}>
+            <g key={`node-${k.key}`} className="cursor-default" data-title={tip}>
 
               {/* Knoten-Hintergrund (halbtransparent, Gitter scheint durch) */}
               <rect
