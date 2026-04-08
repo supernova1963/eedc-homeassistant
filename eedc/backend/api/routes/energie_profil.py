@@ -438,7 +438,7 @@ async def delete_rohdaten(
     }
 
 
-@router.delete("/alle/rohdaten")
+@router.delete("/rohdaten")
 async def delete_alle_rohdaten(
     db: AsyncSession = Depends(get_db),
 ):
