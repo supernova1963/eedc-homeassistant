@@ -90,13 +90,15 @@ def _extract_meter_energy(meter_info: dict) -> tuple[Optional[float], Optional[f
     export_wh: Optional[float] = None
 
     # Legacy-Felder (Fronius Smart Meter am Einspeisepunkt)
-    # Plus = Export (ins Netz), Minus = Import (aus dem Netz)
+    # Plus_Absolute = Sum_Consumed = Netzbezug (aus dem Netz)
+    # Minus_Absolute = Sum_Produced = Einspeisung (ins Netz)
+    # Verifiziert mit echtem Fronius Smart Meter 63A-3 (joachim-xo, 2026-04-08)
     minus = meter_info.get("EnergyReal_WAC_Minus_Absolute")
     plus = meter_info.get("EnergyReal_WAC_Plus_Absolute")
     if minus is not None:
-        import_wh = float(minus)
+        export_wh = float(minus)
     if plus is not None:
-        export_wh = float(plus)
+        import_wh = float(plus)
 
     # Gen24 SmartMeter-Felder überschreiben Legacy falls vorhanden
     consumed = meter_info.get("SMARTMETER_ENERGYACTIVE_CONSUMED_SUM_F64")
@@ -130,7 +132,7 @@ class FroniusSolarApiConnector(DeviceConnector):
                 "3. Benutzername und Passwort können leer gelassen werden (API ist offen)\n"
                 "4. Für Grid-Werte muss ein Fronius Smart Meter installiert und konfiguriert sein"
             ),
-            getestet=False,
+            getestet=True,
         )
 
     async def test_connection(
