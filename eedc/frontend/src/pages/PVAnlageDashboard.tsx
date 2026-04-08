@@ -124,6 +124,14 @@ export default function PVAnlageDashboard() {
     ]
   }, [gesamtErzeugung, gesamtEigenverbrauch, gesamtEinspeisung])
 
+  const jahresFormatter = useMemo(() => {
+    const maxVal = jahresChartData.length > 0
+      ? Math.max(...jahresChartData.flatMap(d => [d.Erzeugung, d.Eigenverbrauch, d.Einspeisung]))
+      : 0
+    const mwh = maxVal > 10000
+    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+  }, [jahresChartData])
+
   const loading = anlagenLoading || invLoading || cockpitLoading
   const hasData = gesamtErzeugung > 0
   const hasPVSystem = pvSysteme.length > 0 || orphanModule.length > 0
@@ -278,7 +286,7 @@ export default function PVAnlageDashboard() {
                 <BarChart data={jahresChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis unit=" kWh" width={60} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+                  <YAxis tickFormatter={jahresFormatter} width={80} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend />
                   <Bar dataKey="Erzeugung" fill={COLORS.solar} />

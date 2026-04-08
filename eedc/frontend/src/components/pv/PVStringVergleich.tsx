@@ -102,6 +102,23 @@ export function PVStringVergleich({ anlageId }: Props) {
     }))
   }, [data])
 
+  const jahresFormatter = useMemo(() => {
+    if (jahresChartData.length === 0) return (val: number) => `${val} kWh`
+    const maxVal = Math.max(...jahresChartData.flatMap(row =>
+      Object.entries(row).filter(([k]) => k !== 'name').map(([, v]) => Number(v) || 0)
+    ))
+    const mwh = maxVal > 10000
+    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+  }, [jahresChartData])
+
+  const saisonalFormatter = useMemo(() => {
+    const maxVal = saisonalChartData.length > 0
+      ? Math.max(...saisonalChartData.flatMap(d => [d.SOLL, d['IST Ø']]))
+      : 0
+    const mwh = maxVal > 10000
+    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+  }, [saisonalChartData])
+
   // Loading State
   if (loading) {
     return <LoadingSpinner text="Lade String-Vergleich..." />
@@ -231,7 +248,7 @@ export function PVStringVergleich({ anlageId }: Props) {
               <BarChart data={jahresChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis unit=" kWh" />
+                <YAxis tickFormatter={jahresFormatter} width={80} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 {data.strings.map((s, idx) => (
@@ -272,7 +289,7 @@ export function PVStringVergleich({ anlageId }: Props) {
               <ComposedChart data={saisonalChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis unit=" kWh" />
+                <YAxis tickFormatter={saisonalFormatter} width={80} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 <Area
