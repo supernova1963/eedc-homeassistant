@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.14] - 2026-04-08
+
+### Fix
+
+- **Energieprofil-Daten löschen: 422-Fehler behoben**: DELETE-Endpoint-Pfad von `/alle/rohdaten` auf `/rohdaten` geändert — FastAPI hatte `alle` fälschlich als `anlage_id` (Integer) interpretiert.
+
+---
+
 ## [3.11.13] - 2026-04-08
 
 ### Feat
