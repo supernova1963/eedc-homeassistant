@@ -4,6 +4,8 @@ Energie-Profil API - Tägliche und stündliche Energiedaten.
 GET /api/energie-profil/{anlage_id}/tage      — Tageszusammenfassungen
 GET /api/energie-profil/{anlage_id}/stunden   — Stundenwerte für einen Tag
 GET /api/energie-profil/{anlage_id}/wochenmuster — Ø-Tagesprofil je Wochentag
+GET /api/energie-profil/{anlage_id}/debug-rohdaten — Rohdaten TagesEnergieProfil (7 Tage)
+DELETE /api/energie-profil/{anlage_id}/rohdaten — Löscht TagesEnergieProfil-Daten
 """
 
 import logging
@@ -14,7 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
@@ -353,3 +355,84 @@ async def get_wochenmuster(
         ))
 
     return punkte
+
+
+# ── Debug + Wartungs-Endpoints ───────────────────────────────────────────────
+
+@router.get("/{anlage_id}/debug-rohdaten")
+async def get_debug_rohdaten(
+    anlage_id: int,
+    tage: int = Query(7, ge=1, le=30, description="Anzahl Tage zurück"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Gibt TagesEnergieProfil-Rohdaten zurück (für Diagnose falsch gespeicherter Werte).
+
+    Zeigt pv_kw, verbrauch_kw, netzbezug_kw, einspeisung_kw pro Stunde + Datum.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    from datetime import timedelta
+    start = date.today() - timedelta(days=tage)
+
+    rows_result = await db.execute(
+        select(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= start,
+        ).order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    )
+    rows = rows_result.scalars().all()
+
+    alle_verbrauch = [r.verbrauch_kw for r in rows if r.verbrauch_kw is not None]
+    median_verbrauch = None
+    if alle_verbrauch:
+        sv = sorted(alle_verbrauch)
+        median_verbrauch = sv[len(sv) // 2]
+
+    return {
+        "anlage_id": anlage_id,
+        "anzahl_zeilen": len(rows),
+        "median_verbrauch_kw": median_verbrauch,
+        "plausibel": median_verbrauch is None or median_verbrauch <= 100,
+        "zeilen": [
+            {
+                "datum": r.datum.isoformat(),
+                "stunde": r.stunde,
+                "pv_kw": r.pv_kw,
+                "verbrauch_kw": r.verbrauch_kw,
+                "netzbezug_kw": r.netzbezug_kw,
+                "einspeisung_kw": r.einspeisung_kw,
+                "batterie_kw": r.batterie_kw,
+                "waermepumpe_kw": r.waermepumpe_kw,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.delete("/{anlage_id}/rohdaten")
+async def delete_rohdaten(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Löscht alle TagesEnergieProfil-Daten einer Anlage.
+
+    Der Scheduler schreibt ab dem nächsten Lauf (alle 15 Min) neue, korrekte Daten.
+    Nur aufrufen wenn die Daten nachweislich falsch sind (z.B. falsch gemappte Sensoren).
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    del_result = await db.execute(
+        delete(TagesEnergieProfil).where(TagesEnergieProfil.anlage_id == anlage_id)
+    )
+    await db.commit()
+
+    return {
+        "geloescht": del_result.rowcount,
+        "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten.",
+    }

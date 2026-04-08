@@ -130,27 +130,20 @@ async def _profil_from_db(
     if not rows:
         return None
 
-    # Plausibilitätsprüfung: Erkennt falsch gespeicherte Watt-Werte (statt kW).
-    # Typischer Haushalts-Peak: 0.1–20 kW. Werte > 100 kW = definitiv Watt.
-    # Median der nicht-None verbrauch_kw-Werte prüfen.
+    # Plausibilitätsprüfung: Erkennt falsch gespeicherte Werte (z.B. W statt kW,
+    # oder kumulative Wh-Zähler). Typischer Haushalts-Peak: 0.1–20 kW.
+    # Median > 100 = unplausibel → None zurückgeben, Fallback auf HA-History.
     alle_verbrauch = [r[2] for r in rows if r[2] is not None]
     if alle_verbrauch:
         sorted_v = sorted(alle_verbrauch)
         median_v = sorted_v[len(sorted_v) // 2]
         if median_v > 100:
-            # Werte sind in Watt gespeichert → durch 1000 korrigieren
             logger.warning(
-                "Anlage %s: TagesEnergieProfil verbrauch_kw-Median %.1f > 100 — "
-                "Werte vermutlich in W statt kW, automatische /1000 Korrektur.",
+                "Anlage %s: TagesEnergieProfil verbrauch_kw-Median %.1f > 100 kW — "
+                "DB-Daten unplausibel (falsch gemappter Sensor?), Fallback auf HA-History.",
                 anlage_id, median_v,
             )
-            rows = [
-                (datum, stunde,
-                 verbrauch_kw / 1000 if verbrauch_kw is not None else None,
-                 waermepumpe_kw / 1000 if waermepumpe_kw is not None else None,
-                 temperatur_c)
-                for datum, stunde, verbrauch_kw, waermepumpe_kw, temperatur_c in rows
-            ]
+            return None
 
     werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
