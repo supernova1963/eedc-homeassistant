@@ -436,3 +436,22 @@ async def delete_rohdaten(
         "geloescht": del_result.rowcount,
         "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten.",
     }
+
+
+@router.delete("/alle/rohdaten")
+async def delete_alle_rohdaten(
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Löscht alle TagesEnergieProfil-Daten aller Anlagen.
+
+    Wird verwendet wenn Energieprofil-Daten durch falsch gemappte Sensoren
+    korrumpiert wurden. Der Scheduler berechnet alles neu (max. 15 Min).
+    """
+    del_result = await db.execute(delete(TagesEnergieProfil))
+    await db.commit()
+
+    return {
+        "geloescht": del_result.rowcount,
+        "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten.",
+    }

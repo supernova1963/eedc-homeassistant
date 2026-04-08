@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info, BarChart3 } from 'lucide-react'
+import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info, BarChart3, Trash2 } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 import { systemApi, haApi, type StatsResponse, type SettingsResponse, type HASensor } from '../api'
+import { api } from '../api/client'
 
 export default function Settings() {
   const { theme, setTheme } = useTheme()
@@ -10,6 +11,22 @@ export default function Settings() {
   const [haSensors, setHaSensors] = useState<HASensor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deletingProfil, setDeletingProfil] = useState(false)
+  const [profilDeletedMsg, setProfilDeletedMsg] = useState<string | null>(null)
+
+  const handleDeleteProfildaten = async () => {
+    if (!window.confirm('Alle Energieprofil-Daten löschen? Der Scheduler berechnet alles neu (max. 15 Min). Monatsdaten bleiben erhalten.')) return
+    try {
+      setDeletingProfil(true)
+      const result = await api.delete<{ geloescht: number }>('/energie-profil/alle/rohdaten')
+      setProfilDeletedMsg(`${result.geloescht} Einträge gelöscht. Scheduler berechnet neu.`)
+      await loadData()
+    } catch {
+      setProfilDeletedMsg('Fehler beim Löschen.')
+    } finally {
+      setDeletingProfil(false)
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -322,6 +339,21 @@ export default function Settings() {
               </p>
             </div>
           )}
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleDeleteProfildaten}
+              disabled={deletingProfil}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+            >
+              {deletingProfil ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Energieprofil-Daten löschen
+            </button>
+            {profilDeletedMsg && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">{profilDeletedMsg}</span>
+            )}
+          </div>
         </div>
       )}
 
