@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.6] - 2026-04-08
+
+### Fix
+
+- **Y-Achsenbeschriftung in PV-Anlage Charts**: `PVAnlageDashboard` und `PVStringVergleich` — `unit`-Prop entfernt, `useMemo`-Formatter analog AktuellerMonat (MWh ab >10k kWh), `width` auf 80 erhöht. Verhindert Abschneiden der führenden Ziffer.
+- **Y-Achsenbeschriftung in Speicher-Charts**: Ladung/Entladung (kWh-Einheit), Zyklen (1 Dezimalstelle), Effizienz (`domain` von `[80,100]` auf `[0,100]` + %-Formatter) — verhindert Recharts-Fallback mit rohen Float-Ticks wenn Werte außerhalb des fixen Domains liegen.
+- **Solar-Aussicht Prognose-Quelle**: Live-Dashboard Heute-Prognose nutzt `wetter.pv_prognose_kwh` (GTI + Temperaturkorrektur) statt `tag.pv_ertrag_kwh` — angezeigte Zahl und Differenzrechnung sind nun konsistent.
+- **EnergieFluss Mobile-Tooltips**: SVG `<title>`-Kindelemente durch `title=""`-Attribute ersetzt — globaler `useTouchTitleTooltip`-Hook greift jetzt auch auf Mobile (Tap statt Hover).
+
+---
+
 ## [3.11.5] - 2026-04-07
 
 ### Neu
