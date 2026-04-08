@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.8] - 2026-04-08
+
+### Fix
+
+- **EnergieFluss Knoten-Tooltips**: Desktop-Hover (native `<title>`-Kindelemente) und Mobile-Touch (`data-title` via `useTouchTitleTooltip`) funktionieren jetzt gleichzeitig. Haus-Knoten-Text in Variable `hausTip` vor `return()` extrahiert.
+
+---
+
 ## [3.11.7] - 2026-04-08
 
 ### Fix
