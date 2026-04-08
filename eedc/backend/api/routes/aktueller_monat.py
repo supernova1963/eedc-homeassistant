@@ -437,15 +437,17 @@ async def _load_soll_pv(anlage_id: int, monat: int, db: AsyncSession) -> Optiona
 @router.get("/{anlage_id}", response_model=AktuellerMonatResponse)
 async def get_aktueller_monat(
     anlage_id: int,
+    jahr: Optional[int] = None,
+    monat: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Übersicht des aktuellen Monats mit Daten aus allen verfügbaren Quellen.
+    Übersicht eines Monats mit Daten aus allen verfügbaren Quellen.
 
     Datenquellen-Priorität (höchste überschreibt niedrigere):
     1. Gespeicherte Monatsdaten (85%) — DB
     2. Connector (90%) — Geräte-Snapshot-Delta
-    3. MQTT-Inbound (91%) — Energy-Topics aus Smarthome
+    3. MQTT-Inbound (91%) — Energy-Topics aus Smarthome (nur aktueller Monat)
     4. HA Statistics (92%) — Recorder-DB
     """
     # Anlage mit Investitionen laden
@@ -459,8 +461,11 @@ async def get_aktueller_monat(
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
     now = datetime.now()
-    jahr = now.year
-    monat = now.month
+    if jahr is None:
+        jahr = now.year
+    if monat is None:
+        monat = now.month
+    ist_aktueller_monat = (jahr == now.year and monat == now.month)
     investitionen = [i for i in anlage.investitionen if i.aktiv]
 
     # ── Daten sammeln (niedrigste Konfidenz zuerst, höchste überschreibt) ──
@@ -472,7 +477,7 @@ async def get_aktueller_monat(
     connector = await _collect_connector_data(anlage, jahr, monat)
     resolved.update(connector)
 
-    mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen)
+    mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen) if ist_aktueller_monat else {}
     resolved.update(mqtt_energy)
 
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
@@ -587,7 +592,7 @@ async def get_aktueller_monat(
     # ── Quellen-Übersicht ──
     quellen = {
         "ha_statistics": bool(ha_stats),
-        "mqtt_inbound": bool(mqtt_energy),
+        "mqtt_inbound": bool(mqtt_energy) if ist_aktueller_monat else False,
         "connector": bool(connector),
         "gespeichert": bool(saved),
     }

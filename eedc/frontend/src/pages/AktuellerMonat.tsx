@@ -15,6 +15,7 @@ import {
   FileSpreadsheet, Plug, Cloud, Upload,
 } from 'lucide-react'
 import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
+import { MONAT_NAMEN } from '../lib/constants'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useApiData } from '../hooks'
@@ -91,9 +92,14 @@ export default function AktuellerMonat() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [refreshing, setRefreshing] = useState(false)
 
+  const now = new Date()
+  const [selectedJahr, setSelectedJahr] = useState(now.getFullYear())
+  const [selectedMonat, setSelectedMonat] = useState(now.getMonth() + 1)
+  const istAktuellerMonat = selectedJahr === now.getFullYear() && selectedMonat === now.getMonth() + 1
+
   const { data, loading, error, refetch } = useApiData(
-    () => aktuellerMonatApi.getData(selectedAnlageId!),
-    [selectedAnlageId],
+    () => aktuellerMonatApi.getData(selectedAnlageId!, selectedJahr, selectedMonat),
+    [selectedAnlageId, selectedJahr, selectedMonat],
     { enabled: selectedAnlageId != null },
   )
 
@@ -201,7 +207,7 @@ export default function AktuellerMonat() {
           <CalendarClock className="h-8 w-8 text-blue-500" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Aktueller Monat: {data.monat_name} {data.jahr}
+              {istAktuellerMonat ? 'Aktueller Monat: ' : ''}{data.monat_name} {data.jahr}
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <QuelleBadge quelle="ha_statistics" aktiv={data.quellen.ha_statistics} />
@@ -210,7 +216,19 @@ export default function AktuellerMonat() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select
+            compact
+            value={selectedMonat.toString()}
+            onChange={(e) => setSelectedMonat(parseInt(e.target.value))}
+            options={MONAT_NAMEN.slice(1).map((name, i) => ({ value: String(i + 1), label: name }))}
+          />
+          <Select
+            compact
+            value={selectedJahr.toString()}
+            onChange={(e) => setSelectedJahr(parseInt(e.target.value))}
+            options={Array.from({ length: 6 }, (_, i) => now.getFullYear() - i).map(y => ({ value: String(y), label: String(y) }))}
+          />
           {anlagen.length > 1 && (
             <Select
               compact
@@ -223,6 +241,7 @@ export default function AktuellerMonat() {
             variant="secondary"
             onClick={handleRefresh}
             loading={refreshing}
+            disabled={!istAktuellerMonat}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Aktualisieren
@@ -250,7 +269,9 @@ export default function AktuellerMonat() {
                   Keine Daten für {data.monat_name} {data.jahr}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Wählen Sie eine der folgenden Möglichkeiten, um Daten für den aktuellen Monat einzulesen:
+                  {istAktuellerMonat
+                    ? 'Wählen Sie eine der folgenden Möglichkeiten, um Daten für den aktuellen Monat einzulesen:'
+                    : 'Für diesen Monat sind keine gespeicherten Daten vorhanden. Sie können den Monatsabschluss durchführen, um Daten einzutragen.'}
                 </p>
               </div>
             </div>

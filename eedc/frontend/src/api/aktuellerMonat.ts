@@ -67,6 +67,11 @@ export interface AktuellerMonatResponse {
 }
 
 export const aktuellerMonatApi = {
-  getData: (anlageId: number) =>
-    api.get<AktuellerMonatResponse>(`/aktueller-monat/${anlageId}`),
+  getData: (anlageId: number, jahr?: number, monat?: number) => {
+    const params = new URLSearchParams()
+    if (jahr !== undefined) params.set('jahr', String(jahr))
+    if (monat !== undefined) params.set('monat', String(monat))
+    const query = params.toString()
+    return api.get<AktuellerMonatResponse>(`/aktueller-monat/${anlageId}${query ? '?' + query : ''}`)
+  },
 }
