@@ -266,7 +266,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
+                <YAxis tickFormatter={(v) => `${v} kWh`} width={70} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend />
                 {z.arbitrage_faehig && z.arbitrage_kwh > 0 ? (
@@ -293,7 +293,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
               <AreaChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
+                <YAxis tickFormatter={(v) => v.toFixed(1)} width={40} />
                 <Tooltip content={<ChartTooltip decimals={1} />} />
                 <Area type="monotone" dataKey="zyklen" fill="#8b5cf6" stroke="#7c3aed" name="Zyklen" />
               </AreaChart>
@@ -312,7 +312,7 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
             <LineChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} />
-              <YAxis domain={[80, 100]} />
+              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={45} />
               <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
               <Line type="monotone" dataKey="effizienz" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Effizienz" />
             </LineChart>
