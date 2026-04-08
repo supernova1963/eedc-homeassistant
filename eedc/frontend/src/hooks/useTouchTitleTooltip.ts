@@ -56,7 +56,7 @@ export function useTouchTitleTooltip() {
     const onTouchStart = (e: TouchEvent) => {
       let el = e.target as HTMLElement | null
       while (el && el !== document.body) {
-        const title = el.getAttribute('title')
+        const title = el.getAttribute('data-title') || el.getAttribute('title')
         if (title) {
           const touch = e.touches[0]
           show(title, touch.clientX, touch.clientY)
