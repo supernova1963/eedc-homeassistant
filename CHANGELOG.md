@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.13] - 2026-04-08
+
+### Feat
+
+- **Einstellungen → System: Button "Energieprofil-Daten löschen"**: Direkt im Datenbestand-Block, mit Bestätigungsdialog. Für Nutzer mit falsch gemappten Sensoren die fehlerhafte Daten in TagesEnergieProfil geschrieben haben. Monatsdaten bleiben erhalten, Scheduler berechnet neu (max. 15 Min). Auslöser: Joachim-xo.
+
+---
+
 ## [3.11.12] - 2026-04-08
 
 ### Fix
