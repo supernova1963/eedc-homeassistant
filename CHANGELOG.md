@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.12] - 2026-04-08
+
+### Fix
+
+- **WetterWidget: Verbrauchsprognose 1000x zu groß** (Regression v3.11.10): Bei unplausiblen DB-Werten (Median verbrauch_kw > 100 kW) wird auf HA-History-Fallback umgeschaltet statt fehlerhafte Werte zu verwenden. Zusätzlich: Debug-Endpoint `GET /api/energie-profil/{id}/debug-rohdaten` und Lösch-Endpoint `DELETE /api/energie-profil/{id}/rohdaten` zur Diagnose und Bereinigung. Auslöser: Joachim-xo (#231).
+
+---
+
 ## [3.11.11] - 2026-04-08
 
 ### Fix
