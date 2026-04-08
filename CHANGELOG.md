@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.11] - 2026-04-08
+
+### Fix
+
+- **WetterWidget: Verbrauchsprognose 1000x zu groß** (Regression v3.11.10): Automatische Erkennung und Korrektur von historisch falsch gespeicherten Watt-Werten in `TagesEnergieProfil` (Median > 100 kW → /1000). Auslöser: Joachim-xo (#231).
+
+---
+
 ## [3.11.10] - 2026-04-08
 
 ### Fix
