@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.7] - 2026-04-08
+
+### Fix
+
+- **EnergieFluss Mobile-Tooltips**: React rendert `title`-Props auf SVG-Elementen nicht als DOM-Attribute → `getAttribute('title')` lieferte immer `null`. SVG-Knoten nutzen jetzt `data-title="..."`, Hook liest `data-title || title`. HTML-Elemente (Buttons) behalten `title=""`.
+
+---
+
 ## [3.11.6] - 2026-04-08
 
 ### Fix
