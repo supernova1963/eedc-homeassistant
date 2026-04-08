@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.9] - 2026-04-08
+
+### Feat
+
+- **Monat-Selektor in "Aktueller Monat"**: Monat und Jahr frei wählbar (bis 6 Jahre zurück). Refresh-Button deaktiviert für Vormonate. Für vergangene Monate werden nur gespeicherte Daten angezeigt (kein MQTT-Inbound). Auslöser: MartyBR (community.simon42.com #216).
+
+---
+
 ## [3.11.8] - 2026-04-08
 
 ### Fix
