@@ -52,6 +52,8 @@ class CockpitUebersichtResponse(BaseModel):
     # Wärmepumpe aggregiert
     wp_waerme_kwh: float
     wp_strom_kwh: float
+    wp_heizung_kwh: float
+    wp_warmwasser_kwh: float
     wp_cop: Optional[float]
     wp_ersparnis_euro: float
     hat_waermepumpe: bool
@@ -153,6 +155,8 @@ async def get_cockpit_uebersicht(
     speicher_entladung = 0.0
     wp_waerme = 0.0
     wp_strom = 0.0
+    wp_heizung = 0.0
+    wp_warmwasser = 0.0
     emob_km = 0.0
     emob_ladung = 0.0
     emob_pv_ladung = 0.0
@@ -179,11 +183,11 @@ async def get_cockpit_uebersicht(
             speicher_entladung += data.get("entladung_kwh", 0) or 0
 
         elif inv.typ == "waermepumpe":
-            wp_waerme += (
-                data.get("waerme_kwh", 0) or
-                (data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0)) +
-                (data.get("warmwasser_kwh", 0) or 0)
-            )
+            heizung = data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0
+            warmwasser = data.get("warmwasser_kwh", 0) or 0
+            wp_heizung += heizung
+            wp_warmwasser += warmwasser
+            wp_waerme += data.get("waerme_kwh", 0) or (heizung + warmwasser)
             wp_strom += (
                 data.get("stromverbrauch_kwh", 0) or
                 data.get("strom_kwh", 0) or
@@ -414,6 +418,8 @@ async def get_cockpit_uebersicht(
         hat_speicher=hat_speicher,
         wp_waerme_kwh=round(wp_waerme, 1),
         wp_strom_kwh=round(wp_strom, 1),
+        wp_heizung_kwh=round(wp_heizung, 1),
+        wp_warmwasser_kwh=round(wp_warmwasser, 1),
         wp_cop=round(wp_cop, 2) if wp_cop else None,
         wp_ersparnis_euro=round(wp_ersparnis, 2),
         hat_waermepumpe=hat_waermepumpe,
