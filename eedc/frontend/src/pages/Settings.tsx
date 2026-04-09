@@ -19,8 +19,9 @@ export default function Settings() {
     try {
       setDeletingProfil(true)
       const result = await api.delete<{ geloescht_stundenwerte: number; geloescht_tagessummen: number }>('/energie-profil/rohdaten')
-      setProfilDeletedMsg(`${result.geloescht_stundenwerte} Stundenwerte + ${result.geloescht_tagessummen} Tagessummen gelöscht. Scheduler berechnet neu.`)
+      const msg = `${result.geloescht_stundenwerte} Stundenwerte + ${result.geloescht_tagessummen} Tagessummen gelöscht. Scheduler berechnet neu (max. 15 Min).`
       await loadData()
+      setProfilDeletedMsg(msg)  // nach loadData setzen damit es nicht überschrieben wird
     } catch {
       setProfilDeletedMsg('Fehler beim Löschen.')
     } finally {
@@ -350,10 +351,14 @@ export default function Settings() {
               {deletingProfil ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               Energieprofil-Daten löschen
             </button>
-            {profilDeletedMsg && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">{profilDeletedMsg}</span>
-            )}
           </div>
+        </div>
+      )}
+
+      {profilDeletedMsg && (
+        <div className="card p-4 flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20">
+          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+          {profilDeletedMsg}
         </div>
       )}
 
