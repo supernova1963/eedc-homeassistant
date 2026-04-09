@@ -18,8 +18,8 @@ export default function Settings() {
     if (!window.confirm('Alle Energieprofil-Daten löschen? Der Scheduler berechnet alles neu (max. 15 Min). Monatsdaten bleiben erhalten.')) return
     try {
       setDeletingProfil(true)
-      const result = await api.delete<{ geloescht: number }>('/energie-profil/rohdaten')
-      setProfilDeletedMsg(`${result.geloescht} Einträge gelöscht. Scheduler berechnet neu.`)
+      const result = await api.delete<{ geloescht_stundenwerte: number; geloescht_tagessummen: number }>('/energie-profil/rohdaten')
+      setProfilDeletedMsg(`${result.geloescht_stundenwerte} Stundenwerte + ${result.geloescht_tagessummen} Tagessummen gelöscht. Scheduler berechnet neu.`)
       await loadData()
     } catch {
       setProfilDeletedMsg('Fehler beim Löschen.')
