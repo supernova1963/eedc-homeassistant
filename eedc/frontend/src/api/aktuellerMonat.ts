@@ -39,6 +39,8 @@ export interface AktuellerMonatResponse {
   hat_speicher: boolean
   wp_strom_kwh: number | null
   wp_waerme_kwh: number | null
+  wp_heizung_kwh: number | null
+  wp_warmwasser_kwh: number | null
   hat_waermepumpe: boolean
   emob_ladung_kwh: number | null
   emob_km: number | null

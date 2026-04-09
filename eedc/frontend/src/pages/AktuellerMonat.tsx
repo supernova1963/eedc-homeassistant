@@ -555,7 +555,7 @@ export default function AktuellerMonat() {
               <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Flame className="h-5 w-5 text-orange-500" />
-                  <span className="font-medium text-gray-900 dark:text-white">Wärmepumpe</span>
+                  <span className="font-medium text-gray-900 dark:text-white">Wärmepumpe Summe</span>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -566,6 +566,18 @@ export default function AktuellerMonat() {
                     <span className="text-gray-500">Wärme:</span>
                     <span className="font-medium">{fmt(data.wp_waerme_kwh)} kWh</span>
                   </div>
+                  {(data.wp_heizung_kwh ?? 0) > 0 && (
+                    <div className="flex justify-between pl-3 text-gray-400">
+                      <span>Heizung:</span>
+                      <span>{fmt(data.wp_heizung_kwh)} kWh</span>
+                    </div>
+                  )}
+                  {(data.wp_warmwasser_kwh ?? 0) > 0 && (
+                    <div className="flex justify-between pl-3 text-gray-400">
+                      <span>Warmwasser:</span>
+                      <span>{fmt(data.wp_warmwasser_kwh)} kWh</span>
+                    </div>
+                  )}
                   {data.wp_strom_kwh && data.wp_waerme_kwh && (
                     <div className="flex justify-between pt-1 border-t border-orange-100 dark:border-orange-800">
                       <span className="text-gray-500">COP:</span>
