@@ -428,6 +428,9 @@ export default function LiveDashboard() {
                         if (nachSU) return null
                         return diff
                       })() : null
+                      const prozentUeber = verbleibenKwh != null && verbleibenKwh < 0 && wetter?.pv_prognose_kwh
+                        ? Math.round(Math.abs(verbleibenKwh) / wetter.pv_prognose_kwh * 100)
+                        : null
                       return (
                         <div key={tag.datum}>
                         <div className={`grid grid-cols-[auto_1fr_7rem] items-center gap-x-2 rounded-lg px-3 py-2 ${
@@ -447,7 +450,7 @@ export default function LiveDashboard() {
                                     title={verbleibenKwh > 0
                                       ? `Noch ~${verbleibenKwh.toFixed(1)} kWh ausstehend`
                                       : `Prognose um ${Math.abs(verbleibenKwh).toFixed(1)} kWh übertroffen`}>
-                                {verbleibenKwh > 0 ? `~${verbleibenKwh.toFixed(1)} verbl.` : `+${Math.abs(verbleibenKwh).toFixed(1)} über Progn.`}
+                                {verbleibenKwh > 0 ? `~${verbleibenKwh.toFixed(1)} verbl.` : `+${Math.abs(verbleibenKwh).toFixed(1)} kWh über Progn.${prozentUeber != null ? ` (+${prozentUeber}%)` : ''}`}
                               </span>
                             )}
                           </div>
