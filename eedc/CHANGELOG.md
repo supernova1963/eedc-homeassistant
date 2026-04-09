@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.16] - 2026-04-09
+
+### Fix
+
+- **Energieprofil löschen: Bestätigungsmeldung bleibt sichtbar**: Meldung wird nach dem Seiten-Reload gesetzt und außerhalb des bedingten Datenbestand-Blocks gerendert — war vorher unsichtbar weil der Block nach dem Löschen (0 Einträge) ausgeblendet wird.
+
+---
+
 ## [3.11.15] - 2026-04-09
 
 ### Fix
