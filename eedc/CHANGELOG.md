@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.18] - 2026-04-09
+
+### Fix
+
+- **Fronius Custom Report — PV-Spalte 0,00 kWh**: `"Energie | [Gerätemodell]"` wurde von `_normalize()` zu `"energie [modell]"` (Pipe entfernt) — Pattern `"energie |"` traf nie. Stattdessen griff `"ertrag"` auf `"Spezifischer Ertrag [kWh/kWp]"` → Werte ~0,38 als Wh ÷ 1000 = 0,00 kWh. Fix: Raw-Header-Suche auf `startswith("energie |")`, `"ertrag"` aus Patterns entfernt. Verifiziert mit echter CSV von Joachim-xo (365 Tage, 14 Spalten).
+
+## [3.11.17] - 2026-04-09
+
+### Fix
+
+- **Fronius Solar.web Benutzerdefinierter Report: PV-Spalte korrekt erkannt**: Spaltenbezeichnung `"Energie | [Gerätemodell]"` (Pipe-Zeichen + Inverter-Name) wurde nicht als PV-Erzeugung erkannt — Parser griff fälschlich auf `"Spezifischer Ertrag"` (kWh/kWp) zurück. Auslöser: Joachim-xo.
+
+### Feat
+
+- **Aktueller Monat — Wärmepumpe Heizung/Warmwasser-Split**: Label umbenannt in "Wärmepumpe Summe", Heizung und Warmwasser werden als eingerückte Unterzeilen angezeigt (nur wenn Werte > 0 vorhanden). Auslöser: Issue #113.
+- **Live-Dashboard — Prognoseabweichung mit %-Wert**: Anzeige erweitert von `+0.7 über Progn.` auf `+0.7 kWh über Progn. (+1%)`. Auslöser: Issue #114 (rapahl).
+
+---
+
 ## [3.11.16] - 2026-04-09
 
 ### Fix
