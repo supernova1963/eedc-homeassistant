@@ -33,7 +33,7 @@ from .sma_sunny_portal import _normalize, _parse_float
 COLUMN_PATTERNS: dict[str, list[str]] = {
     "pv_erzeugung": [
         "pv production", "pv-erzeugung", "gesamtenergie", "energy",
-        "erzeugung", "ertrag", "produced",
+        "erzeugung", "energie |", "ertrag", "produced",
     ],
     "einspeisung": [
         "energy to grid", "einspeisung", "einspeisen", "feed-in",
@@ -152,7 +152,7 @@ class FroniusSolarwebParser(PortalExportParser):
                 "4. Als CSV herunterladen\n"
                 "5. Die heruntergeladene CSV-Datei hier hochladen"
             ),
-            beispiel_header="Date and time;PV production [Wh];Energy to grid [Wh];Energy from grid [Wh];Consumed directly [Wh]",
+            beispiel_header="Date and time;PV production [Wh];Energy to grid [Wh];Energy from grid [Wh];Consumed directly [Wh] — oder Benutzerdefinierter Report: Datum und Uhrzeit;Energie | [Gerätemodell] [Wh];...",
             getestet=True,
         )
 
