@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.15] - 2026-04-09
+
+### Fix
+
+- **Energieprofil-Daten löschen: auch Tagessummen bereinigen**: Der Lösch-Button entfernt jetzt zusätzlich `TagesZusammenfassung` — diese enthält aggregierte Werte die den PV-Lernfaktor beeinflussen und bei falsch gemappten Sensoren ebenfalls korrumpiert waren. Monatsdaten bleiben erhalten. Auslöser: Joachim-xo.
+
+---
+
 ## [3.11.14] - 2026-04-08
 
 ### Fix
