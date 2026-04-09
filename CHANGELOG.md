@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.18] - 2026-04-09
+
+### Fix
+
+- **Fronius Custom Report — PV-Spalte 0,00 kWh**: `"Energie | [Gerätemodell]"` wurde von `_normalize()` zu `"energie [modell]"` (Pipe entfernt) — Pattern `"energie |"` traf nie. Stattdessen griff `"ertrag"` auf `"Spezifischer Ertrag [kWh/kWp]"` → Werte ~0,38 als Wh ÷ 1000 = 0,00 kWh. Fix: Raw-Header-Suche auf `startswith("energie |")`, `"ertrag"` aus Patterns entfernt. Verifiziert mit echter CSV von Joachim-xo (365 Tage, 14 Spalten).
+
 ## [3.11.17] - 2026-04-09
 
 ### Fix
