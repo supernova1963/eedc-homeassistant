@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.17] - 2026-04-09
+
+### Fix
+
+- **Fronius Solar.web Benutzerdefinierter Report: PV-Spalte korrekt erkannt**: Spaltenbezeichnung `"Energie | [Gerätemodell]"` (Pipe-Zeichen + Inverter-Name) wurde nicht als PV-Erzeugung erkannt — Parser griff fälschlich auf `"Spezifischer Ertrag"` (kWh/kWp) zurück. Auslöser: Joachim-xo.
+
+### Feat
+
+- **Aktueller Monat — Wärmepumpe Heizung/Warmwasser-Split**: Label umbenannt in "Wärmepumpe Summe", Heizung und Warmwasser werden als eingerückte Unterzeilen angezeigt (nur wenn Werte > 0 vorhanden). Auslöser: Issue #113.
+- **Live-Dashboard — Prognoseabweichung mit %-Wert**: Anzeige erweitert von `+0.7 über Progn.` auf `+0.7 kWh über Progn. (+1%)`. Auslöser: Issue #114 (rapahl).
+
+---
+
 ## [3.11.16] - 2026-04-09
 
 ### Fix
