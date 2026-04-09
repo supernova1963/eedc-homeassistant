@@ -33,7 +33,10 @@ from .sma_sunny_portal import _normalize, _parse_float
 COLUMN_PATTERNS: dict[str, list[str]] = {
     "pv_erzeugung": [
         "pv production", "pv-erzeugung", "gesamtenergie", "energy",
-        "erzeugung", "energie |", "ertrag", "produced",
+        "erzeugung", "produced",
+        # Hinweis: "Energie | [InverterModel]" (Custom Report) wird in parse()
+        # per Raw-Header-Suche behandelt, da _normalize() "|" entfernt.
+        # "ertrag" absichtlich NICHT hier: würde "Spezifischer Ertrag" treffen!
     ],
     "einspeisung": [
         "energy to grid", "einspeisung", "einspeisen", "feed-in",
@@ -211,6 +214,17 @@ class FroniusSolarwebParser(PortalExportParser):
 
         # Datum-Spalte: erste Spalte ist typischerweise das Datum
         col_date = 0
+
+        # Fronius Custom Report: PV-Spalte heißt "Energie | [InverterModel]"
+        # _normalize() entfernt "|" → normalisierte Suche schlägt fehl → Raw-Header-Suche
+        if col_map.get("pv_erzeugung") is None:
+            for idx, raw_h in enumerate(headers):
+                if idx in used_indices:
+                    continue
+                if raw_h.lower().startswith("energie |"):
+                    col_map["pv_erzeugung"] = idx
+                    used_indices.add(idx)
+                    break
 
         # Prüfen ob wir genug Spalten haben
         if col_map.get("pv_erzeugung") is None and col_map.get("einspeisung") is None:
