@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.19] - 2026-04-10
+
+### Fix
+
+- **Fronius Custom Report — Zwei Wechselrichter**: Alle `"Energie | [WR-Modell]"`-Spalten werden jetzt summiert (statt nur die erste). Betrifft Anlagen mit mehreren Wechselrichtern (z.B. Symo 4.5 + GEN24 10.0). Auslöser: Joachim-xo.
+- **Fronius Custom Report — Wattpilot-Ladedaten**: `"Energie vom Netz/Batterie/PV an Wattpilot"` wird zu `wallbox_ladung_kwh` aggregiert und der konfigurierten Wallbox-Investition zugeordnet (bei mehreren Wallboxen: manuelle Auswahl im Import-Dialog).
+- **Portal-Import — Dezimaleingabe Prozent-Anteile**: Tipp eines Kommas oder Punkts sprang den Wert auf 0. Fix: `valueAsNumber` statt `parseFloat`, `step={0.01}` statt `0.1` für 2-stellige Nachkommastellen.
+
 ## [3.11.18] - 2026-04-09
 
 ### Fix
