@@ -176,6 +176,11 @@ export default function AktuellerMonat() {
     return items
   }, [data])
 
+  const energieSaldo = useMemo(() => {
+    if (!data || data.einspeise_erloes_euro === null || data.ev_ersparnis_euro === null || data.netzbezug_kosten_euro === null) return null
+    return Math.round((data.einspeise_erloes_euro + data.ev_ersparnis_euro - data.netzbezug_kosten_euro) * 100) / 100
+  }, [data])
+
   // ── Loading / Error States ──
 
   if (anlagenLoading || loading) {
@@ -368,12 +373,15 @@ export default function AktuellerMonat() {
             ergebnis={data.autarkie_prozent !== null ? `= ${fmtCalc(data.autarkie_prozent, 1)} %` : undefined}
           />
           <KPICard
-            title="Netto-Ertrag"
+            title="Netto-Ertrag PV"
             value={data.netto_ertrag_euro !== null ? fmtEuro(data.netto_ertrag_euro) : '—'}
             unit="€"
             icon={Euro}
             color={data.netto_ertrag_euro !== null && data.netto_ertrag_euro >= 0 ? 'green' : 'red'}
-            formel="Einspeise-Erlöse + EV-Ersparnis − Netzbezug-Kosten"
+            formel="Einspeise-Erlöse + EV-Ersparnis (Ertrag der PV-Anlage, ohne Netzbezug-Abzug)"
+            berechnung={data.einspeise_erloes_euro !== null && data.ev_ersparnis_euro !== null
+              ? `${fmtCalc(data.einspeise_erloes_euro, 2)} + ${fmtCalc(data.ev_ersparnis_euro, 2)} €`
+              : undefined}
             ergebnis={data.netto_ertrag_euro !== null ? `= ${fmtCalc(data.netto_ertrag_euro, 2)} €` : undefined}
           />
         </div>
@@ -655,35 +663,59 @@ export default function AktuellerMonat() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <KPICard
-                title="Einspeise-Erlöse"
-                value={data.einspeise_erloes_euro !== null ? fmtEuro(data.einspeise_erloes_euro) : '—'}
-                unit="€"
-                icon={TrendingUp}
-                color="green"
-              />
-              <KPICard
-                title="EV-Ersparnis"
-                value={data.ev_ersparnis_euro !== null ? fmtEuro(data.ev_ersparnis_euro) : '—'}
-                unit="€"
-                icon={Home}
-                color="blue"
-              />
-              <KPICard
-                title="Netzbezug-Kosten"
-                value={data.netzbezug_kosten_euro !== null ? `−${fmt(data.netzbezug_kosten_euro)}` : '—'}
-                unit="€"
-                icon={ArrowDownToLine}
-                color="red"
-              />
-              <KPICard
-                title="Netto-Ertrag"
-                value={data.netto_ertrag_euro !== null ? fmtEuro(data.netto_ertrag_euro) : '—'}
-                unit="€"
-                icon={Euro}
-                color={data.netto_ertrag_euro !== null && data.netto_ertrag_euro >= 0 ? 'green' : 'red'}
-              />
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <KPICard
+                  title="Einspeise-Erlöse"
+                  value={data.einspeise_erloes_euro !== null ? fmtEuro(data.einspeise_erloes_euro) : '—'}
+                  unit="€"
+                  icon={TrendingUp}
+                  color="green"
+                  formel="Einspeisung × Einspeisevergütung"
+                  berechnung={data.einspeisung_kwh !== null ? `${fmtCalc(data.einspeisung_kwh, 1)} kWh` : undefined}
+                  ergebnis={data.einspeise_erloes_euro !== null ? `= ${fmtCalc(data.einspeise_erloes_euro, 2)} €` : undefined}
+                />
+                <KPICard
+                  title="EV-Ersparnis"
+                  value={data.ev_ersparnis_euro !== null ? fmtEuro(data.ev_ersparnis_euro) : '—'}
+                  unit="€"
+                  icon={Home}
+                  color="blue"
+                  formel="Eigenverbrauch × Netzbezugspreis"
+                  berechnung={data.eigenverbrauch_kwh !== null ? `${fmtCalc(data.eigenverbrauch_kwh, 1)} kWh` : undefined}
+                  ergebnis={data.ev_ersparnis_euro !== null ? `= ${fmtCalc(data.ev_ersparnis_euro, 2)} €` : undefined}
+                />
+                <KPICard
+                  title="Netzbezug-Kosten"
+                  value={data.netzbezug_kosten_euro !== null ? `−${fmt(data.netzbezug_kosten_euro)}` : '—'}
+                  unit="€"
+                  icon={ArrowDownToLine}
+                  color="red"
+                  formel="Netzbezug × Netzbezugspreis + Grundpreis"
+                  berechnung={data.netzbezug_kwh !== null ? `${fmtCalc(data.netzbezug_kwh, 1)} kWh` : undefined}
+                  ergebnis={data.netzbezug_kosten_euro !== null ? `= −${fmtCalc(data.netzbezug_kosten_euro, 2)} €` : undefined}
+                />
+              </div>
+              {/* Energie-Saldo — analog zum SOLL/IST Erfüllungsgrad */}
+              {energieSaldo !== null && (
+                <Card>
+                  <div className="flex flex-col items-center justify-center py-2">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Energie-Saldo</p>
+                    <FormelTooltip
+                      formel="Einspeise-Erlöse + EV-Ersparnis − Netzbezug-Kosten"
+                      berechnung={`${fmtCalc(data.einspeise_erloes_euro, 2)} + ${fmtCalc(data.ev_ersparnis_euro, 2)} − ${fmtCalc(data.netzbezug_kosten_euro, 2)} €`}
+                      ergebnis={`= ${fmtCalc(energieSaldo, 2)} €`}
+                    >
+                      <span className={`text-4xl font-bold ${energieSaldo >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {fmtEuro(energieSaldo)}
+                      </span>
+                    </FormelTooltip>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                      Einspeisung + Eigenverbr. − Netzbezug
+                    </p>
+                  </div>
+                </Card>
+              )}
             </div>
           </div>
         </Card>
