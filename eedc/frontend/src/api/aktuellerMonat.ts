@@ -53,6 +53,8 @@ export interface AktuellerMonatResponse {
   netzbezug_kosten_euro: number | null
   ev_ersparnis_euro: number | null
   netto_ertrag_euro: number | null
+  wp_ersparnis_euro: number | null
+  emob_ersparnis_euro: number | null
 
   // Vergleiche
   vorjahr: {

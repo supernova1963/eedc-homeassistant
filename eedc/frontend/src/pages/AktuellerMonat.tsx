@@ -171,14 +171,18 @@ export default function AktuellerMonat() {
     const items: Array<{ name: string; Betrag: number; fill: string }> = []
     if (data.einspeise_erloes_euro !== null) items.push({ name: 'Einspeise-Erlöse', Betrag: data.einspeise_erloes_euro, fill: COLORS.erloese })
     if (data.ev_ersparnis_euro !== null) items.push({ name: 'EV-Ersparnis', Betrag: data.ev_ersparnis_euro, fill: COLORS.ersparnis })
+    if (data.wp_ersparnis_euro !== null) items.push({ name: 'WP-Ersparnis', Betrag: data.wp_ersparnis_euro, fill: COLORS.wp })
+    if (data.emob_ersparnis_euro !== null) items.push({ name: 'eMob-Ersparnis', Betrag: data.emob_ersparnis_euro, fill: COLORS.emob })
     if (data.netzbezug_kosten_euro !== null) items.push({ name: 'Netzbezug-Kosten', Betrag: -data.netzbezug_kosten_euro, fill: COLORS.kosten })
-    if (data.netto_ertrag_euro !== null) items.push({ name: 'Netto-Ertrag', Betrag: data.netto_ertrag_euro, fill: COLORS.netto })
     return items
   }, [data])
 
   const energieSaldo = useMemo(() => {
     if (!data || data.einspeise_erloes_euro === null || data.ev_ersparnis_euro === null || data.netzbezug_kosten_euro === null) return null
-    return Math.round((data.einspeise_erloes_euro + data.ev_ersparnis_euro - data.netzbezug_kosten_euro) * 100) / 100
+    let saldo = data.einspeise_erloes_euro + data.ev_ersparnis_euro - data.netzbezug_kosten_euro
+    if (data.wp_ersparnis_euro !== null) saldo += data.wp_ersparnis_euro
+    if (data.emob_ersparnis_euro !== null) saldo += data.emob_ersparnis_euro
+    return Math.round(saldo * 100) / 100
   }, [data])
 
   // ── Loading / Error States ──
@@ -663,59 +667,89 @@ export default function AktuellerMonat() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <KPICard
-                  title="Einspeise-Erlöse"
-                  value={data.einspeise_erloes_euro !== null ? fmtEuro(data.einspeise_erloes_euro) : '—'}
-                  unit="€"
-                  icon={TrendingUp}
-                  color="green"
-                  formel="Einspeisung × Einspeisevergütung"
-                  berechnung={data.einspeisung_kwh !== null ? `${fmtCalc(data.einspeisung_kwh, 1)} kWh` : undefined}
-                  ergebnis={data.einspeise_erloes_euro !== null ? `= ${fmtCalc(data.einspeise_erloes_euro, 2)} €` : undefined}
-                />
-                <KPICard
-                  title="EV-Ersparnis"
-                  value={data.ev_ersparnis_euro !== null ? fmtEuro(data.ev_ersparnis_euro) : '—'}
-                  unit="€"
-                  icon={Home}
-                  color="blue"
-                  formel="Eigenverbrauch × Netzbezugspreis"
-                  berechnung={data.eigenverbrauch_kwh !== null ? `${fmtCalc(data.eigenverbrauch_kwh, 1)} kWh` : undefined}
-                  ergebnis={data.ev_ersparnis_euro !== null ? `= ${fmtCalc(data.ev_ersparnis_euro, 2)} €` : undefined}
-                />
-                <KPICard
-                  title="Netzbezug-Kosten"
-                  value={data.netzbezug_kosten_euro !== null ? `−${fmt(data.netzbezug_kosten_euro)}` : '—'}
-                  unit="€"
-                  icon={ArrowDownToLine}
-                  color="red"
-                  formel="Netzbezug × Netzbezugspreis + Grundpreis"
-                  berechnung={data.netzbezug_kwh !== null ? `${fmtCalc(data.netzbezug_kwh, 1)} kWh` : undefined}
-                  ergebnis={data.netzbezug_kosten_euro !== null ? `= −${fmtCalc(data.netzbezug_kosten_euro, 2)} €` : undefined}
-                />
-              </div>
-              {/* Energie-Saldo — analog zum SOLL/IST Erfüllungsgrad */}
-              {energieSaldo !== null && (
-                <Card>
-                  <div className="flex flex-col items-center justify-center py-2">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Energie-Saldo</p>
-                    <FormelTooltip
-                      formel="Einspeise-Erlöse + EV-Ersparnis − Netzbezug-Kosten"
-                      berechnung={`${fmtCalc(data.einspeise_erloes_euro, 2)} + ${fmtCalc(data.ev_ersparnis_euro, 2)} − ${fmtCalc(data.netzbezug_kosten_euro, 2)} €`}
-                      ergebnis={`= ${fmtCalc(energieSaldo, 2)} €`}
-                    >
-                      <span className={`text-4xl font-bold ${energieSaldo >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {fmtEuro(energieSaldo)}
-                      </span>
-                    </FormelTooltip>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                      Einspeisung + Eigenverbr. − Netzbezug
-                    </p>
+            <div className="flex flex-col gap-3">
+              {/* KPI-Grid: 3 Basis + optionale Komponenten, grid-cols passt sich an */}
+              {(() => {
+                const hasWP = data.wp_ersparnis_euro !== null
+                const hasEmob = data.emob_ersparnis_euro !== null
+                const total = 3 + (hasWP ? 1 : 0) + (hasEmob ? 1 : 0)
+                // 3 → 3-col | 4 → 2×2 | 5 → 3-col (3+2)
+                const gridCols = total === 4 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'
+                return (
+                  <div className={`grid ${gridCols} gap-3`}>
+                    <KPICard
+                      title="Einspeise-Erlöse"
+                      value={data.einspeise_erloes_euro !== null ? fmtEuro(data.einspeise_erloes_euro) : '—'}
+                      unit="€" icon={TrendingUp} color="green"
+                      formel="Einspeisung × Einspeisevergütung"
+                      berechnung={data.einspeisung_kwh !== null ? `${fmtCalc(data.einspeisung_kwh, 1)} kWh` : undefined}
+                      ergebnis={data.einspeise_erloes_euro !== null ? `= ${fmtCalc(data.einspeise_erloes_euro, 2)} €` : undefined}
+                    />
+                    <KPICard
+                      title="EV-Ersparnis"
+                      value={data.ev_ersparnis_euro !== null ? fmtEuro(data.ev_ersparnis_euro) : '—'}
+                      unit="€" icon={Home} color="blue"
+                      formel="Eigenverbrauch × Netzbezugspreis"
+                      berechnung={data.eigenverbrauch_kwh !== null ? `${fmtCalc(data.eigenverbrauch_kwh, 1)} kWh` : undefined}
+                      ergebnis={data.ev_ersparnis_euro !== null ? `= ${fmtCalc(data.ev_ersparnis_euro, 2)} €` : undefined}
+                    />
+                    <KPICard
+                      title="Netzbezug-Kosten"
+                      value={data.netzbezug_kosten_euro !== null ? `−${fmt(data.netzbezug_kosten_euro)}` : '—'}
+                      unit="€" icon={ArrowDownToLine} color="red"
+                      formel="Netzbezug × Netzbezugspreis + Grundpreis"
+                      berechnung={data.netzbezug_kwh !== null ? `${fmtCalc(data.netzbezug_kwh, 1)} kWh` : undefined}
+                      ergebnis={data.netzbezug_kosten_euro !== null ? `= −${fmtCalc(data.netzbezug_kosten_euro, 2)} €` : undefined}
+                    />
+                    {hasWP && (
+                      <KPICard
+                        title="WP-Ersparnis"
+                        value={fmtEuro(data.wp_ersparnis_euro)}
+                        unit="€" icon={Flame} color="orange"
+                        formel="Wärme ÷ 0,9 × Gaspreis − WP-Strom × WP-Strompreis"
+                        berechnung={data.wp_waerme_kwh !== null && data.wp_strom_kwh !== null
+                          ? `${fmtCalc(data.wp_waerme_kwh, 1)} kWh Wärme, ${fmtCalc(data.wp_strom_kwh, 1)} kWh Strom`
+                          : undefined}
+                        ergebnis={`= ${fmtCalc(data.wp_ersparnis_euro, 2)} €`}
+                      />
+                    )}
+                    {hasEmob && (
+                      <KPICard
+                        title="eMob-Ersparnis"
+                        value={fmtEuro(data.emob_ersparnis_euro)}
+                        unit="€" icon={Car} color="purple"
+                        formel="Benzinkosten − Stromkosten (vs. Verbrenner)"
+                        berechnung={data.emob_ladung_kwh !== null ? `${fmtCalc(data.emob_ladung_kwh, 1)} kWh geladen` : undefined}
+                        ergebnis={`= ${fmtCalc(data.emob_ersparnis_euro, 2)} €`}
+                      />
+                    )}
                   </div>
-                </Card>
-              )}
+                )
+              })()}
+              {/* Energie-Saldo */}
+              {energieSaldo !== null && (() => {
+                const formelTeile = ['Einspeise-Erlöse', 'EV-Ersparnis']
+                const berechnungTeile = [fmtCalc(data.einspeise_erloes_euro, 2), fmtCalc(data.ev_ersparnis_euro, 2)]
+                if (data.wp_ersparnis_euro !== null) { formelTeile.push('WP-Ersparnis'); berechnungTeile.push(fmtCalc(data.wp_ersparnis_euro, 2)) }
+                if (data.emob_ersparnis_euro !== null) { formelTeile.push('eMob-Ersparnis'); berechnungTeile.push(fmtCalc(data.emob_ersparnis_euro, 2)) }
+                const formel = formelTeile.join(' + ') + ' − Netzbezug-Kosten'
+                const berechnung = berechnungTeile.join(' + ') + ` − ${fmtCalc(data.netzbezug_kosten_euro, 2)} €`
+                return (
+                  <Card>
+                    <div className="flex flex-col items-center justify-center py-2">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Energie-Saldo</p>
+                      <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={`= ${fmtCalc(energieSaldo, 2)} €`}>
+                        <span className={`text-4xl font-bold ${energieSaldo >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {fmtEuro(energieSaldo)}
+                        </span>
+                      </FormelTooltip>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
+                        {formelTeile.join(' + ')} − Netzbezug
+                      </p>
+                    </div>
+                  </Card>
+                )
+              })()}
             </div>
           </div>
         </Card>

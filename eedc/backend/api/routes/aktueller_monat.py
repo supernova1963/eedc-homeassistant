@@ -87,6 +87,8 @@ class AktuellerMonatResponse(BaseModel):
     netzbezug_kosten_euro: Optional[float] = None
     ev_ersparnis_euro: Optional[float] = None
     netto_ertrag_euro: Optional[float] = None
+    wp_ersparnis_euro: Optional[float] = None
+    emob_ersparnis_euro: Optional[float] = None
 
     # Vergleiche
     vorjahr: Optional[dict] = None
@@ -242,7 +244,10 @@ async def _collect_saved_data(
         wp_strom_total = 0.0
         wp_waerme_total = 0.0
         emob_ladung_total = 0.0
+        emob_km_total = 0.0
+        emob_pv_ladung_total = 0.0
         bkw_erzeugung_total = 0.0
+        bkw_eigenverbrauch_total = 0.0
 
         for imd in imd_result.scalars().all():
             inv = inv_by_id.get(imd.investition_id)
@@ -274,6 +279,8 @@ async def _collect_saved_data(
                         data.get("ladung_kwh", 0) or
                         data.get("verbrauch_kwh", 0) or 0
                     )
+                    emob_km_total += data.get("km_gefahren", 0) or 0
+                    emob_pv_ladung_total += data.get("ladung_pv_kwh", 0) or 0
             elif inv.typ == "balkonkraftwerk":
                 bkw_kwh = (
                     data.get("pv_erzeugung_kwh", 0) or
@@ -282,6 +289,7 @@ async def _collect_saved_data(
                 bkw_erzeugung_total += bkw_kwh
                 # BKW ist PV-Erzeugung → fließt in Gesamt-PV ein
                 pv_erzeugung_total += bkw_kwh
+                bkw_eigenverbrauch_total += data.get("eigenverbrauch_kwh", 0) or bkw_kwh
 
         if pv_erzeugung_total > 0:
             resolved["pv_erzeugung_kwh"] = (pv_erzeugung_total, quelle)
@@ -295,8 +303,14 @@ async def _collect_saved_data(
             resolved["wp_waerme_kwh"] = (wp_waerme_total, quelle)
         if emob_ladung_total > 0:
             resolved["emob_ladung_kwh"] = (emob_ladung_total, quelle)
+        if emob_km_total > 0:
+            resolved["emob_km"] = (emob_km_total, quelle)
+        if emob_pv_ladung_total > 0:
+            resolved["emob_pv_ladung_kwh"] = (emob_pv_ladung_total, quelle)
         if bkw_erzeugung_total > 0:
             resolved["bkw_erzeugung_kwh"] = (bkw_erzeugung_total, quelle)
+        if bkw_eigenverbrauch_total > 0:
+            resolved["bkw_eigenverbrauch_kwh"] = (bkw_eigenverbrauch_total, quelle)
 
     return resolved
 
@@ -576,6 +590,41 @@ async def get_aktueller_monat(
         if einspeise_erloes is not None and ev_ersparnis is not None:
             netto_ertrag = round(einspeise_erloes + ev_ersparnis, 2)
 
+    # ── Komponenten-Ersparnis ──
+    wp_ersparnis = None
+    emob_ersparnis = None
+
+    wp_waerme = get_val("wp_waerme_kwh")
+    wp_strom = get_val("wp_strom_kwh")
+    if wp_waerme is not None and wp_strom is not None and allgemein_tarif:
+        wp_tarif = tarife.get("waermepumpe")
+        wp_preis_cent = (
+            wp_tarif.netzbezug_arbeitspreis_cent_kwh
+            if wp_tarif and wp_tarif.netzbezug_arbeitspreis_cent_kwh is not None
+            else netzbezug_preis_cent
+        )
+        GAS_PREIS_CENT = 10.0
+        wp_ersparnis = round(
+            (wp_waerme / 0.9 * GAS_PREIS_CENT - wp_strom * wp_preis_cent) / 100, 2
+        )
+
+    emob_ladung = get_val("emob_ladung_kwh")
+    emob_km = get_val("emob_km")
+    emob_pv_ladung = get_val("emob_pv_ladung_kwh") or 0.0
+    if emob_km is not None and emob_km > 0 and allgemein_tarif:
+        wallbox_tarif = tarife.get("wallbox")
+        wallbox_preis_cent = (
+            wallbox_tarif.netzbezug_arbeitspreis_cent_kwh
+            if wallbox_tarif and wallbox_tarif.netzbezug_arbeitspreis_cent_kwh is not None
+            else netzbezug_preis_cent
+        )
+        benzin_kosten = emob_km * 7 / 100 * 1.80
+        strom_kosten = ((emob_ladung or 0) - emob_pv_ladung) * wallbox_preis_cent / 100
+        emob_ersparnis = round(benzin_kosten - strom_kosten, 2)
+
+    # BKW-Ersparnis wird NICHT separat ausgewiesen — BKW-Erzeugung fließt in
+    # pv_erzeugung_total und damit in eigenverbrauch ein → bereits in ev_ersparnis enthalten.
+
     # ── Komponenten-Flags ──
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
@@ -637,6 +686,8 @@ async def get_aktueller_monat(
         netzbezug_kosten_euro=netzbezug_kosten,
         ev_ersparnis_euro=ev_ersparnis,
         netto_ertrag_euro=netto_ertrag,
+        wp_ersparnis_euro=wp_ersparnis,
+        emob_ersparnis_euro=emob_ersparnis,
         # Vergleiche
         vorjahr=vorjahr,
         soll_pv_kwh=soll_pv,
