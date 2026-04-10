@@ -88,10 +88,13 @@ function AnteilEingabe({
               type="number"
               min={0}
               max={100}
-              step={0.1}
+              step={0.01}
               aria-label={`Anteil ${inv.bezeichnung} in Prozent`}
               value={zuordnung[inv.id] ?? 0}
-              onChange={(e) => onChange(inv.id, parseFloat(e.target.value) || 0)}
+              onChange={(e) => {
+                const val = e.target.valueAsNumber
+                if (!isNaN(val)) onChange(inv.id, val)
+              }}
               className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:border-gray-600
                 dark:bg-gray-700 dark:text-white text-right focus:ring-1 focus:ring-primary-500"
             />

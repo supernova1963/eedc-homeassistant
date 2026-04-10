@@ -215,19 +215,44 @@ class FroniusSolarwebParser(PortalExportParser):
         # Datum-Spalte: erste Spalte ist typischerweise das Datum
         col_date = 0
 
-        # Fronius Custom Report: PV-Spalte heißt "Energie | [InverterModel]"
+        # Fronius Custom Report: PV-Spalten heißen "Energie | [InverterModel]"
         # _normalize() entfernt "|" → normalisierte Suche schlägt fehl → Raw-Header-Suche
+        # Mehrere Wechselrichter (z.B. "Energie | Symo 4.5-3-M" + "Energie | GEN24")
+        # werden alle gefunden und summiert. MPP-Spalten ("Energie MPP1 | ...") und
+        # Wattpilot-Spalten ("Energie Wattpilot | ...") werden korrekt ausgeschlossen,
+        # da sie nicht exakt mit "energie |" beginnen.
+        pv_col_indices: list[int] = []
         if col_map.get("pv_erzeugung") is None:
             for idx, raw_h in enumerate(headers):
                 if idx in used_indices:
                     continue
                 if raw_h.lower().startswith("energie |"):
-                    col_map["pv_erzeugung"] = idx
+                    pv_col_indices.append(idx)
                     used_indices.add(idx)
-                    break
+
+        # Wattpilot-Spalten: "Energie vom Netz an Wattpilot", "... von Batterie ...", "... von PV ..."
+        # Separate Suche per Raw-Header um Konflikte mit netzbezug/batterie-Patterns zu vermeiden.
+        wattpilot_netz_idx: Optional[int] = None
+        wattpilot_bat_idx: Optional[int] = None
+        wattpilot_pv_idx: Optional[int] = None
+        for idx, raw_h in enumerate(headers):
+            if idx in used_indices:
+                continue
+            h = raw_h.lower()
+            if "wattpilot" in h:
+                if "netz" in h:
+                    wattpilot_netz_idx = idx
+                    used_indices.add(idx)
+                elif "batterie" in h:
+                    wattpilot_bat_idx = idx
+                    used_indices.add(idx)
+                elif "pv" in h:
+                    wattpilot_pv_idx = idx
+                    used_indices.add(idx)
 
         # Prüfen ob wir genug Spalten haben
-        if col_map.get("pv_erzeugung") is None and col_map.get("einspeisung") is None:
+        if (col_map.get("pv_erzeugung") is None and not pv_col_indices
+                and col_map.get("einspeisung") is None):
             return []
 
         # Werte pro Monat aggregieren
@@ -256,6 +281,29 @@ class FroniusSolarwebParser(PortalExportParser):
                     if val is not None and val >= 0:
                         monthly[key][field] += val
 
+            # Fronius Custom Report: alle WR-Spalten ("Energie | WR1", "Energie | WR2", ...)
+            # werden zu pv_erzeugung summiert
+            for col_idx in pv_col_indices:
+                if col_idx < len(row):
+                    val = _parse_float(row[col_idx])
+                    unit = units[col_idx] if col_idx < len(units) else ""
+                    val = _wh_to_kwh(val, headers[col_idx], unit)
+                    if val is not None and val >= 0:
+                        monthly[key]["pv_erzeugung"] += val
+
+            # Wattpilot-Ladung: Netz + Batterie + PV = Gesamt
+            for wp_field, wp_idx in (
+                ("wattpilot_netz", wattpilot_netz_idx),
+                ("wattpilot_bat", wattpilot_bat_idx),
+                ("wattpilot_pv", wattpilot_pv_idx),
+            ):
+                if wp_idx is not None and wp_idx < len(row):
+                    val = _parse_float(row[wp_idx])
+                    unit = units[wp_idx] if wp_idx < len(units) else ""
+                    val = _wh_to_kwh(val, headers[wp_idx], unit)
+                    if val is not None and val >= 0:
+                        monthly[key][wp_field] += val
+
         # ParsedMonthData erstellen
         result: list[ParsedMonthData] = []
         for (jahr, monat) in sorted(monthly.keys()):
@@ -270,6 +318,12 @@ class FroniusSolarwebParser(PortalExportParser):
                 if eigenverbrauch < 0:
                     eigenverbrauch = None
 
+            # Wattpilot: Gesamt = Netz + Batterie + PV
+            wp_gesamt = (
+                data.get("wattpilot_netz", 0)
+                + data.get("wattpilot_bat", 0)
+                + data.get("wattpilot_pv", 0)
+            )
             result.append(ParsedMonthData(
                 jahr=jahr,
                 monat=monat,
@@ -279,6 +333,8 @@ class FroniusSolarwebParser(PortalExportParser):
                 eigenverbrauch_kwh=round(eigenverbrauch, 2) if eigenverbrauch else None,
                 batterie_ladung_kwh=round(data["batterie_ladung"], 2) if data.get("batterie_ladung") else None,
                 batterie_entladung_kwh=round(data["batterie_entladung"], 2) if data.get("batterie_entladung") else None,
+                wallbox_ladung_kwh=round(wp_gesamt, 2) if wp_gesamt > 0 else None,
+                wallbox_ladung_pv_kwh=round(data["wattpilot_pv"], 2) if data.get("wattpilot_pv") else None,
             ))
 
         return result
