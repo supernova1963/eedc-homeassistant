@@ -70,7 +70,7 @@ function App() {
           <Route path="cockpit/speicher" element={<SpeicherDashboard />} />
           <Route path="cockpit/wallbox" element={<WallboxDashboard />} />
           <Route path="cockpit/balkonkraftwerk" element={<BalkonkraftwerkDashboard />} />
-          <Route path="cockpit/aktueller-monat" element={<AktuellerMonat />} />
+          <Route path="cockpit/aktueller-monat" element={<Navigate to="/cockpit/monatsberichte" replace />} />
           <Route path="cockpit/monatsberichte" element={<MonatsabschlussView />} />
           <Route path="cockpit/sonstiges" element={<SonstigesDashboard />} />
 

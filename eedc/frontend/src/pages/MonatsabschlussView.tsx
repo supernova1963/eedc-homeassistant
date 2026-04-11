@@ -12,17 +12,13 @@ import { useNavigate } from 'react-router-dom'
 import {
   Sun, Battery, Flame, Car, Euro,
   ChevronDown, BarChart3, Wrench, Home, Zap, TrendingUp,
-  Plug, Gauge, ArrowUpDown,
+  Plug, Gauge, ArrowUpDown, RefreshCw, CalendarClock, Users, Share2,
 } from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell, LabelList,
-} from 'recharts'
 import { Card, LoadingSpinner, Alert, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
-import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useAggregierteDaten } from '../hooks'
 import { aktuellerMonatApi, AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { cockpitApi } from '../api/cockpit'
+import { communityApi, MonatsVergleich } from '../api/community'
 import { MONAT_NAMEN } from '../lib/constants'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
@@ -63,28 +59,6 @@ function Δ({ a, b, inv = false }: { a: number | null | undefined; b: number | n
   )
 }
 
-/** Max/Min/Ø Einordnung aus einer Werteliste */
-function StatBar({ values, current, unit, label }: {
-  values: number[]
-  current: number | null | undefined
-  unit: string
-  label?: string
-}) {
-  if (!values.length || current == null) return null
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const avg = values.reduce((s, v) => s + v, 0) / values.length
-  return (
-    <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-      {label && <span className="font-medium text-gray-600 dark:text-gray-300">{label}: </span>}
-      <span>Ø {fmt(avg, 0)} {unit}</span>
-      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
-      <span className="text-green-600 dark:text-green-400">Max {fmt(max, 0)}</span>
-      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
-      <span className="text-red-500 dark:text-red-400">Min {fmt(min, 0)}</span>
-    </div>
-  )
-}
 
 // ─── Vergleichs-Zeile ─────────────────────────────────────────────────────────
 function VglZeile({ label, aktuell, vm, vj, unit, inv = false, formel, ergebnis }: {
@@ -158,9 +132,12 @@ function Section({
   )
 }
 
+// ─── Typen ────────────────────────────────────────────────────────────────────
+type TimelineEntry = { jahr: number; monat: number; pv_kwh: number; autarkie: number; laufend?: boolean }
+
 // ─── Vertikaler Zeitstrahl ────────────────────────────────────────────────────
 function VerticalTimeline({ entries, selectedJahr, selectedMonat, onSelect }: {
-  entries: Array<{ jahr: number; monat: number; pv_kwh: number; autarkie: number }>
+  entries: TimelineEntry[]
   selectedJahr: number
   selectedMonat: number
   onSelect: (j: number, m: number) => void
@@ -211,29 +188,39 @@ function VerticalTimeline({ entries, selectedJahr, selectedMonat, onSelect }: {
                   ref={isSel ? selectedRef : null}
                   type="button"
                   onClick={() => onSelect(e.jahr, e.monat)}
-                  title={`${MONAT_NAMEN[e.monat]} ${e.jahr}: ${Math.round(e.pv_kwh)} kWh · ${Math.round(e.autarkie)} % Autarkie`}
+                  title={e.laufend
+                    ? `${MONAT_NAMEN[e.monat]} ${e.jahr} — laufender Monat`
+                    : `${MONAT_NAMEN[e.monat]} ${e.jahr}: ${Math.round(e.pv_kwh)} kWh · ${Math.round(e.autarkie)} % Autarkie`}
                   className={`relative flex items-start gap-2 w-full text-left py-1.5 pr-1 rounded-lg transition-colors group ${
                     isSel ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                   }`}
                 >
                   <span className={`relative z-10 mt-1 h-3 w-3 rounded-full border-2 shrink-0 transition-all ${
-                    isSel
-                      ? 'bg-blue-600 border-blue-600 shadow shadow-blue-400/50'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 group-hover:border-blue-400'
+                    e.laufend
+                      ? isSel
+                        ? 'bg-emerald-500 border-emerald-500 animate-pulse'
+                        : 'bg-emerald-400 border-emerald-500 animate-pulse group-hover:border-emerald-400'
+                      : isSel
+                        ? 'bg-blue-600 border-blue-600 shadow shadow-blue-400/50'
+                        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 group-hover:border-blue-400'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-1">
                       <span className={`text-sm font-medium ${isSel ? 'text-blue-700 dark:text-blue-300' : ''}`}>
                         {MONAT_NAMEN[e.monat].substring(0, 3)}
                       </span>
-                      <span className={`text-xs tabular-nums ${isSel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400'}`}>
-                        {Math.round(e.pv_kwh)} kWh
+                      <span className={`text-xs tabular-nums ${
+                        e.laufend ? 'text-emerald-500 dark:text-emerald-400' : isSel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400'
+                      }`}>
+                        {e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`}
                       </span>
                     </div>
-                    <svg className="mt-0.5 w-full h-1" aria-hidden="true">
-                      <rect width="100%" height="4" rx="2" className="fill-gray-100 dark:fill-gray-700" />
-                      <rect width={`${barW}%`} height="4" rx="2" className={isSel ? 'fill-blue-500' : 'fill-yellow-400 dark:fill-yellow-500'} />
-                    </svg>
+                    {!e.laufend && (
+                      <svg className="mt-0.5 w-full h-1" aria-hidden="true">
+                        <rect width="100%" height="4" rx="2" className="fill-gray-100 dark:fill-gray-700" />
+                        <rect width={`${barW}%`} height="4" rx="2" className={isSel ? 'fill-blue-500' : 'fill-yellow-400 dark:fill-yellow-500'} />
+                      </svg>
+                    )}
                   </div>
                 </button>
               )
@@ -248,20 +235,32 @@ function VerticalTimeline({ entries, selectedJahr, selectedMonat, onSelect }: {
 // ─── Hauptkomponente ──────────────────────────────────────────────────────────
 export default function MonatsabschlussView() {
   const navigate = useNavigate()
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
   const { daten: alleMonate, loading: monateLoading } = useAggregierteDaten(selectedAnlageId)
 
-  const timelineEntries = useMemo(
-    () => alleMonate.map(m => ({
+  const heute = useMemo(() => new Date(), [])
+  const heuteJahr  = heute.getFullYear()
+  const heuteMonat = heute.getMonth() + 1
+
+  const timelineEntries = useMemo((): TimelineEntry[] => {
+    const completed: TimelineEntry[] = alleMonate.map(m => ({
       jahr: m.jahr, monat: m.monat,
       pv_kwh: m.pv_erzeugung_kwh ?? 0,
       autarkie: m.autarkie_prozent ?? 0,
-    })),
-    [alleMonate]
-  )
+    }))
+    // Aktuellen Monat einfügen wenn noch nicht abgeschlossen
+    const istAbgeschlossen = completed.some(m => m.jahr === heuteJahr && m.monat === heuteMonat)
+    if (!istAbgeschlossen) {
+      completed.unshift({ jahr: heuteJahr, monat: heuteMonat, pv_kwh: 0, autarkie: 0, laufend: true })
+    }
+    return completed
+  }, [alleMonate, heuteJahr, heuteMonat])
 
   const defaultEntry = useMemo(() =>
-    [...timelineEntries].sort((a, b) => b.jahr !== a.jahr ? b.jahr - a.jahr : b.monat - a.monat)[0] ?? null,
+    // Aktueller Monat ist immer der sinnvollste Einstieg
+    timelineEntries.find(e => e.laufend)
+    ?? [...timelineEntries].sort((a, b) => b.jahr !== a.jahr ? b.jahr - a.jahr : b.monat - a.monat)[0]
+    ?? null,
     [timelineEntries]
   )
 
@@ -286,14 +285,22 @@ export default function MonatsabschlussView() {
     return alleMonate.find(m => m.jahr === vm.jahr && m.monat === vm.monat) ?? null
   }, [alleMonate, selectedJahr, selectedMonat])
 
-  // Max/Min/Ø-Werte aus alleMonate (alle Jahre)
-  const stats = useMemo(() => ({
-    pv:       alleMonate.map(m => m.pv_erzeugung_kwh).filter(v => v > 0),
-    autarkie: alleMonate.map(m => m.autarkie_prozent).filter(v => v > 0),
-    einsp:    alleMonate.map(m => m.einspeisung_kwh).filter(v => v > 0),
-    netz:     alleMonate.map(m => m.netzbezug_kwh).filter(v => v > 0),
-    ev:       alleMonate.map(m => m.eigenverbrauch_kwh).filter(v => v > 0),
-  }), [alleMonate])
+  // Ø gleicher Monat (z.B. alle März-Monate außer dem aktuell gewählten Jahr)
+  const glMonStats = useMemo(() => {
+    if (selectedMonat === null) return null
+    const monate = alleMonate.filter(m => m.monat === selectedMonat && m.jahr !== selectedJahr)
+    if (monate.length === 0) return null
+    const avg = (vals: number[]) => vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+    return {
+      pv:       avg(monate.map(m => m.pv_erzeugung_kwh).filter((v): v is number => v != null && v > 0)),
+      ev:       avg(monate.map(m => m.eigenverbrauch_kwh).filter((v): v is number => v != null && v > 0)),
+      einsp:    avg(monate.map(m => m.einspeisung_kwh).filter((v): v is number => v != null && v > 0)),
+      netz:     avg(monate.map(m => m.netzbezug_kwh).filter((v): v is number => v != null && v > 0)),
+      gesamt:   avg(monate.map(m => m.gesamtverbrauch_kwh).filter((v): v is number => v != null && v > 0)),
+      autarkie: avg(monate.map(m => m.autarkie_prozent).filter((v): v is number => v != null && v > 0)),
+      count: monate.length,
+    }
+  }, [alleMonate, selectedMonat, selectedJahr])
 
   // Live-Monatsdaten
   const [monatData, setMonatData] = useState<AktuellerMonatResponse | null>(null)
@@ -324,23 +331,44 @@ export default function MonatsabschlussView() {
     return monatData.gesamtnettoertrag_euro - (monatData.betriebskosten_anteilig_euro || 0) - (sonderkosten || 0)
   }, [monatData, sonderkosten])
 
+  // Community-Monats-Benchmark
+  const [monatsVergleich, setMonatsVergleich] = useState<MonatsVergleich | null>(null)
+  useEffect(() => {
+    if (selectedJahr === null || selectedMonat === null) return
+    setMonatsVergleich(null)
+    communityApi.getMonatsBenchmark(selectedJahr, selectedMonat)
+      .then(setMonatsVergleich)
+      .catch(() => setMonatsVergleich(null)) // still, kein Fehler-Block nötig
+  }, [selectedJahr, selectedMonat])
+
+  // "Abschluss starten" nur wenn Vergangenheits-Monate noch offen sind
+  const hatOffeneAbschluesse = useMemo(() => {
+    const vormonat = heuteMonat === 1
+      ? { jahr: heuteJahr - 1, monat: 12 }
+      : { jahr: heuteJahr,     monat: heuteMonat - 1 }
+    if (alleMonate.length === 0) return true
+    const sorted = [...alleMonate].sort((a, b) => b.jahr !== a.jahr ? b.jahr - a.jahr : b.monat - a.monat)
+    const letzter = sorted[0]
+    return letzter.jahr < vormonat.jahr
+      || (letzter.jahr === vormonat.jahr && letzter.monat < vormonat.monat)
+  }, [alleMonate, heuteJahr, heuteMonat])
+
   // ── Guards ──────────────────────────────────────────────────────────────────
   if (anlagenLoading || monateLoading) return <LoadingSpinner text="Lade Monatsberichte…" />
   if (anlagen.length === 0) return <Alert type="warning">Bitte lege zuerst eine PV-Anlage an.</Alert>
   if (timelineEntries.length === 0) return (
     <Card className="text-center py-12">
       <BarChart3 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Noch keine abgeschlossenen Monate</h3>
-      <p className="text-gray-500 dark:text-gray-400 mb-4">Führe zuerst einen Monatsabschluss durch.</p>
-      <button type="button" onClick={() => navigate('/einstellungen/monatsabschluss')} className="btn btn-primary">
-        Monatsabschluss erfassen
-      </button>
+      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Keine Monatsdaten</h3>
+      <p className="text-gray-500 dark:text-gray-400 mb-4">Bitte wähle eine Anlage mit konfigurierten Sensoren.</p>
     </Card>
   )
 
   const d = monatData
   const vj = d?.vorjahr
   const vm = vormonatAgg
+  const isLaufend = selectedJahr === heuteJahr && selectedMonat === heuteMonat
+    && !alleMonate.some(m => m.jahr === heuteJahr && m.monat === heuteMonat)
   const titel = selectedJahr && selectedMonat ? `${MONAT_NAMEN[selectedMonat]} ${selectedJahr}` : '…'
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -384,8 +412,15 @@ export default function MonatsabschlussView() {
                 const isSel = e.jahr === selectedJahr && e.monat === selectedMonat
                 return (
                   <button key={`${e.jahr}-${e.monat}`} type="button" onClick={() => handleSelect(e.jahr, e.monat)}
-                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${isSel ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                      isSel
+                        ? 'bg-blue-600 text-white'
+                        : e.laufend
+                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                    }`}>
                     {MONAT_NAMEN[e.monat].substring(0, 3)} {e.jahr}
+                    {e.laufend && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse align-middle" />}
                   </button>
                 )
               })}
@@ -394,8 +429,44 @@ export default function MonatsabschlussView() {
 
         {/* Titel */}
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">{titel}</h2>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{titel}</h2>
+            {isLaufend && (
+              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                laufend
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {isLaufend && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedAnlageId || selectedJahr === null || selectedMonat === null) return
+                    setMonatLoading(true); setMonatError(null)
+                    aktuellerMonatApi.getData(selectedAnlageId, selectedJahr, selectedMonat)
+                      .then(setMonatData).catch(e => setMonatError(e.message || 'Fehler')).finally(() => setMonatLoading(false))
+                  }}
+                  disabled={monatLoading}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${monatLoading ? 'animate-spin' : ''}`} />
+                  Aktualisieren
+                </button>
+                {hatOffeneAbschluesse && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/einstellungen/monatsabschluss')}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                  >
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    Abschluss starten
+                  </button>
+                )}
+              </>
+            )}
             {d && Object.entries(d.quellen).filter(([, v]) => v).map(([k]) => (
               <span key={k} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
                 {k === 'ha_statistics' ? 'HA-Statistik' : k === 'connector' ? 'Connector' : k === 'gespeichert' ? 'Gespeichert' : k}
@@ -442,74 +513,129 @@ export default function MonatsabschlussView() {
                   subtitle={vm ? `VM: ${fmt(vm.netzbezug_kwh, 0)} kWh` : undefined} />
               </div>
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Detailvergleich-Tabelle */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Detailvergleich</p>
-                  <VglZeile label="PV-Erzeugung"    aktuell={d.pv_erzeugung_kwh}    vm={vm?.pv_erzeugung_kwh}    vj={vj?.pv_erzeugung_kwh}    unit="kWh" />
-                  <VglZeile label="Eigenverbrauch"  aktuell={d.eigenverbrauch_kwh}   vm={vm?.eigenverbrauch_kwh}  vj={vj?.eigenverbrauch_kwh}  unit="kWh" />
-                  <VglZeile label="Einspeisung"     aktuell={d.einspeisung_kwh}      vm={vm?.einspeisung_kwh}     vj={vj?.einspeisung_kwh}     unit="kWh" />
-                  <VglZeile label="Netzbezug"       aktuell={d.netzbezug_kwh}        vm={vm?.netzbezug_kwh}       vj={vj?.netzbezug_kwh}       unit="kWh" inv />
-                  <VglZeile label="Gesamtverbrauch" aktuell={d.gesamtverbrauch_kwh}  vm={vm?.gesamtverbrauch_kwh} unit="kWh" />
-                  <VglZeile label="Autarkie"        aktuell={d.autarkie_prozent}     vm={vm?.autarkie_prozent}    vj={vj?.autarkie_prozent}    unit="%" />
-                  <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50 space-y-1">
-                    <StatBar values={stats.pv}       current={d.pv_erzeugung_kwh}    unit="kWh" label="PV Ø/Max/Min" />
-                    <StatBar values={stats.autarkie}  current={d.autarkie_prozent}    unit="%" label="Autarkie" />
-                    <StatBar values={stats.netz}     current={d.netzbezug_kwh}        unit="kWh" label="Netzbezug" />
-                  </div>
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                {/* Vergleichstabelle (2/3 Breite) */}
+                <div className="lg:col-span-2">
+                  {(() => {
+                    const rows: Array<{
+                      label: string
+                      ist: number | null | undefined
+                      vmV: number | null | undefined
+                      vjV: number | null | undefined
+                      gm: number | null | undefined
+                      unit: string
+                      inv?: boolean
+                    }> = [
+                      { label: 'PV-Erzeugung',    ist: d.pv_erzeugung_kwh,   vmV: vm?.pv_erzeugung_kwh,   vjV: vj?.pv_erzeugung_kwh,   gm: glMonStats?.pv,       unit: 'kWh' },
+                      { label: 'Eigenverbrauch',  ist: d.eigenverbrauch_kwh,  vmV: vm?.eigenverbrauch_kwh, vjV: vj?.eigenverbrauch_kwh, gm: glMonStats?.ev,       unit: 'kWh' },
+                      { label: 'Einspeisung',     ist: d.einspeisung_kwh,     vmV: vm?.einspeisung_kwh,    vjV: vj?.einspeisung_kwh,    gm: glMonStats?.einsp,    unit: 'kWh' },
+                      { label: 'Netzbezug',       ist: d.netzbezug_kwh,       vmV: vm?.netzbezug_kwh,      vjV: vj?.netzbezug_kwh,      gm: glMonStats?.netz,     unit: 'kWh', inv: true },
+                      { label: 'Gesamtverbrauch', ist: d.gesamtverbrauch_kwh, vmV: vm?.gesamtverbrauch_kwh, vjV: null,                   gm: glMonStats?.gesamt,   unit: 'kWh' },
+                      { label: 'Autarkie',        ist: d.autarkie_prozent,    vmV: vm?.autarkie_prozent,   vjV: vj?.autarkie_prozent,   gm: glMonStats?.autarkie, unit: '%'   },
+                    ]
+                    const cell = (val: number | null | undefined, row: typeof rows[0]) =>
+                      val != null
+                        ? <span
+                            className="flex items-center justify-end gap-1"
+                            title={`${fmt(val, row.unit === '%' ? 1 : 0)} ${row.unit}`}
+                          >
+                            <span className="hidden sm:inline text-gray-400 dark:text-gray-500">{fmt(val, row.unit === '%' ? 1 : 0)}</span>
+                            <Δ a={row.ist} b={val} inv={row.inv} />
+                          </span>
+                        : <span className="text-gray-300 dark:text-gray-600">—</span>
+                    return (
+                      <>
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+                              <th className="text-left pb-1.5 font-medium" scope="col"><span className="sr-only">Kennzahl</span></th>
+                              <th className="text-right pb-1.5 font-medium">IST</th>
+                              <th className="text-right pb-1.5 font-medium">Vormonat</th>
+                              <th className="text-right pb-1.5 font-medium">Vorjahr</th>
+                              {glMonStats && <th className="text-right pb-1.5 font-medium">Ø {MONAT_NAMEN[selectedMonat!]}</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(row => (
+                              <tr key={row.label} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+                                <td className="py-1.5 text-gray-600 dark:text-gray-400">{row.label}</td>
+                                <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
+                                  {fmt(row.ist, row.unit === '%' ? 1 : 0)} {row.unit}
+                                </td>
+                                <td className="py-1.5 text-right tabular-nums">{cell(row.vmV, row)}</td>
+                                <td className="py-1.5 text-right tabular-nums">{cell(row.vjV, row)}</td>
+                                {glMonStats && <td className="py-1.5 text-right tabular-nums">{cell(row.gm, row)}</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {glMonStats && (
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                            Ø aus {glMonStats.count} {MONAT_NAMEN[selectedMonat!]}-Monat{glMonStats.count !== 1 ? 'en' : ''}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
 
-                {/* Donut + Vorjahr-Chart */}
-                <div className="space-y-3">
-                  {d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && d.pv_erzeugung_kwh != null && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">PV-Verteilung</p>
-                      <div className="h-36">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={[
-                              { name: 'Eigenverbr.', value: d.eigenverbrauch_kwh, color: C.ev },
-                              { name: 'Einspeisung', value: d.einspeisung_kwh,    color: C.einsp },
-                            ].filter(e => e.value > 0)}
-                              cx="50%" cy="50%" innerRadius={42} outerRadius={58} paddingAngle={3} dataKey="value">
-                              {[C.ev, C.einsp].map((c, i) => <Cell key={i} fill={c} />)}
-                            </Pie>
-                            <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
-                            <Legend formatter={(name, entry: any) => {
-                              const pct = d.pv_erzeugung_kwh && d.pv_erzeugung_kwh > 0
-                                ? Math.round((entry.payload.value / d.pv_erzeugung_kwh) * 100)
-                                : 0
-                              return `${name} ${pct} %`
-                            }} />
-                          </PieChart>
-                        </ResponsiveContainer>
+                {/* SOLL/IST + PV-Verteilung (1/3 Breite) */}
+                <div className="space-y-5">
+
+                  {/* SOLL/IST */}
+                  {d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && (() => {
+                    const pct = Math.round(d.pv_erzeugung_kwh! / d.soll_pv_kwh! * 100)
+                    const colorText = pct >= 100 ? 'text-green-500 dark:text-green-400' : pct >= 75 ? 'text-yellow-500 dark:text-yellow-400' : 'text-orange-500'
+                    const colorBar  = pct >= 100 ? 'bg-green-500' : pct >= 75 ? 'bg-yellow-400' : 'bg-orange-400'
+                    return (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">SOLL/IST (PVGIS)</p>
+                        <div className="flex justify-end">
+                          <FormelTooltip
+                            formel="IST ÷ SOLL × 100"
+                            berechnung={`${fmt(d.pv_erzeugung_kwh, 0)} ÷ ${fmt(d.soll_pv_kwh, 0)} kWh`}
+                            ergebnis={`= ${pct} %`}
+                          >
+                            <span className={`text-4xl font-bold ${colorText}`}>{pct} %</span>
+                          </FormelTooltip>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                          <div className={`h-2 rounded-full ${colorBar}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                          {fmt(d.pv_erzeugung_kwh, 0)} von {fmt(d.soll_pv_kwh, 0)} kWh
+                        </p>
                       </div>
-                    </div>
-                  )}
-                  {vj && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Vorjahr {selectedJahr! - 1}</p>
-                      <div className="h-36">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={[
-                            vj.pv_erzeugung_kwh && d.pv_erzeugung_kwh ? { name: 'PV', A: Math.round(d.pv_erzeugung_kwh), B: Math.round(vj.pv_erzeugung_kwh) } : null,
-                            vj.eigenverbrauch_kwh && d.eigenverbrauch_kwh ? { name: 'EV', A: Math.round(d.eigenverbrauch_kwh), B: Math.round(vj.eigenverbrauch_kwh) } : null,
-                            vj.einspeisung_kwh && d.einspeisung_kwh ? { name: 'Einsp.', A: Math.round(d.einspeisung_kwh), B: Math.round(vj.einspeisung_kwh) } : null,
-                            vj.netzbezug_kwh && d.netzbezug_kwh ? { name: 'Netz', A: Math.round(d.netzbezug_kwh), B: Math.round(vj.netzbezug_kwh) } : null,
-                          ].filter(Boolean) as any[]} margin={{ top: 14, right: 5, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                            <YAxis tick={{ fontSize: 10 }} unit=" kWh" width={48} />
-                            <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
-                            <Bar dataKey="A" name={String(selectedJahr)} fill={C.pv} radius={[3,3,0,0]}>
-                              <LabelList dataKey="A" position="top" style={{ fontSize: 9 }} />
-                            </Bar>
-                            <Bar dataKey="B" name={String(selectedJahr! - 1)} fill={C.vj} radius={[3,3,0,0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
+                    )
+                  })()}
+
+                  {/* PV-Verteilung */}
+                  {d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && d.pv_erzeugung_kwh != null && d.pv_erzeugung_kwh > 0 && (() => {
+                    const total = d.pv_erzeugung_kwh!
+                    const evPct    = Math.round(d.eigenverbrauch_kwh! / total * 100)
+                    const einspPct = Math.round(d.einspeisung_kwh!    / total * 100)
+                    return (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">PV-Verteilung</p>
+                        <div className="space-y-2.5">
+                          {([
+                            { label: 'Eigenverbr.',  pct: evPct,    color: 'bg-purple-500' },
+                            { label: 'Einspeisung',  pct: einspPct, color: 'bg-emerald-500' },
+                          ]).map(({ label, pct: p, color }) => (
+                            <div key={label} className="flex items-center gap-2 text-xs">
+                              <span className="w-20 text-gray-600 dark:text-gray-400 shrink-0">{label}</span>
+                              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div className={`h-2 rounded-full ${color}`} style={{ width: `${p}%` }} />
+                              </div>
+                              <span className="w-8 text-right text-gray-700 dark:text-gray-300 font-medium tabular-nums">{p} %</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
+
                 </div>
               </div>
             </Section>
@@ -714,7 +840,7 @@ export default function MonatsabschlussView() {
 
                   return (
                     <div className="mt-3">
-                      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-700">
 
                         {/* Eine einzige Tabelle: 9 Spalten = 4 SOLL + 1 Trennlinie + 4 HABEN */}
                         {(() => {
@@ -778,53 +904,89 @@ export default function MonatsabschlussView() {
                             </>
                           }
 
+                          const thSoll = "px-4 py-2 text-left text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider bg-red-50 dark:bg-red-900/20"
+                          const thHaben = "px-4 py-2 text-left text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider bg-green-50 dark:bg-green-900/20"
+                          const sumRow = "bg-gray-100 dark:bg-gray-700/60 border-t-2 border-gray-300 dark:border-gray-600"
+
                           return (
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-600">
-                                  <th colSpan={4} className="px-4 py-2 text-left text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider bg-red-50 dark:bg-red-900/20">
-                                    SOLL — Kosten
-                                  </th>
-                                  <th className="w-0 p-0 border-l border-gray-200 dark:border-gray-700" aria-hidden="true" />
-                                  <th colSpan={4} className="px-4 py-2 text-left text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider bg-green-50 dark:bg-green-900/20">
-                                    HABEN — Erlöse + Einsparungen
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {sollRows.map((s, i) => (
-                                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
-                                    {renderCell(s, 'soll')}
-                                    <td className={tdDiv} />
-                                    {renderCell(habenRows[i], 'haben')}
+                            <>
+                              {/* ── Desktop: SOLL | HABEN nebeneinander ── */}
+                              <table className="hidden sm:table w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-gray-200 dark:border-gray-600">
+                                    <th colSpan={4} className={thSoll}>SOLL — Kosten</th>
+                                    <th className="w-0 p-0 border-l border-gray-200 dark:border-gray-700" aria-hidden="true" />
+                                    <th colSpan={4} className={thHaben}>HABEN — Erlöse + Einsparungen</th>
                                   </tr>
-                                ))}
-                                {/* Summenzeile — durchgehend in derselben Tabelle */}
-                                <tr className="bg-gray-100 dark:bg-gray-700/60 border-t-2 border-gray-300 dark:border-gray-600">
-                                  <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Soll</td>
-                                  <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">
-                                    {fmtCalc(sumSoll, 2)} €
-                                  </td>
-                                  <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-                                    {vjSumSoll != null ? `VJ: ${fmtCalc(vjSumSoll, 2)} €` : ''}
-                                  </td>
-                                  <td className="py-2 pr-4 text-right whitespace-nowrap">
-                                    {vjSumSoll != null ? <Δ a={sumSoll} b={vjSumSoll} inv /> : null}
-                                  </td>
-                                  <td className={tdDiv} />
-                                  <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Haben</td>
-                                  <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">
-                                    {fmtCalc(sumHaben, 2)} €
-                                  </td>
-                                  <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-                                    {vjSumHaben != null ? `VJ: ${fmtCalc(vjSumHaben, 2)} €` : ''}
-                                  </td>
-                                  <td className="py-2 pr-4 text-right whitespace-nowrap">
-                                    {vjSumHaben != null ? <Δ a={sumHaben} b={vjSumHaben} /> : null}
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody>
+                                  {sollRows.map((s, i) => (
+                                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                      {renderCell(s, 'soll')}
+                                      <td className={tdDiv} />
+                                      {renderCell(habenRows[i], 'haben')}
+                                    </tr>
+                                  ))}
+                                  <tr className={sumRow}>
+                                    <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Soll</td>
+                                    <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(sumSoll, 2)} €</td>
+                                    <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vjSumSoll != null ? `VJ: ${fmtCalc(vjSumSoll, 2)} €` : ''}</td>
+                                    <td className="py-2 pr-4 text-right whitespace-nowrap">{vjSumSoll != null ? <Δ a={sumSoll} b={vjSumSoll} inv /> : null}</td>
+                                    <td className={tdDiv} />
+                                    <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Haben</td>
+                                    <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(sumHaben, 2)} €</td>
+                                    <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vjSumHaben != null ? `VJ: ${fmtCalc(vjSumHaben, 2)} €` : ''}</td>
+                                    <td className="py-2 pr-4 text-right whitespace-nowrap">{vjSumHaben != null ? <Δ a={sumHaben} b={vjSumHaben} /> : null}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              {/* ── Mobile: SOLL oben, HABEN unten ── */}
+                              <div className="sm:hidden">
+                                {/* SOLL */}
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-gray-200 dark:border-gray-600">
+                                      <th colSpan={4} className={thSoll}>SOLL — Kosten</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sollRows.filter(r => r !== null).map((s, i) => (
+                                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                        {renderCell(s, 'soll')}
+                                      </tr>
+                                    ))}
+                                    <tr className={sumRow}>
+                                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Soll</td>
+                                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(sumSoll, 2)} €</td>
+                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vjSumSoll != null ? `VJ: ${fmtCalc(vjSumSoll, 2)} €` : ''}</td>
+                                      <td className="py-2 pr-4 text-right whitespace-nowrap">{vjSumSoll != null ? <Δ a={sumSoll} b={vjSumSoll} inv /> : null}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                                {/* HABEN */}
+                                <table className="w-full text-sm border-t-2 border-gray-300 dark:border-gray-600">
+                                  <thead>
+                                    <tr className="border-b border-gray-200 dark:border-gray-600">
+                                      <th colSpan={4} className={thHaben}>HABEN — Erlöse + Einsparungen</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {habenRows.filter(r => r !== null).map((h, i) => (
+                                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                        {renderCell(h, 'haben')}
+                                      </tr>
+                                    ))}
+                                    <tr className={sumRow}>
+                                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Haben</td>
+                                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(sumHaben, 2)} €</td>
+                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vjSumHaben != null ? `VJ: ${fmtCalc(vjSumHaben, 2)} €` : ''}</td>
+                                      <td className="py-2 pr-4 text-right whitespace-nowrap">{vjSumHaben != null ? <Δ a={sumHaben} b={vjSumHaben} /> : null}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
                           )
                         })()}
                       </div>
@@ -840,6 +1002,129 @@ export default function MonatsabschlussView() {
                     </div>
                   )
                 })()}
+              </Section>
+            )}
+
+            {/* ════ SEKTION 2b: Community-Vergleich ═══════════════════════ */}
+            {(monatsVergleich || !selectedAnlage?.community_hash) && (
+              <Section icon={Users} color="text-blue-400" title="Community-Vergleich"
+                summary={
+                  monatsVergleich
+                    ? <span className="text-xs text-gray-400">{monatsVergleich.anzahl_anlagen} Anlagen im {MONAT_NAMEN[selectedMonat!]} {selectedJahr}</span>
+                    : <span className="text-xs text-gray-400">Lade…</span>
+                }
+              >
+                {monatsVergleich ? (
+                  <div className="space-y-4 mt-2">
+                    {/* KPI-Vergleich */}
+                    {(() => {
+                      const rows: Array<{
+                        label: string
+                        istVal: number | null | undefined
+                        kpi: typeof monatsVergleich.autarkie
+                        unit: string
+                        inv?: boolean
+                      }> = [
+                        { label: 'Autarkie',     istVal: d?.autarkie_prozent,   kpi: monatsVergleich.autarkie,     unit: '%' },
+                        { label: 'Eigenverbr.',  istVal: d?.eigenverbrauch_kwh != null && d?.pv_erzeugung_kwh ? Math.round(d.eigenverbrauch_kwh / d.pv_erzeugung_kwh * 100) : null, kpi: monatsVergleich.eigenverbrauch, unit: '%' },
+                        { label: 'Einspeisung',  istVal: d?.einspeisung_kwh,    kpi: monatsVergleich.einspeisung,  unit: 'kWh' },
+                        { label: 'Netzbezug',    istVal: d?.netzbezug_kwh,      kpi: monatsVergleich.netzbezug,    unit: 'kWh', inv: true },
+                      ]
+                      return (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+                              <th className="text-left pb-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
+                              <th className="text-right pb-1.5 font-medium">Dein Wert</th>
+                              <th className="text-right pb-1.5 font-medium">Community-Median</th>
+                              <th className="text-right pb-1.5 font-medium"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.filter(r => r.kpi?.median != null).map(row => {
+                              const median = row.kpi!.median!
+                              const d2 = row.unit === '%' ? 0 : 0
+                              const better = row.inv
+                                ? (row.istVal ?? Infinity) <= median
+                                : (row.istVal ?? -Infinity) >= median
+                              return (
+                                <tr key={row.label} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+                                  <td className="py-1.5 text-gray-600 dark:text-gray-400">{row.label}</td>
+                                  <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
+                                    {row.istVal != null ? `${fmt(row.istVal, d2)} ${row.unit}` : '—'}
+                                  </td>
+                                  <td className="py-1.5 text-right text-gray-400 dark:text-gray-500 tabular-nums">
+                                    {fmt(median, d2)} {row.unit}
+                                  </td>
+                                  <td className="py-1.5 text-right">
+                                    {row.istVal != null && (
+                                      <span className={`text-xs font-medium px-1 py-0.5 rounded ${
+                                        better
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                      }`}>
+                                        {better ? '▲' : '▼'}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )
+                    })()}
+
+                    {/* Teilen-CTA wenn noch nicht geteilt */}
+                    {!selectedAnlage?.community_hash && (
+                      <div className="rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800/40 p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                            <Share2 className="h-4 w-4 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Wie schneidest du im Ranking ab?</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                              Teile deine Anlage anonym und sieh deinen Platz unter {monatsVergleich.anzahl_anlagen} Anlagen.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/einstellungen/community')}
+                            className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+                          >
+                            Jetzt teilen →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Basis: {monatsVergleich.anzahl_anlagen} Anlagen · {MONAT_NAMEN[selectedMonat!]} {selectedJahr}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800/40 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                        <Share2 className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Community-Vergleich freischalten</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          Teile deine Anlage anonym und vergleiche deine Werte mit anderen PV-Anlagen.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/einstellungen/community')}
+                        className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+                      >
+                        Jetzt teilen →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Section>
             )}
 
