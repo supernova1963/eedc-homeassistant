@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.11.20] - 2026-04-11
+## [3.12.0] - 2026-04-11
 
 ### Feat
 
