@@ -295,6 +295,24 @@ async def delete_from_community(
         )
 
 
+@router.get("/benchmark/monat/{jahr}/{monat}")
+async def get_monatsbenchmark(jahr: int, monat: int):
+    """Öffentlicher Community-Benchmark für einen bestimmten Monat — kein Hash nötig."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{COMMUNITY_SERVER_URL}/api/benchmark/monat/{jahr}/{monat}"
+            )
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Keine Community-Daten für diesen Monat")
+            else:
+                raise HTTPException(status_code=response.status_code, detail="Community-Server Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Community-Server nicht erreichbar: {str(e)}")
+
+
 @router.get("/benchmark/{anlage_id}")
 async def get_community_benchmark(
     anlage_id: int,

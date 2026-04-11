@@ -363,6 +363,34 @@ export interface DegradationsAnalyse {
 export type TrendPeriod = '12_monate' | '24_monate' | 'gesamt'
 
 // =============================================================================
+// Monats-Benchmark Types
+// =============================================================================
+
+export interface MonatsKPI {
+  durchschnitt: number | null
+  median: number | null
+  min: number | null
+  max: number | null
+  anzahl_anlagen: number
+}
+
+export interface MonatsVergleich {
+  jahr: number
+  monat: number
+  anzahl_anlagen: number
+  spez_ertrag: MonatsKPI | null
+  autarkie: MonatsKPI | null
+  eigenverbrauch: MonatsKPI | null
+  einspeisung: MonatsKPI | null
+  netzbezug: MonatsKPI | null
+  speicher_ladung?: MonatsKPI | null
+  speicher_entladung?: MonatsKPI | null
+  wp_stromverbrauch?: MonatsKPI | null
+  eauto_ladung?: MonatsKPI | null
+  bkw_erzeugung?: MonatsKPI | null
+}
+
+// =============================================================================
 // API Client
 // =============================================================================
 
@@ -500,5 +528,12 @@ export const communityApi = {
    */
   async getDegradation(): Promise<DegradationsAnalyse> {
     return api.get<DegradationsAnalyse>('/community/trends/degradation')
+  },
+
+  /**
+   * Öffentlicher Monats-Benchmark — kein Hash nötig
+   */
+  async getMonatsBenchmark(jahr: number, monat: number): Promise<MonatsVergleich> {
+    return api.get<MonatsVergleich>(`/community/benchmark/monat/${jahr}/${monat}`)
   },
 }
