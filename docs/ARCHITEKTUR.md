@@ -586,7 +586,7 @@ Sonstiges [Eigenständig]
 | `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** |
 | `/api/live` | live_dashboard.py, live_mqtt_inbound.py, live_wetter.py | **Live Dashboard + MQTT + Wetter** (v3.0.0, refactored v3.9.0) |
-| `/api/aktueller-monat` | aktueller_monat.py | **Aktueller Monat Dashboard** |
+| `/api/aktueller-monat` | aktueller_monat.py | **Monatsdaten-API** (genutzt von Monatsberichte-View für alle Monate inkl. laufender) |
 | `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** |
 | `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** |
 | `/api/portal-import` | portal_import.py | Portal-CSV Import (SMA, Fronius, EVCC) |
@@ -773,7 +773,8 @@ URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
 ├── /live               → LiveDashboard (Echtzeit-Leistungsdaten)
 │                         EnergieFluss (SVG), GaugeChart (SoC), Tagesverlauf
 ├── /cockpit            → Dashboard (Übersicht)
-│   ├── /aktueller-monat → AktuellerMonat (Live-Monatsdaten aus HA/Connector)
+│   ├── /aktueller-monat → Redirect → /monatsberichte (seit v3.12.0)
+│   ├── /monatsberichte → MonatsabschlussView (Zeitstrahl + laufender Monat + Historik)
 │   ├── /pv-anlage      → PVAnlageDashboard
 │   ├── /e-auto         → EAutoDashboard
 │   ├── /waermepumpe    → WaermepumpeDashboard

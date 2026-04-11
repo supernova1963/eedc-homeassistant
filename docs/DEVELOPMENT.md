@@ -320,7 +320,7 @@ eedc-homeassistant/
         │   │
         │   ├── pages/
         │   │   ├── LiveDashboard.tsx        # Echtzeit-Monitoring
-        │   │   ├── AktuellerMonat.tsx       # Laufender Monat
+        │   │   ├── AktuellerMonat.tsx       # deprecated seit v3.12.0 (noch nicht gelöscht)
         │   │   ├── Dashboard.tsx            # Cockpit
         │   │   ├── Auswertung.tsx           # Analysen (6 Tabs)
         │   │   ├── CommunityVergleich.tsx   # Community (6 Tabs)
@@ -395,7 +395,7 @@ Nach dem Start des Backends verfügbar unter:
 | Modul              | Prefix               | Beschreibung                                            |
 | ------------------ | -------------------- | ------------------------------------------------------- |
 | **Live Dashboard** | `/api/live` | Echtzeit-Daten, MQTT-Inbound, Tagesverlauf, Energiefluss |
-| **Aktueller Monat** | `/api/aktueller-monat` | Laufender Monat mit Multi-Source-Daten |
+| **Monatsdaten-API** | `/api/aktueller-monat` | Monatsdaten für alle Monate inkl. laufender (genutzt von MonatsabschlussView) |
 | **Cockpit** | `/api/cockpit` | Dashboard-Aggregation, KPIs |
 | **Aussichten** | `/api/aussichten` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
 | **Monatsdaten** | `/api/monatsdaten` | CRUD + Berechnungen |
