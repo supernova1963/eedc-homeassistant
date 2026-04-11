@@ -22,21 +22,6 @@ import { communityApi, MonatsVergleich } from '../api/community'
 import { MONAT_NAMEN } from '../lib/constants'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
-// ─── Farben ───────────────────────────────────────────────────────────────────
-const C = {
-  pv:      '#f59e0b',
-  ev:      '#8b5cf6',
-  einsp:   '#10b981',
-  netz:    '#ef4444',
-  speicher:'#3b82f6',
-  wp:      '#f97316',
-  emob:    '#a855f7',
-  erloese: '#10b981',
-  ersparnis:'#3b82f6',
-  kosten:  '#ef4444',
-  vm:      '#94a3b8',
-  vj:      '#64748b',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt  = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')

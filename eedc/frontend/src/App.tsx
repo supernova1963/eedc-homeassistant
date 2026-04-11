@@ -11,7 +11,6 @@ import SpeicherDashboard from './pages/SpeicherDashboard'
 import WallboxDashboard from './pages/WallboxDashboard'
 import BalkonkraftwerkDashboard from './pages/BalkonkraftwerkDashboard'
 import SonstigesDashboard from './pages/SonstigesDashboard'
-import AktuellerMonat from './pages/AktuellerMonat'
 import LiveDashboard from './pages/LiveDashboard'
 
 // Auswertungen
