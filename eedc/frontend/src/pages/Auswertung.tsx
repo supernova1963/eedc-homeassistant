@@ -1,7 +1,7 @@
 // Auswertung Hauptseite - Tab-Navigation
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, ArrowRight, Calendar } from 'lucide-react'
+import { Sun, ArrowRight, Calendar, FileText } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { useSelectedAnlage, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis, useStrompreise } from '../hooks'
 import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab, TabelleTab, EnergieprofilTab } from './auswertung/index'
@@ -105,7 +105,13 @@ export default function Auswertung() {
       {/* Sticky Header mit Filter */}
       <div className="sticky -top-3 sm:-top-6 z-10 bg-gray-50 dark:bg-gray-900 pb-4 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-3 sm:pt-6">
         <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auswertung</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auswertung</h1>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/cockpit/monatsberichte')}>
+              <FileText className="h-4 w-4 mr-1.5" />
+              Monatsberichte
+            </Button>
+          </div>
           <div className="flex items-center gap-3">
             {/* Jahr-Filter - für alle Tabs */}
             <div className="flex items-center gap-2">
