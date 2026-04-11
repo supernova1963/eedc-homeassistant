@@ -12,6 +12,18 @@ export interface DatenquelleInfo {
   zeitpunkt: string | null
 }
 
+export interface InvestitionFinancialDetail {
+  investition_id: number
+  bezeichnung: string
+  typ: string
+  betriebskosten_monat_euro: number
+  erloes_euro: number | null
+  ersparnis_euro: number | null
+  ersparnis_label: string
+  formel: string | null
+  berechnung: string | null
+}
+
 export interface AktuellerMonatResponse {
   anlage_id: number
   anlage_name: string
@@ -107,6 +119,9 @@ export interface AktuellerMonatResponse {
     netzbezug_durchschnittspreis_cent?: number
   } | null
   soll_pv_kwh: number | null
+
+  // Per-Investition Finanzdetails (T-Konto)
+  investitionen_financials: InvestitionFinancialDetail[]
 
   // Quellenangabe pro Feld
   feld_quellen: Record<string, DatenquelleInfo>

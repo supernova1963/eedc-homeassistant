@@ -533,9 +533,6 @@ export default function MonatsabschlussView() {
                 {/* ── T-Konto ───────────────────────────────────────────── */}
                 {(() => {
                   const netzPreis = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent
-                  const sumErloese = (d.einspeise_erloes_euro ?? 0)
-                  const sumEinsparungen = (d.ev_ersparnis_euro ?? 0) + (d.wp_ersparnis_euro ?? 0) + (d.emob_ersparnis_euro ?? 0)
-                  const sumKosten = (d.netzbezug_kosten_euro ?? 0) + (d.betriebskosten_anteilig_euro ?? 0) + (sonderkosten ?? 0)
 
                   // ── T-Konto Datenstruktur ──────────────────────────────
                   type TKontoPosten = {
@@ -548,9 +545,36 @@ export default function MonatsabschlussView() {
                     color: string
                   }
 
+                  // Farbe je Investitionstyp
+                  const typColor = (typ: string) => {
+                    switch (typ) {
+                      case 'balkonkraftwerk': return 'text-blue-500 dark:text-blue-300'
+                      case 'speicher':        return 'text-blue-600 dark:text-blue-400'
+                      case 'waermepumpe':     return 'text-orange-500'
+                      case 'e-auto':
+                      case 'wallbox':         return 'text-purple-500'
+                      case 'sonstiges':       return 'text-teal-600 dark:text-teal-400'
+                      default:                return 'text-blue-600 dark:text-blue-400'
+                    }
+                  }
+
+                  const fins = d.investitionen_financials ?? []
+                  const hasPerInv = fins.length > 0
+
+                  // Welche Komponenten-Ersparnisse stecken in ev_ersparnis (BKW + Speicher)
+                  const evInErsparnis = hasPerInv
+                    ? fins
+                        .filter(inv => inv.typ === 'balkonkraftwerk' || inv.typ === 'speicher')
+                        .reduce((s, inv) => s + (inv.ersparnis_euro ?? 0), 0)
+                    : 0
+                  const pvEvResidual = Math.max(0, (d.ev_ersparnis_euro ?? 0) - evInErsparnis)
+
+                  const preisBez = d.netzbezug_durchschnittspreis_cent != null ? 'Ø-Preis flex' : 'Netzbezugspreis'
+
                   const habenPosten: TKontoPosten[] = [
+                    // ── Einspeise-Erlöse (immer) ──
                     {
-                      label: `Einspeise-Erlöse`,
+                      label: 'Einspeise-Erlöse',
                       wert: d.einspeise_erloes_euro ?? 0,
                       vjWert: vj?.einspeise_erloes_euro,
                       color: 'text-green-600 dark:text-green-400',
@@ -560,36 +584,68 @@ export default function MonatsabschlussView() {
                         : undefined,
                       ergebnis: `= ${fmtCalc(d.einspeise_erloes_euro, 2)} €`,
                     },
-                    {
-                      label: `EV-Ersparnis${d.hat_balkonkraftwerk ? ' (inkl. BKW)' : ''}`,
+                    // ── PV-Eigenverbrauch ──
+                    // Mit per-Inv-Daten: Residual (ohne BKW/Speicher die separat gezeigt werden)
+                    // Ohne per-Inv-Daten: Gesamtwert inkl. VJ-Vergleich
+                    ...(hasPerInv && pvEvResidual > 0 ? [{
+                      label: 'PV-Eigenverbrauch-Ersparnis',
+                      wert: pvEvResidual,
+                      vjWert: undefined as number | null | undefined,
+                      color: 'text-blue-600 dark:text-blue-400',
+                      formel: `PV-Eigenverbrauch × ${preisBez}`,
+                      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null
+                        ? `${fmt(d.eigenverbrauch_kwh - evInErsparnis / (netzPreis / 100), 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`
+                        : undefined,
+                      ergebnis: `= ${fmtCalc(pvEvResidual, 2)} €`,
+                    } as TKontoPosten] : !hasPerInv ? [{
+                      label: 'Eigenverbrauch-Ersparnis',
                       wert: d.ev_ersparnis_euro ?? 0,
                       vjWert: vj?.ev_ersparnis_euro,
                       color: 'text-blue-600 dark:text-blue-400',
-                      formel: `Eigenverbrauch${d.hat_balkonkraftwerk ? ' (inkl. BKW)' : ''} × ${netzPreis != null ? (d.netzbezug_durchschnittspreis_cent != null ? 'Ø-Preis flex' : 'Netzbezugspreis') : 'Netzbezugspreis'}`,
-                      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null ? [
-                        `${fmt(d.eigenverbrauch_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`,
-                        d.hat_balkonkraftwerk && d.bkw_erzeugung_kwh != null
-                          ? `(BKW ${fmt(d.bkw_eigenverbrauch_kwh ?? d.bkw_erzeugung_kwh, 1)} kWh enthalten)` : null,
-                        d.netzbezug_durchschnittspreis_cent != null
-                          ? `Ø-Preis flex: ${fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh` : null,
-                      ].filter(Boolean).join('\n') : undefined,
+                      formel: `Eigenverbrauch × ${preisBez}`,
+                      berechnung: d.eigenverbrauch_kwh != null && netzPreis != null
+                        ? `${fmt(d.eigenverbrauch_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct/kWh`
+                        : undefined,
                       ergebnis: `= ${fmtCalc(d.ev_ersparnis_euro, 2)} €`,
-                    },
-                    ...(d.wp_ersparnis_euro != null ? [{
+                    } as TKontoPosten] : []),
+                    // ── Per-Investition: BKW, Speicher, WP, eMob, Sonstiges ──
+                    ...fins.flatMap((inv): TKontoPosten[] => {
+                      const rows: TKontoPosten[] = []
+                      if (inv.erloes_euro != null && inv.erloes_euro > 0) {
+                        rows.push({
+                          label: `${inv.bezeichnung} — Einspeisung`,
+                          wert: inv.erloes_euro,
+                          color: 'text-green-600 dark:text-green-400',
+                          formel: 'Einspeisung × Einspeisevergütung',
+                          ergebnis: `= ${fmtCalc(inv.erloes_euro, 2)} €`,
+                        })
+                      }
+                      if (inv.ersparnis_euro != null) {
+                        rows.push({
+                          label: `${inv.bezeichnung} — ${inv.ersparnis_label || 'Ersparnis'}`,
+                          wert: inv.ersparnis_euro,
+                          color: typColor(inv.typ),
+                          formel: inv.formel ?? undefined,
+                          berechnung: inv.berechnung ?? undefined,
+                          ergebnis: `= ${fmtCalc(inv.ersparnis_euro, 2)} €`,
+                        })
+                      }
+                      return rows
+                    }),
+                    // ── Fallback: WP/eMob-Aggregate wenn kein per-Inv-Daten ──
+                    ...(!hasPerInv && d.wp_ersparnis_euro != null ? [{
                       label: 'WP-Ersparnis vs. Gas',
                       wert: d.wp_ersparnis_euro,
-                      vjWert: undefined,
                       color: 'text-orange-500',
                       formel: '(Wärme ÷ 0,9 × Gaspreis) − Strom × WP-Strompreis',
                       berechnung: d.wp_waerme_kwh != null && d.wp_strom_kwh != null
                         ? `${fmt(d.wp_waerme_kwh, 1)} kWh / 0,9 × 10 ct − ${fmt(d.wp_strom_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct`
                         : undefined,
                       ergebnis: `= ${fmtCalc(d.wp_ersparnis_euro, 2)} €`,
-                    }] : []),
-                    ...(d.emob_ersparnis_euro != null ? [{
+                    } as TKontoPosten] : []),
+                    ...(!hasPerInv && d.emob_ersparnis_euro != null ? [{
                       label: 'eMob-Ersparnis vs. Verbrenner',
                       wert: d.emob_ersparnis_euro,
-                      vjWert: undefined,
                       color: 'text-purple-500',
                       formel: '(km × 7 L/100km × 1,80 €/L) − Netzladung × Strompreis',
                       berechnung: d.emob_km != null ? [
@@ -600,7 +656,7 @@ export default function MonatsabschlussView() {
                         d.emob_ladung_pv_kwh != null ? `(PV ${fmt(d.emob_ladung_pv_kwh, 1)} kWh kostenlos)` : null,
                       ].filter(Boolean).join('\n') : undefined,
                       ergebnis: `= ${fmtCalc(d.emob_ersparnis_euro, 2)} €`,
-                    }] : []),
+                    } as TKontoPosten] : []),
                   ]
 
                   const sollPosten: TKontoPosten[] = [
@@ -616,92 +672,41 @@ export default function MonatsabschlussView() {
                       ].filter(Boolean).join('\n') : undefined,
                       ergebnis: `= ${fmtCalc(d.netzbezug_kosten_euro, 2)} €`,
                     },
-                    ...((d.betriebskosten_anteilig_euro ?? 0) > 0 ? [{
-                      label: 'Betriebskosten (anteilig)',
-                      wert: d.betriebskosten_anteilig_euro!,
-                      vjWert: undefined,
-                      color: 'text-amber-600',
-                      formel: 'Σ (Betriebskosten/Jahr ÷ 12) aller aktiven Investitionen',
-                      ergebnis: `= ${fmtCalc(d.betriebskosten_anteilig_euro, 2)} €`,
-                    }] : []),
+                    // ── Betriebskosten: per Investition wenn Daten da, sonst Aggregat ──
+                    ...(hasPerInv
+                      ? fins
+                          .filter(inv => inv.betriebskosten_monat_euro > 0)
+                          .map(inv => ({
+                            label: `${inv.bezeichnung} — Betriebskosten`,
+                            wert: inv.betriebskosten_monat_euro,
+                            color: 'text-amber-600',
+                            formel: 'Betriebskosten/Jahr ÷ 12',
+                            ergebnis: `= ${fmtCalc(inv.betriebskosten_monat_euro, 2)} €`,
+                          } as TKontoPosten))
+                      : (d.betriebskosten_anteilig_euro ?? 0) > 0 ? [{
+                          label: 'Betriebskosten (anteilig)',
+                          wert: d.betriebskosten_anteilig_euro!,
+                          color: 'text-amber-600',
+                          formel: 'Σ (Betriebskosten/Jahr ÷ 12) aller aktiven Investitionen',
+                          ergebnis: `= ${fmtCalc(d.betriebskosten_anteilig_euro, 2)} €`,
+                        } as TKontoPosten] : []
+                    ),
                     ...((sonderkosten ?? 0) > 0 ? [{
                       label: 'Sonderkosten',
                       wert: sonderkosten!,
-                      vjWert: undefined,
                       color: 'text-red-500',
-                    }] : []),
+                    } as TKontoPosten] : []),
                   ]
 
-                  const gewinnSeite = nettoNachAllem != null && nettoNachAllem >= 0 ? 'soll' : 'haben'
-                  const sumSoll  = sumKosten + Math.max(0,  nettoNachAllem ?? 0)
-                  const sumHaben = sumErloese + sumEinsparungen + Math.max(0, -(nettoNachAllem ?? 0))
+                  // Summen aus tatsächlich angezeigten Zeilen berechnen
+                  const rawSoll  = sollPosten.reduce((s, p) => s + p.wert, 0)
+                  const rawHaben = habenPosten.reduce((s, p) => s + p.wert, 0)
+                  const nettoT   = rawHaben - rawSoll   // T-Konto-Gewinn aus Zeilen
+                  const gewinnSeite = nettoT >= 0 ? 'soll' : 'haben'
+                  const sumSoll  = rawSoll  + Math.max(0,  nettoT)
+                  const sumHaben = rawHaben + Math.max(0, -nettoT)
 
-                  // Eine Tabellenzeile: Label [ⓘ] | Betrag | VJ-Betrag | Δ%
-                  // FormelTooltip nur auf Label-Zelle — nie auf <tr> (bricht Tabellenstruktur)
-                  const TRow = ({ p, seite }: { p: TKontoPosten; seite: 'soll' | 'haben' }) => (
-                    <tr className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                      <td className="py-2 pl-4 pr-2 text-gray-700 dark:text-gray-300">
-                        {p.formel
-                          ? <FormelTooltip formel={p.formel} berechnung={p.berechnung} ergebnis={p.ergebnis}>{p.label}</FormelTooltip>
-                          : p.label
-                        }
-                      </td>
-                      <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-semibold ${p.color}`}>
-                        {fmtCalc(p.wert, 2)} €
-                      </td>
-                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-                        {p.vjWert != null ? `VJ: ${fmtCalc(p.vjWert, 2)} €` : ''}
-                      </td>
-                      <td className="py-2 pr-4 text-right whitespace-nowrap">
-                        {p.vjWert != null ? <Δ a={p.wert} b={p.vjWert} inv={seite === 'soll'} /> : null}
-                      </td>
-                    </tr>
-                  )
 
-                  // Leerzeile
-                  const TEmpty = () => (
-                    <tr><td colSpan={4} className="py-1" /></tr>
-                  )
-
-                  // Gewinn/Verlust-Zeile
-                  const TErgebnis = ({ seite }: { seite: 'soll' | 'haben' }) => {
-                    if (nettoNachAllem == null) return null
-                    const isGewinn = seite === 'soll'
-                    return (
-                      <tr className="border-b border-gray-200 dark:border-gray-600">
-                        <td className="py-2 pl-4 pr-2 font-bold text-gray-900 dark:text-white">
-                          {isGewinn ? 'Gewinn' : 'Verlust'}
-                        </td>
-                        <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold ${isGewinn ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {fmtCalc(Math.abs(nettoNachAllem), 2)} €
-                        </td>
-                        <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-                          {vj?.gesamtnettoertrag_euro != null ? `VJ: ${fmtCalc(vj.gesamtnettoertrag_euro, 2)} €` : ''}
-                        </td>
-                        <td className="py-2 pr-4 text-right whitespace-nowrap">
-                          {vj?.gesamtnettoertrag_euro != null ? <Δ a={nettoNachAllem} b={vj.gesamtnettoertrag_euro} /> : null}
-                        </td>
-                      </tr>
-                    )
-                  }
-
-                  // Summenzeile
-                  const TSumme = ({ label, summe, vjSumme, inv = false }: {
-                    label: string; summe: number; vjSumme?: number | null; inv?: boolean
-                  }) => (
-                    <tr className="bg-gray-100 dark:bg-gray-700/60">
-                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">{label}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">
-                        {fmtCalc(summe, 2)} €
-                      </td>
-                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-                        {vjSumme != null ? `VJ: ${fmtCalc(vjSumme, 2)} €` : ''}
-                      </td>
-                      <td className="py-2 pr-4 text-right whitespace-nowrap">
-                        {vjSumme != null ? <Δ a={summe} b={vjSumme} inv={inv} /> : null}
-                      </td>
-                    </tr>
-                  )
 
                   // VJ-Summen
                   const vjSumSoll  = vj?.netzbezug_kosten_euro != null ? (vj.netzbezug_kosten_euro + Math.max(0, vj.gesamtnettoertrag_euro ?? 0)) : null
@@ -711,47 +716,117 @@ export default function MonatsabschlussView() {
                     <div className="mt-3">
                       <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
 
-                        {/* Header */}
-                        <div className="grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-600 border-b border-gray-200 dark:border-gray-600">
-                          <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20">
-                            <span className="text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">SOLL — Kosten</span>
-                          </div>
-                          <div className="px-4 py-2 bg-green-50 dark:bg-green-900/20">
-                            <span className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider">HABEN — Erlöse + Einsparungen</span>
-                          </div>
-                        </div>
+                        {/* Eine einzige Tabelle: 9 Spalten = 4 SOLL + 1 Trennlinie + 4 HABEN */}
+                        {(() => {
+                          const maxRows = Math.max(
+                            sollPosten.length + 1 + (gewinnSeite === 'soll' ? 1 : 0),
+                            habenPosten.length + 1 + (gewinnSeite === 'haben' ? 1 : 0),
+                          )
+                          // SOLL-Zeilen: Posten + Leerzeile + ggf. Gewinn
+                          const sollRows: (TKontoPosten | null | 'empty' | 'ergebnis')[] = [
+                            ...sollPosten,
+                            'empty',
+                            ...(gewinnSeite === 'soll' ? ['ergebnis' as const] : []),
+                          ]
+                          const habenRows: (TKontoPosten | null | 'empty' | 'ergebnis')[] = [
+                            ...habenPosten,
+                            'empty',
+                            ...(gewinnSeite === 'haben' ? ['ergebnis' as const] : []),
+                          ]
+                          // Auf gleiche Länge auffüllen
+                          while (sollRows.length < maxRows) sollRows.push(null)
+                          while (habenRows.length < maxRows) habenRows.push(null)
 
-                        {/* Inhalt: zwei unabhängige Tabellen nebeneinander */}
-                        <div className="grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-600">
-                          <table className="w-full text-sm">
-                            <tbody>
-                              {sollPosten.map((p, i) => <TRow key={i} p={p} seite="soll" />)}
-                              <TEmpty />
-                              {gewinnSeite === 'soll' && <TErgebnis seite="soll" />}
-                            </tbody>
-                          </table>
-                          <table className="w-full text-sm">
-                            <tbody>
-                              {habenPosten.map((p, i) => <TRow key={i} p={p} seite="haben" />)}
-                              <TEmpty />
-                              {gewinnSeite === 'haben' && <TErgebnis seite="haben" />}
-                            </tbody>
-                          </table>
-                        </div>
+                          const tdDiv = 'w-0 p-0 border-l border-gray-200 dark:border-gray-700'
 
-                        {/* Summenzeile — gemeinsam, immer auf gleicher Höhe */}
-                        <div className="grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-600 border-t-2 border-gray-300 dark:border-gray-600">
-                          <table className="w-full text-sm">
-                            <tbody>
-                              <TSumme label="Σ Soll" summe={sumSoll} vjSumme={vjSumSoll} inv />
-                            </tbody>
-                          </table>
-                          <table className="w-full text-sm">
-                            <tbody>
-                              <TSumme label="Σ Haben" summe={sumHaben} vjSumme={vjSumHaben} />
-                            </tbody>
-                          </table>
-                        </div>
+                          const renderCell = (item: TKontoPosten | null | 'empty' | 'ergebnis', seite: 'soll' | 'haben') => {
+                            if (item === null) return <><td /><td /><td /><td /></>
+                            if (item === 'empty') return <><td className="py-1" colSpan={4} /></>
+                            if (item === 'ergebnis') {
+                              const isGewinn = seite === 'soll'
+                              return <>
+                                <td className="py-2 pl-4 pr-2 font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-600">
+                                  {isGewinn ? 'Gewinn' : 'Verlust'}
+                                </td>
+                                <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold border-b border-gray-200 dark:border-gray-600 ${isGewinn ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                  {fmtCalc(Math.abs(nettoT), 2)} €
+                                </td>
+                                <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-600">
+                                  {vj?.gesamtnettoertrag_euro != null ? `VJ: ${fmtCalc(vj.gesamtnettoertrag_euro, 2)} €` : ''}
+                                </td>
+                                <td className="py-2 pr-4 text-right whitespace-nowrap border-b border-gray-200 dark:border-gray-600">
+                                  {vj?.gesamtnettoertrag_euro != null ? <Δ a={nettoT} b={vj.gesamtnettoertrag_euro} /> : null}
+                                </td>
+                              </>
+                            }
+                            // Normaler Posten
+                            return <>
+                              <td className="py-2 pl-4 pr-2 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700/50">
+                                {item.formel
+                                  ? <FormelTooltip formel={item.formel} berechnung={item.berechnung} ergebnis={item.ergebnis}>{item.label}</FormelTooltip>
+                                  : item.label}
+                              </td>
+                              <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-semibold border-b border-gray-100 dark:border-gray-700/50 ${item.color}`}>
+                                {fmtCalc(item.wert, 2)} €
+                              </td>
+                              <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/50">
+                                {item.vjWert != null ? `VJ: ${fmtCalc(item.vjWert, 2)} €` : ''}
+                              </td>
+                              <td className="py-2 pr-4 text-right whitespace-nowrap border-b border-gray-100 dark:border-gray-700/50">
+                                {item.vjWert != null ? <Δ a={item.wert} b={item.vjWert} inv={seite === 'soll'} /> : null}
+                              </td>
+                            </>
+                          }
+
+                          return (
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-gray-200 dark:border-gray-600">
+                                  <th colSpan={4} className="px-4 py-2 text-left text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider bg-red-50 dark:bg-red-900/20">
+                                    SOLL — Kosten
+                                  </th>
+                                  <th className="w-0 p-0 border-l border-gray-200 dark:border-gray-700" aria-hidden="true" />
+                                  <th colSpan={4} className="px-4 py-2 text-left text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider bg-green-50 dark:bg-green-900/20">
+                                    HABEN — Erlöse + Einsparungen
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sollRows.map((s, i) => (
+                                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                    {renderCell(s, 'soll')}
+                                    <td className={tdDiv} />
+                                    {renderCell(habenRows[i], 'haben')}
+                                  </tr>
+                                ))}
+                                {/* Summenzeile — durchgehend in derselben Tabelle */}
+                                <tr className="bg-gray-100 dark:bg-gray-700/60 border-t-2 border-gray-300 dark:border-gray-600">
+                                  <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Soll</td>
+                                  <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">
+                                    {fmtCalc(sumSoll, 2)} €
+                                  </td>
+                                  <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                                    {vjSumSoll != null ? `VJ: ${fmtCalc(vjSumSoll, 2)} €` : ''}
+                                  </td>
+                                  <td className="py-2 pr-4 text-right whitespace-nowrap">
+                                    {vjSumSoll != null ? <Δ a={sumSoll} b={vjSumSoll} inv /> : null}
+                                  </td>
+                                  <td className={tdDiv} />
+                                  <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Haben</td>
+                                  <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">
+                                    {fmtCalc(sumHaben, 2)} €
+                                  </td>
+                                  <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                                    {vjSumHaben != null ? `VJ: ${fmtCalc(vjSumHaben, 2)} €` : ''}
+                                  </td>
+                                  <td className="py-2 pr-4 text-right whitespace-nowrap">
+                                    {vjSumHaben != null ? <Δ a={sumHaben} b={vjSumHaben} /> : null}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          )
+                        })()}
                       </div>
 
                       {/* Tarif-Info */}
