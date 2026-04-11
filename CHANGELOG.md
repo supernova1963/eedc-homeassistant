@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.11.20] - 2026-04-11
+
+### Feat
+
+- **Monatsberichte ersetzt "Aktueller Monat"**: Laufender Monat erscheint jetzt direkt im Zeitstrahl (grüner Pulse-Dot). Route `/cockpit/aktueller-monat` redirectet auf Monatsberichte. Refresh-Button und "Abschluss starten"-CTA (nur wenn Vergangenheitsmonate offen) im Titelbereich.
+- **Energie-Bilanz Redesign**: Vergleichstabelle mit neuem "Ø [Monatsname]"-Vergleich (z.B. alle März-Monate) statt sinnlosen Gesamt-Ø/Max/Min. SOLL/IST-Block mit großer Prozentanzeige, Fortschrittsbalken und Ampelfarben. PV-Verteilung als kompakte Horizontal-Balken statt großem Donut-Chart.
+- **Community-Vergleich**: Neue Sektion zeigt Autarkie, EV-Quote, Einspeisung und Netzbezug gegen den Community-Median des gewählten Monats (▲/▼). Prominente Teilen-Aufforderung wenn Anlage noch nicht geteilt.
+- **Mobile T-Konto**: SOLL und HABEN werden auf kleinen Screens untereinander dargestellt.
+- **Mobile Vergleichstabelle**: Zahlenwerte ausgeblendet, nur Δ-Badge mit Tooltip sichtbar.
+
 ## [3.11.19] - 2026-04-10
 
 ### Fix
