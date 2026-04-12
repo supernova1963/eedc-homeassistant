@@ -482,9 +482,25 @@ async def vollbackfill(
         if not all_eids:
             raise HTTPException(status_code=400, detail="Keine Live-Sensoren konfiguriert")
 
+        # Nur Sensoren verwenden die tatsächlich in HA statistics_meta existieren
         import asyncio
+        valid_eids, missing_eids = await asyncio.to_thread(ha_service.filter_valid_sensor_ids, all_eids)
+        if missing_eids:
+            logger.warning(
+                f"Anlage {anlage_id}: {len(missing_eids)} Sensor(en) nicht in HA statistics_meta "
+                f"gefunden, werden ignoriert: {missing_eids}"
+            )
+        if not valid_eids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Keiner der konfigurierten Live-Sensoren wurde in der HA-Datenbank gefunden: "
+                    f"{all_eids}. Bitte Sensor-Zuordnung im Wizard prüfen und veraltete Sensoren entfernen."
+                )
+            )
+
         try:
-            verfuegbar = await asyncio.to_thread(ha_service.get_verfuegbare_monate, all_eids)
+            verfuegbar = await asyncio.to_thread(ha_service.get_verfuegbare_monate, valid_eids)
             von = verfuegbar.erstes_datum
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Konnte frühestes Datum nicht ermitteln: {e}")
