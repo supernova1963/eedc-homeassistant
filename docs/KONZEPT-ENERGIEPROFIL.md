@@ -13,6 +13,139 @@ identifiziert, die eine Revision von Etappe 1 notwendig machen, **bevor** mit Et
 
 ---
 
+## Implementierungsstand (Stand v3.12.0)
+
+| Etappe | Inhalt | Status |
+|---|---|---|
+| **Etappe 1** | Datenbestand aufbauen (Revision + Scheduler) | ✅ v3.1.x / v3.9.0 |
+| **Etappe 2** | Tagesdetail + Wochenvergleich | ✅ v3.11.0 |
+| **Backfill** | Vollbackfill aus HA Long-Term Statistics | ✅ v3.12.x (heute) |
+| **Etappe 3** | Monatsauswertung (Heatmap, PR-Trend, Batterie-Zyklen) | ⏳ nächster Sprint |
+| **Etappe 4** | Saisonale Muster | ⏳ später |
+
+---
+
+## Datenquellen und Aggregations-Hierarchie
+
+### Level 0 — Rohdaten (Quellen)
+
+Es gibt vier voneinander unabhängige Datenquellen. Welche genutzt werden kann, hängt von der Systemkonfiguration ab:
+
+```
+┌─────────────────────────────────┬────────────────────────────────────────────────────────────────┐
+│ Quelle                          │ Beschreibung                                                   │
+├─────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+│ HA Sensor History               │ Rohe Zustandswerte aus HA Recorder (W/kW-Sensoren).            │
+│ (ha_state_service)              │ Verfügbarkeit: ~10 Tage (HA-Recorder-Retention).               │
+│                                 │ Auflösung: jede Zustandsänderung (Sekunden bis Minuten).       │
+│                                 │ Nur verfügbar: HA-Add-on-Umgebung                              │
+├─────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+│ HA Long-Term Statistics         │ Stündliche Mittelwerte (mean) aus HA statistics-Tabelle.       │
+│ (ha_statistics_service)         │ Verfügbarkeit: gesamte HA-History (Jahre).                     │
+│                                 │ Auflösung: 1 Stunde (mean-Wert je Stunde).                     │
+│                                 │ Nur verfügbar: HA-Add-on + sensors mit has_mean=True           │
+│                                 │ kWh-Zähler (has_sum) werden für Profile NICHT genutzt          │
+├─────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+│ MQTT Snapshots                  │ Periodische Leistungs-Snapshots (alle 5 Min) aus MQTT-Inbound. │
+│ (mqtt_live_history_service)     │ Verfügbarkeit: solange gespeichert (konfigurierbar).           │
+│                                 │ Auflösung: 5 Minuten.                                          │
+│                                 │ Standalone-Fallback: wenn kein HA verfügbar                    │
+├─────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+│ Open-Meteo Archive API          │ Historische Wetter-IST-Daten (temperature_2m,                  │
+│ (archive-api.open-meteo.com)    │ shortwave_radiation). Verfügbar für beliebige Vergangenheit.   │
+│                                 │ Wird für alle Tage außer heute genutzt.                        │
+├─────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+│ Open-Meteo Forecast API         │ Wetter-Prognose für den heutigen Tag.                          │
+│ (api.open-meteo.com)            │ Wird durch Archive-Daten ersetzt sobald Tag abgeschlossen.     │
+└─────────────────────────────────┴────────────────────────────────────────────────────────────────┘
+```
+
+### Level 1 — TagesEnergieProfil (24 Zeilen / Tag / Anlage)
+
+**Was:** Stündlich aggregierte Leistungswerte. Eine Zeile pro Stunde (0–23), pro Tag, pro Anlage.
+
+**Woher kommen die Daten (Quellen-Auswahl):**
+
+```
+Schreibzeitpunkt          Energiedaten-Quelle              Wetter-Quelle
+─────────────────────────────────────────────────────────────────────────────────────
+Rollierend (15 Min)       HA Sensor History (heute)        Open-Meteo Forecast
+                           oder MQTT Snapshots (Standalone)
+─────────────────────────────────────────────────────────────────────────────────────
+Täglich 00:15             HA Sensor History (gestern)      Open-Meteo Archive
+                           oder MQTT Snapshots (Standalone)
+─────────────────────────────────────────────────────────────────────────────────────
+Monatsabschluss           HA Sensor History (bis ~10 Tage) Open-Meteo Archive
+(backfill_range)           → nur innerhalb Recorder-Fenster
+─────────────────────────────────────────────────────────────────────────────────────
+Vollbackfill              HA Long-Term Statistics (years)  Open-Meteo Archive
+(backfill_from_statistics) → beliebig weit zurück
+                           → keine MQTT-Entsprechung
+─────────────────────────────────────────────────────────────────────────────────────
+```
+
+**Verdichtung zur nächsten Ebene (Level 2):**
+
+Alle 24 Stunden-Zeilen eines Tages werden zu einer `TagesZusammenfassung`-Zeile aggregiert:
+
+```
+TagesEnergieProfil (24×)          →    TagesZusammenfassung (1×)
+──────────────────────────────────────────────────────────────────
+pv_kw (24 Stundenwerte)           →    peak_pv_kw = MAX(pv_kw)
+                                        (kWh via Summe, in Monatsdaten)
+netzbezug_kw (24 Stundenwerte)    →    peak_netzbezug_kw = MAX(netzbezug_kw)
+einspeisung_kw (24 Stundenwerte)  →    peak_einspeisung_kw = MAX(einspeisung_kw)
+ueberschuss_kw (24 Stundenwerte)  →    ueberschuss_kwh = SUM(ueberschuss_kw) × 1h
+defizit_kw (24 Stundenwerte)      →    defizit_kwh = SUM(defizit_kw) × 1h
+soc_prozent (24 Stundenwerte)     →    batterie_vollzyklen = ΔSOC-Summe / 200 %
+                                        (ein Vollzyklus = 200 % Δ)
+globalstrahlung_wm2 (24×)        →    strahlung_summe_wh_m2 = SUM × 1h
+temperatur_c (24 Stundenwerte)    →    temperatur_min_c, temperatur_max_c
+pv_kw + globalstrahlung_wm2      →    performance_ratio = ΣPV / (Σstrahlung × kWp / 1000)
+stunden_verfuegbar                →    stunden_verfuegbar = COUNT(Zeilen mit Daten)
+komponenten (24 JSON-Dicts)       →    komponenten_kwh = SUM je Key × 1h
+```
+
+**Retention:** 2 Jahre (Cleanup täglich um 00:15). `TagesZusammenfassung` bleibt dauerhaft.
+
+### Level 2 — TagesZusammenfassung (1 Zeile / Tag / Anlage)
+
+**Was:** Tageskennzahlen, dauerhaft gespeichert. Basis für Etappe 3 (Monatsauswertung).
+
+**Verdichtung zur nächsten Ebene (Level 3, via `rollup_month()`):**
+
+```
+TagesZusammenfassung (N Tage eines Monats)    →    Monatsdaten-Felder
+──────────────────────────────────────────────────────────────────────
+ueberschuss_kwh (alle Tage)       →    Monatsdaten.ueberschuss_kwh = SUM
+defizit_kwh (alle Tage)           →    Monatsdaten.defizit_kwh = SUM
+batterie_vollzyklen (alle Tage)   →    Monatsdaten.batterie_vollzyklen = SUM
+performance_ratio (alle Tage)     →    Monatsdaten.performance_ratio = Ø (Mittelwert)
+peak_netzbezug_kw (alle Tage)     →    Monatsdaten.peak_netzbezug_kw = MAX
+```
+
+**Trigger für rollup_month():** Am Ende des Monatsabschlusses (nach `save_monatsabschluss()`).
+
+### Level 3 — Monatsdaten (1 Zeile / Monat / Anlage)
+
+**Was:** Monatskennzahlen aus Energieprofil-Rollup (zusätzlich zu den Zählerwerten aus HA Statistics / Portal-Import / manueller Eingabe).
+
+**Achtung:** `Monatsdaten` enthält zwei verschiedene Daten-Ebenen:
+- **Zählerwerte** (pv_erzeugung_kwh, netzbezug_kwh etc.) → aus Monatsabschluss-Import (HA Statistics / Portal-Import / manuell)
+- **Energieprofil-Rollup** (ueberschuss_kwh, performance_ratio etc.) → aus `rollup_month()` / TagesZusammenfassung
+
+### Zusammenfassung Datenfluss
+
+```
+HA Sensor History (~10 Tage)  ──┐
+HA Long-Term Statistics (Jahre) ──┤
+MQTT Snapshots (Standalone)    ──┤──→ TagesEnergieProfil ──→ TagesZusammenfassung ──→ Monatsdaten
+Open-Meteo Archive (Wetter)    ──┘    (24 Zeilen/Tag)        (1 Zeile/Tag)            (Rollup-Felder)
+                                       2 Jahre Retention       dauerhaft
+```
+
+---
+
 ## Ziele des Energieprofils
 
 ### Primäres Ziel: Personalisierte IST-Prognosen

@@ -2,6 +2,7 @@
  * MappingSummaryStep - Zusammenfassung des Sensor-Mappings
  */
 
+import { useState } from 'react'
 import {
   CheckCircle,
   Wifi,
@@ -16,8 +17,11 @@ import {
   Car,
   Activity,
   AlertTriangle,
+  History,
+  Loader2,
 } from 'lucide-react'
 import type { FeldMapping, InvestitionInfo, StrategieTyp } from '../../api/sensorMapping'
+import { energieProfilApi, type VollbackfillResult } from '../../api/energie_profil'
 
 interface MappingSummaryStepProps {
   state: {
@@ -33,6 +37,7 @@ interface MappingSummaryStepProps {
     investitionenLiveInvert: Record<string, Record<string, boolean>>
   }
   investitionen: InvestitionInfo[]
+  anlageId?: number | null
 }
 
 const STRATEGIE_ICONS: Record<StrategieTyp, React.ReactNode> = {
@@ -132,7 +137,26 @@ function LiveSensorRow({ label, entityId, inverted }: { label: string; entityId:
 export default function MappingSummaryStep({
   state,
   investitionen,
+  anlageId,
 }: MappingSummaryStepProps) {
+  const [isBackfilling, setIsBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<VollbackfillResult | null>(null)
+  const [backfillError, setBackfillError] = useState<string | null>(null)
+
+  const handleVollbackfill = async () => {
+    if (!anlageId) return
+    setIsBackfilling(true)
+    setBackfillError(null)
+    setBackfillResult(null)
+    try {
+      const result = await energieProfilApi.vollbackfill(anlageId)
+      setBackfillResult(result)
+    } catch (e) {
+      setBackfillError(e instanceof Error ? e.message : 'Fehler beim Backfill')
+    } finally {
+      setIsBackfilling(false)
+    }
+  }
   // Statistiken berechnen
   const stats = {
     sensor: 0,
@@ -264,6 +288,39 @@ export default function MappingSummaryStep({
       )}
 
       {/* Investitionen */}
+      {/* Energieprofil-Verlauf nachberechnen */}
+      {anlageId != null && (
+        <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-4 bg-blue-50 dark:bg-blue-900/20">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-medium text-blue-900 dark:text-blue-100">Energieprofil-Verlauf nachberechnen</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                Füllt stündliche Energieprofile aus der HA Long-Term Statistics — unabhängig von der ~10-Tage-Grenze der Sensor-History.
+              </p>
+              {backfillResult && (
+                <p className="text-sm text-blue-800 dark:text-blue-200 mt-2 font-medium">
+                  ✓ {backfillResult.geschrieben} Tage geschrieben ({backfillResult.von} – {backfillResult.bis})
+                </p>
+              )}
+              {backfillError && (
+                <p className="text-sm text-red-700 dark:text-red-300 mt-2">{backfillError}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleVollbackfill}
+              disabled={isBackfilling}
+              className="shrink-0 flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isBackfilling
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Wird berechnet…</>
+                : <><History className="w-4 h-4" /> Verlauf nachberechnen</>
+              }
+            </button>
+          </div>
+        </div>
+      )}
+
       {investitionen.map(inv => {
         const felder = state.investitionen[inv.id.toString()] || {}
         const live = invLive[inv.id.toString()] || {}

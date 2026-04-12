@@ -427,6 +427,102 @@ class HAStatisticsService:
 
         return ergebnisse
 
+    def get_hourly_sensor_data(
+        self,
+        sensor_ids: list[str],
+        von: date,
+        bis: date,
+    ) -> dict[str, dict[str, dict[int, float]]]:
+        """
+        Holt stündliche Mittelwerte (mean) für Leistungs- und SoC-Sensoren.
+
+        Geeignet für Backfill des Energieprofils aus HA Long-Term Statistics.
+        Nur für Sensoren mit has_mean=True (W, kW, %).
+        kWh-Zähler (has_sum) werden übersprungen (nur für Monatswerte geeignet).
+
+        Args:
+            sensor_ids: HA Entity-IDs
+            von: Startdatum (inklusiv)
+            bis: Enddatum (inklusiv)
+
+        Returns:
+            {entity_id: {datum_iso: {stunde_0_23: kW_oder_prozent}}}
+
+        Einheitenumrechnung:
+            W   → kW (/ 1000)
+            kW  → kW (unverändert)
+            %   → % (unverändert, für SoC-Sensoren)
+            kWh → wird übersprungen (Zähler, kein Leistungssensor)
+        """
+        if not self.is_available or not sensor_ids:
+            return {}
+
+        import time as time_module
+        from datetime import time
+
+        von_dt = datetime.combine(von, time.min)
+        bis_dt = datetime.combine(bis + timedelta(days=1), time.min)
+        ts_von = time_module.mktime(von_dt.timetuple())
+        ts_bis = time_module.mktime(bis_dt.timetuple())
+
+        params: dict = {f"id_{i}": sid for i, sid in enumerate(sensor_ids)}
+        placeholders = ", ".join(f":id_{i}" for i in range(len(sensor_ids)))
+        params["ts_von"] = ts_von
+        params["ts_bis"] = ts_bis
+
+        result: dict[str, dict[str, dict[int, float]]] = {}
+
+        try:
+            with self._engine.connect() as conn:
+                rows = conn.execute(
+                    text(f"""
+                        SELECT sm.statistic_id, s.start_ts, s.mean, sm.unit_of_measurement
+                        FROM statistics s
+                        JOIN statistics_meta sm ON s.metadata_id = sm.id
+                        WHERE sm.statistic_id IN ({placeholders})
+                          AND s.start_ts >= :ts_von
+                          AND s.start_ts < :ts_bis
+                          AND s.mean IS NOT NULL
+                        ORDER BY sm.statistic_id, s.start_ts
+                    """),
+                    params
+                )
+                for row in rows:
+                    entity_id: str = row[0]
+                    start_ts: float = row[1]
+                    mean: float = row[2]
+                    unit: Optional[str] = row[3]
+
+                    # Energie-Zähler sind für Leistungsprofile ungeeignet
+                    if unit in ("kWh", "Wh", "MWh"):
+                        continue
+
+                    # Lokalzeit aus Unix-Timestamp (kein CONVERT_TZ nötig)
+                    dt = datetime.fromtimestamp(start_ts)
+                    datum_iso = dt.date().isoformat()
+                    hour = dt.hour
+
+                    # Einheitenumrechnung → kW
+                    if unit == "W":
+                        kw = mean / 1000.0
+                    elif unit in ("kW", "%"):
+                        kw = mean
+                    else:
+                        # Unbekannte Einheit → als W behandeln (konservativ)
+                        logger.debug(f"Unbekannte Einheit '{unit}' für {entity_id}, behandle als W")
+                        kw = mean / 1000.0
+
+                    if entity_id not in result:
+                        result[entity_id] = {}
+                    if datum_iso not in result[entity_id]:
+                        result[entity_id][datum_iso] = {}
+                    result[entity_id][datum_iso][hour] = kw
+
+        except Exception as e:
+            logger.warning(f"get_hourly_sensor_data Fehler: {type(e).__name__}: {e}")
+
+        return result
+
     def get_monatsanfang_wert(
         self,
         sensor_id: str,

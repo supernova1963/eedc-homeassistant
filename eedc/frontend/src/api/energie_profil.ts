@@ -58,6 +58,13 @@ export interface TagesZusammenfassung {
   komponenten_kwh: Record<string, number> | null
 }
 
+export interface VollbackfillResult {
+  verarbeitet: number
+  geschrieben: number
+  von: string
+  bis: string
+}
+
 export const energieProfilApi = {
   getStunden: (anlageId: number, datum: string): Promise<StundenAntwort> =>
     api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
@@ -67,4 +74,7 @@ export const energieProfilApi = {
 
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
     api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
+
+  vollbackfill: (anlageId: number): Promise<VollbackfillResult> =>
+    api.post(`/energie-profil/${anlageId}/vollbackfill`),
 }

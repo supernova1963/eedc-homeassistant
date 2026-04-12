@@ -728,6 +728,7 @@ export default function SensorMappingWizard() {
             <MappingSummaryStep
               state={state}
               investitionen={mappingData?.investitionen || []}
+              anlageId={effectiveAnlageId}
             />
           )}
         </div>

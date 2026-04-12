@@ -11,7 +11,7 @@ DELETE /api/energie-profil/{anlage_id}/rohdaten — Löscht TagesEnergieProfil-D
 import logging
 import re
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -435,6 +435,73 @@ async def delete_rohdaten(
     return {
         "geloescht": del_result.rowcount,
         "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten.",
+    }
+
+
+@router.post("/{anlage_id}/vollbackfill")
+async def vollbackfill(
+    anlage_id: int,
+    von: Optional[date] = Query(None, description="Startdatum (Standard: frühestes Datum in HA Statistics)"),
+    bis: Optional[date] = Query(None, description="Enddatum (Standard: gestern)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Berechnet Energieprofile rückwirkend aus HA Long-Term Statistics.
+
+    Füllt TagesEnergieProfil + TagesZusammenfassung für den gesamten Zeitraum
+    (unabhängig von der ~10-Tage-Grenze der HA-Sensor-History).
+    Überspringt bereits vorhandene Tage.
+
+    Returns:
+        verarbeitet: Anzahl Tage im Zeitraum
+        geschrieben: Davon neu geschriebene Tage
+    """
+    from backend.services.energie_profil_service import backfill_from_statistics
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    from backend.services.live_sensor_config import extract_live_config
+
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    ha_service = get_ha_statistics_service()
+    if not ha_service.is_available:
+        raise HTTPException(status_code=503, detail="HA Statistics Datenbank nicht verfügbar")
+
+    if bis is None:
+        bis = date.today() - timedelta(days=1)
+
+    if von is None:
+        # Frühestes Datum aus Statistics ermitteln
+        basis_live, inv_live_map, _, _ = extract_live_config(anlage)
+        all_eids = list(set(
+            list(basis_live.values()) +
+            [eid for live in inv_live_map.values() for eid in live.values() if eid]
+        ))
+        if not all_eids:
+            raise HTTPException(status_code=400, detail="Keine Live-Sensoren konfiguriert")
+
+        import asyncio
+        try:
+            verfuegbar = await asyncio.to_thread(ha_service.get_verfuegbare_monate, all_eids)
+            von = verfuegbar.erstes_datum
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Konnte frühestes Datum nicht ermitteln: {e}")
+
+    if von > bis:
+        raise HTTPException(status_code=400, detail=f"von ({von}) muss <= bis ({bis}) sein")
+
+    verarbeitet = (bis - von).days + 1
+    geschrieben = await backfill_from_statistics(anlage, von, bis, db)
+    await db.commit()
+
+    logger.info(f"Vollbackfill Anlage {anlage_id}: {geschrieben}/{verarbeitet} Tage von {von} bis {bis}")
+    return {
+        "verarbeitet": verarbeitet,
+        "geschrieben": geschrieben,
+        "von": von.isoformat(),
+        "bis": bis.isoformat(),
     }
 
 
