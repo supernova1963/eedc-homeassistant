@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.2] - 2026-04-12
+
+### Feat
+
+- **Post-Save-Dialog im Sensor-Mapping-Wizard**: Nach dem Speichern geänderter Sensor-Zuordnungen erscheint ein kontextueller Dialog. Bei geänderten Live-Sensoren kann der Energieprofil-Verlauf direkt neu berechnet werden. Bei geänderten Felder-Sensoren wird zum HA Statistik-Import (mit Überschreiben) navigiert.
+
+### Fix
+
+- **Community: 0-Wert-Einlieferungen** (#107): Anlagen mit kaputtem Sensor-Mapping die `ertrag_kwh=0` einlieferten, verfälschten den Community-Durchschnitt. Fix: EEDC sendet keine Monate ohne PV-Erzeugung mehr. Community-Server lehnt `ertrag_kwh≤0` mit HTTP 400 ab.
+- **Energieprofil-Backfill mit veralteten Sensoren**: Wenn im Live-Sensor-Mapping noch alte/umbenannte HA-Sensoren steckten (z.B. nach Sensor-Austausch im Wizard), scheiterte "Verlauf nachberechnen" mit einem Fehler. Veraltete Sensoren werden jetzt automatisch ignoriert.
+- **Sensor-Mapping-Wizard**: Beim Speichern werden Live-Sensoren die in HA nicht mehr existieren automatisch aus dem Mapping entfernt.
+
+---
+
 ## [3.12.1] - 2026-04-12
 
 ### Feat
