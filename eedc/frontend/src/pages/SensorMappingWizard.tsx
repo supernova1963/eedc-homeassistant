@@ -27,6 +27,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { sensorMappingApi, anlagenApi } from '../api'
+import { energieProfilApi, type VollbackfillResult } from '../api/energie_profil'
 import type {
   FeldMapping,
   SensorMappingRequest,
@@ -107,6 +108,15 @@ export default function SensorMappingWizard() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Post-Save Dialog
+  const [postSave, setPostSave] = useState<{
+    liveChanged: boolean
+    felderChanged: boolean
+    backfillRunning: boolean
+    backfillResult: VollbackfillResult | null
+    backfillError: string | null
+  } | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Data loading states
@@ -369,6 +379,29 @@ export default function SensorMappingWizard() {
         return Object.keys(cleaned).length > 0 ? cleaned : undefined
       }
 
+      // Änderungen erkennen (vor dem Save, gegen Original-Mapping)
+      const origInv = mappingData?.mapping?.investitionen || {}
+      const origBasis = mappingData?.mapping?.basis || {}
+
+      const origLive = Object.fromEntries(
+        Object.entries(origInv).map(([id, inv]) => [id, (inv as { live?: Record<string, string> }).live || {}])
+      )
+      const origFelder = Object.fromEntries(
+        Object.entries(origInv).map(([id, inv]) => [id, (inv as { felder?: Record<string, unknown> }).felder || {}])
+      )
+
+      const liveChanged =
+        JSON.stringify(state.investitionenLive) !== JSON.stringify(origLive) ||
+        JSON.stringify(state.basisLive) !== JSON.stringify((origBasis as { live?: unknown }).live || {})
+
+      const felderChanged =
+        JSON.stringify(state.investitionen) !== JSON.stringify(origFelder) ||
+        JSON.stringify(state.basis) !== JSON.stringify({
+          einspeisung: (origBasis as Record<string, unknown>).einspeisung || null,
+          netzbezug: (origBasis as Record<string, unknown>).netzbezug || null,
+          pv_gesamt: (origBasis as Record<string, unknown>).pv_gesamt || null,
+        })
+
       const request: SensorMappingRequest = {
         basis: {
           einspeisung: state.basis.einspeisung,
@@ -390,14 +423,19 @@ export default function SensorMappingWizard() {
       }
 
       await sensorMappingApi.saveMapping(effectiveAnlageId, request)
-      // Nach erfolgreichem Speichern direkt zur Einstellungsseite navigieren
-      navigate('/einstellungen/ha-export?saved=true')
+
+      // Post-Save-Dialog anzeigen wenn etwas geändert wurde
+      if (liveChanged || felderChanged) {
+        setPostSave({ liveChanged, felderChanged, backfillRunning: false, backfillResult: null, backfillError: null })
+      } else {
+        navigate('/einstellungen/ha-export?saved=true')
+      }
     } catch (err) {
       setSaveError((err as Error).message || 'Fehler beim Speichern')
     } finally {
       setIsSaving(false)
     }
-  }, [state, effectiveAnlageId])
+  }, [state, effectiveAnlageId, mappingData, availableSensors])
 
   // Handler zum Löschen des Mappings
   const handleDeleteMapping = useCallback(async () => {
@@ -476,6 +514,98 @@ export default function SensorMappingWizard() {
   }
 
   const currentStepConfig = steps[currentStep]
+
+  // Post-Save-Dialog: anzeigen wenn Mapping geändert und gespeichert wurde
+  if (postSave) {
+    const handleBackfill = async () => {
+      if (!effectiveAnlageId) return
+      setPostSave(prev => prev ? { ...prev, backfillRunning: true, backfillError: null } : null)
+      try {
+        const result = await energieProfilApi.vollbackfill(effectiveAnlageId)
+        setPostSave(prev => prev ? { ...prev, backfillRunning: false, backfillResult: result } : null)
+      } catch (err) {
+        setPostSave(prev => prev ? { ...prev, backfillRunning: false, backfillError: (err as Error).message || 'Fehler beim Backfill' } : null)
+      }
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sensor-Zuordnung</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{mappingData?.anlage_name}</p>
+          </div>
+        </div>
+
+        <Card>
+          <div className="p-6 space-y-6">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-500 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white">Sensor-Zuordnung gespeichert</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Die Änderungen sind aktiv für zukünftige Importe und das Live-Dashboard.</p>
+              </div>
+            </div>
+
+            {postSave.liveChanged && (
+              <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  Live-Sensoren wurden geändert
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Das Energieprofil (stündliche Verlaufsdaten) kann mit den neuen Sensoren neu berechnet werden.
+                  Bereits vorhandene Tage werden dabei überschrieben.
+                </p>
+                {postSave.backfillResult ? (
+                  <Alert type="success">
+                    ✓ {postSave.backfillResult.geschrieben} Tage neu berechnet ({postSave.backfillResult.von} – {postSave.backfillResult.bis})
+                  </Alert>
+                ) : postSave.backfillError ? (
+                  <Alert type="error">{postSave.backfillError}</Alert>
+                ) : (
+                  <Button
+                    onClick={handleBackfill}
+                    disabled={postSave.backfillRunning}
+                    variant="secondary"
+                  >
+                    {postSave.backfillRunning ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Wird berechnet…</>
+                    ) : (
+                      <>Energieprofil-Verlauf neu berechnen</>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {postSave.felderChanged && (
+              <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  Felder-Sensoren wurden geändert
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Vergangene Monatsabschlüsse können mit den neuen Sensoren neu importiert werden.
+                  Nur sinnvoll wenn sich der Sensor-Name geändert hat und die Daten korrekt sein sollen.
+                </p>
+                <Button
+                  onClick={() => navigate('/einstellungen/ha-statistik-import?ueberschreiben=true')}
+                  variant="secondary"
+                >
+                  Zum HA Statistik-Import (mit Überschreiben)
+                </Button>
+              </div>
+            )}
+
+            <div className="pt-2">
+              <Button onClick={() => navigate('/einstellungen/ha-export?saved=true')}>
+                Fertig
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
