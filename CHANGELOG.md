@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.3] - 2026-04-12
+
+### Fix
+
+- **Vollbackfill 500-Fehler**: Fehlende DB-Migration für Spalte `komponenten` in `tages_energie_profil` führte zu einem internen Serverfehler beim Ausführen von "Verlauf nachberechnen". Migration wird jetzt beim Add-on-Start automatisch ergänzt.
+
+---
+
 ## [3.12.2] - 2026-04-12
 
 ### Feat
