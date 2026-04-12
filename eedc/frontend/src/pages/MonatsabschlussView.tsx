@@ -95,12 +95,28 @@ function Section({
   defaultOpen?: boolean
   color?: string
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const storageKey = `monatsberichte_section_${title}`
+  const [open, setOpen] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey)
+      return stored !== null ? stored === 'true' : defaultOpen
+    } catch {
+      return defaultOpen
+    }
+  })
+
+  const toggle = () => {
+    setOpen(o => {
+      const next = !o
+      try { localStorage.setItem(storageKey, String(next)) } catch {}
+      return next
+    })
+  }
   return (
     <Card className="!p-0">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
       >
         <Icon className={`h-5 w-5 shrink-0 ${color}`} />
@@ -361,8 +377,8 @@ export default function MonatsabschlussView() {
     <div className="flex flex-col lg:flex-row gap-6 min-h-0">
 
       {/* Zeitstrahl Desktop */}
-      <aside className="hidden lg:block w-48 shrink-0">
-        <div className="sticky top-4">
+      <aside className="hidden lg:block w-48 shrink-0 self-start sticky top-4">
+        <div>
           {anlagen.length > 1 && (
             <div className="mb-3">
               <select aria-label="Anlage" value={selectedAnlageId?.toString() || ''}
@@ -372,7 +388,7 @@ export default function MonatsabschlussView() {
               </select>
             </div>
           )}
-          <div className="overflow-y-auto max-h-[calc(100vh-9rem)] scrollbar-none">
+          <div className="overflow-y-auto max-h-[calc(100vh-6rem)] scrollbar-none">
             {selectedJahr !== null && selectedMonat !== null && (
               <VerticalTimeline
                 entries={timelineEntries}
