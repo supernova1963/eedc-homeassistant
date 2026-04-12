@@ -349,10 +349,14 @@ export default function SensorMappingWizard() {
     setSaveError(null)
 
     try {
-      // Live-Felder bereinigen (leere Werte entfernen)
+      // Live-Felder bereinigen: leere Werte + veraltete Sensoren entfernen
+      // Nur filtern wenn HA erreichbar (availableSensors nicht leer)
+      const validEntityIds = availableSensors.length > 0
+        ? new Set(availableSensors.map(s => s.entity_id))
+        : null
       const cleanLive = (live: Record<string, string | null>): Record<string, string | null> | undefined => {
         const cleaned = Object.fromEntries(
-          Object.entries(live).filter(([, v]) => v)
+          Object.entries(live).filter(([, v]) => v && (!validEntityIds || validEntityIds.has(v)))
         )
         return Object.keys(cleaned).length > 0 ? cleaned : undefined
       }
