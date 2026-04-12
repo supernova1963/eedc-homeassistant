@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.4] - 2026-04-12
+
+### Fix
+
+- **Vollbackfill Fehlerdiagnose**: Interne Fehler beim "Verlauf nachberechnen" werden jetzt als lesbare Fehlermeldung zurückgegeben statt als stiller 500er.
+
+---
+
 ## [3.12.3] - 2026-04-12
 
 ### Fix
