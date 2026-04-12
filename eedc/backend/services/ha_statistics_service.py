@@ -212,6 +212,22 @@ class HAStatisticsService:
             return None
         return SensorMeta(id=row[0], unit=row[1])
 
+    def filter_valid_sensor_ids(self, sensor_ids: list[str]) -> tuple[list[str], list[str]]:
+        """
+        Prüft welche Sensor-IDs tatsächlich in statistics_meta vorhanden sind.
+
+        Returns:
+            (valid_ids, missing_ids)
+        """
+        valid, missing = [], []
+        with self._engine.connect() as conn:
+            for sid in sensor_ids:
+                if self.get_metadata(conn, sid):
+                    valid.append(sid)
+                else:
+                    missing.append(sid)
+        return valid, missing
+
     def get_sensor_monatswert(
         self,
         conn,
