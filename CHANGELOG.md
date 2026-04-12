@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.1] - 2026-04-12
+
+### Feat
+
+- **Energieprofil-Vollbackfill**: Neuer Button "Verlauf nachberechnen" im Sensor-Mapping-Wizard (letzter Schritt). Berechnet stündliche Energieprofile rückwirkend aus HA Long-Term Statistics — unabhängig von der ~10-Tage-Grenze der Sensor-History. Ermöglicht erstmals die Befüllung der gesamten HA-History auf einen Schlag.
+
+### Fix
+
+- **WetterWidget KPI-Aufräumung** (#100): ML/SFML-Tages- und Morgenprognose aus der KPI-Zeile entfernt. PV-Prognose (EEDC GTI) wird jetzt immer angezeigt. ML-Linie bleibt im Chart und in der Legende sichtbar.
+- **Monatsberichte Scroll-Bug**: Zeitstrahl-Scrollen beeinflusste fälschlicherweise den Haupt-Viewport — `sticky` sitzt jetzt korrekt am äußeren Container.
+- **Monatsberichte Sektions-Zustand**: Auf-/Zugeklappt-Zustand aller Sektionen (Energie-Bilanz, Finanzen, Community etc.) wird jetzt per localStorage gespeichert — Finanzen öffnet nicht mehr immer aufgeklappt.
+
+### Chore
+
+- **Investitionsformular**: Deprecation-Banner für Ansprechpartner- und Wartungsfelder — diese werden in einer der nächsten Versionen entfernt und durch die Infothek ersetzt. Bereits eingetragene Daten bleiben erhalten.
+
+---
+
 ## [3.12.0] - 2026-04-11
 
 ### Feat
