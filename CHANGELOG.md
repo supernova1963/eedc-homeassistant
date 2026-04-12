@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.5] - 2026-04-12
+
+### Fix
+
+- **Vollbackfill NameError**: `timedelta` fehlte als Import in `get_hourly_sensor_data` → "Verlauf nachberechnen" schlug mit `NameError: name 'timedelta' is not defined` fehl.
+
+---
+
 ## [3.12.4] - 2026-04-12
 
 ### Fix
