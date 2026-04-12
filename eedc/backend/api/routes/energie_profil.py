@@ -509,7 +509,13 @@ async def vollbackfill(
         raise HTTPException(status_code=400, detail=f"von ({von}) muss <= bis ({bis}) sein")
 
     verarbeitet = (bis - von).days + 1
-    geschrieben = await backfill_from_statistics(anlage, von, bis, db)
+    try:
+        geschrieben = await backfill_from_statistics(anlage, von, bis, db)
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(f"Vollbackfill Anlage {anlage_id} FEHLER: {type(e).__name__}: {e}\n{tb}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
     await db.commit()
 
     logger.info(f"Vollbackfill Anlage {anlage_id}: {geschrieben}/{verarbeitet} Tage von {von} bis {bis}")
