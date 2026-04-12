@@ -474,7 +474,7 @@ class HAStatisticsService:
             return {}
 
         import time as time_module
-        from datetime import time
+        from datetime import time, timedelta
 
         von_dt = datetime.combine(von, time.min)
         bis_dt = datetime.combine(bis + timedelta(days=1), time.min)
