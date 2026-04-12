@@ -312,29 +312,11 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
             </div>
           )}
 {/* SA/SU/Noon werden als vertikale Linien im Chart angezeigt */}
-          {wetter.pv_prognose_kwh !== null && wetter.sfml_prognose_kwh != null && (
+          {wetter.pv_prognose_kwh !== null && (
             <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium"
                  title="EEDC PV-Tagesprognose (GTI-basiert)">
               <BatteryCharging className="h-3.5 w-3.5" />
               <span>~{wetter.pv_prognose_kwh} kWh PV</span>
-            </div>
-          )}
-          {wetter.sfml_prognose_kwh != null && (
-            <div
-              className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-medium"
-              title={wetter.sfml_accuracy_pct != null ? `ML-Genauigkeit: ${wetter.sfml_accuracy_pct}%` : 'Solar Forecast ML'}
-            >
-              <Zap className="h-3.5 w-3.5" />
-              <span>~{wetter.sfml_prognose_kwh} kWh ML</span>
-            </div>
-          )}
-          {wetter.sfml_tomorrow_kwh != null && (
-            <div
-              className="flex items-center gap-1.5 text-purple-400 dark:text-purple-500 font-medium"
-              title="Solar Forecast ML — Morgen-Prognose"
-            >
-              <Zap className="h-3.5 w-3.5" />
-              <span>Morgen ~{wetter.sfml_tomorrow_kwh} kWh ML</span>
             </div>
           )}
           {wetter.grundlast_kw != null && wetter.grundlast_kw > 0 && (
