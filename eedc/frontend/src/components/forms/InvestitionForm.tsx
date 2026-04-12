@@ -593,14 +593,6 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         hasParent={!!formData.parent_investition_id}
       />
 
-      {/* Infothek-Hinweis */}
-      <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 pt-1">
-        Kontakte, Garantien und Wartungsverträge zentral verwalten?
-        <a href="#/einstellungen/infothek" className="text-primary-600 dark:text-primary-400 hover:underline">
-          Zur Infothek
-        </a>
-      </div>
-
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <Button type="button" variant="secondary" onClick={onCancel}>

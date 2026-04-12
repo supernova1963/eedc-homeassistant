@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, Info } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Info, AlertTriangle } from 'lucide-react'
 import { Input } from '../ui'
 import type { InvestitionTyp, Anlage } from '../../types'
 
@@ -28,6 +28,19 @@ export default function InvestitionStammdatenSection({
 
   return (
     <div className="space-y-4">
+      {/* Deprecation-Banner */}
+      <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-800 dark:text-amber-200">
+          <span className="font-medium">Diese Felder werden in einer der nächsten Versionen entfernt.</span>{' '}
+          Ansprechpartner und Wartungsverträge bitte künftig in der{' '}
+          <a href="#/einstellungen/infothek" className="underline hover:text-amber-900 dark:hover:text-amber-100">
+            Infothek
+          </a>{' '}
+          verwalten. Bereits eingetragene Daten bleiben erhalten.
+        </p>
+      </div>
+
       {/* Gerätedaten */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Gerätedaten</h3>
@@ -205,6 +218,7 @@ export default function InvestitionStammdatenSection({
               <ChevronRight className="w-4 h-4 text-gray-500" />
             )}
             <span className="text-sm font-medium text-gray-900 dark:text-white">Ansprechpartner</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Veraltet</span>
             {kannVererben && !hasAnyAnsprechpartnerValue(paramData) && (
               <span className="text-xs text-gray-500 dark:text-gray-400">(erbt von {vererbungsQuelle})</span>
             )}
@@ -313,6 +327,7 @@ export default function InvestitionStammdatenSection({
               <ChevronRight className="w-4 h-4 text-gray-500" />
             )}
             <span className="text-sm font-medium text-gray-900 dark:text-white">Wartungsvertrag</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">Veraltet</span>
             {kannVererben && !hasAnyWartungValue(paramData) && (
               <span className="text-xs text-gray-500 dark:text-gray-400">(erbt von {vererbungsQuelle})</span>
             )}
