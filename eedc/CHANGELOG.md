@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.0] - 2026-04-13
+
+### Feat
+
+- **Energieprofil Etappe 3: Monatsauswertung**: Neuer Sub-Tab "Monat" in Auswertung → Energieprofil mit vollständiger monatlicher Analyse der persistierten Stundenwerte.
+  - **Heatmap 24h × N Tage** mit umschaltbarer Metrik (PV / Verbrauch / Netzbezug / Einspeisung / Überschuss-divergent), Hover-Tooltip pro Zelle und Skalen-Legende.
+  - **Monats-KPIs (1. Reihe)**: PV-Erzeugung, Verbrauch, Einspeisung, Netzbezug, Autarkie, Eigenverbrauch, Performance-Ratio Ø, Batterie-Vollzyklen-Summe.
+  - **Analyse-KPIs (2. Reihe)**: Grundbedarf (Nacht-Ø 0–5 Uhr), Direkt-Eigenverbrauch (PV → Senke ohne Batterie-Umweg), Batterie geladen/entladen/η, PV Best-/Ø-/Schlecht-Tag.
+  - **Kategorien-Leiste**: Erzeugung und Verbrauch nach Gruppen — PV-Module, Balkonkraftwerk, Sonstige Erzeuger, Wärmepumpe, Wallbox/E-Auto, Haushalt, Sonstige Verbraucher — mit kWh + Anteil am jeweiligen Gesamt.
+  - **Geräte-Tabelle**: Eine Zeile pro Investition (Süddach, Ostdach, WP, Wallbox …) mit Monats-kWh und prozentualem Anteil.
+  - **Typisches Tagesprofil**: 24h-Linien-Chart (Ø PV + Ø Verbrauch über den Monat) als Basis für spätere Verbrauchsprognose (Etappe 3b).
+  - **Peak-Tabellen**: Top-10 Netzbezug- und Einspeise-Stunden für Tarif-Optimierung und Batterie-Timing.
+  - **Monats-Picker** mit Vorher/Nachher-Buttons, Sperre für Zukunftsmonate, Anzeige "X von Y Tagen mit Daten".
+
+  Backend: Neuer Endpoint `GET /api/energie-profil/{anlage_id}/monat?jahr=&monat=&top_n=` aggregiert `TagesEnergieProfil` (stündlich) + `TagesZusammenfassung` (Tages-Rollup inkl. `komponenten_kwh`) zu einer einzigen kompakten Response — Frontend lädt die komplette Monatsansicht in einem Request.
+
+---
+
 ## [3.12.7] - 2026-04-13
 
 ### Fix
