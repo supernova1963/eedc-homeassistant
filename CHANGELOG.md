@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.7] - 2026-04-13
+
+### Fix
+
+- **Monatsbericht weicht von Auswertung→Tabelle ab** (#118): Für vergangene Monate hat der Monatsbericht-Endpunkt die in `Monatsdaten`/`InvestitionMonatsdaten` gespeicherten Werte stillschweigend mit Live-Werten aus der HA Long-Term Statistics-DB überschrieben (höhere Konfidenz). Wenn HA-Sensoren später umbenannt wurden oder die Recorder-DB für vergangene Monate driftete, zeigte der Monatsbericht andere Zahlen als die Auswertungs-Tabelle — selbst nach abgeschlossenem Monat. Fix: HA-Stats werden für vergangene Monate nur noch als Fallback verwendet (`setdefault`), nicht mehr als Override. Aktueller Monat bleibt unverändert. Auslöser: Safi105.
+
+---
+
 ## [3.12.6] - 2026-04-13
 
 ### Fix

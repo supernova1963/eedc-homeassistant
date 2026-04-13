@@ -602,7 +602,18 @@ async def get_aktueller_monat(
     resolved.update(mqtt_energy)
 
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
-    resolved.update(ha_stats)
+    if ist_aktueller_monat:
+        # Laufender Monat: HA-Stats sind die frischeste Quelle und sollen die
+        # gespeicherten Werte überschreiben (Vorschau aus Live-Sensoren).
+        resolved.update(ha_stats)
+    else:
+        # Vergangener Monat: gespeicherte Monatsdaten + InvestitionMonatsdaten
+        # sind authoritativ (Monatsabschluss). HA-Stats nur als Fallback für
+        # Felder, die noch nicht vorhanden sind — kein Override mehr, sonst
+        # können sich Werte rückwirkend ändern (Sensor-Renames, Recorder-Drift)
+        # und Monatsbericht weicht von Auswertung→Tabelle ab (#118).
+        for k, v in ha_stats.items():
+            resolved.setdefault(k, v)
 
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
     # Nur aggregieren wenn kein direkter Top-Level-Wert existiert (sonst Doppelzählung!)
