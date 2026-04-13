@@ -5,7 +5,7 @@
  * Darunter: PV-Ertrag vs. gestapelter Verbrauch — IST (solid) + Prognose (dashed), volle 24h.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
@@ -42,11 +42,32 @@ interface WetterWidgetProps {
   wetter: LiveWetterResponse | null
   tagesverlauf?: TagesverlaufResponse | null
   loading?: boolean
+  anlageId?: number | null
 }
 
-export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWidgetProps) {
+type ChartView = 'beides' | 'pv' | 'verbrauch'
+
+export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }: WetterWidgetProps) {
   const now = new Date()
   const currentHour = now.getHours()
+
+  // Chart-Ansicht (PV / Verbrauch / Beides) — pro Anlage in localStorage
+  const storageKey = anlageId != null ? `wetterChartView_${anlageId}` : 'wetterChartView'
+  const [chartView, setChartView] = useState<ChartView>('beides')
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey)
+    if (saved === 'pv' || saved === 'verbrauch' || saved === 'beides') {
+      setChartView(saved)
+    } else {
+      setChartView('beides')
+    }
+  }, [storageKey])
+  const updateChartView = (v: ChartView) => {
+    setChartView(v)
+    localStorage.setItem(storageKey, v)
+  }
+  const showPv = chartView === 'pv' || chartView === 'beides'
+  const showVerbrauch = chartView === 'verbrauch' || chartView === 'beides'
 
   // IST-Daten aus Tagesverlauf aggregieren — gestapelt nach Kategorie
   const { istDaten, vorhandeneKategorien } = useMemo(() => {
@@ -339,8 +360,33 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
       {/* PV-Ertrag vs. Verbrauch — IST (gestapelt) + Prognose */}
       {chartData.length > 0 && (
         <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-            PV-Ertrag vs. Verbrauch — IST + Prognose
+          <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {chartView === 'pv' ? 'PV-Ertrag — IST + Prognose'
+                : chartView === 'verbrauch' ? 'Verbrauch — IST + Prognose'
+                : 'PV-Ertrag vs. Verbrauch — IST + Prognose'}
+            </div>
+            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] overflow-hidden shrink-0">
+              {([
+                { k: 'pv', label: 'Nur PV' },
+                { k: 'verbrauch', label: 'Nur Verbrauch' },
+                { k: 'beides', label: 'Beides' },
+              ] as const).map(({ k, label }) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => updateChartView(k)}
+                  className={`px-2 py-1 transition-colors ${
+                    chartView === k
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
+                  title={`Chart: ${label}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           {/* Wetter-Timeline: 24h-Grid, aligned mit Chart-X-Achse */}
           {/* Chart-Margins: left=-20 + YAxis ~60px = ~40px offset, right=5px */}
@@ -475,132 +521,156 @@ export default function WetterWidget({ wetter, tagesverlauf, loading }: WetterWi
               )}
 
               {/* IST: PV — solid, kräftig (kein Stack) */}
-              <Area
-                type="monotone"
-                dataKey="pv_ist"
-                stroke="#eab308"
-                fill="url(#pvIstGrad)"
-                strokeWidth={2}
-                connectNulls={false}
-                dot={false}
-              />
+              {showPv && (
+                <Area
+                  type="monotone"
+                  dataKey="pv_ist"
+                  stroke="#eab308"
+                  fill="url(#pvIstGrad)"
+                  strokeWidth={2}
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
 
               {/* IST: Gestapelter Verbrauch */}
-              <Area
-                type="monotone"
-                dataKey="haushalt_ist"
-                stackId="verbrauch"
-                stroke="#ef4444"
-                fill="url(#haushaltGrad)"
-                strokeWidth={1.5}
-                connectNulls={false}
-                dot={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="batterie_ladung_ist"
-                stackId="verbrauch"
-                stroke="#8b5cf6"
-                fill="url(#batterieGrad)"
-                strokeWidth={1.5}
-                connectNulls={false}
-                dot={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="wallbox_ist"
-                stackId="verbrauch"
-                stroke="#22c55e"
-                fill="url(#wallboxGrad)"
-                strokeWidth={1.5}
-                connectNulls={false}
-                dot={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="waermepumpe_ist"
-                stackId="verbrauch"
-                stroke="#06b6d4"
-                fill="url(#wpGrad)"
-                strokeWidth={1.5}
-                connectNulls={false}
-                dot={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="sonstige_ist"
-                stackId="verbrauch"
-                stroke="#9ca3af"
-                fill="url(#sonstigeGrad)"
-                strokeWidth={1}
-                connectNulls={false}
-                dot={false}
-              />
+              {showVerbrauch && (
+                <Area
+                  type="monotone"
+                  dataKey="haushalt_ist"
+                  stackId="verbrauch"
+                  stroke="#ef4444"
+                  fill="url(#haushaltGrad)"
+                  strokeWidth={1.5}
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
+              {showVerbrauch && (
+                <Area
+                  type="monotone"
+                  dataKey="batterie_ladung_ist"
+                  stackId="verbrauch"
+                  stroke="#8b5cf6"
+                  fill="url(#batterieGrad)"
+                  strokeWidth={1.5}
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
+              {showVerbrauch && (
+                <Area
+                  type="monotone"
+                  dataKey="wallbox_ist"
+                  stackId="verbrauch"
+                  stroke="#22c55e"
+                  fill="url(#wallboxGrad)"
+                  strokeWidth={1.5}
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
+              {showVerbrauch && (
+                <Area
+                  type="monotone"
+                  dataKey="waermepumpe_ist"
+                  stackId="verbrauch"
+                  stroke="#06b6d4"
+                  fill="url(#wpGrad)"
+                  strokeWidth={1.5}
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
+              {showVerbrauch && (
+                <Area
+                  type="monotone"
+                  dataKey="sonstige_ist"
+                  stackId="verbrauch"
+                  stroke="#9ca3af"
+                  fill="url(#sonstigeGrad)"
+                  strokeWidth={1}
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
 
               {/* Prognose: PV — dashed, blass */}
-              <Area
-                type="monotone"
-                dataKey="pv_prognose"
-                stroke="#eab308"
-                fill="url(#pvProgGrad)"
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                connectNulls={false}
-                dot={false}
-              />
+              {showPv && (
+                <Area
+                  type="monotone"
+                  dataKey="pv_prognose"
+                  stroke="#eab308"
+                  fill="url(#pvProgGrad)"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
               {/* ML-Prognose: PV — dotted, lila */}
-              <Area
-                type="monotone"
-                dataKey="pv_ml"
-                stroke="#a855f7"
-                fill="url(#pvMlGrad)"
-                strokeWidth={1.5}
-                strokeDasharray="3 3"
-                connectNulls={false}
-                dot={false}
-              />
+              {showPv && (
+                <Area
+                  type="monotone"
+                  dataKey="pv_ml"
+                  stroke="#a855f7"
+                  fill="url(#pvMlGrad)"
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
               {/* Prognose: Verbrauch — dashed, blass (nur Gesamt) */}
-              <Area
-                type="monotone"
-                dataKey="verbrauch_prognose"
-                stroke="#ef4444"
-                fill="url(#vrbProgGrad)"
-                strokeWidth={1}
-                strokeDasharray="4 2"
-                connectNulls={false}
-                dot={false}
-              />
+              {showVerbrauch && (
+                <Area
+                  type="monotone"
+                  dataKey="verbrauch_prognose"
+                  stroke="#ef4444"
+                  fill="url(#vrbProgGrad)"
+                  strokeWidth={1}
+                  strokeDasharray="4 2"
+                  connectNulls={false}
+                  dot={false}
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
           {/* Legende */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400 mt-1 justify-center">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 bg-yellow-500 rounded" /> PV (IST)
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 bg-yellow-500/40 rounded" style={{ borderTop: '1px dashed #eab308' }} /> PV (Prognose)
-            </span>
-            {wetter.sfml_prognose_kwh != null && (
+            {showPv && (
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-0.5 bg-yellow-500 rounded" /> PV (IST)
+              </span>
+            )}
+            {showPv && (
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-0.5 bg-yellow-500/40 rounded" style={{ borderTop: '1px dashed #eab308' }} /> PV (Prognose)
+              </span>
+            )}
+            {showPv && wetter.sfml_prognose_kwh != null && (
               <span className="flex items-center gap-1">
                 <span className="w-3 h-0.5 bg-purple-500/40 rounded" style={{ borderTop: '1.5px dotted #a855f7' }} /> PV (ML)
               </span>
             )}
-            {aktiveKategorien.map(k => (
+            {showVerbrauch && aktiveKategorien.map(k => (
               <span key={k.key} className="flex items-center gap-1">
                 <span className="w-3 h-0.5 rounded" style={{ backgroundColor: k.farbe }} /> {k.label}
               </span>
             ))}
-            <span className="flex items-center gap-1"
-                  title={wetter.profil_typ?.startsWith('individuell')
-                    ? `Basiert auf ${wetter.profil_tage ?? '?'} Tagen ${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}-History (${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
-                    : 'Standardlastprofil — wird durch individuelles Profil ersetzt sobald History verfügbar'
-                  }>
-              <span className="w-3 h-0.5 bg-red-400/40 rounded" style={{ borderTop: '1px dashed #ef4444' }} />
-              {wetter.profil_typ?.startsWith('individuell')
-                ? `Verbr. (ind., ${wetter.profil_typ === 'individuell_wochenende' ? 'WE' : 'WT'})`
-                : 'Verbr. (BDEW H0)'
-              }
-            </span>
+            {showVerbrauch && (
+              <span className="flex items-center gap-1"
+                    title={wetter.profil_typ?.startsWith('individuell')
+                      ? `Basiert auf ${wetter.profil_tage ?? '?'} Tagen ${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}-History (${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
+                      : 'Standardlastprofil — wird durch individuelles Profil ersetzt sobald History verfügbar'
+                    }>
+                <span className="w-3 h-0.5 bg-red-400/40 rounded" style={{ borderTop: '1px dashed #ef4444' }} />
+                {wetter.profil_typ?.startsWith('individuell')
+                  ? `Verbr. (ind., ${wetter.profil_typ === 'individuell_wochenende' ? 'WE' : 'WT'})`
+                  : 'Verbr. (BDEW H0)'
+                }
+              </span>
+            )}
           </div>
         </div>
       )}
