@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.1] - 2026-04-13
+
+### Fix
+
+- **Energieprofil Monat: Zukunftsmonate auch in Selects sperren**: Bis jetzt war nur der ▶-Button für Zukunftsmonate deaktiviert, über die Monats-/Jahres-Dropdowns ließen sich trotzdem Monate in der Zukunft (z.B. Juni 2026 am 13.04.2026) auswählen — mit leerer Anzeige als Folge. Im Monats-Select sind Zukunftsmonate jetzt `disabled`, das Jahres-Select listet nur bis zum aktuellen Jahr, und wer beim Jahreswechsel in einem Zukunftsmonat landet, wird automatisch auf den letzten erlaubten Monat geklemmt. Lücken in der Vergangenheit bleiben sichtbar — die sind Absicht, damit man fehlende Daten überhaupt findet.
+
+---
+
 ## [3.13.0] - 2026-04-13
 
 ### Feat
