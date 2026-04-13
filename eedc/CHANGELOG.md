@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.6] - 2026-04-13
+
+### Fix
+
+- **T-Konto Mobile als Gewinn-und-Verlust-Rechnung** (#117): Auf Mobile wird das T-Konto zur G+V umgebaut. SOLL/HABEN-Überschriften entfallen (passen ohne nebeneinanderliegende Konten nicht mehr), die Ergebniszeile wandert aus beiden Blöcken in eine eigene "Gewinn"/"Verlust"-Zeile darunter, und die Summen zeigen jetzt die tatsächlichen Kosten- bzw. Ertragsbeträge statt der um den Gewinn korrigierten T-Konto-Ausgleichssummen. Desktop bleibt unverändert. Auslöser: TomHarm.
+
+### Feat
+
+- **WetterWidget Chart-Toggle PV/Verbrauch/Beides** (#119): Drei Buttons rechts neben der Chart-Überschrift im "Wetter heute"-Diagramm — "Nur PV / Nur Verbrauch / Beides", Auswahl pro Anlage in localStorage. Default bleibt "Beides", die reduzierten Sichten blenden Stack/Legende entsprechend ein und aus. Auslöser: felixlen.
+- **Monatsberichte: Individuelle Sektions-Reihenfolge**: Jede Sektion (Energie-Bilanz, Finanzen, Community, Speicher, WP, eMob, BKW, Sonstiges) hat im Header zwei kleine Pfeile zum Verschieben nach oben/unten. Reihenfolge wird in localStorage gespeichert.
+- **Speicher: Wirkungsverluste in Euro**: Neue Zeile unter der kWh-Bilanz zeigt die Opportunitätskosten des Roundtrip-Verlusts — anteilig nach Lade-Quelle: PV-Anteil × Einspeisepreis (entgangener Erlös) + Netz-Anteil × Bezugspreis. Tooltip erklärt die Aufschlüsselung. Rein informativ, nicht Teil der T-Konto-Bilanz.
+
+---
+
 ## [3.12.5] - 2026-04-12
 
 ### Fix
