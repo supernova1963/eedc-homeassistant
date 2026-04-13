@@ -10,6 +10,7 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { Card, Button } from '../../components/ui'
 import { exportToCSV } from '../../utils/export'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
+import { EnergieprofilMonat } from './EnergieprofilMonat'
 
 // Kategorien die bereits dedizierte Spalten/Felder haben → kein Extra-Tracking
 const DEDIZIERTE_KATEGORIEN = new Set(['pv', 'batterie', 'netz', 'haushalt', 'waermepumpe', 'wallbox', 'eauto', 'virtual'])
@@ -915,7 +916,7 @@ interface EnergieprofilTabProps {
 const MIN_TAGE = 8  // 1 Woche + 1 Tag
 
 export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
-  const [subTab, setSubTab] = useState<'tagesdetail' | 'wochenvergleich'>('tagesdetail')
+  const [subTab, setSubTab] = useState<'tagesdetail' | 'wochenvergleich' | 'monat'>('tagesdetail')
   const [tageMitDaten, setTageMitDaten] = useState<number | null>(null)
 
   // Datenbestand prüfen: letzte 90 Tage abfragen und zählen
@@ -931,6 +932,7 @@ export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
   const subTabs = [
     { key: 'tagesdetail' as const, label: 'Tagesdetail' },
     { key: 'wochenvergleich' as const, label: 'Wochenvergleich' },
+    { key: 'monat' as const, label: 'Monat' },
   ]
 
   // Noch nicht genug Daten → Sammelscreen
@@ -997,6 +999,7 @@ export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
 
       {subTab === 'tagesdetail' && <Tagesdetail anlageId={anlageId} />}
       {subTab === 'wochenvergleich' && <Wochenvergleich anlageId={anlageId} />}
+      {subTab === 'monat' && <EnergieprofilMonat anlageId={anlageId} />}
     </div>
   )
 }

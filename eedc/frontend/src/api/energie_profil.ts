@@ -58,6 +58,76 @@ export interface TagesZusammenfassung {
   komponenten_kwh: Record<string, number> | null
 }
 
+export interface HeatmapZelle {
+  tag: number          // 1..31
+  stunde: number       // 0..23
+  pv_kw: number | null
+  verbrauch_kw: number | null
+  netzbezug_kw: number | null
+  einspeisung_kw: number | null
+  ueberschuss_kw: number | null
+}
+
+export interface PeakStunde {
+  datum: string
+  stunde: number
+  wert_kw: number
+}
+
+export interface TagesprofilStunde {
+  stunde: number
+  pv_kw: number | null
+  verbrauch_kw: number | null
+}
+
+export interface KomponentenEintrag {
+  key: string
+  label: string
+  kategorie: string
+  typ: string
+  seite: string
+  kwh: number
+  anteil_prozent: number | null
+}
+
+export interface KategorieSumme {
+  kategorie: string
+  kwh: number
+  anteil_prozent: number | null
+}
+
+export interface MonatsAuswertung {
+  jahr: number
+  monat: number
+  tage_im_monat: number
+  tage_mit_daten: number
+  pv_kwh: number
+  verbrauch_kwh: number
+  einspeisung_kwh: number
+  netzbezug_kwh: number
+  ueberschuss_kwh: number
+  defizit_kwh: number
+  autarkie_prozent: number | null
+  eigenverbrauch_prozent: number | null
+  performance_ratio_avg: number | null
+  batterie_vollzyklen_summe: number | null
+  grundbedarf_kw: number | null
+  batterie_ladung_kwh: number | null
+  batterie_entladung_kwh: number | null
+  batterie_wirkungsgrad: number | null
+  direkt_eigenverbrauch_kwh: number | null
+  pv_tag_best_kwh: number | null
+  pv_tag_schnitt_kwh: number | null
+  pv_tag_schlecht_kwh: number | null
+  typisches_tagesprofil: TagesprofilStunde[]
+  kategorien: KategorieSumme[]
+  komponenten: KomponentenEintrag[]
+  peak_netzbezug: PeakStunde[]
+  peak_einspeisung: PeakStunde[]
+  peak_pv: PeakStunde | null
+  heatmap: HeatmapZelle[]
+}
+
 export interface VollbackfillResult {
   verarbeitet: number
   geschrieben: number
@@ -74,6 +144,9 @@ export const energieProfilApi = {
 
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
     api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
+
+  getMonat: (anlageId: number, jahr: number, monat: number): Promise<MonatsAuswertung> =>
+    api.get(`/energie-profil/${anlageId}/monat?jahr=${jahr}&monat=${monat}`),
 
   vollbackfill: (anlageId: number): Promise<VollbackfillResult> =>
     api.post(`/energie-profil/${anlageId}/vollbackfill`),

@@ -4,10 +4,12 @@ Energie-Profil API - Tägliche und stündliche Energiedaten.
 GET /api/energie-profil/{anlage_id}/tage      — Tageszusammenfassungen
 GET /api/energie-profil/{anlage_id}/stunden   — Stundenwerte für einen Tag
 GET /api/energie-profil/{anlage_id}/wochenmuster — Ø-Tagesprofil je Wochentag
+GET /api/energie-profil/{anlage_id}/monat     — Monatsauswertung (Heatmap + KPIs + Peaks)
 GET /api/energie-profil/{anlage_id}/debug-rohdaten — Rohdaten TagesEnergieProfil (7 Tage)
 DELETE /api/energie-profil/{anlage_id}/rohdaten — Löscht TagesEnergieProfil-Daten
 """
 
+import calendar
 import logging
 import re
 from collections import defaultdict
@@ -137,6 +139,96 @@ class WochenmusterPunkt(BaseModel):
     einspeisung_kw: Optional[float] = None
     batterie_kw: Optional[float] = None
     anzahl_tage: int = 0
+
+
+class HeatmapZelle(BaseModel):
+    """Eine Zelle der Monats-Heatmap (Tag × Stunde)."""
+    tag: int          # 1..31
+    stunde: int       # 0..23
+    pv_kw: Optional[float] = None
+    verbrauch_kw: Optional[float] = None
+    netzbezug_kw: Optional[float] = None
+    einspeisung_kw: Optional[float] = None
+    ueberschuss_kw: Optional[float] = None  # pv − verbrauch
+
+
+class PeakStunde(BaseModel):
+    """Eine einzelne Peak-Stunde im Monat."""
+    datum: date
+    stunde: int
+    wert_kw: float
+
+
+class TagesprofilStunde(BaseModel):
+    """Ein Stundenpunkt im typischen Tagesprofil (Ø über Monat)."""
+    stunde: int
+    pv_kw: Optional[float] = None
+    verbrauch_kw: Optional[float] = None
+
+
+class KomponentenEintrag(BaseModel):
+    """Ein einzelnes Gerät mit Monatssumme."""
+    key: str
+    label: str
+    kategorie: str       # "pv", "waermepumpe", "wallbox", "eauto", "sonstiges", …
+    typ: str             # z.B. "pv-module", "balkonkraftwerk", "waermepumpe", "sonstiges"
+    seite: str           # "quelle" | "senke" | "bidirektional"
+    kwh: float           # positiv = Erzeugung, negativ = Verbrauch
+    anteil_prozent: Optional[float] = None  # vom Gesamt-PV bzw. Gesamt-Verbrauch
+
+
+class KategorieSumme(BaseModel):
+    """Monatssumme pro Kategorie (für KPI-Strip)."""
+    kategorie: str       # "pv_module", "bkw", "sonstige_erzeuger", "waermepumpe", "wallbox_eauto", "sonstige_verbraucher", "haushalt"
+    kwh: float
+    anteil_prozent: Optional[float] = None
+
+
+class MonatsAuswertungResponse(BaseModel):
+    """Monatsauswertung aus TagesEnergieProfil + TagesZusammenfassung."""
+    jahr: int
+    monat: int
+    tage_im_monat: int
+    tage_mit_daten: int
+
+    # Energie-Summen (kWh)
+    pv_kwh: float
+    verbrauch_kwh: float
+    einspeisung_kwh: float
+    netzbezug_kwh: float
+    ueberschuss_kwh: float
+    defizit_kwh: float
+
+    # Kennzahlen
+    autarkie_prozent: Optional[float] = None
+    eigenverbrauch_prozent: Optional[float] = None
+    performance_ratio_avg: Optional[float] = None
+    batterie_vollzyklen_summe: Optional[float] = None
+
+    # Erweiterte Analyse-KPIs
+    grundbedarf_kw: Optional[float] = None          # Ø Verbrauch Nachtstunden 0–5 Uhr
+    batterie_ladung_kwh: Optional[float] = None      # Σ Energie in die Batterie
+    batterie_entladung_kwh: Optional[float] = None   # Σ Energie aus der Batterie
+    batterie_wirkungsgrad: Optional[float] = None    # Entladung / Ladung
+    direkt_eigenverbrauch_kwh: Optional[float] = None  # Σ min(pv, verbrauch) je Stunde
+    pv_tag_best_kwh: Optional[float] = None
+    pv_tag_schnitt_kwh: Optional[float] = None
+    pv_tag_schlecht_kwh: Optional[float] = None
+
+    # Typisches Tagesprofil (24 Punkte, Ø über Monat)
+    typisches_tagesprofil: list[TagesprofilStunde] = []
+
+    # Per-Komponente Aggregation
+    kategorien: list[KategorieSumme] = []
+    komponenten: list[KomponentenEintrag] = []
+
+    # Peaks (Top-N Stunden)
+    peak_netzbezug: list[PeakStunde] = []
+    peak_einspeisung: list[PeakStunde] = []
+    peak_pv: Optional[PeakStunde] = None
+
+    # Heatmap-Matrix
+    heatmap: list[HeatmapZelle] = []
 
 
 class TagesZusammenfassungResponse(BaseModel):
@@ -355,6 +447,322 @@ async def get_wochenmuster(
         ))
 
     return punkte
+
+
+@router.get("/{anlage_id}/monat", response_model=MonatsAuswertungResponse)
+async def get_monatsauswertung(
+    anlage_id: int,
+    jahr: int = Query(..., ge=2000, le=2100),
+    monat: int = Query(..., ge=1, le=12),
+    top_n: int = Query(10, ge=1, le=50, description="Anzahl Peak-Stunden (Netzbezug/Einspeisung)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Monatsauswertung aus TagesEnergieProfil + TagesZusammenfassung.
+
+    Liefert Heatmap-Matrix (Tag × Stunde), KPIs, Peak-Stunden,
+    Batterie-Vollzyklen-Summe und Ø Performance Ratio für einen Kalendermonat.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    tage_im_monat = calendar.monthrange(jahr, monat)[1]
+    von = date(jahr, monat, 1)
+    bis = date(jahr, monat, tage_im_monat)
+
+    # Stundenwerte des Monats laden
+    result = await db.execute(
+        select(TagesEnergieProfil)
+        .where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= von,
+            TagesEnergieProfil.datum <= bis,
+        )
+        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    )
+    stunden_rows = result.scalars().all()
+
+    # Tageszusammenfassungen (für Batterie-Zyklen + PR)
+    result = await db.execute(
+        select(TagesZusammenfassung)
+        .where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum >= von,
+            TagesZusammenfassung.datum <= bis,
+        )
+    )
+    tag_rows = result.scalars().all()
+
+    # ── Heatmap + Summen aggregieren ──
+    heatmap: list[HeatmapZelle] = []
+    pv_sum = 0.0
+    verbrauch_sum = 0.0
+    einspeisung_sum = 0.0
+    netzbezug_sum = 0.0
+    ueberschuss_sum = 0.0
+    defizit_sum = 0.0
+    batt_lade_sum = 0.0
+    batt_entlade_sum = 0.0
+    direkt_sum = 0.0
+
+    tage_mit_daten: set[date] = set()
+    pv_pro_tag: dict[date, float] = defaultdict(float)
+
+    # Für typisches Tagesprofil: Ø pro Stunde
+    profil_pv: dict[int, list[float]] = defaultdict(list)
+    profil_verbrauch: dict[int, list[float]] = defaultdict(list)
+    # Für Grundbedarf: Nachtstunden 0–5 Uhr
+    nacht_verbrauch: list[float] = []
+
+    # Peaks sammeln — alle Einträge, später sortieren
+    netzbezug_kandidaten: list[PeakStunde] = []
+    einspeisung_kandidaten: list[PeakStunde] = []
+    peak_pv: Optional[PeakStunde] = None
+
+    for r in stunden_rows:
+        tage_mit_daten.add(r.datum)
+        pv = r.pv_kw or 0.0
+        verbrauch = r.verbrauch_kw or 0.0
+        einspeisung = r.einspeisung_kw or 0.0
+        netzbezug = r.netzbezug_kw or 0.0
+        batt = r.batterie_kw or 0.0  # +Entladung, −Ladung
+        ueberschuss = pv - verbrauch
+
+        pv_sum += pv
+        verbrauch_sum += verbrauch
+        einspeisung_sum += einspeisung
+        netzbezug_sum += netzbezug
+        if ueberschuss > 0:
+            ueberschuss_sum += ueberschuss
+        else:
+            defizit_sum += -ueberschuss
+
+        # Batterie getrennt nach Richtung
+        if batt < 0:
+            batt_lade_sum += -batt
+        elif batt > 0:
+            batt_entlade_sum += batt
+
+        # Direkt-Eigenverbrauch: was aus PV direkt in die Senken geht (ohne Batterie-Umweg)
+        direkt_sum += min(pv, verbrauch)
+
+        pv_pro_tag[r.datum] += pv
+
+        # Profilsammlung
+        if r.pv_kw is not None:
+            profil_pv[r.stunde].append(pv)
+        if r.verbrauch_kw is not None:
+            profil_verbrauch[r.stunde].append(verbrauch)
+            if 0 <= r.stunde < 5:
+                nacht_verbrauch.append(verbrauch)
+
+        heatmap.append(HeatmapZelle(
+            tag=r.datum.day,
+            stunde=r.stunde,
+            pv_kw=round(pv, 3) if r.pv_kw is not None else None,
+            verbrauch_kw=round(verbrauch, 3) if r.verbrauch_kw is not None else None,
+            netzbezug_kw=round(netzbezug, 3) if r.netzbezug_kw is not None else None,
+            einspeisung_kw=round(einspeisung, 3) if r.einspeisung_kw is not None else None,
+            ueberschuss_kw=round(ueberschuss, 3) if (r.pv_kw is not None or r.verbrauch_kw is not None) else None,
+        ))
+
+        if r.netzbezug_kw is not None and r.netzbezug_kw > 0:
+            netzbezug_kandidaten.append(PeakStunde(
+                datum=r.datum, stunde=r.stunde, wert_kw=round(r.netzbezug_kw, 3),
+            ))
+        if r.einspeisung_kw is not None and r.einspeisung_kw > 0:
+            einspeisung_kandidaten.append(PeakStunde(
+                datum=r.datum, stunde=r.stunde, wert_kw=round(r.einspeisung_kw, 3),
+            ))
+        if r.pv_kw is not None and r.pv_kw > 0:
+            if peak_pv is None or r.pv_kw > peak_pv.wert_kw:
+                peak_pv = PeakStunde(
+                    datum=r.datum, stunde=r.stunde, wert_kw=round(r.pv_kw, 3),
+                )
+
+    netzbezug_kandidaten.sort(key=lambda p: p.wert_kw, reverse=True)
+    einspeisung_kandidaten.sort(key=lambda p: p.wert_kw, reverse=True)
+
+    # ── KPIs ──
+    eigenverbrauch_pv = pv_sum - einspeisung_sum
+    autarkie = (
+        round((verbrauch_sum - netzbezug_sum) / verbrauch_sum * 100, 1)
+        if verbrauch_sum > 0 else None
+    )
+    eigenverbrauch = (
+        round(eigenverbrauch_pv / pv_sum * 100, 1)
+        if pv_sum > 0 else None
+    )
+
+    grundbedarf = (
+        round(sum(nacht_verbrauch) / len(nacht_verbrauch), 3)
+        if nacht_verbrauch else None
+    )
+    batt_wirkungsgrad = (
+        round(batt_entlade_sum / batt_lade_sum, 3)
+        if batt_lade_sum > 0.1 else None
+    )
+
+    # Tagesverteilung PV
+    pv_tage = [v for v in pv_pro_tag.values() if v > 0]
+    pv_best = round(max(pv_tage), 2) if pv_tage else None
+    pv_schlecht = round(min(pv_tage), 2) if pv_tage else None
+    pv_schnitt = round(sum(pv_tage) / len(pv_tage), 2) if pv_tage else None
+
+    # Typisches Tagesprofil (Ø pro Stunde)
+    tagesprofil: list[TagesprofilStunde] = []
+    for s in range(24):
+        pv_werte = profil_pv.get(s, [])
+        vb_werte = profil_verbrauch.get(s, [])
+        tagesprofil.append(TagesprofilStunde(
+            stunde=s,
+            pv_kw=round(sum(pv_werte) / len(pv_werte), 3) if pv_werte else None,
+            verbrauch_kw=round(sum(vb_werte) / len(vb_werte), 3) if vb_werte else None,
+        ))
+
+    # ── Batterie-Vollzyklen + PR aus TagesZusammenfassung ──
+    zyklen_werte = [t.batterie_vollzyklen for t in tag_rows if t.batterie_vollzyklen is not None]
+    zyklen_summe = round(sum(zyklen_werte), 2) if zyklen_werte else None
+
+    pr_werte = [t.performance_ratio for t in tag_rows if t.performance_ratio is not None]
+    pr_avg = round(sum(pr_werte) / len(pr_werte), 3) if pr_werte else None
+
+    # ── Per-Komponente Aggregation aus komponenten_kwh ──
+    # Investments für Label-Auflösung laden
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    inv_map: dict[int, Investition] = {
+        inv.id: inv for inv in inv_result.scalars().all()
+    }
+
+    komponenten_sum: dict[str, float] = defaultdict(float)
+    for t in tag_rows:
+        if not t.komponenten_kwh:
+            continue
+        for k, v in t.komponenten_kwh.items():
+            if v is not None:
+                komponenten_sum[k] += v
+
+    # Einträge auflösen + Anteile berechnen
+    komponenten_liste: list[KomponentenEintrag] = []
+    # Kategorie-Mapping: detaillierte Kategorie aus Invest-Typ
+    def detail_kategorie(info: dict, inv: Optional[Investition]) -> str:
+        kat = info.get("kategorie", "sonstige")
+        typ = info.get("typ", "")
+        key = info.get("key", "")
+        if key == "netz":
+            return "netz"
+        if typ == "pv-module":
+            return "pv_module"
+        if typ == "balkonkraftwerk":
+            return "bkw"
+        if typ == "speicher":
+            return "speicher"
+        if typ == "waermepumpe":
+            return "waermepumpe"
+        if typ in ("wallbox", "e-auto"):
+            return "wallbox_eauto"
+        if kat == "haushalt":
+            return "haushalt"
+        if typ == "sonstiges" and inv and isinstance(inv.parameter, dict):
+            unterkat = inv.parameter.get("kategorie", "verbraucher")
+            if unterkat == "erzeuger":
+                return "sonstige_erzeuger"
+            if unterkat == "speicher":
+                return "speicher"
+            return "sonstige_verbraucher"
+        if kat == "pv":
+            return "pv_module"
+        return "sonstige_verbraucher"
+
+    kategorie_sum: dict[str, float] = defaultdict(float)
+
+    for key, kwh in komponenten_sum.items():
+        info = _key_to_serie_info(key, inv_map)
+        if not info:
+            continue
+        inv = None
+        m = re.match(r'^[a-z]+_(\d+)(?:_[a-z]+)?$', key)
+        if m:
+            inv = inv_map.get(int(m.group(1)))
+        det_kat = detail_kategorie(info, inv)
+        kategorie_sum[det_kat] += kwh
+        komponenten_liste.append(KomponentenEintrag(
+            key=key,
+            label=info["label"],
+            kategorie=det_kat,
+            typ=info["typ"],
+            seite=info["seite"],
+            kwh=round(kwh, 2),
+            anteil_prozent=None,  # später setzen
+        ))
+
+    # Anteile: Erzeuger → vom Gesamt-PV, Senken → vom Gesamt-Verbrauch
+    for e in komponenten_liste:
+        if e.seite == "quelle" and pv_sum > 0:
+            e.anteil_prozent = round(abs(e.kwh) / pv_sum * 100, 1)
+        elif e.seite == "senke" and verbrauch_sum > 0:
+            e.anteil_prozent = round(abs(e.kwh) / verbrauch_sum * 100, 1)
+
+    # Sortieren: Erzeuger zuerst (absteigend), dann Verbraucher (absteigend nach Betrag)
+    komponenten_liste.sort(key=lambda e: (
+        0 if e.seite == "quelle" else (1 if e.seite == "senke" else 2),
+        -abs(e.kwh),
+    ))
+
+    kategorien_liste: list[KategorieSumme] = []
+    ERZEUGER_KAT = {"pv_module", "bkw", "sonstige_erzeuger"}
+    VERBRAUCHER_KAT = {"waermepumpe", "wallbox_eauto", "haushalt", "sonstige_verbraucher"}
+    # Bidirektionale Kategorien (speicher, netz) werden nicht als Erzeuger/Verbraucher-KPI ausgewiesen,
+    # tauchen aber in der Geräteliste weiter unten auf.
+    BIDI_KAT = {"speicher", "netz"}
+    for kat, kwh in sorted(kategorie_sum.items(), key=lambda kv: -abs(kv[1])):
+        if kat in BIDI_KAT:
+            continue
+        anteil = None
+        if kat in ERZEUGER_KAT and pv_sum > 0:
+            anteil = round(abs(kwh) / pv_sum * 100, 1)
+        elif kat in VERBRAUCHER_KAT and verbrauch_sum > 0:
+            anteil = round(abs(kwh) / verbrauch_sum * 100, 1)
+        kategorien_liste.append(KategorieSumme(
+            kategorie=kat,
+            kwh=round(kwh, 2),
+            anteil_prozent=anteil,
+        ))
+
+    return MonatsAuswertungResponse(
+        jahr=jahr,
+        monat=monat,
+        tage_im_monat=tage_im_monat,
+        tage_mit_daten=len(tage_mit_daten),
+        pv_kwh=round(pv_sum, 2),
+        verbrauch_kwh=round(verbrauch_sum, 2),
+        einspeisung_kwh=round(einspeisung_sum, 2),
+        netzbezug_kwh=round(netzbezug_sum, 2),
+        ueberschuss_kwh=round(ueberschuss_sum, 2),
+        defizit_kwh=round(defizit_sum, 2),
+        autarkie_prozent=autarkie,
+        eigenverbrauch_prozent=eigenverbrauch,
+        performance_ratio_avg=pr_avg,
+        batterie_vollzyklen_summe=zyklen_summe,
+        grundbedarf_kw=grundbedarf,
+        batterie_ladung_kwh=round(batt_lade_sum, 2) if batt_lade_sum > 0 else None,
+        batterie_entladung_kwh=round(batt_entlade_sum, 2) if batt_entlade_sum > 0 else None,
+        batterie_wirkungsgrad=batt_wirkungsgrad,
+        direkt_eigenverbrauch_kwh=round(direkt_sum, 2) if direkt_sum > 0 else None,
+        pv_tag_best_kwh=pv_best,
+        pv_tag_schnitt_kwh=pv_schnitt,
+        pv_tag_schlecht_kwh=pv_schlecht,
+        typisches_tagesprofil=tagesprofil,
+        kategorien=kategorien_liste,
+        komponenten=komponenten_liste,
+        peak_netzbezug=netzbezug_kandidaten[:top_n],
+        peak_einspeisung=einspeisung_kandidaten[:top_n],
+        peak_pv=peak_pv,
+        heatmap=heatmap,
+    )
 
 
 # ── Debug + Wartungs-Endpoints ───────────────────────────────────────────────
