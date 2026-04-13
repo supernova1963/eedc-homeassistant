@@ -942,47 +942,66 @@ export default function MonatsabschlussView() {
                                 </tbody>
                               </table>
 
-                              {/* ── Mobile: SOLL oben, HABEN unten ── */}
+                              {/* ── Mobile: Gewinn-und-Verlust-Rechnung (Kosten-Block, Ertrags-Block, Ergebnis) ── */}
                               <div className="sm:hidden">
-                                {/* SOLL */}
+                                {/* Kosten */}
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr className="border-b border-gray-200 dark:border-gray-600">
-                                      <th colSpan={4} className={thSoll}>SOLL — Kosten</th>
+                                      <th colSpan={4} className={thSoll}>Kosten</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {sollRows.filter(r => r !== null).map((s, i) => (
+                                    {sollPosten.map((s, i) => (
                                       <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
                                         {renderCell(s, 'soll')}
                                       </tr>
                                     ))}
                                     <tr className={sumRow}>
-                                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Soll</td>
-                                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(sumSoll, 2)} €</td>
-                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vjSumSoll != null ? `VJ: ${fmtCalc(vjSumSoll, 2)} €` : ''}</td>
-                                      <td className="py-2 pr-4 text-right whitespace-nowrap">{vjSumSoll != null ? <Δ a={sumSoll} b={vjSumSoll} inv /> : null}</td>
+                                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Summe Kosten</td>
+                                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(rawSoll, 2)} €</td>
+                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vj?.netzbezug_kosten_euro != null ? `VJ: ${fmtCalc(vj.netzbezug_kosten_euro, 2)} €` : ''}</td>
+                                      <td className="py-2 pr-4 text-right whitespace-nowrap">{vj?.netzbezug_kosten_euro != null ? <Δ a={rawSoll} b={vj.netzbezug_kosten_euro} inv /> : null}</td>
                                     </tr>
                                   </tbody>
                                 </table>
-                                {/* HABEN */}
+                                {/* Erlöse + Einsparungen */}
                                 <table className="w-full text-sm border-t-2 border-gray-300 dark:border-gray-600">
                                   <thead>
                                     <tr className="border-b border-gray-200 dark:border-gray-600">
-                                      <th colSpan={4} className={thHaben}>HABEN — Erlöse + Einsparungen</th>
+                                      <th colSpan={4} className={thHaben}>Erlöse + Einsparungen</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {habenRows.filter(r => r !== null).map((h, i) => (
+                                    {habenPosten.map((h, i) => (
                                       <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
                                         {renderCell(h, 'haben')}
                                       </tr>
                                     ))}
                                     <tr className={sumRow}>
-                                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Σ Haben</td>
-                                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(sumHaben, 2)} €</td>
-                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{vjSumHaben != null ? `VJ: ${fmtCalc(vjSumHaben, 2)} €` : ''}</td>
-                                      <td className="py-2 pr-4 text-right whitespace-nowrap">{vjSumHaben != null ? <Δ a={sumHaben} b={vjSumHaben} /> : null}</td>
+                                      <td className="py-2 pl-4 pr-2 text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Summe Erträge</td>
+                                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold text-gray-900 dark:text-white">{fmtCalc(rawHaben, 2)} €</td>
+                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{(vj?.einspeise_erloes_euro != null || vj?.ev_ersparnis_euro != null) ? `VJ: ${fmtCalc((vj.einspeise_erloes_euro ?? 0) + (vj.ev_ersparnis_euro ?? 0), 2)} €` : ''}</td>
+                                      <td className="py-2 pr-4 text-right whitespace-nowrap">{(vj?.einspeise_erloes_euro != null || vj?.ev_ersparnis_euro != null) ? <Δ a={rawHaben} b={(vj.einspeise_erloes_euro ?? 0) + (vj.ev_ersparnis_euro ?? 0)} /> : null}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                                {/* Netto-Ergebnis */}
+                                <table className="w-full text-sm border-t-2 border-gray-400 dark:border-gray-500">
+                                  <tbody>
+                                    <tr className="bg-gray-100 dark:bg-gray-700/60">
+                                      <td className="py-2 pl-4 pr-2 text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                                        {nettoT >= 0 ? 'Gewinn' : 'Verlust'}
+                                      </td>
+                                      <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold ${nettoT >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                        {fmtCalc(Math.abs(nettoT), 2)} €
+                                      </td>
+                                      <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                                        {vj?.gesamtnettoertrag_euro != null ? `VJ: ${fmtCalc(vj.gesamtnettoertrag_euro, 2)} €` : ''}
+                                      </td>
+                                      <td className="py-2 pr-4 text-right whitespace-nowrap">
+                                        {vj?.gesamtnettoertrag_euro != null ? <Δ a={nettoT} b={vj.gesamtnettoertrag_euro} /> : null}
+                                      </td>
                                     </tr>
                                   </tbody>
                                 </table>
