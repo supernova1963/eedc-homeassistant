@@ -23,7 +23,73 @@ import {
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
+import Icon from '@mdi/react'
+import {
+  mdiSolarPower,
+  mdiSolarPowerVariant,
+  mdiLightningBolt,
+  mdiHomeLightningBolt,
+  mdiHomeLightningBoltOutline,
+  mdiHomeBattery,
+  mdiTransmissionTowerExport,
+  mdiTransmissionTowerImport,
+  mdiPercent,
+  mdiCashPlus,
+  mdiCashCheck,
+  mdiCash,
+  mdiCashRefund,
+  mdiPiggyBank,
+  mdiMoleculeCo2,
+  mdiChartLine,
+  mdiCalendarClock,
+  mdiCalendar,
+  mdiCalendarMonth,
+  mdiCalendarText,
+  mdiCarElectric,
+  mdiGauge,
+  mdiFuel,
+  mdiHeatPump,
+  mdiBatterySync,
+  mdiBatteryCheck,
+  mdiCounter,
+  mdiHelpCircleOutline
+} from '@mdi/js'
 import { haApi, anlagenApi } from '../api'
+
+const MDI_ICON_MAP: Record<string, string> = {
+  'mdi:solar-power': mdiSolarPower,
+  'mdi:solar-power-variant': mdiSolarPowerVariant,
+  'mdi:lightning-bolt': mdiLightningBolt,
+  'mdi:home-lightning-bolt': mdiHomeLightningBolt,
+  'mdi:home-lightning-bolt-outline': mdiHomeLightningBoltOutline,
+  'mdi:home-battery': mdiHomeBattery,
+  'mdi:transmission-tower-export': mdiTransmissionTowerExport,
+  'mdi:transmission-tower-import': mdiTransmissionTowerImport,
+  'mdi:percent': mdiPercent,
+  'mdi:cash-plus': mdiCashPlus,
+  'mdi:cash-check': mdiCashCheck,
+  'mdi:cash': mdiCash,
+  'mdi:cash-refund': mdiCashRefund,
+  'mdi:piggy-bank': mdiPiggyBank,
+  'mdi:molecule-co2': mdiMoleculeCo2,
+  'mdi:chart-line': mdiChartLine,
+  'mdi:calendar-clock': mdiCalendarClock,
+  'mdi:calendar': mdiCalendar,
+  'mdi:calendar-month': mdiCalendarMonth,
+  'mdi:calendar-text': mdiCalendarText,
+  'mdi:car-electric': mdiCarElectric,
+  'mdi:gauge': mdiGauge,
+  'mdi:fuel': mdiFuel,
+  'mdi:heat-pump': mdiHeatPump,
+  'mdi:battery-sync': mdiBatterySync,
+  'mdi:battery-check': mdiBatteryCheck,
+  'mdi:counter': mdiCounter,
+}
+
+function MdiIcon({ name }: { name: string }) {
+  const path = MDI_ICON_MAP[name] ?? mdiHelpCircleOutline
+  return <Icon path={path} size={0.9} className="text-gray-600 dark:text-gray-300" />
+}
 import type {
   FullExportResponse,
   AnlageExport,
@@ -639,7 +705,7 @@ export default function HAExportSettings() {
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">{sensor.icon}</span>
+                              <MdiIcon name={sensor.icon} />
                               <span className="font-medium text-gray-900 dark:text-white">
                                 {sensor.name}
                               </span>

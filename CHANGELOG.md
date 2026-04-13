@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.2] - 2026-04-13
+
+### Fix
+
+- **MQTT-Export: Icons wurden als Text angezeigt**: Im HA-Export-Tab stand bei jedem Sensor der MDI-Name als Text (`mdi:solar-power`, `mdi:lightning-bolt` …) statt eines echten Icons. Frontend rendert jetzt die tatsächlichen Material-Design-Icons über `@mdi/react` + `@mdi/js` — identisch zur Darstellung in Home Assistant. Auslöser: Rainer.
+
+---
+
 ## [3.13.1] - 2026-04-13
 
 ### Fix
