@@ -150,12 +150,20 @@ export function EnergieprofilMonat({ anlageId }: Props) {
   }
 
   // Zukünftige Monate sperren
-  const nextDisabled = (() => {
-    const now = new Date()
-    const aktJahr = now.getFullYear()
-    const aktMonat = now.getMonth() + 1
-    return jahr > aktJahr || (jahr === aktJahr && monat >= aktMonat)
-  })()
+  const now = new Date()
+  const aktJahr = now.getFullYear()
+  const aktMonat = now.getMonth() + 1
+  const nextDisabled = jahr > aktJahr || (jahr === aktJahr && monat >= aktMonat)
+
+  // Handler, die Zukunfts-Auswahl auf den letzten erlaubten Monat klemmen
+  const handleJahrChange = (neuesJahr: number) => {
+    setJahr(neuesJahr)
+    if (neuesJahr === aktJahr && monat > aktMonat) setMonat(aktMonat)
+  }
+  const handleMonatChange = (neuerMonat: number) => {
+    if (jahr === aktJahr && neuerMonat > aktMonat) setMonat(aktMonat)
+    else setMonat(neuerMonat)
+  }
 
   return (
     <div className="space-y-4">
@@ -171,21 +179,25 @@ export function EnergieprofilMonat({ anlageId }: Props) {
         </button>
         <select
           value={monat}
-          onChange={(e) => setMonat(Number(e.target.value))}
+          onChange={(e) => handleMonatChange(Number(e.target.value))}
           className="input w-auto"
           aria-label="Monat"
         >
-          {MONATSNAMEN.map((_, i) => (
-            <option key={i + 1} value={i + 1}>{MONATSNAMEN_LANG[i]}</option>
-          ))}
+          {MONATSNAMEN.map((_, i) => {
+            const m = i + 1
+            const disabled = jahr === aktJahr && m > aktMonat
+            return (
+              <option key={m} value={m} disabled={disabled}>{MONATSNAMEN_LANG[i]}</option>
+            )
+          })}
         </select>
         <select
           value={jahr}
-          onChange={(e) => setJahr(Number(e.target.value))}
+          onChange={(e) => handleJahrChange(Number(e.target.value))}
           className="input w-auto"
           aria-label="Jahr"
         >
-          {Array.from({ length: 6 }, (_, i) => heute.jahr - i).map(j => (
+          {Array.from({ length: 6 }, (_, i) => aktJahr - i).map(j => (
             <option key={j} value={j}>{j}</option>
           ))}
         </select>
