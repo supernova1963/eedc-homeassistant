@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.4] - 2026-04-14
+
+### Vorbereitung
+
+- **PDF-Engine als HA-Add-on-Option (#121)**: v3.13.3 hatte die neue WeasyPrint-Engine zwar im Hintergrund installiert, aber nur über die Umgebungsvariable `PDF_ENGINE=weasyprint` aktivierbar — was im HA-Add-on-Kontext gar nicht möglich war. v3.13.4 ergänzt eine Add-on-Option `pdf_engine` (Default `reportlab`), die in der HA-UI direkt umgeschaltet werden kann. Standalone-Docker-User können die ENV-Variable wie bisher in `docker-compose.yml` setzen — keine Verhaltensänderung. Default bleibt `reportlab`, am sichtbaren Verhalten ändert sich für niemanden etwas.
+
+---
+
 ## [3.13.3] - 2026-04-14
 
 ### Vorbereitung
