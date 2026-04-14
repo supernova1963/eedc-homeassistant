@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block doc_title %}Infothek-Dossier — {{ anlage.name }}{% endblock %}
+{% block heading %}
+  Infothek-Dossier
+  {% if kategorie_filter_label %} — {{ kategorie_filter_label }}{% endif %}
+{% endblock %}
+
+{% block subheading %}
+  <p class="muted">
+    {{ anlage.name }}
+    {%- if anlage.standort_ort %} · {{ anlage.standort_plz or "" }} {{ anlage.standort_ort }}{% endif %}
+    · {{ anzahl_eintraege }} Eintrag{{ "" if anzahl_eintraege == 1 else "äge" }}
+    · erzeugt am {{ erzeugt_am }}
+  </p>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Infothek-spezifisches Feintuning, kein Eingriff in styles.css */
+  .sektion + .sektion { page-break-before: always; }
+  .eintrag {
+    margin: 4mm 0 6mm 0;
+    padding: 3mm 4mm;
+    border-left: 3px solid var(--color-primary);
+    background: var(--color-bg-soft);
+    page-break-inside: avoid;
+  }
+  .eintrag h3 {
+    margin: 0 0 1mm 0;
+    color: var(--color-primary-dark);
+  }
+  .eintrag .vp {
+    font-size: 9.5pt;
+    color: var(--color-muted);
+    margin-bottom: 2mm;
+  }
+  .eintrag-tabelle {
+    margin: 2mm 0 0 0;
+    background: white;
+  }
+  .eintrag-tabelle th {
+    width: 38%;
+    background: white;
+    color: var(--color-muted);
+    font-weight: 500;
+    font-size: 9pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+  }
+  .eintrag-tabelle td { font-size: 10pt; }
+  .notizen {
+    margin-top: 3mm;
+    padding: 2mm 4mm;
+    background: white;
+    border-left: 2px solid var(--color-accent);
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+  .notizen p { margin: 0 0 1.5mm 0; }
+  .notizen p:last-child { margin-bottom: 0; }
+  .notizen ul { margin: 0 0 0 4mm; padding: 0; }
+  .notizen a { color: var(--color-primary); }
+  .leer-hinweis {
+    color: var(--color-muted);
+    font-style: italic;
+  }
+</style>
+
+{% if not sektionen %}
+  <p class="leer-hinweis">Keine Einträge vorhanden.</p>
+{% endif %}
+
+{% for sektion in sektionen %}
+<section class="sektion">
+  <h2>{{ sektion.label }} <span class="muted" style="font-size:10pt; font-weight:normal;">· {{ sektion.eintraege|length }}</span></h2>
+
+  {% for e in sektion.eintraege %}
+  <div class="eintrag">
+    <h3>{{ e.bezeichnung }}</h3>
+    {% if e.vertragspartner %}
+      <div class="vp">Vertragspartner: {{ e.vertragspartner }}</div>
+    {% endif %}
+
+    {% if e.felder %}
+    <table class="eintrag-tabelle">
+      <tbody>
+        {% for label, value in e.felder %}
+        <tr>
+          <th>{{ label }}</th>
+          <td>{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if e.notizen_html %}
+    <div class="notizen">{{ e.notizen_html }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{% endblock %}

@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.3] - 2026-04-14
+
+### Vorbereitung
+
+- **PDF-Pipeline-Umstellung (Issue #121) — Substrat-Release**: Die neue PDF-Engine (WeasyPrint + Jinja2 + Matplotlib) wird im Hintergrund installiert und ist über die Umgebungsvariable `PDF_ENGINE=weasyprint` opt-in testbar. Default bleibt `reportlab`, am sichtbaren Verhalten ändert sich für niemanden etwas. Drin sind die neuen Builder für **Jahresbericht** und **Infothek-Dossier** mit einheitlichem Corporate-Design, Matplotlib-Charts (PV-Erzeugung, Energiefluss, Autarkie) und Markdown-Notizen-Rendering. Der bisherige reportlab-Pfad bleibt vollständig erhalten und wird unverändert genutzt. Anlagendokumentation, Finanzbericht und der Dokumenten-Dialog im Frontend folgen in einem späteren Beta-Release, sobald das Layout (V4 — siehe #121) und die Verknüpfung Investition↔Infothek-Eintrag ausreichend mit der Community abgestimmt sind. Native Libs (libpango, fontconfig, fonts-dejavu-core) sind im Dockerfile ergänzt — der HA-Add-on-Build vergrößert sich um wenige MB.
+
+---
+
 ## [3.13.2] - 2026-04-13
 
 ### Fix

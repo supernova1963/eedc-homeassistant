@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block doc_title %}Smoke-Test{% endblock %}
+{% block heading %}EEDC PDF-Engine — Smoke-Test{% endblock %}
+
+{% block subheading %}
+  <p class="muted">Generiert am {{ erzeugt_am }} · Engine: WeasyPrint · Template: Jinja2</p>
+{% endblock %}
+
+{% block content %}
+  <h2>Status</h2>
+  <p>Wenn dieses PDF lesbar ist, sind alle Komponenten der neuen Pipeline einsatzbereit:</p>
+  <ul>
+    <li>WeasyPrint inkl. Pango/Cairo</li>
+    <li>Jinja2 Template-Loader aus <code>pdf/templates/</code></li>
+    <li>CSS aus <code>pdf/static/styles.css</code> + <code>print.css</code></li>
+    <li>Page-Header / Page-Footer / Seitenzählung</li>
+  </ul>
+
+  <h2>Corporate Identity</h2>
+  <div>
+    <span class="kpi"><span class="label">Primärfarbe</span><span class="value">#1565c0</span></span>
+    <span class="kpi"><span class="label">Akzent</span><span class="value">#43a047</span></span>
+    <span class="kpi"><span class="label">Schrift</span><span class="value">DejaVu Sans</span></span>
+  </div>
+
+  <h2>Tabellen-Stil</h2>
+  <table>
+    <thead>
+      <tr><th>Sektion</th><th>Status</th><th>Hinweis</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Phase 1 — Fundament</td><td>aktiv</td><td>Smoke-Test rendert</td></tr>
+      <tr><td>Phase 2 — Jahresbericht</td><td>geplant</td><td>Builder folgt</td></tr>
+      <tr><td>Phase 3 — Infothek</td><td>geplant</td><td>Builder folgt</td></tr>
+      <tr><td>Phase 4 — Anlagenpass + Finanzbericht + Dialog</td><td>geplant</td><td>Vorarbeiten nötig</td></tr>
+      <tr><td>Phase 5 — Aufräumen</td><td>geplant</td><td>Alte Services löschen</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Page-Break-Test</h2>
+  <p>Der nächste Block erzwingt einen Seitenwechsel via <code>.page-break</code>.</p>
+
+  <div class="page-break"></div>
+  <h2>Zweite Seite</h2>
+  <p>Header, Footer und Seitenzählung müssen unten erscheinen. Wenn „Seite 2 / 2" sichtbar ist, funktionieren die <code>@page</code>-Regeln.</p>
+{% endblock %}

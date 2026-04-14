@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Anlagenpass — Mockup V4 Farbstreifen</title>
+<style>
+  /*
+   * V4 — auf Basis von Rainers Referenzbild aus Issue #121:
+   *   • dezente vertikale 3-Farben-Leiste am linken Rand (seitenübergreifend)
+   *   • viel Weißraum, Sans-Serif
+   *   • gesperrte Headline-Caps + fetter Haupttitel
+   *   • kleiner farbiger Mini-Trenner
+   * Farben sind als CSS-Variablen ablegt — Rainer kann sie später ändern.
+   */
+  :root {
+    --c1: #0d47a1;
+    --c2: #43a047;
+    --c3: #ffa726;
+    --txt: #1a1a1a;
+    --muted: #5f6b7a;
+    --rule: #d6dde6;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+    @bottom-right {
+      content: "Seite " counter(page) " / " counter(pages);
+      font-family: "DejaVu Sans", sans-serif;
+      font-size: 8.5pt;
+      color: #90a4ae;
+      margin-right: 22mm;
+      margin-bottom: 14mm;
+    }
+  }
+  body { font-family: "DejaVu Sans", sans-serif; color: var(--txt); margin: 0; }
+
+  .seite {
+    width: 210mm;
+    height: 297mm;
+    box-sizing: border-box;
+    page-break-after: always;
+    position: relative;
+    padding: 28mm 22mm 22mm 38mm;
+  }
+  .seite:last-child { page-break-after: auto; }
+
+  /* Vertikale 3-Farben-Leiste links, seitenübergreifend */
+  .seite::before {
+    content: "";
+    position: absolute;
+    top: 22mm;
+    bottom: 22mm;
+    left: 22mm;
+    width: 6mm;
+    background:
+      linear-gradient(180deg,
+        var(--c1) 0%,    var(--c1) 33.3%,
+        var(--c2) 33.3%, var(--c2) 66.6%,
+        var(--c3) 66.6%, var(--c3) 100%);
+  }
+
+  /* === Titelseite === */
+  .titel-headline {
+    font-size: 11pt;
+    color: var(--muted);
+    letter-spacing: 4mm;
+    text-transform: uppercase;
+    text-align: center;
+    margin: 50mm 0 6mm 0;
+    font-weight: 400;
+  }
+  .titel-name {
+    font-size: 30pt;
+    text-align: center;
+    color: var(--txt);
+    font-weight: 700;
+    margin: 0 0 4mm 0;
+    letter-spacing: 0.5mm;
+  }
+  .mini-trenner {
+    text-align: center;
+    margin: 6mm 0 14mm 0;
+    height: 2.5mm;
+  }
+  .mini-trenner span {
+    display: inline-block;
+    width: 8mm;
+    height: 2.5mm;
+  }
+  .mini-trenner .a { background: var(--c1); }
+  .mini-trenner .b { background: var(--c2); }
+  .mini-trenner .c { background: var(--c3); }
+
+  .adresse {
+    text-align: center;
+    font-size: 13pt;
+    line-height: 1.7;
+    color: var(--txt);
+    margin: 0 0 30mm 0;
+    font-weight: 300;
+  }
+
+  .meta-row {
+    display: table;
+    width: 100%;
+    border-top: 0.3mm solid var(--rule);
+    border-bottom: 0.3mm solid var(--rule);
+    padding: 6mm 0;
+    margin: 4mm 0;
+  }
+  .meta-row > div {
+    display: table-cell;
+    width: 33%;
+    vertical-align: top;
+    padding: 0 4mm;
+  }
+  .meta-row .label {
+    font-size: 8pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1mm;
+    margin-bottom: 1.5mm;
+  }
+  .meta-row .value {
+    font-size: 12pt;
+    color: var(--txt);
+    font-weight: 500;
+  }
+
+  .komponenten-headline {
+    font-size: 9pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.8mm;
+    margin: 18mm 0 4mm 0;
+    text-align: center;
+  }
+  .komponenten-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+  }
+  .komponenten-list li {
+    font-size: 11pt;
+    padding: 1.5mm 0;
+    color: var(--txt);
+  }
+  .komponenten-list li + li { border-top: 0.2mm dotted var(--rule); }
+
+  .titel-fuss {
+    position: absolute;
+    bottom: 22mm;
+    left: 38mm;
+    right: 22mm;
+    font-size: 8.5pt;
+    color: var(--muted);
+    text-align: center;
+    padding-top: 4mm;
+    border-top: 0.3mm solid var(--rule);
+    letter-spacing: 0.4mm;
+  }
+
+  /* === Investitions-Folgeseite === */
+  .invest-page .typ-label {
+    font-size: 9pt;
+    color: var(--c1);
+    text-transform: uppercase;
+    letter-spacing: 1.6mm;
+    margin: 8mm 0 2mm 0;
+  }
+  .invest-page h2 {
+    font-size: 22pt;
+    margin: 0 0 6mm 0;
+    color: var(--txt);
+    font-weight: 700;
+  }
+  .invest-page .mini-trenner-l {
+    margin: 0 0 12mm 0;
+    height: 2mm;
+  }
+  .invest-page .mini-trenner-l span {
+    display: inline-block;
+    width: 8mm;
+    height: 2mm;
+  }
+  .invest-page .mini-trenner-l .a { background: var(--c1); }
+  .invest-page .mini-trenner-l .b { background: var(--c2); }
+  .invest-page .mini-trenner-l .c { background: var(--c3); }
+
+  .invest-page .tech-grid {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .invest-page .tech-grid .row { display: table-row; }
+  .invest-page .tech-grid .row > div {
+    display: table-cell;
+    padding: 3mm 4mm 3mm 0;
+    vertical-align: top;
+    border-bottom: 0.2mm solid var(--rule);
+  }
+  .invest-page .tech-grid .label {
+    width: 38%;
+    font-size: 9pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5mm;
+  }
+  .invest-page .tech-grid .value {
+    font-size: 11pt;
+    color: var(--txt);
+  }
+</style>
+</head>
+<body>
+<!-- Titelseite -->
+<div class="seite">
+  <div class="titel-headline">Anlagenpass</div>
+  <h1 class="titel-name">{{ a.name }}</h1>
+  <div class="mini-trenner">
+    <span class="a"></span><span class="b"></span><span class="c"></span>
+  </div>
+
+  <div class="adresse">
+    {{ a.standort_strasse }}<br>
+    {{ a.standort_plz }} {{ a.standort_ort }}
+  </div>
+
+  <div class="meta-row">
+    <div>
+      <div class="label">Leistung</div>
+      <div class="value">{{ "%.2f"|format(a.leistung_kwp) }} kWp</div>
+    </div>
+    <div>
+      <div class="label">In Betrieb seit</div>
+      <div class="value">{{ a.installationsdatum.strftime("%m / %Y") }}</div>
+    </div>
+    <div>
+      <div class="label">MaStR</div>
+      <div class="value">{{ a.mastr_id }}</div>
+    </div>
+  </div>
+
+  <div class="komponenten-headline">Komponenten</div>
+  <ul class="komponenten-list">
+    {% for art in a.anlagenarten %}<li>{{ art }}</li>{% endfor %}
+  </ul>
+
+  <div class="titel-fuss">
+    EEDC · Energie Effizienz Data Center · erzeugt am {{ erzeugt_am }}
+  </div>
+</div>
+
+<!-- Investitions-Folgeseiten -->
+{% set typ_namen = {
+  "pv-module": "PV-Modulfeld",
+  "speicher": "Batteriespeicher",
+  "waermepumpe": "Wärmepumpe",
+  "wallbox": "Wallbox",
+  "e-auto": "E-Fahrzeug",
+  "balkonkraftwerk": "Balkonkraftwerk",
+} %}
+
+{% for inv in investitionen %}
+<div class="seite invest-page">
+  <div class="typ-label">{{ typ_namen.get(inv.typ, inv.typ) }}</div>
+  <h2>{{ inv.bezeichnung }}</h2>
+  <div class="mini-trenner-l">
+    <span class="a"></span><span class="b"></span><span class="c"></span>
+  </div>
+
+  <div class="tech-grid">
+    <div class="row">
+      <div class="label">Anschaffungsdatum</div>
+      <div class="value">{{ inv.anschaffungsdatum.strftime("%d.%m.%Y") }}</div>
+    </div>
+    {% if inv.leistung_kwp %}
+    <div class="row">
+      <div class="label">Nennleistung</div>
+      <div class="value">{{ "%.2f"|format(inv.leistung_kwp) }} kWp</div>
+    </div>
+    {% endif %}
+    {% if inv.kapazitaet_kwh %}
+    <div class="row">
+      <div class="label">Speicherkapazität</div>
+      <div class="value">{{ "%.1f"|format(inv.kapazitaet_kwh) }} kWh</div>
+    </div>
+    {% endif %}
+    {% if inv.modul_typ %}
+    <div class="row">
+      <div class="label">Modul / Modell</div>
+      <div class="value">{{ inv.modul_typ }}</div>
+    </div>
+    {% endif %}
+    {% if inv.modulanzahl %}
+    <div class="row">
+      <div class="label">Anzahl Module</div>
+      <div class="value">{{ inv.modulanzahl }}</div>
+    </div>
+    {% endif %}
+    {% if inv.wechselrichter %}
+    <div class="row">
+      <div class="label">Wechselrichter</div>
+      <div class="value">{{ inv.wechselrichter }}</div>
+    </div>
+    {% endif %}
+    {% if inv.ausrichtung %}
+    <div class="row">
+      <div class="label">Ausrichtung</div>
+      <div class="value">{{ inv.ausrichtung }}{% if inv.neigung_grad %} · {{ inv.neigung_grad }}° Neigung{% endif %}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+</body>
+</html>

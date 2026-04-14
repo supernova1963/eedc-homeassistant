@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block doc_title %}{{ zeitraum_label }} – {{ anlage.name }}{% endblock %}
+{% block heading %}{{ zeitraum_label }}{% endblock %}
+
+{% macro fmt_kwh(v, decimals=0) -%}
+  {%- if v is none -%}–{%- else -%}{{ "{:,.{p}f}".format(v, p=decimals).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh{%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_eur(v) -%}
+  {%- if v is none -%}–{%- else -%}{{ "{:,.2f}".format(v).replace(",", "X").replace(".", ",").replace("X", ".") }} €{%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_pct(v, decimals=1) -%}
+  {%- if v is none -%}–{%- else -%}{{ "{:.{p}f}".format(v, p=decimals).replace(".", ",") }} %{%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_num(v, decimals=0) -%}
+  {%- if v is none -%}–{%- else -%}{{ "{:,.{p}f}".format(v, p=decimals).replace(",", "X").replace(".", ",").replace("X", ".") }}{%- endif -%}
+{%- endmacro %}
+
+{% block subheading %}
+  <p class="muted">
+    {{ anlage.name }} · {{ fmt_num(anlage.leistung_kwp, 2) }} kWp
+    {%- if anlage.standort_ort %} · {{ anlage.standort_plz or "" }} {{ anlage.standort_ort }}{% endif %}
+    · erzeugt am {{ erzeugt_am }}
+  </p>
+{% endblock %}
+
+{% block content %}
+
+<h2>Anlagen-Übersicht</h2>
+<table>
+  <tbody>
+    <tr><th style="width:35%">Anlagenname</th><td>{{ anlage.name }}</td></tr>
+    <tr><th>Leistung</th><td>{{ fmt_num(anlage.leistung_kwp, 2) }} kWp</td></tr>
+    {% if anlage.installationsdatum %}
+    <tr><th>Installationsdatum</th><td>{{ anlage.installationsdatum.strftime("%d.%m.%Y") }}</td></tr>
+    {% endif %}
+    {% if anlage.mastr_id %}<tr><th>MaStR-ID</th><td>{{ anlage.mastr_id }}</td></tr>{% endif %}
+    {% if anlage.standort_strasse or anlage.standort_ort %}
+    <tr><th>Standort</th><td>
+      {{ anlage.standort_strasse or "" }}{% if anlage.standort_strasse %}, {% endif %}
+      {{ anlage.standort_plz or "" }} {{ anlage.standort_ort or "" }}
+    </td></tr>
+    {% endif %}
+    {% if tarif.anbieter or tarif.tarifname %}
+    <tr><th>Stromtarif</th><td>
+      {{ tarif.anbieter or "" }}{% if tarif.tarifname %} – {{ tarif.tarifname }}{% endif %}<br>
+      <span class="muted">
+        Bezug {{ fmt_num(tarif.netzbezug_cent, 2) }} ct/kWh ·
+        Einspeisung {{ fmt_num(tarif.einspeise_cent, 2) }} ct/kWh
+      </span>
+    </td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<h2>Jahres-Kennzahlen</h2>
+<div>
+  <span class="kpi"><span class="label">PV-Erzeugung</span><span class="value">{{ fmt_kwh(kpis.pv_erzeugung_kwh) }}</span></span>
+  <span class="kpi"><span class="label">Eigenverbrauch</span><span class="value">{{ fmt_kwh(kpis.eigenverbrauch_kwh) }}</span></span>
+  <span class="kpi"><span class="label">Einspeisung</span><span class="value">{{ fmt_kwh(kpis.einspeisung_kwh) }}</span></span>
+  <span class="kpi"><span class="label">Netzbezug</span><span class="value">{{ fmt_kwh(kpis.netzbezug_kwh) }}</span></span>
+</div>
+<div>
+  <span class="kpi"><span class="label">Autarkie</span><span class="value">{{ fmt_pct(kpis.autarkie_prozent) }}</span></span>
+  <span class="kpi"><span class="label">Eigenverbrauchsquote</span><span class="value">{{ fmt_pct(kpis.ev_quote_prozent) }}</span></span>
+  <span class="kpi"><span class="label">Spez. Ertrag</span><span class="value">{{ fmt_num(kpis.spezifischer_ertrag) }} kWh/kWp</span></span>
+  <span class="kpi"><span class="label">Netto-Ertrag</span><span class="value">{{ fmt_eur(kpis.netto_ertrag_euro) }}</span></span>
+</div>
+
+{% if charts.pv_erzeugung %}
+<h2>PV-Erzeugung</h2>
+<img src="{{ charts.pv_erzeugung }}" style="width:100%; max-width:170mm;">
+{% endif %}
+
+{% if charts.energie_fluss %}
+<h2>Energiefluss</h2>
+<img src="{{ charts.energie_fluss }}" style="width:100%; max-width:170mm;">
+{% endif %}
+
+{% if charts.autarkie %}
+<h2>Autarkie-Verlauf</h2>
+<img src="{{ charts.autarkie }}" style="width:100%; max-width:170mm;">
+{% endif %}
+
+{% if speicher.vorhanden %}
+<h2>Batteriespeicher</h2>
+<table>
+  <tbody>
+    <tr><th style="width:35%">Kapazität</th><td>{{ fmt_num(speicher.kapazitaet_kwh, 1) }} kWh</td></tr>
+    <tr><th>Ladung</th><td>{{ fmt_kwh(speicher.ladung_kwh) }}</td></tr>
+    <tr><th>Entladung</th><td>{{ fmt_kwh(speicher.entladung_kwh) }}</td></tr>
+    <tr><th>Vollzyklen</th><td>{{ fmt_num(speicher.vollzyklen, 1) }}</td></tr>
+    <tr><th>Wirkungsgrad</th><td>{{ fmt_pct(speicher.effizienz_prozent) }}</td></tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% if waermepumpe.vorhanden %}
+<h2>Wärmepumpe</h2>
+<table>
+  <tbody>
+    <tr><th style="width:35%">Wärmeenergie gesamt</th><td>{{ fmt_kwh(waermepumpe.waerme_kwh) }}</td></tr>
+    <tr><th>davon Heizung</th><td>{{ fmt_kwh(waermepumpe.heizung_kwh) }}</td></tr>
+    <tr><th>davon Warmwasser</th><td>{{ fmt_kwh(waermepumpe.warmwasser_kwh) }}</td></tr>
+    <tr><th>Stromverbrauch</th><td>{{ fmt_kwh(waermepumpe.strom_kwh) }}</td></tr>
+    <tr><th>Jahresarbeitszahl (COP)</th><td>{{ fmt_num(waermepumpe.cop, 2) }}</td></tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% if emob.vorhanden %}
+<h2>E-Mobilität</h2>
+<table>
+  <tbody>
+    <tr><th style="width:35%">Strecke</th><td>{{ fmt_num(emob.km) }} km</td></tr>
+    <tr><th>Ladung gesamt</th><td>{{ fmt_kwh(emob.ladung_kwh) }}</td></tr>
+    <tr><th>davon aus PV</th><td>{{ fmt_kwh(emob.ladung_pv_kwh) }}</td></tr>
+    <tr><th>davon aus Netz</th><td>{{ fmt_kwh(emob.ladung_netz_kwh) }}</td></tr>
+    <tr><th>PV-Anteil</th><td>{{ fmt_pct(emob.pv_anteil_prozent) }}</td></tr>
+    {% if emob.v2h_kwh %}<tr><th>V2H-Entladung</th><td>{{ fmt_kwh(emob.v2h_kwh) }}</td></tr>{% endif %}
+  </tbody>
+</table>
+{% endif %}
+
+<div class="page-break"></div>
+<h2>Monatsübersicht</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Monat</th><th>PV</th><th>Eigenverbr.</th><th>Einspeisung</th><th>Netzbezug</th><th>Autarkie</th><th>Ertrag</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for z in monats_zeilen %}
+    <tr>
+      <td>{{ z.monat_name }}</td>
+      <td>{{ fmt_kwh(z.pv_erzeugung_kwh) }}</td>
+      <td>{{ fmt_kwh(z.eigenverbrauch_kwh) }}</td>
+      <td>{{ fmt_kwh(z.einspeisung_kwh) }}</td>
+      <td>{{ fmt_kwh(z.netzbezug_kwh) }}</td>
+      <td>{{ fmt_pct(z.autarkie_prozent) }}</td>
+      <td>{{ fmt_eur(z.netto_ertrag_euro) }}</td>
+    </tr>
+    {% endfor %}
+    <tr style="font-weight:bold; background:#f5f7fa;">
+      <td>Summe</td>
+      <td>{{ fmt_kwh(kpis.pv_erzeugung_kwh) }}</td>
+      <td>{{ fmt_kwh(kpis.eigenverbrauch_kwh) }}</td>
+      <td>{{ fmt_kwh(kpis.einspeisung_kwh) }}</td>
+      <td>{{ fmt_kwh(kpis.netzbezug_kwh) }}</td>
+      <td>{{ fmt_pct(kpis.autarkie_prozent) }}</td>
+      <td>{{ fmt_eur(kpis.netto_ertrag_euro) }}</td>
+    </tr>
+  </tbody>
+</table>
+
+{% if string_vergleiche %}
+<div class="page-break"></div>
+<h2>String-Vergleich SOLL/IST (PVGIS)</h2>
+<table>
+  <thead>
+    <tr><th>String</th><th>kWp</th><th>Ausr.</th><th>Neig.</th><th>SOLL</th><th>IST</th><th>Δ</th><th>spez.</th></tr>
+  </thead>
+  <tbody>
+    {% for s in string_vergleiche %}
+    <tr>
+      <td>{{ s.bezeichnung }}</td>
+      <td>{{ fmt_num(s.leistung_kwp, 2) }}</td>
+      <td>{{ s.ausrichtung or "–" }}</td>
+      <td>{{ fmt_num(s.neigung_grad, 0) }}°</td>
+      <td>{{ fmt_kwh(s.prognose_kwh) }}</td>
+      <td>{{ fmt_kwh(s.ist_kwh) }}</td>
+      <td>{{ fmt_pct(s.abweichung_prozent) }}</td>
+      <td>{{ fmt_num(s.spezifischer_ertrag) }} kWh/kWp</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<div class="page-break"></div>
+<h2>Finanz-Übersicht</h2>
+<table>
+  <tbody>
+    <tr><th style="width:45%">Investition gesamt</th><td>{{ fmt_eur(kpis.investition_gesamt_euro) }}</td></tr>
+    <tr><th>Investition Mehrkosten (vs. Alternative)</th><td>{{ fmt_eur(kpis.investition_mehrkosten_euro) }}</td></tr>
+    <tr><th>Einspeise-Erlös</th><td>{{ fmt_eur(kpis.einspeise_erloes_euro) }}</td></tr>
+    <tr><th>Eigenverbrauchs-Ersparnis</th><td>{{ fmt_eur(kpis.ev_ersparnis_euro) }}</td></tr>
+    <tr><th>Netto-Ertrag (vor Betriebskosten)</th><td>{{ fmt_eur(kpis.netto_ertrag_euro) }}</td></tr>
+    <tr><th>Betriebskosten anteilig</th><td>{{ fmt_eur(kpis.betriebskosten_zeitraum_euro) }}</td></tr>
+    <tr><th>Netto nach Betriebskosten</th><td>{{ fmt_eur(kpis.netto_nach_bk_euro) }}</td></tr>
+    <tr><th>Amortisations-Fortschritt</th><td>{{ fmt_pct(kpis.amortisation_prozent) }}</td></tr>
+    <tr><th>Rendite</th><td>{{ fmt_pct(kpis.rendite_prozent) }}</td></tr>
+  </tbody>
+</table>
+
+<h2>CO₂-Bilanz</h2>
+<table>
+  <tbody>
+    <tr><th style="width:45%">CO₂ aus PV-Eigenverbrauch</th><td>{{ fmt_num(co2.pv_kg) }} kg</td></tr>
+    {% if waermepumpe.vorhanden %}<tr><th>CO₂-Einsparung Wärmepumpe (vs. Gas)</th><td>{{ fmt_num(co2.wp_kg) }} kg</td></tr>{% endif %}
+    {% if emob.vorhanden %}<tr><th>CO₂-Einsparung E-Mobilität</th><td>{{ fmt_num(co2.emob_kg) }} kg</td></tr>{% endif %}
+    <tr style="font-weight:bold;"><th>Gesamt</th><td>{{ fmt_num(co2.gesamt_kg) }} kg</td></tr>
+  </tbody>
+</table>
+
+{% endblock %}
