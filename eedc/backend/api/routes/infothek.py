@@ -573,6 +573,33 @@ async def export_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     """Exportiert Infothek-Einträge als PDF."""
+    # Engine-Switch (Issue #121, Phase 3) — Default bleibt reportlab.
+    from backend.core.config import settings as _settings
+    if (_settings.pdf_engine or "").lower() == "weasyprint":
+        from backend.services.pdf import render_document
+        from backend.services.pdf.builders.infothek import build_infothek_context
+        try:
+            ctx = await build_infothek_context(db, anlage_id, kategorie)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        try:
+            pdf_bytes = render_document("infothek.html", ctx)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"PDF-Render-Fehler: {exc}")
+        anlagen_name = ctx["anlage"]["name"]
+        filename = f"infothek_{anlagen_name.replace(' ', '_')}"
+        if kategorie:
+            filename += f"_{kategorie}"
+        filename += f"_{datetime.now().strftime('%Y%m%d')}.pdf"
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     # Anlage laden
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()

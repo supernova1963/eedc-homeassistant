@@ -29,9 +29,16 @@ LABEL \
     io.hass.version="3.13.2"
 
 # System-Abhängigkeiten
+# WeasyPrint (neue PDF-Engine) braucht Pango/Cairo/HarfBuzz als native Libs.
+# libpango-1.0-0 zieht libcairo + harfbuzz transitiv mit, fontconfig ist
+# für die Schriften-Auflösung nötig.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     jq \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    fontconfig \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Arbeitsverzeichnis

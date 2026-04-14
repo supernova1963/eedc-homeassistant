@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     open_meteo_solar_enabled: bool = os.environ.get("OPEN_METEO_SOLAR_ENABLED", "true").lower() == "true"
     open_meteo_solar_api_url: str = "https://api.open-meteo.com/v1/forecast"
 
+    # PDF-Engine: "reportlab" (alt) oder "weasyprint" (neu).
+    # Während der Migration (Issue #121) parallel — Default bleibt reportlab,
+    # bis Phase 2/3 die Bestands-Endpoints umgestellt haben.
+    pdf_engine: str = os.environ.get("PDF_ENGINE", "reportlab")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

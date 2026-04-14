@@ -1,0 +1,12 @@
+/*
+ * Page-Break-Regeln. Wird zusätzlich zu styles.css eingebunden,
+ * damit die rein druckspezifischen Regeln separat gepflegt werden können.
+ */
+
+.page-break       { page-break-before: always; }
+.investition-block,
+.haupt-sektion,
+.infothek-kategorie { page-break-before: always; }
+
+/* Innerhalb von Tabellen keine Zeilen-Trenner */
+tr, td, th { page-break-inside: avoid; }

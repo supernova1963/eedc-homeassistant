@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>{% block doc_title %}EEDC Dokument{% endblock %}</title>
+  <link rel="stylesheet" href="{{ static_dir }}/styles.css">
+  <link rel="stylesheet" href="{{ static_dir }}/print.css">
+</head>
+<body>
+  <h1 class="doc-title">{% block heading %}EEDC{% endblock %}</h1>
+  {% block subheading %}{% endblock %}
+  {% block content %}{% endblock %}
+</body>
+</html>

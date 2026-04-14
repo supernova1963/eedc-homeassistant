@@ -41,6 +41,11 @@ pillow-heif>=0.16.0  # HEIC/HEIF Support (iPhone-Fotos)
 
 # PDF Generation
 reportlab>=4.0.0
+# Neue PDF-Engine (WeasyPrint + Jinja2 + Matplotlib für Charts).
+# Läuft parallel zu reportlab während der Migration (Feature-Flag PDF_ENGINE).
+weasyprint>=62.0
+jinja2>=3.1.0
+matplotlib>=3.8.0
 
 # Development (optional)
 # pytest>=7.4.0

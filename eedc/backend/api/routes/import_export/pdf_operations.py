@@ -43,6 +43,15 @@ MONATSNAMEN = [
 ]
 
 
+async def _render_jahresbericht_weasyprint(db: AsyncSession, anlage_id: int, jahr: Optional[int]) -> bytes:
+    """Neue WeasyPrint-Pipeline (Phase 2). Liefert PDF-Bytes."""
+    from backend.services.pdf import render_document
+    from backend.services.pdf.builders.jahresbericht import build_jahresbericht_context
+
+    ctx = await build_jahresbericht_context(db, anlage_id, jahr)
+    return render_document("jahresbericht.html", ctx)
+
+
 @router.get("/pdf/{anlage_id}")
 async def export_pdf(
     anlage_id: int,
@@ -64,6 +73,36 @@ async def export_pdf(
     - Finanz-Prognose & Amortisation (kumuliert)
     - PV-String Vergleich (SOLL vs. IST)
     """
+    # ==========================================================================
+    # 0. Engine-Switch (Issue #121, Phase 2 — Default bleibt reportlab)
+    # ==========================================================================
+    from backend.core.config import settings as _settings
+    if (_settings.pdf_engine or "").lower() == "weasyprint":
+        try:
+            pdf_bytes = await _render_jahresbericht_weasyprint(db, anlage_id, jahr)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        except Exception as exc:
+            logger.exception("WeasyPrint-Render fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail=f"PDF-Render-Fehler: {exc}")
+        # Anlage nur für Dateinamen nachladen
+        result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+        anlage = result.scalar_one()
+        safe_name = anlage.anlagenname.replace(" ", "_").replace("/", "-")
+        for umlaut, ersatz in [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"),
+                               ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue")]:
+            safe_name = safe_name.replace(umlaut, ersatz)
+        if jahr is None:
+            filename = f"eedc_anlagenbericht_{safe_name}.pdf"
+        else:
+            filename = f"eedc_jahresbericht_{safe_name}_{jahr}.pdf"
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     # ==========================================================================
     # 1. Anlage laden
     # ==========================================================================
