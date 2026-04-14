@@ -36,6 +36,7 @@ panel_title: "eedc"
 # Benutzer-Optionen
 options:
   log_level: info
+  pdf_engine: reportlab
   ha_recorder_db_url: ""
   mqtt:
     enabled: false
@@ -48,6 +49,7 @@ options:
 
 schema:
   log_level: list(debug|info|warning|error)
+  pdf_engine: list(reportlab|weasyprint)?
   ha_recorder_db_url: str?
   mqtt:
     enabled: bool?
