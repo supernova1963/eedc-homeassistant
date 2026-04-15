@@ -41,6 +41,14 @@ class Base(DeclarativeBase):
     pass
 
 
+# v3.16.0: Anlagen mit mindestens dieser Anzahl Tagen TagesZusammenfassung
+# gelten als "Bestand" und überspringen den Auto-Vollbackfill beim ersten
+# Monatsabschluss nach Upgrade. Schwelle bewusst niedrig, damit auch frische
+# Installationen mit ein paar Wochen Datenbestand nicht überraschend einen
+# Multi-Jahres-Backfill auslösen.
+VOLLBACKFILL_BESTAND_SCHWELLE_TAGE = 30
+
+
 async def run_migrations(conn):
     """
     Führt einfache Migrationen durch.
@@ -87,10 +95,25 @@ async def run_migrations(conn):
                 ('community_auto_share', 'BOOLEAN DEFAULT 0'),
                 # v3.5.0: Netz-Puffer für Energiefluss-Farbwechsel (Watt)
                 ('netz_puffer_w', 'INTEGER DEFAULT 100'),
+                ('vollbackfill_durchgefuehrt', 'BOOLEAN DEFAULT 0'),
             ]
+            newly_added = set()
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE anlagen ADD COLUMN {col_name} {col_type}'))
+                    newly_added.add(col_name)
+
+            # Bestandsdaten-Heuristik: Anlagen mit substanzieller Energieprofil-Historie
+            # sollen den Auto-Vollbackfill NICHT erneut auslösen. Nur beim erstmaligen
+            # Anlegen der Spalte einmalig markieren.
+            if 'vollbackfill_durchgefuehrt' in newly_added and 'tages_zusammenfassung' in inspector.get_table_names():
+                connection.execute(text(f"""
+                    UPDATE anlagen SET vollbackfill_durchgefuehrt = 1
+                    WHERE id IN (
+                        SELECT anlage_id FROM tages_zusammenfassung
+                        GROUP BY anlage_id HAVING COUNT(*) > {VOLLBACKFILL_BESTAND_SCHWELLE_TAGE}
+                    )
+                """))
 
         # v1.1.0: Neue Spalten zur monatsdaten Tabelle
         if 'monatsdaten' in inspector.get_table_names():

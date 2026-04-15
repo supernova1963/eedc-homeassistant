@@ -104,6 +104,13 @@ class Anlage(Base):
     # Energiefluss-Anzeige: Netz-Puffer in Watt (unterhalb = Balance/grün)
     netz_puffer_w: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=100)
 
+    # Einmaliger Auto-Vollbackfill aus HA Statistics: läuft beim ersten Monatsabschluss
+    # nach Upgrade automatisch durch (siehe _post_save_hintergrund). Wird gesetzt vom
+    # manuellen Wizard-Button und vom Auto-Lauf, damit es genau einmal pro Anlage greift.
+    vollbackfill_durchgefuehrt: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+
     # Steuerliche Behandlung
     # keine_ust: Kein USt-Effekt (Post-2023 ≤30kWp, Kleinunternehmer)
     # regelbesteuerung: USt auf Eigenverbrauch (Pre-2023, >30kWp, AT/CH)

@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
@@ -832,12 +832,16 @@ async def delete_rohdaten(
     Nur aufrufen wenn die Daten nachweislich falsch sind (z.B. falsch gemappte Sensoren).
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    if not result.scalar_one_or_none():
+    anlage = result.scalar_one_or_none()
+    if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
     del_result = await db.execute(
         delete(TagesEnergieProfil).where(TagesEnergieProfil.anlage_id == anlage_id)
     )
+    # Flag zurücksetzen, damit der nächste Monatsabschluss den Auto-Vollbackfill
+    # aus HA Statistics erneut anstößt
+    anlage.vollbackfill_durchgefuehrt = False
     await db.commit()
 
     return {
@@ -864,74 +868,44 @@ async def vollbackfill(
         verarbeitet: Anzahl Tage im Zeitraum
         geschrieben: Davon neu geschriebene Tage
     """
-    from backend.services.energie_profil_service import backfill_from_statistics
-    from backend.services.ha_statistics_service import get_ha_statistics_service
-    from backend.services.live_sensor_config import extract_live_config
+    from backend.services.energie_profil_service import resolve_and_backfill_from_statistics
 
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
         raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
 
-    ha_service = get_ha_statistics_service()
-    if not ha_service.is_available:
-        raise HTTPException(status_code=503, detail="HA Statistics Datenbank nicht verfügbar")
-
-    if bis is None:
-        bis = date.today() - timedelta(days=1)
-
-    if von is None:
-        # Frühestes Datum aus Statistics ermitteln
-        basis_live, inv_live_map, _, _ = extract_live_config(anlage)
-        all_eids = list(set(
-            list(basis_live.values()) +
-            [eid for live in inv_live_map.values() for eid in live.values() if eid]
-        ))
-        if not all_eids:
-            raise HTTPException(status_code=400, detail="Keine Live-Sensoren konfiguriert")
-
-        # Nur Sensoren verwenden die tatsächlich in HA statistics_meta existieren
-        import asyncio
-        valid_eids, missing_eids = await asyncio.to_thread(ha_service.filter_valid_sensor_ids, all_eids)
-        if missing_eids:
-            logger.warning(
-                f"Anlage {anlage_id}: {len(missing_eids)} Sensor(en) nicht in HA statistics_meta "
-                f"gefunden, werden ignoriert: {missing_eids}"
-            )
-        if not valid_eids:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Keiner der konfigurierten Live-Sensoren wurde in der HA-Datenbank gefunden: "
-                    f"{all_eids}. Bitte Sensor-Zuordnung im Wizard prüfen und veraltete Sensoren entfernen."
-                )
-            )
-
-        try:
-            verfuegbar = await asyncio.to_thread(ha_service.get_verfuegbare_monate, valid_eids)
-            von = verfuegbar.erstes_datum
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Konnte frühestes Datum nicht ermitteln: {e}")
-
-    if von > bis:
-        raise HTTPException(status_code=400, detail=f"von ({von}) muss <= bis ({bis}) sein")
-
-    verarbeitet = (bis - von).days + 1
     try:
-        geschrieben = await backfill_from_statistics(anlage, von, bis, db)
+        backfill = await resolve_and_backfill_from_statistics(anlage, db, von=von, bis=bis)
     except Exception as e:
         import traceback
-        tb = traceback.format_exc()
-        logger.error(f"Vollbackfill Anlage {anlage_id} FEHLER: {type(e).__name__}: {e}\n{tb}")
+        logger.error(f"Vollbackfill Anlage {anlage_id} FEHLER: {type(e).__name__}: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+    if backfill.missing_eids:
+        logger.warning(
+            f"Anlage {anlage_id}: {len(backfill.missing_eids)} Sensor(en) nicht in HA "
+            f"statistics_meta gefunden, werden ignoriert: {backfill.missing_eids}"
+        )
+
+    if backfill.status == "ha_unavailable":
+        raise HTTPException(status_code=503, detail=backfill.detail)
+    if backfill.status in ("no_sensors", "no_valid_sensors", "earliest_unknown", "empty_range"):
+        raise HTTPException(status_code=400, detail=backfill.detail)
+
+    # Flag setzen, damit der Auto-Vollbackfill im _post_save_hintergrund nicht erneut läuft
+    anlage.vollbackfill_durchgefuehrt = True
     await db.commit()
 
-    logger.info(f"Vollbackfill Anlage {anlage_id}: {geschrieben}/{verarbeitet} Tage von {von} bis {bis}")
+    logger.info(
+        f"Vollbackfill Anlage {anlage_id}: {backfill.geschrieben}/{backfill.verarbeitet} Tage "
+        f"von {backfill.von} bis {backfill.bis}"
+    )
     return {
-        "verarbeitet": verarbeitet,
-        "geschrieben": geschrieben,
-        "von": von.isoformat(),
-        "bis": bis.isoformat(),
+        "verarbeitet": backfill.verarbeitet,
+        "geschrieben": backfill.geschrieben,
+        "von": backfill.von.isoformat(),
+        "bis": backfill.bis.isoformat(),
     }
 
 
@@ -948,6 +922,9 @@ async def delete_alle_rohdaten(
     """
     del_stunden = await db.execute(delete(TagesEnergieProfil))
     del_tage = await db.execute(delete(TagesZusammenfassung))
+    # Flag bei ALLEN Anlagen zurücksetzen, damit der nächste Monatsabschluss
+    # den Auto-Vollbackfill aus HA Statistics erneut anstößt
+    await db.execute(update(Anlage).values(vollbackfill_durchgefuehrt=False))
     await db.commit()
 
     return {

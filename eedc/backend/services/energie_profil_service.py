@@ -15,9 +15,11 @@ Datenfluss:
   → monatlich: rollup_month() → Monatsdaten-Felder aktualisieren
 """
 
+import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from sqlalchemy import select, delete, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1039,3 +1041,111 @@ async def _get_soc_history(
     except Exception as e:
         logger.debug(f"SoC-History für {datum}: {e}")
         return {}
+
+
+BackfillStatus = Literal[
+    "ok",
+    "ha_unavailable",
+    "no_sensors",
+    "no_valid_sensors",
+    "earliest_unknown",
+    "empty_range",
+]
+
+
+@dataclass
+class BackfillResult:
+    """Ergebnis von resolve_and_backfill_from_statistics()."""
+    status: BackfillStatus
+    von: Optional[date] = None
+    bis: Optional[date] = None
+    verarbeitet: int = 0
+    geschrieben: int = 0
+    missing_eids: list[str] = None
+    detail: str = ""
+
+    def __post_init__(self):
+        if self.missing_eids is None:
+            self.missing_eids = []
+
+
+async def resolve_and_backfill_from_statistics(
+    anlage: Anlage,
+    db: AsyncSession,
+    *,
+    von: Optional[date] = None,
+    bis: Optional[date] = None,
+) -> BackfillResult:
+    """
+    Orchestriert den Vollbackfill aus HA Long-Term Statistics:
+
+    - resolved Live-Sensoren der Anlage
+    - filtert ungültige Sensor-IDs
+    - ermittelt frühestes Datum aus HA Statistics (falls `von` None)
+    - default `bis` = gestern
+    - ruft backfill_from_statistics() mit dem ermittelten Zeitraum auf
+
+    Wird vom manuellen Wizard-Endpoint und vom Auto-Vollbackfill im
+    Monatsabschluss-Background-Task geteilt — gleiche Logik, unterschiedliche
+    Fehlerbehandlung im Caller (HTTPException vs. Log).
+    """
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    from backend.services.live_sensor_config import extract_live_config
+
+    ha_service = get_ha_statistics_service()
+    if not ha_service.is_available:
+        return BackfillResult(status="ha_unavailable", detail="HA Statistics Datenbank nicht verfügbar")
+
+    basis_live, inv_live_map, _, _ = extract_live_config(anlage)
+    all_eids = list(set(
+        list(basis_live.values()) +
+        [eid for live in inv_live_map.values() for eid in live.values() if eid]
+    ))
+    if not all_eids:
+        return BackfillResult(status="no_sensors", detail="Keine Live-Sensoren konfiguriert")
+
+    valid_eids, missing_eids = await asyncio.to_thread(ha_service.filter_valid_sensor_ids, all_eids)
+    if not valid_eids:
+        return BackfillResult(
+            status="no_valid_sensors",
+            missing_eids=missing_eids,
+            detail=(
+                f"Keiner der konfigurierten Live-Sensoren wurde in der HA-Datenbank gefunden: "
+                f"{all_eids}. Bitte Sensor-Zuordnung im Wizard prüfen und veraltete Sensoren entfernen."
+            ),
+        )
+
+    if bis is None:
+        bis = date.today() - timedelta(days=1)
+
+    if von is None:
+        try:
+            verfuegbar = await asyncio.to_thread(ha_service.get_verfuegbare_monate, valid_eids)
+            von = verfuegbar.erstes_datum
+        except Exception as e:
+            return BackfillResult(
+                status="earliest_unknown",
+                missing_eids=missing_eids,
+                detail=f"Konnte frühestes Datum nicht ermitteln: {e}",
+            )
+
+    if von > bis:
+        return BackfillResult(
+            status="empty_range",
+            von=von,
+            bis=bis,
+            missing_eids=missing_eids,
+            detail=f"von ({von}) > bis ({bis})",
+        )
+
+    verarbeitet = (bis - von).days + 1
+    geschrieben = await backfill_from_statistics(anlage, von, bis, db)
+
+    return BackfillResult(
+        status="ok",
+        von=von,
+        bis=bis,
+        verarbeitet=verarbeitet,
+        geschrieben=geschrieben,
+        missing_eids=missing_eids,
+    )

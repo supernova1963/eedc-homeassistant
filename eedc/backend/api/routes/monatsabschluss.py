@@ -722,6 +722,10 @@ async def _post_save_hintergrund(
 ) -> None:
     """MQTT-Publish, Energie-Profil Rollup und Community Auto-Share im Hintergrund."""
     from datetime import timedelta
+    from sqlalchemy import update as sql_update
+    from backend.services.energie_profil_service import (
+        rollup_month, backfill_range, resolve_and_backfill_from_statistics,
+    )
 
     # 1. MQTT Publish
     mqtt_sync = get_ha_mqtt_sync_service()
@@ -730,23 +734,60 @@ async def _post_save_hintergrund(
     except Exception as e:
         logger.warning(f"MQTT-Publish fehlgeschlagen: {type(e).__name__}: {e}")
 
-    # 2. Energie-Profil Backfill + Rollup (eigene DB-Session)
+    # 2. Energie-Profil: Closing-Month-Backfill + Rollup + einmaliger Auto-Vollbackfill
     async with async_session_maker() as db:
+        result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+        anlage = result.scalar_one_or_none()
+        if anlage is None:
+            return
+
+        erster_tag = date(jahr, monat, 1)
+        letzter_tag = date(jahr + 1, 1, 1) - timedelta(days=1) if monat == 12 \
+            else date(jahr, monat + 1, 1) - timedelta(days=1)
+
         try:
-            from backend.services.energie_profil_service import rollup_month, backfill_range
-            result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-            anlage = result.scalar_one_or_none()
-            if anlage:
-                erster_tag = date(jahr, monat, 1)
-                letzter_tag = date(jahr + 1, 1, 1) - timedelta(days=1) if monat == 12 \
-                    else date(jahr, monat + 1, 1) - timedelta(days=1)
-                backfill_count = await backfill_range(anlage, erster_tag, letzter_tag, db)
-                if backfill_count > 0:
-                    await db.commit()
-                await rollup_month(anlage_id, jahr, monat, db)
+            backfill_count = await backfill_range(anlage, erster_tag, letzter_tag, db)
+            if backfill_count > 0:
                 await db.commit()
+            await rollup_month(anlage_id, jahr, monat, db)
+            await db.commit()
         except Exception as e:
             logger.warning(f"Energie-Profil Rollup fehlgeschlagen: {type(e).__name__}: {e}")
+
+        # Einmaliger Auto-Vollbackfill aus HA Long-Term Statistics. Läuft genau einmal
+        # pro Anlage beim ersten Monatsabschluss nach Upgrade. Doppelläufe mit dem
+        # Closing-Month-Backfill oben sind idempotent durch skip_existing in
+        # backfill_from_statistics. Flag wird IMMER gesetzt — auch bei Fehler — sonst
+        # Endlos-Retry bei defekter HA-DB.
+        if not anlage.vollbackfill_durchgefuehrt:
+            try:
+                backfill = await resolve_and_backfill_from_statistics(
+                    anlage, db, bis=letzter_tag,
+                )
+                if backfill.missing_eids:
+                    logger.warning(
+                        f"Auto-Vollbackfill Anlage {anlage_id}: "
+                        f"{len(backfill.missing_eids)} Sensor(en) ignoriert: {backfill.missing_eids}"
+                    )
+                if backfill.status == "ok":
+                    logger.info(
+                        f"Auto-Vollbackfill Anlage {anlage_id}: "
+                        f"{backfill.geschrieben}/{backfill.verarbeitet} Tage von "
+                        f"{backfill.von} bis {backfill.bis}"
+                    )
+                else:
+                    logger.info(f"Auto-Vollbackfill Anlage {anlage_id} übersprungen: {backfill.detail}")
+            except Exception as e:
+                logger.warning(f"Auto-Vollbackfill Anlage {anlage_id} Fehler: {type(e).__name__}: {e}")
+                await db.rollback()
+
+            # Direktes UPDATE statt ORM-Attribut: robust gegen abgebrochene Session
+            await db.execute(
+                sql_update(Anlage)
+                .where(Anlage.id == anlage_id)
+                .values(vollbackfill_durchgefuehrt=True)
+            )
+            await db.commit()
 
     # 3. Community Auto-Share
     if community_auto_share:
