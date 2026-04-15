@@ -7,6 +7,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.14.0] - 2026-04-15
+
+### Fix
+
+- **Historische Aggregate blenden deaktivierte Investitionen nicht mehr aus (#123)**: Bis jetzt haben ~32 Call-Sites im Backend (Monatsdaten-Aggregation, Cockpit-KPIs, PDF-Jahresbericht, Nachhaltigkeit, Social-Text, PV-Strings-Vergleich, Export-Routen) Investitionen strikt mit `aktiv == True` gefiltert. Folge: Sobald ein Nutzer eine Komponente deaktiviert hat (z.B. nach WR-Upgrade oder Verkauf), sind ihre historischen Werte **rückwirkend und stillschweigend** aus allen Auswertungen verschwunden — Rohdaten in `InvestitionMonatsdaten` blieben zwar erhalten, wurden aber nicht mehr summiert. Aufgefallen ist das bei MartyBr (community.simon42.com #297), der seinen zweiten WR in Betrieb genommen hat. Fix in zwei Richtungen: (1) Alle historischen Auswertungen laden Investitionen jetzt ohne `aktiv`-Filter, sodass vergangene Werte erhalten bleiben. (2) Neues optionales Feld **Stilllegungsdatum** auf jeder Investition als finaler Endmarker — bis dahin zählt die Komponente für Historie und Live/Prognose, danach nur noch für Historie. Live-/Prognose-Queries (Solar-Forecast, Live-Dashboard, Sensor-Mapping, MQTT-Routing, PVGIS-Refresh) respektieren das neue Feld zusätzlich zum bestehenden `aktiv`-Flag. Empfehlung für Gerätewechsel: neue Investition anlegen (Anschaffungsdatum = Umbautag) + Stilllegungsdatum auf alter Investition setzen (nicht mehr deaktivieren).
+
+### Feat
+
+- **Stilllegungsdatum in der Investitions-Form**: Neuer DatePicker unter dem Anschaffungsdatum in allen Investitions-Typen (E-Auto, WP, Speicher, Wallbox, WR, PV-Module, Balkonkraftwerk, Sonstiges). Validierung: nicht vor dem Anschaffungsdatum. In der Investitions-Übersicht zeigt ein neuer amber-farbener **Stillgelegt**-Badge den Zustand an (mit Tooltip `Stillgelegt seit YYYY-MM-DD`).
+- **MonatsdatenForm-Editor zeigt historisch aktive Komponenten**: Beim Bearbeiten eines Monats sieht man jetzt alle Investitionen, die in diesem Monat (mindestens teilweise) in Betrieb waren — auch inzwischen stillgelegte. Vorher waren die für historische Nachträge unsichtbar.
+
+### Maintenance
+
+- Neues Helper-Modul `backend/utils/investition_filter.py` mit wiederverwendbaren Filter-Funktionen `aktiv_jetzt()`, `aktiv_im_zeitraum()`, `aktiv_im_monat()`, `aktiv_im_jahr()` und Model-Methoden `Investition.ist_aktiv_an()`, `ist_aktiv_im_zeitraum()`, `ist_aktiv_im_monat()` für In-Memory-Checks in Aggregations-Loops.
+- `aussichten.py`-Langfristbericht: historische Aggregation vs. Prognose-Basis sauber getrennt — Prognose-kWp kommt nur aus aktuell aktiven PV-Modulen, historische Werte aus allen je vorhandenen.
+- JSON-Backup-Export/Import persistiert Stilllegungsdatum.
+- DB-Migration `investitionen.stilllegungsdatum DATE` (SQLite + MariaDB/MySQL), rückwärtskompatibel — bestehende Installationen behalten ihr Verhalten, solange kein Datum gesetzt ist.
+
+### Bekannter Folgepunkt
+
+- **ROI-Dashboard zeitanteilige Gewichtung**: Der eigentliche Bug (stillschweigend falsche historische Zahlen) ist in v3.14.0 behoben. Offene Verfeinerung: Das ROI-Modell geht aktuell von "Investition läuft das ganze Jahr" aus — bei mitten im Jahr stillgelegten Komponenten wäre eine zeitanteilige Gewichtung sauberer. Nicht dringend; wird in einem späteren Release angegangen.
+
+---
+
 ## [3.13.5] - 2026-04-15
 
 ### Fix
