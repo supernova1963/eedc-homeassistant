@@ -832,15 +832,15 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felder={[
-            { key: 'stromverbrauch_kwh', label: 'Stromverbrauch', unit: 'kWh', placeholder: 'z.B. 350' },
-            { key: 'heizenergie_kwh', label: 'Heizenergie', unit: 'kWh', placeholder: 'z.B. 1200' },
-            { key: 'warmwasser_kwh', label: 'Warmwasser', unit: 'kWh', placeholder: 'z.B. 150' },
+            { key: 'stromverbrauch_kwh', label: 'Stromverbrauch', unit: 'kWh', placeholder: 'z.B. 350', hint: 'Stromaufnahme der WP (elektrisch)' },
+            { key: 'heizenergie_kwh', label: 'Heizwärme', unit: 'kWh', placeholder: 'z.B. 1200', hint: 'Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom' },
+            { key: 'warmwasser_kwh', label: 'Warmwasser', unit: 'kWh', placeholder: 'z.B. 150', hint: 'Abgegebene Warmwasser-Wärme (thermisch)' },
           ]}
           felderFn={(inv) => inv.parameter?.getrennte_strommessung === true ? [
-            { key: 'strom_heizen_kwh', label: 'Strom Heizen', unit: 'kWh', placeholder: 'z.B. 300' },
-            { key: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', unit: 'kWh', placeholder: 'z.B. 50' },
-            { key: 'heizenergie_kwh', label: 'Heizenergie', unit: 'kWh', placeholder: 'z.B. 1200' },
-            { key: 'warmwasser_kwh', label: 'Warmwasser', unit: 'kWh', placeholder: 'z.B. 150' },
+            { key: 'strom_heizen_kwh', label: 'Strom Heizen', unit: 'kWh', placeholder: 'z.B. 300', hint: 'Stromaufnahme Heizbetrieb (elektrisch)' },
+            { key: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', unit: 'kWh', placeholder: 'z.B. 50', hint: 'Stromaufnahme Warmwasserbereitung (elektrisch)' },
+            { key: 'heizenergie_kwh', label: 'Heizwärme', unit: 'kWh', placeholder: 'z.B. 1200', hint: 'Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom' },
+            { key: 'warmwasser_kwh', label: 'Warmwasser', unit: 'kWh', placeholder: 'z.B. 150', hint: 'Abgegebene Warmwasser-Wärme (thermisch)' },
           ] : undefined}
         />
       )}
