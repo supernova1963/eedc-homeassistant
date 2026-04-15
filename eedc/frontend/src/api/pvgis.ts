@@ -57,6 +57,21 @@ export interface GespeichertePrognose {
   horizont_verwendet?: boolean
 }
 
+export interface AktivePrognoseModul {
+  investition_id: number
+  bezeichnung: string
+  leistung_kwp: number
+  neigung_grad: number
+  ausrichtung_richtung: string
+  jahresertrag_kwh: number
+  monatsdaten: Array<{
+    monat: number
+    e_m: number
+    h_m: number
+    sd_m: number
+  }>
+}
+
 export interface AktivePrognoseResponse {
   id: number
   anlage_id: number
@@ -76,6 +91,7 @@ export interface AktivePrognoseResponse {
     h_m: number
     sd_m: number
   }>
+  module?: AktivePrognoseModul[]
 }
 
 export interface HorizontStatus {
