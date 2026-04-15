@@ -184,51 +184,8 @@ EEDC Add-on                              Community Server
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
 
-## Parkplatz — Offene Punkte & zurückgestellte Ideen
+## Roadmap & offene Punkte
 
-> Dieser Abschnitt ist rechnerübergreifend. Nach jeder Session: kurz eintragen, committen, pushen.
-> Format: `- **Thema** — Was/Warum/Stand`
+Single Source of Truth: **GitHub Issue [#110 — Roadmap Anfrage](https://github.com/supernova1963/eedc-homeassistant/issues/110)**.
 
-### Bugs / Offene Issues
-
-- **Issue #90** (OPEN) — Statistik-Import zeigt aktuellen (unvollständigen) Monat + WP-Sensor-Mapping Bugs (Rainer/simon42-Feedback). Analyse liegt im Issue, noch nicht gefixt.
-- **MariaDB CONVERT_TZ Bug** — Import-Vorschau wirft 500, weil `CONVERT_TZ()` auf HA-MariaDB `NULL` zurückgibt. Betrifft nur MariaDB-Nutzer. Noch offen.
-
-### Live-Dashboard Performance — Analyse abgeschlossen (2026-04-02)
-
-**Option A erledigt in v3.8.15** — 60s TTL-Cache für `heute_kwh` verhindert HA-History-Flood.
-
-**Option B Schritt 1 (Priority-Flip) — NICHT umsetzen.**
-Analyse ergab: Der MQTT-Fallback-Pfad funktioniert korrekt (verifiziert mit Testumgebung Winterborn).
-Das eigentliche Problem war ein FK-Bug im Snapshot-Scheduler (→ v3.8.20 gefixt).
-Ein Priority-Flip würde für HA-Nutzer Genauigkeit kosten (Trapez-Integration echter Sensorhistorie
-ist präziser als Utility-Meter-Deltas). Aktuelles Verhalten (HA zuerst, MQTT Fallback) ist korrekt.
-
-**Ist-Zustand nach v3.8.20:**
-
-| Datenbedarf | Aktuell | Status |
-|---|---|---|
-| Live-Wattage (W) | MQTT-Cache | ✅ fertig |
-| Heute/Gestern kWh (HA) | HA-History, 60s gecacht | ✅ fertig |
-| Heute/Gestern kWh (Standalone) | MqttEnergySnapshot Fallback | ✅ funktioniert |
-| Tagesverlauf-Chart | HA-History | offen für Standalone |
-
-**Option B Schritt 2 (Tagesverlauf-Chart aus lokaler DB) — zurückgestellt:**
-Für Standalone-Nutzer ohne HA fehlt der Tagesverlauf-Chart. Lösungsansatz:
-- Neue Tabelle `MqttLiveSnapshot` mit periodischen W-Snapshots (alle 5 Min)
-- `get_tagesverlauf()` liest aus lokaler DB statt HA-History
-- Nur sinnvoll wenn konkreter Nutzerbedarf entsteht (bisher kein Issue dazu)
-
-### Zurückgestellte Features / Ideen
-
-- **WP-Temperaturkorrektur Verbrauchsprognose** — Wärmepumpen-Verbrauch temperaturabhängig skalieren (Heizgradtage). Zurückgestellt bis GTI-Prognose stabil validiert ist.
-- **Kraftstoffpreis E-Auto — Monatsdurchschnitt** — Statt statischem `benzinpreis_euro` monatliche Preishistorie pflegen. Diskutiert 2026-04-01, zurückgestellt. Öffentliche Quelle für DE-Durchschnittspreise noch zu klären.
-
-### Live Dashboard Generalüberholung — ABGESCHLOSSEN (v3.9.0)
-
-Refactoring + Performance in 2 Sessions komplett umgesetzt (2026-04-02 bis 2026-04-03).
-Details: Memory `project_perf_live_service.md`
-
-### Ungeklärte Punkte (anderer Rechner)
-
-- **Umfrage** — Intensiv diskutiert auf dem anderen Rechner, Inhalt hier nicht bekannt. Bitte beim nächsten Mal kurz zusammenfassen und hier eintragen.
+Aktuellen Stand bei Bedarf abrufen via `gh issue view 110 --repo supernova1963/eedc-homeassistant`.
