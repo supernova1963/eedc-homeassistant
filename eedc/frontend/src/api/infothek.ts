@@ -74,8 +74,13 @@ export const infothekApi = {
     return api.get<InfothekDatei[]>(`/infothek/${eintragId}/dateien`)
   },
 
-  async uploadDatei(eintragId: number, file: File): Promise<InfothekDatei> {
-    return api.upload<InfothekDatei>(`/infothek/${eintragId}/dateien`, file, 'datei')
+  async uploadDatei(eintragId: number, file: File, beschreibung?: string): Promise<InfothekDatei> {
+    return api.upload<InfothekDatei>(
+      `/infothek/${eintragId}/dateien`,
+      file,
+      'datei',
+      beschreibung ? { beschreibung } : undefined,
+    )
   },
 
   async deleteDatei(eintragId: number, dateiId: number): Promise<void> {

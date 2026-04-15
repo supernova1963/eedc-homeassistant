@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # Limits
 MAX_IMAGE_BYTES = 500_000       # 500 KB nach Resize
 MAX_THUMBNAIL_BYTES = 50_000    # ~50 KB
-MAX_PDF_BYTES = 5_242_880       # 5 MB
-MAX_DATEIEN_PRO_EINTRAG = 3
+MAX_PDF_BYTES = 10_485_760      # 10 MB
+MAX_DATEIEN_PRO_EINTRAG = 15
 THUMBNAIL_SIZE = (200, 200)
 
 ERLAUBTE_BILD_TYPES = {"image/jpeg", "image/png", "image/heic", "image/heif"}

@@ -344,6 +344,14 @@ function ParameterFeld({
             <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
+      ) : feld.type === 'text' ? (
+        <textarea
+          value={strValue}
+          title={feld.label}
+          onChange={e => onChange(e.target.value || null)}
+          rows={4}
+          className="input w-full font-sans"
+        />
       ) : (
         <input
           type={feld.type === 'number' ? 'number' : feld.type === 'date' ? 'date' : 'text'}

@@ -102,9 +102,21 @@ class ApiClient {
   }
 
   // File Upload
-  async upload<T>(endpoint: string, file: File, fieldName: string = 'file'): Promise<T> {
+  async upload<T>(
+    endpoint: string,
+    file: File,
+    fieldName: string = 'file',
+    extraFields?: Record<string, string | undefined | null>,
+  ): Promise<T> {
     const formData = new FormData()
     formData.append(fieldName, file)
+    if (extraFields) {
+      for (const [key, value] of Object.entries(extraFields)) {
+        if (value !== undefined && value !== null && value !== '') {
+          formData.append(key, value)
+        }
+      }
+    }
 
     return this.request<T>(endpoint, {
       method: 'POST',

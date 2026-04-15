@@ -41,7 +41,7 @@ export interface InfothekEintragUpdate {
 }
 
 export interface KategorieFeld {
-  type: 'string' | 'number' | 'date' | 'select'
+  type: 'string' | 'text' | 'number' | 'date' | 'select'
   label: string
   options?: string[]
 }

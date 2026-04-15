@@ -6,7 +6,7 @@ CRUD-Endpunkte für Infothek-Einträge (Verträge, Zähler, Kontakte, Dokumentat
 
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
@@ -170,15 +170,23 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
         },
     },
     "garantie": {
-        "label": "Garantie",
+        "label": "Komponente / Datenblatt",
         "icon": "BadgeCheck",
         "felder": {
             "hersteller": {"type": "string", "label": "Hersteller"},
-            "produkt": {"type": "string", "label": "Produkt"},
+            "produkt": {"type": "string", "label": "Produkt / Modell"},
+            "serien_nummer": {"type": "string", "label": "Seriennummer"},
+            "einbau_datum": {"type": "date", "label": "Einbau am"},
+            "installation_firma": {"type": "string", "label": "Installiert von (Firma)"},
             "garantie_nummer": {"type": "string", "label": "Garantie-Nummer"},
-            "garantie_bis": {"type": "date", "label": "Garantie bis"},
-            "erweiterung": {"type": "select", "label": "Erweiterung", "options": ["Ja", "Nein"]},
-            "bedingungen": {"type": "string", "label": "Bedingungen"},
+            "garantie_bis": {"type": "date", "label": "Garantie gültig bis"},
+            "erweiterung": {"type": "select", "label": "Garantie-Erweiterung", "options": ["Ja", "Nein"]},
+            "bedingungen": {"type": "text", "label": "Garantie-Bedingungen"},
+            "technische_daten": {"type": "text", "label": "Technische Daten"},
+            "letzte_pruefung": {"type": "date", "label": "Letzte Prüfung / Wartung"},
+            "naechste_pruefung": {"type": "date", "label": "Nächste Prüfung / Wartung"},
+            "datenblatt_url": {"type": "string", "label": "Link zum Hersteller-Datenblatt"},
+            "zugehoerige_vertraege": {"type": "text", "label": "Sonstige zugehörige Verträge / Dokumente"},
         },
     },
     "steuerdaten": {
@@ -704,6 +712,7 @@ async def migrate_stammdaten(
 async def upload_datei(
     eintrag_id: int,
     datei: UploadFile = File(...),
+    beschreibung: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     """Lädt eine Datei (Bild oder PDF) zu einem Eintrag hoch."""
@@ -761,6 +770,7 @@ async def upload_datei(
         mime_type=mime_type,
         daten=daten,
         thumbnail=thumbnail,
+        beschreibung=(beschreibung.strip() or None) if beschreibung else None,
     )
     db.add(db_datei)
     await db.commit()
