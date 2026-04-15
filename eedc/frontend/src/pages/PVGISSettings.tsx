@@ -278,7 +278,7 @@ export default function PVGISSettings() {
                   return (
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                        <BarChart data={chartData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" />
                           <YAxis
@@ -561,7 +561,7 @@ export default function PVGISSettings() {
                         name: monatNamen[m.monat],
                         ertrag: m.e_m
                       }))}
-                      margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+                      margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" fontSize={10} />
