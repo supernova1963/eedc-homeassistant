@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.5] - 2026-04-15
+
+### Fix
+
+- **Solarprognose PVGIS: Y-Achsen-Clipping + Multi-String-Anzeige**: Im PVGIS-Prognose-Chart wurde bei Anlagen mit mehreren Strings der höchste Wert oben am Rand abgeschnitten; zusätzlich fehlte die String-übergreifende Summendarstellung in einigen Ansichten. Y-Achse bekommt jetzt automatischen Headroom, Multi-String-Summe wird konsistent dargestellt.
+
+### Maintenance
+
+- `type="button"` auf zwei Icon-Buttons im PVGIS-Dialog ergänzt (verhindert unbeabsichtigtes Form-Submit).
+
+---
+
 ## [3.13.4] - 2026-04-14
 
 ### Vorbereitung
