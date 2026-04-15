@@ -689,6 +689,7 @@ export default function PVGISSettings() {
                           <div className="flex items-center justify-end gap-2">
                             {!p.ist_aktiv && (
                               <button
+                                type="button"
                                 onClick={() => aktivierePrognose(p.id)}
                                 className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
                                 title="Aktivieren"
@@ -697,6 +698,7 @@ export default function PVGISSettings() {
                               </button>
                             )}
                             <button
+                              type="button"
                               onClick={() => loeschePrognose(p.id)}
                               className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
                               title="Löschen"
