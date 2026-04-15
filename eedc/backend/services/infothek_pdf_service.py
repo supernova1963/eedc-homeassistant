@@ -46,7 +46,7 @@ KATEGORIE_LABELS = {
     "wartungsvertrag": "Wartungsvertrag",
     "marktstammdatenregister": "Marktstammdatenregister",
     "foerderung": "Förderung",
-    "garantie": "Garantie",
+    "garantie": "Komponente / Datenblatt",
     "steuerdaten": "Steuerdaten",
     "sonstiges": "Sonstiges",
 }
