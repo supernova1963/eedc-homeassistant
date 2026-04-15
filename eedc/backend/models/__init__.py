@@ -1,5 +1,5 @@
 # EEDC Models
-from backend.models.anlage import Anlage
+from backend.models.anlage import Anlage, AnlageFoto
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten, InvestitionTyp
 from backend.models.strompreis import Strompreis
@@ -12,6 +12,7 @@ from backend.models.infothek import InfothekEintrag, InfothekDatei
 
 __all__ = [
     "Anlage",
+    "AnlageFoto",
     "Monatsdaten",
     "Investition",
     "InvestitionMonatsdaten",

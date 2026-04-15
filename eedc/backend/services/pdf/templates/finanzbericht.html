@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Finanzbericht — {{ anlage.name }}</title>
+<style>
+  :root {
+    --c1: #0d47a1;
+    --c2: #43a047;
+    --c3: #ffa726;
+    --txt: #1a1a1a;
+    --muted: #5f6b7a;
+    --rule: #d6dde6;
+    --bg-soft: #f5f8fd;
+  }
+
+  @page {
+    size: A4;
+    margin: 22mm 22mm 22mm 38mm;
+
+    @bottom-right {
+      content: "Seite " counter(page) " / " counter(pages);
+      font-family: "DejaVu Sans", sans-serif;
+      font-size: 8.5pt;
+      color: #90a4ae;
+      margin-right: 0;
+      margin-bottom: 2mm;
+    }
+  }
+  body { font-family: "DejaVu Sans", sans-serif; color: var(--txt); margin: 0; font-size: 10pt; line-height: 1.4; }
+
+  /* Seitenübergreifende 3-Farben-Leiste — position: fixed wird von
+     WeasyPrint auf jeder physischen Seite repliziert. Negative left,
+     damit die Leiste außerhalb der Content-Area in die linke
+     @page-Margin gerendert wird. */
+  .page-stripe {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: -16mm;
+    width: 6mm;
+    background: linear-gradient(180deg,
+      #0d47a1 0%,    #0d47a1 33.3%,
+      #43a047 33.3%, #43a047 66.6%,
+      #ffa726 66.6%, #ffa726 100%);
+  }
+
+  .seite + .seite { page-break-before: always; }
+
+  .titel-headline {
+    font-size: 11pt;
+    color: var(--muted);
+    letter-spacing: 4mm;
+    text-transform: uppercase;
+    text-align: center;
+    margin: 26mm 0 6mm 0;
+    font-weight: 400;
+  }
+  .titel-name {
+    font-size: 24pt;
+    text-align: center;
+    color: var(--txt);
+    font-weight: 700;
+    margin: 0 0 4mm 0;
+    letter-spacing: 0.5mm;
+  }
+  .mini-trenner {
+    text-align: center;
+    margin: 6mm 0 12mm 0;
+  }
+  .mini-trenner span {
+    display: inline-block;
+    width: 8mm;
+    height: 2.5mm;
+  }
+  .mini-trenner .a { background: var(--c1); }
+  .mini-trenner .b { background: var(--c2); }
+  .mini-trenner .c { background: var(--c3); }
+
+  .meta {
+    text-align: center;
+    font-size: 11pt;
+    color: var(--muted);
+    margin: 0 0 14mm 0;
+  }
+  .meta strong { color: var(--txt); }
+
+  h2 {
+    font-size: 14pt;
+    margin: 10mm 0 3mm 0;
+    color: var(--txt);
+    font-weight: 600;
+    border-bottom: 0.3mm solid var(--rule);
+    padding-bottom: 1mm;
+  }
+  h2:first-of-type { margin-top: 0; }
+
+  table.invest {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+    margin: 3mm 0;
+  }
+  table.invest th {
+    text-align: left;
+    font-size: 8pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+    padding: 2mm 2mm;
+    border-bottom: 0.3mm solid var(--rule);
+    font-weight: 500;
+  }
+  table.invest td {
+    padding: 2mm 2mm;
+    border-bottom: 0.15mm solid var(--rule);
+    vertical-align: top;
+  }
+  table.invest td.num { text-align: right; white-space: nowrap; }
+  table.invest th.num { text-align: right; }
+  table.invest tr.summe td {
+    font-weight: 700;
+    border-top: 0.5mm solid var(--txt);
+    border-bottom: 0.5mm solid var(--txt);
+    padding-top: 3mm;
+    padding-bottom: 3mm;
+  }
+
+  .kpi-row {
+    display: table;
+    width: 100%;
+    margin: 6mm 0;
+    background: var(--bg-soft);
+    border-left: 2mm solid var(--c1);
+    padding: 4mm 5mm;
+  }
+  .kpi-row > div {
+    display: table-cell;
+    width: 33%;
+    vertical-align: top;
+    padding: 0 3mm;
+  }
+  .kpi-row .label {
+    font-size: 8pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+    margin-bottom: 1mm;
+  }
+  .kpi-row .value {
+    font-size: 14pt;
+    color: var(--txt);
+    font-weight: 700;
+  }
+
+  .eintrag {
+    margin: 3mm 0;
+    padding: 3mm 4mm;
+    border-left: 2mm solid var(--c2);
+    background: #f6f9f3;
+    page-break-inside: avoid;
+  }
+  .eintrag h3 {
+    font-size: 11pt;
+    margin: 0 0 2mm 0;
+  }
+  .eintrag .notizen {
+    font-size: 9pt;
+    color: var(--muted);
+    margin: 0 0 2mm 0;
+    font-style: italic;
+  }
+  .eintrag table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  .eintrag table td {
+    padding: 1mm 3mm 1mm 0;
+    vertical-align: top;
+  }
+  .eintrag table td.label {
+    color: var(--muted);
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+    width: 38%;
+  }
+
+  .leer {
+    color: var(--muted);
+    font-style: italic;
+    font-size: 9pt;
+  }
+
+  .vertraulich {
+    margin-top: 14mm;
+    padding: 3mm 4mm;
+    background: #fff3cd;
+    border-left: 2mm solid #ffe082;
+    font-size: 8.5pt;
+    color: #7a5a00;
+  }
+</style>
+</head>
+<body>
+<div class="page-stripe"></div>
+
+<div class="seite">
+
+  <div class="titel-headline">Finanzbericht</div>
+  <h1 class="titel-name">{{ anlage.name }}</h1>
+  <div class="mini-trenner">
+    <span class="a"></span><span class="b"></span><span class="c"></span>
+  </div>
+
+  <div class="meta">
+    <strong>{{ "%.2f"|format(anlage.leistung_kwp) }} kWp</strong>
+    {% if anlage.installationsdatum %} · seit {{ anlage.installationsdatum.strftime("%m / %Y") }}{% endif %}
+    {% if anlage.standort_ort %} · {{ anlage.standort_plz }} {{ anlage.standort_ort }}{% endif %}
+    <br>
+    <span style="font-size: 9pt;">erzeugt am {{ erzeugt_am }}</span>
+  </div>
+
+  <h2>Investitionen</h2>
+  {% if investitionen %}
+  <table class="invest">
+    <thead>
+      <tr>
+        <th>Bezeichnung</th>
+        <th>Kategorie</th>
+        <th>Inbetriebnahme</th>
+        <th class="num">Kosten</th>
+        <th class="num">Alt.-Kosten</th>
+        <th class="num">Ersparnis / Jahr</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in investitionen %}
+      <tr>
+        <td>
+          {{ inv.bezeichnung }}
+          {% if inv.stilllegungsdatum %}<br><span style="color: var(--muted); font-size: 8pt;">stillgelegt {{ inv.stilllegungsdatum }}</span>{% endif %}
+        </td>
+        <td>{{ inv.typ_label }}</td>
+        <td>{{ inv.anschaffungsdatum }}</td>
+        <td class="num">{{ inv.kosten }}</td>
+        <td class="num">{{ inv.alternativ or "—" }}</td>
+        <td class="num">{{ inv.einsparung_jahr or "—" }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="summe">
+        <td colspan="3">Summe</td>
+        <td class="num">{{ summen.kosten }}</td>
+        <td class="num">{{ summen.alternativ or "—" }}</td>
+        <td class="num">{{ summen.einsparung_jahr or "—" }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p class="leer">Keine Investitionen erfasst.</p>
+  {% endif %}
+
+  <div class="kpi-row">
+    <div>
+      <div class="label">Amortisation (Prognose)</div>
+      <div class="value">{{ amortisation_jahre }}</div>
+    </div>
+    <div>
+      <div class="label">Differenz vs. Alt-Szenario</div>
+      <div class="value">{{ summen.differenz_alt or "—" }}</div>
+    </div>
+    <div>
+      <div class="label">Netto nach Förderung</div>
+      <div class="value">{{ summen.netto_nach_foerderung or summen.kosten }}</div>
+    </div>
+  </div>
+
+  <h2>Förderungen</h2>
+  {% if foerderungen %}
+    {% for f in foerderungen %}
+    <div class="eintrag">
+      <h3>{{ f.bezeichnung }}</h3>
+      {% if f.notizen %}<div class="notizen">{{ f.notizen }}</div>{% endif %}
+      {% if f.felder %}
+      <table>
+        {% for label, value in f.felder %}
+        <tr>
+          <td class="label">{{ label }}</td>
+          <td>{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if summen.foerderung %}
+    <p style="text-align: right; font-size: 10pt; margin-top: 2mm;">
+      <strong>Summe Förderungen: {{ summen.foerderung }}</strong>
+    </p>
+    {% endif %}
+  {% else %}
+  <p class="leer">Keine Förderungen erfasst (in der Infothek unter „Förderung" pflegbar).</p>
+  {% endif %}
+
+  <h2>Versicherung</h2>
+  {% if versicherungen %}
+    {% for v in versicherungen %}
+    <div class="eintrag">
+      <h3>{{ v.bezeichnung }}</h3>
+      {% if v.notizen %}<div class="notizen">{{ v.notizen }}</div>{% endif %}
+      {% if v.felder %}
+      <table>
+        {% for label, value in v.felder %}
+        <tr>
+          <td class="label">{{ label }}</td>
+          <td>{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="leer">Keine Versicherung erfasst (in der Infothek unter „Versicherung" pflegbar).</p>
+  {% endif %}
+
+  <h2>Steuerdaten</h2>
+  {% if steuerdaten %}
+    {% for s in steuerdaten %}
+    <div class="eintrag">
+      <h3>{{ s.bezeichnung }}</h3>
+      {% if s.notizen %}<div class="notizen">{{ s.notizen }}</div>{% endif %}
+      {% if s.felder %}
+      <table>
+        {% for label, value in s.felder %}
+        <tr>
+          <td class="label">{{ label }}</td>
+          <td>{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="leer">Keine Steuerdaten erfasst (in der Infothek unter „Steuerdaten" pflegbar).</p>
+  {% endif %}
+
+  <div class="vertraulich">
+    <strong>Vertraulich.</strong>
+    Dieser Bericht enthält finanzielle Kennzahlen zur persönlichen Energie-Investition.
+    EEDC-Jahres-Prognosen sind Schätzwerte auf Basis der erfassten Daten und keine Zusage.
+    Nur für den internen Gebrauch bzw. die gezielte Weitergabe an Finanzamt, Versicherung oder Steuerberatung.
+  </div>
+
+</div>
+
+</body>
+</html>

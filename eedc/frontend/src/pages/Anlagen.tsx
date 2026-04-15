@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Plus, Edit, Trash2, Sun, MapPin, Download, FileText } from 'lucide-react'
+import { Plus, Edit, Trash2, Sun, MapPin, Download, FolderOpen } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import AnlageForm from '../components/forms/AnlageForm'
+import DokumentationsDialog from '../components/DokumentationsDialog'
 import { useAnlagen } from '../hooks'
 import { importApi } from '../api/import'
 import type { Anlage, AnlageCreate } from '../types'
@@ -12,6 +13,7 @@ export default function Anlagen() {
   const [showForm, setShowForm] = useState(false)
   const [editingAnlage, setEditingAnlage] = useState<Anlage | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Anlage | null>(null)
+  const [dokumenteAnlage, setDokumenteAnlage] = useState<Anlage | null>(null)
 
   const handleCreate = async (data: AnlageCreate) => {
     await createAnlage(data)
@@ -113,12 +115,10 @@ export default function Anlagen() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          window.location.href = importApi.getPdfExportUrl(anlage.id)
-                        }}
-                        title="PDF-Dokumentation (Gesamtzeitraum)"
+                        onClick={() => setDokumenteAnlage(anlage)}
+                        title="Dokumente (Jahresbericht, Infothek, Anlagendokumentation, Finanzbericht)"
                       >
-                        <FileText className="h-4 w-4 text-orange-500" />
+                        <FolderOpen className="h-4 w-4 text-orange-500" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -206,6 +206,12 @@ export default function Anlagen() {
           </div>
         </div>
       </Modal>
+
+      {/* Dokumente-Dialog (Phase 4 Beta) */}
+      <DokumentationsDialog
+        anlage={dokumenteAnlage}
+        onClose={() => setDokumenteAnlage(null)}
+      />
 
     </div>
   )

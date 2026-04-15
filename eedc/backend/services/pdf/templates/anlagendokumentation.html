@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Anlagendokumentation — {{ anlage.name }}</title>
+<style>
+  /*
+   * V4-Layout (approved by Rainer in #121):
+   *   vertikale 3-Farben-Leiste links, seitenübergreifend
+   *   gesperrte Headline-Caps + fetter Haupttitel
+   *   viel Weißraum, Sans-Serif
+   */
+  :root {
+    --c1: #0d47a1;
+    --c2: #43a047;
+    --c3: #ffa726;
+    --txt: #1a1a1a;
+    --muted: #5f6b7a;
+    --rule: #d6dde6;
+    --hint-bg: #fff3cd;
+    --hint-border: #ffe082;
+    --hint-txt: #7a5a00;
+  }
+
+  /*
+   * Die @page-Margins definieren die echte Content-Area. Damit
+   * respektieren auch automatisch umgebrochene Überlauf-Seiten
+   * den Oberrand (22 mm — gleiche Höhe wie der Streifen-Start).
+   */
+  @page {
+    size: A4;
+    margin: 22mm 22mm 22mm 38mm;
+
+    @bottom-right {
+      content: "Seite " counter(page) " / " counter(pages);
+      font-family: "DejaVu Sans", sans-serif;
+      font-size: 8.5pt;
+      color: #90a4ae;
+      margin-right: 0;
+      margin-bottom: 2mm;
+    }
+  }
+  body { font-family: "DejaVu Sans", sans-serif; color: var(--txt); margin: 0; font-size: 10pt; line-height: 1.4; }
+
+  /*
+   * Seitenübergreifende 3-Farben-Leiste via position: fixed.
+   * WeasyPrint repliziert position-fixed-Elemente automatisch auf
+   * jeder physischen Seite — auch bei Überlauf-Seiten.
+   *
+   * Containing-Block bei gesetztem @page-margin ist die Content-Area,
+   * deshalb negative left-Werte, um die Leiste in die linke
+   * Page-Margin (16 mm vor der Content-Area) zu schieben.
+   */
+  .page-stripe {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: -16mm;
+    width: 6mm;
+    background: linear-gradient(180deg,
+      #0d47a1 0%,    #0d47a1 33.3%,
+      #43a047 33.3%, #43a047 66.6%,
+      #ffa726 66.6%, #ffa726 100%);
+  }
+
+  /*
+   * .seite ist nur noch ein logischer Block mit Seitenumbruch —
+   * die Content-Area definiert @page margin.
+   */
+  .seite {
+    page-break-after: always;
+  }
+  .seite:last-child { page-break-after: auto; }
+
+  /* === Titelseite === */
+  .titel-headline {
+    font-size: 10pt;
+    color: var(--muted);
+    letter-spacing: 4mm;
+    text-transform: uppercase;
+    text-align: center;
+    margin: 10mm 0 4mm 0;
+    font-weight: 400;
+  }
+  .titel-name {
+    font-size: 26pt;
+    text-align: center;
+    color: var(--txt);
+    font-weight: 700;
+    margin: 0 0 3mm 0;
+    letter-spacing: 0.5mm;
+  }
+  .mini-trenner {
+    text-align: center;
+    margin: 4mm 0 5mm 0;
+    height: 2.5mm;
+  }
+  .mini-trenner span {
+    display: inline-block;
+    width: 8mm;
+    height: 2.5mm;
+  }
+  .mini-trenner .a { background: var(--c1); }
+  .mini-trenner .b { background: var(--c2); }
+  .mini-trenner .c { background: var(--c3); }
+
+  .foto-wrap {
+    text-align: center;
+    margin: 2mm 0 4mm 0;
+  }
+  .foto-wrap img {
+    max-width: 120mm;
+    max-height: 55mm;
+    object-fit: cover;
+    border-radius: 2mm;
+    box-shadow: 0 0 0 0.3mm var(--rule);
+  }
+
+  .adresse {
+    text-align: center;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: var(--txt);
+    margin: 0 0 6mm 0;
+    font-weight: 300;
+  }
+
+  .meta-row {
+    display: table;
+    width: 100%;
+    border-top: 0.3mm solid var(--rule);
+    border-bottom: 0.3mm solid var(--rule);
+    padding: 4mm 0;
+    margin: 2mm 0;
+  }
+  .meta-row > div {
+    display: table-cell;
+    width: 33%;
+    vertical-align: top;
+    padding: 0 4mm;
+  }
+  .meta-row .label {
+    font-size: 8pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1mm;
+    margin-bottom: 1mm;
+  }
+  .meta-row .value {
+    font-size: 11pt;
+    color: var(--txt);
+    font-weight: 500;
+  }
+
+  .komponenten-headline {
+    font-size: 9pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.8mm;
+    margin: 6mm 0 2mm 0;
+    text-align: center;
+  }
+  .komponenten-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+  }
+  .komponenten-list li {
+    font-size: 10pt;
+    padding: 1mm 0;
+    color: var(--txt);
+  }
+  .komponenten-list li + li { border-top: 0.2mm dotted var(--rule); }
+
+  .titel-fuss {
+    margin-top: 8mm;
+    font-size: 8pt;
+    color: var(--muted);
+    text-align: center;
+    padding-top: 4mm;
+    border-top: 0.3mm solid var(--rule);
+    letter-spacing: 0.4mm;
+  }
+
+  /* === Investitions-Folgeseiten === */
+  .invest-page .typ-label {
+    font-size: 9pt;
+    color: var(--c1);
+    text-transform: uppercase;
+    letter-spacing: 1.6mm;
+    margin: 0 0 2mm 0;
+  }
+  .invest-page h2 {
+    font-size: 20pt;
+    margin: 0 0 5mm 0;
+    color: var(--txt);
+    font-weight: 700;
+  }
+  .invest-page .mini-trenner-l {
+    margin: 0 0 8mm 0;
+    height: 2mm;
+  }
+  .invest-page .mini-trenner-l span {
+    display: inline-block;
+    width: 8mm;
+    height: 2mm;
+  }
+  .invest-page .mini-trenner-l .a { background: var(--c1); }
+  .invest-page .mini-trenner-l .b { background: var(--c2); }
+  .invest-page .mini-trenner-l .c { background: var(--c3); }
+
+  .sektion-titel {
+    font-size: 9pt;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 1mm;
+    margin: 6mm 0 2mm 0;
+    border-bottom: 0.3mm solid var(--rule);
+    padding-bottom: 1mm;
+  }
+
+  .tech-grid {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 4mm 0;
+  }
+  .tech-grid .row { display: table-row; }
+  .tech-grid .row > div {
+    display: table-cell;
+    padding: 2mm 4mm 2mm 0;
+    vertical-align: top;
+    border-bottom: 0.2mm solid var(--rule);
+  }
+  .tech-grid .label {
+    width: 40%;
+    font-size: 8.5pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+  }
+  .tech-grid .value {
+    font-size: 10pt;
+    color: var(--txt);
+  }
+
+  /* Komponenten-Akte-Block */
+  .komponente {
+    margin: 3mm 0 5mm 0;
+    padding: 3mm 4mm 2mm 4mm;
+    border-left: 2mm solid var(--c2);
+    background: #f6f9f3;
+    page-break-inside: avoid;
+  }
+  .komponente h4 {
+    font-size: 11pt;
+    margin: 0 0 2mm 0;
+    color: var(--txt);
+  }
+  .komponente .notizen {
+    font-size: 9pt;
+    color: var(--muted);
+    margin: 0 0 2mm 0;
+    font-style: italic;
+  }
+  .komponente .k-grid {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .komponente .k-grid .row { display: table-row; }
+  .komponente .k-grid .row > div {
+    display: table-cell;
+    padding: 1.2mm 4mm 1.2mm 0;
+    vertical-align: top;
+  }
+  .komponente .k-grid .label {
+    width: 42%;
+    font-size: 8pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+  }
+  .komponente .k-grid .value {
+    font-size: 9.5pt;
+  }
+  .komponente .freitext {
+    margin: 2mm 0 0 0;
+    padding: 2mm 3mm;
+    background: white;
+    border-left: 0.6mm solid var(--rule);
+  }
+  .komponente .freitext .ft-label {
+    font-size: 8pt;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3mm;
+    margin: 0 0 1mm 0;
+  }
+  .komponente .freitext .ft-body {
+    font-size: 9pt;
+    color: var(--txt);
+    white-space: pre-wrap;
+    line-height: 1.45;
+  }
+  .komponente .datenblatt-url {
+    font-size: 8.5pt;
+    margin: 2mm 0 0 0;
+    color: var(--c1);
+  }
+  .komponente .datenblatt-url a { color: var(--c1); text-decoration: none; }
+  .komponente .dateien {
+    margin: 2mm 0 0 0;
+    font-size: 8.5pt;
+    color: var(--muted);
+  }
+  .komponente .dateien ul {
+    list-style: none;
+    padding: 0;
+    margin: 1mm 0 0 0;
+  }
+  .komponente .dateien li {
+    padding: 0.5mm 0;
+  }
+  .komponente .dateien .beschreibung {
+    color: var(--txt);
+  }
+  .komponente .dateien .typ {
+    display: inline-block;
+    width: 10mm;
+    color: var(--c1);
+    font-weight: 600;
+  }
+
+  /* Hinweis-Box bei fehlender Komponentenakte (bewusster B1-Effekt) */
+  .keine-komponente {
+    margin: 4mm 0 0 0;
+    padding: 3mm 4mm;
+    background: var(--hint-bg);
+    border-left: 2mm solid var(--hint-border);
+    font-size: 9pt;
+    color: var(--hint-txt);
+  }
+  .keine-komponente strong { color: var(--hint-txt); }
+
+  /* PV-Sammel-Seite: eine Zeile pro Modulfeld */
+  .pv-items { margin: 0; padding: 0; }
+  .pv-item {
+    padding: 3mm 0 3mm 0;
+    border-top: 0.3mm solid var(--rule);
+  }
+  .pv-item:last-child { border-bottom: 0.3mm solid var(--rule); }
+  .pv-item h3 {
+    font-size: 12pt;
+    margin: 0 0 1mm 0;
+    font-weight: 600;
+  }
+  .pv-summary {
+    margin: 0 0 6mm 0;
+    padding: 3mm 4mm;
+    background: #f5f8fd;
+    border-left: 2mm solid var(--c1);
+    font-size: 10pt;
+  }
+  .pv-summary .lbl { color: var(--muted); font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.3mm; margin-right: 2mm; }
+  .pv-summary .val { color: var(--txt); font-weight: 600; font-size: 11pt; margin-right: 8mm; }
+</style>
+</head>
+<body>
+<div class="page-stripe"></div>
+
+{# ============================================================== #}
+{#                    KOMPONENTE-BLOCK-MAKRO                        #}
+{# ============================================================== #}
+{% macro komponente_block(k) %}
+<div class="komponente">
+  <h4>{{ k.bezeichnung }}</h4>
+  {% if k.notizen %}<div class="notizen">{{ k.notizen }}</div>{% endif %}
+
+  {% if k.grid %}
+  <div class="k-grid">
+    {% for label, value in k.grid %}
+    <div class="row">
+      <div class="label">{{ label }}</div>
+      <div class="value">{{ value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% for label, value in k.freitext %}
+  <div class="freitext">
+    <div class="ft-label">{{ label }}</div>
+    <div class="ft-body">{{ value }}</div>
+  </div>
+  {% endfor %}
+
+  {% if k.datenblatt_url %}
+  <div class="datenblatt-url">
+    Datenblatt: <a href="{{ k.datenblatt_url }}">{{ k.datenblatt_url }}</a>
+  </div>
+  {% endif %}
+
+  {% if k.dateien %}
+  <div class="dateien">
+    Angehängte Dokumente ({{ k.dateien|length }}):
+    <ul>
+      {% for d in k.dateien %}
+      <li><span class="typ">{{ "PDF" if d.dateityp == "pdf" else "IMG" }}</span>
+          {{ d.dateiname }}{% if d.beschreibung %} — <span class="beschreibung">{{ d.beschreibung }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# ============================================================== #}
+{#                          TITELSEITE                             #}
+{# ============================================================== #}
+<div class="seite">
+  <div class="titel-headline">Anlagendokumentation</div>
+  <h1 class="titel-name">{{ anlage.name }}</h1>
+  <div class="mini-trenner">
+    <span class="a"></span><span class="b"></span><span class="c"></span>
+  </div>
+
+  {% if foto_data_url %}
+  <div class="foto-wrap">
+    <img src="{{ foto_data_url }}" alt="Anlagenfoto">
+  </div>
+  {% endif %}
+
+  <div class="adresse">
+    {% if anlage.standort_strasse %}{{ anlage.standort_strasse }}<br>{% endif %}
+    {{ anlage.standort_plz }} {{ anlage.standort_ort }}
+  </div>
+
+  <div class="meta-row">
+    <div>
+      <div class="label">Leistung</div>
+      <div class="value">{{ "%.2f"|format(anlage.leistung_kwp) }} kWp</div>
+    </div>
+    <div>
+      <div class="label">In Betrieb seit</div>
+      <div class="value">{% if anlage.installationsdatum %}{{ anlage.installationsdatum.strftime("%m / %Y") }}{% else %}—{% endif %}</div>
+    </div>
+    <div>
+      <div class="label">MaStR</div>
+      <div class="value">{{ anlage.mastr_id or "—" }}</div>
+    </div>
+  </div>
+
+  <div class="komponenten-headline">Komponenten</div>
+  <ul class="komponenten-list">
+    {% for art in anlage.anlagenarten %}<li>{{ art }}</li>{% endfor %}
+    {% if not anlage.anlagenarten %}<li style="color: var(--muted)">— Keine Investitionen erfasst —</li>{% endif %}
+  </ul>
+
+  <div class="titel-fuss">
+    EEDC · Energie Effizienz Data Center · erzeugt am {{ erzeugt_am }}
+  </div>
+</div>
+
+{# ============================================================== #}
+{#                         FOLGESEITEN                             #}
+{# ============================================================== #}
+{% for seite in seiten %}
+<div class="seite invest-page">
+  <div class="typ-label">{{ seite.typ_label }}</div>
+  <h2>{{ seite.titel }}</h2>
+  <div class="mini-trenner-l">
+    <span class="a"></span><span class="b"></span><span class="c"></span>
+  </div>
+
+  {% if seite.kind == "pv-sammel" %}
+    <div class="pv-summary">
+      <span class="lbl">Gesamt-Leistung</span><span class="val">{{ "%.2f"|format(seite.pv_gesamt_kwp) }} kWp</span>
+      <span class="lbl">Modulfelder</span><span class="val">{{ seite.pv_anzahl }}</span>
+    </div>
+
+    <div class="pv-items">
+    {% for item in seite.pv_items %}
+      <div class="pv-item">
+        <h3>{{ item.bezeichnung }}</h3>
+        {% if item.tech_grid %}
+        <div class="tech-grid">
+          {% for label, value in item.tech_grid %}
+          <div class="row">
+            <div class="label">{{ label }}</div>
+            <div class="value">{{ value }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if item.komponenten %}
+          <div class="sektion-titel">Komponentenakte</div>
+          {% for k in item.komponenten %}
+            {{ komponente_block(k) }}
+          {% endfor %}
+        {% else %}
+          <div class="keine-komponente">
+            <strong>Keine Komponenten-Akte verknüpft.</strong>
+            Datenblatt, Seriennummer, Garantie, Prüftermine und Kabelquerschnitte können
+            in der Infothek unter der Kategorie <em>„Komponente / Datenblatt"</em>
+            gepflegt und mit dieser Investition verknüpft werden.
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+    </div>
+  {% else %}
+    {# Einzel-Seite #}
+    {% if seite.tech_grid %}
+    <div class="sektion-titel">Technische Daten</div>
+    <div class="tech-grid">
+      {% for label, value in seite.tech_grid %}
+      <div class="row">
+        <div class="label">{{ label }}</div>
+        <div class="value">{{ value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if seite.komponenten %}
+      <div class="sektion-titel">Komponentenakte</div>
+      {% for k in seite.komponenten %}
+        {{ komponente_block(k) }}
+      {% endfor %}
+    {% else %}
+      <div class="keine-komponente">
+        <strong>Keine Komponenten-Akte verknüpft.</strong>
+        Datenblatt, Seriennummer, Garantie, Prüftermine und technische Details können
+        in der Infothek unter der Kategorie <em>„Komponente / Datenblatt"</em>
+        gepflegt und mit dieser Investition verknüpft werden.
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endfor %}
+
+{# ============================================================== #}
+{#                    KOMPONENTE-BLOCK-MAKRO                        #}
+{# ============================================================== #}
+{% macro komponente_block(k) %}
+<div class="komponente">
+  <h4>{{ k.bezeichnung }}</h4>
+  {% if k.notizen %}<div class="notizen">{{ k.notizen }}</div>{% endif %}
+
+  {% if k.grid %}
+  <div class="k-grid">
+    {% for label, value in k.grid %}
+    <div class="row">
+      <div class="label">{{ label }}</div>
+      <div class="value">{{ value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% for label, value in k.freitext %}
+  <div class="freitext">
+    <div class="ft-label">{{ label }}</div>
+    <div class="ft-body">{{ value }}</div>
+  </div>
+  {% endfor %}
+
+  {% if k.datenblatt_url %}
+  <div class="datenblatt-url">
+    Datenblatt: <a href="{{ k.datenblatt_url }}">{{ k.datenblatt_url }}</a>
+  </div>
+  {% endif %}
+
+  {% if k.dateien %}
+  <div class="dateien">
+    Angehängte Dokumente ({{ k.dateien|length }}):
+    <ul>
+      {% for d in k.dateien %}
+      <li><span class="typ">{{ "PDF" if d.dateityp == "pdf" else "IMG" }}</span>
+          {{ d.dateiname }}{% if d.beschreibung %} — <span class="beschreibung">{{ d.beschreibung }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+</body>
+</html>

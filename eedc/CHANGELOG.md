@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.0] - 2026-04-15
+
+### Feat — Anlagendokumentation & Finanzbericht (Issue #121 Phase 4, Beta)
+
+- **Neuer zentraler „Dokumente"-Dialog pro Anlage**: Der bisherige Einzel-Button auf der Anlagen-Seite wird abgelöst durch einen **Dokumente**-Button (orangefarbenes Ordner-Icon), der einen Download-Hub mit allen verfügbaren PDF-Dokumenten öffnet. Aktuell vier Karten: **Jahresbericht**, **Infothek-Dossier**, **Anlagendokumentation** (Beta) und **Finanzbericht** (Beta). Die beiden neuen Dokumente sind mit einem amber-farbenen „Beta"-Badge gekennzeichnet und verlinken direkt auf Issue #121 für Feedback.
+- **Anlagendokumentation (Beta)** — neues PDF im V4-Layout mit Urkunden-Charakter: Titelseite mit Anlagenfoto, gesperrter Headline, großem Anlagennamen, Meta-Zeile (Leistung / Inbetriebnahme / MaStR) und Komponenten-Übersicht. Folgeseiten mit **Hybrid-Gruppierung**: alle PV-Modulfelder werden gesammelt auf einer Seite gerendert, alle anderen Investitionstypen (Wechselrichter, Speicher, Wärmepumpe, Wallbox, E-Fahrzeug, Balkonkraftwerk, Sonstiges) bekommen eine eigene Folgeseite. Unter der Technik jeder Investition wird der Komponenten-Akte-Block aus verknüpften Infothek-Einträgen der Kategorie „Komponente / Datenblatt" gerendert — mit allen gepflegten Feldern (Hersteller, Seriennummer, Garantie, Prüftermine, Datenblatt-URL), mehrzeiligen Freitext-Blöcken (Technische Daten, Garantie-Bedingungen, Sonstige Verträge) und der Liste angehängter Dateien inkl. Beschreibung. Ist keine Komponenten-Akte verknüpft, zeigt die Seite eine freundliche Hinweis-Box mit dem Pflege-Pfad. **Keine Geldbeträge** — die Anlagendokumentation ist bewusst für Versicherung, Nachlass und Archiv konzipiert und kann ohne Finanzbedenken weitergegeben werden.
+- **Finanzbericht (Beta)** — neues PDF mit allen monetären Kennzahlen zur Anlage: Investitions-Tabelle mit Bezeichnung, Kategorie, Inbetriebnahme, Kosten, Alternativ-Kosten und Jahres-Ersparnis je Investition; Summenzeile; KPI-Block mit Amortisations-Prognose, Differenz zum Alt-Szenario und Netto-Kosten nach Förderung; gruppierte Sektionen **Förderungen**, **Versicherung** und **Steuerdaten** aus den jeweiligen Infothek-Kategorien (`foerderung`, `versicherung`, `steuerdaten`) mit allen Einzel-Einträgen. Abgeschlossen mit einem Vertraulichkeits-Hinweis.
+- **Anlagenfoto am Anlage-Modell**: Neuer Upload-Bereich in der Anlage-Stammdaten-Form — Drag & Drop oder Klick, Vorschau als 128 × 128-Thumbnail, Ersetzen und Entfernen. Die bestehende Bildpipeline aus der Infothek wird wiederverwendet (EXIF-Rotation, HEIC→JPEG, Resize auf ~500 kB, 200 × 200-Thumbnail). Gespeichert wird in einer neuen Tabelle `anlage_foto` (1:1 zu `anlagen`, Cascade-Delete). Ein Foto pro Anlage — ein neues Foto überschreibt das alte. Genutzt wird es auf der Titelseite der Anlagendokumentation; ohne Foto bleibt die Titelseite aufgeräumt ohne Platzhalter.
+- **Neue API-Routen** unter `/api/anlagen/{id}/foto` (POST/GET/GET/thumb/DELETE) und unter `/api/dokumentation/anlagendokumentation/{id}` sowie `/api/dokumentation/finanzbericht/{id}`. Die beiden Dokumentations-Routen sind **WeasyPrint-only** — bei `PDF_ENGINE=reportlab` liefern sie `HTTP 503` mit klarem Hinweistext („Im HA-Add-on in der Konfiguration umschaltbar, im Standalone-Docker via Umgebungsvariable"). Begründung: Das V4-Layout (mehrseitige Komponenten-Blöcke, seitenübergreifende 3-Farben-Leiste, CSS-Gradients, `position: fixed`) ist auf WeasyPrint + Pango/Cairo ausgelegt und im reportlab-Builder nicht realistisch abbildbar.
+
+### Beta-Hinweis & Feedback-Einladung
+
+Die beiden neuen Dokumente sind bewusst als **Beta** markiert und werden über Issue [#121](https://github.com/supernova1963/eedc-homeassistant/issues/121) iteriert. Die Grundstruktur ist freigegeben (V4-Layout von rapahl approved, Hybrid-Gruppierung und B1-Datenquelle abgestimmt), aber Feld-Auswahl und Layout-Details werden nach Community-Praxis-Tests verfeinert. Feedback bitte konkret: „X fehlt, weil Y beim Ausfüllen/Drucken nicht passt". Das Fundament (Komponentenakte) aus v3.14.0 bleibt stabil, strukturelle Änderungen sind damit zukünftig reine Builder-/Template-Anpassungen — keine Datenmodell-Brüche.
+
+### Maintenance
+
+- Neuer PDF-Builder-Modul: `backend/services/pdf/builders/anlagendokumentation.py` und `backend/services/pdf/builders/finanzbericht.py`, Templates analog unter `backend/services/pdf/templates/`.
+- Seitenübergreifende 3-Farben-Leiste via `position: fixed` (WeasyPrint repliziert fixed-Elemente auf jeder physischen Seite) und `@page { margin: 22mm 22mm 22mm 38mm }` — damit starten auch automatisch umgebrochene Überlauf-Seiten auf Höhe des Streifen-Oberrands statt am Papier-Rand.
+- Neue Frontend-Komponenten: `AnlagenfotoSection.tsx`, `DokumentationsDialog.tsx`. Bestehender `ApiClient.upload()` um optionalen `extraFields`-Parameter erweitert (wurde für die Datei-Beschreibungen in v3.14.0 bereits vorbereitet).
+
+---
+
 ## [3.14.0] - 2026-04-15
 
 ### Fix

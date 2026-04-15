@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent } from 'react'
 import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain, Users, Zap } from 'lucide-react'
 import { Button, Input, Alert } from '../ui'
 import VersorgerSection from './VersorgerSection'
+import AnlagenfotoSection from './AnlagenfotoSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
 import type { Anlage, AnlageCreate, VersorgerDaten } from '../../types'
 
@@ -152,6 +153,13 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
           />
         </div>
       </div>
+
+      {/* Anlagenfoto — nur für bestehende Anlagen */}
+      {anlage?.id && (
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <AnlagenfotoSection anlageId={anlage.id} />
+        </div>
+      )}
 
       {/* Hinweis zu technischen Daten */}
       <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">

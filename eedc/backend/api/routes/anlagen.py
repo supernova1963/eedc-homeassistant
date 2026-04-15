@@ -6,14 +6,15 @@ CRUD Endpoints für PV-Anlagen.
 
 from typing import Optional, Any
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 from datetime import date
 
 from backend.api.deps import get_db
-from backend.models.anlage import Anlage
+from backend.models.anlage import Anlage, AnlageFoto
+from backend.services.infothek_datei_service import verarbeite_bild, validiere_dateityp, ist_bild
 
 
 # =============================================================================
@@ -389,3 +390,98 @@ async def geocode_address(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Geocoding-Service nicht erreichbar: {str(e)}"
         )
+
+
+# =============================================================================
+# Anlagenfoto (Phase 4 — Anlagendokumentation Titelseite)
+# =============================================================================
+
+MAX_FOTO_UPLOAD_BYTES = 50 * 1024 * 1024  # Grenze vor Resize
+
+
+@router.post("/{anlage_id}/foto", status_code=status.HTTP_201_CREATED)
+async def upload_anlagenfoto(
+    anlage_id: int,
+    datei: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lädt das Hauptfoto der Anlage hoch (ersetzt ggf. ein vorhandenes)."""
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    mime_type = datei.content_type or "application/octet-stream"
+    if not ist_bild(mime_type):
+        raise HTTPException(
+            status_code=400,
+            detail="Nur Bilder erlaubt (JPEG, PNG, HEIC).",
+        )
+
+    raw = await datei.read(MAX_FOTO_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_FOTO_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Datei zu groß (max. 50 MB).")
+
+    try:
+        bild_daten, thumbnail_daten, out_mime = verarbeite_bild(raw, mime_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    existing = await db.execute(
+        select(AnlageFoto).where(AnlageFoto.anlage_id == anlage_id)
+    )
+    foto = existing.scalar_one_or_none()
+    if foto:
+        foto.dateiname = datei.filename or "anlagenfoto.jpg"
+        foto.mime_type = out_mime
+        foto.daten = bild_daten
+        foto.thumbnail = thumbnail_daten
+    else:
+        foto = AnlageFoto(
+            anlage_id=anlage_id,
+            dateiname=datei.filename or "anlagenfoto.jpg",
+            mime_type=out_mime,
+            daten=bild_daten,
+            thumbnail=thumbnail_daten,
+        )
+        db.add(foto)
+
+    await db.commit()
+    return {"ok": True, "bytes": len(bild_daten)}
+
+
+@router.get("/{anlage_id}/foto")
+async def get_anlagenfoto(anlage_id: int, db: AsyncSession = Depends(get_db)):
+    """Liefert das Anlagenfoto in voller Auflösung."""
+    result = await db.execute(
+        select(AnlageFoto).where(AnlageFoto.anlage_id == anlage_id)
+    )
+    foto = result.scalar_one_or_none()
+    if not foto:
+        raise HTTPException(status_code=404, detail="Kein Anlagenfoto hinterlegt")
+    return Response(content=foto.daten, media_type=foto.mime_type)
+
+
+@router.get("/{anlage_id}/foto/thumb")
+async def get_anlagenfoto_thumb(anlage_id: int, db: AsyncSession = Depends(get_db)):
+    """Liefert das Thumbnail des Anlagenfotos."""
+    result = await db.execute(
+        select(AnlageFoto).where(AnlageFoto.anlage_id == anlage_id)
+    )
+    foto = result.scalar_one_or_none()
+    if not foto:
+        raise HTTPException(status_code=404, detail="Kein Anlagenfoto hinterlegt")
+    return Response(content=foto.thumbnail, media_type="image/jpeg")
+
+
+@router.delete("/{anlage_id}/foto", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_anlagenfoto(anlage_id: int, db: AsyncSession = Depends(get_db)):
+    """Entfernt das Anlagenfoto."""
+    result = await db.execute(
+        select(AnlageFoto).where(AnlageFoto.anlage_id == anlage_id)
+    )
+    foto = result.scalar_one_or_none()
+    if not foto:
+        raise HTTPException(status_code=404, detail="Kein Anlagenfoto hinterlegt")
+    await db.delete(foto)
+    await db.commit()

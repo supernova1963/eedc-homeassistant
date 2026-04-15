@@ -6,7 +6,7 @@ Repräsentiert eine PV-Anlage mit Stammdaten.
 
 from datetime import date, datetime
 from typing import Optional, Any
-from sqlalchemy import String, Float, Integer, Date, DateTime, JSON, Boolean
+from sqlalchemy import String, Float, Integer, Date, DateTime, JSON, Boolean, LargeBinary, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
@@ -120,6 +120,34 @@ class Anlage(Base):
     strompreise = relationship("Strompreis", back_populates="anlage", cascade="all, delete-orphan")
     pvgis_prognosen = relationship("PVGISPrognose", back_populates="anlage", cascade="all, delete-orphan")
     infothek_eintraege = relationship("InfothekEintrag", back_populates="anlage", cascade="all, delete-orphan")
+    foto = relationship("AnlageFoto", back_populates="anlage", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Anlage(id={self.id}, name='{self.anlagenname}', kWp={self.leistung_kwp})>"
+
+
+class AnlageFoto(Base):
+    """
+    Hauptfoto einer Anlage — wird auf der Titelseite der Anlagendokumentation
+    gerendert. Eine Anlage hat genau ein Foto (1:1).
+
+    Bildpipeline: wiederverwendet aus infothek_datei_service (Resize auf
+    ~500 KB, Thumbnail ~50 KB, EXIF-Rotation, HEIC→JPEG-Konvertierung).
+    """
+
+    __tablename__ = "anlage_foto"
+
+    anlage_id: Mapped[int] = mapped_column(
+        ForeignKey("anlagen.id", ondelete="CASCADE"), primary_key=True
+    )
+    dateiname: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    daten: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    thumbnail: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    anlage = relationship("Anlage", back_populates="foto")
+
+    def __repr__(self) -> str:
+        return f"<AnlageFoto(anlage_id={self.anlage_id}, {len(self.daten)} bytes)>"
