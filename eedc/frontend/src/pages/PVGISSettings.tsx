@@ -243,28 +243,79 @@ export default function PVGISSettings() {
                     </p>
                   </div>
                   <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                    <p className="text-sm text-green-600 dark:text-green-400">Ausrichtung</p>
+                    <p className="text-sm text-green-600 dark:text-green-400">
+                      {(aktivePrognose.module?.length ?? 0) > 1 ? 'Strings' : 'Ausrichtung'}
+                    </p>
                     <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                      {aktivePrognose.ausrichtung_richtung}
+                      {(aktivePrognose.module?.length ?? 0) > 1
+                        ? `${aktivePrognose.module!.length} Strings`
+                        : aktivePrognose.ausrichtung_richtung}
                     </p>
                   </div>
                 </div>
 
-                {/* Monatswerte Chart */}
-                {aktivePrognose.monatswerte && aktivePrognose.monatswerte.length > 0 && (
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={aktivePrognose.monatswerte.map(m => ({
+                {/* Monatswerte Chart: stacked pro Modul wenn >1, sonst Gesamt */}
+                {aktivePrognose.monatswerte && aktivePrognose.monatswerte.length > 0 && (() => {
+                  const module = aktivePrognose.module ?? []
+                  const multiString = module.length > 1
+                  const stringFarben = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
+
+                  const chartData = multiString
+                    ? Array.from({ length: 12 }, (_, i) => {
+                        const monat = i + 1
+                        const row: Record<string, number | string> = { name: monatNamen[monat] }
+                        module.forEach(mod => {
+                          const md = mod.monatsdaten.find(x => x.monat === monat)
+                          row[`m_${mod.investition_id}`] = md ? md.e_m : 0
+                        })
+                        return row
+                      })
+                    : aktivePrognose.monatswerte.map(m => ({
                         name: monatNamen[m.monat],
                         prognose: m.e_m
-                      }))}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis tickFormatter={(v) => `${v} kWh`} />
-                        <Tooltip content={<ChartTooltip unit="kWh" />} />
-                        <Bar dataKey="prognose" fill="#f59e0b" name="Prognose" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                      }))
+
+                  return (
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis
+                            width={70}
+                            tickFormatter={(v) => `${Number(v).toLocaleString('de-DE')} kWh`}
+                          />
+                          <Tooltip content={<ChartTooltip unit="kWh" />} />
+                          {multiString ? (
+                            module.map((mod, idx) => (
+                              <Bar
+                                key={mod.investition_id}
+                                dataKey={`m_${mod.investition_id}`}
+                                stackId="prognose"
+                                fill={stringFarben[idx % stringFarben.length]}
+                                name={`${mod.bezeichnung} (${mod.ausrichtung_richtung})`}
+                              />
+                            ))
+                          ) : (
+                            <Bar dataKey="prognose" fill="#f59e0b" name="Prognose" />
+                          )}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )
+                })()}
+
+                {/* Modul-Liste bei Multi-String */}
+                {aktivePrognose.module && aktivePrognose.module.length > 1 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
+                    {aktivePrognose.module.map(mod => (
+                      <div key={mod.investition_id} className="flex items-center justify-between px-4 py-2 text-sm">
+                        <span className="font-medium text-gray-900 dark:text-white">{mod.bezeichnung}</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {mod.leistung_kwp} kWp • {mod.ausrichtung_richtung} • {mod.neigung_grad}° • {mod.jahresertrag_kwh.toLocaleString('de-DE')} kWh/a
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -505,13 +556,19 @@ export default function PVGISSettings() {
                 {/* Monatswerte */}
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={previewPrognose.monatsdaten.map(m => ({
-                      name: monatNamen[m.monat],
-                      ertrag: m.e_m
-                    }))}>
+                    <BarChart
+                      data={previewPrognose.monatsdaten.map(m => ({
+                        name: monatNamen[m.monat],
+                        ertrag: m.e_m
+                      }))}
+                      margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" fontSize={10} />
-                      <YAxis tickFormatter={(v) => `${v}`} />
+                      <YAxis
+                        width={70}
+                        tickFormatter={(v) => `${Number(v).toLocaleString('de-DE')} kWh`}
+                      />
                       <Tooltip content={<ChartTooltip unit="kWh" />} />
                       <Bar dataKey="ertrag" fill="#22c55e" name="Ertrag" />
                     </BarChart>

@@ -764,6 +764,34 @@ async def get_aktive_prognose(
     if not prognose:
         return None
 
+    # Per-Modul-Infos aufbauen (für Multi-String-Anzeige im Frontend)
+    module_info: list[dict] = []
+    if prognose.module_monatswerte:
+        inv_ids = [int(k) for k in prognose.module_monatswerte.keys()]
+        result_inv = await db.execute(
+            select(Investition).where(Investition.id.in_(inv_ids))
+        )
+        inv_by_id = {inv.id: inv for inv in result_inv.scalars().all()}
+
+        for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
+            inv_id = int(inv_id_str)
+            inv = inv_by_id.get(inv_id)
+            leistung_kwp = float(inv.leistung_kwp) if inv and inv.leistung_kwp else 0.0
+            neigung = float(inv.neigung_grad) if inv and inv.neigung_grad is not None else 0.0
+            ausrichtung_str = (inv.ausrichtung if inv and inv.ausrichtung else "Süd")
+            jahres_kwh = sum(float(m.get("e_m", 0) or 0) for m in monatsdaten)
+            module_info.append({
+                "investition_id": inv_id,
+                "bezeichnung": (inv.bezeichnung if inv else f"Modul {inv_id}"),
+                "leistung_kwp": leistung_kwp,
+                "neigung_grad": neigung,
+                "ausrichtung_richtung": ausrichtung_str,
+                "jahresertrag_kwh": round(jahres_kwh, 1),
+                "monatsdaten": monatsdaten,
+            })
+        # Stabile Reihenfolge: größte Module zuerst
+        module_info.sort(key=lambda m: m["leistung_kwp"], reverse=True)
+
     return {
         "id": prognose.id,
         "anlage_id": prognose.anlage_id,
@@ -777,6 +805,7 @@ async def get_aktive_prognose(
         "jahresertrag_kwh": prognose.jahresertrag_kwh,
         "spezifischer_ertrag_kwh_kwp": prognose.spezifischer_ertrag_kwh_kwp,
         "monatswerte": prognose.monatswerte,
+        "module": module_info,
         "horizont_verwendet": prognose.horizont_verwendet or False,
     }
 
