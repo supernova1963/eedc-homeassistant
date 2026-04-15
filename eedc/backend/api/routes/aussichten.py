@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_zeitraum
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
@@ -290,7 +291,7 @@ async def get_kurzfrist_prognose(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "pv-module",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     pv_module = result.scalars().all()
@@ -302,7 +303,7 @@ async def get_kurzfrist_prognose(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "balkonkraftwerk",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     balkonkraftwerke = result.scalars().all()
@@ -420,7 +421,7 @@ async def get_langfrist_prognose(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "pv-module",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     pv_module = result.scalars().all()
@@ -431,7 +432,7 @@ async def get_langfrist_prognose(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "balkonkraftwerk",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     balkonkraftwerke = result.scalars().all()
@@ -586,7 +587,7 @@ async def get_trend_analyse(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "pv-module",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     pv_module = result.scalars().all()
@@ -597,7 +598,7 @@ async def get_trend_analyse(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "balkonkraftwerk",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     balkonkraftwerke = result.scalars().all()
@@ -905,17 +906,20 @@ async def get_finanz_prognose(
     wp_netzbezug_preis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis
 
     # =====================================================================
-    # ALLE INVESTITIONEN LADEN
+    # ALLE INVESTITIONEN LADEN — Issue #123: Hybrid-Sicht
+    # Historische Aggregation braucht ALLE (auch stillgelegte) Investitionen,
+    # damit Vergangenheit vollständig bleibt. Für die Prognose-Basis
+    # (anlagenleistung_kwp) wird anschließend auf aktuell aktive PV gefiltert.
     # =====================================================================
+    from datetime import date as _date
     result = await db.execute(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
-            Investition.aktiv == True
         )
     )
     alle_investitionen = result.scalars().all()
 
-    # Nach Typ gruppieren
+    # Nach Typ gruppieren (alle — auch historische)
     pv_module = [i for i in alle_investitionen if i.typ == "pv-module"]
     speicher = [i for i in alle_investitionen if i.typ == "speicher"]
     e_autos = [i for i in alle_investitionen
@@ -924,7 +928,14 @@ async def get_finanz_prognose(
     balkonkraftwerke = [i for i in alle_investitionen if i.typ == "balkonkraftwerk"]
     sonstiges_investitionen = [i for i in alle_investitionen if i.typ == "sonstiges"]
 
-    anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module) or anlage.leistung_kwp or 0
+    # Prognose-Basis: nur aktuell aktive PV (kWp für künftige Erträge)
+    _heute = _date.today()
+    aktuelle_pv_module = [m for m in pv_module if m.ist_aktiv_an(_heute)]
+    aktuelle_bkw = [b for b in balkonkraftwerke if b.ist_aktiv_an(_heute)]
+    anlagenleistung_kwp = (
+        sum(m.leistung_kwp or 0 for m in aktuelle_pv_module)
+        + sum(b.leistung_kwp or 0 for b in aktuelle_bkw)
+    ) or anlage.leistung_kwp or 0
 
     # =====================================================================
     # HISTORISCHE DATEN LADEN

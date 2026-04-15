@@ -17,6 +17,7 @@ from backend.core.config import settings
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.services.solar_forecast_service import (
     get_solar_prognose,
@@ -78,7 +79,7 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
         select(Investition).where(
             Investition.anlage_id == anlage.id,
             Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
-            Investition.aktiv == True,
+            aktiv_jetzt(),
         )
     )
     alle_pv = inv_result.scalars().all()

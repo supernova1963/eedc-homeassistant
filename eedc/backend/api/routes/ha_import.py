@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,7 @@ async def get_investitionen_mit_feldern(
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
+        .where(aktiv_jetzt())
         .order_by(Investition.typ, Investition.bezeichnung)
     )
     investitionen = result.scalars().all()

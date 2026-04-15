@@ -73,11 +73,14 @@ async def build_jahresbericht_context(
     einspeise_cent = strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2
 
     # ── 3. Investitionen ────────────────────────────────────────────────
-    res = await db.execute(
-        select(Investition)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)  # noqa: E712
-    )
+    # KEIN aktiv-Filter (Issue #123): Jahresbericht ist historisch, spätere
+    # Stilllegung darf Komponenten-Daten nicht rückwirkend entfernen. Wenn ein
+    # Jahr ausgewählt ist, wird zusätzlich auf den Einsatzzeitraum gefiltert.
+    from backend.utils.investition_filter import aktiv_im_jahr
+    inv_stmt = select(Investition).where(Investition.anlage_id == anlage_id)
+    if jahr is not None:
+        inv_stmt = inv_stmt.where(aktiv_im_jahr(jahr))
+    res = await db.execute(inv_stmt)
     investitionen = res.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}
 

@@ -22,6 +22,7 @@ from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
@@ -578,7 +579,7 @@ async def get_live_wetter(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
-            Investition.aktiv == True,
+            aktiv_jetzt(),
         )
     )
     pv_module = list(pv_result.scalars().all())

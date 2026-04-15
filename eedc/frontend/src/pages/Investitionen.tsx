@@ -363,11 +363,14 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
 
   const details = getDetails()
   const kosten = investition.anschaffungskosten_gesamt
+  const heute = new Date().toISOString().slice(0, 10)
+  const istStillgelegt = !!investition.stilllegungsdatum && investition.stilllegungsdatum <= heute
+  const istAktiv = investition.aktiv && !istStillgelegt
 
   return (
     <div className={`
       flex items-center justify-between p-3 rounded-lg border
-      ${investition.aktiv
+      ${istAktiv
         ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
         : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60'
       }
@@ -377,7 +380,12 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
           <p className="font-medium text-gray-900 dark:text-white truncate">
             {investition.bezeichnung}
           </p>
-          {!investition.aktiv && (
+          {istStillgelegt && (
+            <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 rounded text-amber-700 dark:text-amber-300" title={`Stillgelegt seit ${investition.stilllegungsdatum}`}>
+              Stillgelegt
+            </span>
+          )}
+          {!investition.aktiv && !istStillgelegt && (
             <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
               Inaktiv
             </span>

@@ -171,11 +171,12 @@ async def list_monatsdaten_aggregiert(
     if not monatsdaten_list:
         return []
 
-    # Investitionen laden
+    # Investitionen laden — KEIN aktiv-Filter (Issue #123): historische Aggregate
+    # dürfen Investitionen nicht rückwirkend ausblenden, wenn sie später pausiert
+    # oder stillgelegt werden. Die Rohdaten in InvestitionMonatsdaten bleiben gültig.
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
     )
     investitionen = inv_result.scalars().all()
     inv_ids = [i.id for i in investitionen]

@@ -526,6 +526,7 @@ async def backfill_from_statistics(
     from sqlalchemy import select as sa_select, delete as sa_delete, and_ as sa_and
 
     from backend.models.investition import Investition
+    from backend.utils.investition_filter import aktiv_jetzt
     from backend.services.live_sensor_config import (
         extract_live_config,
         TV_SERIE_CONFIG,
@@ -537,7 +538,7 @@ async def backfill_from_statistics(
     inv_result = await db.execute(
         sa_select(Investition).where(
             Investition.anlage_id == anlage.id,
-            Investition.aktiv == True,
+            aktiv_jetzt(),
         )
     )
     investitionen: dict[str, Investition] = {

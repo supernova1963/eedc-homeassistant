@@ -16,6 +16,7 @@ from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.core.field_definitions import (
     get_alle_felder_fuer_investition,
     get_live_felder_fuer_investition,
@@ -326,7 +327,7 @@ async def get_mqtt_topics(
         investitionen = (await db.execute(
             select(Investition).where(
                 Investition.anlage_id == aid,
-                Investition.aktiv == True,
+                aktiv_jetzt(),
             )
         )).scalars().all()
 

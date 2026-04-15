@@ -54,8 +54,9 @@ async def get_share_text(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
+    # KEIN aktiv-Filter (Issue #123): historischer Monatstext.
     inv_result = await db.execute(
-        select(Investition).where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+        select(Investition).where(Investition.anlage_id == anlage_id)
     )
     investitionen = inv_result.scalars().all()
 

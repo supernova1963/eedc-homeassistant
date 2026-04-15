@@ -19,6 +19,7 @@ from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.strompreis import Strompreis
 from backend.services.ha_sensors_export import (
     SensorDefinition, SensorValue, SensorCategory,
@@ -135,7 +136,7 @@ async def calculate_anlage_sensors(
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage.id)
-        .where(Investition.aktiv == True)
+        .where(aktiv_jetzt())
     )
     investitionen = result.scalars().all()
 

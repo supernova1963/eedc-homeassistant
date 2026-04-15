@@ -115,10 +115,10 @@ async def get_cockpit_uebersicht(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    # Investitionen laden
+    # Investitionen laden — KEIN aktiv-Filter (Issue #123): historische KPIs
+    # dürfen später deaktivierte/stillgelegte Komponenten nicht rückwirkend ausblenden.
     inv_query = select(Investition).where(
         Investition.anlage_id == anlage_id,
-        Investition.aktiv == True
     )
     inv_result = await db.execute(inv_query)
     investitionen = inv_result.scalars().all()

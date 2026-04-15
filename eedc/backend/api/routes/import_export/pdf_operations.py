@@ -130,10 +130,11 @@ async def export_pdf(
     # ==========================================================================
     # 3. Investitionen laden
     # ==========================================================================
+    # KEIN aktiv-Filter (Issue #123): PDF-Export historischer Daten
+    # darf spätere Stilllegungen nicht rückwirkend berücksichtigen.
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
     )
     investitionen = inv_result.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}

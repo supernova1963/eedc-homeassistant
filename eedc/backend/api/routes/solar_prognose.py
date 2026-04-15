@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.services.solar_forecast_service import (
     get_solar_prognose,
@@ -181,7 +182,7 @@ async def get_solar_prognose_endpoint(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "pv-module",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     pv_module = result.scalars().all()
@@ -191,7 +192,7 @@ async def get_solar_prognose_endpoint(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
             Investition.typ == "balkonkraftwerk",
-            Investition.aktiv == True
+            aktiv_jetzt()
         )
     )
     balkonkraftwerke = result.scalars().all()

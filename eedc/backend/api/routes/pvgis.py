@@ -27,6 +27,7 @@ import httpx
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 
 # =============================================================================
@@ -356,7 +357,7 @@ async def get_pvgis_prognose(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.PV_MODULE.value)
-        .where(Investition.aktiv == True)
+        .where(aktiv_jetzt())
     )
     pv_module = result.scalars().all()
 

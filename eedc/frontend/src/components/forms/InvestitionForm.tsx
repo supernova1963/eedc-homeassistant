@@ -84,6 +84,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
   const [formData, setFormData] = useState({
     bezeichnung: investition?.bezeichnung || `Mein ${typLabels[typ]}`,
     anschaffungsdatum: investition?.anschaffungsdatum || '',
+    stilllegungsdatum: investition?.stilllegungsdatum || '',
     anschaffungskosten_gesamt: investition?.anschaffungskosten_gesamt?.toString() || '',
     anschaffungskosten_alternativ: investition?.anschaffungskosten_alternativ?.toString() || '',
     betriebskosten_jahr: investition?.betriebskosten_jahr?.toString() || '',
@@ -345,6 +346,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         ...(investition ? {} : { anlage_id: anlageId, typ }),
         bezeichnung: formData.bezeichnung.trim(),
         anschaffungsdatum: formData.anschaffungsdatum || undefined,
+        stilllegungsdatum: formData.stilllegungsdatum || undefined,
         anschaffungskosten_gesamt: formData.anschaffungskosten_gesamt ? parseFloat(formData.anschaffungskosten_gesamt) : undefined,
         anschaffungskosten_alternativ: formData.anschaffungskosten_alternativ ? parseFloat(formData.anschaffungskosten_alternativ) : undefined,
         betriebskosten_jahr: formData.betriebskosten_jahr ? parseFloat(formData.betriebskosten_jahr) : undefined,
@@ -398,6 +400,16 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
             max="2099-12-31"
             value={formData.anschaffungsdatum}
             onChange={handleChange}
+          />
+          <Input
+            label="Stilllegungsdatum (optional)"
+            name="stilllegungsdatum"
+            type="date"
+            min={formData.anschaffungsdatum || "2000-01-01"}
+            max="2099-12-31"
+            value={formData.stilllegungsdatum}
+            onChange={handleChange}
+            hint="Ab diesem Datum zählt die Komponente nicht mehr für Live/Prognose. Historische Werte bleiben erhalten."
           />
           <Input
             label="Anschaffungskosten (€)"

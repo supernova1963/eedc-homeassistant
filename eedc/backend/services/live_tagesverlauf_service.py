@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.live_sensor_config import (
     SKIP_TYPEN,
     TV_SERIE_CONFIG,
@@ -53,7 +54,7 @@ async def get_tagesverlauf(
     inv_result = await db.execute(
         select(Investition).where(
             Investition.anlage_id == anlage.id,
-            Investition.aktiv == True,
+            aktiv_jetzt(),
         )
     )
     investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
@@ -352,7 +353,7 @@ async def _get_tagesverlauf_mqtt(
     inv_result = await db.execute(
         select(Investition).where(
             Investition.anlage_id == anlage.id,
-            Investition.aktiv == True,
+            aktiv_jetzt(),
         )
     )
     investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}

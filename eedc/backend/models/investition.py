@@ -58,6 +58,7 @@ class Investition(Base):
     typ: Mapped[str] = mapped_column(String(50), nullable=False)  # InvestitionTyp value
     bezeichnung: Mapped[str] = mapped_column(String(255), nullable=False)
     anschaffungsdatum: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    stilllegungsdatum: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     # Kosten
     anschaffungskosten_gesamt: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -99,6 +100,39 @@ class Investition(Base):
 
     def __repr__(self) -> str:
         return f"<Investition(id={self.id}, typ='{self.typ}', name='{self.bezeichnung}')>"
+
+    def ist_aktiv_an(self, tag: date) -> bool:
+        """True, wenn die Investition an einem konkreten Tag aktiv war.
+
+        `aktiv` ist manueller Override (temporär aus), `stilllegungsdatum` finaler End-Marker.
+        """
+        if not self.aktiv:
+            return False
+        if self.anschaffungsdatum and self.anschaffungsdatum > tag:
+            return False
+        if self.stilllegungsdatum and self.stilllegungsdatum < tag:
+            return False
+        return True
+
+    def ist_aktiv_im_zeitraum(self, start: date, end: date) -> bool:
+        """True, wenn die Investition irgendwann im Zeitraum [start, end] aktiv war.
+
+        Historische Sicht — ignoriert `aktiv`-Flag bewusst, weil vergangene Daten
+        ("Einsatz in H1/2024") auch nach manuellem Pausieren gültig bleiben sollen.
+        Nur `stilllegungsdatum` begrenzt die Lebensspanne endgültig.
+        """
+        if self.anschaffungsdatum and self.anschaffungsdatum > end:
+            return False
+        if self.stilllegungsdatum and self.stilllegungsdatum < start:
+            return False
+        return True
+
+    def ist_aktiv_im_monat(self, jahr: int, monat: int) -> bool:
+        """Convenience: True, wenn Investition im gegebenen Kalendermonat (teilweise) aktiv war."""
+        from calendar import monthrange
+        start = date(jahr, monat, 1)
+        end = date(jahr, monat, monthrange(jahr, monat)[1])
+        return self.ist_aktiv_im_zeitraum(start, end)
 
 
 class InvestitionMonatsdaten(Base):

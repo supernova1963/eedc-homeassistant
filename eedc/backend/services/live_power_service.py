@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.live_sensor_config import (
     normalize_to_w,
     extract_live_config,
@@ -130,7 +131,7 @@ class LivePowerService:
         result = await db.execute(
             select(Investition).where(
                 Investition.anlage_id == anlage.id,
-                Investition.aktiv == True,
+                aktiv_jetzt(),
             )
         )
         investitionen = {str(inv.id): inv for inv in result.scalars().all()}

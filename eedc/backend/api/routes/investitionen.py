@@ -14,6 +14,7 @@ from datetime import date
 
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
+from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_monat, aktiv_im_jahr
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import Strompreis
@@ -30,6 +31,7 @@ class InvestitionBase(BaseModel):
     typ: str = Field(..., description="Investitionstyp (e-auto, speicher, etc.)")
     bezeichnung: str = Field(..., min_length=1, max_length=255)
     anschaffungsdatum: Optional[date] = None
+    stilllegungsdatum: Optional[date] = Field(None, description="Endmarker: ab diesem Datum zählt die Investition nicht mehr für aktuelle/künftige Auswertungen")
     anschaffungskosten_gesamt: Optional[float] = Field(None, ge=0)
     anschaffungskosten_alternativ: Optional[float] = Field(None, ge=0)
     betriebskosten_jahr: Optional[float] = Field(None, ge=0)
@@ -52,6 +54,7 @@ class InvestitionUpdate(BaseModel):
     """Schema für Investition-Update."""
     bezeichnung: Optional[str] = Field(None, min_length=1, max_length=255)
     anschaffungsdatum: Optional[date] = None
+    stilllegungsdatum: Optional[date] = None
     anschaffungskosten_gesamt: Optional[float] = Field(None, ge=0)
     anschaffungskosten_alternativ: Optional[float] = Field(None, ge=0)
     betriebskosten_jahr: Optional[float] = Field(None, ge=0)
@@ -293,7 +296,7 @@ async def get_parent_options(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.WECHSELRICHTER.value)
-        .where(Investition.aktiv == True)
+        .where(aktiv_jetzt())
         .order_by(Investition.bezeichnung)
     )
     wechselrichter = wr_result.scalars().all()
@@ -675,13 +678,16 @@ async def get_roi_dashboard(
     wallbox_tarif = tarife.get("wallbox")
     wallbox_strompreis = wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else strompreis_cent
 
-    # Investitionen laden
-    inv_result = await db.execute(
+    # Investitionen laden — Issue #123: ROI historisch, spätere Stilllegung
+    # darf Vergangenheit nicht löschen. Siehe Roadmap R1 für zeitanteilige Gewichtung.
+    inv_stmt = (
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
         .order_by(Investition.typ, Investition.id)
     )
+    if jahr is not None:
+        inv_stmt = inv_stmt.where(aktiv_im_jahr(jahr))
+    inv_result = await db.execute(inv_stmt)
     investitionen = list(inv_result.scalars().all())
 
     # ==========================================================================
@@ -737,11 +743,12 @@ async def get_roi_dashboard(
         Einspeisung/Netzbezug kommen weiterhin aus Monatsdaten (Zählerwerte).
         """
         # 1. PV-Module IDs ermitteln
+        # Issue #123: historische PV-Einsparung — keine aktiv-Filterung, damit
+        # spätere Stilllegung Vergangenheit nicht entfernt.
         pv_ids_result = await db.execute(
             select(Investition.id)
             .where(Investition.anlage_id == anlage_id)
             .where(Investition.typ == "pv-module")
-            .where(Investition.aktiv == True)
         )
         pv_module_ids = [row[0] for row in pv_ids_result.all()]
 
@@ -1411,12 +1418,12 @@ async def get_eauto_dashboard(
     allgemein_tarif = tarife.get("allgemein")
     strompreis_cent = strompreis_cent or (wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else (allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0))
 
-    # E-Autos laden
+    # E-Autos laden — Issue #123: Dashboard ist historische Übersicht,
+    # stillgelegte E-Autos bleiben mit ihrer Historie sichtbar.
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.E_AUTO.value)
-        .where(Investition.aktiv == True)
     )
     eautos = inv_result.scalars().all()
 
@@ -1552,7 +1559,6 @@ async def get_waermepumpe_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.WAERMEPUMPE.value)
-        .where(Investition.aktiv == True)
     )
     waermepumpen = inv_result.scalars().all()
 
@@ -1658,7 +1664,6 @@ async def get_speicher_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.SPEICHER.value)
-        .where(Investition.aktiv == True)
     )
     speicher_list = inv_result.scalars().all()
 
@@ -1777,11 +1782,12 @@ async def get_investition_monatsdaten_by_month(
     Returns:
         list[InvestitionMonatsdatenResponse]: Liste der InvestitionMonatsdaten
     """
-    # Alle aktiven Investitionen der Anlage laden
+    # Issue #123: MonatsdatenForm-Editor — zeige Investitionen, die in dem
+    # bearbeiteten Monat aktiv waren (auch inzwischen stillgelegte).
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
+        .where(aktiv_im_monat(jahr, monat))
     )
     investitionen = inv_result.scalars().all()
 
@@ -1823,7 +1829,6 @@ async def get_wallbox_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.WALLBOX.value)
-        .where(Investition.aktiv == True)
     )
     wallboxen = inv_result.scalars().all()
 
@@ -1835,7 +1840,6 @@ async def get_wallbox_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.E_AUTO.value)
-        .where(Investition.aktiv == True)
     )
     eautos = eauto_result.scalars().all()
 
@@ -1937,7 +1941,6 @@ async def get_balkonkraftwerk_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.BALKONKRAFTWERK.value)
-        .where(Investition.aktiv == True)
     )
     balkonkraftwerke = inv_result.scalars().all()
 
@@ -2051,7 +2054,6 @@ async def get_sonstiges_dashboard(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.SONSTIGES.value)
-        .where(Investition.aktiv == True)
     )
     sonstige = inv_result.scalars().all()
 

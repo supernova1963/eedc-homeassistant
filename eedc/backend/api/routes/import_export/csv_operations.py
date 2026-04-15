@@ -17,6 +17,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
@@ -67,7 +68,7 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     # Investitionen laden, nach Typ und ID sortiert
     inv_result = await db.execute(
         select(Investition)
-        .where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+        .where(Investition.anlage_id == anlage_id, aktiv_jetzt())
         .order_by(Investition.typ, Investition.id)
     )
     investitionen = inv_result.scalars().all()
@@ -196,7 +197,7 @@ async def import_csv(
 
     # Investitionen laden
     inv_result = await db.execute(
-        select(Investition).where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+        select(Investition).where(Investition.anlage_id == anlage_id, aktiv_jetzt())
     )
     investitionen = list(inv_result.scalars().all())
 
@@ -522,9 +523,11 @@ async def export_csv(
     inv_monatsdaten_map: dict[tuple[int, int, int], dict] = {}
 
     if include_investitionen:
+        # KEIN aktiv-Filter (Issue #123): Export historischer Daten soll
+        # vollständig sein, auch für später stillgelegte Komponenten.
         inv_result = await db.execute(
             select(Investition)
-            .where(Investition.anlage_id == anlage_id, Investition.aktiv == True)
+            .where(Investition.anlage_id == anlage_id)
             .order_by(Investition.typ, Investition.id)
         )
         investitionen = list(inv_result.scalars().all())

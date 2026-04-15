@@ -79,11 +79,13 @@ async def get_komponenten_zeitreihe(
     db: AsyncSession = Depends(get_db)
 ):
     """Zeitreihe aller Komponenten für Auswertungen."""
-    inv_result = await db.execute(
-        select(Investition)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
-    )
+    # Issue #123: historische Zeitreihe — kein aktiv-Filter, damit spätere
+    # Stilllegungen Vergangenheitsdaten nicht rückwirkend entfernen.
+    inv_stmt = select(Investition).where(Investition.anlage_id == anlage_id)
+    if jahr is not None:
+        from backend.utils.investition_filter import aktiv_im_jahr
+        inv_stmt = inv_stmt.where(aktiv_im_jahr(jahr))
+    inv_result = await db.execute(inv_stmt)
     investitionen = inv_result.scalars().all()
 
     speicher_ids = [i.id for i in investitionen if i.typ == "speicher"]

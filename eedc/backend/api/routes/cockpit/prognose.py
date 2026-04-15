@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.utils.investition_filter import aktiv_im_jahr
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
@@ -90,7 +91,7 @@ async def get_prognose_vs_ist(
         select(Investition.id)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ.in_(["pv-module", "balkonkraftwerk"]))
-        .where(Investition.aktiv == True)
+        .where(aktiv_im_jahr(jahr))
     )
     pv_ids = [row[0] for row in pv_result.all()]
 
@@ -194,7 +195,7 @@ async def get_prognose_vergleich(
         select(Investition.id)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ.in_(["pv-module", "balkonkraftwerk"]))
-        .where(Investition.aktiv == True)
+        .where(aktiv_im_jahr(jahr))
     )
     pv_ids = [row[0] for row in pv_result.all()]
 

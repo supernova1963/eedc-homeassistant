@@ -125,11 +125,12 @@ async def get_pv_strings(
     if not anlage:
         raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
 
+    # KEIN aktiv-Filter (Issue #123): historische PV-String-Auswertung darf
+    # später stillgelegte Strings nicht aus Vergangenheits-Vergleichen ausblenden.
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == "pv-module")
-        .where(Investition.aktiv == True)
     )
     pv_module = result.scalars().all()
 
@@ -281,11 +282,12 @@ async def get_pv_strings_gesamtlaufzeit(
     if not anlage:
         raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
 
+    # KEIN aktiv-Filter (Issue #123): historische PV-String-Auswertung darf
+    # später stillgelegte Strings nicht aus Vergangenheits-Vergleichen ausblenden.
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == "pv-module")
-        .where(Investition.aktiv == True)
     )
     pv_module = result.scalars().all()
 

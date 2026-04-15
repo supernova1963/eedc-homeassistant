@@ -52,10 +52,11 @@ async def get_nachhaltigkeit(
     db: AsyncSession = Depends(get_db)
 ):
     """Nachhaltigkeits-Übersicht mit CO2-Zeitreihe."""
+    # KEIN aktiv-Filter (Issue #123): CO2-Zeitreihe historisch, Stilllegung
+    # darf vergangene Einsparungen nicht rückwirkend entfernen.
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.aktiv == True)
     )
     investitionen = inv_result.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}

@@ -132,6 +132,9 @@ async def run_migrations(conn):
                 ('ausrichtung', 'VARCHAR(50)'),
                 ('neigung_grad', 'FLOAT'),
                 ('ha_entity_id', 'VARCHAR(255)'),
+                # v3.14.0: Stilllegungsdatum (Issue #123) — historische Aggregate
+                # blenden Investitionen nicht mehr rückwirkend aus
+                ('stilllegungsdatum', 'DATE'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

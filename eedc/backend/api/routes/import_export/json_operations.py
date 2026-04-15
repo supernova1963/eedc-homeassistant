@@ -55,6 +55,7 @@ class InvestitionExport(BaseModel):
     anschaffungskosten_alternativ: Optional[float] = None
     betriebskosten_jahr: Optional[float] = None
     anschaffungsdatum: Optional[date] = None
+    stilllegungsdatum: Optional[date] = None
     leistung_kwp: Optional[float] = None
     ausrichtung: Optional[str] = None
     neigung_grad: Optional[float] = None
@@ -368,6 +369,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             anschaffungskosten_alternativ=inv.anschaffungskosten_alternativ,
             betriebskosten_jahr=inv.betriebskosten_jahr,
             anschaffungsdatum=inv.anschaffungsdatum,
+            stilllegungsdatum=inv.stilllegungsdatum,
             leistung_kwp=inv.leistung_kwp,
             ausrichtung=inv.ausrichtung,
             neigung_grad=inv.neigung_grad,
@@ -630,6 +632,7 @@ async def import_json(
                 anschaffungskosten_alternativ=inv_data.get("anschaffungskosten_alternativ"),
                 betriebskosten_jahr=inv_data.get("betriebskosten_jahr"),
                 anschaffungsdatum=_parse_date(inv_data.get("anschaffungsdatum")),
+                stilllegungsdatum=_parse_date(inv_data.get("stilllegungsdatum")),
                 leistung_kwp=inv_data.get("leistung_kwp"),
                 ausrichtung=inv_data.get("ausrichtung"),
                 neigung_grad=inv_data.get("neigung_grad"),

@@ -157,6 +157,7 @@ export interface Investition {
   typ: InvestitionTyp
   bezeichnung: string
   anschaffungsdatum?: string
+  stilllegungsdatum?: string
   anschaffungskosten_gesamt?: number
   anschaffungskosten_alternativ?: number
   betriebskosten_jahr?: number

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
 from backend.services.wetter.utils import wetter_code_zu_symbol
@@ -127,13 +128,13 @@ async def get_kurzfrist_prognose(
     pv_module = db.query(Investition).filter(
         Investition.anlage_id == anlage_id,
         Investition.typ == "pv_module",
-        Investition.aktiv == True
+        aktiv_jetzt(),
     ).all()
 
     bkw = db.query(Investition).filter(
         Investition.anlage_id == anlage_id,
         Investition.typ == "balkonkraftwerk",
-        Investition.aktiv == True
+        aktiv_jetzt(),
     ).all()
 
     anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
@@ -243,7 +244,7 @@ async def get_langfrist_prognose(
     pv_module = db.query(Investition).filter(
         Investition.anlage_id == anlage_id,
         Investition.typ == "pv_module",
-        Investition.aktiv == True
+        aktiv_jetzt(),
     ).all()
 
     anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module) or anlage.leistung_kwp or 0
@@ -391,7 +392,7 @@ async def get_trend_analyse(
     pv_module = db.query(Investition).filter(
         Investition.anlage_id == anlage_id,
         Investition.typ == "pv_module",
-        Investition.aktiv == True
+        aktiv_jetzt(),
     ).all()
 
     anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module) or anlage.leistung_kwp or 0

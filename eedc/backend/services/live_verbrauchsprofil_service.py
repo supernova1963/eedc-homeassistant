@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.live_sensor_config import (
     ERZEUGER_TYPEN,
     extract_live_config,
@@ -208,7 +209,7 @@ async def _profil_from_ha(
     # PV-Entity-IDs
     inv_result = await db.execute(
         select(Investition.id, Investition.typ).where(
-            Investition.anlage_id == anlage.id, Investition.aktiv == True
+            Investition.anlage_id == anlage.id, aktiv_jetzt()
         )
     )
     inv_types = {str(row[0]): row[1] for row in inv_result.all()}
