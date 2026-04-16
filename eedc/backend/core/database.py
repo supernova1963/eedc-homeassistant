@@ -41,7 +41,7 @@ class Base(DeclarativeBase):
     pass
 
 
-# v3.16.0: Anlagen mit mindestens dieser Anzahl Tagen TagesZusammenfassung
+# v3.15.2: Anlagen mit mindestens dieser Anzahl Tagen TagesZusammenfassung
 # gelten als "Bestand" und überspringen den Auto-Vollbackfill beim ersten
 # Monatsabschluss nach Upgrade. Schwelle bewusst niedrig, damit auch frische
 # Installationen mit ein paar Wochen Datenbestand nicht überraschend einen
@@ -207,11 +207,11 @@ async def run_migrations(conn):
             existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}
             if 'ansprechpartner_id' not in existing_columns:
                 connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN ansprechpartner_id INTEGER REFERENCES infothek_eintraege(id) ON DELETE SET NULL'))
-            # v3.16.0: Flag für Anlagendokumentation
+            # v3.15.2: Flag für Anlagendokumentation
             if 'in_anlagendoku' not in existing_columns:
                 connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN in_anlagendoku BOOLEAN DEFAULT 1'))
 
-        # v3.16.0: Infothek N:M Verknüpfung mit Investitionen (Junction Table)
+        # v3.15.2: Infothek N:M Verknüpfung mit Investitionen (Junction Table)
         # Tabelle wird von create_all erstellt (SQLAlchemy Model), hier nur Datenmigration
         table_names = inspector.get_table_names()
         if 'infothek_investition' not in table_names and 'infothek_eintraege' in table_names:
