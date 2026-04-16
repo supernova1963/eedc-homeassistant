@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
+// Note: useState/useEffect still needed for distribution + monthlyAverages
 import {
   Sun,
   TrendingUp,
@@ -21,6 +22,7 @@ import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, Verteilung, MonatlicheDurchschnitte } from '../../api/community'
+// communityApi still needed for distribution + monthlyAverages
 import {
   Bar,
   XAxis,
@@ -36,38 +38,38 @@ import {
 interface PVErtragTabProps {
   anlageId: number
   zeitraum: ZeitraumTyp
+  benchmark: CommunityBenchmarkResponse | null
+  benchmarkLoading: boolean
+  benchmarkError: string | null
 }
 
-export default function PVErtragTab({ anlageId, zeitraum }: PVErtragTabProps) {
-  const [benchmark, setBenchmark] = useState<CommunityBenchmarkResponse | null>(null)
+export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkError }: PVErtragTabProps) {
   const [distribution, setDistribution] = useState<Verteilung | null>(null)
   const [monthlyAverages, setMonthlyAverages] = useState<MonatlicheDurchschnitte | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [extraLoading, setExtraLoading] = useState(false)
 
-  // Benchmark und Community-Daten laden
+  const loading = benchmarkLoading || extraLoading
+  const error = benchmarkError
+
+  // Zusätzliche Community-Daten laden (Distribution + Monatsdurchschnitte)
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true)
-      setError(null)
+    const loadExtra = async () => {
+      setExtraLoading(true)
       try {
-        const [benchmarkData, distData, monthlyData] = await Promise.all([
-          communityApi.getBenchmark(anlageId, zeitraum),
+        const [distData, monthlyData] = await Promise.all([
           communityApi.getDistribution('spez_ertrag', 15).catch(() => null),
-          communityApi.getMonthlyAverages(24).catch(() => null), // Letzte 24 Monate
+          communityApi.getMonthlyAverages(24).catch(() => null),
         ])
-        setBenchmark(benchmarkData)
         setDistribution(distData)
         setMonthlyAverages(monthlyData)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      } catch {
+        // Ignoriere Fehler bei Zusatzdaten
       } finally {
-        setLoading(false)
+        setExtraLoading(false)
       }
     }
-
-    loadData()
-  }, [anlageId, zeitraum])
+    loadExtra()
+  }, [])
 
   // Monatsdaten für Chart aufbereiten - mit echten monatlichen Community-Durchschnitten
   const chartData = useMemo(() => {

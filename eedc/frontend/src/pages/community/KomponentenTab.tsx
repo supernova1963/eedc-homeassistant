@@ -62,35 +62,19 @@ import {
 interface KomponentenTabProps {
   anlageId: number
   zeitraum: ZeitraumTyp
+  benchmark: CommunityBenchmarkResponse | null
+  benchmarkLoading: boolean
+  benchmarkError: string | null
 }
 
-export default function KomponentenTab({ anlageId, zeitraum }: KomponentenTabProps) {
-  const [benchmark, setBenchmark] = useState<CommunityBenchmarkResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export default function KomponentenTab({ zeitraum, benchmark, benchmarkLoading, benchmarkError }: KomponentenTabProps) {
+  const loading = benchmarkLoading
+  const error = benchmarkError
 
   // Community Deep-Dive Daten
   const [speicherByClass, setSpeicherByClass] = useState<SpeicherByClass | null>(null)
   const [wpByRegion, setWpByRegion] = useState<WPByRegion | null>(null)
   const [eautoByUsage, setEautoByUsage] = useState<EAutoByUsage | null>(null)
-
-  // Benchmark laden
-  useEffect(() => {
-    const loadBenchmark = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await communityApi.getBenchmark(anlageId, zeitraum)
-        setBenchmark(data)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Fehler beim Laden')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadBenchmark()
-  }, [anlageId, zeitraum])
 
   // Deep-Dive Statistiken laden (unabhängig vom Zeitraum)
   useEffect(() => {

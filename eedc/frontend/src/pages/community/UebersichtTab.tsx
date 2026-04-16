@@ -9,7 +9,7 @@
  * - Komponenten-Benchmarks
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import {
   Trophy,
   Battery,
@@ -34,7 +34,6 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
-import { communityApi } from '../../api'
 import type {
   CommunityBenchmarkResponse,
   ZeitraumTyp,
@@ -75,6 +74,9 @@ const REGION_NAMEN: Record<string, string> = {
 interface UebersichtTabProps {
   anlageId: number
   zeitraum: ZeitraumTyp
+  benchmark: CommunityBenchmarkResponse | null
+  benchmarkLoading: boolean
+  benchmarkError: string | null
 }
 
 // Stärken/Schwächen Analyse
@@ -149,28 +151,7 @@ const ACHIEVEMENT_DEFINITIONEN = {
   },
 }
 
-export default function UebersichtTab({ anlageId, zeitraum }: UebersichtTabProps) {
-  const [benchmark, setBenchmark] = useState<CommunityBenchmarkResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Benchmark laden
-  useEffect(() => {
-    const loadBenchmark = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await communityApi.getBenchmark(anlageId, zeitraum)
-        setBenchmark(data)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Fehler beim Laden')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadBenchmark()
-  }, [anlageId, zeitraum])
+export default function UebersichtTab({ benchmark, benchmarkLoading: loading, benchmarkError: error }: UebersichtTabProps) {
 
   // Ranking-Badge berechnen
   const rankingBadge = useMemo(() => {

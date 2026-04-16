@@ -177,35 +177,31 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
 interface RegionalTabProps {
   anlageId: number
   zeitraum: ZeitraumTyp
+  benchmark: CommunityBenchmarkResponse | null
+  benchmarkLoading: boolean
+  benchmarkError: string | null
 }
 
-export default function RegionalTab({ anlageId, zeitraum }: RegionalTabProps) {
-  const [benchmark, setBenchmark] = useState<CommunityBenchmarkResponse | null>(null)
+export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkError }: RegionalTabProps) {
   const [allRegions, setAllRegions] = useState<RegionStatistik[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [extraLoading, setExtraLoading] = useState(false)
 
-  // Benchmark und regionale Statistiken laden
+  const loading = benchmarkLoading || extraLoading
+  const error = benchmarkError
+
+  // Regionale Statistiken laden (unabhängig vom Benchmark)
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true)
-      setError(null)
+    const loadRegions = async () => {
+      setExtraLoading(true)
       try {
-        const [benchmarkData, regionsData] = await Promise.all([
-          communityApi.getBenchmark(anlageId, zeitraum),
-          communityApi.getRegionalStatistics().catch(() => []),
-        ])
-        setBenchmark(benchmarkData)
+        const regionsData = await communityApi.getRegionalStatistics().catch(() => [])
         setAllRegions(regionsData)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Fehler beim Laden')
       } finally {
-        setLoading(false)
+        setExtraLoading(false)
       }
     }
-
-    loadData()
-  }, [anlageId, zeitraum])
+    loadRegions()
+  }, [])
 
   // Regionale Kennzahlen berechnen
   const regionalStats = useMemo(() => {

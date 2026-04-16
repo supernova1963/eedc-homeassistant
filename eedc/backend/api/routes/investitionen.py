@@ -1430,15 +1430,21 @@ async def get_eauto_dashboard(
     if not eautos:
         return []
 
+    # Batch-Query: Alle Monatsdaten für alle E-Autos auf einmal laden
+    eauto_ids = [e.id for e in eautos]
+    all_md_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(eauto_ids))
+        .order_by(InvestitionMonatsdaten.investition_id, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    all_monatsdaten = all_md_result.scalars().all()
+    md_by_inv: dict[int, list] = {}
+    for md in all_monatsdaten:
+        md_by_inv.setdefault(md.investition_id, []).append(md)
+
     dashboards = []
     for eauto in eautos:
-        # Monatsdaten laden
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == eauto.id)
-            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-        )
-        monatsdaten = md_result.scalars().all()
+        monatsdaten = md_by_inv.get(eauto.id, [])
 
         # Zusammenfassung berechnen
         gesamt_km = 0
@@ -1565,14 +1571,21 @@ async def get_waermepumpe_dashboard(
     if not waermepumpen:
         return []
 
+    # Batch-Query: Alle Monatsdaten für alle Wärmepumpen auf einmal laden
+    wp_ids = [w.id for w in waermepumpen]
+    all_md_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(wp_ids))
+        .order_by(InvestitionMonatsdaten.investition_id, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    all_monatsdaten = all_md_result.scalars().all()
+    md_by_inv: dict[int, list] = {}
+    for md in all_monatsdaten:
+        md_by_inv.setdefault(md.investition_id, []).append(md)
+
     dashboards = []
     for wp in waermepumpen:
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == wp.id)
-            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-        )
-        monatsdaten = md_result.scalars().all()
+        monatsdaten = md_by_inv.get(wp.id, [])
 
         gesamt_strom = 0
         gesamt_strom_heizen = 0
@@ -1686,14 +1699,21 @@ async def get_speicher_dashboard(
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in anlage_md_dict.values())
     eff_strompreis_cent = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else strompreis_cent
 
+    # Batch-Query: Alle Monatsdaten für alle Speicher auf einmal laden
+    speicher_ids = [s.id for s in speicher_list]
+    all_md_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(speicher_ids))
+        .order_by(InvestitionMonatsdaten.investition_id, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    all_monatsdaten = all_md_result.scalars().all()
+    md_by_inv: dict[int, list] = {}
+    for md in all_monatsdaten:
+        md_by_inv.setdefault(md.investition_id, []).append(md)
+
     dashboards = []
     for speicher in speicher_list:
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == speicher.id)
-            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-        )
-        monatsdaten = md_result.scalars().all()
+        monatsdaten = md_by_inv.get(speicher.id, [])
 
         gesamt_ladung = 0
         gesamt_entladung = 0
@@ -1791,20 +1811,18 @@ async def get_investition_monatsdaten_by_month(
     )
     investitionen = inv_result.scalars().all()
 
-    # InvestitionMonatsdaten für diesen Monat laden
-    result = []
-    for inv in investitionen:
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == inv.id)
-            .where(InvestitionMonatsdaten.jahr == jahr)
-            .where(InvestitionMonatsdaten.monat == monat)
-        )
-        imd = md_result.scalar_one_or_none()
-        if imd:
-            result.append(imd)
+    # Batch-Query: Alle InvestitionMonatsdaten für diesen Monat auf einmal laden
+    inv_ids = [inv.id for inv in investitionen]
+    if not inv_ids:
+        return []
 
-    return result
+    md_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
+        .where(InvestitionMonatsdaten.jahr == jahr)
+        .where(InvestitionMonatsdaten.monat == monat)
+    )
+    return md_result.scalars().all()
 
 
 @router.get("/dashboard/wallbox/{anlage_id}", response_model=list[WallboxDashboardResponse])
@@ -1843,6 +1861,21 @@ async def get_wallbox_dashboard(
     )
     eautos = eauto_result.scalars().all()
 
+    # Batch-Query: Alle Monatsdaten für E-Autos + Wallboxen auf einmal laden
+    eauto_ids = [e.id for e in eautos]
+    wallbox_ids = [w.id for w in wallboxen]
+    all_inv_ids = eauto_ids + wallbox_ids
+
+    all_md_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(all_inv_ids))
+        .order_by(InvestitionMonatsdaten.investition_id, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    all_monatsdaten = all_md_result.scalars().all()
+    md_by_inv: dict[int, list] = {}
+    for md in all_monatsdaten:
+        md_by_inv.setdefault(md.investition_id, []).append(md)
+
     # Aggregiere E-Auto-Heimladung über alle E-Autos
     gesamt_heim_pv = 0
     gesamt_heim_netz = 0
@@ -1851,31 +1884,27 @@ async def get_wallbox_dashboard(
     gesamt_ladevorgaenge = 0
     monate_set = set()
 
-    for eauto in eautos:
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == eauto.id)
-        )
-        for md in md_result.scalars().all():
-            d = md.verbrauch_daten or {}
-            gesamt_heim_pv += d.get('ladung_pv_kwh', 0)
-            gesamt_heim_netz += d.get('ladung_netz_kwh', 0)
-            gesamt_extern_kwh += d.get('ladung_extern_kwh', 0)
-            gesamt_extern_euro += d.get('ladung_extern_euro', 0)
-            # Fallback: ladevorgaenge aus E-Auto-Daten (manuelle Altdaten)
-            gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
-            monate_set.add((md.jahr, md.monat))
+    eauto_id_set = set(eauto_ids)
+    for inv_id, md_list in md_by_inv.items():
+        if inv_id in eauto_id_set:
+            for md in md_list:
+                d = md.verbrauch_daten or {}
+                gesamt_heim_pv += d.get('ladung_pv_kwh', 0)
+                gesamt_heim_netz += d.get('ladung_netz_kwh', 0)
+                gesamt_extern_kwh += d.get('ladung_extern_kwh', 0)
+                gesamt_extern_euro += d.get('ladung_extern_euro', 0)
+                # Fallback: ladevorgaenge aus E-Auto-Daten (manuelle Altdaten)
+                gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
+                monate_set.add((md.jahr, md.monat))
 
     # Ladevorgänge aus Wallbox-Monatsdaten (Sensor-Mapping speichert hier)
-    for wallbox in wallboxen:
-        wb_md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == wallbox.id)
-        )
-        for md in wb_md_result.scalars().all():
-            d = md.verbrauch_daten or {}
-            gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
-            monate_set.add((md.jahr, md.monat))
+    wallbox_id_set = set(wallbox_ids)
+    for inv_id, md_list in md_by_inv.items():
+        if inv_id in wallbox_id_set:
+            for md in md_list:
+                d = md.verbrauch_daten or {}
+                gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
+                monate_set.add((md.jahr, md.monat))
 
     gesamt_heim_ladung = gesamt_heim_pv + gesamt_heim_netz
     anzahl_monate = len(monate_set)
@@ -1896,13 +1925,8 @@ async def get_wallbox_dashboard(
 
     dashboards = []
     for wallbox in wallboxen:
-        # Wallbox-eigene Monatsdaten (falls vorhanden)
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == wallbox.id)
-            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-        )
-        monatsdaten = md_result.scalars().all()
+        # Wallbox-eigene Monatsdaten aus Batch-Ergebnis
+        monatsdaten = md_by_inv.get(wallbox.id, [])
 
         params = wallbox.parameter or {}
         leistung_kw = params.get('leistung_kw', 11)
@@ -1959,14 +1983,21 @@ async def get_balkonkraftwerk_dashboard(
     if not balkonkraftwerke:
         return []
 
+    # Batch-Query: Alle Monatsdaten für alle BKW auf einmal laden
+    bkw_ids = [b.id for b in balkonkraftwerke]
+    all_md_result = await db.execute(
+        select(InvestitionMonatsdaten)
+        .where(InvestitionMonatsdaten.investition_id.in_(bkw_ids))
+        .order_by(InvestitionMonatsdaten.investition_id, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    )
+    all_monatsdaten = all_md_result.scalars().all()
+    md_by_inv: dict[int, list] = {}
+    for md in all_monatsdaten:
+        md_by_inv.setdefault(md.investition_id, []).append(md)
+
     dashboards = []
     for bkw in balkonkraftwerke:
-        md_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id == bkw.id)
-            .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-        )
-        monatsdaten = md_result.scalars().all()
+        monatsdaten = md_by_inv.get(bkw.id, [])
 
         gesamt_erzeugung = 0
         gesamt_eigenverbrauch = 0

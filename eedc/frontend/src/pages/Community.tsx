@@ -24,6 +24,7 @@ import {
   HelpCircle,
 } from 'lucide-react'
 import { Card, Alert } from '../components/ui'
+import { communityApi, type CommunityBenchmarkResponse } from '../api/community'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
@@ -57,6 +58,11 @@ export default function Community() {
   const [communityHash, setCommunityHash] = useState<string | null>(null)
   const [checkingAccess, setCheckingAccess] = useState(true)
 
+  // Benchmark zentral laden — wird an alle Tabs weitergereicht
+  const [benchmark, setBenchmark] = useState<CommunityBenchmarkResponse | null>(null)
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false)
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null)
+
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
 
   // Community-Hash prüfen
@@ -79,6 +85,26 @@ export default function Community() {
     }
     checkCommunityStatus()
   }, [anlageId])
+
+  // Benchmark einmal laden, Ergebnis an alle Tabs weitergeben
+  useEffect(() => {
+    if (!anlageId || !communityHash) return
+
+    const loadBenchmark = async () => {
+      setBenchmarkLoading(true)
+      setBenchmarkError(null)
+      try {
+        const data = await communityApi.getBenchmark(anlageId, zeitraum)
+        setBenchmark(data)
+      } catch (e) {
+        setBenchmarkError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      } finally {
+        setBenchmarkLoading(false)
+      }
+    }
+    loadBenchmark()
+  }, [anlageId, zeitraum, communityHash])
+
 
   if (anlagenLoading || checkingAccess) {
     return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
@@ -220,22 +246,22 @@ export default function Community() {
       {anlageId && (
         <>
           {activeTab === 'uebersicht' && (
-            <UebersichtTab anlageId={anlageId} zeitraum={zeitraum} />
+            <UebersichtTab anlageId={anlageId} zeitraum={zeitraum} benchmark={benchmark} benchmarkLoading={benchmarkLoading} benchmarkError={benchmarkError} />
           )}
           {activeTab === 'pv-ertrag' && (
-            <PVErtragTab anlageId={anlageId} zeitraum={zeitraum} />
+            <PVErtragTab anlageId={anlageId} zeitraum={zeitraum} benchmark={benchmark} benchmarkLoading={benchmarkLoading} benchmarkError={benchmarkError} />
           )}
           {activeTab === 'komponenten' && (
-            <KomponentenTab anlageId={anlageId} zeitraum={zeitraum} />
+            <KomponentenTab anlageId={anlageId} zeitraum={zeitraum} benchmark={benchmark} benchmarkLoading={benchmarkLoading} benchmarkError={benchmarkError} />
           )}
           {activeTab === 'regional' && (
-            <RegionalTab anlageId={anlageId} zeitraum={zeitraum} />
+            <RegionalTab anlageId={anlageId} zeitraum={zeitraum} benchmark={benchmark} benchmarkLoading={benchmarkLoading} benchmarkError={benchmarkError} />
           )}
           {activeTab === 'trends' && (
-            <TrendsTab anlageId={anlageId} zeitraum={zeitraum} />
+            <TrendsTab anlageId={anlageId} zeitraum={zeitraum} benchmark={benchmark} benchmarkLoading={benchmarkLoading} benchmarkError={benchmarkError} />
           )}
           {activeTab === 'statistiken' && (
-            <StatistikenTab anlageId={anlageId} zeitraum={zeitraum} />
+            <StatistikenTab anlageId={anlageId} zeitraum={zeitraum} benchmark={benchmark} benchmarkLoading={benchmarkLoading} benchmarkError={benchmarkError} />
           )}
         </>
       )}
