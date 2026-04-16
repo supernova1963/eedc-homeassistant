@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.2] - 2026-04-16
+
+### Feat — Infothek N:M Verknüpfung + Komponenten-Akte am Investment (#121)
+
+- **Mehrfachverknüpfung Infothek ↔ Investitionen (N:M)**: Ein Datenblatt (z.B. „Trina Vertex S 430Wp") kann jetzt mit mehreren Investments gleichzeitig verknüpft werden — statt für 6 PV-Strings 6 identische Einträge zu pflegen. Neue Junction Table `infothek_investition`, bestehende 1:1-Verknüpfungen werden automatisch migriert. Im Formular ersetzt eine Checkbox-Liste das bisherige Single-Select-Dropdown. API bleibt rückwärtskompatibel (`investition_id` weiterhin akzeptiert).
+- **Komponenten-Akte direkt am Investment**: Kontextabhängiger Button in der Investitions-Übersicht: „Komponenten-Akte anlegen" (0 Einträge), „Komponenten-Akte öffnen" (1 Eintrag), Dropdown-Liste mit Direktlinks (N Einträge) + „Weitere verknüpfen". Quick-Create öffnet ein Modal mit vorausgefüllter Kategorie und Verknüpfung.
+- **„In Anlagendokumentation anzeigen" Flag**: Neues Häkchen pro Infothek-Eintrag (Default: an). Steuert, ob der Eintrag in der Anlagendokumentation (PDF) erscheint. Das Infothek-Dossier zeigt weiterhin immer alles, Jahres- und Finanzbericht sind nicht betroffen.
+- **Infrastruktur-Abschnitt in Anlagendokumentation**: Infothek-Einträge der Kategorie „Komponente / Datenblatt" ohne Investment-Verknüpfung (z.B. Zähler, Zählerschränke, Verkabelung) bekommen eine eigene Seite im PDF.
+
+### Fix
+
+- **Wallbox-Dashboard: Ladevorgänge immer 0**: Sensor-Mapping speichert `ladevorgaenge` in den Wallbox-Monatsdaten, aber das Dashboard las nur E-Auto-Monatsdaten. Fix: beide Quellen aggregieren (Wallbox primär, E-Auto als Fallback für manuelle Altdaten).
+- **Infothek Datei-Label**: Zeigte „max. 3", tatsächliches Limit ist 15. Dateigröße (bis 10 MB) ergänzt.
+- **Stromzähler-Placeholder erweitert**: Strom-Zähler-Bezeichnung zeigt jetzt Beispiele für WP-Strom, Wallbox, Haushalt als Placeholder-Text.
+
+---
+
 ## [3.15.1] - 2026-04-16
 
 ### Feat — Auto-Vollbackfill aus HA Long-Term Statistics
