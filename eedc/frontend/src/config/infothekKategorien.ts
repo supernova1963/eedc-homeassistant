@@ -87,7 +87,7 @@ export const KATEGORIE_CONFIG: Record<string, KategorieConfig> = {
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
   },
   garantie: {
-    label: 'Garantie',
+    label: 'Komponente / Datenblatt',
     icon: BadgeCheck,
     color: 'text-green-500',
     bgColor: 'bg-green-50 dark:bg-green-900/20',
