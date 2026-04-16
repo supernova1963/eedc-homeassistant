@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.16.0] - 2026-04-15
+## [3.15.1] - 2026-04-16
 
 ### Feat — Auto-Vollbackfill aus HA Long-Term Statistics
 
@@ -15,6 +15,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Neues Anlage-Feld `vollbackfill_durchgefuehrt`**: Wird gesetzt, sobald entweder der manuelle Wizard-Button oder der Auto-Lauf durch ist (Erfolg oder Fehler). Damit greift der Auto-Vollbackfill garantiert nur einmal pro Anlage und führt auch bei defekter HA-DB nicht zu Endlos-Retries. Beim **Löschen der Energieprofil-Rohdaten** (Single-Anlage und Bulk-Endpoint) wird das Flag zurückgesetzt → der nächste Monatsabschluss zieht die History erneut nach. Das Feld ist server-intern, nicht über die Anlage-API editierbar.
 - **Bestandsdaten-Heuristik** in der DB-Migration: Anlagen mit mehr als 30 Tagen Energieprofil-Historie werden bei der Migration auf v3.16.0 direkt mit `vollbackfill_durchgefuehrt = True` markiert. So bekommt z.B. Rainer (578 Tage) keinen überraschenden Multi-Jahres-Backfill beim ersten Scheduler-Lauf — wer das explizit will, kann den Wizard-Button weiter manuell anstoßen.
 - **Verhalten in Edge-Cases**: HA Statistics nicht verfügbar → Flag wird trotzdem gesetzt, kein Retry. Keine validen Sensoren konfiguriert → Flag wird trotzdem gesetzt. Frische Installation ohne Profile-Daten → Flag bleibt False, erster Monatsabschluss zieht die komplette History. Wizard-Vollbackfill bereits gelaufen → Flag ist True, kein erneuter Auto-Lauf.
+
+### Fix
+
+- **Infothek-Kategorie „Garantie" → „Komponente / Datenblatt"**: Das Label in der Infothek-UI stimmte nicht mit dem Verweis in der Anlagendokumentation überein. Nutzer, die dem Hinweis „Kategorie Komponente / Datenblatt" folgten, fanden die Kategorie nicht, weil sie im Frontend noch „Garantie" hieß. Auslöser: Rainer.
 
 ### Maintenance
 
