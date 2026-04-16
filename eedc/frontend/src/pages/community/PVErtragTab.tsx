@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-// Note: useState/useEffect still needed for distribution + monthlyAverages
+import { MONAT_KURZ } from '../../lib/constants'
 import {
   Sun,
   TrendingUp,
@@ -22,7 +22,6 @@ import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, Verteilung, MonatlicheDurchschnitte } from '../../api/community'
-// communityApi still needed for distribution + monthlyAverages
 import {
   Bar,
   XAxis,
@@ -75,7 +74,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
   const chartData = useMemo(() => {
     if (!benchmark?.anlage.monatswerte) return []
 
-    const monatsnamen = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+    const monatsnamen = MONAT_KURZ.slice(1)
 
     // Map für schnellen Zugriff auf monatliche Durchschnitte
     const avgMap = new Map<string, number>()

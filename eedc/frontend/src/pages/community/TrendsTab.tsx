@@ -42,12 +42,9 @@ import {
   Legend,
 } from 'recharts'
 
-// Monatsnamen
-const MONATSNAMEN = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-const MONATSNAMEN_LANG = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-]
+import { MONAT_KURZ, MONAT_NAMEN } from '../../lib/constants'
+const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
+const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
 
 // Jahreszeiten
 const JAHRESZEITEN = {

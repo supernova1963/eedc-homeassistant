@@ -35,11 +35,7 @@ import type {
   InvestitionsZuordnung,
 } from '../api/portalImport'
 import type { Anlage } from '../types'
-
-const MONAT_NAMEN = [
-  '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-]
+import { MONAT_NAMEN } from '../lib/constants'
 
 // ── Zuordnungs-Hilfsfunktionen ──────────────────────────────────────────────
 

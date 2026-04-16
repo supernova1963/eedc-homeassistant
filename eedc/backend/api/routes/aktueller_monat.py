@@ -769,6 +769,27 @@ async def get_aktueller_monat(
         )
 
     # ── Komponenten-Detail aus gespeicherten InvestitionMonatsdaten ──
+    # Batch-Query: Alle InvestitionMonatsdaten für diesen Monat auf einmal laden
+    all_inv_ids = [i.id for i in investitionen]
+    imd_by_inv: dict[int, list] = {}
+    if all_inv_ids:
+        all_imd_result = await db.execute(
+            select(InvestitionMonatsdaten).where(
+                InvestitionMonatsdaten.investition_id.in_(all_inv_ids),
+                InvestitionMonatsdaten.jahr == jahr,
+                InvestitionMonatsdaten.monat == monat,
+            )
+        )
+        for imd in all_imd_result.scalars().all():
+            imd_by_inv.setdefault(imd.investition_id, []).append(imd)
+
+    def get_imd_for_invs(invs: list) -> list:
+        """Sammelt InvestitionMonatsdaten für eine Liste von Investitionen."""
+        result = []
+        for inv in invs:
+            result.extend(imd_by_inv.get(inv.id, []))
+        return result
+
     # Speicher: Kapazität, Arbitrage-Ladung, Wirkungsgrad, Vollzyklen
     speicher_ladung_netz = None
     speicher_wirkungsgrad = None
@@ -783,16 +804,8 @@ async def get_aktueller_monat(
             speicher_kapazitaet = round(kap_sum, 1)
 
         # Arbitrage-Ladung aus gespeicherten Daten
-        sp_ids = [i.id for i in speicher_invs]
-        sp_imd = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(sp_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
         ladung_netz_total = 0.0
-        for imd in sp_imd.scalars().all():
+        for imd in get_imd_for_invs(speicher_invs):
             data = imd.verbrauch_daten or {}
             ladung_netz_total += data.get("ladung_netz_kwh", 0) or 0
         if ladung_netz_total > 0:
@@ -811,17 +824,9 @@ async def get_aktueller_monat(
     wp_warmwasser = None
     wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
     if wp_invs:
-        wp_ids = [i.id for i in wp_invs]
-        wp_imd = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(wp_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
         h_total = 0.0
         ww_total = 0.0
-        for imd in wp_imd.scalars().all():
+        for imd in get_imd_for_invs(wp_invs):
             data = imd.verbrauch_daten or {}
             h_total += data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0
             ww_total += data.get("warmwasser_kwh", 0) or 0
@@ -838,18 +843,10 @@ async def get_aktueller_monat(
 
     emob_invs = [i for i in investitionen if i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)]
     if emob_invs:
-        emob_ids = [i.id for i in emob_invs]
-        emob_imd = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(emob_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
         netz_total = 0.0
         extern_total = 0.0
         v2h_total = 0.0
-        for imd in emob_imd.scalars().all():
+        for imd in get_imd_for_invs(emob_invs):
             data = imd.verbrauch_daten or {}
             netz_total += data.get("ladung_netz_kwh", 0) or 0
             extern_total += data.get("ladung_extern_kwh", 0) or 0
@@ -865,16 +862,8 @@ async def get_aktueller_monat(
     bkw_eigenverbrauch = None
     bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk"]
     if bkw_invs:
-        bkw_ids = [i.id for i in bkw_invs]
-        bkw_imd = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(bkw_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
         ev_total = 0.0
-        for imd in bkw_imd.scalars().all():
+        for imd in get_imd_for_invs(bkw_invs):
             data = imd.verbrauch_daten or {}
             ev_total += data.get("eigenverbrauch_kwh", 0) or 0
         if ev_total > 0:
@@ -890,21 +879,13 @@ async def get_aktueller_monat(
 
     sonstiges_invs = [i for i in investitionen if i.typ == "sonstiges"]
     if sonstiges_invs:
-        sonstiges_ids = [i.id for i in sonstiges_invs]
-        sonstiges_imd = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(sonstiges_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
         se_total = 0.0
         sev_total = 0.0
         sei_total = 0.0
         sv_total = 0.0
         sbpv_total = 0.0
         sbnetz_total = 0.0
-        for imd in sonstiges_imd.scalars().all():
+        for imd in get_imd_for_invs(sonstiges_invs):
             data = imd.verbrauch_daten or {}
             se_total   += data.get("erzeugung_kwh", 0) or 0
             sev_total  += data.get("eigenverbrauch_kwh", 0) or 0

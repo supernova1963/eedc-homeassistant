@@ -32,11 +32,7 @@ import { portalImportApi } from '../api/portalImport'
 import type { CloudProviderInfo, CloudTestResult, CloudPreviewResult } from '../api/cloudImport'
 import type { ApplyResult } from '../api/portalImport'
 import type { Anlage } from '../types'
-
-const MONAT_NAMEN = [
-  '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-]
+import { MONAT_NAMEN } from '../lib/constants'
 
 export default function CloudImportWizard() {
   const navigate = useNavigate()

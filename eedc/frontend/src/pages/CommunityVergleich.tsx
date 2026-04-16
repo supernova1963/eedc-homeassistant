@@ -53,27 +53,7 @@ const ZEITRAUM_OPTIONS: { value: ZeitraumTyp; label: string }[] = [
   { value: 'seit_installation', label: 'Seit Installation' },
 ]
 
-// Bundesland-Namen
-const REGION_NAMEN: Record<string, string> = {
-  BW: 'Baden-Württemberg',
-  BY: 'Bayern',
-  BE: 'Berlin',
-  BB: 'Brandenburg',
-  HB: 'Bremen',
-  HH: 'Hamburg',
-  HE: 'Hessen',
-  MV: 'Mecklenburg-Vorpommern',
-  NI: 'Niedersachsen',
-  NW: 'Nordrhein-Westfalen',
-  RP: 'Rheinland-Pfalz',
-  SL: 'Saarland',
-  SN: 'Sachsen',
-  ST: 'Sachsen-Anhalt',
-  SH: 'Schleswig-Holstein',
-  TH: 'Thüringen',
-  AT: 'Österreich',
-  CH: 'Schweiz',
-}
+import { REGION_NAMEN } from '../lib/constants'
 
 interface CommunityVergleichProps {
   /** Wenn true, wird ohne eigenen Header angezeigt (eingebettet in Auswertung) */

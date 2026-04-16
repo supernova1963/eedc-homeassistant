@@ -252,6 +252,59 @@ MONATSNAMEN = [
 
 
 # =============================================================================
+# Shared Helpers
+# =============================================================================
+
+
+async def _lade_anlage_mit_pv(
+    db: AsyncSession,
+    anlage_id: int,
+    *,
+    require_coords: bool = True,
+) -> tuple["Anlage", list["Investition"], list["Investition"], float]:
+    """Lädt Anlage + aktive PV-Module + BKW und berechnet Gesamtleistung.
+
+    Returns:
+        (anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp)
+
+    Raises:
+        HTTPException 404/400 bei fehlenden Daten.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    if require_coords and (not anlage.latitude or not anlage.longitude):
+        raise HTTPException(
+            status_code=400,
+            detail="Anlage hat keine Koordinaten. Bitte Standort in Einstellungen konfigurieren."
+        )
+
+    # PV-Module + BKW in einer Query
+    result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
+            aktiv_jetzt()
+        )
+    )
+    alle_pv = result.scalars().all()
+    pv_module = [i for i in alle_pv if i.typ == "pv-module"]
+    balkonkraftwerke = [i for i in alle_pv if i.typ == "balkonkraftwerk"]
+
+    anlagenleistung_kwp = (
+        sum(m.leistung_kwp or 0 for m in pv_module)
+        + sum(b.leistung_kwp or 0 for b in balkonkraftwerke)
+    )
+    if anlagenleistung_kwp <= 0:
+        anlagenleistung_kwp = anlage.leistung_kwp or 0
+
+    return anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp
+
+
+# =============================================================================
 # Router
 # =============================================================================
 
@@ -273,45 +326,7 @@ async def get_kurzfrist_prognose(
     - Systemverluste (aus PVGIS oder Standard 14%)
     - Temperaturkorrektur (Wirkungsgrad sinkt bei Hitze)
     """
-    # Anlage laden
-    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    anlage = result.scalar_one_or_none()
-
-    if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
-
-    if not anlage.latitude or not anlage.longitude:
-        raise HTTPException(
-            status_code=400,
-            detail="Anlage hat keine Koordinaten. Bitte Standort in Einstellungen konfigurieren."
-        )
-
-    # Anlagenleistung aus PV-Modulen
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "pv-module",
-            aktiv_jetzt()
-        )
-    )
-    pv_module = result.scalars().all()
-
-    anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
-
-    # Balkonkraftwerke hinzufügen
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "balkonkraftwerk",
-            aktiv_jetzt()
-        )
-    )
-    balkonkraftwerke = result.scalars().all()
-    bkw_leistung_kwp = sum(b.leistung_kwp or 0 for b in balkonkraftwerke)
-    anlagenleistung_kwp += bkw_leistung_kwp
-
-    if anlagenleistung_kwp <= 0:
-        anlagenleistung_kwp = anlage.leistung_kwp or 0
+    anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
 
     if anlagenleistung_kwp <= 0:
         raise HTTPException(
@@ -406,41 +421,7 @@ async def get_langfrist_prognose(
     """
     from datetime import date, timedelta
 
-    # Anlage laden
-    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    anlage = result.scalar_one_or_none()
-
-    if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
-
-    if not anlage.latitude or not anlage.longitude:
-        raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten")
-
-    # Anlagenleistung aus PV-Modulen
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "pv-module",
-            aktiv_jetzt()
-        )
-    )
-    pv_module = result.scalars().all()
-    anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
-
-    # Balkonkraftwerke hinzufügen
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "balkonkraftwerk",
-            aktiv_jetzt()
-        )
-    )
-    balkonkraftwerke = result.scalars().all()
-    bkw_leistung_kwp = sum(b.leistung_kwp or 0 for b in balkonkraftwerke)
-    anlagenleistung_kwp += bkw_leistung_kwp
-
-    if anlagenleistung_kwp <= 0:
-        anlagenleistung_kwp = anlage.leistung_kwp or 0
+    anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
 
     if anlagenleistung_kwp <= 0:
         raise HTTPException(status_code=400, detail="Keine PV-Leistung konfiguriert")
@@ -575,38 +556,9 @@ async def get_trend_analyse(
     """
     from datetime import date
 
-    # Anlage laden
-    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    anlage = result.scalar_one_or_none()
-
-    if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
-
-    # PV-Module
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "pv-module",
-            aktiv_jetzt()
-        )
+    anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp = await _lade_anlage_mit_pv(
+        db, anlage_id, require_coords=False
     )
-    pv_module = result.scalars().all()
-    anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
-
-    # Balkonkraftwerke
-    result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage_id,
-            Investition.typ == "balkonkraftwerk",
-            aktiv_jetzt()
-        )
-    )
-    balkonkraftwerke = result.scalars().all()
-    bkw_leistung_kwp = sum(b.leistung_kwp or 0 for b in balkonkraftwerke)
-    anlagenleistung_kwp += bkw_leistung_kwp
-
-    if anlagenleistung_kwp <= 0:
-        anlagenleistung_kwp = anlage.leistung_kwp or 0
 
     # PVGIS (mit limit(1) falls mehrere aktiv)
     result = await db.execute(
