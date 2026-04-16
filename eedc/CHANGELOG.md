@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.5] - 2026-04-16
+
+### Fix — PDF-Download Mobile 401 Unauthorized
+
+- **PDF-Download auf Mobile (HA Companion App)**: `target="_blank"` Links verloren den Ingress-Auth-Token → 401 Unauthorized. PDFs werden jetzt per `fetch()` im aktuellen Auth-Kontext geladen und als Blob-Download angeboten. Spinner während der PDF-Generierung.
+
+---
+
 ## [3.15.4] - 2026-04-16
 
 ### Fix — Anlagendokumentation PDF + Foto-Upload
