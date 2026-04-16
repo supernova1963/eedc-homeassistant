@@ -10,9 +10,11 @@ export interface InfothekEintrag {
   notizen?: string | null
   parameter?: Record<string, unknown> | null
   investition_id?: number | null
+  investition_ids?: number[]
   ansprechpartner_id?: number | null
   sortierung: number
   aktiv: boolean
+  in_anlagendoku?: boolean
   created_at?: string | null
   updated_at?: string | null
 }
@@ -24,9 +26,11 @@ export interface InfothekEintragCreate {
   notizen?: string | null
   parameter?: Record<string, unknown> | null
   investition_id?: number | null
+  investition_ids?: number[]
   ansprechpartner_id?: number | null
   sortierung?: number
   aktiv?: boolean
+  in_anlagendoku?: boolean
 }
 
 export interface InfothekEintragUpdate {
@@ -35,9 +39,11 @@ export interface InfothekEintragUpdate {
   notizen?: string | null
   parameter?: Record<string, unknown> | null
   investition_id?: number | null
+  investition_ids?: number[]
   ansprechpartner_id?: number | null
   sortierung?: number
   aktiv?: boolean
+  in_anlagendoku?: boolean
 }
 
 export interface KategorieFeld {

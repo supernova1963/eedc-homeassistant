@@ -9,11 +9,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
-from backend.models.infothek import InfothekEintrag, InfothekDatei
+from backend.models.infothek import InfothekEintrag, InfothekDatei, InfothekInvestition
 from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition
@@ -257,12 +257,14 @@ class InfothekEintragBase(BaseModel):
     parameter: Optional[dict] = None
     sortierung: int = Field(default=0)
     aktiv: bool = Field(default=True)
+    in_anlagendoku: bool = Field(default=True)
 
 
 class InfothekEintragCreate(InfothekEintragBase):
     """Schema für Erstellung."""
     anlage_id: int
-    investition_id: Optional[int] = None
+    investition_id: Optional[int] = None  # Legacy 1:1 (Rückwärtskompatibilität)
+    investition_ids: Optional[list[int]] = None  # N:M Verknüpfung
     ansprechpartner_id: Optional[int] = None
 
 
@@ -272,17 +274,20 @@ class InfothekEintragUpdate(BaseModel):
     kategorie: Optional[str] = Field(None, min_length=1, max_length=50)
     notizen: Optional[str] = None
     parameter: Optional[dict] = None
-    investition_id: Optional[int] = None
+    investition_id: Optional[int] = None  # Legacy 1:1
+    investition_ids: Optional[list[int]] = None  # N:M
     ansprechpartner_id: Optional[int] = None
     sortierung: Optional[int] = None
     aktiv: Optional[bool] = None
+    in_anlagendoku: Optional[bool] = None
 
 
 class InfothekEintragResponse(InfothekEintragBase):
     """Schema für Response."""
     id: int
     anlage_id: int
-    investition_id: Optional[int] = None
+    investition_id: Optional[int] = None  # Legacy: erstes Element oder None
+    investition_ids: list[int] = []  # N:M Verknüpfungen
     ansprechpartner_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -318,6 +323,77 @@ class InfothekDateiResponse(BaseModel):
 router = APIRouter()
 
 
+# =============================================================================
+# Helper: Junction Table Sync + Response-Erweiterung
+# =============================================================================
+
+async def _sync_junction(db: AsyncSession, eintrag_id: int, investition_ids: list[int]):
+    """Synchronisiert die N:M Junction Table für einen Infothek-Eintrag."""
+    # Alte Verknüpfungen löschen
+    await db.execute(
+        delete(InfothekInvestition)
+        .where(InfothekInvestition.infothek_eintrag_id == eintrag_id)
+    )
+    # Neue einfügen
+    for inv_id in investition_ids:
+        db.add(InfothekInvestition(infothek_eintrag_id=eintrag_id, investition_id=inv_id))
+
+
+async def _get_investition_ids(db: AsyncSession, eintrag_id: int) -> list[int]:
+    """Lädt die verknüpften Investition-IDs aus der Junction Table."""
+    result = await db.execute(
+        select(InfothekInvestition.investition_id)
+        .where(InfothekInvestition.infothek_eintrag_id == eintrag_id)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def _get_investition_ids_batch(db: AsyncSession, eintrag_ids: list[int]) -> dict[int, list[int]]:
+    """Lädt die verknüpften Investition-IDs für mehrere Einträge (Batch)."""
+    if not eintrag_ids:
+        return {}
+    result = await db.execute(
+        select(InfothekInvestition.infothek_eintrag_id, InfothekInvestition.investition_id)
+        .where(InfothekInvestition.infothek_eintrag_id.in_(eintrag_ids))
+    )
+    mapping: dict[int, list[int]] = {}
+    for eintrag_id, inv_id in result.all():
+        mapping.setdefault(eintrag_id, []).append(inv_id)
+    return mapping
+
+
+def _resolve_investition_ids(
+    investition_ids: Optional[list[int]],
+    investition_id: Optional[int],
+) -> list[int]:
+    """Löst investition_ids auf: N:M hat Vorrang, Fallback auf Legacy 1:1."""
+    if investition_ids is not None:
+        return investition_ids
+    if investition_id is not None:
+        return [investition_id]
+    return []
+
+
+def _eintrag_to_response(eintrag: InfothekEintrag, inv_ids: list[int]) -> dict:
+    """Baut ein Response-Dict mit investition_ids aus einem InfothekEintrag."""
+    return {
+        "id": eintrag.id,
+        "anlage_id": eintrag.anlage_id,
+        "bezeichnung": eintrag.bezeichnung,
+        "kategorie": eintrag.kategorie,
+        "notizen": eintrag.notizen,
+        "parameter": eintrag.parameter,
+        "sortierung": eintrag.sortierung,
+        "aktiv": eintrag.aktiv,
+        "in_anlagendoku": eintrag.in_anlagendoku if hasattr(eintrag, 'in_anlagendoku') else True,
+        "investition_id": inv_ids[0] if inv_ids else None,
+        "investition_ids": inv_ids,
+        "ansprechpartner_id": eintrag.ansprechpartner_id,
+        "created_at": eintrag.created_at,
+        "updated_at": eintrag.updated_at,
+    }
+
+
 @router.get("/", response_model=list[InfothekEintragResponse])
 async def list_eintraege(
     anlage_id: int = Query(..., description="Anlage-ID"),
@@ -338,7 +414,12 @@ async def list_eintraege(
         query = query.where(InfothekEintrag.aktiv == aktiv)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    eintraege = result.scalars().all()
+
+    # Batch-Load der Junction-Verknüpfungen
+    ids = [e.id for e in eintraege]
+    inv_map = await _get_investition_ids_batch(db, ids)
+    return [_eintrag_to_response(e, inv_map.get(e.id, [])) for e in eintraege]
 
 
 @router.get("/kategorien")
@@ -375,7 +456,8 @@ async def get_eintrag(
     eintrag = result.scalar_one_or_none()
     if not eintrag:
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
-    return eintrag
+    inv_ids = await _get_investition_ids(db, eintrag.id)
+    return _eintrag_to_response(eintrag, inv_ids)
 
 
 @router.post("/", response_model=InfothekEintragResponse, status_code=status.HTTP_201_CREATED)
@@ -384,11 +466,23 @@ async def create_eintrag(
     db: AsyncSession = Depends(get_db),
 ):
     """Erstellt einen neuen Infothek-Eintrag."""
-    db_item = InfothekEintrag(**item.model_dump())
+    # investition_ids aus Request extrahieren (nicht ans Model durchreichen)
+    data = item.model_dump(exclude={"investition_ids"})
+    inv_ids = _resolve_investition_ids(item.investition_ids, item.investition_id)
+    # Legacy-Feld synchron halten
+    data["investition_id"] = inv_ids[0] if inv_ids else None
+
+    db_item = InfothekEintrag(**data)
     db.add(db_item)
+    await db.flush()  # ID generieren
+
+    # Junction Table befüllen
+    if inv_ids:
+        await _sync_junction(db, db_item.id, inv_ids)
+
     await db.commit()
     await db.refresh(db_item)
-    return db_item
+    return _eintrag_to_response(db_item, inv_ids)
 
 
 @router.put("/{eintrag_id}", response_model=InfothekEintragResponse)
@@ -406,13 +500,31 @@ async def update_eintrag(
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
 
     update_data = item.model_dump(exclude_unset=True)
+
+    # Junction Table synchronisieren wenn investition_ids gesetzt
+    inv_ids_updated = False
+    if "investition_ids" in update_data:
+        inv_ids = update_data.pop("investition_ids") or []
+        await _sync_junction(db, eintrag_id, inv_ids)
+        update_data["investition_id"] = inv_ids[0] if inv_ids else None
+        inv_ids_updated = True
+    elif "investition_id" in update_data:
+        inv_id = update_data.get("investition_id")
+        inv_ids = [inv_id] if inv_id else []
+        await _sync_junction(db, eintrag_id, inv_ids)
+        inv_ids_updated = True
+
     for key, value in update_data.items():
+        if key == "investition_ids":
+            continue
         setattr(db_item, key, value)
 
     db.add(db_item)
     await db.commit()
     await db.refresh(db_item)
-    return db_item
+
+    final_inv_ids = await _get_investition_ids(db, eintrag_id) if not inv_ids_updated else inv_ids
+    return _eintrag_to_response(db_item, final_inv_ids)
 
 
 @router.delete("/{eintrag_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -528,13 +640,19 @@ async def get_vorbelegung(
 # Investition-Verknüpfung (Etappe 3)
 # =============================================================================
 
+class VerknuepfungBody(BaseModel):
+    """Body für Batch-Verknüpfung."""
+    investition_ids: list[int] = []
+
+
 @router.put("/{eintrag_id}/verknuepfung", response_model=InfothekEintragResponse)
 async def update_verknuepfung(
     eintrag_id: int,
-    investition_id: Optional[int] = Query(None, description="Investition-ID (null zum Lösen)"),
+    body: Optional[VerknuepfungBody] = None,
+    investition_id: Optional[int] = Query(None, description="Legacy: einzelne Investition-ID"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Verknüpft oder löst einen Infothek-Eintrag mit/von einer Investition."""
+    """Verknüpft einen Infothek-Eintrag mit Investitionen (N:M)."""
     result = await db.execute(
         select(InfothekEintrag).where(InfothekEintrag.id == eintrag_id)
     )
@@ -542,18 +660,21 @@ async def update_verknuepfung(
     if not eintrag:
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
 
-    if investition_id is not None:
-        inv_result = await db.execute(
-            select(Investition).where(Investition.id == investition_id)
-        )
-        if not inv_result.scalar_one_or_none():
-            raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+    # N:M Body hat Vorrang, Fallback auf Legacy Query-Param
+    if body and body.investition_ids:
+        inv_ids = body.investition_ids
+    elif investition_id is not None:
+        inv_ids = [investition_id]
+    else:
+        inv_ids = []
 
-    eintrag.investition_id = investition_id
+    # Junction Table + Legacy-Feld synchronisieren
+    await _sync_junction(db, eintrag_id, inv_ids)
+    eintrag.investition_id = inv_ids[0] if inv_ids else None
     db.add(eintrag)
     await db.commit()
     await db.refresh(eintrag)
-    return eintrag
+    return _eintrag_to_response(eintrag, inv_ids)
 
 
 @router.get("/investition/{investition_id}", response_model=list[InfothekEintragResponse])
@@ -564,10 +685,14 @@ async def list_eintraege_fuer_investition(
     """Gibt alle Infothek-Einträge zurück, die mit einer Investition verknüpft sind."""
     result = await db.execute(
         select(InfothekEintrag)
-        .where(InfothekEintrag.investition_id == investition_id)
+        .join(InfothekInvestition, InfothekInvestition.infothek_eintrag_id == InfothekEintrag.id)
+        .where(InfothekInvestition.investition_id == investition_id)
         .order_by(InfothekEintrag.sortierung)
     )
-    return result.scalars().all()
+    eintraege = result.scalars().all()
+    ids = [e.id for e in eintraege]
+    inv_map = await _get_investition_ids_batch(db, ids)
+    return [_eintrag_to_response(e, inv_map.get(e.id, [])) for e in eintraege]
 
 
 # =============================================================================

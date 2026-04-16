@@ -26,12 +26,12 @@ import base64
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.infothek import INFOTHEK_KATEGORIEN
 from backend.models.anlage import Anlage, AnlageFoto
-from backend.models.infothek import InfothekDatei, InfothekEintrag
+from backend.models.infothek import InfothekDatei, InfothekEintrag, InfothekInvestition
 from backend.models.investition import Investition
 
 
@@ -172,10 +172,12 @@ async def _lade_komponenten_fuer_investition(
     """Lädt alle verknüpften Komponenten-Akte-Einträge für eine Investition."""
     q = (
         select(InfothekEintrag)
+        .join(InfothekInvestition, InfothekInvestition.infothek_eintrag_id == InfothekEintrag.id)
         .where(InfothekEintrag.anlage_id == anlage_id)
         .where(InfothekEintrag.kategorie == "garantie")
-        .where(InfothekEintrag.investition_id == investition_id)
+        .where(InfothekInvestition.investition_id == investition_id)
         .where(InfothekEintrag.aktiv == True)  # noqa: E712
+        .where(InfothekEintrag.in_anlagendoku == True)  # noqa: E712
         .order_by(InfothekEintrag.sortierung, InfothekEintrag.created_at.desc())
     )
     res = await db.execute(q)
@@ -273,6 +275,40 @@ async def build_anlagendokumentation_context(
             "titel": inv.bezeichnung,
             "tech_grid": _build_investition_tech_grid(inv),
             "komponenten": komponenten,
+        })
+
+    # Infrastruktur: Komponenten-Akten ohne Investment-Verknüpfung
+    linked_subq = (
+        select(InfothekInvestition.infothek_eintrag_id)
+        .where(InfothekInvestition.infothek_eintrag_id == InfothekEintrag.id)
+        .correlate(InfothekEintrag)
+        .exists()
+    )
+    infra_res = await db.execute(
+        select(InfothekEintrag)
+        .where(InfothekEintrag.anlage_id == anlage_id)
+        .where(InfothekEintrag.kategorie == "garantie")
+        .where(InfothekEintrag.in_anlagendoku == True)  # noqa: E712
+        .where(InfothekEintrag.aktiv == True)  # noqa: E712
+        .where(~linked_subq)
+        .order_by(InfothekEintrag.sortierung, InfothekEintrag.created_at.desc())
+    )
+    infra_eintraege = list(infra_res.scalars().all())
+    if infra_eintraege:
+        infra_blocks = []
+        for e in infra_eintraege:
+            d_res = await db.execute(
+                select(InfothekDatei)
+                .where(InfothekDatei.eintrag_id == e.id)
+                .order_by(InfothekDatei.created_at)
+            )
+            dateien = list(d_res.scalars().all())
+            infra_blocks.append(_build_komponenten_block(e, dateien))
+        seiten.append({
+            "kind": "infrastruktur",
+            "typ_label": "Infrastruktur",
+            "titel": "Allgemeine Infrastruktur",
+            "komponenten": infra_blocks,
         })
 
     # Anlagenarten-Liste für die Titelseite

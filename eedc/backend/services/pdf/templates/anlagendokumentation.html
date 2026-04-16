@@ -538,6 +538,11 @@
         gepflegt und mit dieser Investition verknüpft werden.
       </div>
     {% endif %}
+  {% elif seite.kind == "infrastruktur" %}
+    {# Infrastruktur-Seite: Komponenten ohne Investment-Verknüpfung #}
+    {% for k in seite.komponenten %}
+      {{ komponente_block(k) }}
+    {% endfor %}
   {% endif %}
 </div>
 {% endfor %}

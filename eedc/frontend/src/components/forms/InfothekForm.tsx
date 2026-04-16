@@ -19,11 +19,12 @@ interface InfothekFormProps {
   eintrag: InfothekEintrag | null
   anlageId: number
   initialKategorie?: string
+  initialInvestitionIds?: number[]
   onSubmit: (data: InfothekEintragCreate | InfothekEintragUpdate) => Promise<void>
   onCancel: () => void
 }
 
-export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSubmit, onCancel }: InfothekFormProps) {
+export default function InfothekForm({ eintrag, anlageId, initialKategorie, initialInvestitionIds, onSubmit, onCancel }: InfothekFormProps) {
   const [bezeichnung, setBezeichnung] = useState(eintrag?.bezeichnung ?? '')
   const [kategorie, setKategorie] = useState(eintrag?.kategorie ?? initialKategorie ?? 'sonstiges')
   const [notizen, setNotizen] = useState(eintrag?.notizen ?? '')
@@ -31,7 +32,8 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
     (eintrag?.parameter as Record<string, unknown>) ?? {}
   )
   const [aktiv, setAktiv] = useState(eintrag?.aktiv ?? true)
-  const [investitionId, setInvestitionId] = useState<number | null>(eintrag?.investition_id ?? null)
+  const [inAnlagendoku, setInAnlagendoku] = useState(eintrag?.in_anlagendoku ?? true)
+  const [investitionIds, setInvestitionIds] = useState<number[]>(eintrag?.investition_ids ?? (eintrag?.investition_id ? [eintrag.investition_id] : (initialInvestitionIds ?? [])))
   const [ansprechpartnerId, setAnsprechpartnerId] = useState<number | null>(eintrag?.ansprechpartner_id ?? null)
   const [investitionen, setInvestitionen] = useState<Investition[]>([])
   const [ansprechpartnerList, setAnsprechpartnerList] = useState<{ id: number; bezeichnung: string }[]>([])
@@ -92,9 +94,10 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
           kategorie,
           notizen: notizen || null,
           parameter: params,
-          investition_id: investitionId,
+          investition_ids: investitionIds,
           ansprechpartner_id: ansprechpartnerId,
           aktiv,
+          in_anlagendoku: inAnlagendoku,
         }
         await onSubmit(data)
       } else {
@@ -104,9 +107,10 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
           kategorie,
           notizen: notizen || null,
           parameter: params,
-          investition_id: investitionId,
+          investition_ids: investitionIds,
           ansprechpartner_id: ansprechpartnerId,
           aktiv,
+          in_anlagendoku: inAnlagendoku,
         }
         await onSubmit(data)
       }
@@ -245,25 +249,41 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
         )}
       </div>
 
-      {/* Verknüpfte Investition (nicht bei Ansprechpartnern) */}
+      {/* Verknüpfte Investitionen (nicht bei Ansprechpartnern) */}
       {kategorie !== 'ansprechpartner' && investitionen.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Verknüpfte Investition
+            Verknüpfte Investitionen
           </label>
-          <select
-            value={investitionId ?? ''}
-            onChange={e => setInvestitionId(e.target.value ? Number(e.target.value) : null)}
-            className="input w-full"
-            title="Verknüpfte Investition"
-          >
-            <option value="">— Keine Verknüpfung —</option>
+          <div className="space-y-1 max-h-48 overflow-y-auto border border-gray-600 rounded-lg p-2">
             {investitionen.map(inv => (
-              <option key={inv.id} value={inv.id}>
-                {inv.bezeichnung} ({inv.typ})
-              </option>
+              <label key={inv.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-700/30 rounded px-1 py-0.5">
+                <input
+                  type="checkbox"
+                  checked={investitionIds.includes(inv.id)}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      setInvestitionIds(prev => [...prev, inv.id])
+                    } else {
+                      setInvestitionIds(prev => prev.filter(id => id !== inv.id))
+                    }
+                  }}
+                  className="rounded border-gray-500"
+                />
+                <span className="text-gray-300">{inv.bezeichnung}</span>
+                <span className="text-gray-500 text-xs">({inv.typ})</span>
+              </label>
             ))}
-          </select>
+          </div>
+          {investitionIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setInvestitionIds([])}
+              className="text-xs text-gray-400 hover:text-gray-200 mt-1"
+            >
+              Alle abwählen
+            </button>
+          )}
         </div>
       )}
 
@@ -298,6 +318,19 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, onSu
             className="rounded border-gray-300"
           />
           Aktiv (deaktivierte Einträge werden ausgegraut angezeigt)
+        </label>
+      )}
+
+      {/* In Anlagendokumentation anzeigen (nicht bei Ansprechpartnern) */}
+      {kategorie !== 'ansprechpartner' && (
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={inAnlagendoku}
+            onChange={e => setInAnlagendoku(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          In Anlagendokumentation anzeigen
         </label>
       )}
 

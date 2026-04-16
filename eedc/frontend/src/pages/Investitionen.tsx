@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, BookOpen, ArrowRight } from 'lucide-react'
+import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, ArrowRight, FileText, ChevronDown } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage, useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import InvestitionForm from '../components/forms/InvestitionForm'
+import InfothekForm from '../components/forms/InfothekForm'
 import type { Investition, InvestitionTyp } from '../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../api'
 import { infothekApi } from '../api/infothek'
-import type { InfothekEintrag } from '../types/infothek'
+import type { InfothekEintrag, InfothekEintragCreate } from '../types/infothek'
 
 const investitionTypen: {
   typ: InvestitionTyp
@@ -319,11 +320,17 @@ interface InvestitionCardProps {
 
 function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps) {
   const [infothekEintraege, setInfothekEintraege] = useState<InfothekEintrag[]>([])
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
   const params = investition.parameter || {}
 
-  useEffect(() => {
+  const refreshInfothek = useCallback(() => {
     infothekApi.listFuerInvestition(investition.id).then(setInfothekEintraege).catch(() => {})
   }, [investition.id])
+
+  useEffect(() => {
+    refreshInfothek()
+  }, [refreshInfothek])
 
   // Typspezifische Parameter anzeigen
   const getDetails = () => {
@@ -406,14 +413,59 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
             </span>
           )}
         </div>
-        {infothekEintraege.length > 0 && (
-          <div className="flex items-center gap-1 mt-1 text-xs text-primary-600 dark:text-primary-400">
-            <BookOpen className="h-3 w-3" />
-            <a href={`#/einstellungen/infothek`} className="hover:underline">
-              {infothekEintraege.length} Infothek-{infothekEintraege.length === 1 ? 'Eintrag' : 'Einträge'}
+        {/* Komponenten-Akte: kontextabhängiger Button */}
+        <div className="flex items-center gap-1 mt-1 text-xs">
+          {infothekEintraege.length === 0 ? (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-1 text-amber-500 hover:text-amber-400 transition-colors"
+              title="Komponenten-Akte anlegen"
+            >
+              <FileText className="h-3 w-3" />
+              Komponenten-Akte anlegen
+            </button>
+          ) : infothekEintraege.length === 1 ? (
+            <a
+              href="#/einstellungen/infothek"
+              className="flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
+              title={infothekEintraege[0].bezeichnung}
+            >
+              <FileText className="h-3 w-3" />
+              {infothekEintraege[0].bezeichnung}
             </a>
-          </div>
-        )}
+          ) : (
+            <div className="relative">
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                <FileText className="h-3 w-3" />
+                {infothekEintraege.length} Komponenten-Akten
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              {showDropdown && (
+                <div className="absolute left-0 top-full mt-1 z-10 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-1 min-w-48">
+                  {infothekEintraege.map(e => (
+                    <a
+                      key={e.id}
+                      href="#/einstellungen/infothek"
+                      className="block px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                    >
+                      {e.bezeichnung}
+                    </a>
+                  ))}
+                  <hr className="border-gray-600 my-1" />
+                  <button
+                    onClick={() => { setShowDropdown(false); setShowCreateModal(true) }}
+                    className="block w-full text-left px-3 py-1.5 text-sm text-amber-400 hover:bg-gray-700"
+                  >
+                    + Weitere verknüpfen
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-1 ml-4">
         <button
@@ -431,6 +483,27 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Quick-Create Modal für Komponenten-Akte */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Komponenten-Akte anlegen"
+        size="lg"
+      >
+        <InfothekForm
+          eintrag={null}
+          anlageId={investition.anlage_id}
+          initialKategorie="garantie"
+          initialInvestitionIds={[investition.id]}
+          onSubmit={async (data) => {
+            await infothekApi.create(data as InfothekEintragCreate)
+            setShowCreateModal(false)
+            refreshInfothek()
+          }}
+          onCancel={() => setShowCreateModal(false)}
+        />
+      </Modal>
     </div>
   )
 }

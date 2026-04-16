@@ -7,10 +7,27 @@ Optionales Modul mit kategorie-spezifischen Vorlagen.
 
 from datetime import datetime
 from typing import Optional, Any
-from sqlalchemy import Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, LargeBinary
+from sqlalchemy import Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, LargeBinary, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+
+
+class InfothekInvestition(Base):
+    """Junction Table für N:M-Verknüpfung Infothek ↔ Investition."""
+
+    __tablename__ = "infothek_investition"
+    __table_args__ = (
+        UniqueConstraint("infothek_eintrag_id", "investition_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    infothek_eintrag_id: Mapped[int] = mapped_column(
+        ForeignKey("infothek_eintraege.id", ondelete="CASCADE"), nullable=False
+    )
+    investition_id: Mapped[int] = mapped_column(
+        ForeignKey("investitionen.id", ondelete="CASCADE"), nullable=False
+    )
 
 
 class InfothekEintrag(Base):
@@ -48,6 +65,7 @@ class InfothekEintrag(Base):
     # Sortierung und Status
     sortierung: Mapped[int] = mapped_column(Integer, default=0)
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True)
+    in_anlagendoku: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -56,6 +74,7 @@ class InfothekEintrag(Base):
     # Relationships
     anlage = relationship("Anlage", back_populates="infothek_eintraege")
     dateien = relationship("InfothekDatei", back_populates="eintrag", cascade="all, delete-orphan")
+    investitionen = relationship("Investition", secondary="infothek_investition", viewonly=True)
 
     def __repr__(self) -> str:
         return f"<InfothekEintrag(id={self.id}, bezeichnung='{self.bezeichnung}', kategorie='{self.kategorie}')>"

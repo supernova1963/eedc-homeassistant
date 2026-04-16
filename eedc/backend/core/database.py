@@ -207,6 +207,28 @@ async def run_migrations(conn):
             existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}
             if 'ansprechpartner_id' not in existing_columns:
                 connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN ansprechpartner_id INTEGER REFERENCES infothek_eintraege(id) ON DELETE SET NULL'))
+            # v3.16.0: Flag für Anlagendokumentation
+            if 'in_anlagendoku' not in existing_columns:
+                connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN in_anlagendoku BOOLEAN DEFAULT 1'))
+
+        # v3.16.0: Infothek N:M Verknüpfung mit Investitionen (Junction Table)
+        # Tabelle wird von create_all erstellt (SQLAlchemy Model), hier nur Datenmigration
+        table_names = inspector.get_table_names()
+        if 'infothek_investition' not in table_names and 'infothek_eintraege' in table_names:
+            # Junction Table manuell erstellen (vor create_all, damit Datenmigration sofort läuft)
+            connection.execute(text("""
+                CREATE TABLE infothek_investition (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    infothek_eintrag_id INTEGER NOT NULL REFERENCES infothek_eintraege(id) ON DELETE CASCADE,
+                    investition_id INTEGER NOT NULL REFERENCES investitionen(id) ON DELETE CASCADE,
+                    UNIQUE(infothek_eintrag_id, investition_id)
+                )
+            """))
+            # Bestehende 1:1-Verknüpfungen übertragen
+            connection.execute(text("""
+                INSERT OR IGNORE INTO infothek_investition (infothek_eintrag_id, investition_id)
+                SELECT id, investition_id FROM infothek_eintraege WHERE investition_id IS NOT NULL
+            """))
 
     await conn.run_sync(_run_migrations)
 
