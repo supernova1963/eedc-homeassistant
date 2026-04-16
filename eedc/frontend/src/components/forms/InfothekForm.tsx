@@ -302,7 +302,7 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
       {eintrag && (
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Dateien (max. 3 — Fotos + PDFs)
+            Dateien (max. 15 — Fotos + PDFs bis 10 MB)
           </label>
           <DateiUpload eintragId={eintrag.id} />
         </div>
