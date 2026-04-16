@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.3] - 2026-04-16
+
+### Perf — N+1 Queries, Code-Splitting, Konstanten-Bereinigung
+
+- **Backend: N+1 Queries eliminiert**: 6 Dashboard-Endpoints (`investitionen.py`) von Loop-Queries auf Batch-Queries (`WHERE investition_id IN`) umgestellt. E-Auto, Wärmepumpe, Speicher, Wallbox (3 Schleifen → 1 Query), BKW und Monatsdaten-by-Month.
+- **Backend: aktueller_monat.py**: 5 sequentielle InvestitionMonatsdaten-Queries (Speicher/WP/EMob/BKW/Sonstiges) zu einer Batch-Query zusammengefasst.
+- **Backend: aussichten.py**: Shared Helper `_lade_anlage_mit_pv()` extrahiert — 3 Forecast-Endpoints sparen je 3 duplizierte Queries (Anlage + PV + BKW → 1 kombinierte Query).
+- **Frontend: React.lazy Code-Splitting**: 33 Seiten als Lazy-Imports, nur LiveDashboard (Startseite) bleibt eager. Vite erzeugt separate Chunks pro Route — Initial-Bundle deutlich kleiner.
+- **Frontend: Community-Benchmark zentralisiert**: `getBenchmark()` wird einmal im Parent geladen und als Props an alle 6 Tabs weitergereicht. Kein Re-Fetch bei Tab-Wechsel.
+- **Frontend: Duplizierte Konstanten bereinigt**: `REGION_NAMEN` (4×), `MONAT_NAMEN`/`MONAT_KURZ` (4×) zentralisiert in `lib/constants.ts`.
+
+### Fix
+
+- **Daten-Checker: Dienstwagen ausgenommen**: E-Autos mit `ist_dienstlich`-Flag werden im Daten-Checker komplett übersprungen — keine PV-Ladungs-, Alternativkosten- oder Anschaffungskosten-Checks mehr.
+
+---
+
 ## [3.15.2] - 2026-04-16
 
 ### Feat — Infothek N:M Verknüpfung + Komponenten-Akte am Investment (#121)
