@@ -227,7 +227,7 @@ export default function VersorgerSection({ value, onChange }: VersorgerSectionPr
                                 onChange={(e) =>
                                   updateZaehler(key, index, { ...zaehler, bezeichnung: e.target.value })
                                 }
-                                placeholder={key === 'strom' ? 'z.B. Einspeisung' : 'z.B. Hauptzähler'}
+                                placeholder={key === 'strom' ? 'z.B. Einspeisung, WP-Strom, Wallbox, Haushalt' : 'z.B. Hauptzähler'}
                               />
                               <Input
                                 label="Zählernummer"
