@@ -1862,6 +1862,18 @@ async def get_wallbox_dashboard(
             gesamt_heim_netz += d.get('ladung_netz_kwh', 0)
             gesamt_extern_kwh += d.get('ladung_extern_kwh', 0)
             gesamt_extern_euro += d.get('ladung_extern_euro', 0)
+            # Fallback: ladevorgaenge aus E-Auto-Daten (manuelle Altdaten)
+            gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
+            monate_set.add((md.jahr, md.monat))
+
+    # Ladevorgänge aus Wallbox-Monatsdaten (Sensor-Mapping speichert hier)
+    for wallbox in wallboxen:
+        wb_md_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id == wallbox.id)
+        )
+        for md in wb_md_result.scalars().all():
+            d = md.verbrauch_daten or {}
             gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
             monate_set.add((md.jahr, md.monat))
 
