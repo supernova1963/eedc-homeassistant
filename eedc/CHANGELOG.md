@@ -7,6 +7,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.1] - 2026-04-16
+
+### Feat — Auto-Vollbackfill aus HA Long-Term Statistics
+
+- **Erster Monatsabschluss nach Upgrade befüllt automatisch die komplette HA-History** ins Energieprofil. Bisher wurde nur der Monat des jeweiligen Monatsabschlusses per `backfill_range` aufgefüllt — die HA Long-Term Statistics (Jahre zurück) wurden nicht angetastet. Wer auf v3.1.x+ upgegradet hatte, blieb folglich ohne Energieprofil-Historie aus der Zeit vor dem Upgrade. Bisher gab es nur den manuellen „Vollständig nachberechnen"-Button im Sensor-Mapping-Wizard (v3.12.1) — wer den nicht aktiv geklickt hat, hatte schlicht nichts. Mit v3.16.0 läuft der Vollbackfill jetzt **einmalig pro Anlage** automatisch im Hintergrund mit, sobald der erste Monatsabschluss nach dem Upgrade gespeichert wird (manuell ODER per Scheduler — beide Pfade durchlaufen `_post_save_hintergrund`).
+- **Neues Anlage-Feld `vollbackfill_durchgefuehrt`**: Wird gesetzt, sobald entweder der manuelle Wizard-Button oder der Auto-Lauf durch ist (Erfolg oder Fehler). Damit greift der Auto-Vollbackfill garantiert nur einmal pro Anlage und führt auch bei defekter HA-DB nicht zu Endlos-Retries. Beim **Löschen der Energieprofil-Rohdaten** (Single-Anlage und Bulk-Endpoint) wird das Flag zurückgesetzt → der nächste Monatsabschluss zieht die History erneut nach. Das Feld ist server-intern, nicht über die Anlage-API editierbar.
+- **Bestandsdaten-Heuristik** in der DB-Migration: Anlagen mit mehr als 30 Tagen Energieprofil-Historie werden bei der Migration auf v3.16.0 direkt mit `vollbackfill_durchgefuehrt = True` markiert. So bekommt z.B. Rainer (578 Tage) keinen überraschenden Multi-Jahres-Backfill beim ersten Scheduler-Lauf — wer das explizit will, kann den Wizard-Button weiter manuell anstoßen.
+- **Verhalten in Edge-Cases**: HA Statistics nicht verfügbar → Flag wird trotzdem gesetzt, kein Retry. Keine validen Sensoren konfiguriert → Flag wird trotzdem gesetzt. Frische Installation ohne Profile-Daten → Flag bleibt False, erster Monatsabschluss zieht die komplette History. Wizard-Vollbackfill bereits gelaufen → Flag ist True, kein erneuter Auto-Lauf.
+
+### Fix
+
+- **Infothek-Kategorie „Garantie" → „Komponente / Datenblatt"**: Das Label in der Infothek-UI stimmte nicht mit dem Verweis in der Anlagendokumentation überein. Nutzer, die dem Hinweis „Kategorie Komponente / Datenblatt" folgten, fanden die Kategorie nicht, weil sie im Frontend noch „Garantie" hieß. Auslöser: Rainer.
+
+### Maintenance
+
+- Neue gemeinsame Helper-Funktion `resolve_and_backfill_from_statistics()` in `backend/services/energie_profil_service.py` mit `BackfillResult`-Dataclass. Vereint die zuvor ~50 Zeilen duplizierte Orchestrierungs-Logik (Sensor-Discovery, ungültige Sensoren filtern, frühestes Datum aus HA Statistics ermitteln, Backfill auslösen) zwischen dem manuellen Vollbackfill-Endpoint und dem neuen Auto-Vollbackfill im Background-Task. Beide Call-Sites mappen den `BackfillResult.status` ("ok"/"ha_unavailable"/"no_sensors"/"no_valid_sensors"/"earliest_unknown"/"empty_range") auf ihre eigene Fehlerbehandlung (HTTPException vs. Log-Warnung).
+- `_post_save_hintergrund` lädt die `Anlage` jetzt nur noch einmal (vorher: separate Sessions für Rollup und Auto-Vollbackfill, zwei SELECTs auf jedem Save). Closing-Month-Backfill, Rollup und Auto-Vollbackfill teilen sich dieselbe DB-Session.
+- Konstante `VOLLBACKFILL_BESTAND_SCHWELLE_TAGE = 30` in `backend/core/database.py`.
+
+---
+
 ## [3.15.0] - 2026-04-15
 
 ### Feat — Anlagendokumentation & Finanzbericht (Issue #121 Phase 4, Beta)
