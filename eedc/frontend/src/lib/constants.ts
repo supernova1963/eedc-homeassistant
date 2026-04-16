@@ -28,6 +28,31 @@ export const TYP_LABELS: Record<string, string> = {
   'pv-system': 'PV-System',
 }
 
+// ─── Regionen (Bundesländer + DACH) ─────────────────────────────────────────
+
+/** Kurzcode → Klartext für deutsche Bundesländer + AT/CH. */
+export const REGION_NAMEN: Record<string, string> = {
+  BW: 'Baden-Württemberg',
+  BY: 'Bayern',
+  BE: 'Berlin',
+  BB: 'Brandenburg',
+  HB: 'Bremen',
+  HH: 'Hamburg',
+  HE: 'Hessen',
+  MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen',
+  NW: 'Nordrhein-Westfalen',
+  RP: 'Rheinland-Pfalz',
+  SL: 'Saarland',
+  SN: 'Sachsen',
+  ST: 'Sachsen-Anhalt',
+  SH: 'Schleswig-Holstein',
+  TH: 'Thüringen',
+  AT: 'Österreich',
+  CH: 'Schweiz',
+  XX: 'Unbekannt',
+}
+
 // ─── Sonstige Konstanten ─────────────────────────────────────────────────────
 
 /** CO2-Emissionsfaktor Strommix Deutschland (kg CO2 pro kWh). */
