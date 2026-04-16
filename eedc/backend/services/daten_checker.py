@@ -420,6 +420,9 @@ class DatenChecker:
                 ))
 
             elif inv.typ == "e-auto":
+                # Dienstwagen: keine PV-Ladungs-/ROI-Checks (kein PV-Bezug, kein Invest)
+                if param.get("ist_dienstlich"):
+                    continue
                 if not param.get("km_jahr") and not param.get("verbrauch_kwh_100km"):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
