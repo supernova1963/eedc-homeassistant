@@ -5,7 +5,7 @@
  * Die Bild-Pipeline (Resize, HEIC→JPEG, EXIF-Rotation) läuft im Backend.
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Upload, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { Alert } from '../ui'
 
@@ -25,18 +25,14 @@ export default function AnlagenfotoSection({ anlageId }: AnlagenfotoSectionProps
 
   const thumbUrl = `./api/anlagen/${anlageId}/foto/thumb?v=${cacheBust}`
 
-  const checkFoto = useCallback(async () => {
-    try {
-      const res = await fetch(thumbUrl, { method: 'HEAD' })
-      setHasFoto(res.ok)
-    } catch {
-      setHasFoto(false)
-    }
-  }, [thumbUrl])
-
+  // Nur beim Mounten prüfen ob bereits ein Foto existiert — nicht nach Upload erneut
   useEffect(() => {
-    checkFoto()
-  }, [checkFoto])
+    let cancelled = false
+    fetch(`./api/anlagen/${anlageId}/foto/thumb`, { method: 'HEAD' })
+      .then(res => { if (!cancelled) setHasFoto(res.ok) })
+      .catch(() => { if (!cancelled) setHasFoto(false) })
+    return () => { cancelled = true }
+  }, [anlageId])
 
   const handleUpload = async (file: File) => {
     setError(null)
