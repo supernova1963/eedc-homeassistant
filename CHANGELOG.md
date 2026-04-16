@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.4] - 2026-04-16
+
+### Fix — Anlagendokumentation PDF + Foto-Upload
+
+- **PDF Jinja-Fehler behoben**: `TemplateSyntaxError` bei Anlagendokumentation — `elif`-Block stand nach `else` im Template (ungültig in Jinja). Reihenfolge korrigiert.
+- **Anlagenfoto verschwindet nach Upload**: HEAD-Request feuerte nach jedem Upload erneut und setzte das Foto bei Timing-Problemen zurück. Check läuft jetzt nur noch beim Öffnen des Dialogs.
+
+---
+
 ## [3.15.3] - 2026-04-16
 
 ### Perf — N+1 Queries, Code-Splitting, Konstanten-Bereinigung
