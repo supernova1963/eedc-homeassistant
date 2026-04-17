@@ -245,9 +245,12 @@ async def get_cockpit_uebersicht(
     ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
     dv_quote = (direktverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
 
-    # Anlagenleistung aus Investitionen
+    # Anlagenleistung aus Investitionen (nur aktive — stillgelegte nicht mitzählen)
+    today = date.today()
     anlagenleistung_kwp = 0.0
     for inv in investitionen:
+        if not inv.ist_aktiv_an(today):
+            continue
         if inv.typ == "pv-module" and inv.leistung_kwp:
             anlagenleistung_kwp += inv.leistung_kwp
         elif inv.typ == "balkonkraftwerk":
@@ -263,8 +266,8 @@ async def get_cockpit_uebersicht(
 
     spez_ertrag = (pv_erzeugung / anlagenleistung_kwp) if anlagenleistung_kwp > 0 else None
 
-    # Komponenten-Flags und Berechnungen
-    speicher_invs = [i for i in investitionen if i.typ == "speicher"]
+    # Komponenten-Flags und Berechnungen (nur aktive Investitionen)
+    speicher_invs = [i for i in investitionen if i.typ == "speicher" and i.ist_aktiv_an(today)]
     hat_speicher = len(speicher_invs) > 0
     speicher_kapazitaet = sum(
         (i.parameter or {}).get("kapazitaet_kwh", 0) for i in speicher_invs
@@ -272,7 +275,7 @@ async def get_cockpit_uebersicht(
     speicher_effizienz = (speicher_entladung / speicher_ladung * 100) if speicher_ladung > 0 else None
     speicher_vollzyklen = (speicher_ladung / speicher_kapazitaet) if speicher_kapazitaet > 0 else None
 
-    wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
+    wp_invs = [i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_an(today)]
     hat_waermepumpe = len(wp_invs) > 0
     wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 else None
     gas_preis_cent = 10.0
@@ -281,6 +284,7 @@ async def get_cockpit_uebersicht(
     emob_invs = [
         i for i in investitionen
         if i.typ in ("e-auto", "wallbox")
+        and i.ist_aktiv_an(today)
         and not (i.parameter or {}).get("ist_dienstlich", False)
     ]
     hat_emobilitaet = len(emob_invs) > 0
@@ -290,7 +294,7 @@ async def get_cockpit_uebersicht(
     strom_kosten = (emob_ladung - emob_pv_ladung) * wallbox_preis_cent / 100
     emob_ersparnis = benzin_kosten - strom_kosten if emob_km > 0 else 0
 
-    bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk"]
+    bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]
     hat_balkonkraftwerk = len(bkw_invs) > 0
 
     # Finanzen

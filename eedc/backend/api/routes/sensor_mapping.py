@@ -7,7 +7,7 @@ Das Mapping wird in der Anlage als JSON gespeichert und für MQTT Auto-Discovery
 
 from enum import Enum
 from typing import Optional, Any
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -162,11 +162,11 @@ async def get_sensor_mapping(anlage_id: int):
             # Erwartete Felder aus Registry (Bedingungen werden anhand der Parameter aufgelöst)
             felder = [f["feld"] for f in get_felder_fuer_investition(inv.typ, inv.parameter)]
 
-            # kWp für PV-Module
+            # kWp für PV-Module (nur aktive in Gesamtsumme)
             kwp = None
             if inv.typ == "pv-module":
                 kwp = inv.parameter.get("leistung_kwp") if inv.parameter else None
-                if kwp:
+                if kwp and inv.ist_aktiv_an(date.today()):
                     gesamt_kwp += kwp
 
             # COP für Wärmepumpen

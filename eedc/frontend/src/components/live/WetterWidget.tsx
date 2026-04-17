@@ -70,9 +70,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   const showVerbrauch = chartView === 'verbrauch' || chartView === 'beides'
 
   // IST-Daten aus Tagesverlauf aggregieren — gestapelt nach Kategorie
-  const { istDaten, vorhandeneKategorien } = useMemo(() => {
+  const { istDaten, vorhandeneKategorien, serienKategorien } = useMemo(() => {
     if (!tagesverlauf?.punkte?.length || !tagesverlauf?.serien?.length) {
-      return { istDaten: null, vorhandeneKategorien: new Set<string>() }
+      return { istDaten: null, vorhandeneKategorien: new Set<string>(), serienKategorien: new Set<string>() }
     }
 
     const pvKeys = tagesverlauf.serien
@@ -181,6 +181,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
     return {
       istDaten: Object.keys(result).length > 0 ? result : null,
       vorhandeneKategorien: kategorienGesehen,
+      serienKategorien,
     }
   }, [tagesverlauf, currentHour])
 
@@ -475,8 +476,13 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               <Tooltip content={<ChartTooltip
                 labelFormatter={(label) => `${label}:00 Uhr`}
                 nameFormatter={(name) => tooltipLabels[name] ?? name}
-                formatter={(value) => {
+                formatter={(value, name) => {
                   if (value === null || value === undefined) return null
+                  // Verbrauchs-Kategorien nur anzeigen, wenn Investition existiert
+                  if (name.endsWith('_ist')) {
+                    const katKey = name.replace('_ist', '')
+                    if (!serienKategorien.has(katKey)) return null
+                  }
                   return `${value.toFixed(2)} kW`
                 }}
                 itemSorter={() => 0}
@@ -655,7 +661,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             )}
             {showVerbrauch && aktiveKategorien.map(k => (
               <span key={k.key} className="flex items-center gap-1">
-                <span className="w-3 h-0.5 rounded" style={{ backgroundColor: k.farbe }} /> {k.label}
+                <span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: k.farbe, opacity: 0.7 }} /> {k.label}
               </span>
             ))}
             {showVerbrauch && (
