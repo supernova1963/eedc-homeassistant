@@ -276,13 +276,15 @@ async def build_anlagendokumentation_context(
                 "tech_grid": _build_investition_tech_grid(inv),
             })
 
-        # "Gilt für"-Hinweis nur bei Mehrfachverknüpfung oder wenn nicht
-        # alle Modulfelder abgedeckt sind
+        # "Gilt für"-Hinweis: immer anzeigen, damit bei Seitenumbruch
+        # die Zuordnung klar bleibt
         pv_komponenten: list[dict] = []
         alle_namen = [inv.bezeichnung for inv in pv_module]
         for eid, block in alle_komp.items():
             namen = komp_gilt_fuer.get(eid, [])
-            if set(namen) != set(alle_namen):
+            if set(namen) == set(alle_namen):
+                block["gilt_fuer"] = "alle Modulfelder"
+            else:
                 block["gilt_fuer"] = ", ".join(namen)
             pv_komponenten.append(block)
 
