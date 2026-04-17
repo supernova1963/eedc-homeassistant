@@ -15,7 +15,7 @@
 
 @page {
   size: A4;
-  margin: 22mm 18mm 22mm 18mm;
+  margin: 22mm 22mm 22mm 38mm;
   @top-left {
     content: string(doc-title);
     font-family: "DejaVu Sans", sans-serif;
@@ -96,3 +96,20 @@ th {
 }
 .kpi .label { display: block; font-size: 8.5pt; color: var(--color-muted); }
 .kpi .value { display: block; font-size: 13pt; font-weight: 600; color: var(--color-primary-dark); }
+
+/*
+ * Subtile 3-Farben-Linie links (1.5mm).
+ * position: fixed = WeasyPrint repliziert auf jeder Seite.
+ * left: -16mm = innerhalb der 38mm linken @page-Margin.
+ */
+.page-stripe {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: -16mm;
+  width: 1.5mm;
+  background: linear-gradient(180deg,
+    var(--color-primary-dark) 0%,    var(--color-primary-dark) 33.3%,
+    var(--color-accent) 33.3%,       var(--color-accent) 66.6%,
+    #ffa726 66.6%,                   #ffa726 100%);
+}

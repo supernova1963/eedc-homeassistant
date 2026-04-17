@@ -93,12 +93,13 @@ export interface LiveWetterResponse {
 }
 
 export interface TagesverlaufSerie {
-  key: string          // z.B. "pv_3", "batterie_5", "wallbox_6", "netz", "haushalt"
+  key: string          // z.B. "pv_3", "batterie_5", "wallbox_6", "netzbezug", "einspeisung", "haushalt"
   label: string        // z.B. "PV Süd", "BYD HVS 10.2"
-  kategorie: string    // "pv", "batterie", "wallbox", "waermepumpe", "sonstige", "netz", "haushalt"
+  kategorie: string    // "pv", "batterie", "wallbox", "waermepumpe", "sonstige", "netz", "haushalt", "preis"
   farbe: string        // Hex-Farbe
-  seite: string        // "quelle" (positiv) oder "senke" (negativ)
+  seite: string        // "quelle" (positiv), "senke" (negativ) oder "overlay" (sekundäre Y-Achse)
   bidirektional: boolean
+  einheit?: string     // z.B. "ct/kWh" — wenn gesetzt, wird auf sekundärer Y-Achse als Linie gerendert
 }
 
 export interface TagesverlaufPunkt {
