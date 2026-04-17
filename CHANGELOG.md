@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.7] - 2026-04-17
+
+### Fix — Stillgelegte Komponenten in Gesamt-kWp (MartyBr Forum #308)
+
+- **Cockpit kWp-Summe**: Stillgelegte/deaktivierte PV-Module und BKW werden nicht mehr zur Gesamtleistung addiert
+- **Komponenten-Flags**: Speicher, Wärmepumpe, E-Mobilität und BKW-Sektionen respektieren jetzt Stilllegungsdatum
+- **Sensor-Mapping gesamt_kwp**: Nur noch aktive Module in der kWp-Summe
+
+### Fix — WetterWidget Tooltip zeigt irrelevante Kategorien (av3 Forum #311)
+
+- **Tooltip**: Verbrauchskategorien (Wallbox, WP, Sonstige) werden nur angezeigt, wenn entsprechende Investitionen existieren
+- **Legende**: Verbrauchs-Kategorien als gefüllte Rechtecke statt Linien-Symbole (passend zur Flächendarstellung)
+
+---
+
 ## [3.15.6] - 2026-04-17
 
 ### Verbesserung — PDF-Anlagenbericht nach Rainer-Feedback
