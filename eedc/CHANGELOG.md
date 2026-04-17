@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.6] - 2026-04-17
+
+### Verbesserung — PDF-Anlagenbericht nach Rainer-Feedback
+
+- **EEDC-Vermerk entfernt**: Titelseite zeigt nur noch "Stand DD.MM.YYYY" statt redundantem EEDC-Branding
+- **Kompaktere Komponenten**: Zeilenabstand in Komponenten-Blöcken reduziert
+- **Hinweis-Box entfernt**: "Keine Komponenten-Akte verknüpft" (Beta-Phase vorbei)
+- **Logo-Fallback**: EEDC-Logo wird angezeigt wenn kein eigenes Anlagenfoto hochgeladen ist
+- **PV-Komponenten dedupliziert**: Bei n:m-Verknüpfung wird jede Komponente nur einmal angezeigt, mit "Gilt für"-Hinweis (z.B. "alle Modulfelder" oder "Süddach")
+- **Farbstreifen subtiler**: Durchgehend dünne 1.5mm-Linie statt dominantem 6mm-Streifen
+- **Logo einzeilig**: "ENERGIE EFFIZIENZ DATA CENTER" auf einer Zeile (SVG + PNG aktualisiert)
+- **Duplicate Macro entfernt**: `komponente_block` war im Template doppelt definiert
+
+---
+
 ## [3.15.5] - 2026-04-16
 
 ### Fix — PDF-Download Mobile 401 Unauthorized
