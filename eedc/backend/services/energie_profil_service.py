@@ -528,7 +528,7 @@ async def backfill_from_statistics(
     from sqlalchemy import select as sa_select, delete as sa_delete, and_ as sa_and
 
     from backend.models.investition import Investition
-    from backend.utils.investition_filter import aktiv_jetzt
+    from backend.utils.investition_filter import aktiv_im_zeitraum
     from backend.services.live_sensor_config import (
         extract_live_config,
         TV_SERIE_CONFIG,
@@ -536,11 +536,13 @@ async def backfill_from_statistics(
     )
     from backend.services.ha_statistics_service import get_ha_statistics_service
 
-    # Investitionen laden
+    # Investitionen laden — alle die im Backfill-Zeitraum aktiv waren,
+    # nicht nur die heute aktiven (sonst fehlen stillgelegte Investitionen
+    # für historische Tage vor dem Stilllegungsdatum)
     inv_result = await db.execute(
         sa_select(Investition).where(
             Investition.anlage_id == anlage.id,
-            aktiv_jetzt(),
+            aktiv_im_zeitraum(von, bis),
         )
     )
     investitionen: dict[str, Investition] = {
@@ -575,7 +577,7 @@ async def backfill_from_statistics(
                     eid = live.get(field)
                     if eid:
                         key = f"waermepumpe_{inv_id}_{suffix}"
-                        serien.append({"key": key, "kategorie": config["kategorie"],
+                        serien.append({"key": key, "inv_id": inv_id, "kategorie": config["kategorie"],
                                        "seite": config["seite"], "bidirektional": config["bidirektional"]})
                         serie_entities[key] = [eid]
             continue
@@ -601,7 +603,7 @@ async def backfill_from_statistics(
                 bidirektional = True
 
         serie_key = f"{config['kategorie']}_{inv_id}"
-        serien.append({"key": serie_key, "kategorie": config["kategorie"],
+        serien.append({"key": serie_key, "inv_id": inv_id, "kategorie": config["kategorie"],
                        "seite": seite, "bidirektional": bidirektional})
         serie_entities[serie_key] = [live["leistung_w"]]
 
@@ -747,12 +749,20 @@ async def backfill_from_statistics(
             )
         )
 
+        # Serien filtern: nur Investitionen die an diesem Tag aktiv waren
+        tages_serien = [
+            s for s in serien
+            if s.get("inv_id") is None  # Basis-Serien (PV Gesamt, Netz)
+            or investitionen.get(s["inv_id"], None) is None  # Safety
+            or investitionen[s["inv_id"]].ist_aktiv_an(current)
+        ]
+
         stunden_mit_daten = 0
         for h in range(24):
             # werte-Dict aus Statistics aufbauen (spiegelt live_tagesverlauf_service.py)
             werte: dict[str, float] = {}
 
-            for serie in serien:
+            for serie in tages_serien:
                 skey = serie["key"]
                 if serie["kategorie"] == "netz":
                     continue  # Netz separat
