@@ -7,6 +7,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.8] - 2026-04-17
+
+### Feature — Tagesverlauf: Einspeisung + Strompreis-Overlay (Rainer-Feedback)
+
+- **Einspeisung als eigene Serie**: Netz-Serie aufgeteilt in Netzbezug (rot, oben) und Einspeisung (cyan, unten) mit eigenem Legendeneintrag
+- **Strompreis-Overlay**: Sekundäre Y-Achse (ct/kWh) mit Step-Linie — zeigt EPEX/Tibber-Preis im Tagesverlauf, wenn ein Strompreis-Sensor im Sensor-Mapping konfiguriert ist
+- **Einheiten-Normalisierung**: EUR/kWh-Sensoren werden automatisch in ct/kWh konvertiert
+- Beide Pfade (HA + MQTT) angepasst
+
+### Fix — Lernfaktor robuster bei Wetterwechseln (Rainer-Feedback)
+
+- **Produktionsgewichtet**: Σ(IST) / Σ(Prognose) statt Median der Tages-Ratios — sonnige Tage dominieren automatisch, bewölkte Phasen verzerren den Faktor nicht mehr nach unten
+
+### Fix — Backfill: Stillgelegte Investitionen zeitraumgerecht (MartyBr)
+
+- **Backfill** nutzte `aktiv_jetzt()` statt `aktiv_im_zeitraum()` — stillgelegte Investitionen wurden komplett ignoriert, auch für historische Tage VOR dem Stilllegungsdatum
+- Jetzt: Pro Tag wird geprüft ob die Investition an dem konkreten Tag aktiv war
+
+### Verbesserung — PDF-Farbstreifen einheitlich
+
+- **Finanzbericht**: Streifen von 6mm auf 1.5mm (wie Anlagendokumentation)
+- **Jahresbericht + Infothek**: Farbstreifen über base.html + styles.css ergänzt
+- Alle 4 Berichte haben jetzt den gleichen subtilen 1.5mm-Streifen
+
+---
+
 ## [3.15.7] - 2026-04-17
 
 ### Fix — Stillgelegte Komponenten in Gesamt-kWp (MartyBr Forum #308)
