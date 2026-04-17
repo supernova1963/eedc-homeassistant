@@ -17,9 +17,6 @@
     --txt: #1a1a1a;
     --muted: #5f6b7a;
     --rule: #d6dde6;
-    --hint-bg: #fff3cd;
-    --hint-border: #ffe082;
-    --hint-txt: #7a5a00;
   }
 
   /*
@@ -30,6 +27,15 @@
   @page {
     size: A4;
     margin: 22mm 22mm 22mm 38mm;
+
+    /* Subtile 1.5mm-Farblinie auf Folgeseiten */
+    background-image: linear-gradient(180deg,
+      #0d47a1 0%,    #0d47a1 33.3%,
+      #43a047 33.3%, #43a047 66.6%,
+      #ffa726 66.6%, #ffa726 100%);
+    background-repeat: no-repeat;
+    background-position: 22mm 0;
+    background-size: 1.5mm 100%;
 
     @bottom-right {
       content: "Seite " counter(page) " / " counter(pages);
@@ -43,24 +49,20 @@
   body { font-family: "DejaVu Sans", sans-serif; color: var(--txt); margin: 0; font-size: 10pt; line-height: 1.4; }
 
   /*
-   * Seitenübergreifende 3-Farben-Leiste via position: fixed.
-   * WeasyPrint repliziert position-fixed-Elemente automatisch auf
-   * jeder physischen Seite — auch bei Überlauf-Seiten.
+   * 3-Farben-Leiste als @page-Hintergrund:
+   * Seite 1: voller 6mm-Streifen (wie bisher)
+   * Folgeseiten: subtile 1.5mm-Linie — edler, weniger dominant
    *
-   * Containing-Block bei gesetztem @page-margin ist die Content-Area,
-   * deshalb negative left-Werte, um die Leiste in die linke
-   * Page-Margin (16 mm vor der Content-Area) zu schieben.
+   * Position: 22mm vom linken Seitenrand (= in der 38mm linken Page-Margin)
    */
-  .page-stripe {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: -16mm;
-    width: 6mm;
-    background: linear-gradient(180deg,
+  @page :first {
+    background-image: linear-gradient(180deg,
       #0d47a1 0%,    #0d47a1 33.3%,
       #43a047 33.3%, #43a047 66.6%,
       #ffa726 66.6%, #ffa726 100%);
+    background-repeat: no-repeat;
+    background-position: 22mm 0;
+    background-size: 6mm 100%;
   }
 
   /*
@@ -247,8 +249,8 @@
 
   /* Komponenten-Akte-Block */
   .komponente {
-    margin: 3mm 0 5mm 0;
-    padding: 3mm 4mm 2mm 4mm;
+    margin: 2mm 0 4mm 0;
+    padding: 2mm 4mm 1.5mm 4mm;
     border-left: 2mm solid var(--c2);
     background: #f6f9f3;
     page-break-inside: avoid;
@@ -272,7 +274,7 @@
   .komponente .k-grid .row { display: table-row; }
   .komponente .k-grid .row > div {
     display: table-cell;
-    padding: 1.2mm 4mm 1.2mm 0;
+    padding: 0.8mm 4mm 0.8mm 0;
     vertical-align: top;
   }
   .komponente .k-grid .label {
@@ -333,17 +335,6 @@
     font-weight: 600;
   }
 
-  /* Hinweis-Box bei fehlender Komponentenakte (bewusster B1-Effekt) */
-  .keine-komponente {
-    margin: 4mm 0 0 0;
-    padding: 3mm 4mm;
-    background: var(--hint-bg);
-    border-left: 2mm solid var(--hint-border);
-    font-size: 9pt;
-    color: var(--hint-txt);
-  }
-  .keine-komponente strong { color: var(--hint-txt); }
-
   /* PV-Sammel-Seite: eine Zeile pro Modulfeld */
   .pv-items { margin: 0; padding: 0; }
   .pv-item {
@@ -368,7 +359,6 @@
 </style>
 </head>
 <body>
-<div class="page-stripe"></div>
 
 {# ============================================================== #}
 {#                    KOMPONENTE-BLOCK-MAKRO                        #}
@@ -376,6 +366,7 @@
 {% macro komponente_block(k) %}
 <div class="komponente">
   <h4>{{ k.bezeichnung }}</h4>
+  {% if k.gilt_fuer %}<div class="notizen">Gilt für: {{ k.gilt_fuer }}</div>{% endif %}
   {% if k.notizen %}<div class="notizen">{{ k.notizen }}</div>{% endif %}
 
   {% if k.grid %}
@@ -459,7 +450,7 @@
   </ul>
 
   <div class="titel-fuss">
-    EEDC · Energie Effizienz Data Center · erzeugt am {{ erzeugt_am }}
+    Stand {{ erzeugt_am }}
   </div>
 </div>
 
@@ -494,23 +485,17 @@
           {% endfor %}
         </div>
         {% endif %}
-
-        {% if item.komponenten %}
-          <div class="sektion-titel">Komponentenakte</div>
-          {% for k in item.komponenten %}
-            {{ komponente_block(k) }}
-          {% endfor %}
-        {% else %}
-          <div class="keine-komponente">
-            <strong>Keine Komponenten-Akte verknüpft.</strong>
-            Datenblatt, Seriennummer, Garantie, Prüftermine und Kabelquerschnitte können
-            in der Infothek unter der Kategorie <em>„Komponente / Datenblatt"</em>
-            gepflegt und mit dieser Investition verknüpft werden.
-          </div>
-        {% endif %}
       </div>
     {% endfor %}
     </div>
+
+    {# Komponenten dedupliziert nach den Modulfeldern #}
+    {% if seite.pv_komponenten %}
+      <div class="sektion-titel">Komponentenakte</div>
+      {% for k in seite.pv_komponenten %}
+        {{ komponente_block(k) }}
+      {% endfor %}
+    {% endif %}
   {% elif seite.kind == "infrastruktur" %}
     {# Infrastruktur-Seite: Komponenten ohne Investment-Verknüpfung #}
     {% for k in seite.komponenten %}
@@ -535,63 +520,10 @@
       {% for k in seite.komponenten %}
         {{ komponente_block(k) }}
       {% endfor %}
-    {% else %}
-      <div class="keine-komponente">
-        <strong>Keine Komponenten-Akte verknüpft.</strong>
-        Datenblatt, Seriennummer, Garantie, Prüftermine und technische Details können
-        in der Infothek unter der Kategorie <em>„Komponente / Datenblatt"</em>
-        gepflegt und mit dieser Investition verknüpft werden.
-      </div>
     {% endif %}
   {% endif %}
 </div>
 {% endfor %}
-
-{# ============================================================== #}
-{#                    KOMPONENTE-BLOCK-MAKRO                        #}
-{# ============================================================== #}
-{% macro komponente_block(k) %}
-<div class="komponente">
-  <h4>{{ k.bezeichnung }}</h4>
-  {% if k.notizen %}<div class="notizen">{{ k.notizen }}</div>{% endif %}
-
-  {% if k.grid %}
-  <div class="k-grid">
-    {% for label, value in k.grid %}
-    <div class="row">
-      <div class="label">{{ label }}</div>
-      <div class="value">{{ value }}</div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% for label, value in k.freitext %}
-  <div class="freitext">
-    <div class="ft-label">{{ label }}</div>
-    <div class="ft-body">{{ value }}</div>
-  </div>
-  {% endfor %}
-
-  {% if k.datenblatt_url %}
-  <div class="datenblatt-url">
-    Datenblatt: <a href="{{ k.datenblatt_url }}">{{ k.datenblatt_url }}</a>
-  </div>
-  {% endif %}
-
-  {% if k.dateien %}
-  <div class="dateien">
-    Angehängte Dokumente ({{ k.dateien|length }}):
-    <ul>
-      {% for d in k.dateien %}
-      <li><span class="typ">{{ "PDF" if d.dateityp == "pdf" else "IMG" }}</span>
-          {{ d.dateiname }}{% if d.beschreibung %} — <span class="beschreibung">{{ d.beschreibung }}</span>{% endif %}</li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-</div>
-{% endmacro %}
 
 </body>
 </html>

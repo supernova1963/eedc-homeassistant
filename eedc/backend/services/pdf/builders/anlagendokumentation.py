@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy import select, exists
@@ -191,7 +192,9 @@ async def _lade_komponenten_fuer_investition(
             .order_by(InfothekDatei.created_at)
         )
         dateien = list(d_res.scalars().all())
-        blocks.append(_build_komponenten_block(e, dateien))
+        block = _build_komponenten_block(e, dateien)
+        block["_eintrag_id"] = e.id
+        blocks.append(block)
     return blocks
 
 
@@ -215,6 +218,12 @@ async def build_anlagendokumentation_context(
     if foto:
         b64 = base64.b64encode(foto.daten).decode("ascii")
         foto_data_url = f"data:{foto.mime_type};base64,{b64}"
+    else:
+        # EEDC-Logo als Fallback (Nutzer kann eigenes Bild hochladen)
+        logo_path = Path(__file__).resolve().parents[4] / "logo.png"
+        if logo_path.exists():
+            b64 = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+            foto_data_url = f"data:image/png;base64,{b64}"
 
     # Alle Investitionen laden (inkl. stillgelegte — Historie relevant)
     inv_res = await db.execute(
@@ -247,15 +256,36 @@ async def build_anlagendokumentation_context(
     if pv_module:
         pv_gesamt_kwp = sum((i.leistung_kwp or 0) for i in pv_module)
         pv_items = []
+        # Komponenten deduplizieren: gleiche Komponente kann mit mehreren
+        # PV-Modulfeldern verknüpft sein (n:m) → nur einmal anzeigen,
+        # mit Hinweis für welche Modulfelder sie gilt
+        alle_komp: dict[int, dict] = {}  # eintrag_id → block
+        komp_gilt_fuer: dict[int, list[str]] = {}  # eintrag_id → [Modulfeld-Namen]
         for inv in pv_module:
             komponenten = await _lade_komponenten_fuer_investition(
                 db, anlage_id, inv.id
             )
+            for k in komponenten:
+                eid = k.pop("_eintrag_id", None)
+                if eid and eid not in alle_komp:
+                    alle_komp[eid] = k
+                if eid:
+                    komp_gilt_fuer.setdefault(eid, []).append(inv.bezeichnung)
             pv_items.append({
                 "bezeichnung": inv.bezeichnung,
                 "tech_grid": _build_investition_tech_grid(inv),
-                "komponenten": komponenten,
             })
+
+        # "Gilt für"-Hinweis nur bei Mehrfachverknüpfung oder wenn nicht
+        # alle Modulfelder abgedeckt sind
+        pv_komponenten: list[dict] = []
+        alle_namen = [inv.bezeichnung for inv in pv_module]
+        for eid, block in alle_komp.items():
+            namen = komp_gilt_fuer.get(eid, [])
+            if set(namen) != set(alle_namen):
+                block["gilt_fuer"] = ", ".join(namen)
+            pv_komponenten.append(block)
+
         seiten.append({
             "kind": "pv-sammel",
             "typ_label": "PV-Modulfelder",
@@ -263,11 +293,14 @@ async def build_anlagendokumentation_context(
             "pv_gesamt_kwp": pv_gesamt_kwp,
             "pv_anzahl": len(pv_module),
             "pv_items": pv_items,
+            "pv_komponenten": pv_komponenten,
         })
 
     # Einzel-Seiten
     for inv in einzel:
         komponenten = await _lade_komponenten_fuer_investition(db, anlage_id, inv.id)
+        for k in komponenten:
+            k.pop("_eintrag_id", None)
         seiten.append({
             "kind": "einzel",
             "typ": inv.typ,
