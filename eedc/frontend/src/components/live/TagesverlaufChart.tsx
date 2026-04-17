@@ -4,7 +4,8 @@
  * Dynamische Serien aus Backend: Jede Investition wird einzeln dargestellt.
  * Positive Werte = Quellen (PV, Batterie-Entladung, Netzbezug)
  * Negative Werte = Senken (Haushalt, WP, Wallbox, Batterie-Ladung, Einspeisung)
- * Bidirektionale Serien (Speicher, Netz) werden in pos/neg aufgespalten.
+ * Bidirektionale Serien (Speicher) werden in pos/neg aufgespalten.
+ * Overlay-Serien (Strompreis) werden als Linie auf sekundärer Y-Achse gerendert.
  *
  * Stacking: Zwei getrennte stackIds ("quellen" / "senken") damit sich
  * positive und negative Werte nicht gegenseitig aufheben.
@@ -12,7 +13,7 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import {
-  AreaChart, Area, XAxis, YAxis, ResponsiveContainer,
+  ComposedChart, Area, Line, XAxis, YAxis, ResponsiveContainer,
   Tooltip, ReferenceLine, Legend, CartesianGrid,
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
@@ -46,10 +47,15 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
     })
   }, [])
 
-  // Render-Serien: Bidirektionale werden in _pos/_neg aufgespalten
+  // Overlay-Serien (z.B. Strompreis) — separate Achse, als Linie
+  const overlaySerien = useMemo(() => serien.filter((s) => s.seite === 'overlay'), [serien])
+
+  // Render-Serien: Bidirektionale werden in _pos/_neg aufgespalten (ohne Overlays)
   const renderSerien = useMemo<RenderSerie[]>(() => {
     const result: RenderSerie[] = []
     for (const s of serien) {
+      if (s.seite === 'overlay') continue  // Overlays separat behandelt
+
       if (s.bidirektional) {
         // Positiver Anteil → Quellen-Stack
         result.push({
@@ -88,7 +94,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
     return result
   }, [serien])
 
-  // Chart-Daten: Bidirektionale Serien in pos/neg splitten
+  // Chart-Daten: Bidirektionale Serien in pos/neg splitten, Overlays direkt übernehmen
   const chartData = useMemo(() => {
     return punkte.map((p) => {
       const row: Record<string, string | number> = { zeit: p.zeit }
@@ -96,7 +102,10 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
         const val = p.werte[s.key] ?? 0
         const isHidden = hidden.has(s.key)
 
-        if (s.bidirektional) {
+        if (s.seite === 'overlay') {
+          // Overlay: Wert direkt, undefined wenn kein Datenpunkt (Lücke in Linie)
+          row[s.key] = isHidden ? 0 : (p.werte[s.key] ?? 0)
+        } else if (s.bidirektional) {
           row[`${s.key}_pos`] = isHidden ? 0 : Math.max(0, val)
           row[`${s.key}_neg`] = isHidden ? 0 : Math.min(0, val)
         } else {
@@ -137,7 +146,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
         <span>▼ Senken (Verbrauch, Einspeisung)</span>
       </div>
       <ResponsiveContainer width="100%" height={320}>
-        <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+        <ComposedChart data={chartData} margin={{ top: 5, right: overlaySerien.length > 0 ? 10 : 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="zeit"
@@ -146,20 +155,37 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
             interval="preserveStartEnd"
           />
           <YAxis
+            yAxisId="left"
             tick={{ fontSize: 11 }}
             className="fill-gray-500 dark:fill-gray-400"
             tickFormatter={(v: number) => v.toFixed(1)}
           />
+          {overlaySerien.length > 0 && (
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tick={{ fontSize: 10 }}
+              className="fill-gray-400 dark:fill-gray-500"
+              tickFormatter={(v: number) => v.toFixed(0)}
+              label={{ value: overlaySerien[0].einheit || '', angle: -90, position: 'insideRight', fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
+            />
+          )}
           <Tooltip content={<ChartTooltip
             labelFormatter={(label) => `${label} Uhr`}
             itemSorter={(item) => -(Math.abs(item.value as number))}
             nameFormatter={(name) => {
+              // Overlay-Serien direkt über key finden
+              const overlay = overlaySerien.find((s) => s.key === name)
+              if (overlay) return overlay.label
               const rs = renderSerien.find((r) => r.dataKey === name)
               const origSerie = serien.find((s) => s.key === rs?.origKey)
               return origSerie?.label || rs?.label || name
             }}
-            formatter={(value) => {
+            formatter={(value, name) => {
               if (Math.abs(value) < 0.001) return null
+              // Overlay-Serien: eigene Einheit
+              const overlay = overlaySerien.find((s) => s.key === name)
+              if (overlay) return `${value.toFixed(1)} ${overlay.einheit || ''}`
               const absVal = Math.abs(value).toFixed(2)
               const richtung = value > 0 ? '▲' : '▼'
               return `${richtung} ${absVal} kW`
@@ -167,6 +193,9 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           />} />
           <Legend
             formatter={(value: string) => {
+              // Overlay-Serien direkt
+              const overlay = overlaySerien.find((s) => s.key === value)
+              if (overlay) return `${overlay.label} (${overlay.einheit || ''})`
               const rs = renderSerien.find((r) => r.dataKey === value)
               const origSerie = serien.find((s) => s.key === rs?.origKey)
               // Bidirektionale: nur einmal in Legende (pos zeigen, neg verstecken)
@@ -175,7 +204,9 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
             wrapperStyle={{ fontSize: 11, cursor: 'pointer' }}
             onClick={(e) => {
               if (e && typeof e.dataKey === 'string') {
-                // Render-Serie → Original-Key für Toggle
+                // Overlay oder Render-Serie → Toggle
+                const overlay = overlaySerien.find((s) => s.key === e.dataKey)
+                if (overlay) { toggleSerie(overlay.key); return }
                 const rs = renderSerien.find((r) => r.dataKey === e.dataKey)
                 if (rs) toggleSerie(rs.origKey)
               }
@@ -183,7 +214,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           />
 
           {/* Null-Linie (Energiebilanz-Grenze) */}
-          <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1.5} />
+          <ReferenceLine yAxisId="left" y={0} stroke="#9ca3af" strokeWidth={1.5} />
 
           {/* Dynamische Areas — getrennte Stacks für Quellen und Senken */}
           {renderSerien.map((rs) => {
@@ -198,6 +229,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 type="monotone"
                 dataKey={rs.dataKey}
                 name={rs.dataKey}
+                yAxisId="left"
                 fill={rs.farbe}
                 stroke={rs.farbe}
                 fillOpacity={0.3}
@@ -209,14 +241,34 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
             )
           })}
 
+          {/* Overlay-Linien (z.B. Strompreis) — sekundäre Y-Achse */}
+          {overlaySerien.map((s) => {
+            if (!hatDaten(s.key) || hidden.has(s.key)) return null
+            return (
+              <Line
+                key={s.key}
+                type="stepAfter"
+                dataKey={s.key}
+                name={s.key}
+                yAxisId="right"
+                stroke={s.farbe}
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+                connectNulls={false}
+              />
+            )
+          })}
+
           {/* Aktuelle Stunde */}
           <ReferenceLine
+            yAxisId="left"
             x={currentHour}
             stroke="#6b7280"
             strokeDasharray="3 3"
             label={{ value: 'Jetzt', position: 'top', fontSize: 10 }}
           />
-        </AreaChart>
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   )

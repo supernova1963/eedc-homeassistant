@@ -171,50 +171,74 @@ async def get_tagesverlauf(
         })
         serie_entities["pv_gesamt"] = [basis_live["pv_gesamt_w"]]
 
-    # Netz (Einspeisung + Netzbezug als eine bidirektionale Serie)
-    has_netz = False
+    # Netz: Netzbezug und Einspeisung als getrennte Serien
     netz_kombi_eid = basis_live.get("netz_kombi_w")
     netz_einspeisung_eid = basis_live.get("einspeisung_w")
     netz_bezug_eid = basis_live.get("netzbezug_w")
-    # Kombinierter Sensor hat Vorrang wenn keine getrennten Sensoren
+    has_netzbezug = False
+    has_einspeisung = False
+
     if netz_kombi_eid and not netz_einspeisung_eid and not netz_bezug_eid:
-        has_netz = True
-        serien.append({
-            "key": "netz",
-            "label": "Stromnetz",
-            "kategorie": "netz",
-            "farbe": "#ef4444",
-            "seite": "quelle",
-            "bidirektional": True,
-        })
+        # Kombi-Sensor → beide Serien möglich
+        has_netzbezug = True
+        has_einspeisung = True
     elif netz_einspeisung_eid or netz_bezug_eid:
         netz_kombi_eid = None  # Getrennte Sensoren → kein Kombi
-        has_netz = True
+        has_netzbezug = bool(netz_bezug_eid)
+        has_einspeisung = bool(netz_einspeisung_eid)
+
+    if has_netzbezug:
         serien.append({
-            "key": "netz",
-            "label": "Stromnetz",
+            "key": "netzbezug",
+            "label": "Netzbezug",
             "kategorie": "netz",
             "farbe": "#ef4444",
             "seite": "quelle",
-            "bidirektional": True,
+            "bidirektional": False,
         })
+    if has_einspeisung:
+        serien.append({
+            "key": "einspeisung",
+            "label": "Einspeisung",
+            "kategorie": "netz",
+            "farbe": "#06b6d4",
+            "seite": "senke",
+            "bidirektional": False,
+        })
+
+    # Strompreis-Sensor (optional, für EPEX-Overlay)
+    strompreis_eid = None
+    basis_mapping = (anlage.sensor_mapping or {}).get("basis", {})
+    sp = basis_mapping.get("strompreis")
+    if isinstance(sp, dict) and sp.get("entity_id"):
+        strompreis_eid = sp["entity_id"]
 
     # Alle Entity-IDs für History-Abfrage sammeln
     all_ids = list(set(
         eid for eids in serie_entities.values() for eid in eids
     ))
-    if netz_kombi_eid:
-        all_ids.append(netz_kombi_eid)
-    if netz_einspeisung_eid:
-        all_ids.append(netz_einspeisung_eid)
-    if netz_bezug_eid:
-        all_ids.append(netz_bezug_eid)
+    if has_netzbezug or has_einspeisung:
+        if netz_kombi_eid:
+            all_ids.append(netz_kombi_eid)
+        if netz_einspeisung_eid:
+            all_ids.append(netz_einspeisung_eid)
+        if netz_bezug_eid:
+            all_ids.append(netz_bezug_eid)
+    if strompreis_eid:
+        all_ids.append(strompreis_eid)
     all_ids = list(set(all_ids))
 
     if not all_ids:
         return {"serien": [], "punkte": []}
 
-    history, _ = await get_history_normalized(all_ids, start, end)
+    history, units = await get_history_normalized(all_ids, start, end)
+
+    # Strompreis-Einheit normalisieren: EUR/kWh → ct/kWh (×100)
+    if strompreis_eid:
+        sp_unit = units.get(strompreis_eid, "")
+        if sp_unit in ("EUR/kWh", "€/kWh"):
+            pts = history.get(strompreis_eid, [])
+            history[strompreis_eid] = [(ts, val * 100) for ts, val in pts]
 
     # Vorzeichen-Invertierung auf History anwenden (#58)
     apply_invert_to_history(
@@ -235,7 +259,7 @@ async def get_tagesverlauf(
         # Investitions-Serien
         for serie in serien:
             skey = serie["key"]
-            if skey == "netz":
+            if skey in ("netzbezug", "einspeisung"):
                 continue  # Netz separat behandeln
 
             entity_ids = serie_entities.get(skey, [])
@@ -263,8 +287,8 @@ async def get_tagesverlauf(
                 raw_values[skey] = raw_val
                 werte[skey] = round(raw_val, 2)
 
-        # Netz: Bezug (positiv/Quelle) - Einspeisung (negativ/Senke)
-        if has_netz:
+        # Netz: Bezug (positiv/Quelle) und Einspeisung (negativ/Senke)
+        if has_netzbezug or has_einspeisung:
             bezug_kw = 0.0
             einsp_kw = 0.0
 
@@ -290,10 +314,12 @@ async def get_tagesverlauf(
                     if h_pts:
                         einsp_kw = sum(h_pts) / len(h_pts) / 1000
 
-            netto = bezug_kw - einsp_kw
-            if abs(netto) > 0.001:
-                raw_values["netz"] = netto
-                werte["netz"] = round(netto, 2)
+            if has_netzbezug and bezug_kw > 0.001:
+                raw_values["netzbezug"] = bezug_kw
+                werte["netzbezug"] = round(bezug_kw, 2)
+            if has_einspeisung and einsp_kw > 0.001:
+                raw_values["einspeisung"] = -einsp_kw
+                werte["einspeisung"] = round(-einsp_kw, 2)
 
         # Haushalt aus ungerundeten Rohwerten berechnen
         quellen_sum = sum(v for v in raw_values.values() if v > 0)
@@ -301,6 +327,13 @@ async def get_tagesverlauf(
         haushalt = quellen_sum + senken_sum
         if quellen_sum > 0 and haushalt > 0:
             werte["haushalt"] = round(-haushalt, 2)
+
+        # Strompreis (optional, wird NICHT in Haushalt-Berechnung einbezogen)
+        if strompreis_eid:
+            pts = history.get(strompreis_eid, [])
+            h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+            if h_pts:
+                werte["strompreis"] = round(sum(h_pts) / len(h_pts), 2)
 
         punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
 
@@ -313,6 +346,18 @@ async def get_tagesverlauf(
             "farbe": "#10b981",
             "seite": "senke",
             "bidirektional": False,
+        })
+
+    # Strompreis-Serie hinzufügen wenn Daten vorhanden
+    if strompreis_eid and any("strompreis" in p["werte"] for p in punkte):
+        serien.append({
+            "key": "strompreis",
+            "label": "Strompreis",
+            "kategorie": "preis",
+            "farbe": "#f472b6",
+            "seite": "overlay",
+            "bidirektional": False,
+            "einheit": "ct/kWh",
         })
 
     return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}
@@ -449,19 +494,30 @@ async def _get_tagesverlauf_mqtt(
         })
         serie_comp_keys["pv_gesamt"] = ["basis:pv_gesamt_w"]
 
-    # Netz
+    # Netz: Netzbezug und Einspeisung als getrennte Serien
     has_netz_kombi = "basis:netz_kombi_w" in available_keys
     has_einsp = "basis:einspeisung_w" in available_keys
     has_bezug = "basis:netzbezug_w" in available_keys
-    has_netz = has_netz_kombi or has_einsp or has_bezug
-    if has_netz:
+    has_netzbezug = has_netz_kombi or has_bezug
+    has_einspeisung = has_netz_kombi or has_einsp
+
+    if has_netzbezug:
         serien.append({
-            "key": "netz",
-            "label": "Stromnetz",
+            "key": "netzbezug",
+            "label": "Netzbezug",
             "kategorie": "netz",
             "farbe": "#ef4444",
             "seite": "quelle",
-            "bidirektional": True,
+            "bidirektional": False,
+        })
+    if has_einspeisung:
+        serien.append({
+            "key": "einspeisung",
+            "label": "Einspeisung",
+            "kategorie": "netz",
+            "farbe": "#06b6d4",
+            "seite": "senke",
+            "bidirektional": False,
         })
 
     if not serien:
@@ -480,7 +536,7 @@ async def _get_tagesverlauf_mqtt(
 
         for serie in serien:
             skey = serie["key"]
-            if skey == "netz":
+            if skey in ("netzbezug", "einspeisung"):
                 continue
             comp_keys = serie_comp_keys.get(skey, [])
             serie_sum = 0.0
@@ -503,8 +559,8 @@ async def _get_tagesverlauf_mqtt(
                 raw_values[skey] = raw_val
                 werte[skey] = round(raw_val, 2)
 
-        # Netz: Bezug (positiv) - Einspeisung (negativ)
-        if has_netz:
+        # Netz: Bezug (positiv/Quelle) und Einspeisung (negativ/Senke)
+        if has_netzbezug or has_einspeisung:
             bezug_kw = 0.0
             einsp_kw = 0.0
             if has_netz_kombi and not has_einsp and not has_bezug:
@@ -522,10 +578,13 @@ async def _get_tagesverlauf_mqtt(
                 pts = [v for ts, v in history.get("basis:einspeisung_w", []) if h_start <= ts < h_end]
                 if pts:
                     einsp_kw = sum(pts) / len(pts) / 1000
-            netto = bezug_kw - einsp_kw
-            if abs(netto) > 0.001:
-                raw_values["netz"] = netto
-                werte["netz"] = round(netto, 2)
+
+            if has_netzbezug and bezug_kw > 0.001:
+                raw_values["netzbezug"] = bezug_kw
+                werte["netzbezug"] = round(bezug_kw, 2)
+            if has_einspeisung and einsp_kw > 0.001:
+                raw_values["einspeisung"] = -einsp_kw
+                werte["einspeisung"] = round(-einsp_kw, 2)
 
         # Haushalt berechnen
         quellen_sum = sum(v for v in raw_values.values() if v > 0)

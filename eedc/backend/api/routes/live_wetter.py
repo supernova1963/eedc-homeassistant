@@ -457,6 +457,10 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
     - IST = Summe aller PV-Komponenten-kWh (positive Werte in komponenten_kwh)
     - Prognose = pv_prognose_kwh (gespeichert beim Wetter-Abruf)
 
+    Produktionsgewichtete Berechnung: Σ(IST) / Σ(Prognose) statt Median der
+    Tages-Ratios. Damit dominieren ertragsstarke (sonnige) Tage automatisch,
+    und bewölkte Phasen verzerren den Faktor nicht mehr nach unten.
+
     Ergebnis wird tageweise gecacht (ändert sich max 1x/Tag nach Tagesabschluss).
 
     Returns:
@@ -483,7 +487,10 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
     )
     tage = result.scalars().all()
 
-    ratios = []
+    sum_ist = 0.0
+    sum_prognose = 0.0
+    tage_count = 0
+
     for tag in tage:
         # IST: Summe der positiven Werte in komponenten_kwh (= PV-Erzeugung)
         ist_kwh = 0.0
@@ -491,23 +498,25 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
             ist_kwh = sum(v for v in tag.komponenten_kwh.values() if v > 0)
 
         if ist_kwh > 0.5 and tag.pv_prognose_kwh > 0.5:  # Nur Tage mit relevanter Produktion
-            ratios.append(ist_kwh / tag.pv_prognose_kwh)
+            sum_ist += ist_kwh
+            sum_prognose += tag.pv_prognose_kwh
+            tage_count += 1
 
-    if len(ratios) < 7:
+    if tage_count < 7 or sum_prognose < 1:
         _lernfaktor_cache[anlage_id] = (heute, None)
         return None
 
-    # Median statt Mean — robust gegen einzelne Ausreißer (Schnee, Schatten, Störung)
-    ratios.sort()
-    mid = len(ratios) // 2
-    median = ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
+    # Produktionsgewichtet: Σ(IST) / Σ(Prognose)
+    # Sonnige Tage dominieren automatisch (mehr kWh → mehr Gewicht)
+    raw_faktor = sum_ist / sum_prognose
 
     # Faktor auf realistischen Bereich begrenzen (0.5 – 1.3)
-    faktor = max(0.5, min(1.3, median))
+    faktor = max(0.5, min(1.3, raw_faktor))
 
     logger.info(
         f"Lernfaktor Anlage {anlage_id}: {faktor:.3f} "
-        f"(Median aus {len(ratios)} Tagen, Range {min(ratios):.2f}–{max(ratios):.2f})"
+        f"(produktionsgewichtet aus {tage_count} Tagen, "
+        f"Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh)"
     )
 
     faktor = round(faktor, 3)
