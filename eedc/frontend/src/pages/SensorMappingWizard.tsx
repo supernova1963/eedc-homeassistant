@@ -58,6 +58,7 @@ interface WizardState {
     einspeisung: FeldMapping | null
     netzbezug: FeldMapping | null
     pv_gesamt: FeldMapping | null
+    strompreis: FeldMapping | null
   }
   basisLive: Record<string, string | null>  // {einspeisung_w: entity_id, netzbezug_w: entity_id}
   basisLiveInvert: Record<string, boolean>  // {einspeisung_w: true} — Vorzeichen invertieren
@@ -82,6 +83,7 @@ const initialState: WizardState = {
     einspeisung: null,
     netzbezug: null,
     pv_gesamt: null,
+    strompreis: null,
   },
   basisLive: {},
   basisLiveInvert: {},
@@ -170,6 +172,7 @@ export default function SensorMappingWizard() {
               einspeisung: existingMapping.basis?.einspeisung || null,
               netzbezug: existingMapping.basis?.netzbezug || null,
               pv_gesamt: existingMapping.basis?.pv_gesamt || null,
+              strompreis: existingMapping.basis?.strompreis || null,
             },
             basisLive: existingMapping.basis?.live || {},
             basisLiveInvert: existingMapping.basis?.live_invert || {},
@@ -400,6 +403,7 @@ export default function SensorMappingWizard() {
           einspeisung: (origBasis as Record<string, unknown>).einspeisung || null,
           netzbezug: (origBasis as Record<string, unknown>).netzbezug || null,
           pv_gesamt: (origBasis as Record<string, unknown>).pv_gesamt || null,
+          strompreis: (origBasis as Record<string, unknown>).strompreis || null,
         })
 
       const request: SensorMappingRequest = {
@@ -407,6 +411,7 @@ export default function SensorMappingWizard() {
           einspeisung: state.basis.einspeisung,
           netzbezug: state.basis.netzbezug,
           pv_gesamt: state.basis.pv_gesamt,
+          strompreis: state.basis.strompreis,
           live: cleanLive(state.basisLive) || null,
           live_invert: cleanInvert(state.basisLiveInvert) || null,
         },

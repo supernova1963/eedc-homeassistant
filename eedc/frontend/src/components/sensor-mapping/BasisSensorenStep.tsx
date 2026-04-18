@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react'
-import { Zap, Download, Upload, Activity, Thermometer } from 'lucide-react'
+import { Zap, Download, Upload, Activity, Thermometer, TrendingUp } from 'lucide-react'
 import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
 import Alert from '../ui/Alert'
@@ -20,8 +20,9 @@ interface BasisSensorenStepProps {
     einspeisung: FeldMapping | null
     netzbezug: FeldMapping | null
     pv_gesamt: FeldMapping | null
+    strompreis: FeldMapping | null
   }
-  onChange: (field: 'einspeisung' | 'netzbezug' | 'pv_gesamt', mapping: FeldMapping | null) => void
+  onChange: (field: 'einspeisung' | 'netzbezug' | 'pv_gesamt' | 'strompreis', mapping: FeldMapping | null) => void
   availableSensors: HASensorInfo[]
   basisLive?: Record<string, string | null>
   onBasisLiveChange?: (key: string, entityId: string | null) => void
@@ -123,6 +124,41 @@ export default function BasisSensorenStep({
           <p className="mt-2 text-xs text-gray-500">
             Optional: Wenn du mehrere PV-Strings hast, aber nur einen Gesamtsensor,
             kann die Erzeugung anteilig nach kWp auf die Strings verteilt werden.
+          </p>
+        </div>
+      </div>
+
+      {/* Strompreis-Sensor (optional, für dynamische Tarife) */}
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+          <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+        </div>
+        <div className="flex-1">
+          <FeldMappingInput
+            label="Strompreis (dynamischer Tarif)"
+            einheit="ct/kWh"
+            value={value.strompreis}
+            onChange={mapping => onChange('strompreis', mapping)}
+            availableSensors={availableSensors}
+            strategieOptionen={[
+              {
+                value: 'sensor' as const,
+                label: 'HA-Sensor',
+                description: 'Aktueller Strompreis aus Tibber, aWATTar, EPEX o.ä.',
+              },
+              {
+                value: 'keine' as const,
+                label: 'Nicht verwenden',
+                description: 'Fester Tarif aus den Strompreis-Einstellungen',
+              },
+            ]}
+            defaultStrategie="keine"
+          />
+          <p className="mt-2 text-xs text-gray-500">
+            Optional: Nur für dynamische Stromtarife. Der Sensor sollte den aktuellen
+            Arbeitspreis in ct/kWh liefern (z.B. Tibber, aWATTar, EPEX Spot).
+            Wird im Tagesverlauf als Overlay angezeigt und für den verbrauchsgewichteten
+            Monats-Durchschnittspreis verwendet.
           </p>
         </div>
       </div>

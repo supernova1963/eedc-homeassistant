@@ -29,6 +29,11 @@ _BASIS_POWER_KEYS = {
     "netz_kombi_w",
 }
 
+# Zusätzliche Basis-Keys die gesnapshoted werden (kein Leistungswert)
+_BASIS_EXTRA_KEYS = {
+    "strompreis_ct",  # Dynamischer Strompreis in ct/kWh
+}
+
 # Investment-Keys die als Live-Leistungswerte (W) interpretiert werden
 _INV_POWER_KEYS = {
     "leistung_w",
@@ -68,7 +73,7 @@ async def snapshot_live_cache() -> int:
 
         # Basis-Werte
         for key, (value, _ts) in cache.get("basis", {}).items():
-            if key in _BASIS_POWER_KEYS:
+            if key in _BASIS_POWER_KEYS or key in _BASIS_EXTRA_KEYS:
                 rows.append(MqttLiveSnapshot(
                     anlage_id=anlage_id,
                     timestamp=now,
