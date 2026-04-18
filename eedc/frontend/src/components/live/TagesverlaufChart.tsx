@@ -252,7 +252,8 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 name={s.key}
                 yAxisId="right"
                 stroke={s.farbe}
-                strokeWidth={2}
+                strokeWidth={1.5}
+                strokeDasharray="4 2"
                 dot={false}
                 isAnimationActive={false}
                 connectNulls={false}
