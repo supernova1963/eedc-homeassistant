@@ -124,6 +124,9 @@ async def aggregate_day(
     # ── SoC-History holen ─────────────────────────────────────────────────
     soc_stunden = await _get_soc_history(anlage, sensor_mapping, datum)
 
+    # ── Strompreis-Stundenwerte holen ─────────────────────────────────────
+    strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
+
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
     await db.execute(
         delete(TagesEnergieProfil).where(
@@ -154,6 +157,7 @@ async def aggregate_day(
     soc_values = []
     stunden_count = 0
     komponenten_summen: dict[str, float] = {}  # Per-Komponenten Tages-kWh
+    einspeisung_pro_stunde: dict[int, float] = {}  # h → kWh (für Negativpreis-Berechnung)
 
     for punkt in punkte:
         h = int(punkt["zeit"].split(":")[0])
@@ -163,6 +167,8 @@ async def aggregate_day(
         netz_val = sum(werte.get(k, 0) for k in netz_keys)
         einspeisung_kw = abs(netz_val) if netz_val < 0 else 0.0
         netzbezug_kw = netz_val if netz_val > 0 else 0.0
+        if einspeisung_kw > 0:
+            einspeisung_pro_stunde[h] = einspeisung_kw
 
         # Batterie: alle Speicher + V2H (vorzeichenbehaftet: positiv=Entladung, negativ=Ladung)
         batterie_kw = (
@@ -216,6 +222,10 @@ async def aggregate_day(
         if soc is not None:
             soc_values.append(soc)
 
+        # Strompreis (Sensor-Endpreis + Börsenpreis getrennt)
+        strompreis = strompreis_stunden.sensor.get(h)
+        boersenpreis = strompreis_stunden.boerse.get(h)
+
         # Per-Komponenten kWh akkumulieren (kW × 1h = kWh)
         if werte:
             for komp_key, komp_kw in werte.items():
@@ -239,10 +249,26 @@ async def aggregate_day(
             temperatur_c=round(temperatur, 1) if temperatur is not None else None,
             globalstrahlung_wm2=round(strahlung, 0) if strahlung is not None else None,
             soc_prozent=round(soc, 1) if soc is not None else None,
+            strompreis_cent=round(strompreis, 2) if strompreis is not None else None,
+            boersenpreis_cent=round(boersenpreis, 2) if boersenpreis is not None else None,
             komponenten=werte if werte else None,
         )
         db.add(profil)
         stunden_count += 1
+
+    # ── Börsenpreis-Tagesaggregation ────────────────────────────────────
+    boersen_values = [v for v in (strompreis_stunden.boerse.get(h) for h in range(24)) if v is not None]
+    boersenpreis_avg = round(sum(boersen_values) / len(boersen_values), 2) if boersen_values else None
+    boersenpreis_min = round(min(boersen_values), 2) if boersen_values else None
+    neg_stunden = sum(1 for v in boersen_values if v < 0) if boersen_values else None
+
+    # Einspeisung bei negativem Börsenpreis (§51 EEG)
+    einsp_neg = 0.0
+    for h in range(24):
+        bp = strompreis_stunden.boerse.get(h)
+        if bp is not None and bp < 0:
+            einsp_neg += einspeisung_pro_stunde.get(h, 0.0)
+    einsp_neg_kwh = round(einsp_neg, 3) if einsp_neg > 0 else None
 
     # ── Batterie-Vollzyklen berechnen ─────────────────────────────────────
     vollzyklen = None
@@ -277,6 +303,10 @@ async def aggregate_day(
         performance_ratio=performance_ratio,
         stunden_verfuegbar=stunden_count,
         datenquelle=datenquelle,
+        boersenpreis_avg_cent=boersenpreis_avg,
+        boersenpreis_min_cent=boersenpreis_min,
+        negative_preis_stunden=neg_stunden,
+        einspeisung_neg_preis_kwh=einsp_neg_kwh,
         komponenten_kwh=(
             {k: round(v, 2) for k, v in komponenten_summen.items()}
             if komponenten_summen else None
@@ -1051,6 +1081,83 @@ async def _get_soc_history(
     except Exception as e:
         logger.debug(f"SoC-History für {datum}: {e}")
         return {}
+
+
+@dataclass
+class StrompreisStunden:
+    """Stündliche Strompreise aus zwei unabhängigen Quellen."""
+    sensor: dict[int, float]   # Endpreis aus HA-Sensor (Tibber etc.), leer wenn kein Sensor
+    boerse: dict[int, float]   # EPEX Day-Ahead Börsenpreis (aWATTar), immer befüllt
+
+
+async def _get_strompreis_stunden(
+    anlage: Anlage,
+    sensor_mapping: dict,
+    datum: date,
+) -> StrompreisStunden:
+    """
+    Holt stündliche Strompreise für einen Tag aus zwei Quellen.
+
+    1. HA-Sensor (Endpreis, nur wenn konfiguriert) → strompreis_cent
+    2. Börsenpreis (aWATTar API, immer) → boersenpreis_cent
+
+    Returns:
+        StrompreisStunden mit sensor- und boerse-Dicts
+    """
+    sensor_preise: dict[int, float] = {}
+    boersen_preise: dict[int, float] = {}
+
+    # ── HA-Sensor (Endpreis, wenn konfiguriert) ──────────────────────────
+    basis = sensor_mapping.get("basis", {})
+    sp = basis.get("strompreis")
+    sensor_id = sp.get("sensor_id") if isinstance(sp, dict) else None
+
+    if sensor_id:
+        try:
+            from backend.core.config import HA_INTEGRATION_AVAILABLE
+            if HA_INTEGRATION_AVAILABLE:
+                from backend.services.ha_state_service import get_ha_state_service
+                ha_service = get_ha_state_service()
+
+                start = datetime.combine(datum, datetime.min.time())
+                end = start + timedelta(days=1)
+                history = await ha_service.get_sensor_history([sensor_id], start, end)
+                units = await ha_service.get_sensor_units([sensor_id])
+
+                points = history.get(sensor_id, [])
+                if points:
+                    unit = units.get(sensor_id, "")
+                    faktor = 1.0
+                    if unit in ("EUR/kWh", "€/kWh"):
+                        faktor = 100.0
+                    elif unit in ("EUR/MWh", "€/MWh"):
+                        faktor = 0.1
+
+                    for h in range(24):
+                        h_start = start + timedelta(hours=h)
+                        h_end = h_start + timedelta(hours=1)
+                        h_pts = [p[1] * faktor for p in points if h_start <= p[0] < h_end]
+                        if h_pts:
+                            sensor_preise[h] = sum(h_pts) / len(h_pts)
+
+                    if sensor_preise:
+                        logger.debug("Strompreis %s: %d Stunden aus HA-Sensor %s",
+                                     datum, len(sensor_preise), sensor_id)
+        except Exception as e:
+            logger.debug("Strompreis HA-Sensor %s für %s: %s", sensor_id, datum, e)
+
+    # ── Börsenpreis (aWATTar/EPEX, immer) ────────────────────────────────
+    try:
+        from backend.services.strompreis_markt_service import get_strompreis_stunden
+        land = getattr(anlage, "standort_land", None)
+        boersen_preise = await get_strompreis_stunden(land, datum)
+        if boersen_preise:
+            logger.debug("Börsenpreis %s: %d Stunden (%s)",
+                         datum, len(boersen_preise), land or "DE")
+    except Exception as e:
+        logger.debug("Börsenpreis für %s: %s", datum, e)
+
+    return StrompreisStunden(sensor=sensor_preise, boerse=boersen_preise)
 
 
 BackfillStatus = Literal[

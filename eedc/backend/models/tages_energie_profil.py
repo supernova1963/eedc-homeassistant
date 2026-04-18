@@ -73,6 +73,12 @@ class TagesEnergieProfil(Base):
     # Batterie-SoC (Stundenmittel, %)
     soc_prozent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Strompreis (ct/kWh, Stundenmittel)
+    # strompreis_cent: Endpreis aus HA-Sensor (Tibber etc.) — nur wenn Sensor konfiguriert
+    strompreis_cent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # boersenpreis_cent: EPEX Day-Ahead Großhandelspreis (aWATTar API) — immer befüllt
+    boersenpreis_cent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Per-Komponenten-Aufschlüsselung (wie Tagesverlauf-Butterfly)
     # z.B. {"pv_3": 2.1, "waermepumpe_5": -0.8, "haushalt": -1.2}
     komponenten: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -142,6 +148,13 @@ class TagesZusammenfassung(Base):
     # Datenquelle
     datenquelle: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # "ha_sensor", "mqtt", "scheduler", "monatsabschluss"
+
+    # Börsenpreis-Tagesaggregation (EPEX Day-Ahead, immer befüllt wenn verfügbar)
+    boersenpreis_avg_cent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    boersenpreis_min_cent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    negative_preis_stunden: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # kWh die bei negativem Börsenpreis eingespeist wurden (§51 EEG — Vergütungsausfall)
+    einspeisung_neg_preis_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Per-Komponenten Tages-kWh (Summe der stündlichen kW-Werte)
     # z.B. {"pv_3": 22.5, "waermepumpe_5": -8.3, "wallbox_7": -12.1, "haushalt": -15.2}
