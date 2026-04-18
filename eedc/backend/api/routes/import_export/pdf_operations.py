@@ -533,20 +533,6 @@ async def export_pdf(
             neigung_grad=inv.neigung_grad,
             parent_bezeichnung=parent_name,
             parameter=params,
-            stamm_hersteller=params.get("stamm_hersteller"),
-            stamm_modell=params.get("stamm_modell"),
-            stamm_seriennummer=params.get("stamm_seriennummer"),
-            stamm_garantie_bis=params.get("stamm_garantie_bis"),
-            stamm_mastr_id=params.get("stamm_mastr_id"),
-            ansprechpartner_firma=params.get("ansprechpartner_firma"),
-            ansprechpartner_name=params.get("ansprechpartner_name"),
-            ansprechpartner_telefon=params.get("ansprechpartner_telefon"),
-            ansprechpartner_email=params.get("ansprechpartner_email"),
-            ansprechpartner_kundennummer=params.get("ansprechpartner_kundennummer"),
-            wartung_vertragsnummer=params.get("wartung_vertragsnummer"),
-            wartung_anbieter=params.get("wartung_anbieter"),
-            wartung_gueltig_bis=params.get("wartung_gueltig_bis"),
-            wartung_leistungsumfang=params.get("wartung_leistungsumfang"),
         )
         inv_dok_list.append(inv_dok)
 

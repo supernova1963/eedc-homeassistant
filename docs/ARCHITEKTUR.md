@@ -199,7 +199,7 @@ eedc-homeassistant/
     │       ├── solar_forecast_service.py  # Open-Meteo Solar GTI + Solar Forecast ML (SFML)
     │       ├── mqtt_gateway_service.py    # MQTT-Gateway Topic-Mapping + Presets (v3.4.5)
     │       ├── infothek_datei_service.py  # Bild-Resize, HEIC→JPEG, PDF-Validierung
-    │       ├── infothek_migration.py      # Infothek 1:1→N:M Migration (v3.15.2)
+    │       ├── infothek_migration.py      # stamm_*→Infothek Migration + 1:1→N:M (v3.15.2)
     │       ├── infothek_pdf_service.py    # Infothek-PDF + Dossier (v3.15.0)
     │       ├── prognose_service.py        # Prognose-Berechnungen
     │       ├── pdf_service.py             # PDF-Generierung (Jahresbericht)
@@ -341,21 +341,24 @@ eedc-homeassistant/
 ┌─────────────────────────────────────────────────────────────┐
 │                          Anlage                             │
 │  id, name, adresse, koordinaten, ausrichtung, neigung       │
-└────────────┬──────────────────────┬────────────────┬────────┘
-             │                      │                │
-             │ 1:n                  │ 1:n            │ 1:n
-             ▼                      ▼                ▼
-┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
-│    Monatsdaten     │  │    Strompreise     │  │   Investitionen    │
-│  (Zählerwerte)     │  │  (Tarife)          │  │   (Komponenten)    │
-└────────────────────┘  └────────────────────┘  └─────────┬──────────┘
-                                                          │
-                                                          │ 1:n
-                                                          ▼
-                                              ┌────────────────────────┐
-                                              │ InvestitionMonatsdaten │
-                                              │   (Komponenten-Daten)  │
-                                              └────────────────────────┘
+└──────┬──────────────┬──────────────┬──────────────┬─────────┘
+       │              │              │              │
+       │ 1:n          │ 1:n          │ 1:n          │ 1:n
+       ▼              ▼              ▼              ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+│ Monatsdaten  │ │ Strompreise  │ │ Investitionen│ │ InfothekEintrag  │
+│ (Zählerwerte)│ │ (Tarife)     │ │ (Komponenten)│ │ (Verträge, Daten)│
+└──────────────┘ └──────────────┘ └──────┬───────┘ └────────┬─────────┘
+                                        │                   │
+                                        │ 1:n               │ 1:n
+                                        ▼                   ▼
+                              ┌──────────────────┐ ┌──────────────────┐
+                              │ Investition-     │ │ InfothekDatei    │
+                              │ Monatsdaten      │ │ (Fotos, PDFs)    │
+                              └──────────────────┘ └──────────────────┘
+
+                    Investitionen ◄── N:M ──► InfothekEintrag
+                                  (infothek_investition Junction Table)
 ```
 
 ### Tabellen im Detail
@@ -456,23 +459,9 @@ eedc-homeassistant/
 | `balkonkraftwerk` | leistung_wp, anzahl, hat_speicher, speicher_kapazitaet_wh |
 | `sonstiges` | kategorie (erzeuger/verbraucher/speicher), beschreibung |
 
-**Stammdaten-Felder:**
+**Legacy-Felder im `parameter` JSON (nicht mehr im Formular):**
 
-Alle Investitionstypen können zusätzlich folgende Felder im `parameter` JSON enthalten:
-
-| Gruppe | Felder |
-|--------|--------|
-| **Gerätedaten** | `stamm_hersteller`, `stamm_modell`, `stamm_seriennummer`, `stamm_garantie_bis`, `stamm_notizen` |
-| **Ansprechpartner** | `ansprechpartner_firma`, `ansprechpartner_name`, `ansprechpartner_telefon`, `ansprechpartner_email`, `ansprechpartner_ticketsystem`, `ansprechpartner_kundennummer`, `ansprechpartner_vertragsnummer` |
-| **Wartung** | `wartung_vertragsnummer`, `wartung_anbieter`, `wartung_gueltig_bis`, `wartung_kuendigungsfrist`, `wartung_leistungsumfang` |
-
-Typ-spezifische Zusatzfelder:
-- **Wechselrichter:** `stamm_mastr_id`
-- **Speicher:** `stamm_garantie_zyklen`
-- **PV-Module:** `stamm_garantie_leistung_prozent`
-- **E-Auto:** `stamm_kennzeichen`, `stamm_fahrgestellnummer`, `stamm_erstzulassung`, `stamm_garantie_batterie_km`, `stamm_foerderung_*`
-- **Wärmepumpe:** `stamm_foerderung_aktenzeichen`, `stamm_foerderung_betrag_euro`
-- **Balkonkraftwerk:** `stamm_anmeldung_netzbetreiber`, `stamm_anmeldung_marktstammdaten`
+Die folgenden Felder (`stamm_*`, `ansprechpartner_*`, `wartung_*`) wurden aus dem Investitionsformular entfernt. Gerätedaten, Ansprechpartner und Wartungsverträge werden jetzt über die **Infothek** verwaltet (N:M-Verknüpfung). Bestehende Daten bleiben im `parameter`-JSON erhalten und können über den Migrations-Service (`infothek_migration.py`) automatisch in Infothek-Einträge überführt werden.
 
 #### InvestitionMonatsdaten
 
@@ -609,6 +598,48 @@ Typ-spezifische Zusatzfelder:
 | verwendung | VARCHAR(30) | `allgemein`, `waermepumpe` oder `wallbox` |
 | created_at | DATETIME | Erstellungsdatum |
 | updated_at | DATETIME | Letztes Update |
+
+#### InfothekEintrag (v3.5.0, N:M v3.15.2)
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| id | INTEGER | Primary Key |
+| anlage_id | INTEGER | Foreign Key → Anlage |
+| bezeichnung | VARCHAR(255) | Name des Eintrags |
+| kategorie | VARCHAR(50) | Kategorie (15 Typen, siehe Handbuch) |
+| notizen | TEXT | Freitext-Notizen (Markdown) |
+| parameter | JSON | Kategorie-spezifische Felder |
+| investition_id | INTEGER | Legacy 1:1 FK (deprecated, nur Migration) |
+| ansprechpartner_id | INTEGER | FK → InfothekEintrag (Vertragspartner-Verweis) |
+| sortierung | INTEGER | Reihenfolge |
+| aktiv | BOOLEAN | Archiviert = false |
+| in_anlagendoku | BOOLEAN | In Anlagendokumentation-PDF anzeigen |
+| created_at | DATETIME | Erstellungsdatum |
+| updated_at | DATETIME | Letztes Update |
+
+**15 Kategorien:** stromvertrag, einspeisevertrag, gasvertrag, wasservertrag, fernwaerme, brennstoff, versicherung, ansprechpartner, wartungsvertrag, marktstammdatenregister, foerderung, garantie (Komponente/Datenblatt), steuerdaten, messstellenbetreiber, sonstiges
+
+#### InfothekInvestition (Junction Table, N:M)
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| id | INTEGER | Primary Key |
+| infothek_eintrag_id | INTEGER | FK → InfothekEintrag (CASCADE) |
+| investition_id | INTEGER | FK → Investitionen (CASCADE) |
+
+#### InfothekDatei
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| id | INTEGER | Primary Key |
+| eintrag_id | INTEGER | FK → InfothekEintrag (CASCADE) |
+| dateiname | VARCHAR(255) | Originaler Dateiname |
+| dateityp | VARCHAR(10) | `image` oder `pdf` |
+| mime_type | VARCHAR(50) | MIME-Typ |
+| beschreibung | VARCHAR(255) | Optionale Beschreibung |
+| daten | LARGEBINARY | Datei-BLOB (Bilder max ~500 KB, PDFs max 10 MB) |
+| thumbnail | LARGEBINARY | Vorschaubild (nur für Bilder) |
+| created_at | DATETIME | Erstellungsdatum |
 
 ### Parent-Child Beziehungen
 
