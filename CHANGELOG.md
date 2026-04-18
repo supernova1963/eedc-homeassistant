@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.3] - 2026-04-18
+
+### Verbesserungen (Community-Feedback)
+
+- **Sensor-Mapping**: Strompreis-Sensoren mit Einheiten wie `ct`, `Cent`, `EUR/MWh`, `€` werden jetzt akzeptiert (bisher nur `EUR/kWh`, `ct/kWh`, `€/kWh`)
+- **Tagesverlauf**: EUR/MWh-Sensoren werden korrekt nach ct/kWh normalisiert (×0.1)
+- **PDF-Deckblatt**: MaStR-Feld durch Geo-Koordinaten ersetzt, Schriftgrößen für Adresse und Komponentenliste vergrößert
+- **Energiefluss**: Leistungsanzeige bleibt bis 9.999 W in Watt, Umschaltung auf kW erst ab 10 kW
+
+---
+
 ## [3.16.2] - 2026-04-18
 
 ### Infothek — Investitionsformular verschlanken (Etappe 3.6)
