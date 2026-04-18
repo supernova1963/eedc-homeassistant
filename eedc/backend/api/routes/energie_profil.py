@@ -230,6 +230,11 @@ class MonatsAuswertungResponse(BaseModel):
     # Heatmap-Matrix
     heatmap: list[HeatmapZelle] = []
 
+    # Börsenpreis / Negativpreis (§51 EEG)
+    boersenpreis_avg_cent: Optional[float] = None
+    negative_preis_stunden: Optional[int] = None
+    einspeisung_neg_preis_kwh: Optional[float] = None
+
 
 class TagesZusammenfassungResponse(BaseModel):
     """Tageszusammenfassung mit Per-Komponenten-kWh."""
@@ -247,6 +252,11 @@ class TagesZusammenfassungResponse(BaseModel):
     stunden_verfuegbar: int = 0
     datenquelle: Optional[str] = None
     komponenten_kwh: Optional[dict] = None
+    # Börsenpreis-Aggregation (§51 EEG)
+    boersenpreis_avg_cent: Optional[float] = None
+    boersenpreis_min_cent: Optional[float] = None
+    negative_preis_stunden: Optional[int] = None
+    einspeisung_neg_preis_kwh: Optional[float] = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -304,6 +314,10 @@ async def get_tages_zusammenfassungen(
             stunden_verfuegbar=t.stunden_verfuegbar,
             datenquelle=t.datenquelle,
             komponenten_kwh=t.komponenten_kwh,
+            boersenpreis_avg_cent=t.boersenpreis_avg_cent,
+            boersenpreis_min_cent=t.boersenpreis_min_cent,
+            negative_preis_stunden=t.negative_preis_stunden,
+            einspeisung_neg_preis_kwh=t.einspeisung_neg_preis_kwh,
         )
         for t in tage
     ]
@@ -621,12 +635,20 @@ async def get_monatsauswertung(
             verbrauch_kw=round(sum(vb_werte) / len(vb_werte), 3) if vb_werte else None,
         ))
 
-    # ── Batterie-Vollzyklen + PR aus TagesZusammenfassung ──
+    # ── Batterie-Vollzyklen + PR + Börsenpreis aus TagesZusammenfassung ──
     zyklen_werte = [t.batterie_vollzyklen for t in tag_rows if t.batterie_vollzyklen is not None]
     zyklen_summe = round(sum(zyklen_werte), 2) if zyklen_werte else None
 
     pr_werte = [t.performance_ratio for t in tag_rows if t.performance_ratio is not None]
     pr_avg = round(sum(pr_werte) / len(pr_werte), 3) if pr_werte else None
+
+    # Börsenpreis / Negativpreis (§51 EEG)
+    boersen_werte = [t.boersenpreis_avg_cent for t in tag_rows if t.boersenpreis_avg_cent is not None]
+    boersenpreis_avg = round(sum(boersen_werte) / len(boersen_werte), 2) if boersen_werte else None
+    neg_stunden_werte = [t.negative_preis_stunden for t in tag_rows if t.negative_preis_stunden is not None]
+    neg_stunden_summe = sum(neg_stunden_werte) if neg_stunden_werte else None
+    neg_einsp_werte = [t.einspeisung_neg_preis_kwh for t in tag_rows if t.einspeisung_neg_preis_kwh is not None]
+    neg_einsp_summe = round(sum(neg_einsp_werte), 2) if neg_einsp_werte else None
 
     # ── Per-Komponente Aggregation aus komponenten_kwh ──
     # Investments für Label-Auflösung laden
@@ -762,6 +784,9 @@ async def get_monatsauswertung(
         peak_einspeisung=einspeisung_kandidaten[:top_n],
         peak_pv=peak_pv,
         heatmap=heatmap,
+        boersenpreis_avg_cent=boersenpreis_avg,
+        negative_preis_stunden=neg_stunden_summe,
+        einspeisung_neg_preis_kwh=neg_einsp_summe,
     )
 
 

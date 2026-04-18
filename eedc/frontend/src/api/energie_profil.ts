@@ -56,6 +56,11 @@ export interface TagesZusammenfassung {
   stunden_verfuegbar: number
   datenquelle: string | null
   komponenten_kwh: Record<string, number> | null
+  // Börsenpreis / Negativpreis (§51 EEG)
+  boersenpreis_avg_cent: number | null
+  boersenpreis_min_cent: number | null
+  negative_preis_stunden: number | null
+  einspeisung_neg_preis_kwh: number | null
 }
 
 export interface HeatmapZelle {
@@ -126,6 +131,10 @@ export interface MonatsAuswertung {
   peak_einspeisung: PeakStunde[]
   peak_pv: PeakStunde | null
   heatmap: HeatmapZelle[]
+  // Börsenpreis / Negativpreis (§51 EEG)
+  boersenpreis_avg_cent: number | null
+  negative_preis_stunden: number | null
+  einspeisung_neg_preis_kwh: number | null
 }
 
 export interface VollbackfillResult {

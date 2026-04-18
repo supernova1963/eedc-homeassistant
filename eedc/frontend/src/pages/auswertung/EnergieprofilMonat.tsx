@@ -261,6 +261,26 @@ export function EnergieprofilMonat({ anlageId }: Props) {
             <KpiCard label="PV Schlecht-Tag" value={fmt0(data.pv_tag_schlecht_kwh, 'kWh')} />
           </div>
 
+          {/* Börsenpreis / Negativpreis (§51 EEG) — nur wenn Daten vorhanden */}
+          {data.negative_preis_stunden != null && data.negative_preis_stunden > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <KpiCard
+                label="Neg. Börsenpreis"
+                value={`${data.negative_preis_stunden} h`}
+                color="text-amber-600 dark:text-amber-400"
+              />
+              <KpiCard
+                label="Einspeisung bei neg. Preis"
+                value={fmt1(data.einspeisung_neg_preis_kwh, 'kWh')}
+                color="text-amber-600 dark:text-amber-400"
+              />
+              <KpiCard
+                label="Börsenpreis Ø"
+                value={data.boersenpreis_avg_cent != null ? `${data.boersenpreis_avg_cent.toFixed(1)} ct` : '—'}
+              />
+            </div>
+          )}
+
           {/* Kategorien-Leiste */}
           {data.kategorien.length > 0 && (
             <Card>
