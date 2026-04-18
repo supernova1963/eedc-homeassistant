@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
+import { KATEGORIE_FARBEN } from '../../lib'
 import EnergieFlussBackground from './EnergieFlussBackground'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
@@ -93,16 +94,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   flame: Flame, wrench: Wrench, home: Home, heater: Heater, droplets: Droplets,
 }
 
-const COLOR_MAP: Record<string, string> = {
-  pv: '#eab308',
-  netz: '#ef4444',
-  batterie: '#3b82f6',
-  eauto: '#a855f7',
-  wallbox: '#a855f7',
-  waermepumpe: '#f97316',
-  sonstige: '#6b7280',
-  haushalt: '#10b981',
-}
+const COLOR_MAP = KATEGORIE_FARBEN
 
 function getColor(key: string): string {
   if (COLOR_MAP[key]) return COLOR_MAP[key]

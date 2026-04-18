@@ -51,6 +51,32 @@ export const CHART_COLORS = {
   nettoErtrag: '#059669',        // Emerald-600
 }
 
+// ─── Tagesverlauf-Kategorien ─────────────────────────────────────────────────
+
+/** Farben für Energiefluss- und Bilanz-Visualisierungen (nach Tagesverlauf-Kategorie) */
+export const KATEGORIE_FARBEN: Record<string, string> = {
+  pv: '#eab308',
+  netz: '#ef4444',
+  batterie: '#3b82f6',
+  eauto: '#a855f7',
+  wallbox: '#a855f7',
+  waermepumpe: '#f97316',
+  sonstige: '#6b7280',
+  haushalt: '#10b981',
+}
+
+/**
+ * Kategorien die KEINE Energieflüsse darstellen (z.B. Preise, virtuelle Serien).
+ * Werden im Verbrauchs-Stacking (WetterWidget etc.) ignoriert.
+ * → Neue nicht-Energie-Kategorien hier ergänzen, nicht in einzelnen Komponenten.
+ */
+export const NICHT_ENERGIE_KATEGORIEN = new Set(['preis', 'virtual'])
+
+/** Kategorien die dedizierte DB-Felder/Spalten haben (kein Extra-Tracking nötig) */
+export const DEDIZIERTE_KATEGORIEN = new Set([
+  'pv', 'batterie', 'netz', 'haushalt', 'waermepumpe', 'wallbox', 'eauto', 'virtual',
+])
+
 // ─── Typ-Farben (für Investitionstypen) ──────────────────────────────────────
 
 export const TYP_COLORS: Record<string, string> = {

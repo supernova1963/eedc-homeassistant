@@ -11,9 +11,7 @@ import { Card, Button } from '../../components/ui'
 import { exportToCSV } from '../../utils/export'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
 import { EnergieprofilMonat } from './EnergieprofilMonat'
-
-// Kategorien die bereits dedizierte Spalten/Felder haben → kein Extra-Tracking
-const DEDIZIERTE_KATEGORIEN = new Set(['pv', 'batterie', 'netz', 'haushalt', 'waermepumpe', 'wallbox', 'eauto', 'virtual'])
+import { DEDIZIERTE_KATEGORIEN } from '../../lib'
 
 // Farben für extra Sonstiges-Serien (Rotation) — hex für Recharts, Tailwind-Klassen für Tabelle
 const EXTRA_FARBEN = ['#8b5cf6', '#06b6d4', '#84cc16', '#f43f5e', '#fb923c', '#a78bfa']

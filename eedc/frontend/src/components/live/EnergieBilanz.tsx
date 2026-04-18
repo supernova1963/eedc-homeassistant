@@ -8,6 +8,7 @@
 
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets } from 'lucide-react'
 import type { LiveKomponente } from '../../api/liveDashboard'
+import { KATEGORIE_FARBEN } from '../../lib'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   sun: Sun,
@@ -22,15 +23,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   droplets: Droplets,
 }
 
-const COLOR_MAP: Record<string, string> = {
-  pv: '#eab308',       // gelb
-  netz: '#ef4444',      // rot
-  batterie: '#3b82f6',  // blau
-  eauto: '#a855f7',     // lila
-  waermepumpe: '#f97316', // orange
-  sonstige: '#6b7280',  // grau
-  haushalt: '#10b981',  // grün
-}
+const COLOR_MAP = KATEGORIE_FARBEN
 
 /** Farbe für einen Komponenten-Key ermitteln (z.B. "pv_1" → pv-Farbe) */
 function getColor(key: string): string {

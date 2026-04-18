@@ -10,6 +10,7 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
+import { NICHT_ENERGIE_KATEGORIEN } from '../../lib'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
 function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; className?: string }) {
@@ -138,7 +139,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
         } else if (kat === 'waermepumpe') {
           waermepumpe += Math.abs(val)
           if (val !== 0) kategorienGesehen.add('waermepumpe')
-        } else if (kat && kat !== 'pv' && kat !== 'preis') {
+        } else if (kat && kat !== 'pv' && !NICHT_ENERGIE_KATEGORIEN.has(kat)) {
           sonstige += Math.abs(val)
           if (val !== 0) kategorienGesehen.add('sonstige')
         }
