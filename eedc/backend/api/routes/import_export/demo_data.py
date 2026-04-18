@@ -190,27 +190,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "hybrid": True,
             "notstromfaehig": True,
             "phasen": 3,
-            # Stammdaten
-            "stamm_hersteller": "Fronius",
-            "stamm_modell": "Symo GEN24 10.0 Plus",
-            "stamm_seriennummer": "29501234567890",
-            "stamm_garantie_bis": "2033-06-01",
-            "stamm_mastr_id": "SEE912345678901",
-            "stamm_notizen": "Firmware v1.25.3",
-            # Ansprechpartner
-            "ansprechpartner_firma": "Solar Mustermann GmbH",
-            "ansprechpartner_name": "Max Mustermann",
-            "ansprechpartner_telefon": "+49 89 12345678",
-            "ansprechpartner_email": "service@solar-mustermann.de",
-            "ansprechpartner_ticketsystem": "https://portal.solar-mustermann.de",
-            "ansprechpartner_kundennummer": "K-2023-4711",
-            "ansprechpartner_vertragsnummer": "V-2023-001",
-            # Wartungsvertrag
-            "wartung_vertragsnummer": "WV-2023-4711",
-            "wartung_anbieter": "Solar Mustermann GmbH",
-            "wartung_gueltig_bis": "2028-06-01",
-            "wartung_kuendigungsfrist": "3 Monate zum Jahresende",
-            "wartung_leistungsumfang": "Jaehrliche Inspektion, Fernueberwachung, Reinigung nach Bedarf",
         },
         aktiv=True,
     )
@@ -232,13 +211,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "wirkungsgrad_prozent": 95,
             "typ": "dc",
             "arbitrage_faehig": True,
-            # Stammdaten
-            "stamm_hersteller": "BYD",
-            "stamm_modell": "Battery-Box Premium HVS 15.4",
-            "stamm_seriennummer": "BYD2023061500123",
-            "stamm_garantie_bis": "2033-06-01",
-            "stamm_notizen": "4 Module a 3.84 kWh, DC-gekoppelt",
-            # Ansprechpartner erbt von Wechselrichter (parent_investition_id)
         },
         aktiv=True,
     )
@@ -261,20 +233,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "nutzt_v2h": True,
             "v2h_entlade_preis_cent": 25,
             "batterie_kapazitaet_kwh": 75,
-            # Stammdaten
-            "stamm_hersteller": "Tesla",
-            "stamm_modell": "Model 3 Long Range",
-            "stamm_seriennummer": "5YJ3E1EA1PF123456",
-            "stamm_garantie_bis": "2031-12-01",
-            "stamm_kennzeichen": "M-EE 2023",
-            "stamm_erstzulassung": "2023-12-01",
-            "stamm_notizen": "Midnight Silver, 19 Zoll Felgen",
-            # Ansprechpartner
-            "ansprechpartner_firma": "Tesla Service Center Muenchen",
-            "ansprechpartner_name": "Tesla Service",
-            "ansprechpartner_telefon": "+49 89 9999888",
-            "ansprechpartner_email": "service-munich@tesla.com",
-            "ansprechpartner_kundennummer": "DE-MUC-2023-4711",
         },
         aktiv=True,
     )
@@ -300,27 +258,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "alter_energietraeger": "gas",
             "alter_preis_cent_kwh": 12,
             "sg_ready": True,
-            # Stammdaten
-            "stamm_hersteller": "Daikin",
-            "stamm_modell": "Altherma 3 H HT 12kW",
-            "stamm_seriennummer": "DAIKIN2024040012345",
-            "stamm_garantie_bis": "2029-04-01",
-            "stamm_notizen": "Ausseneinheit: ERGA08EV, Inneneinheit: EHVH08S23E9W",
-            # Ansprechpartner
-            "ansprechpartner_firma": "Heizung Mueller GmbH",
-            "ansprechpartner_name": "Thomas Mueller",
-            "ansprechpartner_telefon": "+49 89 55544433",
-            "ansprechpartner_email": "service@heizung-mueller.de",
-            "ansprechpartner_kundennummer": "HM-2024-0815",
-            # Wartungsvertrag
-            "wartung_vertragsnummer": "WV-WP-2024-001",
-            "wartung_anbieter": "Heizung Mueller GmbH",
-            "wartung_gueltig_bis": "2027-04-01",
-            "wartung_kuendigungsfrist": "3 Monate",
-            "wartung_leistungsumfang": "Jaehrliche Wartung, Kaeltemittel-Check, Filterreinigung",
-            # BAFA Foerderung
-            "foerderung_bafa_aktenzeichen": "BEG-2024-MUC-12345",
-            "foerderung_betrag_euro": 4500,
         },
         aktiv=True,
     )
@@ -337,12 +274,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "ladeleistung_kw": 11,
             "phasen": 3,
             "v2h_faehig": True,
-            # Stammdaten
-            "stamm_hersteller": "go-e",
-            "stamm_modell": "go-eCharger HOMEfix 11kW",
-            "stamm_seriennummer": "GOE2023120001234",
-            "stamm_garantie_bis": "2026-12-01",
-            "stamm_notizen": "Firmware v055.8, WLAN + App-Steuerung",
         },
         aktiv=True,
     )
@@ -365,13 +296,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "modul_leistung_wp": 500,
             "ausrichtung_grad": 0,    # Süd = 0° für GTI
             "neigung_grad": 30,
-            # Stammdaten
-            "stamm_hersteller": "LONGi",
-            "stamm_modell": "Hi-MO 5 LR5-72HPH-500M",
-            "stamm_garantie_bis": "2048-06-01",
-            "stamm_leistungsgarantie": "87.4% nach 25 Jahren",
-            "stamm_notizen": "24 Module, String 1+2 am Wechselrichter MPPT1",
-            # Ansprechpartner erbt von Wechselrichter
         },
         aktiv=True,
     )
@@ -393,12 +317,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "modul_leistung_wp": 500,
             "ausrichtung_grad": -90,  # Ost = -90° für GTI
             "neigung_grad": 25,
-            # Stammdaten
-            "stamm_hersteller": "LONGi",
-            "stamm_modell": "Hi-MO 5 LR5-72HPH-500M",
-            "stamm_garantie_bis": "2048-06-01",
-            "stamm_leistungsgarantie": "87.4% nach 25 Jahren",
-            "stamm_notizen": "10 Module, String 3 am Wechselrichter MPPT2",
         },
         aktiv=True,
     )
@@ -420,12 +338,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "modul_leistung_wp": 500,
             "ausrichtung_grad": 90,   # West = 90° für GTI
             "neigung_grad": 25,
-            # Stammdaten
-            "stamm_hersteller": "LONGi",
-            "stamm_modell": "Hi-MO 5 LR5-72HPH-500M",
-            "stamm_garantie_bis": "2048-06-01",
-            "stamm_leistungsgarantie": "87.4% nach 25 Jahren",
-            "stamm_notizen": "6 Module, String 4 am Wechselrichter MPPT2",
         },
         aktiv=True,
     )
@@ -446,12 +358,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "neigung_grad": 35,
             "hat_speicher": True,
             "speicher_kapazitaet_wh": 1024,
-            # Stammdaten
-            "stamm_hersteller": "Anker",
-            "stamm_modell": "SOLIX Solarbank 2 Pro",
-            "stamm_seriennummer": "ANKER2024030099",
-            "stamm_garantie_bis": "2034-03-01",
-            "stamm_notizen": "2x bifaziale 400W Module, 1024Wh Speicher, WLAN",
         },
         aktiv=True,
     )

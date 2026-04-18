@@ -88,23 +88,6 @@ class InvestitionDokumentation:
     parent_bezeichnung: Optional[str] = None
     # Technische Parameter
     parameter: Dict = field(default_factory=dict)
-    # Stammdaten
-    stamm_hersteller: Optional[str] = None
-    stamm_modell: Optional[str] = None
-    stamm_seriennummer: Optional[str] = None
-    stamm_garantie_bis: Optional[str] = None
-    stamm_mastr_id: Optional[str] = None
-    # Ansprechpartner
-    ansprechpartner_firma: Optional[str] = None
-    ansprechpartner_name: Optional[str] = None
-    ansprechpartner_telefon: Optional[str] = None
-    ansprechpartner_email: Optional[str] = None
-    ansprechpartner_kundennummer: Optional[str] = None
-    # Wartung
-    wartung_vertragsnummer: Optional[str] = None
-    wartung_anbieter: Optional[str] = None
-    wartung_gueltig_bis: Optional[str] = None
-    wartung_leistungsumfang: Optional[str] = None
 
 
 @dataclass
@@ -767,53 +750,6 @@ class PDFService:
 
             if tech_daten:
                 elements.append(self._create_key_value_table(tech_daten))
-
-            # Stammdaten (Geraetedaten)
-            stamm_daten = []
-            if inv.stamm_hersteller:
-                stamm_daten.append(["Hersteller:", inv.stamm_hersteller])
-            if inv.stamm_modell:
-                stamm_daten.append(["Modell:", inv.stamm_modell])
-            if inv.stamm_seriennummer:
-                stamm_daten.append(["Seriennummer:", inv.stamm_seriennummer])
-            if inv.stamm_garantie_bis:
-                stamm_daten.append(["Garantie bis:", inv.stamm_garantie_bis])
-            if inv.stamm_mastr_id:
-                stamm_daten.append(["MaStR-ID:", inv.stamm_mastr_id])
-
-            if stamm_daten:
-                elements.append(Paragraph("<i>Geraetedaten:</i>", self.styles['EEDCBody']))
-                elements.append(self._create_key_value_table(stamm_daten))
-
-            # Ansprechpartner
-            if inv.ansprechpartner_firma or inv.ansprechpartner_name:
-                elements.append(Paragraph("<i>Ansprechpartner:</i>", self.styles['EEDCBody']))
-                ap_daten = []
-                if inv.ansprechpartner_firma:
-                    ap_daten.append(["Firma:", inv.ansprechpartner_firma])
-                if inv.ansprechpartner_name:
-                    ap_daten.append(["Kontakt:", inv.ansprechpartner_name])
-                if inv.ansprechpartner_telefon:
-                    ap_daten.append(["Telefon:", inv.ansprechpartner_telefon])
-                if inv.ansprechpartner_email:
-                    ap_daten.append(["E-Mail:", inv.ansprechpartner_email])
-                if inv.ansprechpartner_kundennummer:
-                    ap_daten.append(["Kundennr.:", inv.ansprechpartner_kundennummer])
-                elements.append(self._create_key_value_table(ap_daten))
-
-            # Wartung
-            if inv.wartung_vertragsnummer or inv.wartung_anbieter:
-                elements.append(Paragraph("<i>Wartungsvertrag:</i>", self.styles['EEDCBody']))
-                w_daten = []
-                if inv.wartung_vertragsnummer:
-                    w_daten.append(["Vertragsnr.:", inv.wartung_vertragsnummer])
-                if inv.wartung_anbieter:
-                    w_daten.append(["Anbieter:", inv.wartung_anbieter])
-                if inv.wartung_gueltig_bis:
-                    w_daten.append(["Gueltig bis:", inv.wartung_gueltig_bis])
-                if inv.wartung_leistungsumfang:
-                    w_daten.append(["Leistungen:", inv.wartung_leistungsumfang])
-                elements.append(self._create_key_value_table(w_daten))
 
             elements.append(Spacer(1, 6))
 

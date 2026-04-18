@@ -352,6 +352,10 @@ In der **Investitions-Übersicht** (Cockpit → Investitionen) gibt es pro Inves
 | Genau 1 Akte verknüpft | **"Komponenten-Akte öffnen"** → öffnet direkt den Eintrag |
 | Mehrere Akten verknüpft | **Dropdown** mit Direktlinks + "Weitere verknüpfen" |
 
+### Verknüpfungen im Bearbeitungsformular
+
+Beim **Bearbeiten einer Investition** zeigt das Formular am Ende eine kompakte Liste aller verknüpften Infothek-Einträge mit Kategorie-Label und Direktlink zur Infothek. Falls keine Einträge verknüpft sind, erscheint ein Hinweis mit Link zur Infothek.
+
 ---
 
 ## 6. Dateien: Fotos und PDFs
@@ -412,7 +416,9 @@ Im Formular-Bereich **"Verknüpfte Investitionen"** erscheint eine **Checkbox-Li
 
 ### Migration von Altdaten
 
-Bestehende 1:1-Verknüpfungen (vor v3.15.2) wurden automatisch in die neue N:M-Struktur migriert. Es ist keine manuelle Nacharbeit nötig.
+**N:M-Migration (v3.15.2):** Bestehende 1:1-Verknüpfungen wurden automatisch in die neue N:M-Struktur migriert. Es ist keine manuelle Nacharbeit nötig.
+
+**Stammdaten-Migration:** Ältere EEDC-Versionen hatten Gerätedaten, Ansprechpartner und Wartungsverträge direkt im Investitionsformular. Diese Felder wurden entfernt — alle Daten werden jetzt über die Infothek verwaltet. Falls noch alte Daten vorhanden sind, erscheint in der **Investitions-Übersicht** ein blauer Hinweis "Stammdaten in Infothek übernehmen?". Ein Klick auf **"Übernehmen"** migriert alle Einträge automatisch in die passenden Infothek-Kategorien (Komponente/Datenblatt, Vertragspartner, Wartungsvertrag).
 
 ---
 

@@ -27,7 +27,7 @@ const investitionTypen: {
 ]
 
 export default function Investitionen() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: currentAnlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [showForm, setShowForm] = useState(false)
   const [editingInvestition, setEditingInvestition] = useState<Investition | null>(null)
   const [selectedTyp, setSelectedTyp] = useState<InvestitionTyp | null>(null)
@@ -278,7 +278,6 @@ export default function Investitionen() {
             investition={editingInvestition}
             anlageId={anlageId}
             typ={selectedTyp}
-            anlage={currentAnlage}
             onSubmit={handleSubmit}
             onCancel={() => {
               setShowForm(false)

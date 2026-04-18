@@ -1,10 +1,11 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, useCallback, FormEvent } from 'react'
 import { Button, Input, Alert } from '../ui'
-import type { Investition, InvestitionTyp, Anlage } from '../../types'
+import type { Investition, InvestitionTyp } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
 import { investitionenApi } from '../../api'
-import { AlertCircle } from 'lucide-react'
-import InvestitionStammdatenSection from './InvestitionStammdatenSection'
+import { infothekApi } from '../../api/infothek'
+import type { InfothekEintrag } from '../../types/infothek'
+import { AlertCircle, FileText, ExternalLink } from 'lucide-react'
 
 // Azimut-Mapping: Himmelsrichtung → PVGIS-Grad (0=Süd, -90=Ost, 90=West, ±180=Nord)
 const AUSRICHTUNG_GRAD_MAP: Record<string, number> = {
@@ -46,7 +47,6 @@ interface InvestitionFormProps {
   investition?: Investition | null
   anlageId: number
   typ: InvestitionTyp
-  anlage?: Anlage | null
   onSubmit: (data: InvestitionCreate | InvestitionUpdate) => Promise<void>
   onCancel: () => void
 }
@@ -75,7 +75,7 @@ const alternativkostenHints: Record<InvestitionTyp, string> = {
   'sonstiges': 'Kosten einer Alternative (falls vorhanden)',
 }
 
-export default function InvestitionForm({ investition, anlageId, typ, anlage, onSubmit, onCancel }: InvestitionFormProps) {
+export default function InvestitionForm({ investition, anlageId, typ, onSubmit, onCancel }: InvestitionFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [possibleParents, setPossibleParents] = useState<Investition[]>([])
@@ -123,49 +123,10 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
   // Typ-spezifische Parameter
   const params = investition?.parameter || {}
 
-  // Gemeinsame Stammdaten-Felder (für alle Typen)
-  const getStammdatenFields = (): Record<string, string | boolean> => ({
-    // Gerätedaten
-    stamm_hersteller: params.stamm_hersteller?.toString() || '',
-    stamm_modell: params.stamm_modell?.toString() || '',
-    stamm_seriennummer: params.stamm_seriennummer?.toString() || '',
-    stamm_garantie_bis: params.stamm_garantie_bis?.toString() || '',
-    stamm_notizen: params.stamm_notizen?.toString() || '',
-    // Typ-spezifisch (werden nur bei relevantem Typ angezeigt)
-    stamm_mastr_id: params.stamm_mastr_id?.toString() || '',
-    stamm_garantie_zyklen: params.stamm_garantie_zyklen?.toString() || '',
-    stamm_garantie_leistung_prozent: params.stamm_garantie_leistung_prozent?.toString() || '',
-    stamm_kennzeichen: params.stamm_kennzeichen?.toString() || '',
-    stamm_fahrgestellnummer: params.stamm_fahrgestellnummer?.toString() || '',
-    stamm_erstzulassung: params.stamm_erstzulassung?.toString() || '',
-    stamm_garantie_batterie_km: params.stamm_garantie_batterie_km?.toString() || '',
-    stamm_foerderung_aktenzeichen: params.stamm_foerderung_aktenzeichen?.toString() || '',
-    stamm_foerderung_betrag_euro: params.stamm_foerderung_betrag_euro?.toString() || '',
-    stamm_anmeldung_netzbetreiber: params.stamm_anmeldung_netzbetreiber?.toString() || '',
-    stamm_anmeldung_marktstammdaten: params.stamm_anmeldung_marktstammdaten?.toString() || '',
-    // Ansprechpartner
-    ansprechpartner_firma: params.ansprechpartner_firma?.toString() || '',
-    ansprechpartner_name: params.ansprechpartner_name?.toString() || '',
-    ansprechpartner_telefon: params.ansprechpartner_telefon?.toString() || '',
-    ansprechpartner_email: params.ansprechpartner_email?.toString() || '',
-    ansprechpartner_ticketsystem: params.ansprechpartner_ticketsystem?.toString() || '',
-    ansprechpartner_kundennummer: params.ansprechpartner_kundennummer?.toString() || '',
-    ansprechpartner_vertragsnummer: params.ansprechpartner_vertragsnummer?.toString() || '',
-    ansprechpartner_notizen: params.ansprechpartner_notizen?.toString() || '',
-    // Wartungsvertrag
-    wartung_vertragsnummer: params.wartung_vertragsnummer?.toString() || '',
-    wartung_anbieter: params.wartung_anbieter?.toString() || '',
-    wartung_gueltig_bis: params.wartung_gueltig_bis?.toString() || '',
-    wartung_kuendigungsfrist: params.wartung_kuendigungsfrist?.toString() || '',
-    wartung_leistungsumfang: params.wartung_leistungsumfang?.toString() || '',
-  })
-
   const getInitialParamData = (): Record<string, string | boolean> => {
-    const stammdaten = getStammdatenFields()
     switch (typ) {
       case 'e-auto':
         return {
-          ...stammdaten,
           batteriekapazitaet_kwh: params.batteriekapazitaet_kwh?.toString() || '',
           verbrauch_kwh_100km: params.verbrauch_kwh_100km?.toString() || '18',
           jahresfahrleistung_km: params.jahresfahrleistung_km?.toString() || '15000',
@@ -178,7 +139,6 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         }
       case 'speicher':
         return {
-          ...stammdaten,
           kapazitaet_kwh: params.kapazitaet_kwh?.toString() || '',
           nutzbare_kapazitaet_kwh: params.nutzbare_kapazitaet_kwh?.toString() || '',
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '',
@@ -188,7 +148,6 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         }
       case 'waermepumpe':
         return {
-          ...stammdaten,
           leistung_kw: params.leistung_kw?.toString() || '',
           // Wärmepumpenart für fairen Community-Vergleich
           wp_art: params.wp_art?.toString() || 'luft_wasser',
@@ -216,7 +175,6 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         }
       case 'wallbox':
         return {
-          ...stammdaten,
           max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '11',
           bidirektional: (params.bidirektional as boolean) ?? false,
           pv_optimiert: (params.pv_optimiert as boolean) ?? true,
@@ -224,21 +182,18 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         }
       case 'wechselrichter':
         return {
-          ...stammdaten,
           max_leistung_kw: params.max_leistung_kw?.toString() || '',
           wirkungsgrad_prozent: params.wirkungsgrad_prozent?.toString() || '97',
           hybrid: (params.hybrid as boolean) ?? false,
         }
       case 'pv-module':
         return {
-          ...stammdaten,
           anzahl_module: params.anzahl_module?.toString() || '',
           modul_leistung_wp: params.modul_leistung_wp?.toString() || '',
           modul_typ: params.modul_typ?.toString() || '',
         }
       case 'balkonkraftwerk':
         return {
-          ...stammdaten,
           leistung_wp: params.leistung_wp?.toString() || '',
           anzahl: params.anzahl?.toString() || '2',
           ausrichtung: params.ausrichtung?.toString() || 'Süd',
@@ -248,12 +203,11 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
         }
       case 'sonstiges':
         return {
-          ...stammdaten,
           kategorie: params.kategorie?.toString() || 'erzeuger',
           beschreibung: params.beschreibung?.toString() || '',
         }
       default:
-        return stammdaten
+        return {}
     }
   }
 
@@ -288,11 +242,7 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
       setLoading(true)
 
       // Parameter konvertieren
-      // Datumsfelder, die als String bleiben sollen
-      const dateFields = [
-        'stamm_garantie_bis', 'stamm_erstzulassung', 'wartung_gueltig_bis',
-        'stamm_anmeldung_netzbetreiber', 'stamm_anmeldung_marktstammdaten'
-      ]
+      const dateFields: string[] = []
       const convertedParams: Record<string, unknown> = {}
       Object.entries(paramData).forEach(([key, value]) => {
         if (typeof value === 'boolean') {
@@ -596,14 +546,10 @@ export default function InvestitionForm({ investition, anlageId, typ, anlage, on
       {/* Typ-spezifische Parameter */}
       <TypSpecificFields typ={typ} paramData={paramData} onChange={handleChange} />
 
-      {/* Erweiterte Stammdaten (Gerätedaten, Ansprechpartner, Wartung) */}
-      <InvestitionStammdatenSection
-        typ={typ}
-        paramData={paramData}
-        onChange={handleChange}
-        anlage={anlage}
-        hasParent={!!formData.parent_investition_id}
-      />
+      {/* Verknüpfte Infothek-Einträge */}
+      {investition && (
+        <InfothekVerknuepfungen investitionId={investition.id} />
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1357,4 +1303,81 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
     default:
       return null
   }
+}
+
+// Kategorie-Labels für die Infothek-Verknüpfungen (Subset, kein eigener Import nötig)
+const KATEGORIE_LABELS: Record<string, string> = {
+  garantie: 'Komponente / Datenblatt',
+  ansprechpartner: 'Vertragspartner',
+  wartungsvertrag: 'Wartungsvertrag',
+  marktstammdatenregister: 'MaStR',
+  foerderung: 'Förderung',
+  versicherung: 'Versicherung',
+  stromvertrag: 'Stromvertrag',
+  einspeisevertrag: 'Einspeisevertrag',
+  steuerdaten: 'Steuerdaten',
+  sonstiges: 'Sonstiges',
+}
+
+function InfothekVerknuepfungen({ investitionId }: { investitionId: number }) {
+  const [eintraege, setEintraege] = useState<InfothekEintrag[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const refresh = useCallback(() => {
+    setLoading(true)
+    infothekApi.listFuerInvestition(investitionId)
+      .then(setEintraege)
+      .catch(() => setEintraege([]))
+      .finally(() => setLoading(false))
+  }, [investitionId])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Verknüpfte Infothek-Einträge</h3>
+        <a
+          href="#/einstellungen/infothek"
+          className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
+        >
+          <ExternalLink className="w-3 h-3" />
+          Infothek öffnen
+        </a>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-gray-400">Laden...</p>
+      ) : eintraege.length === 0 ? (
+        <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Keine Infothek-Einträge verknüpft. Gerätedaten, Ansprechpartner und Wartungsverträge
+            können in der{' '}
+            <a href="#/einstellungen/infothek" className="underline text-primary-600 dark:text-primary-400">
+              Infothek
+            </a>{' '}
+            verwaltet und mit dieser Investition verknüpft werden.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {eintraege.map(e => (
+            <a
+              key={e.id}
+              href="#/einstellungen/infothek"
+              className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+            >
+              <FileText className="w-3.5 h-3.5 text-primary-500 shrink-0" />
+              <span className="text-sm text-gray-900 dark:text-white truncate group-hover:underline">
+                {e.bezeichnung}
+              </span>
+              <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                {KATEGORIE_LABELS[e.kategorie] || e.kategorie}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
