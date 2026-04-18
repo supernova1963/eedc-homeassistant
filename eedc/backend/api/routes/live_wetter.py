@@ -114,6 +114,7 @@ def _format_solar_noon(longitude: Optional[float]) -> Optional[str]:
     m = int((noon - h) * 60)
     return f"{h:02d}:{m:02d}"
 TEMP_COEFFICIENT = 0.004  # -0.4%/°C über 25°C (typisch Silizium)
+HEIZGRENZE = 15.0  # °C — unterhalb wird geheizt (Standard Deutschland)
 
 # Ausrichtungs-Text → Azimut (0=Süd, -90=Ost, 90=West)
 _AUSRICHTUNG_ZU_AZIMUT = {
@@ -238,12 +239,28 @@ def _berechne_verbrauchsprofil(
             # Individuelles Profil: Schlüssel sind int oder str
             verbrauch_kw = round(individuelles_profil.get(h, individuelles_profil.get(str(h), 0.3)), 2)
 
-            # WP-Temperaturkorrektur: WP-Anteil mit Forecast-Temperatur skalieren
+            # WP-Temperaturkorrektur: WP-Anteil mit Heizgradtagen skalieren
+            #
+            # Heizgradtage (HDD) = max(0, Heizgrenze - Temperatur)
+            # Bei Referenz-Ø 5°C und Forecast 0°C: HDD_fc/HDD_ref = 15/10 = 1.5×
+            # Bei Referenz-Ø 14°C (mild): HDD_ref < 1 → WP lief kaum (Warmwasser),
+            #   Hochskalieren ergibt keinen Sinn → Zuschlag pro Heizgrad stattdessen
             if wp_profil and referenz_temp_c is not None:
                 temp = s.get("temperatur_c")
-                nenn = max(1.0, 15.0 - referenz_temp_c)
                 if temp is not None:
-                    faktor = max(0.3, min(3.0, (15.0 - temp) / nenn))
+                    hdd_ref = max(0.0, HEIZGRENZE - referenz_temp_c)
+                    hdd_fc = max(0.0, HEIZGRENZE - temp)
+                    if hdd_ref >= 1.0:
+                        # Normaler Heizbetrieb in Referenzperiode → proportional
+                        faktor = hdd_fc / hdd_ref
+                    elif hdd_fc > 0:
+                        # Referenz war mild (WP nur Warmwasser), Forecast kalt
+                        # Sanfter Zuschlag: +15% pro Heizgrad unter Heizgrenze
+                        faktor = 1.0 + hdd_fc * 0.15
+                    else:
+                        # Beide über Heizgrenze → kein Heizbedarf
+                        faktor = 1.0
+                    faktor = max(0.1, min(3.0, faktor))
                     wp_kw = wp_profil.get(h, wp_profil.get(str(h), 0.0))
                     haus_kw = max(0.0, verbrauch_kw - wp_kw)
                     verbrauch_kw = round(max(0.0, haus_kw + wp_kw * faktor), 2)
