@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.16.1 | **Status:** Stable Release
+**Version:** 3.16.2 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -170,10 +170,11 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
-**v3.16.x** - Dynamischer Strompreis:
+**v3.16.x** - Dynamischer Strompreis + Infothek-Verschlankung:
 
 - **Sensor-Mapping Strompreis (v3.16.0):** Optionaler Strompreis-Sensor (Tibber, aWATTar, EPEX) im Sensor-Mapping Wizard, EPEX-Börsenpreis automatisch via aWATTar API, Overlay im Tagesverlauf
 - **Stündliche Strompreis-Mitschrift:** Zwei getrennte Preisfelder im TagesEnergieProfil (Endpreis + Börsenpreis), Tagesaggregation mit Negativpreis-Analyse
+- **Infothek Etappe 3.6 (v3.16.2):** stamm_*/ansprechpartner_*/wartung_*-Felder aus Investitionsformular entfernt, Infothek-Verknüpfungen inline im Formular, PDF-Jahresbericht bereinigt
 
 **v3.15.x** - PDF-Dokumente, Infothek N:M, Performance:
 
