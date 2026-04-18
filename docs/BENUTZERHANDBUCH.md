@@ -1,7 +1,7 @@
 
 # EEDC Benutzerhandbuch
 
-**Version 3.6** | Stand: März 2026
+**Version 3.16.1** | Stand: April 2026
 
 ---
 

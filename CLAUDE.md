@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.3.6 | **Status:** Stable Release
+**Version:** 3.16.1 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -80,11 +80,11 @@ cd eedc/frontend && npm run dev
 
 ```bash
 cd /home/gernot/claude/eedc-homeassistant
-./scripts/release.sh 2.8.6
+./scripts/release.sh 3.17.0
 ```
 
 Das Script macht automatisch:
-1. Bumpt Version in allen 4 Dateien
+1. Bumpt Version in allen 5 Dateien
 2. Kopiert CHANGELOG nach eedc/
 3. Committed + taggt + pusht eedc-homeassistant
 4. Synchronisiert backend/ + frontend/ nach eedc-Standalone
@@ -170,17 +170,29 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
-**v3.3.x** - Frontend-Refactoring, Community, Energiefluss:
+**v3.16.x** - Dynamischer Strompreis:
 
-- **Frontend-Refactoring (v3.3.4–v3.3.6):** 7-Phasen-Refactoring: `lib/` Utils, shared Hooks (`useSelectedAnlage`, `useApiData`), Chart-Komponenten, Common-Components (`PageHeader`, `DataLoadingState`), Dashboard + Wizard zerlegt, alle 27 Seiten migriert
-- **Energiefluss 3D (v3.3.3):** 3D-Perspektivhintergrund, leuchtende Flusslinien mit Elektronen-Partikeln
-- **GTI-Prognose (v3.3.0):** PV-Ertragsprognose mit Global Tilted Irradiance, Multi-String, Lernfaktor, Temperaturkorrektur
+- **Sensor-Mapping Strompreis (v3.16.0):** Optionaler Strompreis-Sensor (Tibber, aWATTar, EPEX) im Sensor-Mapping Wizard, EPEX-Börsenpreis automatisch via aWATTar API, Overlay im Tagesverlauf
+- **Stündliche Strompreis-Mitschrift:** Zwei getrennte Preisfelder im TagesEnergieProfil (Endpreis + Börsenpreis), Tagesaggregation mit Negativpreis-Analyse
 
-**v3.0.0–v3.0.3** - Live Dashboard, MQTT-Inbound, Energiefluss:
+**v3.15.x** - PDF-Dokumente, Infothek N:M, Performance:
 
-- **Live Dashboard:** Echtzeit-Leistungsanzeige mit Gauges, animiertem Energiefluss-Diagramm, Heute/Gestern-kWh
-- **MQTT-Inbound:** Universelle Datenbrücke für beliebige Smarthome-Systeme
-- **Sensor-Mapping:** Ersetzt alte `ha_sensor_*` Felder, konfigurierbar im Wizard
+- **Anlagendokumentation + Finanzbericht (v3.15.0):** Zwei neue PDF-Dokumente (Beta), Dokumente-Dialog, Anlagenfoto-Upload
+- **Infothek N:M Verknüpfung (v3.15.2):** Ein Datenblatt für mehrere Investitionen, Komponenten-Akte direkt am Investment
+- **N+1 Queries + Code-Splitting (v3.15.3):** Batch-Queries, React.lazy für 33 Seiten, Konstanten zentralisiert
+- **Tagesverlauf Einspeisung + Strompreis-Overlay (v3.15.8):** Netzbezug/Einspeisung getrennt, sekundäre Y-Achse
+
+**v3.14.0** - Stilllegungsdatum:
+
+- **Stilllegungsdatum auf Investitionen:** Historische Aggregate behalten deaktivierte Komponenten, 32 Call-Sites korrigiert
+- **Infothek Komponentenakte:** Garantie-Kategorie zum vollwertigen Datenblatt ausgebaut
+
+**v3.12.0–v3.13.0** - Monatsberichte, Energieprofil Etappe 3:
+
+- **Monatsberichte (v3.12.0):** Ersetzt "Aktueller Monat", Zeitstrahl-Integration, Community-Vergleich, T-Konto
+- **Energieprofil Monatsauswertung (v3.13.0):** Heatmap 24h×N, KPIs, Kategorien-Leiste, Geräte-Tabelle, Peak-Analyse
+
+**Ältere Meilensteine:** Live Dashboard + MQTT-Inbound (v3.0), GTI-Prognose (v3.3), Wettermodell-Kaskade (v3.4), Infothek (v3.5), L2-Cache (v3.7), Live Dashboard Generalüberholung (v3.9), Import-Strategie (v3.10)
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
 

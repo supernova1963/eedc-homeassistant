@@ -1,7 +1,7 @@
 
 # EEDC Development Guide
 
-**Version 3.6** | Stand: März 2026
+**Version 3.16.1** | Stand: April 2026
 
 ---
 
@@ -318,31 +318,36 @@ eedc-homeassistant/
         │   │   ├── sensor-mapping/  # Sensor-Wizard Steps
         │   │   └── setup-wizard/    # Ersteinrichtung
         │   │
-        │   ├── pages/
-        │   │   ├── LiveDashboard.tsx        # Echtzeit-Monitoring
-        │   │   ├── AktuellerMonat.tsx       # deprecated seit v3.12.0 (noch nicht gelöscht)
+        │   ├── pages/               # 40 Seiten, React.lazy Code-Split (v3.15.3)
+        │   │   ├── LiveDashboard.tsx        # Echtzeit-Monitoring (eager, Startseite)
         │   │   ├── Dashboard.tsx            # Cockpit
-        │   │   ├── Auswertung.tsx           # Analysen (6 Tabs)
-        │   │   ├── CommunityVergleich.tsx   # Community (6 Tabs)
+        │   │   ├── Auswertung.tsx           # Analysen (7 Tabs)
+        │   │   ├── auswertung/             # EnergieTab, PVAnlageTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, TabelleTab, EnergieprofilTab/MonatTab
         │   │   ├── Aussichten.tsx           # Prognosen (4 Tabs)
-        │   │   ├── MqttInboundSetup.tsx     # MQTT-Inbound Einrichtung
+        │   │   ├── aussichten/             # KurzfristTab, LangfristTab, TrendTab, FinanzenTab
+        │   │   ├── MonatsabschlussView.tsx  # Monatsberichte (ersetzt AktuellerMonat, v3.12.0)
         │   │   ├── MonatsabschlussWizard.tsx
-        │   │   ├── SensorMappingWizard.tsx
-        │   │   ├── HAStatistikImport.tsx
-        │   │   ├── CloudImportWizard.tsx
-        │   │   ├── CustomImportWizard.tsx
-        │   │   ├── DataImportWizard.tsx     # Portal-Import
-        │   │   ├── DatenChecker.tsx         # Datenqualität
-        │   │   ├── Settings.tsx             # Einstellungen
+        │   │   ├── Community.tsx            # Community-Hub (6 Tabs)
+        │   │   ├── CommunityShare.tsx + CommunityVergleich.tsx
+        │   │   ├── community/              # UebersichtTab, PVErtragTab, RegionalTab, etc.
+        │   │   ├── Investitionen.tsx        # Investitions-Übersicht + Stilllegungsdatum
+        │   │   ├── Monatsdaten.tsx          # Monatsdaten-Editor
+        │   │   ├── ROIDashboard.tsx         # ROI-Analyse
+        │   │   ├── PrognoseVsIst.tsx        # SOLL-IST Vergleich
         │   │   ├── PVAnlageDashboard.tsx    # PV-Anlage
         │   │   ├── SpeicherDashboard.tsx    # Speicher
-        │   │   ├── BalkonkraftwerkDashboard.tsx
-        │   │   ├── SonstigesDashboard.tsx
-        │   │   └── auswertung/             # Tab-Komponenten
-        │   │       ├── EnergieTab.tsx
-        │   │       ├── KomponentenTab.tsx
-        │   │       ├── FinanzenTab.tsx
-        │   │       └── InvestitionenTab.tsx
+        │   │   ├── WaermepumpeDashboard.tsx
+        │   │   ├── WallboxDashboard.tsx + EAutoDashboard.tsx
+        │   │   ├── BalkonkraftwerkDashboard.tsx + SonstigesDashboard.tsx
+        │   │   ├── Strompreise.tsx          # Strompreis-Verwaltung
+        │   │   ├── Infothek.tsx             # Komponenten-Akten + Verträge (v3.5.0, N:M v3.15.2)
+        │   │   ├── Import.tsx + DataImportWizard.tsx + CloudImportWizard.tsx + CustomImportWizard.tsx
+        │   │   ├── Einrichtung.tsx          # Datenquellen-Hub
+        │   │   ├── SensorMappingWizard.tsx + MqttInboundSetup.tsx + ConnectorSetupWizard.tsx
+        │   │   ├── HAStatistikImport.tsx + HAExportSettings.tsx + PVGISSettings.tsx
+        │   │   ├── DatenChecker.tsx + DatenerfassungGuide.tsx
+        │   │   ├── Anlagen.tsx + Settings.tsx + Backup.tsx + Protokolle.tsx
+        │   │   └── AktuellerMonat.tsx       # deprecated seit v3.12.0 (redirect)
         │   │
         │   ├── hooks/               # React Hooks
         │   └── config/              # Version, etc.
@@ -395,31 +400,33 @@ Nach dem Start des Backends verfügbar unter:
 | Modul              | Prefix               | Beschreibung                                            |
 | ------------------ | -------------------- | ------------------------------------------------------- |
 | **Live Dashboard** | `/api/live` | Echtzeit-Daten, MQTT-Inbound, Tagesverlauf, Energiefluss |
-| **Monatsdaten-API** | `/api/aktueller-monat` | Monatsdaten für alle Monate inkl. laufender (genutzt von MonatsabschlussView) |
-| **Cockpit** | `/api/cockpit` | Dashboard-Aggregation, KPIs |
+| **Monatsdaten-API** | `/api/aktueller-monat` | Monatsdaten für alle Monate inkl. laufender (deprecated, redirect auf Monatsberichte) |
+| **Cockpit** | `/api/cockpit` | Dashboard-Aggregation, KPIs, Komponenten, Nachhaltigkeit |
 | **Aussichten** | `/api/aussichten` | Prognosen (Kurzfrist, Langfrist, Trend, Finanzen) |
 | **Monatsdaten** | `/api/monatsdaten` | CRUD + Berechnungen |
 | **Monatsabschluss** | `/api/monatsabschluss` | Wizard mit Datenquellen-Status |
-| **Investitionen** | `/api/investitionen` | Komponenten, ROI |
-| **Anlagen** | `/api/anlagen` | Anlagen CRUD |
+| **Investitionen** | `/api/investitionen` | Komponenten, ROI, Stilllegungsdatum |
+| **Anlagen** | `/api/anlagen` | Anlagen CRUD + Anlagenfoto |
 | **Strompreise** | `/api/strompreise` | Tarife, Spezialtarife |
-| **Sensor-Mapping** | `/api/sensor-mapping` | HA Sensor-Zuordnung |
+| **Sensor-Mapping** | `/api/sensor-mapping` | HA Sensor-Zuordnung (inkl. Strompreis) |
 | **Import/Export** | `/api/import` | CSV, JSON, Demo, PDF |
-| **Portal-Import** | `/api/portal-import` | CSV-Upload (SMA, Fronius, evcc) |
-| **Cloud-Import** | `/api/cloud-import` | Cloud-API Import (5 Provider) |
+| **Daten-Import** | `/api/data-import` | Universeller Import (ersetzt Portal-Import) |
+| **Cloud-Import** | `/api/cloud-import` | Cloud-API Import (12 Provider) |
 | **Custom-Import** | `/api/custom-import` | CSV/JSON mit Feld-Mapping |
-| **Connectors** | `/api/connectors` | 9 Geräte-Connectors |
+| **Connectors** | `/api/connectors` | 10 Geräte-Connectors |
 | **Community** | `/api/community` | Community-Benchmark |
 | **Wetter** | `/api/wetter` | Open-Meteo, Bright Sky, PVGIS TMY |
 | **PVGIS** | `/api/pvgis` | PVGIS-Daten + Horizontprofil |
 | **Solar-Prognose** | `/api/solar-prognose` | Open-Meteo Solar GTI |
-| **System** | `/api/system` | Daten-Checker, Logs, Energieprofile |
+| **Energieprofil** | `/api/energie-profil` | Stündliche Energieprofile, Monatsauswertung |
+| **Dokumentation** | `/api/dokumentation` | PDF-Dokumente (Anlagendokumentation, Finanzbericht) |
+| **System** | `/api/system` | Daten-Checker, Logs |
 | **HA Integration** | `/api/ha` | HA-Status, MQTT Export |
 | **HA Statistics** | `/api/ha-statistics` | HA-DB Langzeitstatistik (SQLite + MariaDB) |
 | **HA Import** | `/api/ha-import` | HA Datenimport |
-| **Infothek** | `/api/infothek` | Verträge, Zähler, Dokumente (CRUD + Datei-Upload) |
-| **MQTT-Gateway** | `/api/mqtt-gateway` | Topic-Mapping, Geräte-Presets |
-| **Scheduler** | `/api/scheduler` | Cron-Jobs, Monatswechsel |
+| **Infothek** | `/api/infothek` | Komponenten-Akten, Verträge, Dokumente (CRUD + Datei-Upload, N:M) |
+| **MQTT-Gateway** | `/api/mqtt-gateway` | Topic-Mapping |
+| **MQTT-Presets** | `/api/mqtt-presets` | Geräte-Presets für MQTT |
 
 > **Hinweis:** HA-spezifische Routen (`/api/ha*`, `/api/sensor-mapping`, `/api/ha-statistics`) sind nur aktiv wenn `HA_MODE=true`.
 
@@ -436,4 +443,4 @@ Nach dem Start des Backends verfügbar unter:
 
 ---
 
-*Letzte Aktualisierung: März 2026*
+*Letzte Aktualisierung: April 2026*

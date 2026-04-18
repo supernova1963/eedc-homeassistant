@@ -6,7 +6,7 @@ description: "Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Feh
 
 # EEDC Handbuch — Teil I: Installation & Einrichtung
 
-**Version 3.6** | Stand: März 2026
+**Version 3.16.1** | Stand: April 2026
 
 > Dieses Handbuch ist Teil der EEDC-Dokumentation.
 > Siehe auch: [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)

@@ -1,7 +1,7 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 3.6** | Stand: März 2026
+**Version 3.16.1** | Stand: April 2026
 
 ---
 
@@ -126,7 +126,14 @@ eedc-homeassistant/
     │   │       ├── monatsdaten.py
     │   │       ├── investitionen.py
     │   │       ├── strompreise.py
-    │   │       ├── cockpit.py
+    │   │       ├── cockpit.py             # Cockpit-Übersicht
+    │   │       ├── cockpit/               # Cockpit Sub-Module (v3.11.x)
+    │   │       │   ├── uebersicht.py
+    │   │       │   ├── komponenten.py
+    │   │       │   ├── nachhaltigkeit.py
+    │   │       │   ├── prognose.py
+    │   │       │   ├── pv_strings.py
+    │   │       │   └── social.py
     │   │       ├── aussichten.py          # Prognosen (4 Tabs)
     │   │       ├── community.py           # Community-Teilen & Benchmark
     │   │       ├── import_export/         # Modulares Package
@@ -145,16 +152,22 @@ eedc-homeassistant/
     │   │       ├── ha_statistics.py       # HA-Statistik Bulk-Import
     │   │       ├── sensor_mapping.py      # Sensor-Mapping CRUD
     │   │       ├── monatsabschluss.py     # Monatsabschluss-Wizard API
-    │   │       ├── portal_import.py         # Portal-CSV-Parser
+    │   │       ├── data_import.py           # Universeller Daten-Import (v3.10.x)
     │   │       ├── custom_import.py          # Custom CSV/JSON Import
     │   │       ├── cloud_import.py           # Cloud-API Import
     │   │       ├── live_dashboard.py        # Live Dashboard Kern-API (v3.0.0, refactored v3.9.0)
     │   │       ├── live_mqtt_inbound.py    # Live MQTT Endpoints (extrahiert v3.9.0)
     │   │       ├── live_wetter.py          # Live Wetter + Verbrauchsprofil (extrahiert v3.9.0)
-    │   │       ├── aktueller_monat.py       # Aktueller Monat API
+    │   │       ├── aktueller_monat.py       # Aktueller Monat API (deprecated v3.12.0)
     │   │       ├── daten_checker.py         # Daten-Checker API
     │   │       ├── system_logs.py           # Protokolle API
-    │   │       └── connector.py             # Geräte-Connector API
+    │   │       ├── connector.py             # Geräte-Connector API
+    │   │       ├── infothek.py              # Infothek CRUD (v3.5.0)
+    │   │       ├── energie_profil.py        # Energieprofil-Auswertung (v3.13.0)
+    │   │       ├── dokumentation.py         # PDF-Dokumente (v3.15.0)
+    │   │       ├── mqtt_gateway.py          # MQTT-Gateway Mapping
+    │   │       ├── mqtt_presets.py           # MQTT-Presets
+    │   │       └── solar_prognose.py        # Solar-Prognose API
     │   │
     │   ├── core/                # Kernfunktionalität
     │   │   ├── config.py        # Settings + Version
@@ -167,25 +180,29 @@ eedc-homeassistant/
     │   │   ├── investition.py
     │   │   ├── strompreis.py
     │   │   ├── pvgis_prognose.py
-    │   │   ├── settings.py         # App-Einstellungen
-    │   │   ├── activity_log.py    # Aktivitäts-Protokolle
-    │   │   ├── mqtt_energy_snapshot.py # MQTT Energy Snapshots (NEU v3.0.0)
-    │   │   ├── tages_energie_profil.py # Energieprofil: Stundenwerte + Tagessummary (NEU v3.1.0)
-    │   │   ├── infothek.py             # Infothek-Einträge + Dateien (NEU v3.5.0)
-    │   │   └── solar_forecast_ml.py    # Solar Forecast ML Persistierung (NEU v3.4.0)
+    │   │   ├── settings.py             # App-Einstellungen
+    │   │   ├── activity_log.py         # Aktivitäts-Protokolle
+    │   │   ├── api_cache.py            # L1/L2 API-Cache (v3.7.6)
+    │   │   ├── mqtt_energy_snapshot.py  # MQTT Energy Snapshots (v3.0.0)
+    │   │   ├── mqtt_gateway_mapping.py  # MQTT-Gateway Topic-Mapping (v3.4.5)
+    │   │   ├── mqtt_live_snapshot.py     # MQTT Live-Snapshots
+    │   │   ├── tages_energie_profil.py  # Energieprofil: Stundenwerte + Tagessummary (v3.1.0)
+    │   │   └── infothek.py             # Infothek-Einträge + Dateien + N:M (v3.5.0, N:M v3.15.2)
     │   │
     │   ├── utils/                # Hilfsfunktionen
-    │   │   └── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
+    │   │   ├── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
+    │   │   └── investition_filter.py   # aktiv_jetzt/aktiv_im_zeitraum Filter (v3.14.0)
     │   │
     │   └── services/            # Business Logic
     │       ├── wetter_service.py
     │       ├── brightsky_service.py       # DWD-Daten via Bright Sky API
     │       ├── solar_forecast_service.py  # Open-Meteo Solar GTI + Solar Forecast ML (SFML)
-    │       ├── mqtt_gateway_service.py    # MQTT-Gateway Topic-Mapping + Presets (NEU v3.4.5)
-    │       ├── infothek_service.py        # Infothek CRUD + Datei-Handling (NEU v3.5.0)
+    │       ├── mqtt_gateway_service.py    # MQTT-Gateway Topic-Mapping + Presets (v3.4.5)
     │       ├── infothek_datei_service.py  # Bild-Resize, HEIC→JPEG, PDF-Validierung
+    │       ├── infothek_migration.py      # Infothek 1:1→N:M Migration (v3.15.2)
+    │       ├── infothek_pdf_service.py    # Infothek-PDF + Dossier (v3.15.0)
     │       ├── prognose_service.py        # Prognose-Berechnungen
-    │       ├── pdf_service.py             # PDF-Generierung
+    │       ├── pdf_service.py             # PDF-Generierung (Jahresbericht)
     │       ├── ha_sensors_export.py
     │       ├── ha_state_service.py        # HA State-Abfragen
     │       ├── mqtt_client.py
@@ -194,28 +211,53 @@ eedc-homeassistant/
     │       ├── scheduler.py               # APScheduler für Cron-Jobs
     │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
     │       ├── community_service.py       # Community-Datenaufbereitung
-    │       ├── plz_to_state.py           # PLZ→Bundesland Mapping (8.308 Einträge)
+    │       ├── plz_to_state.py            # PLZ→Bundesland Mapping (8.308 Einträge)
+    │       ├── prefetch_service.py        # Startup-Prefetch für Caches (v3.7.6)
+    │       ├── strompreis_markt_service.py # EPEX-Börsenpreise via aWATTar API (v3.16.0)
     │       ├── live_power_service.py      # Live Dashboard Orchestrierung (v3.0.0, refactored v3.9.0)
-    │       ├── live_sensor_config.py     # Konstanten, Config-Extraktion, Normalisierung (v3.9.0)
-    │       ├── live_kwh_cache.py         # TTL-Caches für heute/gestern/profil kWh (v3.9.0)
-    │       ├── live_history_service.py   # HA-History, Trapez-kWh, Tages-kWh (v3.9.0)
+    │       ├── live_sensor_config.py      # Konstanten, Config-Extraktion, Normalisierung (v3.9.0)
+    │       ├── live_kwh_cache.py          # TTL-Caches für heute/gestern/profil kWh (v3.9.0)
+    │       ├── live_history_service.py    # HA-History, Trapez-kWh, Tages-kWh (v3.9.0)
     │       ├── live_verbrauchsprofil_service.py # Verbrauchsprofil aus HA + MQTT (v3.9.0)
     │       ├── live_tagesverlauf_service.py     # Butterfly-Chart Daten (v3.9.0)
     │       ├── live_komponenten_builder.py      # Komponenten, Gauges, Summen (v3.9.0)
-    │       ├── mqtt_inbound_service.py   # MQTT-Inbound Subscribe + Cache (NEU v3.0.0)
-    │       ├── mqtt_energy_history_service.py # MQTT Snapshots (NEU v3.0.0)
-    │       ├── energie_profil_service.py  # Energieprofil: Aggregation + Rollup (NEU v3.1.0)
-    │       ├── daten_checker.py          # Datenqualitätsprüfung
-    │       ├── activity_service.py       # Aktivitäts-Logging
-    │       └── cloud_import/              # Cloud-Import-Provider
-    │           ├── __init__.py
-    │           ├── base.py                 # ABC + Registry
-    │           ├── ecoflow_powerocean.py
-    │           ├── solaredge.py
-    │           ├── fronius_solarweb.py
-    │           ├── huawei_fusionsolar.py
-    │           ├── growatt.py
-    │           └── deye_solarman.py
+    │       ├── mqtt_inbound_service.py    # MQTT-Inbound Subscribe + Cache (v3.0.0)
+    │       ├── mqtt_energy_history_service.py # MQTT Snapshots (v3.0.0)
+    │       ├── mqtt_live_history_service.py   # MQTT Live-History (v3.9.0)
+    │       ├── mqtt_presets.py             # MQTT-Preset-Definitionen
+    │       ├── connector_mqtt_bridge.py   # Connector→MQTT Brücke
+    │       ├── energie_profil_service.py   # Energieprofil: Aggregation + Rollup (v3.1.0)
+    │       ├── daten_checker.py           # Datenqualitätsprüfung
+    │       ├── activity_service.py        # Aktivitäts-Logging
+    │       ├── wetter/                    # Wetter-Subsystem (refactored v3.4.18)
+    │       │   ├── orchestrator.py        # Kaskadierender Multi-Provider
+    │       │   ├── open_meteo.py          # Open-Meteo API
+    │       │   ├── pvgis.py               # PVGIS TMY
+    │       │   ├── cache.py               # Wetter-Cache
+    │       │   ├── models.py              # Wetter-Datenmodelle
+    │       │   └── utils.py
+    │       ├── pdf/                       # PDF-Subsystem (refactored v3.15.0)
+    │       │   ├── engine.py              # WeasyPrint/ReportLab Abstraktion
+    │       │   ├── charts.py              # Chart-Rendering für PDFs
+    │       │   ├── builders/              # Dokument-Builder
+    │       │   └── templates/             # Jinja2/HTML-Templates
+    │       ├── cloud_import/              # Cloud-Import-Provider (14 Dateien)
+    │       │   ├── base.py + registry.py  # ABC + Provider-Registry
+    │       │   ├── ecoflow_powerocean.py, ecoflow_powerstream.py
+    │       │   ├── solaredge.py, fronius_solarweb.py
+    │       │   ├── huawei_fusionsolar.py, growatt.py, deye_solarman.py
+    │       │   ├── anker_solix.py, hoymiles_smiles.py
+    │       │   └── sungrow_isolarcloud.py, viessmann_gridbox.py
+    │       ├── connectors/                # Geräte-Connectors (v3.10.x)
+    │       │   ├── base.py + registry.py
+    │       │   ├── fronius_solar_api.py, sma_webconnect.py, sma_ennexos.py
+    │       │   ├── kostal_plenticore.py, opendtu.py, shelly_em.py
+    │       │   ├── sonnen_batterie.py, tasmota_sml.py
+    │       │   └── go_echarger.py
+    │       └── import_parsers/            # Portal-Import Parser (v3.10.x)
+    │           ├── base.py + registry.py
+    │           ├── fronius_solarweb.py, sma_sunny_portal.py, sma_echarger.py
+    │           └── evcc.py
     │
     └── frontend/                # React Frontend
         ├── package.json
@@ -241,18 +283,46 @@ eedc-homeassistant/
         │   │   ├── layout/      # Layout (TopNav, SubTabs)
         │   │   ├── forms/       # Formulare
         │   │   ├── ui/          # Wiederverwendbare UI
-        │   │   ├── setup-wizard/ # Setup-Wizard
-        │   │   └── pv/          # PV-spezifische Komponenten
+        │   │   ├── common/      # Shared Components (PageHeader, DataLoadingState, KPICard)
+        │   │   ├── charts/      # Chart-Komponenten (Recharts-Wrapper)
+        │   │   ├── dashboard/   # Dashboard-spezifische Komponenten
+        │   │   ├── live/        # Live-Dashboard Komponenten
+        │   │   ├── infothek/    # Infothek-Komponenten
+        │   │   ├── monatsabschluss/ # Monatsabschluss-Wizard Schritte
+        │   │   ├── sensor-mapping/  # Sensor-Mapping Wizard
+        │   │   ├── setup-wizard/    # Setup-Wizard
+        │   │   └── pv/             # PV-spezifische Komponenten
         │   │
-        │   ├── pages/           # Seiten-Komponenten
-        │   │   ├── Dashboard.tsx
-        │   │   ├── Auswertung.tsx
-        │   │   ├── auswertung/  # Auswertungs-Tabs (Energie, PV, Komponenten, Finanzen, CO2, Investitionen, Tabelle)
-        │   │   ├── Infothek.tsx             # Infothek (NEU v3.5.0)
-        │   │   ├── CloudImportWizard.tsx
-        │   │   ├── CustomImportWizard.tsx
-        │   │   ├── Einrichtung.tsx          # Datenquellen-Hub
-        │   │   └── ...
+        │   ├── pages/           # Seiten-Komponenten (40 Seiten, React.lazy Code-Split)
+        │   │   ├── Dashboard.tsx           # Cockpit-Übersicht
+        │   │   ├── LiveDashboard.tsx       # Echtzeit-Leistung (Startseite, eager)
+        │   │   ├── Auswertung.tsx          # Auswertungs-Hub
+        │   │   ├── auswertung/            # Tabs: Energie, PV, Komponenten, Finanzen, CO2, Investitionen, Tabelle
+        │   │   ├── Aussichten.tsx          # Prognosen
+        │   │   ├── aussichten/            # Prognose-Tabs
+        │   │   ├── MonatsabschlussView.tsx # Monatsberichte (ersetzt AktuellerMonat, v3.12.0)
+        │   │   ├── MonatsabschlussWizard.tsx
+        │   │   ├── Infothek.tsx           # Infothek (v3.5.0)
+        │   │   ├── Investitionen.tsx      # Investitions-Übersicht
+        │   │   ├── Monatsdaten.tsx         # Monatsdaten-Editor
+        │   │   ├── ROIDashboard.tsx        # ROI-Analyse
+        │   │   ├── PrognoseVsIst.tsx      # SOLL-IST Vergleich
+        │   │   ├── PVAnlageDashboard.tsx  # PV-Anlagen Dashboard
+        │   │   ├── SpeicherDashboard.tsx  # Speicher Dashboard
+        │   │   ├── WaermepumpeDashboard.tsx
+        │   │   ├── WallboxDashboard.tsx
+        │   │   ├── EAutoDashboard.tsx
+        │   │   ├── BalkonkraftwerkDashboard.tsx
+        │   │   ├── SonstigesDashboard.tsx
+        │   │   ├── Strompreise.tsx         # Strompreis-Verwaltung
+        │   │   ├── Community.tsx + CommunityShare.tsx + CommunityVergleich.tsx
+        │   │   ├── Import.tsx + DataImportWizard.tsx + CloudImportWizard.tsx + CustomImportWizard.tsx
+        │   │   ├── Einrichtung.tsx         # Datenquellen-Hub
+        │   │   ├── SensorMappingWizard.tsx + MqttInboundSetup.tsx + ConnectorSetupWizard.tsx
+        │   │   ├── HAStatistikImport.tsx + HAExportSettings.tsx + PVGISSettings.tsx
+        │   │   ├── DatenChecker.tsx + DatenerfassungGuide.tsx
+        │   │   ├── Anlagen.tsx + Settings.tsx + Backup.tsx + Protokolle.tsx
+        │   │   └── AktuellerMonat.tsx     # deprecated (v3.12.0, redirect)
         │   │
         │   ├── hooks/           # Custom React Hooks
         │   ├── utils/           # Hilfsfunktionen
@@ -583,17 +653,21 @@ Sonstiges [Eigenständig]
 | `/api/ha` | ha_integration.py | HA Discovery, String-Import |
 | `/api/sensor-mapping` | sensor_mapping.py | **Sensor-Mapping CRUD** |
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** |
-| `/api/scheduler` | scheduler.py | **Scheduler Status/Trigger** |
+| `/api/scheduler` | main.py (inline) | **Scheduler Status/Trigger** |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** |
 | `/api/live` | live_dashboard.py, live_mqtt_inbound.py, live_wetter.py | **Live Dashboard + MQTT + Wetter** (v3.0.0, refactored v3.9.0) |
 | `/api/aktueller-monat` | aktueller_monat.py | **Monatsdaten-API** (genutzt von Monatsberichte-View für alle Monate inkl. laufender) |
 | `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** |
 | `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** |
-| `/api/portal-import` | portal_import.py | Portal-CSV Import (SMA, Fronius, EVCC) |
-| `/api/cloud-import` | cloud_import.py | Cloud-API Import (SolarEdge, Fronius, Huawei, Growatt, Deye, EcoFlow) |
+| `/api/data-import` | data_import.py | Universeller Daten-Import (ersetzt Portal-Import, v3.10.x) |
+| `/api/cloud-import` | cloud_import.py | Cloud-API Import (12 Provider) |
 | `/api/custom-import` | custom_import.py | Custom CSV/JSON Import mit Feld-Mapping |
-| `/api/infothek` | infothek.py | Infothek CRUD + Datei-Upload (NEU v3.5.0) |
-| `/api/mqtt-gateway` | mqtt_gateway.py | MQTT-Gateway Topic-Mapping (NEU v3.4.5) |
+| `/api/infothek` | infothek.py | Infothek CRUD + Datei-Upload + N:M (v3.5.0, N:M v3.15.2) |
+| `/api/mqtt-gateway` | mqtt_gateway.py | MQTT-Gateway Topic-Mapping (v3.4.5) |
+| `/api/mqtt-presets` | mqtt_presets.py | MQTT-Geräte-Presets |
+| `/api/energie-profil` | energie_profil.py | Energieprofil-Auswertung (v3.13.0) |
+| `/api/dokumentation` | dokumentation.py | PDF-Dokumente: Anlagendokumentation, Finanzbericht (v3.15.0) |
+| `/api/solar-prognose` | solar_prognose.py | Solar-Prognose API |
 
 ### Wichtige Endpoints
 
@@ -814,7 +888,7 @@ URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
     ├── /einrichtung       → Einrichtung.tsx (Datenquellen-Hub)
     ├── /cloud-import      → CloudImportWizard.tsx
     ├── /custom-import     → CustomImportWizard.tsx
-    ├── /portal-import     → PortalImportWizard.tsx
+    ├── /data-import       → DataImportWizard.tsx
     ├── /daten-checker    → DatenChecker.tsx
     └── /protokolle       → Protokolle.tsx
 ```
@@ -1433,4 +1507,4 @@ Vollständige API-Dokumentation unter:
 
 ---
 
-*Letzte Aktualisierung: März 2026*
+*Letzte Aktualisierung: April 2026*

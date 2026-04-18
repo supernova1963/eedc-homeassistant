@@ -5,7 +5,7 @@ description: "Alle Berechnungsketten: Energiebilanz, Finanzen, ROI, Prognosen, S
 
 # EEDC Berechnungsreferenz
 
-**Version 3.6** | Stand: März 2026
+**Version 3.16.1** | Stand: April 2026
 
 Dieses Dokument beschreibt alle Berechnungsketten im EEDC-System: von den Eingabefeldern
 über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche

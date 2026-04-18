@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 3.6</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Version 3.16.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
