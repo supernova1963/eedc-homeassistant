@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.1] - 2026-04-18
+
+### Bugfix
+
+- **Wetter-Widget**: Strompreis-Sensor (EPEX Börsenpreis, kat=preis) wurde fälschlich als „Sonstige"-Verbrauch interpretiert — ct/kWh-Werte erschienen als ~11 kW graue Fläche ab 02:00 Uhr im Tagesverlauf-Chart
+
+---
+
 ## [3.16.0] - 2026-04-18
 
 ### Feature — Dynamischer Strompreis: Sensor-Mapping + EPEX-Börsenpreis (Joachim-xo)
