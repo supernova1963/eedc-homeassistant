@@ -186,6 +186,15 @@ async def run_migrations(conn):
             # v3.4.1: SFML-Tagesprognose für Prognose-Vergleich
             if 'sfml_prognose_kwh' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_kwh FLOAT'))
+            # v3.16.0: Börsenpreis-Tagesaggregation
+            if 'boersenpreis_avg_cent' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN boersenpreis_avg_cent FLOAT'))
+            if 'boersenpreis_min_cent' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN boersenpreis_min_cent FLOAT'))
+            if 'negative_preis_stunden' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN negative_preis_stunden INTEGER'))
+            if 'einspeisung_neg_preis_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN einspeisung_neg_preis_kwh FLOAT'))
 
         # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
         # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),
@@ -201,6 +210,11 @@ async def run_migrations(conn):
             # v3.12.3: Per-Komponenten-Aufschlüsselung für Vollbackfill
             if 'komponenten' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN komponenten JSON'))
+            # v3.16.0: Stündlicher Strompreis (Sensor + Börsenpreis getrennt)
+            if 'strompreis_cent' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN strompreis_cent FLOAT'))
+            if 'boersenpreis_cent' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN boersenpreis_cent FLOAT'))
 
         # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
         if 'infothek_eintraege' in inspector.get_table_names():
