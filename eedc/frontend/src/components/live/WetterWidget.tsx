@@ -138,7 +138,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
         } else if (kat === 'waermepumpe') {
           waermepumpe += Math.abs(val)
           if (val !== 0) kategorienGesehen.add('waermepumpe')
-        } else if (kat && kat !== 'pv') {
+        } else if (kat && kat !== 'pv' && kat !== 'preis') {
           sonstige += Math.abs(val)
           if (val !== 0) kategorienGesehen.add('sonstige')
         }
