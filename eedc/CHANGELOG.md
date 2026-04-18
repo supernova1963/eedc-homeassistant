@@ -7,6 +7,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.0] - 2026-04-18
+
+### Feature — Dynamischer Strompreis: Sensor-Mapping + EPEX-Börsenpreis (Joachim-xo)
+
+- **Sensor-Mapping Wizard**: Neues optionales Feld „Strompreis (dynamischer Tarif)" unter Basis-Sensoren — Tibber, aWATTar, EPEX oder eigener Template-Sensor zuordnen
+- **Börsenpreis für alle**: EPEX Day-Ahead Preise (DE/AT) werden automatisch via aWATTar API geholt — als Overlay im Tagesverlauf, auch ohne eigenen Sensor
+- **Tagesverlauf-Overlay**: Eigener Sensor → „Strompreis", kein Sensor → „Börsenpreis (EPEX)" — pinke Linie auf sekundärer Y-Achse
+- **MQTT-Support**: Topic `eedc/{id}/live/strompreis_ct` für Standalone-Docker-Nutzer
+
+### Feature — Stündliche Strompreis-Mitschrift im Energieprofil (Vorbereitung)
+
+- **Zwei getrennte Preisfelder** im TagesEnergieProfil: `strompreis_cent` (Endpreis aus HA-Sensor) + `boersenpreis_cent` (EPEX, immer befüllt)
+- **Tagesaggregation**: Börsenpreis Ø/Min, Anzahl negativer Preis-Stunden, Einspeisung bei negativem Börsenpreis (§51 EEG Vorbereitung)
+- Datensammlung als Grundlage für mögliche spätere Features (Monatsvorschlag, Negativpreis-Analyse)
+
+### Fix — Strompreis-Overlay las falsches Feld
+
+- Tagesverlauf suchte `entity_id` statt `sensor_id` im Sensor-Mapping → Overlay konnte nicht funktionieren
+
+---
+
 ## [3.15.8] - 2026-04-17
 
 ### Feature — Tagesverlauf: Einspeisung + Strompreis-Overlay (Rainer-Feedback)
