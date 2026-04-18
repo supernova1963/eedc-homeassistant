@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.2] - 2026-04-18
+
+### Infothek — Investitionsformular verschlanken (Etappe 3.6)
+
+- **Stammdaten-Felder entfernt**: Gerätedaten (`stamm_*`), Ansprechpartner (`ansprechpartner_*`) und Wartungsvertrag (`wartung_*`) aus dem Investitionsformular entfernt — alle Daten werden jetzt über die Infothek verwaltet
+- **Infothek-Verknüpfungen im Formular**: Beim Bearbeiten einer Investition werden verknüpfte Infothek-Einträge als kompakte Liste mit Kategorie und Direktlink angezeigt
+- **PDF-Jahresbericht bereinigt**: Gerätedaten/Ansprechpartner/Wartung-Sektionen entfernt (Anlagendokumentation-PDF nutzt bereits ausschließlich Infothek-Daten)
+- **Migrations-Banner bleibt**: Nutzer mit Altdaten sehen weiterhin den Hinweis „Stammdaten in Infothek übernehmen?" in der Investitions-Übersicht
+- **Dokumentation aktualisiert**: ARCHITEKTUR.md (Infothek-Datenmodell im ER-Diagramm + Tabellen), HANDBUCH_INFOTHEK.md (Migrations-Hinweis + Formular-Verknüpfungen)
+
+---
+
 ## [3.16.1] - 2026-04-18
 
 ### Bugfix
