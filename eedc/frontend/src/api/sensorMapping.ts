@@ -28,6 +28,7 @@ export interface BasisMapping {
   einspeisung?: FeldMapping | null
   netzbezug?: FeldMapping | null
   pv_gesamt?: FeldMapping | null
+  strompreis?: FeldMapping | null  // Ø Strompreis bei dyn. Tarif (ct/kWh)
   live?: Record<string, string | null> | null  // Live-Sensoren: {einspeisung_w: entity_id, netzbezug_w: entity_id}
   live_invert?: Record<string, boolean> | null  // Vorzeichen invertieren: {einspeisung_w: true}
 }

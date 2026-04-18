@@ -210,8 +210,8 @@ async def get_tagesverlauf(
     strompreis_eid = None
     basis_mapping = (anlage.sensor_mapping or {}).get("basis", {})
     sp = basis_mapping.get("strompreis")
-    if isinstance(sp, dict) and sp.get("entity_id"):
-        strompreis_eid = sp["entity_id"]
+    if isinstance(sp, dict) and sp.get("sensor_id"):
+        strompreis_eid = sp["sensor_id"]
 
     # Alle Entity-IDs für History-Abfrage sammeln
     all_ids = list(set(
@@ -593,6 +593,11 @@ async def _get_tagesverlauf_mqtt(
         if quellen_sum > 0 and haushalt > 0:
             werte["haushalt"] = round(-haushalt, 2)
 
+        # Strompreis (optional, MQTT-Key: strompreis_ct)
+        sp_pts = [v for ts, v in history.get("basis:strompreis_ct", []) if h_start <= ts < h_end]
+        if sp_pts:
+            werte["strompreis"] = round(sum(sp_pts) / len(sp_pts), 2)
+
         punkte.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
 
     # Haushalt-Serie ergänzen wenn Daten vorhanden
@@ -604,6 +609,18 @@ async def _get_tagesverlauf_mqtt(
             "farbe": "#10b981",
             "seite": "senke",
             "bidirektional": False,
+        })
+
+    # Strompreis-Serie ergänzen wenn Daten vorhanden
+    if any("strompreis" in p["werte"] for p in punkte):
+        serien.append({
+            "key": "strompreis",
+            "label": "Strompreis",
+            "kategorie": "preis",
+            "farbe": "#f472b6",
+            "seite": "overlay",
+            "bidirektional": False,
+            "einheit": "ct/kWh",
         })
 
     return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}

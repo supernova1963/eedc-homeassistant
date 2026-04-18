@@ -7,6 +7,7 @@ Node-RED) kann Live-Werte auf EEDC-Topics publishen.
 Topic-Struktur (mit sprechenden Namen):
   eedc/{id}_{anlagename}/live/einspeisung_w
   eedc/{id}_{anlagename}/live/netzbezug_w
+  eedc/{id}_{anlagename}/live/strompreis_ct          (dynamischer Strompreis, ct/kWh)
   eedc/{id}_{anlagename}/live/inv/{id}_{name}/leistung_w
   eedc/{id}_{anlagename}/live/inv/{id}_{name}/soc
 
