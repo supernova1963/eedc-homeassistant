@@ -129,11 +129,12 @@ function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
   return getColor(komp.key)
 }
 
-/** Leistung formatieren: < 1 kW → Watt, ≥ 1 kW → kW */
+/** Leistung formatieren: < 10 kW → Watt, ≥ 10 kW → kW */
 function formatPower(kw: number): string {
   if (kw <= 0) return '0 W'
-  if (kw < 1) return `${Math.round(kw * 1000)} W`
-  return `${kw.toFixed(2)} kW`
+  const w = Math.round(kw * 1000)
+  if (w < 10000) return `${w} W`
+  return `${kw.toFixed(1)} kW`
 }
 
 /** log(1 + kW) für Liniendicke, normiert auf min..max px */

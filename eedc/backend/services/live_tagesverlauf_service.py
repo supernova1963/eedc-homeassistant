@@ -236,12 +236,15 @@ async def get_tagesverlauf(
 
     history, units = await get_history_normalized(all_ids, start, end)
 
-    # Strompreis-Einheit normalisieren: EUR/kWh → ct/kWh (×100)
+    # Strompreis-Einheit normalisieren → ct/kWh
     if strompreis_eid:
         sp_unit = units.get(strompreis_eid, "")
         if sp_unit in ("EUR/kWh", "€/kWh"):
             pts = history.get(strompreis_eid, [])
             history[strompreis_eid] = [(ts, val * 100) for ts, val in pts]
+        elif sp_unit in ("EUR/MWh", "€/MWh"):
+            pts = history.get(strompreis_eid, [])
+            history[strompreis_eid] = [(ts, val * 0.1) for ts, val in pts]
 
     # Börsenpreis-Fallback: aWATTar API wenn kein Sensor konfiguriert
     _boersenpreis_stunden: dict[int, float] = {}

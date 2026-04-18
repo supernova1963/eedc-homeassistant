@@ -110,7 +110,7 @@
 
   .adresse {
     text-align: center;
-    font-size: 11pt;
+    font-size: 13pt;
     line-height: 1.6;
     color: var(--txt);
     margin: 0 0 6mm 0;
@@ -159,7 +159,7 @@
     text-align: center;
   }
   .komponenten-list li {
-    font-size: 10pt;
+    font-size: 11pt;
     padding: 1mm 0;
     color: var(--txt);
   }
@@ -429,8 +429,8 @@
       <div class="value">{% if anlage.installationsdatum %}{{ anlage.installationsdatum.strftime("%m / %Y") }}{% else %}—{% endif %}</div>
     </div>
     <div>
-      <div class="label">MaStR</div>
-      <div class="value">{{ anlage.mastr_id or "—" }}</div>
+      <div class="label">Koordinaten</div>
+      <div class="value">{% if anlage.latitude and anlage.longitude %}{{ "%.4f"|format(anlage.latitude) }}°, {{ "%.4f"|format(anlage.longitude) }}°{% else %}—{% endif %}</div>
     </div>
   </div>
 
