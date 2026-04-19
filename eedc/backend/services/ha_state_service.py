@@ -182,57 +182,6 @@ class HAStateService:
 
         return {eid: self._unit_cache[eid] for eid in entity_ids if eid in self._unit_cache}
 
-    async def resolve_entity_ids_by_unique_id(
-        self, platform: str, unique_id_map: dict[str, str]
-    ) -> dict[str, str]:
-        """
-        Löst sprachunabhängige unique_ids zu tatsächlichen entity_ids auf.
-
-        Nutzt die HA Entity Registry API. Die unique_id ist stabil über
-        Spracheinstellungen hinweg, die entity_id wird je nach HA-Sprache
-        unterschiedlich generiert (z.B. prognose_heute vs. vorhersage_heute).
-
-        Args:
-            platform: Integration-Platform (z.B. "solcast_solar")
-            unique_id_map: Dict logischer_name → unique_id
-                z.B. {"heute": "total_kwh_forecast_today", ...}
-
-        Returns:
-            Dict logischer_name → entity_id
-                z.B. {"heute": "sensor.solcast_pv_forecast_prognose_heute", ...}
-        """
-        if not self.is_available:
-            return {}
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.api_url}/config/entity_registry/list",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    timeout=10.0,
-                )
-
-                if response.status_code != 200:
-                    logger.warning(f"HA Entity Registry: Status {response.status_code}")
-                    return {}
-
-                # Reverse-Map: unique_id → logischer_name
-                uid_to_key = {uid: key for key, uid in unique_id_map.items()}
-                result: dict[str, str] = {}
-
-                for entry in response.json():
-                    if entry.get("platform") != platform:
-                        continue
-                    uid = entry.get("unique_id", "")
-                    if uid in uid_to_key:
-                        result[uid_to_key[uid]] = entry["entity_id"]
-
-                return result
-
-        except Exception as e:
-            logger.warning(f"HA Entity Registry Fehler: {type(e).__name__}: {e}")
-            return {}
-
     async def get_sensor_history(
         self,
         entity_ids: list[str],

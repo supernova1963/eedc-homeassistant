@@ -289,19 +289,29 @@ async def _fetch_solcast_api(
 
 # ── HA-Sensor-Pfad (Auto-Discovery) ────────────────────────────────────────────
 
-# BJReplay Solcast HA-Integration: Sprachunabhängige unique_ids.
+# BJReplay Solcast HA-Integration: Auto-Discovery per Suffix-Pattern.
 # Die Entity-IDs werden je nach HA-Sprache anders generiert
 # (z.B. "prognose_heute" vs. "vorhersage_heute" vs. "forecast_today").
-# Über die Entity Registry → unique_id finden wir die richtigen IDs.
-_SOLCAST_UNIQUE_IDS = {
-    "heute": "total_kwh_forecast_today",
-    "morgen": "total_kwh_forecast_tomorrow",
-    "tag_3": "total_kwh_forecast_d3",
-    "tag_4": "total_kwh_forecast_d4",
-    "tag_5": "total_kwh_forecast_d5",
-    "tag_6": "total_kwh_forecast_d6",
-    "tag_7": "total_kwh_forecast_d7",
+# Die Suffixe (_heute/_today, _morgen/_tomorrow, _tag_N/_day_N) sind
+# über alle Sprachen stabil — darüber matchen wir.
+_SOLCAST_SUFFIX_MAP = {
+    "_heute": "heute",
+    "_today": "heute",
+    "_morgen": "morgen",
+    "_tomorrow": "morgen",
+    "_tag_3": "tag_3",
+    "_day_3": "tag_3",
+    "_tag_4": "tag_4",
+    "_day_4": "tag_4",
+    "_tag_5": "tag_5",
+    "_day_5": "tag_5",
+    "_tag_6": "tag_6",
+    "_day_6": "tag_6",
+    "_tag_7": "tag_7",
+    "_day_7": "tag_7",
 }
+
+_SOLCAST_PREFIX = "sensor.solcast_pv_forecast_"
 
 # Cache für aufgelöste Entity-IDs (überlebt Server-Neustart nicht, aber das ist ok)
 _resolved_entities: dict[str, str] = {}
@@ -311,7 +321,16 @@ _RESOLVE_TTL = 3600  # 1 Stunde — Entity-IDs ändern sich quasi nie
 
 async def _resolve_solcast_entities() -> dict[str, str]:
     """
-    Löst Solcast unique_ids zu tatsächlichen entity_ids auf.
+    Findet Solcast-Entities über /api/states + Suffix-Pattern.
+
+    Sucht alle Entities mit Prefix 'sensor.solcast_pv_forecast_' und
+    matcht deren Suffix gegen bekannte Tages-Patterns (_heute/_today,
+    _morgen/_tomorrow, _tag_N/_day_N).
+
+    Robust gegenüber:
+    - HA-Spracheinstellungen (deutsch/englisch/etc.)
+    - Umbenennungen durch BJReplay-Updates
+    - unique_id-Änderungen in HA
 
     Returns:
         Dict logischer_name → entity_id, z.B. {"heute": "sensor.solcast_pv_forecast_prognose_heute"}
@@ -325,19 +344,46 @@ async def _resolve_solcast_entities() -> dict[str, str]:
 
     from backend.services.ha_state_service import get_ha_state_service
     ha_svc = get_ha_state_service()
-    resolved = await ha_svc.resolve_entity_ids_by_unique_id(
-        "solcast_solar", _SOLCAST_UNIQUE_IDS
-    )
+    if not ha_svc.is_available:
+        return {}
 
-    if resolved:
-        _resolved_entities = resolved
-        _resolved_ts = now
-        logger.info(
-            f"Solcast Entity-IDs aufgelöst: {len(resolved)}/7 "
-            f"(z.B. heute={resolved.get('heute', '?')})"
-        )
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{ha_svc.api_url}/states",
+                headers={"Authorization": f"Bearer {ha_svc.token}"},
+                timeout=10.0,
+            )
+            if response.status_code != 200:
+                return {}
 
-    return resolved
+            resolved: dict[str, str] = {}
+            for item in response.json():
+                eid = item.get("entity_id", "")
+                if not eid.startswith(_SOLCAST_PREFIX):
+                    continue
+                # Suffix matchen (längste zuerst um _tag_3 vor _3 zu priorisieren)
+                for suffix, key in sorted(
+                    _SOLCAST_SUFFIX_MAP.items(), key=lambda x: -len(x[0])
+                ):
+                    if eid.endswith(suffix) and key not in resolved:
+                        resolved[key] = eid
+                        break
+
+            if resolved:
+                _resolved_entities = resolved
+                _resolved_ts = now
+                logger.info(
+                    f"Solcast Entity-IDs aufgelöst: {len(resolved)}/7 "
+                    f"(z.B. heute={resolved.get('heute', '?')})"
+                )
+
+            return resolved
+
+    except Exception as e:
+        logger.warning(f"Solcast Discovery Fehler: {type(e).__name__}: {e}")
+        return {}
 
 
 async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
