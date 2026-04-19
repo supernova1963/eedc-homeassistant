@@ -35,6 +35,7 @@ interface MappingSummaryStepProps {
     investitionenLive: Record<string, Record<string, string | null>>
     basisLiveInvert: Record<string, boolean>
     investitionenLiveInvert: Record<string, Record<string, boolean>>
+    solcastHaAktiv: boolean
   }
   investitionen: InvestitionInfo[]
   anlageId?: number | null
@@ -283,6 +284,21 @@ export default function MappingSummaryStep({
                 inverted={state.basisLiveInvert?.[key]}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Solcast PV Forecast */}
+      {state.solcastHaAktiv && (
+        <div className="border border-blue-200 dark:border-blue-700/50 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 flex items-center gap-2">
+            <Sun className="w-5 h-5 text-blue-500" />
+            <h3 className="font-medium text-gray-900 dark:text-white">Solcast PV Forecast</h3>
+            <span className="text-xs text-blue-500 ml-auto">HA-Integration</span>
+          </div>
+          <div className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+            Automatische Erkennung der Solcast-Sensoren (sensor.solcast_pv_forecast_prognose_*).
+            Prognosen für 7 Tage mit Konfidenzband (p10/p90), sichtbar unter Aussichten → Prognosen.
           </div>
         </div>
       )}

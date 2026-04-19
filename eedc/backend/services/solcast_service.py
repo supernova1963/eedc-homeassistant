@@ -75,8 +75,8 @@ async def get_solcast_forecast(anlage) -> Optional[SolcastForecast]:
             cfg.get("resource_ids", []),
             cfg.get("tier", "free"),
         )
-    elif modus == "ha_sensor":
-        return await _fetch_solcast_ha_sensor(cfg.get("ha_sensor", {}))
+    elif modus in ("ha_sensor", "ha_auto"):
+        return await _fetch_solcast_ha_auto()
     else:
         logger.warning(f"Unbekannter Solcast-Modus: {modus}")
         return None
@@ -125,19 +125,20 @@ def get_solcast_status(anlage) -> tuple[str, str]:
             return ("ok", "")
         return ("ok", "")  # Kein Fehler bekannt, wird beim nächsten Abruf geladen
 
-    elif modus == "ha_sensor":
-        ha_cfg = cfg.get("ha_sensor", {})
-        if not ha_cfg.get("today_kwh"):
-            return ("ha_nicht_erreichbar",
-                    "Solcast HA-Sensor nicht konfiguriert. "
-                    "Trage den Entity-Name des Solcast-Prognose-Sensors ein "
-                    "(z.B. sensor.solcast_pv_forecast_prognose_heute).")
+    elif modus in ("ha_sensor", "ha_auto"):
         from backend.core.config import settings as app_settings
         if not app_settings.supervisor_token:
             return ("ha_nicht_erreichbar",
                     "HA-Supervisor nicht erreichbar (Standalone-Modus). "
-                    "Die HA-Sensor-Variante funktioniert nur im HA-Add-on. "
+                    "Die HA-Integration funktioniert nur im HA-Add-on. "
                     "Für Standalone nutze den API-Modus mit einem eigenen Solcast-Key.")
+        # Prüfe ob der Cache Daten hat (= letzter Abruf erfolgreich)
+        cached = _cache_get("solcast_ha:auto")
+        if cached is None:
+            # Kein Cache → entweder erster Abruf oder Sensor nicht vorhanden
+            return ("ok", "Solcast HA-Integration aktiviert. Daten werden beim nächsten Seitenaufruf geladen. "
+                    "Falls nach dem Laden keine Solcast-Daten erscheinen: "
+                    "Prüfe ob die Solcast HA-Integration (BJReplay) installiert und konfiguriert ist.")
         return ("ok", "")
 
     return ("fehler", f"Unbekannter Solcast-Modus: '{modus}'. Erlaubt: 'api' oder 'ha_sensor'.")
@@ -286,25 +287,29 @@ async def _fetch_solcast_api(
     return result
 
 
-# ── HA-Sensor-Pfad ─────────────────────────────────────────────────────────────
+# ── HA-Sensor-Pfad (Auto-Discovery) ────────────────────────────────────────────
 
-async def _fetch_solcast_ha_sensor(
-    ha_sensor_cfg: dict,
-) -> Optional[SolcastForecast]:
+# BJReplay Solcast HA-Integration: Standardisierte Entity-IDs
+_HA_SOLCAST_ENTITIES = {
+    "heute": "sensor.solcast_pv_forecast_prognose_heute",
+    "morgen": "sensor.solcast_pv_forecast_prognose_morgen",
+    "tag_3": "sensor.solcast_pv_forecast_prognose_tag_3",
+    "tag_4": "sensor.solcast_pv_forecast_prognose_tag_4",
+    "tag_5": "sensor.solcast_pv_forecast_prognose_tag_5",
+    "tag_6": "sensor.solcast_pv_forecast_prognose_tag_6",
+    "tag_7": "sensor.solcast_pv_forecast_prognose_tag_7",
+}
+
+
+async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
     """
-    Liest Solcast-Daten aus HA-Sensor-Attributen.
+    Liest Solcast-Daten aus der HA Solcast-Integration (BJReplay).
 
-    Die HA Solcast-Integration (BJReplay) speichert detaillierte Stundenwerte
-    als Attribut 'detailedHourly' am Hauptsensor.
-    Einheit beachten: prognose_aktuelle_stunde in Wh (nicht kWh)!
+    Nutzt standardisierte Entity-IDs — kein manuelles Mapping nötig.
+    Tageswerte (Heute bis Tag 7) direkt aus Sensor-States.
+    Stundenprofil + p10/p90 aus dem detailedHourly-Attribut des Heute-Sensors.
     """
-    today_entity = ha_sensor_cfg.get("today_kwh")
-    tomorrow_entity = ha_sensor_cfg.get("tomorrow_kwh")
-
-    if not today_entity:
-        return None
-
-    cache_key = f"solcast_ha:{today_entity}"
+    cache_key = "solcast_ha:auto"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -315,29 +320,44 @@ async def _fetch_solcast_ha_sensor(
         if not ha_svc.is_available:
             return None
 
-        # State-Werte lesen (Tages-kWh)
-        today_kwh = await ha_svc.get_sensor_state(today_entity)
-        tomorrow_kwh = None
-        if tomorrow_entity:
-            tomorrow_kwh = await ha_svc.get_sensor_state(tomorrow_entity)
+        # Alle 7 Tages-Sensoren in einem Batch-Call lesen
+        entity_ids = list(_HA_SOLCAST_ENTITIES.values())
+        ha_batch = await ha_svc.get_sensor_states_batch(entity_ids)
 
-        if today_kwh is None:
+        # Heute prüfen
+        heute_entity = _HA_SOLCAST_ENTITIES["heute"]
+        if not ha_batch.get(heute_entity):
+            logger.debug("Solcast HA: Heute-Sensor nicht verfügbar")
             return None
 
-        # Attribute lesen für Stundenprofil + p10/p90
-        today_attrs = await _get_ha_sensor_attributes(today_entity)
+        today_kwh = ha_batch[heute_entity][0]
+        heute = date.today()
 
+        # 7-Tage-Werte aus Sensor-States
+        tage_voraus = []
+        for day_offset, key in enumerate(["heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7"]):
+            entity = _HA_SOLCAST_ENTITIES[key]
+            state = ha_batch.get(entity)
+            if state:
+                datum = heute + timedelta(days=day_offset)
+                tage_voraus.append({
+                    "datum": datum.isoformat(),
+                    "kwh": round(state[0], 1),
+                    "p10": 0,  # Wird aus detailedHourly nachgezogen
+                    "p90": 0,
+                })
+
+        # detailedHourly-Attribut für Stundenprofil + p10/p90
         hourly_p50 = [0.0] * 24
         hourly_p10 = [0.0] * 24
         hourly_p90 = [0.0] * 24
-        tage_voraus = []
+        today_attrs = await _get_ha_sensor_attributes(heute_entity)
 
         if today_attrs:
-            # detailedHourly: Liste von {period_start, pv_estimate, pv_estimate10, pv_estimate90}
             detailed = today_attrs.get("detailedHourly") or today_attrs.get("detailed_hourly") or []
             tz = ZoneInfo("Europe/Berlin")
-            heute = date.today()
-            tage_dict: dict[str, dict[str, float]] = {}
+            # p10/p90 pro Tag aggregieren
+            tage_p_dict: dict[str, dict[str, float]] = {}
 
             for entry in detailed:
                 period_start = entry.get("period_start", "")
@@ -357,39 +377,39 @@ async def _fetch_solcast_ha_sensor(
                 datum_str = dt.strftime("%Y-%m-%d")
                 stunde = dt.hour
 
-                # Stundenwerte für heute (kW-Werte, 30-Min-Perioden → addieren)
+                # Stundenwerte für heute
                 if dt.date() == heute:
-                    hourly_p50[stunde] += pv_p50 * 0.5  # kW × 0.5h
+                    hourly_p50[stunde] += pv_p50 * 0.5
                     hourly_p10[stunde] += pv_p10 * 0.5
                     hourly_p90[stunde] += pv_p90 * 0.5
 
-                # Tageswerte
-                if datum_str not in tage_dict:
-                    tage_dict[datum_str] = {"kwh": 0, "p10": 0, "p90": 0}
-                tage_dict[datum_str]["kwh"] += pv_p50 * 0.5
-                tage_dict[datum_str]["p10"] += pv_p10 * 0.5
-                tage_dict[datum_str]["p90"] += pv_p90 * 0.5
+                # p10/p90 pro Tag
+                if datum_str not in tage_p_dict:
+                    tage_p_dict[datum_str] = {"p10": 0, "p90": 0}
+                tage_p_dict[datum_str]["p10"] += pv_p10 * 0.5
+                tage_p_dict[datum_str]["p90"] += pv_p90 * 0.5
 
-            for datum_str in sorted(tage_dict.keys()):
-                d = tage_dict[datum_str]
-                tage_voraus.append({
-                    "datum": datum_str,
-                    "kwh": round(d["kwh"], 1),
-                    "p10": round(d["p10"], 1),
-                    "p90": round(d["p90"], 1),
-                })
+            # p10/p90 in tage_voraus nachziehen
+            for tag in tage_voraus:
+                p_data = tage_p_dict.get(tag["datum"])
+                if p_data:
+                    tag["p10"] = round(p_data["p10"], 1)
+                    tag["p90"] = round(p_data["p90"], 1)
 
-        # p10/p90 aus Tage-Attributen (Fallback wenn kein detailedHourly)
-        heute_str = date.today().isoformat()
-        heute_tage = next((t for t in tage_voraus if t["datum"] == heute_str), None)
+        # Morgen/Heute aus tage_voraus
+        morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0
+        morgen_p10 = tage_voraus[1]["p10"] if len(tage_voraus) > 1 else 0
+        morgen_p90 = tage_voraus[1]["p90"] if len(tage_voraus) > 1 else 0
+        heute_p10 = tage_voraus[0]["p10"] if tage_voraus else 0
+        heute_p90 = tage_voraus[0]["p90"] if tage_voraus else 0
 
         result = SolcastForecast(
             daily_kwh=round(today_kwh, 1),
-            daily_p10_kwh=round(heute_tage["p10"], 1) if heute_tage else 0,
-            daily_p90_kwh=round(heute_tage["p90"], 1) if heute_tage else 0,
-            tomorrow_kwh=round(tomorrow_kwh, 1) if tomorrow_kwh is not None else 0,
-            tomorrow_p10_kwh=0,  # Nicht einzeln verfügbar über State
-            tomorrow_p90_kwh=0,
+            daily_p10_kwh=heute_p10,
+            daily_p90_kwh=heute_p90,
+            tomorrow_kwh=morgen_kwh,
+            tomorrow_p10_kwh=morgen_p10,
+            tomorrow_p90_kwh=morgen_p90,
             hourly_kw=[round(v, 2) for v in hourly_p50],
             hourly_p10_kw=[round(v, 2) for v in hourly_p10],
             hourly_p90_kw=[round(v, 2) for v in hourly_p90],
@@ -397,19 +417,16 @@ async def _fetch_solcast_ha_sensor(
             quelle="solcast_ha",
         )
 
-        # Morgen p10/p90 aus Tage-Dict nachziehen
-        morgen_str = (date.today() + timedelta(days=1)).isoformat()
-        morgen_tage = next((t for t in tage_voraus if t["datum"] == morgen_str), None)
-        if morgen_tage:
-            result.tomorrow_p10_kwh = morgen_tage["p10"]
-            result.tomorrow_p90_kwh = morgen_tage["p90"]
-
         _cache_set(cache_key, result, CACHE_TTL_HA_SENSOR)
-        logger.info(f"Solcast HA: Heute={result.daily_kwh} kWh, Morgen={result.tomorrow_kwh} kWh")
+        logger.info(
+            f"Solcast HA: Heute={result.daily_kwh} kWh, "
+            f"Morgen={result.tomorrow_kwh} kWh, "
+            f"{len(tage_voraus)} Tage"
+        )
         return result
 
     except Exception as e:
-        logger.warning(f"Solcast HA-Sensor Fehler: {type(e).__name__}: {e}")
+        logger.warning(f"Solcast HA Fehler: {type(e).__name__}: {e}")
         return None
 
 

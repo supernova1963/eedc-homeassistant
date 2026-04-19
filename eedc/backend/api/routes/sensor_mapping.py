@@ -65,6 +65,14 @@ class InvestitionFelder(BaseModel):
     live_invert: Optional[dict[str, bool]] = None  # Vorzeichen invertieren: {leistung_w: true}
 
 
+class SolcastConfigRequest(BaseModel):
+    """Optionale Solcast-Konfiguration."""
+    modus: str  # "ha_auto" oder "api"
+    api_key: Optional[str] = None
+    resource_ids: Optional[list] = None
+    tier: Optional[str] = "free"
+
+
 class SensorMappingRequest(BaseModel):
     """Request zum Speichern des Sensor-Mappings."""
     basis: BasisMapping
@@ -72,6 +80,7 @@ class SensorMappingRequest(BaseModel):
         default_factory=dict,
         description="Key = Investition-ID als String"
     )
+    solcast_config: Optional[SolcastConfigRequest] = None
 
 
 class InvestitionInfo(BaseModel):
@@ -343,6 +352,24 @@ async def save_sensor_mapping(
                 if invert_clean:
                     inv_data["live_invert"] = invert_clean
             mapping_dict["investitionen"][inv_id] = inv_data
+
+        # Solcast-Config (optional)
+        if mapping.solcast_config:
+            sc = mapping.solcast_config
+            if sc.modus == "ha_auto":
+                mapping_dict["solcast_config"] = {"modus": "ha_auto"}
+            elif sc.modus == "api" and sc.api_key:
+                mapping_dict["solcast_config"] = {
+                    "modus": "api",
+                    "api_key": sc.api_key,
+                    "resource_ids": sc.resource_ids or [],
+                    "tier": sc.tier or "free",
+                }
+        else:
+            # Bestehende solcast_config beibehalten wenn nicht explizit gesendet
+            existing = anlage.sensor_mapping or {}
+            if "solcast_config" in existing:
+                mapping_dict["solcast_config"] = existing["solcast_config"]
 
         # Timestamp setzen
         mapping_dict["updated_at"] = datetime.now().isoformat()
