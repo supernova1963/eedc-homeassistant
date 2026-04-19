@@ -546,6 +546,9 @@ async def _speichere_prognose(
     datum: date,
     prognose_kwh: float,
     sfml_kwh: float | None = None,
+    solcast_kwh: float | None = None,
+    solcast_p10_kwh: float | None = None,
+    solcast_p90_kwh: float | None = None,
 ):
     """
     Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
@@ -570,12 +573,19 @@ async def _speichere_prognose(
                 tz.pv_prognose_kwh = prognose_kwh
                 if sfml_kwh is not None:
                     tz.sfml_prognose_kwh = sfml_kwh
+                if solcast_kwh is not None:
+                    tz.solcast_prognose_kwh = solcast_kwh
+                    tz.solcast_p10_kwh = solcast_p10_kwh
+                    tz.solcast_p90_kwh = solcast_p90_kwh
             else:
                 tz = TagesZusammenfassung(
                     anlage_id=anlage_id,
                     datum=datum,
                     pv_prognose_kwh=prognose_kwh,
                     sfml_prognose_kwh=sfml_kwh,
+                    solcast_prognose_kwh=solcast_kwh,
+                    solcast_p10_kwh=solcast_p10_kwh,
+                    solcast_p90_kwh=solcast_p90_kwh,
                     stunden_verfuegbar=0,
                     datenquelle="wetter_prognose",
                 )
@@ -855,10 +865,29 @@ async def get_live_wetter(
             except Exception:
                 pass
 
-        # Prognose für Lernfaktor-Berechnung + SFML speichern (fire-and-forget)
+        # Solcast-Prognose (fire-and-forget, parallel zum Response)
+        solcast_kwh = None
+        solcast_p10 = None
+        solcast_p90 = None
+        try:
+            from backend.services.solcast_service import get_solcast_forecast
+            solcast = await get_solcast_forecast(anlage)
+            if solcast:
+                solcast_kwh = solcast.daily_kwh
+                solcast_p10 = solcast.daily_p10_kwh
+                solcast_p90 = solcast.daily_p90_kwh
+        except Exception as e:
+            logger.debug(f"Solcast-Fetch für Persistenz fehlgeschlagen: {e}")
+
+        # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget)
         if pv_prognose is not None and pv_prognose > 0:
             asyncio.create_task(
-                _speichere_prognose(anlage.id, date.today(), pv_prognose, sfml_kwh)
+                _speichere_prognose(
+                    anlage.id, date.today(), pv_prognose, sfml_kwh,
+                    solcast_kwh=solcast_kwh,
+                    solcast_p10_kwh=solcast_p10,
+                    solcast_p90_kwh=solcast_p90,
+                )
             )
 
         return {

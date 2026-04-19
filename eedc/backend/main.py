@@ -47,7 +47,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME, HA_INTEGRATION_AVAILABLE
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, aktueller_monat, live_dashboard, live_mqtt_inbound, live_wetter, energie_profil, mqtt_gateway, mqtt_presets, infothek, dokumentation
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, prognosen, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, aktueller_monat, live_dashboard, live_mqtt_inbound, live_wetter, energie_profil, mqtt_gateway, mqtt_presets, infothek, dokumentation
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -318,6 +318,7 @@ app.include_router(pvgis.router, prefix="/api/pvgis", tags=["PVGIS"])
 app.include_router(cockpit.router, prefix="/api/cockpit", tags=["Cockpit"])
 app.include_router(wetter.router, prefix="/api/wetter", tags=["Wetter"])
 app.include_router(aussichten.router, prefix="/api/aussichten", tags=["Aussichten"])
+app.include_router(prognosen.router, prefix="/api/aussichten", tags=["Prognosen"])
 app.include_router(solar_prognose.router, prefix="/api/solar-prognose", tags=["Solar-Prognose"])
 app.include_router(monatsabschluss.router, prefix="/api", tags=["Monatsabschluss"])
 app.include_router(community.router, prefix="/api", tags=["Community"])

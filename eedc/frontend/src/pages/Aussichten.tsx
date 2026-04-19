@@ -3,14 +3,14 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, TrendingUp, Calendar, ArrowRight, Euro } from 'lucide-react'
+import { Sun, TrendingUp, Calendar, ArrowRight, Euro, BarChart3 } from 'lucide-react'
 import { Card, Button, Alert } from '../components/ui'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
-import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab } from './aussichten/index'
+import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab, PrognoseVergleichTab } from './aussichten/index'
 
-type TabType = 'kurzfristig' | 'langfristig' | 'trend' | 'finanzen'
+type TabType = 'kurzfristig' | 'prognosen' | 'langfristig' | 'trend' | 'finanzen'
 
 export default function Aussichten() {
   const navigate = useNavigate()
@@ -62,6 +62,7 @@ export default function Aussichten() {
 
   const tabs: { key: TabType; label: string; icon: typeof Sun; tooltip: string }[] = [
     { key: 'kurzfristig', label: 'Kurzfristig', icon: Sun, tooltip: '7-14 Tage Wetterprognose mit PV-Ertragsprognose' },
+    { key: 'prognosen', label: 'Prognosen', icon: BarChart3, tooltip: 'PV-Prognosen vergleichen (OpenMeteo, Solcast, SFML)' },
     { key: 'langfristig', label: 'Langfristig', icon: Calendar, tooltip: '12-Monats-Prognose basierend auf PVGIS-Daten' },
     { key: 'trend', label: 'Trend', icon: TrendingUp, tooltip: 'Historische Trends und Degradationsanalyse' },
     { key: 'finanzen', label: 'Finanzen', icon: Euro, tooltip: 'Finanzielle Prognosen und Amortisation' },
@@ -118,6 +119,7 @@ export default function Aussichten() {
       {selectedAnlageId && (
         <>
           {activeTab === 'kurzfristig' && <KurzfristTab anlageId={selectedAnlageId} />}
+          {activeTab === 'prognosen' && <PrognoseVergleichTab anlageId={selectedAnlageId} />}
           {activeTab === 'langfristig' && <LangfristTab anlageId={selectedAnlageId} />}
           {activeTab === 'trend' && <TrendTab anlageId={selectedAnlageId} />}
           {activeTab === 'finanzen' && <FinanzenTab anlageId={selectedAnlageId} />}
