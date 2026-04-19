@@ -593,7 +593,7 @@ async def _speichere_prognose(
 
             await db.commit()
     except Exception as e:
-        logger.debug(f"Prognose speichern fehlgeschlagen: {e}")
+        logger.warning(f"Prognose speichern fehlgeschlagen: {e}")
 
 
 # ── Wetter Endpoint ──────────────────────────────────────────────────────────
