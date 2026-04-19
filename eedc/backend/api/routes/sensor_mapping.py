@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Optional, Any
 from datetime import date, datetime
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -408,7 +408,10 @@ async def save_sensor_mapping(
 
 
 @router.delete("/{anlage_id}")
-async def delete_sensor_mapping(anlage_id: int):
+async def delete_sensor_mapping(
+    anlage_id: int,
+    force: bool = Query(default=False, description="Erzwingt Löschung trotz aktiver Live-Sensoren"),
+):
     """
     Löscht das Sensor-Mapping einer Anlage.
     """
@@ -419,21 +422,22 @@ async def delete_sensor_mapping(anlage_id: int):
             raise HTTPException(status_code=404, detail="Kein Sensor-Mapping vorhanden")
 
         # Sicherheitsprüfung: Nicht löschen wenn Live-Sensoren konfiguriert sind
-        mapping = anlage.sensor_mapping or {}
-        basis_live = mapping.get("basis", {}).get("live", {})
-        inv_mappings = mapping.get("investitionen", {})
-        live_count = sum(1 for v in basis_live.values() if v)
-        for inv_data in inv_mappings.values():
-            if isinstance(inv_data, dict):
-                for v in (inv_data.get("live") or {}).values():
-                    if v:
-                        live_count += 1
-        if live_count > 0:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Sensor-Mapping hat {live_count} aktive Live-Sensoren. "
-                       f"Lösche zuerst die Zuordnungen im Wizard oder nutze ?force=true."
-            )
+        if not force:
+            mapping = anlage.sensor_mapping or {}
+            basis_live = mapping.get("basis", {}).get("live", {})
+            inv_mappings = mapping.get("investitionen", {})
+            live_count = sum(1 for v in basis_live.values() if v)
+            for inv_data in inv_mappings.values():
+                if isinstance(inv_data, dict):
+                    for v in (inv_data.get("live") or {}).values():
+                        if v:
+                            live_count += 1
+            if live_count > 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Sensor-Mapping hat {live_count} aktive Live-Sensoren. "
+                           f"Lösche zuerst die Zuordnungen im Wizard oder nutze ?force=true."
+                )
 
         # Mapping löschen
         anlage.sensor_mapping = None
