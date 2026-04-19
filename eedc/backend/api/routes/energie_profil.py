@@ -875,6 +875,14 @@ async def delete_rohdaten(
     }
 
 
+@router.post("/reaggregate-heute")
+async def reaggregate_heute():
+    """Triggert sofortige Neu-Aggregation des heutigen Tages für alle Anlagen."""
+    from backend.services.energie_profil_service import aggregate_today_all
+    results = await aggregate_today_all()
+    return {"status": "ok", "anlagen": results}
+
+
 @router.post("/{anlage_id}/vollbackfill")
 async def vollbackfill(
     anlage_id: int,
