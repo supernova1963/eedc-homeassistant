@@ -129,6 +129,25 @@ async def aggregate_day(
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
 
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
+    # Prognose-Felder aus bestehender TagesZusammenfassung retten,
+    # da diese asynchron vom Wetter-Endpoint geschrieben werden.
+    existing_tz = await db.execute(
+        select(TagesZusammenfassung).where(
+            and_(
+                TagesZusammenfassung.anlage_id == anlage.id,
+                TagesZusammenfassung.datum == datum,
+            )
+        )
+    )
+    existing_tz_row = existing_tz.scalar_one_or_none()
+    preserved_prognose = {}
+    if existing_tz_row:
+        for field in ("pv_prognose_kwh", "sfml_prognose_kwh",
+                       "solcast_prognose_kwh", "solcast_p10_kwh", "solcast_p90_kwh"):
+            val = getattr(existing_tz_row, field, None)
+            if val is not None:
+                preserved_prognose[field] = val
+
     await db.execute(
         delete(TagesEnergieProfil).where(
             and_(
@@ -314,6 +333,10 @@ async def aggregate_day(
             if komponenten_summen else None
         ),
     )
+    # Gerettete Prognose-Felder wiederherstellen
+    for field, val in preserved_prognose.items():
+        setattr(zusammenfassung, field, val)
+
     db.add(zusammenfassung)
     await db.flush()
 
