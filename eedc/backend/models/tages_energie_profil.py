@@ -142,6 +142,12 @@ class TagesZusammenfassung(Base):
     # Für Phase 2: Cockpit-Vergleich EEDC vs. ML vs. IST.
     sfml_prognose_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Solcast PV-Prognose (kWh): Tages-Forecast von Solcast (API oder HA-Sensor).
+    # p50 = wahrscheinlichster Wert, p10/p90 = Konfidenzband.
+    solcast_prognose_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    solcast_p10_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    solcast_p90_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Anzahl verfügbarer Stundenwerte (Qualitätsindikator)
     stunden_verfuegbar: Mapped[int] = mapped_column(Integer, default=0)
 

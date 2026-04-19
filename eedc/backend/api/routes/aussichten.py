@@ -1490,3 +1490,4 @@ async def get_finanz_prognose(
         monatswerte=monatswerte,
         datenquellen=datenquellen,
     )
+

@@ -229,6 +229,92 @@ export interface FinanzPrognose {
 }
 
 // =============================================================================
+// Prognosen-Vergleich Types
+// =============================================================================
+
+export interface StundenProfilEintrag {
+  stunde: number
+  kw: number
+  p10_kw: number | null
+  p90_kw: number | null
+}
+
+export interface SolcastTag {
+  datum: string
+  kwh: number
+  p10: number
+  p90: number
+}
+
+export interface Tageshaelfte {
+  vormittag_kwh: number
+  nachmittag_kwh: number
+}
+
+export interface PrognosenVergleich {
+  // OpenMeteo (roh)
+  openmeteo_heute_kwh: number | null
+  openmeteo_morgen_kwh: number | null
+  openmeteo_uebermorgen_kwh: number | null
+  openmeteo_tage: TagesPrognose[]
+  openmeteo_tageshaelften: (Tageshaelfte | null)[]  // [heute, morgen, übermorgen]
+
+  // EEDC (OpenMeteo × Lernfaktor)
+  eedc_heute_kwh: number | null
+  eedc_morgen_kwh: number | null
+  eedc_uebermorgen_kwh: number | null
+  eedc_stundenprofil: StundenProfilEintrag[]
+  eedc_lernfaktor: number | null
+  eedc_tageshaelften: (Tageshaelfte | null)[]
+
+  // Solcast
+  solcast_verfuegbar: boolean
+  solcast_status: string | null  // "ok"|"nicht_konfiguriert"|"tageslimit"|"auth_fehler"|"ha_nicht_erreichbar"|"fehler"
+  solcast_hinweis: string | null
+  solcast_quelle: string | null
+  solcast_heute_kwh: number | null
+  solcast_p10_kwh: number | null
+  solcast_p90_kwh: number | null
+  solcast_morgen_kwh: number | null
+  solcast_morgen_p10_kwh: number | null
+  solcast_morgen_p90_kwh: number | null
+  solcast_uebermorgen_kwh: number | null
+  solcast_stundenprofil: StundenProfilEintrag[]
+  solcast_tage: SolcastTag[]
+  solcast_tageshaelften: (Tageshaelfte | null)[]
+
+  // IST-Ertrag heute
+  ist_heute_kwh: number | null
+  ist_stundenprofil: StundenProfilEintrag[]
+  ist_tageshaelfte: Tageshaelfte | null
+
+  // Verbleibend (IST + Prognose Rest)
+  verbleibend_kwh: number | null
+
+  // OpenMeteo Stundenprofil (GTI-basiert)
+  openmeteo_stundenprofil: StundenProfilEintrag[]
+
+  // Meta
+  solcast_letzter_abruf: string | null
+  openmeteo_modell: string | null
+  aktuelle_stunde: number | null
+}
+
+export interface GenauigkeitsEintrag {
+  datum: string
+  openmeteo_kwh: number | null
+  solcast_kwh: number | null
+  ist_kwh: number | null
+}
+
+export interface GenauigkeitsResponse {
+  tage: GenauigkeitsEintrag[]
+  openmeteo_mae_prozent: number | null
+  solcast_mae_prozent: number | null
+  anzahl_tage: number
+}
+
+// =============================================================================
 // API Functions
 // =============================================================================
 
@@ -266,5 +352,19 @@ export const aussichtenApi = {
    */
   async getFinanzPrognose(anlageId: number, monate: number = 12): Promise<FinanzPrognose> {
     return api.get<FinanzPrognose>(`/aussichten/finanzen/${anlageId}?monate=${monate}`)
+  },
+
+  /**
+   * Holt den Prognosen-Vergleich (OpenMeteo + Solcast + SFML).
+   */
+  async getPrognosenVergleich(anlageId: number): Promise<PrognosenVergleich> {
+    return api.get<PrognosenVergleich>(`/aussichten/prognosen/${anlageId}`)
+  },
+
+  /**
+   * Holt das Genauigkeits-Tracking (Prognose vs. IST).
+   */
+  async getPrognosenGenauigkeit(anlageId: number, tage: number = 30): Promise<GenauigkeitsResponse> {
+    return api.get<GenauigkeitsResponse>(`/aussichten/prognosen/${anlageId}/genauigkeit?tage=${tage}`)
   },
 }
