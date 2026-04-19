@@ -116,7 +116,8 @@ async def aggregate_day(
                     if s["kategorie"] in ("wallbox", "eauto")
                     and not s["key"].startswith("v2h_")}
     # Alle Schlüssel die separat behandelt werden (nicht in generischer Summe)
-    _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys
+    # "strompreis" und "haushalt" sind keine Energieflüsse und dürfen nicht in pv_kw/verbrauch_kw einfließen
+    _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys | {"strompreis", "haushalt"}
 
     # ── Wetter-IST-Daten holen ────────────────────────────────────────────
     wetter_stunden = await _get_wetter_ist(anlage, datum)
@@ -227,9 +228,10 @@ async def aggregate_day(
         boersenpreis = strompreis_stunden.boerse.get(h)
 
         # Per-Komponenten kWh akkumulieren (kW × 1h = kWh)
+        # strompreis ist kein Energiefluss → ausschließen
         if werte:
             for komp_key, komp_kw in werte.items():
-                if komp_kw is not None:
+                if komp_kw is not None and komp_key != "strompreis":
                     komponenten_summen[komp_key] = komponenten_summen.get(komp_key, 0.0) + komp_kw
 
         # TagesEnergieProfil speichern
@@ -251,7 +253,7 @@ async def aggregate_day(
             soc_prozent=round(soc, 1) if soc is not None else None,
             strompreis_cent=round(strompreis, 2) if strompreis is not None else None,
             boersenpreis_cent=round(boersenpreis, 2) if boersenpreis is not None else None,
-            komponenten=werte if werte else None,
+            komponenten={k: v for k, v in werte.items() if k != "strompreis"} if werte else None,
         )
         db.add(profil)
         stunden_count += 1

@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.7] - 2026-04-19
+
+### Bugfix
+
+- **fix(energieprofil): Börsenpreis-Kontamination in pv_kw behoben** — Der `strompreis`-Schlüssel aus den Tagesverlauf-Daten (ct/kWh) wurde fälschlich als PV-Erzeugung (kW) in `pv_kw` aufaddiert. Betroffen: IST-Stundenprofil im Prognosen-Tab (falsche Werte nachts), `komponenten_kwh` in TagesZusammenfassung, Lernfaktor-Berechnung. Fix: `strompreis` und `haushalt` aus der generischen Energiefluss-Aggregation ausgeschlossen.
+
+---
+
 ## [3.16.6] - 2026-04-19
 
 ### Solcast PV Forecast — Stabiles Release
