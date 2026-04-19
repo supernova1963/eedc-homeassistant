@@ -7,7 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.16.5] - 2026-04-19
+## [3.16.6] - 2026-04-19
+
+### Solcast PV Forecast — Stabiles Release
+
+Zusammenfassung von v3.16.4 + v3.16.5 (Pre-Releases) als stabile Version.
+
+- **Neuer Tab „Prognosen"** in Aussichten: OpenMeteo / EEDC (kalibriert) / Solcast / IST im Vergleich
+- **Solcast HA-Integration**: Ein Toggle im Sensor-Mapping Wizard — automatische Erkennung der Solcast-Sensoren (BJReplay)
+- **Solcast API-Zugang**: Für Standalone-Nutzer (Free/Paid Key), L1/L2-Cache überlebt Neustarts
+- **KPI-Matrix**: Heute/Morgen/Übermorgen × alle Quellen mit VM/NM-Split
+- **Stundenprofil-Chart**: GTI-basiertes OpenMeteo, EEDC (kalibriert), Solcast, IST mit p10/p90-Band
+- **24h + 7-Tage-Vergleichstabelle**: Mit Differenzen und Wetter-Symbolen
+- **Genauigkeits-Tracking**: MAE-Berechnung über historische IST-Daten
+- **Integrations-Vorschlag**: Erläuterung der Nutzung in Live, Kurzfristig, Lernfaktor, Finanzen
+- **Statusmeldungen**: Kontextbezogene Hinweise (Tageslimit, Auth, HA nicht erreichbar)
+- **Sicherheit**: DELETE-Schutz für sensor_mapping mit aktiven Live-Sensoren
+- **Refactoring**: Prognosen-Code in eigene prognosen.py ausgelagert
+- **DB-Migration**: 3 neue Spalten in TagesZusammenfassung (solcast_prognose_kwh, p10, p90)
+
+---
+
+## [3.16.5] - 2026-04-19 (Pre-Release)
 
 ### Solcast PV Forecast — Sensor-Mapping Wizard
 
