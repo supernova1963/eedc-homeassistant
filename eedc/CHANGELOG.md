@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.11] - 2026-04-19
+
+### Bugfixes
+
+- **fix(solcast): Discovery filtert auf kWh + schließt "verbleibend" aus** — `prognose_verbleibende_leistung_heute` konnte statt `prognose_heute` gematcht werden (beide enden auf `_heute`). Jetzt: nur Sensoren mit `unit_of_measurement=kWh` und ohne "verbleibend"/"remaining" im Namen.
+- **fix(prognosen): IST-Berechnung schließt strompreis/netzbezug/einspeisung aus** — `komponenten_kwh` enthält auch `strompreis` (ct/kWh), `netzbezug` und `einspeisung`. Diese verfälschten den IST-Wert im Genauigkeits-Tracking und Lernfaktor massiv (z.B. 244 kWh statt 40 kWh wegen `strompreis=202.95` ct).
+
+---
+
 ## [3.16.10] - 2026-04-19
 
 ### Bugfixes
