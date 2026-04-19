@@ -250,9 +250,6 @@ export default function LiveDashboard() {
           {/* Zeile 1: Energiebilanz (2/3) + Zustandswerte (1/3) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">
-                Momentwerte · aktualisiert alle ~30s
-              </p>
               <EnergieFluss
                 komponenten={data.komponenten}
                 summeErzeugung={data.summe_erzeugung_kw}
