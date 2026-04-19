@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.10] - 2026-04-19
+
+### Bugfixes
+
+- **fix(solcast): Discovery via /api/states Suffix-Pattern statt Entity Registry** — Die Entity Registry API ist über die HA Supervisor REST API nicht verfügbar (404), und `unique_id`s können sich bei Integrations-Updates ändern. Neuer Ansatz: `/api/states` laden und Solcast-Entities per Suffix-Pattern matchen (`_heute`/`_today`, `_morgen`/`_tomorrow`, `_tag_N`/`_day_N`). Robust gegenüber Spracheinstellungen, Umbenennungen und unique_id-Änderungen.
+- **fix(live): Redundanten Momentwerte-Text über Energiefluss entfernt** — Refresh-Takt wird bereits oben rechts angezeigt (5s), der separate Text war zudem falsch (~30s).
+
+---
+
 ## [3.16.9] - 2026-04-19
 
 ### Bugfixes
