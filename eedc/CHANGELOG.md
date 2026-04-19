@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.9] - 2026-04-19
+
+### Bugfixes
+
+- **fix(solcast): Auto-Discovery sprachunabhängig via Entity Registry** — Solcast-Sensoren werden jetzt über die HA Entity Registry (`unique_id`) aufgelöst statt über hardcodierte `entity_id`s. Funktioniert unabhängig von der HA-Spracheinstellung (`prognose_heute` vs. `vorhersage_heute` vs. `forecast_today`).
+- **fix(energieprofil): aggregate_day() überschreibt Prognose-Felder nicht mehr** — `aggregate_day()` löschte die gesamte `TagesZusammenfassung` und verlor dabei `pv_prognose_kwh`, `sfml_prognose_kwh` und `solcast_*_kwh`. Jetzt werden die Prognose-Felder vor dem DELETE gerettet und nach dem INSERT wiederhergestellt. Dadurch wird der Lernfaktor und das Genauigkeits-Tracking erstmals korrekt befüllt.
+
+### Neu
+
+- **Prognosen-Abweichungen inline mit Farbskala** — Stundenvergleich + 7-Tage-Vergleich zeigen die Abweichung direkt neben jedem Prognosewert (OM, EEDC, Solcast) mit Pfeil (↑/↓) und Farbskala (grün <15%, gelb 15–30%, rot >30%). Bei Zukunfts-Tagen ohne IST wird der Mittelwert aller Prognosen als Referenz verwendet.
+
+---
+
 ## [3.16.8] - 2026-04-19
 
 ### Bugfixes (Code-Audit v3.16.3–v3.16.7)
