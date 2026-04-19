@@ -508,11 +508,17 @@ async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
     sum_prognose = 0.0
     tage_count = 0
 
+    # Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
+    _NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
+
     for tag in tage:
-        # IST: Summe der positiven Werte in komponenten_kwh (= PV-Erzeugung)
+        # IST: Summe der positiven PV-Komponenten in komponenten_kwh
         ist_kwh = 0.0
         if tag.komponenten_kwh:
-            ist_kwh = sum(v for v in tag.komponenten_kwh.values() if v > 0)
+            ist_kwh = sum(
+                v for k, v in tag.komponenten_kwh.items()
+                if v > 0 and k not in _NICHT_PV
+            )
 
         if ist_kwh > 0.5 and tag.pv_prognose_kwh > 0.5:  # Nur Tage mit relevanter Produktion
             sum_ist += ist_kwh
