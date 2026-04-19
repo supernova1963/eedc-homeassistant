@@ -289,23 +289,63 @@ async def _fetch_solcast_api(
 
 # ── HA-Sensor-Pfad (Auto-Discovery) ────────────────────────────────────────────
 
-# BJReplay Solcast HA-Integration: Standardisierte Entity-IDs
-_HA_SOLCAST_ENTITIES = {
-    "heute": "sensor.solcast_pv_forecast_prognose_heute",
-    "morgen": "sensor.solcast_pv_forecast_prognose_morgen",
-    "tag_3": "sensor.solcast_pv_forecast_prognose_tag_3",
-    "tag_4": "sensor.solcast_pv_forecast_prognose_tag_4",
-    "tag_5": "sensor.solcast_pv_forecast_prognose_tag_5",
-    "tag_6": "sensor.solcast_pv_forecast_prognose_tag_6",
-    "tag_7": "sensor.solcast_pv_forecast_prognose_tag_7",
+# BJReplay Solcast HA-Integration: Sprachunabhängige unique_ids.
+# Die Entity-IDs werden je nach HA-Sprache anders generiert
+# (z.B. "prognose_heute" vs. "vorhersage_heute" vs. "forecast_today").
+# Über die Entity Registry → unique_id finden wir die richtigen IDs.
+_SOLCAST_UNIQUE_IDS = {
+    "heute": "total_kwh_forecast_today",
+    "morgen": "total_kwh_forecast_tomorrow",
+    "tag_3": "total_kwh_forecast_d3",
+    "tag_4": "total_kwh_forecast_d4",
+    "tag_5": "total_kwh_forecast_d5",
+    "tag_6": "total_kwh_forecast_d6",
+    "tag_7": "total_kwh_forecast_d7",
 }
+
+# Cache für aufgelöste Entity-IDs (überlebt Server-Neustart nicht, aber das ist ok)
+_resolved_entities: dict[str, str] = {}
+_resolved_ts: float = 0.0
+_RESOLVE_TTL = 3600  # 1 Stunde — Entity-IDs ändern sich quasi nie
+
+
+async def _resolve_solcast_entities() -> dict[str, str]:
+    """
+    Löst Solcast unique_ids zu tatsächlichen entity_ids auf.
+
+    Returns:
+        Dict logischer_name → entity_id, z.B. {"heute": "sensor.solcast_pv_forecast_prognose_heute"}
+    """
+    global _resolved_entities, _resolved_ts
+    import time
+
+    now = time.monotonic()
+    if _resolved_entities and (now - _resolved_ts) < _RESOLVE_TTL:
+        return _resolved_entities
+
+    from backend.services.ha_state_service import get_ha_state_service
+    ha_svc = get_ha_state_service()
+    resolved = await ha_svc.resolve_entity_ids_by_unique_id(
+        "solcast_solar", _SOLCAST_UNIQUE_IDS
+    )
+
+    if resolved:
+        _resolved_entities = resolved
+        _resolved_ts = now
+        logger.info(
+            f"Solcast Entity-IDs aufgelöst: {len(resolved)}/7 "
+            f"(z.B. heute={resolved.get('heute', '?')})"
+        )
+
+    return resolved
 
 
 async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
     """
     Liest Solcast-Daten aus der HA Solcast-Integration (BJReplay).
 
-    Nutzt standardisierte Entity-IDs — kein manuelles Mapping nötig.
+    Erkennt Sensoren automatisch über die Entity Registry (unique_id),
+    unabhängig von der HA-Spracheinstellung.
     Tageswerte (Heute bis Tag 7) direkt aus Sensor-States.
     Stundenprofil + p10/p90 aus dem detailedHourly-Attribut des Heute-Sensors.
     """
@@ -320,12 +360,18 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
         if not ha_svc.is_available:
             return None
 
+        # Entity-IDs dynamisch auflösen (gecacht, 1h TTL)
+        entity_map = await _resolve_solcast_entities()
+        if not entity_map or "heute" not in entity_map:
+            logger.debug("Solcast HA: Keine Solcast-Entities in der Entity Registry gefunden")
+            return None
+
         # Alle 7 Tages-Sensoren in einem Batch-Call lesen
-        entity_ids = list(_HA_SOLCAST_ENTITIES.values())
+        entity_ids = list(entity_map.values())
         ha_batch = await ha_svc.get_sensor_states_batch(entity_ids)
 
         # Heute prüfen
-        heute_entity = _HA_SOLCAST_ENTITIES["heute"]
+        heute_entity = entity_map["heute"]
         if not ha_batch.get(heute_entity):
             logger.debug("Solcast HA: Heute-Sensor nicht verfügbar")
             return None
@@ -336,7 +382,9 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
         # 7-Tage-Werte aus Sensor-States
         tage_voraus = []
         for day_offset, key in enumerate(["heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7"]):
-            entity = _HA_SOLCAST_ENTITIES[key]
+            entity = entity_map.get(key)
+            if not entity:
+                continue
             state = ha_batch.get(entity)
             if state:
                 datum = heute + timedelta(days=day_offset)

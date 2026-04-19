@@ -307,7 +307,7 @@ export default function BasisSensorenStep({
                 </div>
                 {solcastHaAktiv && (
                   <p className="text-xs text-blue-500 mt-2">
-                    Sensoren werden automatisch erkannt (sensor.solcast_pv_forecast_prognose_*).
+                    Sensoren werden automatisch erkannt (unabhängig von der HA-Spracheinstellung).
                     Ergebnis sichtbar unter Aussichten → Prognosen.
                   </p>
                 )}

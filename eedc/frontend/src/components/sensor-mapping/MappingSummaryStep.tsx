@@ -297,7 +297,7 @@ export default function MappingSummaryStep({
             <span className="text-xs text-blue-500 ml-auto">HA-Integration</span>
           </div>
           <div className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
-            Automatische Erkennung der Solcast-Sensoren (sensor.solcast_pv_forecast_prognose_*).
+            Automatische Erkennung der Solcast-Sensoren (unabhängig von der HA-Spracheinstellung).
             Prognosen für 7 Tage mit Konfidenzband (p10/p90), sichtbar unter Aussichten → Prognosen.
           </div>
         </div>
