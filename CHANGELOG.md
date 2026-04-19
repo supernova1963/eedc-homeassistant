@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.8] - 2026-04-19
+
+### Bugfixes (Code-Audit v3.16.3–v3.16.7)
+
+- **fix(prognosen): bestPrognose-Berechnung lieferte `false` statt Zahl** — Δ-Spalte im Stundenvergleich zeigte falsche Werte wenn Solcast nicht aktiv
+- **fix(prognosen): 0-as-falsy bei eedc_*_kwh und Genauigkeit** — 0.0 kWh Prognose wurde als `None` angezeigt statt als 0
+- **fix(prognosen): asyncio.gather mit Fehler-Isolation** — Ein API-Timeout (OpenMeteo/Solcast) crashte den gesamten Prognosen-Tab, jetzt werden verfügbare Daten angezeigt
+- **fix(sensor-mapping): `?force=true` DELETE-Parameter implementiert** — War nur in Fehlermeldung referenziert, Query-Parameter fehlte
+
+### Neu
+
+- **API: `POST /api/energie-profil/reaggregate-heute`** — Manuelle Neu-Aggregation des heutigen Tages (nach Bugfixes oder Konfigurationsänderungen)
+
+---
+
 ## [3.16.7] - 2026-04-19
 
 ### Bugfix
