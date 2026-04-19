@@ -363,6 +363,13 @@ async def _resolve_solcast_entities() -> dict[str, str]:
                 eid = item.get("entity_id", "")
                 if not eid.startswith(_SOLCAST_PREFIX):
                     continue
+                # Nur Tages-Total-Sensoren (kWh), keine Leistung/Zeitpunkte/Verbleibend
+                unit = (item.get("attributes") or {}).get("unit_of_measurement", "")
+                if unit != "kWh":
+                    continue
+                # "verbleibend/remaining" ist Restleistung, nicht Tages-Total
+                if "verbleibend" in eid or "remaining" in eid:
+                    continue
                 # Suffix matchen (längste zuerst um _tag_3 vor _3 zu priorisieren)
                 for suffix, key in sorted(
                     _SOLCAST_SUFFIX_MAP.items(), key=lambda x: -len(x[0])
