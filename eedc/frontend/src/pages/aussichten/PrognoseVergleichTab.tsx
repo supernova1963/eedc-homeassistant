@@ -107,8 +107,15 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   })
 
   // ── 7-Tage-Daten ──
+  const heute = new Date().toISOString().slice(0, 10)
+  const genauigkeitMap = new Map(
+    (genauigkeit?.tage ?? []).map(t => [t.datum, t.ist_kwh])
+  )
   const vergleichsTage = data.openmeteo_tage.slice(0, 7).map(om => {
     const sc = data.solcast_tage.find(s => s.datum === om.datum)
+    const istKwh = om.datum === heute
+      ? data.ist_heute_kwh
+      : genauigkeitMap.get(om.datum) ?? null
     return {
       datum: om.datum,
       om_kwh: om.pv_prognose_kwh,
@@ -118,6 +125,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
       sc_p90: sc?.p90 ?? null,
       wetter_symbol: om.wetter_symbol,
       temp_max: om.temperatur_max_c,
+      ist_kwh: istKwh,
     }
   })
 
@@ -290,38 +298,66 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 {hasEedc && <th className="text-right py-1.5 px-2 font-medium text-orange-500">EEDC</th>}
                 {hasSolcast && <th className="text-right py-1.5 px-2 font-medium text-blue-500">SC</th>}
                 <th className="text-right py-1.5 px-2 font-medium text-green-500">IST</th>
-                <th className="text-right py-1.5 px-2 font-medium text-gray-400">Δ IST</th>
               </tr>
             </thead>
             <tbody>
               {chartData.filter(r => r.openmeteo > 0.01 || r.solcast > 0.01 || (r.ist !== null && r.ist > 0.01)).map((row) => {
                 const h = parseInt(row.stunde)
                 const isPast = data.aktuelle_stunde !== null && h <= data.aktuelle_stunde
-                // Beste Prognose für Δ-Berechnung: EEDC > Solcast > OpenMeteo
-                const bestPrognose = row.eedc ?? (hasSolcast && row.solcast > 0 ? row.solcast : null) ?? row.openmeteo
+                const istVal = row.ist
                 return (
                   <tr key={row.stunde} className={`border-b border-gray-50 dark:border-gray-800 ${isPast ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}`}>
                     <td className="py-1 px-2 font-mono text-gray-900 dark:text-white">{row.stunde}</td>
-                    <td className="py-1 px-2 text-right font-mono">{row.openmeteo.toFixed(2)}</td>
-                    {hasEedc && <td className="py-1 px-2 text-right font-mono text-orange-500">{row.eedc?.toFixed(2) ?? '—'}</td>}
-                    {hasSolcast && <td className="py-1 px-2 text-right font-mono">{row.solcast.toFixed(2)}</td>}
-                    <td className="py-1 px-2 text-right font-mono font-semibold text-green-600 dark:text-green-400">
-                      {row.ist !== null ? row.ist.toFixed(2) : <span className="text-gray-400">—</span>}
-                    </td>
                     <td className="py-1 px-2 text-right font-mono">
-                      {row.ist !== null ? <DiffCell a={row.ist} b={bestPrognose} /> : <span className="text-gray-400">—</span>}
+                      {row.openmeteo.toFixed(2)}
+                      {istVal !== null && <DevBadge prognose={row.openmeteo} ist={istVal} />}
+                    </td>
+                    {hasEedc && (
+                      <td className="py-1 px-2 text-right font-mono text-orange-500">
+                        {row.eedc?.toFixed(2) ?? '—'}
+                        {istVal !== null && row.eedc !== null && <DevBadge prognose={row.eedc} ist={istVal} />}
+                      </td>
+                    )}
+                    {hasSolcast && (
+                      <td className="py-1 px-2 text-right font-mono">
+                        {row.solcast.toFixed(2)}
+                        {istVal !== null && <DevBadge prognose={row.solcast} ist={istVal} />}
+                      </td>
+                    )}
+                    <td className="py-1 px-2 text-right font-mono font-semibold text-green-600 dark:text-green-400">
+                      {istVal !== null ? istVal.toFixed(2) : <span className="text-gray-400">—</span>}
                     </td>
                   </tr>
                 )
               })}
-              <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-                <td className="py-1.5 px-2 text-gray-900 dark:text-white">Σ</td>
-                <td className="py-1.5 px-2 text-right font-mono text-yellow-500">{chartData.reduce((s, r) => s + r.openmeteo, 0).toFixed(1)}</td>
-                {hasEedc && <td className="py-1.5 px-2 text-right font-mono text-orange-500">{chartData.reduce((s, r) => s + (r.eedc ?? 0), 0).toFixed(1)}</td>}
-                {hasSolcast && <td className="py-1.5 px-2 text-right font-mono text-blue-500">{chartData.reduce((s, r) => s + r.solcast, 0).toFixed(1)}</td>}
-                <td className="py-1.5 px-2 text-right font-mono text-green-500">{data.ist_heute_kwh !== null ? data.ist_heute_kwh.toFixed(1) : '—'}</td>
-                <td></td>
-              </tr>
+              {(() => {
+                const omSum = chartData.reduce((s, r) => s + r.openmeteo, 0)
+                const eedcSum = chartData.reduce((s, r) => s + (r.eedc ?? 0), 0)
+                const scSum = chartData.reduce((s, r) => s + r.solcast, 0)
+                const istSum = data.ist_heute_kwh
+                return (
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
+                    <td className="py-1.5 px-2 text-gray-900 dark:text-white">Σ</td>
+                    <td className="py-1.5 px-2 text-right font-mono text-yellow-500">
+                      {omSum.toFixed(1)}
+                      {istSum !== null && <DevBadge prognose={omSum} ist={istSum} />}
+                    </td>
+                    {hasEedc && (
+                      <td className="py-1.5 px-2 text-right font-mono text-orange-500">
+                        {eedcSum.toFixed(1)}
+                        {istSum !== null && <DevBadge prognose={eedcSum} ist={istSum} />}
+                      </td>
+                    )}
+                    {hasSolcast && (
+                      <td className="py-1.5 px-2 text-right font-mono text-blue-500">
+                        {scSum.toFixed(1)}
+                        {istSum !== null && <DevBadge prognose={scSum} ist={istSum} />}
+                      </td>
+                    )}
+                    <td className="py-1.5 px-2 text-right font-mono text-green-500">{istSum !== null ? istSum.toFixed(1) : '—'}</td>
+                  </tr>
+                )
+              })()}
             </tbody>
           </table>
         </div>
@@ -338,30 +374,53 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 <th className="text-right py-2 px-2 font-medium text-yellow-500">OM</th>
                 {hasEedc && <th className="text-right py-2 px-2 font-medium text-orange-500">EEDC</th>}
                 {hasSolcast && <th className="text-right py-2 px-2 font-medium text-blue-500">Solcast</th>}
+                <th className="text-right py-2 px-2 font-medium text-green-500">IST</th>
                 <th className="text-center py-2 px-2 font-medium text-gray-500">Wetter</th>
               </tr>
             </thead>
             <tbody>
-              {vergleichsTage.map((tag) => (
-                <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
-                  <td className="py-2 px-2 text-right font-mono">{tag.om_kwh.toFixed(1)}</td>
-                  {hasEedc && <td className="py-2 px-2 text-right font-mono text-orange-500">{tag.eedc_kwh?.toFixed(1) ?? '—'}</td>}
-                  {hasSolcast && (
+              {vergleichsTage.map((tag) => {
+                // Referenz: IST wenn vorhanden, sonst Mittelwert aller Prognosen
+                const ref = tag.ist_kwh
+                const prognosen = [tag.om_kwh, tag.eedc_kwh, tag.sc_kwh].filter((v): v is number => v !== null)
+                const mean = prognosen.length > 1 ? prognosen.reduce((a, b) => a + b, 0) / prognosen.length : null
+                const devRef = ref ?? mean
+                return (
+                  <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="py-2 px-2 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
                     <td className="py-2 px-2 text-right font-mono">
-                      {tag.sc_kwh !== null ? (
-                        <><span className="font-semibold">{tag.sc_kwh.toFixed(1)}</span><span className="text-gray-400 text-xs ml-1">({tag.sc_p10?.toFixed(0)}–{tag.sc_p90?.toFixed(0)})</span></>
-                      ) : '—'}
+                      {tag.om_kwh.toFixed(1)}
+                      {devRef !== null && <DevBadge prognose={tag.om_kwh} ist={devRef} />}
                     </td>
-                  )}
-                  <td className="py-2 px-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />
-                      {tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    {hasEedc && (
+                      <td className="py-2 px-2 text-right font-mono text-orange-500">
+                        {tag.eedc_kwh?.toFixed(1) ?? '—'}
+                        {devRef !== null && tag.eedc_kwh !== null && <DevBadge prognose={tag.eedc_kwh} ist={devRef} />}
+                      </td>
+                    )}
+                    {hasSolcast && (
+                      <td className="py-2 px-2 text-right font-mono">
+                        {tag.sc_kwh !== null ? (
+                          <>
+                            <span className="font-semibold">{tag.sc_kwh.toFixed(1)}</span>
+                            {devRef !== null && <DevBadge prognose={tag.sc_kwh} ist={devRef} />}
+                            <span className="text-gray-400 text-xs ml-1">({tag.sc_p10?.toFixed(0)}–{tag.sc_p90?.toFixed(0)})</span>
+                          </>
+                        ) : '—'}
+                      </td>
+                    )}
+                    <td className="py-2 px-2 text-right font-mono font-semibold text-green-600 dark:text-green-400">
+                      {tag.ist_kwh !== null ? tag.ist_kwh.toFixed(1) : <span className="text-gray-400 text-xs">⌀{mean?.toFixed(0)}</span>}
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />
+                        {tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -483,11 +542,14 @@ function MAECard({ label, mae, color }: { label: string; mae: number | null; col
   )
 }
 
-function DiffCell({ a, b }: { a: number; b: number }) {
-  const diff = a - b
-  if (Math.abs(diff) < 0.05) return <span className="text-gray-400">±0</span>
-  const color = diff > 0 ? 'text-green-400' : 'text-red-400'
-  return <span className={color}>{diff > 0 ? '+' : ''}{diff.toFixed(2)}</span>
+function DevBadge({ prognose, ist }: { prognose: number; ist: number }) {
+  if (ist < 0.05 && prognose < 0.05) return null
+  const diff = prognose - ist
+  if (Math.abs(diff) < 0.03) return null
+  const pct = ist > 0.05 ? Math.abs(diff / ist) * 100 : (prognose > 0.05 ? 100 : 0)
+  const color = pct < 15 ? 'text-green-500' : pct < 30 ? 'text-yellow-500' : 'text-red-400'
+  const arrow = diff > 0 ? '↑' : '↓'
+  return <span className={`text-[10px] ml-1 ${color}`}>{arrow}{Math.abs(diff).toFixed(1)}</span>
 }
 
 function AbweichungCell({ prognose, ist }: { prognose: number; ist: number | null }) {
