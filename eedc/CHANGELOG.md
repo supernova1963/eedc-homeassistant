@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.5] - 2026-04-19
+
+### Solcast PV Forecast — Sensor-Mapping Wizard
+
+- **Ein-Klick-Aktivierung**: Toggle „Solcast PV Forecast" im Sensor-Mapping Wizard — automatische Erkennung der Solcast HA-Integration (BJReplay), kein manueller DB-Eintrag nötig
+- **7-Tage-Prognose aus HA-Sensoren**: Heute + Morgen + Tag 3–7 direkt als Sensor-States gelesen (standardisierte Entity-IDs)
+- **Zusammenfassung**: Solcast-Sektion im Wizard-Abschluss sichtbar
+- **Status-Hinweise**: Kontext-bezogene Meldungen wenn Sensoren noch nicht geladen oder HA nicht erreichbar
+
+---
+
 ## [3.16.4] - 2026-04-19
 
 ### Solcast PV Forecast — Prognosen-Vergleich (Evaluierung)
