@@ -481,10 +481,16 @@ async def get_prognosen_genauigkeit(
     om_errors = []
     sc_errors = []
 
+    # Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
+    _NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
+
     for tz in tage_daten:
         ist_kwh = None
         if tz.komponenten_kwh:
-            ist_kwh = sum(v for v in tz.komponenten_kwh.values() if v > 0)
+            ist_kwh = sum(
+                v for k, v in tz.komponenten_kwh.items()
+                if v > 0 and k not in _NICHT_PV
+            )
 
         eintraege.append(GenauigkeitsEintrag(
             datum=tz.datum.isoformat(),
