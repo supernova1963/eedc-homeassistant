@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.4] - 2026-04-19
+
+### Solcast PV Forecast — Prognosen-Vergleich (Evaluierung)
+
+- **Neuer Tab „Prognosen"** in Aussichten: Evaluierungs-Cockpit für das Zusammenspiel von OpenMeteo und Solcast
+- **Solcast-Service**: API-Zugang (Free/Paid) und HA-Sensor-Anbindung mit L1/L2-Cache (überlebt Neustarts)
+- **EEDC-Prognose**: Kalibrierter OpenMeteo-Wert (×Lernfaktor) als dritte Vergleichsspalte
+- **KPI-Matrix**: OpenMeteo / EEDC / Solcast / IST × Heute / Morgen / Übermorgen mit VM/NM-Split
+- **Stundenprofil-Chart**: 4 Linien (IST grün, EEDC orange, Solcast blau, OpenMeteo gelb) + Solcast p10/p90-Band
+- **24h-Vergleichstabelle**: Stündliche Werte mit Differenzen (Δ IST–Prognose)
+- **7-Tage-Vergleichstabelle**: Alle Quellen mit Solcast-Konfidenzband
+- **Genauigkeits-Tracking**: MAE-Berechnung (OpenMeteo vs. Solcast) aus historischen TagesZusammenfassungen
+- **Statusmeldungen**: Kontextbezogene Hinweise bei Tageslimit, fehlender Config, HA nicht erreichbar
+- **Integrations-Vorschlag**: Erläuterung der geplanten Einbindung in Live, Kurzfristig, Lernfaktor, Finanzen
+- **Refactoring**: Prognosen-Code aus aussichten.py in eigene prognosen.py ausgelagert (−360 Zeilen)
+- **DB-Migration**: 3 neue Spalten in TagesZusammenfassung (solcast_prognose_kwh, p10, p90)
+
+---
+
 ## [3.16.3] - 2026-04-18
 
 ### Verbesserungen (Community-Feedback)
