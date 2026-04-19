@@ -229,7 +229,7 @@ async def get_prognosen_vergleich(
     now = datetime.now(ZoneInfo("Europe/Berlin"))
     heute = date.today()
 
-    # ── Parallele Datenabrufe ──
+    # ── Parallele Datenabrufe (return_exceptions: ein API-Timeout crasht nicht alles) ──
     wetter, gti_data, solcast, ist_rows = await asyncio.gather(
         fetch_open_meteo_forecast(
             latitude=anlage.latitude, longitude=anlage.longitude,
@@ -247,8 +247,22 @@ async def get_prognosen_vergleich(
                 TagesEnergieProfil.datum == heute,
             ).order_by(TagesEnergieProfil.stunde)
         ),
+        return_exceptions=True,
     )
-    ist_rows = ist_rows.scalars().all()
+    # Exceptions → None/leeres Ergebnis (Endpoint liefert was verfügbar ist)
+    if isinstance(wetter, BaseException):
+        logger.warning(f"OpenMeteo Forecast fehlgeschlagen: {wetter}")
+        wetter = None
+    if isinstance(gti_data, BaseException):
+        logger.warning(f"GTI Forecast fehlgeschlagen: {gti_data}")
+        gti_data = None
+    if isinstance(solcast, BaseException):
+        logger.warning(f"Solcast Forecast fehlgeschlagen: {solcast}")
+        solcast = None
+    if isinstance(ist_rows, BaseException):
+        logger.warning(f"IST-Daten Abfrage fehlgeschlagen: {ist_rows}")
+        ist_rows = None
+    ist_rows = ist_rows.scalars().all() if ist_rows is not None else []
 
     # ── OpenMeteo Tageswerte ──
     openmeteo_tage = []
@@ -318,9 +332,9 @@ async def get_prognosen_vergleich(
                 eedc_tagesprofile[tag_idx].append(StundenProfilEintrag(
                     stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
                 ))
-    eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh and lernfaktor else None
-    eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh and lernfaktor else None
-    eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh and lernfaktor else None
+    eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh is not None and lernfaktor is not None else None
+    eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None and lernfaktor is not None else None
+    eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None and lernfaktor is not None else None
 
     # ── IST-Ertrag heute ──
     ist_stundenprofil = []
@@ -474,8 +488,8 @@ async def get_prognosen_genauigkeit(
 
         eintraege.append(GenauigkeitsEintrag(
             datum=tz.datum.isoformat(),
-            openmeteo_kwh=round(tz.pv_prognose_kwh, 1) if tz.pv_prognose_kwh else None,
-            solcast_kwh=round(tz.solcast_prognose_kwh, 1) if tz.solcast_prognose_kwh else None,
+            openmeteo_kwh=round(tz.pv_prognose_kwh, 1) if tz.pv_prognose_kwh is not None else None,
+            solcast_kwh=round(tz.solcast_prognose_kwh, 1) if tz.solcast_prognose_kwh is not None else None,
             ist_kwh=round(ist_kwh, 1) if ist_kwh is not None else None,
         ))
 

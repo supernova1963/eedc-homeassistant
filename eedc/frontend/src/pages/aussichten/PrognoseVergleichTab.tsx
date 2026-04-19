@@ -298,7 +298,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 const h = parseInt(row.stunde)
                 const isPast = data.aktuelle_stunde !== null && h <= data.aktuelle_stunde
                 // Beste Prognose für Δ-Berechnung: EEDC > Solcast > OpenMeteo
-                const bestPrognose = row.eedc ?? (hasSolcast && row.solcast > 0 ? row.solcast : row.openmeteo)
+                const bestPrognose = row.eedc ?? (hasSolcast && row.solcast > 0 ? row.solcast : null) ?? row.openmeteo
                 return (
                   <tr key={row.stunde} className={`border-b border-gray-50 dark:border-gray-800 ${isPast ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}`}>
                     <td className="py-1 px-2 font-mono text-gray-900 dark:text-white">{row.stunde}</td>
