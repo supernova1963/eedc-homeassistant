@@ -42,6 +42,7 @@ export interface InvestitionFelder {
 export interface SensorMappingRequest {
   basis: BasisMapping
   investitionen: Record<string, InvestitionFelder>
+  solcast_config?: { modus: string; api_key?: string; resource_ids?: { id: string; name: string }[]; tier?: string }
 }
 
 export interface InvestitionInfo {

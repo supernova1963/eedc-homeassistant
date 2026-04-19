@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react'
-import { Zap, Download, Upload, Activity, Thermometer, TrendingUp } from 'lucide-react'
+import { Zap, Download, Upload, Activity, Thermometer, TrendingUp, Sun } from 'lucide-react'
 import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
 import Alert from '../ui/Alert'
@@ -28,6 +28,8 @@ interface BasisSensorenStepProps {
   onBasisLiveChange?: (key: string, entityId: string | null) => void
   basisLiveInvert?: Record<string, boolean>
   onBasisLiveInvertChange?: (key: string, invert: boolean) => void
+  solcastHaAktiv?: boolean
+  onSolcastHaChange?: (aktiv: boolean) => void
 }
 
 export default function BasisSensorenStep({
@@ -38,6 +40,8 @@ export default function BasisSensorenStep({
   onBasisLiveChange,
   basisLiveInvert = {},
   onBasisLiveInvertChange,
+  solcastHaAktiv = false,
+  onSolcastHaChange,
 }: BasisSensorenStepProps) {
   const basisOptionen = [
     {
@@ -275,6 +279,40 @@ export default function BasisSensorenStep({
                 </div>
               </div>
             </div>
+
+            {/* Solcast PV Forecast (optional) */}
+            {onSolcastHaChange && (
+              <div className="border border-blue-200 dark:border-blue-700/50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sun className="w-5 h-5 text-blue-500" />
+                    <div>
+                      <span className="font-medium text-sm text-gray-900 dark:text-white">Solcast PV Forecast</span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Satellitenbasierte PV-Prognose mit Konfidenzband (p10/p90), 7 Tage.
+                        Benötigt die Solcast HA-Integration (BJReplay).
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer" title="Solcast HA-Integration aktivieren">
+                    <input
+                      type="checkbox"
+                      checked={solcastHaAktiv}
+                      onChange={e => onSolcastHaChange(e.target.checked)}
+                      className="sr-only peer"
+                      title="Solcast HA-Integration aktivieren"
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-500"></div>
+                  </label>
+                </div>
+                {solcastHaAktiv && (
+                  <p className="text-xs text-blue-500 mt-2">
+                    Sensoren werden automatisch erkannt (sensor.solcast_pv_forecast_prognose_*).
+                    Ergebnis sichtbar unter Aussichten → Prognosen.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

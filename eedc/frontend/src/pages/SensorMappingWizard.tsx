@@ -65,6 +65,7 @@ interface WizardState {
   investitionen: Record<string, Record<string, FeldMapping>>
   investitionenLive: Record<string, Record<string, string | null>>  // {inv_id: {leistung_w: entity_id, soc: entity_id}}
   investitionenLiveInvert: Record<string, Record<string, boolean>>  // {inv_id: {leistung_w: true}}
+  solcastHaAktiv: boolean  // Solcast HA-Integration aktiviert
 }
 
 interface StepConfig {
@@ -90,6 +91,7 @@ const initialState: WizardState = {
   investitionen: {},
   investitionenLive: {},
   investitionenLiveInvert: {},
+  solcastHaAktiv: false,
 }
 
 // =============================================================================
@@ -165,6 +167,7 @@ export default function SensorMappingWizard() {
           const existingMapping = mapping.mapping as {
             basis?: Record<string, FeldMapping> & { live?: Record<string, string | null>; live_invert?: Record<string, boolean> }
             investitionen?: Record<string, { felder: Record<string, FeldMapping>; live?: Record<string, string | null>; live_invert?: Record<string, boolean> }>
+            solcast_config?: { modus: string }
           }
 
           setState({
@@ -192,6 +195,7 @@ export default function SensorMappingWizard() {
                 .filter(([, inv]) => inv.live_invert && Object.keys(inv.live_invert).length > 0)
                 .map(([id, inv]) => [id, inv.live_invert!])
             ),
+            solcastHaAktiv: existingMapping.solcast_config?.modus === 'ha_auto',
           })
         }
       } catch (err) {
@@ -425,6 +429,7 @@ export default function SensorMappingWizard() {
             },
           ])
         ),
+        solcast_config: state.solcastHaAktiv ? { modus: 'ha_auto' } : undefined,
       }
 
       await sensorMappingApi.saveMapping(effectiveAnlageId, request)
@@ -780,6 +785,8 @@ export default function SensorMappingWizard() {
               onBasisLiveChange={updateBasisLive}
               basisLiveInvert={state.basisLiveInvert}
               onBasisLiveInvertChange={updateBasisLiveInvert}
+              solcastHaAktiv={state.solcastHaAktiv}
+              onSolcastHaChange={(aktiv) => setState(prev => ({ ...prev, solcastHaAktiv: aktiv }))}
             />
           )}
 
