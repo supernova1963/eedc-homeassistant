@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.15] - 2026-04-20
+
+### Features
+
+- **feat(prognose): Saisonaler Lernfaktor (MOS-Kaskade)** — Der Lernfaktor nutzt jetzt eine saisonale Kaskade: Monatsfaktor (≥15 Tage gleicher Kalendermonat) → Quartalsfaktor (≥15 Tage) → 30-Tage-Fenster (≥7 Tage, bisheriges Verhalten). Bei wachsendem Datenbestand wird die Kalibrierung automatisch präziser. Im Prognosen-Tab wird die aktive Stufe angezeigt.
+
+- **feat(prognose): Erweiterbare Prognose-Architektur** — Prognose-Quellen als Registry (`PROGNOSE_QUELLEN`) für zukünftige Erweiterungen vorbereitet. Neues Anlage-Feld `prognose_basis` zur Auswahl der Kalibrierungsquelle in den Anlagenstammdaten. Lernfaktor wird pro Quelle separat berechnet und gecacht.
+
+---
+
 ## [3.16.14] - 2026-04-20
 
 ### Bugfixes
