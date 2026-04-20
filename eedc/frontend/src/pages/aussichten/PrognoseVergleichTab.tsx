@@ -287,7 +287,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Stundenvergleich heute
         </h3>
-        <div className="overflow-x-auto max-h-96">
+        <div className="overflow-auto max-h-96">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-white dark:bg-gray-900">
               <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -328,6 +328,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   </tr>
                 )
               })}
+            </tbody>
+            <tfoot className="sticky bottom-0 bg-white dark:bg-gray-900">
               {(() => {
                 const omSum = chartData.reduce((s, r) => s + r.openmeteo, 0)
                 const eedcSum = chartData.reduce((s, r) => s + (r.eedc ?? 0), 0)
@@ -356,7 +358,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   </tr>
                 )
               })()}
-            </tbody>
+            </tfoot>
           </table>
         </div>
       </Card>
