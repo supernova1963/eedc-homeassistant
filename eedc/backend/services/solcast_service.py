@@ -402,7 +402,7 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
     Erkennt Sensoren automatisch über die Entity Registry (unique_id),
     unabhängig von der HA-Spracheinstellung.
     Tageswerte (Heute bis Tag 7) direkt aus Sensor-States.
-    Stundenprofil + p10/p90 aus dem detailedHourly-Attribut des Heute-Sensors.
+    Stundenprofil + p10/p90 aus dem DetailedForecast-Attribut des Heute-Sensors.
     """
     cache_key = "solcast_ha:auto"
     cached = _cache_get(cache_key)
@@ -457,7 +457,13 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
         today_attrs = await _get_ha_sensor_attributes(heute_entity)
 
         if today_attrs:
-            detailed = today_attrs.get("detailedHourly") or today_attrs.get("detailed_hourly") or []
+            detailed = (
+                today_attrs.get("detailedForecast")
+                or today_attrs.get("DetailedForecast")
+                or today_attrs.get("detailedHourly")
+                or today_attrs.get("detailed_hourly")
+                or []
+            )
             tz = ZoneInfo("Europe/Berlin")
             # p10/p90 pro Tag aggregieren
             tage_p_dict: dict[str, dict[str, float]] = {}
@@ -537,7 +543,7 @@ async def _get_ha_sensor_attributes(entity_id: str) -> Optional[dict]:
     """
     Holt alle Attribute eines HA-Sensors (nicht nur State).
 
-    Für Solcast: detailedHourly mit 30-Min-Auflösung.
+    Für Solcast: DetailedForecast (oder detailedHourly) mit 30-Min-Auflösung.
     """
     if not settings.supervisor_token:
         return None
