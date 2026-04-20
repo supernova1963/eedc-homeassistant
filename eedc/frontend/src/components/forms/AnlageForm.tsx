@@ -33,6 +33,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',
     community_auto_share: anlage?.community_auto_share ?? false,
     netz_puffer_w: anlage?.netz_puffer_w?.toString() || '100',
+    prognose_basis: anlage?.prognose_basis || 'openmeteo',
   })
 
   // Track if user manually changed USt-Satz
@@ -107,6 +108,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         ust_satz_prozent: formData.ust_satz_prozent ? parseFloat(formData.ust_satz_prozent) : undefined,
         community_auto_share: formData.community_auto_share,
         netz_puffer_w: formData.netz_puffer_w ? parseInt(formData.netz_puffer_w) : 100,
+        prognose_basis: formData.prognose_basis || 'openmeteo',
       } as AnlageCreate)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -487,6 +489,37 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             </p>
           </div>
         )}
+      </div>
+
+      {/* Prognose-Basis */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <Sun className="w-5 h-5 text-amber-500" />
+          Prognose-Basis (EEDC kalibriert)
+        </h3>
+        <div>
+          <label
+            htmlFor="prognose_basis"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            Quelle für EEDC-Kalibrierung
+          </label>
+          <select
+            id="prognose_basis"
+            name="prognose_basis"
+            value={formData.prognose_basis}
+            onChange={handleChange}
+            className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
+          >
+            <option value="openmeteo">Open-Meteo (Standard, Standalone)</option>
+            <option value="solcast">Solcast (wenn konfiguriert)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {formData.prognose_basis === 'openmeteo'
+              ? 'EEDC kalibriert die Open-Meteo Rohprognose mit einem anlagenspezifischen Lernfaktor (MOS-Verfahren).'
+              : 'EEDC kalibriert die Solcast-Prognose mit einem eigenen Lernfaktor. Solcast muss im Sensor-Mapping konfiguriert sein.'}
+          </p>
+        </div>
       </div>
 
       {/* Energiefluss-Einstellungen */}

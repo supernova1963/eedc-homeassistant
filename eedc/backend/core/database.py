@@ -96,6 +96,8 @@ async def run_migrations(conn):
                 # v3.5.0: Netz-Puffer für Energiefluss-Farbwechsel (Watt)
                 ('netz_puffer_w', 'INTEGER DEFAULT 100'),
                 ('vollbackfill_durchgefuehrt', 'BOOLEAN DEFAULT 0'),
+                # v3.17: Prognose-Basis (openmeteo, solcast, sfml)
+                ('prognose_basis', "VARCHAR(30) DEFAULT 'openmeteo'"),
             ]
             newly_added = set()
             for col_name, col_type in new_columns:

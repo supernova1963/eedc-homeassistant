@@ -461,90 +461,184 @@ async def _fetch_multi_string_gti(
     return kombiniert
 
 
-# ── Lernfaktor (mit täglichem Cache) ─────────────────────────────────────────
+# ── Prognose-Quellen Registry ────────────────────────────────────────────────
 
-_lernfaktor_cache: dict[int, tuple[str, Optional[float]]] = {}  # {anlage_id: (datum_str, faktor)}
+PROGNOSE_QUELLEN = {
+    "openmeteo": {
+        "label": "Open-Meteo",
+        "db_feld": "pv_prognose_kwh",
+        "braucht_lernfaktor": True,
+        "standalone": True,
+    },
+    "solcast": {
+        "label": "Solcast",
+        "db_feld": "solcast_prognose_kwh",
+        "braucht_lernfaktor": True,
+        "standalone": False,
+    },
+    # "sfml": {
+    #     "label": "Solar Forecast ML",
+    #     "db_feld": "sfml_prognose_kwh",
+    #     "braucht_lernfaktor": False,  # ML-Modell kalibriert sich selbst
+    #     "standalone": False,
+    # },
+}
+
+# ── Lernfaktor (MOS-basiert, saisonale Kaskade) ─────────────────────────────
+
+from dataclasses import dataclass
 
 
-async def _get_lernfaktor(anlage_id: int, db: AsyncSession) -> Optional[float]:
-    """
-    Berechnet einen Korrekturfaktor aus historischen IST/Prognose-Vergleichen.
+@dataclass
+class LernfaktorResult:
+    """Ergebnis der Lernfaktor-Berechnung mit Metadaten."""
+    faktor: Optional[float]
+    stufe: Optional[str] = None   # "saisonal", "quartal", "gesamt"
+    label: Optional[str] = None   # z.B. "saisonal April (23 Tage)"
+    tage_count: int = 0
+    quelle: Optional[str] = None  # "openmeteo", "solcast"
 
-    Nutzt die TagesZusammenfassung der letzten 30 Tage:
-    - IST = Summe aller PV-Komponenten-kWh (positive Werte in komponenten_kwh)
-    - Prognose = pv_prognose_kwh (gespeichert beim Wetter-Abruf)
 
-    Produktionsgewichtete Berechnung: Σ(IST) / Σ(Prognose) statt Median der
-    Tages-Ratios. Damit dominieren ertragsstarke (sonnige) Tage automatisch,
-    und bewölkte Phasen verzerren den Faktor nicht mehr nach unten.
+_MONAT_NAMEN = {
+    1: "Januar", 2: "Februar", 3: "März", 4: "April",
+    5: "Mai", 6: "Juni", 7: "Juli", 8: "August",
+    9: "September", 10: "Oktober", 11: "November", 12: "Dezember",
+}
 
-    Ergebnis wird tageweise gecacht (ändert sich max 1x/Tag nach Tagesabschluss).
+# Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
+_NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
 
-    Returns:
-        Korrekturfaktor (z.B. 0.92 = Anlage liefert 8% weniger als Prognose)
-        oder None wenn nicht genug Daten (< 7 Tage).
-    """
-    # Cache prüfen
-    heute = date.today().isoformat()
-    if anlage_id in _lernfaktor_cache:
-        cached_datum, cached_faktor = _lernfaktor_cache[anlage_id]
-        if cached_datum == heute:
-            return cached_faktor
+# Cache-Key: (anlage_id, quelle) → (datum_str, LernfaktorResult)
+_lernfaktor_cache: dict[tuple[int, str], tuple[str, LernfaktorResult]] = {}
 
-    vor_30_tagen = date.today() - timedelta(days=30)
 
-    result = await db.execute(
-        select(TagesZusammenfassung).where(
-            TagesZusammenfassung.anlage_id == anlage_id,
-            TagesZusammenfassung.datum >= vor_30_tagen,
-            TagesZusammenfassung.datum < date.today(),  # Heute ausschließen (noch nicht komplett)
-            TagesZusammenfassung.pv_prognose_kwh.isnot(None),
-            TagesZusammenfassung.pv_prognose_kwh > 0,
-        )
-    )
-    tage = result.scalars().all()
+def _quartal_fuer_monat(monat: int) -> tuple[int, list[int]]:
+    """Returns (quarter_number, [months_in_quarter])."""
+    q = (monat - 1) // 3 + 1
+    monate = list(range((q - 1) * 3 + 1, q * 3 + 1))
+    return q, monate
 
+
+def _berechne_faktor(tage: list, db_feld: str) -> tuple[float, float, int]:
+    """Produktionsgewichtete IST/Prognose-Summierung. Returns (sum_ist, sum_prognose, count)."""
     sum_ist = 0.0
     sum_prognose = 0.0
-    tage_count = 0
-
-    # Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
-    _NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
-
+    count = 0
     for tag in tage:
-        # IST: Summe der positiven PV-Komponenten in komponenten_kwh
+        prognose = getattr(tag, db_feld, None)
+        if not prognose or prognose <= 0.5:
+            continue
         ist_kwh = 0.0
         if tag.komponenten_kwh:
             ist_kwh = sum(
                 v for k, v in tag.komponenten_kwh.items()
                 if v > 0 and k not in _NICHT_PV
             )
-
-        if ist_kwh > 0.5 and tag.pv_prognose_kwh > 0.5:  # Nur Tage mit relevanter Produktion
+        if ist_kwh > 0.5:
             sum_ist += ist_kwh
-            sum_prognose += tag.pv_prognose_kwh
-            tage_count += 1
+            sum_prognose += prognose
+            count += 1
+    return sum_ist, sum_prognose, count
 
-    if tage_count < 7 or sum_prognose < 1:
-        _lernfaktor_cache[anlage_id] = (heute, None)
-        return None
 
-    # Produktionsgewichtet: Σ(IST) / Σ(Prognose)
-    # Sonnige Tage dominieren automatisch (mehr kWh → mehr Gewicht)
+async def _get_lernfaktor_detail(
+    anlage_id: int, db: AsyncSession, quelle: str = "openmeteo"
+) -> LernfaktorResult:
+    """
+    Berechnet einen Korrekturfaktor (MOS-basiert) aus historischen IST/Prognose-Vergleichen.
+
+    Saisonale Kaskade:
+    1. Monatsfaktor — gleicher Kalendermonat über alle Jahre (≥15 Tage)
+    2. Quartalsfaktor — gleiches Quartal über alle Jahre (≥15 Tage)
+    3. Gesamtfaktor — letzte 30 Tage rollierend (≥7 Tage, bisheriges Verhalten)
+
+    Args:
+        quelle: "openmeteo" oder "solcast" — bestimmt welches Prognose-Feld verglichen wird.
+
+    Produktionsgewichtete Berechnung: Σ(IST) / Σ(Prognose).
+    Ergebnis wird tageweise gecacht (ändert sich max 1x/Tag nach Tagesabschluss).
+    """
+    quelle_config = PROGNOSE_QUELLEN.get(quelle)
+    if not quelle_config or not quelle_config["braucht_lernfaktor"]:
+        return LernfaktorResult(faktor=None, tage_count=0, quelle=quelle)
+
+    db_feld = quelle_config["db_feld"]
+
+    # Cache prüfen (pro Anlage + Quelle)
+    cache_key = (anlage_id, quelle)
+    heute_str = date.today().isoformat()
+    if cache_key in _lernfaktor_cache:
+        cached_datum, cached_result = _lernfaktor_cache[cache_key]
+        if cached_datum == heute_str:
+            return cached_result
+
+    heute = date.today()
+
+    # Alle historischen Tage laden (max ~730 Rows bei 2 Jahren, performant)
+    prognose_col = getattr(TagesZusammenfassung, db_feld)
+    result = await db.execute(
+        select(TagesZusammenfassung).where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum < heute,  # Heute ausschließen (noch nicht komplett)
+            prognose_col.isnot(None),
+            prognose_col > 0,
+        )
+    )
+    alle_tage = result.scalars().all()
+
+    # Tage in Pools aufteilen
+    aktueller_monat = heute.month
+    q_nr, q_monate = _quartal_fuer_monat(aktueller_monat)
+    vor_30_tagen = heute - timedelta(days=30)
+
+    pool_monat = [t for t in alle_tage if t.datum.month == aktueller_monat]
+    pool_quartal = [t for t in alle_tage if t.datum.month in q_monate]
+    pool_gesamt = [t for t in alle_tage if t.datum >= vor_30_tagen]
+
+    # Kaskade: saisonal → quartal → gesamt
+    stufe = None
+    label = None
+
+    sum_ist, sum_prognose, tage_count = _berechne_faktor(pool_monat, db_feld)
+    if tage_count >= 15 and sum_prognose >= 1:
+        stufe = "saisonal"
+        label = f"saisonal {_MONAT_NAMEN[aktueller_monat]} ({tage_count} Tage)"
+    else:
+        sum_ist, sum_prognose, tage_count = _berechne_faktor(pool_quartal, db_feld)
+        if tage_count >= 15 and sum_prognose >= 1:
+            stufe = "quartal"
+            label = f"Quartal Q{q_nr} ({tage_count} Tage)"
+        else:
+            sum_ist, sum_prognose, tage_count = _berechne_faktor(pool_gesamt, db_feld)
+            if tage_count >= 7 and sum_prognose >= 1:
+                stufe = "gesamt"
+                label = f"gesamt ({tage_count} Tage)"
+
+    if stufe is None:
+        lf_result = LernfaktorResult(faktor=None, tage_count=0, quelle=quelle)
+        _lernfaktor_cache[cache_key] = (heute_str, lf_result)
+        return lf_result
+
     raw_faktor = sum_ist / sum_prognose
+    faktor = round(max(0.5, min(1.3, raw_faktor)), 3)
 
-    # Faktor auf realistischen Bereich begrenzen (0.5 – 1.3)
-    faktor = max(0.5, min(1.3, raw_faktor))
-
+    quelle_label = quelle_config["label"]
     logger.info(
-        f"Lernfaktor Anlage {anlage_id}: {faktor:.3f} "
-        f"(produktionsgewichtet aus {tage_count} Tagen, "
-        f"Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh)"
+        f"Lernfaktor Anlage {anlage_id} ({quelle_label}): {faktor:.3f} — {label} "
+        f"(Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh)"
     )
 
-    faktor = round(faktor, 3)
-    _lernfaktor_cache[anlage_id] = (heute, faktor)
-    return faktor
+    lf_result = LernfaktorResult(
+        faktor=faktor, stufe=stufe, label=label, tage_count=tage_count, quelle=quelle
+    )
+    _lernfaktor_cache[cache_key] = (heute_str, lf_result)
+    return lf_result
+
+
+async def _get_lernfaktor(anlage_id: int, db: AsyncSession, quelle: str = "openmeteo") -> Optional[float]:
+    """Abwärtskompatibel: gibt nur den Faktor-Wert zurück."""
+    result = await _get_lernfaktor_detail(anlage_id, db, quelle=quelle)
+    return result.faktor
 
 
 async def _speichere_prognose(
@@ -717,8 +811,9 @@ async def get_live_wetter(
 
         now = datetime.now(ZoneInfo("Europe/Berlin"))
 
-        # Lernfaktor laden (historischer IST/Prognose-Vergleich)
-        lernfaktor = await _get_lernfaktor(anlage_id, db)
+        # Lernfaktor laden (nur bei OpenMeteo-Basis — bei Solcast/SFML wirkt der LF im Prognosen-Tab)
+        prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
+        lernfaktor = await _get_lernfaktor(anlage_id, db) if prognose_basis == "openmeteo" else None
 
         alle_stunden = []  # 0-23 für Verbrauchsprofil
         stunden = []       # 6-20 für Wetter-Timeline

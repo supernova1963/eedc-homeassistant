@@ -104,6 +104,10 @@ class Anlage(Base):
     # Energiefluss-Anzeige: Netz-Puffer in Watt (unterhalb = Balance/grün)
     netz_puffer_w: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=100)
 
+    # Prognose-Basis: welche Quelle als Grundlage für EEDC-kalibriert dient
+    # "openmeteo" (Default, Standalone), "solcast" (wenn konfiguriert)
+    prognose_basis: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="openmeteo")
+
     # Einmaliger Auto-Vollbackfill aus HA Statistics: läuft beim ersten Monatsabschluss
     # nach Upgrade automatisch durch (siehe _post_save_hintergrund). Wird gesetzt vom
     # manuellen Wizard-Button und vom Auto-Lauf, damit es genau einmal pro Anlage greift.

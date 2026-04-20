@@ -31,7 +31,7 @@ from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
 from backend.services.solar_forecast_service import fetch_gti_forecast
-from backend.api.routes.live_wetter import _get_lernfaktor
+from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,8 @@ class PrognosenVergleichResponse(BaseModel):
     eedc_uebermorgen_kwh: Optional[float] = None
     eedc_stundenprofil: List[StundenProfilEintrag] = []
     eedc_lernfaktor: Optional[float] = None  # z.B. 0.92 = Anlage liefert 8% weniger
+    eedc_lernfaktor_stufe: Optional[str] = None  # z.B. "saisonal April (23 Tage)"
+    eedc_prognose_basis: str = "openmeteo"  # "openmeteo" oder "solcast"
     eedc_tageshaelften: List[Optional[TageshaelfteSchema]] = []
 
     # Solcast (wenn konfiguriert)
@@ -349,11 +351,16 @@ async def get_prognosen_vergleich(
             if tag_idx == 0:
                 openmeteo_stundenprofil.append(entry)
 
-    # ── EEDC = OpenMeteo × Lernfaktor ──
-    lernfaktor = await _get_lernfaktor(anlage_id, db)
+    # ── EEDC = Basis × Lernfaktor (MOS-Kaskade: saisonal → quartal → gesamt) ──
+    prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
+    lf_result = await _get_lernfaktor_detail(anlage_id, db, quelle=prognose_basis)
+    lernfaktor = lf_result.faktor
     eedc_stundenprofil = []
     eedc_tagesprofile: list[list[StundenProfilEintrag]] = [[], [], []]
-    if lernfaktor is not None:
+    # Basis-Werte abhängig von prognose_basis (Solcast-Stundenprofil wird weiter unten gefüllt,
+    # daher hier vorab merken — die endgültige EEDC-Berechnung erfolgt nach Solcast-Aufbereitung)
+    _eedc_basis_om = prognose_basis == "openmeteo"
+    if _eedc_basis_om and lernfaktor is not None:
         for s in openmeteo_stundenprofil:
             eedc_stundenprofil.append(StundenProfilEintrag(
                 stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
@@ -363,9 +370,13 @@ async def get_prognosen_vergleich(
                 eedc_tagesprofile[tag_idx].append(StundenProfilEintrag(
                     stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
                 ))
-    eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh is not None and lernfaktor is not None else None
-    eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None and lernfaktor is not None else None
-    eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None and lernfaktor is not None else None
+    eedc_heute_kwh = None
+    eedc_morgen_kwh = None
+    eedc_uebermorgen_kwh = None
+    if _eedc_basis_om and lernfaktor is not None:
+        eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh is not None else None
+        eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None else None
+        eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None else None
 
     # ── IST-Ertrag heute ──
     ist_stundenprofil = []
@@ -422,6 +433,23 @@ async def get_prognosen_vergleich(
             if t["datum"] == uebermorgen_str:
                 solcast_uebermorgen_kwh = t["kwh"]
 
+    # ── EEDC auf Solcast-Basis (wenn prognose_basis == "solcast") ──
+    if not _eedc_basis_om and solcast and solcast_stundenprofil:
+        if lernfaktor is not None:
+            for s in solcast_stundenprofil:
+                eedc_stundenprofil.append(StundenProfilEintrag(
+                    stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
+                ))
+            eedc_heute_kwh = round(solcast.daily_kwh * lernfaktor, 1) if solcast.daily_kwh is not None else None
+            eedc_morgen_kwh = round(solcast.tomorrow_kwh * lernfaktor, 1) if solcast.tomorrow_kwh is not None else None
+            eedc_uebermorgen_kwh = round(solcast_uebermorgen_kwh * lernfaktor, 1) if solcast_uebermorgen_kwh is not None else None
+        else:
+            # Solcast als Basis ohne Lernfaktor: Rohwerte als EEDC übernehmen
+            eedc_stundenprofil = list(solcast_stundenprofil)
+            eedc_heute_kwh = round(solcast.daily_kwh, 1) if solcast.daily_kwh is not None else None
+            eedc_morgen_kwh = round(solcast.tomorrow_kwh, 1) if solcast.tomorrow_kwh is not None else None
+            eedc_uebermorgen_kwh = round(solcast_uebermorgen_kwh, 1) if solcast_uebermorgen_kwh is not None else None
+
     # ── Tageshälften (je 3 Einträge: heute, morgen, übermorgen) ──
     om_ths = [_berechne_tageshaelfte(p) if p else None for p in openmeteo_tagesprofile]
     eedc_ths = [_berechne_tageshaelfte(p) if p else None for p in eedc_tagesprofile]
@@ -465,6 +493,8 @@ async def get_prognosen_vergleich(
         eedc_stundenprofil=eedc_stundenprofil,
         eedc_tageshaelften=eedc_ths,
         eedc_lernfaktor=lernfaktor,
+        eedc_lernfaktor_stufe=lf_result.label,
+        eedc_prognose_basis=prognose_basis,
         solcast_verfuegbar=solcast is not None,
         solcast_status=sc_status,
         solcast_hinweis=sc_hinweis if sc_hinweis else None,

@@ -86,8 +86,10 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   if (!data) return null
 
   const hasSolcast = data.solcast_verfuegbar
-  const hasEedc = data.eedc_lernfaktor !== null
+  const hasEedc = data.eedc_lernfaktor !== null || (data.eedc_prognose_basis === 'solcast' && data.eedc_heute_kwh !== null)
   const lf = data.eedc_lernfaktor
+  const progBasis = data.eedc_prognose_basis || 'openmeteo'
+  const progBasisLabel = progBasis === 'solcast' ? 'Solcast' : 'OpenMeteo'
 
   // ── Chart-Daten ──
   const chartData = Array.from({ length: 24 }, (_, h) => {
@@ -145,8 +147,11 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 </th>
                 {hasEedc && (
                   <th className="text-right py-2 px-3 font-medium text-orange-500">
-                    <SimpleTooltip text={`EEDC: OpenMeteo × Lernfaktor ${lf?.toFixed(3)} (kalibriert aus ${'\u2265'}7 Tagen IST/Prognose-Vergleich)`}>
-                      <span>EEDC <span className="text-xs font-normal">×{lf?.toFixed(2)}</span></span>
+                    <SimpleTooltip text={lf != null
+                      ? `EEDC: ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})`
+                      : `EEDC: ${progBasisLabel}-Rohwerte (Lernfaktor noch nicht verfügbar)`
+                    }>
+                      <span>EEDC {lf != null && <span className="text-xs font-normal">×{lf.toFixed(2)}</span>}</span>
                     </SimpleTooltip>
                   </th>
                 )}
@@ -267,7 +272,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
               <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => ({
-                ist: 'IST', eedc: `EEDC (×${lf?.toFixed(2) ?? '?'})`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)'
+                ist: 'IST', eedc: `EEDC${lf != null ? ` (${progBasisLabel} ×${lf.toFixed(2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)'
               }[v] || v)} />
               {data.aktuelle_stunde !== null && (
                 <ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke="#6b7280" strokeDasharray="3 3"
@@ -483,7 +488,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             </div>
             <p className="text-xs text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
               <span className="text-yellow-500">OpenMeteo</span> = Wettermodelle (ICON/ECMWF), GTI→kWh, 14 Tage, unbegrenzt.{' '}
-              <span className="text-orange-500">EEDC</span> = OpenMeteo × Lernfaktor ({lf?.toFixed(3) ?? 'noch nicht verfügbar'}), anlagenspezifisch kalibriert.{' '}
+              <span className="text-orange-500">EEDC</span> = {progBasisLabel} × Lernfaktor ({lf?.toFixed(3) ?? 'noch nicht verfügbar'}), MOS-kalibriert{data.eedc_lernfaktor_stufe ? ` (${data.eedc_lernfaktor_stufe})` : ''}.{' '}
               <span className="text-blue-500">Solcast</span> = Satellit + NWP, direkte PV-Leistung mit p10/p50/p90, 7 Tage.
             </p>
           </div>

@@ -265,6 +265,8 @@ export interface PrognosenVergleich {
   eedc_uebermorgen_kwh: number | null
   eedc_stundenprofil: StundenProfilEintrag[]
   eedc_lernfaktor: number | null
+  eedc_lernfaktor_stufe: string | null
+  eedc_prognose_basis: string  // "openmeteo" | "solcast"
   eedc_tageshaelften: (Tageshaelfte | null)[]
 
   // Solcast

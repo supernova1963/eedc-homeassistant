@@ -56,6 +56,8 @@ class AnlageBase(BaseModel):
     community_auto_share: Optional[bool] = Field(False, description="Monatsdaten nach Abschluss automatisch an Community senden")
     # Energiefluss-Anzeige
     netz_puffer_w: Optional[int] = Field(100, ge=0, le=1000, description="Netz-Puffer in Watt: unterhalb wird Balance (grün) angezeigt")
+    # Prognose-Basis
+    prognose_basis: Optional[str] = Field("openmeteo", max_length=30, description="Prognose-Basis für EEDC-kalibriert: openmeteo, solcast")
 
 
 class AnlageCreate(AnlageBase):
@@ -91,6 +93,7 @@ class AnlageUpdate(BaseModel):
     ust_satz_prozent: Optional[float] = Field(None, ge=0, le=30)
     community_auto_share: Optional[bool] = None
     netz_puffer_w: Optional[int] = Field(None, ge=0, le=1000)
+    prognose_basis: Optional[str] = Field(None, max_length=30)
 
 
 class SensorConfigUpdate(BaseModel):

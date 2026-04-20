@@ -40,6 +40,9 @@ export type WetterModell =
   | 'icon_eu'
   | 'ecmwf_ifs04'
 
+// Prognose-Basis für EEDC-kalibriert
+export type PrognoseBasis = 'openmeteo' | 'solcast'
+
 // Steuerliche Behandlung
 export type SteuerlicheBehandlung = 'keine_ust' | 'regelbesteuerung'
 
@@ -79,6 +82,8 @@ export interface Anlage {
   community_auto_share?: boolean
   // Energiefluss-Anzeige
   netz_puffer_w?: number
+  // Prognose-Basis
+  prognose_basis?: PrognoseBasis
 }
 
 // Sensor-Konfiguration
