@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.12] - 2026-04-20
+
+### Bugfixes
+
+- **fix(prognosen): 0.0 kWh ab Tag 3 bei icon_d2 Wettermodell** — Modelle mit kurzem Horizont (z.B. icon_d2 = 2 Tage) lieferten ab Tag 3 keine Daten. Neuer Fallback: Primary-Modell + best_match parallel abrufen und Tage mergen (analog zur GTI-Kaskade).
+- **fix(prognosen): Verbleibend-Werte pro Quelle in KPI-Matrix** — Die Verbleibend-Zeile zeigt jetzt OM/EEDC/Solcast-Werte (Tagesprognose − bisheriger IST) statt nur den kombinierten IST-Wert.
+- **fix(solcast): Entity-Mapping für "übermorgen"** — `_ubermorgen` und `_uebermorgen` als Aliase für `tag_3` im Suffix-Mapper ergänzt.
+- **fix(prognosen): Solcast p90-Konfidenzband im Stundenprofil entfernt** — Der halbtransparente "Schatten" im Chart sorgte für Verwirrung.
+- **fix(prognosen): Σ-Summenzeile im Stundenvergleich sticky** — Die Summenzeile ist jetzt am unteren Rand fixiert und bleibt beim Scrollen sichtbar.
+
+---
+
 ## [3.16.11] - 2026-04-19
 
 ### Bugfixes
