@@ -138,6 +138,7 @@ class SolarPrognoseTag:
     pv_ertrag_morgens_kwh: Optional[float] = None   # vor 12:00
     pv_ertrag_nachmittags_kwh: Optional[float] = None  # ab 12:00
     datenquelle: str = "best_match"  # Welches Wettermodell die Daten lieferte
+    stunden_kw: Optional[List[float]] = None  # 24 Werte (kW pro Stunde), für Tagesprognose
 
 
 @dataclass
@@ -500,6 +501,7 @@ def _build_prognose(
                 "temp_max": None,
                 "snow_sum": 0,
                 "cloud_values": [],  # Für Durchschnittsberechnung
+                "stunden_kw": [0.0] * 24,  # Stündliche PV-Leistung (kW)
             }
             # Solar Noon für diesen Tag berechnen
             solar_noon_cache[tag] = _solar_noon_hour(tag, longitude)
@@ -536,8 +538,11 @@ def _build_prognose(
                 schnee_cm=snow
             )
             day["ertrag_sum_kwh"] += stunden_ertrag
-            # Vor-/Nachmittag-Split an Solar Noon (proportional)
+            # Stündliche kW-Werte sammeln
             stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else 12
+            if 0 <= stunde < 24:
+                day["stunden_kw"][stunde] += stunden_ertrag
+            # Vor-/Nachmittag-Split an Solar Noon (proportional)
             noon = solar_noon_cache.get(tag, 12.4)
             noon_hour = int(noon)
             if stunde < noon_hour:
@@ -612,6 +617,7 @@ def _build_prognose(
             pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
             pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
             datenquelle=datenquelle_tag,
+            stunden_kw=[round(v, 3) for v in day.get("stunden_kw", [0.0] * 24)],
         ))
 
         summe_kwh += ertrag

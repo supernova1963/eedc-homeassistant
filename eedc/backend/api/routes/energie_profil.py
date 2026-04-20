@@ -5,6 +5,7 @@ GET /api/energie-profil/{anlage_id}/tage      — Tageszusammenfassungen
 GET /api/energie-profil/{anlage_id}/stunden   — Stundenwerte für einen Tag
 GET /api/energie-profil/{anlage_id}/wochenmuster — Ø-Tagesprofil je Wochentag
 GET /api/energie-profil/{anlage_id}/monat     — Monatsauswertung (Heatmap + KPIs + Peaks)
+GET /api/energie-profil/{anlage_id}/tagesprognose — Verbrauch+PV+Batterie-Prognose für einen Tag
 GET /api/energie-profil/{anlage_id}/debug-rohdaten — Rohdaten TagesEnergieProfil (7 Tage)
 DELETE /api/energie-profil/{anlage_id}/rohdaten — Löscht TagesEnergieProfil-Daten
 """
@@ -23,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition
+from backend.models.investition import Investition, InvestitionTyp
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
 # seite je Investitionstyp
@@ -965,3 +966,278 @@ async def delete_alle_rohdaten(
         "geloescht_tagessummen": del_tage.rowcount,
         "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten. Monatsdaten bleiben erhalten.",
     }
+
+
+# ── Tagesprognose (Etappe 3b) ──────────────────────────────────────────────
+
+
+class StundenPrognose(BaseModel):
+    """Prognose für eine Stunde: PV, Verbrauch, Netto-Bilanz, Batterie-SoC."""
+    stunde: int
+    pv_kw: float
+    verbrauch_kw: float
+    netto_kw: float           # pv - verbrauch (positiv=Überschuss)
+    netzbezug_kw: float       # max(0, Bedarf nach Batterie-Entladung)
+    einspeisung_kw: float     # max(0, Überschuss nach Batterie-Ladung)
+    soc_prozent: Optional[float] = None  # Simulierter Batterie-SoC
+
+
+class TagesPrognoseResponse(BaseModel):
+    """Kombinierte Verbrauchs- + PV- + Batterie-Prognose für einen Tag."""
+    datum: str
+    stunden: list[StundenPrognose]
+    # Zusammenfassung
+    pv_summe_kwh: float
+    verbrauch_summe_kwh: float
+    netzbezug_summe_kwh: float
+    einspeisung_summe_kwh: float
+    eigenverbrauch_kwh: float
+    autarkie_prozent: float
+    # Speicher (optional)
+    speicher_kapazitaet_kwh: Optional[float] = None
+    speicher_voll_um: Optional[str] = None
+    speicher_leer_um: Optional[str] = None
+    # Meta
+    verbrauch_basis: str        # "gleicher_wochentag", "tagestyp", "alle"
+    pv_quelle: str              # "openmeteo" oder "solcast"
+    daten_tage: int
+
+
+@router.get("/{anlage_id}/tagesprognose", response_model=TagesPrognoseResponse)
+async def get_tagesprognose(
+    anlage_id: int,
+    datum: Optional[date] = Query(
+        default=None,
+        description="Ziel-Datum (Default: morgen)"
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Kombinierte Tagesprognose: Verbrauch + PV + Batterie-Simulation.
+
+    Berechnet für einen Tag (Standard: morgen):
+    - Verbrauchsprofil aus historischen Stundenmitteln (Wochenmuster-Basis)
+    - PV-Stundenprofil aus Solar Forecast (OpenMeteo GTI oder Solcast)
+    - Netto-Bilanz und optionale Batterie-SoC-Simulation
+    """
+    if datum is None:
+        datum = date.today() + timedelta(days=1)
+
+    # Anlage laden
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    if not anlage.latitude or not anlage.longitude:
+        raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten konfiguriert")
+
+    # ── 1. Verbrauchsprognose ──
+    from backend.services.verbrauch_prognose_service import get_verbrauch_prognose
+
+    vp = await get_verbrauch_prognose(anlage_id, datum, db)
+    if not vp:
+        raise HTTPException(
+            status_code=422,
+            detail="Zu wenig historische Energieprofil-Daten für Verbrauchsprognose. "
+                   "Mindestens 3 vollständige Tage benötigt."
+        )
+
+    verbrauch_stunden = vp["stunden_kw"]
+
+    # ── 2. PV-Stundenprofil ──
+    pv_stunden = [0.0] * 24
+    pv_quelle = "openmeteo"
+
+    # Versuche Solcast zuerst (wenn konfiguriert)
+    prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
+    solcast_config = (anlage.sensor_mapping or {}).get("solcast_config")
+
+    if solcast_config and prognose_basis == "solcast":
+        try:
+            from backend.services.solcast_service import get_solcast_forecast
+            solcast = await get_solcast_forecast(anlage)
+            if solcast and solcast.hourly_kw and len(solcast.hourly_kw) == 24:
+                # Solcast hourly_kw enthält Werte für heute
+                # Für morgen: tage_voraus nutzen (falls verfügbar mit Stundenwerten)
+                # Sonst: hourly als Approximation
+                pv_stunden = list(solcast.hourly_kw)
+                pv_quelle = "solcast"
+        except Exception as e:
+            logger.warning("Solcast für Tagesprognose fehlgeschlagen: %s", e)
+
+    # Fallback: OpenMeteo GTI
+    if pv_quelle == "openmeteo":
+        try:
+            from backend.services.solar_forecast_service import get_solar_prognose
+
+            # Strings für Multi-Ausrichtung laden
+            inv_result = await db.execute(
+                select(Investition).where(
+                    Investition.anlage_id == anlage_id,
+                    Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
+                    Investition.aktiv.is_(True),
+                )
+            )
+            invs = inv_result.scalars().all()
+            # Nur aktive (nicht stillgelegte) Investitionen
+            aktive_invs = [
+                inv for inv in invs
+                if not inv.stilllegungsdatum or inv.stilllegungsdatum >= datum
+            ]
+
+            if aktive_invs:
+                total_kwp = sum((inv.parameter or {}).get("kwp", 0) or 0 for inv in aktive_invs)
+                system_losses = (anlage.system_losses or 14) / 100
+
+                # Tage bis zum Zieldatum berechnen
+                tage_bis_ziel = (datum - date.today()).days
+                forecast_days = max(tage_bis_ziel + 1, 2)
+
+                prognose = await get_solar_prognose(
+                    latitude=anlage.latitude,
+                    longitude=anlage.longitude,
+                    kwp=total_kwp,
+                    neigung=aktive_invs[0].parameter.get("neigung", 35) if aktive_invs[0].parameter else 35,
+                    ausrichtung=aktive_invs[0].parameter.get("ausrichtung", 0) if aktive_invs[0].parameter else 0,
+                    days=forecast_days,
+                    system_losses=system_losses,
+                )
+                if prognose:
+                    ziel_str = datum.isoformat()
+                    for tag in prognose.tageswerte:
+                        if tag.datum == ziel_str and tag.stunden_kw:
+                            pv_stunden = tag.stunden_kw
+                            break
+
+                    # Lernfaktor anwenden (MOS-Kaskade)
+                    from backend.api.routes.live_wetter import _get_lernfaktor
+                    lernfaktor = await _get_lernfaktor(anlage_id, db)
+                    if lernfaktor is not None:
+                        pv_stunden = [round(v * lernfaktor, 3) for v in pv_stunden]
+
+        except Exception as e:
+            logger.warning("PV-Prognose für Tagesprognose fehlgeschlagen: %s", e)
+
+    # ── 3. Batterie-Info laden ──
+    inv_result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == InvestitionTyp.SPEICHER.value,
+            Investition.aktiv.is_(True),
+        )
+    )
+    speicher_invs = [
+        inv for inv in inv_result.scalars().all()
+        if not inv.stilllegungsdatum or inv.stilllegungsdatum >= datum
+    ]
+
+    speicher_kap = sum(
+        (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        for inv in speicher_invs
+    )
+
+    # Start-SoC: Ø SoC um Mitternacht der letzten 7 Tage
+    start_soc = 50.0  # Default
+    if speicher_kap > 0:
+        soc_result = await db.execute(
+            select(TagesEnergieProfil.soc_prozent)
+            .where(
+                TagesEnergieProfil.anlage_id == anlage_id,
+                TagesEnergieProfil.datum >= datum - timedelta(days=7),
+                TagesEnergieProfil.datum < datum,
+                TagesEnergieProfil.stunde == 0,
+                TagesEnergieProfil.soc_prozent.isnot(None),
+            )
+            .order_by(TagesEnergieProfil.datum.desc())
+        )
+        soc_werte = [r for r in soc_result.scalars().all()]
+        if soc_werte:
+            start_soc = sum(soc_werte) / len(soc_werte)
+
+    # ── 4. Stündliche Bilanz + Batterie-Simulation ──
+    stunden: list[StundenPrognose] = []
+    soc = start_soc
+    speicher_voll_um = None
+    speicher_leer_um = None
+
+    sum_pv = 0.0
+    sum_verbrauch = 0.0
+    sum_netzbezug = 0.0
+    sum_einspeisung = 0.0
+
+    for h in range(24):
+        pv = pv_stunden[h] if h < len(pv_stunden) else 0.0
+        vb = verbrauch_stunden[h] if h < len(verbrauch_stunden) else 0.0
+        netto = pv - vb  # positiv = Überschuss
+
+        netzbezug = 0.0
+        einspeisung = 0.0
+        soc_h: Optional[float] = None
+
+        if speicher_kap > 0:
+            if netto > 0:
+                # Überschuss → Batterie laden
+                lade_kapazitaet = (100.0 - soc) / 100.0 * speicher_kap
+                ladung = min(netto, lade_kapazitaet)  # kWh (1h Intervall)
+                soc += (ladung / speicher_kap) * 100.0
+                soc = min(soc, 100.0)
+                rest_ueberschuss = netto - ladung
+                einspeisung = rest_ueberschuss
+            else:
+                # Defizit → Batterie entladen
+                defizit = abs(netto)
+                entlade_kapazitaet = soc / 100.0 * speicher_kap
+                entladung = min(defizit, entlade_kapazitaet)
+                soc -= (entladung / speicher_kap) * 100.0
+                soc = max(soc, 0.0)
+                rest_defizit = defizit - entladung
+                netzbezug = rest_defizit
+
+            soc_h = round(soc, 1)
+
+            if soc >= 98.0 and speicher_voll_um is None:
+                speicher_voll_um = f"{h:02d}:00"
+            if soc <= 2.0 and speicher_leer_um is None and h >= 12:
+                speicher_leer_um = f"{h:02d}:00"
+        else:
+            # Ohne Batterie: direkte Bilanz
+            if netto > 0:
+                einspeisung = netto
+            else:
+                netzbezug = abs(netto)
+
+        sum_pv += pv
+        sum_verbrauch += vb
+        sum_netzbezug += netzbezug
+        sum_einspeisung += einspeisung
+
+        stunden.append(StundenPrognose(
+            stunde=h,
+            pv_kw=round(pv, 3),
+            verbrauch_kw=round(vb, 3),
+            netto_kw=round(netto, 3),
+            netzbezug_kw=round(netzbezug, 3),
+            einspeisung_kw=round(einspeisung, 3),
+            soc_prozent=soc_h,
+        ))
+
+    eigenverbrauch = sum_pv - sum_einspeisung
+    autarkie = (eigenverbrauch / sum_verbrauch * 100) if sum_verbrauch > 0 else 0.0
+
+    return TagesPrognoseResponse(
+        datum=datum.isoformat(),
+        stunden=stunden,
+        pv_summe_kwh=round(sum_pv, 2),
+        verbrauch_summe_kwh=round(sum_verbrauch, 2),
+        netzbezug_summe_kwh=round(sum_netzbezug, 2),
+        einspeisung_summe_kwh=round(sum_einspeisung, 2),
+        eigenverbrauch_kwh=round(eigenverbrauch, 2),
+        autarkie_prozent=round(autarkie, 1),
+        speicher_kapazitaet_kwh=round(speicher_kap, 1) if speicher_kap > 0 else None,
+        speicher_voll_um=speicher_voll_um,
+        speicher_leer_um=speicher_leer_um,
+        verbrauch_basis=vp["basis"],
+        pv_quelle=pv_quelle,
+        daten_tage=vp["daten_tage"],
+    )

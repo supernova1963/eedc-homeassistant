@@ -144,6 +144,33 @@ export interface VollbackfillResult {
   bis: string
 }
 
+export interface StundenPrognose {
+  stunde: number
+  pv_kw: number
+  verbrauch_kw: number
+  netto_kw: number
+  netzbezug_kw: number
+  einspeisung_kw: number
+  soc_prozent: number | null
+}
+
+export interface TagesPrognose {
+  datum: string
+  stunden: StundenPrognose[]
+  pv_summe_kwh: number
+  verbrauch_summe_kwh: number
+  netzbezug_summe_kwh: number
+  einspeisung_summe_kwh: number
+  eigenverbrauch_kwh: number
+  autarkie_prozent: number
+  speicher_kapazitaet_kwh: number | null
+  speicher_voll_um: string | null
+  speicher_leer_um: string | null
+  verbrauch_basis: string
+  pv_quelle: string
+  daten_tage: number
+}
+
 export const energieProfilApi = {
   getStunden: (anlageId: number, datum: string): Promise<StundenAntwort> =>
     api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
@@ -159,4 +186,7 @@ export const energieProfilApi = {
 
   vollbackfill: (anlageId: number): Promise<VollbackfillResult> =>
     api.post(`/energie-profil/${anlageId}/vollbackfill`),
+
+  getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
+    api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),
 }
