@@ -214,7 +214,7 @@ async def get_prognosen_vergleich(
 
     # Wettermodell + Orientierung
     wetter_modell = anlage.wetter_modell or "auto"
-    model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
+    model_name, max_days = WETTER_MODELLE.get(wetter_modell, (None, 16))
 
     haupt_neigung = 35
     haupt_azimut = 0
@@ -229,9 +229,37 @@ async def get_prognosen_vergleich(
     now = datetime.now(ZoneInfo("Europe/Berlin"))
     heute = date.today()
 
+    # ── Wetter-Abruf: Kaskade bei Modellen mit kurzem Horizont (z.B. icon_d2 = 2 Tage) ──
+    needs_fallback = wetter_modell != "auto" and 14 > max_days
+
+    async def _fetch_wetter_mit_fallback():
+        """Primary-Modell + best_match Fallback parallel abrufen und mergen."""
+        primary, fallback = await asyncio.gather(
+            fetch_open_meteo_forecast(
+                latitude=anlage.latitude, longitude=anlage.longitude,
+                days=max_days, skip_jitter=True, model=model_name,
+            ),
+            fetch_open_meteo_forecast(
+                latitude=anlage.latitude, longitude=anlage.longitude,
+                days=14, skip_jitter=True, model=None,
+            ),
+        )
+        if not primary and not fallback:
+            return None
+        if not primary:
+            return fallback
+        if not fallback:
+            return primary
+        # Beide verfügbar → Primary-Tage haben Vorrang, Fallback füllt auf
+        primary_dates = {t["datum"] for t in primary.get("tage", [])}
+        merged_tage = list(primary.get("tage", []))
+        merged_tage.extend(t for t in fallback.get("tage", []) if t["datum"] not in primary_dates)
+        merged_tage.sort(key=lambda t: t["datum"])
+        return {**primary, "tage": merged_tage}
+
     # ── Parallele Datenabrufe (return_exceptions: ein API-Timeout crasht nicht alles) ──
     wetter, gti_data, solcast, ist_rows = await asyncio.gather(
-        fetch_open_meteo_forecast(
+        _fetch_wetter_mit_fallback() if needs_fallback else fetch_open_meteo_forecast(
             latitude=anlage.latitude, longitude=anlage.longitude,
             days=14, skip_jitter=True, model=model_name,
         ),
