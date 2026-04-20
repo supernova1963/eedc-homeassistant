@@ -118,6 +118,9 @@ class PrognosenVergleichResponse(BaseModel):
 
     # Verbleibend: Hochrechnung basierend auf IST + beste Prognose für Rest
     verbleibend_kwh: Optional[float] = None
+    verbleibend_om_kwh: Optional[float] = None
+    verbleibend_eedc_kwh: Optional[float] = None
+    verbleibend_solcast_kwh: Optional[float] = None
 
     # OpenMeteo Stundenprofil (GTI-basiert, roh)
     openmeteo_stundenprofil: List[StundenProfilEintrag] = []
@@ -375,6 +378,9 @@ async def get_prognosen_vergleich(
     # ── Verbleibend ──
     aktuelle_stunde = now.hour
     verbleibend_kwh = None
+    verbleibend_om_kwh = None
+    verbleibend_eedc_kwh = None
+    verbleibend_solcast_kwh = None
     if ist_heute_kwh > 0 or openmeteo_stundenprofil:
         rest_prognose = 0.0
         for h in range(aktuelle_stunde + 1, 24):
@@ -383,6 +389,13 @@ async def get_prognosen_vergleich(
             elif h < len(openmeteo_stundenprofil):
                 rest_prognose += openmeteo_stundenprofil[h].kw
         verbleibend_kwh = round(ist_heute_kwh + rest_prognose, 1)
+    # Pro Quelle: Tagesprognose - bisheriger IST
+    if openmeteo_heute_kwh is not None and ist_heute_kwh > 0:
+        verbleibend_om_kwh = round(max(0, openmeteo_heute_kwh - ist_heute_kwh), 1)
+    if eedc_heute_kwh is not None and ist_heute_kwh > 0:
+        verbleibend_eedc_kwh = round(max(0, eedc_heute_kwh - ist_heute_kwh), 1)
+    if solcast and solcast.daily_kwh is not None and ist_heute_kwh > 0:
+        verbleibend_solcast_kwh = round(max(0, solcast.daily_kwh - ist_heute_kwh), 1)
 
     # ── Solcast aufbereiten ──
     solcast_stundenprofil = []
@@ -470,6 +483,9 @@ async def get_prognosen_vergleich(
         ist_stundenprofil=ist_stundenprofil,
         ist_tageshaelfte=ist_th,
         verbleibend_kwh=verbleibend_kwh,
+        verbleibend_om_kwh=verbleibend_om_kwh,
+        verbleibend_eedc_kwh=verbleibend_eedc_kwh,
+        verbleibend_solcast_kwh=verbleibend_solcast_kwh,
         openmeteo_stundenprofil=openmeteo_stundenprofil,
         solcast_letzter_abruf=datetime.now().isoformat(),
         openmeteo_modell=wetter_modell,
