@@ -4,11 +4,15 @@ Prefetch-Service für Solar- und Wetterprognosen.
 Füllt den In-Memory-Cache proaktiv im Hintergrund, damit
 Aussichten-Seiten und das Live-Wetter-Widget sofort bedient werden können.
 Läuft alle 45 Minuten (innerhalb des 60-Min Cache-TTL).
+
+Persistiert die heutige PV-Tagesprognose (+ Solcast) in TagesZusammenfassung,
+damit der Lernfaktor unabhängig von Dashboard-Besuchen berechnet werden kann.
 """
 
 import asyncio
 import logging
 import random
+from datetime import date
 
 import httpx
 from sqlalchemy import select
@@ -175,9 +179,65 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
         wetter_modell=wetter_modell,
     ))
 
-    await asyncio.gather(*coros, return_exceptions=True)
+    results = await asyncio.gather(*coros, return_exceptions=True)
+
+    # ── Heutige PV-Prognose in DB persistieren (für Lernfaktor) ──
+    # Erster Result ist die 7-Tage-Prognose (single oder multi)
+    pv_heute_kwh = _extract_heute_kwh(results[0], has_multi)
+
+    # Solcast parallel holen (wenn verfügbar)
+    solcast_kwh = None
+    solcast_p10 = None
+    solcast_p90 = None
+    try:
+        from backend.services.solcast_service import get_solcast_forecast
+        solcast = await get_solcast_forecast(anlage)
+        if solcast:
+            solcast_kwh = solcast.daily_kwh
+            solcast_p10 = solcast.daily_p10_kwh
+            solcast_p90 = solcast.daily_p90_kwh
+    except Exception as e:
+        logger.debug(f"Prefetch Solcast für Anlage {anlage.id}: {e}")
+
+    if pv_heute_kwh is not None and pv_heute_kwh > 0:
+        try:
+            from backend.api.routes.live_wetter import _speichere_prognose
+            await _speichere_prognose(
+                anlage.id, date.today(), pv_heute_kwh,
+                solcast_kwh=solcast_kwh,
+                solcast_p10_kwh=solcast_p10,
+                solcast_p90_kwh=solcast_p90,
+            )
+        except Exception as e:
+            logger.warning(f"Prefetch Prognose-Persistierung Anlage {anlage.id}: {e}")
 
     return {"status": "ok", "strings": len(strings), "multi": has_multi}
+
+
+def _extract_heute_kwh(result, is_multi: bool) -> float | None:
+    """Extrahiert den heutigen PV-Ertrag (kWh) aus dem Prognose-Ergebnis."""
+    if result is None or isinstance(result, Exception):
+        return None
+
+    heute = date.today().isoformat()
+
+    if is_multi:
+        # Multi-String: result ist ein dict mit "string_prognosen"
+        if not isinstance(result, dict):
+            return None
+        total = 0.0
+        for sp in result.get("string_prognosen", []):
+            for tag in sp.get("tageswerte", []):
+                if tag["datum"] == heute:
+                    total += tag["pv_ertrag_kwh"]
+                    break
+        return round(total, 1) if total > 0 else None
+    else:
+        # Single-String: result ist SolarPrognoseResponse
+        for tag in getattr(result, "tageswerte", []):
+            if tag.datum == heute:
+                return round(tag.pv_ertrag_kwh, 1)
+        return None
 
 
 async def _prefetch_live_wetter(
