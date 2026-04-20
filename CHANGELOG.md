@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.14] - 2026-04-20
+
+### Bugfixes
+
+- **fix(prefetch): Prognose-Persistierung vom Dashboard in den Scheduler verlagert** — `pv_prognose_kwh` und Solcast-Tageswerte werden jetzt alle 45 Min automatisch vom Prefetch-Job in `TagesZusammenfassung` geschrieben. Vorher war die Persistierung ein Nebeneffekt des Dashboard-Besuchs (fragil), was dazu führte, dass der Lernfaktor bei keinem Nutzer berechnet werden konnte.
+
+---
+
 ## [3.16.13] - 2026-04-20
 
 ### Bugfixes
