@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.13] - 2026-04-20
+
+### Bugfixes
+
+- **fix(solcast): DetailedForecast Attribut-Name korrigiert** — BJReplay Solcast-Integration liefert das Stundenprofil als `DetailedForecast`, nicht `detailedHourly`. Dadurch fehlten bei HA-Sensor-Nutzern das Stundenprofil im Chart und die p10/p90 Konfidenzintervalle in der 7-Tage-Tabelle. Betraf insbesondere Anlagen mit mehreren Dachsegmenten (Danke @rapahl).
+
+---
+
 ## [3.16.12] - 2026-04-20
 
 ### Bugfixes
