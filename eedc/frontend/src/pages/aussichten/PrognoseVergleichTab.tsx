@@ -274,8 +274,6 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: '#9ca3af' }} />
               )}
               <Area dataKey="ist" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} />
-              {hasSolcast && <Area dataKey="solcast_p90" stroke="none" fill="#3b82f6" fillOpacity={0.08} legendType="none" />}
-              {hasSolcast && <Area dataKey="solcast_p10" stroke="none" fill="#ffffff" fillOpacity={0} legendType="none" />}
               {hasSolcast && <Line dataKey="solcast" stroke="#3b82f6" strokeWidth={2} dot={false} name="solcast" />}
               {hasEedc && <Line dataKey="eedc" stroke="#f97316" strokeWidth={2} dot={false} name="eedc" />}
               <Line dataKey="openmeteo" stroke="#eab308" strokeWidth={1.5} strokeDasharray="5 3" dot={false} name="openmeteo" />

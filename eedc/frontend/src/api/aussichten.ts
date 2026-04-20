@@ -290,6 +290,9 @@ export interface PrognosenVergleich {
 
   // Verbleibend (IST + Prognose Rest)
   verbleibend_kwh: number | null
+  verbleibend_om_kwh: number | null
+  verbleibend_eedc_kwh: number | null
+  verbleibend_solcast_kwh: number | null
 
   // OpenMeteo Stundenprofil (GTI-basiert)
   openmeteo_stundenprofil: StundenProfilEintrag[]
