@@ -180,9 +180,9 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                     <span>↳ Verbleibend</span>
                   </SimpleTooltip>
                 </td>
-                <td className="py-2 px-3"></td>
-                {hasEedc && <td className="py-2 px-3"></td>}
-                {hasSolcast && <td className="py-2 px-3"></td>}
+                <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_om_kwh)}</td>
+                {hasEedc && <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_eedc_kwh)}</td>}
+                {hasSolcast && <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_solcast_kwh)}</td>}
                 <td className="py-2 px-3 text-right font-mono text-emerald-500">{fmtKwh(data.verbleibend_kwh)}</td>
               </tr>
               {/* VM/NM Heute */}

@@ -301,6 +301,8 @@ _SOLCAST_SUFFIX_MAP = {
     "_tomorrow": "morgen",
     "_tag_3": "tag_3",
     "_day_3": "tag_3",
+    "_ubermorgen": "tag_3",
+    "_uebermorgen": "tag_3",
     "_tag_4": "tag_4",
     "_day_4": "tag_4",
     "_tag_5": "tag_5",
