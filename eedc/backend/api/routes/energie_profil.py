@@ -943,6 +943,29 @@ async def vollbackfill(
     }
 
 
+@router.post("/{anlage_id}/kraftstoffpreis-backfill")
+async def kraftstoffpreis_backfill(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Befüllt Kraftstoffpreise aus EU Oil Bulletin für alle Tage ohne Preis.
+
+    Lädt die aktuelle History-XLSX der EU-Kommission und schreibt den
+    passenden Wochenpreis (Euro-Super 95, inkl. Steuern) in
+    TagesZusammenfassung.kraftstoffpreis_euro.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    from backend.services.kraftstoff_preis_service import backfill_kraftstoffpreise
+    land = anlage.standort_land or "DE"
+    info = await backfill_kraftstoffpreise(anlage_id, land, db)
+    return info
+
+
 @router.delete("/rohdaten")
 async def delete_alle_rohdaten(
     db: AsyncSession = Depends(get_db),

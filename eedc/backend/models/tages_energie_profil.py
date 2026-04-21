@@ -162,6 +162,10 @@ class TagesZusammenfassung(Base):
     # kWh die bei negativem Börsenpreis eingespeist wurden (§51 EEG — Vergütungsausfall)
     einspeisung_neg_preis_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Kraftstoffpreis (Euro-Super 95, €/Liter, nationaler Wochendurchschnitt)
+    # Quelle: EU Weekly Oil Bulletin. Für E-Auto-Ersparnisberechnung.
+    kraftstoffpreis_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Per-Komponenten Tages-kWh (Summe der stündlichen kW-Werte)
     # z.B. {"pv_3": 22.5, "waermepumpe_5": -8.3, "wallbox_7": -12.1, "haushalt": -15.2}
     # Vorzeichen: positiv = Erzeugung (PV), negativ = Verbrauch (WP, Wallbox, etc.)

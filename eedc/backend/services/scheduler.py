@@ -163,6 +163,15 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Kraftstoffpreis: Wöchentlich Dienstag 06:00 (Oil Bulletin erscheint Montag)
+            self._scheduler.add_job(
+                kraftstoffpreis_job,
+                CronTrigger(day_of_week="tue", hour=6, minute=0),
+                id="kraftstoffpreis",
+                name="Kraftstoffpreis (EU Oil Bulletin)",
+                replace_existing=True,
+            )
+
             self._scheduler.start()
             self._running = True
             logger.info("EEDC Scheduler gestartet")
@@ -459,6 +468,43 @@ def get_scheduler() -> EEDCScheduler:
     if _scheduler is None:
         _scheduler = EEDCScheduler()
     return _scheduler
+
+
+async def kraftstoffpreis_job() -> None:
+    """
+    Aktualisiert Kraftstoffpreise für alle Anlagen aus EU Oil Bulletin.
+
+    Wöchentlich: Lädt aktuelle XLSX, befüllt fehlende Tage in TagesZusammenfassung.
+    """
+    try:
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.kraftstoff_preis_service import backfill_kraftstoffpreise
+        from sqlalchemy import select
+
+        async for db in get_session():
+            result = await db.execute(select(Anlage))
+            anlagen = result.scalars().all()
+
+            gesamt = 0
+            for anlage in anlagen:
+                land = anlage.standort_land or "DE"
+                try:
+                    info = await backfill_kraftstoffpreise(anlage.id, land, db)
+                    gesamt += info.get("aktualisiert", 0)
+                except Exception as e:
+                    logger.warning("Kraftstoffpreis-Backfill Anlage %d: %s", anlage.id, e)
+
+            if gesamt > 0:
+                await log_activity(
+                    kategorie="scheduler",
+                    aktion="Kraftstoffpreis-Update",
+                    erfolg=True,
+                    details=f"{gesamt} Tage für {len(anlagen)} Anlagen aktualisiert",
+                )
+                logger.info("Kraftstoffpreis-Job: %d Tage aktualisiert", gesamt)
+    except Exception as e:
+        logger.warning("Kraftstoffpreis-Job fehlgeschlagen: %s: %s", type(e).__name__, e)
 
 
 def start_scheduler() -> bool:
