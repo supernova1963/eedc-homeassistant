@@ -421,89 +421,98 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
             logger.debug("Solcast HA: Keine Solcast-Entities in der Entity Registry gefunden")
             return None
 
-        # Alle 7 Tages-Sensoren in einem Batch-Call lesen
+        # Alle 7 Tages-Sensoren in einem Batch-Call lesen (inkl. Attribute)
         entity_ids = list(entity_map.values())
-        ha_batch = await ha_svc.get_sensor_states_batch(entity_ids)
+        wanted = set(entity_ids)
+        ha_states: dict[str, dict] = {}  # entity_id → {"value": float, "attrs": dict}
+        try:
+            async with httpx.AsyncClient() as _client:
+                _resp = await _client.get(
+                    f"{ha_svc.api_url}/states",
+                    headers={"Authorization": f"Bearer {ha_svc.token}"},
+                    timeout=10.0,
+                )
+                if _resp.status_code == 200:
+                    for item in _resp.json():
+                        eid = item.get("entity_id", "")
+                        if eid not in wanted:
+                            continue
+                        state_val = item.get("state")
+                        if state_val in [None, "unknown", "unavailable", ""]:
+                            continue
+                        try:
+                            ha_states[eid] = {
+                                "value": float(state_val),
+                                "attrs": item.get("attributes") or {},
+                            }
+                        except (ValueError, TypeError):
+                            continue
+        except Exception:
+            pass
 
         # Heute prüfen
         heute_entity = entity_map["heute"]
-        if not ha_batch.get(heute_entity):
+        if heute_entity not in ha_states:
             logger.debug("Solcast HA: Heute-Sensor nicht verfügbar")
             return None
 
-        today_kwh = ha_batch[heute_entity][0]
+        today_kwh = ha_states[heute_entity]["value"]
         heute = date.today()
 
-        # 7-Tage-Werte aus Sensor-States
+        # 7-Tage-Werte aus Sensor-States + estimate10/estimate90 Attribute
         tage_voraus = []
         for day_offset, key in enumerate(["heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7"]):
             entity = entity_map.get(key)
             if not entity:
                 continue
-            state = ha_batch.get(entity)
-            if state:
+            sensor = ha_states.get(entity)
+            if sensor:
                 datum = heute + timedelta(days=day_offset)
+                attrs = sensor["attrs"]
                 tage_voraus.append({
                     "datum": datum.isoformat(),
-                    "kwh": round(state[0], 1),
-                    "p10": 0,  # Wird aus detailedHourly nachgezogen
-                    "p90": 0,
+                    "kwh": round(sensor["value"], 1),
+                    "p10": round(float(attrs.get("estimate10", 0) or 0), 1),
+                    "p90": round(float(attrs.get("estimate90", 0) or 0), 1),
                 })
 
-        # detailedHourly-Attribut für Stundenprofil + p10/p90
+        # detailedForecast-Attribut des Heute-Sensors für Stundenprofil
         hourly_p50 = [0.0] * 24
         hourly_p10 = [0.0] * 24
         hourly_p90 = [0.0] * 24
-        today_attrs = await _get_ha_sensor_attributes(heute_entity)
+        today_attrs = ha_states[heute_entity]["attrs"]
 
-        if today_attrs:
-            detailed = (
-                today_attrs.get("detailedForecast")
-                or today_attrs.get("DetailedForecast")
-                or today_attrs.get("detailedHourly")
-                or today_attrs.get("detailed_hourly")
-                or []
-            )
-            tz = ZoneInfo("Europe/Berlin")
-            # p10/p90 pro Tag aggregieren
-            tage_p_dict: dict[str, dict[str, float]] = {}
+        detailed = (
+            today_attrs.get("detailedForecast")
+            or today_attrs.get("DetailedForecast")
+            or today_attrs.get("detailedHourly")
+            or today_attrs.get("detailed_hourly")
+            or []
+        )
+        tz = ZoneInfo("Europe/Berlin")
 
-            for entry in detailed:
-                period_start = entry.get("period_start", "")
-                try:
-                    dt = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=tz)
-                    else:
-                        dt = dt.astimezone(tz)
-                except (ValueError, TypeError):
-                    continue
+        for entry in detailed:
+            period_start = entry.get("period_start", "")
+            try:
+                dt = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=tz)
+                else:
+                    dt = dt.astimezone(tz)
+            except (ValueError, TypeError):
+                continue
 
-                pv_p50 = entry.get("pv_estimate", 0) or 0
-                pv_p10 = entry.get("pv_estimate10", 0) or 0
-                pv_p90 = entry.get("pv_estimate90", 0) or 0
+            pv_p50 = entry.get("pv_estimate", 0) or 0
+            pv_p10 = entry.get("pv_estimate10", 0) or 0
+            pv_p90 = entry.get("pv_estimate90", 0) or 0
 
-                datum_str = dt.strftime("%Y-%m-%d")
-                stunde = dt.hour
+            stunde = dt.hour
 
-                # Stundenwerte für heute
-                if dt.date() == heute:
-                    hourly_p50[stunde] += pv_p50 * 0.5
-                    hourly_p10[stunde] += pv_p10 * 0.5
-                    hourly_p90[stunde] += pv_p90 * 0.5
-
-                # p10/p90 pro Tag
-                if datum_str not in tage_p_dict:
-                    tage_p_dict[datum_str] = {"p10": 0, "p90": 0}
-                tage_p_dict[datum_str]["p10"] += pv_p10 * 0.5
-                tage_p_dict[datum_str]["p90"] += pv_p90 * 0.5
-
-            # p10/p90 in tage_voraus nachziehen
-            for tag in tage_voraus:
-                p_data = tage_p_dict.get(tag["datum"])
-                if p_data:
-                    tag["p10"] = round(p_data["p10"], 1)
-                    tag["p90"] = round(p_data["p90"], 1)
+            # Stundenwerte für heute
+            if dt.date() == heute:
+                hourly_p50[stunde] += pv_p50 * 0.5
+                hourly_p10[stunde] += pv_p10 * 0.5
+                hourly_p90[stunde] += pv_p90 * 0.5
 
         # Morgen/Heute aus tage_voraus
         morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0

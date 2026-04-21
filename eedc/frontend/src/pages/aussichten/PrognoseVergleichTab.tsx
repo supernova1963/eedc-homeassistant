@@ -553,7 +553,7 @@ function DevBadge({ prognose, ist }: { prognose: number; ist: number }) {
   if (Math.abs(diff) < 0.03) return null
   const pct = ist > 0.05 ? Math.abs(diff / ist) * 100 : (prognose > 0.05 ? 100 : 0)
   const color = pct < 10 ? 'text-green-500' : pct < 30 ? 'text-yellow-500' : 'text-red-400'
-  const arrow = diff > 0 ? '↑' : '↓'
+  const arrow = diff > 0 ? '▲' : '▼'
   return <span className={`text-[10px] ml-1 ${color}`}>{arrow} {Math.abs(diff).toFixed(1)}</span>
 }
 
