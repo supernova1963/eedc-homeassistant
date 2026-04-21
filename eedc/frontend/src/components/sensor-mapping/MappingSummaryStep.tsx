@@ -143,6 +143,7 @@ export default function MappingSummaryStep({
   const [isBackfilling, setIsBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<VollbackfillResult | null>(null)
   const [backfillError, setBackfillError] = useState<string | null>(null)
+  const [overwrite, setOverwrite] = useState(false)
 
   const handleVollbackfill = async () => {
     if (!anlageId) return
@@ -150,7 +151,7 @@ export default function MappingSummaryStep({
     setBackfillError(null)
     setBackfillResult(null)
     try {
-      const result = await energieProfilApi.vollbackfill(anlageId)
+      const result = await energieProfilApi.vollbackfill(anlageId, overwrite)
       setBackfillResult(result)
     } catch (e) {
       setBackfillError(e instanceof Error ? e.message : 'Fehler beim Backfill')
@@ -313,6 +314,15 @@ export default function MappingSummaryStep({
               <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                 Füllt stündliche Energieprofile aus der HA Long-Term Statistics — unabhängig von der ~10-Tage-Grenze der Sensor-History.
               </p>
+              <label className="flex items-center gap-2 mt-2 text-sm text-blue-700 dark:text-blue-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={overwrite}
+                  onChange={(e) => setOverwrite(e.target.checked)}
+                  className="rounded border-blue-300 dark:border-blue-600 text-blue-600 focus:ring-blue-500"
+                />
+                Bestehende Tage überschreiben (z.B. nach Sensor-Änderungen)
+              </label>
               {backfillResult && (
                 <p className="text-sm text-blue-800 dark:text-blue-200 mt-2 font-medium">
                   ✓ {backfillResult.geschrieben} Tage geschrieben ({backfillResult.von} – {backfillResult.bis})
