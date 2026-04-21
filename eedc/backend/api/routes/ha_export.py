@@ -445,10 +445,27 @@ async def calculate_investition_sensors(
                     berechnung = f"{gesamt_pv_ladung:.0f} / {gesamt_ladung:.0f} × 100"
             elif sensor.key == "e_auto_ersparnis_vs_benzin_euro":
                 if gesamt_km > 0:
-                    benzinpreis = params.get("benzinpreis_euro", 1.65)
+                    # Monatliche Kraftstoffpreise laden (Fallback: statischer Parameter)
+                    fallback_benzinpreis = params.get("benzinpreis_euro", 1.65)
                     vergleich_l = params.get("vergleich_verbrauch_l_100km", 7.5)
-                    benzin_kosten = (gesamt_km / 100) * vergleich_l * benzinpreis
-                    strom_kosten = gesamt_netz_ladung * netzbezug_preis / 100
+                    anlage_md_result = await db.execute(
+                        select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
+                    )
+                    anlage_md_dict = {
+                        (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
+                    }
+                    benzin_kosten = 0.0
+                    strom_kosten = 0.0
+                    for md in monatsdaten:
+                        d = md.verbrauch_daten or {}
+                        km = d.get("km_gefahren", 0) or 0
+                        netz = d.get("ladung_netz_kwh", 0) or 0
+                        amd = anlage_md_dict.get((md.jahr, md.monat))
+                        bp = (amd.kraftstoffpreis_euro
+                              if amd and amd.kraftstoffpreis_euro is not None
+                              else fallback_benzinpreis)
+                        benzin_kosten += (km / 100) * vergleich_l * bp
+                        strom_kosten += netz * netzbezug_preis / 100
                     value = round(benzin_kosten - strom_kosten, 2)
                     berechnung = f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom)"
 
