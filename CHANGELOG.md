@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.17.0] - 2026-04-21
+
+### Features
+
+- **feat(kraftstoffpreis): Dynamische Benzinpreise für E-Auto-ROI** — Statt statischem `benzinpreis_euro`-Parameter werden jetzt echte monatliche Kraftstoffpreise aus dem EU Weekly Oil Bulletin verwendet. Neues Feld `Monatsdaten.kraftstoffpreis_euro` (€/L) mit automatischem Vorschlagswert im Monatsabschluss-Wizard (Konfidenz 85). ROI-Berechnung (Aussichten), HA-Sensor-Export und PDF-Finanzbericht nutzen pro Monat den echten Preis — Fallback auf statischen Parameter wenn kein Monatswert vorhanden. Backfill-Endpoint befüllt auch Monatsdaten rückwirkend (Oil Bulletin History seit 2005).
+
+> **Hinweis:** Die E-Auto-Ersparnis (Aussichten, HA-Sensor, PDF) wird jetzt mit echten monatlichen Benzinpreisen berechnet statt mit dem statischen Wert aus den Investitions-Parametern. Dadurch können sich angezeigte Ersparnisse gegenüber früheren Versionen verändern — nach oben oder unten, je nachdem ob der reale Preis über oder unter dem konfigurierten Wert lag. Die Berechnung ist damit genauer. Um die Monatsdaten rückwirkend mit Preisen zu befüllen: Einstellungen → Energieprofil → Kraftstoffpreis-Backfill.
+
+### Verbessert
+
+- **enhance(monatsabschluss): Preisfelder im Wizard und Zusammenfassung** — Kraftstoffpreis und Strompreis werden jetzt in der Basisdaten-Seite und in der Zusammenfassung des Monatsabschluss-Wizards angezeigt. Monatsdaten-Formular (Erstellen/Bearbeiten) zeigt ebenfalls das Benzinpreis-Feld (bedingt: nur bei E-Auto-Investitionen).
+
+---
+
 ## [3.16.16] - 2026-04-21
 
 ### Features
