@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.18.0] - 2026-04-21
+
+### Features
+
+- **feat(energieprofil): Eigener Tab mit Tages-Tabelle + Datenverwaltung (#133)** — Neue Seite `Einstellungen → Energieprofil` bündelt die tagesbezogenen Auswertungen und Datenverwaltungs-Aktionen der gewählten Anlage. Datenbestand-Kacheln (Stundenwerte/Tagessummen/Monatswerte, Abdeckung, Zeitraum) sind jetzt anlage-spezifisch. Tages-Tabelle mit Jahr/Monat-Selektor (zeigt nur Zeiträume mit Daten), Spalten-Selektor mit Gruppen (Peak-Leistungen, Tages-Summen, Performance, Wetter, §51-Börsenpreise), 12-Zeilen-Scrollansicht mit sticky Header. Aktionen: Vollbackfill aus HA-Statistik (mit overwrite-Option), Kraftstoffpreis-Tages-Backfill (nur sichtbar bei offenen Tagen), Energieprofil-Daten löschen (anlage-spezifisch statt global).
+
+- **feat(monatsdaten): Datenverwaltung auf Monatsdaten-Seite** — Neuer Abschnitt für Kraftstoffpreis-Monats-Backfill (nur sichtbar bei offenen Monaten). Tabelle jetzt auf ~12 Zeilen mit eigener vertikaler Scrollbar und sticky Header begrenzt. `<select>`-Accessibility-Labels verknüpft.
+
+### Verbessert
+
+- **enhance(navigation): Tab-Konsolidierung (#133)** — Tab `Monatsabschluss` in der Einstellungen-Tab-Leiste entfernt (war nur Redirect auf Monatsdaten). Direkt-Einstieg über den `Monatsabschluss`-Menüpunkt in der Einstellungen-Dropdown bleibt erhalten. Neuer Tab `Energieprofil` in der Daten-Gruppe ergänzt.
+
+- **enhance(settings): `Allgemein` entkernt** — Block `Datenbestand Energieprofile` samt globalem Löschen-Button aus `Einstellungen → Allgemein` entfernt (wandert zur neuen Energieprofil-Seite). Die Seite zeigt jetzt nur noch Theme, HA-Integration und Datenbank-Info.
+
+### Backend
+
+- **feat(api): Anlage-spezifische Energieprofil-Endpoints** — Neu: `GET /energie-profil/{id}/stats` (Profildaten-Kennzahlen pro Anlage), `GET /verfuegbare-monate` (Jahr/Monat-Kombinationen mit Einträgen), `GET /kraftstoffpreis-status` (offene Tages-/Monats-Zeilen), `POST /kraftstoffpreis-backfill/tages` und `/monats` als Split des bisherigen kombinierten Endpoints (Alt-Endpoint bleibt als Alias). `DELETE /energie-profil/{id}/rohdaten` löscht jetzt konsistent auch `TagesZusammenfassung` (analog zum globalen Alt-Endpoint).
+
+---
+
 ## [3.17.1] - 2026-04-21
 
 > **⚠️ Backup erforderlich** — Internes Refactoring der Formulardaten-Verarbeitung. Bitte vor dem Update ein Backup erstellen.
