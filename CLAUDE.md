@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.16.14 | **Status:** Stable Release
+**Version:** 3.16.16 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
