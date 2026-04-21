@@ -474,35 +474,43 @@ async def kraftstoffpreis_job() -> None:
     """
     Aktualisiert Kraftstoffpreise für alle Anlagen aus EU Oil Bulletin.
 
-    Wöchentlich: Lädt aktuelle XLSX, befüllt fehlende Tage in TagesZusammenfassung.
+    Wöchentlich: Lädt aktuelle XLSX, befüllt fehlende Tage in TagesZusammenfassung
+    und fehlende Monate in Monatsdaten (Monatsdurchschnitt).
     """
     try:
         from backend.core.database import get_session
         from backend.models.anlage import Anlage
-        from backend.services.kraftstoff_preis_service import backfill_kraftstoffpreise
+        from backend.services.kraftstoff_preis_service import (
+            backfill_kraftstoffpreise,
+            backfill_monatsdaten_kraftstoffpreise,
+        )
         from sqlalchemy import select
 
         async for db in get_session():
             result = await db.execute(select(Anlage))
             anlagen = result.scalars().all()
 
-            gesamt = 0
+            gesamt_tage = 0
+            gesamt_monate = 0
             for anlage in anlagen:
                 land = anlage.standort_land or "DE"
                 try:
-                    info = await backfill_kraftstoffpreise(anlage.id, land, db)
-                    gesamt += info.get("aktualisiert", 0)
+                    info_t = await backfill_kraftstoffpreise(anlage.id, land, db)
+                    gesamt_tage += info_t.get("aktualisiert", 0)
+                    info_m = await backfill_monatsdaten_kraftstoffpreise(anlage.id, land, db)
+                    gesamt_monate += info_m.get("aktualisiert", 0)
                 except Exception as e:
                     logger.warning("Kraftstoffpreis-Backfill Anlage %d: %s", anlage.id, e)
 
-            if gesamt > 0:
+            if gesamt_tage > 0 or gesamt_monate > 0:
                 await log_activity(
                     kategorie="scheduler",
                     aktion="Kraftstoffpreis-Update",
                     erfolg=True,
-                    details=f"{gesamt} Tage für {len(anlagen)} Anlagen aktualisiert",
+                    details=f"{gesamt_tage} Tage + {gesamt_monate} Monate für {len(anlagen)} Anlagen",
                 )
-                logger.info("Kraftstoffpreis-Job: %d Tage aktualisiert", gesamt)
+                logger.info("Kraftstoffpreis-Job: %d Tage, %d Monate aktualisiert",
+                            gesamt_tage, gesamt_monate)
     except Exception as e:
         logger.warning("Kraftstoffpreis-Job fehlgeschlagen: %s: %s", type(e).__name__, e)
 
