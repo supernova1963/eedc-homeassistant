@@ -15,9 +15,11 @@ export default function SummaryStep({
   let gefuellt = 0
   let gesamt = 0
 
+  const zaehlerFelder = ['einspeisung_kwh', 'netzbezug_kwh']
+  const zusatzFelder = data.basis_felder.filter(f => !zaehlerFelder.includes(f.feld))
+
   for (const feld of data.basis_felder) {
-    // direktverbrauch_kwh wird automatisch berechnet, daher nicht zählen
-    if (['einspeisung_kwh', 'netzbezug_kwh'].includes(feld.feld)) {
+    if (zaehlerFelder.includes(feld.feld)) {
       gesamt++
       if (values.basis[feld.feld] !== null && values.basis[feld.feld] !== undefined) {
         gefuellt++
@@ -61,7 +63,7 @@ export default function SummaryStep({
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-700">
           {data.basis_felder
-            .filter(f => ['einspeisung_kwh', 'netzbezug_kwh'].includes(f.feld))
+            .filter(f => zaehlerFelder.includes(f.feld))
             .map(feld => (
               <SummaryRow
                 key={feld.feld}
@@ -70,6 +72,15 @@ export default function SummaryStep({
                 einheit={feld.einheit}
               />
             ))}
+          {zusatzFelder.map(feld => (
+            <SummaryRow
+              key={feld.feld}
+              label={feld.label}
+              wert={values.basis[feld.feld]}
+              einheit={feld.einheit}
+              optional
+            />
+          ))}
         </div>
       </div>
 

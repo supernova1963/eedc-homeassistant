@@ -134,6 +134,7 @@ class MonatsabschlussInput(BaseModel):
 
     # Optionale manuelle Felder (nicht aus HA)
     netzbezug_durchschnittspreis_cent: Optional[float] = None
+    kraftstoffpreis_euro: Optional[float] = None  # €/L Monatsdurchschnitt
     sonderkosten_euro: Optional[float] = None
     sonderkosten_beschreibung: Optional[str] = None
     notizen: Optional[str] = None
@@ -439,6 +440,36 @@ async def get_monatsabschluss(
             warnungen=[],
             strategie=strompreis_strategie,
             sensor_id=strompreis_sensor_id,
+        ))
+
+    # Kraftstoffpreis: Bedingt anzeigen wenn E-Auto-Investitionen vorhanden
+    hat_eauto = any(i.typ == "e-auto" for i in anlage.investitionen if not i.stilllegungsdatum)
+    if hat_eauto:
+        feld = "kraftstoffpreis_euro"
+        aktueller_wert = getattr(monatsdaten, feld, None) if monatsdaten else None
+
+        kraftstoff_vorschlaege: list[VorschlagResponse] = []
+        # Vorschlag aus TagesZusammenfassung-Durchschnitt
+        from backend.services.kraftstoff_preis_service import get_monatsdurchschnitt
+        avg_preis = await get_monatsdurchschnitt(anlage_id, jahr, monat, db)
+        if avg_preis is not None:
+            kraftstoff_vorschlaege.append(VorschlagResponse(
+                wert=avg_preis,
+                quelle="oil_bulletin",
+                konfidenz=85,
+                beschreibung="Monatsdurchschnitt aus EU Weekly Oil Bulletin",
+            ))
+
+        basis_felder.append(FeldStatus(
+            feld=feld,
+            label="Ø Benzinpreis",
+            einheit="€/L",
+            aktueller_wert=aktueller_wert,
+            quelle="manuell" if aktueller_wert else None,
+            vorschlaege=kraftstoff_vorschlaege,
+            warnungen=[],
+            strategie=None,
+            sensor_id=None,
         ))
 
     # Investitionen aufbereiten
@@ -896,6 +927,8 @@ async def save_monatsabschluss(
         monatsdaten.durchschnittstemperatur = daten.durchschnittstemperatur
     if daten.netzbezug_durchschnittspreis_cent is not None:
         monatsdaten.netzbezug_durchschnittspreis_cent = daten.netzbezug_durchschnittspreis_cent
+    if daten.kraftstoffpreis_euro is not None:
+        monatsdaten.kraftstoffpreis_euro = daten.kraftstoffpreis_euro
     if daten.sonderkosten_euro is not None:
         monatsdaten.sonderkosten_euro = daten.sonderkosten_euro
     if daten.sonderkosten_beschreibung is not None:

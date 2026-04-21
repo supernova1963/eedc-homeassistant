@@ -56,6 +56,9 @@ class Monatsdaten(Base):
     # Dynamischer Tarif: Monatsdurchschnitt Netzbezugspreis (ct/kWh)
     netzbezug_durchschnittspreis_cent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Kraftstoffpreis: Monatsdurchschnitt aus EU Weekly Oil Bulletin (€/L)
+    kraftstoffpreis_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Wetterdaten (optional, von Open-Meteo)
     globalstrahlung_kwh_m2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sonnenstunden: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

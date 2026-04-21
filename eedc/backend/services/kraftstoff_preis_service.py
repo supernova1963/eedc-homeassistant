@@ -196,6 +196,37 @@ def get_preis_fuer_datum(preise: list[tuple[date, float]], ziel_datum: date) -> 
     return None
 
 
+async def get_monatsdurchschnitt(
+    anlage_id: int,
+    jahr: int,
+    monat: int,
+    db,  # AsyncSession
+) -> Optional[float]:
+    """
+    Berechnet den Durchschnitts-Kraftstoffpreis eines Monats
+    aus TagesZusammenfassung-Daten.
+
+    Returns:
+        Durchschnittspreis in €/L oder None wenn keine Daten vorhanden.
+    """
+    from sqlalchemy import select, func, extract
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+
+    result = await db.execute(
+        select(func.avg(TagesZusammenfassung.kraftstoffpreis_euro))
+        .where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            extract('year', TagesZusammenfassung.datum) == jahr,
+            extract('month', TagesZusammenfassung.datum) == monat,
+            TagesZusammenfassung.kraftstoffpreis_euro.isnot(None),
+        )
+    )
+    avg_preis = result.scalar()
+    if avg_preis is not None:
+        return round(avg_preis, 3)
+    return None
+
+
 async def backfill_kraftstoffpreise(
     anlage_id: int,
     land: str,

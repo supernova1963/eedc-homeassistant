@@ -132,6 +132,8 @@ async def run_migrations(conn):
                 ('batterie_vollzyklen', 'FLOAT'),
                 ('performance_ratio', 'FLOAT'),
                 ('peak_netzbezug_kw', 'FLOAT'),
+                # v3.17.0: Kraftstoffpreis aus EU Oil Bulletin
+                ('kraftstoffpreis_euro', 'FLOAT'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

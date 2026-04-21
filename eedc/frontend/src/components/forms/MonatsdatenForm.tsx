@@ -46,6 +46,7 @@ export interface MonatsdatenSubmitData {
   batterie_ladung_kwh?: number
   batterie_entladung_kwh?: number
   netzbezug_durchschnittspreis_cent?: number
+  kraftstoffpreis_euro?: number
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
   durchschnittstemperatur?: number
@@ -160,6 +161,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     sonnenstunden: monatsdaten?.sonnenstunden?.toString() || '',
     durchschnittstemperatur: monatsdaten?.durchschnittstemperatur?.toString() || '',
     netzbezug_durchschnittspreis_cent: monatsdaten?.netzbezug_durchschnittspreis_cent?.toString() || '',
+    kraftstoffpreis_euro: monatsdaten?.kraftstoffpreis_euro?.toString() || '',
     sonderkosten_euro: monatsdaten?.sonderkosten_euro?.toString() || '',
     sonderkosten_beschreibung: monatsdaten?.sonderkosten_beschreibung || '',
     notizen: monatsdaten?.notizen || '',
@@ -605,6 +607,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         batterie_ladung_kwh: battLadung,
         batterie_entladung_kwh: battEntladung,
         netzbezug_durchschnittspreis_cent: formData.netzbezug_durchschnittspreis_cent ? parseFloat(formData.netzbezug_durchschnittspreis_cent) : undefined,
+        kraftstoffpreis_euro: formData.kraftstoffpreis_euro ? parseFloat(formData.kraftstoffpreis_euro) : undefined,
         globalstrahlung_kwh_m2: formData.globalstrahlung_kwh_m2 ? parseFloat(formData.globalstrahlung_kwh_m2) : undefined,
         sonnenstunden: formData.sonnenstunden ? parseFloat(formData.sonnenstunden) : undefined,
         durchschnittstemperatur: formData.durchschnittstemperatur ? parseFloat(formData.durchschnittstemperatur) : undefined,
@@ -702,6 +705,19 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               onChange={handleChange}
               placeholder="z.B. 25.3"
               hint="Monatsdurchschnitt bei dynamischem Tarif (ct/kWh)"
+            />
+          )}
+          {hatEAuto && (
+            <Input
+              label="Ø Benzinpreis"
+              name="kraftstoffpreis_euro"
+              type="number"
+              step="0.001"
+              min="0"
+              value={formData.kraftstoffpreis_euro}
+              onChange={handleChange}
+              placeholder="z.B. 1.85"
+              hint="€/L — Monatsdurchschnitt für E-Auto-Vergleich"
             />
           )}
           {/* PV-Erzeugung: readonly wenn PV-Module mit Werten vorhanden, sonst editierbar (Legacy) */}

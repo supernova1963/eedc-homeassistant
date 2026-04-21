@@ -15,6 +15,8 @@ export default function BasisStep({
   // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung), daher nicht hier
   const wichtigeFelder = ['einspeisung_kwh', 'netzbezug_kwh']
   const wetterdatenFelder = ['globalstrahlung_kwh_m2', 'sonnenstunden', 'durchschnittstemperatur']
+  const preisFelder = ['netzbezug_durchschnittspreis_cent', 'kraftstoffpreis_euro']
+  const preiseFelderVorhanden = felder.filter(f => preisFelder.includes(f.feld))
 
   return (
     <div className="space-y-6">
@@ -35,6 +37,20 @@ export default function BasisStep({
             />
           ))}
       </div>
+
+      {/* Preisdaten (bedingt: nur wenn Felder vom Backend geliefert) */}
+      {preiseFelderVorhanden.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {preiseFelderVorhanden.map(feld => (
+            <FeldInput
+              key={feld.feld}
+              feld={feld}
+              value={values[feld.feld]}
+              onChange={(wert) => onChange(feld.feld, wert)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Wetterdaten (optional) */}
       <details className="mt-6">

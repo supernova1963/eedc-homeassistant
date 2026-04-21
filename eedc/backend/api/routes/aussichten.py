@@ -1132,6 +1132,7 @@ async def get_finanz_prognose(
 
     # E-Auto Alternativkosten-Ersparnis
     # Ersparnis = Benzin-Kosten - Netzstrom-Kosten
+    # Pro Monat berechnet, um echte Kraftstoffpreise zu nutzen (Fallback: statischer Parameter)
     gesamt_km = 0.0
     gesamt_eauto_netz = 0.0
     for ea in e_autos:
@@ -1141,15 +1142,18 @@ async def get_finanz_prognose(
                 netz = daten.get("ladung_netz_kwh", 0)
                 gesamt_km += km
                 gesamt_eauto_netz += netz
-
-    if gesamt_km > 0:
-        # Benzin-Kosten für dieselbe Strecke
-        benzin_liter = gesamt_km / 100 * eauto_vergleich_l_100km
-        benzin_kosten = benzin_liter * eauto_benzinpreis
-        # Netzstrom-Kosten für E-Auto
-        eauto_netzstrom_kosten = gesamt_eauto_netz * netzbezug_preis / 100
-        # Ersparnis = was Benzin gekostet hätte - was Netzstrom kostet
-        bisherige_eauto_ersparnis = benzin_kosten - eauto_netzstrom_kosten
+                # Monats-Benzinpreis: Monatsdaten → Fallback statischer Parameter
+                md = monatsdaten_dict.get((jahr, monat))
+                monats_benzinpreis = (
+                    md.kraftstoffpreis_euro
+                    if md and md.kraftstoffpreis_euro is not None
+                    else eauto_benzinpreis
+                )
+                benzin_liter = km / 100 * eauto_vergleich_l_100km
+                md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis) if md else netzbezug_preis
+                bisherige_eauto_ersparnis += (
+                    benzin_liter * monats_benzinpreis - netz * md_preis / 100
+                )
 
     # BKW Ersparnis (Eigenverbrauch spart Netzbezug)
     bisherige_bkw_ersparnis = 0.0
@@ -1303,9 +1307,19 @@ async def get_finanz_prognose(
     if e_autos and gesamt_km > 0 and anzahl_monate_hist > 0:
         # km pro Jahr (hochgerechnet)
         km_jahr = gesamt_km / anzahl_monate_hist * 12
+        # Prognose-Benzinpreis: Ø der historischen Monatspreise, Fallback statisch
+        hist_kraftstoffpreise = [
+            md.kraftstoffpreis_euro for md in monatsdaten
+            if md.kraftstoffpreis_euro is not None
+        ]
+        prognose_benzinpreis = (
+            sum(hist_kraftstoffpreise) / len(hist_kraftstoffpreise)
+            if hist_kraftstoffpreise
+            else eauto_benzinpreis
+        )
         # Was es mit Benzin kosten würde
         benzin_liter_jahr = km_jahr / 100 * eauto_vergleich_l_100km
-        benzin_kosten_jahr = benzin_liter_jahr * eauto_benzinpreis
+        benzin_kosten_jahr = benzin_liter_jahr * prognose_benzinpreis
         # E-Auto Netz-Stromkosten pro Jahr (PV-Ladung ist in EV-Ersparnis)
         netz_anteil = gesamt_eauto_netz / (gesamt_eauto_pv + gesamt_eauto_netz) if (gesamt_eauto_pv + gesamt_eauto_netz) > 0 else 0.5
         eauto_netz_kwh_jahr = (jahres_eauto_pv / (1 - netz_anteil) * netz_anteil) if netz_anteil < 1 else 0
