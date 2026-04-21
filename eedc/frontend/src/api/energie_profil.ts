@@ -184,8 +184,8 @@ export const energieProfilApi = {
   getMonat: (anlageId: number, jahr: number, monat: number): Promise<MonatsAuswertung> =>
     api.get(`/energie-profil/${anlageId}/monat?jahr=${jahr}&monat=${monat}`),
 
-  vollbackfill: (anlageId: number): Promise<VollbackfillResult> =>
-    api.post(`/energie-profil/${anlageId}/vollbackfill`),
+  vollbackfill: (anlageId: number, overwrite: boolean = false): Promise<VollbackfillResult> =>
+    api.post(`/energie-profil/${anlageId}/vollbackfill${overwrite ? '?overwrite=true' : ''}`),
 
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
     api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),

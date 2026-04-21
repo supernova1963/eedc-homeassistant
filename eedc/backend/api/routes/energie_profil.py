@@ -889,6 +889,7 @@ async def vollbackfill(
     anlage_id: int,
     von: Optional[date] = Query(None, description="Startdatum (Standard: frühestes Datum in HA Statistics)"),
     bis: Optional[date] = Query(None, description="Enddatum (Standard: gestern)"),
+    overwrite: bool = Query(False, description="Bestehende Tage überschreiben statt überspringen"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -896,7 +897,7 @@ async def vollbackfill(
 
     Füllt TagesEnergieProfil + TagesZusammenfassung für den gesamten Zeitraum
     (unabhängig von der ~10-Tage-Grenze der HA-Sensor-History).
-    Überspringt bereits vorhandene Tage.
+    Überspringt bereits vorhandene Tage (außer bei overwrite=True).
 
     Returns:
         verarbeitet: Anzahl Tage im Zeitraum
@@ -910,7 +911,7 @@ async def vollbackfill(
         raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
 
     try:
-        backfill = await resolve_and_backfill_from_statistics(anlage, db, von=von, bis=bis)
+        backfill = await resolve_and_backfill_from_statistics(anlage, db, von=von, bis=bis, overwrite=overwrite)
     except Exception as e:
         import traceback
         logger.error(f"Vollbackfill Anlage {anlage_id} FEHLER: {type(e).__name__}: {e}\n{traceback.format_exc()}")
