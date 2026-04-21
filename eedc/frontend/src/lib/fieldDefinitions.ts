@@ -14,6 +14,7 @@ export interface FeldDefinition {
   label: string
   einheit: string
   typ?: 'number' | 'text'
+  datentyp?: 'float' | 'int'
   placeholder?: string
   hint?: string
   bedingung?: string
@@ -63,7 +64,7 @@ const EAUTO_FELDER: FeldDefinition[] = [
 const WALLBOX_FELDER: FeldDefinition[] = [
   { feld: 'ladung_kwh',    label: 'Ladung gesamt', einheit: 'kWh', placeholder: 'z.B. 200' },
   { feld: 'ladung_pv_kwh', label: 'Ladung PV',     einheit: 'kWh', placeholder: 'z.B. 80'  },
-  { feld: 'ladevorgaenge', label: 'Ladevorgänge',  einheit: '',    placeholder: 'z.B. 12'  },
+  { feld: 'ladevorgaenge', label: 'Ladevorgänge',  einheit: '',    placeholder: 'z.B. 12', datentyp: 'int' },
 ]
 
 const BALKONKRAFTWERK_FELDER: FeldDefinition[] = [
