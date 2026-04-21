@@ -115,9 +115,10 @@ async def aggregate_day(
     wallbox_keys = {s["key"] for s in serien
                     if s["kategorie"] in ("wallbox", "eauto")
                     and not s["key"].startswith("v2h_")}
+    sonstige_keys = {s["key"] for s in serien if s["kategorie"] == "sonstige"}
     # Alle Schlüssel die separat behandelt werden (nicht in generischer Summe)
     # "strompreis" und "haushalt" sind keine Energieflüsse und dürfen nicht in pv_kw/verbrauch_kw einfließen
-    _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys | {"strompreis", "haushalt"}
+    _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys | sonstige_keys | {"strompreis", "haushalt"}
 
     # ── Wetter-IST-Daten holen ────────────────────────────────────────────
     wetter_stunden = await _get_wetter_ist(anlage, datum)
