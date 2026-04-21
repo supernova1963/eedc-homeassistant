@@ -435,7 +435,10 @@ export default function MonatsdatenPage() {
             Aus HA laden
           </Button>
         )}
-        <Button onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}>
+        <Button
+          onClick={() => selectedAnlageId && navigate(`/monatsabschluss/${selectedAnlageId}`)}
+          disabled={!selectedAnlageId}
+        >
           <Plus className="h-5 w-5 mr-2" />
           Neuer Monat
         </Button>
@@ -468,7 +471,12 @@ export default function MonatsdatenPage() {
             description="Erfasse deine ersten Monatsdaten manuell oder importiere eine CSV-Datei."
             action={
               <div className="flex gap-4">
-                <Button onClick={() => setShowForm(true)}>Manuell erfassen</Button>
+                <Button
+                  onClick={() => selectedAnlageId && navigate(`/monatsabschluss/${selectedAnlageId}`)}
+                  disabled={!selectedAnlageId}
+                >
+                  Monatsabschluss starten
+                </Button>
                 <Button variant="secondary" onClick={() => navigate('/import')}>CSV importieren</Button>
               </div>
             }
