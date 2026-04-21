@@ -15,15 +15,14 @@ export default function SummaryStep({
   let gefuellt = 0
   let gesamt = 0
 
-  const zaehlerFelder = ['einspeisung_kwh', 'netzbezug_kwh']
-  const zusatzFelder = data.basis_felder.filter(f => !zaehlerFelder.includes(f.feld))
+  // Gruppierung über das gruppe-Attribut aus der Backend-Registry
+  const zaehlerFelder = data.basis_felder.filter(f => f.gruppe === 'zaehler')
+  const zusatzFelder = data.basis_felder.filter(f => f.gruppe !== 'zaehler')
 
-  for (const feld of data.basis_felder) {
-    if (zaehlerFelder.includes(feld.feld)) {
-      gesamt++
-      if (values.basis[feld.feld] !== null && values.basis[feld.feld] !== undefined) {
-        gefuellt++
-      }
+  for (const feld of zaehlerFelder) {
+    gesamt++
+    if (values.basis[feld.feld] !== null && values.basis[feld.feld] !== undefined) {
+      gefuellt++
     }
   }
 
@@ -62,9 +61,7 @@ export default function SummaryStep({
           <h3 className="font-medium text-gray-900 dark:text-white">Zählerdaten</h3>
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-700">
-          {data.basis_felder
-            .filter(f => zaehlerFelder.includes(f.feld))
-            .map(feld => (
+          {zaehlerFelder.map(feld => (
               <SummaryRow
                 key={feld.feld}
                 label={feld.label}

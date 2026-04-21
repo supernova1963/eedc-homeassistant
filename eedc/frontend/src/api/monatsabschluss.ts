@@ -37,6 +37,7 @@ export interface FeldStatus {
   strategie: string | null
   sensor_id: string | null
   typ: 'number' | 'text'  // Feldtyp
+  gruppe: string | null  // zaehler, wetter, preise
 }
 
 export interface SonstigePosition {
@@ -83,18 +84,23 @@ export interface InvestitionWerte {
 }
 
 export interface MonatsabschlussInput {
+  // Basis-Felder (aus field_definitions.py — alle number-Felder generisch)
   einspeisung_kwh?: number | null
   netzbezug_kwh?: number | null
-  // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung)
   globalstrahlung_kwh_m2?: number | null
   sonnenstunden?: number | null
   durchschnittstemperatur?: number | null
+  // Bedingte Basis-Felder
+  netzbezug_durchschnittspreis_cent?: number | null
+  kraftstoffpreis_euro?: number | null
   // Optionale manuelle Felder
   sonderkosten_euro?: number | null
   sonderkosten_beschreibung?: string | null
   notizen?: string | null
   investitionen: InvestitionWerte[]
   datenquelle?: string | null
+  // Index-Signatur für generischen Zugriff (Phase D)
+  [key: string]: unknown
 }
 
 export interface MonatsabschlussResult {
