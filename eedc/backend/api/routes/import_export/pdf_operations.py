@@ -425,13 +425,23 @@ async def export_pdf(
     emob_pv_anteil = (emob_pv_total / emob_ladung_total * 100) if emob_ladung_total > 0 else None
     emob_ersparnis = 0.0
     if hat_emobilitaet and emob_km_total > 0:
-        emob_benzinpreis = 1.65
+        emob_benzinpreis_fallback = 1.65
         emob_vergleich_l_100km = 7.5
         for inv in investitionen:
             if inv.typ in ("e-auto", "wallbox") and inv.parameter:
-                emob_benzinpreis = inv.parameter.get("benzinpreis_euro", 1.65)
+                emob_benzinpreis_fallback = inv.parameter.get("benzinpreis_euro", 1.65)
                 emob_vergleich_l_100km = inv.parameter.get("vergleich_verbrauch_l_100km", 7.5)
                 break
+        # Durchschnitt der Monats-Kraftstoffpreise, Fallback auf statischen Parameter
+        hist_kraftstoffpreise = [
+            m.kraftstoffpreis_euro for m in monatsdaten_list
+            if m.kraftstoffpreis_euro is not None
+        ]
+        emob_benzinpreis = (
+            sum(hist_kraftstoffpreise) / len(hist_kraftstoffpreise)
+            if hist_kraftstoffpreise
+            else emob_benzinpreis_fallback
+        )
         benzin_kosten = (emob_km_total / 100) * emob_vergleich_l_100km * emob_benzinpreis
         strom_kosten = emob_netz_total * netzbezug_preis_cent / 100
         emob_ersparnis = benzin_kosten - strom_kosten
