@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.16] - 2026-04-21
+
+### Features
+
+- **feat(energieprofil): Verbrauchsprognose (Etappe 3b Phase A)** — Neuer Sub-Tab "Prognose" im Energieprofil: Kombinierte Verbrauchs- + PV- + Batterie-Prognose für einen Tag. Verbrauchsprofil aus historischen Stundenmitteln (gewichteter Ø, Wochentag-Kaskade, Halbwertszeit 14 Tage), PV-Stundenprofil aus OpenMeteo GTI (kalibriert mit Lernfaktor) oder Solcast, Batterie-SoC-Simulation mit Speicher-voll/leer-Zeitpunkt. Chart (PV/Verbrauch/Netto + SoC-Overlay), KPI-Cards, Stundentabelle.
+
+### Vorbereitung (v3.17.0)
+
+- **prep(kraftstoff): EU-Kraftstoffpreis-Sammlung** — Wöchentliche nationale Durchschnittspreise (Euro-Super 95, inkl. Steuern) aus dem EU Weekly Oil Bulletin der EU-Kommission. Historische Daten seit 2005, alle EU-Länder + CH (via AT). Scheduler-Job (Di 06:00), manueller Backfill-Endpoint, Speicherung in `TagesZusammenfassung.kraftstoffpreis_euro`. Vorbereitung für dynamische E-Auto-Ersparnisberechnung.
+
+### Bugfixes
+
+- **fix(energieprofil): pv_kw zählte Sonstiges-Erzeuger fälschlich als PV** — Sonstige Erzeuger (BHKW etc.) wurden in der TagesEnergieProfil-Aggregation mitgezählt, was PV-spezifische KPIs (Performance Ratio, Lernfaktor) verfälschte.
+
+- **fix(prognose): Grün-Schwelle bei Prognose-Abweichung auf 10%** — Anpassung der farblichen Bewertung der Prognosegenauigkeit.
+
+---
+
 ## [3.16.15] - 2026-04-20
 
 ### Features
