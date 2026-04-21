@@ -112,7 +112,7 @@ Hardcodierte Werte in `cockpit.py`:
 | Gas-Preis: 10.0 ct/kWh | WP-Ersparnis (vs. Gas) |
 | Gas-Wirkungsgrad: 0.9 (90%) | WP CO2-Vergleich |
 | Benzin-Verbrauch: 7.0 L/100km | E-Mob-Ersparnis |
-| Benzin-Preis: 1.80 EUR/L | E-Mob-Ersparnis |
+| Benzin-Preis: 1.80 EUR/L | E-Mob-Ersparnis (Cockpit-Fallback) |
 
 ---
 
@@ -206,6 +206,8 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 
 **Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten fließen als kalkulatorische Ausgaben in `sonstige_ausgaben_gesamt`.
 
+**Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In **Aussichten**, **HA-Sensor-Export** und **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Investition wenn kein Monatswert vorhanden.
+
 #### Investitionskosten (Mehrkosten-Ansatz)
 
 ```
@@ -288,6 +290,26 @@ CO2_Verbrenner       = Benzin_Verbrauch * 2.37
 CO2_E-Auto           = Strom_Bedarf * Netz_Anteil * 0.38
 CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto
 ```
+
+#### Dynamischer Kraftstoffpreis (ab v3.17.0)
+
+In **Aussichten (Finanzen)** wird die E-Auto-Ersparnis **pro Monat** mit dem echten Kraftstoffpreis berechnet:
+
+```
+Für jeden historischen Monat:
+  Benzinpreis = Monatsdaten.kraftstoffpreis_euro       (wenn vorhanden)
+              ∨ Investition.parameter.benzinpreis_euro  (Fallback statisch)
+  Benzin_Kosten_Monat = km_gefahren / 100 * Vergleich_L_100km * Benzinpreis
+  Strom_Kosten_Monat  = ladung_netz_kwh * Netzbezug_Preis / 100
+
+Für Jahresprognose:
+  Prognose_Benzinpreis = Ø(Monatsdaten.kraftstoffpreis_euro)  (historischer Durchschnitt)
+                       ∨ Investition.parameter.benzinpreis_euro  (Fallback)
+```
+
+**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung via Backfill-Endpoint oder wöchentlichem Scheduler-Job (Dienstags 06:00).
+
+**Betroffen:** Aussichten (`aussichten.py`), HA-Sensor-Export (`ha_export.py`), PDF-Finanzbericht (`pdf_operations.py`).
 
 ### 3.5 Wärmepumpe-Einsparung
 

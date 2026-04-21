@@ -39,6 +39,7 @@
 | **ICON-D2** | DWD-Wettermodell mit 2,2 km Auflösung; hochauflösend für Deutschland |
 | **ECMWF IFS** | Globales Wettermodell des Europäischen Zentrums für mittelfristige Wettervorhersage |
 | **Infothek** | Optionales EEDC-Modul zur Verwaltung von Verträgen, Zählern, Kontakten und Dokumenten |
+| **Kraftstoffpreis** | Monatlicher Benzindurchschnittspreis (€/L) aus dem EU Weekly Oil Bulletin; ersetzt ab v3.17.0 den statischen Parameter für E-Auto-ROI |
 | **Monatsabschluss** | Monatliche Datenerfassung via geführtem Wizard mit automatischen Vorschlägen aus mehreren Quellen |
 | **Connector** | Geräte-Modul in EEDC für direkten API-Abruf von Wechselrichtern, Speichern und Ladesäulen |
 | **Community-Hash** | Anonymer Identifier für die Community-Benchmark-Funktion; kein Rückschluss auf Person oder Adresse |

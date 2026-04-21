@@ -280,6 +280,7 @@ eedc-homeassistant/
     │       ├── pdf_service.py              # PDF-Export
     │       ├── plz_to_state.py             # PLZ→Bundesland Mapping
     │       ├── prognose_service.py         # Prognose-Berechnungen
+    │       ├── kraftstoff_preis_service.py  # EU Oil Bulletin Benzinpreise
     │       ├── scheduler.py                # APScheduler für Cron-Jobs
     │       ├── solar_forecast_service.py   # Open-Meteo Solar GTI
     │       ├── vorschlag_service.py        # Intelligente Vorschläge

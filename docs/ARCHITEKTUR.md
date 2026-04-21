@@ -408,6 +408,8 @@ eedc-homeassistant/
 | globalstrahlung_kwh_m2 | FLOAT | Wetter-API |
 | sonnenstunden | FLOAT | Wetter-API |
 | durchschnittstemperatur | FLOAT | Wetter-API |
+| netzbezug_durchschnittspreis_cent | FLOAT | Ø Strompreis bei dynamischem Tarif (ct/kWh) |
+| kraftstoffpreis_euro | FLOAT | Ø Benzinpreis des Monats (€/L, aus EU Oil Bulletin) |
 | sonderkosten_euro | FLOAT | Manuelle Eingabe |
 | sonderkosten_beschreibung | VARCHAR(500) | Beschreibung der Sonderkosten |
 | datenquelle | VARCHAR(50) | manual, csv, ha_import |
@@ -1150,6 +1152,22 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
   - Löscht Snapshots älter als 31 Tage
 - `energie_profil_aggregation_job` - Täglich 00:15 (NEU v3.1.0)
   - Aggregiert Vortag für alle Anlagen → `TagesEnergieProfil` + `TagesZusammenfassung`
+- `kraftstoffpreis_job` - Wöchentlich Dienstag 06:00 (NEU v3.16.16)
+  - Lädt EU Weekly Oil Bulletin (XLSX) und befüllt `TagesZusammenfassung.kraftstoffpreis_euro` + `Monatsdaten.kraftstoffpreis_euro`
+
+### Kraftstoffpreis Service (v3.16.16)
+
+**Datei:** `backend/services/kraftstoff_preis_service.py`
+
+**Funktion:** Wöchentliche nationale Benzindurchschnittspreise aus dem EU Weekly Oil Bulletin.
+
+**Datenquelle:** EU-Kommission XLSX (stabile URL, History seit 2005, Euro-Super 95 inkl. Steuern).
+
+**Hauptfunktionen:**
+- `get_kraftstoffpreise(land)` — Gibt Preisliste für ein Land zurück (24h Cache)
+- `get_monatsdurchschnitt(anlage_id, jahr, monat, db)` — Ø aus TagesZusammenfassung
+- `backfill_kraftstoffpreise(anlage_id, land, db)` — Befüllt TagesZusammenfassung
+- `backfill_monatsdaten_kraftstoffpreise(anlage_id, land, db)` — Befüllt Monatsdaten
 
 ### HA MQTT Sync Service
 

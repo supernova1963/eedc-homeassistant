@@ -543,7 +543,8 @@ Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 1. Wähle den gewünschten Monat
 2. Klicke auf "Werte aus HA-Statistik laden"
 3. Die Felder werden automatisch befüllt
-4. Prüfe die Werte und speichere
+4. Bei E-Auto-Investitionen: Prüfe den vorgeschlagenen **Ø Benzinpreis** (aus EU Oil Bulletin)
+5. Prüfe die Werte und speichere
 
 ### 4.5 Startwerte beim Sensor-Mapping
 
@@ -949,6 +950,20 @@ HA-History hat nur ~10 Tage Retention. EEDC sichert die Daten dauerhaft in seine
 
 Unter Einstellungen → System → Energieprofile siehst du den Datenbestand: wie viele Tage pro Anlage bereits gesammelt wurden.
 
+### Kraftstoffpreis-Backfill (ab v3.17.0)
+
+Für die korrekte Berechnung der E-Auto-Ersparnis verwendet EEDC echte monatliche Benzinpreise aus dem **EU Weekly Oil Bulletin**. Um Monatsdaten rückwirkend mit Preisen zu befüllen:
+
+**API:** `POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill`
+
+Dies befüllt:
+- **TagesZusammenfassung**: Tagesgenauer Wochenpreis (für Energieprofil-Auswertung)
+- **Monatsdaten**: Monatsdurchschnitt (für Aussichten/ROI, HA-Export, PDF)
+
+Der Backfill nutzt die Oil Bulletin History (seit 2005) und setzt nur Werte wo noch keiner vorhanden ist. Kann gefahrlos mehrfach aufgerufen werden (z.B. nach jedem Datenimport).
+
+**Automatisch:** Ein Scheduler-Job läuft wöchentlich (Dienstag 06:00) und befüllt neue Tage automatisch.
+
 ---
 
-*Letzte Aktualisierung: März 2026*
+*Letzte Aktualisierung: April 2026*

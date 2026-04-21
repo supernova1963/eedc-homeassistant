@@ -516,7 +516,7 @@ Amortisations-Prognose und Komponenten-Beiträge:
 **Komponenten-Beiträge:**
 - Speicher: Eigenverbrauchserhöhung
 - E-Auto (V2H): Rückspeisung ins Haus
-- E-Auto (vs. Benzin): Ersparnis gegenüber Verbrenner
+- E-Auto (vs. Benzin): Ersparnis gegenüber Verbrenner (ab v3.17.0 mit echten monatlichen Benzinpreisen aus EU Oil Bulletin)
 - Wärmepumpe (PV): Direktverbrauch aus PV
 - Wärmepumpe (vs. Gas): Ersparnis gegenüber Gasheizung
 
