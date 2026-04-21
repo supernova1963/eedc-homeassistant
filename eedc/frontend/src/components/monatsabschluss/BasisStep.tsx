@@ -11,12 +11,10 @@ export default function BasisStep({
   values: Record<string, number | null>
   onChange: (feld: string, wert: number | null) => void
 }) {
-  // Nur die wichtigsten Felder anzeigen
-  // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung), daher nicht hier
-  const wichtigeFelder = ['einspeisung_kwh', 'netzbezug_kwh']
-  const wetterdatenFelder = ['globalstrahlung_kwh_m2', 'sonnenstunden', 'durchschnittstemperatur']
-  const preisFelder = ['netzbezug_durchschnittspreis_cent', 'kraftstoffpreis_euro']
-  const preiseFelderVorhanden = felder.filter(f => preisFelder.includes(f.feld))
+  // Gruppierung über das gruppe-Attribut aus der Backend-Registry
+  const zaehlerFelder = felder.filter(f => f.gruppe === 'zaehler')
+  const preisFelder = felder.filter(f => f.gruppe === 'preise')
+  const wetterFelder = felder.filter(f => f.gruppe === 'wetter')
 
   return (
     <div className="space-y-6">
@@ -26,9 +24,7 @@ export default function BasisStep({
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {felder
-          .filter(f => wichtigeFelder.includes(f.feld))
-          .map(feld => (
+        {zaehlerFelder.map(feld => (
             <FeldInput
               key={feld.feld}
               feld={feld}
@@ -39,9 +35,9 @@ export default function BasisStep({
       </div>
 
       {/* Preisdaten (bedingt: nur wenn Felder vom Backend geliefert) */}
-      {preiseFelderVorhanden.length > 0 && (
+      {preisFelder.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {preiseFelderVorhanden.map(feld => (
+          {preisFelder.map(feld => (
             <FeldInput
               key={feld.feld}
               feld={feld}
@@ -58,9 +54,7 @@ export default function BasisStep({
           Wetterdaten (optional)
         </summary>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          {felder
-            .filter(f => wetterdatenFelder.includes(f.feld))
-            .map(feld => (
+          {wetterFelder.map(feld => (
               <FeldInput
                 key={feld.feld}
                 feld={feld}

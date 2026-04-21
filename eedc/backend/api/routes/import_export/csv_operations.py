@@ -559,74 +559,17 @@ async def export_csv(
     inv_columns: list[tuple[Investition, str, str]] = []
 
     for inv in investitionen:
+        if inv.typ in ("wechselrichter",):
+            continue
         prefix = _sanitize_column_name(inv.bezeichnung)
 
-        if inv.typ == "pv-module":
-            inv_columns.append((inv, "kWh", "pv_erzeugung_kwh"))
-            header.append(f"{prefix}_kWh")
+        felder = get_felder_fuer_investition(inv.typ, inv.parameter)
+        for feld_def in felder:
+            csv_suffix = feld_def.get("csv_suffix", feld_def["feld"])
+            inv_columns.append((inv, csv_suffix, feld_def["feld"]))
+            header.append(f"{prefix}_{csv_suffix}")
 
-        elif inv.typ == "speicher":
-            inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
-            inv_columns.append((inv, "Entladung_kWh", "entladung_kwh"))
-            header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Entladung_kWh"])
-            if inv.parameter and inv.parameter.get("arbitrage_faehig"):
-                inv_columns.append((inv, "Netzladung_kWh", "speicher_ladung_netz_kwh"))
-                inv_columns.append((inv, "Ladepreis_Cent", "speicher_ladepreis_cent"))
-                header.extend([f"{prefix}_Netzladung_kWh", f"{prefix}_Ladepreis_Cent"])
-
-        elif inv.typ == "e-auto":
-            cols = [
-                ("km", "km_gefahren"),
-                ("Verbrauch_kWh", "verbrauch_kwh"),
-                ("Ladung_PV_kWh", "ladung_pv_kwh"),
-                ("Ladung_Netz_kWh", "ladung_netz_kwh"),
-                ("Ladung_Extern_kWh", "ladung_extern_kwh"),
-                ("Ladung_Extern_Euro", "ladung_extern_euro"),
-            ]
-            if inv.parameter and (inv.parameter.get("nutzt_v2h") or inv.parameter.get("v2h_faehig")):
-                cols.append(("V2H_kWh", "v2h_entladung_kwh"))
-            for suffix, key in cols:
-                inv_columns.append((inv, suffix, key))
-                header.append(f"{prefix}_{suffix}")
-
-        elif inv.typ == "wallbox":
-            inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
-            inv_columns.append((inv, "Ladevorgaenge", "ladevorgaenge"))
-            header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Ladevorgaenge"])
-
-        elif inv.typ == "waermepumpe":
-            cols = [
-                ("Strom_kWh", "stromverbrauch_kwh"),
-                ("Heizung_kWh", "heizenergie_kwh"),
-                ("Warmwasser_kWh", "warmwasser_kwh"),
-            ]
-            for suffix, key in cols:
-                inv_columns.append((inv, suffix, key))
-                header.append(f"{prefix}_{suffix}")
-
-        elif inv.typ == "balkonkraftwerk":
-            inv_columns.append((inv, "Erzeugung_kWh", "pv_erzeugung_kwh"))
-            inv_columns.append((inv, "Eigenverbrauch_kWh", "eigenverbrauch_kwh"))
-            header.extend([f"{prefix}_Erzeugung_kWh", f"{prefix}_Eigenverbrauch_kWh"])
-            if inv.parameter and inv.parameter.get("hat_speicher"):
-                inv_columns.append((inv, "Speicher_Ladung_kWh", "speicher_ladung_kwh"))
-                inv_columns.append((inv, "Speicher_Entladung_kWh", "speicher_entladung_kwh"))
-                header.extend([f"{prefix}_Speicher_Ladung_kWh", f"{prefix}_Speicher_Entladung_kWh"])
-
-        elif inv.typ == "sonstiges":
-            kategorie = inv.parameter.get("kategorie", "erzeuger") if inv.parameter else "erzeuger"
-            if kategorie == "erzeuger":
-                inv_columns.append((inv, "Erzeugung_kWh", "erzeugung_kwh"))
-                header.append(f"{prefix}_Erzeugung_kWh")
-            elif kategorie == "verbraucher":
-                inv_columns.append((inv, "Verbrauch_kWh", "verbrauch_sonstig_kwh"))
-                header.append(f"{prefix}_Verbrauch_kWh")
-            elif kategorie == "speicher":
-                inv_columns.append((inv, "Ladung_kWh", "ladung_kwh"))
-                inv_columns.append((inv, "Entladung_kWh", "entladung_kwh"))
-                header.extend([f"{prefix}_Ladung_kWh", f"{prefix}_Entladung_kWh"])
-
-        # Sonderkosten
+        # Sonderkosten für alle Investitionen (nicht in Registry)
         inv_columns.append((inv, "Sonderkosten_Euro", "sonderkosten_euro"))
         inv_columns.append((inv, "Sonderkosten_Notiz", "sonderkosten_notiz"))
         header.extend([f"{prefix}_Sonderkosten_Euro", f"{prefix}_Sonderkosten_Notiz"])
@@ -638,6 +581,8 @@ async def export_csv(
     FALLBACK_KEYS = {
         "pv_erzeugung_kwh": "erzeugung_kwh",  # BKW: MonatsdatenForm (alt) vs. Monatsabschluss
         "verbrauch_sonstig_kwh": "verbrauch_kwh",  # Sonstiges Verbraucher
+        "ladung_netz_kwh": "speicher_ladung_netz_kwh",  # Speicher Arbitrage: kanonisch → Legacy
+        "v2h_entladung_kwh": "entladung_v2h_kwh",  # E-Auto V2H: kanonisch → Legacy
     }
 
     # Hilfsfunktion: Dezimaltrennzeichen für deutsche CSV (Komma statt Punkt)

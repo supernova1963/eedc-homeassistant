@@ -444,23 +444,28 @@ export default function MonatsabschlussWizard() {
 
     try {
       const input: MonatsabschlussInput = {
-        einspeisung_kwh: values.basis.einspeisung_kwh,
-        netzbezug_kwh: values.basis.netzbezug_kwh,
-        // direktverbrauch_kwh wird automatisch berechnet (PV - Einspeisung)
-        globalstrahlung_kwh_m2: values.basis.globalstrahlung_kwh_m2,
-        sonnenstunden: values.basis.sonnenstunden,
-        durchschnittstemperatur: values.basis.durchschnittstemperatur,
-        // Optionale Felder
-        sonderkosten_euro: typeof values.optionale.sonderkosten_euro === 'number'
-          ? values.optionale.sonderkosten_euro
-          : null,
-        sonderkosten_beschreibung: typeof values.optionale.sonderkosten_beschreibung === 'string'
-          ? values.optionale.sonderkosten_beschreibung
-          : null,
-        notizen: typeof values.optionale.notizen === 'string'
-          ? values.optionale.notizen
-          : null,
         investitionen: [],
+      }
+
+      // Basis-Felder generisch aus API-Response übernehmen
+      for (const feld of data.basis_felder) {
+        if (feld.typ === 'number') {
+          const wert = values.basis[feld.feld]
+          if (wert !== null && wert !== undefined) {
+            input[feld.feld] = wert
+          }
+        }
+      }
+
+      // Optionale Felder
+      if (typeof values.optionale.sonderkosten_euro === 'number') {
+        input.sonderkosten_euro = values.optionale.sonderkosten_euro
+      }
+      if (typeof values.optionale.sonderkosten_beschreibung === 'string') {
+        input.sonderkosten_beschreibung = values.optionale.sonderkosten_beschreibung
+      }
+      if (typeof values.optionale.notizen === 'string') {
+        input.notizen = values.optionale.notizen
       }
 
       // Investitionen zusammenstellen

@@ -37,11 +37,40 @@ from typing import Optional
 # =============================================================================
 
 BASIS_FELDER = [
-    {"feld": "einspeisung_kwh",        "label": "Einspeisung",     "einheit": "kWh",    "mapping_key": "einspeisung"},
-    {"feld": "netzbezug_kwh",          "label": "Netzbezug",       "einheit": "kWh",    "mapping_key": "netzbezug"},
-    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung"},
-    {"feld": "sonnenstunden",          "label": "Sonnenstunden",   "einheit": "h",      "mapping_key": "sonnenstunden"},
-    {"feld": "durchschnittstemperatur","label": "Ø Temperatur",    "einheit": "°C",     "mapping_key": "temperatur"},
+    {"feld": "einspeisung_kwh",        "label": "Einspeisung",     "einheit": "kWh",    "mapping_key": "einspeisung",    "gruppe": "zaehler"},
+    {"feld": "netzbezug_kwh",          "label": "Netzbezug",       "einheit": "kWh",    "mapping_key": "netzbezug",      "gruppe": "zaehler"},
+    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung","gruppe": "wetter"},
+    {"feld": "sonnenstunden",          "label": "Sonnenstunden",   "einheit": "h",      "mapping_key": "sonnenstunden",  "gruppe": "wetter"},
+    {"feld": "durchschnittstemperatur","label": "Ø Temperatur",    "einheit": "°C",     "mapping_key": "temperatur",     "gruppe": "wetter"},
+]
+
+# =============================================================================
+# Bedingte Basis-Felder (Anlage-Ebene)
+#
+# Diese Felder sind Monatsdaten-Spalten (wie BASIS_FELDER), werden aber nur
+# angezeigt wenn eine Anlage-Bedingung erfüllt ist.
+#
+# bedingung_basis:
+#   "dynamischer_tarif" — Anlage hat einen dynamischen Stromtarif
+#   "hat_eauto"         — Anlage hat mindestens eine aktive E-Auto-Investition
+# =============================================================================
+
+BEDINGTE_BASIS_FELDER = [
+    {
+        "feld": "netzbezug_durchschnittspreis_cent",
+        "label": "Ø Strompreis",
+        "einheit": "ct/kWh",
+        "bedingung_basis": "dynamischer_tarif",
+        "mapping_key": "strompreis",
+        "gruppe": "preise",
+    },
+    {
+        "feld": "kraftstoffpreis_euro",
+        "label": "Ø Benzinpreis",
+        "einheit": "€/L",
+        "bedingung_basis": "hat_eauto",
+        "gruppe": "preise",
+    },
 ]
 
 # =============================================================================
@@ -49,11 +78,9 @@ BASIS_FELDER = [
 # =============================================================================
 
 OPTIONALE_FELDER = [
-    {"feld": "sonderkosten_euro",                 "label": "Sonderkosten",  "einheit": "€",       "typ": "number"},
-    {"feld": "sonderkosten_beschreibung",          "label": "Beschreibung",  "einheit": "",        "typ": "text"},
-    {"feld": "notizen",                            "label": "Notizen",       "einheit": "",        "typ": "text"},
-    # Nur bei dynamischem Tarif (wird in get_monatsabschluss() konditionell ergänzt):
-    # {"feld": "netzbezug_durchschnittspreis_cent", "label": "Ø Strompreis", "einheit": "ct/kWh"}
+    {"feld": "sonderkosten_euro",        "label": "Sonderkosten",  "einheit": "€",  "typ": "number"},
+    {"feld": "sonderkosten_beschreibung","label": "Beschreibung",  "einheit": "",   "typ": "text"},
+    {"feld": "notizen",                  "label": "Notizen",       "einheit": "",   "typ": "text"},
 ]
 
 # =============================================================================
@@ -448,6 +475,45 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     return list(alle_felder)
 
 
+def get_basis_felder(
+    hat_dynamischen_tarif: bool = False,
+    aktive_inv_typen: Optional[set[str]] = None,
+) -> list[dict]:
+    """
+    Gibt alle Basis-Felder für eine Anlage zurück (inkl. aufgelöster bedingter Felder).
+
+    Kombiniert BASIS_FELDER + BEDINGTE_BASIS_FELDER, wobei letztere nur bei
+    erfüllter Bedingung enthalten sind.
+
+    Args:
+        hat_dynamischen_tarif: True wenn die Anlage einen dynamischen Stromtarif hat
+        aktive_inv_typen: Set der aktiven Investitionstypen (z.B. {"pv-module", "e-auto"})
+
+    Returns:
+        Liste von Feld-Dicts (ohne bedingung_basis-Key)
+    """
+    typen = aktive_inv_typen or set()
+    result = list(BASIS_FELDER)
+
+    for feld in BEDINGTE_BASIS_FELDER:
+        bedingung = feld.get("bedingung_basis")
+        if bedingung == "dynamischer_tarif" and not hat_dynamischen_tarif:
+            continue
+        if bedingung == "hat_eauto" and "e-auto" not in typen:
+            continue
+        # bedingung_basis nicht an Consumer durchreichen
+        result.append({k: v for k, v in feld.items() if k != "bedingung_basis"})
+
+    return result
+
+
+# Alle Monatsdaten-Feldnamen (Basis + Bedingte + Optionale) für generisches Speichern.
+# Beim Save müssen keine Bedingungen geprüft werden — gespeichert wird was gesendet wurde.
+ALLE_MONATSDATEN_FELDNAMEN: set[str] = {
+    f["feld"] for f in BASIS_FELDER + BEDINGTE_BASIS_FELDER + OPTIONALE_FELDER
+}
+
+
 def get_felder_fuer_sonstiges(kategorie: str) -> list[dict]:
     """
     Gibt Felder für eine Sonstiges-Investition nach Kategorie zurück.
@@ -522,6 +588,12 @@ def build_feld_labels() -> dict[str, str]:
     for f in BASIS_FELDER:
         labels[f["mapping_key"]] = f["label"]
         labels[f["feld"]] = f["label"]  # auch DB-Feldname → Label
+
+    # Bedingte Basis-Felder
+    for f in BEDINGTE_BASIS_FELDER:
+        labels[f["feld"]] = f["label"]
+        if "mapping_key" in f:
+            labels[f["mapping_key"]] = f["label"]
 
     # Basis-Live-Felder
     for f in BASIS_LIVE_FELDER:

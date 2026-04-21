@@ -19,8 +19,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from backend.core.database import get_db, async_session_maker
 from backend.core.field_definitions import (
-    BASIS_FELDER, OPTIONALE_FELDER, INVESTITION_FELDER,
-    get_felder_fuer_investition, get_felder_fuer_sonstiges,
+    BASIS_FELDER, BEDINGTE_BASIS_FELDER, OPTIONALE_FELDER, INVESTITION_FELDER,
+    ALLE_MONATSDATEN_FELDNAMEN,
+    get_basis_felder, get_felder_fuer_investition, get_felder_fuer_sonstiges,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class FeldStatus(BaseModel):
     strategie: Optional[str] = None  # Aus sensor_mapping
     sensor_id: Optional[str] = None  # Wenn strategie=sensor
     typ: str = "number"  # number oder text
+    gruppe: Optional[str] = None  # zaehler, wetter, preise (für Frontend-Gruppierung)
 
 
 class InvestitionStatus(BaseModel):
@@ -334,9 +336,21 @@ async def get_monatsabschluss(
     # Datenquelle des Monats ermitteln
     datenquelle = getattr(monatsdaten, "datenquelle", None) if monatsdaten else None
 
+    # Bedingungen für bedingte Basis-Felder ermitteln
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    allgemein_tarif = tarife.get("allgemein")
+    hat_dynamischen_tarif = bool(allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch")
+    aktive_inv_typen = {i.typ for i in anlage.investitionen if not i.stilllegungsdatum}
+
+    # Alle Basis-Felder aus Registry (inkl. aufgelöster bedingter Felder)
+    alle_basis_felder = get_basis_felder(
+        hat_dynamischen_tarif=hat_dynamischen_tarif,
+        aktive_inv_typen=aktive_inv_typen,
+    )
+
     # Basis-Felder aufbereiten
     basis_felder: list[FeldStatus] = []
-    for feld_config in BASIS_FELDER:
+    for feld_config in alle_basis_felder:
         feld = feld_config["feld"]
         aktueller_wert = getattr(monatsdaten, feld, None) if monatsdaten else None
 
@@ -351,7 +365,7 @@ async def get_monatsabschluss(
         if aktueller_wert is not None:
             quelle = datenquelle if datenquelle else "manuell"
 
-        # Vorschläge holen (historische Daten)
+        # Vorschläge holen (historische Daten) — nur für Standard-Basis-Felder
         vorschlaege = await vorschlag_service.get_vorschlaege(
             anlage_id, feld, jahr, monat
         )
@@ -387,6 +401,31 @@ async def get_monatsabschluss(
                 beschreibung="Aus MQTT Energy-Topics (Monatswerte)",
             ))
 
+        # ── Feld-spezifische Vorschläge (bedingte Felder) ──────────────────
+        if feld == "netzbezug_durchschnittspreis_cent":
+            # HA-Sensor-Vorschlag: Direktes Lesen (kein MWD)
+            if strategie == "sensor" and sensor_id:
+                ha_state_svc = get_ha_state_service()
+                sensor_wert = await ha_state_svc.get_sensor_state(sensor_id)
+                if sensor_wert is not None:
+                    vorschlaege.insert(0, Vorschlag(
+                        wert=round(sensor_wert, 2),
+                        quelle=VorschlagQuelle.HA_SENSOR,
+                        konfidenz=90,
+                        beschreibung="Aus HA-Sensor (Ø Strompreis)",
+                    ))
+        elif feld == "kraftstoffpreis_euro":
+            # Vorschlag aus TagesZusammenfassung-Durchschnitt
+            from backend.services.kraftstoff_preis_service import get_monatsdurchschnitt
+            avg_preis = await get_monatsdurchschnitt(anlage_id, jahr, monat, db)
+            if avg_preis is not None:
+                vorschlaege.insert(0, Vorschlag(
+                    wert=avg_preis,
+                    quelle=VorschlagQuelle.BERECHNUNG,
+                    konfidenz=85,
+                    beschreibung="Monatsdurchschnitt aus EU Weekly Oil Bulletin",
+                ))
+
         # Warnungen prüfen (nur wenn Wert vorhanden)
         warnungen = []
         if aktueller_wert is not None:
@@ -404,72 +443,7 @@ async def get_monatsabschluss(
             warnungen=[_warnung_to_response(w) for w in warnungen],
             strategie=strategie,
             sensor_id=sensor_id,
-        ))
-
-    # Dynamischer Tarif: Durchschnittspreis-Feld bedingt hinzufügen
-    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
-    allgemein_tarif = tarife.get("allgemein")
-    if allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch":
-        feld = "netzbezug_durchschnittspreis_cent"
-        aktueller_wert = getattr(monatsdaten, feld, None) if monatsdaten else None
-
-        # HA-Sensor-Vorschlag: Direktes Lesen (kein MWD)
-        strompreis_vorschlaege: list[VorschlagResponse] = []
-        strompreis_mapping = basis_mapping.get("strompreis", {})
-        strompreis_strategie = strompreis_mapping.get("strategie") if strompreis_mapping else None
-        strompreis_sensor_id = strompreis_mapping.get("sensor_id") if strompreis_mapping else None
-
-        if strompreis_strategie == "sensor" and strompreis_sensor_id:
-            ha_state_svc = get_ha_state_service()
-            sensor_wert = await ha_state_svc.get_sensor_state(strompreis_sensor_id)
-            if sensor_wert is not None:
-                strompreis_vorschlaege.append(VorschlagResponse(
-                    wert=round(sensor_wert, 2),
-                    quelle="ha_sensor",
-                    konfidenz=90,
-                    beschreibung="Aus HA-Sensor (Ø Strompreis)",
-                ))
-
-        basis_felder.append(FeldStatus(
-            feld=feld,
-            label="Ø Strompreis",
-            einheit="ct/kWh",
-            aktueller_wert=aktueller_wert,
-            quelle="manuell" if aktueller_wert else None,
-            vorschlaege=strompreis_vorschlaege,
-            warnungen=[],
-            strategie=strompreis_strategie,
-            sensor_id=strompreis_sensor_id,
-        ))
-
-    # Kraftstoffpreis: Bedingt anzeigen wenn E-Auto-Investitionen vorhanden
-    hat_eauto = any(i.typ == "e-auto" for i in anlage.investitionen if not i.stilllegungsdatum)
-    if hat_eauto:
-        feld = "kraftstoffpreis_euro"
-        aktueller_wert = getattr(monatsdaten, feld, None) if monatsdaten else None
-
-        kraftstoff_vorschlaege: list[VorschlagResponse] = []
-        # Vorschlag aus TagesZusammenfassung-Durchschnitt
-        from backend.services.kraftstoff_preis_service import get_monatsdurchschnitt
-        avg_preis = await get_monatsdurchschnitt(anlage_id, jahr, monat, db)
-        if avg_preis is not None:
-            kraftstoff_vorschlaege.append(VorschlagResponse(
-                wert=avg_preis,
-                quelle="oil_bulletin",
-                konfidenz=85,
-                beschreibung="Monatsdurchschnitt aus EU Weekly Oil Bulletin",
-            ))
-
-        basis_felder.append(FeldStatus(
-            feld=feld,
-            label="Ø Benzinpreis",
-            einheit="€/L",
-            aktueller_wert=aktueller_wert,
-            quelle="manuell" if aktueller_wert else None,
-            vorschlaege=kraftstoff_vorschlaege,
-            warnungen=[],
-            strategie=None,
-            sensor_id=None,
+            gruppe=feld_config.get("gruppe"),
         ))
 
     # Investitionen aufbereiten
@@ -912,29 +886,12 @@ async def save_monatsabschluss(
         )
         db.add(monatsdaten)
 
-    # Basis-Felder setzen
-    if daten.einspeisung_kwh is not None:
-        monatsdaten.einspeisung_kwh = daten.einspeisung_kwh
-    if daten.netzbezug_kwh is not None:
-        monatsdaten.netzbezug_kwh = daten.netzbezug_kwh
+    # Basis-Felder generisch aus Registry setzen
     # direktverbrauch_kwh wird automatisch berechnet (PV-Erzeugung - Einspeisung)
-    # und nicht manuell eingegeben
-    if daten.globalstrahlung_kwh_m2 is not None:
-        monatsdaten.globalstrahlung_kwh_m2 = daten.globalstrahlung_kwh_m2
-    if daten.sonnenstunden is not None:
-        monatsdaten.sonnenstunden = daten.sonnenstunden
-    if daten.durchschnittstemperatur is not None:
-        monatsdaten.durchschnittstemperatur = daten.durchschnittstemperatur
-    if daten.netzbezug_durchschnittspreis_cent is not None:
-        monatsdaten.netzbezug_durchschnittspreis_cent = daten.netzbezug_durchschnittspreis_cent
-    if daten.kraftstoffpreis_euro is not None:
-        monatsdaten.kraftstoffpreis_euro = daten.kraftstoffpreis_euro
-    if daten.sonderkosten_euro is not None:
-        monatsdaten.sonderkosten_euro = daten.sonderkosten_euro
-    if daten.sonderkosten_beschreibung is not None:
-        monatsdaten.sonderkosten_beschreibung = daten.sonderkosten_beschreibung
-    if daten.notizen is not None:
-        monatsdaten.notizen = daten.notizen
+    for feld in ALLE_MONATSDATEN_FELDNAMEN:
+        wert = getattr(daten, feld, None)
+        if wert is not None:
+            setattr(monatsdaten, feld, wert)
     if daten.datenquelle:
         monatsdaten.datenquelle = daten.datenquelle
 
