@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.17.1] - 2026-04-21
+
+> **⚠️ Backup erforderlich** — Internes Refactoring der Formulardaten-Verarbeitung. Bitte vor dem Update ein Backup erstellen.
+
+### Verbessert
+
+- **refactor(monatsdaten): Dynamisches Formular aus field_definitions (#132 Phase E)** — MonatsdatenForm nutzt jetzt `getFelderFuerInvestition()` als Single Source of Truth für alle Investitionsfelder. Initialisierung, Submit-Handler und Section-Rendering sind vollständig generisch — keine hardcodierten Typ→Felder-Maps mehr. 4 spezialisierte Section-Komponenten (Speicher, E-Auto, Balkonkraftwerk, Sonstiges) durch die generische InvestitionSection ersetzt. Neue Felder werden automatisch angezeigt wenn sie in `field_definitions.py` definiert sind.
+
+### Bugfixes
+
+- **fix(monatsdaten): Sonstiges/Speicher sendete falsche Feldnamen** — Die Monatsdaten-Erfassung für Sonstiges-Investitionen der Kategorie "Speicher" sendete `ladung_kwh`/`entladung_kwh` statt der kanonischen Namen `erzeugung_kwh`/`verbrauch_sonstig_kwh`. Die alten Feldnamen wurden vom Cockpit nie gelesen, sodass diese Daten in der Auswertung fehlten. Jetzt werden die korrekten kanonischen Namen verwendet.
+
+---
+
 ## [3.17.0] - 2026-04-21
 
 ### Features
