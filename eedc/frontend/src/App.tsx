@@ -34,6 +34,7 @@ const Infothek = lazy(() => import('./pages/Infothek'))
 
 // Einstellungen - Daten
 const Monatsdaten = lazy(() => import('./pages/Monatsdaten'))
+const Energieprofil = lazy(() => import('./pages/Energieprofil'))
 const Import = lazy(() => import('./pages/Import'))
 const Einrichtung = lazy(() => import('./pages/Einrichtung'))
 const MqttInboundSetup = lazy(() => import('./pages/MqttInboundSetup'))
@@ -105,6 +106,7 @@ function App() {
             <Route path="einstellungen/monatsabschluss" element={<Navigate to="/einstellungen/monatsdaten" replace />} />
             <Route path="monatsabschluss/:anlageId" element={<MonatsabschlussWizard />} />
             <Route path="monatsabschluss/:anlageId/:jahr/:monat" element={<MonatsabschlussWizard />} />
+            <Route path="einstellungen/energieprofil" element={<Energieprofil />} />
             <Route path="einstellungen/daten-checker" element={<DatenChecker />} />
             <Route path="einstellungen/einrichtung" element={<Einrichtung />} />
             <Route path="einstellungen/import" element={<Import />} />

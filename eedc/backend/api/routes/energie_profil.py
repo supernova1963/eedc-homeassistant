@@ -852,18 +852,21 @@ async def delete_rohdaten(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Löscht alle TagesEnergieProfil-Daten einer Anlage.
+    Löscht alle TagesEnergieProfil- und TagesZusammenfassung-Daten einer Anlage.
 
     Der Scheduler schreibt ab dem nächsten Lauf (alle 15 Min) neue, korrekte Daten.
-    Nur aufrufen wenn die Daten nachweislich falsch sind (z.B. falsch gemappte Sensoren).
+    Monatsdaten bleiben erhalten.
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    del_result = await db.execute(
+    del_stunden = await db.execute(
         delete(TagesEnergieProfil).where(TagesEnergieProfil.anlage_id == anlage_id)
+    )
+    del_tage = await db.execute(
+        delete(TagesZusammenfassung).where(TagesZusammenfassung.anlage_id == anlage_id)
     )
     # Flag zurücksetzen, damit der nächste Monatsabschluss den Auto-Vollbackfill
     # aus HA Statistics erneut anstößt
@@ -871,8 +874,100 @@ async def delete_rohdaten(
     await db.commit()
 
     return {
-        "geloescht": del_result.rowcount,
-        "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten.",
+        "geloescht_stundenwerte": del_stunden.rowcount,
+        "geloescht_tagessummen": del_tage.rowcount,
+        "hinweis": "Scheduler schreibt ab dem nächsten Lauf (max. 15 Min) neue Daten. Monatsdaten bleiben erhalten.",
+    }
+
+
+@router.get("/{anlage_id}/verfuegbare-monate")
+async def verfuegbare_monate(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Liefert alle Jahr/Monat-Kombinationen mit TagesZusammenfassung-Einträgen.
+
+    Für Jahr-/Monats-Selektoren, die nur Werte mit Daten anbieten sollen.
+    Sortierung: neueste zuerst.
+    """
+    from sqlalchemy import func
+
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    jahr = func.extract("year", TagesZusammenfassung.datum)
+    monat = func.extract("month", TagesZusammenfassung.datum)
+    rows = (await db.execute(
+        select(jahr.label("jahr"), monat.label("monat"), func.count().label("tage"))
+        .where(TagesZusammenfassung.anlage_id == anlage_id)
+        .group_by(jahr, monat)
+        .order_by(jahr.desc(), monat.desc())
+    )).all()
+
+    return [
+        {"jahr": int(r.jahr), "monat": int(r.monat), "tage": int(r.tage)}
+        for r in rows
+    ]
+
+
+@router.get("/{anlage_id}/stats")
+async def get_anlage_stats(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Anlage-spezifische Profildaten-Statistik für die Energieprofil-Seite.
+
+    Zählt Stundenwerte, Tageszusammenfassungen und Monatsdaten nur für diese
+    Anlage und liefert den Abdeckungs-Zeitraum aus TagesZusammenfassung.
+    """
+    from sqlalchemy import func
+    from backend.models.monatsdaten import Monatsdaten
+
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    stundenwerte = await db.scalar(
+        select(func.count(TagesEnergieProfil.id)).where(TagesEnergieProfil.anlage_id == anlage_id)
+    ) or 0
+    tageszusammenfassungen = await db.scalar(
+        select(func.count(TagesZusammenfassung.id)).where(TagesZusammenfassung.anlage_id == anlage_id)
+    ) or 0
+    monatswerte = await db.scalar(
+        select(func.count(Monatsdaten.id)).where(Monatsdaten.anlage_id == anlage_id)
+    ) or 0
+
+    zeitraum = None
+    if tageszusammenfassungen > 0:
+        row = (await db.execute(
+            select(
+                func.min(TagesZusammenfassung.datum),
+                func.max(TagesZusammenfassung.datum),
+                func.count(func.distinct(TagesZusammenfassung.datum)),
+            ).where(TagesZusammenfassung.anlage_id == anlage_id)
+        )).one()
+        von_datum, bis_datum, tage_mit_daten = row
+        if von_datum:
+            tage_gesamt = (bis_datum - von_datum).days + 1
+            zeitraum = {
+                "von": von_datum.isoformat(),
+                "bis": bis_datum.isoformat(),
+                "tage_mit_daten": tage_mit_daten,
+                "tage_gesamt": tage_gesamt,
+                "abdeckung_prozent": round(tage_mit_daten / tage_gesamt * 100, 1) if tage_gesamt > 0 else 0,
+            }
+
+    return {
+        "stundenwerte": int(stundenwerte),
+        "tageszusammenfassungen": int(tageszusammenfassungen),
+        "monatswerte": int(monatswerte),
+        "zeitraum": zeitraum,
+        "wachstum_pro_monat": 750,  # 24h + 1 Tagessumme × 30 Tage
     }
 
 
@@ -944,18 +1039,97 @@ async def vollbackfill(
     }
 
 
+@router.get("/{anlage_id}/kraftstoffpreis-status")
+async def kraftstoffpreis_status(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Liefert die Anzahl offener Zeilen ohne Kraftstoffpreis für die UI-Sichtbarkeit.
+    """
+    from sqlalchemy import func
+    from backend.models.monatsdaten import Monatsdaten
+
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    tages_offen = await db.scalar(
+        select(func.count(TagesZusammenfassung.id)).where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.kraftstoffpreis_euro.is_(None),
+        )
+    )
+    monats_offen = await db.scalar(
+        select(func.count(Monatsdaten.id)).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.kraftstoffpreis_euro.is_(None),
+        )
+    )
+    return {
+        "tages_offen": int(tages_offen or 0),
+        "monats_offen": int(monats_offen or 0),
+        "land": anlage.standort_land or "DE",
+    }
+
+
+@router.post("/{anlage_id}/kraftstoffpreis-backfill/tages")
+async def kraftstoffpreis_backfill_tages(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Befüllt TagesZusammenfassung.kraftstoffpreis_euro aus EU Oil Bulletin
+    (Euro-Super 95, inkl. Steuern) für alle Tage ohne Preis.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    from backend.services.kraftstoff_preis_service import backfill_kraftstoffpreise
+    land = anlage.standort_land or "DE"
+    info = await backfill_kraftstoffpreise(anlage_id, land, db)
+    return {
+        "aktualisiert": info.get("aktualisiert", 0),
+        "land": info.get("land", land),
+        "hinweis": info.get("hinweis"),
+    }
+
+
+@router.post("/{anlage_id}/kraftstoffpreis-backfill/monats")
+async def kraftstoffpreis_backfill_monats(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Befüllt Monatsdaten.kraftstoffpreis_euro aus EU Oil Bulletin
+    (Monatsdurchschnitt aus Wochenpreisen) für alle Monate ohne Preis.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    from backend.services.kraftstoff_preis_service import backfill_monatsdaten_kraftstoffpreise
+    land = anlage.standort_land or "DE"
+    info = await backfill_monatsdaten_kraftstoffpreise(anlage_id, land, db)
+    return {
+        "aktualisiert": info.get("aktualisiert", 0),
+        "land": info.get("land", land),
+        "hinweis": info.get("hinweis"),
+    }
+
+
 @router.post("/{anlage_id}/kraftstoffpreis-backfill")
 async def kraftstoffpreis_backfill(
     anlage_id: int,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Befüllt Kraftstoffpreise aus EU Oil Bulletin für alle Tage und Monate ohne Preis.
-
-    Lädt die aktuelle History-XLSX der EU-Kommission und schreibt den
-    passenden Wochenpreis (Euro-Super 95, inkl. Steuern) in:
-    - TagesZusammenfassung.kraftstoffpreis_euro (tagesgenau)
-    - Monatsdaten.kraftstoffpreis_euro (Monatsdurchschnitt)
+    Alt-Endpoint (Rückwärtskompatibilität): befüllt Tages- und Monats-Kraftstoffpreise
+    in einem Aufruf. Neue UIs sollten die split-Endpoints ``/tages`` und ``/monats`` nutzen.
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()

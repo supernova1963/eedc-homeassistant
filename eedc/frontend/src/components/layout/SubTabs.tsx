@@ -22,7 +22,6 @@ import {
   PiggyBank,
   Database,
   Settings,
-  CalendarCheck,
   Cpu,
   Radio,
   BarChart2,
@@ -32,6 +31,7 @@ import {
   ClipboardCheck,
   ScrollText,
   FileText,
+  Activity,
 } from 'lucide-react'
 
 interface TabItem {
@@ -88,6 +88,7 @@ const einstellungenGruppen: TabGroup[] = [
     prefixes: [
       '/einstellungen/monatsdaten',
       '/einstellungen/monatsabschluss',
+      '/einstellungen/energieprofil',
       '/einstellungen/einrichtung',
       // Sub-Wizards erreichbar via Einrichtung-Hub
       '/einstellungen/import',
@@ -99,10 +100,10 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/daten-checker',
     ],
     tabs: [
-      { name: 'Monatsdaten',     href: '/einstellungen/monatsdaten',     icon: Database },
-      { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss', icon: CalendarCheck },
-      { name: 'Daten-Checker',   href: '/einstellungen/daten-checker',   icon: ClipboardCheck },
-      { name: 'Einrichtung',     href: '/einstellungen/einrichtung',     icon: Cpu },
+      { name: 'Monatsdaten',   href: '/einstellungen/monatsdaten',   icon: Database },
+      { name: 'Energieprofil', href: '/einstellungen/energieprofil', icon: Activity },
+      { name: 'Daten-Checker', href: '/einstellungen/daten-checker', icon: ClipboardCheck },
+      { name: 'Einrichtung',   href: '/einstellungen/einrichtung',   icon: Cpu },
     ],
   },
   {

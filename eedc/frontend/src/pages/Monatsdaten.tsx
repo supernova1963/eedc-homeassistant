@@ -1,14 +1,15 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Calendar, Edit, Trash2, AlertCircle, Columns, AlertTriangle, Database, Loader2 } from 'lucide-react'
+import { Plus, Calendar, Edit, Trash2, AlertCircle, Columns, AlertTriangle, Database, Loader2, Fuel } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Select } from '../components/ui'
-import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
+import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { MonatsdatenForm } from '../components/forms'
 import { PageHeader, DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useMonatsdaten, useInvestitionen, useApiData } from '../hooks'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
+import { energieProfilApi, type KraftstoffpreisStatus } from '../api/energie_profil'
 import type { Monatsdaten } from '../types'
 import { MONAT_KURZ } from '../lib'
 
@@ -230,6 +231,42 @@ export default function MonatsdatenPage() {
     vorhandeneDaten: Monatsdaten
     vorhandeneInvestitionsDaten: InvestitionMonatsdaten[]
   } | null>(null)
+
+  // Datenverwaltung: Kraftstoffpreis-Monats-Backfill
+  const [kpStatus, setKpStatus] = useState<KraftstoffpreisStatus | null>(null)
+  const [kpMessage, setKpMessage] = useState<string | null>(null)
+  const [runningKpBackfill, setRunningKpBackfill] = useState(false)
+
+  const loadKraftstoffStatus = useCallback(async () => {
+    if (!selectedAnlageId) { setKpStatus(null); return }
+    try {
+      const s = await energieProfilApi.getKraftstoffpreisStatus(selectedAnlageId)
+      setKpStatus(s)
+    } catch {
+      setKpStatus(null)
+    }
+  }, [selectedAnlageId])
+
+  useEffect(() => { loadKraftstoffStatus() }, [loadKraftstoffStatus])
+
+  const handleKraftstoffMonatsBackfill = async () => {
+    if (!selectedAnlageId) return
+    try {
+      setRunningKpBackfill(true)
+      setKpMessage(null)
+      const res = await energieProfilApi.kraftstoffpreisBackfillMonats(selectedAnlageId)
+      setKpMessage(
+        res.aktualisiert > 0
+          ? `${res.aktualisiert} Monate mit Kraftstoffpreis (${res.land}) befüllt.`
+          : (res.hinweis || 'Keine offenen Monate.')
+      )
+      await loadKraftstoffStatus()
+    } catch (e) {
+      setKpMessage(e instanceof Error ? e.message : 'Kraftstoffpreis-Backfill fehlgeschlagen')
+    } finally {
+      setRunningKpBackfill(false)
+    }
+  }
 
   // Sichtbare Spalten aus LocalStorage laden
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
@@ -543,8 +580,8 @@ export default function MonatsdatenPage() {
 
           {/* Tabelle */}
           <Card padding="none">
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="max-h-[36rem] overflow-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <TableHead>
                   <TableRow>
                     <TableHeader>Monat</TableHeader>
@@ -611,10 +648,51 @@ export default function MonatsdatenPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </table>
             </div>
           </Card>
         </>
+      )}
+
+      {/* Datenverwaltung */}
+      {selectedAnlageId && kpStatus && kpStatus.monats_offen > 0 && (
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Database className="h-6 w-6 text-primary-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Datenverwaltung
+              </h2>
+            </div>
+
+            {kpMessage && <Alert type="info" className="mb-3">{kpMessage}</Alert>}
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Fuel className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-medium text-gray-900 dark:text-white">
+                    Kraftstoffpreise nachpflegen (Monats-Ebene)
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {kpStatus.monats_offen.toLocaleString('de-DE')} Monate ohne Kraftstoffpreis.
+                    Lädt den Monatsdurchschnitt aus dem EU Oil Bulletin (Euro-Super 95, {kpStatus.land}).
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      variant="secondary"
+                      onClick={handleKraftstoffMonatsBackfill}
+                      disabled={runningKpBackfill}
+                    >
+                      {runningKpBackfill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Fuel className="h-4 w-4 mr-2" />}
+                      Kraftstoffpreise nachpflegen
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* HA-Statistik Modal */}
@@ -646,10 +724,11 @@ export default function MonatsdatenPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="ha-jahr" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Jahr
                   </label>
                   <select
+                    id="ha-jahr"
                     value={selectedHaJahr}
                     onChange={(e) => setSelectedHaJahr(parseInt(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -660,10 +739,11 @@ export default function MonatsdatenPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="ha-monat" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Monat
                   </label>
                   <select
+                    id="ha-monat"
                     value={selectedHaMonat}
                     onChange={(e) => setSelectedHaMonat(parseInt(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"

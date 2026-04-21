@@ -39,6 +39,7 @@ const settingsMenu = [
     items: [
       { name: 'Monatsdaten', href: '/einstellungen/monatsdaten' },
       { name: 'Monatsabschluss', href: '/einstellungen/monatsabschluss' },
+      { name: 'Energieprofil', href: '/einstellungen/energieprofil' },
       { name: 'Daten-Checker', href: '/einstellungen/daten-checker' },
       { name: 'Einrichtung', href: '/einstellungen/einrichtung' },
     ],

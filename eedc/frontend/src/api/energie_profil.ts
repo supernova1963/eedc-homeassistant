@@ -144,6 +144,43 @@ export interface VollbackfillResult {
   bis: string
 }
 
+export interface KraftstoffpreisStatus {
+  tages_offen: number
+  monats_offen: number
+  land: string
+}
+
+export interface KraftstoffpreisBackfillResult {
+  aktualisiert: number
+  land: string
+  hinweis?: string
+}
+
+export interface ProfildatenLoeschResult {
+  geloescht_stundenwerte: number
+  geloescht_tagessummen: number
+}
+
+export interface VerfuegbarerMonat {
+  jahr: number
+  monat: number
+  tage: number
+}
+
+export interface AnlageStats {
+  stundenwerte: number
+  tageszusammenfassungen: number
+  monatswerte: number
+  zeitraum: {
+    von: string
+    bis: string
+    tage_mit_daten: number
+    tage_gesamt: number
+    abdeckung_prozent: number
+  } | null
+  wachstum_pro_monat: number
+}
+
 export interface StundenPrognose {
   stunde: number
   pv_kw: number
@@ -189,4 +226,25 @@ export const energieProfilApi = {
 
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
     api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),
+
+  getKraftstoffpreisStatus: (anlageId: number): Promise<KraftstoffpreisStatus> =>
+    api.get(`/energie-profil/${anlageId}/kraftstoffpreis-status`),
+
+  kraftstoffpreisBackfillTages: (anlageId: number): Promise<KraftstoffpreisBackfillResult> =>
+    api.post(`/energie-profil/${anlageId}/kraftstoffpreis-backfill/tages`),
+
+  kraftstoffpreisBackfillMonats: (anlageId: number): Promise<KraftstoffpreisBackfillResult> =>
+    api.post(`/energie-profil/${anlageId}/kraftstoffpreis-backfill/monats`),
+
+  deleteRohdaten: (): Promise<ProfildatenLoeschResult> =>
+    api.delete(`/energie-profil/rohdaten`),
+
+  getAnlageStats: (anlageId: number): Promise<AnlageStats> =>
+    api.get(`/energie-profil/${anlageId}/stats`),
+
+  getVerfuegbareMonate: (anlageId: number): Promise<VerfuegbarerMonat[]> =>
+    api.get(`/energie-profil/${anlageId}/verfuegbare-monate`),
+
+  deleteRohdatenAnlage: (anlageId: number): Promise<ProfildatenLoeschResult> =>
+    api.delete(`/energie-profil/${anlageId}/rohdaten`),
 }
