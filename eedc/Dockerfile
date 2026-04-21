@@ -26,7 +26,7 @@ LABEL \
     io.hass.name="EEDC" \
     io.hass.description="Energie Effizienz Data Center - PV-Anlagen Auswertung" \
     io.hass.type="addon" \
-    io.hass.version="3.16.16"
+    io.hass.version="3.17.0"
 
 # System-Abhängigkeiten
 # WeasyPrint (neue PDF-Engine) braucht Pango/Cairo/HarfBuzz als native Libs.
