@@ -676,30 +676,41 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
           )}
 
           {/* Wärmepumpe */}
-          {benchmark.benchmark_erweitert.waermepumpe && benchmark.anlage.hat_waermepumpe && (
-            <KomponentenCard
-              title="Wärmepumpe"
-              icon={<Home className="h-6 w-6 text-blue-500" />}
-            >
-              <KPIRow
-                label={`JAZ${benchmark.anlage.wp_art === 'luft_wasser' ? ' · Luft/Wasser' : benchmark.anlage.wp_art === 'sole_wasser' ? ' · Sole/Wasser' : ''}`}
-                kpi={benchmark.benchmark_erweitert.waermepumpe.jaz}
-                einheit=""
-              />
-              <KPIRow
-                label="Stromverbrauch"
-                kpi={benchmark.benchmark_erweitert.waermepumpe.stromverbrauch}
-                einheit="kWh"
-                hideComparison
-              />
-              <KPIRow
-                label="Wärmeerzeugung"
-                kpi={benchmark.benchmark_erweitert.waermepumpe.waermeerzeugung}
-                einheit="kWh"
-                hideComparison
-              />
-            </KomponentenCard>
-          )}
+          {benchmark.benchmark_erweitert.waermepumpe && benchmark.anlage.hat_waermepumpe && (() => {
+            const wp = benchmark.benchmark_erweitert.waermepumpe
+            // Typ-spezifischen Vergleich bevorzugen (konsistent mit Verbesserungspotenzial)
+            const jazVergleich = wp.jaz_typ?.community_avg ? wp.jaz_typ : wp.jaz
+            const wpArt = wp.wp_art ?? benchmark.anlage.wp_art
+            const wpArtLabel = wpArt === 'luft_wasser' ? ' · Luft/Wasser'
+              : wpArt === 'sole_wasser' ? ' · Sole/Wasser'
+              : wpArt === 'grundwasser' ? ' · Grundwasser'
+              : wpArt === 'luft_luft' ? ' · Luft/Luft'
+              : ''
+            return (
+              <KomponentenCard
+                title="Wärmepumpe"
+                icon={<Home className="h-6 w-6 text-blue-500" />}
+              >
+                <KPIRow
+                  label={`JAZ${wpArtLabel}`}
+                  kpi={jazVergleich}
+                  einheit=""
+                />
+                <KPIRow
+                  label="Stromverbrauch"
+                  kpi={wp.stromverbrauch}
+                  einheit="kWh"
+                  hideComparison
+                />
+                <KPIRow
+                  label="Wärmeerzeugung"
+                  kpi={wp.waermeerzeugung}
+                  einheit="kWh"
+                  hideComparison
+                />
+              </KomponentenCard>
+            )
+          })()}
 
           {/* E-Auto */}
           {benchmark.benchmark_erweitert.eauto && benchmark.anlage.hat_eauto && (
