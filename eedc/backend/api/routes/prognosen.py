@@ -59,7 +59,8 @@ class TagesPrognoseSchema(BaseModel):
 
 class StundenProfilEintrag(BaseModel):
     stunde: int
-    kw: float
+    # kw=None → Datenlücke (z.B. IST-Stunde ohne gemappten Zähler, Issue #135)
+    kw: Optional[float] = None
     p10_kw: Optional[float] = None
     p90_kw: Optional[float] = None
 
@@ -117,6 +118,9 @@ class PrognosenVergleichResponse(BaseModel):
     ist_heute_kwh: Optional[float] = None
     ist_stundenprofil: List[StundenProfilEintrag] = []
     ist_tageshaelfte: Optional[TageshaelfteSchema] = None
+    # True wenn mindestens eine Stunde des Tages pv_kw=None hatte
+    # (kein kumulativer Zähler gemappt — Issue #135)
+    ist_unvollstaendig: bool = False
 
     # Verbleibend: Hochrechnung basierend auf IST + beste Prognose für Rest
     verbleibend_kwh: Optional[float] = None
@@ -153,9 +157,12 @@ class GenauigkeitsResponse(BaseModel):
 # =============================================================================
 
 def _berechne_tageshaelfte(stundenprofil: List[StundenProfilEintrag]) -> TageshaelfteSchema:
-    """Teilt Stundenprofil in Vormittag (0–12) und Nachmittag (13–23)."""
-    vm = sum(s.kw for s in stundenprofil if s.stunde <= 12)
-    nm = sum(s.kw for s in stundenprofil if s.stunde > 12)
+    """Teilt Stundenprofil in Vormittag (0–12) und Nachmittag (13–23).
+
+    NULL-Stunden (z.B. IST-Lücken ohne Zähler, Issue #135) werden übersprungen.
+    """
+    vm = sum(s.kw for s in stundenprofil if s.stunde <= 12 and s.kw is not None)
+    nm = sum(s.kw for s in stundenprofil if s.stunde > 12 and s.kw is not None)
     return TageshaelfteSchema(
         vormittag_kwh=round(vm, 1),
         nachmittag_kwh=round(nm, 1),
@@ -379,10 +386,22 @@ async def get_prognosen_vergleich(
         eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None else None
 
     # ── IST-Ertrag heute ──
+    # Issue #135: pv_kw kann None sein (kein Zähler gemappt / Datenlücke).
+    # None-Stunden fließen NICHT in die Summe ein und werden im Stundenprofil
+    # als Lücke markiert (kw=None). Frontend zeigt ist_unvollstaendig=True an.
     ist_stundenprofil = []
     ist_heute_kwh = 0.0
+    ist_unvollstaendig = False
+    jetzt_stunde = now.hour
     for row in ist_rows:
-        kw = row.pv_kw or 0
+        if row.pv_kw is None:
+            # Nur vergangene Stunden als "fehlend" werten; noch nicht
+            # aggregierte Zukunft-Stunden sind kein Datenproblem
+            if row.stunde <= jetzt_stunde:
+                ist_unvollstaendig = True
+            ist_stundenprofil.append(StundenProfilEintrag(stunde=row.stunde, kw=None))
+            continue
+        kw = row.pv_kw
         ist_stundenprofil.append(StundenProfilEintrag(stunde=row.stunde, kw=round(kw, 2)))
         ist_heute_kwh += kw
 
@@ -512,6 +531,7 @@ async def get_prognosen_vergleich(
         ist_heute_kwh=round(ist_heute_kwh, 1) if ist_heute_kwh > 0 else None,
         ist_stundenprofil=ist_stundenprofil,
         ist_tageshaelfte=ist_th,
+        ist_unvollstaendig=ist_unvollstaendig,
         verbleibend_kwh=verbleibend_kwh,
         verbleibend_om_kwh=verbleibend_om_kwh,
         verbleibend_eedc_kwh=verbleibend_eedc_kwh,
