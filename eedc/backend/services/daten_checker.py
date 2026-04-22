@@ -37,6 +37,8 @@ class CheckKategorie(str, Enum):
     INVESTITIONEN = "investitionen"
     MONATSDATEN_VOLLSTAENDIGKEIT = "monatsdaten_vollstaendigkeit"
     MONATSDATEN_PLAUSIBILITAET = "monatsdaten_plausibilitaet"
+    # Issue #135: Deckungsgrad kumulativer kWh-Zähler für Energieprofil
+    ENERGIEPROFIL_ABDECKUNG = "energieprofil_abdeckung"
 
 
 @dataclass
@@ -130,6 +132,7 @@ class DatenChecker:
         ergebnisse.extend(self._check_monatsdaten_plausibilitaet(
             anlage, monatsdaten, pvgis_prognose, pv_erzeugung_map, pvgis_monat_map, pr, pr_count
         ))
+        ergebnisse.extend(self._check_energieprofil_abdeckung(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -850,6 +853,108 @@ class DatenChecker:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung="Keine Auffälligkeiten in den Monatsdaten",
+            ))
+
+        return ergebnisse
+
+    # ─── Energieprofil-Abdeckung (Issue #135) ────────────────────────────
+
+    def _check_energieprofil_abdeckung(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """
+        Prüft welche kumulativen kWh-Zähler im sensor_mapping gesetzt sind.
+
+        Issue #135: Ohne gemappte kumulative Zähler bleibt das Energieprofil
+        für die betroffenen Kategorien leer (strikte NULL-Semantik). Der Check
+        zeigt, welche Zähler fehlen und welche Energieprofil-Bereiche dadurch
+        nicht funktionieren (Prognosen-IST, Heatmap, Lernfaktor, Monatsberichte).
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.ENERGIEPROFIL_ABDECKUNG
+
+        sensor_mapping = anlage.sensor_mapping or {}
+        basis = sensor_mapping.get("basis", {}) or {}
+        inv_map = sensor_mapping.get("investitionen", {}) or {}
+
+        def _has_zaehler(config: Optional[dict]) -> bool:
+            if not isinstance(config, dict):
+                return False
+            return config.get("strategie") == "sensor" and bool(config.get("sensor_id"))
+
+        # Basis: Einspeisung + Netzbezug
+        fehlende_basis: list[str] = []
+        if not _has_zaehler(basis.get("einspeisung")):
+            fehlende_basis.append("Einspeisung")
+        if not _has_zaehler(basis.get("netzbezug")):
+            fehlende_basis.append("Netzbezug")
+
+        if fehlende_basis:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"Kein Basis-Zähler für: {', '.join(fehlende_basis)}",
+                details=(
+                    "Ohne kumulative kWh-Zähler bleibt der bilanzielle Verbrauch im "
+                    "Energieprofil leer. Bitte im Sensor-Mapping-Wizard die kWh-Zähler "
+                    "(nicht die leistung_w-Sensoren) eintragen."
+                ),
+                link="/einstellungen/sensoren",
+            ))
+        else:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung="Basis-Zähler (Einspeisung + Netzbezug) gemappt",
+            ))
+
+        # Pro Investition prüfen
+        erwartete_felder = {
+            "pv-module": ["pv_erzeugung_kwh"],
+            "balkonkraftwerk": ["pv_erzeugung_kwh"],
+            "speicher": ["ladung_kwh", "entladung_kwh"],
+            "waermepumpe": ["stromverbrauch_kwh"],
+            "wallbox": ["ladung_kwh"],
+            "e-auto": ["ladung_kwh"],
+        }
+
+        fehlend_pro_komponente: list[tuple[str, str, list[str]]] = []
+        gemappt_count = 0
+
+        for inv in anlage.investitionen:
+            if not inv.aktiv:
+                continue
+            erwartet = erwartete_felder.get(inv.typ)
+            if not erwartet:
+                continue  # sonstiges, wechselrichter etc. skippen
+
+            inv_data = inv_map.get(str(inv.id), {}) or {}
+            felder = inv_data.get("felder", {}) or {}
+            fehlend = [f for f in erwartet if not _has_zaehler(felder.get(f))]
+
+            if fehlend:
+                fehlend_pro_komponente.append((inv.bezeichnung, inv.typ, fehlend))
+            else:
+                gemappt_count += 1
+
+        if fehlend_pro_komponente:
+            details_parts = [
+                f"{name} ({typ}): {', '.join(fehlend)}"
+                for name, typ, fehlend in fehlend_pro_komponente
+            ]
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=(
+                    f"{len(fehlend_pro_komponente)} von {len(fehlend_pro_komponente) + gemappt_count} "
+                    "Komponenten ohne vollständige kWh-Zähler-Abdeckung"
+                ),
+                details=(
+                    "Ohne kumulative Zähler bleibt das Energieprofil für diese "
+                    "Komponenten leer. Betroffen sind Prognosen-IST, Heatmap, "
+                    "Lernfaktor und Monatsberichte. Details: " + "; ".join(details_parts)
+                ),
+                link="/einstellungen/sensoren",
+            ))
+        elif gemappt_count > 0:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=f"Alle {gemappt_count} aktiven Komponenten haben kWh-Zähler gemappt",
             ))
 
         return ergebnisse

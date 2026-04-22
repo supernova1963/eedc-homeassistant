@@ -236,6 +236,11 @@ class MonatsAuswertungResponse(BaseModel):
     negative_preis_stunden: Optional[int] = None
     einspeisung_neg_preis_kwh: Optional[float] = None
 
+    # Datenqualität (Issue #135): Anteil der Stunden ohne gemappten Zähler
+    # Ermöglicht dem Frontend, Warnhinweise zu Datenlücken anzuzeigen.
+    stunden_fehlend_pv: int = 0
+    stunden_fehlend_verbrauch: int = 0
+
 
 class TagesZusammenfassungResponse(BaseModel):
     """Tageszusammenfassung mit Per-Komponenten-kWh."""
@@ -530,6 +535,11 @@ async def get_monatsauswertung(
     # Für Grundbedarf: Nachtstunden 0–5 Uhr
     nacht_verbrauch: list[float] = []
 
+    # Datenqualität (Issue #135): Zähle Stunden mit NULL-Werten
+    # als Signal an UI, dass kumulativer Zähler fehlt/lückenhaft ist.
+    stunden_fehlend_pv = 0
+    stunden_fehlend_verbrauch = 0
+
     # Peaks sammeln — alle Einträge, später sortieren
     netzbezug_kandidaten: list[PeakStunde] = []
     einspeisung_kandidaten: list[PeakStunde] = []
@@ -537,37 +547,51 @@ async def get_monatsauswertung(
 
     for r in stunden_rows:
         tage_mit_daten.add(r.datum)
-        pv = r.pv_kw or 0.0
-        verbrauch = r.verbrauch_kw or 0.0
-        einspeisung = r.einspeisung_kw or 0.0
-        netzbezug = r.netzbezug_kw or 0.0
-        batt = r.batterie_kw or 0.0  # +Entladung, −Ladung
-        ueberschuss = pv - verbrauch
 
-        pv_sum += pv
-        verbrauch_sum += verbrauch
-        einspeisung_sum += einspeisung
-        netzbezug_sum += netzbezug
-        if ueberschuss > 0:
-            ueberschuss_sum += ueberschuss
-        else:
-            defizit_sum += -ueberschuss
+        # NULL-Handling: Stunde ohne gemapptem Zähler → nicht als 0 zählen
+        pv = r.pv_kw
+        verbrauch = r.verbrauch_kw
+        einspeisung = r.einspeisung_kw
+        netzbezug = r.netzbezug_kw
+        batt = r.batterie_kw
 
-        # Batterie getrennt nach Richtung
-        if batt < 0:
-            batt_lade_sum += -batt
-        elif batt > 0:
-            batt_entlade_sum += batt
+        if pv is None:
+            stunden_fehlend_pv += 1
+        if verbrauch is None:
+            stunden_fehlend_verbrauch += 1
 
-        # Direkt-Eigenverbrauch: was aus PV direkt in die Senken geht (ohne Batterie-Umweg)
-        direkt_sum += min(pv, verbrauch)
+        # Summen: NULL überspringt stillschweigend (statt als 0 zu zählen)
+        if pv is not None:
+            pv_sum += pv
+            pv_pro_tag[r.datum] += pv
+        if verbrauch is not None:
+            verbrauch_sum += verbrauch
+        if einspeisung is not None:
+            einspeisung_sum += einspeisung
+        if netzbezug is not None:
+            netzbezug_sum += netzbezug
 
-        pv_pro_tag[r.datum] += pv
+        # Überschuss/Defizit + Direkt-Eigenverbrauch nur wenn beide Werte da
+        ueberschuss: Optional[float] = None
+        if pv is not None and verbrauch is not None:
+            ueberschuss = pv - verbrauch
+            if ueberschuss > 0:
+                ueberschuss_sum += ueberschuss
+            else:
+                defizit_sum += -ueberschuss
+            direkt_sum += min(pv, verbrauch)
+
+        # Batterie getrennt nach Richtung (nur wenn Wert vorhanden)
+        if batt is not None:
+            if batt < 0:
+                batt_lade_sum += -batt
+            elif batt > 0:
+                batt_entlade_sum += batt
 
         # Profilsammlung
-        if r.pv_kw is not None:
+        if pv is not None:
             profil_pv[r.stunde].append(pv)
-        if r.verbrauch_kw is not None:
+        if verbrauch is not None:
             profil_verbrauch[r.stunde].append(verbrauch)
             if 0 <= r.stunde < 5:
                 nacht_verbrauch.append(verbrauch)
@@ -575,11 +599,11 @@ async def get_monatsauswertung(
         heatmap.append(HeatmapZelle(
             tag=r.datum.day,
             stunde=r.stunde,
-            pv_kw=round(pv, 3) if r.pv_kw is not None else None,
-            verbrauch_kw=round(verbrauch, 3) if r.verbrauch_kw is not None else None,
-            netzbezug_kw=round(netzbezug, 3) if r.netzbezug_kw is not None else None,
-            einspeisung_kw=round(einspeisung, 3) if r.einspeisung_kw is not None else None,
-            ueberschuss_kw=round(ueberschuss, 3) if (r.pv_kw is not None or r.verbrauch_kw is not None) else None,
+            pv_kw=round(pv, 3) if pv is not None else None,
+            verbrauch_kw=round(verbrauch, 3) if verbrauch is not None else None,
+            netzbezug_kw=round(netzbezug, 3) if netzbezug is not None else None,
+            einspeisung_kw=round(einspeisung, 3) if einspeisung is not None else None,
+            ueberschuss_kw=round(ueberschuss, 3) if ueberschuss is not None else None,
         ))
 
         if r.netzbezug_kw is not None and r.netzbezug_kw > 0:
@@ -788,6 +812,8 @@ async def get_monatsauswertung(
         boersenpreis_avg_cent=boersenpreis_avg,
         negative_preis_stunden=neg_stunden_summe,
         einspeisung_neg_preis_kwh=neg_einsp_summe,
+        stunden_fehlend_pv=stunden_fehlend_pv,
+        stunden_fehlend_verbrauch=stunden_fehlend_verbrauch,
     )
 
 
