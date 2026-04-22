@@ -127,6 +127,17 @@ class EEDCScheduler:
                 )
                 logger.info(f"MQTT Auto-Publish aktiviert: alle {interval} Minuten")
 
+            # Sensor-Snapshots: Stündlich 5 Min nach voller Stunde (Issue #135)
+            # Liest kumulative kWh-Zählerstände aus HA Statistics in sensor_snapshots.
+            # 5-Min-Offset gibt HA Zeit, die Stunde zu finalisieren.
+            self._scheduler.add_job(
+                sensor_snapshot_job,
+                CronTrigger(minute=5),
+                id="sensor_snapshot",
+                name="Sensor-Snapshots (Zählerstände stündlich)",
+                replace_existing=True,
+            )
+
             # Energie-Profil Heute: Alle 15 Minuten (rollierend, laufender Tag)
             self._scheduler.add_job(
                 energie_profil_heute_job,
@@ -332,6 +343,58 @@ async def mqtt_live_cleanup_job() -> None:
         await cleanup_old_snapshots()
     except Exception as e:
         logger.warning(f"MQTT Live Cleanup fehlgeschlagen: {type(e).__name__}: {e}")
+
+
+async def sensor_snapshot_job() -> None:
+    """
+    Schreibt stündliche Snapshots aller gemappten kumulativen kWh-Zähler
+    (Issue #135). Läuft 5 Min nach voller Stunde für alle Anlagen.
+
+    Default zeitpunkt = aktuelle Stunde auf :00 gerundet (also die gerade
+    abgeschlossene Stunde zum Zeitpunkt der Ausführung).
+    """
+    try:
+        from sqlalchemy import select
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.sensor_snapshot_service import snapshot_anlage
+
+        now = datetime.now()
+        # Die Stunde, die gerade abgeschlossen wurde (aktuelle volle Stunde)
+        zeitpunkt = now.replace(minute=0, second=0, microsecond=0)
+
+        total_anlagen = 0
+        total_snapshots = 0
+
+        async with get_session() as db:
+            result = await db.execute(select(Anlage))
+            anlagen = result.scalars().all()
+
+            for anlage in anlagen:
+                try:
+                    n = await snapshot_anlage(db, anlage, zeitpunkt=zeitpunkt)
+                    if n > 0:
+                        total_snapshots += n
+                        total_anlagen += 1
+                except Exception as e:
+                    logger.debug(
+                        f"Snapshot für Anlage {anlage.id} fehlgeschlagen: "
+                        f"{type(e).__name__}: {e}"
+                    )
+
+        if total_snapshots > 0:
+            logger.info(
+                f"Sensor-Snapshots geschrieben: {total_snapshots} Werte für "
+                f"{total_anlagen} Anlagen @ {zeitpunkt.isoformat()}"
+            )
+    except Exception as e:
+        logger.warning(f"Sensor-Snapshot Job fehlgeschlagen: {type(e).__name__}: {e}")
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Sensor-Snapshot fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
 
 
 async def energie_profil_heute_job() -> None:
