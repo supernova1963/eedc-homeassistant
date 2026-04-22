@@ -18,6 +18,7 @@ interface KPICardProps {
   formel?: string
   berechnung?: string
   ergebnis?: string
+  sicht?: string
 }
 
 const colorClasses = {
@@ -41,6 +42,7 @@ export function KPICard({
   formel,
   berechnung,
   ergebnis,
+  sicht,
 }: KPICardProps) {
   const colors = colorClasses[color]
 
@@ -60,7 +62,7 @@ export function KPICard({
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{title}</p>
           <div className="mt-1">
             {formel ? (
-              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
                 {valueContent}
               </FormelTooltip>
             ) : (

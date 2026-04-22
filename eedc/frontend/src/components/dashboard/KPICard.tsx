@@ -10,10 +10,10 @@ import { Card, FormelTooltip } from '../../components/ui'
 export interface KPICardProps {
   title: string; value: string; unit: string; subtitle?: string
   icon: React.ElementType; color: string; bgColor: string
-  onClick?: () => void; formel?: string; berechnung?: string; ergebnis?: string
+  onClick?: () => void; formel?: string; berechnung?: string; ergebnis?: string; sicht?: string
 }
 
-export default function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, onClick, formel, berechnung, ergebnis }: KPICardProps) {
+export default function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, onClick, formel, berechnung, ergebnis, sicht }: KPICardProps) {
   const valueContent = (
     <span className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
       {value} <span className="text-xs sm:text-sm font-normal text-gray-500">{unit}</span>
@@ -26,7 +26,7 @@ export default function KPICard({ title, value, unit, subtitle, icon: Icon, colo
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{title}</p>
         <div className="mt-0.5">
           {formel
-            ? <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>{valueContent}</FormelTooltip>
+            ? <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>{valueContent}</FormelTooltip>
             : valueContent
           }
         </div>

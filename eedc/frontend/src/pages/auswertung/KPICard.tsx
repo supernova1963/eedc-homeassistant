@@ -13,9 +13,10 @@ interface KPICardProps {
   formel?: string
   berechnung?: string
   ergebnis?: string
+  sicht?: string
 }
 
-export function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, formel, berechnung, ergebnis }: KPICardProps) {
+export function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgColor, formel, berechnung, ergebnis, sicht }: KPICardProps) {
   const valueContent = (
     <span className="text-2xl font-bold text-gray-900 dark:text-white">
       {value} <span className="text-sm font-normal">{unit}</span>
@@ -29,7 +30,7 @@ export function KPICard({ title, value, unit, subtitle, icon: Icon, color, bgCol
           <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
           <div className="mt-1">
             {formel ? (
-              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
                 {valueContent}
               </FormelTooltip>
             ) : (

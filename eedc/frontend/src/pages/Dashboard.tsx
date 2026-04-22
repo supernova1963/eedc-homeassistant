@@ -498,6 +498,7 @@ export default function Dashboard() {
             color="text-emerald-600"
             bgColor="bg-emerald-50 dark:bg-emerald-900/20"
             onClick={() => navigate('/auswertungen/roi')}
+            sicht="Gesamt-Anlage · Jahres-ROI · IST-Werte · Vollkosten"
             formel="Jahres-Ertrag ÷ Investition × 100"
             berechnung={`${fmtCalc(data.netto_ertrag_euro, 0)} € ÷ ${fmtCalc(data.investition_gesamt_euro, 0)} €`}
             ergebnis={`= ${fmtCalc(data.jahres_rendite_prozent || 0, 1)} % p.a.`}
