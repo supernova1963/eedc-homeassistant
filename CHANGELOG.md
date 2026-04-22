@@ -7,6 +7,44 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.19.0] - 2026-04-22
+
+### Kritischer Bugfix
+
+- **fix(energieprofil): kWh-Werte aus Zähler-Snapshots statt Leistungs-Integration (#135)** — Bisher berechnete `aggregate_day` Stunden-kWh aus `leistung_w`-10-Min-Samples (±5-15% Drift), obwohl kumulative Zähler wie `pv_erzeugung_kwh` im Sensor-Mapping vorhanden waren. Dadurch wichen Prognosen-IST, Lernfaktor, Heatmaps und abgeleitete Monatswerte vom Live Dashboard ab (konkreter Fall: Winterborn 2026-04-22 — Live 28.3 vs Prognosen IST 31.0 kWh, Zähler-Realität 31.25 kWh). Neue Architektur: Scheduler-Job schreibt stündlich kumulative Zählerstände in die `sensor_snapshots`-Tabelle, alle kWh-Werte werden als Snapshot-Differenz berechnet. Quellen: HA Statistics (Add-on) oder MQTT-Energy-Snapshots (Standalone/Docker). Self-Healing füllt Lücken on-demand.
+
+### Features
+
+- **feat(energieprofil): Strikte NULL-Semantik bei fehlenden Zählern** — Wenn keine kumulativen Zähler gemappt sind, bleiben die betroffenen `TagesEnergieProfil`-Felder `NULL` statt aus Leistungs-Samples geschätzt zu werden. Prognosen-IST-Response enthält neues `ist_unvollstaendig`-Flag, Monatsauswertung liefert `stunden_fehlend_pv`/`stunden_fehlend_verbrauch`. Frontend zeigt ⚠-Badge neben IST-Werten bei Datenlücken.
+
+- **feat(datencheck): Neue Kategorie „Energieprofil – Zähler-Abdeckung"** — Daten-Checker prüft pro Anlage und Komponente, welche kumulativen kWh-Zähler (`pv_erzeugung_kwh`, `ladung_kwh`, `entladung_kwh`, `stromverbrauch_kwh`, Einspeisung/Netzbezug) gemappt sind. Warnt mit konkreter Liste fehlender Zähler und verlinkt zum Sensor-Mapping-Wizard.
+
+### Verbessert
+
+- **enhance(energieprofil): Info-Banner auf Datenverwaltungs-Seite** — Neuer Hinweis, der Nutzer einmalig nach dem Update zur Ausführung von „Verlauf nachberechnen" mit aktiver „Überschreiben"-Option auffordert, damit historische Daten auch aus Zählern statt aus Leistungs-Schätzung stammen.
+
+- **enhance(prognosen): StundenProfilEintrag.kw jetzt nullable** — Datenlücken im Stundenprofil werden als `null` übertragen (Recharts zeigt Chart-Unterbrechung statt 0-Linie).
+
+### Backend
+
+- **feat(db): Neue Tabelle `sensor_snapshots`** — Stündliche Snapshots kumulativer kWh-Zählerstände (anlage_id + sensor_key + zeitpunkt). Basis für die neue Energieprofil-Berechnung.
+
+- **feat(api): HA Statistics Helper `get_value_at`** — Liest kumulativen Zählerstand zu einem bestimmten Zeitpunkt aus HA Statistics (SQLite + MariaDB, Wh→kWh-Konvertierung, ±Toleranzfenster).
+
+- **feat(scheduler): `sensor_snapshot_job`** — Neuer stündlicher Job (`minute=5` Cron) schreibt aktuelle Zählerstände aus HA Statistics + MQTT-Energy-Cache in `sensor_snapshots`.
+
+- **feat(standalone): MQTT-Energy-Cache als Zähler-Quelle** — Standalone/Docker-Installationen ohne HA Statistics nutzen automatisch `mqtt_energy_snapshots` als Basis für die Zähler-Berechnung. `aggregate_day` synthetisiert ein 24h-Stundenraster wenn nur kumulative Zähler ohne `leistung_w` verfügbar sind.
+
+- **fix(backfill): `sonstige_keys` in `_sonderschluessel` ergänzt** — Latenter Bug in `backfill_from_statistics`: Sonstige-Erzeuger-Investitionen flossen doppelt in `pv_kw` ein (analog zum bereits gefixten Bug in `aggregate_day`).
+
+- **feat(config): Feature-Flag `EEDC_ENERGIEPROFIL_QUELLE`** — Default `"zaehler"` (neue Architektur), Rollback auf `"leistung_w"` möglich bei Problemen.
+
+### Hinweis
+
+> **Empfohlene Aktion nach Update:** Auf `Einstellungen → Energieprofil → Verlauf nachberechnen` klicken, Option „Bestehende Tage überschreiben" aktivieren, dann „Verlauf nachberechnen" auslösen. Dadurch werden historische Tagesprofile konsistent aus den kumulativen Zählerständen neu berechnet (einmalig, 1-5 Min Laufzeit). Ohne diesen Schritt bleiben ältere Tage mit der alten Leistungs-Schätzung bestehen.
+
+---
+
 ## [3.18.0] - 2026-04-21
 
 ### Features
