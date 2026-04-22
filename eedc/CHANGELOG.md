@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Issues
+
+- **#136** WP-Taktungs-Anzahl als fortlaufender Zähler in Tages-/Monats-Analytik (offen)
+- **#137** Live-Energiefluss: Stringsumme über dem Haus bei Einzel-PV-Konfiguration ausblenden (offen)
+
+---
+
+## [3.19.1] - 2026-04-22
+
+### Bugfixes
+
+- **fix(ha-export/mqtt): WP-/E-Auto-/BKW-Ersparnisse in MQTT-Jahresersparnis** — Die MQTT-Sensoren `jahres_ersparnis_euro`, `roi_prozent` und `amortisation_jahre` rechneten bisher nur den PV-Netto-Ertrag (Einspeise-Erlös + Eigenverbrauchs-Ersparnis) und ignorierten die Alternativkosten-Ersparnisse von Wärmepumpe (vs. Gas/Öl), E-Auto (vs. Benzin) und Balkonkraftwerk. Bei Anlagen mit WP/E-Auto führte das zu absurd langer Amortisation (Forum-Bericht: 188,6 Jahre). `calculate_anlage_sensors` rechnet die historischen Komponenten jetzt analog zu `aussichten.py:get_finanz_prognose` mit ein. Wirkt automatisch auch im periodischen `mqtt_auto_publish_job`.
+
+- **fix(community): JAZ-Kachel nutzt typ-spezifischen Vergleich** — Die Wärmepumpen-JAZ in der Komponenten-Kachel der Community-Übersicht verglich gegen den globalen Durchschnitt über alle WP-Arten, während das Verbesserungspotenzial bereits den fairen typ-spezifischen Vergleich (`jaz_typ`) nutzte. Ergebnis: leicht abweichende Prozentwerte bei identischer Kennzahl (Forum-Rückfrage: -11,1 % vs. -11,9 %). Beide Darstellungen nutzen jetzt konsistent `jaz_typ` mit Fallback auf `jaz`.
+
+### Verbessert
+
+- **enhance(ui/roi): „Sicht"-Hinweis in allen ROI-Tooltips** — `FormelTooltip` um optionalen `sicht`-Block erweitert. Alle ROI-/Amortisations-Anzeigen (Cockpit, Investitionen-Tab inkl. „Tatsächlich realisiert"-Block, ROI-Dashboard inkl. Detail-Tabelle, Aussichten-Finanzen, Amortisations-Bar) zeigen jetzt im Tooltip an, **welche Sicht** die Zahl darstellt (z. B. „Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose" vs. „Gesamt-Anlage · IST-Werte · kumuliert"). Adressiert die im Forum berichtete Verwirrung über mehrere unterschiedliche ROI-/Amortisations-Werte nebeneinander.
+
+---
+
 ## [3.19.0] - 2026-04-22
 
 ### Kritischer Bugfix
