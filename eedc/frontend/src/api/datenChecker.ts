@@ -7,7 +7,7 @@
 import { api } from './client'
 
 export interface CheckErgebnis {
-  kategorie: 'stammdaten' | 'strompreise' | 'investitionen' | 'monatsdaten_vollstaendigkeit' | 'monatsdaten_plausibilitaet'
+  kategorie: 'stammdaten' | 'strompreise' | 'investitionen' | 'monatsdaten_vollstaendigkeit' | 'monatsdaten_plausibilitaet' | 'energieprofil_abdeckung'
   schwere: 'error' | 'warning' | 'info' | 'ok'
   meldung: string
   details?: string
