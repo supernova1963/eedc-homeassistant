@@ -234,7 +234,8 @@ export interface FinanzPrognose {
 
 export interface StundenProfilEintrag {
   stunde: number
-  kw: number
+  // kw=null → Datenlücke (z.B. IST-Stunde ohne gemappten Zähler, Issue #135)
+  kw: number | null
   p10_kw: number | null
   p90_kw: number | null
 }
@@ -289,6 +290,9 @@ export interface PrognosenVergleich {
   ist_heute_kwh: number | null
   ist_stundenprofil: StundenProfilEintrag[]
   ist_tageshaelfte: Tageshaelfte | null
+  // True = mindestens eine Vergangenheits-Stunde hat keinen pv_kw-Wert
+  // (kein kumulativer Zähler gemappt, Issue #135)
+  ist_unvollstaendig?: boolean
 
   // Verbleibend (IST + Prognose Rest)
   verbleibend_kwh: number | null

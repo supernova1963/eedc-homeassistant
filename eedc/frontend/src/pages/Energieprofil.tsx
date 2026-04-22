@@ -243,6 +243,19 @@ export default function Energieprofil() {
                   Füllt Tagesprofile und Tageszusammenfassungen aus den HA Long-Term Statistics
                   für die gesamte verfügbare Historie (unabhängig von der ~10-Tage-Sensor-Grenze).
                 </p>
+
+                <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    <strong>Einmalig empfohlen nach v3.19+:</strong> Das Energieprofil wird
+                    jetzt aus kumulativen Zählerständen berechnet (exakt zum Live Dashboard).
+                    Historische Tage wurden noch aus Leistungs-Samples geschätzt
+                    (±5-15% Abweichung). Starte einmalig mit aktivierter Option
+                    <em>„Bestehende Tage überschreiben"</em>, damit der gesamte Verlauf
+                    konsistent aus Zählern stammt. Der Daten-Checker zeigt unter
+                    „Energieprofil-Abdeckung", welche Zähler dafür gemappt sein müssen.
+                  </p>
+                </div>
+
                 <label className="flex items-center gap-2 mt-3 text-sm text-gray-700 dark:text-gray-300">
                   <input
                     type="checkbox"

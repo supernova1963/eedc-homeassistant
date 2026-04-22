@@ -176,7 +176,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_heute_kwh)}</td>
                 {hasEedc && <td className="py-2 px-3 text-right font-mono font-semibold text-orange-500">{fmtKwh(data.eedc_heute_kwh)}</td>}
                 {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwhBand(data.solcast_heute_kwh, data.solcast_p10_kwh, data.solcast_p90_kwh)}</td>}
-                <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{fmtKwh(data.ist_heute_kwh)}</td>
+                <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
+                  {fmtKwh(data.ist_heute_kwh)}
+                  {data.ist_unvollstaendig && (
+                    <SimpleTooltip text="Mindestens eine Stunde dieses Tages hat keinen Zähler-Wert. Bitte kumulativen Zähler im Sensor-Mapping-Wizard prüfen.">
+                      <span className="ml-1 text-amber-500 cursor-help" aria-label="Unvollständig">⚠</span>
+                    </SimpleTooltip>
+                  )}
+                </td>
               </tr>
               {/* Verbleibend */}
               <tr className="border-b border-gray-100 dark:border-gray-800">
