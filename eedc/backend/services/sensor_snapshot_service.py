@@ -25,6 +25,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.sensor_snapshot import SensorSnapshot
+from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.ha_statistics_service import get_ha_statistics_service
 
 logger = logging.getLogger(__name__)
@@ -45,11 +46,83 @@ KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = {
 BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug")
 
 
+# MQTT-Energy-Topic-Keys → sensor_snapshots.sensor_key Mapping.
+# Das MQTT-Inbound nutzt flachere Keys (z.B. "inv/14/pv_erzeugung_kwh"),
+# SensorSnapshot nutzt Doppelpunkt-Schema für Konsistenz mit HA-Pfad.
+_MQTT_BASIS_KEYS: dict[str, str] = {
+    "einspeisung_kwh": "basis:einspeisung",
+    "netzbezug_kwh": "basis:netzbezug",
+}
+
+
+def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
+    """
+    Konvertiert MQTT-Energy-Topic-Key ins SensorSnapshot.sensor_key-Schema.
+
+    Gibt None zurück für Keys die keine kumulative kWh-Energie sind
+    (ladevorgaenge, km_gefahren, speicher_ladepreis_cent etc.).
+    """
+    if mqtt_key in _MQTT_BASIS_KEYS:
+        return _MQTT_BASIS_KEYS[mqtt_key]
+    if mqtt_key.startswith("inv/"):
+        parts = mqtt_key.split("/", 2)
+        if len(parts) == 3:
+            _, inv_id, feld = parts
+            # Nur kumulative kWh-Energie-Felder (keine km_gefahren, Preise, etc.)
+            alle_felder = {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
+            if feld in alle_felder:
+                return f"inv:{inv_id}:{feld}"
+    return None
+
+
+async def _get_mqtt_snapshot_at(
+    db: AsyncSession,
+    anlage_id: int,
+    mqtt_key: str,
+    zeitpunkt: datetime,
+    toleranz_minuten: int = 30,
+) -> Optional[float]:
+    """
+    Liest den nächstgelegenen MqttEnergySnapshot um zeitpunkt (±toleranz_minuten).
+
+    Wird als MQTT-Fallback genutzt wenn HA Statistics nicht verfügbar ist
+    (Standalone/Docker-Modus ohne HA-Integration).
+    """
+    von = zeitpunkt - timedelta(minutes=toleranz_minuten)
+    bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
+    result = await db.execute(
+        select(MqttEnergySnapshot.value_kwh, MqttEnergySnapshot.timestamp).where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage_id,
+                MqttEnergySnapshot.energy_key == mqtt_key,
+                MqttEnergySnapshot.timestamp >= von,
+                MqttEnergySnapshot.timestamp <= bis,
+            )
+        ).order_by(MqttEnergySnapshot.timestamp.asc()).limit(1)
+    )
+    row = result.first()
+    return row[0] if row else None
+
+
+def _sensor_key_to_mqtt_key(sensor_key: str) -> Optional[str]:
+    """Umkehrung von _mqtt_key_to_sensor_key."""
+    if sensor_key == "basis:einspeisung":
+        return "einspeisung_kwh"
+    if sensor_key == "basis:netzbezug":
+        return "netzbezug_kwh"
+    if sensor_key.startswith("inv:"):
+        parts = sensor_key.split(":", 2)
+        if len(parts) == 3:
+            _, inv_id, feld = parts
+            return f"inv/{inv_id}/{feld}"
+    return None
+
+
 async def get_snapshot(
     db: AsyncSession,
     anlage_id: int,
     sensor_key: str,
-    sensor_id: str,
+    sensor_id: Optional[str],
     zeitpunkt: datetime,
     toleranz_minuten: int = 5,
     ha_toleranz_minuten: int = 120,
@@ -57,15 +130,16 @@ async def get_snapshot(
     """
     Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
 
-    Self-Healing: Wenn kein Snapshot in der DB existiert (±toleranz_minuten
-    um zeitpunkt), wird HA Statistics befragt und das Ergebnis gespeichert.
+    Self-Healing-Reihenfolge:
+      1. DB-Lookup in sensor_snapshots (±toleranz_minuten)
+      2. HA Statistics via sensor_id (nur wenn sensor_id gesetzt)
+      3. MqttEnergySnapshot-Fallback (Standalone-Modus, Issue #135 Blocker 2)
 
     Args:
         db: Async Session
         anlage_id: Anlagen-ID
-        sensor_key: Stabiler Schlüssel im sensor_snapshots-Schema
-                    (z.B. "inv:4:pv_erzeugung_kwh", "basis:einspeisung")
-        sensor_id: HA Entity-ID des kumulativen Zählers
+        sensor_key: Stabiler Schlüssel (z.B. "inv:4:pv_erzeugung_kwh")
+        sensor_id: HA Entity-ID des kumulativen Zählers; None bei MQTT-only
         zeitpunkt: Zielzeitpunkt (typisch: Stundenanfang, 00:00, 01:00 ...)
         toleranz_minuten: Max. zeitliche Abweichung bei DB-Lookup
         ha_toleranz_minuten: Max. zeitliche Abweichung bei HA-Statistics-Fallback
@@ -93,19 +167,23 @@ async def get_snapshot(
     if row is not None:
         return row
 
-    # Self-Healing via HA Statistics
-    ha_svc = get_ha_statistics_service()
-    if not ha_svc.is_available:
-        logger.debug(
-            f"Snapshot-Lücke für anlage={anlage_id} key={sensor_key} @ {zeitpunkt} "
-            f"— HA Statistics nicht verfügbar"
-        )
-        return None
+    # Self-Healing via HA Statistics (wenn HA-Sensor-ID bekannt)
+    wert: Optional[float] = None
+    if sensor_id:
+        ha_svc = get_ha_statistics_service()
+        if ha_svc.is_available:
+            wert = ha_svc.get_value_at(sensor_id, zeitpunkt, ha_toleranz_minuten)
 
-    wert = ha_svc.get_value_at(sensor_id, zeitpunkt, ha_toleranz_minuten)
+    # Fallback: MQTT-Energy-Snapshot (Standalone/Docker-Modus)
+    if wert is None:
+        mqtt_key = _sensor_key_to_mqtt_key(sensor_key)
+        if mqtt_key:
+            wert = await _get_mqtt_snapshot_at(db, anlage_id, mqtt_key, zeitpunkt)
+
     if wert is None:
         logger.debug(
-            f"HA Statistics liefert keinen Wert für {sensor_id} @ {zeitpunkt}"
+            f"Kein Wert für anlage={anlage_id} key={sensor_key} @ {zeitpunkt} "
+            f"(weder HA Statistics noch MQTT-Snapshot)"
         )
         return None
 
@@ -306,9 +384,12 @@ async def get_hourly_kwh_by_category(
     sensor_mapping = anlage.sensor_mapping or {}
 
     # 1. Zähler-Entities sammeln mit Kategorien
-    eintraege: list[tuple[str, str, str]] = []
-    # (sensor_key, entity_id, kategorie)
+    # (sensor_key, entity_id | None, kategorie)
+    # entity_id=None bei reinen MQTT-Quellen (Standalone/Docker-Modus)
+    eintraege: list[tuple[str, Optional[str], str]] = []
+    seen_keys: set[str] = set()
 
+    # 1a. HA-gemappte Zähler aus sensor_mapping
     basis = sensor_mapping.get("basis", {}) or {}
     for feld in BASIS_ZAEHLER_FELDER:
         config = basis.get(feld)
@@ -317,7 +398,9 @@ async def get_hourly_kwh_by_category(
             if eid:
                 kat = _categorize_counter(feld, None, None)
                 if kat:
-                    eintraege.append((f"basis:{feld}", eid, kat))
+                    sk = f"basis:{feld}"
+                    eintraege.append((sk, eid, kat))
+                    seen_keys.add(sk)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -335,7 +418,43 @@ async def get_hourly_kwh_by_category(
                 continue
             kat = _categorize_counter(feld, inv.typ, inv.parameter)
             if kat:
-                eintraege.append((f"inv:{inv_id_str}:{feld}", eid, kat))
+                sk = f"inv:{inv_id_str}:{feld}"
+                eintraege.append((sk, eid, kat))
+                seen_keys.add(sk)
+
+    # 1b. MQTT-gespeiste Zähler (Standalone/Docker-Modus ohne HA-Integration).
+    # Enumeriert Keys die in mqtt_energy_snapshots für diese Anlage vorkommen
+    # (Filter: letzte 7 Tage, um nur aktive Topics zu berücksichtigen).
+    cutoff = datetime.now() - timedelta(days=7)
+    mqtt_keys_result = await db.execute(
+        select(MqttEnergySnapshot.energy_key)
+        .where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= cutoff,
+            )
+        )
+        .distinct()
+    )
+    for (mqtt_key,) in mqtt_keys_result.all():
+        sk = _mqtt_key_to_sensor_key(mqtt_key)
+        if not sk or sk in seen_keys:
+            continue
+        # Kategorie herleiten: für basis-Keys direkt, für inv-Keys via typ-Lookup
+        if sk.startswith("basis:"):
+            feld = sk.split(":", 1)[1]
+            kat = _categorize_counter(feld, None, None)
+        elif sk.startswith("inv:"):
+            _, inv_id, feld = sk.split(":", 2)
+            inv = investitionen_by_id.get(inv_id) or investitionen_by_id.get(str(inv_id))
+            if inv is None:
+                continue
+            kat = _categorize_counter(feld, inv.typ, inv.parameter)
+        else:
+            continue
+        if kat:
+            eintraege.append((sk, None, kat))  # entity_id=None → MQTT-Fallback
+            seen_keys.add(sk)
 
     if not eintraege:
         return {}
@@ -426,11 +545,14 @@ async def snapshot_anlage(
     zeitpunkt: Optional[datetime] = None,
 ) -> int:
     """
-    Schreibt einen Snapshot aller gemappten kumulativen Zähler für eine Anlage.
+    Schreibt Snapshots aller verfügbaren kumulativen Zähler einer Anlage.
 
-    Liest den aktuellen Sensor-Wert via HA Statistics (toleranz: 60 min ab
-    zeitpunkt rückwärts). Kein Live-State-Pull — der Scheduler-Job ruft
-    am Stundenanfang und vertraut darauf, dass HA Statistics die Stunde
+    Reihenfolge der Quellen:
+      1. HA Statistics (für HA-gemappte sensor_id, Add-on-Modus)
+      2. MQTT-Energy-Snapshot (Standalone/Docker-Modus, Fallback auf
+         mqtt_energy_snapshots-Tabelle für Keys ohne HA-Sensor-ID)
+
+    Wird vom Scheduler stündlich :05 aufgerufen, damit HA die Stunde
     bereits finalisiert hat (Latenz ~5 min).
 
     Args:
@@ -445,17 +567,50 @@ async def snapshot_anlage(
         now = datetime.now()
         zeitpunkt = now.replace(minute=0, second=0, microsecond=0)
 
-    counter_map = _build_counter_map(anlage)
-    if not counter_map:
-        return 0
-
-    ha_svc = get_ha_statistics_service()
-    if not ha_svc.is_available:
-        return 0
-
     count = 0
-    for sensor_key, entity_id in counter_map.items():
-        wert = ha_svc.get_value_at(entity_id, zeitpunkt, toleranz_minuten=60)
+
+    # 1. HA-gemappte Zähler (wenn sensor_mapping konfiguriert + HA verfügbar)
+    counter_map = _build_counter_map(anlage)
+    ha_svc = get_ha_statistics_service()
+    if counter_map and ha_svc.is_available:
+        for sensor_key, entity_id in counter_map.items():
+            wert = ha_svc.get_value_at(entity_id, zeitpunkt, toleranz_minuten=60)
+            if wert is None:
+                continue
+            await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+            count += 1
+
+    # 2. MQTT-Energy-Snapshots (Standalone-Modus, ergänzt/deckt HA-Gap ab)
+    # Liest alle in den letzten 60 Min für diese Anlage gesehenen MQTT-Keys
+    # und schreibt deren nächstgelegenen Wert um zeitpunkt.
+    seit = zeitpunkt - timedelta(minutes=60)
+    bis = zeitpunkt + timedelta(minutes=60)
+    mqtt_keys_result = await db.execute(
+        select(MqttEnergySnapshot.energy_key).where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= seit,
+                MqttEnergySnapshot.timestamp <= bis,
+            )
+        ).distinct()
+    )
+    for (mqtt_key,) in mqtt_keys_result.all():
+        sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
+        if not sensor_key:
+            continue
+        # Sensor-Snapshot existiert schon aus HA-Pfad? Dann überspringen
+        existing = await db.execute(
+            select(SensorSnapshot.id).where(
+                and_(
+                    SensorSnapshot.anlage_id == anlage.id,
+                    SensorSnapshot.sensor_key == sensor_key,
+                    SensorSnapshot.zeitpunkt == zeitpunkt,
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            continue
+        wert = await _get_mqtt_snapshot_at(db, anlage.id, mqtt_key, zeitpunkt, toleranz_minuten=30)
         if wert is None:
             continue
         await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)

@@ -70,9 +70,25 @@ async def aggregate_day(
         for v in sensor_mapping.get("investitionen", {}).values()
     )
 
+    # Im Standalone-/Docker-Modus sind sensor_mapping.live-Einträge oft leer
+    # (MQTT liefert direkt Topics). Wir erlauben aggregate_day trotzdem zu
+    # laufen, wenn MQTT-Energy-Snapshots vorliegen — der Zähler-Pfad braucht
+    # kein leistung_w. Issue #135 Blocker 2.
+    has_mqtt_energy = False
     if not basis_live and not has_inv_live:
-        logger.debug(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert")
-        return None
+        from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
+        cutoff = datetime.combine(datum, datetime.min.time()) - timedelta(days=1)
+        mqtt_check = await db.execute(
+            select(MqttEnergySnapshot.id).where(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= cutoff,
+            ).limit(1)
+        )
+        has_mqtt_energy = mqtt_check.scalar_one_or_none() is not None
+
+        if not has_mqtt_energy:
+            logger.debug(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert")
+            return None
 
     # ── Tagesverlauf-Daten holen ──────────────────────────────────────────
     try:
@@ -81,12 +97,17 @@ async def aggregate_day(
         )
     except Exception as e:
         logger.warning(f"Anlage {anlage.id}, {datum}: Tagesverlauf-Fehler: {type(e).__name__}: {e}")
-        return None
+        tv_data = {"serien": [], "punkte": []}
 
     serien = tv_data.get("serien", [])
     punkte_raw = tv_data.get("punkte", [])
 
-    if not punkte_raw:
+    # Wenn keine leistung_w-Daten vorliegen aber MQTT-Energy da ist → synthetisches
+    # punkte-Array mit leeren werte-Dicts, damit die Stunden-Schleife 24x läuft
+    # und die Zähler-Snapshot-Werte in TagesEnergieProfil landen können.
+    if not punkte_raw and has_mqtt_energy:
+        punkte_raw = [{"zeit": f"{h:02d}:00", "werte": {}} for h in range(24)]
+    elif not punkte_raw:
         logger.debug(f"Anlage {anlage.id}, {datum}: Keine Tagesverlauf-Daten")
         return None
 
