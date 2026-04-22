@@ -130,6 +130,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           icon={Wallet}
           color="text-blue-500"
           bgColor="bg-blue-50 dark:bg-blue-900/20"
+          sicht="Gesamt-Anlage · Mehrkosten-Ansatz (Anschaffung minus Alternativkosten)"
           formel="Σ Anschaffungskosten − Alternativkosten"
           berechnung={roiData ? `${fmtCalc(roiData.gesamt_investition, 0)} € − ${fmtCalc(roiData.gesamt_investition - roiData.gesamt_relevante_kosten, 0)} € Alternativ` : undefined}
           ergebnis={roiData ? `= ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € relevante Kosten` : undefined}
@@ -141,6 +142,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           icon={TrendingUp}
           color="text-green-500"
           bgColor="bg-green-50 dark:bg-green-900/20"
+          sicht="Gesamt-Anlage · Prognose auf Basis konfigurierter Parameter und aktueller Strompreise"
           formel="Einspeiseerlös + Eigenverbrauch-Ersparnis"
           berechnung={pvModulDetails ? `${fmtCalc(pvModulDetails.einspeise_erloes_euro as number, 2)} € + ${fmtCalc(pvModulDetails.ev_ersparnis_euro as number, 2)} €` : 'Σ aller Investitions-Einsparungen'}
           ergebnis={hochrechnungsHinweis || (roiData ? `= ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined)}
@@ -153,6 +155,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           icon={TrendingUp}
           color="text-purple-500"
           bgColor="bg-purple-50 dark:bg-purple-900/20"
+          sicht="Gesamt-Anlage · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
           formel="Jahresersparnis ÷ Relevante Kosten × 100"
           berechnung={roiData && roiData.gesamt_relevante_kosten > 0 ? `${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € ÷ ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € × 100` : undefined}
           ergebnis={roiData?.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent.toFixed(1)}% ROI p.a.` : undefined}
@@ -164,6 +167,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           icon={Calendar}
           color="text-amber-500"
           bgColor="bg-amber-50 dark:bg-amber-900/20"
+          sicht="Gesamt-Anlage · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne Berücksichtigung bisheriger Erträge)"
           formel="Relevante Kosten ÷ Jahresersparnis"
           berechnung={roiData && roiData.gesamt_jahres_einsparung > 0 ? `${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined}
           ergebnis={roiData?.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre.toFixed(1)} Jahre bis zur Kostendeckung` : undefined}
@@ -201,28 +205,56 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
               </div>
               <div className="flex flex-wrap gap-6">
                 <div className="text-center">
-                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                    {Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr
-                  </p>
+                  <FormelTooltip
+                    sicht="IST-Werte · Ø über bisher erfasste Monate, hochgerechnet auf 12 Monate"
+                    formel="(PV-Netto + WP- + E-Auto- + BKW- + sonstige Ersparnisse) ÷ (Monate ÷ 12)"
+                    berechnung={`${fmtCalc(kumuliert, 0)} € kumuliert ÷ (${cockpitData.anzahl_monate} ÷ 12)`}
+                    ergebnis={`= ${Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr`}
+                  >
+                    <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                      {Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr
+                    </p>
+                  </FormelTooltip>
                   <p className="text-xs text-gray-400 dark:text-gray-500">Ø Jahresersparnis</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                    {roiRealisiert.toFixed(1)} %
-                  </p>
+                  <FormelTooltip
+                    sicht="IST-Werte · Jahres-ROI · Mehrkosten-Ansatz"
+                    formel="Realisierte Jahresersparnis ÷ Relevante Kosten × 100"
+                    berechnung={`${fmtCalc(jaehrlichRealisiert, 0)} € ÷ ${fmtCalc(invest, 0)} € × 100`}
+                    ergebnis={`= ${roiRealisiert.toFixed(1)} % p.a.`}
+                  >
+                    <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                      {roiRealisiert.toFixed(1)} %
+                    </p>
+                  </FormelTooltip>
                   <p className="text-xs text-gray-400 dark:text-gray-500">ROI p.a.</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                    {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
-                  </p>
+                  <FormelTooltip
+                    sicht="IST-Werte · rechnerische Amortisation · Mehrkosten-Ansatz"
+                    formel="Relevante Kosten ÷ realisierte Jahresersparnis"
+                    berechnung={`${fmtCalc(invest, 0)} € ÷ ${fmtCalc(jaehrlichRealisiert, 0)} €/Jahr`}
+                    ergebnis={amortRealisiert ? `= ${amortRealisiert.toFixed(1)} Jahre` : undefined}
+                  >
+                    <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                      {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
+                    </p>
+                  </FormelTooltip>
                   <p className="text-xs text-gray-400 dark:text-gray-500">Amortisation</p>
                 </div>
                 {realisierungsquote !== null && (
                   <div className="text-center">
-                    <p className={`text-base font-bold ${realisierungsquote >= 90 ? 'text-green-600 dark:text-green-400' : realisierungsquote >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {realisierungsquote.toFixed(0)} %
-                    </p>
+                    <FormelTooltip
+                      sicht="Vergleich IST vs. Prognose · zeigt, wieviel des konfigurierten Potenzials erreicht wurde"
+                      formel="Realisierte Jahresersparnis ÷ prognostizierte Jahresersparnis × 100"
+                      berechnung={`${fmtCalc(jaehrlichRealisiert, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € × 100`}
+                      ergebnis={`= ${realisierungsquote.toFixed(0)} %`}
+                    >
+                      <p className={`text-base font-bold ${realisierungsquote >= 90 ? 'text-green-600 dark:text-green-400' : realisierungsquote >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {realisierungsquote.toFixed(0)} %
+                      </p>
+                    </FormelTooltip>
                     <p className="text-xs text-gray-400 dark:text-gray-500">Realisierungsquote</p>
                   </div>
                 )}
@@ -467,6 +499,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
                           <FormelTooltip
+                            sicht="Pro Investition · Mehrkosten-Ansatz"
                             formel={kostenFormel}
                             berechnung={kostenBerechnung}
                             ergebnis={kostenErgebnis}
@@ -478,6 +511,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-green-600">
                           <FormelTooltip
+                            sicht="Pro Investition · Jahresprognose auf Basis konfigurierter Parameter"
                             formel={`Jahresersparnis ${TYP_LABELS[b.investition_typ] || b.investition_typ}`}
                             berechnung={hinweis || 'Berechnet aus Verbrauchsdaten'}
                             ergebnis={`= ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
@@ -489,6 +523,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
                           <FormelTooltip
+                            sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
                             formel="Ersparnis ÷ Mehrkosten × 100"
                             berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
                             ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)}% p.a.` : 'nicht berechenbar'}
@@ -500,6 +535,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
                           <FormelTooltip
+                            sicht="Pro Investition · Mehrkosten-Ansatz · Prognose"
                             formel="Mehrkosten ÷ Ersparnis"
                             berechnung={`${fmtCalc(b.relevante_kosten, 0)} € ÷ ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
                             ergebnis={b.amortisation_jahre ? `= ${b.amortisation_jahre.toFixed(1)} Jahre` : 'nicht berechenbar'}

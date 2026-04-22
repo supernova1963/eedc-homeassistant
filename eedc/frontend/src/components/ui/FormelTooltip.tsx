@@ -35,6 +35,7 @@ interface FormelTooltipProps {
   formel: string           // Die Formel als Text, z.B. "Eigenverbrauch × Netzbezugspreis"
   berechnung?: string      // Konkrete Berechnung, z.B. "150 kWh × 0,30 €/kWh"
   ergebnis?: string        // Ergebnis, z.B. "= 45,00 €"
+  sicht?: string           // ROI-Sicht zur Einordnung, z.B. "Gesamt-Anlage, Prognose"
   className?: string
   showIcon?: boolean       // Info-Icon anzeigen (default: true)
 }
@@ -44,6 +45,7 @@ export default function FormelTooltip({
   formel,
   berechnung,
   ergebnis,
+  sicht,
   className = '',
   showIcon = true
 }: FormelTooltipProps) {
@@ -100,6 +102,17 @@ export default function FormelTooltip({
 
           {/* Inhalt */}
           <div className="space-y-1">
+            {sicht && (
+              <>
+                <div className="font-medium text-purple-300 text-xs uppercase tracking-wide">
+                  Sicht
+                </div>
+                <div className="text-gray-100 text-xs italic">
+                  {sicht}
+                </div>
+                <div className="border-t border-gray-700 pt-1 mt-1" />
+              </>
+            )}
             <div className="font-medium text-yellow-300 text-xs uppercase tracking-wide">
               Formel
             </div>

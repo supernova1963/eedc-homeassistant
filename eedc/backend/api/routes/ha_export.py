@@ -206,10 +206,89 @@ async def calculate_anlage_sensors(
     relevante_kosten = investition_gesamt - alternativ_gesamt
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
+    # Alternativkosten-Ersparnisse aus historischen InvestitionMonatsdaten:
+    # WP vs. Gas/Öl, E-Auto vs. Benzin, BKW-Eigenverbrauch.
+    # Ohne diese Komponenten wäre die Jahresersparnis nur PV-Netto-Ertrag,
+    # was bei Anlagen mit WP/E-Auto zu absurd langer Amortisation führt.
+    waermepumpen = [i for i in investitionen if i.typ == "waermepumpe"]
+    e_autos = [
+        i for i in investitionen
+        if i.typ == "e-auto" and not (i.parameter or {}).get("ist_dienstlich", False)
+    ]
+    balkonkraftwerke = [i for i in investitionen if i.typ == "balkonkraftwerk"]
+
+    historische_inv_daten: dict[tuple[int, int, int], dict] = {}
+    inv_ids = [i.id for i in investitionen]
+    if inv_ids:
+        imd_alle = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
+        )
+        for imd in imd_alle.scalars().all():
+            historische_inv_daten[(imd.investition_id, imd.jahr, imd.monat)] = (
+                imd.verbrauch_daten or {}
+            )
+
+    netzbezug_preis_cent = (
+        strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
+    )
+
+    wp_alter_preis_cent = 10.0
+    wp_alter_wirkungsgrad = 0.90
+    for wp in waermepumpen:
+        if wp.parameter:
+            wp_alter_preis_cent = wp.parameter.get("alter_preis_cent_kwh", 10.0)
+            if wp.parameter.get("alter_energietraeger") == "oel":
+                wp_alter_wirkungsgrad = 0.85
+
+    bisherige_wp_ersparnis = 0.0
+    for wp in waermepumpen:
+        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
+            if inv_id == wp.id:
+                thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
+                    daten.get("warmwasser_kwh", 0) or 0
+                )
+                strom = daten.get("stromverbrauch_kwh", 0) or 0
+                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * wp_alter_preis_cent / 100
+                wp_stromkosten_netz = strom * 0.5 * netzbezug_preis_cent / 100
+                bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
+
+    eauto_benzinpreis = 1.65
+    eauto_vergleich_l_100km = 7.5
+    for ea in e_autos:
+        if ea.parameter:
+            eauto_benzinpreis = ea.parameter.get("benzinpreis_euro", 1.65)
+            eauto_vergleich_l_100km = ea.parameter.get("vergleich_verbrauch_l_100km", 7.5)
+
+    bisherige_eauto_ersparnis = 0.0
+    for ea in e_autos:
+        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
+            if inv_id == ea.id:
+                km = daten.get("km_gefahren", 0) or 0
+                netz = daten.get("ladung_netz_kwh", 0) or 0
+                benzin_liter = km / 100 * eauto_vergleich_l_100km
+                bisherige_eauto_ersparnis += (
+                    benzin_liter * eauto_benzinpreis - netz * netzbezug_preis_cent / 100
+                )
+
+    bisherige_bkw_ersparnis = 0.0
+    for bkw in balkonkraftwerke:
+        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
+            if inv_id == bkw.id:
+                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
+                bisherige_bkw_ersparnis += bkw_ev * netzbezug_preis_cent / 100
+
+    historischer_netto_ertrag = (
+        netto_ertrag
+        + bisherige_wp_ersparnis
+        + bisherige_eauto_ersparnis
+        + bisherige_bkw_ersparnis
+    )
+
     # Jahresersparnis aus Monatsdaten berechnen (annualisiert)
     anzahl_monate = len(monatsdaten)
     if anzahl_monate > 0:
-        jahres_ersparnis = (netto_ertrag / anzahl_monate) * 12 - betriebskosten_ges
+        jahres_ersparnis = (historischer_netto_ertrag / anzahl_monate) * 12 - betriebskosten_ges
     else:
         jahres_ersparnis = 0
 
@@ -304,7 +383,7 @@ async def calculate_anlage_sensors(
         elif sensor.key == "jahres_ersparnis_euro":
             if jahres_ersparnis > 0:
                 value = round(jahres_ersparnis, 2)
-                berechnung = f"({netto_ertrag:.2f} ÷ {anzahl_monate}) × 12"
+                berechnung = f"({historischer_netto_ertrag:.2f} ÷ {anzahl_monate}) × 12"
         elif sensor.key == "roi_prozent":
             if roi_prozent is not None:
                 value = round(roi_prozent, 1)

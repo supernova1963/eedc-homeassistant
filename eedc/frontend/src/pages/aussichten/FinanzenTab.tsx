@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
 import {
@@ -96,9 +96,15 @@ export default function FinanzenTab({ anlageId }: Props) {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Jahres-Ertrag</p>
-              <p className="text-xl font-bold text-green-600">
-                {prognose.jahres_netto_ertrag_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-              </p>
+              <FormelTooltip
+                sicht="Gesamt-Anlage · Jahres-Prognose auf Basis PVGIS + historischer Ø-Werte"
+                formel="PV-Netto + WP-, E-Auto-, BKW-Ersparnis − Betriebskosten"
+                ergebnis={`= ${fmtCalc(prognose.jahres_netto_ertrag_euro, 0)} €/Jahr`}
+              >
+                <p className="text-xl font-bold text-green-600">
+                  {prognose.jahres_netto_ertrag_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
+                </p>
+              </FormelTooltip>
             </div>
           </div>
         </Card>
@@ -110,9 +116,16 @@ export default function FinanzenTab({ anlageId }: Props) {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {prognose.amortisations_fortschritt_prozent.toFixed(1)}%
-              </p>
+              <FormelTooltip
+                sicht="Gesamt-Anlage · kumulierter Fortschritt · IST-Werte gegen Gesamt-Investition"
+                formel="Bisherige Erträge ÷ Gesamtinvestition × 100"
+                berechnung={`${fmtCalc(prognose.bisherige_ertraege_euro, 0)} € ÷ ${fmtCalc(prognose.investition_gesamt_euro, 0)} € × 100`}
+                ergebnis={`= ${prognose.amortisations_fortschritt_prozent.toFixed(1)} %`}
+              >
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {prognose.amortisations_fortschritt_prozent.toFixed(1)}%
+                </p>
+              </FormelTooltip>
             </div>
           </div>
         </Card>
@@ -130,15 +143,27 @@ export default function FinanzenTab({ anlageId }: Props) {
             )}
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {prognose.amortisation_erreicht ? (
-                  <span className="text-green-600">Erreicht</span>
-                ) : prognose.amortisation_prognose_jahr ? (
-                  <span>{prognose.amortisation_prognose_jahr}</span>
-                ) : (
-                  <span className="text-gray-400">-</span>
-                )}
-              </p>
+              <FormelTooltip
+                sicht="Gesamt-Anlage · Prognose Jahr · IST-Erträge + erwartete Jahresersparnis"
+                formel="heute + (Restbetrag ÷ Jahres-Netto-Ertrag)"
+                ergebnis={
+                  prognose.amortisation_erreicht
+                    ? '= bereits erreicht'
+                    : prognose.amortisation_prognose_jahr
+                      ? `= voraussichtlich ${prognose.amortisation_prognose_jahr}`
+                      : 'nicht berechenbar'
+                }
+              >
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {prognose.amortisation_erreicht ? (
+                    <span className="text-green-600">Erreicht</span>
+                  ) : prognose.amortisation_prognose_jahr ? (
+                    <span>{prognose.amortisation_prognose_jahr}</span>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
+                </p>
+              </FormelTooltip>
             </div>
           </div>
         </Card>
@@ -150,9 +175,15 @@ export default function FinanzenTab({ anlageId }: Props) {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Bisherige Erträge</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {prognose.bisherige_ertraege_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-              </p>
+              <FormelTooltip
+                sicht="Gesamt-Anlage · IST-Werte · kumuliert seit ältestem Monatsdaten-Eintrag"
+                formel="Σ historische Erträge (Einspeise + EV-Ersparnis + WP- + E-Auto- + BKW- + sonstige)"
+                ergebnis={`= ${fmtCalc(prognose.bisherige_ertraege_euro, 0)} € kumuliert`}
+              >
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {prognose.bisherige_ertraege_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
+                </p>
+              </FormelTooltip>
             </div>
           </div>
         </Card>
@@ -161,7 +192,13 @@ export default function FinanzenTab({ anlageId }: Props) {
       {/* ROI-Fortschrittsbalken */}
       <Card className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-gray-900 dark:text-white">Amortisations-Fortschritt</h3>
+          <FormelTooltip
+            sicht="Gesamt-Anlage · IST-Werte gegen Gesamt-Investition · kumuliert"
+            formel="Bisherige Erträge ÷ Gesamtinvestition"
+            ergebnis={`Restbetrag bis 100 %: ${fmtCalc(prognose.investition_gesamt_euro - prognose.bisherige_ertraege_euro, 0)} €`}
+          >
+            <h3 className="font-semibold text-gray-900 dark:text-white">Amortisations-Fortschritt</h3>
+          </FormelTooltip>
           <span className="text-sm text-gray-500">
             {prognose.bisherige_ertraege_euro.toLocaleString('de-DE')} € von {prognose.investition_gesamt_euro.toLocaleString('de-DE')} €
           </span>

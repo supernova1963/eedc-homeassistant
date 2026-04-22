@@ -3,6 +3,7 @@
  */
 
 import type { CockpitUebersicht } from '../../api/cockpit'
+import { FormelTooltip, fmtCalc } from '../ui'
 
 export default function AmortisationsBar({ data }: { data: CockpitUebersicht }) {
   const invest = data.investition_gesamt_euro
@@ -29,9 +30,16 @@ export default function AmortisationsBar({ data }: { data: CockpitUebersicht }) 
   return (
     <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-          Amortisationsfortschritt
-        </span>
+        <FormelTooltip
+          sicht="Gesamt-Anlage · IST-Werte realisiert · kumuliert seit Anschaffung"
+          formel="Σ realisierte Erträge ÷ Gesamtinvestition × 100"
+          berechnung={`${fmtCalc(kumuliert, 0)} € ÷ ${fmtCalc(invest, 0)} € × 100`}
+          ergebnis={`= ${progress.toFixed(1)} % über ${data.anzahl_monate} Monate`}
+        >
+          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            Amortisationsfortschritt
+          </span>
+        </FormelTooltip>
         <span className="text-xs text-emerald-600 dark:text-emerald-400">
           {progress.toFixed(1)} % &nbsp;·&nbsp;
           {Math.round(kumuliert).toLocaleString('de')} € von {Math.round(invest).toLocaleString('de')} €

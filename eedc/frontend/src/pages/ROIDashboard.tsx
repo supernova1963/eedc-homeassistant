@@ -296,6 +296,7 @@ export default function ROIDashboard() {
               subtitle={`Relevant: ${roiData.gesamt_relevante_kosten.toLocaleString('de-DE')} €`}
               color="text-blue-500"
               bgColor="bg-blue-50 dark:bg-blue-900/20"
+              sicht="Gesamt-Anlage · Vollkosten + Mehrkosten-Ansatz im Untertitel"
               formel="Σ Anschaffungskosten aller Investitionen"
               berechnung={`Relevant = Gesamt − Alternativkosten`}
               ergebnis={`= ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} €`}
@@ -307,6 +308,7 @@ export default function ROIDashboard() {
               subtitle={roiData.gesamt_roi_prozent ? `ROI: ${roiData.gesamt_roi_prozent}%` : 'ROI: -'}
               color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
+              sicht="Gesamt-Anlage · Jahres-Prognose · Mehrkosten-Ansatz"
               formel="Σ Einsparungen aller Investitionen"
               berechnung={roiData.gesamt_relevante_kosten > 0 ? `ROI = Einsparung ÷ Kosten × 100` : undefined}
               ergebnis={roiData.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent}% ROI` : undefined}
@@ -318,6 +320,7 @@ export default function ROIDashboard() {
               subtitle="Bis zur Kostendeckung"
               color="text-orange-500"
               bgColor="bg-orange-50 dark:bg-orange-900/20"
+              sicht="Gesamt-Anlage · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
               formel="Relevante Kosten ÷ Jährliche Einsparung"
               berechnung={roiData.gesamt_jahres_einsparung > 0 ? `${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined}
               ergebnis={roiData.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre} Jahre` : undefined}
@@ -329,6 +332,7 @@ export default function ROIDashboard() {
               subtitle="pro Jahr"
               color="text-emerald-500"
               bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+              sicht="Gesamt-Anlage · Jahres-Prognose"
               formel="Σ CO2-Einsparungen aller Investitionen"
               berechnung="Je nach Investitionstyp unterschiedlich"
               ergebnis={`= ${fmtCalc(roiData.gesamt_co2_einsparung_kg / 1000, 2)} t CO2/Jahr`}
@@ -509,18 +513,32 @@ export default function ROIDashboard() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
                           {b.roi_prozent ? (
-                            <span className={b.roi_prozent >= 10 ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}>
-                              {b.roi_prozent}%
-                            </span>
+                            <FormelTooltip
+                              sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
+                              formel="Jahresersparnis ÷ Relevante Kosten × 100"
+                              berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
+                              ergebnis={`= ${b.roi_prozent}% p.a.`}
+                            >
+                              <span className={b.roi_prozent >= 10 ? 'text-green-600 dark:text-green-400 cursor-help border-b border-dotted border-green-400' : 'text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-400'}>
+                                {b.roi_prozent}%
+                              </span>
+                            </FormelTooltip>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
                           {b.amortisation_jahre ? (
-                            <span className={b.amortisation_jahre <= 10 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}>
-                              {b.amortisation_jahre} J.
-                            </span>
+                            <FormelTooltip
+                              sicht="Pro Investition · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
+                              formel="Relevante Kosten ÷ Jahresersparnis"
+                              berechnung={`${fmtCalc(b.relevante_kosten, 0)} € ÷ ${fmtCalc(b.jahres_einsparung, 0)} €/Jahr`}
+                              ergebnis={`= ${b.amortisation_jahre} Jahre`}
+                            >
+                              <span className={b.amortisation_jahre <= 10 ? 'text-green-600 dark:text-green-400 cursor-help border-b border-dotted border-green-400' : 'text-orange-500 cursor-help border-b border-dotted border-orange-400'}>
+                                {b.amortisation_jahre} J.
+                              </span>
+                            </FormelTooltip>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
@@ -580,9 +598,10 @@ interface KPICardProps {
   formel?: string
   berechnung?: string
   ergebnis?: string
+  sicht?: string
 }
 
-function KPICard({ icon: Icon, title, value, subtitle, color, bgColor, formel, berechnung, ergebnis }: KPICardProps) {
+function KPICard({ icon: Icon, title, value, subtitle, color, bgColor, formel, berechnung, ergebnis, sicht }: KPICardProps) {
   const valueContent = (
     <span className="text-2xl font-bold text-gray-900 dark:text-white">{value}</span>
   )
@@ -596,7 +615,7 @@ function KPICard({ icon: Icon, title, value, subtitle, color, bgColor, formel, b
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
           {formel ? (
-            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>
+            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
               {valueContent}
             </FormelTooltip>
           ) : (
