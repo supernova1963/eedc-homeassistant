@@ -269,7 +269,7 @@ async def init_db():
     Wird beim App-Start aufgerufen.
     """
     # Importiere alle Models damit sie registriert werden
-    from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot, mqtt_live_snapshot, tages_energie_profil, mqtt_gateway_mapping, infothek, api_cache
+    from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot, mqtt_live_snapshot, tages_energie_profil, mqtt_gateway_mapping, infothek, api_cache, sensor_snapshot
 
     async with engine.begin() as conn:
         # Migrationen ausführen

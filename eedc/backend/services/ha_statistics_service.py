@@ -13,7 +13,7 @@ Unterstützt SQLite (Standard) und MariaDB/MySQL (über ha_recorder_db_url).
 """
 
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, NamedTuple
 
@@ -577,6 +577,74 @@ class HAStatisticsService:
                 {"mid": meta.id, "start": start_datum, "end": end_datum}
             )
 
+            row = result.fetchone()
+            if not row or row[0] is None:
+                return None
+
+            wert = row[0]
+            faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
+            if faktor != 1.0:
+                wert *= faktor
+            return round(wert, 3)
+
+    def get_value_at(
+        self,
+        sensor_id: str,
+        zeitpunkt: datetime,
+        toleranz_minuten: int = 120,
+    ) -> Optional[float]:
+        """
+        Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
+
+        HA Statistics speichert stündliche Snapshots mit state = Zählerstand
+        am Stundenanfang. Sucht die nächstgelegene Zeile innerhalb
+        ±toleranz_minuten und gibt deren state (in kWh) zurück.
+
+        Zweck: Self-Healing-Lookup für SensorSnapshot-Tabelle bei Lücken
+        (z.B. Scheduler-Ausfall, Vollbackfill historischer Tage).
+
+        Args:
+            sensor_id: HA Entity-ID des kumulativen Zählers
+            zeitpunkt: Zielzeitpunkt (lokale Zeit)
+            toleranz_minuten: Max. Abweichung von zeitpunkt (beidseitig)
+
+        Returns:
+            Zählerstand in kWh oder None wenn kein Datenpunkt im Fenster.
+        """
+        if not self.is_available:
+            return None
+
+        von = zeitpunkt - timedelta(minutes=toleranz_minuten)
+        bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
+        ts_expr = self._ts_to_datetime("start_ts")
+
+        if self._is_mysql:
+            order_expr = f"ABS(TIMESTAMPDIFF(SECOND, {ts_expr}, :target))"
+        else:
+            order_expr = f"ABS(julianday({ts_expr}) - julianday(:target))"
+
+        with self._engine.connect() as conn:
+            meta = self.get_metadata(conn, sensor_id)
+            if not meta:
+                return None
+
+            result = conn.execute(
+                text(f"""
+                    SELECT state
+                    FROM statistics
+                    WHERE metadata_id = :mid
+                      AND {ts_expr} >= :von
+                      AND {ts_expr} <= :bis
+                    ORDER BY {order_expr}
+                    LIMIT 1
+                """),
+                {
+                    "mid": meta.id,
+                    "target": zeitpunkt,
+                    "von": von,
+                    "bis": bis,
+                }
+            )
             row = result.fetchone()
             if not row or row[0] is None:
                 return None
