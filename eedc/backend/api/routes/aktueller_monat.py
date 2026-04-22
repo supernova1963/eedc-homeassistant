@@ -503,6 +503,7 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     ev = direktverbrauch + bat_entladung
     gv = ev + netz
     result["eigenverbrauch_kwh"] = round(ev, 1)
+    result["gesamtverbrauch_kwh"] = round(gv, 1) if gv > 0 else None
     result["autarkie_prozent"] = round(ev / gv * 100, 1) if gv > 0 else None
 
     # Finanzen mit historisch korrektem Tarif berechnen

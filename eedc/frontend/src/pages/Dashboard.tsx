@@ -60,7 +60,7 @@ export default function Dashboard() {
         // availableYears aus ungefilterten Monatsdaten — nicht aus result.zeitraum_von/bis,
         // da result bei gesetztem selectedYear nur den gefilterten Zeitraum zurückgibt
         if (monate.length > 0) {
-          const years = [...new Set(monate.map(m => m.jahr))].sort((a, b) => a - b)
+          const years = [...new Set(monate.map(m => m.jahr))].sort((a, b) => b - a)
           setAvailableYears(years)
         }
 
@@ -145,7 +145,7 @@ export default function Dashboard() {
             value={selectedYear || ''}
             onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : undefined)}
             aria-label="Jahr filtern"
-            className="input py-1.5 text-sm"
+            className="input w-auto"
           >
             <option value="">Alle Jahre</option>
             {availableYears.map(y => (

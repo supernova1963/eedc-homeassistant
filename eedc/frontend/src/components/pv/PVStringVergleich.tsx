@@ -255,8 +255,10 @@ export function PVStringVergleich({ anlageId }: Props) {
                   <Bar
                     key={`${s.investition_id}-soll`}
                     dataKey={`${s.bezeichnung} SOLL`}
-                    fill={STRING_COLORS[idx % STRING_COLORS.length]}
-                    opacity={0.4}
+                    fill={`${STRING_COLORS[idx % STRING_COLORS.length]}66`}
+                    stroke={STRING_COLORS[idx % STRING_COLORS.length]}
+                    strokeWidth={1}
+                    strokeDasharray="4 2"
                     name={`${s.bezeichnung} SOLL`}
                   />
                 ))}
