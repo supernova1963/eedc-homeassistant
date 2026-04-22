@@ -105,6 +105,7 @@ export interface AktuellerMonatResponse {
     einspeisung_kwh?: number
     netzbezug_kwh?: number
     eigenverbrauch_kwh?: number
+    gesamtverbrauch_kwh?: number
     autarkie_prozent?: number
     wp_strom_kwh?: number
     wp_waerme_kwh?: number

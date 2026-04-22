@@ -650,7 +650,7 @@ export default function MonatsabschlussView() {
                       { label: 'Eigenverbrauch',  ist: d.eigenverbrauch_kwh,  vmV: vm?.eigenverbrauch_kwh, vjV: vj?.eigenverbrauch_kwh, gm: glMonStats?.ev,       unit: 'kWh' },
                       { label: 'Einspeisung',     ist: d.einspeisung_kwh,     vmV: vm?.einspeisung_kwh,    vjV: vj?.einspeisung_kwh,    gm: glMonStats?.einsp,    unit: 'kWh' },
                       { label: 'Netzbezug',       ist: d.netzbezug_kwh,       vmV: vm?.netzbezug_kwh,      vjV: vj?.netzbezug_kwh,      gm: glMonStats?.netz,     unit: 'kWh', inv: true },
-                      { label: 'Gesamtverbrauch', ist: d.gesamtverbrauch_kwh, vmV: vm?.gesamtverbrauch_kwh, vjV: null,                   gm: glMonStats?.gesamt,   unit: 'kWh' },
+                      { label: 'Gesamtverbrauch', ist: d.gesamtverbrauch_kwh, vmV: vm?.gesamtverbrauch_kwh, vjV: vj?.gesamtverbrauch_kwh, gm: glMonStats?.gesamt,   unit: 'kWh' },
                       { label: 'Autarkie',        ist: d.autarkie_prozent,    vmV: vm?.autarkie_prozent,   vjV: vj?.autarkie_prozent,   gm: glMonStats?.autarkie, unit: '%'   },
                     ]
                     const cell = (val: number | null | undefined, row: typeof rows[0]) =>
