@@ -143,8 +143,19 @@ async def aggregate_day(
     # "strompreis" und "haushalt" sind keine Energieflüsse und dürfen nicht in pv_kw/verbrauch_kw einfließen
     _sonderschluessel = batterie_keys | v2h_keys | netz_keys | pv_keys | wp_keys | wallbox_keys | sonstige_keys | {"strompreis", "haushalt"}
 
-    # ── Wetter-IST-Daten holen ────────────────────────────────────────────
-    wetter_stunden = await _get_wetter_ist(anlage, datum)
+    # ── PV-Module für GTI-Gruppierung holen (Issue #139) ──────────────────
+    pv_module_result = await db.execute(
+        select(Investition).where(
+            and_(
+                Investition.anlage_id == anlage.id,
+                Investition.typ.in_(("pv-module", "balkonkraftwerk")),
+            )
+        )
+    )
+    pv_module_list = list(pv_module_result.scalars().all())
+
+    # ── Wetter-IST-Daten holen (inkl. GTI für PR-Berechnung) ──────────────
+    wetter_stunden = await _get_wetter_ist(anlage, datum, pv_module=pv_module_list)
 
     # ── SoC-History holen ─────────────────────────────────────────────────
     soc_stunden = await _get_soc_history(anlage, sensor_mapping, datum)
@@ -220,6 +231,8 @@ async def aggregate_day(
     temp_values = []
     strahlung_summe = 0.0
     pv_ertrag_summe = 0.0
+    gti_summe = 0.0  # kWp-gewichtete GTI (Wh/m²) über den Tag — für PR (#139)
+    gti_stunden_count = 0
     soc_values = []
     stunden_count = 0
     komponenten_summen: dict[str, float] = {}  # Per-Komponenten Tages-kWh
@@ -312,10 +325,14 @@ async def aggregate_day(
         # Wetter
         temperatur = wetter_stunden.get(h, {}).get("temperatur_c")
         strahlung = wetter_stunden.get(h, {}).get("globalstrahlung_wm2")
+        gti = wetter_stunden.get(h, {}).get("gti_wm2")
         if temperatur is not None:
             temp_values.append(temperatur)
         if strahlung is not None:
             strahlung_summe += strahlung  # W/m² × 1h = Wh/m²
+        if gti is not None:
+            gti_summe += gti
+            gti_stunden_count += 1
 
         # SoC
         soc = soc_stunden.get(h)
@@ -381,11 +398,15 @@ async def aggregate_day(
         vollzyklen = round(delta_sum / 200.0, 2)
 
     # ── Performance Ratio ─────────────────────────────────────────────────
+    # Referenz-Einstrahlung: GTI (modul-gewichtet) statt horizontaler GHI.
+    # Bei steilen Modulen + tiefstehender Wintersonne ist GTI bis 3× höher
+    # als GHI — mit GHI liefen PR-Werte im Winter künstlich auf 1.5–2.8
+    # (Issue #139). Ohne GTI (keine PV-Module, API-Fehler) bleibt PR = None
+    # statt einen physikalisch unsinnigen Wert zu liefern.
     performance_ratio = None
     kwp = anlage.leistung_kwp
-    if kwp and kwp > 0 and strahlung_summe > 0:
-        # Theoretischer Ertrag bei gemessener Strahlung
-        theoretisch_kwh = strahlung_summe * kwp / 1000  # Wh/m² × kWp / 1000
+    if kwp and kwp > 0 and gti_summe > 0:
+        theoretisch_kwh = gti_summe * kwp / 1000  # Wh/m² × kWp / 1000
         if theoretisch_kwh > 0:
             performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)
 
@@ -855,8 +876,13 @@ async def backfill_from_statistics(
 
         datum_iso = current.isoformat()
 
-        # Wetter-IST-Daten für diesen Tag
-        wetter_stunden = await _get_wetter_ist(anlage, current)
+        # Wetter-IST-Daten für diesen Tag (inkl. GTI für PR — Issue #139).
+        # Nur PV-Module berücksichtigen die an diesem Tag aktiv waren.
+        pv_module_aktiv = [
+            inv for inv in investitionen.values()
+            if inv.typ in ("pv-module", "balkonkraftwerk") and inv.ist_aktiv_an(current)
+        ]
+        wetter_stunden = await _get_wetter_ist(anlage, current, pv_module=pv_module_aktiv)
 
         # SoC-Werte für diesen Tag
         soc_stunden: dict[int, float] = {}
@@ -886,6 +912,7 @@ async def backfill_from_statistics(
         peak_einspeisung = 0.0
         temp_values: list[float] = []
         strahlung_summe = 0.0
+        gti_summe = 0.0  # PR-Referenz (#139)
         pv_ertrag_summe = 0.0
         soc_values: list[float] = []
         stunden_count = 0
@@ -1020,10 +1047,13 @@ async def backfill_from_statistics(
 
             temperatur = wetter_stunden.get(h, {}).get("temperatur_c")
             strahlung = wetter_stunden.get(h, {}).get("globalstrahlung_wm2")
+            gti = wetter_stunden.get(h, {}).get("gti_wm2")
             if temperatur is not None:
                 temp_values.append(temperatur)
             if strahlung is not None:
                 strahlung_summe += strahlung
+            if gti is not None:
+                gti_summe += gti
 
             soc = soc_stunden.get(h)
             if soc is not None:
@@ -1103,11 +1133,11 @@ async def backfill_from_statistics(
                             for i in range(1, len(soc_values)))
             vollzyklen = round(delta_sum / 200.0, 2)
 
-        # Performance Ratio
+        # Performance Ratio — GTI statt horizontaler GHI als Referenz (#139).
         performance_ratio = None
         kwp = anlage.leistung_kwp
-        if kwp and kwp > 0 and strahlung_summe > 0:
-            theoretisch_kwh = strahlung_summe * kwp / 1000
+        if kwp and kwp > 0 and gti_summe > 0:
+            theoretisch_kwh = gti_summe * kwp / 1000
             if theoretisch_kwh > 0:
                 performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)
 
@@ -1154,52 +1184,124 @@ def _tage_zurueck(datum: date) -> int:
     return (date.today() - datum).days
 
 
-async def _get_wetter_ist(anlage: Anlage, datum: date) -> dict:
+async def _get_wetter_ist(
+    anlage: Anlage,
+    datum: date,
+    pv_module: Optional[list] = None,
+) -> dict:
     """
     Holt Wetter-IST-Daten für einen Tag (Open-Meteo Historical).
 
+    Zusätzlich zur horizontalen Globalstrahlung (GHI) wird — wenn PV-Module
+    mit bekannter Neigung/Ausrichtung übergeben werden — die Global Tilted
+    Irradiance (GTI) kWp-gewichtet über alle Orientierungsgruppen geholt.
+    GTI ist die auf die Modul-Fläche projizierte Strahlung und die physikalisch
+    korrekte Referenz für die Performance-Ratio-Berechnung (Issue #139).
+
+    Args:
+        anlage: Anlage-Objekt mit lat/lon
+        datum: Zieltag
+        pv_module: Liste von PV-Module-Investitionen (für GTI-Gruppierung).
+            None/leer → nur GHI (PR bleibt dann None in der Aggregation).
+
     Returns:
-        {stunde: {"temperatur_c": float, "globalstrahlung_wm2": float}}
+        {stunde: {
+            "temperatur_c": float,
+            "globalstrahlung_wm2": float,   # horizontal, GHI
+            "gti_wm2": float | None,        # modul-gewichtet, None wenn keine PV-Module
+        }}
     """
     if not anlage.latitude or not anlage.longitude:
         return {}
 
     try:
+        import asyncio
         import httpx
         from backend.core.config import settings
+        from backend.api.routes.live_wetter import _get_pv_orientierungsgruppen
 
-        params = {
-            "latitude": anlage.latitude,
-            "longitude": anlage.longitude,
-            "hourly": "temperature_2m,shortwave_radiation",
-            "timezone": "Europe/Berlin",
-        }
+        gruppen = _get_pv_orientierungsgruppen(pv_module) if pv_module else []
 
-        # Für den heutigen Tag: Forecast-API, sonst Historical
+        # Forecast für heute, Archive für historische Tage
         if datum == date.today():
             url = f"{settings.open_meteo_api_url}/forecast"
-            params["forecast_days"] = 1
+            base_params: dict = {"forecast_days": 1}
         else:
             url = "https://archive-api.open-meteo.com/v1/archive"
-            params["start_date"] = datum.isoformat()
-            params["end_date"] = datum.isoformat()
+            base_params = {
+                "start_date": datum.isoformat(),
+                "end_date": datum.isoformat(),
+            }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        base_params.update({
+            "latitude": anlage.latitude,
+            "longitude": anlage.longitude,
+            "timezone": "Europe/Berlin",
+        })
+
+        # Haupt-Request: Temperatur + GHI, bei genau einer Gruppe auch GTI
+        haupt_params = dict(base_params)
+        hourly_vars = ["temperature_2m", "shortwave_radiation"]
+        if len(gruppen) == 1:
+            hourly_vars.append("global_tilted_irradiance")
+            haupt_params["tilt"] = gruppen[0]["neigung"]
+            haupt_params["azimuth"] = gruppen[0]["ausrichtung"]
+        haupt_params["hourly"] = ",".join(hourly_vars)
+
+        multi_gti: Optional[list[float]] = None
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if len(gruppen) > 1:
+                # Separate GTI-Calls pro Gruppe, parallel
+                gti_tasks = [
+                    client.get(url, params={
+                        **base_params,
+                        "hourly": "global_tilted_irradiance",
+                        "tilt": g["neigung"],
+                        "azimuth": g["ausrichtung"],
+                    })
+                    for g in gruppen
+                ]
+                haupt_resp, *gti_resps = await asyncio.gather(
+                    client.get(url, params=haupt_params),
+                    *gti_tasks,
+                )
+                # kWp-gewichtete Kombination
+                kwp_gesamt = sum(g["kwp"] for g in gruppen)
+                multi_gti = [0.0] * 24
+                for gruppe, resp in zip(gruppen, gti_resps):
+                    try:
+                        resp.raise_for_status()
+                        gti_vals = resp.json().get("hourly", {}).get("global_tilted_irradiance", [])
+                    except Exception:
+                        continue
+                    if not gti_vals or kwp_gesamt <= 0:
+                        continue
+                    gewicht = gruppe["kwp"] / kwp_gesamt
+                    for i in range(min(24, len(gti_vals))):
+                        v = gti_vals[i]
+                        if v is not None:
+                            multi_gti[i] += v * gewicht
+            else:
+                haupt_resp = await client.get(url, params=haupt_params)
+
+        haupt_resp.raise_for_status()
+        data = haupt_resp.json()
 
         hourly = data.get("hourly", {})
         times = hourly.get("time", [])
         temps = hourly.get("temperature_2m", [])
-        strahlung = hourly.get("shortwave_radiation", [])
+        ghi = hourly.get("shortwave_radiation", [])
+        gti_single = hourly.get("global_tilted_irradiance", [])
+
+        gti_values = multi_gti if multi_gti is not None else gti_single
 
         result = {}
         for i, t in enumerate(times):
             h = int(t[11:13])
             result[h] = {
                 "temperatur_c": temps[i] if i < len(temps) else None,
-                "globalstrahlung_wm2": strahlung[i] if i < len(strahlung) else None,
+                "globalstrahlung_wm2": ghi[i] if i < len(ghi) else None,
+                "gti_wm2": gti_values[i] if i < len(gti_values) else None,
             }
 
         return result
