@@ -94,27 +94,26 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
     return result
   }, [serien])
 
-  // Chart-Daten: Bidirektionale Serien in pos/neg splitten, Overlays direkt übernehmen
+  // Chart-Daten: Bidirektionale Serien in pos/neg splitten, Overlays direkt übernehmen.
+  // Hide-Steuerung übernimmt Recharts via `hide`-Prop am Area/Line — nicht über 0-Daten,
+  // sonst entfernt `hatDaten` versteckte Serien aus dem DOM und Re-Toggle bringt sie nicht zurück.
   const chartData = useMemo(() => {
     return punkte.map((p) => {
       const row: Record<string, string | number> = { zeit: p.zeit }
       for (const s of serien) {
         const val = p.werte[s.key] ?? 0
-        const isHidden = hidden.has(s.key)
-
         if (s.seite === 'overlay') {
-          // Overlay: Wert direkt, undefined wenn kein Datenpunkt (Lücke in Linie)
-          row[s.key] = isHidden ? 0 : (p.werte[s.key] ?? 0)
+          row[s.key] = val
         } else if (s.bidirektional) {
-          row[`${s.key}_pos`] = isHidden ? 0 : Math.max(0, val)
-          row[`${s.key}_neg`] = isHidden ? 0 : Math.min(0, val)
+          row[`${s.key}_pos`] = Math.max(0, val)
+          row[`${s.key}_neg`] = Math.min(0, val)
         } else {
-          row[s.key] = isHidden ? 0 : val
+          row[s.key] = val
         }
       }
       return row
     })
-  }, [punkte, serien, hidden])
+  }, [punkte, serien])
 
   if (punkte.length === 0 || serien.length === 0) return null
 
@@ -237,13 +236,14 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 stackId={rs.stackId}
                 isAnimationActive={false}
                 legendType={legendHide ? 'none' : undefined}
+                hide={hidden.has(rs.origKey)}
               />
             )
           })}
 
           {/* Overlay-Linien (z.B. Strompreis) — sekundäre Y-Achse */}
           {overlaySerien.map((s) => {
-            if (!hatDaten(s.key) || hidden.has(s.key)) return null
+            if (!hatDaten(s.key)) return null
             return (
               <Line
                 key={s.key}
@@ -257,6 +257,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 dot={false}
                 isAnimationActive={false}
                 connectNulls={false}
+                hide={hidden.has(s.key)}
               />
             )
           })}

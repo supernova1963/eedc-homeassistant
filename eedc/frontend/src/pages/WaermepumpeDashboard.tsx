@@ -297,7 +297,7 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
               <BarChart data={kostenVergleichData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-                <YAxis type="category" dataKey="name" width={100} />
+                <YAxis type="category" dataKey="name" width={110} />
                 <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Bar dataKey="value" />
               </BarChart>

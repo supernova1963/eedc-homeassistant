@@ -17,14 +17,17 @@ import EnergieFlussBackground from './EnergieFlussBackground'
 
 const LITE_STORAGE_KEY = 'eedc-energiefluss-lite'
 
-/** Auto-Detect: HA Companion App oder schmales Viewport → lite */
+/** Auto-Detect: HA Companion App, iPad/Tablet oder schmales Viewport → lite */
 function detectLiteDefault(): boolean {
   if (typeof window === 'undefined') return false
   const ua = navigator.userAgent
   // HA Companion App (Android/iOS)
   if (/HomeAssistant/i.test(ua)) return true
-  // Allgemein Mobile
-  if (/Android|iPhone|iPad|iPod/i.test(ua) && window.innerWidth < 768) return true
+  // iPad — auch iPadOS 13+, das sich in Safari als "Macintosh" mit Touch-Support meldet
+  if (/iPad|iPod/i.test(ua)) return true
+  if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return true
+  // Phones
+  if (/Android|iPhone/i.test(ua) && window.innerWidth < 768) return true
   // prefers-reduced-motion
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return true
   return false
