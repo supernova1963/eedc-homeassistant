@@ -458,7 +458,18 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                   domain={[0, 100]}
                   unit="%"
                 />
-                <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
+                <Tooltip content={<ChartTooltip
+                  unit="%"
+                  decimals={1}
+                  nameFormatter={(name) => {
+                    const labels: Record<string, string> = {
+                      speicher: 'Speicher-Quote',
+                      waermepumpe: 'Wärmepumpen-Quote',
+                      eauto: 'E-Auto-Quote',
+                    }
+                    return labels[name] || name
+                  }}
+                />} />
                 <Legend
                   formatter={(value) => {
                     const labels: Record<string, string> = {

@@ -147,12 +147,13 @@ async def prepare_community_data(
         if wallbox_kw == 0:
             wallbox_kw = None
 
-    # Balkonkraftwerk Leistung
+    # Balkonkraftwerk Leistung (Wp pro Modul × Anzahl Module)
     bkw_wp = None
     bkws = [inv for inv in investitionen if inv.typ == "balkonkraftwerk"]
     if bkws:
         bkw_wp = sum(
-            (inv.parameter or {}).get("leistung_wp", 0) or 0
+            ((inv.parameter or {}).get("leistung_wp", 0) or 0)
+            * ((inv.parameter or {}).get("anzahl", 1) or 1)
             for inv in bkws
         )
         if bkw_wp == 0:
