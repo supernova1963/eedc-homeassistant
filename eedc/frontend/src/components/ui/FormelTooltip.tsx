@@ -3,7 +3,7 @@
  * Zeigt bei Hover über einen Wert die zugrunde liegende Formel und Berechnung an.
  */
 
-import { useState, useRef, useEffect, ReactNode } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, ReactNode } from 'react'
 import { Info } from 'lucide-react'
 
 /**
@@ -52,27 +52,31 @@ export default function FormelTooltip({
   const { isVisible, interactionProps } = useTooltipInteraction()
   const [position, setPosition] = useState<'top' | 'bottom'>('top')
   const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const [measured, setMeasured] = useState(false)
   const triggerRef = useRef<HTMLSpanElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
 
   // Tooltip wird via position:fixed gerendert, damit overflow-x:auto-Container
   // (z.B. Tabellen) ihn nicht clippen und horizontalen Scroll auslösen.
-  useEffect(() => {
-    if (isVisible && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect()
-      const showBelow = rect.top < 140
-      setPosition(showBelow ? 'bottom' : 'top')
-      const tooltipWidth = 280
-      const padding = 8
-      let left = rect.left + rect.width / 2
-      // Horizontal in Viewport halten
-      if (left - tooltipWidth / 2 < padding) left = tooltipWidth / 2 + padding
-      const vw = window.innerWidth
-      if (left + tooltipWidth / 2 > vw - padding) left = vw - tooltipWidth / 2 - padding
-      setCoords({
-        top: showBelow ? rect.bottom + 8 : rect.top - 8,
-        left,
-      })
-    }
+  // Breite wird nach dem ersten Render am DOM gemessen, damit der Viewport-Clamp
+  // mit der echten Tooltip-Breite rechnet (statt hardcoded 280 — Forum #362).
+  useLayoutEffect(() => {
+    if (!isVisible) { setMeasured(false); return }
+    if (!triggerRef.current || !tooltipRef.current) return
+    const triggerRect = triggerRef.current.getBoundingClientRect()
+    const tooltipWidth = tooltipRef.current.offsetWidth
+    const showBelow = triggerRect.top < 140
+    const padding = 8
+    let left = triggerRect.left + triggerRect.width / 2
+    if (left - tooltipWidth / 2 < padding) left = tooltipWidth / 2 + padding
+    const vw = window.innerWidth
+    if (left + tooltipWidth / 2 > vw - padding) left = vw - tooltipWidth / 2 - padding
+    setPosition(showBelow ? 'bottom' : 'top')
+    setCoords({
+      top: showBelow ? triggerRect.bottom + 8 : triggerRect.top - 8,
+      left,
+    })
+    setMeasured(true)
   }, [isVisible])
 
   return (
@@ -91,6 +95,7 @@ export default function FormelTooltip({
       {/* Tooltip — fixed positioniert, damit overflow-Container nicht clippen */}
       {isVisible && (
         <div
+          ref={tooltipRef}
           className="fixed z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg pointer-events-none"
           style={{
             minWidth: '200px',
@@ -100,6 +105,7 @@ export default function FormelTooltip({
             top: position === 'bottom' ? coords.top : 'auto',
             bottom: position === 'top' ? `calc(100vh - ${coords.top}px)` : 'auto',
             transform: 'translateX(-50%)',
+            visibility: measured ? 'visible' : 'hidden',
           }}
         >
           {/* Inhalt */}
