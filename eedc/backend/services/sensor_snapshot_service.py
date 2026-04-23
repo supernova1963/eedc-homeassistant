@@ -507,17 +507,20 @@ async def get_hourly_kwh_by_category(
     if not eintraege:
         return {}
 
-    # 2. Für jede Stunde: Snapshot bei H und bei H+1 holen (mit Self-Healing)
+    # 2. Snapshots für alle benötigten Stundenboundaries holen.
+    # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
+    # Slot 0 = Delta von Vortag 23:00 → Heute 00:00
+    # Slot 1 = Delta von Heute 00:00 → 01:00
+    # Slot 23 = Delta von Heute 22:00 → 23:00
+    # → Snapshots bei h=-1..23 werden benötigt (nicht mehr 0..24).
     tag_0 = datetime.combine(datum, datetime.min.time())
     result: dict[int, dict[str, Optional[float]]] = {h: {} for h in range(24)}
 
-    # Pre-fetch: Für alle 25 Zeitpunkte (00:00..24:00) alle Snapshots parallel holen
-    # Einfach: sequential, der Overhead ist gering dank DB-Cache
-    # pro sensor_key: {stunde_0_24: wert}
+    # pro sensor_key: {stunde_-1_bis_23: wert}
     snaps: dict[str, dict[int, Optional[float]]] = {}
     for sensor_key, entity_id, _kat in eintraege:
         snaps[sensor_key] = {}
-        for h in range(25):  # 0..24 (24 = nächster Tag 00:00)
+        for h in range(-1, 24):  # -1 = Vortag 23:00, 0..23 = Heute 00:00..23:00
             ts = tag_0 + timedelta(hours=h)
             wert = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
             snaps[sensor_key][h] = wert
@@ -532,18 +535,19 @@ async def get_hourly_kwh_by_category(
     for sensor_key in snaps:
         _fill_gaps_linear(snaps[sensor_key])
 
-    # 3. Deltas pro Stunde und Kategorie summieren
+    # 3. Deltas pro Stunde und Kategorie summieren (Backward-Konvention).
+    # Slot h = snap[h] - snap[h-1] → Energie [h-1, h).
     for h in range(24):
         per_kat: dict[str, Optional[float]] = {}
         for sensor_key, _eid, kat in eintraege:
-            s0 = snaps[sensor_key][h]
-            s1 = snaps[sensor_key][h + 1]
+            s0 = snaps[sensor_key][h - 1]
+            s1 = snaps[sensor_key][h]
             if s0 is None or s1 is None:
                 continue  # Kategorie unvollständig für diese Stunde
             d = s1 - s0
             if d < -0.01:  # Reset
                 logger.warning(
-                    f"Negatives Delta bei {sensor_key} ({datum} H{h}): {d:.3f}"
+                    f"Negatives Delta bei {sensor_key} ({datum} Slot{h}): {d:.3f}"
                 )
                 continue
             d = max(0.0, d)

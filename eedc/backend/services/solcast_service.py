@@ -222,14 +222,26 @@ async def _fetch_solcast_api(
                     period_minutes = int(period.get("period", "PT30M").replace("PT", "").replace("M", "") or 30)
                     period_hours = period_minutes / 60
 
-                    datum_str = period_end.strftime("%Y-%m-%d")
-                    stunde = period_end.hour
+                    # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
+                    # Solcast liefert 30-Min-Buckets mit period_end.
+                    #   period_end = N:00 → Bucket [N-0:30, N:00) → Slot N
+                    #   period_end = N:30 → Bucket [N:00, N:30)   → Slot N+1
+                    # Am Tagesübergang (period_end=23:30) wandert der Bucket
+                    # in Slot 0 des Folgetags — slot_date/slot_hour nehmen das
+                    # korrekt ab, statt fälschlich dem heutigen Slot 0 aufzustocken.
+                    if period_end.minute == 0:
+                        slot_marker = period_end
+                    else:
+                        slot_marker = period_end.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+                    slot_date = slot_marker.date()
+                    slot_hour = slot_marker.hour
+                    datum_str = slot_date.isoformat()
 
-                    # Stundenwerte für heute aggregieren (kW → kW, Durchschnitt pro Stunde)
-                    if period_end.date() == heute:
-                        hourly_p50[stunde] += pv_p50 * period_hours
-                        hourly_p10[stunde] += pv_p10 * period_hours
-                        hourly_p90[stunde] += pv_p90 * period_hours
+                    # Stundenwerte für heute aggregieren (kW × 0.5h = kWh)
+                    if slot_date == heute:
+                        hourly_p50[slot_hour] += pv_p50 * period_hours
+                        hourly_p10[slot_hour] += pv_p10 * period_hours
+                        hourly_p90[slot_hour] += pv_p90 * period_hours
 
                     # Tageswerte aggregieren (kW × h = kWh)
                     if datum_str not in tage_dict:
@@ -506,13 +518,23 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
             pv_p10 = entry.get("pv_estimate10", 0) or 0
             pv_p90 = entry.get("pv_estimate90", 0) or 0
 
-            stunde = dt.hour
+            # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
+            # HA-Sensor liefert 30-Min-Buckets mit period_start (nicht period_end
+            # wie die API). Für einen Bucket [period_start, period_start+30min)
+            # ist der zugehörige Backward-Slot = ceil(period_start + 30min) als
+            # Stunde:
+            #   period_start = N:00 → Bucket [N:00, N:30) → Slot N+1
+            #   period_start = N:30 → Bucket [N:30, N+1:00) → Slot N+1
+            # → slot_marker = period_start auf volle Stunde abgerundet + 1h.
+            slot_marker = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            slot_date = slot_marker.date()
+            slot_hour = slot_marker.hour
 
             # Stundenwerte für heute
-            if dt.date() == heute:
-                hourly_p50[stunde] += pv_p50 * 0.5
-                hourly_p10[stunde] += pv_p10 * 0.5
-                hourly_p90[stunde] += pv_p90 * 0.5
+            if slot_date == heute:
+                hourly_p50[slot_hour] += pv_p50 * 0.5
+                hourly_p10[slot_hour] += pv_p10 * 0.5
+                hourly_p90[slot_hour] += pv_p90 * 0.5
 
         # Morgen/Heute aus tage_voraus
         morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0
