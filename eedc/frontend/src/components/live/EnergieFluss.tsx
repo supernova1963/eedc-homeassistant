@@ -483,8 +483,10 @@ export default function EnergieFluss({
                   strokeLinecap="round"
                 />
               )}
-              {/* Animierte Partikel (Elektronen) auf dem Pfad — im Lite-Modus max 1 */}
-              {isActive && Array.from({ length: lite ? 1 : Math.min(3, Math.ceil(kw / 2) + 1) }, (_, pi) => {
+              {/* Animierte Partikel (Elektronen) auf dem Pfad — im Lite-Modus aus.
+                  SMIL-Animationen (animateMotion + animate) sind auf Mobile-Safari/iPad
+                  GPU-intensiv und der Hauptgrund für Ruckler im Lite-Modus. */}
+              {isActive && !lite && Array.from({ length: Math.min(3, Math.ceil(kw / 2) + 1) }, (_, pi) => {
                 const dur = duration + pi * 0.3
                 // Quellen: Partikel fließen Knoten → Haus (vorwärts auf d)
                 // Senken: Partikel fließen Haus → Knoten (rückwärts auf d)
@@ -639,7 +641,9 @@ export default function EnergieFluss({
             <g key={`node-${k.key}`} className="cursor-default" data-title={tip}>
               <title>{tip}</title>
 
-              {/* Knoten-Hintergrund (halbtransparent, Gitter scheint durch) */}
+              {/* Knoten-Hintergrund (halbtransparent, Gitter scheint durch).
+                  Filter-Attribut im Lite-Modus weglassen, damit Safari pro Knoten
+                  keinen separaten Compositing-Layer für den (No-Op-)Filter erstellt. */}
               <rect
                 x={nx} y={ny}
                 width={NODE_W} height={NODE_H}
@@ -649,7 +653,7 @@ export default function EnergieFluss({
                 stroke={isActive ? color : '#9ca3af'}
                 strokeWidth={isActive ? 1 : 0.5}
                 strokeOpacity={isActive ? 0.7 : 0.3}
-                filter="url(#ef-card-shadow)"
+                filter={lite ? undefined : "url(#ef-card-shadow)"}
               />
 
               {/* SoC-Pegel (Füllung von unten, kräftig sichtbar) */}

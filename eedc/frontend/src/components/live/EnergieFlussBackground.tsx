@@ -5,6 +5,7 @@
  * Rendert als SVG-Fragment innerhalb des uebergeordneten <svg>.
  */
 
+import { memo } from 'react'
 import type { BgVariant } from './EnergieFluss'
 
 interface BackgroundProps {
@@ -17,7 +18,7 @@ interface BackgroundProps {
   bgPhotoFile: Partial<Record<BgVariant, string>>
 }
 
-export default function EnergieFlussBackground({
+function EnergieFlussBackground({
   W, svgH, CX, CY, lite, bgVariant, bgPhotoFile,
 }: BackgroundProps) {
   return (
@@ -1017,3 +1018,5 @@ export default function EnergieFlussBackground({
     </>
   )
 }
+
+export default memo(EnergieFlussBackground)

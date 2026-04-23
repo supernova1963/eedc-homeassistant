@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.19.4] - 2026-04-23
+
+### Performance
+
+- **perf(live/energiefluss): Lite-Modus jetzt wirklich „lite" — iPad/Mobile-Safari** — Drei Änderungen am Energiefluss-Diagramm, die zusammen Ruckler auf iPad und schwächeren Mobile-Geräten beseitigen sollten. Forum-Bericht (#345 + #353, dietmar1968: „ruckelt auch im Lite-Modus").
+
+  - **SMIL-Partikel-Animationen werden im Lite-Modus nicht mehr gerendert** — Bisher liefen pro aktiver Linie weiterhin ein `<animateMotion>` + ein `<animate>` mit `repeatCount="indefinite"`. Bei einer Anlage mit 6 aktiven Knoten waren das ≥12 dauerhafte SMIL-Animationen — auf Mobile-Safari der mit Abstand größte Performance-Faktor (WebKit hat SMIL nie effizient implementiert). Im Effekt-Modus bleiben sie unverändert.
+  - **`filter`-Attribute der Knoten-Karten werden im Lite-Modus weggelassen** — statt sie nur zu No-Op-Filter-Definitionen zu reduzieren. Safari erstellt für jedes Element mit `filter="…"` einen separaten Compositing-Layer, auch wenn der Filter nichts tut.
+  - **`EnergieFlussBackground` in `React.memo` gewrappt** — die ~180 SVG-Hintergrund-Elemente (Sterne, Ringe, Strahlen je nach Variante) werden jetzt nicht mehr bei jedem 5-Sekunden-Polling neu durch React diff'd, weil sich keine Background-Props ändern.
+
+---
+
 ## [3.19.3] - 2026-04-23
 
 ### Bugfixes
