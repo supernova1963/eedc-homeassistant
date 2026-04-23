@@ -18,6 +18,7 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
+import { SOLL_IST_COLORS } from '../../lib/colors'
 
 const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899']
 
@@ -344,8 +345,8 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
               <Tooltip content={<ChartTooltip unit="kWh" />} />
               <Legend />
-              <Bar dataKey="SOLL" fill="#3b82f6" name="SOLL (Prognose)" />
-              <Bar dataKey="IST" fill="#f59e0b" name="IST (Erzeugt)" />
+              <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL (Prognose)" />
+              <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST (Erzeugt)" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -374,12 +375,12 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
               <Tooltip content={<ChartTooltip unit="kWh" />} />
               <Legend />
-              <Bar dataKey="SOLL" fill="#3b82f6" name="SOLL" opacity={0.6} />
-              <Bar dataKey="IST" fill="#f59e0b" name="IST" />
+              <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL" />
+              <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST" />
               <Line
                 type="monotone"
                 dataKey="Abweichung"
-                stroke="#10b981"
+                stroke={SOLL_IST_COLORS.abweichung}
                 strokeWidth={2}
                 dot={{ r: 3 }}
                 name="Abweichung"

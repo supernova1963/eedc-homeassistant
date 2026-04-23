@@ -51,6 +51,17 @@ export const CHART_COLORS = {
   nettoErtrag: '#059669',        // Emerald-600
 }
 
+// ─── SOLL/IST-Vergleichsfarben (zentral für alle SOLL-IST-Diagramme) ────────
+//
+// Müssen in ALLEN SOLL-IST-Diagrammen gleich sein, damit Nutzer konsistente
+// Farben über Tabs/Seiten hinweg sehen (Cockpit, Auswertungen, Aussichten).
+
+export const SOLL_IST_COLORS = {
+  soll: '#3b82f6',   // Blau (Prognose)
+  ist: '#f59e0b',    // Amber (tatsächlicher Wert)
+  abweichung: '#10b981',  // Grün (Differenz-Linie)
+}
+
 // ─── Tagesverlauf-Kategorien ─────────────────────────────────────────────────
 
 /** Farben für Energiefluss- und Bilanz-Visualisierungen (nach Tagesverlauf-Kategorie) */

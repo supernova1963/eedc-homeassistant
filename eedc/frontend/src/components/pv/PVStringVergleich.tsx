@@ -16,6 +16,7 @@ import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } fro
 import { Card, LoadingSpinner, Alert } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
+import { SOLL_IST_COLORS } from '../../lib/colors'
 
 const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899']
 
@@ -107,16 +108,21 @@ export function PVStringVergleich({ anlageId }: Props) {
     const maxVal = Math.max(...jahresChartData.flatMap(row =>
       Object.entries(row).filter(([k]) => k !== 'name').map(([, v]) => Number(v) || 0)
     ))
-    const mwh = maxVal > 10000
-    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+    // Schwelle bei 5000: ab dort MWh, damit "10.000 kWh" nicht abgeschnitten wird
+    const mwh = maxVal >= 5000
+    return (val: number) => mwh
+      ? `${(val / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MWh`
+      : `${val.toLocaleString('de-DE')} kWh`
   }, [jahresChartData])
 
   const saisonalFormatter = useMemo(() => {
     const maxVal = saisonalChartData.length > 0
       ? Math.max(...saisonalChartData.flatMap(d => [d.SOLL, d['IST Ø']]))
       : 0
-    const mwh = maxVal > 10000
-    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+    const mwh = maxVal >= 5000
+    return (val: number) => mwh
+      ? `${(val / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MWh`
+      : `${val.toLocaleString('de-DE')} kWh`
   }, [saisonalChartData])
 
   // Loading State
@@ -251,25 +257,39 @@ export function PVStringVergleich({ anlageId }: Props) {
                 <YAxis tickFormatter={jahresFormatter} width={80} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
-                {data.strings.map((s, idx) => (
-                  <Bar
-                    key={`${s.investition_id}-soll`}
-                    dataKey={`${s.bezeichnung} SOLL`}
-                    fill={`${STRING_COLORS[idx % STRING_COLORS.length]}66`}
-                    stroke={STRING_COLORS[idx % STRING_COLORS.length]}
-                    strokeWidth={1}
-                    strokeDasharray="4 2"
-                    name={`${s.bezeichnung} SOLL`}
-                  />
-                ))}
-                {data.strings.map((s, idx) => (
-                  <Bar
-                    key={`${s.investition_id}-ist`}
-                    dataKey={`${s.bezeichnung} IST`}
-                    fill={STRING_COLORS[idx % STRING_COLORS.length]}
-                    name={`${s.bezeichnung} IST`}
-                  />
-                ))}
+                {data.strings.map((s, idx) => {
+                  // Bei nur einem String: SOLL/IST-Standardfarben (konsistent zu anderen Diagrammen)
+                  // Bei mehreren Strings: pro String eine Farbe (Differenzierung wichtiger)
+                  const single = data.strings.length === 1
+                  const baseColor = single
+                    ? SOLL_IST_COLORS.soll
+                    : STRING_COLORS[idx % STRING_COLORS.length]
+                  return (
+                    <Bar
+                      key={`${s.investition_id}-soll`}
+                      dataKey={`${s.bezeichnung} SOLL`}
+                      fill={`${baseColor}66`}
+                      stroke={baseColor}
+                      strokeWidth={1}
+                      strokeDasharray="4 2"
+                      name={`${s.bezeichnung} SOLL`}
+                    />
+                  )
+                })}
+                {data.strings.map((s, idx) => {
+                  const single = data.strings.length === 1
+                  const baseColor = single
+                    ? SOLL_IST_COLORS.ist
+                    : STRING_COLORS[idx % STRING_COLORS.length]
+                  return (
+                    <Bar
+                      key={`${s.investition_id}-ist`}
+                      dataKey={`${s.bezeichnung} IST`}
+                      fill={baseColor}
+                      name={`${s.bezeichnung} IST`}
+                    />
+                  )
+                })}
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -297,15 +317,15 @@ export function PVStringVergleich({ anlageId }: Props) {
                 <Area
                   type="monotone"
                   dataKey="SOLL"
-                  fill="#3b82f6"
-                  stroke="#3b82f6"
+                  fill={SOLL_IST_COLORS.soll}
+                  stroke={SOLL_IST_COLORS.soll}
                   fillOpacity={0.2}
                   name="PVGIS Prognose"
                 />
                 <Line
                   type="monotone"
                   dataKey="IST Ø"
-                  stroke="#f59e0b"
+                  stroke={SOLL_IST_COLORS.ist}
                   strokeWidth={3}
                   dot={{ r: 4 }}
                   name="IST Durchschnitt"
