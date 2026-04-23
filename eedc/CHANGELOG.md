@@ -7,12 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [3.19.2] - 2026-04-23
+
+### Bugfixes
+
+- **fix(ui/tooltip): Tooltip löst horizontalen Scroll in Tabellen aus** — `FormelTooltip` rendert jetzt mit `position: fixed` (statt `absolute`), damit `overflow-x:auto`-Container (z. B. ROI-Tabelle) den Tooltip nicht clippen und keinen unerwünschten horizontalen Scroll auslösen. Tooltip bleibt zudem zuverlässig im Viewport (Links-/Rechts-Clamp). Forum-Bericht (#340): Scrollbar in der ROI-Tabelle „kurz sichtbar, springt zurück".
+
+- **fix(ui/charts): Y-Achse zeigte „0000 kWh" statt „10.000 kWh"** — Im Cockpit-PV-Anlage-Diagramm (`PVStringVergleich`) wurde der Y-Achsen-Tick bei 10.000 kWh wegen zu schmaler Achse abgeschnitten. Formatter nutzt jetzt deutsche Tausenderpunkte (`10.000 kWh`) und schaltet bereits ab 5.000 kWh auf MWh-Anzeige um (`10 MWh`).
+
+### Verbessert
+
+- **enhance(ui/charts): SOLL/IST-Farben vereinheitlicht** — Neue Konstante `SOLL_IST_COLORS` (Blau/Amber/Grün) in `lib/colors.ts`. Beide SOLL-IST-Diagramme im Auswertungen-PV-Tab nutzen sie konsistent (vorher: `opacity={0.6}` auf SOLL machte das Blau im zweiten Diagramm dunkler als die Legende — Forum-Bericht #340: „Das Blau im zweiten Diagram entspricht nicht dem Blau der Legende"). Cockpit-PV-Vergleich nutzt sie bei Single-String-Anlagen, behält die String-Farben-Differenzierung bei mehreren Strings.
 
 ### Issues
 
 - **#136** WP-Taktungs-Anzahl als fortlaufender Zähler in Tages-/Monats-Analytik (offen)
 - **#137** Live-Energiefluss: Stringsumme über dem Haus bei Einzel-PV-Konfiguration ausblenden (offen)
+- **#140** ROI/Amortisations-Anzeige verschlanken: weniger parallele Werte, klarere Hierarchie (offen, Diskussion mit detlan)
 
 ---
 
