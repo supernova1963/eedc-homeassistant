@@ -51,18 +51,27 @@ export default function FormelTooltip({
 }: FormelTooltipProps) {
   const { isVisible, interactionProps } = useTooltipInteraction()
   const [position, setPosition] = useState<'top' | 'bottom'>('top')
-  const [offsetX, setOffsetX] = useState(0)
+  const [coords, setCoords] = useState({ top: 0, left: 0 })
   const triggerRef = useRef<HTMLSpanElement>(null)
 
+  // Tooltip wird via position:fixed gerendert, damit overflow-x:auto-Container
+  // (z.B. Tabellen) ihn nicht clippen und horizontalen Scroll auslösen.
   useEffect(() => {
     if (isVisible && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      setPosition(rect.top < 120 ? 'bottom' : 'top')
-      // Horizontal verschieben falls Tooltip über Viewport-Rand ragt (min. 8px Abstand)
-      const tooltipWidth = 280 // ca. Mitte von minWidth/maxWidth
-      const center = rect.left + rect.width / 2
-      const overflow = center - tooltipWidth / 2
-      setOffsetX(overflow < 8 ? Math.abs(overflow) + 8 : 0)
+      const showBelow = rect.top < 140
+      setPosition(showBelow ? 'bottom' : 'top')
+      const tooltipWidth = 280
+      const padding = 8
+      let left = rect.left + rect.width / 2
+      // Horizontal in Viewport halten
+      if (left - tooltipWidth / 2 < padding) left = tooltipWidth / 2 + padding
+      const vw = window.innerWidth
+      if (left + tooltipWidth / 2 > vw - padding) left = vw - tooltipWidth / 2 - padding
+      setCoords({
+        top: showBelow ? rect.bottom + 8 : rect.top - 8,
+        left,
+      })
     }
   }, [isVisible])
 
@@ -79,27 +88,20 @@ export default function FormelTooltip({
         <Info className="inline-block w-3.5 h-3.5 ml-1 text-gray-400 opacity-60" />
       )}
 
-      {/* Tooltip */}
+      {/* Tooltip — fixed positioniert, damit overflow-Container nicht clippen */}
       {isVisible && (
         <div
-          className={`absolute z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg
-            ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
-          `}
-          style={{ minWidth: '200px', maxWidth: '350px', whiteSpace: 'normal', left: `calc(50% + ${offsetX}px)`, transform: 'translateX(-50%)' }}
+          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg pointer-events-none"
+          style={{
+            minWidth: '200px',
+            maxWidth: '350px',
+            whiteSpace: 'normal',
+            left: coords.left,
+            top: position === 'bottom' ? coords.top : 'auto',
+            bottom: position === 'top' ? `calc(100vh - ${coords.top}px)` : 'auto',
+            transform: 'translateX(-50%)',
+          }}
         >
-          {/* Pfeil */}
-          <div
-            className={`absolute w-0 h-0
-              border-l-[6px] border-l-transparent
-              border-r-[6px] border-r-transparent
-              ${position === 'top'
-                ? 'top-full border-t-[6px] border-t-gray-900 dark:border-t-gray-950'
-                : 'bottom-full border-b-[6px] border-b-gray-900 dark:border-b-gray-950'
-              }
-            `}
-            style={{ left: `calc(50% - ${offsetX}px)`, transform: 'translateX(-50%)' }}
-          />
-
           {/* Inhalt */}
           <div className="space-y-1">
             {sicht && (
