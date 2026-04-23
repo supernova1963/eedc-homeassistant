@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.19.3] - 2026-04-23
+
+### Bugfixes
+
+- **fix(community): BKW-Leistung jetzt × Anzahl Module aggregiert** — `community_service.py` summierte für Balkonkraftwerk nur das Feld `leistung_wp` (Watt pro Modul), ohne die Anzahl der Module einzurechnen. 800-W-BKWs mit 2 × 400 W erschienen in der Community-Anzeige daher als 400 W. Forum-Bericht (#342, Radiocarbonat).
+
+- **fix(community/trends): Tooltip in „Community-Entwicklung" zeigt formatierte Labels** — Der Hover-Tooltip im Trends-Tab nutzte die rohen Daten-Keys (`speicher`, `waermepumpe`, `eauto`), während die Legende darunter bereits korrekt formatierte. Tooltip nutzt jetzt denselben `nameFormatter` wie die Legende (Speicher-Quote, Wärmepumpen-Quote, E-Auto-Quote). Forum-Bericht (#342, Radiocarbonat).
+
+- **fix(live/tagesverlauf): Legenden-Toggle blendet wieder ein** — Klick auf einen Legenden-Eintrag entfernte die Linie/Area komplett aus dem DOM (über `hatDaten()`-Filter bei 0-Daten), wodurch ein erneuter Klick die Serie nicht zurückbringen konnte. Hide-Steuerung wurde auf das Recharts-eigene `hide`-Prop umgestellt; Toggle funktioniert jetzt zuverlässig in beide Richtungen — sowohl für Areas (PV/Verbrauch/Speicher) als auch für die Overlay-Linie (Strompreis). Forum-Berichte (#343 detlan, #348 dietmar1968).
+
+- **fix(waermepumpe): „Wärmepumpe" wird im Kostenvergleichs-Chart nicht mehr abgeschnitten** — Y-Achsen-Spalte des horizontalen Bar-Charts war mit `width={100}` zu schmal für das längste Label (11 Zeichen). Auf 110 erhöht — analog zu bestehenden Charts in der Auswertung. Forum-Bericht (#343, detlan).
+
+- **fix(live/energiefluss): iPad-Lite-Default robuster** — Der Auto-Detect für den Lite-Modus (reduzierte Animationen, kein Blur-Filter — schont schwächere GPUs) griff für iPads bisher nur unter 768 px Viewport-Breite, was iPads üblicherweise nicht erfüllen. Zusätzlich identifiziert sich iPadOS-13+ in Safari als „Macintosh", weshalb die `/iPad/`-UA-Prüfung leer lief. Erkennung jetzt zusätzlich über `navigator.maxTouchPoints > 1` bei Macintosh-UA. Wirkt nur bei neuen Nutzern — wer den Toggle bereits einmal manuell angefasst hat, behält seine localStorage-Wahl. Forum-Bericht (#345, dietmar1968).
+
+### Issues
+
+- **#143** Wetter-Dashboard: vermutete Zeitverschiebung in Stunden-Prognose (offen, wartet auf Diagnose-Daten von MartyBr — Forum #344)
+
+---
+
 ## [3.19.2] - 2026-04-23
 
 ### Bugfixes
