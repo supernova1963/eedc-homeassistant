@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Bugfixes
+
+- **fix(energieprofil): Snapshot-Lücken lösen nicht mehr „Stunde-Null + Folge-Spike" aus (#145)** — Fehlt ein stündlicher Sensor-Snapshot in `sensor_snapshots` (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), erzeugte die kumulative Delta-Bildung in `get_hourly_kwh_by_category` bisher ein sichtbares Artefakt: eine Stunde mit 0.00 kWh, gefolgt von einer Stunde mit dem aufgestauten 2h-Delta als Spike (Forum-Bericht MartyBr #354). Ursache: Das Self-Healing im `get_snapshot`-Fallback griff auf HA Long-Term-Statistics mit ±120 min Toleranz zu und lieferte per `ORDER BY ABS(...)` den zeitlich nächsten Nachbar-Wert zurück — wenn die Stunde in HA ebenfalls fehlte, war das der Wert der Vor- oder Folgestunde, und der nachfolgende Delta `snap[h+1] − snap[h]` wurde 0. Zwei Änderungen:
+  - `get_snapshot`: HA-Statistics-Fallback-Toleranz von 120 min auf **10 min** reduziert. Hourly-Statistics speichern auf der Stundengrenze; eine Abweichung > 10 min ist fast immer ein „kein Eintrag zur Zielstunde" — der Fallback liefert dann bewusst None, statt einen falschen Nachbar-Wert. Gleiches Prinzip für den MQTT-Snapshot-Fallback (30 → 10 min), zusätzlich `nearest`-Sortierung statt `timestamp.asc()` (der frühere „erster-im-Fenster"-Lookup hätte bei mehreren Publikationen zufällig den ältesten zurückgegeben).
+  - `get_hourly_kwh_by_category`: Nach der Snapshot-Collection werden **echte Lücken jetzt linear zwischen den Nachbar-Stunden interpoliert**. Ein kumulativer Zähler wächst monoton — die Interpolation verteilt das Gesamt-Delta über eine Lücke gleichmäßig auf die betroffenen Stunden, statt es in eine einzige Stunde aufzustauen. Ränder (H0 fehlend am Tagesanfang, H24 am Tagesende) werden nicht extrapoliert — dort bleibt der Wert None und die betroffene Stunde fällt wie bisher aus der Delta-Bildung. Tagessumme bleibt in allen Fällen korrekt (bereits vorher durch `snapshot[24] − snapshot[0]`).
+
+---
+
 ## [3.19.4] - 2026-04-23
 
 ### Performance

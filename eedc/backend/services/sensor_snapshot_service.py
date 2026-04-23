@@ -80,16 +80,31 @@ async def _get_mqtt_snapshot_at(
     anlage_id: int,
     mqtt_key: str,
     zeitpunkt: datetime,
-    toleranz_minuten: int = 30,
+    toleranz_minuten: int = 10,
 ) -> Optional[float]:
     """
-    Liest den nächstgelegenen MqttEnergySnapshot um zeitpunkt (±toleranz_minuten).
+    Liest den zeitlich nächstgelegenen MqttEnergySnapshot um zeitpunkt
+    (±toleranz_minuten).
 
     Wird als MQTT-Fallback genutzt wenn HA Statistics nicht verfügbar ist
     (Standalone/Docker-Modus ohne HA-Integration).
+
+    Standard ±10 min (vorher ±30): MQTT-Publisher liefern Zählerstände
+    typischerweise alle 1–5 min. Ein Fenster > 10 min bedeutet fast immer,
+    dass der Zielzeitpunkt gar keine frische Publikation hatte — in dem Fall
+    ist None + Interpolation in der aufrufenden Schicht (Issue #145) besser
+    als ein weit entfernter Wert, der Stunden-Deltas verzerrt.
+
+    Kandidaten werden nach absolutem Zeitabstand sortiert (nearest first),
+    nicht nach Timestamp-Reihenfolge — damit der zeitlich passendste Wert
+    gewählt wird, nicht zufällig der früheste im Fenster.
     """
     von = zeitpunkt - timedelta(minutes=toleranz_minuten)
     bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
+    from sqlalchemy import func
+    abstand = func.abs(
+        func.julianday(MqttEnergySnapshot.timestamp) - func.julianday(zeitpunkt)
+    )
     result = await db.execute(
         select(MqttEnergySnapshot.value_kwh, MqttEnergySnapshot.timestamp).where(
             and_(
@@ -98,7 +113,7 @@ async def _get_mqtt_snapshot_at(
                 MqttEnergySnapshot.timestamp >= von,
                 MqttEnergySnapshot.timestamp <= bis,
             )
-        ).order_by(MqttEnergySnapshot.timestamp.asc()).limit(1)
+        ).order_by(abstand.asc()).limit(1)
     )
     row = result.first()
     return row[0] if row else None
@@ -125,7 +140,7 @@ async def get_snapshot(
     sensor_id: Optional[str],
     zeitpunkt: datetime,
     toleranz_minuten: int = 5,
-    ha_toleranz_minuten: int = 120,
+    ha_toleranz_minuten: int = 10,
 ) -> Optional[float]:
     """
     Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
@@ -142,7 +157,12 @@ async def get_snapshot(
         sensor_id: HA Entity-ID des kumulativen Zählers; None bei MQTT-only
         zeitpunkt: Zielzeitpunkt (typisch: Stundenanfang, 00:00, 01:00 ...)
         toleranz_minuten: Max. zeitliche Abweichung bei DB-Lookup
-        ha_toleranz_minuten: Max. zeitliche Abweichung bei HA-Statistics-Fallback
+        ha_toleranz_minuten: Max. zeitliche Abweichung bei HA-Statistics-Fallback.
+            Standard 10 min: HA Statistics speichert stündliche Snapshots mit
+            start_ts exakt auf der Stunde; eine Abweichung über 10 min bedeutet
+            fast immer, dass der Zielzeitpunkt in HA gar keinen Eintrag hat —
+            ein nearest-Lookup würde den Nachbar-Wert liefern und zu
+            Stunde-Null-mit-Folge-Spike-Artefakten führen (Issue #145).
 
     Returns:
         Zählerstand in kWh oder None (kein Datenpunkt verfügbar).
@@ -355,6 +375,34 @@ def _categorize_counter(
     return None
 
 
+def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]]) -> None:
+    """
+    Füllt None-Werte in {stunde: wert}-Dict per linearer Interpolation
+    zwischen dem letzten und dem nächsten verfügbaren Wert (Issue #145).
+
+    Ränder: fehlt der Wert am Anfang (h=0..k) oder Ende (h=m..24), wird NICHT
+    extrapoliert — die Randwerte bleiben None und die betroffenen
+    Stunden-Deltas fallen bei der Delta-Bildung wie bisher raus. Das ist
+    bewusst: ohne Ankerpunkt an mindestens einer Seite gibt es keine
+    sinnvolle Schätzung.
+
+    Arbeitet in-place.
+    """
+    hours_with_values = sorted(h for h, v in snaps_per_hour.items() if v is not None)
+    if len(hours_with_values) < 2:
+        return  # keine Interpolation ohne mindestens zwei Ankerpunkte möglich
+
+    # Zwischen-Lücken interpolieren (nur solche, die von bekannten Werten eingerahmt sind)
+    for a, b in zip(hours_with_values, hours_with_values[1:]):
+        if b - a <= 1:
+            continue  # keine Lücke zwischen a und b
+        v_a = snaps_per_hour[a]
+        v_b = snaps_per_hour[b]
+        for h in range(a + 1, b):
+            # lineare Interpolation: v_a + (v_b - v_a) * (h - a) / (b - a)
+            snaps_per_hour[h] = v_a + (v_b - v_a) * (h - a) / (b - a)
+
+
 async def get_hourly_kwh_by_category(
     db: AsyncSession,
     anlage,
@@ -473,6 +521,16 @@ async def get_hourly_kwh_by_category(
             ts = tag_0 + timedelta(hours=h)
             wert = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
             snaps[sensor_key][h] = wert
+
+    # 2b. Lücken durch lineare Interpolation füllen (Issue #145).
+    # Kumulative Zähler sind monoton steigend, aber der genaue stündliche
+    # Zuwachs über eine Lücke ist unbekannt — lineare Interpolation verteilt
+    # das Gesamt-Delta gleichmäßig über die fehlenden Stunden. Das ist
+    # deutlich besser als "Stunde-Null + Folge-Spike" (2h-Delta in eine
+    # einzige Stunde aufgestaut), auch wenn es die reale intra-day-Dynamik
+    # nicht perfekt wiedergibt.
+    for sensor_key in snaps:
+        _fill_gaps_linear(snaps[sensor_key])
 
     # 3. Deltas pro Stunde und Kategorie summieren
     for h in range(24):
