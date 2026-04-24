@@ -14,7 +14,7 @@ from markupsafe import Markup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.infothek import INFOTHEK_KATEGORIEN
+from backend.api.routes.infothek import effektive_felder
 from backend.models.anlage import Anlage
 from backend.models.infothek import InfothekEintrag
 
@@ -122,7 +122,7 @@ async def build_infothek_context(
 
     def to_dict(e: InfothekEintrag) -> dict:
         params = e.parameter or {}
-        schema_felder = INFOTHEK_KATEGORIEN.get(e.kategorie, {}).get("felder", {})
+        schema_felder = effektive_felder(e.kategorie)
         felder: list[tuple[str, str]] = []
         for key, defn in schema_felder.items():
             val = params.get(key)

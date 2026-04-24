@@ -40,9 +40,7 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
             "anbieter": {"type": "string", "label": "Anbieter"},
             "netzbetreiber": {"type": "string", "label": "Netzbetreiber"},
             "tarif_ct_kwh": {"type": "number", "label": "Tarif (ct/kWh)"},
-            "vertragsbeginn": {"type": "date", "label": "Vertragsbeginn"},
             "vertragslaufzeit_monate": {"type": "number", "label": "Vertragslaufzeit (Monate)"},
-            "kuendigungsfrist_monate": {"type": "number", "label": "Kündigungsfrist (Monate)"},
             "kundennummer": {"type": "string", "label": "Kundennummer"},
         },
     },
@@ -67,8 +65,6 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
             "tarif_ct_kwh": {"type": "number", "label": "Tarif (ct/kWh)"},
             "jahresverbrauch_kwh": {"type": "number", "label": "Jahresverbrauch (kWh)"},
             "kundennummer": {"type": "string", "label": "Kundennummer"},
-            "vertragsbeginn": {"type": "date", "label": "Vertragsbeginn"},
-            "kuendigungsfrist_monate": {"type": "number", "label": "Kündigungsfrist (Monate)"},
         },
     },
     "wasservertrag": {
@@ -115,8 +111,6 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
             "anbieter": {"type": "string", "label": "Anbieter"},
             "deckungssumme_euro": {"type": "number", "label": "Deckungssumme (€)"},
             "jahresbeitrag_euro": {"type": "number", "label": "Jahresbeitrag (€)"},
-            "vertragsbeginn": {"type": "date", "label": "Vertragsbeginn"},
-            "kuendigungsfrist_monate": {"type": "number", "label": "Kündigungsfrist (Monate)"},
         },
     },
     "ansprechpartner": {
@@ -139,10 +133,8 @@ INFOTHEK_KATEGORIEN: dict[str, dict] = {
         "icon": "Wrench",
         "felder": {
             "anbieter": {"type": "string", "label": "Anbieter"},
-            "vertragsnummer": {"type": "string", "label": "Vertragsnummer"},
             "leistungsumfang": {"type": "string", "label": "Leistungsumfang"},
             "gueltig_bis": {"type": "date", "label": "Gültig bis"},
-            "kuendigungsfrist_monate": {"type": "number", "label": "Kündigungsfrist (Monate)"},
             "jahreskosten_euro": {"type": "number", "label": "Jahreskosten (€)"},
         },
     },
@@ -243,6 +235,17 @@ UEBERGREIFENDE_FELDER = {
         },
     },
 }
+
+
+def effektive_felder(kategorie_key: str) -> dict:
+    """Liefert die effektiven Feld-Definitionen einer Kategorie inkl. übergreifender Vertrags-Felder.
+
+    Wird für Rendering (PDF/Label-Lookup) genutzt — im UI werden Kategorie- und
+    übergreifende Felder bewusst als getrennte Blöcke gerendert.
+    """
+    felder = dict(INFOTHEK_KATEGORIEN.get(kategorie_key, {}).get("felder", {}))
+    felder.update(UEBERGREIFENDE_FELDER.get("vertrag", {}).get("felder", {}))
+    return felder
 
 
 # =============================================================================
@@ -601,6 +604,14 @@ async def get_vorbelegung(
                 prefill.setdefault("kundennummer", strom["kundennummer"])
             if strom.get("name") and "anbieter" not in prefill:
                 prefill["anbieter"] = strom["name"]
+            zaehler_liste = strom.get("zaehler") or []
+            if zaehler_liste:
+                erste_nummer = next(
+                    (z.get("nummer") for z in zaehler_liste if z.get("nummer")),
+                    None,
+                )
+                if erste_nummer:
+                    prefill["zaehler_nummer"] = erste_nummer
 
     elif kategorie == "einspeisevertrag":
         # Einspeisevergütung aus Strompreis
@@ -772,11 +783,15 @@ async def export_pdf(
         for e in eintraege_obj
     ]
 
+    effektive_schemas = {
+        kat_key: {**kat, "felder": effektive_felder(kat_key)}
+        for kat_key, kat in INFOTHEK_KATEGORIEN.items()
+    }
     pdf_bytes = generate_infothek_pdf(
         anlagen_name=anlage.anlagenname,
         eintraege=eintraege,
         vertragspartner_map=vp_map,
-        kategorie_schemas=INFOTHEK_KATEGORIEN,
+        kategorie_schemas=effektive_schemas,
         filter_kategorie=kategorie,
     )
 
