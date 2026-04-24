@@ -208,13 +208,12 @@ async def get_tagesverlauf(
 
     # Strompreis-Sensor (optional, für EPEX-Overlay)
     strompreis_eid = None
-    use_boersenpreis_fallback = False
     basis_mapping = (anlage.sensor_mapping or {}).get("basis", {})
     sp = basis_mapping.get("strompreis")
     if isinstance(sp, dict) and sp.get("sensor_id"):
         strompreis_eid = sp["sensor_id"]
-    else:
-        use_boersenpreis_fallback = True  # Kein Sensor → öffentlichen Börsenpreis nutzen
+    # Börsenpreis-Fallback immer laden: deckt sowohl "kein Sensor" als auch
+    # Lücken im Sensor-History (z.B. Tibber hat erst ab 01:50 Werte) ab.
 
     # Alle Entity-IDs für History-Abfrage sammeln
     all_ids = list(set(
@@ -246,15 +245,15 @@ async def get_tagesverlauf(
             pts = history.get(strompreis_eid, [])
             history[strompreis_eid] = [(ts, val * 0.1) for ts, val in pts]
 
-    # Börsenpreis-Fallback: aWATTar API wenn kein Sensor konfiguriert
+    # Börsenpreis-Fallback: aWATTar API — immer laden, wird pro Slot als
+    # Fallback genutzt wenn Sensor-History für den Slot leer ist.
     _boersenpreis_stunden: dict[int, float] = {}
-    if use_boersenpreis_fallback:
-        try:
-            from backend.services.strompreis_markt_service import get_strompreis_stunden
-            land = getattr(anlage, "standort_land", None)
-            _boersenpreis_stunden = await get_strompreis_stunden(land, start.date())
-        except Exception as e:
-            logger.debug("Börsenpreis-Fallback: %s", e)
+    try:
+        from backend.services.strompreis_markt_service import get_strompreis_stunden
+        land = getattr(anlage, "standort_land", None)
+        _boersenpreis_stunden = await get_strompreis_stunden(land, start.date())
+    except Exception as e:
+        logger.debug("Börsenpreis-Fallback: %s", e)
 
     # Vorzeichen-Invertierung auf History anwenden (#58)
     apply_invert_to_history(
@@ -344,13 +343,17 @@ async def get_tagesverlauf(
         if quellen_sum > 0 and haushalt > 0:
             werte["haushalt"] = round(-haushalt, 2)
 
-        # Strompreis (optional, wird NICHT in Haushalt-Berechnung einbezogen)
+        # Strompreis (optional, wird NICHT in Haushalt-Berechnung einbezogen).
+        # Sensor-Wert hat Vorrang, EPEX ist per-Slot-Fallback für Lücken im
+        # Sensor-History (Tibber/aWATTar liefern oft erst nach Mitternacht).
+        sensor_hat_wert = False
         if strompreis_eid:
             pts = history.get(strompreis_eid, [])
             h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
             if h_pts:
                 werte["strompreis"] = round(sum(h_pts) / len(h_pts), 2)
-        elif _boersenpreis_stunden:
+                sensor_hat_wert = True
+        if not sensor_hat_wert and _boersenpreis_stunden:
             bp = _boersenpreis_stunden.get(h_start.hour)
             if bp is not None:
                 werte["strompreis"] = bp
@@ -402,8 +405,9 @@ async def _get_tagesverlauf_mqtt(
         end = start + timedelta(days=1)
     else:
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now
 
-    # Börsenpreis-Fallback holen (wird nur genutzt wenn kein MQTT-Strompreis vorhanden)
+    # Börsenpreis-Fallback holen — per-Slot-Fallback bei Lücken im MQTT-Sensor
     _mqtt_boersenpreis: dict[int, float] = {}
     try:
         from backend.services.strompreis_markt_service import get_strompreis_stunden
@@ -411,7 +415,6 @@ async def _get_tagesverlauf_mqtt(
         _mqtt_boersenpreis = await get_strompreis_stunden(land, start.date())
     except Exception:
         pass
-        end = now
 
     rows = await get_snapshots_for_range(anlage.id, start, end, db)
     if not rows:
@@ -623,12 +626,13 @@ async def _get_tagesverlauf_mqtt(
         if quellen_sum > 0 and haushalt > 0:
             werte["haushalt"] = round(-haushalt, 2)
 
-        # Strompreis (optional, MQTT-Key: strompreis_ct oder Börsenpreis-Fallback)
-        has_mqtt_strompreis = "basis:strompreis_ct" in available_keys
+        # Strompreis (optional, MQTT-Key: strompreis_ct oder Börsenpreis-Fallback).
+        # Sensor-Wert hat Vorrang, EPEX ist per-Slot-Fallback für Lücken (MQTT
+        # kann nach Nacht-Downtime Daten erst ab 01:50 haben).
         sp_pts = [v for ts, v in history.get("basis:strompreis_ct", []) if h_start <= ts < h_end]
         if sp_pts:
             werte["strompreis"] = round(sum(sp_pts) / len(sp_pts), 2)
-        elif not has_mqtt_strompreis and _mqtt_boersenpreis:
+        elif _mqtt_boersenpreis:
             bp = _mqtt_boersenpreis.get(h_start.hour)
             if bp is not None:
                 werte["strompreis"] = bp

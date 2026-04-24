@@ -97,18 +97,21 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
   // Chart-Daten: Bidirektionale Serien in pos/neg splitten, Overlays direkt übernehmen.
   // Hide-Steuerung übernimmt Recharts via `hide`-Prop am Area/Line — nicht über 0-Daten,
   // sonst entfernt `hatDaten` versteckte Serien aus dem DOM und Re-Toggle bringt sie nicht zurück.
+  // Overlay-Serien: fehlender Wert bleibt null, damit die Linie nicht bei Y=0 gerendert
+  // wird (was bei Strompreis-Overlay mit Y-Achse [~5, ~20] außerhalb des Bildbereichs liegt).
   const chartData = useMemo(() => {
     return punkte.map((p) => {
-      const row: Record<string, string | number> = { zeit: p.zeit }
+      const row: Record<string, string | number | null> = { zeit: p.zeit }
       for (const s of serien) {
-        const val = p.werte[s.key] ?? 0
+        const raw = p.werte[s.key]
         if (s.seite === 'overlay') {
-          row[s.key] = val
+          row[s.key] = raw ?? null
         } else if (s.bidirektional) {
+          const val = raw ?? 0
           row[`${s.key}_pos`] = Math.max(0, val)
           row[`${s.key}_neg`] = Math.min(0, val)
         } else {
-          row[s.key] = val
+          row[s.key] = raw ?? 0
         }
       }
       return row

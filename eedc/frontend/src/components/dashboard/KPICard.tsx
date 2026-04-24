@@ -5,7 +5,7 @@
  * color/bgColor Props. Die generische Version liegt in components/ui/KPICard.tsx.
  */
 
-import { Card, FormelTooltip } from '../../components/ui'
+import { FormelTooltip } from '../../components/ui'
 
 export interface KPICardProps {
   title: string; value: string; unit: string; subtitle?: string
@@ -41,5 +41,5 @@ export default function KPICard({ title, value, unit, subtitle, icon: Icon, colo
   if (onClick) {
     return <button onClick={onClick} className="card p-3 text-left hover:shadow-md transition-shadow w-full">{content}</button>
   }
-  return <Card className="p-3">{content}</Card>
+  return <div className="card p-3">{content}</div>
 }
