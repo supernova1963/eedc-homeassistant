@@ -222,39 +222,19 @@ async def get_solar_prognose_endpoint(
     strings: List[PVStringConfig] = []
     hinweise: List[str] = []
 
+    from backend.services.pv_orientation import (
+        get_pv_kwp, get_pv_neigung, get_pv_azimut,
+    )
     for pv in alle_pv:
-        kwp = pv.leistung_kwp or 0
+        kwp = get_pv_kwp(pv)
         if kwp <= 0:
             continue
-
-        # Neigung und Ausrichtung aus Parameter
-        params = pv.parameter or {}
-        neigung = params.get("neigung_grad")
-        if neigung is None:
-            neigung = params.get("neigung", 35)
-        ausrichtung = params.get("ausrichtung_grad")
-        if ausrichtung is None:
-            ausrichtung = params.get("ausrichtung", 0)
-
-        # Ausrichtung konvertieren falls als Text
-        if isinstance(ausrichtung, str):
-            ausrichtung_map = {
-                "sued": 0, "süd": 0, "s": 0,
-                "ost": -90, "o": -90, "e": -90,
-                "west": 90, "w": 90,
-                "nord": 180, "n": 180,
-                "suedost": -45, "südost": -45, "so": -45, "se": -45,
-                "suedwest": 45, "südwest": 45, "sw": 45,
-                "nordost": -135, "no": -135, "ne": -135,
-                "nordwest": 135, "nw": 135,
-            }
-            ausrichtung = ausrichtung_map.get(ausrichtung.lower(), 0)
 
         strings.append(PVStringConfig(
             name=pv.bezeichnung or f"String {pv.id}",
             kwp=kwp,
-            neigung=int(neigung),
-            ausrichtung=int(ausrichtung),
+            neigung=get_pv_neigung(pv),
+            ausrichtung=get_pv_azimut(pv),
         ))
 
     if not strings:
