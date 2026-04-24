@@ -472,7 +472,11 @@ export default function EnergieFluss({
                 strokeOpacity={isActive ? 0.2 : 0.08}
                 strokeLinecap="round"
               />
-              {/* Kern-Linie (leuchtend, schmal) */}
+              {/* Kern-Linie (leuchtend, schmal). Im Lite-Modus zusätzlich
+                  CSS-animierter Dashoffset-Fluss (wie LuminaCard / STATS
+                  Card) — GPU-beschleunigt, kein SMIL-Ruckler auf Mobile-
+                  Safari. Im Effekt-Modus bleibt die Linie solid und die
+                  SMIL-Partikel darunter übernehmen den Fluss-Eindruck. */}
               {isActive && (
                 <path
                   d={d}
@@ -481,6 +485,8 @@ export default function EnergieFluss({
                   strokeWidth={Math.max(thickness * 0.4, 1.5)}
                   strokeOpacity={0.85}
                   strokeLinecap="round"
+                  className={lite ? (isSource ? 'flow-line' : 'flow-line flow-line--reverse') : undefined}
+                  style={lite ? { ['--flow-duration' as string]: `${duration}s` } : undefined}
                 />
               )}
               {/* Animierte Partikel (Elektronen) auf dem Pfad — im Lite-Modus aus.
