@@ -11,6 +11,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Verbessert
 
+- **enhance(live/energiefluss, auswertung/pv-anlage): Redundante „Stringsumme" bei Einzel-String-Anlagen ausgeblendet (#137, Forum #335 detlan)** — An zwei Stellen wurde bei Anlagen mit nur einem PV-String dieselbe Zahl doppelt angezeigt:
+  - Im **Live-Energiefluss** stand „Solarleistung X kW" als Summen-Label über dem Haus — identisch mit dem einzigen PV-Knoten-Label daneben. Wird jetzt nur noch bei `≥ 2` PV-Strings angezeigt (Summe über Teilerträge bleibt eine echte Zusatzinformation). Die Y-Position des darüberliegenden „Solar Soll"-Labels folgt dem mit.
+  - In der **Auswertung → PV-Anlage „String-Details"-Tabelle** war die „Gesamt"-Fußzeile Duplikat der einzigen Detail-Zeile (kWp, SOLL, IST, Abweichung, kWh/kWp alle identisch, detlan-Kommentar im Issue). Footer wird jetzt nur noch bei `data.strings.length > 1` gerendert — die bereits bestehende Konvention im Performance-Chart des gleichen Tabs.
+
 - **enhance(live/energiefluss): Fließende Strom-Linien im Lite-Modus (Forum dietmar1968)** — Nach dem Entfernen der SMIL-Partikel in v3.19.4 (die auf Mobile-Safari die Hauptruckel-Ursache waren) fehlte Dietmar die optische Visualisierung des Stromflusses. Jetzt zeichnet der Lite-Modus auf jeder aktiven Verbindungs-Kern-Linie einen CSS-animierten `stroke-dashoffset`-Fluss — derselbe Ansatz wie in LuminaCard und Tom's STATS Card. GPU-beschleunigt, Browser-nativ, kein SMIL-Overhead: Linien fließen deutlich sichtbar zur korrekten Seite (Quellen → Haus, Haus → Senken per `animation-direction: reverse`), Geschwindigkeit skaliert mit der Leistung (höhere kW = schnellerer Fluss, über CSS-Custom-Property `--flow-duration` pro Linie). iOS-Nutzer mit „Bewegung reduzieren" erhalten über `@media (prefers-reduced-motion: reduce)` automatisch statische Linien. Der Effekt-Modus bleibt unverändert — dort liefern die SMIL-Partikel weiterhin den vollen Visual-Wumms.
 
 ### Bugfixes

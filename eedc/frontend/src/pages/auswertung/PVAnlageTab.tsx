@@ -486,23 +486,27 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
                 </tr>
               ))}
             </tbody>
-            <tfoot className="bg-gray-100 dark:bg-gray-800 font-medium">
-              <tr>
-                <td className="px-3 py-2">Gesamt</td>
-                <td className="px-3 py-2 text-right">{data.anlagen_leistung_kwp.toFixed(1)}</td>
-                <td className="px-3 py-2">-</td>
-                <td className="px-3 py-2 text-right text-blue-600">{data.prognose_gesamt_kwh.toFixed(0)} kWh</td>
-                <td className="px-3 py-2 text-right text-amber-600">{data.ist_gesamt_kwh.toFixed(0)} kWh</td>
-                <td className={`px-3 py-2 text-right ${
-                  (data.abweichung_gesamt_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {(data.abweichung_gesamt_prozent || 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent?.toFixed(1) || 0}%
-                </td>
-                <td className="px-3 py-2 text-right text-purple-600">
-                  {(data.ist_gesamt_kwh / data.anlagen_leistung_kwp).toFixed(0)}
-                </td>
-              </tr>
-            </tfoot>
+            {/* Gesamt-Zeile nur bei ≥ 2 Strings — sonst Duplikat der einzigen
+                Detail-Zeile (Forum #335 detlan, Issue #137). */}
+            {data.strings.length > 1 && (
+              <tfoot className="bg-gray-100 dark:bg-gray-800 font-medium">
+                <tr>
+                  <td className="px-3 py-2">Gesamt</td>
+                  <td className="px-3 py-2 text-right">{data.anlagen_leistung_kwp.toFixed(1)}</td>
+                  <td className="px-3 py-2">-</td>
+                  <td className="px-3 py-2 text-right text-blue-600">{data.prognose_gesamt_kwh.toFixed(0)} kWh</td>
+                  <td className="px-3 py-2 text-right text-amber-600">{data.ist_gesamt_kwh.toFixed(0)} kWh</td>
+                  <td className={`px-3 py-2 text-right ${
+                    (data.abweichung_gesamt_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {(data.abweichung_gesamt_prozent || 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent?.toFixed(1) || 0}%
+                  </td>
+                  <td className="px-3 py-2 text-right text-purple-600">
+                    {(data.ist_gesamt_kwh / data.anlagen_leistung_kwp).toFixed(0)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </Card>
