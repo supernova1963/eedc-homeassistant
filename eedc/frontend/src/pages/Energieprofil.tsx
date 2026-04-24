@@ -246,12 +246,13 @@ export default function Energieprofil() {
 
                 <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                   <p className="text-xs text-amber-800 dark:text-amber-200">
-                    <strong>Einmalig empfohlen nach v3.19+:</strong> Das Energieprofil wird
-                    jetzt aus kumulativen Zählerständen berechnet (exakt zum Live Dashboard).
-                    Historische Tage wurden noch aus Leistungs-Samples geschätzt
-                    (±5-15% Abweichung). Starte einmalig mit aktivierter Option
-                    <em>„Bestehende Tage überschreiben"</em>, damit der gesamte Verlauf
-                    konsistent aus Zählern stammt. Der Daten-Checker zeigt unter
+                    <strong>Empfohlen nach Updates,</strong> die die Energieprofil-Berechnung
+                    betreffen (Zähler-Snapshots, Slot-Konvention, Performance Ratio o.ä.).
+                    Das Energieprofil wird aus kumulativen Zählerständen berechnet (exakt
+                    zum Live Dashboard); ältere Tage können durch Korrekturen abweichen.
+                    Starte dann einmalig mit aktivierter Option <em>„Bestehende Tage
+                    überschreiben"</em>, damit der gesamte Verlauf konsistent bleibt.
+                    Details im CHANGELOG. Der Daten-Checker zeigt unter
                     „Energieprofil-Abdeckung", welche Zähler dafür gemappt sein müssen.
                   </p>
                 </div>
