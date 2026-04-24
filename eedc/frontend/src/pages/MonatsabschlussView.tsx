@@ -1277,7 +1277,7 @@ export default function MonatsabschlussView() {
                   </span>
                 }
               >
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <KPICard title="Ladung" value={fmt(d.speicher_ladung_kwh, 0)} unit="kWh" icon={Battery} color="blue"
                     subtitle={vm?.speicher_ladung_kwh != null ? `VM: ${fmt(vm.speicher_ladung_kwh, 0)} kWh` : undefined} />
                   <KPICard title="Entladung" value={fmt(d.speicher_entladung_kwh, 0)} unit="kWh" icon={Battery} color="green"
@@ -1366,7 +1366,7 @@ export default function MonatsabschlussView() {
                   </span>
                 }
               >
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <KPICard title="Stromverbrauch" value={fmt(d.wp_strom_kwh, 0)} unit="kWh" icon={Zap} color="red"
                     subtitle={vm?.wp_strom_kwh != null ? `VM: ${fmt(vm.wp_strom_kwh, 0)} kWh` : undefined} />
                   <KPICard title="Wärmeertrag" value={fmt(d.wp_waerme_kwh, 0)} unit="kWh" icon={Flame} color="orange"
@@ -1405,7 +1405,7 @@ export default function MonatsabschlussView() {
                   </span>
                 }
               >
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <KPICard title="Ladung gesamt" value={fmt(d.emob_ladung_kwh, 0)} unit="kWh" icon={Plug} color="purple"
                     subtitle={vm ? `VM: ${fmt((vm.eauto_ladung_kwh + vm.wallbox_ladung_kwh), 0)} kWh` : undefined} />
                   <KPICard title="PV-Anteil" value={d.emob_ladung_pv_kwh != null && d.emob_ladung_kwh ? fmt(d.emob_ladung_pv_kwh / d.emob_ladung_kwh * 100, 0) : '—'} unit="%"

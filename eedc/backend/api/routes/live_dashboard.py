@@ -82,8 +82,10 @@ class TagesverlaufSerie(BaseModel):
     label: str            # z.B. "PV Süd", "BYD HVS 10.2"
     kategorie: str        # "pv", "batterie", "wallbox", "waermepumpe", "sonstige", "netz", "haushalt"
     farbe: str            # Hex-Farbe, z.B. "#eab308"
-    seite: str            # "quelle" (positiv) oder "senke" (negativ)
+    seite: str            # "quelle" (positiv) oder "senke" (negativ), oder "overlay" (sekundäre Y-Achse)
     bidirektional: bool = False  # Speicher/Netz: wechselt dynamisch die Seite
+    einheit: Optional[str] = None  # Nur für Overlay-Serien, z.B. "ct/kWh"
+    max_w: Optional[float] = None  # Optional: Plausibilitäts-Obergrenze für Leistungswerte
 
 
 class TagesverlaufPunkt(BaseModel):
