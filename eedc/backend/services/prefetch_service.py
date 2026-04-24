@@ -92,27 +92,19 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
         return {"status": "keine_pv"}
 
     # String-Konfigurationen erstellen
+    from backend.services.pv_orientation import (
+        get_pv_kwp, get_pv_neigung, get_pv_azimut,
+    )
     strings = []
     for pv in alle_pv:
-        kwp = pv.leistung_kwp or 0
+        kwp = get_pv_kwp(pv)
         if kwp <= 0:
             continue
-        params = pv.parameter or {}
-        neigung = params.get("neigung_grad") or params.get("neigung", 35)
-        ausrichtung = params.get("ausrichtung_grad") or params.get("ausrichtung", 0)
-        if isinstance(ausrichtung, str):
-            ausrichtung_map = {
-                "sued": 0, "süd": 0, "s": 0,
-                "ost": -90, "o": -90, "e": -90,
-                "west": 90, "w": 90,
-                "nord": 180, "n": 180,
-                "suedost": -45, "südost": -45, "so": -45,
-                "suedwest": 45, "südwest": 45, "sw": 45,
-            }
-            ausrichtung = ausrichtung_map.get(ausrichtung.lower(), 0)
         strings.append(PVStringConfig(
             name=pv.bezeichnung or f"String {pv.id}",
-            kwp=kwp, neigung=int(neigung), ausrichtung=int(ausrichtung),
+            kwp=kwp,
+            neigung=get_pv_neigung(pv),
+            ausrichtung=get_pv_azimut(pv),
         ))
 
     if not strings:

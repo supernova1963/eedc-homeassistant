@@ -1319,39 +1319,28 @@ async def get_tagesprognose(
             ]
 
             if aktive_invs:
-                total_kwp = sum((inv.parameter or {}).get("kwp", 0) or 0 for inv in aktive_invs)
+                # Einheitlich kWp + Neigung + Azimut aus Top-Level-Spalten ODER
+                # parameter-JSON lesen — je nachdem, wo das Formular die Werte
+                # gespeichert hat. Ohne den Helper fallen Prognose-Pfade stumm
+                # auf Neigung=35°/Azimut=0° zurück, wenn die Werte nur in den
+                # Top-Level-Spalten (Investition.neigung_grad, .ausrichtung)
+                # liegen statt im parameter-JSON.
+                from backend.services.pv_orientation import (
+                    get_pv_kwp, get_pv_neigung, get_pv_azimut,
+                )
+                total_kwp = sum(get_pv_kwp(inv) for inv in aktive_invs)
                 system_losses = (anlage.system_losses or 14) / 100
 
                 # Tage bis zum Zieldatum berechnen
                 tage_bis_ziel = (datum - date.today()).days
                 forecast_days = max(tage_bis_ziel + 1, 2)
 
-                # Neigung + Azimut aus den PV-Parametern extrahieren. Reihenfolge
-                # der Felder wie in solar_prognose.py (erst *_grad als Zahl, dann
-                # String-Mapping als Fallback), damit Tagesprognose und Kurzfrist
-                # dieselben Eingabewerte sehen.
-                ausrichtung_map = {
-                    "sued": 0, "süd": 0, "s": 0,
-                    "ost": -90, "o": -90, "e": -90,
-                    "west": 90, "w": 90,
-                    "nord": 180, "n": 180,
-                    "suedost": -45, "südost": -45, "so": -45, "se": -45,
-                    "suedwest": 45, "südwest": 45, "sw": 45,
-                    "nordost": -135, "no": -135, "ne": -135,
-                    "nordwest": 135, "nw": 135,
-                }
-                p0 = aktive_invs[0].parameter or {}
-                neigung_raw = p0.get("neigung_grad", p0.get("neigung", 35))
-                ausrichtung_raw = p0.get("ausrichtung_grad", p0.get("ausrichtung", 0))
-                if isinstance(ausrichtung_raw, str):
-                    ausrichtung_raw = ausrichtung_map.get(ausrichtung_raw.lower(), 0)
-
                 prognose = await get_solar_prognose(
                     latitude=anlage.latitude,
                     longitude=anlage.longitude,
                     kwp=total_kwp,
-                    neigung=int(neigung_raw),
-                    ausrichtung=int(ausrichtung_raw),
+                    neigung=get_pv_neigung(aktive_invs[0]),
+                    ausrichtung=get_pv_azimut(aktive_invs[0]),
                     days=forecast_days,
                     system_losses=system_losses,
                 )

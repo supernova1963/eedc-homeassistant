@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.20.3] - 2026-04-24
+
+### Bugfixes
+
+- **fix(prognose): kWp/Neigung/Azimut aus Top-Level-Spalten lesen, nicht nur parameter-JSON** — Folgefix zu v3.20.2. Aussichten-Kurzfristig zeigte zwar sinnvolle Werte (z.B. 72.4 kWh), aber das lag nur an den zufällig passenden Defaults (Neigung=35°, Azimut=0° ≈ Süd). Im Log ([`solar_forecast_service`](eedc/backend/services/solar_forecast_service.py)) war sichtbar: `Open-Meteo Solar: 14 Tage, Neigung=35°, Azimut=0°` — also die Werte aus dem Code-Default, nicht aus der Investition. Ursache: `InvestitionForm` speichert `leistung_kwp`, `neigung_grad` und `ausrichtung` als **Top-Level-Spalten** auf der Investition-Tabelle, aber nur `ausrichtung_grad` im `parameter`-JSON. Die drei Prognose-Pfade (`energie_profil.py` Tagesprognose, `solar_prognose.py` Aussichten-Kurzfrist, `prefetch_service.py` Cache-Warmup) lasen alle ausschließlich aus `parameter`-JSON — und fielen stumm auf Defaults zurück, wenn die Werte dort nicht waren. Neuer Helper [`services/pv_orientation.py`](eedc/backend/services/pv_orientation.py) mit drei Funktionen (`get_pv_kwp`, `get_pv_neigung`, `get_pv_azimut`), die beide Speicher-Orte robust prüfen: erst Top-Level-Spalte, dann `parameter.*_grad` (Zahl), dann `parameter.*` (Zahl oder String mit Mapping), dann Default. Alle drei Prognose-Pfade umgestellt — zukünftig liefern sie identische Eingabe-Parameter an Open-Meteo, unabhängig davon, wo die PV-Parameter in der DB stehen.
+
+---
+
 ## [3.20.2] - 2026-04-24
 
 ### Bugfixes
