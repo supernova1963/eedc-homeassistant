@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.20.2] - 2026-04-24
+
+### Bugfixes
+
+- **fix(tagesprognose): PV-Prognose fiel auf 0 kWh, wenn PV-Investition Text-Ausrichtung („Süd") statt numerischem Azimut hatte** — Im Energieprofil → Prognose-Tab lieferte die PV-Tagesprognose für Einzel-String-Anlagen teils `0.0 kWh`, während Aussichten → Kurzfristig für denselben Tag einen realistischen Wert (z.B. 72.4 kWh) zeigte. Ursache: Der Code in [energie_profil.py:1334](eedc/backend/api/routes/energie_profil.py#L1334) las `parameter.ausrichtung` direkt (z.B. `"Süd"`), während das Investitionsformular den exakten Azimut parallel in `parameter.ausrichtung_grad` (int) speichert. Der String ging ungeprüft an `get_solar_prognose()`, das eine Zahl erwartet — der Open-Meteo-API-Call schlug fehl und die Exception wurde im umschließenden `try/except` stillschweigend geschluckt, sodass `pv_stunden = [0.0] * 24` blieb. Die Kurzfrist-Prognose nutzt dieselbe Logik wie jetzt der Fix: erst `ausrichtung_grad` (Zahl), dann Fallback auf String-Mapping `{"süd": 0, "ost": -90, ...}`. Analog für Neigung (`neigung_grad` → `neigung` → Default 35°). Beide Prognose-Pfade liefern nun identische Eingabe-Parameter an Open-Meteo.
+
+---
+
 ## [3.20.1] - 2026-04-24
 
 ### Verbessert
