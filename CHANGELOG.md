@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.20.0] - 2026-04-23
+## [Unreleased]
 
 ### Bugfixes
 
@@ -18,6 +18,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Verbessert
 
 - **enhance(infothek): Zählernummer wird aus Anlagendaten vorbelegt** — Beim Anlegen eines neuen Stromvertrag-Eintrags wird die Zählernummer jetzt aus `anlage.versorger_daten.strom.zaehler[]` vorbelegt (erster Zähler mit gefüllter Nummer). Ergänzt die bereits bestehende Vorbelegung für `anbieter`, `tarif_ct_kwh` und `kundennummer` (Forum-Bericht #376 detlan).
+
+---
+
+## [3.20.0] - 2026-04-23
+
+### Bugfixes
 
 - **fix(kennzahlen): Performance Ratio nutzt jetzt GTI statt horizontaler Einstrahlung (#139)** — Die PR-Formel `pv_ertrag / (strahlung_summe × kWp)` nutzte `shortwave_radiation` von Open-Meteo — das ist die **horizontale** Globalstrahlung (GHI). Bei steilen Modulen (typ. 30–40°) und tiefstehender Wintersonne ist die auf die Modul-Fläche projizierte **Global Tilted Irradiance (GTI)** 2–3× höher. Die theoretische Ertragsreferenz wurde dadurch im Winter systematisch unterschätzt und PR-Werte liefen auf physikalisch unmögliche 1.2–2.8 (Winterborn 2025-12-28: PR=2.807 bei 42.7 kWh Ertrag). Open-Meteo Archive + Forecast liefern jetzt zusätzlich `global_tilted_irradiance` mit Modul-Tilt und -Azimut; bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert (analog Live-Wetter-Pfad). Ohne gemappte PV-Module bleibt PR bewusst `None` statt einen verzerrten GHI-Wert zu melden. Validation: Winterborn 2025-12-28 (GHI 1317 Wh/m², GTI Süd35° 3358 Wh/m², Faktor 2.55×) liefert bei 15 kWp Anlagenleistung PR=0.85 (plausibel für einen kalten Wintertag), vorher 2.16. Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
 
