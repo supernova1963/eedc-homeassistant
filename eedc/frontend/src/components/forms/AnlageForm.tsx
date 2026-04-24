@@ -101,7 +101,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
         longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
         mastr_id: formData.mastr_id || undefined,
-        versorger_daten: Object.keys(versorgerDaten).length > 0 ? versorgerDaten : undefined,
+        versorger_daten: Object.keys(versorgerDaten).length > 0 ? versorgerDaten : null,
         wetter_provider: formData.wetter_provider as WetterProvider,
         wetter_modell: formData.wetter_modell,
         steuerliche_behandlung: formData.steuerliche_behandlung || 'keine_ust',

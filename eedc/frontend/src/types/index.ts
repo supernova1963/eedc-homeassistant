@@ -69,7 +69,7 @@ export interface Anlage {
   ha_sensor_batterie_entladung?: string
   // Erweiterte Stammdaten
   mastr_id?: string
-  versorger_daten?: VersorgerDaten
+  versorger_daten?: VersorgerDaten | null
   // Wetterdaten-Provider
   wetter_provider?: WetterProvider
   // Wettermodell für Solar-Prognose
