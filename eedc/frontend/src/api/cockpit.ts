@@ -62,7 +62,9 @@ export interface CockpitUebersicht {
   bkw_ersparnis_euro: number             // BKW Eigenverbrauch-Ersparnis
   sonstige_netto_euro: number            // Sonstige Positionen netto (BHKW, THG-Quote etc.)
   jahres_rendite_prozent: number | null  // Jahres-Ertrag / Investition (Rendite p.a.)
-  investition_gesamt_euro: number
+  investition_gesamt_euro: number        // Hybrid (PV voll, WP/E-Auto Mehrkosten) – historisch
+  investition_vollkosten_euro: number    // Summe aller Anschaffungskosten (Gesamtkosten-Sicht)
+  investition_mehrkosten_euro: number    // Σ (Anschaffung − Alternativ) (Mehrkosten-Sicht)
   steuerliche_behandlung: string | null  // 'regelbesteuerung' wenn aktiv
 
   // Umwelt (kg CO2)

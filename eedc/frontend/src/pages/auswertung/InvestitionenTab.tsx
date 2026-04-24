@@ -29,6 +29,8 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
   const [roiLoading, setRoiLoading] = useState(true)
   const [cockpitData, setCockpitData] = useState<CockpitUebersicht | null>(null)
   const [expandedSystems, setExpandedSystems] = useState<Set<number>>(new Set())
+  const [roiTableOpen, setRoiTableOpen] = useState(false)
+  const [realisiertOpen, setRealisiertOpen] = useState(false)
 
   useEffect(() => {
     const loadROI = async () => {
@@ -120,6 +122,57 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
 
   return (
     <div className="space-y-6">
+      {/* Investitionen nach Typ - Pie Chart + Bar Chart */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Investitionen nach Kategorie
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={kostenByTyp}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  dataKey="kosten"
+                  nameKey="label"
+                  label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {kostenByTyp.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTooltip unit="€" />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Kosten nach Kategorie
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={kostenByTyp} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis type="number" unit=" €" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} width={100} />
+                <Tooltip content={<ChartTooltip unit="€" />} />
+                <Bar dataKey="kosten" name="Kosten">
+                  {kostenByTyp.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+
       {/* Gesamt-KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
@@ -174,152 +227,6 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
         />
       </div>
 
-      {/* Tatsächlich realisiert – Vergleich mit konfigurierten Werten */}
-      {cockpitData && cockpitData.anzahl_monate > 0 && roiData && (() => {
-        const invest = roiData.gesamt_relevante_kosten
-        const kumuliert = (cockpitData.netto_ertrag_euro || 0)
-          + (cockpitData.wp_ersparnis_euro || 0)
-          + (cockpitData.emob_ersparnis_euro || 0)
-          + (cockpitData.bkw_ersparnis_euro || 0)
-          + (cockpitData.sonstige_netto_euro || 0)
-        const jaehrlichRealisiert = kumuliert / (cockpitData.anzahl_monate / 12)
-        const roiRealisiert = invest > 0 ? (jaehrlichRealisiert / invest * 100) : 0
-        const amortRealisiert = jaehrlichRealisiert > 0 ? (invest / jaehrlichRealisiert) : null
-        const realisierungsquote = roiData.gesamt_jahres_einsparung > 0
-          ? (jaehrlichRealisiert / roiData.gesamt_jahres_einsparung * 100)
-          : null
-
-        return (
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                  Tatsächlich realisiert
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Basis: {cockpitData.anzahl_monate} Monate Echtdaten
-                  {cockpitData.zeitraum_von && cockpitData.zeitraum_bis
-                    ? ` (${cockpitData.zeitraum_von} – ${cockpitData.zeitraum_bis})`
-                    : ''}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-6">
-                <div className="text-center">
-                  <FormelTooltip
-                    sicht="IST-Werte · Ø über bisher erfasste Monate, hochgerechnet auf 12 Monate"
-                    formel="(PV-Netto + WP- + E-Auto- + BKW- + sonstige Ersparnisse) ÷ (Monate ÷ 12)"
-                    berechnung={`${fmtCalc(kumuliert, 0)} € kumuliert ÷ (${cockpitData.anzahl_monate} ÷ 12)`}
-                    ergebnis={`= ${Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr`}
-                  >
-                    <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                      {Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr
-                    </p>
-                  </FormelTooltip>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">Ø Jahresersparnis</p>
-                </div>
-                <div className="text-center">
-                  <FormelTooltip
-                    sicht="IST-Werte · Jahres-ROI · Mehrkosten-Ansatz"
-                    formel="Realisierte Jahresersparnis ÷ Relevante Kosten × 100"
-                    berechnung={`${fmtCalc(jaehrlichRealisiert, 0)} € ÷ ${fmtCalc(invest, 0)} € × 100`}
-                    ergebnis={`= ${roiRealisiert.toFixed(1)} % p.a.`}
-                  >
-                    <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                      {roiRealisiert.toFixed(1)} %
-                    </p>
-                  </FormelTooltip>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">ROI p.a.</p>
-                </div>
-                <div className="text-center">
-                  <FormelTooltip
-                    sicht="IST-Werte · rechnerische Amortisation · Mehrkosten-Ansatz"
-                    formel="Relevante Kosten ÷ realisierte Jahresersparnis"
-                    berechnung={`${fmtCalc(invest, 0)} € ÷ ${fmtCalc(jaehrlichRealisiert, 0)} €/Jahr`}
-                    ergebnis={amortRealisiert ? `= ${amortRealisiert.toFixed(1)} Jahre` : undefined}
-                  >
-                    <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                      {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
-                    </p>
-                  </FormelTooltip>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">Amortisation</p>
-                </div>
-                {realisierungsquote !== null && (
-                  <div className="text-center">
-                    <FormelTooltip
-                      sicht="Vergleich IST vs. Prognose · zeigt, wieviel des konfigurierten Potenzials erreicht wurde"
-                      formel="Realisierte Jahresersparnis ÷ prognostizierte Jahresersparnis × 100"
-                      berechnung={`${fmtCalc(jaehrlichRealisiert, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € × 100`}
-                      ergebnis={`= ${realisierungsquote.toFixed(0)} %`}
-                    >
-                      <p className={`text-base font-bold ${realisierungsquote >= 90 ? 'text-green-600 dark:text-green-400' : realisierungsquote >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {realisierungsquote.toFixed(0)} %
-                      </p>
-                    </FormelTooltip>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">Realisierungsquote</p>
-                  </div>
-                )}
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
-              Die Kacheln oben zeigen Prognosen auf Basis konfigurierter Parameter und aktueller Strompreise.
-              Die Realisierungsquote zeigt, wie viel des konfigurierten Potenzials tatsächlich erreicht wurde.
-            </p>
-          </div>
-        )
-      })()}
-
-      {/* Investitionen nach Typ - Pie Chart */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Investitionen nach Kategorie
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={kostenByTyp}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  dataKey="kosten"
-                  nameKey="label"
-                  label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
-                >
-                  {kostenByTyp.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<ChartTooltip unit="€" />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        {/* Investitionen Bar Chart */}
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Kosten nach Kategorie
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={kostenByTyp} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis type="number" unit=" €" tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip content={<ChartTooltip unit="€" />} />
-                <Bar dataKey="kosten" name="Kosten">
-                  {kostenByTyp.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
-
       {/* Amortisationskurve */}
       {amortisationData.length > 0 && (
         <Card>
@@ -361,7 +268,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
         </Card>
       )}
 
-      {/* ROI pro Investition */}
+      {/* ROI pro Investition (einklappbar) */}
       {roiData?.berechnungen && roiData.berechnungen.length > 0 && (() => {
         // Prüfe auf Konfigurationsprobleme
         const orphanModules = roiData.berechnungen.filter(b =>
@@ -378,9 +285,23 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
 
         return (
         <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            ROI pro Investition
-          </h3>
+          <button
+            type="button"
+            onClick={() => setRoiTableOpen(v => !v)}
+            className="w-full flex items-center justify-between text-left"
+            aria-expanded={roiTableOpen ? 'true' : 'false'}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              ROI pro Investition
+              {hasConfigIssues && !roiTableOpen && (
+                <AlertTriangle className="h-4 w-4 text-amber-500" aria-label="Konfigurationshinweise" />
+              )}
+            </h3>
+            {roiTableOpen
+              ? <ChevronDown className="h-5 w-5 text-gray-500" />
+              : <ChevronRight className="h-5 w-5 text-gray-500" />}
+          </button>
+          {roiTableOpen && (<div className="mt-4">
 
           {/* Konfigurationswarnungen */}
           {hasConfigIssues && (
@@ -592,42 +513,144 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
               </tbody>
             </table>
           </div>
+          </div>)}
         </Card>
         )
       })()}
 
-      {/* Investitionen-Liste */}
-      <Card>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Alle Investitionen
-        </h3>
-        <div className="grid gap-3">
-          {Object.entries(invByTyp).map(([typ, invs]) => (
-            <div key={typ} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: TYP_COLORS[typ] || '#6b7280' }}
-                />
-                <h4 className="font-medium text-gray-900 dark:text-white">
-                  {TYP_LABELS[typ] || typ}
-                </h4>
-                <span className="text-sm text-gray-500">({invs.length})</span>
+      {/* Tatsächlich realisiert – Vergleich mit konfigurierten Werten (einklappbar) */}
+      {cockpitData && cockpitData.anzahl_monate > 0 && roiData && (() => {
+        const invest = roiData.gesamt_relevante_kosten
+        const kumuliert = (cockpitData.netto_ertrag_euro || 0)
+          + (cockpitData.wp_ersparnis_euro || 0)
+          + (cockpitData.emob_ersparnis_euro || 0)
+          + (cockpitData.bkw_ersparnis_euro || 0)
+          + (cockpitData.sonstige_netto_euro || 0)
+        const jaehrlichRealisiert = kumuliert / (cockpitData.anzahl_monate / 12)
+        const roiRealisiert = invest > 0 ? (jaehrlichRealisiert / invest * 100) : 0
+        const amortRealisiert = jaehrlichRealisiert > 0 ? (invest / jaehrlichRealisiert) : null
+        const realisierungsquote = roiData.gesamt_jahres_einsparung > 0
+          ? (jaehrlichRealisiert / roiData.gesamt_jahres_einsparung * 100)
+          : null
+
+        return (
+          <Card>
+            <button
+              type="button"
+              onClick={() => setRealisiertOpen(v => !v)}
+              className="w-full flex items-center justify-between text-left gap-4 flex-wrap"
+              aria-expanded={realisiertOpen ? 'true' : 'false'}
+            >
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  Tatsächlich realisiert
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Basis: {cockpitData.anzahl_monate} Monate Echtdaten
+                  {cockpitData.zeitraum_von && cockpitData.zeitraum_bis
+                    ? ` (${cockpitData.zeitraum_von} – ${cockpitData.zeitraum_bis})`
+                    : ''}
+                </p>
               </div>
-              <div className="grid gap-2">
-                {invs.map(inv => (
-                  <div key={inv.id} className="flex justify-between items-center text-sm py-1">
-                    <span className="text-gray-700 dark:text-gray-300">{inv.bezeichnung}</span>
-                    <span className="text-gray-900 dark:text-white font-medium">
-                      {inv.anschaffungskosten_gesamt?.toFixed(0) || '0'} €
-                    </span>
+              <div className="flex items-center gap-6 flex-wrap">
+                <div className="text-center">
+                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                    {Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Ø Jahresersparnis</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                    {roiRealisiert.toFixed(1)} %
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">ROI p.a.</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-gray-700 dark:text-gray-200">
+                    {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Amortisation</p>
+                </div>
+                {realisierungsquote !== null && (
+                  <div className="text-center">
+                    <p className={`text-base font-bold ${realisierungsquote >= 90 ? 'text-green-600 dark:text-green-400' : realisierungsquote >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {realisierungsquote.toFixed(0)} %
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Realisierungsquote</p>
                   </div>
-                ))}
+                )}
+                {realisiertOpen
+                  ? <ChevronDown className="h-5 w-5 text-gray-500" />
+                  : <ChevronRight className="h-5 w-5 text-gray-500" />}
               </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+            </button>
+            {realisiertOpen && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <FormelTooltip
+                    sicht="IST-Werte · Ø über bisher erfasste Monate, hochgerechnet auf 12 Monate"
+                    formel="(PV-Netto + WP- + E-Auto- + BKW- + sonstige Ersparnisse) ÷ (Monate ÷ 12)"
+                    berechnung={`${fmtCalc(kumuliert, 0)} € kumuliert ÷ (${cockpitData.anzahl_monate} ÷ 12)`}
+                    ergebnis={`= ${Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr`}
+                  >
+                    <div className="cursor-help">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Ø Jahresersparnis</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-200 border-b border-dotted border-gray-400 inline-block">
+                        {Math.round(jaehrlichRealisiert).toLocaleString('de')} €/Jahr
+                      </p>
+                    </div>
+                  </FormelTooltip>
+                  <FormelTooltip
+                    sicht="IST-Werte · Jahres-ROI · Mehrkosten-Ansatz"
+                    formel="Realisierte Jahresersparnis ÷ Relevante Kosten × 100"
+                    berechnung={`${fmtCalc(jaehrlichRealisiert, 0)} € ÷ ${fmtCalc(invest, 0)} € × 100`}
+                    ergebnis={`= ${roiRealisiert.toFixed(1)} % p.a.`}
+                  >
+                    <div className="cursor-help">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">ROI p.a.</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-200 border-b border-dotted border-gray-400 inline-block">
+                        {roiRealisiert.toFixed(1)} %
+                      </p>
+                    </div>
+                  </FormelTooltip>
+                  <FormelTooltip
+                    sicht="IST-Werte · rechnerische Amortisation · Mehrkosten-Ansatz"
+                    formel="Relevante Kosten ÷ realisierte Jahresersparnis"
+                    berechnung={`${fmtCalc(invest, 0)} € ÷ ${fmtCalc(jaehrlichRealisiert, 0)} €/Jahr`}
+                    ergebnis={amortRealisiert ? `= ${amortRealisiert.toFixed(1)} Jahre` : undefined}
+                  >
+                    <div className="cursor-help">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Amortisation</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-200 border-b border-dotted border-gray-400 inline-block">
+                        {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
+                      </p>
+                    </div>
+                  </FormelTooltip>
+                  {realisierungsquote !== null && (
+                    <FormelTooltip
+                      sicht="Vergleich IST vs. Prognose · zeigt, wieviel des konfigurierten Potenzials erreicht wurde"
+                      formel="Realisierte Jahresersparnis ÷ prognostizierte Jahresersparnis × 100"
+                      berechnung={`${fmtCalc(jaehrlichRealisiert, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € × 100`}
+                      ergebnis={`= ${realisierungsquote.toFixed(0)} %`}
+                    >
+                      <div className="cursor-help">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Realisierungsquote</p>
+                        <p className={`font-semibold border-b border-dotted border-gray-400 inline-block ${realisierungsquote >= 90 ? 'text-green-600 dark:text-green-400' : realisierungsquote >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {realisierungsquote.toFixed(0)} %
+                        </p>
+                      </div>
+                    </FormelTooltip>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                  Die Kacheln oben zeigen Prognosen auf Basis konfigurierter Parameter und aktueller Strompreise.
+                  Die Realisierungsquote zeigt, wie viel des konfigurierten Potenzials tatsächlich erreicht wurde.
+                </p>
+              </div>
+            )}
+          </Card>
+        )
+      })()}
     </div>
   )
 }

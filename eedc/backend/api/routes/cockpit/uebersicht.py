@@ -80,6 +80,8 @@ class CockpitUebersichtResponse(BaseModel):
     sonstige_netto_euro: float = 0
     jahres_rendite_prozent: Optional[float]
     investition_gesamt_euro: float
+    investition_vollkosten_euro: float
+    investition_mehrkosten_euro: float
     steuerliche_behandlung: Optional[str] = None
 
     # Umwelt (kg CO2)
@@ -358,6 +360,12 @@ async def get_cockpit_uebersicht(
     if investition_gesamt <= 0:
         investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
 
+    investition_vollkosten = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
+    investition_mehrkosten = sum(
+        max(0, (i.anschaffungskosten_gesamt or 0) - (i.anschaffungskosten_alternativ or 0))
+        for i in investitionen
+    )
+
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
     ust_eigenverbrauch = 0.0
@@ -444,6 +452,8 @@ async def get_cockpit_uebersicht(
         sonstige_netto_euro=round(sonstige_netto, 2),
         jahres_rendite_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
         investition_gesamt_euro=round(investition_gesamt, 2),
+        investition_vollkosten_euro=round(investition_vollkosten, 2),
+        investition_mehrkosten_euro=round(investition_mehrkosten, 2),
         steuerliche_behandlung=steuerliche_beh if steuerliche_beh != "keine_ust" else None,
         co2_pv_kg=round(co2_pv, 1),
         co2_wp_kg=round(co2_wp, 1),
