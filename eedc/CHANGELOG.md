@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.20.4] - 2026-04-24
+
+### Bugfixes
+
+- **fix(tagesprognose): `AttributeError: 'Anlage' object has no attribute 'system_losses'` verschluckt** — Folgefix zu v3.20.3. Die Tagesprognose lieferte für Anlagen mit PV-Konfiguration weiter 0.0 kWh, obwohl Aussichten-Kurzfrist funktionierte. Log-Beleg: `WARNING energie_profil PV-Prognose für Tagesprognose fehlgeschlagen: 'Anlage' object has no attribute 'system_losses'`. Ursache: Der Code nutzte `anlage.system_losses or 14` — dieses Attribut existiert aber nicht auf dem `Anlage`-Modell; `system_losses` liegt historisch auf der letzten aktiven `PVGISPrognose` (so lesen es auch `solar_prognose.py` und `prefetch_service.py`). Der `AttributeError` wurde im umschließenden `try/except` als Warning geloggt und die Prognose fiel auf den Null-Initialwert zurück. Jetzt wird `system_losses` aus `PVGISPrognose` nachgeladen (gleicher Query wie in den anderen beiden Pfaden) mit Fallback auf `DEFAULT_SYSTEM_LOSSES`. Damit sind alle drei Prognose-Pfade final konsistent und die Tagesprognose liefert denselben Wertebereich wie Aussichten-Kurzfrist.
+
+---
+
 ## [3.20.3] - 2026-04-24
 
 ### Bugfixes
