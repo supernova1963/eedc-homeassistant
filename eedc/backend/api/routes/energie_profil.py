@@ -1326,12 +1326,32 @@ async def get_tagesprognose(
                 tage_bis_ziel = (datum - date.today()).days
                 forecast_days = max(tage_bis_ziel + 1, 2)
 
+                # Neigung + Azimut aus den PV-Parametern extrahieren. Reihenfolge
+                # der Felder wie in solar_prognose.py (erst *_grad als Zahl, dann
+                # String-Mapping als Fallback), damit Tagesprognose und Kurzfrist
+                # dieselben Eingabewerte sehen.
+                ausrichtung_map = {
+                    "sued": 0, "süd": 0, "s": 0,
+                    "ost": -90, "o": -90, "e": -90,
+                    "west": 90, "w": 90,
+                    "nord": 180, "n": 180,
+                    "suedost": -45, "südost": -45, "so": -45, "se": -45,
+                    "suedwest": 45, "südwest": 45, "sw": 45,
+                    "nordost": -135, "no": -135, "ne": -135,
+                    "nordwest": 135, "nw": 135,
+                }
+                p0 = aktive_invs[0].parameter or {}
+                neigung_raw = p0.get("neigung_grad", p0.get("neigung", 35))
+                ausrichtung_raw = p0.get("ausrichtung_grad", p0.get("ausrichtung", 0))
+                if isinstance(ausrichtung_raw, str):
+                    ausrichtung_raw = ausrichtung_map.get(ausrichtung_raw.lower(), 0)
+
                 prognose = await get_solar_prognose(
                     latitude=anlage.latitude,
                     longitude=anlage.longitude,
                     kwp=total_kwp,
-                    neigung=aktive_invs[0].parameter.get("neigung", 35) if aktive_invs[0].parameter else 35,
-                    ausrichtung=aktive_invs[0].parameter.get("ausrichtung", 0) if aktive_invs[0].parameter else 0,
+                    neigung=int(neigung_raw),
+                    ausrichtung=int(ausrichtung_raw),
                     days=forecast_days,
                     system_losses=system_losses,
                 )
