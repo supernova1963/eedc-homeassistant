@@ -82,3 +82,25 @@ html.dark .recharts-legend-item-text {
     display: none;
   }
 }
+
+/* Energiefluss — CSS-animierte Stromfluss-Linien im Lite-Modus.
+   Ersetzt die SMIL-Partikel (die auf Mobile-Safari ruckelten) durch einen
+   GPU-beschleunigten, Browser-nativen Dashoffset-Fluss analog zu
+   LuminaCard / Tom's STATS Card. `--flow-duration` wird pro Linie als
+   Inline-Style gesetzt (schneller Fluss bei höherer Leistung). */
+@keyframes flow-dash {
+  to { stroke-dashoffset: -28; }
+}
+.flow-line {
+  stroke-dasharray: 10 18;
+  animation: flow-dash var(--flow-duration, 2s) linear infinite;
+}
+.flow-line--reverse {
+  animation-direction: reverse;
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-line {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}

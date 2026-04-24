@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Verbessert
+
+- **enhance(live/energiefluss): Fließende Strom-Linien im Lite-Modus (Forum dietmar1968)** — Nach dem Entfernen der SMIL-Partikel in v3.19.4 (die auf Mobile-Safari die Hauptruckel-Ursache waren) fehlte Dietmar die optische Visualisierung des Stromflusses. Jetzt zeichnet der Lite-Modus auf jeder aktiven Verbindungs-Kern-Linie einen CSS-animierten `stroke-dashoffset`-Fluss — derselbe Ansatz wie in LuminaCard und Tom's STATS Card. GPU-beschleunigt, Browser-nativ, kein SMIL-Overhead: Linien fließen deutlich sichtbar zur korrekten Seite (Quellen → Haus, Haus → Senken per `animation-direction: reverse`), Geschwindigkeit skaliert mit der Leistung (höhere kW = schnellerer Fluss, über CSS-Custom-Property `--flow-duration` pro Linie). iOS-Nutzer mit „Bewegung reduzieren" erhalten über `@media (prefers-reduced-motion: reduce)` automatisch statische Linien. Der Effekt-Modus bleibt unverändert — dort liefern die SMIL-Partikel weiterhin den vollen Visual-Wumms.
+
 ### Bugfixes
 
 - **fix(tagesverlauf): Börsenpreis-Overlay für die frühen Morgenstunden erschien nicht (#147 Safi105)** — Im Live-Dashboard-Tagesverlauf fehlte die gepunktete Börsenpreis-Linie von 00:00 bis zum ersten Datenpunkt des Tages (z.B. 02:00). Zwei Ursachen:
