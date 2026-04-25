@@ -5,8 +5,9 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { Card } from '../../components/ui'
+import { Card, CollapsibleSection } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
+import { EnergieprofilTageTabelleEmbedded } from '../../components/energieprofil/EnergieprofilTageTabelle'
 import {
   energieProfilApi,
   type MonatsAuswertung, type HeatmapZelle, type PeakStunde,
@@ -263,86 +264,67 @@ export function EnergieprofilMonat({ anlageId }: Props) {
 
           {/* Börsenpreis / Negativpreis (§51 EEG) — nur wenn Daten vorhanden */}
           {data.negative_preis_stunden != null && data.negative_preis_stunden > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <KpiCard
-                label="Neg. Börsenpreis"
-                value={`${data.negative_preis_stunden} h`}
-                color="text-amber-600 dark:text-amber-400"
-              />
-              <KpiCard
-                label="Einspeisung bei neg. Preis"
-                value={fmt1(data.einspeisung_neg_preis_kwh, 'kWh')}
-                color="text-amber-600 dark:text-amber-400"
-              />
-              <KpiCard
-                label="Börsenpreis Ø"
-                value={data.boersenpreis_avg_cent != null ? `${data.boersenpreis_avg_cent.toFixed(1)} ct` : '—'}
-              />
-            </div>
+            <CollapsibleSection storageKey="monat-boersenpreis" title="Börsenpreis (§51 EEG)" defaultOpen>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <KpiCard
+                  label="Neg. Börsenpreis"
+                  value={`${data.negative_preis_stunden} h`}
+                  color="text-amber-600 dark:text-amber-400"
+                />
+                <KpiCard
+                  label="Einspeisung bei neg. Preis"
+                  value={fmt1(data.einspeisung_neg_preis_kwh, 'kWh')}
+                  color="text-amber-600 dark:text-amber-400"
+                />
+                <KpiCard
+                  label="Börsenpreis Ø"
+                  value={data.boersenpreis_avg_cent != null ? `${data.boersenpreis_avg_cent.toFixed(1)} ct` : '—'}
+                />
+              </div>
+            </CollapsibleSection>
           )}
 
           {/* Kategorien-Leiste */}
           {data.kategorien.length > 0 && (
-            <Card>
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Erzeugung &amp; Verbrauch nach Kategorie</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {data.kategorien.map(k => (
-                    <KategorieBadge key={k.kategorie} eintrag={k} />
-                  ))}
-                </div>
+            <CollapsibleSection storageKey="monat-kategorien" title="Erzeugung & Verbrauch nach Kategorie" defaultOpen>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {data.kategorien.map(k => (
+                  <KategorieBadge key={k.kategorie} eintrag={k} />
+                ))}
               </div>
-            </Card>
+            </CollapsibleSection>
           )}
 
-          {/* Geräte-Tabelle */}
-          {data.komponenten.length > 0 && (
-            <Card>
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Einzelne Geräte</h3>
-                <KomponentenTabelle eintraege={data.komponenten} />
-              </div>
-            </Card>
-          )}
-
-          {/* Typisches Tagesprofil */}
-          {data.typisches_tagesprofil.length > 0 && (
-            <Card>
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Typisches Tagesprofil — Ø {monatLabel}</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Stündlicher Mittelwert aus {data.tage_mit_daten} Tagen. Basis für Verbrauchs- und PV-Prognose.
-                </p>
-                <TagesprofilChart daten={data.typisches_tagesprofil} />
-              </div>
-            </Card>
-          )}
+          {/* Tage des Monats — Detail-Tabelle (Issue #148) */}
+          <CollapsibleSection storageKey="monat-tage-tabelle" title={`Tage des Monats — ${monatLabel}`} defaultOpen>
+            <EnergieprofilTageTabelleEmbedded anlageId={anlageId} jahr={jahr} monat={monat} />
+          </CollapsibleSection>
 
           {/* Heatmap */}
-          <Card>
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Heatmap: {METRIK_OPTIONEN.find(o => o.key === metrik)!.label} — {monatLabel}
-                </h3>
-                <div className="flex flex-wrap gap-1">
-                  {METRIK_OPTIONEN.map(opt => (
-                    <button
-                      type="button"
-                      key={opt.key}
-                      onClick={() => setMetrik(opt.key)}
-                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                        metrik === opt.key
-                          ? 'bg-primary-600 text-white border-primary-600'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+          <CollapsibleSection
+            storageKey="monat-heatmap"
+            title={`Heatmap: ${METRIK_OPTIONEN.find(o => o.key === metrik)!.label} — ${monatLabel}`}
+            defaultOpen
+            action={
+              <div className="flex flex-wrap gap-1">
+                {METRIK_OPTIONEN.map(opt => (
+                  <button
+                    type="button"
+                    key={opt.key}
+                    onClick={() => setMetrik(opt.key)}
+                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                      metrik === opt.key
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
-
+            }
+          >
+            <div className="space-y-3">
               <Heatmap
                 tageImMonat={data.tage_im_monat}
                 matrix={matrix}
@@ -367,23 +349,46 @@ export function EnergieprofilMonat({ anlageId }: Props) {
                 <span>{maxWert.toFixed(1)} kW</span>
               </div>
             </div>
-          </Card>
+          </CollapsibleSection>
+
+          {/* Geräte-Tabelle */}
+          {data.komponenten.length > 0 && (
+            <CollapsibleSection storageKey="monat-geraete" title="Einzelne Geräte" defaultOpen={false}>
+              <KomponentenTabelle eintraege={data.komponenten} />
+            </CollapsibleSection>
+          )}
+
+          {/* Typisches Tagesprofil */}
+          {data.typisches_tagesprofil.length > 0 && (
+            <CollapsibleSection
+              storageKey="monat-typisches-tagesprofil"
+              title={`Typisches Tagesprofil — Ø ${monatLabel}`}
+              defaultOpen={false}
+            >
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                Stündlicher Mittelwert aus {data.tage_mit_daten} Tagen. Basis für Verbrauchs- und PV-Prognose.
+              </p>
+              <TagesprofilChart daten={data.typisches_tagesprofil} />
+            </CollapsibleSection>
+          )}
 
           {/* Peaks */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <PeakListe
-              titel="Top Netzbezug-Stunden"
-              hinweis="Spitzenstunden für Tarif-Optimierung"
-              eintraege={data.peak_netzbezug}
-              farbe="text-orange-600 dark:text-orange-400"
-            />
-            <PeakListe
-              titel="Top Einspeise-Stunden"
-              hinweis="PV-Spitzen, ggf. Batterie früher laden"
-              eintraege={data.peak_einspeisung}
-              farbe="text-blue-600 dark:text-blue-400"
-            />
-          </div>
+          <CollapsibleSection storageKey="monat-peaks" title="Top-Stunden (Bezug + Einspeisung)" defaultOpen={false}>
+            <div className="grid md:grid-cols-2 gap-4">
+              <PeakListe
+                titel="Top Netzbezug-Stunden"
+                hinweis="Spitzenstunden für Tarif-Optimierung"
+                eintraege={data.peak_netzbezug}
+                farbe="text-orange-600 dark:text-orange-400"
+              />
+              <PeakListe
+                titel="Top Einspeise-Stunden"
+                hinweis="PV-Spitzen, ggf. Batterie früher laden"
+                eintraege={data.peak_einspeisung}
+                farbe="text-blue-600 dark:text-blue-400"
+              />
+            </div>
+          </CollapsibleSection>
         </>
       )}
     </div>

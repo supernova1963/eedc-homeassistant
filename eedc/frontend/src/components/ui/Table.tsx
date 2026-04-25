@@ -53,9 +53,20 @@ export function TableHeader({ children, className = '' }: { children: ReactNode;
   )
 }
 
-export function TableCell({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function TableCell({
+  children,
+  className = '',
+  style,
+}: {
+  children: ReactNode
+  className?: string
+  style?: React.CSSProperties
+}) {
   return (
-    <td className={`px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap ${className}`}>
+    <td
+      className={`px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap ${className}`}
+      style={style}
+    >
       {children}
     </td>
   )
