@@ -93,6 +93,7 @@ export interface MonatsabschlussInput {
   // Bedingte Basis-Felder
   netzbezug_durchschnittspreis_cent?: number | null
   kraftstoffpreis_euro?: number | null
+  gaspreis_cent_kwh?: number | null
   // Optionale manuelle Felder
   sonderkosten_euro?: number | null
   sonderkosten_beschreibung?: string | null

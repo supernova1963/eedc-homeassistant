@@ -123,6 +123,7 @@ export interface Monatsdaten {
   batterie_ladepreis_cent?: number
   netzbezug_durchschnittspreis_cent?: number
   kraftstoffpreis_euro?: number
+  gaspreis_cent_kwh?: number
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
   durchschnittstemperatur?: number

@@ -1076,14 +1076,16 @@ async def get_finanz_prognose(
     # ALTERNATIVKOSTEN-PARAMETER LADEN
     # =====================================================================
 
-    # Wärmepumpe: Alter Energieträger (Gas/Öl) Preis
+    # Wärmepumpe: Alter Energieträger (Gas/Öl) Preis + fixe Zusatzkosten
     wp_alter_preis_cent = 10.0  # Default: 10 ct/kWh Gas
     wp_alter_wirkungsgrad = 0.90  # Gasheizung ~90% Wirkungsgrad
+    wp_alternativ_zusatzkosten_jahr = 0.0  # Schornsteinfeger, Wartung, Grundpreis
     for wp in waermepumpen:
         if wp.parameter:
             wp_alter_preis_cent = wp.parameter.get("alter_preis_cent_kwh", 10.0)
             if wp.parameter.get("alter_energietraeger") == "oel":
                 wp_alter_wirkungsgrad = 0.85  # Öl etwas schlechter
+            wp_alternativ_zusatzkosten_jahr += wp.parameter.get("alternativ_zusatzkosten_jahr", 0) or 0
 
     # E-Auto: Benzin-Vergleich
     eauto_benzinpreis = 1.65  # €/L Default
@@ -1111,8 +1113,9 @@ async def get_finanz_prognose(
             bisherige_ertraege += md.eigenverbrauch_kwh * md_preis / 100
 
     # Wärmepumpe Alternativkosten-Ersparnis
-    # Ersparnis = Gas-Kosten (was es kosten würde) - WP-Stromkosten
+    # Ersparnis = Gas-Kosten (was es kosten würde) + fixe Zusatzkosten - WP-Stromkosten
     gesamt_wp_thermisch = 0.0
+    wp_monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id:
@@ -1121,14 +1124,24 @@ async def get_finanz_prognose(
                 strom = daten.get("stromverbrauch_kwh", 0)
                 thermisch = heiz + ww
                 gesamt_wp_thermisch += thermisch
+                # Monatspreis: Monatsdaten.gaspreis_cent_kwh → Fallback statischer Parameter
+                md = monatsdaten_dict.get((jahr, monat))
+                monats_gaspreis = (
+                    md.gaspreis_cent_kwh
+                    if md and md.gaspreis_cent_kwh is not None
+                    else wp_alter_preis_cent
+                )
                 # Gas-Alternative: thermisch / Wirkungsgrad * Preis
-                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * wp_alter_preis_cent / 100
+                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * monats_gaspreis / 100
                 # WP-Stromkosten (nur Netzanteil, PV-Anteil ist bereits in EV-Ersparnis)
                 # Annahme: ca. 50% aus PV (konservativ)
                 wp_netz_anteil = 0.5
                 wp_stromkosten_netz = strom * wp_netz_anteil * wp_netzbezug_preis / 100
                 # Netto-Ersparnis (Gas-Alternative minus WP-Netzstrom)
                 bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
+                wp_monate_gezaehlt.add((jahr, monat))
+    # Fixe Zusatzkosten pro erfassten Monat (1/12 pro Monat)
+    bisherige_wp_ersparnis += wp_alternativ_zusatzkosten_jahr * len(wp_monate_gezaehlt) / 12
 
     # E-Auto Alternativkosten-Ersparnis
     # Ersparnis = Benzin-Kosten - Netzstrom-Kosten
@@ -1293,8 +1306,21 @@ async def get_finanz_prognose(
     if waermepumpen and gesamt_wp_thermisch > 0 and anzahl_monate_hist > 0:
         # Thermische Energie pro Jahr (hochgerechnet)
         wp_thermisch_jahr = gesamt_wp_thermisch / anzahl_monate_hist * 12
-        # Was es mit Gas kosten würde
-        gas_kosten_jahr = (wp_thermisch_jahr / wp_alter_wirkungsgrad) * wp_alter_preis_cent / 100
+        # Prognose-Gaspreis: Ø der historischen Monatspreise, Fallback statisch
+        hist_gaspreise = [
+            md.gaspreis_cent_kwh for md in monatsdaten
+            if md.gaspreis_cent_kwh is not None
+        ]
+        prognose_gaspreis = (
+            sum(hist_gaspreise) / len(hist_gaspreise)
+            if hist_gaspreise
+            else wp_alter_preis_cent
+        )
+        # Was es mit Gas kosten würde (Energiepreis + fixe Zusatzkosten)
+        gas_kosten_jahr = (
+            (wp_thermisch_jahr / wp_alter_wirkungsgrad) * prognose_gaspreis / 100
+            + wp_alternativ_zusatzkosten_jahr
+        )
         # WP-Stromkosten pro Jahr (nur Netzanteil, ca. 50%)
         wp_netz_anteil = 0.5
         wp_strom_jahr = jahres_wp_verbrauch

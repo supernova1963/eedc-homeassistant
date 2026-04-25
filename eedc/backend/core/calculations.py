@@ -308,6 +308,7 @@ def berechne_waermepumpe_einsparung(
     pv_anteil_prozent: float = 30.0,
     alter_energietraeger: str = "gas",  # "gas", "oel", "strom"
     alter_preis_cent_kwh: float = 12.0,
+    alternativ_zusatzkosten_jahr: float = 0.0,
 ) -> WaermepumpeEinsparung:
     """
     Berechnet jährliche Wärmepumpen-Einsparung vs. alte Heizung.
@@ -339,6 +340,8 @@ def berechne_waermepumpe_einsparung(
         pv_anteil_prozent: Anteil PV-Strom am WP-Verbrauch
         alter_energietraeger: "gas", "oel" oder "strom"
         alter_preis_cent_kwh: Preis des alten Energieträgers in Cent/kWh
+        alternativ_zusatzkosten_jahr: Fixe Jahreskosten der Alt-Heizung
+            (Schornsteinfeger, Wartung, Grundpreis Gaszähler etc.)
 
     Returns:
         WaermepumpeEinsparung: Berechnete Werte
@@ -390,8 +393,8 @@ def berechne_waermepumpe_einsparung(
 
     wp_kosten = wp_strom_kwh * netz_anteil * strompreis_cent / 100
 
-    # Alte Heizung Kosten
-    alte_kosten = gesamt_waermebedarf * alter_preis_cent_kwh / 100
+    # Alte Heizung Kosten: Energiepreis + fixe Zusatzkosten (Schornsteinfeger, Wartung etc.)
+    alte_kosten = gesamt_waermebedarf * alter_preis_cent_kwh / 100 + alternativ_zusatzkosten_jahr
 
     # CO2-Einsparung
     co2_faktoren = {

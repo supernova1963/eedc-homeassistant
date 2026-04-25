@@ -171,6 +171,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           pv_anteil_prozent: params.pv_anteil_prozent?.toString() || '30',
           alter_energietraeger: params.alter_energietraeger?.toString() || 'gas',
           alter_preis_cent_kwh: params.alter_preis_cent_kwh?.toString() || '12',
+          alternativ_zusatzkosten_jahr: params.alternativ_zusatzkosten_jahr?.toString() || '0',
           sg_ready: (params.sg_ready as boolean) ?? false,
         }
       case 'wallbox':
@@ -1012,6 +1013,16 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               value={paramData.pv_anteil_prozent as string}
               onChange={onChange}
               hint="Anteil des WP-Stroms aus PV"
+            />
+            <Input
+              label="Zusatzkosten Alt-Heizung (€/Jahr)"
+              name="param_alternativ_zusatzkosten_jahr"
+              type="number"
+              step="1"
+              min="0"
+              value={paramData.alternativ_zusatzkosten_jahr as string}
+              onChange={onChange}
+              hint="Schornsteinfeger, Wartung, Grundpreis Gaszähler etc."
             />
           </div>
 

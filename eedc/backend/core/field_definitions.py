@@ -53,6 +53,7 @@ BASIS_FELDER = [
 # bedingung_basis:
 #   "dynamischer_tarif" — Anlage hat einen dynamischen Stromtarif
 #   "hat_eauto"         — Anlage hat mindestens eine aktive E-Auto-Investition
+#   "hat_waermepumpe"   — Anlage hat mindestens eine aktive Wärmepumpe
 # =============================================================================
 
 BEDINGTE_BASIS_FELDER = [
@@ -69,6 +70,13 @@ BEDINGTE_BASIS_FELDER = [
         "label": "Ø Benzinpreis",
         "einheit": "€/L",
         "bedingung_basis": "hat_eauto",
+        "gruppe": "preise",
+    },
+    {
+        "feld": "gaspreis_cent_kwh",
+        "label": "Ø Gas-/Ölpreis",
+        "einheit": "ct/kWh",
+        "bedingung_basis": "hat_waermepumpe",
         "gruppe": "preise",
     },
 ]
@@ -500,6 +508,8 @@ def get_basis_felder(
         if bedingung == "dynamischer_tarif" and not hat_dynamischen_tarif:
             continue
         if bedingung == "hat_eauto" and "e-auto" not in typen:
+            continue
+        if bedingung == "hat_waermepumpe" and "waermepumpe" not in typen:
             continue
         # bedingung_basis nicht an Consumer durchreichen
         result.append({k: v for k, v in feld.items() if k != "bedingung_basis"})

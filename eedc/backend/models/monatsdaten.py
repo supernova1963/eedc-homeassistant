@@ -59,6 +59,10 @@ class Monatsdaten(Base):
     # Kraftstoffpreis: Monatsdurchschnitt aus EU Weekly Oil Bulletin (€/L)
     kraftstoffpreis_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Alter Energiepreis (Gas/Öl) für WP-Alternativvergleich (ct/kWh)
+    # Optional pro Monat — Fallback: Investition.parameter.alter_preis_cent_kwh
+    gaspreis_cent_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Wetterdaten (optional, von Open-Meteo)
     globalstrahlung_kwh_m2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sonnenstunden: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

@@ -235,23 +235,38 @@ async def calculate_anlage_sensors(
 
     wp_alter_preis_cent = 10.0
     wp_alter_wirkungsgrad = 0.90
+    wp_alternativ_zusatzkosten_jahr = 0.0
     for wp in waermepumpen:
         if wp.parameter:
             wp_alter_preis_cent = wp.parameter.get("alter_preis_cent_kwh", 10.0)
             if wp.parameter.get("alter_energietraeger") == "oel":
                 wp_alter_wirkungsgrad = 0.85
+            wp_alternativ_zusatzkosten_jahr += wp.parameter.get("alternativ_zusatzkosten_jahr", 0) or 0
+
+    # Monatsdaten-Dict für Monats-Gaspreis
+    md_by_periode = {(md.jahr, md.monat): md for md in monatsdaten}
 
     bisherige_wp_ersparnis = 0.0
+    wp_monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
-        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
+        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id:
                 thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
                     daten.get("warmwasser_kwh", 0) or 0
                 )
                 strom = daten.get("stromverbrauch_kwh", 0) or 0
-                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * wp_alter_preis_cent / 100
+                md = md_by_periode.get((jahr, monat))
+                monats_gaspreis = (
+                    md.gaspreis_cent_kwh
+                    if md and md.gaspreis_cent_kwh is not None
+                    else wp_alter_preis_cent
+                )
+                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * monats_gaspreis / 100
                 wp_stromkosten_netz = strom * 0.5 * netzbezug_preis_cent / 100
                 bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
+                wp_monate_gezaehlt.add((jahr, monat))
+    # Fixe Zusatzkosten (Schornsteinfeger, Wartung, Grundpreis) pro erfassten Monat
+    bisherige_wp_ersparnis += wp_alternativ_zusatzkosten_jahr * len(wp_monate_gezaehlt) / 12
 
     eauto_benzinpreis = 1.65
     eauto_vergleich_l_100km = 7.5
@@ -579,9 +594,27 @@ async def calculate_investition_sensors(
                     berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
             elif sensor.key == "wp_ersparnis_euro":
                 if gesamt_waerme > 0:
-                    alter_preis = params.get("alter_preis_cent_kwh", 12.0)
+                    fallback_alter_preis = params.get("alter_preis_cent_kwh", 12.0)
                     alter_wirkungsgrad = 0.85 if params.get("alter_energietraeger") == "oel" else 0.90
-                    alte_kosten = (gesamt_waerme / alter_wirkungsgrad) * alter_preis / 100
+                    zusatzkosten_jahr = params.get("alternativ_zusatzkosten_jahr", 0) or 0
+                    # Monatliche Gaspreise laden (Fallback: statischer Parameter)
+                    anlage_md_result = await db.execute(
+                        select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
+                    )
+                    anlage_md_dict = {
+                        (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
+                    }
+                    alte_kosten = 0.0
+                    for md in monatsdaten:
+                        d = md.verbrauch_daten or {}
+                        waerme = (d.get("heizenergie_kwh", 0) or 0) + (d.get("warmwasser_kwh", 0) or 0)
+                        amd = anlage_md_dict.get((md.jahr, md.monat))
+                        gp = (amd.gaspreis_cent_kwh
+                              if amd and amd.gaspreis_cent_kwh is not None
+                              else fallback_alter_preis)
+                        alte_kosten += (waerme / alter_wirkungsgrad) * gp / 100
+                    # Fixe Zusatzkosten anteilig
+                    alte_kosten += zusatzkosten_jahr * len(monatsdaten) / 12
                     wp_kosten = gesamt_strom * netzbezug_preis / 100
                     value = round(alte_kosten - wp_kosten, 2)
                     berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"

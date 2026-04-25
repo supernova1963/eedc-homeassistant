@@ -44,6 +44,7 @@ export interface MonatsdatenSubmitData {
   batterie_entladung_kwh?: number
   netzbezug_durchschnittspreis_cent?: number
   kraftstoffpreis_euro?: number
+  gaspreis_cent_kwh?: number
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
   durchschnittstemperatur?: number
@@ -159,6 +160,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     durchschnittstemperatur: monatsdaten?.durchschnittstemperatur?.toString() || '',
     netzbezug_durchschnittspreis_cent: monatsdaten?.netzbezug_durchschnittspreis_cent?.toString() || '',
     kraftstoffpreis_euro: monatsdaten?.kraftstoffpreis_euro?.toString() || '',
+    gaspreis_cent_kwh: monatsdaten?.gaspreis_cent_kwh?.toString() || '',
     sonderkosten_euro: monatsdaten?.sonderkosten_euro?.toString() || '',
     sonderkosten_beschreibung: monatsdaten?.sonderkosten_beschreibung || '',
     notizen: monatsdaten?.notizen || '',
@@ -475,6 +477,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         batterie_entladung_kwh: battEntladung,
         netzbezug_durchschnittspreis_cent: formData.netzbezug_durchschnittspreis_cent ? parseFloat(formData.netzbezug_durchschnittspreis_cent) : undefined,
         kraftstoffpreis_euro: formData.kraftstoffpreis_euro ? parseFloat(formData.kraftstoffpreis_euro) : undefined,
+        gaspreis_cent_kwh: formData.gaspreis_cent_kwh ? parseFloat(formData.gaspreis_cent_kwh) : undefined,
         globalstrahlung_kwh_m2: formData.globalstrahlung_kwh_m2 ? parseFloat(formData.globalstrahlung_kwh_m2) : undefined,
         sonnenstunden: formData.sonnenstunden ? parseFloat(formData.sonnenstunden) : undefined,
         durchschnittstemperatur: formData.durchschnittstemperatur ? parseFloat(formData.durchschnittstemperatur) : undefined,
@@ -585,6 +588,19 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               onChange={handleChange}
               placeholder="z.B. 1.85"
               hint="€/L — Monatsdurchschnitt für E-Auto-Vergleich"
+            />
+          )}
+          {hatWaermepumpe && (
+            <Input
+              label="Ø Gas-/Ölpreis"
+              name="gaspreis_cent_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.gaspreis_cent_kwh}
+              onChange={handleChange}
+              placeholder="z.B. 11.5"
+              hint="ct/kWh — Monatsdurchschnitt für WP-Vergleich"
             />
           )}
           {/* PV-Erzeugung: readonly wenn PV-Module mit Werten vorhanden, sonst editierbar (Legacy) */}
