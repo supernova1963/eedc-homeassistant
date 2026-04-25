@@ -158,7 +158,7 @@ async def aggregate_day(
     wetter_stunden = await _get_wetter_ist(anlage, datum, pv_module=pv_module_list)
 
     # ── SoC-History holen ─────────────────────────────────────────────────
-    soc_stunden = await _get_soc_history(anlage, sensor_mapping, datum)
+    soc_stunden = await _get_soc_history(anlage, sensor_mapping, datum, db)
 
     # ── Strompreis-Stundenwerte holen ─────────────────────────────────────
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
@@ -755,13 +755,18 @@ async def backfill_from_statistics(
     if netz_einspeisung_eid:
         all_entity_ids.add(netz_einspeisung_eid)
 
-    # SoC-Entities
+    # SoC-Entities — nur stationäre Speicher, sonst kontaminiert E-Auto-SoC
+    # die Vollzyklen-Berechnung der PV-Anlage.
     soc_entity: Optional[str] = None
     for inv_id, live in inv_live_map.items():
-        if live.get("soc"):
-            soc_entity = live["soc"]
-            all_entity_ids.add(soc_entity)
-            break  # Erstes SoC-Entity reicht
+        if not live.get("soc"):
+            continue
+        inv = investitionen.get(inv_id)
+        if inv is None or inv.typ != "speicher":
+            continue
+        soc_entity = live["soc"]
+        all_entity_ids.add(soc_entity)
+        break  # Erstes Speicher-SoC-Entity reicht
 
     if not all_entity_ids:
         return 0
@@ -1255,21 +1260,39 @@ async def _get_soc_history(
     anlage: Anlage,
     sensor_mapping: dict,
     datum: date,
+    db: AsyncSession,
 ) -> dict:
     """
-    Holt Batterie-SoC History für einen Tag.
+    Holt Batterie-SoC History für einen Tag — nur stationäre Speicher.
+
+    E-Auto-SoC darf hier NICHT enthalten sein, sonst kontaminiert er die
+    Batterie-Vollzyklen-Berechnung der PV-Anlage (E-Auto-ΔSoC ≠ Speicher-ΔSoC).
 
     Returns:
         {stunde: float (SoC %)}
     """
     from backend.core.config import HA_INTEGRATION_AVAILABLE
+    from backend.models.investition import Investition
 
     if not HA_INTEGRATION_AVAILABLE:
         return {}
 
-    # SoC-Entity-IDs aus sensor_mapping sammeln
+    # Speicher-IDs für diese Anlage holen, dann SoC-Entities filtern
+    inv_result = await db.execute(
+        select(Investition.id).where(
+            Investition.anlage_id == anlage.id,
+            Investition.typ == "speicher",
+        )
+    )
+    speicher_ids = {str(row) for row in inv_result.scalars().all()}
+
+    if not speicher_ids:
+        return {}
+
     soc_entities = []
     for key, val in sensor_mapping.get("investitionen", {}).items():
+        if str(key) not in speicher_ids:
+            continue
         if isinstance(val, dict) and val.get("live", {}).get("soc"):
             soc_entities.append(val["live"]["soc"])
 
