@@ -1184,6 +1184,7 @@ async def kraftstoffpreis_backfill_tages(
         "aktualisiert": info.get("aktualisiert", 0),
         "land": info.get("land", land),
         "hinweis": info.get("hinweis"),
+        "fehler": info.get("fehler"),
     }
 
 
@@ -1208,6 +1209,7 @@ async def kraftstoffpreis_backfill_monats(
         "aktualisiert": info.get("aktualisiert", 0),
         "land": info.get("land", land),
         "hinweis": info.get("hinweis"),
+        "fehler": info.get("fehler"),
     }
 
 
