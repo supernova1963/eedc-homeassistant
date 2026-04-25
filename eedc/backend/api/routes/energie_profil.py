@@ -1005,6 +1005,69 @@ async def reaggregate_heute():
     return {"status": "ok", "anlagen": results}
 
 
+@router.post("/{anlage_id}/reaggregate-tag")
+async def reaggregate_tag(
+    anlage_id: int,
+    datum: date = Query(..., description="Tag, der neu aggregiert werden soll"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Aggregiert einen einzelnen Tag für eine Anlage neu (Self-Service nach
+    Snapshot-Spike o. ä.).
+
+    `aggregate_day` macht intern delete + insert für Tagesprofil und
+    Zusammenfassung — der Aufruf ist also idempotent und sicher mehrfach
+    ausführbar.
+    """
+    from backend.services.energie_profil_service import aggregate_day
+
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    try:
+        zusammenfassung = await aggregate_day(anlage, datum, db, datenquelle="manuell")
+    except Exception as e:
+        logger.error(f"Reaggregate Anlage {anlage_id} {datum} FEHLER: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+    if zusammenfassung is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Aggregation für {datum} nicht möglich — keine Live-/MQTT-Daten gefunden.",
+        )
+
+    # Zählt Stunden mit echten Messwerten (nicht nur geschriebene None-Zeilen).
+    # `stunden_verfuegbar` aus der Zusammenfassung zählt alle 24 Slots auch
+    # wenn pv_kw=einspeisung_kw=netzbezug_kw=NULL — das wäre für die
+    # Erfolgsmeldung im Frontend irreführend.
+    from sqlalchemy import or_, func
+    messwerte_result = await db.execute(
+        select(func.count()).select_from(TagesEnergieProfil).where(
+            and_(
+                TagesEnergieProfil.anlage_id == anlage_id,
+                TagesEnergieProfil.datum == datum,
+                or_(
+                    TagesEnergieProfil.pv_kw.isnot(None),
+                    TagesEnergieProfil.einspeisung_kw.isnot(None),
+                    TagesEnergieProfil.netzbezug_kw.isnot(None),
+                    TagesEnergieProfil.verbrauch_kw.isnot(None),
+                ),
+            )
+        )
+    )
+    stunden_mit_messdaten = messwerte_result.scalar_one()
+
+    await db.commit()
+    return {
+        "status": "ok",
+        "datum": datum.isoformat(),
+        "stunden_verfuegbar": zusammenfassung.stunden_verfuegbar,
+        "stunden_mit_messdaten": stunden_mit_messdaten,
+    }
+
+
 @router.post("/{anlage_id}/vollbackfill")
 async def vollbackfill(
     anlage_id: int,
