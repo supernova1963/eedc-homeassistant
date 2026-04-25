@@ -30,7 +30,7 @@ from backend.services.wetter.utils import wetter_code_zu_symbol
 from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
-from backend.services.solar_forecast_service import fetch_gti_forecast
+from backend.services.solar_forecast_service import fetch_gti_forecast, _solar_noon_hour
 from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 
 logger = logging.getLogger(__name__)
@@ -156,13 +156,34 @@ class GenauigkeitsResponse(BaseModel):
 # Helpers
 # =============================================================================
 
-def _berechne_tageshaelfte(stundenprofil: List[StundenProfilEintrag]) -> TageshaelfteSchema:
-    """Teilt Stundenprofil in Vormittag (0–12) und Nachmittag (13–23).
+def _berechne_tageshaelfte(
+    stundenprofil: List[StundenProfilEintrag],
+    solar_noon: float,
+) -> TageshaelfteSchema:
+    """Splittet Stundenprofil an Solar Noon proportional (Backward-Slot-Konvention).
+
+    Slot ``stunde=h`` repräsentiert die Produktion im Intervall ``[h-1, h]``:
+    - Liegt das Intervall komplett vor Solar Noon → VM
+    - Liegt es komplett dahinter → NM
+    - Enthält es Solar Noon → proportional aufteilen (frac_vm = noon - (h-1))
 
     NULL-Stunden (z.B. IST-Lücken ohne Zähler, Issue #135) werden übersprungen.
     """
-    vm = sum(s.kw for s in stundenprofil if s.stunde <= 12 and s.kw is not None)
-    nm = sum(s.kw for s in stundenprofil if s.stunde > 12 and s.kw is not None)
+    vm = 0.0
+    nm = 0.0
+    for s in stundenprofil:
+        if s.kw is None:
+            continue
+        slot_start = s.stunde - 1
+        slot_end = s.stunde
+        if slot_end <= solar_noon:
+            vm += s.kw
+        elif slot_start >= solar_noon:
+            nm += s.kw
+        else:
+            frac_vm = max(0.0, min(1.0, solar_noon - slot_start))
+            vm += s.kw * frac_vm
+            nm += s.kw * (1 - frac_vm)
     return TageshaelfteSchema(
         vormittag_kwh=round(vm, 1),
         nachmittag_kwh=round(nm, 1),
@@ -470,14 +491,26 @@ async def get_prognosen_vergleich(
             eedc_uebermorgen_kwh = round(solcast_uebermorgen_kwh, 1) if solcast_uebermorgen_kwh is not None else None
 
     # ── Tageshälften (je 3 Einträge: heute, morgen, übermorgen) ──
-    om_ths = [_berechne_tageshaelfte(p) if p else None for p in openmeteo_tagesprofile]
-    eedc_ths = [_berechne_tageshaelfte(p) if p else None for p in eedc_tagesprofile]
+    # Solar Noon pro Tag (Equation of Time) — Split an astronomischer Tagesmitte,
+    # nicht an 12:00 Clockzeit. Konsistent zu solar_forecast_service.
+    solar_noons = [
+        _solar_noon_hour((heute + timedelta(days=d)).isoformat(), anlage.longitude)
+        for d in range(3)
+    ]
+    om_ths = [
+        _berechne_tageshaelfte(p, solar_noons[i]) if p else None
+        for i, p in enumerate(openmeteo_tagesprofile)
+    ]
+    eedc_ths = [
+        _berechne_tageshaelfte(p, solar_noons[i]) if p else None
+        for i, p in enumerate(eedc_tagesprofile)
+    ]
 
     # Solcast VM/NM pro Tag aus tage_voraus berechnen (Stundenwerte nur für heute vorhanden,
     # für Morgen/Übermorgen approximieren wir aus den 30-Min-Daten im SolcastForecast)
     sc_ths: list[Optional[TageshaelfteSchema]] = [None, None, None]
     if solcast_stundenprofil:
-        sc_ths[0] = _berechne_tageshaelfte(solcast_stundenprofil)
+        sc_ths[0] = _berechne_tageshaelfte(solcast_stundenprofil, solar_noons[0])
     # Für Morgen/Übermorgen: Solcast liefert nur Tageswerte, kein Stundenprofil
     # → VM/NM aus OpenMeteo-Verteilung schätzen (proportional)
     for day_idx in [1, 2]:
@@ -491,7 +524,7 @@ async def get_prognosen_vergleich(
                 nachmittag_kwh=round(sc_tag["kwh"] * (1 - vm_anteil), 1),
             )
 
-    ist_th = _berechne_tageshaelfte(ist_stundenprofil) if ist_stundenprofil else None
+    ist_th = _berechne_tageshaelfte(ist_stundenprofil, solar_noons[0]) if ist_stundenprofil else None
 
     # ── Solcast-Status ermitteln ──
     sc_status, sc_hinweis = get_solcast_status(anlage)
