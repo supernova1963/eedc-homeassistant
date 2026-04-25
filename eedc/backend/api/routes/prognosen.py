@@ -140,15 +140,25 @@ class PrognosenVergleichResponse(BaseModel):
 class GenauigkeitsEintrag(BaseModel):
     datum: str
     openmeteo_kwh: Optional[float] = None
+    eedc_kwh: Optional[float] = None
     solcast_kwh: Optional[float] = None
     ist_kwh: Optional[float] = None
 
 
 class GenauigkeitsResponse(BaseModel):
-    """Response für Genauigkeits-Tracking."""
+    """Response für Genauigkeits-Tracking.
+
+    MAE = Mean Absolute Error (mit abs()) — Streuung
+    MBE = Mean Bias Error (ohne abs(), vorzeichenbehaftet) — systematischer Bias
+    Beide in Prozent vom IST.
+    """
     tage: List[GenauigkeitsEintrag] = []
     openmeteo_mae_prozent: Optional[float] = None
+    openmeteo_mbe_prozent: Optional[float] = None
+    eedc_mae_prozent: Optional[float] = None
+    eedc_mbe_prozent: Optional[float] = None
     solcast_mae_prozent: Optional[float] = None
+    solcast_mbe_prozent: Optional[float] = None
     anzahl_tage: int = 0
 
 
@@ -604,9 +614,14 @@ async def get_prognosen_genauigkeit(
     )
     tage_daten = result.scalars().all()
 
+    # Lernfaktor + Basis-Quelle (openmeteo oder solcast) für EEDC-Genauigkeit
+    prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
+    lernfaktor = await _get_lernfaktor(anlage_id, db, quelle=prognose_basis)
+
     eintraege = []
-    om_errors = []
-    sc_errors = []
+    om_signed = []  # vorzeichenbehaftete relative Fehler (Prognose - IST) / IST * 100
+    eedc_signed = []
+    sc_signed = []
 
     # Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
     _NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
@@ -619,22 +634,42 @@ async def get_prognosen_genauigkeit(
                 if v > 0 and k not in _NICHT_PV
             )
 
+        # EEDC = Basis × Lernfaktor (historisch — Lernfaktor kalibriert auf aktuellen Stand)
+        eedc_kwh = None
+        if lernfaktor is not None:
+            basis_kwh = tz.solcast_prognose_kwh if prognose_basis == "solcast" else tz.pv_prognose_kwh
+            if basis_kwh and basis_kwh > 0:
+                eedc_kwh = basis_kwh * lernfaktor
+
         eintraege.append(GenauigkeitsEintrag(
             datum=tz.datum.isoformat(),
             openmeteo_kwh=round(tz.pv_prognose_kwh, 1) if tz.pv_prognose_kwh is not None else None,
+            eedc_kwh=round(eedc_kwh, 1) if eedc_kwh is not None else None,
             solcast_kwh=round(tz.solcast_prognose_kwh, 1) if tz.solcast_prognose_kwh is not None else None,
             ist_kwh=round(ist_kwh, 1) if ist_kwh is not None else None,
         ))
 
         if ist_kwh is not None and ist_kwh > 0.5:
             if tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
-                om_errors.append(abs(tz.pv_prognose_kwh - ist_kwh) / ist_kwh * 100)
+                om_signed.append((tz.pv_prognose_kwh - ist_kwh) / ist_kwh * 100)
+            if eedc_kwh is not None and eedc_kwh > 0:
+                eedc_signed.append((eedc_kwh - ist_kwh) / ist_kwh * 100)
             if tz.solcast_prognose_kwh and tz.solcast_prognose_kwh > 0:
-                sc_errors.append(abs(tz.solcast_prognose_kwh - ist_kwh) / ist_kwh * 100)
+                sc_signed.append((tz.solcast_prognose_kwh - ist_kwh) / ist_kwh * 100)
+
+    def _mae(xs):
+        return round(sum(abs(x) for x in xs) / len(xs), 1) if xs else None
+
+    def _mbe(xs):
+        return round(sum(xs) / len(xs), 1) if xs else None
 
     return GenauigkeitsResponse(
         tage=eintraege,
-        openmeteo_mae_prozent=round(sum(om_errors) / len(om_errors), 1) if om_errors else None,
-        solcast_mae_prozent=round(sum(sc_errors) / len(sc_errors), 1) if sc_errors else None,
+        openmeteo_mae_prozent=_mae(om_signed),
+        openmeteo_mbe_prozent=_mbe(om_signed),
+        eedc_mae_prozent=_mae(eedc_signed),
+        eedc_mbe_prozent=_mbe(eedc_signed),
+        solcast_mae_prozent=_mae(sc_signed),
+        solcast_mbe_prozent=_mbe(sc_signed),
         anzahl_tage=len(eintraege),
     )

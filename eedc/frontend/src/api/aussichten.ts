@@ -312,6 +312,7 @@ export interface PrognosenVergleich {
 export interface GenauigkeitsEintrag {
   datum: string
   openmeteo_kwh: number | null
+  eedc_kwh: number | null
   solcast_kwh: number | null
   ist_kwh: number | null
 }
@@ -319,7 +320,11 @@ export interface GenauigkeitsEintrag {
 export interface GenauigkeitsResponse {
   tage: GenauigkeitsEintrag[]
   openmeteo_mae_prozent: number | null
+  openmeteo_mbe_prozent: number | null
+  eedc_mae_prozent: number | null
+  eedc_mbe_prozent: number | null
   solcast_mae_prozent: number | null
+  solcast_mbe_prozent: number | null
   anzahl_tage: number
 }
 

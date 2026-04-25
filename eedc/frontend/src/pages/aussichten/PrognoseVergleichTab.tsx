@@ -145,16 +145,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                     <span>OpenMeteo</span>
                   </SimpleTooltip>
                 </th>
-                {hasEedc && (
-                  <th className="text-right py-2 px-3 font-medium text-orange-500">
-                    <SimpleTooltip text={lf != null
-                      ? `EEDC: ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})`
-                      : `EEDC: ${progBasisLabel}-Rohwerte (Lernfaktor noch nicht verfügbar)`
-                    }>
-                      <span>EEDC {lf != null && <span className="text-xs font-normal">×{lf.toFixed(2)}</span>}</span>
-                    </SimpleTooltip>
-                  </th>
-                )}
+                <th className={`text-right py-2 px-3 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'}`}>
+                  <SimpleTooltip text={hasEedc && lf != null
+                    ? `EEDC: ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})`
+                    : `EEDC: Lernfaktor noch nicht verfügbar — siehe Hinweis unten`
+                  }>
+                    <span>EEDC {hasEedc && lf != null && <span className="text-xs font-normal">×{lf.toFixed(2)}</span>}</span>
+                  </SimpleTooltip>
+                </th>
                 {hasSolcast && (
                   <th className="text-right py-2 px-3 font-medium text-blue-500">
                     <SimpleTooltip text={`Solcast: Satellitenbasierte PV-Prognose mit Konfidenzband, 7 Tage (${data.solcast_quelle === 'solcast_api' ? 'API' : 'HA-Sensor'})`}>
@@ -174,7 +172,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
                 <td className="py-2 px-3 font-medium text-gray-900 dark:text-white">Heute</td>
                 <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_heute_kwh)}</td>
-                {hasEedc && <td className="py-2 px-3 text-right font-mono font-semibold text-orange-500">{fmtKwh(data.eedc_heute_kwh)}</td>}
+                <td className={`py-2 px-3 text-right font-mono ${hasEedc ? 'font-semibold text-orange-500' : 'text-gray-400'}`}>{hasEedc ? fmtKwh(data.eedc_heute_kwh) : '—'}</td>
                 {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwhBand(data.solcast_heute_kwh, data.solcast_p10_kwh, data.solcast_p90_kwh)}</td>}
                 <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
                   {fmtKwh(data.ist_heute_kwh)}
@@ -193,7 +191,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   </SimpleTooltip>
                 </td>
                 <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_om_kwh)}</td>
-                {hasEedc && <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_eedc_kwh)}</td>}
+                <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtKwh(data.verbleibend_eedc_kwh) : <span className="text-gray-400">—</span>}</td>
                 {hasSolcast && <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_solcast_kwh)}</td>}
                 <td className="py-2 px-3 text-right font-mono text-emerald-500">{fmtKwh(data.verbleibend_kwh)}</td>
               </tr>
@@ -201,7 +199,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-1 px-3 text-gray-400 text-xs">↳ VM / NM</td>
                 <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.openmeteo_tageshaelften?.[0])}</td>
-                {hasEedc && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.eedc_tageshaelften?.[0])}</td>}
+                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[0]) : <span className="text-gray-400">—</span>}</td>
                 {hasSolcast && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.solcast_tageshaelften?.[0])}</td>}
                 <td className="py-1 px-3 text-right font-mono text-xs text-green-500">{fmtVmNm(data.ist_tageshaelfte)}</td>
               </tr>
@@ -209,7 +207,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-3 font-medium text-gray-900 dark:text-white">Morgen</td>
                 <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_morgen_kwh)}</td>
-                {hasEedc && <td className="py-2 px-3 text-right font-mono text-orange-500">{fmtKwh(data.eedc_morgen_kwh)}</td>}
+                <td className={`py-2 px-3 text-right font-mono ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>{hasEedc ? fmtKwh(data.eedc_morgen_kwh) : '—'}</td>
                 {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwhBand(data.solcast_morgen_kwh, data.solcast_morgen_p10_kwh, data.solcast_morgen_p90_kwh)}</td>}
                 <td className="py-2 px-3 text-right text-gray-400">—</td>
               </tr>
@@ -217,7 +215,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-1 px-3 text-gray-400 text-xs">↳ VM / NM</td>
                 <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.openmeteo_tageshaelften?.[1])}</td>
-                {hasEedc && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.eedc_tageshaelften?.[1])}</td>}
+                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[1]) : <span className="text-gray-400">—</span>}</td>
                 {hasSolcast && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.solcast_tageshaelften?.[1])}</td>}
                 <td className="py-1 px-3"></td>
               </tr>
@@ -225,7 +223,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-3 font-medium text-gray-900 dark:text-white">Übermorgen</td>
                 <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_uebermorgen_kwh)}</td>
-                {hasEedc && <td className="py-2 px-3 text-right font-mono text-orange-500">{fmtKwh(data.eedc_uebermorgen_kwh)}</td>}
+                <td className={`py-2 px-3 text-right font-mono ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>{hasEedc ? fmtKwh(data.eedc_uebermorgen_kwh) : '—'}</td>
                 {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.solcast_uebermorgen_kwh)}</td>}
                 <td className="py-2 px-3 text-right text-gray-400">—</td>
               </tr>
@@ -233,7 +231,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr>
                 <td className="py-1 px-3 text-gray-400 text-xs">↳ VM / NM</td>
                 <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.openmeteo_tageshaelften?.[2])}</td>
-                {hasEedc && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.eedc_tageshaelften?.[2])}</td>}
+                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[2]) : <span className="text-gray-400">—</span>}</td>
                 {hasSolcast && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.solcast_tageshaelften?.[2])}</td>}
                 <td className="py-1 px-3"></td>
               </tr>
@@ -314,7 +312,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-1.5 px-2 font-medium text-gray-500">Std.</th>
                 <th className="text-right py-1.5 px-2 font-medium text-yellow-500">OM</th>
-                {hasEedc && <th className="text-right py-1.5 px-2 font-medium text-orange-500">EEDC</th>}
+                <th className={`text-right py-1.5 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>EEDC</th>
                 {hasSolcast && <th className="text-right py-1.5 px-2 font-medium text-blue-500">SC</th>}
                 <th className="text-right py-1.5 px-2 font-medium text-green-500">IST</th>
               </tr>
@@ -331,12 +329,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                       {row.openmeteo.toFixed(2)}
                       {istVal !== null && <DevBadge prognose={row.openmeteo} ist={istVal} />}
                     </td>
-                    {hasEedc && (
-                      <td className="py-1 px-2 text-right font-mono text-orange-500">
-                        {row.eedc?.toFixed(2) ?? '—'}
-                        {istVal !== null && row.eedc !== null && <DevBadge prognose={row.eedc} ist={istVal} />}
-                      </td>
-                    )}
+                    <td className={`py-1 px-2 text-right font-mono ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {hasEedc ? (
+                        <>
+                          {row.eedc?.toFixed(2) ?? '—'}
+                          {istVal !== null && row.eedc !== null && <DevBadge prognose={row.eedc} ist={istVal} />}
+                        </>
+                      ) : '—'}
+                    </td>
                     {hasSolcast && (
                       <td className="py-1 px-2 text-right font-mono">
                         {row.solcast.toFixed(2)}
@@ -363,12 +363,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                       {omSum.toFixed(1)}
                       {istSum !== null && <DevBadge prognose={omSum} ist={istSum} />}
                     </td>
-                    {hasEedc && (
-                      <td className="py-1.5 px-2 text-right font-mono text-orange-500">
-                        {eedcSum.toFixed(1)}
-                        {istSum !== null && <DevBadge prognose={eedcSum} ist={istSum} />}
-                      </td>
-                    )}
+                    <td className={`py-1.5 px-2 text-right font-mono ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {hasEedc ? (
+                        <>
+                          {eedcSum.toFixed(1)}
+                          {istSum !== null && <DevBadge prognose={eedcSum} ist={istSum} />}
+                        </>
+                      ) : '—'}
+                    </td>
                     {hasSolcast && (
                       <td className="py-1.5 px-2 text-right font-mono text-blue-500">
                         {scSum.toFixed(1)}
@@ -393,7 +395,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-2 px-2 font-medium text-gray-500">Datum</th>
                 <th className="text-right py-2 px-2 font-medium text-yellow-500">OM</th>
-                {hasEedc && <th className="text-right py-2 px-2 font-medium text-orange-500">EEDC</th>}
+                <th className={`text-right py-2 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>EEDC</th>
                 {hasSolcast && <th className="text-right py-2 px-2 font-medium text-blue-500">Solcast</th>}
                 <th className="text-right py-2 px-2 font-medium text-green-500">IST</th>
                 <th className="text-center py-2 px-2 font-medium text-gray-500">Wetter</th>
@@ -413,12 +415,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                       {tag.om_kwh.toFixed(1)}
                       {devRef !== null && <DevBadge prognose={tag.om_kwh} ist={devRef} />}
                     </td>
-                    {hasEedc && (
-                      <td className="py-2 px-2 text-right font-mono text-orange-500">
-                        {tag.eedc_kwh?.toFixed(1) ?? '—'}
-                        {devRef !== null && tag.eedc_kwh !== null && <DevBadge prognose={tag.eedc_kwh} ist={devRef} />}
-                      </td>
-                    )}
+                    <td className={`py-2 px-2 text-right font-mono ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {hasEedc ? (
+                        <>
+                          {tag.eedc_kwh?.toFixed(1) ?? '—'}
+                          {devRef !== null && tag.eedc_kwh !== null && <DevBadge prognose={tag.eedc_kwh} ist={devRef} />}
+                        </>
+                      ) : '—'}
+                    </td>
                     {hasSolcast && (
                       <td className="py-2 px-2 text-right font-mono">
                         {tag.sc_kwh !== null ? (
@@ -453,9 +457,16 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Genauigkeits-Tracking <span className="text-sm font-normal text-gray-500 ml-2">(letzte {genauigkeit.anzahl_tage} Tage)</span>
           </h3>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <MAECard label="OpenMeteo" mae={genauigkeit.openmeteo_mae_prozent} color="text-yellow-500" />
-            <MAECard label="Solcast" mae={genauigkeit.solcast_mae_prozent} color="text-blue-500" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <MaeMbeCard label="OpenMeteo" mae={genauigkeit.openmeteo_mae_prozent} mbe={genauigkeit.openmeteo_mbe_prozent} color="text-yellow-500" />
+            <MaeMbeCard
+              label="EEDC"
+              mae={genauigkeit.eedc_mae_prozent}
+              mbe={genauigkeit.eedc_mbe_prozent}
+              color="text-orange-500"
+              hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined}
+            />
+            <MaeMbeCard label="Solcast" mae={genauigkeit.solcast_mae_prozent} mbe={genauigkeit.solcast_mbe_prozent} color="text-blue-500" />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -464,7 +475,12 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   <th className="text-left py-2 px-3 font-medium text-gray-500">Datum</th>
                   <th className="text-right py-2 px-3 font-medium text-green-500">IST</th>
                   <th className="text-right py-2 px-3 font-medium text-yellow-500">OpenMeteo</th>
-                  {genauigkeit.solcast_mae_prozent !== null && <th className="text-right py-2 px-3 font-medium text-blue-500">Solcast</th>}
+                  <th className={`text-right py-2 px-3 font-medium ${lf != null ? 'text-orange-500' : 'text-gray-400'}`}>
+                    <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `EEDC = ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)}`}>
+                      <span>EEDC</span>
+                    </SimpleTooltip>
+                  </th>
+                  <th className="text-right py-2 px-3 font-medium text-blue-500">Solcast</th>
                 </tr>
               </thead>
               <tbody>
@@ -473,9 +489,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                     <td className="py-2 px-3 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{tag.ist_kwh !== null ? tag.ist_kwh.toFixed(1) : '—'}</td>
                     <td className="py-2 px-3 text-right font-mono">{tag.openmeteo_kwh !== null ? <AbweichungCell prognose={tag.openmeteo_kwh} ist={tag.ist_kwh} /> : '—'}</td>
-                    {genauigkeit.solcast_mae_prozent !== null && (
-                      <td className="py-2 px-3 text-right font-mono">{tag.solcast_kwh !== null ? <AbweichungCell prognose={tag.solcast_kwh} ist={tag.ist_kwh} /> : '—'}</td>
-                    )}
+                    <td className="py-2 px-3 text-right font-mono">{tag.eedc_kwh !== null ? <AbweichungCell prognose={tag.eedc_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400">—</span>}</td>
+                    <td className="py-2 px-3 text-right font-mono">{tag.solcast_kwh !== null ? <AbweichungCell prognose={tag.solcast_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -554,11 +569,34 @@ function IntegrationItem({ icon, title, text }: { icon: JSX.Element; title: stri
   )
 }
 
-function MAECard({ label, mae, color }: { label: string; mae: number | null; color: string }) {
+function MaeMbeCard({ label, mae, mbe, color, hint }: {
+  label: string
+  mae: number | null
+  mbe: number | null
+  color: string
+  hint?: string
+}) {
+  const fmtMbe = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
   return (
     <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label} MAE</div>
-      <div className={`text-xl font-bold ${color}`}>{mae !== null ? `${mae.toFixed(0)}%` : '—'}</div>
+      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</div>
+      <div className="flex items-baseline justify-center gap-3">
+        <SimpleTooltip text="MAE = Mean Absolute Error: durchschnittliche Abweichung |Prognose − IST| in % — Streuung">
+          <div>
+            <span className="text-xs text-gray-500 mr-1">MAE</span>
+            <span className={`text-lg font-bold ${color}`}>{mae !== null ? `${mae.toFixed(0)}%` : '—'}</span>
+          </div>
+        </SimpleTooltip>
+        <SimpleTooltip text="MBE = Mean Bias Error: durchschnittliche vorzeichenbehaftete Abweichung — positiv = systematisch zu hoch, negativ = zu niedrig. |MBE| ≪ MAE → Streuung; |MBE| ≈ MAE → systematischer Bias (Lernfaktor wirkt).">
+          <div>
+            <span className="text-xs text-gray-500 mr-1">Bias</span>
+            <span className={`text-lg font-bold ${mbe === null ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
+              {mbe !== null ? fmtMbe(mbe) : '—'}
+            </span>
+          </div>
+        </SimpleTooltip>
+      </div>
+      {hint && <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{hint}</div>}
     </div>
   )
 }
