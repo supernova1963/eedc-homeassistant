@@ -7,6 +7,44 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.0] - 2026-04-25
+
+### Neue Features
+
+- **feat(prognose): Klickbarer Reparatur-Popover bei IST-Datenlücke (#147 fortlaufend)** — Wenn die Prognosen-IST-Anzeige eine Datenlücke hat (⚠ neben dem Tageswert), öffnet ein Klick auf das Symbol jetzt einen kompakten Popover statt des Hover-Tooltips. Inhalt: konkrete Auflistung der fehlenden Stunden, kurzer Erklärungstext (Snapshot-Zyklus, Sensor-Mapping), Button **„Tag neu berechnen"** (triggert `POST /api/energie-profil/{anlage_id}/reaggregate-tag` mit Refetch + Status-Banner) und Fallback-Link zum Sensor-Mapping. Layout am ⚠ rechtsbündig verankert (`right-0`) mit `max-w-[calc(100vw-2rem)]` — bricht nicht mehr aus dem Viewport.
+
+- **feat(snapshot): Restart-Recovery für verpasste :05/:55-Jobs** — Wird das Add-on zwischen `:55` (Live-Snapshot-Preview) und `:05` (regulärer HA-Statistics-Snapshot) der Folgestunde neu gestartet, fehlten die Snapshots der laufenden und ggf. der gerade abgeschlossenen Stunde, weil die Cron-Trigger keine Misfire-Recovery hatten. Neue `sensor_snapshot_startup_recovery()` läuft nach Scheduler-Start im Hintergrund: holt für die letzten 6 Stunden je Anlage `snapshot_anlage` (HA-Statistics, idempotent dank Upsert) und für die laufende Stunde zusätzlich `live_snapshot_if_missing` (aus HA-Live-State); anschließend `aggregate_today_all` für sofortige Sichtbarkeit. Damit ist das Energieprofil nach Add-on-Restarts (Watchdog, Update) ohne Wartezeit wieder vollständig.
+
+### Bugfixes
+
+- **fix(prognose): IST-Slot der gerade abgeschlossenen Stunde nicht mehr als Lücke flaggen** — Slot N (= Backward-Slot-Konvention `[N-1, N)`) hängt von der HA-Hourly-Statistics-Row für `start_ts=N`, die HA aber erst am Ende der Stunde schreibt. Innerhalb des Zeitfensters zwischen Stundenwechsel und HA-Stats-Write (typisch ~5–60 Min) ist der Slot zwangsläufig `None`. Die `<=`-Bedingung in `prognosen.py:431` flaggte das fälschlich als „IST-Daten unvollständig". Geändert zu `<` — der gerade abgeschlossene Slot wird nicht mehr geflaggt; ältere echte Lücken (>1 h alt) weiter wie bisher.
+
+- **fix(snapshot): Tagesreset-Heuristik für utility_meter mit daily cycle** — Forum-Beobachtung Rainer: HA-`utility_meter`-Sensoren mit täglichem Reset (z. B. „Erzeugung heute") werfen um Mitternacht ein stark negatives Delta (Vortag-Endwert → ~0). `get_hourly_kwh_by_category` hatte das pauschal als „Sensor-Reset" verworfen → Slot 0 dauerhaft `None` → `ist_unvollstaendig=True` jeden Tag. Heuristik in `sensor_snapshot_service.py:548-559` erkennt Daily-Reset-Muster (`s1 < 0.5 ∧ s0 > 0.5`) und nimmt `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Bei untypischen negativen Deltas mitten am Tag bleibt die Reset-Warnung wie bisher.
+
+- **fix(daten-checker): Falscher Beheben-Link bei „X Komponenten ohne kWh-Zähler"** — Joachim-PN: Klick auf „Beheben" in dieser Daten-Checker-Kategorie führte auf eine weiße Seite. Der Link verwies auf `/einstellungen/sensoren`; die Route heißt aber `/einstellungen/sensor-mapping`. In [`daten_checker.py`](eedc/backend/services/daten_checker.py) zwei Stellen korrigiert.
+
+- **fix(live-dashboard): Wetter-Timeline-Alignment im Tagesverlauf-Chart (MartyBr)** — Hartcodiertes `paddingLeft: 40` in der Wetter-Timeline ignorierte die dynamische Recharts-`YAxis`-Breite. Bei größeren PV-Werten (>10 kW) wurde die YAxis breiter und die Wetter-Icons saßen nicht mehr exakt über den X-Tick-Stunden. Fix: `<YAxis width={45}>` setzt deterministische Breite, `margin.left=0` und `paddingLeft: 45` halten die Plot-Area konsistent über den Tag.
+
+- **fix(card): Border-Radius-Clipping bei Tabellen-/Section-Headern (#149, #152)** — detLAN-Bündel: Auf vier Pages (Monatsabschluss-T-Konto Mobile, Monatsdaten-Tabelle, Anlagen-Liste, Strompreise-Liste) ragten farbige `<th>`-/Section-Bänder über die abgerundeten Card-Ecken hinaus, sodass die Rahmenlinie an den Ecken nicht sauber schloss. `overflow-hidden` auf der jeweiligen Card behebt das.
+
+- **fix(legacy): `Anlage.ausrichtung` / `Anlage.neigung_grad` aus aktivem Code entfernt (#152)** — Die Spalte „Ausrichtung" in der Anlagen-Liste zeigte bei detLAN konsistent `-`, weil das Feld am Anlage-Modell seit dem Refactoring zu PV-Modul-Investitionen nicht mehr gepflegt wird. Geprüft: weder Berechnungen (Prognose, PVGIS, Solar-Forecast, PR), Community-Submit, Infothek noch JSON-Export greifen darauf zu. Spalte aus der Liste entfernt, Setup-Wizard-Lese-Stellen aufgeräumt, Pydantic-`AnlageExport`-Schema und TypeScript-`Anlage`-Interface bereinigt. **DB-Spalte bleibt erhalten** für Bestandsinstallationen (Pattern wie `ha_sensor_*`); Kommentar im Modell präzisiert.
+
+- **fix(pv-cockpit): Modul-Anzahl zählt jetzt `parameter.anzahl_module` statt nur Investitions-Einträge (#152)** — Anzeige „1 WR, 1 Module" trotz 21 gepflegter Module in der PV-Modul-Investition. Subtitle berechnet jetzt `anzahl_module` pro Modul-Investition (Default 1 falls Parameter leer).
+
+- **fix(anlage-form): Umlaute „fur"/„wunschen"/„Warmepumpe" (#152)** — In `AnlageForm` (Steuerlicher Hinweis) und `Strompreise` (Spezialtarif-Hinweis) waren ASCII-Stümpfe statt korrekter Umlaute hinterlegt — ggf. ein altes copy-paste aus einer ASCII-only-Quelle.
+
+- **fix(input): Date-Inputs in Webkit linksbündig erzwingen (#152)** — `<input type="date">` rendert in Safari/iOS den Datumstext per Default zentriert, in Anlage-/Investition-/Strompreis-Modals fiel das auf. CSS-Selector `[&[type='date']]:text-left` und `[&::-webkit-datetime-edit]:text-left` in der zentralen `Input`-Komponente erzwingt linksbündig.
+
+- **fix(auswertung): Tab-Wechsel scrollt zum Seitenanfang (#154)** — Bei Tab-Wechseln innerhalb der Auswertung (Energie/PV/Komponenten/Finanzen/CO2/Investitionen/Tabelle/Energieprofil) blieb die Seite auf der vorherigen Scroll-Position — am Tab-Wechselpunkt unsichtbar bis der Nutzer manuell hochscrollte. Smooth-Scroll auf den Page-Top im `onClick` der Tab-Buttons.
+
+- **fix(waermepumpe): Konsistente KPI-Anzeige zwischen Cockpit und Auswertung (#153)** — Detlef-Bündel: in beiden Dialogen jetzt identische **Reihenfolge** (JAZ → Wärme → Strom → Ersparnis), **Icons** (Thermometer / Flame / Zap / TrendingUp) und **Farben** (orange / red / yellow / green). Zuvor war die Auswertungs-Sicht aus der Reihe (Wärme zuerst, JAZ an Position 3), Strom-Icon und -Farbe (lila vs. gelb) waren divergent.
+
+- **fix(waermepumpe): JAZ ignoriert Daten vor Anschaffungsdatum (#153)** — Wichtigster Punkt aus Detlef-Issue #153: Im Cockpit- und Auswertungs-Dashboard summierten Backend-Aggregatoren alle vorhandenen `InvestitionMonatsdaten` der Wärmepumpe, ungeachtet des `anschaffungsdatum`. Das verfälschte JAZ und Ersparnis bei Anlagen, die vor dem Stichtag andere (unvollständige) Erfassungs-Methoden hatten — z. B. Detlef's Migration zu Shelly-erfasstem WP-Stromverbrauch ab April 2026: das alte JAZ blieb auf dem optimistischen Wert der WP-eigenen Strommessung (5,2) statt auf den realistischen 3,7–4. Filter eingebaut in `cockpit/komponenten.py` und `investitionen.py` (`/dashboard/waermepumpe`): Monate vor `(anschaffung.year, anschaffung.month)` werden ignoriert.
+
+- **fix(dashboards): „Dashboard"-Suffix aus Top-Header entfernt + Card-Header bei n=1 versteckt (#153)** — Vereinheitlichung mit PV-Anlage-Cockpit, das nur eine Überschrift zeigt. Top-Header der Komponenten-Dashboards (Wärmepumpe / Speicher / Wallbox / E-Auto / Balkonkraftwerk / Sonstiges) heißt jetzt analog „Wärmepumpe" statt „Wärmepumpe Dashboard". Bei der Wärmepumpe wird zusätzlich der Card-interne Header ausgeblendet, wenn nur eine WP existiert (vorher doppelte „Wärmepumpe"-Überschrift).
+
+---
+
 ## [3.22.0] - 2026-04-25
 
 ### Neue Features
