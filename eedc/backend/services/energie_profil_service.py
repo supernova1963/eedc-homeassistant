@@ -164,26 +164,25 @@ async def aggregate_day(
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
 
     # ── Zähler-basierte Stunden-kWh (Issue #135) ─────────────────────────
-    # Wenn Feature-Flag "zaehler": Stunden-kWh aus Snapshot-Deltas statt
-    # leistung_w-Integration. Fehlende Zähler → Werte bleiben None.
+    # Stunden-kWh werden aus kumulativen Snapshot-Deltas berechnet.
+    # Fehlt der Zähler einer Kategorie, bleibt der Wert None (kein W-Fallback).
     kwh_pro_stunde: dict[int, dict[str, Optional[float]]] = {}
-    if settings.energieprofil_quelle == "zaehler":
-        try:
-            from backend.services.sensor_snapshot_service import get_hourly_kwh_by_category
-            inv_result = await db.execute(
-                select(Investition).where(Investition.anlage_id == anlage.id)
-            )
-            invs = inv_result.scalars().all()
-            invs_by_id = {str(inv.id): inv for inv in invs}
-            kwh_pro_stunde = await get_hourly_kwh_by_category(
-                db, anlage, invs_by_id, datum,
-            )
-        except Exception as e:
-            logger.warning(
-                f"Anlage {anlage.id}, {datum}: Zähler-Snapshot-Pfad fehlgeschlagen, "
-                f"fällt auf leistung_w-Integration zurück: {type(e).__name__}: {e}"
-            )
-            kwh_pro_stunde = {}
+    try:
+        from backend.services.sensor_snapshot_service import get_hourly_kwh_by_category
+        inv_result = await db.execute(
+            select(Investition).where(Investition.anlage_id == anlage.id)
+        )
+        invs = inv_result.scalars().all()
+        invs_by_id = {str(inv.id): inv for inv in invs}
+        kwh_pro_stunde = await get_hourly_kwh_by_category(
+            db, anlage, invs_by_id, datum,
+        )
+    except Exception as e:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: Zähler-Snapshot-Pfad fehlgeschlagen: "
+            f"{type(e).__name__}: {e}"
+        )
+        kwh_pro_stunde = {}
 
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
     # Prognose-Felder aus bestehender TagesZusammenfassung retten,
@@ -242,62 +241,31 @@ async def aggregate_day(
         h = int(punkt["zeit"].split(":")[0])
         werte = punkt.get("werte", {})
 
-        # ── Leistungs-basierte Werte aus Tagesverlauf (für Peaks + Chart) ──
+        # ── Leistungs-Spitzen aus Tagesverlauf (W-Integration nur für Peaks) ──
+        # kW-Peaks brauchen keine kWh-Präzision; Zähler liefern keine Momentanwerte.
         netz_val = sum(werte.get(k, 0) for k in netz_keys)
         einspeisung_kw_w = abs(netz_val) if netz_val < 0 else 0.0
         netzbezug_kw_w = netz_val if netz_val > 0 else 0.0
 
-        batterie_kw_w = (
-            sum(werte.get(k, 0) for k in batterie_keys) +
-            sum(werte.get(k, 0) for k in v2h_keys)
-        )
-        waermepumpe_kw_w = sum(abs(werte.get(k, 0)) for k in wp_keys
-                               if (werte.get(k) or 0) < 0)
-        wallbox_kw_w = sum(abs(werte.get(k, 0)) for k in wallbox_keys
-                           if (werte.get(k) or 0) < 0)
-
         pv_kw_w = sum(v for k in pv_keys
                       if (v := werte.get(k, 0)) > 0)
-        verbrauch_kw_w = waermepumpe_kw_w + wallbox_kw_w
         for k, v in werte.items():
             if v is None or k in _sonderschluessel:
                 continue
             if v > 0:
                 pv_kw_w += v
-            elif v < 0:
-                verbrauch_kw_w += abs(v)
 
-        # ── kWh-Werte: bevorzugt aus Zähler-Snapshots (Issue #135) ─────────
-        # Fallback auf leistung_w-Integration wenn kein Zähler gemappt oder
-        # Feature-Flag auf "leistung_w" steht.
+        # ── kWh-Werte aus Zähler-Snapshots (Issue #135) ───────────────────
+        # Fehlt der Zähler einer Kategorie, bleibt der Wert None.
+        # Konvention für Batterie: positiv=Ladung, negativ=Entladung (netto).
         snap_h = kwh_pro_stunde.get(h, {}) if kwh_pro_stunde else {}
-
-        def _val(key: str, fallback: float) -> Optional[float]:
-            """Zähler-Wert bevorzugt, sonst Leistungs-Integration."""
-            snap_val = snap_h.get(key)
-            if snap_val is not None:
-                return snap_val
-            if settings.energieprofil_quelle == "zaehler":
-                # Strikt: kein Fallback auf W-Integration
-                return None
-            return fallback
-
-        pv_kw = _val("pv", pv_kw_w)
-        einspeisung_kw = _val("einspeisung", einspeisung_kw_w)
-        netzbezug_kw = _val("netzbezug", netzbezug_kw_w)
-        verbrauch_kw = _val("verbrauch", verbrauch_kw_w)
-        waermepumpe_kw = _val("wp", waermepumpe_kw_w)
-        wallbox_kw = _val("wallbox", wallbox_kw_w)
-        # Batterie: snap liefert netto (lade - entlade); W-Pfad liefert
-        # vorzeichenbehafteten Fluss (negativ=Ladung, positiv=Entladung).
-        batterie_netto_snap = snap_h.get("batterie_netto")
-        if batterie_netto_snap is not None:
-            # Konvention im TagesEnergieProfil: positiv=Ladung, negativ=Entladung
-            batterie_kw = batterie_netto_snap
-        elif settings.energieprofil_quelle == "zaehler":
-            batterie_kw = None
-        else:
-            batterie_kw = batterie_kw_w
+        pv_kw = snap_h.get("pv")
+        einspeisung_kw = snap_h.get("einspeisung")
+        netzbezug_kw = snap_h.get("netzbezug")
+        verbrauch_kw = snap_h.get("verbrauch")
+        waermepumpe_kw = snap_h.get("wp")
+        wallbox_kw = snap_h.get("wallbox")
+        batterie_kw = snap_h.get("batterie_netto")
 
         # Einspeisung pro Stunde für Negativpreis-Analyse (§51 EEG)
         if einspeisung_kw is not None and einspeisung_kw > 0:
@@ -316,8 +284,6 @@ async def aggregate_day(
         if pv_kw is not None:
             pv_ertrag_summe += pv_kw
 
-        # Peaks: weiterhin aus W-Kurve (legitim — kW-Spitzen brauchen keine
-        # kWh-Präzision und Zähler liefern keine Momentanwerte)
         peak_pv = max(peak_pv, pv_kw_w)
         peak_bezug = max(peak_bezug, netzbezug_kw_w)
         peak_einspeisung = max(peak_einspeisung, einspeisung_kw_w)
@@ -863,9 +829,6 @@ async def backfill_from_statistics(
         )
         existing_dates = {row[0] for row in ex_result}
 
-    # ── Zähler-Pfad vorbereiten (Issue #135) ─────────────────────────────────
-    use_zaehler = settings.energieprofil_quelle == "zaehler"
-
     # ── Pro-Tag-Schleife ─────────────────────────────────────────────────────
     count = 0
     current = von
@@ -891,18 +854,17 @@ async def backfill_from_statistics(
 
         # Zähler-basierte kWh pro Stunde (Issue #135)
         kwh_pro_stunde_tag: dict[int, dict[str, Optional[float]]] = {}
-        if use_zaehler:
-            try:
-                from backend.services.sensor_snapshot_service import get_hourly_kwh_by_category
-                kwh_pro_stunde_tag = await get_hourly_kwh_by_category(
-                    db, anlage, investitionen, current,
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Anlage {anlage.id}, {current}: Zähler-Snapshot fehlgeschlagen: "
-                    f"{type(e).__name__}: {e}"
-                )
-                kwh_pro_stunde_tag = {}
+        try:
+            from backend.services.sensor_snapshot_service import get_hourly_kwh_by_category
+            kwh_pro_stunde_tag = await get_hourly_kwh_by_category(
+                db, anlage, investitionen, current,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Anlage {anlage.id}, {current}: Zähler-Snapshot fehlgeschlagen: "
+                f"{type(e).__name__}: {e}"
+            )
+            kwh_pro_stunde_tag = {}
 
         # Stundenschleife: werte-Dict aufbauen (Butterfly-Konvention)
         tages_ueberschuss = 0.0
@@ -983,50 +945,28 @@ async def backfill_from_statistics(
 
             stunden_mit_daten += 1
 
-            # Aggregation (identisch zu aggregate_day Zeilen 160–222)
+            # Leistungs-Spitzen aus W-Integration (nur für Peaks).
             netz_val = sum(werte.get(k, 0) for k in netz_keys)
             einspeisung_kw_h = abs(netz_val) if netz_val < 0 else 0.0
             netzbezug_kw_h = netz_val if netz_val > 0 else 0.0
 
-            batterie_kw_h = (
-                sum(werte.get(k, 0) for k in batterie_keys) +
-                sum(werte.get(k, 0) for k in v2h_keys)
-            )
-
-            waermepumpe_kw_h = sum(abs(werte.get(k, 0)) for k in wp_keys
-                                   if (werte.get(k) or 0) < 0)
-            wallbox_kw_h = sum(abs(werte.get(k, 0)) for k in wallbox_keys
-                               if (werte.get(k) or 0) < 0)
-
             pv_kw_h = sum(v for k in pv_keys if (v := werte.get(k, 0)) > 0)
-            verbrauch_kw_h = waermepumpe_kw_h + wallbox_kw_h
             for k, v in werte.items():
                 if v is None or k in _sonderschluessel:
                     continue
                 if v > 0:
                     pv_kw_h += v
-                elif v < 0:
-                    verbrauch_kw_h += abs(v)
 
-            # Zähler-Werte überschreiben die W-Integration (Issue #135)
+            # kWh-Werte aus Zähler-Snapshots (Issue #135).
+            # Fehlt der Zähler einer Kategorie, bleibt der Wert None.
             snap_h = kwh_pro_stunde_tag.get(h, {}) if kwh_pro_stunde_tag else {}
-            if use_zaehler:
-                # Strikt: wenn Zähler fehlt → None (kein stiller W-Fallback)
-                pv_kw_final = snap_h.get("pv")
-                einspeisung_kw_final = snap_h.get("einspeisung")
-                netzbezug_kw_final = snap_h.get("netzbezug")
-                verbrauch_kw_final = snap_h.get("verbrauch")
-                waermepumpe_kw_final = snap_h.get("wp")
-                wallbox_kw_final = snap_h.get("wallbox")
-                batterie_kw_final = snap_h.get("batterie_netto")
-            else:
-                pv_kw_final = pv_kw_h
-                einspeisung_kw_final = einspeisung_kw_h
-                netzbezug_kw_final = netzbezug_kw_h
-                verbrauch_kw_final = verbrauch_kw_h
-                waermepumpe_kw_final = waermepumpe_kw_h
-                wallbox_kw_final = wallbox_kw_h
-                batterie_kw_final = batterie_kw_h
+            pv_kw_final = snap_h.get("pv")
+            einspeisung_kw_final = snap_h.get("einspeisung")
+            netzbezug_kw_final = snap_h.get("netzbezug")
+            verbrauch_kw_final = snap_h.get("verbrauch")
+            waermepumpe_kw_final = snap_h.get("wp")
+            wallbox_kw_final = snap_h.get("wallbox")
+            batterie_kw_final = snap_h.get("batterie_netto")
 
             if pv_kw_final is not None and verbrauch_kw_final is not None:
                 ueberschuss_h = max(0.0, pv_kw_final - verbrauch_kw_final)
