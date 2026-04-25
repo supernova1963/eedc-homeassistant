@@ -252,19 +252,28 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         </Alert>
       )}
 
-      {!hasEedc && (
-        <Alert type="info">
-          <div className="flex items-start gap-2">
-            <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="text-sm">
-              EEDC-Prognose nicht verfügbar — benötigt mindestens 7 Tage mit IST-Ertragsdaten,
-              um den Lernfaktor (Verhältnis IST/Prognose) zu berechnen.
-              Der Lernfaktor kalibriert die OpenMeteo-Prognose anlagenspezifisch
-              und gleicht systematische Abweichungen (Verschattung, Ausrichtung, Alterung) aus.
+      {!hasEedc && (() => {
+        // Tage mit OpenMeteo-Prognose UND IST (>0.5 kWh) zählen — analog Backend-Filter
+        // im _berechne_faktor() (live_wetter.py): nur diese Tage zählen für die 7-Tage-Schwelle.
+        const usableDays = (genauigkeit?.tage ?? []).filter(
+          t => t.openmeteo_kwh != null && t.openmeteo_kwh > 0 && t.ist_kwh != null && t.ist_kwh > 0.5
+        ).length
+        const fehlend = Math.max(0, 7 - usableDays)
+        return (
+          <Alert type="info">
+            <div className="flex items-start gap-2">
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                EEDC-Prognose nicht verfügbar — benötigt mindestens 7 Tage mit IST-Ertragsdaten,
+                um den Lernfaktor (Verhältnis IST/Prognose) zu berechnen
+                {' '}(<strong>{usableDays} von 7 Tagen</strong>{fehlend > 0 ? `, noch ${fehlend} Tag${fehlend === 1 ? '' : 'e'}` : ''}).
+                Der Lernfaktor kalibriert die OpenMeteo-Prognose anlagenspezifisch
+                und gleicht systematische Abweichungen (Verschattung, Ausrichtung, Alterung) aus.
+              </div>
             </div>
-          </div>
-        </Alert>
-      )}
+          </Alert>
+        )
+      })()}
 
       {/* ── Stundenprofil-Chart ── */}
       <Card>
