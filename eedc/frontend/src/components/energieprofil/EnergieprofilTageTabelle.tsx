@@ -76,7 +76,13 @@ function formatValue(val: number | null, format: ColumnConfig['format']): string
     case 'percent': return `${(val * 100).toFixed(1)}%`
     case 'temp':    return `${val.toFixed(1)}°C`
     case 'zyklen':  return val.toFixed(2)
-    case 'stunden': return `${val}/24`
+    case 'stunden': {
+      // Pro-Tag-Wert (immer ganze Stunden) → "20/24". Aggregat-Durchschnitt (z. B. 22,93) → "22h 56min".
+      if (Number.isInteger(val)) return `${val}/24`
+      const h = Math.floor(val)
+      const m = Math.round((val - h) * 60)
+      return `${h}h ${m}min`
+    }
     case 'ct':      return `${val.toFixed(1)} ct`
     case 'int':     return val.toLocaleString('de-DE')
     default:        return String(val)
@@ -101,9 +107,12 @@ interface BodyProps {
   jahr: number | null
   monat: number | null
   onReload: () => void
+  /** Pro-Tag "Aktualisieren"-Button anzeigen? Standard: true.
+   *  In Auswertungs-Sicht (Monat-Tab) ausgeblendet — Reaggregation gehört in Daten → Energieprofil. */
+  showReaggregate?: boolean
 }
 
-function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReload }: BodyProps) {
+function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReload, showReaggregate = true }: BodyProps) {
   const [showColumnSelector, setShowColumnSelector] = useState(false)
   // Reaggregate-State lebt im Body (nicht in DataTable), damit er das
   // Loading-Remount der DataTable überlebt.
@@ -182,8 +191,8 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
       </div>
 
       {error && <Alert type="error">{error}</Alert>}
-      {reagError && <Alert type="error" className="mb-2">{reagError}</Alert>}
-      {reagInfo && (
+      {showReaggregate && reagError && <Alert type="error" className="mb-2">{reagError}</Alert>}
+      {showReaggregate && reagInfo && (
         <Alert type={reagInfo.tone === 'success' ? 'success' : 'warning'} className="mb-2">
           {reagInfo.message}
         </Alert>
@@ -248,6 +257,7 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
           activeColumns={activeColumns}
           onReaggregate={handleReaggregate}
           reagDatum={reagDatum}
+          showReaggregate={showReaggregate}
         />
       )}
     </>
@@ -280,11 +290,13 @@ function DataTable({
   activeColumns,
   onReaggregate,
   reagDatum,
+  showReaggregate,
 }: {
   daten: TagesZusammenfassung[]
   activeColumns: ColumnConfig[]
   onReaggregate: (datum: string) => void
   reagDatum: string | null
+  showReaggregate: boolean
 }) {
   // Pro Spalte: Maximalwert (für Cell-Coloring) + Aggregat (für Footer)
   const stats = useMemo(() => {
@@ -314,7 +326,9 @@ function DataTable({
             {activeColumns.map((col) => (
               <TableHeader key={col.key} className="text-right">{col.label}</TableHeader>
             ))}
-            <TableHeader className="text-right w-10"><span className="sr-only">Aktionen</span></TableHeader>
+            {showReaggregate && (
+              <TableHeader className="text-right w-10"><span className="sr-only">Aktionen</span></TableHeader>
+            )}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -350,22 +364,24 @@ function DataTable({
                     </TableCell>
                   )
                 })}
-                <TableCell className="text-right">
-                  <button
-                    type="button"
-                    onClick={() => onReaggregate(t.datum)}
-                    disabled={reagDatum !== null}
-                    title={`Tag ${t.datum} neu aggregieren`}
-                    className="p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 ${isReag ? 'animate-spin' : ''}`} />
-                  </button>
-                </TableCell>
+                {showReaggregate && (
+                  <TableCell className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => onReaggregate(t.datum)}
+                      disabled={reagDatum !== null}
+                      title={`Tag ${t.datum} neu aggregieren`}
+                      className="p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isReag ? 'animate-spin' : ''}`} />
+                    </button>
+                  </TableCell>
+                )}
               </TableRow>
             )
           })}
         </TableBody>
-          <tfoot className="bg-gray-50 dark:bg-gray-800/70 font-medium">
+          <tfoot className="bg-gray-100 dark:bg-gray-800 font-medium">
             <tr>
               <td className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Σ Monat
@@ -394,7 +410,7 @@ function DataTable({
                   )}
                 </td>
               ))}
-              <td className="px-3 py-2" />
+              {showReaggregate && <td className="px-3 py-2" />}
             </tr>
           </tfoot>
       </table>
@@ -458,6 +474,7 @@ export function EnergieprofilTageTabelleEmbedded({ anlageId, jahr, monat }: Embe
       jahr={jahr}
       monat={monat}
       onReload={reload}
+      showReaggregate={false}
     />
   )
 }
