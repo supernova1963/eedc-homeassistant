@@ -4,6 +4,7 @@
  * Einstellungen: gruppen-aware – zeigt alle Tabs der aktuellen Gruppe.
  */
 
+import { useEffect, useRef } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
@@ -192,12 +193,24 @@ function CockpitTabBar() {
 
 // ─── Wiederverwendbare Tab-Leiste ─────────────────────────────────────────────
 function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) {
+  const navRef = useRef<HTMLElement>(null)
+  const location = useLocation()
+
+  // Aktiven Tab in den sichtbaren Bereich scrollen — wichtig auf Mobile,
+  // damit z.B. "PV-Anlage" oder "Daten-Cleanup" nicht hinter dem rechten Rand bleiben.
+  useEffect(() => {
+    const active = navRef.current?.querySelector('a[aria-current="page"]') as HTMLElement | null
+    if (active) {
+      active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' })
+    }
+  }, [location.pathname, tabs.length])
+
   if (tabs.length === 0) return null
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <div className="px-4 sm:px-6">
-        <nav aria-label={groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs'} className="flex items-center gap-1 py-2 overflow-x-auto snap-x snap-proximity scrollbar-none">
+        <nav ref={navRef} aria-label={groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs'} className="flex items-center gap-1 py-2 overflow-x-auto snap-x snap-proximity scrollbar-none">
           {groupLabel && (
             <>
               <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap pr-2">

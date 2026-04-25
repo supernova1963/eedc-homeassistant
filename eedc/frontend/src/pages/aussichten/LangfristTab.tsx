@@ -146,9 +146,9 @@ export default function LangfristTab({ anlageId }: Props) {
 
       {/* Controls */}
       <Card className="p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h3 className="font-semibold text-gray-900 dark:text-white">Monatsprognose</h3>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

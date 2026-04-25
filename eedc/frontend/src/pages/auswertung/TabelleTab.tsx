@@ -444,6 +444,11 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
         </p>
       )}
 
+      {/* Querformat-Hinweis nur auf Mobile-Portrait */}
+      <p className="sm:hidden landscape:hidden text-xs text-gray-500 dark:text-gray-400 -mb-2">
+        Tipp: Gerät ins Querformat drehen für mehr Spalten.
+      </p>
+
       {/* Tabelle */}
       <Card padding="none" className="overflow-hidden">
         <div className="overflow-auto max-h-[600px]">

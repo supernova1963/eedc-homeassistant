@@ -301,7 +301,12 @@ function DataTable({
   }, [daten, activeColumns])
 
   return (
-    <div className="max-h-[36rem] overflow-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_tfoot]:sticky [&_tfoot]:bottom-0 [&_tfoot]:z-10 border border-gray-200 dark:border-gray-700 rounded-lg">
+    <>
+      {/* Querformat-Hinweis nur auf Mobile-Portrait */}
+      <p className="sm:hidden landscape:hidden text-xs text-gray-500 dark:text-gray-400 mb-2">
+        Tipp: Gerät ins Querformat drehen für mehr Spalten.
+      </p>
+      <div className="max-h-[36rem] overflow-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_tfoot]:sticky [&_tfoot]:bottom-0 [&_tfoot]:z-10 border border-gray-200 dark:border-gray-700 rounded-lg">
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <TableHead>
           <TableRow>
@@ -393,7 +398,8 @@ function DataTable({
             </tr>
           </tfoot>
       </table>
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -505,7 +511,7 @@ export default function EnergieprofilTageTabelle({ anlageId }: Props) {
 
   return (
     <Card>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-3">
             <Calendar className="h-6 w-6 text-primary-500" />

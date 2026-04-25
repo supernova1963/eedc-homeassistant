@@ -979,14 +979,14 @@ export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
       {/* Info-Panel */}
       <InfoPanel />
 
-      {/* Sub-Tab-Navigation */}
-      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
+      {/* Sub-Tab-Navigation — auf Mobile umbrechen, auf Desktop kompakt */}
+      <div className="flex flex-wrap gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 sm:w-fit">
         {subTabs.map(t => (
           <button
             type="button"
             key={t.key}
             onClick={() => setSubTab(t.key)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            className={`px-3 sm:px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex-1 sm:flex-none ${
               subTab === t.key
                 ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'

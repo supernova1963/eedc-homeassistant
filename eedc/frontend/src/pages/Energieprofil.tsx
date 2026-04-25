@@ -155,7 +155,7 @@ export default function Energieprofil() {
       {/* Datenbestand */}
       {hatProfildaten && stats && (
         <Card>
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             <div className="flex items-center gap-3 mb-4">
               <BarChart3 className="h-6 w-6 text-emerald-500" />
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -163,27 +163,27 @@ export default function Energieprofil() {
               </h2>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
+              <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
                   {stats.stundenwerte.toLocaleString('de-DE')}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Stundenwerte</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">24 pro Tag</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Stundenwerte</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500">24 pro Tag</p>
               </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
                   {stats.tageszusammenfassungen.toLocaleString('de-DE')}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Tagessummen</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">1 pro Tag</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Tagessummen</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500">1 pro Tag</p>
               </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
                   {stats.monatswerte.toLocaleString('de-DE')}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Monatswerte</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">1 pro Monat</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Monatswerte</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500">1 pro Monat</p>
               </div>
             </div>
 
