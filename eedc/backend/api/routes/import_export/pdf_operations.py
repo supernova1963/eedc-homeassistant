@@ -411,13 +411,27 @@ async def export_pdf(
     if hat_waermepumpe and wp_waerme_total > 0:
         wp_alter_preis_cent = 12.0
         wp_alter_wirkungsgrad = 0.90
+        wp_alternativ_zusatzkosten_jahr = 0.0
         for inv in investitionen:
             if inv.typ == "waermepumpe" and inv.parameter:
                 wp_alter_preis_cent = inv.parameter.get("alter_preis_cent_kwh", 12.0)
                 if inv.parameter.get("alter_energietraeger") == "oel":
                     wp_alter_wirkungsgrad = 0.85
+                wp_alternativ_zusatzkosten_jahr += inv.parameter.get("alternativ_zusatzkosten_jahr", 0) or 0
                 break
-        alte_heizung_kosten = (wp_waerme_total / wp_alter_wirkungsgrad) * wp_alter_preis_cent / 100
+        # Durchschnitt der Monats-Gaspreise, Fallback auf statischen Parameter
+        hist_gaspreise = [
+            m.gaspreis_cent_kwh for m in monatsdaten_list
+            if m.gaspreis_cent_kwh is not None
+        ]
+        wp_gaspreis = (
+            sum(hist_gaspreise) / len(hist_gaspreise)
+            if hist_gaspreise
+            else wp_alter_preis_cent
+        )
+        alte_heizung_kosten = (wp_waerme_total / wp_alter_wirkungsgrad) * wp_gaspreis / 100
+        # Fixe Zusatzkosten anteilig für den PDF-Zeitraum
+        alte_heizung_kosten += wp_alternativ_zusatzkosten_jahr * anzahl_monate_pdf / 12
         wp_stromkosten = wp_strom_total * netzbezug_preis_cent / 100
         wp_ersparnis = alte_heizung_kosten - wp_stromkosten
 

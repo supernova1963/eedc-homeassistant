@@ -257,6 +257,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             "pv_anteil_prozent": 35,
             "alter_energietraeger": "gas",
             "alter_preis_cent_kwh": 12,
+            "alternativ_zusatzkosten_jahr": 350,
             "sg_ready": True,
         },
         aktiv=True,

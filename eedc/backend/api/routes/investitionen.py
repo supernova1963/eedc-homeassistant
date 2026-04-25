@@ -197,6 +197,12 @@ async def list_investition_typen():
                     "default": "gas",
                 },
                 "alter_preis_cent_kwh": {"type": "number", "label": "Alter Preis (ct/kWh)", "default": 12},
+                "alternativ_zusatzkosten_jahr": {
+                    "type": "number",
+                    "label": "Zusatzkosten Alt-Heizung (€/Jahr)",
+                    "default": 0,
+                    "hint": "Schornsteinfeger, Wartung, Grundpreis Gaszähler etc.",
+                },
             }
         ),
         InvestitionTypInfo(
@@ -1181,6 +1187,7 @@ async def get_roi_dashboard(
             pv_anteil = params.get('pv_anteil_prozent', 30)
             alter_energietraeger = params.get('alter_energietraeger', 'gas')
             alter_preis = params.get('alter_preis_cent_kwh', 12)
+            alternativ_zusatzkosten = params.get('alternativ_zusatzkosten_jahr', 0) or 0
             heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
             warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
 
@@ -1199,6 +1206,7 @@ async def get_roi_dashboard(
                     pv_anteil_prozent=pv_anteil,
                     alter_energietraeger=alter_energietraeger,
                     alter_preis_cent_kwh=alter_preis,
+                    alternativ_zusatzkosten_jahr=alternativ_zusatzkosten,
                 )
                 hinweis = f'WP: COP Heizung {cop_heizung}, Warmwasser {cop_warmwasser}'
 
@@ -1218,6 +1226,7 @@ async def get_roi_dashboard(
                     pv_anteil_prozent=pv_anteil,
                     alter_energietraeger=alter_energietraeger,
                     alter_preis_cent_kwh=alter_preis,
+                    alternativ_zusatzkosten_jahr=alternativ_zusatzkosten,
                 )
                 hinweis = f'WP: SCOP {scop_heizung} (VL {vorlauftemperatur}°C)'
 
@@ -1237,6 +1246,7 @@ async def get_roi_dashboard(
                     pv_anteil_prozent=pv_anteil,
                     alter_energietraeger=alter_energietraeger,
                     alter_preis_cent_kwh=alter_preis,
+                    alternativ_zusatzkosten_jahr=alternativ_zusatzkosten,
                 )
                 hinweis = f'Wärmepumpe: JAZ {jaz}'
 

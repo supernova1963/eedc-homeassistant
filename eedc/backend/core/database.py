@@ -134,6 +134,8 @@ async def run_migrations(conn):
                 ('peak_netzbezug_kw', 'FLOAT'),
                 # v3.17.0: Kraftstoffpreis aus EU Oil Bulletin
                 ('kraftstoffpreis_euro', 'FLOAT'),
+                # v3.21.0: Alter Energiepreis (Gas/Öl) pro Monat für WP-Alternativvergleich
+                ('gaspreis_cent_kwh', 'FLOAT'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
