@@ -235,6 +235,7 @@ export default function MonatsdatenPage() {
   // Datenverwaltung: Kraftstoffpreis-Monats-Backfill
   const [kpStatus, setKpStatus] = useState<KraftstoffpreisStatus | null>(null)
   const [kpMessage, setKpMessage] = useState<string | null>(null)
+  const [kpIsError, setKpIsError] = useState(false)
   const [runningKpBackfill, setRunningKpBackfill] = useState(false)
 
   const loadKraftstoffStatus = useCallback(async () => {
@@ -254,14 +255,21 @@ export default function MonatsdatenPage() {
     try {
       setRunningKpBackfill(true)
       setKpMessage(null)
+      setKpIsError(false)
       const res = await energieProfilApi.kraftstoffpreisBackfillMonats(selectedAnlageId)
-      setKpMessage(
-        res.aktualisiert > 0
-          ? `${res.aktualisiert} Monate mit Kraftstoffpreis (${res.land}) befüllt.`
-          : (res.hinweis || 'Keine offenen Monate.')
-      )
+      if (res.fehler) {
+        setKpIsError(true)
+        setKpMessage(`Kraftstoffpreis-Backfill: ${res.fehler}`)
+      } else {
+        setKpMessage(
+          res.aktualisiert > 0
+            ? `${res.aktualisiert} Monate mit Kraftstoffpreis (${res.land}) befüllt.`
+            : (res.hinweis || 'Keine offenen Monate.')
+        )
+      }
       await loadKraftstoffStatus()
     } catch (e) {
+      setKpIsError(true)
       setKpMessage(e instanceof Error ? e.message : 'Kraftstoffpreis-Backfill fehlgeschlagen')
     } finally {
       setRunningKpBackfill(false)
@@ -665,7 +673,7 @@ export default function MonatsdatenPage() {
               </h2>
             </div>
 
-            {kpMessage && <Alert type="info" className="mb-3">{kpMessage}</Alert>}
+            {kpMessage && <Alert type={kpIsError ? "error" : "info"} className="mb-3">{kpMessage}</Alert>}
 
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
               <div className="flex items-start gap-3">

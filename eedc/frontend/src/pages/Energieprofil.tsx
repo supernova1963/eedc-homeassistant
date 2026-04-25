@@ -77,11 +77,15 @@ export default function Energieprofil() {
       setMessage(null)
       setError(null)
       const res = await energieProfilApi.kraftstoffpreisBackfillTages(selectedAnlageId)
-      setMessage(
-        res.aktualisiert > 0
-          ? `${res.aktualisiert} Tage mit Kraftstoffpreis (${res.land}) befüllt.`
-          : (res.hinweis || 'Keine offenen Tage.')
-      )
+      if (res.fehler) {
+        setError(`Kraftstoffpreis-Backfill: ${res.fehler}`)
+      } else {
+        setMessage(
+          res.aktualisiert > 0
+            ? `${res.aktualisiert} Tage mit Kraftstoffpreis (${res.land}) befüllt.`
+            : (res.hinweis || 'Keine offenen Tage.')
+        )
+      }
       await loadKraftstoffStatus()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kraftstoffpreis-Backfill fehlgeschlagen')

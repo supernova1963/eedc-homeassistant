@@ -154,6 +154,7 @@ export interface KraftstoffpreisBackfillResult {
   aktualisiert: number
   land: string
   hinweis?: string
+  fehler?: string
 }
 
 export interface ProfildatenLoeschResult {
