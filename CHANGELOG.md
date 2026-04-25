@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.22.0] - 2026-04-25
+
+### Neue Features
+
+- **feat(prognose): Genauigkeits-Tracking — MAE + Bias trennen, Spaltenstruktur stabilisieren (#151)** — Zwei eng verzahnte Diagnosen aus Rainer-PN gemeinsam aufgelöst. **MAE + MBE getrennt ausweisen:** Backend `GET /aussichten/prognosen/{id}/genauigkeit` aggregiert jetzt auf vorzeichenbehafteten relativen Fehlern und liefert zwei Kennzahlen — MAE (`abs()`) für Streuung, MBE (ohne `abs()`) für systematischen Bias. Drei Quellen statt zwei: zusätzlich zu OpenMeteo und Solcast wird auch EEDC bewertet (Basis × aktueller Lernfaktor). Neue Response-Felder: `openmeteo_mbe_prozent`, `eedc_mae_prozent`, `eedc_mbe_prozent`, `solcast_mbe_prozent`, plus `eedc_kwh` pro Tag. Frontend: `MAECard` → `MaeMbeCard` mit zwei KPIs nebeneinander (MAE + Bias) und Tooltips, drei Cards in der Genauigkeits-Sektion. Bias neutral gefärbt — Vorzeichen ist Information, nicht Wertung. **Spaltenstruktur stabil:** EEDC-Spalte in allen vier Tabellen (KPI-Matrix, 24h-Stundenvergleich, 7-Tage, Genauigkeits-Tracking) immer gerendert. Bei fehlendem Lernfaktor gedämpfter Header (`text-gray-400`) und `—` als Platzhalter, Tooltip verweist auf den Status-Banner. Die Genauigkeits-Tracking-Tabelle hatte bisher gar keine EEDC-Spalte; ist jetzt konsistent. Kein Spaltenflattern mehr nach Tag 7.
+
+- **feat(prognose): Banner zeigt Restzeit bis Lernfaktor-Schwelle** — Der Hinweis „EEDC-Prognose nicht verfügbar" erläutert jetzt zusätzlich, wie viele Tage bereits gesammelt sind und wie viele noch bis zur 7-Tage-Schwelle fehlen (z. B. „3 von 7 Tagen, noch 4 Tage"). Die Berechnung filtert Tage mit gültiger OpenMeteo-Prognose UND IST-Ertrag > 0.5 kWh — analog zur Backend-Logik in `_berechne_faktor`.
+
+- **feat(prognose): VM/NM-Split an Solar Noon proportional aufteilen** — Tageshälften (Vormittag/Nachmittag) wurden bisher hart bei 12:00 Uhr Clockzeit gesplittet. Korrekt ist der Split an der astronomischen Tagesmitte (Solar Noon, via Equation of Time), die je nach Standort und Datum bis ~30 min von 12:00 abweicht. Slots, die Solar Noon enthalten, werden proportional auf VM und NM verteilt. Konsistent zu `solar_forecast_service`.
+
+### Bugfixes
+
+- **fix(mobile): Mehrere Darstellungsprobleme auf kleinem Bildschirm (#149)** — Bündel von 7 Mobile-Layout-Fixes aus detLAN-Bugreport: Cockpit-/Energieprofil-SubTabs scrollen aktiven Tab automatisch in den sichtbaren Bereich (PV-Anlage, Daten-Cleanup nicht mehr abgeschnitten); Info-Icon der KPI-Tiles auf Mobile ausgeblendet (Tap-Tooltip bleibt); Monatsberichte Finanzen-T-Konto auf Mobile als 2-Spalten-Layout (Label | Wert+VJ+Δ gestapelt) statt 4 Spalten — GEWINN/Badges nicht mehr abgeschnitten; Section-Header „Monatsergebnis" + Ø-Cent-Suffix auf Mobile ausgeblendet (sonst mid-word truncated); Page-Sticky-Bars (Auswertung, Aussichten, Community) auf z-30, damit Tabellen-thead (z-10) sie nicht mehr überlagert; Energieprofil-Subtabs in Auswertung als `flex-wrap` (umbricht statt rechts rauszulaufen); Aussichten Langfristig stapelt Steuerung vertikal auf Mobile; Energieprofil-Seite mit `p-3 sm:p-6` und kleineren KPI-Tiles auf Mobile; Tabellen mit vielen Spalten zeigen Querformat-Hinweis nur in Mobile-Portrait.
+
+- **fix(energieprofil): Batterie-Vollzyklen verwenden nur stationäre Speicher-SoC** — `_get_soc_history` und der Bulk-Fetch in `backfill_from_statistics` sammelten alle `live.soc`-Sensoren aus den Investitionen und nahmen den **ersten** als Batterie-SoC. Bei Anlagen mit E-Auto-Investition landete deren SoC-Sensor zuerst in der Liste — `break` nach dem ersten Entity sorgte dafür, dass der eigentliche stationäre Speicher nie angefasst wurde. Folge: `batterie_vollzyklen` in TagesZusammenfassung spiegelten den ΔSoC des Autos wider, nicht des Speichers. Im neuen Tage-Tabellen-Tab (#148, v3.21.0) wurde das offensichtlich (Tage mit `-` bei abgesteckten Auto, vereinzelt 0.7+ wenn das Auto gefahren+geladen wurde). Beide Selektions-Pfade filtern jetzt auf `inv.typ == "speicher"`. Multi-Speicher-Anlagen behalten das bisherige „erstes Speicher-Entity"-Verhalten (Kapazitäts-Gewichtung wäre eine separate Erweiterung). **Nutzer-Schritt nach Update:** einmal „Verlauf nachberechnen + überschreiben" auslösen, damit historische `batterie_vollzyklen`-Werte korrigiert werden.
+
+- **fix(kraftstoffpreis): Service-Fehler im Backfill durchreichen statt verschlucken** — Wenn der EU-Oil-Bulletin-Download oder das XLSX-Parsing fehlschlug, lieferte der Service `{"aktualisiert": 0, "fehler": "Keine Kraftstoffpreise verfügbar"}` zurück. Der Endpoint las aber nur `aktualisiert/land/hinweis` — `fehler` wurde gestrippt und das Frontend zeigte „Keine offenen Tage." statt eines Error-Alerts. Der Counter „X Tage ohne Kraftstoffpreis" blieb unverändert, der Nutzer hatte keinen Hinweis auf den eigentlichen Fehler (z.B. URL-Wechsel beim Bulletin). Beide Endpoints (`/tages` und `/monats`) reichen `fehler` jetzt durch, das Frontend zeigt es als roten Error-Alert.
+
+- **fix(energieprofil): Auswertungs-Tabelle Verfeinerungen** — Aktualisieren-Button pro Zeile in Auswertung → Energieprofil → Monat ausgeblendet (`showReaggregate`-Prop) — Reaggregation gehört in die Datenverwaltung (Daten → Energieprofil), nicht in die Auswertungs-Sicht. Stunden-Aggregat im Footer als „Xh YYmin" statt „22.93/24" (Pro-Tag-Werte bleiben unverändert „20/24"). Footer-Hintergrund voll-opak (statt /70-Transparenz im Dark Mode), damit die Summenleiste klar abgesetzt ist.
+
+---
+
 ## [3.21.0] - 2026-04-25
 
 ### Neue Features
