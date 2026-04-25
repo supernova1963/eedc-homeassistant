@@ -632,11 +632,18 @@ async def snapshot_anlage(
     count = 0
 
     # 1. HA-gemappte Zähler (wenn sensor_mapping konfiguriert + HA verfügbar)
+    # Toleranz 10 Min konsistent zu get_snapshot (Issue #145, #146): HA hourly-
+    # Statistics sitzen exakt auf der Stundengrenze. Eine Abweichung > 10 min
+    # bedeutet, dass HA die Zielstunde noch gar nicht finalisiert hat — dann
+    # nichts schreiben (None bleibt), statt den Nachbar-Eintrag (z.B. h-1)
+    # fälschlich als h zu speichern. Falscher Nachbarwert würde Slot-h = 0
+    # erzeugen und Slot h+1 = 2-Stunden-Delta als Spike (Forum-Beobachtung
+    # Rainer #146, gleicher Mechanismus wie #145 nur in der Job-Schicht).
     counter_map = _build_counter_map(anlage)
     ha_svc = get_ha_statistics_service()
     if counter_map and ha_svc.is_available:
         for sensor_key, entity_id in counter_map.items():
-            wert = ha_svc.get_value_at(entity_id, zeitpunkt, toleranz_minuten=60)
+            wert = ha_svc.get_value_at(entity_id, zeitpunkt, toleranz_minuten=10)
             if wert is None:
                 continue
             await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
@@ -672,7 +679,111 @@ async def snapshot_anlage(
         )
         if existing.scalar_one_or_none() is not None:
             continue
-        wert = await _get_mqtt_snapshot_at(db, anlage.id, mqtt_key, zeitpunkt, toleranz_minuten=30)
+        wert = await _get_mqtt_snapshot_at(db, anlage.id, mqtt_key, zeitpunkt, toleranz_minuten=10)
+        if wert is None:
+            continue
+        await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+        count += 1
+
+    return count
+
+
+async def live_snapshot_if_missing(
+    db: AsyncSession,
+    anlage,
+    zeitpunkt: datetime,
+) -> int:
+    """
+    Schreibt für eine anstehende volle Stunde einen Live-Snapshot pro Sensor,
+    aber nur wenn dort noch kein Eintrag existiert (Issue #146).
+
+    Hintergrund: Der reguläre `snapshot_anlage` läuft erst :05 nach voller
+    Stunde — die laufende Stunde im Energieprofil bleibt bis dahin als
+    "0.00" (bzw. "—") sichtbar, weil aggregate_day Slot[h] nicht ohne
+    snap[h+1:00] berechnen kann. Diese Hilfsroutine läuft :55 vor voller
+    Stunde, holt den AKTUELLEN Live-Zählerstand pro gemapptem Zähler und
+    schreibt ihn als Annäherung für h:00.
+
+    Genauigkeit: Der Live-Wert wird ~5 Minuten vor h:00 gelesen, ist also
+    minimal niedriger als der echte snap[h:00]. Beim regulären :05-Job wird
+    der Eintrag durch den exakten HA-Statistics-Wert überschrieben.
+
+    Wichtig: Schreibt NICHT, wenn snap[zeitpunkt] für einen Sensor bereits
+    vorhanden ist — das verhindert Überschreiben durch Approximation
+    während eines Backfills oder nach manueller Aggregation.
+
+    Args:
+        db: Async Session
+        anlage: Anlage-Objekt
+        zeitpunkt: Anstehende volle Stunde (typisch: now+1h auf :00 gerundet)
+
+    Returns:
+        Anzahl geschriebener Live-Snapshots.
+    """
+    count = 0
+
+    # 1. HA-gemappte Zähler — Live-State von HA-API
+    counter_map = _build_counter_map(anlage)
+    if counter_map:
+        from backend.services.ha_state_service import get_ha_state_service
+        ha_state_svc = get_ha_state_service()
+        if ha_state_svc.is_available:
+            for sensor_key, entity_id in counter_map.items():
+                # Skip wenn snap[zeitpunkt] schon da
+                existing = await db.execute(
+                    select(SensorSnapshot.id).where(
+                        and_(
+                            SensorSnapshot.anlage_id == anlage.id,
+                            SensorSnapshot.sensor_key == sensor_key,
+                            SensorSnapshot.zeitpunkt == zeitpunkt,
+                        )
+                    )
+                )
+                if existing.scalar_one_or_none() is not None:
+                    continue
+                wert = await ha_state_svc.get_sensor_state(entity_id)
+                if wert is None:
+                    continue
+                await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+                count += 1
+
+    # 2. MQTT-gespeiste Zähler (Standalone-Modus): jüngsten Snapshot der
+    # letzten ~10 Min als Live-Wert verwenden.
+    cutoff = zeitpunkt - timedelta(minutes=10)
+    mqtt_keys_result = await db.execute(
+        select(MqttEnergySnapshot.energy_key).where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= cutoff,
+            )
+        ).distinct()
+    )
+    for (mqtt_key,) in mqtt_keys_result.all():
+        sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
+        if not sensor_key:
+            continue
+        existing = await db.execute(
+            select(SensorSnapshot.id).where(
+                and_(
+                    SensorSnapshot.anlage_id == anlage.id,
+                    SensorSnapshot.sensor_key == sensor_key,
+                    SensorSnapshot.zeitpunkt == zeitpunkt,
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            continue
+        # Jüngsten MQTT-Wert nehmen (innerhalb des cutoff-Fensters)
+        recent = await db.execute(
+            select(MqttEnergySnapshot.value_kwh).where(
+                and_(
+                    MqttEnergySnapshot.anlage_id == anlage.id,
+                    MqttEnergySnapshot.energy_key == mqtt_key,
+                    MqttEnergySnapshot.timestamp >= cutoff,
+                )
+            ).order_by(MqttEnergySnapshot.timestamp.desc()).limit(1)
+        )
+        wert = recent.scalar_one_or_none()
         if wert is None:
             continue
         await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)

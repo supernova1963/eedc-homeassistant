@@ -138,6 +138,18 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Sensor-Snapshot Preview: 5 Min vor voller Stunde (Issue #146).
+            # Schreibt Live-Zählerstand als Annäherung für h:00, nur wenn der
+            # reguläre Snapshot noch fehlt. Sorgt dafür, dass die laufende
+            # Stunde im Energieprofil sofort am Stundenende erscheint.
+            self._scheduler.add_job(
+                sensor_snapshot_preview_job,
+                CronTrigger(minute=55),
+                id="sensor_snapshot_preview",
+                name="Sensor-Snapshots Preview (Live-Wert, :55)",
+                replace_existing=True,
+            )
+
             # Energie-Profil Heute: Alle 15 Minuten (rollierend, laufender Tag)
             self._scheduler.add_job(
                 energie_profil_heute_job,
@@ -395,6 +407,51 @@ async def sensor_snapshot_job() -> None:
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )
+
+
+async def sensor_snapshot_preview_job() -> None:
+    """
+    Live-Snapshot-Prüfroutine kurz vor Stundenende (Issue #146).
+
+    Schreibt für die anstehende volle Stunde Live-Zählerstände, nur wo
+    snap[h+1:00] noch nicht existiert. Damit ist die laufende Stunde im
+    Energieprofil bereits am Stundenende sichtbar (kein "0.00"/"—" mehr
+    bis :05 der Folgestunde).
+
+    Beim regulären :05-Job wird der Live-Approx-Wert durch den exakten
+    HA-Statistics-Wert via _upsert überschrieben.
+    """
+    try:
+        from sqlalchemy import select
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.sensor_snapshot_service import live_snapshot_if_missing
+
+        now = datetime.now()
+        # Anstehende volle Stunde (z. B. now=15:55 → 16:00)
+        zeitpunkt = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+
+        total = 0
+        async with get_session() as db:
+            result = await db.execute(select(Anlage))
+            anlagen = result.scalars().all()
+            for anlage in anlagen:
+                try:
+                    n = await live_snapshot_if_missing(db, anlage, zeitpunkt=zeitpunkt)
+                    total += n
+                except Exception as e:
+                    logger.debug(
+                        f"Live-Snapshot Preview Anlage {anlage.id} fehlgeschlagen: "
+                        f"{type(e).__name__}: {e}"
+                    )
+
+        if total > 0:
+            logger.debug(
+                f"Sensor-Snapshot Preview: {total} Live-Werte geschrieben "
+                f"@ {zeitpunkt.isoformat()}"
+            )
+    except Exception as e:
+        logger.debug(f"Sensor-Snapshot Preview Job fehlgeschlagen: {type(e).__name__}: {e}")
 
 
 async def energie_profil_heute_job() -> None:
