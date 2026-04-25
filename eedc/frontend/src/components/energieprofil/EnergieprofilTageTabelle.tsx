@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Columns, Calendar } from 'lucide-react'
+import { Columns, Calendar, RefreshCw } from 'lucide-react'
 import { Button, Card, Alert, EmptyState } from '../ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../ui'
 import { DataLoadingState } from '../common'
@@ -94,15 +94,52 @@ function monatsBereich(jahr: number, monat: number): { von: string; bis: string 
 // (Daten → Energieprofil, mit Year/Month-Selector im Header) als auch von der
 // Embedded-Variante (Auswertungs → Energieprofile → Monat) genutzt.
 interface BodyProps {
+  anlageId: number
   daten: TagesZusammenfassung[]
   loading: boolean
   error: string | null
   jahr: number | null
   monat: number | null
+  onReload: () => void
 }
 
-function TageTabelleBody({ daten, loading, error, jahr, monat }: BodyProps) {
+function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReload }: BodyProps) {
   const [showColumnSelector, setShowColumnSelector] = useState(false)
+  // Reaggregate-State lebt im Body (nicht in DataTable), damit er das
+  // Loading-Remount der DataTable überlebt.
+  const [reagDatum, setReagDatum] = useState<string | null>(null)
+  const [reagError, setReagError] = useState<string | null>(null)
+  const [reagInfo, setReagInfo] = useState<{ message: string; tone: 'success' | 'warning' } | null>(null)
+
+  const handleReaggregate = async (datum: string) => {
+    if (!window.confirm(
+      `Tag ${datum} neu aggregieren?\n\nLädt Stunden aus Snapshots/Statistik neu, korrigiert ggf. fehlerhafte Werte (z. B. 0.00 + Spike). Andere Tage bleiben unberührt.`
+    )) return
+    setReagDatum(datum)
+    setReagError(null)
+    setReagInfo(null)
+    try {
+      const res = await energieProfilApi.reaggregateTag(anlageId, datum)
+      const messdaten = res.stunden_mit_messdaten
+      if (messdaten > 0) {
+        setReagInfo({
+          message: `${datum} reaggregiert: ${messdaten}/24 Stunden mit Messdaten.`,
+          tone: 'success',
+        })
+      } else {
+        setReagInfo({
+          message: `${datum} reaggregiert, aber 0/24 Stunden mit Messdaten — keine Snapshots in der DB und HA-Statistics nicht erreichbar.`,
+          tone: 'warning',
+        })
+      }
+      onReload()
+    } catch (e) {
+      setReagError(e instanceof Error ? e.message : `Neu-Aggregation für ${datum} fehlgeschlagen`)
+    } finally {
+      setReagDatum(null)
+    }
+  }
+
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(COLUMNS_STORAGE_KEY)
@@ -145,6 +182,12 @@ function TageTabelleBody({ daten, loading, error, jahr, monat }: BodyProps) {
       </div>
 
       {error && <Alert type="error">{error}</Alert>}
+      {reagError && <Alert type="error" className="mb-2">{reagError}</Alert>}
+      {reagInfo && (
+        <Alert type={reagInfo.tone === 'success' ? 'success' : 'warning'} className="mb-2">
+          {reagInfo.message}
+        </Alert>
+      )}
 
       {showColumnSelector && (
         <Card className="bg-gray-50 dark:bg-gray-800/50 mb-4">
@@ -200,7 +243,12 @@ function TageTabelleBody({ daten, loading, error, jahr, monat }: BodyProps) {
           description="Der Scheduler legt pro Tag eine Zusammenfassung an. Falls Daten fehlen, kann der Vollbackfill aus HA-Statistik weiter unten helfen."
         />
       ) : (
-        <DataTable daten={daten} activeColumns={activeColumns} />
+        <DataTable
+          daten={daten}
+          activeColumns={activeColumns}
+          onReaggregate={handleReaggregate}
+          reagDatum={reagDatum}
+        />
       )}
     </>
   )
@@ -230,7 +278,14 @@ function cellBg(val: number | null, max: number, tone: ColorTone): string | unde
 function DataTable({
   daten,
   activeColumns,
-}: { daten: TagesZusammenfassung[]; activeColumns: ColumnConfig[] }) {
+  onReaggregate,
+  reagDatum,
+}: {
+  daten: TagesZusammenfassung[]
+  activeColumns: ColumnConfig[]
+  onReaggregate: (datum: string) => void
+  reagDatum: string | null
+}) {
   // Pro Spalte: Maximalwert (für Cell-Coloring) + Aggregat (für Footer)
   const stats = useMemo(() => {
     const out: Record<string, { max: number; agg: number | null }> = {}
@@ -254,11 +309,13 @@ function DataTable({
             {activeColumns.map((col) => (
               <TableHeader key={col.key} className="text-right">{col.label}</TableHeader>
             ))}
+            <TableHeader className="text-right w-10"><span className="sr-only">Aktionen</span></TableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
           {daten.map((t) => {
             const negPreis = (t.negative_preis_stunden ?? 0) > 0
+            const isReag = reagDatum === t.datum
             return (
               <TableRow
                 key={t.datum}
@@ -288,41 +345,53 @@ function DataTable({
                     </TableCell>
                   )
                 })}
+                <TableCell className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => onReaggregate(t.datum)}
+                    disabled={reagDatum !== null}
+                    title={`Tag ${t.datum} neu aggregieren`}
+                    className="p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isReag ? 'animate-spin' : ''}`} />
+                  </button>
+                </TableCell>
               </TableRow>
             )
           })}
         </TableBody>
-        <tfoot className="bg-gray-50 dark:bg-gray-800/70 font-medium">
-          <tr>
-            <td className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Σ Monat
-            </td>
-            {activeColumns.map((col) => (
-              <td
-                key={col.key}
-                className={`px-3 py-2 text-right font-mono text-sm ${col.className || 'text-gray-700 dark:text-gray-200'}`}
-                title={
-                  col.agg === 'sum' ? 'Summe'
-                    : col.agg === 'avg' ? 'Durchschnitt'
-                    : col.agg === 'max' ? 'Maximum'
-                    : col.agg === 'min' ? 'Minimum'
-                    : ''
-                }
-              >
-                {formatValue(stats[col.key].agg, col.format)}
-                {col.agg === 'avg' && (
-                  <span className="ml-1 text-[10px] text-gray-400">Ø</span>
-                )}
-                {col.agg === 'max' && (
-                  <span className="ml-1 text-[10px] text-gray-400">max</span>
-                )}
-                {col.agg === 'min' && (
-                  <span className="ml-1 text-[10px] text-gray-400">min</span>
-                )}
+          <tfoot className="bg-gray-50 dark:bg-gray-800/70 font-medium">
+            <tr>
+              <td className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Σ Monat
               </td>
-            ))}
-          </tr>
-        </tfoot>
+              {activeColumns.map((col) => (
+                <td
+                  key={col.key}
+                  className={`px-3 py-2 text-right font-mono text-sm ${col.className || 'text-gray-700 dark:text-gray-200'}`}
+                  title={
+                    col.agg === 'sum' ? 'Summe'
+                      : col.agg === 'avg' ? 'Durchschnitt'
+                      : col.agg === 'max' ? 'Maximum'
+                      : col.agg === 'min' ? 'Minimum'
+                      : ''
+                  }
+                >
+                  {formatValue(stats[col.key].agg, col.format)}
+                  {col.agg === 'avg' && (
+                    <span className="ml-1 text-[10px] text-gray-400">Ø</span>
+                  )}
+                  {col.agg === 'max' && (
+                    <span className="ml-1 text-[10px] text-gray-400">max</span>
+                  )}
+                  {col.agg === 'min' && (
+                    <span className="ml-1 text-[10px] text-gray-400">min</span>
+                  )}
+                </td>
+              ))}
+              <td className="px-3 py-2" />
+            </tr>
+          </tfoot>
       </table>
     </div>
   )
@@ -354,7 +423,7 @@ function useTagesdaten(anlageId: number, jahr: number | null, monat: number | nu
   }, [anlageId, jahr, monat])
 
   useEffect(() => { load() }, [load])
-  return { daten, loading, error }
+  return { daten, loading, error, reload: load }
 }
 
 interface Props {
@@ -373,8 +442,18 @@ interface EmbeddedProps {
  * Spaltenselektor + Tabelle, ohne Card-Hülle und ohne eigenen Monats-Selector.
  */
 export function EnergieprofilTageTabelleEmbedded({ anlageId, jahr, monat }: EmbeddedProps) {
-  const { daten, loading, error } = useTagesdaten(anlageId, jahr, monat)
-  return <TageTabelleBody daten={daten} loading={loading} error={error} jahr={jahr} monat={monat} />
+  const { daten, loading, error, reload } = useTagesdaten(anlageId, jahr, monat)
+  return (
+    <TageTabelleBody
+      anlageId={anlageId}
+      daten={daten}
+      loading={loading}
+      error={error}
+      jahr={jahr}
+      monat={monat}
+      onReload={reload}
+    />
+  )
 }
 
 export default function EnergieprofilTageTabelle({ anlageId }: Props) {
@@ -402,7 +481,7 @@ export default function EnergieprofilTageTabelle({ anlageId }: Props) {
     return () => { abgebrochen = true }
   }, [anlageId])
 
-  const { daten, loading, error } = useTagesdaten(anlageId, jahr, monat)
+  const { daten, loading, error, reload } = useTagesdaten(anlageId, jahr, monat)
 
   const jahrOptionen = useMemo(() => {
     return Array.from(new Set(verfuegbar.map(v => v.jahr))).sort((a, b) => b - a)
@@ -462,7 +541,15 @@ export default function EnergieprofilTageTabelle({ anlageId }: Props) {
           </div>
         </div>
 
-        <TageTabelleBody daten={daten} loading={loading} error={error} jahr={jahr} monat={monat} />
+        <TageTabelleBody
+          anlageId={anlageId}
+          daten={daten}
+          loading={loading}
+          error={error}
+          jahr={jahr}
+          monat={monat}
+          onReload={reload}
+        />
       </div>
     </Card>
   )

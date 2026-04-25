@@ -224,6 +224,9 @@ export const energieProfilApi = {
   vollbackfill: (anlageId: number, overwrite: boolean = false): Promise<VollbackfillResult> =>
     api.post(`/energie-profil/${anlageId}/vollbackfill${overwrite ? '?overwrite=true' : ''}`),
 
+  reaggregateTag: (anlageId: number, datum: string): Promise<{ status: string; datum: string; stunden_verfuegbar: number; stunden_mit_messdaten: number }> =>
+    api.post(`/energie-profil/${anlageId}/reaggregate-tag?datum=${datum}`),
+
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
     api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),
 
