@@ -178,7 +178,7 @@ export default function Strompreise() {
           />
         </Card>
       ) : (
-        <Card padding="none">
+        <Card padding="none" className="overflow-hidden">
           <Table>
             <TableHead>
               <TableRow>
@@ -432,13 +432,13 @@ function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, er
           title="Tarif-Verwendung"
         >
           <option value="allgemein">Standard (allgemein)</option>
-          <option value="waermepumpe">Warmepumpe (Spezialtarif)</option>
+          <option value="waermepumpe">Wärmepumpe (Spezialtarif)</option>
           <option value="wallbox">Wallbox (Spezialtarif)</option>
         </select>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           {formData.verwendung === 'allgemein'
-            ? 'Standard-Tarif fur alle Berechnungen. Wird auch als Fallback fur WP/Wallbox ohne Spezialtarif genutzt.'
-            : 'Spezialtarif wird nur fur diese Komponente verwendet. Ohne Spezialtarif gilt der Standard-Tarif.'}
+            ? 'Standard-Tarif für alle Berechnungen. Wird auch als Fallback für WP/Wallbox ohne Spezialtarif genutzt.'
+            : 'Spezialtarif wird nur für diese Komponente verwendet. Ohne Spezialtarif gilt der Standard-Tarif.'}
         </p>
       </div>
 

@@ -58,8 +58,6 @@ export interface Anlage {
   standort_strasse?: string
   latitude?: number
   longitude?: number
-  ausrichtung?: string
-  neigung_grad?: number
   wechselrichter_hersteller?: string
   // Home Assistant Sensor-Konfiguration
   ha_sensor_pv_erzeugung?: string

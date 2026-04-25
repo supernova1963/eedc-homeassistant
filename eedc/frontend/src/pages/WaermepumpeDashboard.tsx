@@ -1,5 +1,5 @@
 /**
- * Wärmepumpe Dashboard
+ * Wärmepumpe
  * Zeigt Statistiken: COP, Stromverbrauch, Heizenergie, Ersparnis vs. Gas/Öl
  */
 
@@ -46,7 +46,7 @@ export default function WaermepumpeDashboard() {
   if (anlagen.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wärmepumpe Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wärmepumpe</h1>
         <Alert type="warning">Bitte zuerst eine Anlage anlegen.</Alert>
       </div>
     )
@@ -57,7 +57,7 @@ export default function WaermepumpeDashboard() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <Flame className="h-8 w-8 text-orange-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wärmepumpe Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wärmepumpe</h1>
         </div>
         {anlagen.length > 1 && (
           <Select
@@ -83,14 +83,14 @@ export default function WaermepumpeDashboard() {
         </Card>
       ) : (
         dashboards.map((dashboard) => (
-          <WaermepumpeCard key={dashboard.investition.id} dashboard={dashboard} />
+          <WaermepumpeCard key={dashboard.investition.id} dashboard={dashboard} showHeader={dashboards.length > 1} />
         ))
       )}
     </div>
   )
 }
 
-function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardResponse }) {
+function WaermepumpeCard({ dashboard, showHeader = true }: { dashboard: WaermepumpeDashboardResponse; showHeader?: boolean }) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
@@ -152,17 +152,23 @@ function WaermepumpeCard({ dashboard }: { dashboard: WaermepumpeDashboardRespons
 
   return (
     <Card className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {investition.bezeichnung}
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.anzahl_monate} Monate Daten
-          </p>
+      {showHeader ? (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              {investition.bezeichnung}
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {z.anzahl_monate} Monate Daten
+            </p>
+          </div>
+          <Flame className="h-10 w-10 text-orange-500" />
         </div>
-        <Flame className="h-10 w-10 text-orange-500" />
-      </div>
+      ) : (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {z.anzahl_monate} Monate Daten
+        </p>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">

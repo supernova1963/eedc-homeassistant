@@ -131,6 +131,12 @@ async def lifespan(app: FastAPI):
     # Scheduler starten
     if start_scheduler():
         print("Scheduler gestartet.")
+        # Snapshot-Recovery für Restart-Edge-Case (verpasste :05/:55-Jobs)
+        try:
+            from backend.services.scheduler import sensor_snapshot_startup_recovery
+            asyncio.create_task(sensor_snapshot_startup_recovery())
+        except Exception as e:
+            logger.debug(f"Snapshot-Recovery konnte nicht gestartet werden: {e}")
     else:
         print("Scheduler konnte nicht gestartet werden (APScheduler nicht installiert?).")
 

@@ -426,9 +426,12 @@ async def get_prognosen_vergleich(
     jetzt_stunde = now.hour
     for row in ist_rows:
         if row.pv_kw is None:
-            # Nur vergangene Stunden als "fehlend" werten; noch nicht
-            # aggregierte Zukunft-Stunden sind kein Datenproblem
-            if row.stunde <= jetzt_stunde:
+            # Slot der gerade-eben-abgeschlossenen Stunde (= jetzt_stunde) wird
+            # nicht geflaggt: HA Statistics schreibt die Hourly-Row erst am Ende
+            # der Stunde, der :55-Preview-Job überbrückt das nicht immer
+            # zuverlässig (HA-Restart, Sensor-Glitch). Erst Slots, die mindestens
+            # eine volle Folgestunde alt sind, gelten als echtes Datenloch.
+            if row.stunde < jetzt_stunde:
                 ist_unvollstaendig = True
             ist_stundenprofil.append(StundenProfilEintrag(stunde=row.stunde, kw=None))
             continue

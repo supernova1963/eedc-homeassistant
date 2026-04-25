@@ -330,8 +330,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               </p>
             ) : (
               <p>
-                <strong>Keine USt</strong> gilt fur PV-Anlagen ab 2023 mit Nullsteuersatz (&le;30 kWp),
-                Kleinunternehmer (&sect;19 UStG) oder wenn Sie keine steuerliche Erfassung wunschen.
+                <strong>Keine USt</strong> gilt für PV-Anlagen ab 2023 mit Nullsteuersatz (&le;30 kWp),
+                Kleinunternehmer (&sect;19 UStG) oder wenn Sie keine steuerliche Erfassung wünschen.
               </p>
             )}
           </div>

@@ -4,7 +4,7 @@ import {
   Bar, ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
-import { Battery, Flame, Car, Download, AlertCircle, Sun, Zap, RefreshCw } from 'lucide-react'
+import { Battery, Flame, Car, Download, AlertCircle, Sun, Zap, RefreshCw, Thermometer, TrendingUp } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
@@ -327,8 +327,20 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             </h2>
           </div>
 
-          {/* WP KPIs - Erste Zeile */}
+          {/* WP KPIs - Erste Zeile (Reihenfolge + Icons + Farben analog Cockpit-Dashboard) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <KPICard
+              title="JAZ"
+              value={wpSummen.cop?.toFixed(2) || '---'}
+              unit=""
+              subtitle={zeitraumLabel ? `Jahresarbeitszahl ${zeitraumLabel}` : 'Jahresarbeitszahl'}
+              icon={Thermometer}
+              color="text-orange-500"
+              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              formel="JAZ = Wärme ÷ Strom"
+              berechnung={`${fmtCalc(wpSummen.waerme, 0)} kWh ÷ ${fmtCalc(wpSummen.strom, 0)} kWh`}
+              ergebnis={wpSummen.cop ? `= ${fmtCalc(wpSummen.cop, 2)}` : '---'}
+            />
             <KPICard
               title="Wärme erzeugt"
               value={(wpSummen.waerme / 1000).toFixed(2)}
@@ -344,31 +356,19 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               title="Strom verbraucht"
               value={(wpSummen.strom / 1000).toFixed(2)}
               unit="MWh"
-              icon={Flame}
-              color="text-purple-500"
-              bgColor="bg-purple-50 dark:bg-purple-900/20"
+              icon={Zap}
+              color="text-yellow-500"
+              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
               formel="Σ WP-Strom aller Monate"
               berechnung={`${fmtCalc(wpSummen.strom, 0)} kWh`}
               ergebnis={`= ${fmtCalc(wpSummen.strom / 1000, 2)} MWh`}
-            />
-            <KPICard
-              title="JAZ"
-              value={wpSummen.cop?.toFixed(2) || '---'}
-              unit=""
-              subtitle={zeitraumLabel ? `Jahresarbeitszahl ${zeitraumLabel}` : 'Jahresarbeitszahl'}
-              icon={Flame}
-              color="text-orange-500"
-              bgColor="bg-orange-50 dark:bg-orange-900/20"
-              formel="JAZ = Wärme ÷ Strom"
-              berechnung={`${fmtCalc(wpSummen.waerme, 0)} kWh ÷ ${fmtCalc(wpSummen.strom, 0)} kWh`}
-              ergebnis={wpSummen.cop ? `= ${fmtCalc(wpSummen.cop, 2)}` : '---'}
             />
             <KPICard
               title="Ersparnis vs. Gas"
               value={strompreis ? ((wpSummen.waerme * 0.08) - (wpSummen.strom * strompreis.netzbezug_arbeitspreis_cent_kwh / 100)).toFixed(0) : '---'}
               unit="€"
               subtitle="ca. 8 ct/kWh Gas"
-              icon={Flame}
+              icon={TrendingUp}
               color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
             />

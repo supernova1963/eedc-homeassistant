@@ -545,11 +545,18 @@ async def get_hourly_kwh_by_category(
             if s0 is None or s1 is None:
                 continue  # Kategorie unvollständig für diese Stunde
             d = s1 - s0
-            if d < -0.01:  # Reset
-                logger.warning(
-                    f"Negatives Delta bei {sensor_key} ({datum} Slot{h}): {d:.3f}"
-                )
-                continue
+            if d < -0.01:
+                # Tagesreset-Zähler (HA utility_meter mit daily cycle): s0 ≈ Tagesendwert,
+                # s1 ≈ 0 nach Mitternachts-Reset. Slot wird mit s1 (Energie seit Reset)
+                # gewertet statt verworfen, sonst bliebe Slot 0 dauerhaft None und
+                # ist_unvollstaendig=True würde irreführend triggern.
+                if s1 < 0.5 and s0 > 0.5:
+                    d = max(0.0, s1)
+                else:
+                    logger.warning(
+                        f"Negatives Delta bei {sensor_key} ({datum} Slot{h}): {d:.3f}"
+                    )
+                    continue
             d = max(0.0, d)
             per_kat[kat] = (per_kat.get(kat) or 0.0) + d
         result[h] = per_kat

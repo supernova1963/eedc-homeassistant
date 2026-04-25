@@ -896,7 +896,7 @@ class DatenChecker:
                     "Energieprofil leer. Bitte im Sensor-Mapping-Wizard die kWh-Zähler "
                     "(nicht die leistung_w-Sensoren) eintragen."
                 ),
-                link="/einstellungen/sensoren",
+                link="/einstellungen/sensor-mapping",
             ))
         else:
             ergebnisse.append(CheckErgebnis(
@@ -949,7 +949,7 @@ class DatenChecker:
                     "Komponenten leer. Betroffen sind Prognosen-IST, Heatmap, "
                     "Lernfaktor und Monatsberichte. Details: " + "; ".join(details_parts)
                 ),
-                link="/einstellungen/sensoren",
+                link="/einstellungen/sensor-mapping",
             ))
         elif gemappt_count > 0:
             ergebnisse.append(CheckErgebnis(

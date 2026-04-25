@@ -587,7 +587,7 @@ export default function MonatsdatenPage() {
           )}
 
           {/* Tabelle */}
-          <Card padding="none">
+          <Card padding="none" className="overflow-hidden">
             <div className="max-h-[36rem] overflow-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <TableHead>

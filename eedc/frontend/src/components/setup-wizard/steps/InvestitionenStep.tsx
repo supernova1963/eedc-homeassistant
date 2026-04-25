@@ -64,14 +64,12 @@ function getDeviceIcon(typ: InvestitionTyp) {
 function InvestitionForm({
   investition,
   allInvestitionen,
-  anlage,
   onUpdate,
   onDelete,
   isNew = false,
 }: {
   investition: Investition
   allInvestitionen: Investition[]
-  anlage: Anlage | null
   onUpdate: (data: Partial<Investition>) => void
   onDelete: () => void
   isNew?: boolean
@@ -285,7 +283,7 @@ function InvestitionForm({
                   Ausrichtung *
                 </label>
                 <select
-                  value={investition.ausrichtung || anlage?.ausrichtung || ''}
+                  value={investition.ausrichtung || ''}
                   onChange={(e) => onUpdate({ ausrichtung: e.target.value || undefined })}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 >
@@ -307,7 +305,7 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={investition.neigung_grad ?? anlage?.neigung_grad ?? ''}
+                  value={investition.neigung_grad ?? ''}
                   onChange={(e) => onUpdate({ neigung_grad: parseFloat(e.target.value) || undefined })}
                   placeholder="z.B. 35"
                   min="0"
@@ -889,7 +887,6 @@ export default function InvestitionenStep({
                       <InvestitionForm
                         investition={inv}
                         allInvestitionen={investitionen}
-                        anlage={anlage}
                         onUpdate={(data) => onUpdateInvestition(inv.id, data)}
                         onDelete={() => onDeleteInvestition(inv.id)}
                         isNew={inv.id === newlyAddedId}

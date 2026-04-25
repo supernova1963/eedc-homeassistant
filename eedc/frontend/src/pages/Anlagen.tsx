@@ -66,14 +66,13 @@ export default function Anlagen() {
           />
         </Card>
       ) : (
-        <Card padding="none">
+        <Card padding="none" className="overflow-hidden">
           <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>Name</TableHeader>
                 <TableHeader>Leistung</TableHeader>
                 <TableHeader>Standort</TableHeader>
-                <TableHeader>Ausrichtung</TableHeader>
                 <TableHeader>Installation</TableHeader>
                 <TableHeader className="text-right">Aktionen</TableHeader>
               </TableRow>
@@ -99,10 +98,6 @@ export default function Anlagen() {
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    {anlage.ausrichtung || <span className="text-gray-400">-</span>}
-                    {anlage.neigung_grad && ` / ${anlage.neigung_grad}°`}
                   </TableCell>
                   <TableCell>
                     {anlage.installationsdatum

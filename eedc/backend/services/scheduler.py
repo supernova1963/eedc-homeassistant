@@ -454,6 +454,87 @@ async def sensor_snapshot_preview_job() -> None:
         logger.debug(f"Sensor-Snapshot Preview Job fehlgeschlagen: {type(e).__name__}: {e}")
 
 
+async def sensor_snapshot_startup_recovery() -> None:
+    """
+    Holt nach Addon-Restart verpasste Snapshots der letzten 6 Stunden nach.
+
+    Hintergrund: Die Cron-Trigger :05 und :55 haben keine Misfire-Recovery.
+    Wird das Addon zwischen :55 und :05 der Folgestunde neu gestartet (z. B.
+    16:32 nach 15:55), fehlen für die laufende und ggf. abgeschlossene Stunde
+    die Snapshots, weil:
+      - HA Statistics für die laufende Stunde noch keine Hourly-Row hat
+        (die wird erst am Stundenende geschrieben)
+      - Der :55-Preview-Job nicht lief (Addon noch nicht da)
+
+    Strategie:
+      - Letzte 6 Stunden (≥ :00 lokal) durchgehen, je Anlage snapshot_anlage()
+        rufen — idempotent dank Upsert, holt aus HA Statistics nach.
+      - Für die laufende volle Stunde zusätzlich live_snapshot_if_missing(),
+        damit das Energieprofil sofort einen Wert hat (Approximation aus
+        Live-State, wird beim nächsten regulären :05-Lauf überschrieben).
+      - Anschließend aggregate_today_all() triggern, damit Slot-Werte sofort
+        in tagesenergieprofil sichtbar werden.
+
+    Wird in main.py beim Lifespan-Startup als Hintergrund-Task gestartet,
+    blockiert also den Boot nicht.
+    """
+    try:
+        from sqlalchemy import select
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.sensor_snapshot_service import (
+            snapshot_anlage,
+            live_snapshot_if_missing,
+        )
+
+        now = datetime.now()
+        aktuelle_stunde = now.replace(minute=0, second=0, microsecond=0)
+        zeitpunkte = [aktuelle_stunde - timedelta(hours=h) for h in range(7)]  # 0..-6
+
+        total_stats = 0
+        total_live = 0
+        async with get_session() as db:
+            result = await db.execute(select(Anlage))
+            anlagen = result.scalars().all()
+            for anlage in anlagen:
+                for zp in zeitpunkte:
+                    try:
+                        n = await snapshot_anlage(db, anlage, zeitpunkt=zp)
+                        total_stats += n
+                    except Exception as e:
+                        logger.debug(
+                            f"Recovery snapshot_anlage Anlage {anlage.id} {zp}: "
+                            f"{type(e).__name__}: {e}"
+                        )
+                # Live-Approximation für laufende Stunde (HA Statistics noch leer)
+                try:
+                    n = await live_snapshot_if_missing(
+                        db, anlage, zeitpunkt=aktuelle_stunde
+                    )
+                    total_live += n
+                except Exception as e:
+                    logger.debug(
+                        f"Recovery live_snapshot Anlage {anlage.id}: "
+                        f"{type(e).__name__}: {e}"
+                    )
+
+        if total_stats > 0 or total_live > 0:
+            logger.info(
+                f"Startup-Snapshot-Recovery: {total_stats} aus HA-Statistics "
+                f"+ {total_live} Live-Werte geschrieben"
+            )
+
+        # Sofortige Aggregation, damit das Energieprofil heute befüllt ist
+        try:
+            from backend.services.energie_profil_service import aggregate_today_all
+            await aggregate_today_all()
+        except Exception as e:
+            logger.debug(f"Recovery Heute-Aggregation: {type(e).__name__}: {e}")
+
+    except Exception as e:
+        logger.debug(f"Startup-Snapshot-Recovery fehlgeschlagen: {type(e).__name__}: {e}")
+
+
 async def energie_profil_heute_job() -> None:
     """Schreibt abgeschlossene Stunden des laufenden Tages (alle 15 Min)."""
     try:

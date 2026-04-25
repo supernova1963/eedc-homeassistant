@@ -27,8 +27,12 @@ class Anlage(Base):
         installationsdatum: Datum der Inbetriebnahme
         standort_*: Adressdaten
         latitude/longitude: Geokoordinaten für PVGIS (gilt für alle PV-Module am Standort)
-        ausrichtung: DEPRECATED - jetzt bei PV-Modul Investitionen
-        neigung_grad: DEPRECATED - jetzt bei PV-Modul Investitionen
+        ausrichtung: DEPRECATED — wird seit v3.23 von keinem aktiven Code mehr
+            gelesen. DB-Spalte bleibt erhalten, damit bestehende Installationen
+            keine Migration durchlaufen müssen. Werte werden in den PV-Modul-
+            Investitionen (Investition.ausrichtung) gepflegt.
+        neigung_grad: DEPRECATED — siehe ausrichtung. Wert in
+            Investition.neigung_grad pro PV-Modul.
     """
 
     __tablename__ = "anlagen"

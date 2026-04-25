@@ -390,9 +390,10 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               ))}
             </div>
           </div>
-          {/* Wetter-Timeline: 24h-Grid, aligned mit Chart-X-Achse */}
-          {/* Chart-Margins: left=-20 + YAxis ~60px = ~40px offset, right=5px */}
-          <div className="flex" style={{ paddingLeft: 40, paddingRight: 5 }}>
+          {/* Wetter-Timeline: 24h-Grid, aligned mit Chart-X-Achse.
+              Recharts plot-area startet bei container_x + margin.left + YAxis.width.
+              Mit margin.left=0 und YAxis.width=45 → padding-left=45 (rechts: margin.right=5). */}
+          <div className="flex" style={{ paddingLeft: 45, paddingRight: 5 }}>
             {Array.from({ length: 24 }, (_, h) => {
               const s = stundenMap[h]
               const istJetzt = h === currentHour
@@ -420,7 +421,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             })}
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <defs>
                 {/* PV-Gradienten */}
                 <linearGradient id="pvIstGrad" x1="0" y1="0" x2="0" y2="1">
@@ -469,10 +470,11 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 interval={2}
               />
               <YAxis
+                width={45}
                 tick={{ fontSize: 10 }}
                 className="fill-gray-400 dark:fill-gray-500"
                 tickFormatter={(v: number) => `${v.toFixed(1)}`}
-                label={{ value: 'kW', angle: -90, position: 'insideLeft', offset: 25, fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
+                label={{ value: 'kW', angle: -90, position: 'insideLeft', offset: 15, fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
               />
               <Tooltip content={<ChartTooltip
                 labelFormatter={(label) => `${label}:00 Uhr`}

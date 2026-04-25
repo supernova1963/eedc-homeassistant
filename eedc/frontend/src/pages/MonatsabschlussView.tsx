@@ -119,7 +119,7 @@ function Section({
   }
   const stop = (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault() }
   return (
-    <Card className="!p-0">
+    <Card className="!p-0 overflow-hidden">
       <button
         type="button"
         onClick={toggle}

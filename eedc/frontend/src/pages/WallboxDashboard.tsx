@@ -1,5 +1,5 @@
 /**
- * Wallbox Dashboard
+ * Wallbox
  * Zeigt: Heimladung (aus E-Auto-Daten), PV-Anteil, Ersparnis vs. externe Ladung
  * Die Wallbox ist Infrastruktur - ihr ROI entsteht durch günstiges Heimladen.
  */
@@ -46,7 +46,7 @@ export default function WallboxDashboard() {
   if (anlagen.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallbox Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallbox</h1>
         <Alert type="warning">Bitte zuerst eine Anlage anlegen.</Alert>
       </div>
     )
@@ -57,7 +57,7 @@ export default function WallboxDashboard() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <Plug className="h-8 w-8 text-purple-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallbox Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallbox</h1>
         </div>
         {anlagen.length > 1 && (
           <Select

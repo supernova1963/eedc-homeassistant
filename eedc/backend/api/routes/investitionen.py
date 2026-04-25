@@ -1595,7 +1595,16 @@ async def get_waermepumpe_dashboard(
 
     dashboards = []
     for wp in waermepumpen:
-        monatsdaten = md_by_inv.get(wp.id, [])
+        # Issue #153: Daten vor Anschaffungsdatum ignorieren — siehe komponenten.py
+        # für die Begründung. Konsistent mit Auswertung > Komponenten.
+        if wp.anschaffungsdatum:
+            anschaffung_key = (wp.anschaffungsdatum.year, wp.anschaffungsdatum.month)
+            monatsdaten = [
+                md for md in md_by_inv.get(wp.id, [])
+                if (md.jahr, md.monat) >= anschaffung_key
+            ]
+        else:
+            monatsdaten = md_by_inv.get(wp.id, [])
 
         gesamt_strom = 0
         gesamt_strom_heizen = 0

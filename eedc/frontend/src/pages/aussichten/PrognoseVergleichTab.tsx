@@ -8,7 +8,7 @@
  * - 7-Tage-Vergleichstabelle
  * - Genauigkeits-Tracking + Integrations-Vorschlag
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, AlertCircle, Info, Zap, BarChart3, Calendar } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
@@ -17,6 +17,7 @@ import {
   PrognosenVergleich,
   GenauigkeitsResponse,
 } from '../../api/aussichten'
+import { energieProfilApi } from '../../api/energie_profil'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -54,11 +55,116 @@ function formatDatum(datum: string): string {
   return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
 
+function IstUnvollstaendigPopover({
+  fehlendeStunden,
+  anlageId,
+  onReloaded,
+}: {
+  fehlendeStunden: number[]
+  anlageId: number
+  onReloaded: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'warning' | 'error'; msg: string } | null>(null)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const stundenLabel = fehlendeStunden.length === 0
+    ? '—'
+    : fehlendeStunden.length === 1
+      ? `Stunde ${fehlendeStunden[0]}:00–${fehlendeStunden[0] + 1}:00`
+      : `Stunden ${fehlendeStunden.map(h => `${h}:00`).join(', ')}`
+
+  const handleReaggregate = async () => {
+    setBusy(true)
+    setFeedback(null)
+    try {
+      const heute = new Date().toISOString().slice(0, 10)
+      const res = await energieProfilApi.reaggregateTag(anlageId, heute)
+      if (res.stunden_mit_messdaten > 0) {
+        setFeedback({ tone: 'success', msg: `Neu berechnet: ${res.stunden_mit_messdaten}/24 Stunden mit Daten.` })
+      } else {
+        setFeedback({ tone: 'warning', msg: 'Reaggregiert, aber HA Statistics liefert noch keine Werte. In ~10 Min erneut versuchen.' })
+      }
+      onReloaded()
+    } catch (e) {
+      setFeedback({ tone: 'error', msg: e instanceof Error ? e.message : 'Reaggregation fehlgeschlagen' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        className="ml-1 text-amber-500 hover:text-amber-600 cursor-pointer"
+        aria-label="IST-Daten unvollständig"
+      >
+        ⚠
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 z-[9999] w-72 max-w-[calc(100vw-2rem)] p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl text-left"
+        >
+          <div className="text-xs font-semibold text-gray-900 dark:text-white mb-1">
+            IST-Daten unvollständig
+          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-2">
+            Ohne Werte für {stundenLabel}.
+            Falls EEDC oder HA kürzlich neu gestartet wurden, schließt sich die Lücke
+            beim nächsten Snapshot-Zyklus (max. 1 h). Bleibt sie bestehen, ist
+            wahrscheinlich der kumulative Zähler im Sensor-Mapping nicht gesetzt.
+          </div>
+          {feedback && (
+            <div className={`text-xs mb-2 px-2 py-1 rounded ${
+              feedback.tone === 'success'
+                ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                : feedback.tone === 'warning'
+                  ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                  : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+            }`}>
+              {feedback.msg}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleReaggregate}
+              disabled={busy}
+              className="flex-1 px-2 py-1 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded transition-colors"
+            >
+              {busy ? 'Berechne…' : 'Tag neu berechnen'}
+            </button>
+            <a
+              href="#/einstellungen/sensor-mapping"
+              className="px-2 py-1 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded transition-colors"
+            >
+              Sensor-Mapping
+            </a>
+          </div>
+        </div>
+      )}
+    </span>
+  )
+}
+
 export default function PrognoseVergleichTab({ anlageId }: Props) {
   const [data, setData] = useState<PrognosenVergleich | null>(null)
   const [genauigkeit, setGenauigkeit] = useState<GenauigkeitsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -79,7 +185,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
     }
     load()
     return () => { cancelled = true }
-  }, [anlageId])
+  }, [anlageId, reloadTick])
 
   if (loading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>
   if (error) return <Alert type="error">{error}</Alert>
@@ -177,9 +283,13 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
                   {fmtKwh(data.ist_heute_kwh)}
                   {data.ist_unvollstaendig && (
-                    <SimpleTooltip text="Mindestens eine Stunde dieses Tages hat keinen Zähler-Wert. Bitte kumulativen Zähler im Sensor-Mapping-Wizard prüfen.">
-                      <span className="ml-1 text-amber-500 cursor-help" aria-label="Unvollständig">⚠</span>
-                    </SimpleTooltip>
+                    <IstUnvollstaendigPopover
+                      fehlendeStunden={data.ist_stundenprofil
+                        .filter(s => s.kw === null && s.stunde < new Date().getHours())
+                        .map(s => s.stunde)}
+                      anlageId={anlageId}
+                      onReloaded={() => setReloadTick(t => t + 1)}
+                    />
                   )}
                 </td>
               </tr>

@@ -148,13 +148,23 @@ async def get_komponenten_zeitreihe(
     hat_v2h = False
 
     for imd in all_imd:
-        key = (imd.jahr, imd.monat)
-        if key not in inv_data_by_month:
-            inv_data_by_month[key] = empty_month_data()
-
         inv = inv_by_id.get(imd.investition_id)
         if not inv:
             continue
+
+        # Issue #153: Daten vor Anschaffungsdatum ignorieren — sonst fließen
+        # historische, vor-Inbetriebnahme-Werte (z. B. unvollständige Test-Daten,
+        # Sensor mit anderer Erfassungsmethode) in JAZ/Aggregate ein und
+        # verfälschen die Komponenten-Auswertung.
+        if inv.anschaffungsdatum:
+            anschaffung_jahr = inv.anschaffungsdatum.year
+            anschaffung_monat = inv.anschaffungsdatum.month
+            if (imd.jahr, imd.monat) < (anschaffung_jahr, anschaffung_monat):
+                continue
+
+        key = (imd.jahr, imd.monat)
+        if key not in inv_data_by_month:
+            inv_data_by_month[key] = empty_month_data()
 
         data = imd.verbrauch_daten or {}
         d = inv_data_by_month[key]

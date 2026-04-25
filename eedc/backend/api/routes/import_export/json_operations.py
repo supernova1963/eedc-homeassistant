@@ -143,8 +143,6 @@ class AnlageExport(BaseModel):
     standort_strasse: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    ausrichtung: Optional[str] = None
-    neigung_grad: Optional[float] = None
     wechselrichter_hersteller: Optional[str] = None
     mastr_id: Optional[str] = None
     versorger_daten: Optional[dict] = None
@@ -280,8 +278,6 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
         standort_strasse=anlage.standort_strasse,
         latitude=anlage.latitude,
         longitude=anlage.longitude,
-        ausrichtung=anlage.ausrichtung,
-        neigung_grad=anlage.neigung_grad,
         wechselrichter_hersteller=getattr(anlage, 'wechselrichter_hersteller', None),
         mastr_id=anlage.mastr_id,
         versorger_daten=anlage.versorger_daten,
@@ -584,8 +580,6 @@ async def import_json(
             standort_strasse=anlage_data.get("standort_strasse"),
             latitude=anlage_data.get("latitude"),
             longitude=anlage_data.get("longitude"),
-            ausrichtung=anlage_data.get("ausrichtung"),
-            neigung_grad=anlage_data.get("neigung_grad"),
             wechselrichter_hersteller=anlage_data.get("wechselrichter_hersteller"),
             mastr_id=anlage_data.get("mastr_id"),
             versorger_daten=anlage_data.get("versorger_daten"),

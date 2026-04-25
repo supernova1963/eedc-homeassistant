@@ -197,7 +197,12 @@ export default function PVAnlageDashboard() {
           title="Anlagenleistung"
           value={gesamtKwp > 0 ? gesamtKwp.toFixed(1) : '---'}
           unit="kWp"
-          subtitle={`${pvSysteme.length} WR, ${pvSysteme.reduce((s, p) => s + p.pvModule.length, 0) + orphanModule.length} Module`}
+          subtitle={(() => {
+            const wrCount = pvSysteme.length
+            const moduleCount = [...pvSysteme.flatMap(p => p.pvModule), ...orphanModule]
+              .reduce((s, m) => s + ((m.parameter as { anzahl_module?: number } | undefined)?.anzahl_module || 1), 0)
+            return `${wrCount} WR, ${moduleCount} Module`
+          })()}
           icon={Sun}
           color="yellow"
         />

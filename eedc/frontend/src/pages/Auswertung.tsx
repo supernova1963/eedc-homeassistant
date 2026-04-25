@@ -149,7 +149,10 @@ export default function Auswertung() {
             {tabs.map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
                 className={`py-3 px-1 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
                   activeTab === tab.key
                     ? 'border-primary-500 text-primary-600 dark:text-primary-400'

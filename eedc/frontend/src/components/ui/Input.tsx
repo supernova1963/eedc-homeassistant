@@ -28,6 +28,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             placeholder-gray-400 dark:placeholder-gray-500
             focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
             disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
+            [&[type='date']]:text-left
+            [&::-webkit-datetime-edit]:text-left
             ${error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}
             ${className}
           `}

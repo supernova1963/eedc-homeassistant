@@ -483,13 +483,12 @@ export function useSetupWizard(): UseSetupWizardReturn {
       } as InvestitionCreate)
 
       // 2. PV-Module erstellen und dem Wechselrichter zuordnen
+      // Ausrichtung/Neigung trägt der User in der PV-Modul-Investition selbst nach.
       await investitionenApi.create({
         anlage_id: wizardState.anlageId,
         typ: 'pv-module',
         bezeichnung: 'PV-Module',
         leistung_kwp: anlage.leistung_kwp,
-        ausrichtung: anlage.ausrichtung,
-        neigung_grad: anlage.neigung_grad,
         parent_investition_id: wechselrichter.id,
         aktiv: true,
         anschaffungsdatum: anlage.installationsdatum,
