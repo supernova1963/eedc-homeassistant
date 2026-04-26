@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.4] - 2026-04-26
+
+### Bugfixes
+
+- **fix(auswertung): Tab-Wechsel scrollt zuverlässig zum Seitenanfang (#154 detLAN, dritter Anlauf)** — detLAN-Re-Test: Tabs „CO2" und „Tabelle" übernahmen die Scroll-Position der vorherigen Tab, andere Tabs scrollten korrekt nach oben. Ursache: bisheriges `scrollTo` lief im `onClick`-Handler **vor** dem React-Re-Render und mit `behavior:'smooth'` — bei Tabs mit langem Inhalt wurde die Animation durch das Re-Render unterbrochen oder gekappt. Lösung: `useEffect` auf `activeTab`-Änderung mit `behavior:'auto'` — scrollt **nach** dem Re-Render hart auf 0, ohne Smooth-Animation. Entspricht dem Cockpit-Pattern (jeder Sub-Tab beginnt am Seitenanfang) und detLAN's explizit formuliertem Wunsch.
+
+### Internal
+
+- **internal: Day-Ahead-Stundenprofil-Snapshot in `TagesZusammenfassung`** — Zwei neue JSON-Felder (`pv_prognose_stundenprofil`, `solcast_prognose_stundenprofil`) speichern den ersten OpenMeteo-/Solcast-Forecast des Tages als 24-Werte-Liste in kWh (Backward-Slot-Konvention). First-write-wins: spätere Aufrufe am selben Tag überschreiben das Profil nicht, der Day-Ahead-Charakter bleibt erhalten. Schreiben passiert fire-and-forget aus dem bestehenden Live-Wetter-Endpoint, kein neuer Scheduler-Job, kein UI, kein API-Endpunkt — reine Hintergrund-Datensammlung für künftige Diagnostik (siehe [`docs/KONZEPT-KORREKTURPROFIL.md`](docs/KONZEPT-KORREKTURPROFIL.md)). Storage ~80 KB/Jahr/Anlage.
+
+---
+
 ## [3.23.3] - 2026-04-26
 
 ### Neue Features

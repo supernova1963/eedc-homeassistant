@@ -1,5 +1,5 @@
 // Auswertung Hauptseite - Tab-Navigation
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight, Calendar, FileText } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
@@ -24,6 +24,14 @@ export default function Auswertung() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('energie')
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all')
+
+  // Tab-Wechsel: hart auf Seitenanfang scrollen (#154 detLAN — Cockpit-Pattern).
+  // useEffect läuft NACH dem Re-Render des neuen Tabs, daher robust auch bei
+  // Tabs mit langem Inhalt; behavior:'auto' ohne Smooth-Animation, damit das
+  // Auge die neue Seite immer von oben aufnimmt.
+  useEffect(() => {
+    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [activeTab])
 
   const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
 
@@ -149,10 +157,7 @@ export default function Auswertung() {
             {tabs.map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => {
-                  setActiveTab(tab.key)
-                  document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
-                }}
+                onClick={() => setActiveTab(tab.key)}
                 className={`py-3 px-1 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
                   activeTab === tab.key
                     ? 'border-primary-500 text-primary-600 dark:text-primary-400'
