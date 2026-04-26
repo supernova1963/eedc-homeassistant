@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.2] - 2026-04-26
+
+### Bugfixes
+
+- **fix(downloads): Backup/CSV/PDF-Downloads über Blob-Pattern statt `window.open` (Joachim-PN)** — Joachim meldete „401: unauthorized" beim Tippen auf den Backup-Button in der iOS HA Companion-App. Ursache: `window.open(url, '_blank')` (in [`Backup.tsx`](eedc/frontend/src/pages/Backup.tsx)) öffnet `_blank`-Links extern in Safari — und Safari hat keine HA-Ingress-Session, daher 401 vom Ingress-Endpoint. Browser klappte das deshalb, App nicht. Fünf Stellen umgestellt auf zentrales `downloadFile(url, filename)` aus neuem [`lib/download.ts`](eedc/frontend/src/lib/download.ts) (fetch + Blob + temporärer `<a download>`): Backup-Button, JSON-Export-Icon in der Anlagen-Liste, CSV-Template + CSV-Export im Import-Dialog, alle vier PDF-Dokumente im Dokumente-Dialog (lokale Helper-Duplikate konsolidiert). Damit läuft die HTTP-Anfrage in der bestehenden iframe-Session und der Download geht als blob:-URL ins Filesystem — funktioniert in der HA-App + Browser gleichermaßen.
+
+- **fix(prognosen-tabelle): „Laufbalken" entfernt + Spalten konsistent ausgerichtet (Rainer-PN, Detlef-PN)** — Rainer meldete einen sichtbaren Vertikal-Balken am rechten Rand der 24h-Stundenvergleichstabelle nach „Tag neu berechnen". Es war die Browser-Scrollbar des Tabellen-Containers — `max-h-96` (384px) plus die Stunden-Anzahl in den Übergangs-Monaten ließen die Tabelle um wenige Pixel überlaufen → Scrollbar erschien, obwohl optisch alles reinpasste. Höhen-Constraint + sticky-thead/tfoot entfernt. Im selben Zug die Spaltenstruktur **aller vier Tabellen** auf der Prognosen-Seite vereinheitlicht: KPI-Matrix (Heute/Morgen/Übermorgen), 24h-Stundenvergleich, 7-Tage-Vergleich und Genauigkeits-Tracking nutzen jetzt durchgängig **`table-fixed` + `<colgroup>`** mit konsistenten Title-Spalten und gleichmäßig verteilten Wertspalten. Im 7-Tage-Vergleich wurde die **Wetter-Spalte vor das Datum** verschoben (zweispaltiger Zeilentitel), im Genauigkeits-Tracking die **IST-Spalte ans Ende**. Damit stehen OpenMeteo / EEDC / Solcast / IST in allen vier Tabellen in derselben vertikalen Linie übereinander — die Seite scrollt sauber von oben nach unten ohne Auge-Zickzack.
+
+---
+
 ## [3.23.1] - 2026-04-26
 
 ### Bugfixes
