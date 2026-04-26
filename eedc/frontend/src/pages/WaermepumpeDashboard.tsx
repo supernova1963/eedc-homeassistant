@@ -9,7 +9,7 @@ import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ } from '../lib'
+import { MONAT_KURZ, fmtKpi } from '../lib'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
 import {
@@ -151,7 +151,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
   })
 
   // Monatsvergleich über Jahre: Jan/Feb/...Dez als Gruppen, je ein Balken pro Jahr
-  const [vergleichModus, setVergleichModus] = useState<'cop' | 'strom'>('strom')
+  const [vergleichModus, setVergleichModus] = useState<'jaz' | 'strom'>('strom')
   const vergleichJahre = [...new Set(monatsdaten.map(md => md.jahr))].sort()
   const vergleichJahreColors = ['#f59e0b', '#22c55e', '#3b82f6', '#ef4444', '#8b5cf6']
   const vergleichData = Array.from({ length: 12 }, (_, i) => {
@@ -162,7 +162,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       if (md) {
         const waerme = (md.verbrauch_daten.heizenergie_kwh || 0) + (md.verbrauch_daten.warmwasser_kwh || 0)
         const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
-        if (vergleichModus === 'cop') {
+        if (vergleichModus === 'jaz') {
           entry[`val_${jahr}`] = strom > 0 ? Math.round(waerme / strom * 100) / 100 : null
         } else {
           entry[`val_${jahr}`] = strom > 0 ? Math.round(strom) : null
@@ -204,17 +204,17 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
-          title="JAZ (gesamt)"
-          value={z.durchschnitt_cop.toFixed(2)}
+          title="JAZ"
+          value={fmtKpi(z.durchschnitt_cop, 2)}
           icon={Thermometer}
           color="orange"
           formel="JAZ = Wärme ÷ Strom (Gesamtlaufzeit)"
           berechnung={`${z.gesamt_waerme_kwh.toFixed(0)} kWh ÷ ${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
-          ergebnis={`= ${z.durchschnitt_cop.toFixed(2)}`}
+          ergebnis={z.durchschnitt_cop ? `= ${z.durchschnitt_cop.toFixed(2)}` : '---'}
         />
         <KPICard
           title="Wärme erzeugt"
-          value={(z.gesamt_waerme_kwh / 1000).toFixed(1)}
+          value={fmtKpi(z.gesamt_waerme_kwh / 1000, 1)}
           unit="MWh"
           icon={Flame}
           color="red"
@@ -224,7 +224,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         />
         <KPICard
           title="Strom verbraucht"
-          value={(z.gesamt_stromverbrauch_kwh / 1000).toFixed(1)}
+          value={fmtKpi(z.gesamt_stromverbrauch_kwh / 1000, 1)}
           unit="MWh"
           icon={Zap}
           color="yellow"
@@ -233,8 +233,8 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
           ergebnis={`= ${(z.gesamt_stromverbrauch_kwh / 1000).toFixed(2)} MWh`}
         />
         <KPICard
-          title="Ersparnis"
-          value={z.ersparnis_euro.toFixed(0)}
+          title="Ersparnis vs. Gas"
+          value={fmtKpi(z.ersparnis_euro, 0)}
           unit="€"
           icon={TrendingUp}
           color="green"
@@ -249,33 +249,33 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <KPICard
             title="JAZ Heizen"
-            value={z.cop_heizen?.toFixed(2) || '–'}
+            value={fmtKpi(z.cop_heizen, 2)}
             icon={Thermometer}
-            color="blue"
+            color="orange"
             formel="JAZ Heizen = Heizenergie ÷ Strom Heizen"
             berechnung={`${z.gesamt_heizung_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
-            ergebnis={`= ${z.cop_heizen?.toFixed(2) || '–'}`}
+            ergebnis={z.cop_heizen ? `= ${z.cop_heizen.toFixed(2)}` : '---'}
           />
           <KPICard
             title="JAZ Warmwasser"
-            value={(z.cop_warmwasser && z.cop_warmwasser > 0) ? z.cop_warmwasser.toFixed(2) : '–'}
+            value={fmtKpi(z.cop_warmwasser, 2)}
             icon={Thermometer}
-            color="purple"
+            color="orange"
             formel="JAZ WW = Warmwasser ÷ Strom WW"
             berechnung={`${z.gesamt_warmwasser_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
-            ergebnis={(z.cop_warmwasser && z.cop_warmwasser > 0) ? `= ${z.cop_warmwasser.toFixed(2)}` : '– (keine Daten)'}
+            ergebnis={(z.cop_warmwasser && z.cop_warmwasser > 0) ? `= ${z.cop_warmwasser.toFixed(2)}` : '---'}
           />
           <KPICard
             title="Strom Heizen"
-            value={(z.gesamt_strom_heizen_kwh! / 1000).toFixed(1)}
+            value={fmtKpi(z.gesamt_strom_heizen_kwh ? z.gesamt_strom_heizen_kwh / 1000 : null, 1)}
             unit="MWh"
             icon={Zap}
             color="yellow"
           />
           <KPICard
             title="Strom Warmwasser"
-            value={z.gesamt_strom_warmwasser_kwh ? (z.gesamt_strom_warmwasser_kwh / 1000).toFixed(1) : '–'}
-            unit={z.gesamt_strom_warmwasser_kwh ? 'MWh' : ''}
+            value={fmtKpi(z.gesamt_strom_warmwasser_kwh ? z.gesamt_strom_warmwasser_kwh / 1000 : null, 1)}
+            unit="MWh"
             icon={Zap}
             color="yellow"
           />
@@ -376,7 +376,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {vergleichModus === 'cop' ? 'COP' : 'Stromverbrauch'} Monatsvergleich {vergleichJahre.length > 1 ? `(${vergleichJahre[0]}–${vergleichJahre[vergleichJahre.length - 1]})` : vergleichJahre[0]}
+            {vergleichModus === 'jaz' ? 'JAZ' : 'Stromverbrauch'} Monatsvergleich {vergleichJahre.length > 1 ? `(${vergleichJahre[0]}–${vergleichJahre[vergleichJahre.length - 1]})` : vergleichJahre[0]}
           </h3>
           <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
             <button
@@ -386,10 +386,10 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
               Strom (kWh)
             </button>
             <button
-              onClick={() => setVergleichModus('cop')}
-              className={`px-3 py-1 transition-colors ${vergleichModus === 'cop' ? 'bg-orange-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              onClick={() => setVergleichModus('jaz')}
+              className={`px-3 py-1 transition-colors ${vergleichModus === 'jaz' ? 'bg-orange-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
             >
-              COP
+              JAZ
             </button>
           </div>
         </div>
@@ -398,8 +398,8 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             <BarChart data={vergleichData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={12} />
-              <YAxis domain={vergleichModus === 'cop' ? [0, 6] : undefined} />
-              <Tooltip content={<ChartTooltip formatter={(v) => vergleichModus === 'cop' ? v?.toFixed(2) : `${v} kWh`} />} />
+              <YAxis domain={vergleichModus === 'jaz' ? [0, 6] : undefined} />
+              <Tooltip content={<ChartTooltip formatter={(v) => vergleichModus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
               <Legend />
               {vergleichJahre.map((jahr, i) => (
                 <Bar
@@ -438,7 +438,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
                 <th className="text-right py-2 px-2">Strom</th>
                 <th className="text-right py-2 px-2">Heizung</th>
                 <th className="text-right py-2 px-2">Warmwasser</th>
-                <th className="text-right py-2 px-2">COP</th>
+                <th className="text-right py-2 px-2">JAZ</th>
               </tr>
             </thead>
             <tbody>

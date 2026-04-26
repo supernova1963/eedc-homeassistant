@@ -17,9 +17,10 @@ import { useNavigate } from 'react-router-dom'
 import {
   Sun, Zap, Battery, TrendingUp, Flame, Car, Home,
   ArrowDownToLine, ArrowUpFromLine, Percent, Gauge, Euro, Leaf,
-  Calendar, Receipt, Share2
+  Calendar, Receipt, Share2, Activity, Thermometer
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Select, fmtCalc } from '../components/ui'
+import { fmtKpi } from '../lib'
 import {
   HeroLeiste, EnergyFlowDiagram, RingGaugeCard, SparklineChart,
   AmortisationsBar, CommunityTeaser, CommunityNudge, Section, SectionLink, KPICard,
@@ -295,15 +296,15 @@ export default function Dashboard() {
               ergebnis={`= ${fmtCalc(data.speicher_entladung_kwh / 1000, 2)} MWh`}
             />
             <KPICard
-              title="Ø Effizienz"
-              value={data.speicher_effizienz_prozent?.toFixed(1) || '---'}
+              title="Effizienz"
+              value={fmtKpi(data.speicher_effizienz_prozent, 1)}
               unit="%"
-              icon={Gauge}
-              color="text-teal-500"
-              bgColor="bg-teal-50 dark:bg-teal-900/20"
+              icon={Activity}
+              color="text-cyan-500"
+              bgColor="bg-cyan-50 dark:bg-cyan-900/20"
               formel="Entladung ÷ Ladung × 100"
               berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} ÷ ${fmtCalc(data.speicher_ladung_kwh, 0)} × 100`}
-              ergebnis={`= ${fmtCalc(data.speicher_effizienz_prozent || 0, 1)} %`}
+              ergebnis={data.speicher_effizienz_prozent ? `= ${fmtCalc(data.speicher_effizienz_prozent, 1)} %` : '---'}
             />
             <KPICard
               title="Vollzyklen"
@@ -326,6 +327,17 @@ export default function Dashboard() {
         <SectionLink title="Wärmepumpe" icon={Flame} onClick={() => navigate('/cockpit/waermepumpe')}>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
+              title="JAZ"
+              value={fmtKpi(data.wp_cop, 2)}
+              unit=""
+              icon={Thermometer}
+              color="text-orange-500"
+              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              formel="JAZ = Wärme ÷ Strom"
+              berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} ÷ ${fmtCalc(data.wp_strom_kwh, 0)}`}
+              ergebnis={data.wp_cop ? `= ${fmtCalc(data.wp_cop, 2)}` : '---'}
+            />
+            <KPICard
               title="Wärme erzeugt"
               value={(data.wp_waerme_kwh / 1000).toFixed(2)}
               unit="MWh"
@@ -341,29 +353,18 @@ export default function Dashboard() {
               value={(data.wp_strom_kwh / 1000).toFixed(2)}
               unit="MWh"
               icon={Zap}
-              color="text-purple-500"
-              bgColor="bg-purple-50 dark:bg-purple-900/20"
+              color="text-yellow-500"
+              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
               formel="Σ WP-Stromverbrauch"
               berechnung={`${fmtCalc(data.wp_strom_kwh, 0)} kWh`}
               ergebnis={`= ${fmtCalc(data.wp_strom_kwh / 1000, 2)} MWh`}
             />
             <KPICard
-              title="JAZ"
-              value={data.wp_cop?.toFixed(1) || '---'}
-              unit=""
-              icon={Gauge}
-              color="text-orange-500"
-              bgColor="bg-orange-50 dark:bg-orange-900/20"
-              formel="JAZ = Wärme ÷ Strom"
-              berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} ÷ ${fmtCalc(data.wp_strom_kwh, 0)}`}
-              ergebnis={`= ${fmtCalc(data.wp_cop || 0, 1)}`}
-            />
-            <KPICard
               title="Ersparnis vs. Gas"
               value={data.wp_ersparnis_euro.toFixed(0)}
               unit="€"
-              icon={Euro}
-              color="text-green-600"
+              icon={TrendingUp}
+              color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
               formel="Gaskosten - Stromkosten"
               berechnung={`(${fmtCalc(data.wp_waerme_kwh, 0)} kWh ÷ 0.9 × 10ct) - (${fmtCalc(data.wp_strom_kwh, 0)} kWh × Strompreis)`}
