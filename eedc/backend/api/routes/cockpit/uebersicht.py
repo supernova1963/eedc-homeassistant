@@ -174,6 +174,16 @@ async def get_cockpit_uebersicht(
         if not inv:
             continue
 
+        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren — sonst fließen
+        # historische, vor-Inbetriebnahme-Werte (z. B. unvollständige Test-Daten,
+        # Sensor mit anderer Erfassungsmethode) in JAZ/Aggregate ein und
+        # verfälschen die Cockpit-Übersicht.
+        if inv.anschaffungsdatum:
+            anschaffung_jahr = inv.anschaffungsdatum.year
+            anschaffung_monat = inv.anschaffungsdatum.month
+            if (imd.jahr, imd.monat) < (anschaffung_jahr, anschaffung_monat):
+                continue
+
         data = imd.verbrauch_daten or {}
         zeitraum_monate.add((imd.jahr, imd.monat))
 

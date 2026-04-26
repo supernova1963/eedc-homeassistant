@@ -348,13 +348,13 @@ export default function Dashboard() {
               ergebnis={`= ${fmtCalc(data.wp_strom_kwh / 1000, 2)} MWh`}
             />
             <KPICard
-              title="Ø COP"
+              title="JAZ"
               value={data.wp_cop?.toFixed(1) || '---'}
               unit=""
               icon={Gauge}
               color="text-orange-500"
               bgColor="bg-orange-50 dark:bg-orange-900/20"
-              formel="Wärme ÷ Strom"
+              formel="JAZ = Wärme ÷ Strom"
               berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} ÷ ${fmtCalc(data.wp_strom_kwh, 0)}`}
               ergebnis={`= ${fmtCalc(data.wp_cop || 0, 1)}`}
             />

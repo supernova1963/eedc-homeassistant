@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 
 export default function WaermepumpeDashboard() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<WaermepumpeDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,9 +55,9 @@ export default function WaermepumpeDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Flame className="h-8 w-8 text-orange-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wärmepumpe</h1>
+        <div className="flex items-center gap-3 min-w-0">
+          <Flame className="h-8 w-8 text-orange-500 flex-shrink-0" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{anlage?.anlagenname || 'Wärmepumpe'}</h1>
         </div>
         {anlagen.length > 1 && (
           <Select
@@ -153,16 +153,16 @@ function WaermepumpeCard({ dashboard, showHeader = true }: { dashboard: Waermepu
   return (
     <Card className="space-y-6">
       {showHeader ? (
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white truncate">
               {investition.bezeichnung}
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {z.anzahl_monate} Monate Daten
             </p>
           </div>
-          <Flame className="h-10 w-10 text-orange-500" />
+          <Flame className="h-10 w-10 text-orange-500 flex-shrink-0" />
         </div>
       ) : (
         <p className="text-sm text-gray-500 dark:text-gray-400">

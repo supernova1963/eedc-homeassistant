@@ -74,6 +74,15 @@ async def get_nachhaltigkeit(
     data_by_month: dict[tuple[int, int], dict] = {}
 
     for imd in all_imd:
+        inv = inv_by_id.get(imd.investition_id)
+        if not inv:
+            continue
+
+        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
+        if inv.anschaffungsdatum:
+            if (imd.jahr, imd.monat) < (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month):
+                continue
+
         key = (imd.jahr, imd.monat)
         if key not in data_by_month:
             data_by_month[key] = {
@@ -81,10 +90,6 @@ async def get_nachhaltigkeit(
                 "wp_waerme": 0, "wp_strom": 0,
                 "emob_km": 0, "emob_ladung": 0, "emob_pv_ladung": 0,
             }
-
-        inv = inv_by_id.get(imd.investition_id)
-        if not inv:
-            continue
 
         data = imd.verbrauch_daten or {}
 

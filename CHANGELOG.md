@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.1] - 2026-04-26
+
+### Bugfixes
+
+- **fix(cockpit-uebersicht): JAZ/Wärme/Strom ignorieren Daten vor Anschaffungsdatum (#155.1, Folgefix zu #153)** — detLAN-Beobachtung: „Die Wärmepumpe im Cockpit-Überblick haben wir übersehen." Der v3.23.0-Filter aus #153 wurde nur in `cockpit/komponenten.py` und im WP-Detail-Endpoint (`investitionen.py:/dashboard/waermepumpe`) eingebaut. Die Cockpit-Hauptseite („Übersicht") zog ihre WP-Aggregate aus `cockpit/uebersicht.py` — und summierte dort weiter alle vorhandenen `InvestitionMonatsdaten` ungefiltert. Dasselbe Problem in vier weiteren Endpunkten (`cockpit/social.py`, `cockpit/nachhaltigkeit.py`, `aktueller_monat.py`, `aussichten.py`) und in fünf Dashboards (E-Auto, Speicher, Wallbox, Balkonkraftwerk — der WP-Dashboard hatte den Filter bereits). Filter konsistent eingebaut: Monate vor `(anschaffung.year, anschaffung.month)` werden überall ignoriert. Greift für WP, Speicher, Wallbox/E-Auto und Balkonkraftwerk gleichermaßen; das löst auch #155.4-Beobachtung („Es wird erneut das Anlagendatum für den Zeitraum ausgewählt"), weil der Zeitraum jetzt aus dem gefilterten Datensatz hergeleitet wird.
+
+- **fix(auswertung): Tab-Wechsel scrollt jetzt wirklich (#154 reopened)** — Der v3.23.0-Fix scrollte `window` per `window.scrollTo(...)`, das eigentlich scrollende Element ist aber das `<main>` mit `overflow-auto` aus dem App-Layout — `window.scrollTo` war damit ein No-Op. Korrigiert auf `document.querySelector('main')?.scrollTo({...})`.
+
+- **fix(cockpit): Anlagenname als Titel statt redundanter Typ-Bezeichnung (#156)** — detLAN: „Die Art des Investments geht aus dem aktiven Tab hervor — eine Wiederholung als Titel ist nicht erforderlich." Der `<h1>` der vier Cockpit-Dashboards (PV-Anlage, Wärmepumpe, Speicher, Wallbox) zeigt jetzt `{anlage.anlagenname}` statt „PV-Anlage" / „Wärmepumpe" / „Speicher" / „Wallbox" — Investment-Art bleibt nur noch im aktiven grünen Tab sichtbar, der Card-Header bei mehreren Investments derselben Art trägt weiterhin `{investition.bezeichnung}` zur Unterscheidung.
+
+- **fix(cockpit): Icon-Overflow bei schmalen Fenstergrößen (#155.4)** — In den vier Cockpit-Dashboards rutschten Header-Icon (Sun/Flame/Battery/Plug) und Card-Header-Icon (Flame/Battery/Plug) aus dem Container, sobald der Bezeichnungs-Text zu lang wurde. `flex-shrink-0` auf den Icons + `min-w-0` + `truncate` auf den Text-Containern halten das Layout stabil.
+
+- **fix(navigation): Hamburger-Menü früher aktiv (md → lg, #155.1)** — detLAN-Screenshot zeigte bei 1539px die Hauptnavigation und das Settings-Dropdown im Konflikt. Breakpoint in `TopNavigation.tsx` von `md:` (768px) auf `lg:` (1024px) gehoben — Hamburger-Layout ist damit auf typischen Notebook-Viewports und kleineren Browser-Fenstern aktiv.
+
+- **fix(cockpit): WP-Tile zeigt „JAZ" statt „Ø COP" (#155.3, #155.5)** — detLAN: Auswertung→Komponenten→WP nutzt für die Periode JAZ, das Cockpit-Hauptseiten-Tile zeigte demgegenüber „Ø COP". Cockpit-Tile auf „JAZ" + Formel-Beschriftung „JAZ = Wärme ÷ Strom" harmonisiert; pro-Monat-Werte (Tabelle, Vergleichs-Toggle) bleiben weiter als COP.
+
+- **fix(monatsabschluss-wp): VM-Vergleich nur wenn Vormonat tatsächlich WP-Daten hat (#155.2)** — Bei einer WP, die im aktuellen Monat zum ersten Mal Daten hat, zeigte der Monatsabschluss alle vier KPI-Tiles („Stromverbrauch", „Wärmeertrag", „COP", „Ersparnis vs. Gas") mit „VM: 0 kWh" oder „VM: NaN kWh" — irreführend, weil der Vormonat keinen WP-Betrieb hatte. Single-Source-Guard `hatVmWp = (vm?.wp_strom_kwh ?? 0) > 0` unterdrückt jetzt sowohl die Subtitle-Zeilen als auch die `VglZeile`-Vergleichsspalten der WP-Sektion.
+
+---
+
 ## [3.23.0] - 2026-04-25
 
 ### Neue Features
