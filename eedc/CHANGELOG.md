@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+---
+
+## [3.23.6] - 2026-04-26
+
+### Bugfixes
+
+- **fix(layout): h-screen → h-dvh gegen leeren Bereich unter Footer auf iOS (#161 detLAN)** — detLAN meldete bei iPhone mit Anzeigezoom „Größerer Text" (und analog HA-Companion-App mit erhöhtem Seitenzoom): in den Monatsberichten ans Ende scrollen, neu absetzen und weiterziehen — und es geht *noch weiter*, der Footer sitzt mitten im Viewport mit leerem Raum darunter. Ursache: Layout-Wrapper [Layout.tsx](eedc/frontend/src/components/layout/Layout.tsx) nutzt `h-screen` (= `100vh`); auf iOS Safari / WKWebView ist `100vh` statisch das Viewport ohne UI-Chrome (Adressleiste, Tab-Bar). Mit eingeklappter Adressleiste oder Anzeigezoom wird das echte Viewport größer als `100vh` — der äußere Container füllt es nicht aus, das innere `<main>` mit `flex-1 overflow-auto` lässt sich nach dem ersten Scroll-Anschlag im Overscroll noch ein Stück weiter ziehen. Fix: `h-screen` → **`h-dvh`** (dynamic viewport height, von Tailwind 3.4+ unterstützt). `dvh` reagiert dynamisch auf Adressleisten-Animationen und füllt das echte sichtbare Viewport. Eine-Zeilen-Änderung. Issue #161.
+
+- **fix(layout): Einstellungs-Dropdown scrollbar + SimpleTooltip Viewport-Clamp (#158 detLAN)** — Zwei kleine UX-Bugs aus detLAN's Mobile/Smartfenster-Re-Test. (1) Bei kurzem Browser-Fenster lief das Desktop-Einstellungs-Dropdown unten aus dem Viewport — der letzte Eintrag „Sensor-Zuordnung" war nicht erreichbar. Der äquivalente Container im Mobile-Panel hatte `max-h-[calc(100vh-3.5rem)] overflow-y-auto`, das Desktop-Dropdown nicht. Jetzt analog ergänzt in [`TopNavigation.tsx`](eedc/frontend/src/components/layout/TopNavigation.tsx). (2) Tooltips aus `SimpleTooltip` (z. B. „Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)" auf der Live-Dashboard-Netzbezug-Kachel) wurden bei langem Text und Trigger nahe am rechten Rand abgeschnitten — die Kombination `whitespace-nowrap` + `transform: translateX(-50%)` erzeugte einen einzeiligen Streifen, der über den Viewport-Rand hinausragte. Jetzt in [`FormelTooltip.tsx`](eedc/frontend/src/components/ui/FormelTooltip.tsx): `max-w-xs whitespace-normal break-words` (mehrzeilig, max ~320 px) plus Edge-Clamp auf `coords.left` damit die Tooltip-Box auch bei Trigger nahe Viewport-Rand vollständig sichtbar bleibt. Issue #158.
+
+- **fix(wetter-widget): Stunden-Aggregation IST von „last" auf „mean" (Rainer-PN)** — Rainer-PN-Idee zum Versatz im „Wetter heute"-Chart: aus Apex-Charts kennt er Kurven-Versatz durch Aggregations-Methode (`group_by`/`statistics` mit `avg`/`last`/`first`). Bei uns trifft das zu, in kleiner Form: das Frontend hat im Live-Heute-Chart pro Stunde den **letzten** 10-Min-Slot übernommen (`result[h] = ...` mehrfach überschrieben → `last`), Open-Meteo dagegen liefert das Stunden-**Mittel**. Effekt: ~25 Min systematischer Versatz zwischen IST und Prognose im selben Stundenfach. Jetzt in [`WetterWidget.tsx`](eedc/frontend/src/components/live/WetterWidget.tsx): Akkumulator pro Stunde + Mittelwert über alle vorhandenen 10-Min-Slots. Konsistent mit der Mean-Konvention der Prognose-Linien. Den anlagenspezifischen 1-Stunden-Versatz, den Rainer beobachtet, erklärt das nicht — der kommt aus dem Stundenprofil seiner Anlage und gehört zum Korrekturprofil-Konzept (siehe [`docs/KONZEPT-KORREKTURPROFIL.md`](docs/KONZEPT-KORREKTURPROFIL.md)).
+
+- **fix(layout): globaler Scroll-to-Top bei jedem Route-Wechsel (#154 reopened, detLAN)** — detLAN-Re-Test nach v3.23.5: das Scroll-Problem aus #154 existiert noch unter „Daten" beim Wechsel auf den Tab „Einrichtung" (und implizit überall wo SubTabs route-basiert wechseln — Stammdaten, HA, System). Der v3.23.4-Fix saß nur in `Auswertung.tsx` mit lokalem `activeTab`-State; bei `NavLink`-Wechseln im Layout greift das nicht. Jetzt zentral in [`Layout.tsx`](eedc/frontend/src/components/layout/Layout.tsx): `useEffect` auf `useLocation().pathname` scrollt den `<main>`-Container per Ref bei jedem Routenwechsel an den Anfang. Damit konsistent für **alle** SubTab-Gruppen.
+
+---
+
 ## [3.23.5] - 2026-04-26
 
 ### Bugfixes
