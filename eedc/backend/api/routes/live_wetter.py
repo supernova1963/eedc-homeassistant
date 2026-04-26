@@ -649,6 +649,8 @@ async def _speichere_prognose(
     solcast_kwh: float | None = None,
     solcast_p10_kwh: float | None = None,
     solcast_p90_kwh: float | None = None,
+    pv_stundenprofil: list[float] | None = None,
+    solcast_stundenprofil: list[float] | None = None,
 ):
     """
     Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
@@ -656,6 +658,12 @@ async def _speichere_prognose(
     Nutzt eine eigene DB-Session (fire-and-forget aus dem Request-Kontext).
     Falls der Tag schon existiert (z.B. durch Scheduler), wird nur pv_prognose_kwh aktualisiert.
     Falls nicht, wird ein minimaler Eintrag angelegt.
+
+    Stundenprofile (`pv_stundenprofil`, `solcast_stundenprofil`): 24 Werte in
+    kWh, Backward-Slot-Konvention. Pro Tag **first-write-wins** — der erste
+    Snapshot bleibt als Day-Ahead-Forecast erhalten, spätere Aufrufe
+    überschreiben das Profil nicht (sonst würde der nachmittagsaktualisierte
+    Forecast die morgendliche Day-Ahead-Sicht verlieren).
     """
     from backend.core.database import get_session
 
@@ -677,6 +685,11 @@ async def _speichere_prognose(
                     tz.solcast_prognose_kwh = solcast_kwh
                     tz.solcast_p10_kwh = solcast_p10_kwh
                     tz.solcast_p90_kwh = solcast_p90_kwh
+                # First-write-wins für Stundenprofile (Day-Ahead-Snapshot)
+                if pv_stundenprofil is not None and tz.pv_prognose_stundenprofil is None:
+                    tz.pv_prognose_stundenprofil = pv_stundenprofil
+                if solcast_stundenprofil is not None and tz.solcast_prognose_stundenprofil is None:
+                    tz.solcast_prognose_stundenprofil = solcast_stundenprofil
             else:
                 tz = TagesZusammenfassung(
                     anlage_id=anlage_id,
@@ -686,6 +699,8 @@ async def _speichere_prognose(
                     solcast_prognose_kwh=solcast_kwh,
                     solcast_p10_kwh=solcast_p10_kwh,
                     solcast_p90_kwh=solcast_p90_kwh,
+                    pv_prognose_stundenprofil=pv_stundenprofil,
+                    solcast_prognose_stundenprofil=solcast_stundenprofil,
                     stunden_verfuegbar=0,
                     datenquelle="wetter_prognose",
                 )
@@ -970,6 +985,7 @@ async def get_live_wetter(
         solcast_kwh = None
         solcast_p10 = None
         solcast_p90 = None
+        solcast_stundenprofil = None
         try:
             from backend.services.solcast_service import get_solcast_forecast
             solcast = await get_solcast_forecast(anlage)
@@ -977,8 +993,16 @@ async def get_live_wetter(
                 solcast_kwh = solcast.daily_kwh
                 solcast_p10 = solcast.daily_p10_kwh
                 solcast_p90 = solcast.daily_p90_kwh
+                if solcast.hourly_kw and len(solcast.hourly_kw) == 24:
+                    solcast_stundenprofil = list(solcast.hourly_kw)
         except Exception as e:
             logger.debug(f"Solcast-Fetch für Persistenz fehlgeschlagen: {e}")
+
+        # OpenMeteo-Stundenprofil aus dem berechneten verbrauchsprofil ableiten
+        # (24 kW-Werte → kWh; profil hat genau 24 Einträge in Stundenform).
+        pv_stundenprofil: list[float] | None = None
+        if profil and len(profil) == 24:
+            pv_stundenprofil = [round(p.get("pv_ertrag_kw", 0.0) or 0.0, 3) for p in profil]
 
         # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget)
         if pv_prognose is not None and pv_prognose > 0:
@@ -988,6 +1012,8 @@ async def get_live_wetter(
                     solcast_kwh=solcast_kwh,
                     solcast_p10_kwh=solcast_p10,
                     solcast_p90_kwh=solcast_p90,
+                    pv_stundenprofil=pv_stundenprofil,
+                    solcast_stundenprofil=solcast_stundenprofil,
                 )
             )
 

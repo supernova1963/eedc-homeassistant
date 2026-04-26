@@ -148,6 +148,13 @@ class TagesZusammenfassung(Base):
     solcast_p10_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     solcast_p90_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Day-Ahead Stundenprofil (kWh, 24 Werte): vor Sonnenaufgang gefrorener
+    # Forecast für den Tag, indexiert von Stunde 0 bis 23 (Backward-Slot-Konvention,
+    # Index h = Energie im Intervall [h-1, h)). Dient als Datenbasis für künftige
+    # Stundenprofil-Diagnostik (siehe docs/KONZEPT-KORREKTURPROFIL.md).
+    pv_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    solcast_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
     # Anzahl verfügbarer Stundenwerte (Qualitätsindikator)
     stunden_verfuegbar: Mapped[int] = mapped_column(Integer, default=0)
 
