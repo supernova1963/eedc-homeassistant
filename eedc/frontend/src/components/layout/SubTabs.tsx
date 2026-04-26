@@ -57,13 +57,15 @@ const cockpitBaseTabs: TabItem[] = [
   { name: 'PV-Anlage',       href: '/cockpit/pv-anlage',          icon: Sun },
 ]
 
-// Investitions-Tabs: werden nur angezeigt wenn der Typ als Investition existiert
+// Investitions-Tabs: werden nur angezeigt wenn der Typ als Investition existiert.
+// Reihenfolge: PV-Anlage (in Base) → Balkonkraftwerk (Erzeuger) → Speicher → Wärmepumpe →
+// Wallbox → E-Auto (Verbraucher) → Sonstiges (Rest).
 const cockpitInvestitionTabs: (TabItem & { typen: InvestitionTyp[] })[] = [
-  { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car,     typen: ['e-auto'] },
-  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame,   typen: ['waermepumpe'] },
-  { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery, typen: ['speicher'] },
-  { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug,    typen: ['wallbox'] },
   { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun,     typen: ['balkonkraftwerk'] },
+  { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery, typen: ['speicher'] },
+  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame,   typen: ['waermepumpe'] },
+  { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug,    typen: ['wallbox'] },
+  { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car,     typen: ['e-auto'] },
   { name: 'Sonstiges',       href: '/cockpit/sonstiges',        icon: Wrench,  typen: ['sonstiges'] },
 ]
 

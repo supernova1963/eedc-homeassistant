@@ -3,10 +3,11 @@
  * Zeigt Statistiken zu E-Autos: km, Verbrauch, PV-Anteil, Ersparnis vs. Benzin, V2H
  */
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Car, Zap, Leaf, TrendingUp, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
+import type { Anlage } from '../types'
 import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { EAutoDashboardResponse } from '../api/investitionen'
@@ -55,45 +56,74 @@ export default function EAutoDashboard() {
     )
   }
 
+  const showSelector = anlagen.length > 1
+  const selectorProps = { anlagen, selectedAnlageId, setSelectedAnlageId }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Car className="h-8 w-8 text-blue-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">E-Auto</h1>
-        </div>
-        {anlagen.length > 1 && (
-          <Select
-            compact
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-        )}
-      </div>
-
       {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <LoadingSpinner text="Lade E-Auto Daten..." />
       ) : dashboards.length === 0 ? (
-        <Card>
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Kein E-Auto für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge ein E-Auto unter "Investitionen" hinzu.</p>
-          </div>
-        </Card>
+        <>
+          <PlaceholderHeader showSelector={showSelector} {...selectorProps} />
+          <Card>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Kein E-Auto für diese Anlage erfasst.</p>
+              <p className="text-sm mt-2">Füge ein E-Auto unter "Investitionen" hinzu.</p>
+            </div>
+          </Card>
+        </>
       ) : (
-        dashboards.map((dashboard) => (
-          <EAutoCard key={dashboard.investition.id} dashboard={dashboard} />
+        dashboards.map((dashboard, idx) => (
+          <Fragment key={dashboard.investition.id}>
+            {idx > 0 && <hr className="border-t border-gray-200 dark:border-gray-700" />}
+            <EAutoBlock
+              dashboard={dashboard}
+              showSelector={idx === 0 && showSelector}
+              {...selectorProps}
+            />
+          </Fragment>
         ))
       )}
     </div>
   )
 }
 
-function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
+interface SelectorProps {
+  anlagen: Anlage[]
+  selectedAnlageId: number | undefined
+  setSelectedAnlageId: (id: number) => void
+  showSelector: boolean
+}
+
+function AnlageSelector({ anlagen, selectedAnlageId, setSelectedAnlageId, showSelector }: SelectorProps) {
+  if (!showSelector) return null
+  return (
+    <Select
+      compact
+      value={selectedAnlageId?.toString() || ''}
+      onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+      options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+    />
+  )
+}
+
+function PlaceholderHeader(props: SelectorProps) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Car className="h-8 w-8 text-blue-500 flex-shrink-0" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">E-Auto</h1>
+      </div>
+      <AnlageSelector {...props} />
+    </div>
+  )
+}
+
+function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
@@ -121,18 +151,20 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
   ]
 
   return (
-    <Card className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {investition.bezeichnung}
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.anzahl_monate} Monate Daten
-          </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Car className="h-8 w-8 text-blue-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+              {investition.bezeichnung}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {z.anzahl_monate} Monate Daten
+            </p>
+          </div>
         </div>
-        <Car className="h-10 w-10 text-blue-500" />
+        <AnlageSelector {...selectorProps} />
       </div>
 
       {/* KPIs */}
@@ -359,6 +391,6 @@ function EAutoCard({ dashboard }: { dashboard: EAutoDashboardResponse }) {
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }

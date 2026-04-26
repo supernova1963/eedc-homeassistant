@@ -4,11 +4,12 @@
  * Kategoriebasiert: Erzeuger, Verbraucher oder Speicher
  */
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Wrench, Zap, TrendingUp, Home, Leaf, Battery, AlertCircle } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
+import type { Anlage } from '../types'
 import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { SonstigesDashboardResponse } from '../api/investitionen'
@@ -59,64 +60,139 @@ export default function SonstigesDashboard() {
     )
   }
 
+  const showSelector = anlagen.length > 1
+  const selectorProps = { anlagen, selectedAnlageId, setSelectedAnlageId }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Wrench className="h-8 w-8 text-gray-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sonstiges</h1>
-        </div>
-        {anlagen.length > 1 && (
-          <Select
-            compact
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-        )}
-      </div>
-
       {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <LoadingSpinner text="Lade Daten..." />
       ) : dashboards.length === 0 ? (
-        <Card>
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Wrench className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Keine sonstigen Investitionen für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge eine sonstige Investition unter "Investitionen" hinzu.</p>
-            <p className="text-xs mt-1 text-gray-400">z.B. Mini-BHKW, Pelletofen, Mini-Wind, Brennstoffzelle</p>
-          </div>
-        </Card>
+        <>
+          <PlaceholderHeader showSelector={showSelector} {...selectorProps} />
+          <Card>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Wrench className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Keine sonstigen Investitionen für diese Anlage erfasst.</p>
+              <p className="text-sm mt-2">Füge eine sonstige Investition unter "Investitionen" hinzu.</p>
+              <p className="text-xs mt-1 text-gray-400">z.B. Mini-BHKW, Pelletofen, Mini-Wind, Brennstoffzelle</p>
+            </div>
+          </Card>
+        </>
       ) : (
-        dashboards.map((dashboard) => (
-          <SonstigesCard key={dashboard.investition.id} dashboard={dashboard} />
+        dashboards.map((dashboard, idx) => (
+          <Fragment key={dashboard.investition.id}>
+            {idx > 0 && <hr className="border-t border-gray-200 dark:border-gray-700" />}
+            <SonstigesBlock
+              dashboard={dashboard}
+              showSelector={idx === 0 && showSelector}
+              {...selectorProps}
+            />
+          </Fragment>
         ))
       )}
     </div>
   )
 }
 
-function SonstigesCard({ dashboard }: { dashboard: SonstigesDashboardResponse }) {
+interface SelectorProps {
+  anlagen: Anlage[]
+  selectedAnlageId: number | undefined
+  setSelectedAnlageId: (id: number) => void
+  showSelector: boolean
+}
+
+function AnlageSelector({ anlagen, selectedAnlageId, setSelectedAnlageId, showSelector }: SelectorProps) {
+  if (!showSelector) return null
+  return (
+    <Select
+      compact
+      value={selectedAnlageId?.toString() || ''}
+      onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+      options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+    />
+  )
+}
+
+function PlaceholderHeader(props: SelectorProps) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Wrench className="h-8 w-8 text-gray-500 flex-shrink-0" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Sonstiges</h1>
+      </div>
+      <AnlageSelector {...props} />
+    </div>
+  )
+}
+
+function SonstigesBlockHeader({
+  bezeichnung,
+  beschreibung,
+  anzahlMonate,
+  kategorie,
+  badgeClass,
+  icon: Icon,
+  iconClass,
+  selectorProps,
+}: {
+  bezeichnung: string
+  beschreibung?: string | null
+  anzahlMonate: number
+  kategorie: string
+  badgeClass: string
+  icon: typeof Wrench
+  iconClass: string
+  selectorProps: SelectorProps
+}) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Icon className={`h-8 w-8 ${iconClass} flex-shrink-0`} />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+              {bezeichnung}
+            </h1>
+            <span className={`px-2 py-0.5 text-xs ${badgeClass} rounded`}>
+              {kategorieLabels[kategorie]}
+            </span>
+          </div>
+          {beschreibung && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{beschreibung}</p>
+          )}
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {anzahlMonate} Monate Daten
+          </p>
+        </div>
+      </div>
+      <AnlageSelector {...selectorProps} />
+    </div>
+  )
+}
+
+function SonstigesBlock({ dashboard, ...selectorProps }: { dashboard: SonstigesDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
   const kategorie = z.kategorie
 
   // Je nach Kategorie unterschiedliche Ansicht
   if (kategorie === 'erzeuger') {
-    return <ErzeugerCard investition={investition} monatsdaten={monatsdaten} zusammenfassung={z} />
+    return <ErzeugerBlock investition={investition} monatsdaten={monatsdaten} zusammenfassung={z} selectorProps={selectorProps} />
   } else if (kategorie === 'verbraucher') {
-    return <VerbraucherCard investition={investition} monatsdaten={monatsdaten} zusammenfassung={z} />
+    return <VerbraucherBlock investition={investition} monatsdaten={monatsdaten} zusammenfassung={z} selectorProps={selectorProps} />
   } else {
-    return <SpeicherCard investition={investition} monatsdaten={monatsdaten} zusammenfassung={z} />
+    return <SpeicherBlock investition={investition} monatsdaten={monatsdaten} zusammenfassung={z} selectorProps={selectorProps} />
   }
 }
 
-function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
+function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorProps }: {
   investition: SonstigesDashboardResponse['investition']
   monatsdaten: SonstigesDashboardResponse['monatsdaten']
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
+  selectorProps: SelectorProps
 }) {
   const monthlyData = monatsdaten.map(md => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
@@ -131,26 +207,17 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
   ]
 
   return (
-    <Card className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {investition.bezeichnung}
-            </h2>
-            <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 rounded">
-              {kategorieLabels[z.kategorie]}
-            </span>
-          </div>
-          {z.beschreibung && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{z.beschreibung}</p>
-          )}
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.anzahl_monate} Monate Daten
-          </p>
-        </div>
-        <Zap className="h-10 w-10 text-yellow-500" />
-      </div>
+    <div className="space-y-6">
+      <SonstigesBlockHeader
+        bezeichnung={investition.bezeichnung}
+        beschreibung={z.beschreibung}
+        anzahlMonate={z.anzahl_monate}
+        kategorie={z.kategorie}
+        badgeClass="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+        icon={Zap}
+        iconClass="text-yellow-500"
+        selectorProps={selectorProps}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -288,14 +355,15 @@ function ErzeugerCard({ investition, monatsdaten, zusammenfassung: z }: {
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }
 
-function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
+function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, selectorProps }: {
   investition: SonstigesDashboardResponse['investition']
   monatsdaten: SonstigesDashboardResponse['monatsdaten']
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
+  selectorProps: SelectorProps
 }) {
   const monthlyData = monatsdaten.map(md => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
@@ -310,26 +378,17 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
   ]
 
   return (
-    <Card className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {investition.bezeichnung}
-            </h2>
-            <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
-              {kategorieLabels[z.kategorie]}
-            </span>
-          </div>
-          {z.beschreibung && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{z.beschreibung}</p>
-          )}
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.anzahl_monate} Monate Daten
-          </p>
-        </div>
-        <Zap className="h-10 w-10 text-blue-500" />
-      </div>
+    <div className="space-y-6">
+      <SonstigesBlockHeader
+        bezeichnung={investition.bezeichnung}
+        beschreibung={z.beschreibung}
+        anzahlMonate={z.anzahl_monate}
+        kategorie={z.kategorie}
+        badgeClass="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+        icon={Zap}
+        iconClass="text-blue-500"
+        selectorProps={selectorProps}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -467,14 +526,15 @@ function VerbraucherCard({ investition, monatsdaten, zusammenfassung: z }: {
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }
 
-function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
+function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorProps }: {
   investition: SonstigesDashboardResponse['investition']
   monatsdaten: SonstigesDashboardResponse['monatsdaten']
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
+  selectorProps: SelectorProps
 }) {
   const monthlyData = monatsdaten.map(md => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
@@ -483,26 +543,17 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
   }))
 
   return (
-    <Card className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {investition.bezeichnung}
-            </h2>
-            <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded">
-              {kategorieLabels[z.kategorie]}
-            </span>
-          </div>
-          {z.beschreibung && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{z.beschreibung}</p>
-          )}
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.anzahl_monate} Monate Daten
-          </p>
-        </div>
-        <Battery className="h-10 w-10 text-purple-500" />
-      </div>
+    <div className="space-y-6">
+      <SonstigesBlockHeader
+        bezeichnung={investition.bezeichnung}
+        beschreibung={z.beschreibung}
+        anzahlMonate={z.anzahl_monate}
+        kategorie={z.kategorie}
+        badgeClass="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+        icon={Battery}
+        iconClass="text-purple-500"
+        selectorProps={selectorProps}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -613,6 +664,6 @@ function SpeicherCard({ investition, monatsdaten, zusammenfassung: z }: {
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }

@@ -3,11 +3,12 @@
  * Zeigt Statistiken: Erzeugung, Eigenverbrauch, Einspeisung, Ersparnis
  */
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Sun, Zap, TrendingUp, Home, Leaf, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
+import type { Anlage } from '../types'
 import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { BalkonkraftwerkDashboardResponse } from '../api/investitionen'
@@ -52,45 +53,74 @@ export default function BalkonkraftwerkDashboard() {
     )
   }
 
+  const showSelector = anlagen.length > 1
+  const selectorProps = { anlagen, selectedAnlageId, setSelectedAnlageId }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Sun className="h-8 w-8 text-yellow-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Balkonkraftwerk</h1>
-        </div>
-        {anlagen.length > 1 && (
-          <Select
-            compact
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-        )}
-      </div>
-
       {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <LoadingSpinner text="Lade Balkonkraftwerk Daten..." />
       ) : dashboards.length === 0 ? (
-        <Card>
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Sun className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Kein Balkonkraftwerk für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge ein Balkonkraftwerk unter "Investitionen" hinzu.</p>
-          </div>
-        </Card>
+        <>
+          <PlaceholderHeader showSelector={showSelector} {...selectorProps} />
+          <Card>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Sun className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Kein Balkonkraftwerk für diese Anlage erfasst.</p>
+              <p className="text-sm mt-2">Füge ein Balkonkraftwerk unter "Investitionen" hinzu.</p>
+            </div>
+          </Card>
+        </>
       ) : (
-        dashboards.map((dashboard) => (
-          <BalkonkraftwerkCard key={dashboard.investition.id} dashboard={dashboard} />
+        dashboards.map((dashboard, idx) => (
+          <Fragment key={dashboard.investition.id}>
+            {idx > 0 && <hr className="border-t border-gray-200 dark:border-gray-700" />}
+            <BalkonkraftwerkBlock
+              dashboard={dashboard}
+              showSelector={idx === 0 && showSelector}
+              {...selectorProps}
+            />
+          </Fragment>
         ))
       )}
     </div>
   )
 }
 
-function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboardResponse }) {
+interface SelectorProps {
+  anlagen: Anlage[]
+  selectedAnlageId: number | undefined
+  setSelectedAnlageId: (id: number) => void
+  showSelector: boolean
+}
+
+function AnlageSelector({ anlagen, selectedAnlageId, setSelectedAnlageId, showSelector }: SelectorProps) {
+  if (!showSelector) return null
+  return (
+    <Select
+      compact
+      value={selectedAnlageId?.toString() || ''}
+      onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+      options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+    />
+  )
+}
+
+function PlaceholderHeader(props: SelectorProps) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Sun className="h-8 w-8 text-yellow-500 flex-shrink-0" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Balkonkraftwerk</h1>
+      </div>
+      <AnlageSelector {...props} />
+    </div>
+  )
+}
+
+function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: BalkonkraftwerkDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
@@ -109,18 +139,21 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
   ]
 
   return (
-    <Card className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {investition.bezeichnung}
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.leistung_wp} Wp • {z.anzahl_module} Module • {z.anzahl_monate} Monate Daten
-            {z.hat_speicher && ` • ${z.speicher_kapazitaet_wh} Wh Speicher`}
-          </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Sun className="h-8 w-8 text-yellow-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+              {investition.bezeichnung}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {z.leistung_wp} Wp • {z.anzahl_module} Module • {z.anzahl_monate} Monate Daten
+              {z.hat_speicher && ` • ${z.speicher_kapazitaet_wh} Wh Speicher`}
+            </p>
+          </div>
         </div>
-        <Sun className="h-10 w-10 text-yellow-500" />
+        <AnlageSelector {...selectorProps} />
       </div>
 
       {/* KPIs */}
@@ -366,6 +399,6 @@ function BalkonkraftwerkCard({ dashboard }: { dashboard: BalkonkraftwerkDashboar
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }

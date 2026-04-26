@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [3.23.4] - 2026-04-26
 
+### Verbesserungen
+
+- **refactor(cockpit): Cockpit-Tabs harmonisiert nach PV-Vorlage (#156 reopened, detLAN)** — detLAN's Korrektur zu v3.23.1: (1) der Tab-Titel sollte bei tatsächlichen Investments (Wärmepumpe / Speicher / Wallbox / E-Auto / Balkonkraftwerk / Sonstiges) nicht der Anlagenname sein, sondern die `bezeichnung` des konkreten Investments — bei mehreren Investments derselben Art entsteht so automatisch eine Abgrenzung über die jeweiligen Block-Header. PV-Anlage bleibt mit Anlagennamen (kein direktes Investment). (2) Card-Layout vereinheitlicht: die einzelnen Investment-Blöcke werden nicht mehr in eine eigene Card-Box gepackt — bei einem einzigen Investment fällt der Box-Wrapper weg, bei mehreren trennt jetzt eine durchgezogene Linie statt einer Card-Border (analog zur Komponenten-Liste in der Auswertung). (3) Cockpit-Tab-Reihenfolge auf detLAN's Vorschlag umsortiert: Übersicht → Monatsberichte → PV-Anlage → Balkonkraftwerk → Speicher → Wärmepumpe → Wallbox → E-Auto → Sonstiges (Erzeuger oben, Speicher in der Mitte, Verbraucher unten, „Sonstiges" am Ende). Issue #156.
+
 ### Bugfixes
 
 - **fix(auswertung): Tab-Wechsel scrollt zuverlässig zum Seitenanfang (#154 detLAN, dritter Anlauf)** — detLAN-Re-Test: Tabs „CO2" und „Tabelle" übernahmen die Scroll-Position der vorherigen Tab, andere Tabs scrollten korrekt nach oben. Ursache: bisheriges `scrollTo` lief im `onClick`-Handler **vor** dem React-Re-Render und mit `behavior:'smooth'` — bei Tabs mit langem Inhalt wurde die Animation durch das Re-Render unterbrochen oder gekappt. Lösung: `useEffect` auf `activeTab`-Änderung mit `behavior:'auto'` — scrollt **nach** dem Re-Render hart auf 0, ohne Smooth-Animation. Entspricht dem Cockpit-Pattern (jeder Sub-Tab beginnt am Seitenanfang) und detLAN's explizit formuliertem Wunsch.
