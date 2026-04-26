@@ -3,8 +3,8 @@
  * Neues Layout mit TopNavigation und SubTabs (ohne Sidebar)
  */
 
-import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
 import { ArrowUpCircle, X } from 'lucide-react'
 import TopNavigation from './TopNavigation'
 import SubTabs from './SubTabs'
@@ -16,6 +16,15 @@ const DISMISSED_KEY = 'eedc_update_dismissed_version'
 export default function Layout() {
   const [update, setUpdate] = useState<UpdateCheckResponse | null>(null)
   const [dismissed, setDismissed] = useState(false)
+  const mainRef = useRef<HTMLElement>(null)
+  const location = useLocation()
+
+  // Bei jedem Route-Wechsel den Main-Container an den Anfang scrollen.
+  // SubTabs nutzen NavLink → Routenwechsel; ohne diesen Effekt bleibt
+  // die alte Scroll-Position erhalten (#154 Folge-Punkt detLAN: Daten/Einrichtung).
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [location.pathname])
 
   useEffect(() => {
     systemApi.checkUpdate().then((data) => {
@@ -87,7 +96,7 @@ export default function Layout() {
       <SubTabs />
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto px-3 pb-3 pt-1 sm:px-6 sm:pb-6 sm:pt-1">
+      <main ref={mainRef} className="flex-1 overflow-auto px-3 pb-3 pt-1 sm:px-6 sm:pb-6 sm:pt-1">
         <div className="max-w-[1920px] mx-auto">
           <Outlet />
         </div>

@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Bugfixes
+
+- **fix(layout): globaler Scroll-to-Top bei jedem Route-Wechsel (#154 reopened, detLAN)** — detLAN-Re-Test nach v3.23.5: das Scroll-Problem aus #154 existiert noch unter „Daten" beim Wechsel auf den Tab „Einrichtung" (und implizit überall wo SubTabs route-basiert wechseln — Stammdaten, HA, System). Der v3.23.4-Fix saß nur in `Auswertung.tsx` mit lokalem `activeTab`-State; bei `NavLink`-Wechseln im Layout greift das nicht. Jetzt zentral in [`Layout.tsx`](eedc/frontend/src/components/layout/Layout.tsx): `useEffect` auf `useLocation().pathname` scrollt den `<main>`-Container per Ref bei jedem Routenwechsel an den Anfang. Damit konsistent für **alle** SubTab-Gruppen.
+
+---
+
 ## [3.23.5] - 2026-04-26
 
 ### Bugfixes
