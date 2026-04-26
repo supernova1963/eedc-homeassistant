@@ -36,7 +36,7 @@ export DATABASE_URL="sqlite+aiosqlite:////data/eedc.db"
 
 echo "==================================="
 echo "  EEDC - Energie Daten Center"
-echo "  Version: 3.23.4"
+echo "  Version: 3.23.5"
 echo "==================================="
 echo "Log Level: $LOG_LEVEL"
 echo "Database: /data/eedc.db"
