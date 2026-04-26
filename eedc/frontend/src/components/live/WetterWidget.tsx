@@ -104,6 +104,20 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
       verbrauch_gesamt: number
     }> = {}
 
+    // Stunden-Mittelwert über alle 10-Min-Slots (statt letzten Slot zu nehmen).
+    // Konsistent mit der Mean-Konvention der Open-Meteo-Prognose im selben Chart.
+    type StundenAcc = {
+      pv: number
+      haushalt: number
+      batterie_ladung: number
+      wallbox: number
+      waermepumpe: number
+      sonstige: number
+      verbrauch_gesamt: number
+      count: number
+    }
+    const accumulators: Record<number, StundenAcc> = {}
+
     for (const punkt of tagesverlauf.punkte) {
       const h = parseInt(punkt.zeit.split(':')[0])
       if (h > currentHour) continue
@@ -156,14 +170,30 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
         kategorienGesehen.add('haushalt')
       }
 
-      result[h] = {
-        pv: pvSum,
-        haushalt,
-        batterie_ladung,
-        wallbox,
-        waermepumpe,
-        sonstige,
-        verbrauch_gesamt,
+      const acc = accumulators[h] ??= {
+        pv: 0, haushalt: 0, batterie_ladung: 0, wallbox: 0,
+        waermepumpe: 0, sonstige: 0, verbrauch_gesamt: 0, count: 0,
+      }
+      acc.pv += pvSum
+      acc.haushalt += haushalt
+      acc.batterie_ladung += batterie_ladung
+      acc.wallbox += wallbox
+      acc.waermepumpe += waermepumpe
+      acc.sonstige += sonstige
+      acc.verbrauch_gesamt += verbrauch_gesamt
+      acc.count += 1
+    }
+
+    for (const [hStr, acc] of Object.entries(accumulators)) {
+      const c = acc.count
+      result[parseInt(hStr)] = {
+        pv: acc.pv / c,
+        haushalt: acc.haushalt / c,
+        batterie_ladung: acc.batterie_ladung / c,
+        wallbox: acc.wallbox / c,
+        waermepumpe: acc.waermepumpe / c,
+        sonstige: acc.sonstige / c,
+        verbrauch_gesamt: acc.verbrauch_gesamt / c,
       }
     }
 
