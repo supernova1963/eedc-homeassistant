@@ -4,7 +4,7 @@ import {
   Bar, ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
-import { Battery, Flame, Car, Download, AlertCircle, Sun, Zap, RefreshCw, Thermometer, TrendingUp } from 'lucide-react'
+import { Battery, Flame, Car, Download, AlertCircle, Sun, Zap, RefreshCw, Thermometer, TrendingUp, Activity } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
@@ -253,10 +253,10 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               ergebnis={`= ${fmtCalc(speicherSummen.entladung / 1000, 2)} MWh`}
             />
             <KPICard
-              title="Ø Effizienz"
+              title="Effizienz"
               value={speicherSummen.effizienz?.toFixed(1) || '---'}
               unit="%"
-              icon={Battery}
+              icon={Activity}
               color="text-cyan-500"
               bgColor="bg-cyan-50 dark:bg-cyan-900/20"
               formel="Entladung ÷ Ladung × 100"
@@ -699,7 +699,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 title="Speicher Effizienz"
                 value={bkwSummen.speicherLadung > 0 ? ((bkwSummen.speicherEntladung / bkwSummen.speicherLadung) * 100).toFixed(0) : '---'}
                 unit="%"
-                icon={Battery}
+                icon={Activity}
                 color="text-cyan-500"
                 bgColor="bg-cyan-50 dark:bg-cyan-900/20"
                 formel="Entladung ÷ Ladung × 100"

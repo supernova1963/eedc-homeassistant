@@ -13,9 +13,10 @@ import {
   Sun, Battery, Flame, Car, Euro,
   ChevronDown, BarChart3, Wrench, Home, Zap, TrendingUp,
   Plug, Gauge, ArrowUpDown, RefreshCw, CalendarClock, Users, Share2,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, Thermometer, Activity,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
+import { fmtKpi } from '../lib'
 import { useSelectedAnlage, useAggregierteDaten } from '../hooks'
 import { aktuellerMonatApi, AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { cockpitApi } from '../api/cockpit'
@@ -1335,12 +1336,12 @@ export default function MonatsabschlussView() {
                     subtitle={vm?.speicher_ladung_kwh != null ? `VM: ${fmt(vm.speicher_ladung_kwh, 0)} kWh` : undefined} />
                   <KPICard title="Entladung" value={fmt(d.speicher_entladung_kwh, 0)} unit="kWh" icon={Battery} color="green"
                     subtitle={vm?.speicher_entladung_kwh != null ? `VM: ${fmt(vm.speicher_entladung_kwh, 0)} kWh` : undefined} />
-                  <KPICard title="Wirkungsgrad" value={fmt(d.speicher_wirkungsgrad_prozent, 1)} unit="%" icon={Gauge} color="green"
+                  <KPICard title="Effizienz" value={fmtKpi(d.speicher_wirkungsgrad_prozent, 1)} unit="%" icon={Activity} color="cyan"
                     formel="Entladung ÷ Ladung × 100"
                     berechnung={d.speicher_ladung_kwh != null && d.speicher_entladung_kwh != null
                       ? `${fmt(d.speicher_entladung_kwh, 0)} ÷ ${fmt(d.speicher_ladung_kwh, 0)} kWh`
                       : undefined}
-                    ergebnis={d.speicher_wirkungsgrad_prozent != null ? `= ${fmtCalc(d.speicher_wirkungsgrad_prozent, 1)} %` : undefined} />
+                    ergebnis={d.speicher_wirkungsgrad_prozent != null ? `= ${fmtCalc(d.speicher_wirkungsgrad_prozent, 1)} %` : '---'} />
                   <KPICard title="Vollzyklen" value={fmt(d.speicher_vollzyklen, 2)} unit=""
                     icon={ArrowUpDown} color="blue"
                     subtitle={d.speicher_kapazitaet_kwh != null ? `Kapazität: ${fmt(d.speicher_kapazitaet_kwh, 0)} kWh` : undefined}
@@ -1410,30 +1411,33 @@ export default function MonatsabschlussView() {
             {d.hat_waermepumpe && (() => {
               const hatVmWp = vm != null && (vm.wp_strom_kwh ?? 0) > 0
               const vmWaerme = hatVmWp ? (vm!.wp_heizung_kwh ?? 0) + (vm!.wp_warmwasser_kwh ?? 0) : null
+              const jaz = d.wp_strom_kwh != null && d.wp_waerme_kwh != null && d.wp_strom_kwh > 0
+                ? d.wp_waerme_kwh / d.wp_strom_kwh : null
               return (
               <Section sectionId="waermepumpe" icon={Flame} color="text-orange-500" title="Wärmepumpe"
                 summary={
                   <span className="flex gap-3 text-sm">
                     {d.wp_strom_kwh != null && <span>{fmt(d.wp_strom_kwh, 0)} kWh Strom</span>}
-                    {d.wp_strom_kwh != null && d.wp_waerme_kwh != null && d.wp_strom_kwh > 0 && (
-                      <span className="text-green-600 dark:text-green-400">COP {(d.wp_waerme_kwh / d.wp_strom_kwh).toFixed(2)}</span>
+                    {jaz != null && (
+                      <span className="text-green-600 dark:text-green-400">JAZ {jaz.toFixed(2)}</span>
                     )}
                     {d.wp_ersparnis_euro != null && <span className="text-green-500">+{fmtCalc(d.wp_ersparnis_euro, 2)} € vs. Gas</span>}
                   </span>
                 }
               >
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                  <KPICard title="Stromverbrauch" value={fmt(d.wp_strom_kwh, 0)} unit="kWh" icon={Zap} color="red"
-                    subtitle={hatVmWp ? `VM: ${fmt(vm!.wp_strom_kwh, 0)} kWh` : undefined} />
-                  <KPICard title="Wärmeertrag" value={fmt(d.wp_waerme_kwh, 0)} unit="kWh" icon={Flame} color="orange"
-                    subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmt(vmWaerme, 0)} kWh` : undefined} />
-                  <KPICard title="COP" value={d.wp_strom_kwh != null && d.wp_waerme_kwh != null && d.wp_strom_kwh > 0
-                    ? fmtCalc(d.wp_waerme_kwh / d.wp_strom_kwh, 2) : '—'} unit=""
-                    icon={Gauge} color="green"
-                    formel="Wärmeertrag ÷ Stromverbrauch"
+                  <KPICard title="JAZ" value={fmtKpi(jaz, 2)} unit=""
+                    icon={Thermometer} color="orange"
+                    formel="JAZ = Wärme ÷ Strom"
                     subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmtCalc(vmWaerme / vm!.wp_strom_kwh, 2)}` : undefined} />
-                  <KPICard title="Ersparnis vs. Gas" value={d.wp_ersparnis_euro != null ? `+${fmt(d.wp_ersparnis_euro, 2)}` : '—'} unit="€"
-                    icon={Euro} color="green"
+                  <KPICard title="Wärme erzeugt" value={fmt(d.wp_waerme_kwh, 0)} unit="kWh"
+                    icon={Flame} color="red"
+                    subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmt(vmWaerme, 0)} kWh` : undefined} />
+                  <KPICard title="Strom verbraucht" value={fmt(d.wp_strom_kwh, 0)} unit="kWh"
+                    icon={Zap} color="yellow"
+                    subtitle={hatVmWp ? `VM: ${fmt(vm!.wp_strom_kwh, 0)} kWh` : undefined} />
+                  <KPICard title="Ersparnis vs. Gas" value={d.wp_ersparnis_euro != null ? `+${fmt(d.wp_ersparnis_euro, 2)}` : '---'} unit="€"
+                    icon={TrendingUp} color="green"
                     formel="(Wärme ÷ 0,9 × Gaspreis − Strom × Strompreis)"
                     subtitle={vj?.wp_strom_kwh != null ? `VJ Strom: ${fmt(vj.wp_strom_kwh, 0)} kWh` : undefined} />
                 </div>

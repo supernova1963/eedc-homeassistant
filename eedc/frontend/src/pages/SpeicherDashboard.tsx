@@ -9,7 +9,7 @@ import { Card, LoadingSpinner, Alert, Select, KPICard, FormelTooltip, fmtCalc } 
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ } from '../lib'
+import { MONAT_KURZ, fmtKpi } from '../lib'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
 import {
@@ -169,13 +169,13 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
         />
         <KPICard
           title="Effizienz"
-          value={z.effizienz_prozent.toFixed(1)}
+          value={fmtKpi(z.effizienz_prozent, 1)}
           unit="%"
           icon={Activity}
-          color="green"
+          color="cyan"
           formel="Effizienz = Entladung ÷ Ladung × 100"
           berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh ÷ ${z.gesamt_ladung_kwh.toFixed(0)} kWh × 100`}
-          ergebnis={`= ${z.effizienz_prozent.toFixed(1)} %`}
+          ergebnis={z.effizienz_prozent ? `= ${z.effizienz_prozent.toFixed(1)} %` : '---'}
         />
         <KPICard
           title="Durchsatz"

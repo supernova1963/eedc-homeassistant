@@ -12,7 +12,7 @@ interface KPICardProps {
   unit?: string
   subtitle?: string
   icon: React.ElementType
-  color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'orange' | 'gray'
+  color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'orange' | 'cyan' | 'gray'
   trend?: 'up' | 'down'
   // Tooltip für Berechnungsdetails
   formel?: string
@@ -28,6 +28,7 @@ const colorClasses = {
   red: { icon: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
   purple: { icon: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20' },
   orange: { icon: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
+  cyan: { icon: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/20' },
   gray: { icon: 'text-gray-500', bg: 'bg-gray-50 dark:bg-gray-800' },
 }
 
