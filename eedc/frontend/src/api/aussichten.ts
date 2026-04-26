@@ -317,14 +317,24 @@ export interface GenauigkeitsEintrag {
   ist_kwh: number | null
 }
 
+export interface AsymmetrieEintrag {
+  over_count: number
+  over_avg_prozent: number | null
+  under_count: number
+  under_avg_prozent: number | null
+}
+
 export interface GenauigkeitsResponse {
   tage: GenauigkeitsEintrag[]
   openmeteo_mae_prozent: number | null
   openmeteo_mbe_prozent: number | null
+  openmeteo_asymmetrie: AsymmetrieEintrag | null
   eedc_mae_prozent: number | null
   eedc_mbe_prozent: number | null
+  eedc_asymmetrie: AsymmetrieEintrag | null
   solcast_mae_prozent: number | null
   solcast_mbe_prozent: number | null
+  solcast_asymmetrie: AsymmetrieEintrag | null
   anzahl_tage: number
 }
 

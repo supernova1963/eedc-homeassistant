@@ -16,6 +16,7 @@ import {
   aussichtenApi,
   PrognosenVergleich,
   GenauigkeitsResponse,
+  AsymmetrieEintrag,
 } from '../../api/aussichten'
 import { energieProfilApi } from '../../api/energie_profil'
 import {
@@ -165,6 +166,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  const [genauigkeitsModus, setGenauigkeitsModus] = useState<'kompakt' | 'diagnostisch'>('kompakt')
 
   useEffect(() => {
     let cancelled = false
@@ -586,19 +588,47 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
       {/* ── Genauigkeits-Tracking ── */}
       {genauigkeit && genauigkeit.anzahl_tage > 0 && (
         <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Genauigkeits-Tracking <span className="text-sm font-normal text-gray-500 ml-2">(letzte {genauigkeit.anzahl_tage} Tage)</span>
-          </h3>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Genauigkeits-Tracking <span className="text-sm font-normal text-gray-500 ml-2">(letzte {genauigkeit.anzahl_tage} Tage)</span>
+            </h3>
+            <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setGenauigkeitsModus('kompakt')}
+                className={`px-3 py-1 transition-colors ${genauigkeitsModus === 'kompakt' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              >
+                Kompakt
+              </button>
+              <button
+                type="button"
+                onClick={() => setGenauigkeitsModus('diagnostisch')}
+                className={`px-3 py-1 transition-colors ${genauigkeitsModus === 'diagnostisch' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              >
+                Diagnostisch
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <MaeMbeCard label="OpenMeteo" mae={genauigkeit.openmeteo_mae_prozent} mbe={genauigkeit.openmeteo_mbe_prozent} color="text-yellow-500" />
-            <MaeMbeCard
-              label="EEDC"
-              mae={genauigkeit.eedc_mae_prozent}
-              mbe={genauigkeit.eedc_mbe_prozent}
-              color="text-orange-500"
-              hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined}
-            />
-            <MaeMbeCard label="Solcast" mae={genauigkeit.solcast_mae_prozent} mbe={genauigkeit.solcast_mbe_prozent} color="text-blue-500" />
+            {genauigkeitsModus === 'kompakt' ? (
+              <>
+                <MaeMbeCard label="OpenMeteo" mae={genauigkeit.openmeteo_mae_prozent} mbe={genauigkeit.openmeteo_mbe_prozent} color="text-yellow-500" />
+                <MaeMbeCard
+                  label="EEDC"
+                  mae={genauigkeit.eedc_mae_prozent}
+                  mbe={genauigkeit.eedc_mbe_prozent}
+                  color="text-orange-500"
+                  hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined}
+                />
+                <MaeMbeCard label="Solcast" mae={genauigkeit.solcast_mae_prozent} mbe={genauigkeit.solcast_mbe_prozent} color="text-blue-500" />
+              </>
+            ) : (
+              <>
+                <AsymmetrieCard label="OpenMeteo" asym={genauigkeit.openmeteo_asymmetrie} color="text-yellow-500" />
+                <AsymmetrieCard label="EEDC" asym={genauigkeit.eedc_asymmetrie} color="text-orange-500" hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined} />
+                <AsymmetrieCard label="Solcast" asym={genauigkeit.solcast_asymmetrie} color="text-blue-500" />
+              </>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm table-fixed">
@@ -732,6 +762,41 @@ function MaeMbeCard({ label, mae, mbe, color, hint }: {
             <span className={`text-lg font-bold ${mbe === null ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
               {mbe !== null ? fmtMbe(mbe) : '—'}
             </span>
+          </div>
+        </SimpleTooltip>
+      </div>
+      {hint && <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{hint}</div>}
+    </div>
+  )
+}
+
+function AsymmetrieCard({ label, asym, color, hint }: {
+  label: string
+  asym: AsymmetrieEintrag | null
+  color: string
+  hint?: string
+}) {
+  const fmtPct = (v: number | null) => v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
+  const overCount = asym?.over_count ?? 0
+  const underCount = asym?.under_count ?? 0
+  const tagWord = (n: number) => n === 1 ? 'Tag' : 'Tage'
+
+  return (
+    <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+      <div className={`text-xs font-medium mb-2 ${color}`}>{label}</div>
+      <div className="grid grid-cols-2 gap-2">
+        <SimpleTooltip text="Tage an denen die Prognose über dem IST lag — durchschnittliche relative Überschätzung">
+          <div className="px-2 py-1.5 rounded bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700">
+            <div className="text-[10px] text-gray-500 dark:text-gray-400">darüber</div>
+            <div className="text-sm font-bold text-amber-600 dark:text-amber-400">{fmtPct(asym?.over_avg_prozent ?? null)}</div>
+            <div className="text-[10px] text-gray-400 dark:text-gray-500">{overCount} {tagWord(overCount)}</div>
+          </div>
+        </SimpleTooltip>
+        <SimpleTooltip text="Tage an denen die Prognose unter dem IST lag — durchschnittliche relative Unterschätzung">
+          <div className="px-2 py-1.5 rounded bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700">
+            <div className="text-[10px] text-gray-500 dark:text-gray-400">darunter</div>
+            <div className="text-sm font-bold text-sky-600 dark:text-sky-400">{fmtPct(asym?.under_avg_prozent ?? null)}</div>
+            <div className="text-[10px] text-gray-400 dark:text-gray-500">{underCount} {tagWord(underCount)}</div>
           </div>
         </SimpleTooltip>
       </div>
