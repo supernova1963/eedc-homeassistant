@@ -50,8 +50,8 @@ export default function LangfristTab({ anlageId }: Props) {
     try {
       const data = await aussichtenApi.getLangfristPrognose(anlageId, monate)
       setPrognose(data)
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Laden der Prognose')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Prognose')
     } finally {
       setLoading(false)
     }

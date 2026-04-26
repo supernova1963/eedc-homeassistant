@@ -113,7 +113,7 @@ function Section({
   const toggle = () => {
     setOpen(o => {
       const next = !o
-      try { localStorage.setItem(storageKey, String(next)) } catch {}
+      try { localStorage.setItem(storageKey, String(next)) } catch { /* localStorage nicht verfügbar */ }
       return next
     })
   }
@@ -185,12 +185,12 @@ function loadSectionOrder(): string[] {
         return valid
       }
     }
-  } catch {}
+  } catch { /* invalides JSON / localStorage nicht verfügbar */ }
   return [...DEFAULT_SECTION_ORDER]
 }
 
 function saveSectionOrder(order: string[]) {
-  try { localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(order)) } catch {}
+  try { localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(order)) } catch { /* localStorage nicht verfügbar */ }
 }
 
 /**

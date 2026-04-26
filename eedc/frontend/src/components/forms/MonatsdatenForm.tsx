@@ -446,7 +446,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           // Nur Positionen mit Betrag > 0 und Bezeichnung speichern
           const gueltigePositionen = invPositionen.filter(p => p.betrag > 0 && p.bezeichnung.trim())
           if (gueltigePositionen.length > 0) {
-            ;(parsed as Record<string, unknown>).sonstige_positionen = gueltigePositionen
+            (parsed as Record<string, unknown>).sonstige_positionen = gueltigePositionen
           }
         }
 

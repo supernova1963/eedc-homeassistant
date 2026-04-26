@@ -163,8 +163,8 @@ export default function ConnectorSetupWizard() {
       } else {
         setError(result.fehler || 'Verbindungstest fehlgeschlagen')
       }
-    } catch (e: any) {
-      setError(e.message || 'Verbindungstest fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Verbindungstest fehlgeschlagen')
     } finally {
       setIsTesting(false)
     }
@@ -191,8 +191,8 @@ export default function ConnectorSetupWizard() {
       // Status neu laden
       await loadStatus(selectedAnlageId)
       setCurrentStep(2)
-    } catch (e: any) {
-      setError(e.message || 'Einrichtung fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Einrichtung fehlgeschlagen')
     } finally {
       setIsSettingUp(false)
     }
@@ -211,8 +211,8 @@ export default function ConnectorSetupWizard() {
       setFetchResult(result)
       // Status aktualisieren
       await loadStatus(selectedAnlageId)
-    } catch (e: any) {
-      setError(e.message || 'Ablesung fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ablesung fehlgeschlagen')
     } finally {
       setIsFetching(false)
     }
@@ -232,8 +232,8 @@ export default function ConnectorSetupWizard() {
       setTestResult(null)
       setFetchResult(null)
       setCurrentStep(0)
-    } catch (e: any) {
-      setError(e.message || 'Entfernen fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Entfernen fehlgeschlagen')
     } finally {
       setIsRemoving(false)
     }

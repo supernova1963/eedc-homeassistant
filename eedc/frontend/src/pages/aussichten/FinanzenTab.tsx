@@ -49,8 +49,8 @@ export default function FinanzenTab({ anlageId }: Props) {
     try {
       const data = await aussichtenApi.getFinanzPrognose(anlageId, monate)
       setPrognose(data)
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Laden der Finanzprognose')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Finanzprognose')
     } finally {
       setLoading(false)
     }

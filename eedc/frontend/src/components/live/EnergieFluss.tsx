@@ -358,8 +358,6 @@ export default function EnergieFluss({
     return () => ro.disconnect()
   }, [])
 
-  if (komponenten.length === 0) return null
-
   // SVG-Breite: Container < 375 → 360, 375-499 → 450, ≥500 → 600
   const W = containerW < 375 ? 360 : containerW < 500 ? 450 : 600
   const CX = W / 2
@@ -381,6 +379,8 @@ export default function EnergieFluss({
 
     return { nodes: layout.nodes, dims: layout.dims, nodeMap: _nodeMap, maxKw: _maxKw, nettoHausverbrauch: _nettoHausverbrauch, svgH: _svgH }
   }, [komponenten, W])
+
+  if (komponenten.length === 0) return null
 
   const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
   const CY = dims.cy

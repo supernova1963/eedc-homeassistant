@@ -1182,7 +1182,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
         </div>
       )
 
-    case 'balkonkraftwerk':
+    case 'balkonkraftwerk': {
       const bkwLeistungKwp = ((parseInt(paramData.anzahl as string) || 0) * (parseInt(paramData.leistung_wp as string) || 0) / 1000)
       return (
         <div className="space-y-4">
@@ -1273,6 +1273,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
           )}
         </div>
       )
+    }
 
     case 'sonstiges':
       return (

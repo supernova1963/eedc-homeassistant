@@ -179,8 +179,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
           aussichtenApi.getPrognosenGenauigkeit(anlageId, 30).catch(() => null),
         ])
         if (!cancelled) { setData(prognosen); setGenauigkeit(accuracy) }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || 'Fehler beim Laden')
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Fehler beim Laden')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -822,20 +822,35 @@ function AbweichungCell({ prognose, ist }: { prognose: number; ist: number | nul
   return <span>{prognose.toFixed(1)}<span className={`text-xs ml-1 ${color}`}>{pct > 0 ? '+' : ''}{pct.toFixed(0)}%</span></span>
 }
 
-function StundenTooltip({ active, payload, label, hasEedc }: any) {
+interface StundenTooltipPayload {
+  dataKey?: string
+  value?: number | null
+  stroke?: string
+  fill?: string
+}
+
+interface StundenTooltipProps {
+  active?: boolean
+  payload?: StundenTooltipPayload[]
+  label?: string | number
+  hasEedc?: boolean
+}
+
+function StundenTooltip({ active, payload, label, hasEedc }: StundenTooltipProps) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-gray-800 text-white p-2 rounded shadow-lg text-xs">
       <div className="font-medium mb-1">{label} Uhr</div>
-      {payload.map((p: any) => {
-        if (['solcast_p10', 'solcast_p90'].includes(p.dataKey)) return null
-        if (p.dataKey === 'ist' && p.value === null) return null
-        if (p.dataKey === 'eedc' && !hasEedc) return null
+      {payload.map((p: StundenTooltipPayload) => {
+        const key = p.dataKey ?? ''
+        if (['solcast_p10', 'solcast_p90'].includes(key)) return null
+        if (key === 'ist' && p.value === null) return null
+        if (key === 'eedc' && !hasEedc) return null
         const labels: Record<string, string> = { openmeteo: 'OpenMeteo (roh)', eedc: 'EEDC (kalibriert)', solcast: 'Solcast', ist: 'IST' }
         return (
-          <div key={p.dataKey} className="flex items-center gap-2">
+          <div key={key} className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke || p.fill }} />
-            <span className="text-gray-400">{labels[p.dataKey] || p.dataKey}:</span>
+            <span className="text-gray-400">{labels[key] || key}:</span>
             <span className="font-mono font-medium">{p.value?.toFixed(2)} kW</span>
           </div>
         )

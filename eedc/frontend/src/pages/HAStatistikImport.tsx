@@ -183,7 +183,7 @@ export default function HAStatistikImport() {
             investitionen.set(inv.investition_id, new Set(Object.keys(inv.ha_werte)))
           })
           break
-        case 'manuell':
+        case 'manuell': {
           // Nichts ändern, wird durch einzelne Checkboxen gesteuert
           const existing = feldAuswahl.get(key)
           if (existing) {
@@ -191,6 +191,7 @@ export default function HAStatistikImport() {
             return
           }
           break
+        }
       }
 
       newFeldAuswahl.set(key, { basis, investitionen })

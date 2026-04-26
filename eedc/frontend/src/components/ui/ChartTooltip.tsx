@@ -3,9 +3,9 @@ import type { Payload, ValueType, NameType } from 'recharts/types/component/Defa
 interface ChartTooltipProps {
   active?: boolean
   payload?: Payload<ValueType, NameType>[]
-  label?: any
+  label?: unknown
   formatter?: (value: number, name: string) => string | null
-  labelFormatter?: (label: any) => string
+  labelFormatter?: (label: unknown) => string
   nameFormatter?: (name: string) => string
   itemSorter?: (item: Payload<ValueType, NameType>) => number
   unit?: string
@@ -44,8 +44,8 @@ export default function ChartTooltip({
       {sorted.map((entry, i) => {
         if (entry.type === 'none') return null
         const val = entry.value as number
-        const p = entry.payload as Record<string, any> | undefined
-        const color = entry.color || entry.fill || p?.fill || p?.color || '#888'
+        const p = entry.payload as Record<string, unknown> | undefined
+        const color: string = entry.color || entry.fill || (typeof p?.fill === 'string' ? p.fill : undefined) || (typeof p?.color === 'string' ? p.color : undefined) || '#888'
         let formatted: string | null
         if (formatter) {
           formatted = formatter(val, entry.name as string)

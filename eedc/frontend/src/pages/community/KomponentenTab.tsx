@@ -234,8 +234,6 @@ function SpeicherDeepDive({
   communityStats: SpeicherByClass | null
 }) {
   const speicher = benchmark.benchmark_erweitert?.speicher
-  if (!speicher) return null
-
   const kapazitaet = benchmark.anlage.speicher_kwh || 0
 
   // Eigene Kapazitätsklasse ermitteln
@@ -250,6 +248,7 @@ function SpeicherDeepDive({
   // Chart-Daten für Vergleich
   const vergleichsData = useMemo(() => {
     const data: { name: string; du: number; community: number }[] = []
+    if (!speicher) return data
 
     if (speicher.wirkungsgrad?.community_avg) {
       data.push({
@@ -300,6 +299,7 @@ function SpeicherDeepDive({
   // Tipps generieren
   const tipps = useMemo(() => {
     const tips: string[] = []
+    if (!speicher) return tips
 
     if (speicher.netz_anteil && speicher.netz_anteil.wert > 20) {
       tips.push('Hoher Netzlade-Anteil: Prüfe, ob die PV-Überschussladung optimal konfiguriert ist.')
@@ -319,6 +319,8 @@ function SpeicherDeepDive({
 
     return tips
   }, [speicher])
+
+  if (!speicher) return null
 
   return (
     <Card>
@@ -490,8 +492,6 @@ function WaermepumpeDeepDive({
   communityStats: WPByRegion | null
 }) {
   const wp = benchmark.benchmark_erweitert?.waermepumpe
-  if (!wp) return null
-
   const eigeneRegion = benchmark.anlage.region
 
   // Community-Daten nach Region
@@ -518,6 +518,7 @@ function WaermepumpeDeepDive({
   // Tipps generieren - berücksichtigt Community-Größe
   const tipps = useMemo(() => {
     const tips: string[] = []
+    if (!wp) return tips
 
     if (wp.jaz && wp.jaz.wert < 3.0) {
       tips.push('JAZ unter 3.0: Prüfe Vorlauftemperaturen und Wärmedämmung. Höhere Temperaturen senken die Effizienz.')
@@ -537,6 +538,8 @@ function WaermepumpeDeepDive({
 
     return tips
   }, [wp, gesamtAnzahlWP])
+
+  if (!wp) return null
 
   return (
     <Card>
@@ -676,17 +679,16 @@ function EAutoDeepDive({
   communityStats: EAutoByUsage | null
 }) {
   const eauto = benchmark.benchmark_erweitert?.eauto
-  if (!eauto) return null
 
   // Eigene Nutzungsklasse ermitteln (basierend auf km)
   const eigeneKlasse = useMemo(() => {
-    if (!eauto.km?.wert) return null
+    if (!eauto?.km?.wert) return null
     const kmMonat = eauto.km.wert / 12 // Grobe Schätzung wenn Jahreswert
     if (kmMonat <= 500) return 'Wenig'
     if (kmMonat <= 1000) return 'Normal'
     if (kmMonat <= 2000) return 'Viel'
     return 'Intensiv'
-  }, [eauto.km])
+  }, [eauto?.km])
 
   // Community-Daten nach Nutzungsintensität
   const nutzungData = useMemo(() => {
@@ -711,7 +713,7 @@ function EAutoDeepDive({
 
   // Chart-Daten für Ladequellen
   const ladequellenData = useMemo(() => {
-    if (!eauto.pv_anteil) return []
+    if (!eauto?.pv_anteil) return []
 
     const pvAnteil = eauto.pv_anteil.wert
     return [
@@ -723,6 +725,7 @@ function EAutoDeepDive({
   // Tipps generieren
   const tipps = useMemo(() => {
     const tips: string[] = []
+    if (!eauto) return tips
 
     if (eauto.pv_anteil && eauto.pv_anteil.wert < 50) {
       tips.push('Unter 50% PV-Anteil: Versuche, das Laden tagsüber bei PV-Überschuss zu priorisieren.')
@@ -742,6 +745,8 @@ function EAutoDeepDive({
 
     return tips
   }, [eauto])
+
+  if (!eauto) return null
 
   return (
     <Card>
@@ -918,13 +923,12 @@ function EAutoDeepDive({
 
 function WallboxDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse }) {
   const wallbox = benchmark.benchmark_erweitert?.wallbox
-  if (!wallbox) return null
-
   const leistung = benchmark.anlage.wallbox_kw
 
   // Tipps generieren
   const tipps = useMemo(() => {
     const tips: string[] = []
+    if (!wallbox) return tips
 
     if (wallbox.pv_anteil && wallbox.pv_anteil.wert < 60) {
       tips.push('Der PV-Anteil könnte höher sein. Nutze PV-geführtes Laden für mehr Eigenverbrauch.')
@@ -940,6 +944,8 @@ function WallboxDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse 
 
     return tips
   }, [wallbox])
+
+  if (!wallbox) return null
 
   return (
     <Card>
@@ -999,13 +1005,12 @@ function WallboxDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse 
 
 function BKWDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse }) {
   const bkw = benchmark.benchmark_erweitert?.balkonkraftwerk
-  if (!bkw) return null
-
   const leistung = benchmark.anlage.bkw_wp
 
   // Tipps generieren
   const tipps = useMemo(() => {
     const tips: string[] = []
+    if (!bkw) return tips
 
     if (bkw.spez_ertrag && bkw.spez_ertrag.community_avg) {
       const abweichung = ((bkw.spez_ertrag.wert - bkw.spez_ertrag.community_avg) / bkw.spez_ertrag.community_avg) * 100
@@ -1024,6 +1029,8 @@ function BKWDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse }) {
 
     return tips
   }, [bkw])
+
+  if (!bkw) return null
 
   return (
     <Card>

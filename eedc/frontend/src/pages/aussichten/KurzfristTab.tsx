@@ -94,8 +94,8 @@ export default function KurzfristTab({ anlageId }: Props) {
     try {
       const data = await wetterApi.getSolarPrognose(anlageId, tage, false)
       setPrognose(data)
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Laden der Prognose')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Prognose')
     } finally {
       setLoading(false)
     }
