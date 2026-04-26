@@ -242,7 +242,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
       {/* ── KPI-Matrix ── */}
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-32" />
+              <col />
+              <col />
+              {hasSolcast && <col />}
+              <col />
+            </colgroup>
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-2 px-3 font-medium text-gray-500 dark:text-gray-400"></th>
@@ -416,15 +423,22 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Stundenvergleich heute
         </h3>
-        <div className="overflow-auto max-h-96">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-white dark:bg-gray-900">
+        <div>
+          <table className="w-full text-xs table-fixed">
+            <colgroup>
+              <col className="w-16" />
+              <col />
+              <col />
+              {hasSolcast && <col />}
+              <col />
+            </colgroup>
+            <thead className="bg-white dark:bg-gray-900">
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-1.5 px-2 font-medium text-gray-500">Std.</th>
                 <th className="text-right py-1.5 px-2 font-medium text-yellow-500">OM</th>
                 <th className={`text-right py-1.5 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>EEDC</th>
                 {hasSolcast && <th className="text-right py-1.5 px-2 font-medium text-blue-500">SC</th>}
-                <th className="text-right py-1.5 px-2 font-medium text-green-500">IST</th>
+                <th className="text-right py-1.5 pl-2 pr-3 font-medium text-green-500">IST</th>
               </tr>
             </thead>
             <tbody>
@@ -453,14 +467,14 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                         {istVal !== null && <DevBadge prognose={row.solcast} ist={istVal} />}
                       </td>
                     )}
-                    <td className="py-1 px-2 text-right font-mono font-semibold text-green-600 dark:text-green-400">
+                    <td className="py-1 pl-2 pr-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
                       {istVal !== null ? istVal.toFixed(2) : <span className="text-gray-400">—</span>}
                     </td>
                   </tr>
                 )
               })}
             </tbody>
-            <tfoot className="sticky bottom-0 bg-white dark:bg-gray-900">
+            <tfoot className="bg-white dark:bg-gray-900">
               {(() => {
                 const omSum = chartData.reduce((s, r) => s + r.openmeteo, 0)
                 const eedcSum = chartData.reduce((s, r) => s + (r.eedc ?? 0), 0)
@@ -487,7 +501,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                         {istSum !== null && <DevBadge prognose={scSum} ist={istSum} />}
                       </td>
                     )}
-                    <td className="py-1.5 px-2 text-right font-mono text-green-500">{istSum !== null ? istSum.toFixed(1) : '—'}</td>
+                    <td className="py-1.5 pl-2 pr-3 text-right font-mono text-green-500">{istSum !== null ? istSum.toFixed(1) : '—'}</td>
                   </tr>
                 )
               })()}
@@ -500,15 +514,23 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-20" />
+              <col className="w-24" />
+              <col />
+              <col />
+              {hasSolcast && <col />}
+              <col />
+            </colgroup>
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="py-2 px-2" aria-label="Wetter"></th>
                 <th className="text-left py-2 px-2 font-medium text-gray-500">Datum</th>
                 <th className="text-right py-2 px-2 font-medium text-yellow-500">OM</th>
                 <th className={`text-right py-2 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>EEDC</th>
                 {hasSolcast && <th className="text-right py-2 px-2 font-medium text-blue-500">Solcast</th>}
-                <th className="text-right py-2 px-2 font-medium text-green-500">IST</th>
-                <th className="text-center py-2 px-2 font-medium text-gray-500">Wetter</th>
+                <th className="text-right py-2 pl-2 pr-3 font-medium text-green-500">IST</th>
               </tr>
             </thead>
             <tbody>
@@ -520,6 +542,12 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 const devRef = ref ?? mean
                 return (
                   <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="py-2 px-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />
+                        {tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}
+                      </div>
+                    </td>
                     <td className="py-2 px-2 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
                     <td className="py-2 px-2 text-right font-mono">
                       {tag.om_kwh.toFixed(1)}
@@ -544,14 +572,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                         ) : '—'}
                       </td>
                     )}
-                    <td className="py-2 px-2 text-right font-mono font-semibold text-green-600 dark:text-green-400">
+                    <td className="py-2 pl-2 pr-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
                       {tag.ist_kwh !== null ? tag.ist_kwh.toFixed(1) : <span className="text-gray-400 text-xs">⌀{mean?.toFixed(0)}</span>}
-                    </td>
-                    <td className="py-2 px-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />
-                        {tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}
-                      </div>
                     </td>
                   </tr>
                 )
@@ -579,11 +601,17 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             <MaeMbeCard label="Solcast" mae={genauigkeit.solcast_mae_prozent} mbe={genauigkeit.solcast_mbe_prozent} color="text-blue-500" />
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                <col className="w-28" />
+                <col />
+                <col />
+                <col />
+                <col />
+              </colgroup>
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left py-2 px-3 font-medium text-gray-500">Datum</th>
-                  <th className="text-right py-2 px-3 font-medium text-green-500">IST</th>
                   <th className="text-right py-2 px-3 font-medium text-yellow-500">OpenMeteo</th>
                   <th className={`text-right py-2 px-3 font-medium ${lf != null ? 'text-orange-500' : 'text-gray-400'}`}>
                     <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `EEDC = ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)}`}>
@@ -591,16 +619,17 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                     </SimpleTooltip>
                   </th>
                   <th className="text-right py-2 px-3 font-medium text-blue-500">Solcast</th>
+                  <th className="text-right py-2 px-3 font-medium text-green-500">IST</th>
                 </tr>
               </thead>
               <tbody>
                 {genauigkeit.tage.slice(-7).reverse().map((tag) => (
                   <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
                     <td className="py-2 px-3 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
-                    <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{tag.ist_kwh !== null ? tag.ist_kwh.toFixed(1) : '—'}</td>
                     <td className="py-2 px-3 text-right font-mono">{tag.openmeteo_kwh !== null ? <AbweichungCell prognose={tag.openmeteo_kwh} ist={tag.ist_kwh} /> : '—'}</td>
                     <td className="py-2 px-3 text-right font-mono">{tag.eedc_kwh !== null ? <AbweichungCell prognose={tag.eedc_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400">—</span>}</td>
                     <td className="py-2 px-3 text-right font-mono">{tag.solcast_kwh !== null ? <AbweichungCell prognose={tag.solcast_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400">—</span>}</td>
+                    <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{tag.ist_kwh !== null ? tag.ist_kwh.toFixed(1) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

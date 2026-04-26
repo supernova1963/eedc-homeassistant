@@ -11,6 +11,7 @@ import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
 import { importApi } from '../api'
+import { downloadFile } from '../lib'
 import type { JSONImportResult } from '../types'
 
 export default function Backup() {
@@ -19,16 +20,31 @@ export default function Backup() {
   // Import States
   const [isDragging, setIsDragging] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [importResult, setImportResult] = useState<JSONImportResult | null>(null)
   const [ueberschreiben, setUeberschreiben] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const anlageId = selectedAnlageId ?? anlagen[0]?.id
+  const anlage = anlagen.find(a => a.id === anlageId)
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!anlageId) return
-    window.open(importApi.getFullExportUrl(anlageId), '_blank')
+    setError(null)
+    setExporting(true)
+    try {
+      const safeName = (anlage?.anlagenname || 'anlage').replace(/\s+/g, '_')
+      const datum = new Date().toISOString().slice(0, 10)
+      await downloadFile(
+        importApi.getFullExportUrl(anlageId),
+        `eedc_backup_${safeName}_${datum}.json`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Backup fehlgeschlagen')
+    } finally {
+      setExporting(false)
+    }
   }
 
   const handleDragOver = (e: DragEvent) => {
@@ -121,9 +137,9 @@ export default function Backup() {
                 ))}
               </select>
             )}
-            <Button onClick={handleExport} className="w-full">
+            <Button onClick={handleExport} disabled={exporting} className="w-full">
               <Download className="h-4 w-4 mr-2" />
-              Backup als JSON herunterladen
+              {exporting ? 'Backup wird erstellt…' : 'Backup als JSON herunterladen'}
             </Button>
             <p className="text-xs text-gray-400 dark:text-gray-500">
               Enthält Konfiguration und Messdaten. Sensor-Mapping wird mitexportiert,

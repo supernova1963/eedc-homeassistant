@@ -6,6 +6,7 @@ import AnlageForm from '../components/forms/AnlageForm'
 import DokumentationsDialog from '../components/DokumentationsDialog'
 import { useAnlagen } from '../hooks'
 import { importApi } from '../api/import'
+import { downloadFile } from '../lib'
 import type { Anlage, AnlageCreate } from '../types'
 
 export default function Anlagen() {
@@ -119,7 +120,12 @@ export default function Anlagen() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          window.location.href = importApi.getFullExportUrl(anlage.id)
+                          const safeName = anlage.anlagenname.replace(/\s+/g, '_')
+                          const datum = new Date().toISOString().slice(0, 10)
+                          downloadFile(
+                            importApi.getFullExportUrl(anlage.id),
+                            `eedc_backup_${safeName}_${datum}.json`,
+                          ).catch(() => {/* still better than 401 in Safari */})
                         }}
                         title="Export (JSON)"
                       >

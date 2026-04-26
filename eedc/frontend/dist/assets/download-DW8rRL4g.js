@@ -1,0 +1,1 @@
+async function l(n,a){const t=await fetch(n);if(!t.ok){const e=await t.json().catch(()=>null);throw new Error((e==null?void 0:e.detail)||`HTTP ${t.status}`)}const d=await t.blob(),c=URL.createObjectURL(d),o=document.createElement("a");o.href=c,o.download=a,document.body.appendChild(o),o.click(),document.body.removeChild(o),URL.revokeObjectURL(c)}export{l as d};
