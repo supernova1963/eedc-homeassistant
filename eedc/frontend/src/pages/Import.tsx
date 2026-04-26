@@ -4,6 +4,7 @@ import { Upload, FileSpreadsheet, Download, Check, AlertTriangle, X, Sparkles, T
 import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import { importApi } from '../api'
+import { downloadFile } from '../lib'
 import type { ImportResult, JSONImportResult } from '../types'
 import type { DemoDataResult } from '../api'
 
@@ -96,20 +97,39 @@ export default function Import() {
     }
   }
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
     if (!anlageId) {
       setError('Bitte zuerst eine Anlage auswählen')
       return
     }
-    window.location.href = importApi.getTemplateDownloadUrl(anlageId)
+    try {
+      const anlage = anlagen.find(a => a.id === anlageId)
+      const safeName = (anlage?.anlagenname || 'anlage').replace(/\s+/g, '_')
+      await downloadFile(
+        importApi.getTemplateDownloadUrl(anlageId),
+        `eedc_template_${safeName}.csv`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Template-Download fehlgeschlagen')
+    }
   }
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!anlageId) {
       setError('Bitte zuerst eine Anlage auswählen')
       return
     }
-    window.location.href = importApi.getExportUrl(anlageId)
+    try {
+      const anlage = anlagen.find(a => a.id === anlageId)
+      const safeName = (anlage?.anlagenname || 'anlage').replace(/\s+/g, '_')
+      const datum = new Date().toISOString().slice(0, 10)
+      await downloadFile(
+        importApi.getExportUrl(anlageId),
+        `eedc_export_${safeName}_${datum}.csv`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export fehlgeschlagen')
+    }
   }
 
   const handleCreateDemoData = async () => {

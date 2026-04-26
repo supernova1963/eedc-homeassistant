@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { FileText, Award, Euro, BookOpen, Download, Loader2 } from 'lucide-react'
 import { Modal, Alert } from './ui'
 import { importApi } from '../api/import'
+import { downloadFile } from '../lib'
 import type { Anlage } from '../types'
 
 interface DokumentationsDialogProps {
@@ -29,23 +30,6 @@ interface DocCard {
   beta?: boolean
   feedbackUrl?: string
   accent: string
-}
-
-async function downloadPdf(url: string, filename: string) {
-  const res = await fetch(url)
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null)
-    throw new Error(detail?.detail || `HTTP ${res.status}`)
-  }
-  const blob = await res.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(blobUrl)
 }
 
 export default function DokumentationsDialog({ anlage, onClose }: DokumentationsDialogProps) {
@@ -99,7 +83,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
     setError(null)
     setLoading(card.titel)
     try {
-      await downloadPdf(card.url, card.filename)
+      await downloadFile(card.url, card.filename)
     } catch (err) {
       setError(`${card.titel}: ${err instanceof Error ? err.message : 'Download fehlgeschlagen'}`)
     } finally {
