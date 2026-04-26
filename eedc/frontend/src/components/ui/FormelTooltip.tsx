@@ -193,9 +193,19 @@ export function SimpleTooltip({
         setPosition(fixedPosition)
       }
 
+      // Edge-Clamp: Tooltip-Mitte (max. 160px halbe Breite bei max-w-xs/320px) im Viewport halten,
+      // mind. 8px Abstand zu den Rändern.
+      const halfWidth = 160
+      const margin = 8
+      const idealLeft = rect.left + rect.width / 2
+      const clampedLeft = Math.max(
+        halfWidth + margin,
+        Math.min(idealLeft, window.innerWidth - halfWidth - margin)
+      )
+
       setCoords({
         top: position === 'bottom' ? rect.bottom + 6 : rect.top - 6,
-        left: rect.left + rect.width / 2
+        left: clampedLeft
       })
     }
   }, [isVisible, fixedPosition, position])
@@ -210,7 +220,7 @@ export function SimpleTooltip({
 
       {isVisible && (
         <div
-          className="fixed z-[9999] px-2 py-1 text-xs bg-gray-800 text-white rounded shadow-lg whitespace-nowrap"
+          className="fixed z-[9999] px-2 py-1 text-xs bg-gray-800 text-white rounded shadow-lg max-w-xs whitespace-normal break-words"
           style={{
             top: position === 'bottom' ? coords.top : 'auto',
             bottom: position === 'top' ? `calc(100vh - ${coords.top}px)` : 'auto',

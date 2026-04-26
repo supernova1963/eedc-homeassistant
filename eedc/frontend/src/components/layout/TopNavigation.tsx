@@ -234,7 +234,7 @@ export default function TopNavigation() {
 
               {/* Dropdown Menu */}
               {settingsOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50 max-h-[calc(100vh-5rem)] overflow-y-auto">
                   {filteredSettingsMenu.map((section, idx) => (
                     <div key={section.category}>
                       {idx > 0 && <div className="my-2 border-t border-gray-200 dark:border-gray-700" />}
