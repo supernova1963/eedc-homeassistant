@@ -31,7 +31,7 @@ interface PVSystem {
 }
 
 export default function PVAnlageDashboard() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
 
   const { data: cockpitData, loading: cockpitLoading } = useApiData<CockpitUebersicht>(
     () => cockpitApi.getUebersicht(selectedAnlageId!),
@@ -152,10 +152,10 @@ export default function PVAnlageDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Sun className="h-8 w-8 text-yellow-500" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">PV-Anlage</h1>
+        <div className="flex items-center gap-3 min-w-0">
+          <Sun className="h-8 w-8 text-yellow-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{anlage?.anlagenname || 'PV-Anlage'}</h1>
             {zeitraumVon && zeitraumBis && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Gesamtlaufzeit: {zeitraumVon} bis {zeitraumBis} ({anzahlMonate} Monate)

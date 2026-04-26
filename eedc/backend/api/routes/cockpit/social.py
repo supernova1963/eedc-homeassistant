@@ -130,6 +130,10 @@ async def get_share_text(
         inv = inv_by_id.get(imd.investition_id)
         if not inv:
             continue
+        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
+        if inv.anschaffungsdatum:
+            if (imd.jahr, imd.monat) < (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month):
+                continue
         data = imd.verbrauch_daten or {}
         if inv.typ in ("pv-module", "balkonkraftwerk"):
             pv_erzeugung += (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)

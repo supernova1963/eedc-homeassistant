@@ -155,7 +155,7 @@ export default function TopNavigation() {
             <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">eedc</span>
 
             {/* Haupttabs (Desktop) */}
-            <nav aria-label="Hauptnavigation" className="ml-8 hidden md:flex space-x-1">
+            <nav aria-label="Hauptnavigation" className="ml-8 hidden lg:flex space-x-1">
               {mainTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -181,14 +181,14 @@ export default function TopNavigation() {
           {/* Hamburger-Button (Mobile) */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+            className="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
             aria-label="Menü"
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
           {/* Rechte Seite: Theme + Monatsabschluss + Einstellungen (Desktop) */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             {/* Theme Toggle */}
             <button
               onClick={cycleTheme}
@@ -268,7 +268,7 @@ export default function TopNavigation() {
 
       {/* Mobile Menu Panel */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-200 dark:border-gray-700 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+        <div className="lg:hidden border-t border-gray-200 dark:border-gray-700 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
           {/* Hauptnavigation */}
           <nav aria-label="Hauptnavigation" className="px-4 py-3 space-y-1">
             {mainTabs.map((tab) => {

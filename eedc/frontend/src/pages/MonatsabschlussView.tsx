@@ -1407,7 +1407,10 @@ export default function MonatsabschlussView() {
             )}
 
             {/* ════ SEKTION 4: Wärmepumpe ═══════════════════════════════ */}
-            {d.hat_waermepumpe && (
+            {d.hat_waermepumpe && (() => {
+              const hatVmWp = vm != null && (vm.wp_strom_kwh ?? 0) > 0
+              const vmWaerme = hatVmWp ? (vm!.wp_heizung_kwh ?? 0) + (vm!.wp_warmwasser_kwh ?? 0) : null
+              return (
               <Section sectionId="waermepumpe" icon={Flame} color="text-orange-500" title="Wärmepumpe"
                 summary={
                   <span className="flex gap-3 text-sm">
@@ -1421,22 +1424,22 @@ export default function MonatsabschlussView() {
               >
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <KPICard title="Stromverbrauch" value={fmt(d.wp_strom_kwh, 0)} unit="kWh" icon={Zap} color="red"
-                    subtitle={vm?.wp_strom_kwh != null ? `VM: ${fmt(vm.wp_strom_kwh, 0)} kWh` : undefined} />
+                    subtitle={hatVmWp ? `VM: ${fmt(vm!.wp_strom_kwh, 0)} kWh` : undefined} />
                   <KPICard title="Wärmeertrag" value={fmt(d.wp_waerme_kwh, 0)} unit="kWh" icon={Flame} color="orange"
-                    subtitle={vm ? `VM: ${fmt(vm.wp_heizung_kwh + vm.wp_warmwasser_kwh, 0)} kWh` : undefined} />
+                    subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmt(vmWaerme, 0)} kWh` : undefined} />
                   <KPICard title="COP" value={d.wp_strom_kwh != null && d.wp_waerme_kwh != null && d.wp_strom_kwh > 0
                     ? fmtCalc(d.wp_waerme_kwh / d.wp_strom_kwh, 2) : '—'} unit=""
                     icon={Gauge} color="green"
                     formel="Wärmeertrag ÷ Stromverbrauch"
-                    subtitle={vm && vm.wp_strom_kwh > 0 ? `VM: ${fmtCalc((vm.wp_heizung_kwh + vm.wp_warmwasser_kwh) / vm.wp_strom_kwh, 2)}` : undefined} />
+                    subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmtCalc(vmWaerme / vm!.wp_strom_kwh, 2)}` : undefined} />
                   <KPICard title="Ersparnis vs. Gas" value={d.wp_ersparnis_euro != null ? `+${fmt(d.wp_ersparnis_euro, 2)}` : '—'} unit="€"
                     icon={Euro} color="green"
                     formel="(Wärme ÷ 0,9 × Gaspreis − Strom × Strompreis)"
                     subtitle={vj?.wp_strom_kwh != null ? `VJ Strom: ${fmt(vj.wp_strom_kwh, 0)} kWh` : undefined} />
                 </div>
                 <div className="mt-3">
-                  <VglZeile label="Stromverbrauch" aktuell={d.wp_strom_kwh}   vm={vm?.wp_strom_kwh}  vj={vj?.wp_strom_kwh}  unit="kWh" inv />
-                  <VglZeile label="Wärmeertrag"    aktuell={d.wp_waerme_kwh}  vm={vm ? vm.wp_heizung_kwh + vm.wp_warmwasser_kwh : null} vj={vj?.wp_waerme_kwh} unit="kWh" />
+                  <VglZeile label="Stromverbrauch" aktuell={d.wp_strom_kwh}   vm={hatVmWp ? vm!.wp_strom_kwh : null}  vj={vj?.wp_strom_kwh}  unit="kWh" inv />
+                  <VglZeile label="Wärmeertrag"    aktuell={d.wp_waerme_kwh}  vm={vmWaerme} vj={vj?.wp_waerme_kwh} unit="kWh" />
                   {d.wp_heizung_kwh != null && (
                     <VglZeile label="  davon Heizung"    aktuell={d.wp_heizung_kwh}    unit="kWh" />
                   )}
@@ -1445,7 +1448,8 @@ export default function MonatsabschlussView() {
                   )}
                 </div>
               </Section>
-            )}
+              )
+            })()}
 
             {/* ════ SEKTION 5: E-Mobilität ═══════════════════════════════ */}
             {d.hat_emobilitaet && (

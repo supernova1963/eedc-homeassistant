@@ -17,7 +17,7 @@ import {
 import ChartTooltip from '../components/ui/ChartTooltip'
 
 export default function WallboxDashboard() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<WallboxDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,9 +55,9 @@ export default function WallboxDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Plug className="h-8 w-8 text-purple-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallbox</h1>
+        <div className="flex items-center gap-3 min-w-0">
+          <Plug className="h-8 w-8 text-purple-500 flex-shrink-0" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{anlage?.anlagenname || 'Wallbox'}</h1>
         </div>
         {anlagen.length > 1 && (
           <Select
@@ -112,16 +112,16 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
 
   return (
     <Card className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white truncate">
             {investition.bezeichnung}
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {leistungKw} kW Ladeleistung • {z.anzahl_monate || 0} Monate Daten
           </p>
         </div>
-        <Plug className="h-10 w-10 text-purple-500" />
+        <Plug className="h-10 w-10 text-purple-500 flex-shrink-0" />
       </div>
 
       {!hatDaten ? (

@@ -944,24 +944,30 @@ async def get_finanz_prognose(
                 gesamt_pv += kwh
                 pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
 
+    # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
+    def _vor_anschaffung(inv, jahr: int, monat: int) -> bool:
+        if not inv.anschaffungsdatum:
+            return False
+        return (jahr, monat) < (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month)
+
     # Speicher-Daten
     for sp in speicher:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == sp.id:
+            if inv_id == sp.id and not _vor_anschaffung(sp, jahr, monat):
                 gesamt_speicher_entladung += daten.get("entladung_kwh", 0)
                 gesamt_speicher_ladung += daten.get("ladung_kwh", 0)
 
     # E-Auto-Daten
     for ea in e_autos:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == ea.id:
+            if inv_id == ea.id and not _vor_anschaffung(ea, jahr, monat):
                 gesamt_v2h += daten.get("v2h_entladung_kwh", 0)
                 gesamt_eauto_pv += daten.get("ladung_pv_kwh", 0)
 
     # Wärmepumpe-Daten
     for wp in waermepumpen:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == wp.id:
+            if inv_id == wp.id and not _vor_anschaffung(wp, jahr, monat):
                 gesamt_wp_strom += daten.get("stromverbrauch_kwh", 0)
 
     # =====================================================================
