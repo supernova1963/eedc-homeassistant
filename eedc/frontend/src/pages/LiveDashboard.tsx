@@ -285,6 +285,10 @@ export default function LiveDashboard() {
               {(data.heute_pv_kwh !== null || data.heute_einspeisung_kwh !== null || data.heute_netzbezug_kwh !== null) && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Heute</h3>
+                  {/* Reihenfolge nach Energiebilanz (#157 detLAN):
+                        Quellen-Seite:    PV + Batterie-Entladung      → Σ Eigenverbrauch
+                        Verbrauchs-Seite: Eigenverbrauch + Netzbezug   → Σ Hausverbrauch
+                        Einspeisung als PV-Überschuss separat am Ende */}
                   <div className="grid grid-cols-2 gap-2">
                     {data.heute_pv_kwh !== null && (
                       <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 py-2"
@@ -293,20 +297,7 @@ export default function LiveDashboard() {
                         <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">{data.heute_pv_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
-                    {data.heute_eigenverbrauch_kwh !== null && (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch <SimpleTooltip text={`Selbst genutzter PV-Strom (Direktverbrauch + Batterieentladung)${data.gestern_eigenverbrauch_kwh !== null ? ` | Gestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : ''}`}><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
-                        <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                      </div>
-                    )}
-                    {data.heute_einspeisung_kwh !== null && (
-                      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2"
-                           title={`PV-Strom der ins Netz eingespeist wird${data.gestern_einspeisung_kwh !== null ? `\nGestern: ${data.gestern_einspeisung_kwh.toFixed(1)} kWh` : ''}`}>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Einspeisung</div>
-                        <div className="text-lg font-bold text-green-600 dark:text-green-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
-                      </div>
-                    )}
-                    {/* Batterie heute (Ladung/Entladung) — neben Einspeisung (Überschuss-Verwertung) */}
+                    {/* Batterie heute (Ladung/Entladung) */}
                     {(() => {
                       const komp = data.heute_kwh_pro_komponente
                       if (!komp) return null
@@ -329,17 +320,31 @@ export default function LiveDashboard() {
                         </div>
                       )
                     })()}
-                    {/* Hausverbrauch heute */}
-                    {data.heute_kwh_pro_komponente?.haushalt != null && (
-                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2">
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <SimpleTooltip text="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)"><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
-                        <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                    {data.heute_eigenverbrauch_kwh !== null && (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch <SimpleTooltip text={`Selbst genutzter PV-Strom (Direktverbrauch + Batterieentladung)${data.gestern_eigenverbrauch_kwh !== null ? ` | Gestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : ''}`}><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
+                        <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
                     {data.heute_netzbezug_kwh !== null && (
                       <div className="bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400">Netzbezug <SimpleTooltip text={`Strom der aus dem Netz bezogen wird (nicht durch PV gedeckt)${data.gestern_netzbezug_kwh !== null ? ` | Gestern: ${data.gestern_netzbezug_kwh.toFixed(1)} kWh` : ''}`}><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
                         <div className="text-lg font-bold text-red-600 dark:text-red-400">{data.heute_netzbezug_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {/* Hausverbrauch heute (= Eigenverbrauch + Netzbezug) */}
+                    {data.heute_kwh_pro_komponente?.haushalt != null && (
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg px-3 py-2">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Hausverbrauch <SimpleTooltip text="Gesamter Stromverbrauch des Haushalts (Eigenverbrauch + Netzbezug)"><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
+                        <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{data.heute_kwh_pro_komponente.haushalt.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+                      </div>
+                    )}
+                    {/* Einspeisung als PV-Überschuss zum Schluss */}
+                    {data.heute_einspeisung_kwh !== null && (
+                      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2"
+                           title={`PV-Strom der ins Netz eingespeist wird${data.gestern_einspeisung_kwh !== null ? `\nGestern: ${data.gestern_einspeisung_kwh.toFixed(1)} kWh` : ''}`}>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Einspeisung</div>
+                        <div className="text-lg font-bold text-green-600 dark:text-green-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
                       </div>
                     )}
                   </div>
@@ -350,8 +355,10 @@ export default function LiveDashboard() {
                     const pv = data.heute_pv_kwh
                     const autarkie = ev !== null && nb !== null && (ev + nb) > 0
                       ? (ev / (ev + nb)) * 100 : null
+                    // Cap analog zum Backend-Pattern aus 588a8b07: Bat-Entladung aus Vortagen
+                    // kann ev > pv erzeugen (Zähler/Nenner gemischter Zeitraum) — visuell auf 100 % begrenzen
                     const evQuote = ev !== null && pv !== null && pv > 0
-                      ? (ev / pv) * 100 : null
+                      ? Math.min((ev / pv) * 100, 100) : null
                     if (autarkie === null && evQuote === null) return null
                     return (
                       <div className="grid grid-cols-2 gap-2 mt-2">
@@ -363,7 +370,7 @@ export default function LiveDashboard() {
                         )}
                         {evQuote !== null && (
                           <div className="bg-sky-50 dark:bg-sky-900/20 rounded-lg px-3 py-1.5">
-                            <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbr.</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch</div>
                             <div className="text-base font-bold text-sky-600 dark:text-sky-400">{evQuote.toFixed(0)}<span className="text-xs font-normal">%</span></div>
                           </div>
                         )}

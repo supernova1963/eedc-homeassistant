@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Bugfixes
+
+- **fix(live-heute): EV-Quote auf 100 % begrenzt + Bilanz-Sortierung (#157 detLAN)** — detLAN-Beobachtung: „Wie kann man 195 % Eigenverbr. haben? Meiner Meinung nach kann man maximal 100 % haben." Sachstand: die 195 % sind mathematisch korrekt (Eigenverbrauch enthält seit [#47/b1519cb3](https://github.com/supernova1963/eedc-homeassistant/commit/b1519cb3) auch Batterieentladung — bei niedriger heutiger PV und Bat-Entladung aus Vortagen kann ev/pv > 100 % rechnen), aber visuell unsinnig. Genau dieses Phänomen war an Periodenwerten schon mit Commit [`588a8b07`](https://github.com/supernova1963/eedc-homeassistant/commit/588a8b07) (25.3.2026) an sieben Backend-Stellen mit `min(…, 100)` gecappt — der Live-Frontend-Pfad rechnet die Quote allerdings lokal in JS und ist beim 7-Dateien-Patch durchs Raster gefallen. Jetzt nachgezogen: `Math.min((ev / pv) * 100, 100)` in [`LiveDashboard.tsx`](eedc/frontend/src/pages/LiveDashboard.tsx). Plus zwei Folge-Punkte aus #157: (1) Wording-Konsistenz „Eigenverbr." → **„Eigenverbrauch"** ausgeschrieben (passt mit dem 100 %-Cap auch in die Pille), (2) Bilanz-Sortierung der Tageswerte-Kacheln nach detLAN's Energie-Logik **PV → Batterie → Eigenverbrauch (Quellen-Σ) → Netzbezug → Hausverbrauch (Verbrauchs-Σ) → Einspeisung (PV-Überschuss)**. Issue #157.
+
+---
+
 ## [3.23.4] - 2026-04-26
 
 ### Verbesserungen
