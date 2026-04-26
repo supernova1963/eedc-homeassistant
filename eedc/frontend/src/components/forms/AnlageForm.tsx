@@ -27,7 +27,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     latitude: anlage?.latitude?.toString() || '',
     longitude: anlage?.longitude?.toString() || '',
     mastr_id: anlage?.mastr_id || '',
-    wetter_provider: (anlage as any)?.wetter_provider || 'auto',
+    wetter_provider: anlage?.wetter_provider || 'auto',
     wetter_modell: anlage?.wetter_modell || 'auto',
     steuerliche_behandlung: anlage?.steuerliche_behandlung || 'keine_ust',
     ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',

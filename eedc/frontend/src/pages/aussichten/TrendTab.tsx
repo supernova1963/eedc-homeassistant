@@ -40,8 +40,8 @@ export default function TrendTab({ anlageId }: Props) {
     try {
       const data = await aussichtenApi.getTrendAnalyse(anlageId, jahre)
       setTrend(data)
-    } catch (err: any) {
-      setError(err.message || 'Fehler beim Laden der Trend-Analyse')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Trend-Analyse')
     } finally {
       setLoading(false)
     }

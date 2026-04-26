@@ -404,8 +404,9 @@ export default function PVGISSettings() {
                         const result = await pvgisApi.abrufeHorizont(selectedAnlageId)
                         setHorizontStatus(result)
                         setSuccess('Geländeprofil von PVGIS abgerufen')
-                      } catch (e: any) {
-                        setError(e?.detail || e?.message || 'Abruf fehlgeschlagen')
+                      } catch (e) {
+                        const err = e as { detail?: string; message?: string }
+                        setError(err?.detail || err?.message || 'Abruf fehlgeschlagen')
                       } finally {
                         setHorizontUploading(false)
                       }
@@ -455,8 +456,9 @@ export default function PVGISSettings() {
                   const result = await pvgisApi.uploadHorizont(selectedAnlageId, file)
                   setHorizontStatus(result)
                   setSuccess('Horizontprofil gespeichert')
-                } catch (e: any) {
-                  setError(e?.detail || e?.message || 'Upload fehlgeschlagen')
+                } catch (e) {
+                  const err = e as { detail?: string; message?: string }
+                  setError(err?.detail || err?.message || 'Upload fehlgeschlagen')
                 } finally {
                   setHorizontUploading(false)
                   if (horizontFileRef.current) horizontFileRef.current.value = ''

@@ -103,8 +103,8 @@ export default function CloudImportWizard() {
       if (!result.erfolg) {
         setError(result.fehler || 'Verbindungstest fehlgeschlagen')
       }
-    } catch (e: any) {
-      setError(e.message || 'Verbindungstest fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Verbindungstest fehlgeschlagen')
     } finally {
       setIsTesting(false)
     }
@@ -124,8 +124,8 @@ export default function CloudImportWizard() {
       const all = new Set(result.monate.map((m) => `${m.jahr}-${m.monat}`))
       setSelectedMonths(all)
       setCurrentStep(2)
-    } catch (e: any) {
-      setError(e.message || 'Datenabruf fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Datenabruf fehlgeschlagen')
     } finally {
       setIsFetching(false)
     }
@@ -159,8 +159,8 @@ export default function CloudImportWizard() {
       )
       setResult(importResult)
       setCurrentStep(3)
-    } catch (e: any) {
-      setError(e.message || 'Import fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import fehlgeschlagen')
     } finally {
       setIsImporting(false)
     }
@@ -171,8 +171,8 @@ export default function CloudImportWizard() {
     setIsSaving(true)
     try {
       await cloudImportApi.saveCredentials(selectedAnlageId, selectedProviderId, credentials)
-    } catch (e: any) {
-      setError(e.message || 'Speichern fehlgeschlagen')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
     } finally {
       setIsSaving(false)
     }

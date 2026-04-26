@@ -33,23 +33,9 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
       .catch(console.error)
   }, [anlageId])
 
-  if (!strompreis) {
-    return (
-      <Card className="text-center py-8">
-        <Euro className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          Strompreis erforderlich
-        </h3>
-        <p className="text-gray-500 dark:text-gray-400">
-          Bitte konfiguriere einen Stromtarif, um Finanzauswertungen zu sehen.
-        </p>
-      </Card>
-    )
-  }
-
   // Monatszeitreihen mit historisch korrekten Tarifen
   const zeitreihe = useMemo(
-    () => createMonatsZeitreihe(data, undefined, strompreis, alleTarife),
+    () => strompreis ? createMonatsZeitreihe(data, undefined, strompreis, alleTarife) : [],
     [data, strompreis, alleTarife]
   )
 
@@ -94,6 +80,20 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
     const nettoNachSonderkosten = nettoErtrag - sonderkosten
     return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, nettoErtrag, sonderkosten, nettoNachSonderkosten }
   }, [chartDataWithKumuliert])
+
+  if (!strompreis) {
+    return (
+      <Card className="text-center py-8">
+        <Euro className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Strompreis erforderlich
+        </h3>
+        <p className="text-gray-500 dark:text-gray-400">
+          Bitte konfiguriere einen Stromtarif, um Finanzauswertungen zu sehen.
+        </p>
+      </Card>
+    )
+  }
 
   // Mehrere Tarife? Subtitle anpassen
   const hatMehrereTarife = (alleTarife?.length || 0) > 1
