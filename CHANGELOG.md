@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.3] - 2026-04-26
+
+### Neue Features
+
+- **feat(prognose): Diagnostisch-Modus für Genauigkeits-Tracking — Asymmetrie sichtbar machen (#151 Variante B, Rainer-Mockup)** — Der MAE/MBE-Modus aus v3.22.0 zeigt Streuung und Bias kompakt, verbirgt aber, ob die Streuung symmetrisch ist (Rauschen ohne Hebel) oder asymmetrisch (z. B. „bei dichten Wolken systematisch zu hoch, bei klarem Himmel zu niedrig" — Lernfaktor lässt sich nur einseitig nutzen). Neuer Toggle **„Kompakt / Diagnostisch"** im Header der Genauigkeits-Tracking-Card schaltet zwischen den zwei Sichten um. Im Diagnostisch-Modus zeigt jede Quelle (OpenMeteo / EEDC / Solcast) zwei Boxen nebeneinander: **darüber** = Tage an denen die Prognose über dem IST lag (Ø-Überschätzung in % + Anzahl Tage, amber) und **darunter** analog für Unterschätzung (sky-blau). Dahinter neues Backend-Schema `AsymmetrieEintrag` (`over_count`, `over_avg_prozent`, `under_count`, `under_avg_prozent`) das die signed errors an 0 splittet — `GET /aussichten/prognosen/{id}/genauigkeit` liefert jetzt zusätzlich `openmeteo_asymmetrie` / `eedc_asymmetrie` / `solcast_asymmetrie`. Default bleibt kompakt; das Asymmetrie-Detail ist optional und stört den Standard-Workflow nicht.
+
+---
+
 ## [3.23.2] - 2026-04-26
 
 ### Bugfixes

@@ -145,20 +145,36 @@ class GenauigkeitsEintrag(BaseModel):
     ist_kwh: Optional[float] = None
 
 
+class AsymmetrieEintrag(BaseModel):
+    """Asymmetrie-Diagnostik: über vs. unter IST getrennt aggregiert.
+
+    Zeigt ob die Streuung symmetrisch (Rauschen) oder einseitig (systematische
+    Über-/Unterschätzung in bestimmten Wettersituationen) ist.
+    """
+    over_count: int = 0
+    over_avg_prozent: Optional[float] = None
+    under_count: int = 0
+    under_avg_prozent: Optional[float] = None
+
+
 class GenauigkeitsResponse(BaseModel):
     """Response für Genauigkeits-Tracking.
 
     MAE = Mean Absolute Error (mit abs()) — Streuung
     MBE = Mean Bias Error (ohne abs(), vorzeichenbehaftet) — systematischer Bias
-    Beide in Prozent vom IST.
+    Asymmetrie = MBE aufgeteilt in „darüber" / „darunter" (Rainer-Mockup #151)
+    Alle Werte in Prozent vom IST.
     """
     tage: List[GenauigkeitsEintrag] = []
     openmeteo_mae_prozent: Optional[float] = None
     openmeteo_mbe_prozent: Optional[float] = None
+    openmeteo_asymmetrie: Optional[AsymmetrieEintrag] = None
     eedc_mae_prozent: Optional[float] = None
     eedc_mbe_prozent: Optional[float] = None
+    eedc_asymmetrie: Optional[AsymmetrieEintrag] = None
     solcast_mae_prozent: Optional[float] = None
     solcast_mbe_prozent: Optional[float] = None
+    solcast_asymmetrie: Optional[AsymmetrieEintrag] = None
     anzahl_tage: int = 0
 
 
@@ -666,13 +682,27 @@ async def get_prognosen_genauigkeit(
     def _mbe(xs):
         return round(sum(xs) / len(xs), 1) if xs else None
 
+    def _asymmetrie(xs) -> AsymmetrieEintrag:
+        """Splittet signed errors an 0 in „darüber" (Prognose > IST) und „darunter"."""
+        over = [x for x in xs if x > 0]
+        under = [x for x in xs if x < 0]
+        return AsymmetrieEintrag(
+            over_count=len(over),
+            over_avg_prozent=round(sum(over) / len(over), 1) if over else None,
+            under_count=len(under),
+            under_avg_prozent=round(sum(under) / len(under), 1) if under else None,
+        )
+
     return GenauigkeitsResponse(
         tage=eintraege,
         openmeteo_mae_prozent=_mae(om_signed),
         openmeteo_mbe_prozent=_mbe(om_signed),
+        openmeteo_asymmetrie=_asymmetrie(om_signed),
         eedc_mae_prozent=_mae(eedc_signed),
         eedc_mbe_prozent=_mbe(eedc_signed),
+        eedc_asymmetrie=_asymmetrie(eedc_signed),
         solcast_mae_prozent=_mae(sc_signed),
         solcast_mbe_prozent=_mbe(sc_signed),
+        solcast_asymmetrie=_asymmetrie(sc_signed),
         anzahl_tage=len(eintraege),
     )
