@@ -3,11 +3,12 @@
  * Zeigt Statistiken: Zyklen, Effizienz, Ladung/Entladung, Eigenverbrauchserhöhung
  */
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Battery, Zap, TrendingUp, Activity, RotateCw, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
+import type { Anlage } from '../types'
 import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
@@ -17,7 +18,7 @@ import {
 } from 'recharts'
 
 export default function SpeicherDashboard() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<SpeicherDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,45 +53,74 @@ export default function SpeicherDashboard() {
     )
   }
 
+  const showSelector = anlagen.length > 1
+  const selectorProps = { anlagen, selectedAnlageId, setSelectedAnlageId }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Battery className="h-8 w-8 text-green-500 flex-shrink-0" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{anlage?.anlagenname || 'Speicher'}</h1>
-        </div>
-        {anlagen.length > 1 && (
-          <Select
-            compact
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-        )}
-      </div>
-
       {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <LoadingSpinner text="Lade Speicher Daten..." />
       ) : dashboards.length === 0 ? (
-        <Card>
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Battery className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Kein Speicher für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge einen Speicher unter "Investitionen" hinzu.</p>
-          </div>
-        </Card>
+        <>
+          <PlaceholderHeader showSelector={showSelector} {...selectorProps} />
+          <Card>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Battery className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Kein Speicher für diese Anlage erfasst.</p>
+              <p className="text-sm mt-2">Füge einen Speicher unter "Investitionen" hinzu.</p>
+            </div>
+          </Card>
+        </>
       ) : (
-        dashboards.map((dashboard) => (
-          <SpeicherCard key={dashboard.investition.id} dashboard={dashboard} />
+        dashboards.map((dashboard, idx) => (
+          <Fragment key={dashboard.investition.id}>
+            {idx > 0 && <hr className="border-t border-gray-200 dark:border-gray-700" />}
+            <SpeicherBlock
+              dashboard={dashboard}
+              showSelector={idx === 0 && showSelector}
+              {...selectorProps}
+            />
+          </Fragment>
         ))
       )}
     </div>
   )
 }
 
-function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
+interface SelectorProps {
+  anlagen: Anlage[]
+  selectedAnlageId: number | undefined
+  setSelectedAnlageId: (id: number) => void
+  showSelector: boolean
+}
+
+function AnlageSelector({ anlagen, selectedAnlageId, setSelectedAnlageId, showSelector }: SelectorProps) {
+  if (!showSelector) return null
+  return (
+    <Select
+      compact
+      value={selectedAnlageId?.toString() || ''}
+      onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+      options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+    />
+  )
+}
+
+function PlaceholderHeader(props: SelectorProps) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Battery className="h-8 w-8 text-green-500 flex-shrink-0" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Speicher</h1>
+      </div>
+      <AnlageSelector {...props} />
+    </div>
+  )
+}
+
+function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
@@ -110,17 +140,20 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
   })
 
   return (
-    <Card className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white truncate">
-            {investition.bezeichnung}
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {z.kapazitaet_kwh} kWh Kapazität • {z.anzahl_monate} Monate Daten
-          </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Battery className="h-8 w-8 text-green-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+              {investition.bezeichnung}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {z.kapazitaet_kwh} kWh Kapazität • {z.anzahl_monate} Monate Daten
+            </p>
+          </div>
         </div>
-        <Battery className="h-10 w-10 text-green-500 flex-shrink-0" />
+        <AnlageSelector {...selectorProps} />
       </div>
 
       {/* KPIs */}
@@ -350,6 +383,6 @@ function SpeicherCard({ dashboard }: { dashboard: SpeicherDashboardResponse }) {
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }

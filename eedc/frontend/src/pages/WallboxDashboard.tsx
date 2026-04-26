@@ -4,10 +4,11 @@
  * Die Wallbox ist Infrastruktur - ihr ROI entsteht durch günstiges Heimladen.
  */
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Plug, Zap, Leaf, TrendingUp, Home, MapPin } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
+import type { Anlage } from '../types'
 import { investitionenApi } from '../api'
 import type { WallboxDashboardResponse } from '../api/investitionen'
 import {
@@ -17,7 +18,7 @@ import {
 import ChartTooltip from '../components/ui/ChartTooltip'
 
 export default function WallboxDashboard() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<WallboxDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,45 +53,74 @@ export default function WallboxDashboard() {
     )
   }
 
+  const showSelector = anlagen.length > 1
+  const selectorProps = { anlagen, selectedAnlageId, setSelectedAnlageId }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Plug className="h-8 w-8 text-purple-500 flex-shrink-0" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{anlage?.anlagenname || 'Wallbox'}</h1>
-        </div>
-        {anlagen.length > 1 && (
-          <Select
-            compact
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-        )}
-      </div>
-
       {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <LoadingSpinner text="Lade Wallbox Daten..." />
       ) : dashboards.length === 0 ? (
-        <Card>
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Plug className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Keine Wallbox für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge eine Wallbox unter "Einstellungen → Investitionen" hinzu.</p>
-          </div>
-        </Card>
+        <>
+          <PlaceholderHeader showSelector={showSelector} {...selectorProps} />
+          <Card>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Plug className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Keine Wallbox für diese Anlage erfasst.</p>
+              <p className="text-sm mt-2">Füge eine Wallbox unter "Einstellungen → Investitionen" hinzu.</p>
+            </div>
+          </Card>
+        </>
       ) : (
-        dashboards.map((dashboard) => (
-          <WallboxCard key={dashboard.investition.id} dashboard={dashboard} />
+        dashboards.map((dashboard, idx) => (
+          <Fragment key={dashboard.investition.id}>
+            {idx > 0 && <hr className="border-t border-gray-200 dark:border-gray-700" />}
+            <WallboxBlock
+              dashboard={dashboard}
+              showSelector={idx === 0 && showSelector}
+              {...selectorProps}
+            />
+          </Fragment>
         ))
       )}
     </div>
   )
 }
 
-function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
+interface SelectorProps {
+  anlagen: Anlage[]
+  selectedAnlageId: number | undefined
+  setSelectedAnlageId: (id: number) => void
+  showSelector: boolean
+}
+
+function AnlageSelector({ anlagen, selectedAnlageId, setSelectedAnlageId, showSelector }: SelectorProps) {
+  if (!showSelector) return null
+  return (
+    <Select
+      compact
+      value={selectedAnlageId?.toString() || ''}
+      onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+      options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+    />
+  )
+}
+
+function PlaceholderHeader(props: SelectorProps) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Plug className="h-8 w-8 text-purple-500 flex-shrink-0" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Wallbox</h1>
+      </div>
+      <AnlageSelector {...props} />
+    </div>
+  )
+}
+
+function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashboardResponse } & SelectorProps) {
   const { investition, zusammenfassung } = dashboard
   const z = zusammenfassung
 
@@ -111,17 +141,20 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
   const hatDaten = (z.gesamt_heim_ladung_kwh || 0) > 0
 
   return (
-    <Card className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white truncate">
-            {investition.bezeichnung}
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {leistungKw} kW Ladeleistung • {z.anzahl_monate || 0} Monate Daten
-          </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Plug className="h-8 w-8 text-purple-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+              {investition.bezeichnung}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {leistungKw} kW Ladeleistung • {z.anzahl_monate || 0} Monate Daten
+            </p>
+          </div>
         </div>
-        <Plug className="h-10 w-10 text-purple-500 flex-shrink-0" />
+        <AnlageSelector {...selectorProps} />
       </div>
 
       {!hatDaten ? (
@@ -305,6 +338,6 @@ function WallboxCard({ dashboard }: { dashboard: WallboxDashboardResponse }) {
           )}
         </>
       )}
-    </Card>
+    </div>
   )
 }

@@ -3,11 +3,12 @@
  * Zeigt Statistiken: COP, Stromverbrauch, Heizenergie, Ersparnis vs. Gas/Öl
  */
 
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Flame, Zap, Leaf, TrendingUp, Thermometer } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
+import type { Anlage } from '../types'
 import { MONAT_KURZ } from '../lib'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
@@ -17,7 +18,7 @@ import {
 } from 'recharts'
 
 export default function WaermepumpeDashboard() {
-  const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [dashboards, setDashboards] = useState<WaermepumpeDashboardResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,45 +53,78 @@ export default function WaermepumpeDashboard() {
     )
   }
 
+  const showSelector = anlagen.length > 1
+  const selectorProps = {
+    anlagen,
+    selectedAnlageId,
+    setSelectedAnlageId,
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Flame className="h-8 w-8 text-orange-500 flex-shrink-0" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{anlage?.anlagenname || 'Wärmepumpe'}</h1>
-        </div>
-        {anlagen.length > 1 && (
-          <Select
-            compact
-            value={selectedAnlageId?.toString() || ''}
-            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-          />
-        )}
-      </div>
-
       {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <LoadingSpinner text="Lade Wärmepumpe Daten..." />
       ) : dashboards.length === 0 ? (
-        <Card>
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Flame className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Keine Wärmepumpe für diese Anlage erfasst.</p>
-            <p className="text-sm mt-2">Füge eine Wärmepumpe unter "Investitionen" hinzu.</p>
-          </div>
-        </Card>
+        <>
+          <PlaceholderHeader showSelector={showSelector} {...selectorProps} />
+          <Card>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Flame className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Keine Wärmepumpe für diese Anlage erfasst.</p>
+              <p className="text-sm mt-2">Füge eine Wärmepumpe unter "Investitionen" hinzu.</p>
+            </div>
+          </Card>
+        </>
       ) : (
-        dashboards.map((dashboard) => (
-          <WaermepumpeCard key={dashboard.investition.id} dashboard={dashboard} showHeader={dashboards.length > 1} />
+        dashboards.map((dashboard, idx) => (
+          <Fragment key={dashboard.investition.id}>
+            {idx > 0 && <hr className="border-t border-gray-200 dark:border-gray-700" />}
+            <WaermepumpeBlock
+              dashboard={dashboard}
+              showSelector={idx === 0 && showSelector}
+              {...selectorProps}
+            />
+          </Fragment>
         ))
       )}
     </div>
   )
 }
 
-function WaermepumpeCard({ dashboard, showHeader = true }: { dashboard: WaermepumpeDashboardResponse; showHeader?: boolean }) {
+interface SelectorProps {
+  anlagen: Anlage[]
+  selectedAnlageId: number | undefined
+  setSelectedAnlageId: (id: number) => void
+  showSelector: boolean
+}
+
+function AnlageSelector({ anlagen, selectedAnlageId, setSelectedAnlageId, showSelector }: SelectorProps) {
+  if (!showSelector) return null
+  return (
+    <Select
+      compact
+      value={selectedAnlageId?.toString() || ''}
+      onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+      options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+    />
+  )
+}
+
+function PlaceholderHeader(props: SelectorProps) {
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Flame className="h-8 w-8 text-orange-500 flex-shrink-0" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Wärmepumpe</h1>
+      </div>
+      <AnlageSelector {...props} />
+    </div>
+  )
+}
+
+function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: WaermepumpeDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
@@ -151,24 +185,21 @@ function WaermepumpeCard({ dashboard, showHeader = true }: { dashboard: Waermepu
   ]
 
   return (
-    <Card className="space-y-6">
-      {showHeader ? (
-        <div className="flex items-center justify-between gap-3">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Flame className="h-8 w-8 text-orange-500 flex-shrink-0" />
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white truncate">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
               {investition.bezeichnung}
-            </h2>
+            </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {z.anzahl_monate} Monate Daten
             </p>
           </div>
-          <Flame className="h-10 w-10 text-orange-500 flex-shrink-0" />
         </div>
-      ) : (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {z.anzahl_monate} Monate Daten
-        </p>
-      )}
+        <AnlageSelector {...selectorProps} />
+      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -430,6 +461,6 @@ function WaermepumpeCard({ dashboard, showHeader = true }: { dashboard: Waermepu
           </table>
         </div>
       </details>
-    </Card>
+    </div>
   )
 }
