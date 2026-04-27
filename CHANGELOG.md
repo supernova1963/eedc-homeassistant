@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+---
+
+## [3.24.0] - 2026-04-27
+
 ### Neue Features
 
 - **feat(energieprofil): WP-Kompressor-Starts als Stunden-/Tages-/Monats-KPI (#136)** — Optionaler kumulativer Anzahl-Zähler für Wärmepumpen-Kompressor-Starts. Im Sensor-Zuordnungs-Wizard kann pro WP-Investition ein Total-Increasing-Sensor angegeben werden (bei Nibe z.B. aus der lokalen „Nibe Heat Pump"-Integration: `sensor.compressor_number_of_starts_…`); der stündliche Snapshot-Job erfasst den Counter wie kWh-Zähler in `sensor_snapshots`, der Tagesabschluss berechnet (a) Stunden-Summen pro Stunde in `TagesEnergieProfil.wp_starts_anzahl` (Summe aller WP-Investitionen) und (b) Tages-Differenzen pro Investition in `TagesZusammenfassung.komponenten_starts` (`{"wp_starts_anzahl": {"<inv_id>": <int>}}`). Vollbackfill aus HA Long-Term Statistics greift für Tages-Summen mit (Counter-Werte werden vom HA-Statistics-Pfad nicht durch 1000 geteilt — Faktor bleibt bei unbekannter Einheit `1.0`); Stunden-Detail wird ab Live-Erfassung gefüllt, historische Tage haben dort `null`. **Anzeige-Stellen unter „Auswertung → Energieprofil":** (1) **Tab Tagesdetail** — neue Spalte „WP-Starts" in der Verbrauchs-Gruppe (default ausgeblendet, im Spalten-Selektor aktivierbar), Stundenwerte + Tagessumme im Footer. (2) **Tab Monat** — neue Gruppe „Komponenten" mit Spalte „WP-Starts" (default ausgeblendet), Tageswerte je Zeile + Monatssumme im Footer. Zusätzlich im Sensor-Zuordnungs-Wizard im WP-Step: neuer optionaler Eintrag mit Hinweis auf die Nibe-Integration. **Bewusst nicht gebaut:** Fallback-Heuristik aus `leistung_w`/Compressor-Binary wäre gerade bei kurzen Takten (wo der KPI sticht) systematisch unterzählen, kein Backfill möglich, Defrost-Verfälschung. Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_FELDER`, damit reine Counter nicht versehentlich in die Energie-Bilanz fließen. Issue #136.
