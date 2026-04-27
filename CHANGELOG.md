@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+---
+
+## [3.23.8] - 2026-04-27
+
 ### Verbesserungen
 
 - **fix(daten-checker): MQTT-Topic-Abdeckung präziser + nicht mehr für MQTT-Verweigerer (Forum #404/#405 detLAN/rapahl)** — detLAN sah im Daten-Checker eine Warnung „MQTT-Topic erwartet, nie empfangen" mit Beheben-Link auf MQTT-Inbound, obwohl er die Funktion gar nicht nutzen wollte. Ursache: in seinen DB-Settings war MQTT-Inbound aktiviert (Toggle aus dem Wizard), der Subscriber lief, aber keine HA-Publisher-Automation lieferte Topics. Die Warnung war technisch korrekt, im Wording aber unklar — sie listete keine Lösung außer „Publisher einrichten". Zwei Verbesserungen: (1) **Kategorie wird stillschweigend übersprungen**, wenn weder Subscriber läuft noch das DB-Setting `mqtt_inbound.enabled` gesetzt ist — wer MQTT-Inbound nie eingeschaltet hat, sieht die Kategorie gar nicht erst. Bei aktivem DB-Setting aber nicht laufendem Subscriber bleibt eine INFO-Meldung mit Diagnose-Hinweisen (Broker-Adresse / Zugangsdaten / Deaktivierung). (2) **WARNING-Meldungen** weisen jetzt explizit auf den **Deaktivierungs-Pfad** hin („Wenn du keine Live-Daten via MQTT brauchst, kannst du MQTT-Inbound unter Daten → Einrichtung → MQTT-Inbound deaktivieren") — rapahls Tipp aus #405 ist damit Teil der Fehlermeldung selbst.
