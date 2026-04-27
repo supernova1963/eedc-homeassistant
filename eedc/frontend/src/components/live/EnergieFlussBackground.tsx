@@ -857,7 +857,9 @@ function EnergieFlussBackground({
           </>)}
 
           {/* ─── Sunset-Animationen — nur im Effekt-Modus ─── */}
-          {!lite && bgVariant === 'sunset' && (<>
+          {/* clipPath verhindert dass Strahlen/Partikel über die abgerundeten Ecken hinaus rendern (#164) */}
+          {!lite && bgVariant === 'sunset' && (
+            <g clipPath="url(#ef-photo-clip)">
             {/* Sonnenstrahlen von oben → Horizont */}
             <path d={`M ${CX - 80} 10 Q ${CX - 40} ${CY * 0.5} ${CX} ${CY}`}
               fill="none" stroke="#ffa500" strokeWidth="2" strokeOpacity="0.22" strokeDasharray="3 12"
@@ -939,10 +941,13 @@ function EnergieFlussBackground({
                 <animate attributeName="opacity" values="0;0.55;0.25;0" dur={`${5.5 + i * 1.5}s`} repeatCount="indefinite" begin={`${i * 2.0}s`} />
               </circle>
             ))}
-          </>)}
+            </g>
+          )}
 
           {/* ─── Alps-Animationen — nur im Effekt-Modus ─── */}
-          {!lite && bgVariant === 'alps' && (<>
+          {/* clipPath für konsistente Eckenrundung (#164) */}
+          {!lite && bgVariant === 'alps' && (
+            <g clipPath="url(#ef-photo-clip)">
             {/* Wolkenwisps (leichter Drift über den Bergkamm) */}
             {[0, 1, 2].map(i => {
               const cy2 = CY * (0.18 + i * 0.18)
@@ -983,7 +988,8 @@ function EnergieFlussBackground({
                   clipPath="url(#ef-alps-sky-clip)" />
               )
             })}
-          </>)}
+            </g>
+          )}
 
           {/* Dezente Achsenlinien (Kreuz durch Zentrum) */}
           {bgVariant !== 'sunset' && bgVariant !== 'alps' && <>
