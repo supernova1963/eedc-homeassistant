@@ -216,6 +216,9 @@ async def run_migrations(conn):
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_stundenprofil JSON'))
             if 'solcast_prognose_stundenprofil' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_prognose_stundenprofil JSON'))
+            # v3.24.0 (Issue #136): WP-Starts und andere Counter pro Komponente
+            if 'komponenten_starts' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_starts JSON'))
 
         # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
         # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),
@@ -236,6 +239,9 @@ async def run_migrations(conn):
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN strompreis_cent FLOAT'))
             if 'boersenpreis_cent' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN boersenpreis_cent FLOAT'))
+            # v3.24.0 (Issue #136): WP-Kompressor-Starts pro Stunde
+            if 'wp_starts_anzahl' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wp_starts_anzahl INTEGER'))
 
         # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
         if 'infothek_eintraege' in inspector.get_table_names():

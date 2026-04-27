@@ -60,6 +60,11 @@ class TagesEnergieProfil(Base):
     waermepumpe_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     wallbox_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Counter pro Stunde (Issue #136): Anzahl WP-Kompressor-Starts in dieser Stunde,
+    # summiert über alle WP-Investitionen mit gemapptem Starts-Zähler.
+    # Pro-Investitions-Aufschlüsselung lebt auf Tagesebene in TagesZusammenfassung.komponenten_starts.
+    wp_starts_anzahl: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # Bilanz
     ueberschuss_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # max(0, pv - verbrauch) — was hätte gespeichert werden können
@@ -177,6 +182,11 @@ class TagesZusammenfassung(Base):
     # z.B. {"pv_3": 22.5, "waermepumpe_5": -8.3, "wallbox_7": -12.1, "haushalt": -15.2}
     # Vorzeichen: positiv = Erzeugung (PV), negativ = Verbrauch (WP, Wallbox, etc.)
     komponenten_kwh: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Per-Komponenten Tages-Counter (Anzahl, kein kWh) — Issue #136.
+    # z.B. {"wp_starts_anzahl": {"5": 12}} = WP-Investition 5 hatte 12 Starts an dem Tag.
+    # Wird aus Snapshot-Differenz Tag-Anfang vs. Folgetag-Anfang berechnet.
+    komponenten_starts: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

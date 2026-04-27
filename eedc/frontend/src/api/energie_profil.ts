@@ -23,6 +23,8 @@ export interface StundenWert {
   globalstrahlung_wm2: number | null
   soc_prozent: number | null
   komponenten: Record<string, number> | null
+  // WP-Kompressor-Starts in dieser Stunde (Summe über alle WPs der Anlage, Issue #136)
+  wp_starts_anzahl: number | null
 }
 
 export interface StundenAntwort {
@@ -56,6 +58,9 @@ export interface TagesZusammenfassung {
   stunden_verfuegbar: number
   datenquelle: string | null
   komponenten_kwh: Record<string, number> | null
+  // Per-Komponente Counter pro Tag (z.B. WP-Kompressor-Starts, Issue #136)
+  // Form: { wp_starts_anzahl: { "<inv_id>": <int> } }
+  komponenten_starts: Record<string, Record<string, number>> | null
   // Börsenpreis / Negativpreis (§51 EEG)
   boersenpreis_avg_cent: number | null
   boersenpreis_min_cent: number | null
