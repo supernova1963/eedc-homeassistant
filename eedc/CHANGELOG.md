@@ -11,6 +11,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.7] - 2026-04-27
+
+### Neue Features
+
+- **feat(daten-checker): neue Kategorie MQTT-Topic-Abdeckung (#134)** — Schließt die Drift-Lücke zwischen dynamischer Konsumenten-Seite (Erwartungsliste aus [`field_definitions.py`](eedc/backend/core/field_definitions.py)) und statisch hartkodierter Publisher-Seite (HA-Automation-YAML / iobroker / Node-RED): Sobald in EEDC neue Felder dazukommen oder Investitions-IDs nach Re-Import wechseln, driftet Publisher gegen Konsument unbemerkt — diese Daten-Checker-Kategorie macht das sofort sichtbar. Drei Befunde pro Anlage: **(WARNING) Topic erwartet, nie empfangen** mit Beispielen in den Details (typische Ursachen: Publisher-Automation noch nicht eingerichtet, Investitions-IDs nach Re-Import in der Automation nicht nachgezogen), **(WARNING) Topic empfangen, Wert älter als Schwellwert** (live ≤ 2 min, energy ≤ 10 min — passt zum sensorgetriebenen Live-Update- und 5-Minuten-Energy-Pattern), **(OK) Alle erwarteten Topics aktuell empfangen**. Bei nicht-aktivem MQTT-Inbound-Subscriber wird die Kategorie als INFO neutral gemeldet (kein Alarm). Pre-work: Topic-Erwartungsliste aus [`live_mqtt_inbound.py`](eedc/backend/api/routes/live_mqtt_inbound.py) in eigenen Helfer [`mqtt_topic_registry.build_expected_topics()`](eedc/backend/services/mqtt_topic_registry.py) extrahiert — Endpoint `/api/live/mqtt/topics` und der Daten-Checker nutzen jetzt denselben Helfer (eine Quelle, ein Bedeutungsraum für „erwartete Topics"). Issue #134.
+
+### Bugfixes
+
+- **fix(energiefluss): Sunset/Alps-Hintergründe mit Border-Radius clippen (#164 detLAN)** — detLAN-Beobachtung beim iPhone-Anzeigezoom-Sweep: bei den Hintergrund-Varianten Sunset und Alps (sowie wahrgenommen bei Alben-Foto-Hintergrund) sind die Ecken nicht abgerundet, im Gegensatz zu den anderen Varianten. Ursache in [`EnergieFlussBackground.tsx`](eedc/frontend/src/components/live/EnergieFlussBackground.tsx): die Himmel/Meer- bzw. Himmel/Tal-Rects der Sunset- und Alps-Varianten zogen ohne `clipPath` bis in die Ecken des SVG und überzeichneten damit die abgerundeten Container-Ecken — Foto-Hintergründe nutzen schon `clipPath="ef-photo-clip"`. Jetzt `clipPath` konsistent auf allen vier Sunset- und vier Alps-Hintergrund-Rects, Ecken sind in allen Varianten gleich abgerundet. Die übrigen Punkte aus #164 (Werte rechts ausbrechend, „Prognose"-Umbruch, Diagramm-Breiten) sind Effekte des aktivierten iOS-Anzeigezooms „Größerer Text" bzw. der HA-Companion-Seitenzoom-Stufe — siehe „Empfohlene Nutzung" im README. Issue #164.
+
+### Dokumentation
+
+- **docs(readme): „Empfohlene Nutzung"-Block** — Im Root- und Standalone-README dokumentiert, dass eedc als datendichte Analyse-App primär für Desktop konzipiert ist. Smartphone in Standard-Anzeigegröße deckt Live-Dashboard und einfache Sichten ab, datendichte Auswertungs-Bereiche profitieren von größerem Bildschirm. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — bewusste Designentscheidung statt Layout-by-Layout-Patches, die den datendichten Charakter aufweichen würden. Wording als technische App-Eigenschaft formuliert (keine Aussagen zu Barrierefreiheit / Accessibility).
+
+---
+
 ## [3.23.6] - 2026-04-26
 
 ### Bugfixes
