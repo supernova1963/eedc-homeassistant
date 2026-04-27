@@ -526,7 +526,7 @@ export default function LiveDashboard() {
                          title={wetter.temperatur_min_c != null && wetter.temperatur_max_c != null
                            ? `Min ${wetter.temperatur_min_c.toFixed(0)}° / Max ${wetter.temperatur_max_c.toFixed(0)}°C`
                            : undefined}>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Außen</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Außen Temperatur</div>
                       <div className="text-base font-bold text-cyan-600 dark:text-cyan-400">
                         {wetter.aktuell.temperatur_c.toFixed(1)}<span className="text-xs font-normal ml-0.5">°C</span>
                       </div>
@@ -534,7 +534,7 @@ export default function LiveDashboard() {
                   )}
                   {data.warmwasser_temperatur_c != null && (
                     <div className="flex-1 bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-1.5">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Warmwasser</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Warmwasser Temperatur</div>
                       <div className="text-base font-bold text-orange-600 dark:text-orange-400">
                         {data.warmwasser_temperatur_c.toFixed(1)}<span className="text-xs font-normal ml-0.5">°C</span>
                       </div>
