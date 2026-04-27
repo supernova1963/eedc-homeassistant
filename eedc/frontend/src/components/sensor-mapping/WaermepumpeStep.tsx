@@ -7,7 +7,7 @@
  * - Warmwasser (kWh) - Sensor, COP-Berechnung, oder nicht separat
  */
 
-import { Thermometer, Zap } from 'lucide-react'
+import { Thermometer } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
@@ -60,8 +60,8 @@ export default function WaermepumpeStep({
     },
     {
       value: 'cop_berechnung',
-      label: 'COP-Berechnung',
-      description: 'Stromverbrauch × COP (JAZ)',
+      label: 'JAZ-Berechnung',
+      description: 'Stromverbrauch × JAZ',
     },
     {
       value: 'keine',
@@ -78,8 +78,8 @@ export default function WaermepumpeStep({
     },
     {
       value: 'cop_berechnung',
-      label: 'COP-Berechnung',
-      description: 'Anteil Strom × COP',
+      label: 'JAZ-Berechnung',
+      description: 'Anteil Strom × JAZ',
     },
     {
       value: 'keine',
@@ -90,10 +90,11 @@ export default function WaermepumpeStep({
 
   return (
     <div className="space-y-6">
-      <Alert type="info" title="COP-Berechnung">
-        Wenn kein Wärmemengenzähler vorhanden ist, kann die Heizenergie über den COP
-        (Coefficient of Performance) berechnet werden. Der COP sollte aus den
-        Investitions-Parametern übernommen werden.
+      <Alert type="info" title="JAZ-basierte Berechnung">
+        Wenn kein Wärmemengenzähler vorhanden ist, wird die Heizenergie aus dem
+        Stromverbrauch und der JAZ (Jahresarbeitszahl) berechnet:
+        Heizenergie = Stromverbrauch × JAZ. Die JAZ stammt aus den
+        Investitions-Parametern.
       </Alert>
 
       {investitionen.map(inv => (
@@ -109,7 +110,7 @@ export default function WaermepumpeStep({
               </div>
               {inv.cop && (
                 <div className="text-xs text-gray-500">
-                  JAZ/COP: {inv.cop.toFixed(1)}
+                  JAZ: {inv.cop.toFixed(1)}
                 </div>
               )}
             </div>
@@ -120,53 +121,32 @@ export default function WaermepumpeStep({
             {/* Stromverbrauch - getrennt oder gesamt */}
             {inv.parameter?.getrennte_strommessung ? (
               <>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
-                    <Zap className="w-3 h-3 text-amber-600" />
-                  </div>
-                  <div className="flex-1">
-                    <FeldMappingInput
-                      label="Strom Heizen"
-                      einheit="kWh"
-                      value={mappings[inv.id.toString()]?.strom_heizen_kwh || null}
-                      onChange={mapping => onChange(inv.id, 'strom_heizen_kwh', mapping)}
-                      availableSensors={availableSensors}
-                      strategieOptionen={stromOptionen}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
-                    <Zap className="w-3 h-3 text-amber-600" />
-                  </div>
-                  <div className="flex-1">
-                    <FeldMappingInput
-                      label="Strom Warmwasser"
-                      einheit="kWh"
-                      value={mappings[inv.id.toString()]?.strom_warmwasser_kwh || null}
-                      onChange={mapping => onChange(inv.id, 'strom_warmwasser_kwh', mapping)}
-                      availableSensors={availableSensors}
-                      strategieOptionen={stromOptionen}
-                    />
-                  </div>
-                </div>
+                <FeldMappingInput
+                  label="Strom Heizen"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.strom_heizen_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'strom_heizen_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={stromOptionen}
+                />
+                <FeldMappingInput
+                  label="Strom Warmwasser"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.strom_warmwasser_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'strom_warmwasser_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={stromOptionen}
+                />
               </>
             ) : (
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center flex-shrink-0 mt-1">
-                  <Zap className="w-3 h-3 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <FeldMappingInput
-                    label="Stromverbrauch"
-                    einheit="kWh"
-                    value={mappings[inv.id.toString()]?.stromverbrauch_kwh || null}
-                    onChange={mapping => onChange(inv.id, 'stromverbrauch_kwh', mapping)}
-                    availableSensors={availableSensors}
-                    strategieOptionen={stromOptionen}
-                  />
-                </div>
-              </div>
+              <FeldMappingInput
+                label="Stromverbrauch"
+                einheit="kWh"
+                value={mappings[inv.id.toString()]?.stromverbrauch_kwh || null}
+                onChange={mapping => onChange(inv.id, 'stromverbrauch_kwh', mapping)}
+                availableSensors={availableSensors}
+                strategieOptionen={stromOptionen}
+              />
             )}
 
             {/* Heizenergie */}

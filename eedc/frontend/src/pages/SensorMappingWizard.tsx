@@ -484,6 +484,12 @@ export default function SensorMappingWizard() {
     }
   }
 
+  // Scroll-to-Top bei Step-Wechsel (#167 Punkt 4): Step-Wechsel ändern nur lokalen
+  // State, kein Route-Wechsel — der zentrale Layout-Scroll-Reset greift nicht.
+  useEffect(() => {
+    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [currentStep])
+
   // Loading / Error states
   if (!effectiveAnlageId && !isLoading) {
     return (

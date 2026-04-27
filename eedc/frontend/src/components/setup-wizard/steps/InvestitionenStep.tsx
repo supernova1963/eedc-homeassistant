@@ -251,8 +251,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('leistung_kw') ?? ''}
-                  onChange={(e) => updateParam('leistung_kw', parseFloat(e.target.value) || undefined)}
+                  value={getParam('max_leistung_kw') ?? ''}
+                  onChange={(e) => updateParam('max_leistung_kw', parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 10"
                   min="0"
                   step="0.1"
@@ -337,8 +337,8 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('arbitrage')}
-                    onChange={(e) => updateParam('arbitrage', e.target.checked)}
+                    checked={getBoolParam('arbitrage_faehig')}
+                    onChange={(e) => updateParam('arbitrage_faehig', e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
@@ -358,8 +358,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('leistung_kw') ?? ''}
-                  onChange={(e) => updateParam('leistung_kw', parseFloat(e.target.value) || undefined)}
+                  value={getParam('max_ladeleistung_kw') ?? ''}
+                  onChange={(e) => updateParam('max_ladeleistung_kw', parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 11"
                   min="0"
                   step="0.1"
@@ -370,12 +370,12 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('v2h')}
-                    onChange={(e) => updateParam('v2h', e.target.checked)}
+                    checked={getBoolParam('bidirektional')}
+                    onChange={(e) => updateParam('bidirektional', e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">V2H-fähig</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Bidirektional</span>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Bidirektionales Laden (Vehicle-to-Home)</p>
                   </div>
                 </label>
@@ -391,8 +391,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('batterie_kwh') ?? ''}
-                  onChange={(e) => updateParam('batterie_kwh', parseFloat(e.target.value) || undefined)}
+                  value={getParam('batteriekapazitaet_kwh') ?? ''}
+                  onChange={(e) => updateParam('batteriekapazitaet_kwh', parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 66"
                   min="0"
                   step="0.1"
@@ -417,8 +417,8 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('v2h')}
-                    onChange={(e) => updateParam('v2h', e.target.checked)}
+                    checked={getBoolParam('v2h_faehig')}
+                    onChange={(e) => updateParam('v2h_faehig', e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
@@ -448,12 +448,21 @@ function InvestitionForm({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  COP (Leistungszahl) *
+                  Jahresarbeitszahl (JAZ) *
                 </label>
                 <input
                   type="number"
-                  value={getParam('cop') ?? '3.5'}
-                  onChange={(e) => updateParam('cop', parseFloat(e.target.value) || undefined)}
+                  value={getParam('jaz') ?? '3.5'}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value) || undefined
+                    onUpdate({
+                      parameter: {
+                        ...investition.parameter,
+                        jaz: value,
+                        effizienz_modus: 'gesamt_jaz',
+                      },
+                    })
+                  }}
                   placeholder="z.B. 3.5"
                   min="1"
                   max="10"
