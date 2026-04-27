@@ -239,8 +239,17 @@ class HAStatisticsService:
         """
         Ermittelt den Monatswert für einen Sensor.
 
-        Die Differenz zwischen MAX(state) und MIN(state) im Monat
-        ergibt den Verbrauch/Erzeugung für diesen Monat.
+        Bevorzugt MAX(sum) - MIN(sum) (HA's eigene reset-bereinigte Kumulation
+        für total_increasing-Sensoren — funktioniert auch bei Tagesreset-
+        Zählern und Mehrfach-Resets im Monat). Fallback auf MAX(state) - MIN(state)
+        wenn `sum` nicht verfügbar (z.B. measurement-Sensoren ohne has_sum).
+
+        Hintergrund: state-Differenz war früher der einzige Pfad, liefert aber
+        bei Tagesreset-Zählern fälschlich die größte Tagessumme im Monat statt
+        der Monatssumme (Discussion #131). HA's `sum`-Spalte wird automatisch
+        bei jedem Reset um den vorigen Endwert weitergeführt — exakt das, was
+        das HA-Energy-Dashboard intern auch nutzt.
+
         Werte werden automatisch nach kWh konvertiert (Wh, MWh, etc.).
         """
         start_datum = f"{jahr:04d}-{monat:02d}-01"
@@ -254,8 +263,10 @@ class HAStatisticsService:
         result = conn.execute(
             text(f"""
                 SELECT
-                    MIN(state) as start_wert,
-                    MAX(state) as end_wert
+                    MIN(state) as state_min,
+                    MAX(state) as state_max,
+                    MIN(sum)   as sum_min,
+                    MAX(sum)   as sum_max
                 FROM statistics
                 WHERE metadata_id = :mid
                 AND {ts_expr} >= :start
@@ -265,11 +276,18 @@ class HAStatisticsService:
         )
 
         row = result.fetchone()
-        if not row or row[0] is None:
+        if not row or (row[0] is None and row[2] is None):
             return None
 
-        start_wert = row[0]
-        end_wert = row[1]
+        state_min, state_max, sum_min, sum_max = row[0], row[1], row[2], row[3]
+
+        # Bevorzugt sum-basiert (reset-bereinigt), Fallback state-basiert
+        if sum_min is not None and sum_max is not None:
+            start_wert = sum_min
+            end_wert = sum_max
+        else:
+            start_wert = state_min
+            end_wert = state_max
         differenz = end_wert - start_wert
 
         # Einheiten-Konvertierung nach kWh
