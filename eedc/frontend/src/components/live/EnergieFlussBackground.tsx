@@ -366,13 +366,13 @@ function EnergieFlussBackground({
           </>}
           {/* Sunset: Himmel + Meer — Light Mode */}
           {bgVariant === 'sunset' && <>
-            <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-light)" className="opacity-100 dark:opacity-0" />
-            <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-light)" className="opacity-100 dark:opacity-0" />
+            <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-light)" clipPath="url(#ef-photo-clip)" className="opacity-100 dark:opacity-0" />
+            <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-light)" clipPath="url(#ef-photo-clip)" className="opacity-100 dark:opacity-0" />
           </>}
           {/* Sunset: Himmel + Meer — Dark Mode */}
           {bgVariant === 'sunset' && <>
-            <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-dark)" className="opacity-0 dark:opacity-100" />
-            <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-dark)" className="opacity-0 dark:opacity-100" />
+            <rect x="0" y="0"  width={W} height={CY}        fill="url(#ef-sky-sunset-dark)" clipPath="url(#ef-photo-clip)" className="opacity-0 dark:opacity-100" />
+            <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-sea-sunset-dark)" clipPath="url(#ef-photo-clip)" className="opacity-0 dark:opacity-100" />
           </>}
 
           {/* Alps: Himmel + Tal + Bergsilhouetten */}
@@ -428,11 +428,11 @@ function EnergieFlussBackground({
             return (
               <>
                 {/* Himmel */}
-                <rect x="0" y="0" width={W} height={CY} fill="url(#ef-sky-alps-light)" className="opacity-100 dark:opacity-0" />
-                <rect x="0" y="0" width={W} height={CY} fill="url(#ef-sky-alps-dark)"  className="opacity-0 dark:opacity-100" />
+                <rect x="0" y="0" width={W} height={CY} fill="url(#ef-sky-alps-light)" clipPath="url(#ef-photo-clip)" className="opacity-100 dark:opacity-0" />
+                <rect x="0" y="0" width={W} height={CY} fill="url(#ef-sky-alps-dark)"  clipPath="url(#ef-photo-clip)" className="opacity-0 dark:opacity-100" />
                 {/* Talboden */}
-                <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-valley-alps-light)" className="opacity-100 dark:opacity-0" />
-                <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-valley-alps-dark)"  className="opacity-0 dark:opacity-100" />
+                <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-valley-alps-light)" clipPath="url(#ef-photo-clip)" className="opacity-100 dark:opacity-0" />
+                <rect x="0" y={CY} width={W} height={svgH - CY} fill="url(#ef-valley-alps-dark)"  clipPath="url(#ef-photo-clip)" className="opacity-0 dark:opacity-100" />
 
                 {/* ── Light Mode Berge ── */}
                 <g className="opacity-100 dark:opacity-0">
