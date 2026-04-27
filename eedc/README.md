@@ -16,6 +16,10 @@ Standalone PV-Analyse-Software mit optionalem Live-Monitoring.
 - **Steuerliche Features** - Kleinunternehmerregelung, Spezialtarife, Firmenwagen
 - **Import/Export** - CSV, JSON, PDF-Berichte
 
+## Empfohlene Nutzung
+
+Datendichte Analyse-App, optimal auf **Desktop**. Smartphone in Standard-Anzeigegröße funktioniert für die Live-Sichten; für tiefere Auswertungen ist ein größerer Bildschirm sinnvoll. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom über Standard) können einzelne Layouts eng werden.
+
 ## Schnellstart
 
 ### Mit Docker (empfohlen)
