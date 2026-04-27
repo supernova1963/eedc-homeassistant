@@ -976,15 +976,36 @@ class DatenChecker:
         """
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
         from backend.services.mqtt_topic_registry import build_expected_topics
+        from backend.models.settings import Settings as SettingsModel
 
         kat = CheckKategorie.MQTT_TOPIC_ABDECKUNG
         ergebnisse: list[CheckErgebnis] = []
 
         service = get_mqtt_inbound_service()
         if service is None or not service._running:
+            # Kategorie nur anzeigen, wenn der Nutzer MQTT-Inbound bewusst
+            # aktiviert hat. Sonst stiller Skip — wer MQTT nicht nutzt, soll
+            # die Kategorie gar nicht erst sehen.
+            result = await self.db.execute(
+                select(SettingsModel).where(SettingsModel.key == "mqtt_inbound")
+            )
+            setting = result.scalar_one_or_none()
+            inbound_enabled_in_settings = bool(
+                setting and setting.value and setting.value.get("enabled")
+            )
+            if not inbound_enabled_in_settings:
+                return []
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,
-                meldung="MQTT-Inbound nicht aktiv — Topic-Abdeckung wird nicht geprüft",
+                meldung="MQTT-Inbound aktiviert, Subscriber läuft jedoch nicht",
+                details=(
+                    "Möglicherweise konnte beim letzten Start keine Verbindung "
+                    "zum Broker aufgebaut werden. Prüfe Broker-Adresse und "
+                    "Zugangsdaten unter Daten → Einrichtung → MQTT-Inbound, "
+                    "oder deaktiviere MQTT-Inbound dort, wenn du keine "
+                    "Live-Daten via MQTT brauchst."
+                ),
+                link="/einstellungen/mqtt-inbound",
             ))
             return ergebnisse
 
@@ -1044,9 +1065,13 @@ class DatenChecker:
                 kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung=f"{len(nie_empfangen)} MQTT-Topic(s) erwartet, nie empfangen",
                 details=(
-                    "Mögliche Ursachen: Publisher-Automation (z.B. HA-Automation) "
-                    "noch nicht eingerichtet, oder Investitions-IDs nach Re-Import "
-                    "verändert und nicht in der Automation nachgezogen. "
+                    "Der Subscriber läuft, aber für diese Topics liefert noch "
+                    "keine Quelle Daten. Mögliche Ursachen: Publisher-Automation "
+                    "(HA-Automation, ioBroker, Node-RED) noch nicht eingerichtet, "
+                    "oder Investitions-IDs nach Re-Import nicht in der Automation "
+                    "nachgezogen. Wenn du keine Live-Daten via MQTT brauchst, "
+                    "kannst du MQTT-Inbound unter Daten → Einrichtung → "
+                    "MQTT-Inbound deaktivieren. "
                     f"Betroffen: {beispiele}"
                 ),
                 link="/einstellungen/mqtt-inbound",
@@ -1063,7 +1088,11 @@ class DatenChecker:
                 meldung=f"{len(veraltet)} MQTT-Topic(s) mit veralteten Werten",
                 details=(
                     "Live-Topics sollten innerhalb 2 min, Energy-Topics innerhalb "
-                    "10 min aktualisiert werden. "
+                    "10 min aktualisiert werden. Mögliche Ursache: "
+                    "Publisher-Automation läuft nicht oder hat ihre Quelle "
+                    "verloren. Wenn du keine Live-Daten via MQTT brauchst, "
+                    "kannst du MQTT-Inbound unter Daten → Einrichtung → "
+                    "MQTT-Inbound deaktivieren. "
                     f"Betroffen: {beispiele}"
                 ),
                 link="/einstellungen/mqtt-inbound",
