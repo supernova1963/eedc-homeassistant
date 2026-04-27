@@ -15,14 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_db
 from backend.core.config import settings
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition
-from backend.utils.investition_filter import aktiv_jetzt
-from backend.core.field_definitions import (
-    get_alle_felder_fuer_investition,
-    get_live_felder_fuer_investition,
-    SOC_TYPEN,
-    BASIS_LIVE_FELDER,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -280,20 +272,14 @@ async def save_mqtt_settings(
         return {"gespeichert": True, "subscriber_gestartet": False}
 
 
-def _mqtt_slug(name: str) -> str:
-    """Erzeugt einen MQTT-Topic-sicheren Slug aus einem Namen."""
-    import re as _re
-    slug = name.strip().replace(" ", "_")
-    slug = _re.sub(r"[^\w.\-]", "", slug)
-    return slug or "unnamed"
-
-
 @router.get("/mqtt/topics")
 async def get_mqtt_topics(
     db: AsyncSession = Depends(get_db),
     anlage_id: Optional[int] = Query(None, description="Filter auf eine Anlage"),
 ):
     """Generiert die vollständige Topic-Liste mit konkreten Anlage- und Investitions-IDs."""
+    from backend.services.mqtt_topic_registry import build_expected_topics
+
     if anlage_id is not None:
         anlagen = (await db.execute(
             select(Anlage).where(Anlage.id == anlage_id)
@@ -305,62 +291,17 @@ async def get_mqtt_topics(
 
     topics = []
     for anlage in anlagen:
-        aid = anlage.id
-        aname = anlage.anlagenname or f"Anlage {aid}"
-        aslug = _mqtt_slug(aname)
-        live_prefix = f"eedc/{aid}_{aslug}/live"
-        energy_prefix = f"eedc/{aid}_{aslug}/energy"
-
-        # Basis-Live-Topics aus Registry — kein hardcodierter Block mehr
-        for feld in BASIS_LIVE_FELDER:
-            einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
+        aname = anlage.anlagenname or f"Anlage {anlage.id}"
+        for entry in await build_expected_topics(db, anlage):
+            # Endpoint-Konvention: energy-Topics führen typ="energy",
+            # live-Topics behalten "basis" oder den Investitions-Typ.
+            api_typ = "energy" if entry["kategorie"] == "energy" else entry["typ"]
             topics.append({
-                "topic": f"{live_prefix}/{feld['key']}",
-                "label": f"{feld['label']}{einheit_str}",
+                "topic": entry["topic"],
+                "label": entry["label"],
                 "anlage": aname,
-                "typ": "basis",
+                "typ": api_typ,
             })
-        topics.append({"topic": f"{energy_prefix}/pv_gesamt_kwh", "label": "PV-Erzeugung Monat (kWh)", "anlage": aname, "typ": "energy"})
-        topics.append({"topic": f"{energy_prefix}/einspeisung_kwh", "label": "Einspeisung Monat (kWh)", "anlage": aname, "typ": "energy"})
-        topics.append({"topic": f"{energy_prefix}/netzbezug_kwh", "label": "Netzbezug Monat (kWh)", "anlage": aname, "typ": "energy"})
-
-        investitionen = (await db.execute(
-            select(Investition).where(
-                Investition.anlage_id == aid,
-                aktiv_jetzt(),
-            )
-        )).scalars().all()
-
-        # energy_keys_by_typ und soc_typen werden aus Registry abgeleitet —
-        # kein hardcodierter Block mehr. Neue Felder nur in field_definitions eintragen.
-        skip_typen = {"wechselrichter"}
-
-        for inv in investitionen:
-            if inv.typ in skip_typen:
-                continue
-
-            islug = _mqtt_slug(inv.bezeichnung)
-            inv_live = f"{live_prefix}/inv/{inv.id}_{islug}"
-            inv_energy = f"{energy_prefix}/inv/{inv.id}_{islug}"
-
-            # Live-Topics aus Registry (leistung_w, soc, WP-spezifische, etc.)
-            for live_feld in get_live_felder_fuer_investition(inv.typ, inv.parameter):
-                topics.append({
-                    "topic": f"{inv_live}/{live_feld['key']}",
-                    "label": f"{inv.bezeichnung} – {live_feld['label']} ({live_feld['einheit']})",
-                    "anlage": aname,
-                    "typ": inv.typ,
-                })
-
-            # Energy-Topics aus Registry (kWh/km/€-Monatswerte)
-            for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter):
-                einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
-                topics.append({
-                    "topic": f"{inv_energy}/{feld['feld']}",
-                    "label": f"{inv.bezeichnung} – {feld['label']}{einheit_str}",
-                    "anlage": aname,
-                    "typ": "energy",
-                })
 
     return {"topics": topics}
 

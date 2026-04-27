@@ -7,7 +7,7 @@ Monatsdaten-Vollständigkeit, Monatsdaten-Plausibilität.
 """
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Optional
 
@@ -39,6 +39,8 @@ class CheckKategorie(str, Enum):
     MONATSDATEN_PLAUSIBILITAET = "monatsdaten_plausibilitaet"
     # Issue #135: Deckungsgrad kumulativer kWh-Zähler für Energieprofil
     ENERGIEPROFIL_ABDECKUNG = "energieprofil_abdeckung"
+    # Issue #134: Drift-Schutz Publisher (HA-Automation) ↔ Konsument (field_definitions.py)
+    MQTT_TOPIC_ABDECKUNG = "mqtt_topic_abdeckung"
 
 
 @dataclass
@@ -133,6 +135,7 @@ class DatenChecker:
             anlage, monatsdaten, pvgis_prognose, pv_erzeugung_map, pvgis_monat_map, pr, pr_count
         ))
         ergebnisse.extend(self._check_energieprofil_abdeckung(anlage))
+        ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -955,6 +958,121 @@ class DatenChecker:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung=f"Alle {gemappt_count} aktiven Komponenten haben kWh-Zähler gemappt",
+            ))
+
+        return ergebnisse
+
+    # ─── MQTT-Topic-Abdeckung (Issue #134) ───────────────────────────────
+
+    async def _check_mqtt_topic_abdeckung(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """
+        Prüft ob die erwarteten MQTT-Inbound-Topics tatsächlich ankommen.
+
+        Issue #134: Schließt die Lücke zwischen dynamischer Konsumenten-Seite
+        (Erwartungsliste aus `field_definitions.py`) und statisch hartkodierter
+        Publisher-Seite (HA-Automationen). Wenn ein Topic erwartet, aber nie
+        empfangen wird oder veraltete Werte trägt, ist die Publisher-Seite
+        gegen die Konsumenten-Seite gedriftet.
+        """
+        from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+        from backend.services.mqtt_topic_registry import build_expected_topics
+
+        kat = CheckKategorie.MQTT_TOPIC_ABDECKUNG
+        ergebnisse: list[CheckErgebnis] = []
+
+        service = get_mqtt_inbound_service()
+        if service is None or not service._running:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung="MQTT-Inbound nicht aktiv — Topic-Abdeckung wird nicht geprüft",
+            ))
+            return ergebnisse
+
+        erwartet = await build_expected_topics(self.db, anlage)
+        if not erwartet:
+            return ergebnisse
+
+        live_data = service.cache.get_all_live_raw().get(anlage.id, {})
+        energy_data = service.cache.get_all_energy_raw().get(anlage.id, {})
+        basis_live: dict = live_data.get("basis", {})
+        inv_live: dict = live_data.get("inv", {})
+
+        now = datetime.now()
+        # Schwellwerte: live ≤ 2 min (sensorgetrieben), energy ≤ 10 min
+        # (alle-5-Pattern + Puffer). Oberhalb gilt der Wert als veraltet.
+        LIVE_MAX_AGE = timedelta(minutes=2)
+        ENERGY_MAX_AGE = timedelta(minutes=10)
+
+        nie_empfangen: list[str] = []
+        veraltet: list[tuple[str, int]] = []  # (topic, alter_minuten)
+
+        for entry in erwartet:
+            mk = entry["match_key"]
+            kategorie = entry["kategorie"]
+            threshold = LIVE_MAX_AGE if kategorie == "live" else ENERGY_MAX_AGE
+
+            ts: Optional[datetime] = None
+            kind = mk[0]
+            if kind == "basis_live":
+                pair = basis_live.get(mk[1])
+                if pair:
+                    _, ts = pair
+            elif kind == "basis_energy":
+                pair = energy_data.get(mk[1])
+                if pair:
+                    _, ts = pair
+            elif kind == "inv_live":
+                pair = inv_live.get(mk[1], {}).get(mk[2])
+                if pair:
+                    _, ts = pair
+            elif kind == "inv_energy":
+                pair = energy_data.get(f"inv/{mk[1]}/{mk[2]}")
+                if pair:
+                    _, ts = pair
+
+            if ts is None:
+                nie_empfangen.append(entry["topic"])
+            elif now - ts > threshold:
+                age_min = int((now - ts).total_seconds() // 60)
+                veraltet.append((entry["topic"], age_min))
+
+        if nie_empfangen:
+            beispiele = ", ".join(t.split("/")[-1] for t in nie_empfangen[:6])
+            if len(nie_empfangen) > 6:
+                beispiele += f" (+{len(nie_empfangen) - 6} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"{len(nie_empfangen)} MQTT-Topic(s) erwartet, nie empfangen",
+                details=(
+                    "Mögliche Ursachen: Publisher-Automation (z.B. HA-Automation) "
+                    "noch nicht eingerichtet, oder Investitions-IDs nach Re-Import "
+                    "verändert und nicht in der Automation nachgezogen. "
+                    f"Betroffen: {beispiele}"
+                ),
+                link="/einstellungen/mqtt-inbound",
+            ))
+
+        if veraltet:
+            beispiele = "; ".join(
+                f"{t.split('/')[-1]} (vor {a} min)" for t, a in veraltet[:5]
+            )
+            if len(veraltet) > 5:
+                beispiele += f" (+{len(veraltet) - 5} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"{len(veraltet)} MQTT-Topic(s) mit veralteten Werten",
+                details=(
+                    "Live-Topics sollten innerhalb 2 min, Energy-Topics innerhalb "
+                    "10 min aktualisiert werden. "
+                    f"Betroffen: {beispiele}"
+                ),
+                link="/einstellungen/mqtt-inbound",
+            ))
+
+        if not nie_empfangen and not veraltet:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=f"Alle {len(erwartet)} erwarteten MQTT-Topics aktuell empfangen",
             ))
 
         return ergebnisse
