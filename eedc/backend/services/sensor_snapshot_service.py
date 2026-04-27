@@ -1,8 +1,13 @@
 """
 Sensor Snapshot Service (Issue #135).
 
-Führt stündliche Snapshots kumulativer kWh-Zählerstände und liefert
-Zähler-Delta-basierte Energiewerte für aggregate_day/backfill.
+Führt stündliche Snapshots kumulativer Zählerstände und liefert
+Zähler-Delta-basierte Energie- und Counter-Werte für aggregate_day/backfill.
+
+Neben kWh-Energiezählern werden auch reine Counter (z.B. WP-Kompressor-Starts,
+Issue #136) in derselben Tabelle abgelegt — das Wert-Feld ist generisch numerisch,
+nur die Aggregations-Schicht (aggregate_day) entscheidet, ob ein Feld in die
+Energie-Bilanz fließt oder als separater Tages-Counter aggregiert wird.
 
 Self-Healing: Fehlt ein Snapshot zu einem benötigten Zeitpunkt, wird der
 Wert on-demand aus HA Statistics geholt und gespeichert. Gleicher Pfad für:
@@ -43,6 +48,14 @@ KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = {
     "sonstiges": ("verbrauch_kwh", "erzeugung_kwh"),
 }
 
+# Reine Counter (Anzahl-Zählwerte ohne kWh-Semantik, Issue #136).
+# Werden vom Snapshot-Job mit erfasst (gleiches Schema, gleiche Tabelle), aber
+# NICHT in die Energie-Bilanz von get_hourly_kwh_by_category einbezogen.
+# Aggregation als Tages-Differenz erfolgt separat in aggregate_day.
+KUMULATIVE_COUNTER_FELDER: dict[str, tuple[str, ...]] = {
+    "waermepumpe": ("wp_starts_anzahl",),
+}
+
 BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug")
 
 
@@ -68,8 +81,11 @@ def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
         parts = mqtt_key.split("/", 2)
         if len(parts) == 3:
             _, inv_id, feld = parts
-            # Nur kumulative kWh-Energie-Felder (keine km_gefahren, Preise, etc.)
-            alle_felder = {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
+            # Kumulative Energie-Felder + reine Counter (keine km_gefahren, Preise, etc.)
+            alle_felder = (
+                {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
+                | {f for felder in KUMULATIVE_COUNTER_FELDER.values() for f in felder}
+            )
             if feld in alle_felder:
                 return f"inv:{inv_id}:{feld}"
     return None
@@ -324,9 +340,11 @@ def _build_counter_map(anlage) -> dict[str, str]:
 
 
 def _is_kumulativ_feld(feld_name: str) -> bool:
-    """Prüft ob ein Feld-Name ein kumulativer kWh-Zähler ist."""
-    # Alle Felder aus KUMULATIVE_ZAEHLER_FELDER (flache Menge)
-    alle = {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
+    """Prüft ob ein Feld-Name ein kumulativer Zähler ist (Energie oder Counter)."""
+    alle = (
+        {f for felder in KUMULATIVE_ZAEHLER_FELDER.values() for f in felder}
+        | {f for felder in KUMULATIVE_COUNTER_FELDER.values() for f in felder}
+    )
     return feld_name in alle
 
 
@@ -606,6 +624,135 @@ async def get_hourly_kwh_by_category(
             "verbrauch": verbrauch,
         }
     return final
+
+
+async def get_daily_counter_deltas_by_inv(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> dict[str, dict[str, int]]:
+    """
+    Berechnet Tages-Differenzen reiner Counter (KUMULATIVE_COUNTER_FELDER)
+    pro Investition aus Snapshot-Differenzen.
+
+    Im Gegensatz zu kWh-Energiezählern, deren stündliches Muster für
+    Heatmaps und Bilanz relevant ist, sind Counter wie WP-Kompressor-Starts
+    auf Tagesebene aussagekräftig (Wartungs-/Auslegungs-KPI). Daher reicht
+    der Tages-Wert: snapshot(Folgetag 00:00) − snapshot(Tag 00:00).
+
+    Returns:
+        {feld: {inv_id_str: int}} z.B. {"wp_starts_anzahl": {"5": 12}}
+        Investitionen ohne gemappten Counter werden weggelassen.
+    """
+    sensor_mapping = anlage.sensor_mapping or {}
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+
+    tag_start = datetime.combine(datum, datetime.min.time())
+    tag_ende = tag_start + timedelta(days=1)
+
+    result: dict[str, dict[str, int]] = {}
+
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        counter_felder = KUMULATIVE_COUNTER_FELDER.get(inv.typ, ())
+        if not counter_felder:
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        for feld in counter_felder:
+            config = felder.get(feld)
+            if not isinstance(config, dict) or config.get("strategie") != "sensor":
+                continue
+            sensor_id = config.get("sensor_id")
+            sensor_key = f"inv:{inv_id_str}:{feld}"
+            snap_start = await get_snapshot(db, anlage.id, sensor_key, sensor_id, tag_start)
+            snap_ende = await get_snapshot(db, anlage.id, sensor_key, sensor_id, tag_ende)
+            if snap_start is None or snap_ende is None:
+                continue
+            delta_count = snap_ende - snap_start
+            if delta_count < 0:
+                # Counter-Reset (Firmware-Update o.ä.) — als 0 werten, nicht als Lücke
+                logger.warning(
+                    f"Negatives Counter-Delta {feld} für anlage={anlage.id} "
+                    f"inv={inv_id_str} ({datum}): {delta_count:.1f} → 0"
+                )
+                delta_count = 0
+            result.setdefault(feld, {})[inv_id_str] = int(round(delta_count))
+
+    return result
+
+
+async def get_hourly_counter_sum_by_feld(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+    feld: str,
+) -> dict[int, Optional[int]]:
+    """
+    Berechnet Stunden-Counter-Summen für ein bestimmtes Feld (z.B. 'wp_starts_anzahl'),
+    summiert über alle Investitionen mit gemapptem Counter.
+
+    Für jede Stunde h (0..23) wird snapshot(h+1) − snapshot(h) pro Investition
+    gebildet und über alle Investitionen aufaddiert. Negative Deltas (Counter-Reset)
+    werden als 0 gewertet.
+
+    Returns:
+        {h: count} für h in 0..23. Fehlt der Snapshot bei beiden Endpunkten einer
+        Stunde, ist count None (Lücke). Fehlt der Counter komplett (kein Mapping),
+        wird ein leeres Dict zurückgegeben.
+    """
+    sensor_mapping = anlage.sensor_mapping or {}
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+
+    relevant_invs: list[tuple[str, Optional[str]]] = []  # (sensor_key, sensor_id)
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        if feld not in KUMULATIVE_COUNTER_FELDER.get(inv.typ, ()):
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        config = felder.get(feld)
+        if not isinstance(config, dict) or config.get("strategie") != "sensor":
+            continue
+        sensor_key = f"inv:{inv_id_str}:{feld}"
+        relevant_invs.append((sensor_key, config.get("sensor_id")))
+
+    if not relevant_invs:
+        return {}
+
+    tag_0 = datetime.combine(datum, datetime.min.time())
+    snaps_per_inv: dict[str, dict[int, Optional[float]]] = {}
+    for sensor_key, entity_id in relevant_invs:
+        snaps: dict[int, Optional[float]] = {}
+        for h in range(25):  # 0..24, damit jede Stunde h ein Boundary-Paar (h, h+1) hat
+            ts = tag_0 + timedelta(hours=h)
+            snaps[h] = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
+        snaps_per_inv[sensor_key] = snaps
+
+    result: dict[int, Optional[int]] = {}
+    for h in range(24):
+        any_value = False
+        total = 0
+        for sensor_key, _ in relevant_invs:
+            s0 = snaps_per_inv[sensor_key][h]
+            s1 = snaps_per_inv[sensor_key][h + 1]
+            if s0 is None or s1 is None:
+                continue
+            d = s1 - s0
+            if d < 0:
+                d = 0  # Counter-Reset → 0 (Warnung wäre redundant zur Tages-Aggregation)
+            total += int(round(d))
+            any_value = True
+        result[h] = total if any_value else None
+    return result
 
 
 async def snapshot_anlage(

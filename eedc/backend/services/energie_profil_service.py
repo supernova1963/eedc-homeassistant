@@ -184,6 +184,19 @@ async def aggregate_day(
         )
         kwh_pro_stunde = {}
 
+    # ── Stunden-Counter (Issue #136: WP-Starts pro Stunde) ────────────────
+    wp_starts_pro_stunde: dict[int, Optional[int]] = {}
+    try:
+        from backend.services.sensor_snapshot_service import get_hourly_counter_sum_by_feld
+        wp_starts_pro_stunde = await get_hourly_counter_sum_by_feld(
+            db, anlage, invs_by_id, datum, "wp_starts_anzahl",
+        )
+    except Exception as e:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: WP-Starts-Stunden-Aggregation fehlgeschlagen: "
+            f"{type(e).__name__}: {e}"
+        )
+
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
     # Prognose-Felder aus bestehender TagesZusammenfassung retten,
     # da diese asynchron vom Wetter-Endpoint geschrieben werden.
@@ -337,6 +350,7 @@ async def aggregate_day(
             strompreis_cent=round(strompreis, 2) if strompreis is not None else None,
             boersenpreis_cent=round(boersenpreis, 2) if boersenpreis is not None else None,
             komponenten={k: v for k, v in werte.items() if k != "strompreis"} if werte else None,
+            wp_starts_anzahl=wp_starts_pro_stunde.get(h),
         )
         db.add(profil)
         stunden_count += 1
@@ -376,6 +390,21 @@ async def aggregate_day(
         if theoretisch_kwh > 0:
             performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)
 
+    # ── Counter-Tagesdifferenzen (Issue #136: WP-Kompressor-Starts) ──────
+    # Werte aus reinen Counter-Sensoren (KUMULATIVE_COUNTER_FELDER), die NICHT
+    # in die Energie-Bilanz fließen, sondern als KPI pro Tag gespeichert werden.
+    komponenten_starts: dict = {}
+    try:
+        from backend.services.sensor_snapshot_service import get_daily_counter_deltas_by_inv
+        komponenten_starts = await get_daily_counter_deltas_by_inv(
+            db, anlage, invs_by_id, datum,
+        )
+    except Exception as e:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: Counter-Aggregation fehlgeschlagen: "
+            f"{type(e).__name__}: {e}"
+        )
+
     # ── TagesZusammenfassung speichern ────────────────────────────────────
     zusammenfassung = TagesZusammenfassung(
         anlage_id=anlage.id,
@@ -400,6 +429,7 @@ async def aggregate_day(
             {k: round(v, 2) for k, v in komponenten_summen.items()}
             if komponenten_summen else None
         ),
+        komponenten_starts=komponenten_starts or None,
     )
     # Gerettete Prognose-Felder wiederherstellen
     for field, val in preserved_prognose.items():
@@ -1086,6 +1116,19 @@ async def backfill_from_statistics(
             if theoretisch_kwh > 0:
                 performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)
 
+        # Counter-Tagesdifferenzen (Issue #136) — Backfill via HA Statistics
+        komponenten_starts: dict = {}
+        try:
+            from backend.services.sensor_snapshot_service import get_daily_counter_deltas_by_inv
+            komponenten_starts = await get_daily_counter_deltas_by_inv(
+                db, anlage, investitionen, current,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Backfill (Statistics) Anlage {anlage.id}, {current}: Counter-Aggregation "
+                f"fehlgeschlagen: {type(e).__name__}: {e}"
+            )
+
         tz_obj = TagesZusammenfassung(
             anlage_id=anlage.id,
             datum=current,
@@ -1105,6 +1148,7 @@ async def backfill_from_statistics(
                 {k: round(v, 2) for k, v in komponenten_summen.items()}
                 if komponenten_summen else None
             ),
+            komponenten_starts=komponenten_starts or None,
         )
         # Prognose-Felder aus gelöschtem Eintrag wiederherstellen
         for field, val in preserved_prognose.items():

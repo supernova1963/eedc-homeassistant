@@ -6,7 +6,7 @@ import { DataLoadingState } from '../common'
 import { energieProfilApi, type TagesZusammenfassung, type VerfuegbarerMonat } from '../../api/energie_profil'
 import { MONAT_KURZ } from '../../lib'
 
-type ColumnGroupKey = 'peaks' | 'summen' | 'performance' | 'wetter' | 'preise'
+type ColumnGroupKey = 'peaks' | 'summen' | 'performance' | 'wetter' | 'preise' | 'komponenten'
 
 type AggKind = 'sum' | 'avg' | 'max' | 'min' | 'none'
 type ColorTone = 'green' | 'orange' | 'amber' | 'blue' | 'red' | 'sky' | 'purple' | null
@@ -41,6 +41,25 @@ const COLUMN_GROUPS: Record<ColumnGroupKey, { label: string; color: string }> = 
   performance: { label: 'Performance',     color: 'bg-green-500' },
   wetter:      { label: 'Wetter',          color: 'bg-sky-500' },
   preise:      { label: 'Börsenpreis §51', color: 'bg-purple-500' },
+  komponenten: { label: 'Komponenten',     color: 'bg-rose-500' },
+}
+
+// Hilfsfunktion: Summe eines Counter-Felds über alle Komponenten eines Tages.
+// komponenten_starts hat Form { feld: { inv_id: count } }.
+function sumKomponentenStarts(t: TagesZusammenfassung, feld: string): number | null {
+  const k = t.komponenten_starts
+  if (!k) return null
+  const inner = k[feld]
+  if (!inner) return null
+  let sum = 0
+  let any = false
+  for (const v of Object.values(inner)) {
+    if (typeof v === 'number' && !isNaN(v)) {
+      sum += v
+      any = true
+    }
+  }
+  return any ? sum : null
 }
 
 const COLUMNS: ColumnConfig[] = [
@@ -64,6 +83,8 @@ const COLUMNS: ColumnConfig[] = [
   { key: 'boersen_min',       label: 'Börsenpreis Min', group: 'preise',      getValue: (t) => t.boersenpreis_min_cent, format: 'ct', defaultVisible: false, agg: 'min', tone: null },
   { key: 'neg_preis_stunden', label: 'Negativ-Stunden', group: 'preise',      getValue: (t) => t.negative_preis_stunden, format: 'int', defaultVisible: false, agg: 'sum', tone: 'amber' },
   { key: 'einsp_neg_preis',   label: 'Einsp. bei neg.', group: 'preise',      getValue: (t) => t.einspeisung_neg_preis_kwh, format: 'kwh', defaultVisible: false, agg: 'sum', tone: 'amber' },
+  // Komponenten-Counter (Issue #136). Summe über alle WPs einer Anlage; Footer zeigt Monatssumme.
+  { key: 'wp_starts',         label: 'WP-Starts',       group: 'komponenten', getValue: (t) => sumKomponentenStarts(t, 'wp_starts_anzahl'), format: 'int', defaultVisible: false, agg: 'sum', tone: 'amber' },
 ]
 
 const COLUMNS_STORAGE_KEY = 'eedc-energieprofil-tage-columns-v1'

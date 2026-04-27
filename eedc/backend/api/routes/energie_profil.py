@@ -122,6 +122,9 @@ class StundenWertResponse(BaseModel):
     globalstrahlung_wm2: Optional[float] = None
     soc_prozent: Optional[float] = None
     komponenten: Optional[dict] = None  # Rohwerte aller Serien (key → kW)
+    # WP-Kompressor-Starts in dieser Stunde, summiert über alle WPs (Issue #136).
+    # Pro-Investitions-Aufschlüsselung lebt auf Tagesebene in TagesZusammenfassung.komponenten_starts.
+    wp_starts_anzahl: Optional[int] = None
 
 
 class StundenAntwort(BaseModel):
@@ -258,6 +261,9 @@ class TagesZusammenfassungResponse(BaseModel):
     stunden_verfuegbar: int = 0
     datenquelle: Optional[str] = None
     komponenten_kwh: Optional[dict] = None
+    # Per-Komponenten Counter-Werte pro Tag (z.B. WP-Kompressor-Starts, Issue #136)
+    # Form: {"wp_starts_anzahl": {"<inv_id>": <int>}}
+    komponenten_starts: Optional[dict] = None
     # Börsenpreis-Aggregation (§51 EEG)
     boersenpreis_avg_cent: Optional[float] = None
     boersenpreis_min_cent: Optional[float] = None
@@ -320,6 +326,7 @@ async def get_tages_zusammenfassungen(
             stunden_verfuegbar=t.stunden_verfuegbar,
             datenquelle=t.datenquelle,
             komponenten_kwh=t.komponenten_kwh,
+            komponenten_starts=t.komponenten_starts,
             boersenpreis_avg_cent=t.boersenpreis_avg_cent,
             boersenpreis_min_cent=t.boersenpreis_min_cent,
             negative_preis_stunden=t.negative_preis_stunden,
@@ -397,6 +404,7 @@ async def get_stundenwerte(
             globalstrahlung_wm2=r.globalstrahlung_wm2,
             soc_prozent=r.soc_prozent,
             komponenten=r.komponenten,
+            wp_starts_anzahl=r.wp_starts_anzahl,
         )
         for r in rows
     ]

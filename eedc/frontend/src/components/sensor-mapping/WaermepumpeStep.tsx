@@ -5,6 +5,7 @@
  * - Stromverbrauch (kWh) - Pflicht
  * - Heizenergie (kWh) - Sensor oder COP-Berechnung
  * - Warmwasser (kWh) - Sensor, COP-Berechnung, oder nicht separat
+ * - Kompressor-Starts (kumulativer Zähler) - optional, Issue #136
  */
 
 import { Thermometer } from 'lucide-react'
@@ -85,6 +86,19 @@ export default function WaermepumpeStep({
       value: 'keine',
       label: 'Nicht separat erfassen',
       description: 'Warmwasser ist in Heizenergie enthalten',
+    },
+  ]
+
+  const startsOptionen: StrategieOption[] = [
+    {
+      value: 'sensor',
+      label: 'HA-Sensor',
+      description: 'Kumulativer Zähler (Total-Increasing) der Kompressor-Starts',
+    },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Kein Starts-Zähler verfügbar',
     },
   ]
 
@@ -171,6 +185,23 @@ export default function WaermepumpeStep({
               copDefault={inv.cop ? inv.cop - 0.5 : 3.0}
               defaultStrategie="keine"
             />
+
+            {/* Kompressor-Starts (optional, kumulativer Counter) */}
+            <div>
+              <FeldMappingInput
+                label="Kompressor-Starts (Anzahl, kumulativ)"
+                einheit="Starts"
+                value={mappings[inv.id.toString()]?.wp_starts_anzahl || null}
+                onChange={mapping => onChange(inv.id, 'wp_starts_anzahl', mapping)}
+                availableSensors={availableSensors}
+                strategieOptionen={startsOptionen}
+                defaultStrategie="keine"
+              />
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
+                Optional. Kumulativer Anzahl-Zähler der Kompressor-Starts für Tages-/Monats-KPI (Verschleiß / Auslegung).
+                Bei Nibe z.B. aus der lokalen „Nibe Heat Pump"-Integration: <code className="text-xs">sensor.compressor_number_of_starts_…</code>
+              </div>
+            </div>
 
             {/* Live-Sensoren */}
             {onLiveChange && (
