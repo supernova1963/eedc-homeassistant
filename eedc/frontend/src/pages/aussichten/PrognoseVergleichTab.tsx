@@ -56,6 +56,28 @@ function formatDatum(datum: string): string {
   return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
 
+/**
+ * Datendichte Tabelle nur ab sm-Breakpoint anzeigen, darunter Hinweis.
+ * Bewusst pro Tabelle, damit Charts und einfachere Karten auf Mobile sichtbar
+ * bleiben. Prognosen-Tab ist Evaluierungsfläche — kein Mobile-Refactor, sondern
+ * Hinweis auf passendes Anzeigegerät.
+ */
+function DatendichtFallback({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <div className="hidden sm:block">{children}</div>
+      <div className="sm:hidden p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-sm text-amber-900 dark:text-amber-200">
+        <span className="portrait:inline landscape:hidden">
+          Datendichte Tabelle — bitte Gerät ins Querformat drehen oder Desktop verwenden.
+        </span>
+        <span className="portrait:hidden landscape:inline">
+          Auflösung zu gering für datendichte Anzeige — bitte Desktop verwenden.
+        </span>
+      </div>
+    </>
+  )
+}
+
 function IstUnvollstaendigPopover({
   fehlendeStunden,
   anlageId,
@@ -243,6 +265,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
     <div className="space-y-6">
       {/* ── KPI-Matrix ── */}
       <Card>
+        <DatendichtFallback>
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             <colgroup>
@@ -357,6 +380,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             </tbody>
           </table>
         </div>
+        </DatendichtFallback>
       </Card>
 
       {/* ── Status-Hinweise ── */}
@@ -515,6 +539,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
       {/* ── 7-Tage-Vergleichstabelle ── */}
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>
+        <DatendichtFallback>
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             <colgroup>
@@ -583,6 +608,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             </tbody>
           </table>
         </div>
+        </DatendichtFallback>
       </Card>
 
       {/* ── Genauigkeits-Tracking ── */}
@@ -630,6 +656,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               </>
             )}
           </div>
+          <DatendichtFallback>
           <div className="overflow-x-auto">
             <table className="w-full text-sm table-fixed">
               <colgroup>
@@ -665,6 +692,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               </tbody>
             </table>
           </div>
+          </DatendichtFallback>
         </Card>
       )}
 
