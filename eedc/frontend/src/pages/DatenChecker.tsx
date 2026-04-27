@@ -26,6 +26,7 @@ const kategorieLabels: Record<string, string> = {
   monatsdaten_vollstaendigkeit: 'Monatsdaten – Vollständigkeit',
   monatsdaten_plausibilitaet: 'Monatsdaten – Plausibilität',
   energieprofil_abdeckung: 'Energieprofil – Zähler-Abdeckung',
+  mqtt_topic_abdeckung: 'MQTT – Topic-Abdeckung',
 }
 
 const kategorieReihenfolge = [
@@ -35,6 +36,7 @@ const kategorieReihenfolge = [
   'monatsdaten_vollstaendigkeit',
   'monatsdaten_plausibilitaet',
   'energieprofil_abdeckung',
+  'mqtt_topic_abdeckung',
 ]
 
 function severityIcon(schwere: string) {
