@@ -129,6 +129,11 @@ export default function SensorMappingWizard() {
   const [availableSensors, setAvailableSensors] = useState<HASensorInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Erweiterte Suche: bei Bedarf alle Sensoren ohne Energy-Filter laden
+  // (z.B. für Nibe-Roh-Counter ohne state_class).
+  const [extendedLoaded, setExtendedLoaded] = useState(false)
+  const [extendedLoading, setExtendedLoading] = useState(false)
+  const [extendedError, setExtendedError] = useState<string | null>(null)
 
   const effectiveAnlageId = anlageId || anlagen?.[0]?.id
 
@@ -283,6 +288,32 @@ export default function SensorMappingWizard() {
 
     return s
   }, [mappingData])
+
+  // Erweiterte Suche aktivieren: alle Sensoren ohne Energy-Filter nachladen
+  // und mit der vorhandenen Liste mergen (kein Replace, weil Live-Bereinigung
+  // beim Save sonst eventuell noch gemappte Sensoren verlieren würde).
+  const loadExtendedSensors = useCallback(async () => {
+    if (!effectiveAnlageId || extendedLoaded || extendedLoading) return
+    setExtendedLoading(true)
+    setExtendedError(null)
+    try {
+      const all = await sensorMappingApi.getAvailableSensors(effectiveAnlageId, false)
+      setAvailableSensors(prev => {
+        const seen = new Set(prev.map(s => s.entity_id))
+        const merged = [...prev]
+        for (const s of all) {
+          if (!seen.has(s.entity_id)) merged.push(s)
+        }
+        merged.sort((a, b) => a.entity_id.localeCompare(b.entity_id))
+        return merged
+      })
+      setExtendedLoaded(true)
+    } catch (err) {
+      setExtendedError((err as Error).message || 'Fehler beim Laden aller Sensoren')
+    } finally {
+      setExtendedLoading(false)
+    }
+  }, [effectiveAnlageId, extendedLoaded, extendedLoading])
 
   // Update handlers
   const updateBasis = useCallback((field: keyof WizardState['basis'], mapping: FeldMapping | null) => {
@@ -759,6 +790,31 @@ export default function SensorMappingWizard() {
           })}
         </div>
       </Card>
+
+      {/* Erweiterte Suche: Fallback wenn der Energy-Filter den gesuchten Sensor versteckt
+          (z.B. Nibe-Roh-Counter ohne state_class). Lädt alle Sensoren ohne Filter nach. */}
+      {currentStepConfig.id !== 'summary' && availableSensors.length > 0 && (
+        <div className="text-xs text-gray-500 dark:text-gray-400 px-1 flex items-center gap-2 flex-wrap">
+          <span>Sensor nicht in der Auswahl?</span>
+          {extendedLoaded ? (
+            <span className="text-green-600 dark:text-green-400">
+              ✓ Alle Sensoren geladen ({availableSensors.length})
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={loadExtendedSensors}
+              disabled={extendedLoading}
+              className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50"
+            >
+              {extendedLoading ? 'Lädt…' : 'Alle Sensoren ohne Filter anzeigen'}
+            </button>
+          )}
+          {extendedError && (
+            <span className="text-red-600 dark:text-red-400">{extendedError}</span>
+          )}
+        </div>
+      )}
 
       {/* Step Content */}
       <Card>

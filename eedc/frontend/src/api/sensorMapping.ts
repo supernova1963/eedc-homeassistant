@@ -69,6 +69,7 @@ export interface HASensorInfo {
   unit?: string | null
   device_class?: string | null
   state?: string | null
+  has_statistics?: boolean  // True wenn state_class gesetzt → in HA-Long-Term-Statistics
 }
 
 export interface SetupResult {

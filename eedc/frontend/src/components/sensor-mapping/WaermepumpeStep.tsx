@@ -197,9 +197,18 @@ export default function WaermepumpeStep({
                 strategieOptionen={startsOptionen}
                 defaultStrategie="keine"
               />
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
-                Optional. Kumulativer Anzahl-Zähler der Kompressor-Starts für Tages-/Monats-KPI (Verschleiß / Auslegung).
-                Bei Nibe z.B. aus der lokalen „Nibe Heat Pump"-Integration: <code className="text-xs">sensor.compressor_number_of_starts_…</code>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1 space-y-1">
+                <div>
+                  Optional. Kumulativer Anzahl-Zähler der Kompressor-Starts für Tages-/Monats-KPI (Verschleiß / Auslegung).
+                  Bei Nibe z.B. aus der lokalen „Nibe Heat Pump"-Integration: <code className="text-xs">sensor.compressor_number_of_starts_…</code>
+                </div>
+                <div>
+                  Falls der Sensor nicht in der Auswahl erscheint, fehlt ihm vermutlich <code className="text-xs">state_class</code> (typisch bei Nibe). Über den Link „Alle Sensoren ohne Filter anzeigen" oben wird er sichtbar — alternativ in HA per <code className="text-xs">configuration.yaml</code> nachpatchen:
+                  <pre className="mt-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[11px] overflow-x-auto">{`homeassistant:
+  customize:
+    sensor.compressor_number_of_starts_…:
+      state_class: total_increasing`}</pre>
+                </div>
               </div>
             </div>
 

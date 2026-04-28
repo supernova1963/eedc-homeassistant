@@ -110,10 +110,18 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
             ? 'bg-gray-100 dark:bg-gray-700'
             : 'bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700'
         }`}>
-          <span className="flex-1 text-sm truncate">
-            {selectedSensor?.friendly_name || value}
+          <span className="flex-1 text-sm truncate flex items-center gap-2">
+            <span className="truncate">{selectedSensor?.friendly_name || value}</span>
             {!selectedSensor && (
-              <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">(nicht verfügbar)</span>
+              <span className="text-xs text-amber-600 dark:text-amber-400 flex-shrink-0">(nicht verfügbar)</span>
+            )}
+            {selectedSensor?.has_statistics === false && (
+              <span
+                className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                title="Sensor ohne state_class — fehlt in HA-Long-Term-Statistics. Für kWh-Felder ungeeignet, für Counter (z.B. WP-Starts) unproblematisch."
+              >
+                ohne Statistik
+              </span>
             )}
           </span>
           <button
@@ -155,8 +163,16 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
                 onClick={() => handleSelect(sensor.entity_id)}
                 className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                  {sensor.friendly_name || sensor.entity_id}
+                <div className="text-sm font-medium text-gray-900 dark:text-white truncate flex items-center gap-1">
+                  <span className="truncate">{sensor.friendly_name || sensor.entity_id}</span>
+                  {sensor.has_statistics === false && (
+                    <span
+                      className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                      title="Sensor ohne state_class — fehlt in HA-Long-Term-Statistics. Für kWh-Felder ungeeignet, für Counter (z.B. WP-Starts) unproblematisch."
+                    >
+                      ohne Statistik
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-gray-500 truncate">
                   {sensor.entity_id}
