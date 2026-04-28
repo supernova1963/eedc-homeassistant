@@ -148,6 +148,9 @@ echo "  eedc/Dockerfile (Label)             → $VERSION"
 echo ""
 echo -e "${CYAN}[2/6] Frontend Build...${NC}"
 
+# In-App-Hilfe-Inhalte aus docs/ refreshen, damit dist/ aktuell ist
+"$REPO_DIR/scripts/sync-help.sh"
+
 cd eedc/frontend
 if [ ! -d "node_modules" ]; then
     echo "  npm ci..."

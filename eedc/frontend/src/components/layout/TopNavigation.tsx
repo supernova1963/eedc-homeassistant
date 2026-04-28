@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X, CalendarCheck, Activity } from 'lucide-react'
+import { Moon, Sun as SunIcon, Monitor, Settings, ChevronDown, LayoutDashboard, BarChart3, TrendingUp, Users, Menu, X, CalendarCheck, Activity, HelpCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
@@ -200,6 +200,20 @@ export default function TopNavigation() {
               {theme === 'system' && <Monitor className="h-5 w-5" />}
             </button>
 
+            {/* Hilfe Quick-Icon (#130) */}
+            <button
+              onClick={() => navigate('/hilfe')}
+              className={`p-2 rounded-lg transition-colors ${
+                location.pathname.startsWith('/hilfe')
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Hilfe"
+              title="Hilfe"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </button>
+
             {/* Monatsabschluss Quick-Icon */}
             <button
               onClick={() => navigate('/einstellungen/monatsabschluss')}
@@ -290,6 +304,19 @@ export default function TopNavigation() {
                 </NavLink>
               )
             })}
+
+            {/* Hilfe Quick-Link (Mobile, #130) */}
+            <NavLink
+              to="/hilfe"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/hilfe')
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+              }`}
+            >
+              <HelpCircle className="h-4 w-4" />
+              Hilfe
+            </NavLink>
 
             {/* Monatsabschluss Quick-Link (Mobile) */}
             <NavLink
