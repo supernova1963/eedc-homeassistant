@@ -55,6 +55,7 @@ const CloudImportWizard = lazy(() => import('./pages/CloudImportWizard'))
 const CustomImportWizard = lazy(() => import('./pages/CustomImportWizard'))
 const Protokolle = lazy(() => import('./pages/Protokolle'))
 const DatenChecker = lazy(() => import('./pages/DatenChecker'))
+const Hilfe = lazy(() => import('./pages/Hilfe'))
 
 function App() {
   useTouchTitleTooltip()
@@ -93,6 +94,9 @@ function App() {
 
             {/* Community */}
             <Route path="community" element={<Community />} />
+
+            {/* In-App-Hilfe (#130) */}
+            <Route path="hilfe" element={<Hilfe />} />
 
             {/* Einstellungen - Stammdaten */}
             <Route path="einstellungen/anlage" element={<Anlagen />} />
