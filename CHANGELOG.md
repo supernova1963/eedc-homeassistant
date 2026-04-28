@@ -11,6 +11,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.24.2] - 2026-04-28
+
+### Dokumentation
+
+- **docs(handbuch): Sweep v3.16–v3.24 — Funktions-Inventur über alle Hilfe-Dokumente** — Alle acht in der In-App-Hilfe gerenderten Markdown-Dokumente (`BENUTZERHANDBUCH`, `HANDBUCH_INSTALLATION/BEDIENUNG/EINSTELLUNGEN/INFOTHEK`, `BERECHNUNGEN`, `SENSOR-REFERENZ`, `GLOSSAR`) wurden im Bündel auf den Stand von v3.24.1 gehoben. Hintergrund: nach Aktivierung der In-App-Hilfe in v3.24.0 (#130) wurde Veraltung sofort sichtbar — Versions-Stempel waren bereits korrekt, aber viele in v3.16–v3.23 ergänzte Funktionen fehlten in den Detail-Beschreibungen. **Bedienung** bekommt einen neuen §5.8 Energieprofil-Tab (Beta) und einen kompletten §7.2 Prognosen-Tab (OpenMeteo / EEDC kalibriert / Solcast / IST inkl. MAE/MBE-Trennung, Asymmetrie-Diagnostik aus v3.23.3, Reparatur-Popover bei IST-Lücken, Backward-Slot-Konvention); Cockpit-Reihenfolge auf v3.23.4-Stand, WP-KPI-Reihenfolge JAZ → Wärme → Strom → Ersparnis. **Einstellungen** bekommt einen neuen §1.6 zur Energieprofil-Seite (Tages-Tabelle mit Pro-Tag-Reaggregation, Datenverwaltung pro Anlage), das Sensor-Mapping mit Solcast-Toggle, Strompreis-Sensor, JAZ-Wording, „ohne Statistik"-Badge und Fallback-Link sowie Daten-Checker auf 8 Kategorien (inkl. MQTT-Topic-Abdeckung #134 und HA-Statistics-Sensor-Mapping). **Berechnungen** bekommen einen neuen §4.1c zu Lernfaktor / saisonaler MOS-Kaskade / MAE+MBE-Trennung / Asymmetrie-Diagnostik plus überarbeiteten §6b (Snapshot-Architektur, Backward-Slot, GTI-PR, Vollzyklen-Filter auf stationäre Speicher). **Sensor-Referenz** mit Strompreis-Sensor, WP-Kompressor-Starts-Counter, Solcast-Anbindung (BJReplay + API), Counter-vs-kWh-Trennung und LTS-Verfügbarkeit. **Glossar** thematisch in 8 Gruppen umgebaut. **Installation** bekommt den „Empfohlene Nutzung"-Block (datendichte App, Desktop empfohlen — als technische App-Eigenschaft formuliert) und 5 neue Fehlerbehebungs-Einträge. **Übersicht** bekommt einen Lifecycle-Block der In-App-Hilfe selbst und eine kuratierte „Was ist neu seit v3.16?"-Tabelle mit Deep-Links — als statische Vorlage für einen späteren What's-new-Banner (Discussion #130 Folge-Wunsch von Safi105).
+
+- **docs(konzept): What's-new-Banner nach Update** — Konzept-Skizze unter [`docs/KONZEPT-WHATS-NEW-BANNER.md`](docs/KONZEPT-WHATS-NEW-BANNER.md): versionsbezogener In-App-Banner mit kuratierten Highlights seit der zuletzt vom Nutzer gesehenen Version, Datenquelle initial aus der „Was ist neu seit v3.16?"-Tabelle des Benutzerhandbuchs, Persistenz per `localStorage`, Re-Open via Hilfe-Sidebar-Eintrag. Bewusst keine automatische CHANGELOG-Extraktion (technisch vs. anwenderzentriert), kein Analytics. Antwort auf Safi105's Folge-Reply in Discussion #130 nach der Zusage zur In-App-Hilfe; Implementierung offen, Trigger: ruhiges Forum-Bündel oder Major-Sprung.
+
+---
+
 ## [3.24.1] - 2026-04-28
 
 ### Bugfixes
