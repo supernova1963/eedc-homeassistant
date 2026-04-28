@@ -6,6 +6,7 @@ Prüft Anlage-Daten systematisch auf Vollständigkeit und Plausibilität.
 Monatsdaten-Vollständigkeit, Monatsdaten-Plausibilität.
 """
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import Enum
@@ -41,6 +42,9 @@ class CheckKategorie(str, Enum):
     ENERGIEPROFIL_ABDECKUNG = "energieprofil_abdeckung"
     # Issue #134: Drift-Schutz Publisher (HA-Automation) ↔ Konsument (field_definitions.py)
     MQTT_TOPIC_ABDECKUNG = "mqtt_topic_abdeckung"
+    # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
+    # (kein state_class) — für kWh-Felder still kritisch, für Counter unproblematisch.
+    SENSOR_MAPPING_LTS = "sensor_mapping_lts"
 
 
 @dataclass
@@ -136,6 +140,7 @@ class DatenChecker:
         ))
         ergebnisse.extend(self._check_energieprofil_abdeckung(anlage))
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
+        ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -1102,6 +1107,130 @@ class DatenChecker:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung=f"Alle {len(erwartet)} erwarteten MQTT-Topics aktuell empfangen",
+            ))
+
+        return ergebnisse
+
+    # ─── Sensor-Mapping LTS-Verfügbarkeit (v3.24.1) ──────────────────────
+
+    async def _check_sensor_mapping_lts(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """
+        Prüft ob die im Sensor-Mapping verwendeten Sensoren in HA's Long-Term-
+        Statistics-Tabelle landen.
+
+        Sensoren ohne `state_class` fehlen dort und liefern für kWh-basierte
+        Monatswerte und Vollbackfill keine Daten — der Energy-Filter im Wizard
+        wurde in v3.24.1 aufgeweicht (damit z.B. Nibe-Roh-Counter ohne Metadaten
+        für WP-Starts auswählbar sind), und damit kann ein Nutzer auch
+        versehentlich einen LTS-losen Sensor in ein kWh-Feld eintragen. Diese
+        Kategorie macht das sichtbar:
+
+        - **kWh-Feld + nicht in LTS** → WARNING (still kritisch)
+        - **Counter-Feld + nicht in LTS** → INFO (erwartetes Verhalten — Snapshot-Pfad)
+        - **kWh-Feld + LTS vorhanden** → OK
+        """
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
+
+        kat = CheckKategorie.SENSOR_MAPPING_LTS
+        ergebnisse: list[CheckErgebnis] = []
+
+        mapping = anlage.sensor_mapping or {}
+        if not mapping:
+            return []
+
+        # Sensor-IDs sammeln, getrennt nach kWh-Feld und Counter-Feld.
+        # Live-Mappings (basis.live, inv.live) werden ignoriert — die lesen
+        # `state` direkt und brauchen kein LTS.
+        counter_fields = {f for fs in KUMULATIVE_COUNTER_FELDER.values() for f in fs}
+        kwh_sensors: list[tuple[str, str]] = []      # (sensor_id, label)
+        counter_sensors: list[tuple[str, str]] = []
+
+        basis = mapping.get("basis") or {}
+        for key in ("einspeisung", "netzbezug", "pv_gesamt", "strompreis"):
+            m = basis.get(key)
+            if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                kwh_sensors.append((m["sensor_id"], f"Basis: {key}"))
+
+        # Investitions-Bezeichnungen für aussagekräftige Labels
+        inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
+
+        for inv_id, inv_data in (mapping.get("investitionen") or {}).items():
+            if not isinstance(inv_data, dict):
+                continue
+            felder = inv_data.get("felder") or {}
+            for feld, m in felder.items():
+                if not isinstance(m, dict) or m.get("strategie") != "sensor":
+                    continue
+                sid = m.get("sensor_id")
+                if not sid:
+                    continue
+                lbl = f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: {feld}"
+                if feld in counter_fields:
+                    counter_sensors.append((sid, lbl))
+                else:
+                    kwh_sensors.append((sid, lbl))
+
+        if not kwh_sensors and not counter_sensors:
+            return []
+
+        ha_service = get_ha_statistics_service()
+        if not ha_service.is_available:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung="HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen",
+            ))
+            return ergebnisse
+
+        all_sids = list({s for s, _ in kwh_sensors} | {s for s, _ in counter_sensors})
+        valid_sids, missing_sids = await asyncio.to_thread(
+            ha_service.filter_valid_sensor_ids, all_sids
+        )
+        missing = set(missing_sids)
+
+        kwh_missing = [(sid, lbl) for sid, lbl in kwh_sensors if sid in missing]
+        counter_missing = [(sid, lbl) for sid, lbl in counter_sensors if sid in missing]
+
+        if kwh_missing:
+            beispiele = "; ".join(f"{lbl} ({sid})" for sid, lbl in kwh_missing[:5])
+            if len(kwh_missing) > 5:
+                beispiele += f" (+{len(kwh_missing) - 5} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"{len(kwh_missing)} kWh-Sensor(en) nicht in HA-Long-Term-Statistics",
+                details=(
+                    "Diese Sensoren liefern keine Daten für Monatswerte und "
+                    "Vollbackfill — die zugehörigen Felder bleiben in vergangenen "
+                    "Monaten leer. Typisch bei Sensoren ohne state_class "
+                    "(z.B. Modbus-Roh-Werte). Lösung: state_class via "
+                    "configuration.yaml customize ergänzen, oder einen anderen "
+                    "Sensor mit state_class=total_increasing wählen. "
+                    f"Betroffen: {beispiele}"
+                ),
+                link="/einstellungen/sensor-mapping",
+            ))
+
+        if counter_missing:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung=(
+                    f"{len(counter_missing)} Counter-Sensor(en) nicht in HA-Statistics "
+                    "(erwartet, kein Problem)"
+                ),
+                details=(
+                    "Counter-Felder wie WP-Kompressor-Starts werden über den "
+                    "stündlichen Snapshot-Service erfasst, nicht über die HA-LTS-"
+                    "Tabelle. Fehlende state_class ist hier ohne Folgen."
+                ),
+            ))
+
+        if kwh_sensors and not kwh_missing:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=(
+                    f"Alle {len(kwh_sensors)} kWh-Sensor(en) im Mapping in "
+                    "HA-Long-Term-Statistics verfügbar"
+                ),
             ))
 
         return ergebnisse

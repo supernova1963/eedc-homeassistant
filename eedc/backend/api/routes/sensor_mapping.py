@@ -110,6 +110,12 @@ class HASensorInfo(BaseModel):
     unit: Optional[str] = None
     device_class: Optional[str] = None
     state: Optional[str] = None
+    # True wenn der Sensor `state_class` gesetzt hat — Voraussetzung dafür,
+    # dass HA ihn in die Long-Term-Statistics-Tabelle aufnimmt. Sensoren
+    # ohne state_class fehlen dort und liefern für kWh-Monatsabschluss /
+    # Vollbackfill keine Daten (Counter-Felder via Snapshot-Service sind
+    # davon nicht betroffen).
+    has_statistics: bool = False
 
 
 class SetupResult(BaseModel):
@@ -122,6 +128,17 @@ class SetupResult(BaseModel):
 
 # Erwartete Felder werden aus field_definitions.INVESTITION_FELDER abgeleitet —
 # kein hardcodierter Block mehr. Neue Felder nur in field_definitions eintragen.
+
+
+def _is_int_state(state_value: Optional[str]) -> bool:
+    """True wenn der State-String als Ganzzahl parsebar ist (Counter-Heuristik)."""
+    if state_value is None or state_value in ("unknown", "unavailable", ""):
+        return False
+    try:
+        int(state_value)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 # =============================================================================
@@ -270,10 +287,21 @@ async def get_available_sensors(
                         "€", "EUR", "ct", "Cent",
                     ]:
                         pass  # OK
-                    # Erlaubt: Zähler-Sensoren (state_class=measurement oder total_increasing) ohne Einheit
-                    # z.B. Ladevorgänge, Zyklen, etc.
-                    elif state_class in ["measurement", "total_increasing", "total"] and not unit:
-                        pass  # OK - Anzahl-basierte Zähler
+                    # Erlaubt: Kumulative Counter (Unit egal — z.B. WP-Kompressor-Starts)
+                    elif state_class in ["total_increasing", "total"]:
+                        pass  # OK — kumulativer Zähler ist per Definition Mapping-Kandidat
+                    # Erlaubt: dimensionslose Messwerte (z.B. Zyklen, Ladevorgänge)
+                    elif state_class == "measurement" and not unit:
+                        pass  # OK
+                    # Erlaubt: Roh-Sensoren mit ganzzahligem State und ohne jegliche Metadaten.
+                    # Fängt z.B. die Nibe-Heat-Pump-Integration ab, die für unbekannte
+                    # Coil-Units weder state_class noch device_class noch unit setzt
+                    # (`compressor_number_of_starts_…`).
+                    elif (
+                        not device_class and not state_class and not unit
+                        and _is_int_state(state.get("state"))
+                    ):
+                        pass  # OK
                     else:
                         continue
 
@@ -283,6 +311,7 @@ async def get_available_sensors(
                     unit=unit or None,
                     device_class=device_class or None,
                     state=state.get("state"),
+                    has_statistics=bool(state_class),
                 ))
 
             # Nach Entity-ID sortieren
