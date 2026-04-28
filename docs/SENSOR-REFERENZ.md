@@ -1,6 +1,6 @@
 # Sensor-Referenz: Feldnamen, Einheiten, Anforderungen
 
-> Stand: 2026-04-02 — Referenz für UI-Beschreibungen in Sensor-Zuordnung und MQTT-Setup
+**Version 3.24.1** | Stand: April 2026 — Referenz für UI-Beschreibungen in Sensor-Zuordnung und MQTT-Setup
 
 ## Legende
 
@@ -9,7 +9,9 @@
 | **Momentan** | Aktueller Messwert zum Zeitpunkt der Abfrage (z.B. aktuelle Leistung in W) |
 | **Kumulativ** | Zählerstand der stetig steigt (z.B. Stromzähler in kWh). Delta wird berechnet. |
 | **Tagessensor** | Kumulativer Sensor der täglich um 0:00 auf 0 zurückgesetzt wird (HA Utility Meter). Wird unterstützt — Monatswechsel-Reset wird automatisch erkannt. |
+| **Counter** | Kumulativer Anzahl-Zähler (Total-Increasing, kein kWh). Wird strikt von kWh-Feldern getrennt — siehe „Counter vs. kWh" unten. |
 | **Bidirektional** | Positiv/negativ kodiert die Richtung (z.B. +Ladung/−Entladung) |
+| **`state_class`** | HA-Attribut. `total_increasing`/`total` markieren kumulative Sensoren — von HA in Long-Term Statistics persistiert. Sensoren ohne `state_class` haben **keine** LTS-Einträge → für kWh-Felder ungeeignet (siehe „LTS-Verfügbarkeit"). |
 
 ---
 
@@ -33,6 +35,7 @@
 | `netzbezug_w` | Netzbezug | W | Momentan | Aktuelle Netzbezugsleistung. Muss ≥ 0 sein. |
 | `pv_gesamt_w` | PV Gesamt | W | Momentan | Gesamte aktuelle PV-Leistung. Nur nötig wenn keine individuellen PV-Investitions-Sensoren konfiguriert sind. |
 | `netz_kombi_w` | Kombinierter Netz-Sensor | W | Momentan, bidirektional | Alternative zu getrennt `einspeisung_w`/`netzbezug_w`. Positiv = Netzbezug, negativ = Einspeisung. Nur verwenden wenn kein getrennter Zähler vorhanden. |
+| `strompreis` | Strompreis (dynamischer Tarif) | ct/kWh | Momentan | **Optional, ab v3.16.0.** Aktueller Strompreis aus Tibber, aWATTar, EPEX oder eigenem Template-Sensor. Akzeptierte Einheiten: `ct/kWh`, `EUR/kWh`, `EUR/MWh` (×0.1 → ct/kWh), `Cent`, `€`. Wird im Live-Tagesverlauf als gepunktete Linie auf sekundärer Y-Achse gezeigt. Ohne eigenen Sensor lädt EEDC automatisch den EPEX-Börsenpreis (DE/AT) via aWATTar API als Fallback. |
 
 ### MQTT-Topic-Mapping (Basis)
 
@@ -114,8 +117,9 @@
 | `stromverbrauch_kwh` | Stromverbrauch | kWh | Kumulativ oder Tagessensor | Gesamter elektrischer Energieverbrauch der WP im Monat. Bei getrennter Messung: Summe aus Heizen + Warmwasser. |
 | `strom_heizen_kwh` | Strom Heizen | kWh | Kumulativ oder Tagessensor | Nur bei getrennter Strommessung. Elektrische Energie für Heizbetrieb. |
 | `strom_warmwasser_kwh` | Strom Warmwasser | kWh | Kumulativ oder Tagessensor | Nur bei getrennter Strommessung. Elektrische Energie für Warmwasserbereitung. |
-| `heizenergie_kwh` | Heizenergie | kWh | Kumulativ oder Tagessensor | Bereitgestellte Wärmeenergie (thermisch). Für COP-Berechnung: `heizenergie / stromverbrauch`. Kann alternativ via COP-Strategie berechnet werden. |
+| `heizenergie_kwh` | Heizenergie | kWh | Kumulativ oder Tagessensor | Bereitgestellte Wärmeenergie (thermisch). Für JAZ-Berechnung: `heizenergie / stromverbrauch`. Kann alternativ via JAZ-Strategie berechnet werden. |
 | `warmwasser_kwh` | Warmwasser | kWh | Kumulativ oder Tagessensor | Bereitgestellte Warmwasserenergie (thermisch). Optional. |
+| `wp_starts_anzahl` | Kompressor-Starts | Anzahl | Counter (Total-Increasing) | **Optional, ab v3.24.0 (#136).** Kumulativer Anzahl-Zähler für Kompressor-Starts der Wärmepumpe. Z. B. aus der lokalen „Nibe Heat Pump"-Integration: `sensor.compressor_number_of_starts_…`. Stündlicher Snapshot-Job erfasst den Counter wie kWh-Zähler; Tagesabschluss berechnet Stunden- und Tages-Differenzen. **Bewusst kein Fallback** aus `leistung_w` oder Compressor-Binary — würde gerade kurze Takte (wo der KPI sticht) systematisch unterzählen. Anzeige: Auswertung → Energieprofil → Tagesdetail (Spalte „WP-Starts", default ausgeblendet) und Auswertung → Energieprofil → Monat (Komponenten-Gruppe). |
 
 ### Live-Dashboard
 
@@ -214,6 +218,97 @@
 
 ---
 
+## 8. Solcast PV Forecast (optional, ab v3.16.5)
+
+Zwei alternative Pfade — Toggle „Solcast PV Forecast" am Ende von Schritt 1 im Sensor-Mapping-Wizard.
+
+### Variante A: HA-Integration (BJReplay)
+
+Setzt die [BJReplay Solcast HA-Integration](https://github.com/BJReplay/ha-solcast-solar) voraus. EEDC liest die 7-Tage-Prognose direkt als Sensor-State — kein API-Key in EEDC nötig.
+
+**Auto-Discovery (v3.16.10):** Sensoren werden über `/api/states` per Suffix-Pattern gematcht:
+
+| Suffix-Pattern | Bedeutung |
+|---|---|
+| `_heute` / `_today` | Tagesprognose Heute |
+| `_morgen` / `_tomorrow` | Tagesprognose Morgen |
+| `_uebermorgen` / `_ubermorgen` / `_tag_3` / `_day_3` | Übermorgen |
+| `_tag_4` … `_tag_7` / `_day_4` … `_day_7` | Tag 4–7 |
+
+Filter (v3.16.11): nur Sensoren mit `unit_of_measurement=kWh` und ohne „verbleibend"/„remaining" im Namen — sonst würde z. B. `prognose_verbleibende_leistung_heute` fälschlich als Tagesprognose gematcht.
+
+**Stundenprofil:** Kommt aus dem `DetailedForecast`-Attribut der HA-Sensoren (v3.16.13 — vorher fälschlich `detailedHourly` gesucht, was bei Multi-Dach-Anlagen leer war).
+
+### Variante B: Solcast-API (Free/Paid Key)
+
+Direkter API-Aufruf für Standalone-Nutzer ohne HA-Integration. Konfiguration in den Anlagenstammdaten. L1-Cache (in-memory) und L2-Cache (DB) überleben Neustarts.
+
+### Slot-Konvention
+
+30-Min-Buckets aus Solcast werden per `ceil(bucket_ende)` dem **Backward-Slot** zugeordnet (siehe BERECHNUNGEN.md §6b). Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des Folgetags.
+
+---
+
+## 9. Counter vs. kWh — strikte Trennung
+
+EEDC unterscheidet seit v3.24.0 zwei Klassen kumulativer Sensoren:
+
+| Klasse | Beispiele | Verarbeitung |
+|---|---|---|
+| **kWh-Felder** | `pv_erzeugung_kwh`, `ladung_kwh`, `entladung_kwh`, `stromverbrauch_kwh`, `einspeisung_kwh`, `netzbezug_kwh` | Fließen in die Energie-Bilanz, Performance Ratio, Lernfaktor. Wh→kWh, MWh→kWh werden automatisch konvertiert. |
+| **Counter-Felder** (`KUMULATIVE_COUNTER_FELDER`) | `wp_starts_anzahl` | Reine Zähler — **keine** Energie-Einheit, **keine** Aufnahme in die Energie-Bilanz. Faktor 1.0 statt 0.001 bei unbekannter Einheit im HA-Statistics-Pfad. |
+
+> **Warum getrennt?** Würde ein Counter-Sensor versehentlich als kWh-Feld konsumiert (z. B. weil seine Unit fehlt), würde er die Energie-Bilanz mit physikalisch sinnlosen Werten (z. B. 50 000 „kWh"-Kompressor-Starts) verfälschen. Die strikte Klassen-Trennung ist Voraussetzung für die Roh-Counter-Unterstützung der Nibe-Integration in v3.24.1.
+
+---
+
+## 10. LTS-Verfügbarkeit (HA Long-Term Statistics)
+
+### Welche Sensoren landen in HA-LTS?
+
+HA persistiert nur Sensoren mit gesetztem `state_class` in seiner `statistics_meta`-Tabelle. Sensoren ohne `state_class` haben **keine** LTS-Einträge — sie funktionieren live (`/api/states`), liefern aber **keine** historischen Stundenwerte für:
+
+- Bulk-Import historischer Monate
+- Vollbackfill der Tageszusammenfassungen
+- Snapshot-basierte Stunden-kWh-Berechnung (siehe BERECHNUNGEN.md §6b)
+
+### Filter im Sensor-Mapping-Wizard (v3.24.1)
+
+Seit v3.24.1 zeigt der Wizard:
+
+- `state_class` ∈ `total_increasing`/`total` → **immer** zugelassen, Unit egal.
+- Sensor mit ganzzahligem State **ohne** Metadaten → zugelassen für Roh-Counter (z. B. Nibe Coils).
+- **Fallback-Link** „Sensor nicht in der Auswahl? Alle Sensoren ohne Filter anzeigen" lädt on-demand alle `sensor.*`-Entities mit `filter_energy=false`.
+
+### „ohne Statistik"-Badge (v3.24.1)
+
+Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"** im Wizard-Dropdown. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch." Im Backend trägt `HASensorInfo.has_statistics: bool` (= `state_class is not None`) diese Information.
+
+### Daten-Checker-Kategorie „Sensor-Mapping – HA-Statistics"
+
+Prüft pro Anlage, ob alle im Mapping verwendeten **kWh-Sensoren** tatsächlich in HA-LTS landen:
+
+| Befund | Bedeutung |
+|---|---|
+| **OK** | Alle kWh-Sensoren in LTS verfügbar |
+| **WARNING** | kWh-Feld zeigt auf LTS-losen Sensor — Monatsabschluss bleibt leer (still kritisch) |
+| **INFO** | Counter-Feld zeigt auf LTS-losen Sensor — erwartetes Verhalten (Snapshot-Pfad) |
+
+Live-Mappings (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` direkt und brauchen kein LTS.
+
+### Plan B außerhalb von EEDC
+
+Wenn ein Sensor als „ohne Statistik" markiert ist, kann man ihn in HA's `customize.yaml` nachträglich klassifizieren:
+
+```yaml
+sensor.compressor_number_of_starts_eb101_ep14_31490:
+  state_class: total_increasing
+```
+
+Damit landet er in HA-LTS und steht für Backfill und Snapshot zur Verfügung.
+
+---
+
 ## Allgemeine Regeln für Sensoren
 
 ### Tagessensoren (Utility Meter)
@@ -237,4 +332,8 @@ HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **EEDC 
 
 ### Einheiten-Konvertierung
 
-Live-Leistungssensoren werden automatisch konvertiert: `kW → W`, `MW → W`. Für kWh-Sensoren wird `Wh → kWh` und `MWh → kWh` automatisch skaliert.
+Live-Leistungssensoren werden automatisch konvertiert: `kW → W`, `MW → W`. Für kWh-Sensoren wird `Wh → kWh` und `MWh → kWh` automatisch skaliert. Counter-Felder (siehe §9) bleiben mit Faktor 1.0 — kein automatisches Wh→kWh, da physikalisch keine Energie.
+
+---
+
+*Letzte Aktualisierung: April 2026 (v3.24.1)*

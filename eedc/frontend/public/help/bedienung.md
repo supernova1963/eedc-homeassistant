@@ -13,11 +13,12 @@
 1. [Navigation & Menüstruktur](#1-navigation--menüstruktur)
 2. [Live Dashboard](#2-live-dashboard)
 3. [Cockpit (Dashboards)](#3-cockpit-dashboards)
-4. [Aktueller Monat](#4-aktueller-monat)
+4. [Monatsberichte](#4-monatsberichte)
 5. [Auswertungen](#5-auswertungen)
 6. [Community](#6-community)
 7. [Aussichten (Prognosen)](#7-aussichten-prognosen)
 8. [Infothek](#8-infothek)
+9. [Hilfe (in der App)](#9-hilfe-in-der-app)
 
 ---
 
@@ -25,39 +26,40 @@
 
 ### Hauptnavigation (oben)
 
-Die horizontale Navigation enthält vier Hauptbereiche:
+Die horizontale Navigation enthält fünf Hauptbereiche:
 
 | Bereich | Funktion |
 |---------|----------|
 | **Live** | Echtzeit-Leistungsdaten mit animiertem Energiefluss-Diagramm |
-| **Cockpit** | Übersicht mit KPIs, Energie-Fluss und Charts |
-| **Auswertungen** | Detaillierte Analysen in 6 Tabs |
+| **Cockpit** | Übersicht, Monatsberichte und Komponenten-Dashboards |
+| **Auswertungen** | 8 Tabs für detaillierte Analysen, inkl. Energieprofil (Beta) |
 | **Community** | Anonymer Benchmark-Vergleich mit anderen PV-Anlagen |
-| **Aussichten** | Prognosen: 7-Tage, Langfristig, Trend, Finanzen |
+| **Aussichten** | Prognosen: Kurzfristig, Prognosen-Vergleich, Langfristig, Trend, Finanzen |
 
-Plus ein Dropdown-Menü für **Einstellungen** und – sobald mindestens ein Eintrag existiert – den Hauptmenüpunkt **Infothek**.
+Plus ein Dropdown-Menü für **Einstellungen**, der Hauptmenüpunkt **Hilfe** und – sobald mindestens ein Eintrag existiert – die **Infothek**.
 
 ### Einstellungen-Dropdown
 
-Das Dropdown-Menü ist in fünf Kategorien unterteilt:
+Das Dropdown-Menü ist in Kategorien unterteilt:
 
 **Stammdaten:**
 - Anlage – PV-Anlage bearbeiten
 - Strompreise – Tarife verwalten
 - Investitionen – Komponenten konfigurieren
+- Solarprognose – PVGIS-Prognose und Wetter-Provider
 
 **Daten:**
-- Monatsdaten – Energiedaten eingeben/bearbeiten
+- Monatsdaten – Energiedaten eingeben/bearbeiten + Kraftstoffpreis-Backfill (Monatsebene)
+- Energieprofil – Tages-Tabelle, Vollbackfill, Datenverwaltung pro Anlage
 - Monatsabschluss – Geführter Monatsabschluss-Wizard
 - Import – CSV-Import/Export
 - Datenerfassung – Automatische Datenerfassung konfigurieren
 - Demo-Daten – Testdaten laden
 
 **System:**
-- Solarprognose – PVGIS-Prognose und Wetter-Provider
 - Daten-Checker – Datenqualitäts-Prüfung
 - Protokolle – Aktivitäts-Logging
-- Allgemein – Version, Status
+- Allgemein – Theme, HA-Integration, Datenbank-Info
 
 **Home Assistant** (nur bei HA-Nutzung sichtbar):
 - Sensor-Zuordnung – HA-Sensoren zu EEDC-Feldern zuordnen
@@ -72,41 +74,64 @@ Das Dropdown-Menü ist in fünf Kategorien unterteilt:
 
 Unter der Hauptnavigation erscheinen kontextabhängige Links:
 
-**Cockpit Sub-Seiten:**
-- Übersicht | Aktueller Monat | PV-Anlage | E-Auto | Wärmepumpe | Speicher | Wallbox | Balkonkraftwerk | Sonstiges
+**Cockpit-Sub-Tabs** (Reihenfolge: Erzeuger oben, Speicher in der Mitte, Verbraucher unten):
+Übersicht → Monatsberichte → PV-Anlage → Balkonkraftwerk → Speicher → Wärmepumpe → Wallbox → E-Auto → Sonstiges
 
-(Jede Komponente hat ein eigenes Dashboard mit spezifischen KPIs.)
+Jeder Investitions-Tab erscheint nur, wenn mindestens ein Investment des passenden Typs angelegt ist.
+
+> **Hinweis zum Layout:** EEDC ist als datendichte Analyse-App primär für den Desktop konzipiert. Live-Dashboard, Cockpit-Übersicht und Monatsberichte funktionieren am Smartphone gut. Für die datendichten Tabellen in Auswertung → Energieprofil und Aussichten → Prognosen empfehlen wir Querformat oder Desktop. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
 
 ---
 
 ## 2. Live Dashboard
 
-Das Live Dashboard zeigt dir **Echtzeit-Leistungsdaten** deiner gesamten PV-Anlage auf einen Blick.
+Das Live Dashboard zeigt dir **Echtzeit-Leistungsdaten** deiner gesamten PV-Anlage auf einen Blick. Aktualisiert sich alle 5 Sekunden.
 
 ### Energiefluss-Diagramm
 
 Das zentrale Element ist ein **animiertes Energiefluss-Diagramm** (ähnlich dem HA Energy Dashboard):
 
 - **Haus** in der Mitte als Senke
-- **Erzeuger** (PV-Module) oben
+- **Erzeuger** (PV-Module, Balkonkraftwerk) oben
 - **Netz** links (bidirektional: Bezug/Einspeisung)
 - **Speicher** (Batterie) rechts (bidirektional: Laden/Entladen)
 - **Verbraucher** (Wärmepumpe, Wallbox, E-Auto, Sonstige) unten
 
 **Animierte Flusslinien** zeigen Richtung und Stärke des Energieflusses:
 - Liniendicke proportional zur Leistung (logarithmisch skaliert)
-- Animationsgeschwindigkeit proportional zur Leistung
+- Animationsgeschwindigkeit proportional zur Leistung (höhere kW = schnellerer Fluss)
 - Farbcodierung nach Komponententyp
+- Netz-Farbe dynamisch: grün (Balance), orange (Einspeisung), rot (Netzbezug)
 
 **SoC-Anzeige:** Bei Batterien und E-Autos wird der Ladezustand als Pegel im Knoten dargestellt (rot <20%, gelb 20-50%, grün >50%).
 
-### Gauges
+**Hintergrund-Varianten** (Auswahl im Live-Header): Sterne (Default), Sunset, Alps oder eigenes Foto aus der Anlagen-Galerie. Dezent und animiert.
 
-Halbkreis-Gauges zeigen den **State of Charge** (SoC) von Speichern und E-Autos in Prozent.
+**Lite- vs. Effekt-Modus:** Auf iPads und schwächeren Mobile-Geräten erkennt EEDC die Plattform automatisch und schaltet auf einen reduzierten Lite-Modus (CSS-animierte Stromlinien, ohne SVG-Partikel und Filter). Im Effekt-Modus laufen zusätzlich Sonnenstrahlen, Reflexionen, Schneefunkeln und SoC-Partikel. Manueller Toggle im Header möglich.
 
-### Tageswerte
+### Tageswerte (Bilanz-Sortierung)
 
-Unter den Knoten werden die **heutigen kWh-Werte** als Tooltip angezeigt (Datenquelle: HA-Statistik oder MQTT-Snapshots).
+Unterhalb des Diagramms zeigt EEDC die Heute-Werte als Kacheln in dieser Reihenfolge — **bilanztreu**, von Quellen über Eigenverbrauch zu Verbrauchern:
+
+1. **PV-Erzeugung** (Heute, kWh)
+2. **Batterie** (Lade- und Entladebilanz)
+3. **Eigenverbrauch** (in % der PV-Erzeugung, gecappt auf 100 % — bei zusätzlicher Batterie-Entladung aus Vortagen kann die Quote rechnerisch über 100 % laufen, das ist visuell nicht sinnvoll)
+4. **Netzbezug**
+5. **Hausverbrauch**
+6. **Einspeisung** (PV-Überschuss ins Netz)
+
+### Tagesverlauf-Chart
+
+Linien-/Flächendiagramm für PV/Verbrauch/Speicher mit gepunkteter **Strompreis-Overlay-Linie** auf sekundärer Y-Achse:
+
+- **Eigener Strompreis-Sensor** im Sensor-Mapping (Tibber, aWATTar, EPEX, eigener Template-Sensor) → Linie heißt „Strompreis"
+- **Kein eigener Sensor** → automatischer EPEX-Börsenpreis-Fallback (DE/AT via aWATTar API) → Linie heißt „Börsenpreis (EPEX)"
+- Auch die frühen Morgenstunden vor dem ersten Sensor-Datenpunkt werden vom Börsenpreis-Fallback aufgefüllt.
+- Klick auf einen Legenden-Eintrag schaltet die Serie ein/aus.
+
+### Wetter-Widget
+
+Aktuelle Außentemperatur, Wolkenbedeckung und Stunden-Prognose als kleines Tile. Stunden-Werte werden als arithmetisches Mittel der 10-Min-Slots aggregiert (konsistent mit der Mean-Konvention der Prognose-Linien).
 
 ### Datenquellen
 
@@ -122,11 +147,11 @@ Ohne konfigurierte Sensoren zeigt das Dashboard einen **Demo-Modus** mit simulie
 
 ## 3. Cockpit (Dashboards)
 
-Das Cockpit zeigt dir alle wichtigen Kennzahlen auf einen Blick.
+Das Cockpit zeigt dir alle wichtigen Kennzahlen auf einen Blick, gruppiert in einer Übersicht und Detail-Dashboards pro Komponententyp.
 
 ### 3.1 Übersicht
 
-Das Cockpit zeigt alle wichtigen Kennzahlen auf einen Blick – ab v2.3.0 modernisiert:
+Das Cockpit zeigt alle wichtigen Kennzahlen auf einen Blick.
 
 #### Hero-Leiste (oben)
 Die drei wichtigsten KPIs prominent dargestellt, jeweils mit Trend-Pfeil zum Vorjahr:
@@ -150,12 +175,12 @@ Anschauliche Ringdiagramme statt reiner Zahlen:
 - **Eigenverbrauchsquote** = Eigenverbrauch / PV-Erzeugung × 100%
 
 #### Komponenten-Status
-Schnellstatus für alle Komponenten mit Klick-Navigation zu Details.
+Schnellstatus für alle Komponenten mit Klick-Navigation zu den Detail-Dashboards. Wärmepumpe-, Speicher-, E-Auto- und Wallbox-KPIs verwenden konsistente Icons, Farben und Reihenfolgen über alle Cockpit-Sichten und Auswertungen hinweg.
 
 #### Finanzielle Auswertung
 - Einspeiseerlös, eingesparte Stromkosten, Gesamt-Einsparung (€)
 - **Amortisations-Fortschrittsbalken**: Wie viel % der Investition ist zurückgeflossen? Mit geschätztem Amortisationsjahr (nur in der Gesamtansicht)
-- **Methodenhinweis**: Amortisationsbalken und Komponenten-Dashboards (E-Auto, WP, BKW) zeigen einen Basis-Hinweis zur Berechnungsmethode
+- **„Sicht"-Tooltip** an jeder ROI-/Amortisations-Anzeige: Klärt explizit, ob die Zahl pro Investition oder gesamt, Jahres-ROI oder kumuliert, IST oder Prognose darstellt — die App zeigt mehrere ROI-Sichten parallel, der Tooltip macht die jeweilige Bedeutung sofort sichtbar.
 
 #### CO2-Bilanz
 - Vermiedene CO2-Emissionen (kg)
@@ -179,7 +204,11 @@ Der Text enthält automatisch:
 - Speicher, Wärmepumpe, E-Auto (nur wenn vorhanden)
 - CO₂-Einsparung und Netto-Ertrag
 
-### 3.2 PV-Anlage Dashboard
+### 3.2 Monatsberichte
+
+Eigener Tab im Cockpit für die Monatssicht (ersetzt seit v3.12.0 den früheren „Aktueller Monat"-Tab). Details siehe [§4 Monatsberichte](#4-monatsberichte).
+
+### 3.3 PV-Anlage Dashboard
 
 Detailansicht für deine Photovoltaik:
 
@@ -187,6 +216,8 @@ Detailansicht für deine Photovoltaik:
 - **String-Vergleich** nach Ausrichtung (Süd, Ost, West)
 - **Spezifischer Ertrag** (kWh/kWp) – wichtig für Vergleiche
 - **SOLL-IST Vergleich** gegen PVGIS-Prognose
+
+Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) wird die „Stringsumme"-Zeile ausgeblendet — sie wäre identisch mit der einzigen Detail-Zeile.
 
 #### SOLL-IST Vergleich verstehen
 
@@ -201,7 +232,46 @@ Detailansicht für deine Photovoltaik:
 - ±10-15% – Prüfen (Verschattung? Verschmutzung?)
 - >20% – Handlungsbedarf (Defekt? Fehlkonfiguration?)
 
-### 3.3 E-Auto Dashboard
+### 3.4 Balkonkraftwerk Dashboard
+
+- **Erzeugung** (kWh) — Stromerzeugung des BKW
+- **Eigenverbrauch** (kWh) — Selbst genutzter BKW-Strom
+- **Einspeisung** (kWh) — Unvergütete Einspeisung (= Erzeugung − Eigenverbrauch)
+- **Optional**: Speicher-Nutzung (Ladung/Entladung)
+
+### 3.5 Speicher Dashboard
+
+- **Ladezyklen** (Vollzyklen) — basieren ausschließlich auf dem stationären Speicher-SoC, E-Auto-SoC wird seit v3.22.0 zuverlässig ausgeschlossen
+- **Effizienz** = Entladung / Ladung × 100% (Activity-Icon, cyan — konsistent über alle Sichten)
+- **Degradation** (Kapazitätsverlust über Zeit)
+- **Arbitrage-Analyse** (wenn aktiviert):
+  - Netzladung zu günstigem Strom
+  - Entladung bei hohem Preis
+  - Arbitrage-Gewinn
+
+### 3.6 Wärmepumpe Dashboard
+
+KPI-Reihenfolge (konsistent über Cockpit-Übersicht, WP-Dashboard, Auswertung→Komponenten und Monatsabschluss):
+
+1. **JAZ** (Jahresarbeitszahl) — Wärme ÷ Strom über den gewählten Zeitraum (Thermometer-Icon, orange)
+2. **Wärme** (kWh) — erzeugte Heizwärme + Warmwasser (Flame-Icon, rot)
+3. **Strom** (kWh) — verbrauchter Strom der Wärmepumpe (Zap-Icon, gelb)
+4. **Ersparnis** (€) — vs. Alternative (Gas/Öl) (TrendingUp-Icon, grün)
+
+Innerhalb des Tabs zusätzlich: JAZ-Heizen / JAZ-Warmwasser, Monatsvergleichs-Toggle, Detail-Tabellen mit Spalte „JAZ" pro Monat.
+
+> **Hinweis JAZ vs. COP:** Im Cockpit/Dashboard-Periodenwert nutzen wir konsistent **JAZ** (Jahresarbeitszahl, ggf. periodenanteilig). Der Begriff **COP** (Coefficient of Performance) bleibt für mathematisch-technische Berechnungen im Backend reserviert. Im Sensor-Zuordnungs-Wizard ist das Feld als „Jahresarbeitszahl (JAZ)" beschriftet.
+
+> **WP-Anschaffungsdatum-Filter:** Aggregate (JAZ, Wärme, Strom, Ersparnis) im Cockpit und in der Auswertung ignorieren Monatsdaten **vor** dem Anschaffungsdatum der WP-Investition. Bei Migration von einer alten Erfassungs-Methode zu einer neuen (z. B. von WP-eigener Strommessung auf Shelly-PM) bleiben die alten Werte historisch erhalten, fließen aber nicht mehr in die aktuelle JAZ-Berechnung ein.
+
+### 3.7 Wallbox Dashboard
+
+- **Geladene Energie** (kWh)
+- **Ladevorgänge** (Anzahl)
+- **Durchschnittliche Lademenge**
+- **PV-Anteil** der Ladungen
+
+### 3.8 E-Auto Dashboard
 
 - **Gefahrene Kilometer** im Zeitraum
 - **Verbrauch** (kWh)
@@ -209,55 +279,33 @@ Detailansicht für deine Photovoltaik:
   - PV-Ladung (kostenlos)
   - Netz-Ladung (zu Hause)
   - Externe Ladung (unterwegs)
-- **Kostenersparnis** vs. Benziner/Diesel
+- **Kostenersparnis** vs. Benziner/Diesel — basiert seit v3.17.0 auf echten **monatlichen Benzinpreisen** aus dem EU Weekly Oil Bulletin (Fallback: statischer Investitions-Parameter)
 - **V2H-Entladung** (wenn aktiviert)
 
-### 3.4 Speicher Dashboard
+### 3.9 Sonstiges
 
-- **Ladezyklen** (Vollzyklen)
-- **Effizienz** = Entladung / Ladung × 100%
-- **Degradation** (Kapazitätsverlust über Zeit)
-- **Arbitrage-Analyse** (wenn aktiviert):
-  - Netzladung zu günstigem Strom
-  - Entladung bei hohem Preis
-  - Arbitrage-Gewinn
+Eigener Tab für sonstige Erzeuger (BHKW etc.) und sonstige Verbraucher mit komponentenspezifischen KPIs.
 
-### 3.5 Wärmepumpe Dashboard
+### Tab-Header und Layout
 
-- **Stromverbrauch** (kWh)
-- **Erzeugte Wärme** (kWh)
-- **COP** (Coefficient of Performance) = Wärme / Strom
-- **Aufteilung**: Heizung vs. Warmwasser
-- **Einsparung** vs. Gas/Öl-Heizung
-
-### 3.6 Wallbox Dashboard
-
-- **Geladene Energie** (kWh)
-- **Ladevorgänge** (Anzahl)
-- **Durchschnittliche Lademenge**
-- **PV-Anteil** der Ladungen
-
-### 3.7 Balkonkraftwerk Dashboard
-
-- **Erzeugung** (kWh) - Stromerzeugung des BKW
-- **Eigenverbrauch** (kWh) - Selbst genutzter BKW-Strom
-- **Einspeisung** (kWh) - Unvergütete Einspeisung (= Erzeugung - Eigenverbrauch)
-- **Optional**: Speicher-Nutzung (Ladung/Entladung)
+- Der Tab-Header der Komponenten-Dashboards zeigt den **Anlagennamen** (PV-Anlage) bzw. die **Bezeichnung** des konkreten Investments (z. B. „Wärmepumpe Erdgeschoss") — der Investment-Typ steht bereits im aktiven grünen Sub-Tab und wird nicht doppelt als Überschrift wiederholt.
+- Bei **mehreren Investments desselben Typs** trennt eine durchgezogene Linie statt Card-Boxen, die Card-Header tragen die jeweilige `bezeichnung` zur Unterscheidung.
 
 ### KPI-Tooltips
 
-Jede Kennzahl zeigt bei Hover einen Tooltip mit:
+Jede Kennzahl zeigt bei Hover/Tap einen Tooltip mit:
 - **Formel**: Wie wird der Wert berechnet?
 - **Berechnung**: Konkrete Zahlen eingesetzt
 - **Ergebnis**: Der angezeigte Wert
+- **Sicht**: Bei ROI- und Amortisations-KPIs zusätzlich, welche Bezugsbasis (pro Investition vs. gesamt, IST vs. Prognose)
 
 ---
 
-## 4. Aktueller Monat
+## 4. Monatsberichte
 
-**Pfad**: Cockpit → Aktueller Monat
+**Pfad**: Cockpit → Monatsberichte
 
-Das Aktueller-Monat-Dashboard zeigt den **laufenden Monat** mit Daten aus verschiedenen Quellen:
+Die Monatsberichte zeigen den **gewählten Monat** mit Daten aus verschiedenen Quellen und ersetzen seit v3.12.0 den früheren „Aktueller Monat"-Tab. Über den Zeitstrahl unter dem Header kannst du zu beliebigen Vormonaten navigieren.
 
 ### Datenquellen (nach Priorität)
 
@@ -273,9 +321,11 @@ Das Aktueller-Monat-Dashboard zeigt den **laufenden Monat** mit Daten aus versch
 - **Energie-Bilanz-Charts** — PV-Erzeugung, Einspeisung, Netzbezug, Eigenverbrauch
 - **Komponenten-Karten** — Status jeder Investition mit kWh-Werten
 - **Datenquellen-Badges** — Farbige Indikatoren zeigen pro Feld die Herkunft
-- **Finanz-Übersicht** — Geschätzte Einsparung im laufenden Monat
+- **Finanzen / T-Konto** — Erlöse, Einsparungen, Kosten gegenübergestellt; Vorjahresvergleich mit Δ. Auf Mobile als 2-Spalten-Layout (Label | Wert+VJ+Δ gestapelt).
+- **Wärmepumpen-Sektion** — JAZ, Wärme, Strom, Ersparnis (in dieser Reihenfolge). VM-Vergleich nur, wenn der Vormonat tatsächlich WP-Daten hat — bei einer WP, die im Berichtsmonat zum ersten Mal Daten liefert, werden die VM-Spalten unterdrückt statt mit „0"/„NaN" verwirrend angezeigt.
 - **Vorjahresvergleich** — Delta zum gleichen Monat im Vorjahr
 - **SOLL/IST-Vergleich** — Gegen PVGIS-Prognose
+- **Community-Vergleich** — Eingebettet, wo Daten geteilt sind
 
 ### Leerer Zustand
 
@@ -285,7 +335,9 @@ Wenn keine Daten vorliegen, werden konkrete Import-Möglichkeiten als Aktionskar
 
 ## 5. Auswertungen
 
-Detaillierte Analysen in 6 Kategorien. Der Community-Vergleich ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt.
+Detaillierte Analysen in 8 Tabs (der **Energieprofil**-Tab ist als Beta gekennzeichnet). Reihenfolge:
+
+Energie | PV-Anlage | Komponenten | Finanzen | CO2 | Investitionen | Tabelle | Energieprofil (Beta)
 
 ### 5.1 Energie-Tab
 
@@ -305,6 +357,8 @@ Detaillierte Analysen in 6 Kategorien. Der Community-Vergleich ist seit v2.1.0 e
 - **Ertrag pro Modul** in kWh und kWh/kWp
 - **Ausrichtungs-Vergleich**: Welcher String performt am besten?
 - **Degradations-Analyse** (Jahr-über-Jahr)
+- **Performance Ratio**: Seit v3.20.0 auf Basis der **Global Tilted Irradiance (GTI)** statt der horizontalen Globalstrahlung (GHI) — bei steilen Modulen und tiefstehender Wintersonne realistischere Werte (vorher konnten PR-Werte > 1 entstehen, die physikalisch nicht möglich sind).
+- **SOLL/IST-Diagramme**: Konsistente Farben (SOLL blau, IST amber, positive Abweichung grün) über alle Charts.
 
 ### 5.3 Komponenten Tab
 
@@ -313,59 +367,69 @@ Detaillierte Zeitreihen für jede Komponente:
 **Speicher:**
 - Ladung/Entladung im Zeitverlauf
 - Arbitrage-Gewinne (wenn aktiviert)
-- Vollzyklen und Effizienz
+- Vollzyklen und Effizienz (cyan, Activity-Icon — konsistent zu Cockpit und Monatsabschluss)
 
 **E-Auto:**
 - Ladequellen-Aufteilung (PV/Netz/Extern)
 - V2H-Entladung (wenn aktiviert)
-- Kostenentwicklung
+- Kostenentwicklung (mit echten monatlichen Benzinpreisen ab v3.17.0)
 
 **Wärmepumpe:**
 - Heizung vs. Warmwasser getrennt
-- COP-Entwicklung über die Saison
+- JAZ-Entwicklung über die Saison
+- Aggregate respektieren das **Anschaffungsdatum** — Daten aus der Zeit vor der aktuellen Erfassungs-Konfiguration verzerren die Kennzahlen nicht mehr.
 
 ### 5.4 Finanzen Tab
 
 - **Einspeiseerlös** = Einspeisung × Einspeisevergütung
 - **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis
 - **Sonderkosten** (Reparaturen, Wartung)
-- **Netto-Einsparung** = Erlöse + Einsparungen - Sonderkosten
+- **Netto-Einsparung** = Erlöse + Einsparungen − Sonderkosten
 
 ### 5.5 CO2 Tab
 
 - **Vermiedene Emissionen** (kg CO2)
 - **Berechnung**: Eigenverbrauch × CO2-Faktor Strommix
 - **Zeitreihe** der CO2-Einsparung
-- **Äquivalente**: z.B. "entspricht X km Autofahren"
+- **Äquivalente**: z. B. „entspricht X km Autofahren"
 
 ### 5.6 Investitionen Tab (ROI)
 
-Das **ROI-Dashboard** zeigt:
+Das **ROI-Dashboard** wurde in v3.21.0 (#140) verschlankt. Es zeigt zwei klar getrennte Sichten und nicht mehr eine Vielzahl paralleler ROI-Werte ohne Bezugsangabe:
 
 #### Amortisationskurve
 - X-Achse: Zeit (Jahre)
 - Y-Achse: Kumulierte Einsparung vs. Investition
 - **Break-Even-Punkt**: Wann ist die Investition zurückverdient?
 
-#### ROI pro Komponente
-Tabelle mit:
+#### ROI pro Komponente — zwei Sichten
+
+| Sicht | Bezugsbasis | Wann nutzen? |
+|---|---|---|
+| **Jahres-ROI** | Jahres-Ertrag / Investition | Vergleich mit Geldanlagen, „Wie viel % rendiert die Anlage pro Jahr?" |
+| **Kumulierte Amortisation** | Σ Erträge / Investition | Fortschritt zur Refinanzierung, „Wie viel % ist schon zurückgeflossen?" |
+
+Jeder ROI-/Amortisations-Wert in der Tabelle und in den Cards trägt einen **„Sicht"-Tooltip**, der erklärt, welche Variante du gerade siehst (Pro Investition vs. Gesamt-Anlage, Mehrkosten- vs. Vollkosten-Ansatz, IST vs. Prognose).
+
+Tabelle pro Komponente:
+
 | Spalte | Bedeutung |
 |--------|-----------|
-| **Investition** | Kaufpreis + Installation |
-| **Jährliche Einsparung** | Durchschnitt pro Jahr |
-| **ROI** | (Einsparung - Kosten) / Kosten × 100% |
+| **Investition** | Kaufpreis + Installation, bei WP/E-Auto auch der Mehrkosten-Ansatz (Kosten minus Alternativsystem) |
+| **Jährliche Einsparung** | Durchschnitt pro Jahr inkl. WP-/E-Auto-/BKW-Komponenten-Beiträgen |
+| **ROI** | Jahres-ROI in % |
 | **Amortisation** | Jahre bis Break-Even |
 
 #### Realisierungsquote
 
-Ein neues Panel vergleicht die historischen Erträge mit der konfigurierten Prognose:
+Vergleicht historische Erträge mit der konfigurierten Prognose:
 - **≥90%** (grün): Ertrag entspricht oder übertrifft die Erwartung
 - **≥70%** (gelb): Leichte Abweichung, ggf. prüfen
 - **<70%** (rot): Deutliche Abweichung, Handlungsbedarf
 
 #### PV-System Aggregation
 
-**Wichtig**: Wechselrichter + zugeordnete PV-Module + DC-Speicher werden als "PV-System" zusammengefasst!
+**Wichtig**: Wechselrichter + zugeordnete PV-Module + DC-Speicher werden als „PV-System" zusammengefasst.
 
 - Die ROI-Berechnung erfolgt auf System-Ebene
 - Einzelkomponenten sind in aufklappbaren Unterzeilen sichtbar
@@ -376,38 +440,64 @@ Ein neues Panel vergleicht die historischen Erträge mit der konfigurierten Prog
 Der **Tabellen-Tab** bietet einen interaktiven Überblick aller Monatswerte in einer sortierbaren Tabelle — ideal für eigene Analysen und schnelle Jahresvergleiche.
 
 #### Inhalt
-
-- **22 Spalten**: Alle Energiefelder (Erzeugung, Einspeisung, Bezug, Direktverbrauch, Speicher, Wärmepumpe, E-Auto, Wallbox, Finanzen, CO2, ...)
+- **22 Spalten**: Alle Energiefelder (Erzeugung, Einspeisung, Bezug, Direktverbrauch, Speicher, Wärmepumpe, E-Auto, Wallbox, Finanzen, CO2, …)
 - **Vorjahresvergleich**: Jede Zeile zeigt optional den Δ-Wert zum gleichen Monat im Vorjahr, farbkodiert (grün = besser, rot = schlechter)
 - **Deutsches Zahlenformat**: Komma als Dezimaltrennzeichen, Punkt als Tausender
 
 #### Sortierung
-
 Klicke auf einen Spalten-Header, um nach dieser Spalte zu sortieren. Erneuter Klick wechselt die Richtung. Standard: chronologisch.
 
 #### Spaltenauswahl
-
-Über den Button **"Spalten"** (oben rechts in der Tabelle) wählst du aus, welche Spalten angezeigt werden. Die Auswahl wird im Browser gespeichert (localStorage) und bleibt auch nach einem Neustart erhalten.
+Über den Button **„Spalten"** (oben rechts) wählst du aus, welche Spalten angezeigt werden. Die Auswahl wird im Browser gespeichert (localStorage) und bleibt auch nach einem Neustart erhalten.
 
 #### Export
+Den sichtbaren Tabelleninhalt kannst du als **CSV exportieren** (Button „CSV" oben rechts). Exportiert werden alle Zeilen und die aktuell eingeblendeten Spalten.
 
-Den sichtbaren Tabelleninhalt kannst du als **CSV exportieren** (Button "CSV" oben rechts). Exportiert werden alle Zeilen und die aktuell eingeblendeten Spalten.
+### 5.8 Energieprofil-Tab (Beta)
+
+Der **Energieprofil-Tab** macht die feingranularen Stunden-Daten direkt in der Auswertung sichtbar. Er teilt sich Sub-Tabs:
+
+#### Sub-Tab Tagesdetail
+- 24h-Tabelle mit Spalten in Gruppen (Peak-Leistungen, Verbrauchs-Komponenten, Performance, Wetter, Strompreise/§51).
+- Spalten-Selektor: Welche Gruppen anzeigen? Auswahl persistiert pro Browser.
+- **WP-Kompressor-Starts** (Spalte „WP-Starts", default ausgeblendet) — optional pro WP-Investition über einen kumulativen Total-Increasing-Sensor. Stundenwerte und Tagessumme im Footer (#136, v3.24.0).
+- Tagessummen im Footer.
+
+#### Sub-Tab Monat
+Aufklappbare Sektionen (`<CollapsibleSection>`, Status pro Sektion persistiert):
+
+1. **KPI-Strips** (fix) — Monats-Summen und Δ zum Vormonat
+2. **§51 Negativpreis-Analyse** (offen) — Anzahl Stunden mit negativem Börsenpreis, betroffene Einspeisung
+3. **Kategorien-Leiste** (offen) — Erzeuger / Verbraucher / Speicher / Wärme im Monat
+4. **Tage des Monats** (offen) — komplette Tagestabelle mit Heatmap-Zellfärbung, sticky Σ-Footer (Σ/Ø/max/min je nach Spalte), Negativpreis-Tage mit amber-Streifen + §51-Badge. Pro Zeile ein Refresh-Knopf für „diesen Tag neu aggregieren" (siehe [Teil III, §1 Energieprofil-Seite](HANDBUCH_EINSTELLUNGEN.md))
+5. **Heatmap** (offen) — 24h × N Tage, Energie pro Stunde
+6. **Geräte / Tagesprofil / Peaks** (zu) — wann läuft welcher Verbraucher
+
+#### Sub-Tab Prognose
+
+Kombinierte Verbrauchs- + PV- + Batterie-Prognose für einen Tag (Etappe 3b Phase A, v3.16.16):
+
+- **Verbrauchsprofil** aus historischen Stundenmitteln (gewichteter Ø, Wochentag-Kaskade, Halbwertszeit 14 Tage)
+- **PV-Stundenprofil** aus OpenMeteo GTI (kalibriert mit Lernfaktor) oder Solcast (wenn konfiguriert)
+- **Batterie-SoC-Simulation** mit Speicher-voll/leer-Zeitpunkt
+- Chart (PV / Verbrauch / Netto + SoC-Overlay), KPI-Cards, Stundentabelle
+
+> **Datenbasis:** Stunden-kWh stammen seit v3.19.0 aus kumulativen Zähler-Snapshots (statt aus 10-Min-Leistungs-Integration), Tageswerte über die Backward-Slot-Konvention (Slot N = Energie [N-1, N), Industriestandard). Bei fehlenden Snapshots zeigt EEDC ein ⚠-Badge — siehe [§7.2 Prognosen-Tab](#72-prognosen) für den klickbaren Reparatur-Popover.
 
 ---
 
 ## 6. Community
 
-Der Community-Vergleich ermöglicht anonyme Benchmarks mit anderen PV-Anlagen-Besitzern.
-Community ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt (gleichwertig mit Cockpit, Auswertungen, Aussichten).
+Der Community-Vergleich ermöglicht anonyme Benchmarks mit anderen PV-Anlagen-Besitzern. Community ist seit v2.1.0 ein eigenständiger Hauptmenüpunkt.
 
 ### 6.1 Daten teilen
 
-**Pfad**: Community → Tab "Übersicht" → Button "Jetzt teilen"
+**Pfad**: Community → Tab „Übersicht" → Button „Jetzt teilen"
 
 Hier kannst du deine Anlagendaten anonym mit der Community teilen:
 - **Vorschau**: Zeigt welche Daten geteilt werden
 - **Anonymisierung**: Nur Bundesland, keine Adresse/PLZ
-- **Jederzeit löschbar**: Button "Meine Daten löschen"
+- **Jederzeit löschbar**: Button „Meine Daten löschen"
 
 ### 6.2 Community-Bereich (6 Tabs)
 
@@ -436,15 +526,15 @@ Detaillierte Benchmarks für jede Komponente:
 | Komponente | KPIs |
 |------------|------|
 | **Speicher** | Zyklen, Effizienz, Autarkie-Beitrag |
-| **Wärmepumpe** | JAZ vs. Community, PV-Anteil |
+| **Wärmepumpe** | JAZ vs. Community (typ-spezifischer Vergleich), PV-Anteil |
 | **E-Auto** | km/Monat, Ø kWh/100km, PV-Anteil |
 | **Wallbox** | Ladung kWh/Mon, PV-Anteil % |
-| **Balkonkraftwerk** | Ertrag kWh/Mon, Vergleich |
+| **Balkonkraftwerk** | Ertrag kWh/Mon, Anzahl × Wp pro Modul |
 
 #### Tab: Regional
 - **Choropleth Deutschlandkarte**: Interaktive Karte mit Farbkodierung nach spezifischem Ertrag
   - Hover über ein Bundesland zeigt Performance-Details: Speicher-Lade/Entlade-kWh, WP-JAZ, E-Auto km + kWh, Wallbox kWh + PV-Anteil, BKW kWh
-- **Bundesland-Tabelle**: Direkter Vergleich aller Bundesländer mit Performance-Metriken (Ø kWh/Mon, JAZ, etc.)
+- **Bundesland-Tabelle**: Direkter Vergleich aller Bundesländer mit Performance-Metriken
 - **Regionale Einordnung**: Wie schneidet dein Bundesland ab?
 
 #### Tab: Trends
@@ -468,44 +558,99 @@ Detaillierte Benchmarks für jede Komponente:
 
 ## 7. Aussichten (Prognosen)
 
-Die **Aussichten**-Seite bietet 4 Prognose-Tabs für zukunftsorientierte Analysen.
+Die **Aussichten**-Seite bietet 5 Tabs für zukunftsorientierte Analysen:
 
-### 7.1 Kurzfristig (7 Tage)
+Kurzfristig | Prognosen | Langfristig | Trend | Finanzen
 
-Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
+### 7.1 Kurzfristig
+
+Wetterbasierte Ertragsschätzung für die nächsten 7–14 Tage:
 
 - **Datenquelle**: Open-Meteo Wetterprognose
-- **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung
+- **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung (kalibriert mit dem **EEDC-Lernfaktor**, sobald genug IST-Daten vorliegen)
 - **Wettersymbole**: Sonnig, bewölkt, regnerisch
 - **Datenquelle-Kürzel** pro Tag: MS (MeteoSwiss ICON-CH2), D2 (ICON-D2), EU (ICON-EU), EC (ECMWF IFS), BM (best_match)
-- **Solar Forecast ML (SFML)**: Wenn SFML konfiguriert ist, erscheint im Chart eine zweite Linie mit dem KI-basierten Ertrag zum Vergleich mit der EEDC-Prognose und dem tatsächlichen IST-Wert
+- **Solar Forecast ML (SFML)**: Wenn SFML konfiguriert ist, erscheint im Chart eine zweite Linie mit dem KI-basierten Ertrag
 
-Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z.B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt EEDC automatisch (auto).
+Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z. B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt EEDC automatisch (auto).
 
-### 7.2 Langfristig (12 Monate)
+### 7.2 Prognosen
+
+Der **Prognosen-Tab** ist die Vergleichs- und Evaluierungsfläche für mehrere PV-Prognosequellen (eingeführt v3.16.4, kontinuierlich erweitert bis v3.23.x). Er zeigt vier Quellen nebeneinander:
+
+| Quelle | Bedeutung |
+|---|---|
+| **OpenMeteo (OM)** | Wetterbasierte Prognose, Standardquelle |
+| **EEDC (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
+| **Solcast** | Optionale dritte Quelle, entweder via Solcast-API-Key oder über die HA-Integration „BJReplay" |
+| **IST** | Tatsächlich gemessener Ertrag (sobald verfügbar) |
+
+#### KPI-Matrix Heute / Morgen / Übermorgen
+Tageswerte aller Quellen, mit VM/NM-Split (Vormittag/Nachmittag) — der Split erfolgt am astronomischen **Solar Noon** (proportional, je nach Standort und Datum kann das bis ~30 min von 12:00 abweichen).
+
+#### Stundenprofil-Chart
+Vier Linien (IST grün, EEDC orange, Solcast blau, OpenMeteo gelb).
+
+#### 24h-Stundenvergleich + 7-Tage-Vergleich
+Tabellarisch, mit Wetter-Symbolen pro Tag und Δ-Spalten farbkodiert (grün < 15 %, gelb 15–30 %, rot > 30 %). Spaltenstruktur ist über alle vier Tabellen des Tabs konsistent (`table-fixed`, `<colgroup>`), OM/EEDC/Solcast/IST stehen vertikal in derselben Linie übereinander.
+
+#### Genauigkeits-Tracking
+Über alle Tage mit gleichzeitig verfügbarer Prognose und IST:
+
+- **MAE** (Mean Absolute Error, %): Streuung — Maß für die Schwankungsbreite
+- **MBE** (Mean Bias Error, %): systematischer Bias — neutral gefärbt, Vorzeichen ist Information, nicht Wertung
+- **Modus „Diagnostisch"** (Toggle im Card-Header): zeigt pro Quelle zwei Boxen — **darüber** (Tage mit Überschätzung, amber) und **darunter** (Tage mit Unterschätzung, sky-blau) mit jeweils Ø-Abweichung in % und Anzahl Tage. Damit wird Asymmetrie sichtbar — z. B. „bei dichten Wolken systematisch zu hoch, bei klarem Himmel zu niedrig" lässt sich nur mit asymmetrischen Lernfaktoren auflösen.
+
+#### Restzeit-Banner Lernfaktor
+Wenn der EEDC-Lernfaktor noch nicht aktiv ist, zeigt ein Hinweis-Banner, wie viele Tage mit gültiger Prognose + IST > 0,5 kWh bereits gesammelt sind und wie viele noch bis zur 7-Tage-Schwelle fehlen (z. B. „3 von 7 Tagen, noch 4 Tage").
+
+#### Saisonaler Lernfaktor (MOS-Kaskade)
+Sobald genug Daten verfügbar sind, wechselt der Lernfaktor automatisch in eine saisonale Kaskade:
+
+1. **Monatsfaktor** — wenn ≥ 15 Tage im selben Kalendermonat vorhanden
+2. **Quartalsfaktor** — wenn ≥ 15 Tage im selben Quartal
+3. **30-Tage-Fenster** — Fallback (≥ 7 Tage)
+
+Die jeweils aktive Stufe wird oberhalb der Genauigkeits-Tracking-Card angezeigt.
+
+#### Klickbarer Reparatur-Popover bei IST-Datenlücke
+Wenn IST-Werte unvollständig sind (z. B. Snapshot-Lücke durch HA-Statistics-Latenz oder Add-on-Restart), erscheint ein **⚠-Symbol** neben dem Tageswert. Ein Klick auf das Symbol öffnet einen Popover mit:
+
+- konkreter Auflistung der fehlenden Stunden
+- kurzer Erklärungstext
+- Button **„Tag neu berechnen"** (triggert die Pro-Tag-Reaggregation, holt fehlende Snapshots aus HA-Statistics nach)
+- Fallback-Link zum Sensor-Mapping
+
+#### Backward-Slot-Konvention
+
+Alle Quellen im Prognosen-Tab nutzen seit v3.20.0 die **Backward-Slot-Konvention**: Slot N enthält die Energie aus dem Intervall **[N−1, N)** — also „die letzte Stunde". Damit liefert IST um 06:00 noch 0 kWh (Sonne geht erst auf), Slot 0 eines Tages enthält die Energie von 23:00–24:00 des Vortags, und Tagessummen passen exakt zur Stundensummenbildung. Industriestandard (HA Energy Dashboard, SolarEdge, SMA, Fronius, Tibber).
+
+#### Mobil-Hinweis
+
+Im Hochformat zeigt EEDC anstelle der drei datendichten Tabellen (KPI-Matrix, 7-Tage, Genauigkeits-Tracking) einen Hinweis „Querformat oder Desktop nutzen". Die Stundenvergleich-Tabelle, der Ertrags-Chart und die MAE/MBE-KPIs bleiben auf allen Geräten sichtbar.
+
+### 7.3 Langfristig
 
 PVGIS-basierte Jahresprognose:
-
 - **Datenquelle**: PVGIS-Erwartungswerte oder TMY
-- **Performance-Ratio**: Historischer Vergleich IST vs. SOLL
+- **Performance-Ratio**: Historischer Vergleich IST vs. SOLL (auf GTI-Basis ab v3.20.0)
 - **Monatliche Aufschlüsselung**: Erwartete Erzeugung pro Monat
 
-### 7.3 Trend-Analyse
+### 7.4 Trend-Analyse
 
 Langfristige Entwicklung und Degradation:
-
 - **Jahresvergleich**: Alle bisherigen Jahre im Vergleich
 - **Saisonale Muster**: Beste und schlechteste Monate identifizieren
 - **Degradation**: Geschätzter Leistungsrückgang pro Jahr
   - Primär: Nur vollständige Jahre (12 Monate)
   - Fallback: TMY-Auffüllung für unvollständige Jahre
 
-### 7.4 Finanzen
+### 7.5 Finanzen
 
 Amortisations-Prognose und Komponenten-Beiträge:
 
 **Amortisations-Fortschritt:**
-- Zeigt wie viel % der Investition bereits amortisiert ist
+- Zeigt, wie viel % der Investition bereits amortisiert ist
 - **Wichtig**: Dies ist der *kumulierte* Fortschritt, nicht die Jahres-Rendite!
 
 **Mehrkosten-Ansatz für Investitionen:**
@@ -516,26 +661,26 @@ Amortisations-Prognose und Komponenten-Beiträge:
 **Komponenten-Beiträge:**
 - Speicher: Eigenverbrauchserhöhung
 - E-Auto (V2H): Rückspeisung ins Haus
-- E-Auto (vs. Benzin): Ersparnis gegenüber Verbrenner (ab v3.17.0 mit echten monatlichen Benzinpreisen aus EU Oil Bulletin)
+- E-Auto (vs. Benzin): Ersparnis gegenüber Verbrenner — seit v3.17.0 mit echten monatlichen Benzinpreisen aus dem EU Weekly Oil Bulletin (Fallback: statischer Investitions-Parameter)
 - Wärmepumpe (PV): Direktverbrauch aus PV
-- Wärmepumpe (vs. Gas): Ersparnis gegenüber Gasheizung
+- Wärmepumpe (vs. Gas): Ersparnis gegenüber Gasheizung — seit v3.21.0 mit zwei Verfeinerungen:
+  - **Zusatzkosten**: Investitions-Parameter `alternativ_zusatzkosten_jahr` (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) wird zu den Alt-Heizungs-Kosten addiert.
+  - **Monats-Gaspreis**: Optionales `gaspreis_cent_kwh`-Feld pro Monatsdaten — wenn gepflegt, wird historisch Monat für Monat der gepflegte Preis verwendet. Tarifwechsel ändern damit nicht mehr rückwirkend die ganze Historie.
 
 > **Hinweis:** Die Finanz-Prognose zeigt den **Amortisations-Fortschritt** (kumulierte Erträge / Investition).
 > Im Cockpit und in Auswertung/Investitionen wird dagegen die **Jahres-Rendite** (Jahres-Ertrag / Investition) angezeigt.
-> Beide Metriken sind korrekt, aber für unterschiedliche Zwecke gedacht.
-
----
+> Beide Metriken sind korrekt, aber für unterschiedliche Zwecke gedacht — der „Sicht"-Tooltip an jeder Anzeige erklärt jeweils die Bezugsbasis.
 
 ---
 
 ## 8. Infothek
 
-Die **Infothek** ist ein optionales Modul für Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung. Der Menüpunkt erscheint sobald der erste Eintrag angelegt wurde.
+Die **Infothek** ist ein optionales Modul für Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung. Der Menüpunkt erscheint, sobald der erste Eintrag angelegt wurde.
 
 **Funktionen im Überblick:**
-- 14 Kategorien mit passenden Vorlagen-Feldern (Strom-, Gas-, Wasservertrag, Versicherung, Wartung, MaStR, ...)
+- 14 Kategorien mit passenden Vorlagen-Feldern (Strom-, Gas-, Wasservertrag, Versicherung, Wartung, MaStR, …)
 - Bis zu 3 Fotos oder PDFs pro Eintrag (JPEG, PNG, HEIC, PDF)
-- Optionale Verknüpfung mit EEDC-Investitionen
+- Optionale N:M-Verknüpfung mit EEDC-Investitionen (ein Datenblatt für mehrere Investments möglich)
 - PDF-Export aller Einträge für den Hefter
 - Archivierung statt Löschung
 
@@ -545,4 +690,16 @@ Eine vollständige Beschreibung aller Kategorien, Upload-Optionen und des PDF-Ex
 
 ---
 
-*Letzte Aktualisierung: März 2026*
+## 9. Hilfe (in der App)
+
+Die in v3.24.0 eingeführte **Hilfe-Seite** (Menüpunkt „Hilfe" in der Hauptnavigation) rendert das gesamte Benutzerhandbuch direkt in der App. Damit funktioniert die Dokumentation in der HA-Companion-App identisch zum Browser, ohne Tab-Wechsel und ohne Ingress-Login-Probleme.
+
+- **Linke Sidebar** (Desktop) / **Dropdown** (Mobile): Auswahl des Dokuments aus Einstieg / Handbuch / Referenz.
+- **URL-Parameter** `?doc=<slug>`: Direktlinks teilbar (z. B. `?doc=bedienung#7-aussichten-prognosen`).
+- **Markdown-Links** zwischen den Hilfe-Dokumenten werden intern aufgelöst, externe `.md`-Verweise zur GitHub-Quelle umgeleitet.
+
+> Die Hilfe ist die offizielle Single-Source-of-Truth-Sicht der Doku — siehe auch die jeweilige Web-Version unter https://supernova1963.github.io/eedc-homeassistant/.
+
+---
+
+*Letzte Aktualisierung: April 2026 (v3.24.1)*

@@ -43,6 +43,14 @@
 - **Home Assistant Add-on**: Home Assistant OS oder Supervised
 - **Browser**: Moderner Browser (Chrome, Firefox, Safari, Edge)
 
+### Empfohlene Nutzung
+
+EEDC ist als datendichte Analyse-App konzipiert und entfaltet seinen vollen Nutzen am **Desktop**. Smartphone in Standard-Anzeigegröße deckt das Live-Dashboard, das Cockpit und die Monatsberichte komfortabel ab — die datendichten Auswertungs-Bereiche (Auswertung → Energieprofil, Aussichten → Prognosen) profitieren spürbar von einem größeren Bildschirm. Im Hochformat zeigt EEDC für die drei datendichten Tabellen im Prognosen-Tab statt überlappender Spalten einen Hinweis „Querformat oder Desktop nutzen".
+
+Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden. Das ist eine bewusste Designentscheidung: Layout-Patches, die den datendichten Charakter aufweichen würden, werden nicht eingebaut. Wer EEDC primär in der HA-Companion-App nutzt, sollte den Seitenzoom nahe der Standardgröße halten.
+
+> Diese Empfehlung formuliert eine technische App-Eigenschaft (datendicht, Desktop empfohlen) — keine Aussage zu Barrierefreiheit oder Accessibility.
+
 ---
 
 ## 2. Installation
@@ -184,11 +192,13 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 
 #### Wärmepumpe
 - **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi:
-  - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP.
+  - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP. (EEDC-Standard.)
   - **SCOP (EU-Label):** Saisonaler COP vom EU-Energielabel - realistischer als Hersteller-COP, aber standortunabhängig. Wähle die passende Vorlauftemperatur (35°C für Fußbodenheizung, 55°C für Heizkörper).
   - **Getrennte COPs:** Separate Werte für Heizung (~3,5-4,5 bei 35°C) und Warmwasser (~2,5-3,5 bei 55°C) - präziser bei unterschiedlichen Betriebspunkten.
 - **Wärmebedarf:** Heiz- und Warmwasserbedarf in kWh/Jahr (aus Energieausweis)
 - **Vergleich:** Alter Energieträger (Gas/Öl/Strom) und Preis für ROI-Berechnung
+- **Alternativ-Zusatzkosten** (€/Jahr, optional, ab v3.21.0): Schornsteinfeger, Wartung, Gaszähler-Grundpreis — Fixkosten, die ohne WP nicht entstehen würden. Wird zur Alt-Heizungs-Kostenseite addiert und macht den ROI-Vergleich realistischer.
+- **Optional, später pflegbar**: Pro Monat ein **Gaspreis** (`gaspreis_cent_kwh`) in den Monatsdaten — sonst gilt der hier eingegebene statische Tarif. Details siehe [Handbuch Bedienung §7.5](HANDBUCH_BEDIENUNG.md#75-finanzen).
 
 #### Wallbox
 - Kaufpreis, Installationsdatum
@@ -354,6 +364,45 @@ Die letzten Abschlüsse werden angezeigt:
    - `eedc_setup_wizard_state`
 2. Oder: Wizard erneut durchlaufen
 
+### Aktueller Monat / Monatsbericht bleibt fest auf einem Wert
+
+**Problem**: Die Monats-Summe (PV-Erzeugung, Einspeisung) bleibt z. B. bei 60 kWh stehen, obwohl Live- und Tagesdaten korrekt weiterlaufen.
+
+**Lösung**: Bei Sensoren mit **Tagesreset** (Zähler springt täglich um 0:00 auf 0, z. B. „Erzeugung heute") aggregierte EEDC vor v3.23.8 die Monatssumme über `MAX(state) − MIN(state)` — bei Tagesreset-Zählern ergibt das fälschlich die größte Tagessumme statt der Monatssumme. Seit v3.23.8 nutzt EEDC die **`sum`-Spalte** aus HA-Statistics (reset-bereinigte Kumulation, identisch zum HA Energy Dashboard).
+1. Auf v3.23.8+ updaten
+2. Monat in den Monatsberichten neu öffnen — die Summe wird neu aus `MAX(sum) − MIN(sum)` berechnet
+3. Wenn die Summe weiterhin nicht passt: Sensor-Mapping prüfen, ob der gemappte Sensor `state_class: total_increasing` hat (Daten-Checker-Kategorie „Sensor-Mapping – HA-Statistics", siehe [Handbuch Einstellungen §8](HANDBUCH_EINSTELLUNGEN.md#8-daten-checker))
+
+### Energieprofil-IST hat ⚠ neben Tageswerten
+
+**Problem**: Im Prognosen-Tab oder in der Energieprofil-Tabelle erscheint ein ⚠-Symbol neben dem IST-Wert.
+
+**Lösung**: Klick auf das ⚠ öffnet einen Reparatur-Popover mit der Liste der fehlenden Stunden und einem Button **„Tag neu berechnen"**. Der Button triggert `aggregate_day` für diesen Tag (idempotent: delete + insert) und holt fehlende Snapshots aus HA Long-Term Statistics nach.
+1. Bei einzelnen fehlenden Stunden: Reparatur-Popover → „Tag neu berechnen"
+2. Bei vielen fehlenden Tagen nach Add-on-Restart: warten — `sensor_snapshot_startup_recovery()` holt nach dem Scheduler-Start die letzten 6 Stunden je Anlage idempotent nach
+3. Bei systematisch fehlenden Werten: Sensor-Mapping prüfen — die Daten-Checker-Kategorie „Energieprofil – Zähler-Abdeckung" zeigt fehlende kWh-Zähler pro Komponente
+
+### Backup-/CSV-/PDF-Download zeigt 401 in der HA-Companion-App
+
+**Problem**: Klick auf Backup, CSV-Export oder PDF-Dokumentation in der iOS HA-Companion-App liefert „401: unauthorized". Im Browser funktioniert der Download.
+
+**Lösung**: Auf v3.23.2 oder neuer updaten. Vor v3.23.2 nutzte EEDC `window.open(url, '_blank')` für Downloads — auf iOS öffnet `_blank` extern in Safari, das hat keine HA-Ingress-Session und der Ingress-Endpoint antwortet mit 401. Seit v3.23.2 läuft die HTTP-Anfrage als `fetch + Blob` in der bestehenden iframe-Session, der Download kommt als `blob:`-URL ins Filesystem — funktioniert in HA-App und Browser gleichermaßen.
+
+### „Aktueller Monat"-Tab fehlt im Cockpit
+
+**Problem**: Der „Aktueller Monat"-Tab ist verschwunden.
+
+**Lösung**: Seit v3.12.0 heißt der Tab **„Monatsberichte"** und steht direkt nach „Übersicht" im Cockpit-Sub-Navigationsmenü. Über den Zeitstrahl im Header navigierst du zu beliebigen Vormonaten — die alte „Aktueller Monat"-Sicht ist als Spezialfall „aktueller Monat im Monatsbericht" weiterhin verfügbar.
+
+### MQTT-Topic erwartet, nie empfangen
+
+**Problem**: Der Daten-Checker meldet bei der Kategorie „MQTT-Topic-Abdeckung" Topics, die erwartet, aber nie empfangen wurden.
+
+**Lösung**: Diese Kategorie schließt die Drift-Lücke zwischen dynamischer Konsumenten-Seite (`field_definitions.py`) und statisch hartkodierter Publisher-Seite (HA-Automation/iobroker/Node-RED). Typische Ursachen:
+1. **MQTT-Inbound nie gewollt** — über *Daten → Einrichtung → MQTT-Inbound* deaktivieren, dann verschwindet die Kategorie
+2. **Publisher-Automation noch nicht eingerichtet** — den HA-Automation-Generator in *MQTT-Inbound* nutzen, fertiges YAML kopieren
+3. **Investitions-IDs nach Re-Import gewechselt** — die in der Publisher-Automation hartkodierten IDs müssen aktualisiert werden
+
 ---
 
-*Letzte Aktualisierung: März 2026*
+*Letzte Aktualisierung: April 2026 (v3.24.1)*

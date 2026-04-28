@@ -344,14 +344,17 @@ PV_Anteil            = pv_anteil_prozent / 100
 Netz_Anteil          = 1 - PV_Anteil
 
 WP_Kosten            = WP_Strom * Netz_Anteil * Strompreis / 100
-Alte_Kosten           = Gesamtwärmebedarf * Alter_Preis / 100
+Alte_Kosten          = Gesamtwärmebedarf * Alter_Preis / 100
+                     + alternativ_zusatzkosten_jahr        # Schornsteinfeger / Wartung / Grundpreis Gaszähler
 
-Jahres-Einsparung     = Alte_Kosten - WP_Kosten
+Jahres-Einsparung    = Alte_Kosten - WP_Kosten
 
 CO2_alt               = Gesamtwärmebedarf * CO2_Faktor[gas|oel|strom]
 CO2_WP                = WP_Strom * Netz_Anteil * 0.38
 CO2-Einsparung        = CO2_alt - CO2_WP
 ```
+
+> **Alternativ-Zusatzkosten (v3.21.0, #141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Alt-Heizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Wird in **fünf** Berechnungs-Pfaden berücksichtigt: Aussichten historisch + Prognose, HA-Sensor-Export inkl. WP-Sensor, PDF-Jahresbericht, Investitions-Vorschau. In historischen Aggregaten anteilig pro erfasstem Monat (`alternativ_zusatzkosten_jahr / 12`).
 
 #### Eingabefelder
 
@@ -367,7 +370,8 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 | Warmwasserbedarf | `warmwasserbedarf_kwh` | 3000 |
 | PV-Anteil | `pv_anteil_prozent` | 30 |
 | Alter Energieträger | `alter_energietraeger` | `gas` |
-| Alter Preis | `alter_preis_cent_kwh` | 12 |
+| Alter Preis | `alter_preis_cent_kwh` | 12 (Fallback wenn `Monatsdaten.gaspreis_cent_kwh` leer) |
+| Alternativ-Zusatzkosten | `alternativ_zusatzkosten_jahr` | 0 (€/Jahr) |
 | WP-Strompreis | Spezialtarif `waermepumpe` | Fallback: allgemein |
 
 ### 3.6 ROI & Amortisation
@@ -512,7 +516,7 @@ Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Einspeisevergütung
 **Datenquelle:** Open-Meteo (konfigurierbar, siehe Wettermodell-Kaskade)
 
 ```
-PV_Ertrag_Tag = Globalstrahlung_kWh_m2 * Anlagenleistung_kWp * (1 - System_Losses)
+PV_Ertrag_Tag = GTI_kWh_m2 * Anlagenleistung_kWp * (1 - System_Losses) * Lernfaktor
 
 Wenn Temperatur > 25°C:
     Temp_Verlust = (Temperatur - 25) * 0.004
@@ -523,7 +527,12 @@ Wenn Temperatur > 25°C:
 |-----------|--------|---------|
 | `System_Losses` | `PVGISPrognose.system_losses / 100` | 0.14 (14%) |
 | `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW) | `Anlage.leistung_kwp` |
-| Globalstrahlung | Wettermodell (siehe unten) | - |
+| `GTI_kWh_m2` | **Global Tilted Irradiance** aus Open-Meteo Solar (modul-projiziert mit Tilt + Azimut). Bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert. | – |
+| `Lernfaktor` | Anlagenspezifischer Korrekturfaktor (siehe §4.1c) | 1.0 (vor 7 Tagen Daten) |
+
+> **GTI vs. GHI:** Bis v3.19.x rechnete EEDC mit GHI (`shortwave_radiation`, horizontal). Bei steilen Modulen und tiefstehender Wintersonne ist die Modul-projizierte GTI 2–3× höher — der GHI-basierte „theoretische Ertrag" lag im Winter systematisch zu niedrig (PR-Werte > 1 möglich). Seit v3.20.0 werden GTI-Werte für Prognose und Performance Ratio verwendet.
+
+> **Multi-String / PV-Parameter-Quelle (v3.20.2/v3.20.3):** kWp, Neigung und Azimut werden über den Helper `services/pv_orientation.py` gelesen, der in dieser Reihenfolge prüft: Top-Level-Spalte der Investition → `parameter.{neigung,ausrichtung}_grad` (Zahl) → `parameter.{neigung,ausrichtung}` (Zahl oder String mit Mapping `{"süd": 0, "ost": -90, "west": 90, ...}`) → Default. Damit liefern alle drei Prognose-Pfade (Energieprofil-Tagesprognose, Aussichten-Kurzfrist, Prefetch-Cache) identische Eingabe-Parameter an Open-Meteo.
 
 #### Wettermodell-Kaskade
 
@@ -575,6 +584,85 @@ SFML_Abweichung (%) = (IST - SFML_Prognose) / SFML_Prognose * 100
 ```
 
 Beide Abweichungen werden im Frontend als farbige Badges angezeigt (grün = Übererfüllung, rot = Untererfüllung).
+
+### 4.1c Prognose-Vergleich (Aussichten → Prognosen)
+
+**Endpoint:** `GET /api/aussichten/prognosen/{anlage_id}`
+**Service:** `api/routes/prognosen.py` (in v3.16.6 aus `aussichten.py` ausgelagert), `services/solcast_service.py`
+
+Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
+
+| Quelle | Bedeutung |
+|---|---|
+| **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus Globalstrahlung × kWp × (1 − System_Losses) |
+| **EEDC (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
+| **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet. |
+| **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
+
+#### Lernfaktor (saisonale MOS-Kaskade, ab v3.16.15)
+
+Die EEDC-Prognose ist `OpenMeteo × Lernfaktor`. Der Lernfaktor wird aus historischen `(Prognose, IST)`-Tag-Paaren berechnet — nur Tage mit gültiger OpenMeteo-Prognose **UND** IST-Ertrag > 0.5 kWh fließen ein (Schlechtwetter-Tage mit ~0 kWh würden den Faktor sonst verzerren).
+
+```
+faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)
+```
+
+Seit v3.16.15 nutzt EEDC eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
+
+| Stufe | Bedingung | Bezugszeitraum |
+|---|---|---|
+| **Monatsfaktor** | ≥ 15 gültige Tage im selben Kalendermonat | Tage des Kalendermonats über alle Jahre |
+| **Quartalsfaktor** | ≥ 15 gültige Tage im selben Quartal | Tage des Quartals über alle Jahre |
+| **30-Tage-Fenster** | ≥ 7 gültige Tage | Letzte 30 Kalendertage |
+| **Inaktiv** | < 7 Tage | Lernfaktor = 1.0, EEDC-Spalte gedämpft mit `—` und Tooltip-Verweis |
+
+Die aktive Stufe wird im Status-Banner und im KPI-Card-Header angezeigt.
+
+**Restzeit-Banner (v3.22.0):** Wenn die 7-Tage-Schwelle noch nicht erreicht ist, zeigt das Banner: „X von 7 Tagen, noch Y Tage" — Y berücksichtigt nur Tage mit gültiger Prognose UND IST > 0.5 kWh, also dieselbe Filterregel wie der Faktor selbst.
+
+**Persistierung:** Lernfaktor pro Quelle separat gecacht. Backfill-Kandidat-Felder (`pv_prognose_kwh`, Solcast-Tageswerte) werden seit v3.16.14 alle 45 Min automatisch aus dem **Prefetch-Job** in `TagesZusammenfassung` geschrieben — vorher hing die Persistierung als Nebeneffekt am Dashboard-Besuch und der Lernfaktor konnte ohne Nutzer-Interaktion nicht berechnet werden.
+
+#### Genauigkeits-Tracking: MAE + MBE getrennt (v3.22.0, #151)
+
+Über alle Tage mit gleichzeitig verfügbarer Prognose und IST werden zwei Kennzahlen pro Quelle (OM, EEDC, Solcast) berechnet, auf **vorzeichenbehafteten relativen Fehlern**:
+
+```
+err_rel(tag) = (Prognose_kWh - IST_kWh) / IST_kWh
+
+MAE = Ø |err_rel|     # Mean Absolute Error — Streuung
+MBE = Ø  err_rel      # Mean Bias Error — systematischer Bias
+```
+
+| Kennzahl | Aussage |
+|---|---|
+| **MAE** | Wie weit liegen Prognose und IST im Schnitt auseinander, **unabhängig von der Richtung**? Maß für Streuung/Schwankungsbreite. |
+| **MBE** | Liegt die Quelle im Mittel **über** (positiv) oder **unter** (negativ) dem IST? Bias ist neutral gefärbt — Vorzeichen ist Information, keine Wertung. |
+
+#### Asymmetrie-Diagnostik (v3.23.3, #151 Variante B)
+
+MAE/MBE bleiben blind für Asymmetrie: eine Quelle, die in 50 % der Tage 30 % zu hoch und in 50 % der Tage 30 % zu niedrig liegt, hat MAE = 30 % und MBE ≈ 0 % — sie sieht „im Mittel ausgewogen" aus, ist aber nicht mit einem einzigen Lernfaktor korrigierbar. Im Diagnostisch-Modus splittet das Backend die signed errors an 0:
+
+```
+darüber: nur Tage mit err_rel > 0
+  over_count       = Anzahl
+  over_avg_prozent = Ø err_rel * 100
+
+darunter: nur Tage mit err_rel ≤ 0
+  under_count       = Anzahl
+  under_avg_prozent = Ø |err_rel| * 100
+```
+
+Response-Schema `AsymmetrieEintrag` mit Feldern `over_count`, `over_avg_prozent`, `under_count`, `under_avg_prozent` — pro Quelle als `openmeteo_asymmetrie` / `eedc_asymmetrie` / `solcast_asymmetrie` zurückgegeben.
+
+#### VM/NM-Split an Solar Noon (v3.22.0)
+
+Tageshälften (Vormittag/Nachmittag) werden nicht hart bei 12:00 Uhr Clockzeit gesplittet, sondern an der astronomischen Tagesmitte (**Solar Noon**, via Equation of Time + Standortlängengrad). Die Abweichung von 12:00 kann je nach Standort und Datum bis ~30 min betragen. Slots, die Solar Noon enthalten, werden proportional auf VM und NM verteilt — konsistent zum `solar_forecast_service`.
+
+#### IST-Slot-Behandlung
+
+- **Backward-Slot-Konvention** (siehe §6b): Slot N enthält Energie aus dem Intervall `[N-1, N)`.
+- **Gerade abgeschlossene Stunde (v3.23.0):** wird nicht als Lücke geflaggt — HA Long-Term Statistics schreibt die Stunden-Row erst am Ende der Stunde, das Zeitfenster zwischen Stundenwechsel und HA-Stats-Write (typisch ~5–60 Min) wird mit `<` (statt `<=`) toleriert.
+- **Echte Lücken (>1 h alt)** werden mit ⚠ markiert. Klick auf das Symbol öffnet einen Reparatur-Popover mit „Tag neu berechnen" (`POST /api/energie-profil/{anlage_id}/reaggregate-tag`) und Sensor-Mapping-Fallback.
 
 ### 4.2 Langfrist-Prognose (12 Monate)
 
@@ -637,10 +725,15 @@ Bisherige_Erträge = Σ(Einspeisung * Vergütung / 100)         (PV)
 
 ```
 Für jeden Monat mit WP-Daten:
+    Gas_Preis     = Monatsdaten.gaspreis_cent_kwh        # ab v3.21.0, wenn pro Monat gepflegt
+                  ∨ Investition.parameter.alter_preis_cent_kwh   # Fallback statisch
     Gas_Kosten    = (Heizung + WW) / 0.9 * Gas_Preis / 100
-    WP_Netzkosten = Strom * 0.5 * WP_Preis / 100    (50% Netzanteil Annahme)
+                  + alternativ_zusatzkosten_jahr / 12     # Zusatzkosten anteilig pro Monat
+    WP_Netzkosten = Strom * 0.5 * WP_Preis / 100         # 50% Netzanteil-Annahme
     Ersparnis     = Gas_Kosten - WP_Netzkosten
 ```
+
+> **Monats-Gaspreis (v3.21.0):** Wenn `Monatsdaten.gaspreis_cent_kwh` pro Monat gepflegt ist, wird er Monat für Monat verwendet — ein Tarifwechsel ändert dann nicht mehr rückwirkend die ganze Historie. Ohne Eintrag bleibt es beim statischen `alter_preis_cent_kwh` der Investition. Anzeige & Pflege im Monatsabschluss-Wizard und im `MonatsdatenForm` (über `BEDINGTE_BASIS_FELDER` mit `bedingung_basis: hat_waermepumpe`).
 
 #### E-Auto-Ersparnis (historisch, in Finanzen)
 
@@ -779,54 +872,156 @@ Wenn weniger als 12 Monate Daten:
 
 ## 6b. Energieprofil-Berechnungen (Tages-Aggregation)
 
-**Service:** `services/energie_profil_service.py`
-**Trigger:** Scheduler täglich 00:15 (Vortag) + Monatsabschluss (Backfill + Rollup)
+**Service:** `services/energie_profil_service.py`, `services/sensor_snapshot_service.py`
+**Trigger:** Scheduler stündlich `:05` (Snapshot) und `:55` (Live-Preview), täglich 00:15 (Vortag-Aggregation) + Monatsabschluss (Backfill + Rollup)
+
+### Snapshot-basierte Architektur (ab v3.19.0, #135)
+
+Stunden-kWh werden **nicht mehr** aus 10-Min-Leistungs-Samples integriert (±5–15 % Drift), sondern als **Differenz kumulativer Zähler-Snapshots** berechnet — analog zum HA Energy Dashboard.
+
+```
+1. Stündlicher Snapshot-Job (Cron :05) schreibt pro Anlage und gemapptem
+   kWh-Sensor den aktuellen Zählerstand in die Tabelle `sensor_snapshots`.
+   Quellen: HA Long-Term Statistics (Add-on)
+            oder MQTT-Energy-Snapshots (Standalone/Docker).
+2. :55-Live-Preview (v3.21.0) schreibt zum Stundenende einen Zählerstand
+   für die anstehende volle Stunde — laufende Stunde sofort sichtbar
+   statt erst um (h+1):05.
+3. Tagesaggregation (00:15) bildet Differenzen: kWh[h] = snap[h] - snap[h-1]
+   für h = 0..23 (Snapshot-Range -1..23, damit Slot 0 aus Vortag-23:00 fließt).
+```
+
+**Snapshot-Lücken-Interpolation (v3.20.0, #145):**
+
+Wenn ein Snapshot fehlt (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), interpoliert EEDC linear zwischen den vorhandenen Nachbar-Stunden:
+
+```
+Beispiel: snap[10] = 1500 kWh, snap[11] = None, snap[12] = 1505 kWh
+        → interpoliert: snap[11] = 1502.5 kWh
+        → kWh[11] = 2.5, kWh[12] = 2.5  (statt fälschlich kWh[11]=0, kWh[12]=5 als Spike)
+```
+
+Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoliert — der Wert bleibt None und die betroffene Stunde fällt aus der Delta-Bildung. Tagessumme bleibt in jedem Fall korrekt (`snap[24] − snap[0]`).
+
+**HA-Statistics-Toleranz (v3.20.0, #145):** Reduziert von 120 min auf **10 min**. Wenn die Zielstunde in HA-Statistics noch nicht vorhanden ist, schreibt der Job nichts (statt einen Nachbar-Wert zu liefern, der Slot N als 0 und Slot N+1 als 2-Stunden-Delta entstehen ließ). Der nächste `aggregate_day`-Lauf 15 Min später holt den Wert via Self-Healing nach.
+
+**Restart-Recovery (v3.23.0):** Beim Scheduler-Start läuft `sensor_snapshot_startup_recovery()` im Hintergrund — holt für die letzten 6 Stunden je Anlage HA-Statistics-Snapshots (idempotent dank Upsert) plus für die laufende Stunde einen Live-Snapshot, anschließend `aggregate_today_all`.
+
+**Tagesreset-Heuristik (v3.23.0):** HA-`utility_meter`-Sensoren mit täglichem Reset werfen um Mitternacht ein stark negatives Delta. Erkannt am Muster `s1 < 0.5 ∧ s0 > 0.5`, EEDC nimmt dann `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Bei untypischen negativen Deltas mitten am Tag bleibt die Reset-Warnung wie bisher.
+
+**Phase D Cleanup (v3.21.0, #138):** Seit v3.21.0 ist der Zähler-Snapshot-Pfad die einzige kWh-Quelle. Der frühere W-Integration-Fallback (`_val()`-Helper, `else`-Branch in `backfill_from_statistics`) und das Feature-Flag `EEDC_ENERGIEPROFIL_QUELLE` sind entfernt. Auf Anlagen ohne kumulative Zähler erscheinen Stunden-kWh-Felder als `NULL` statt geschätzter Werte.
+
+### Backward-Slot-Konvention (ab v3.20.0, #144)
+
+Alle Stunden-Slots im Energieprofil und in den Prognose-Quellen folgen seit v3.20.0 der **Backward-Konvention**:
+
+| Konvention | Slot N enthält Energie aus … |
+|---|---|
+| **Backward** (EEDC, ab v3.20.0) | `[N-1, N)` — „die letzte Stunde". Slot 0 = Energie 23:00–24:00 des Vortags. |
+| Forward (Strompreis, weiterhin) | `[N, N+1)` — „gilt ab jetzt". Industrieüblich für aWATTar/Tibber/EPEX. |
+
+Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Tibber.
+
+**Migration auf Backward (v3.20.0):**
+- `sensor_snapshot_service.get_hourly_kwh_by_category`: Delta `snap[h] − snap[h-1]` → Slot h (vorher: `snap[h+1] − snap[h]` → Slot h)
+- `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot. Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
+- **Nach Update auf v3.20.0 nötig:** einmal „Verlauf nachberechnen + überschreiben" auslösen, damit alle historischen Stundenwerte umverteilt werden. Tagessummen und alle abgeleiteten Kennzahlen (Autarkie, PR, Lernfaktor) sind konventionsunabhängig korrekt.
 
 ### Stündliche Berechnung (aggregate_day)
 
-Für jede Stunde (0–23) aus dem Tagesverlauf:
+```
+PV_kWh            = snap_pv[h] - snap_pv[h-1]                  # für jede gemappte PV-Investition
+Einspeisung_kWh   = snap_einspeisung[h] - snap_einspeisung[h-1]
+Netzbezug_kWh     = snap_netzbezug[h] - snap_netzbezug[h-1]
+Bat_Ladung_kWh    = snap_ladung[h] - snap_ladung[h-1]
+Bat_Entladung_kWh = snap_entladung[h] - snap_entladung[h-1]
+
+Verbrauch_kWh     = PV + Netzbezug + Bat_Entladung - Einspeisung - Bat_Ladung
+Überschuss_kWh    = max(0, PV - Verbrauch_kWh - Bat_Ladung)
+Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
+```
+
+**Strikte NULL-Semantik:** Wenn ein Zähler nicht gemappt ist, bleibt das zugehörige Feld `NULL` (statt aus Leistungs-Samples zu schätzen). Im Frontend zeigt EEDC ein ⚠-Badge bei Datenlücken — siehe Reparatur-Popover in §4.1c.
+
+**Peaks aus W-Integration (für Spitzenwerte):**
 
 ```
-PV_kW             = Σ(positive kW aller PV-Serien)
-Verbrauch_kW      = Σ(|negative kW| aller Verbraucher-Serien, ohne Batterie/Netz)
-Netz_kW           = Σ(Netz-Serien)
-Einspeisung_kW    = |Netz_kW| wenn Netz_kW < 0, sonst 0
-Netzbezug_kW      = Netz_kW wenn Netz_kW > 0, sonst 0
-Batterie_kW       = Σ(Batterie-Serien)  (positiv=Entladung, negativ=Ladung)
-
-Überschuss_kW     = max(0, PV_kW - Verbrauch_kW)
-Defizit_kW        = max(0, Verbrauch_kW - PV_kW)
+Peak_PV_kW              = max(W-Sample) / 1000   # 10-Min-Auflösung
+Peak_Netzbezug_kW       = max(W-Sample) / 1000
+Peak_Einspeisung_kW     = max(W-Sample) / 1000
 ```
+
+Peaks brauchen die Leistungssamples — die kWh-Aggregation läuft separat über die Snapshots.
 
 **Zusätzliche Daten pro Stunde:**
 
-- **Temperatur + Globalstrahlung:** Open-Meteo Historical API (Archiv) bzw. Forecast API (heute)
-- **Batterie-SoC:** HA Sensor History (Stundenmittel)
-- **Komponenten:** Alle Butterfly-Werte als JSON (für spätere Detail-Analyse)
+- **Temperatur + Globalstrahlung + GTI:** Open-Meteo Historical API (Archiv) bzw. Forecast API (heute), inkl. `global_tilted_irradiance` mit Modul-Tilt/Azimut
+- **Stunden-Aggregation IST von Wetter-Samples:** seit v3.23.6 als arithmetisches Mittel der 10-Min-Slots (vorher „last") — konsistent mit der Mean-Konvention der Open-Meteo-Stundenwerte, behebt einen ~25-min-Versatz im Live-Heute-Chart.
+- **Batterie-SoC:** HA Sensor History (Stundenmittel) — gefiltert auf `inv.typ == "speicher"`, siehe Vollzyklen-Hinweis unten
+- **Strompreis (zwei Felder):** `strompreis_cent` (Endpreis aus HA-Sensor) + `boersenpreis_cent` (EPEX, immer befüllt)
 
 ### Tageszusammenfassung (TagesZusammenfassung)
 
 ```
-Überschuss_kWh         = Σ(Überschuss_kW × 1h)     alle 24 Stunden
-Defizit_kWh            = Σ(Defizit_kW × 1h)
-Peak_PV_kW             = max(PV_kW)                  über alle Stunden
+Überschuss_kWh         = Σ(Überschuss_kWh)            alle 24 Stunden
+Defizit_kWh            = Σ(Defizit_kWh)
+Peak_PV_kW             = max(PV_kW)                   über alle Stunden
 Peak_Netzbezug_kW      = max(Netzbezug_kW)
 Peak_Einspeisung_kW    = max(Einspeisung_kW)
-Temperatur_Min/Max     = min/max(Temperatur_C)       aus Open-Meteo
-Strahlung_Summe_Wh_m2  = Σ(Globalstrahlung_W/m²)    × 1h = Wh/m²
+Temperatur_Min/Max     = min/max(Temperatur_C)        aus Open-Meteo
+Strahlung_Summe_Wh_m2  = Σ(Globalstrahlung_W/m²)     × 1h
+GTI_Summe_Wh_m2        = Σ(global_tilted_irradiance) × 1h        # ab v3.20.0
 ```
 
-**Batterie-Vollzyklen:**
+**Batterie-Vollzyklen (v3.22.0 verschärft):**
+
 ```
-Δ_SoC_Summe            = Σ |SoC[h] - SoC[h-1]|     für h = 1..23
-Vollzyklen              = Δ_SoC_Summe / 200          (0→100→0 = 200% = 1 Vollzyklus)
+Δ_SoC_Summe   = Σ |SoC[h] - SoC[h-1]|     für h = 1..23,
+                AUSSCHLIESSLICH aus Investitionen mit typ == "speicher"
+Vollzyklen    = Δ_SoC_Summe / 200          # 0→100→0 = 200 % = 1 Vollzyklus
 ```
 
-**Performance Ratio:**
+> **E-Auto-SoC-Trennung:** Vor v3.22.0 nahm `_get_soc_history` den **ersten** `live.soc`-Sensor aus den Investitionen — bei Anlagen mit E-Auto landete dessen SoC zuerst in der Liste, der eigentliche stationäre Speicher wurde nicht angefasst. Folge: `batterie_vollzyklen` reflektierten den ΔSoC des Autos. Seit v3.22.0 filtern beide Selektions-Pfade (`_get_soc_history`, Bulk-Fetch in `backfill_from_statistics`) auf `inv.typ == "speicher"`. **Nach Update auf v3.22.0:** einmal „Verlauf nachberechnen + überschreiben" auslösen.
+
+**Performance Ratio (v3.20.0 auf GTI):**
+
 ```
-Theoretisch_kWh        = Strahlung_Wh_m2 × kWp / 1000
-Performance_Ratio      = PV_Ertrag_kWh / Theoretisch_kWh
+Theoretisch_kWh   = GTI_Wh_m2 × kWp / 1000     # ab v3.20.0
+Performance_Ratio = PV_Ertrag_kWh / Theoretisch_kWh
+
+# Vor v3.20.0 (deprecated, GHI-basiert):
+# Theoretisch_kWh = Strahlung_Wh_m2 × kWp / 1000   # horizontale Globalstrahlung
 ```
+
+Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abgerufen und kWp-gewichtet kombiniert (analog Live-Wetter-Pfad). Ohne gemappte PV-Module bleibt PR bewusst `None` statt einen verzerrten GHI-Wert zu melden.
+
+> **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
+
+**§51 EEG (Negativpreis-Analyse):**
+
+```
+boersenpreis_avg              = Ø(boersenpreis_cent[h])
+boersenpreis_min              = min(boersenpreis_cent[h])
+neg_stunden                   = Anzahl h mit boersenpreis_cent[h] < 0
+einspeisung_neg_preis_kwh     = Σ(Einspeisung_kWh[h]) für h mit boersenpreis_cent[h] < 0
+```
+
+Datengrundlage für die §51-Sektion in Auswertung → Energieprofil → Monat (siehe Bedienungs-Handbuch §5.8).
+
+**WP-Kompressor-Starts (v3.24.0, #136):**
+
+```
+TagesEnergieProfil.wp_starts_anzahl[h]   = snap_starts[h] - snap_starts[h-1]
+                                            # Summe aller WP-Investitionen pro Stunde
+TagesZusammenfassung.komponenten_starts  = {"wp_starts_anzahl": {"<inv_id>": <int>, ...}}
+                                            # Tages-Differenz pro WP-Investition
+```
+
+Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_FELDER`, damit reine Counter nicht versehentlich in die Energie-Bilanz fließen. Vollbackfill aus HA Long-Term Statistics greift für Tages-Summen (Faktor 1.0 statt 0.001 bei unbekannter Einheit). Stunden-Detail wird ab Live-Erfassung gefüllt.
+
+**Day-Ahead-Stundenprofil-Snapshot (v3.23.4, intern):**
+
+Zwei JSON-Felder in `TagesZusammenfassung` (`pv_prognose_stundenprofil`, `solcast_prognose_stundenprofil`) speichern den ersten OpenMeteo-/Solcast-Forecast des Tages als 24-Werte-Liste in kWh (Backward-Slot). First-write-wins: spätere Aufrufe am selben Tag überschreiben das Profil nicht. Reine Hintergrund-Datensammlung für künftige Diagnostik (Korrekturprofil-Konzept). Speicher ~80 KB/Jahr/Anlage.
 
 ### Monats-Rollup (rollup_month)
 
@@ -904,4 +1099,4 @@ API: GET /api/cockpit/pv-strings/{anlage_id}?jahr=2025
 
 ---
 
-*Letzte Aktualisierung: März 2026*
+*Letzte Aktualisierung: April 2026 (v3.24.1)*
