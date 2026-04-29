@@ -11,6 +11,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.24.5] - 2026-04-29
+
+### Dokumentation
+
+- **feat(hilfe): Was-ist-neu-Seite als Pull-Variante (Discussion #130 Folge-Wunsch von Safi105)** — Statt eines What's-new-Banners nach Update jetzt eine eigene Hilfe-Seite *„Was ist neu"* in der In-App-Hilfe-Sidebar (Kategorie *Einstieg*, direkt unter „Übersicht"). Begründung: HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store beim Update, GitHub-Releases haben einen eigenen — ein zusätzlicher Banner wäre die dritte Stimme zur selben Information. Pull statt Push respektiert den Nutzer und spart die ganze localStorage-/Versionsvergleich-/Bestand-vs-Neuinstall-Mechanik des ursprünglichen Banner-Konzepts. Inhalt: ~270 Zeilen, pro Version 3–5 anwender-perspektivisch formulierte Highlights mit Deep-Links in die zuständigen Hilfe-Sektionen, chronologisch absteigend von v3.24 zurück bis v3.16. Footer-Block mit vier weiterführenden Quellen (CHANGELOG, Releases-Übersicht, Repo, Online-Doku). Discussion [#130](https://github.com/supernova1963/eedc-homeassistant/discussions/130). Konzept-Datei `docs/KONZEPT-WHATS-NEW-BANNER.md` als „verworfen" markiert, Body bleibt als Entscheidungs-Beleg erhalten.
+
+- **build(release.sh): Soft-Check für Major.Minor-Sektion in docs/WAS-IST-NEU.md** — Prüft beim Release, ob für die neue Version eine `## v3.X.x`- oder `## v3.X`-Sektion in der „Was ist neu"-Hilfe-Seite vorhanden ist. Bei reinen Bugfix-Patches (Major.Minor existiert schon) → kein Friction. Bei Sprung in eine neue Versionsreihe (z. B. v3.25.0) → Warnung mit Bestätigungs-Prompt, damit der Maintainer bewusst entscheidet zwischen „neuer Highlights-Block" und „diesmal nichts Anwender-Sichtbares". Volle Auto-Befüllung aus CHANGELOG bewusst nicht — die zwei Stränge bedienen unterschiedliche Zielgruppen (technisch vs. anwender-perspektivisch). `scripts/sync-help.sh` synchronisiert die Page beim Frontend-Build automatisch.
+
+- **fix(handbuch): In-App-Hilfe-Einführungsversion v3.24.0 → v3.24.2** — Im Benutzerhandbuch zwei Stellen, die die In-App-Hilfe als „eingeführt in v3.24.0" auswiesen — tatsächlich kam sie in v3.24.2 (Commit `51922da6` liegt zwischen Tag v3.24.1 und v3.24.2). Korrigiert in `docs/BENUTZERHANDBUCH.md` (Lifecycle-Block + „Was ist neu seit v3.16?"-Tabelle).
+
+---
+
 ## [3.24.4] - 2026-04-29
 
 ### Verbesserungen

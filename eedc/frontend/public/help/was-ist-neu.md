@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** April 2026 (v3.24.4)
+> **Stand:** April 2026 (v3.24.5)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,10 @@
 ---
 
 ## v3.24.x — In-App-Hilfe & WP-Kompressor-Starts (April 2026)
+
+### Diese Seite — „Was ist neu" als Pull-Variante *(v3.24.5)*
+
+Die Seite, die du gerade liest. Statt eines Banner-Pop-ups nach Update gibt es einen festen Eintrag in der Hilfe-Sidebar: wer wissen will, was neu ist, schaut hier rein. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen — kein Bedarf für eine dritte Stimme. Discussion [#130](https://github.com/supernova1963/eedc-homeassistant/discussions/130) Folge-Wunsch von Safi105.
 
 ### In-App-Hilfe-Seite *(v3.24.2)*
 
