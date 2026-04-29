@@ -11,6 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Anlage, Monatsdaten, Investition, InvestitionMonatsdaten
 from backend.core.config import settings
+from backend.core.investition_parameter import (
+    PARAM_SPEICHER,
+    PARAM_WALLBOX,
+    PARAM_BALKONKRAFTWERK,
+    PARAM_WAERMEPUMPE,
+)
 from backend.services.plz_to_state import PLZ_TO_STATE
 
 
@@ -131,17 +137,18 @@ async def prepare_community_data(
 
     # Speicherkapazität summieren
     speicher_kwh = sum(
-        (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        (inv.parameter or {}).get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0) or 0
         for inv in investitionen
         if inv.typ == "speicher"
     )
 
-    # Wallbox Ladeleistung
+    # Wallbox Ladeleistung — Bug #6 v3.25.0: vorher 'ladeleistung_kw' (toter Key,
+    # weder Form noch Wizard noch Schema → Community-Datensatz lieferte immer wallbox_kw=None).
     wallbox_kw = None
     wallboxen = [inv for inv in investitionen if inv.typ == "wallbox"]
     if wallboxen:
         wallbox_kw = max(
-            (inv.parameter or {}).get("ladeleistung_kw", 0) or 0
+            (inv.parameter or {}).get(PARAM_WALLBOX["MAX_LADELEISTUNG_KW"], 0) or 0
             for inv in wallboxen
         )
         if wallbox_kw == 0:
@@ -152,8 +159,8 @@ async def prepare_community_data(
     bkws = [inv for inv in investitionen if inv.typ == "balkonkraftwerk"]
     if bkws:
         bkw_wp = sum(
-            ((inv.parameter or {}).get("leistung_wp", 0) or 0)
-            * ((inv.parameter or {}).get("anzahl", 1) or 1)
+            ((inv.parameter or {}).get(PARAM_BALKONKRAFTWERK["LEISTUNG_WP"], 0) or 0)
+            * ((inv.parameter or {}).get(PARAM_BALKONKRAFTWERK["ANZAHL"], 1) or 1)
             for inv in bkws
         )
         if bkw_wp == 0:
@@ -197,7 +204,7 @@ async def prepare_community_data(
     if hat_waermepumpe:
         wps = [inv for inv in investitionen if inv.typ == "waermepumpe"]
         if wps:
-            wp_art = (wps[0].parameter or {}).get("wp_art")
+            wp_art = (wps[0].parameter or {}).get(PARAM_WAERMEPUMPE["WP_ART"])
 
     # Basis-Daten
     data = {

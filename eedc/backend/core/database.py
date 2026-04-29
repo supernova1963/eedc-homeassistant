@@ -49,6 +49,81 @@ class Base(DeclarativeBase):
 VOLLBACKFILL_BESTAND_SCHWELLE_TAGE = 30
 
 
+def _migrate_investitionen_parameter_keys_v325(connection) -> None:
+    """
+    v3.25.0 Migration: Drift zwischen Form/Wizard-Keys und Backend-Read-Keys auflösen.
+
+    Hintergrund: Inventur in v3.25.0 hat 7 Drift-Bugs aufgedeckt — Backend-Lese-Code
+    las Schlüssel, die Form/Wizard nie geschrieben haben. Mehrere Pfade (E-Auto V2H,
+    E-Auto Fahrleistung, Speicher Arbitrage, Wallbox Leistung) waren dadurch effektiv
+    tot. Diese Migration schreibt alle alten Keys auf den neuen Kanon um, damit
+    auch historische DB-Inhalte (HA-Import, manueller JSON-Edit) konsistent sind.
+
+    Idempotent: läuft beim ersten Mal echt, danach No-Op.
+    """
+    import json
+    from sqlalchemy import text as _text
+
+    # Pro Investitions-Typ: alter Key → neuer Key
+    KEY_MAPPING_BY_TYP = {
+        'e-auto': {
+            'nutzt_v2h': 'v2h_faehig',
+            'km_jahr': 'jahresfahrleistung_km',
+            'pv_anteil_prozent': 'pv_ladeanteil_prozent',
+            'benzin_verbrauch_liter_100km': 'vergleich_verbrauch_l_100km',
+        },
+        'speicher': {
+            'nutzt_arbitrage': 'arbitrage_faehig',
+        },
+        'wallbox': {
+            'leistung_kw': 'max_ladeleistung_kw',
+            'ladeleistung_kw': 'max_ladeleistung_kw',  # community_service-Drift
+        },
+        'wechselrichter': {
+            'leistung_ac_kw': 'max_leistung_kw',  # nur im toten parameter_schema
+        },
+    }
+
+    rows = connection.execute(_text(
+        "SELECT id, typ, parameter FROM investitionen WHERE parameter IS NOT NULL"
+    )).fetchall()
+
+    for inv_id, typ, parameter_raw in rows:
+        if not parameter_raw:
+            continue
+        try:
+            params = json.loads(parameter_raw) if isinstance(parameter_raw, str) else dict(parameter_raw)
+        except (TypeError, ValueError):
+            continue
+
+        if not isinstance(params, dict):
+            continue
+
+        changed = False
+        mapping = KEY_MAPPING_BY_TYP.get(typ, {})
+        for alt_key, neu_key in mapping.items():
+            if alt_key in params:
+                # Wenn neu_key bereits gesetzt → alten Key einfach löschen,
+                # neuen Wert nicht überschreiben (User hat Form-Wert geschrieben).
+                if neu_key not in params or params[neu_key] in (None, '', 0, False):
+                    params[neu_key] = params[alt_key]
+                del params[alt_key]
+                changed = True
+
+        # Bug #8: getrennte_strommessung String 'true'/'false' → echter Boolean
+        if typ == 'waermepumpe':
+            gs = params.get('getrennte_strommessung')
+            if isinstance(gs, str):
+                params['getrennte_strommessung'] = (gs == 'true')
+                changed = True
+
+        if changed:
+            connection.execute(
+                _text("UPDATE investitionen SET parameter = :p WHERE id = :id"),
+                {'p': json.dumps(params), 'id': inv_id},
+            )
+
+
 async def run_migrations(conn):
     """
     Führt einfache Migrationen durch.
@@ -168,6 +243,14 @@ async def run_migrations(conn):
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE investitionen ADD COLUMN {col_name} {col_type}'))
+
+            # v3.25.0: Investitions-Parameter-Key-Vereinheitlichung (siehe
+            # docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md). 7 Drift-Bugs zwischen Form/Wizard
+            # und Backend-Reads sind in v3.25.0 gefixt — bestehende Anlagen können historisch
+            # aber alte Keys gespeichert haben (typischerweise nicht, weil Form/Wizard-Schreibseite
+            # immer kanonisch war, aber HA-Import o. ä. Schreib-Pfade können zu Drift geführt haben).
+            # Diese Migration schreibt alte Keys auf neue Kanon-Keys um. Idempotent.
+            _migrate_investitionen_parameter_keys_v325(connection)
 
         # Spezialtarife: verwendung-Feld für Strompreise
         if 'strompreise' in inspector.get_table_names():

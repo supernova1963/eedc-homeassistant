@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { investitionenApi, type InvestitionCreate, type InvestitionUpdate, type InvestitionTypInfo } from '../api'
+import { investitionenApi, type InvestitionCreate, type InvestitionUpdate } from '../api'
 import type { Investition } from '../types'
 
 // ── Shared Module-Level Cache ───────────────────────────────────────────────
@@ -158,32 +158,6 @@ export function useInvestitionen(anlageId?: number, typ?: string): UseInvestitio
     updateInvestition,
     deleteInvestition,
   }
-}
-
-/**
- * Hook für Investitionstypen-Schema
- */
-export function useInvestitionTypen() {
-  const [typen, setTypen] = useState<InvestitionTypInfo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true)
-        const data = await investitionenApi.getTypen()
-        setTypen(data)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Fehler beim Laden der Typen')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  return { typen, loading, error }
 }
 
 /**

@@ -25,6 +25,15 @@ import {
 } from 'lucide-react'
 import type { Investition, Anlage, InvestitionTyp } from '../../../types'
 import { INVESTITION_TYP_ORDER, INVESTITION_TYP_LABELS, PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
+import {
+  PARAM_E_AUTO,
+  PARAM_SPEICHER,
+  PARAM_WAERMEPUMPE,
+  PARAM_WALLBOX,
+  PARAM_WECHSELRICHTER,
+  PARAM_BALKONKRAFTWERK,
+  PARAM_WAERMEPUMPE_DEFAULTS,
+} from '../../../lib'
 
 interface InvestitionenStepProps {
   investitionen: Investition[]
@@ -251,8 +260,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('max_leistung_kw') ?? ''}
-                  onChange={(e) => updateParam('max_leistung_kw', parseFloat(e.target.value) || undefined)}
+                  value={getParam(PARAM_WECHSELRICHTER.MAX_LEISTUNG_KW) ?? ''}
+                  onChange={(e) => updateParam(PARAM_WECHSELRICHTER.MAX_LEISTUNG_KW, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 10"
                   min="0"
                   step="0.1"
@@ -325,8 +334,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('kapazitaet_kwh') ?? ''}
-                  onChange={(e) => updateParam('kapazitaet_kwh', parseFloat(e.target.value) || undefined)}
+                  value={getParam(PARAM_SPEICHER.KAPAZITAET_KWH) ?? ''}
+                  onChange={(e) => updateParam(PARAM_SPEICHER.KAPAZITAET_KWH, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 10"
                   min="0"
                   step="0.1"
@@ -337,8 +346,8 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('arbitrage_faehig')}
-                    onChange={(e) => updateParam('arbitrage_faehig', e.target.checked)}
+                    checked={getBoolParam(PARAM_SPEICHER.ARBITRAGE_FAEHIG)}
+                    onChange={(e) => updateParam(PARAM_SPEICHER.ARBITRAGE_FAEHIG, e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
@@ -358,8 +367,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('max_ladeleistung_kw') ?? ''}
-                  onChange={(e) => updateParam('max_ladeleistung_kw', parseFloat(e.target.value) || undefined)}
+                  value={getParam(PARAM_WALLBOX.MAX_LADELEISTUNG_KW) ?? ''}
+                  onChange={(e) => updateParam(PARAM_WALLBOX.MAX_LADELEISTUNG_KW, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 11"
                   min="0"
                   step="0.1"
@@ -370,8 +379,8 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('bidirektional')}
-                    onChange={(e) => updateParam('bidirektional', e.target.checked)}
+                    checked={getBoolParam(PARAM_WALLBOX.BIDIREKTIONAL)}
+                    onChange={(e) => updateParam(PARAM_WALLBOX.BIDIREKTIONAL, e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
@@ -391,8 +400,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('batteriekapazitaet_kwh') ?? ''}
-                  onChange={(e) => updateParam('batteriekapazitaet_kwh', parseFloat(e.target.value) || undefined)}
+                  value={getParam(PARAM_E_AUTO.BATTERIE_KAPAZITAET_KWH) ?? ''}
+                  onChange={(e) => updateParam(PARAM_E_AUTO.BATTERIE_KAPAZITAET_KWH, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 66"
                   min="0"
                   step="0.1"
@@ -405,8 +414,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('verbrauch_kwh_100km') ?? ''}
-                  onChange={(e) => updateParam('verbrauch_kwh_100km', parseFloat(e.target.value) || undefined)}
+                  value={getParam(PARAM_E_AUTO.VERBRAUCH_KWH_100KM) ?? ''}
+                  onChange={(e) => updateParam(PARAM_E_AUTO.VERBRAUCH_KWH_100KM, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 15"
                   min="0"
                   step="0.1"
@@ -417,8 +426,8 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('v2h_faehig')}
-                    onChange={(e) => updateParam('v2h_faehig', e.target.checked)}
+                    checked={getBoolParam(PARAM_E_AUTO.V2H_FAEHIG)}
+                    onChange={(e) => updateParam(PARAM_E_AUTO.V2H_FAEHIG, e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
@@ -438,8 +447,8 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('leistung_kw') ?? ''}
-                  onChange={(e) => updateParam('leistung_kw', parseFloat(e.target.value) || undefined)}
+                  value={getParam(PARAM_WAERMEPUMPE.LEISTUNG_KW) ?? ''}
+                  onChange={(e) => updateParam(PARAM_WAERMEPUMPE.LEISTUNG_KW, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 9"
                   min="0"
                   step="0.1"
@@ -452,14 +461,14 @@ function InvestitionForm({
                 </label>
                 <input
                   type="number"
-                  value={getParam('jaz') ?? '3.5'}
+                  value={getParam(PARAM_WAERMEPUMPE.JAZ) ?? PARAM_WAERMEPUMPE_DEFAULTS.jaz.toString()}
                   onChange={(e) => {
                     const value = parseFloat(e.target.value) || undefined
                     onUpdate({
                       parameter: {
                         ...investition.parameter,
-                        jaz: value,
-                        effizienz_modus: 'gesamt_jaz',
+                        [PARAM_WAERMEPUMPE.JAZ]: value,
+                        [PARAM_WAERMEPUMPE.EFFIZIENZ_MODUS]: PARAM_WAERMEPUMPE_DEFAULTS.effizienz_modus,
                       },
                     })
                   }}
@@ -482,8 +491,8 @@ function InvestitionForm({
                   </label>
                   <input
                     type="number"
-                    value={getParam('leistung_wp') ?? ''}
-                    onChange={(e) => updateParam('leistung_wp', parseFloat(e.target.value) || undefined)}
+                    value={getParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP) ?? ''}
+                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP, parseFloat(e.target.value) || undefined)}
                     placeholder="z.B. 400"
                     min="0"
                     step="10"
@@ -496,8 +505,8 @@ function InvestitionForm({
                   </label>
                   <input
                     type="number"
-                    value={getParam('anzahl') ?? ''}
-                    onChange={(e) => updateParam('anzahl', parseInt(e.target.value) || undefined)}
+                    value={getParam(PARAM_BALKONKRAFTWERK.ANZAHL) ?? ''}
+                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.ANZAHL, parseInt(e.target.value) || undefined)}
                     placeholder="z.B. 2"
                     min="1"
                     step="1"
@@ -509,8 +518,8 @@ function InvestitionForm({
                     Ausrichtung *
                   </label>
                   <select
-                    value={getParam('ausrichtung') as string || ''}
-                    onChange={(e) => updateParam('ausrichtung', e.target.value || undefined)}
+                    value={getParam(PARAM_BALKONKRAFTWERK.AUSRICHTUNG) as string || ''}
+                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.AUSRICHTUNG, e.target.value || undefined)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   >
                     <option value="">-- Wählen --</option>
@@ -528,8 +537,8 @@ function InvestitionForm({
                   </label>
                   <input
                     type="number"
-                    value={getParam('neigung_grad') ?? ''}
-                    onChange={(e) => updateParam('neigung_grad', parseFloat(e.target.value) || undefined)}
+                    value={getParam(PARAM_BALKONKRAFTWERK.NEIGUNG_GRAD) ?? ''}
+                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.NEIGUNG_GRAD, parseFloat(e.target.value) || undefined)}
                     placeholder="z.B. 30"
                     min="0"
                     max="90"
@@ -547,8 +556,8 @@ function InvestitionForm({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={getBoolParam('hat_speicher')}
-                    onChange={(e) => updateParam('hat_speicher', e.target.checked)}
+                    checked={getBoolParam(PARAM_BALKONKRAFTWERK.HAT_SPEICHER)}
+                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.HAT_SPEICHER, e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
                   />
                   <div>
@@ -557,15 +566,15 @@ function InvestitionForm({
                   </div>
                 </label>
 
-                {getBoolParam('hat_speicher') && (
+                {getBoolParam(PARAM_BALKONKRAFTWERK.HAT_SPEICHER) && (
                   <div className="mt-3 ml-8">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Speicher-Kapazität (Wh) *
                     </label>
                     <input
                       type="number"
-                      value={getParam('speicher_kapazitaet_wh') ?? ''}
-                      onChange={(e) => updateParam('speicher_kapazitaet_wh', parseFloat(e.target.value) || undefined)}
+                      value={getParam(PARAM_BALKONKRAFTWERK.SPEICHER_KAPAZITAET_WH) ?? ''}
+                      onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.SPEICHER_KAPAZITAET_WH, parseFloat(e.target.value) || undefined)}
                       placeholder="z.B. 1600"
                       min="0"
                       step="100"

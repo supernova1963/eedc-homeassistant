@@ -23,6 +23,12 @@ from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.calculations import berechne_ust_eigenverbrauch
+from backend.core.investition_parameter import (
+    PARAM_E_AUTO,
+    PARAM_E_AUTO_DEFAULTS,
+    PARAM_WAERMEPUMPE,
+    PARAM_WAERMEPUMPE_DEFAULTS,
+)
 from backend.utils.sonstige_positionen import berechne_sonstige_netto
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
 from backend.services.wetter.utils import wetter_code_zu_symbol
@@ -1058,14 +1064,14 @@ async def get_finanz_prognose(
             # Kann über Parameter konfiguriert werden
             alternativ_kosten = 8000.0
             if inv.parameter:
-                alternativ_kosten = inv.parameter.get("alternativ_kosten_euro", 8000.0)
+                alternativ_kosten = inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_KOSTEN_EURO"], 8000.0)
             investition_wp_mehrkosten += max(0, kosten - alternativ_kosten)
         elif inv.typ == "e-auto":
             # Mehrkosten E-Auto vs. Verbrenner
             # Kann über Parameter konfiguriert werden
             alternativ_kosten = 35000.0  # Default: vergleichbarer Verbrenner
             if inv.parameter:
-                alternativ_kosten = inv.parameter.get("alternativ_kosten_euro", 35000.0)
+                alternativ_kosten = inv.parameter.get(PARAM_E_AUTO["ALTERNATIV_KOSTEN_EURO"], 35000.0)
             investition_eauto_mehrkosten += max(0, kosten - alternativ_kosten)
         else:
             investition_sonstige += kosten
@@ -1083,23 +1089,31 @@ async def get_finanz_prognose(
     # =====================================================================
 
     # Wärmepumpe: Alter Energieträger (Gas/Öl) Preis + fixe Zusatzkosten
-    wp_alter_preis_cent = 10.0  # Default: 10 ct/kWh Gas
+    # Bug #7 (v3.25.0): Default vereinheitlicht auf zentrale 12 ct/kWh aus PARAM_WAERMEPUMPE_DEFAULTS
+    # (vorher hier 10.0, andernorts 12.0 → User sah unterschiedliche Ersparnis je Tab).
+    wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
     wp_alter_wirkungsgrad = 0.90  # Gasheizung ~90% Wirkungsgrad
     wp_alternativ_zusatzkosten_jahr = 0.0  # Schornsteinfeger, Wartung, Grundpreis
     for wp in waermepumpen:
         if wp.parameter:
-            wp_alter_preis_cent = wp.parameter.get("alter_preis_cent_kwh", 10.0)
-            if wp.parameter.get("alter_energietraeger") == "oel":
+            wp_alter_preis_cent = wp.parameter.get(
+                PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
+                PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
+            )
+            if wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
                 wp_alter_wirkungsgrad = 0.85  # Öl etwas schlechter
-            wp_alternativ_zusatzkosten_jahr += wp.parameter.get("alternativ_zusatzkosten_jahr", 0) or 0
+            wp_alternativ_zusatzkosten_jahr += wp.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
 
     # E-Auto: Benzin-Vergleich
-    eauto_benzinpreis = 1.65  # €/L Default
-    eauto_vergleich_l_100km = 7.5  # L/100km Default
+    eauto_benzinpreis = PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]
+    eauto_vergleich_l_100km = PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]
     for ea in e_autos:
         if ea.parameter:
-            eauto_benzinpreis = ea.parameter.get("benzinpreis_euro", 1.65)
-            eauto_vergleich_l_100km = ea.parameter.get("vergleich_verbrauch_l_100km", 7.5)
+            eauto_benzinpreis = ea.parameter.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
+            eauto_vergleich_l_100km = ea.parameter.get(
+                PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
+                PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
+            )
 
     # =====================================================================
     # BISHERIGE ERTRÄGE BERECHNEN (inkl. Alternativkosten!)
@@ -1408,8 +1422,9 @@ async def get_finanz_prognose(
         v2h_ersparnis = jahres_v2h_beitrag * netzbezug_preis / 100
         eauto_ersparnis = jahres_eauto_pv * netzbezug_preis / 100
         for ea in e_autos:
-            # Prüfe ob V2H aktiv
-            nutzt_v2h = ea.parameter.get("nutzt_v2h", False) if ea.parameter else False
+            # Prüfe ob V2H aktiv (Bug #1 v3.25.0: Form/Wizard schreiben v2h_faehig,
+            # vorher las dieser Code nutzt_v2h → V2H-Anzeige im Aussichten-Tab war tot.)
+            nutzt_v2h = ea.parameter.get(PARAM_E_AUTO["V2H_FAEHIG"], False) if ea.parameter else False
             if nutzt_v2h and jahres_v2h_beitrag > 0:
                 komponenten_beitraege.append(KomponentenBeitragSchema(
                     typ="e-auto-v2h",
@@ -1443,7 +1458,7 @@ async def get_finanz_prognose(
         alter_energietraeger = "Gas"
         for wp in waermepumpen:
             if wp.parameter:
-                ae = wp.parameter.get("alter_energietraeger", "gas")
+                ae = wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"], PARAM_WAERMEPUMPE_DEFAULTS["alter_energietraeger"])
                 alter_energietraeger = "Öl" if ae == "oel" else "Gas"
             # PV-Direktverbrauch
             komponenten_beitraege.append(KomponentenBeitragSchema(

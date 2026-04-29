@@ -19,6 +19,7 @@ from backend.core.calculations import (
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
 
 router = APIRouter()
 
@@ -354,12 +355,12 @@ async def get_cockpit_uebersicht(
         elif inv.typ == "waermepumpe":
             alternativ_kosten = 8000.0
             if inv.parameter:
-                alternativ_kosten = inv.parameter.get("alternativ_kosten_euro", 8000.0)
+                alternativ_kosten = inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_KOSTEN_EURO"], 8000.0)
             investition_wp_mehrkosten += max(0, kosten - alternativ_kosten)
         elif inv.typ == "e-auto":
             alternativ_kosten = 35000.0
             if inv.parameter:
-                alternativ_kosten = inv.parameter.get("alternativ_kosten_euro", 35000.0)
+                alternativ_kosten = inv.parameter.get(PARAM_E_AUTO["ALTERNATIV_KOSTEN_EURO"], 35000.0)
             investition_eauto_mehrkosten += max(0, kosten - alternativ_kosten)
         else:
             investition_sonstige += kosten

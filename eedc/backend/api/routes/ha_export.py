@@ -28,6 +28,13 @@ from backend.services.ha_sensors_export import (
     get_all_sensor_definitions
 )
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
+from backend.core.investition_parameter import (
+    PARAM_E_AUTO,
+    PARAM_E_AUTO_DEFAULTS,
+    PARAM_SPEICHER,
+    PARAM_WAERMEPUMPE,
+    PARAM_WAERMEPUMPE_DEFAULTS,
+)
 
 router = APIRouter(prefix="/ha/export", tags=["HA Export"])
 
@@ -233,15 +240,19 @@ async def calculate_anlage_sensors(
         strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
     )
 
-    wp_alter_preis_cent = 10.0
+    # Bug #7 v3.25.0: Default vereinheitlicht aus PARAM_WAERMEPUMPE_DEFAULTS (vorher 10.0)
+    wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
     wp_alter_wirkungsgrad = 0.90
     wp_alternativ_zusatzkosten_jahr = 0.0
     for wp in waermepumpen:
         if wp.parameter:
-            wp_alter_preis_cent = wp.parameter.get("alter_preis_cent_kwh", 10.0)
-            if wp.parameter.get("alter_energietraeger") == "oel":
+            wp_alter_preis_cent = wp.parameter.get(
+                PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
+                PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
+            )
+            if wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
                 wp_alter_wirkungsgrad = 0.85
-            wp_alternativ_zusatzkosten_jahr += wp.parameter.get("alternativ_zusatzkosten_jahr", 0) or 0
+            wp_alternativ_zusatzkosten_jahr += wp.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
 
     # Monatsdaten-Dict für Monats-Gaspreis
     md_by_periode = {(md.jahr, md.monat): md for md in monatsdaten}
@@ -268,12 +279,15 @@ async def calculate_anlage_sensors(
     # Fixe Zusatzkosten (Schornsteinfeger, Wartung, Grundpreis) pro erfassten Monat
     bisherige_wp_ersparnis += wp_alternativ_zusatzkosten_jahr * len(wp_monate_gezaehlt) / 12
 
-    eauto_benzinpreis = 1.65
-    eauto_vergleich_l_100km = 7.5
+    eauto_benzinpreis = PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]
+    eauto_vergleich_l_100km = PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]
     for ea in e_autos:
         if ea.parameter:
-            eauto_benzinpreis = ea.parameter.get("benzinpreis_euro", 1.65)
-            eauto_vergleich_l_100km = ea.parameter.get("vergleich_verbrauch_l_100km", 7.5)
+            eauto_benzinpreis = ea.parameter.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
+            eauto_vergleich_l_100km = ea.parameter.get(
+                PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
+                PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
+            )
 
     bisherige_eauto_ersparnis = 0.0
     for ea in e_autos:
@@ -322,7 +336,9 @@ async def calculate_anlage_sensors(
     speicher_kapazitaet = 0
     for inv in investitionen:
         if inv.typ == 'speicher' and inv.parameter:
-            kap = inv.parameter.get('kapazitaet_kwh') or inv.parameter.get('nutzbare_kapazitaet_kwh')
+            # Defensive Doppel-Read: kapazitaet_kwh ist Brutto, nutzbare_kapazitaet_kwh
+            # ist optionaler User-Override (DOD-Reserve). Wenn beides leer → kein Speicher gepflegt.
+            kap = inv.parameter.get(PARAM_SPEICHER["KAPAZITAET_KWH"]) or inv.parameter.get(PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"])
             if kap:
                 speicher_kapazitaet += float(kap)
 
@@ -540,8 +556,11 @@ async def calculate_investition_sensors(
             elif sensor.key == "e_auto_ersparnis_vs_benzin_euro":
                 if gesamt_km > 0:
                     # Monatliche Kraftstoffpreise laden (Fallback: statischer Parameter)
-                    fallback_benzinpreis = params.get("benzinpreis_euro", 1.65)
-                    vergleich_l = params.get("vergleich_verbrauch_l_100km", 7.5)
+                    fallback_benzinpreis = params.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
+                    vergleich_l = params.get(
+                        PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
+                        PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
+                    )
                     anlage_md_result = await db.execute(
                         select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)
                     )
@@ -594,9 +613,9 @@ async def calculate_investition_sensors(
                     berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
             elif sensor.key == "wp_ersparnis_euro":
                 if gesamt_waerme > 0:
-                    fallback_alter_preis = params.get("alter_preis_cent_kwh", 12.0)
-                    alter_wirkungsgrad = 0.85 if params.get("alter_energietraeger") == "oel" else 0.90
-                    zusatzkosten_jahr = params.get("alternativ_zusatzkosten_jahr", 0) or 0
+                    fallback_alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
+                    alter_wirkungsgrad = 0.85 if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel" else 0.90
+                    zusatzkosten_jahr = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
                     # Monatliche Gaspreise laden (Fallback: statischer Parameter)
                     anlage_md_result = await db.execute(
                         select(Monatsdaten).where(Monatsdaten.anlage_id == investition.anlage_id)

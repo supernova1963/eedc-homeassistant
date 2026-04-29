@@ -27,6 +27,13 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
+from backend.core.investition_parameter import (
+    PARAM_E_AUTO,
+    PARAM_SPEICHER,
+    PARAM_BALKONKRAFTWERK,
+    PARAM_SONSTIGES,
+    PARAM_SONSTIGES_DEFAULTS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +84,9 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
             SensorFeld(key="ladung_extern_kwh", label="Externe Ladung", unit="kWh", optional=True, hint="Öffentliche Ladesäulen"),
             SensorFeld(key="ladung_extern_euro", label="Externe Kosten", unit="€", optional=True),
         ]
-        if parameter and (parameter.get("nutzt_v2h") or parameter.get("v2h_faehig")):
+        # Defensive Doppel-Read v3.25.0 entfernt — die DB-Migration in v3.25.0
+        # hat alle 'nutzt_v2h'-Vorkommen auf den Kanon 'v2h_faehig' umgeschrieben.
+        if parameter and parameter.get(PARAM_E_AUTO["V2H_FAEHIG"]):
             felder.append(SensorFeld(key="v2h_entladung_kwh", label="V2H Entladung", unit="kWh", optional=True))
         return felder
 
@@ -86,7 +95,7 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
             SensorFeld(key="ladung_kwh", label="Ladung", unit="kWh", required=True),
             SensorFeld(key="entladung_kwh", label="Entladung", unit="kWh", required=True),
         ]
-        if parameter and parameter.get("arbitrage_faehig"):
+        if parameter and parameter.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"]):
             felder.extend([
                 SensorFeld(key="speicher_ladung_netz_kwh", label="Netzladung", unit="kWh", optional=True, hint="Arbitrage"),
                 SensorFeld(key="speicher_ladepreis_cent", label="Ø Ladepreis", unit="ct/kWh", optional=True),
@@ -116,7 +125,7 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
         felder = [
             SensorFeld(key="pv_erzeugung_kwh", label="Erzeugung", unit="kWh", required=True),
         ]
-        if parameter and parameter.get("hat_speicher"):
+        if parameter and parameter.get(PARAM_BALKONKRAFTWERK["HAT_SPEICHER"]):
             felder.extend([
                 SensorFeld(key="speicher_ladung_kwh", label="Speicher Ladung", unit="kWh", optional=True),
                 SensorFeld(key="speicher_entladung_kwh", label="Speicher Entladung", unit="kWh", optional=True),
@@ -124,7 +133,7 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
         return felder
 
     elif typ == "sonstiges":
-        kategorie = parameter.get("kategorie", "erzeuger") if parameter else "erzeuger"
+        kategorie = parameter.get(PARAM_SONSTIGES["KATEGORIE"], PARAM_SONSTIGES_DEFAULTS["kategorie"]) if parameter else PARAM_SONSTIGES_DEFAULTS["kategorie"]
         if kategorie == "erzeuger":
             return [SensorFeld(key="erzeugung_kwh", label="Erzeugung", unit="kWh", required=True)]
         elif kategorie == "verbraucher":

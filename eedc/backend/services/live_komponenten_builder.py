@@ -9,6 +9,7 @@ from typing import Optional
 
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.core.investition_parameter import PARAM_E_AUTO
 from backend.services.live_sensor_config import (
     TYP_ICON,
     ERZEUGER_TYPEN,
@@ -123,10 +124,10 @@ def build_komponenten(
                     })
             continue
 
-        # E-Auto mit V2H ist bidirektional
+        # E-Auto mit V2H ist bidirektional (Bug #1 v3.25.0: vorher 'nutzt_v2h', Form schreibt 'v2h_faehig')
         ist_v2h = (typ == "e-auto"
                    and isinstance(inv.parameter, dict)
-                   and inv.parameter.get("nutzt_v2h"))
+                   and inv.parameter.get(PARAM_E_AUTO["V2H_FAEHIG"]))
         ist_bidirektional = typ in BIDIREKTIONAL_TYPEN or ist_v2h
 
         if typ in ERZEUGER_TYPEN:

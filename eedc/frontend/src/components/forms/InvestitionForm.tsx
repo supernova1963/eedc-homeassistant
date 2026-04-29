@@ -6,6 +6,23 @@ import { investitionenApi } from '../../api'
 import { infothekApi } from '../../api/infothek'
 import type { InfothekEintrag } from '../../types/infothek'
 import { AlertCircle, FileText, ExternalLink } from 'lucide-react'
+import {
+  PARAM_E_AUTO_DEFAULTS,
+  PARAM_SPEICHER_DEFAULTS,
+  PARAM_WAERMEPUMPE_DEFAULTS,
+  PARAM_WALLBOX_DEFAULTS,
+  PARAM_WECHSELRICHTER_DEFAULTS,
+  PARAM_BALKONKRAFTWERK_DEFAULTS,
+  PARAM_SONSTIGES_DEFAULTS,
+} from '../../lib'
+
+// Liefert einen Form-tauglichen String — Eingabewert wenn vorhanden, sonst Default.
+// Defaults stammen aus lib/investitionParameter.ts (Single Source of Truth, gemeinsam mit Backend).
+const paramStr = (val: unknown, fallback?: unknown): string => {
+  if (val !== undefined && val !== null && val !== '') return String(val)
+  if (fallback !== undefined && fallback !== null) return String(fallback)
+  return ''
+}
 
 // Azimut-Mapping: Himmelsrichtung → PVGIS-Grad (0=Süd, -90=Ost, 90=West, ±180=Nord)
 const AUSRICHTUNG_GRAD_MAP: Record<string, number> = {
@@ -127,85 +144,86 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     switch (typ) {
       case 'e-auto':
         return {
-          batteriekapazitaet_kwh: params.batteriekapazitaet_kwh?.toString() || '',
-          verbrauch_kwh_100km: params.verbrauch_kwh_100km?.toString() || '18',
-          jahresfahrleistung_km: params.jahresfahrleistung_km?.toString() || '15000',
-          pv_ladeanteil_prozent: params.pv_ladeanteil_prozent?.toString() || '60',
-          vergleich_verbrauch_l_100km: params.vergleich_verbrauch_l_100km?.toString() || '7.5',
-          benzinpreis_euro: params.benzinpreis_euro?.toString() || '1.65',
-          v2h_faehig: (params.v2h_faehig as boolean) ?? false,
-          v2h_entladeleistung_kw: params.v2h_entladeleistung_kw?.toString() || '',
-          ist_dienstlich: (params.ist_dienstlich as boolean) ?? false,
+          batteriekapazitaet_kwh: paramStr(params.batteriekapazitaet_kwh),
+          verbrauch_kwh_100km: paramStr(params.verbrauch_kwh_100km, PARAM_E_AUTO_DEFAULTS.verbrauch_kwh_100km),
+          jahresfahrleistung_km: paramStr(params.jahresfahrleistung_km, PARAM_E_AUTO_DEFAULTS.jahresfahrleistung_km),
+          pv_ladeanteil_prozent: paramStr(params.pv_ladeanteil_prozent, PARAM_E_AUTO_DEFAULTS.pv_ladeanteil_prozent),
+          vergleich_verbrauch_l_100km: paramStr(params.vergleich_verbrauch_l_100km, PARAM_E_AUTO_DEFAULTS.vergleich_verbrauch_l_100km),
+          benzinpreis_euro: paramStr(params.benzinpreis_euro, PARAM_E_AUTO_DEFAULTS.benzinpreis_euro),
+          v2h_faehig: (params.v2h_faehig as boolean) ?? PARAM_E_AUTO_DEFAULTS.v2h_faehig,
+          v2h_entladeleistung_kw: paramStr(params.v2h_entladeleistung_kw),
+          ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_E_AUTO_DEFAULTS.ist_dienstlich,
         }
       case 'speicher':
         return {
-          kapazitaet_kwh: params.kapazitaet_kwh?.toString() || '',
-          nutzbare_kapazitaet_kwh: params.nutzbare_kapazitaet_kwh?.toString() || '',
-          max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '',
-          max_entladeleistung_kw: params.max_entladeleistung_kw?.toString() || '',
-          wirkungsgrad_prozent: params.wirkungsgrad_prozent?.toString() || '95',
-          arbitrage_faehig: (params.arbitrage_faehig as boolean) ?? false,
+          kapazitaet_kwh: paramStr(params.kapazitaet_kwh),
+          nutzbare_kapazitaet_kwh: paramStr(params.nutzbare_kapazitaet_kwh),
+          max_ladeleistung_kw: paramStr(params.max_ladeleistung_kw),
+          max_entladeleistung_kw: paramStr(params.max_entladeleistung_kw),
+          wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_SPEICHER_DEFAULTS.wirkungsgrad_prozent),
+          arbitrage_faehig: (params.arbitrage_faehig as boolean) ?? PARAM_SPEICHER_DEFAULTS.arbitrage_faehig,
         }
       case 'waermepumpe':
         return {
-          leistung_kw: params.leistung_kw?.toString() || '',
+          leistung_kw: paramStr(params.leistung_kw),
           // Wärmepumpenart für fairen Community-Vergleich
-          wp_art: params.wp_art?.toString() || 'luft_wasser',
+          wp_art: paramStr(params.wp_art, PARAM_WAERMEPUMPE_DEFAULTS.wp_art),
           // Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
-          effizienz_modus: params.effizienz_modus?.toString() || 'gesamt_jaz',
+          effizienz_modus: paramStr(params.effizienz_modus, PARAM_WAERMEPUMPE_DEFAULTS.effizienz_modus),
           // Für Modus "gesamt_jaz"
-          jaz: params.jaz?.toString() || '3.5',
+          jaz: paramStr(params.jaz, PARAM_WAERMEPUMPE_DEFAULTS.jaz),
           // Für Modus "scop" (EU-Label)
-          scop_heizung: params.scop_heizung?.toString() || '4.5',
-          scop_warmwasser: params.scop_warmwasser?.toString() || '3.2',
-          vorlauftemperatur: params.vorlauftemperatur?.toString() || '35',
+          scop_heizung: paramStr(params.scop_heizung, PARAM_WAERMEPUMPE_DEFAULTS.scop_heizung),
+          scop_warmwasser: paramStr(params.scop_warmwasser, PARAM_WAERMEPUMPE_DEFAULTS.scop_warmwasser),
+          vorlauftemperatur: paramStr(params.vorlauftemperatur, PARAM_WAERMEPUMPE_DEFAULTS.vorlauftemperatur),
           // Für Modus "getrennte_cops"
-          cop_heizung: params.cop_heizung?.toString() || '3.9',
-          cop_warmwasser: params.cop_warmwasser?.toString() || '3.0',
-          // Getrennte Strommessung (Heizen/Warmwasser)
+          cop_heizung: paramStr(params.cop_heizung, PARAM_WAERMEPUMPE_DEFAULTS.cop_heizung),
+          cop_warmwasser: paramStr(params.cop_warmwasser, PARAM_WAERMEPUMPE_DEFAULTS.cop_warmwasser),
+          // Getrennte Strommessung (Heizen/Warmwasser) — Bug #8 historisch als String 'true'/'false';
+          // wird bei Phase 6 auf echten Boolean migriert. Bis dahin tolerieren wir beides beim Lesen.
           getrennte_strommessung: (params.getrennte_strommessung === true || params.getrennte_strommessung === 'true') ? 'true' : 'false',
           // Wärmebedarf (getrennt)
-          heizwaermebedarf_kwh: params.heizwaermebedarf_kwh?.toString() || '12000',
-          warmwasserbedarf_kwh: params.warmwasserbedarf_kwh?.toString() || '3000',
+          heizwaermebedarf_kwh: paramStr(params.heizwaermebedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.heizwaermebedarf_kwh),
+          warmwasserbedarf_kwh: paramStr(params.warmwasserbedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.warmwasserbedarf_kwh),
           // Vergleich mit alter Heizung
-          pv_anteil_prozent: params.pv_anteil_prozent?.toString() || '30',
-          alter_energietraeger: params.alter_energietraeger?.toString() || 'gas',
-          alter_preis_cent_kwh: params.alter_preis_cent_kwh?.toString() || '12',
-          alternativ_zusatzkosten_jahr: params.alternativ_zusatzkosten_jahr?.toString() || '0',
-          sg_ready: (params.sg_ready as boolean) ?? false,
+          pv_anteil_prozent: paramStr(params.pv_anteil_prozent, PARAM_WAERMEPUMPE_DEFAULTS.pv_anteil_prozent),
+          alter_energietraeger: paramStr(params.alter_energietraeger, PARAM_WAERMEPUMPE_DEFAULTS.alter_energietraeger),
+          alter_preis_cent_kwh: paramStr(params.alter_preis_cent_kwh, PARAM_WAERMEPUMPE_DEFAULTS.alter_preis_cent_kwh),
+          alternativ_zusatzkosten_jahr: paramStr(params.alternativ_zusatzkosten_jahr, PARAM_WAERMEPUMPE_DEFAULTS.alternativ_zusatzkosten_jahr),
+          sg_ready: (params.sg_ready as boolean) ?? PARAM_WAERMEPUMPE_DEFAULTS.sg_ready,
         }
       case 'wallbox':
         return {
-          max_ladeleistung_kw: params.max_ladeleistung_kw?.toString() || '11',
-          bidirektional: (params.bidirektional as boolean) ?? false,
-          pv_optimiert: (params.pv_optimiert as boolean) ?? true,
-          ist_dienstlich: (params.ist_dienstlich as boolean) ?? false,
+          max_ladeleistung_kw: paramStr(params.max_ladeleistung_kw, PARAM_WALLBOX_DEFAULTS.max_ladeleistung_kw),
+          bidirektional: (params.bidirektional as boolean) ?? PARAM_WALLBOX_DEFAULTS.bidirektional,
+          pv_optimiert: (params.pv_optimiert as boolean) ?? PARAM_WALLBOX_DEFAULTS.pv_optimiert,
+          ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_WALLBOX_DEFAULTS.ist_dienstlich,
         }
       case 'wechselrichter':
         return {
-          max_leistung_kw: params.max_leistung_kw?.toString() || '',
-          wirkungsgrad_prozent: params.wirkungsgrad_prozent?.toString() || '97',
-          hybrid: (params.hybrid as boolean) ?? false,
+          max_leistung_kw: paramStr(params.max_leistung_kw),
+          wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_WECHSELRICHTER_DEFAULTS.wirkungsgrad_prozent),
+          hybrid: (params.hybrid as boolean) ?? PARAM_WECHSELRICHTER_DEFAULTS.hybrid,
         }
       case 'pv-module':
         return {
-          anzahl_module: params.anzahl_module?.toString() || '',
-          modul_leistung_wp: params.modul_leistung_wp?.toString() || '',
-          modul_typ: params.modul_typ?.toString() || '',
+          anzahl_module: paramStr(params.anzahl_module),
+          modul_leistung_wp: paramStr(params.modul_leistung_wp),
+          modul_typ: paramStr(params.modul_typ),
         }
       case 'balkonkraftwerk':
         return {
-          leistung_wp: params.leistung_wp?.toString() || '',
-          anzahl: params.anzahl?.toString() || '2',
-          ausrichtung: params.ausrichtung?.toString() || 'Süd',
-          neigung_grad: params.neigung_grad?.toString() || '30',
-          hat_speicher: (params.hat_speicher as boolean) ?? false,
-          speicher_kapazitaet_wh: params.speicher_kapazitaet_wh?.toString() || '',
+          leistung_wp: paramStr(params.leistung_wp),
+          anzahl: paramStr(params.anzahl, PARAM_BALKONKRAFTWERK_DEFAULTS.anzahl),
+          ausrichtung: paramStr(params.ausrichtung, PARAM_BALKONKRAFTWERK_DEFAULTS.ausrichtung),
+          neigung_grad: paramStr(params.neigung_grad, PARAM_BALKONKRAFTWERK_DEFAULTS.neigung_grad),
+          hat_speicher: (params.hat_speicher as boolean) ?? PARAM_BALKONKRAFTWERK_DEFAULTS.hat_speicher,
+          speicher_kapazitaet_wh: paramStr(params.speicher_kapazitaet_wh),
         }
       case 'sonstiges':
         return {
-          kategorie: params.kategorie?.toString() || 'erzeuger',
-          beschreibung: params.beschreibung?.toString() || '',
+          kategorie: paramStr(params.kategorie, PARAM_SONSTIGES_DEFAULTS.kategorie),
+          beschreibung: paramStr(params.beschreibung),
         }
       default:
         return {}

@@ -8,6 +8,14 @@ import type { Investition, InvestitionTyp } from '../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../api'
 import { infothekApi } from '../api/infothek'
 import type { InfothekEintrag, InfothekEintragCreate } from '../types/infothek'
+import {
+  eAutoParameter,
+  speicherParameter,
+  waermepumpeParameter,
+  wallboxParameter,
+  wechselrichterParameter,
+  balkonkraftwerkParameter,
+} from '../lib'
 
 const investitionTypen: {
   typ: InvestitionTyp
@@ -321,8 +329,6 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
   const [infothekEintraege, setInfothekEintraege] = useState<InfothekEintrag[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
-  const params = investition.parameter || {}
-
   const refreshInfothek = useCallback(() => {
     infothekApi.listFuerInvestition(investition.id).then(setInfothekEintraege).catch(() => {})
   }, [investition.id])
@@ -331,37 +337,49 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
     refreshInfothek()
   }, [refreshInfothek])
 
-  // Typspezifische Parameter anzeigen
+  // Typspezifische Parameter anzeigen — Reads gehen über typed Helper aus lib/investitionParameter.ts
   const getDetails = () => {
     const details: string[] = []
 
     switch (investition.typ) {
-      case 'e-auto':
-        if (params.batteriekapazitaet_kwh) details.push(`${params.batteriekapazitaet_kwh} kWh Batterie`)
-        if (params.verbrauch_kwh_100km) details.push(`${params.verbrauch_kwh_100km} kWh/100km`)
-        if (params.v2h_faehig) details.push('V2H fähig')
+      case 'e-auto': {
+        const p = eAutoParameter(investition.parameter)
+        if (p.batteriekapazitaet_kwh) details.push(`${p.batteriekapazitaet_kwh} kWh Batterie`)
+        if (p.verbrauch_kwh_100km) details.push(`${p.verbrauch_kwh_100km} kWh/100km`)
+        if (p.v2h_faehig) details.push('V2H fähig')
         break
-      case 'speicher':
-        if (params.kapazitaet_kwh) details.push(`${params.kapazitaet_kwh} kWh`)
-        if (params.nutzbare_kapazitaet_kwh) details.push(`${params.nutzbare_kapazitaet_kwh} kWh nutzbar`)
-        if (params.arbitrage_faehig) details.push('Arbitrage')
+      }
+      case 'speicher': {
+        const p = speicherParameter(investition.parameter)
+        if (p.kapazitaet_kwh) details.push(`${p.kapazitaet_kwh} kWh`)
+        if (p.nutzbare_kapazitaet_kwh) details.push(`${p.nutzbare_kapazitaet_kwh} kWh nutzbar`)
+        if (p.arbitrage_faehig) details.push('Arbitrage')
         break
-      case 'waermepumpe':
-        if (params.leistung_kw) details.push(`${params.leistung_kw} kW`)
-        if (params.cop) details.push(`COP ${params.cop}`)
+      }
+      case 'waermepumpe': {
+        const p = waermepumpeParameter(investition.parameter)
+        if (p.leistung_kw) details.push(`${p.leistung_kw} kW`)
+        if (p.jaz) details.push(`JAZ ${p.jaz}`)
         break
-      case 'wallbox':
-        if (params.max_ladeleistung_kw) details.push(`${params.max_ladeleistung_kw} kW`)
-        if (params.bidirektional) details.push('Bidirektional')
+      }
+      case 'wallbox': {
+        const p = wallboxParameter(investition.parameter)
+        if (p.max_ladeleistung_kw) details.push(`${p.max_ladeleistung_kw} kW`)
+        if (p.bidirektional) details.push('Bidirektional')
         break
-      case 'wechselrichter':
-        if (params.max_leistung_kw) details.push(`${params.max_leistung_kw} kW`)
+      }
+      case 'wechselrichter': {
+        const p = wechselrichterParameter(investition.parameter)
+        if (p.max_leistung_kw) details.push(`${p.max_leistung_kw} kW`)
         break
+      }
       case 'pv-module':
-      case 'balkonkraftwerk':
-        if (params.leistung_wp) details.push(`${params.leistung_wp} Wp`)
-        if (params.anzahl) details.push(`${params.anzahl} Module`)
+      case 'balkonkraftwerk': {
+        const p = balkonkraftwerkParameter(investition.parameter)
+        if (p.leistung_wp) details.push(`${p.leistung_wp} Wp`)
+        if (p.anzahl) details.push(`${p.anzahl} Module`)
         break
+      }
     }
 
     return details

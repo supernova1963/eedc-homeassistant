@@ -1,11 +1,30 @@
 # Was ist neu
 
-> **Stand:** April 2026 (v3.24.6)
+> **Stand:** April 2026 (v3.25.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.25.x — Investitions-Parameter aufgeräumt (April 2026)
+
+### Mehrere ROI- und Aussichten-Werte rechnen jetzt mit deinen tatsächlichen Eingaben *(v3.25.0)*
+
+Hinter den Kulissen war das `parameter`-JSON, in dem Investitionen ihre typ-spezifischen Detail-Daten halten (z. B. Speicher-Kapazität, V2H-Aktivierung, E-Auto-Fahrleistung), zwischen Form/Wizard und Backend-Lese-Code an mehreren Stellen auseinandergedriftet. Eine Vollinventur hat 7 Bugs zutage gefördert, in denen das Backend Schlüssel las, die Form/Wizard nie geschrieben haben — d. h. deine Eingaben wurden stillschweigend durch Default-Werte ersetzt. Konkret:
+
+- **V2H** (E-Auto Vehicle-to-Home) war im Aussichten-Tab, in der Live-Komponenten-Erkennung und im E-Auto-ROI tot — der Haken im Formular hatte dort keine Wirkung.
+- **Arbitrage** (Speicher) war im ROI tot — Aktivierung im Formular wurde ignoriert. Im Speicher-Dashboard funktionierte sie korrekt.
+- **Wallbox-Leistung** im Wallbox-Dashboard und im Community-Datensatz zeigte immer 11 kW, unabhängig vom eingegebenen Wert.
+- **E-Auto Jahresfahrleistung / PV-Ladeanteil / Vergleichsverbrauch** wurden im ROI nicht berücksichtigt — der ROI rechnete mit 15 000 km, 60 % bzw. 7,0 L/100 km, egal was im Formular stand.
+- **WP „Alter Heizungspreis"** hatte je nach Tab unterschiedliche Default-Werte (10 vs. 12 ct/kWh) → unterschiedliche Ersparnis-Anzeigen für denselben Zustand.
+- **WP „Getrennte Strommessung"**: ein subtiler String-vs-Boolean-Fehler ließ den Schalter nicht ausgehen, wenn man ihn von „aktiv" zurücksetzte.
+
+Eine einmalige DB-Migration räumt die Drift in deiner bestehenden Datenbank automatisch auf. **Sichtbare Auswirkung für dich:** Wenn du eine der oben genannten Optionen aktiviert oder eingegeben hattest, siehst du ab v3.25.0 plötzlich neue Werte im ROI, im Aussichten-Tab und im Wallbox-Dashboard. Die alten Werte waren Default-Anzeigen, nicht deine Werte.
+
+→ [Bedienung §3 Cockpit](HANDBUCH_BEDIENUNG.md#3-cockpit-dashboards) · [Bedienung §7 Aussichten](HANDBUCH_BEDIENUNG.md#7-aussichten-prognosen)
 
 ---
 

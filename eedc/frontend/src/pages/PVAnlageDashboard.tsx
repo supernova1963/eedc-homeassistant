@@ -21,7 +21,7 @@ import {
 import type { Investition } from '../types'
 import { PVStringVergleich } from '../components/pv'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { COLORS } from '../lib'
+import { COLORS, speicherParameter, wechselrichterParameter } from '../lib'
 
 interface PVSystem {
   wechselrichter: Investition
@@ -256,8 +256,8 @@ export default function PVAnlageDashboard() {
           </h2>
           <div className="space-y-4">
             {pvSysteme.map((system) => {
-              const wrParams = (system.wechselrichter.parameter || {}) as Record<string, unknown>
-              const wrLeistungKw = typeof wrParams.max_leistung_kw === 'number' ? wrParams.max_leistung_kw : null
+              const wrParams = wechselrichterParameter(system.wechselrichter.parameter)
+              const wrLeistungKw = wrParams.max_leistung_kw ?? null
               return (
               <div key={system.wechselrichter.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -293,9 +293,9 @@ export default function PVAnlageDashboard() {
                     <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Speicher</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                       {system.speicher.map(sp => {
-                        const spParams = (sp.parameter || {}) as Record<string, unknown>
-                        const kapBrutto = typeof spParams.kapazitaet_kwh === 'number' ? spParams.kapazitaet_kwh : null
-                        const kapNutzbar = typeof spParams.nutzbare_kapazitaet_kwh === 'number' ? spParams.nutzbare_kapazitaet_kwh : null
+                        const spParams = speicherParameter(sp.parameter)
+                        const kapBrutto = spParams.kapazitaet_kwh ?? null
+                        const kapNutzbar = spParams.nutzbare_kapazitaet_kwh ?? null
                         const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
                         return (
                           <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
@@ -324,9 +324,9 @@ export default function PVAnlageDashboard() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                   {orphanSpeicher.map(sp => {
-                    const spParams = (sp.parameter || {}) as Record<string, unknown>
-                    const kapBrutto = typeof spParams.kapazitaet_kwh === 'number' ? spParams.kapazitaet_kwh : null
-                    const kapNutzbar = typeof spParams.nutzbare_kapazitaet_kwh === 'number' ? spParams.nutzbare_kapazitaet_kwh : null
+                    const spParams = speicherParameter(sp.parameter)
+                    const kapBrutto = spParams.kapazitaet_kwh ?? null
+                    const kapNutzbar = spParams.nutzbare_kapazitaet_kwh ?? null
                     const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
                     return (
                       <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">

@@ -21,6 +21,16 @@ from backend.models.strompreis import Strompreis
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.investition_parameter import (
+    PARAM_E_AUTO,
+    PARAM_E_AUTO_DEFAULTS,
+    PARAM_SPEICHER,
+    PARAM_SPEICHER_DEFAULTS,
+    PARAM_WAERMEPUMPE,
+    PARAM_WAERMEPUMPE_DEFAULTS,
+    PARAM_WALLBOX,
+    PARAM_WALLBOX_DEFAULTS,
+)
 
 
 # =============================================================================
@@ -80,14 +90,6 @@ class InvestitionResponse(InvestitionBase):
         from_attributes = True
 
 
-class InvestitionTypInfo(BaseModel):
-    """Info über einen Investitionstyp."""
-    typ: str
-    label: str
-    beschreibung: str
-    parameter_schema: dict[str, Any]
-
-
 # =============================================================================
 # Router
 # =============================================================================
@@ -95,182 +97,13 @@ class InvestitionTypInfo(BaseModel):
 router = APIRouter()
 
 
-@router.get("/typen", response_model=list[InvestitionTypInfo])
-async def list_investition_typen():
-    """
-    Gibt alle verfügbaren Investitionstypen mit Parameter-Schema zurück.
-
-    Dies hilft dem Frontend, dynamische Formulare zu erstellen.
-
-    Returns:
-        list[InvestitionTypInfo]: Liste der Typen mit Schema
-    """
-    return [
-        InvestitionTypInfo(
-            typ=InvestitionTyp.E_AUTO.value,
-            label="E-Auto",
-            beschreibung="Elektrofahrzeug mit optionalem V2H",
-            parameter_schema={
-                "km_jahr": {"type": "number", "label": "Jahresfahrleistung (km)", "required": True},
-                "verbrauch_kwh_100km": {"type": "number", "label": "Verbrauch (kWh/100km)", "required": True},
-                "pv_anteil_prozent": {"type": "number", "label": "PV-Anteil Ladung (%)", "default": 60},
-                "benzinpreis_euro": {"type": "number", "label": "Benzinpreis (Euro/L)", "default": 1.85},
-                "nutzt_v2h": {"type": "boolean", "label": "V2H aktiv", "default": False},
-                "v2h_entlade_preis_cent": {"type": "number", "label": "V2H Entladepreis (ct/kWh)"},
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.WAERMEPUMPE.value,
-            label="Wärmepumpe",
-            beschreibung="Wärmepumpe für Heizung/Warmwasser",
-            parameter_schema={
-                # Wärmepumpenart (für fairen Community-Vergleich)
-                "wp_art": {
-                    "type": "select",
-                    "label": "Wärmepumpenart",
-                    "options": ["luft_wasser", "sole_wasser", "grundwasser", "luft_luft"],
-                    "default": "luft_wasser",
-                },
-                # Modus-Auswahl: JAZ (gemessen), SCOP (EU-Label), COPs (präzise)
-                "effizienz_modus": {
-                    "type": "select",
-                    "label": "Berechnungsmodus",
-                    "options": ["gesamt_jaz", "scop", "getrennte_cops"],
-                    "default": "gesamt_jaz",
-                },
-                # Für Modus "gesamt_jaz" - gemessene Jahresarbeitszahl
-                "jaz": {
-                    "type": "number",
-                    "label": "Jahresarbeitszahl (JAZ)",
-                    "default": 3.5,
-                    "conditional": {"effizienz_modus": "gesamt_jaz"},
-                },
-                # Für Modus "scop" - EU-Label SCOP-Werte
-                "scop_heizung": {
-                    "type": "number",
-                    "label": "SCOP Heizung",
-                    "default": 4.5,
-                    "conditional": {"effizienz_modus": "scop"},
-                },
-                "scop_warmwasser": {
-                    "type": "number",
-                    "label": "SCOP Warmwasser",
-                    "default": 3.2,
-                    "conditional": {"effizienz_modus": "scop"},
-                },
-                "vorlauftemperatur": {
-                    "type": "select",
-                    "label": "Vorlauftemperatur (EU-Label)",
-                    "options": ["35", "55"],
-                    "default": "35",
-                    "conditional": {"effizienz_modus": "scop"},
-                },
-                # Für Modus "getrennte_cops" - präzise Betriebspunkte
-                "cop_heizung": {
-                    "type": "number",
-                    "label": "COP Heizung",
-                    "default": 3.9,
-                    "conditional": {"effizienz_modus": "getrennte_cops"},
-                },
-                "cop_warmwasser": {
-                    "type": "number",
-                    "label": "COP Warmwasser",
-                    "default": 3.0,
-                    "conditional": {"effizienz_modus": "getrennte_cops"},
-                },
-                # Wärmebedarf (getrennt für bessere Gewichtung)
-                "heizwaermebedarf_kwh": {
-                    "type": "number",
-                    "label": "Heizwärmebedarf (kWh/Jahr)",
-                    "default": 12000,
-                },
-                "warmwasserbedarf_kwh": {
-                    "type": "number",
-                    "label": "Warmwasserbedarf (kWh/Jahr)",
-                    "default": 3000,
-                },
-                # Vergleich mit alter Heizung
-                "pv_anteil_prozent": {"type": "number", "label": "PV-Anteil (%)", "default": 30},
-                "alter_energietraeger": {
-                    "type": "select",
-                    "label": "Alter Energieträger",
-                    "options": ["gas", "oel", "strom"],
-                    "default": "gas",
-                },
-                "alter_preis_cent_kwh": {"type": "number", "label": "Alter Preis (ct/kWh)", "default": 12},
-                "alternativ_zusatzkosten_jahr": {
-                    "type": "number",
-                    "label": "Zusatzkosten Alt-Heizung (€/Jahr)",
-                    "default": 0,
-                    "hint": "Schornsteinfeger, Wartung, Grundpreis Gaszähler etc.",
-                },
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.SPEICHER.value,
-            label="Batteriespeicher",
-            beschreibung="Stromspeicher mit optionaler Arbitrage",
-            parameter_schema={
-                "kapazitaet_kwh": {"type": "number", "label": "Kapazität (kWh)", "required": True},
-                "wirkungsgrad_prozent": {"type": "number", "label": "Wirkungsgrad (%)", "default": 95},
-                "nutzt_arbitrage": {"type": "boolean", "label": "Arbitrage aktiv", "default": False},
-                "lade_durchschnittspreis_cent": {"type": "number", "label": "Ø Ladepreis Arbitrage (ct/kWh)"},
-                "entlade_vermiedener_preis_cent": {"type": "number", "label": "Ø Entladepreis Arbitrage (ct/kWh)"},
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.WALLBOX.value,
-            label="Wallbox",
-            beschreibung="Ladestation für E-Fahrzeuge",
-            parameter_schema={
-                "leistung_kw": {"type": "number", "label": "Ladeleistung (kW)", "required": True},
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.WECHSELRICHTER.value,
-            label="Wechselrichter",
-            beschreibung="PV-Wechselrichter",
-            parameter_schema={
-                "leistung_ac_kw": {"type": "number", "label": "AC-Leistung (kW)", "required": True},
-                "leistung_dc_kw": {"type": "number", "label": "DC-Leistung (kW)"},
-                "wirkungsgrad_prozent": {"type": "number", "label": "Wirkungsgrad (%)", "default": 97},
-                "hersteller": {"type": "string", "label": "Hersteller"},
-                "modell": {"type": "string", "label": "Modell"},
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.PV_MODULE.value,
-            label="PV-Module",
-            beschreibung="Photovoltaik-Module (Strings)",
-            parameter_schema={
-                "leistung_kwp": {"type": "number", "label": "Leistung (kWp)", "required": True},
-                "anzahl_module": {"type": "integer", "label": "Anzahl Module"},
-                "ausrichtung": {"type": "select", "label": "Ausrichtung",
-                               "options": ["Süd", "Südost", "Südwest", "Ost", "West", "Ost-West"]},
-                "neigung_grad": {"type": "number", "label": "Neigung (°)"},
-                "hersteller": {"type": "string", "label": "Hersteller"},
-                "modell": {"type": "string", "label": "Modell"},
-                "jahresertrag_prognose_kwh": {"type": "number", "label": "Jahresertrag Prognose (kWh)"},
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.BALKONKRAFTWERK.value,
-            label="Balkonkraftwerk",
-            beschreibung="Mini-PV-Anlage",
-            parameter_schema={
-                "leistung_wp": {"type": "number", "label": "Leistung (Wp)", "required": True},
-                "jahresertrag_prognose_kwh": {"type": "number", "label": "Jahresertrag Prognose (kWh)"},
-            }
-        ),
-        InvestitionTypInfo(
-            typ=InvestitionTyp.SONSTIGES.value,
-            label="Sonstiges",
-            beschreibung="Andere Investition",
-            parameter_schema={
-                "beschreibung": {"type": "string", "label": "Beschreibung"},
-            }
-        ),
-    ]
+# v3.25.0: Phantom-Endpoint /typen + InvestitionTypInfo + parameter_schema entfernt.
+# Niemand hat das Schema im Frontend gelesen (useInvestitionTypen war exportiert, aber
+# nirgends aufgerufen), und der Schema-Inhalt war historisch von Form/Wizard und
+# Backend-Reads auseinandergedriftet — siehe docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md.
+# Single Source of Truth ist jetzt:
+#   - Frontend: eedc/frontend/src/lib/investitionParameter.ts
+#   - Backend:  eedc/backend/core/investition_parameter.py
 
 
 class ParentOption(BaseModel):
@@ -1011,9 +844,10 @@ async def get_roi_dashboard(
             system_betriebskosten += (inv.betriebskosten_jahr or 0)
 
             params = inv.parameter or {}
-            kapazitaet = params.get('kapazitaet_kwh', 10)
-            wirkungsgrad = params.get('wirkungsgrad_prozent', 95)
-            nutzt_arbitrage = params.get('nutzt_arbitrage', False)
+            kapazitaet = params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 10)
+            wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
+            # Bug #5 v3.25.0: vorher 'nutzt_arbitrage' (toter Schema-Key), Form/Wizard schreiben 'arbitrage_faehig'.
+            nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
 
             result = berechne_speicher_einsparung(
                 kapazitaet_kwh=kapazitaet,
@@ -1128,12 +962,12 @@ async def get_roi_dashboard(
         detail: dict[str, Any] = {}
 
         if inv.typ == InvestitionTyp.SPEICHER.value:
-            # AC-gekoppelter Speicher
-            kapazitaet = params.get('kapazitaet_kwh', 10)
-            wirkungsgrad = params.get('wirkungsgrad_prozent', 95)
-            nutzt_arbitrage = params.get('nutzt_arbitrage', False)
-            lade_preis = params.get('lade_durchschnittspreis_cent', 12)
-            entlade_preis = params.get('entlade_vermiedener_preis_cent', 35)
+            # AC-gekoppelter Speicher — Bug #5 v3.25.0 fix wie oben (DC-Speicher)
+            kapazitaet = params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 10)
+            wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
+            nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
+            lade_preis = params.get(PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"], PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"])
+            entlade_preis = params.get(PARAM_SPEICHER["ENTLADE_VERMIEDENER_PREIS_CENT"], PARAM_SPEICHER_DEFAULTS["entlade_vermiedener_preis_cent"])
 
             result = berechne_speicher_einsparung(
                 kapazitaet_kwh=kapazitaet,
@@ -1154,13 +988,18 @@ async def get_roi_dashboard(
             }
 
         elif inv.typ == InvestitionTyp.E_AUTO.value:
-            km_jahr = params.get('km_jahr', 15000)
-            verbrauch = params.get('verbrauch_kwh_100km', 18)
-            pv_anteil = params.get('pv_anteil_prozent', 60)
-            benzin_verbrauch = params.get('benzin_verbrauch_liter_100km', 7.0)
-            nutzt_v2h = params.get('nutzt_v2h', False)
-            v2h_entladung = params.get('v2h_entladung_kwh_jahr', 0)
-            v2h_preis = params.get('v2h_entlade_preis_cent', strompreis_cent)
+            # Bugs #1, #2, #3, #4 v3.25.0: vorher las dieser Block aus toten Schema-Keys
+            # ('km_jahr', 'pv_anteil_prozent', 'benzin_verbrauch_liter_100km', 'nutzt_v2h')
+            # — Form/Wizard schreiben aber 'jahresfahrleistung_km', 'pv_ladeanteil_prozent',
+            # 'vergleich_verbrauch_l_100km', 'v2h_faehig'. ROI ignorierte deshalb alle vier
+            # User-Eingaben und nutzte stattdessen die hier hinterlegten Defaults.
+            km_jahr = params.get(PARAM_E_AUTO["JAHRESFAHRLEISTUNG_KM"], PARAM_E_AUTO_DEFAULTS["jahresfahrleistung_km"])
+            verbrauch = params.get(PARAM_E_AUTO["VERBRAUCH_KWH_100KM"], PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"])
+            pv_anteil = params.get(PARAM_E_AUTO["PV_LADEANTEIL_PROZENT"], PARAM_E_AUTO_DEFAULTS["pv_ladeanteil_prozent"])
+            benzin_verbrauch = params.get(PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"], PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"])
+            nutzt_v2h = params.get(PARAM_E_AUTO["V2H_FAEHIG"], PARAM_E_AUTO_DEFAULTS["v2h_faehig"])
+            v2h_entladung = params.get(PARAM_E_AUTO["V2H_ENTLADUNG_KWH_JAHR"], 0)
+            v2h_preis = params.get(PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"], strompreis_cent)
 
             result = berechne_eauto_einsparung(
                 km_jahr=km_jahr,
@@ -1184,18 +1023,18 @@ async def get_roi_dashboard(
 
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
             # Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
-            effizienz_modus = params.get('effizienz_modus', 'gesamt_jaz')
-            pv_anteil = params.get('pv_anteil_prozent', 30)
-            alter_energietraeger = params.get('alter_energietraeger', 'gas')
-            alter_preis = params.get('alter_preis_cent_kwh', 12)
-            alternativ_zusatzkosten = params.get('alternativ_zusatzkosten_jahr', 0) or 0
-            heizwaermebedarf = params.get('heizwaermebedarf_kwh', 12000)
-            warmwasserbedarf = params.get('warmwasserbedarf_kwh', 3000)
+            effizienz_modus = params.get(PARAM_WAERMEPUMPE["EFFIZIENZ_MODUS"], PARAM_WAERMEPUMPE_DEFAULTS["effizienz_modus"])
+            pv_anteil = params.get(PARAM_WAERMEPUMPE["PV_ANTEIL_PROZENT"], PARAM_WAERMEPUMPE_DEFAULTS["pv_anteil_prozent"])
+            alter_energietraeger = params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"], PARAM_WAERMEPUMPE_DEFAULTS["alter_energietraeger"])
+            alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
+            alternativ_zusatzkosten = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
+            heizwaermebedarf = params.get(PARAM_WAERMEPUMPE["HEIZWAERMEBEDARF_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["heizwaermebedarf_kwh"])
+            warmwasserbedarf = params.get(PARAM_WAERMEPUMPE["WARMWASSERBEDARF_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["warmwasserbedarf_kwh"])
 
             if effizienz_modus == 'getrennte_cops':
                 # Getrennte COPs für Heizung und Warmwasser
-                cop_heizung = params.get('cop_heizung', 3.9)
-                cop_warmwasser = params.get('cop_warmwasser', 3.0)
+                cop_heizung = params.get(PARAM_WAERMEPUMPE["COP_HEIZUNG"], PARAM_WAERMEPUMPE_DEFAULTS["cop_heizung"])
+                cop_warmwasser = params.get(PARAM_WAERMEPUMPE["COP_WARMWASSER"], PARAM_WAERMEPUMPE_DEFAULTS["cop_warmwasser"])
 
                 result = berechne_waermepumpe_einsparung(
                     heizwaermebedarf_kwh=heizwaermebedarf,
@@ -1213,9 +1052,9 @@ async def get_roi_dashboard(
 
             elif effizienz_modus == 'scop':
                 # EU-Label SCOP-Werte (saisonale Effizienz)
-                scop_heizung = params.get('scop_heizung', 4.5)
-                scop_warmwasser = params.get('scop_warmwasser', 3.2)
-                vorlauftemperatur = params.get('vorlauftemperatur', '35')
+                scop_heizung = params.get(PARAM_WAERMEPUMPE["SCOP_HEIZUNG"], PARAM_WAERMEPUMPE_DEFAULTS["scop_heizung"])
+                scop_warmwasser = params.get(PARAM_WAERMEPUMPE["SCOP_WARMWASSER"], PARAM_WAERMEPUMPE_DEFAULTS["scop_warmwasser"])
+                vorlauftemperatur = params.get(PARAM_WAERMEPUMPE["VORLAUFTEMPERATUR"], PARAM_WAERMEPUMPE_DEFAULTS["vorlauftemperatur"])
 
                 result = berechne_waermepumpe_einsparung(
                     heizwaermebedarf_kwh=heizwaermebedarf,
@@ -1233,9 +1072,9 @@ async def get_roi_dashboard(
 
             else:
                 # Standard: Ein JAZ für alles (gemessene Jahresarbeitszahl)
-                jaz = params.get('jaz', 3.5)
+                jaz = params.get(PARAM_WAERMEPUMPE["JAZ"], PARAM_WAERMEPUMPE_DEFAULTS["jaz"])
                 # Wärmebedarf: explizit oder aus Komponenten
-                waermebedarf = params.get('waermebedarf_kwh')
+                waermebedarf = params.get(PARAM_WAERMEPUMPE["WAERMEBEDARF_KWH"])
                 if waermebedarf is None:
                     waermebedarf = heizwaermebedarf + warmwasserbedarf
 
@@ -1806,8 +1645,8 @@ async def get_speicher_dashboard(
 
         # Zyklen (basierend auf Kapazität)
         params = speicher.parameter or {}
-        kapazitaet = params.get('kapazitaet_kwh', 10)
-        arbitrage_faehig = params.get('arbitrage_faehig', False)
+        kapazitaet = params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 10)
+        arbitrage_faehig = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
         vollzyklen = gesamt_ladung / kapazitaet if kapazitaet > 0 else 0
 
         # Ersparnis: Entladung ersetzt Netzbezug (Spread zwischen Netzbezug und Einspeisung)
@@ -2013,7 +1852,9 @@ async def get_wallbox_dashboard(
             monatsdaten = md_by_inv.get(wallbox.id, [])
 
         params = wallbox.parameter or {}
-        leistung_kw = params.get('leistung_kw', 11)
+        # Bug #6 v3.25.0: vorher 'leistung_kw' (toter Schema-Key), Form/Wizard schreiben
+        # 'max_ladeleistung_kw' → Dashboard zeigte immer 11 kW Default unabhängig vom User-Setup.
+        leistung_kw = params.get(PARAM_WALLBOX["MAX_LADELEISTUNG_KW"], PARAM_WALLBOX_DEFAULTS["max_ladeleistung_kw"])
 
         zusammenfassung = {
             # Heimladung (aus E-Auto-Daten)

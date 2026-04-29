@@ -41,19 +41,6 @@ export interface InvestitionUpdate {
   ha_entity_id?: string
 }
 
-export interface InvestitionTypInfo {
-  typ: string
-  label: string
-  beschreibung: string
-  parameter_schema: Record<string, {
-    type: string
-    label: string
-    required?: boolean
-    default?: unknown
-    options?: string[]
-  }>
-}
-
 /**
  * Eine Komponente innerhalb eines PV-Systems (WR, PV-Module, DC-Speicher)
  */
@@ -279,13 +266,6 @@ export interface SonstigesDashboardResponse {
 }
 
 export const investitionenApi = {
-  /**
-   * Verfügbare Investitionstypen mit Schema abrufen
-   */
-  async getTypen(): Promise<InvestitionTypInfo[]> {
-    return api.get<InvestitionTypInfo[]>('/investitionen/typen')
-  },
-
   /**
    * Investitionen abrufen (optional gefiltert)
    */

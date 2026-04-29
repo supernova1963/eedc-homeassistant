@@ -19,6 +19,7 @@ import httpx
 from backend.core.database import get_session
 from backend.core.config import settings
 from backend.core.field_definitions import get_felder_fuer_investition
+from backend.core.investition_parameter import PARAM_WAERMEPUMPE
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.investition import Investition
@@ -189,17 +190,18 @@ async def get_sensor_mapping(anlage_id: int):
             felder = [f["feld"] for f in get_felder_fuer_investition(inv.typ, inv.parameter)]
 
             # kWp für PV-Module (nur aktive in Gesamtsumme)
+            # Note: 'leistung_kwp' liegt bei PV-Modulen als Top-Level-Feld vor (nicht in `parameter`),
+            # die parameter-Variante hier ist ein Legacy-Read für ältere DB-Einträge.
             kwp = None
             if inv.typ == "pv-module":
                 kwp = inv.parameter.get("leistung_kwp") if inv.parameter else None
                 if kwp and inv.ist_aktiv_an(date.today()):
                     gesamt_kwp += kwp
 
-            # COP für Wärmepumpen
+            # COP für Wärmepumpen — JAZ ist Kanon, cop_heizung ist Fallback bei Modus 'getrennte_cops'.
             cop = None
             if inv.typ == "waermepumpe" and inv.parameter:
-                # JAZ oder COP aus Parametern
-                cop = inv.parameter.get("jaz") or inv.parameter.get("cop_heizung")
+                cop = inv.parameter.get(PARAM_WAERMEPUMPE["JAZ"]) or inv.parameter.get(PARAM_WAERMEPUMPE["COP_HEIZUNG"])
 
             investitionen.append(InvestitionInfo(
                 id=inv.id,

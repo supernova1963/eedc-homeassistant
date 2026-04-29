@@ -28,6 +28,13 @@ from backend.services.pdf_service import (
     FinanzPrognose,
     StringVergleich,
 )
+from backend.core.investition_parameter import (
+    PARAM_E_AUTO,
+    PARAM_E_AUTO_DEFAULTS,
+    PARAM_SPEICHER,
+    PARAM_WAERMEPUMPE,
+    PARAM_WAERMEPUMPE_DEFAULTS,
+)
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
     CO2_FAKTOR_GAS_KG_KWH,
@@ -234,7 +241,7 @@ async def export_pdf(
     for inv in investitionen:
         if inv.typ == "speicher":
             params = inv.parameter or {}
-            speicher_kapazitaet += params.get("kapazitaet_kwh", 0) or 0
+            speicher_kapazitaet += params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0) or 0
 
     # PV-Erzeugung nach Jahr/Monat indexieren
     pv_erzeugung_by_year_month = {}
@@ -414,10 +421,13 @@ async def export_pdf(
         wp_alternativ_zusatzkosten_jahr = 0.0
         for inv in investitionen:
             if inv.typ == "waermepumpe" and inv.parameter:
-                wp_alter_preis_cent = inv.parameter.get("alter_preis_cent_kwh", 12.0)
-                if inv.parameter.get("alter_energietraeger") == "oel":
+                wp_alter_preis_cent = inv.parameter.get(
+                    PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
+                    PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
+                )
+                if inv.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
                     wp_alter_wirkungsgrad = 0.85
-                wp_alternativ_zusatzkosten_jahr += inv.parameter.get("alternativ_zusatzkosten_jahr", 0) or 0
+                wp_alternativ_zusatzkosten_jahr += inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
                 break
         # Durchschnitt der Monats-Gaspreise, Fallback auf statischen Parameter
         hist_gaspreise = [
@@ -443,8 +453,11 @@ async def export_pdf(
         emob_vergleich_l_100km = 7.5
         for inv in investitionen:
             if inv.typ in ("e-auto", "wallbox") and inv.parameter:
-                emob_benzinpreis_fallback = inv.parameter.get("benzinpreis_euro", 1.65)
-                emob_vergleich_l_100km = inv.parameter.get("vergleich_verbrauch_l_100km", 7.5)
+                emob_benzinpreis_fallback = inv.parameter.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
+                emob_vergleich_l_100km = inv.parameter.get(
+                    PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
+                    PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
+                )
                 break
         # Durchschnitt der Monats-Kraftstoffpreise, Fallback auf statischen Parameter
         hist_kraftstoffpreise = [
@@ -552,7 +565,7 @@ async def export_pdf(
             anschaffungskosten=inv.anschaffungskosten_gesamt,
             alternativkosten=inv.anschaffungskosten_alternativ,
             betriebskosten_jahr=inv.betriebskosten_jahr,
-            leistung_kwp=inv.leistung_kwp if inv.typ != "speicher" else params.get("kapazitaet_kwh"),
+            leistung_kwp=inv.leistung_kwp if inv.typ != "speicher" else params.get(PARAM_SPEICHER["KAPAZITAET_KWH"]),
             ausrichtung=inv.ausrichtung,
             neigung_grad=inv.neigung_grad,
             parent_bezeichnung=parent_name,
