@@ -43,7 +43,9 @@ class CheckKategorie(str, Enum):
     # Issue #134: Drift-Schutz Publisher (HA-Automation) ↔ Konsument (field_definitions.py)
     MQTT_TOPIC_ABDECKUNG = "mqtt_topic_abdeckung"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
-    # (kein state_class) — für kWh-Felder still kritisch, für Counter unproblematisch.
+    # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
+    # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,
+    # Per-Tag-Reaggregation lesen alle aus HA's LTS).
     SENSOR_MAPPING_LTS = "sensor_mapping_lts"
 
 
@@ -1125,9 +1127,9 @@ class DatenChecker:
         versehentlich einen LTS-losen Sensor in ein kWh-Feld eintragen. Diese
         Kategorie macht das sichtbar:
 
-        - **kWh-Feld + nicht in LTS** → WARNING (still kritisch)
-        - **Counter-Feld + nicht in LTS** → INFO mit Hinweis auf lückenhafte Daten
-          (kein Backfill, einzelne Stunden können fehlen; typisch 23–24 Uhr)
+        - **kWh-Feld + nicht in LTS** → WARNING (Korrektur-Werkzeuge wirken nicht)
+        - **Counter-Feld + nicht in LTS** → WARNING (Korrektur-Werkzeuge wirken nicht;
+          jeder Aussetzer permanent verloren, einzelne Stunden können fehlen)
         - **kWh-Feld + LTS vorhanden** → OK
         """
         from backend.services.ha_statistics_service import get_ha_statistics_service
@@ -1200,10 +1202,13 @@ class DatenChecker:
                 kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung=f"{len(kwh_missing)} kWh-Sensor(en) nicht in HA-Long-Term-Statistics",
                 details=(
-                    "Diese Sensoren liefern keine Daten für Monatswerte und "
-                    "Vollbackfill — die zugehörigen Felder bleiben in vergangenen "
-                    "Monaten leer. Typisch bei Sensoren ohne state_class "
-                    "(z.B. Modbus-Roh-Werte). Lösung: state_class via "
+                    "Diese Sensoren haben kein state_class — typisch bei Modbus-"
+                    "Roh-Werten oder Hersteller-Integrationen ohne Metadaten. "
+                    "Folgen: die Korrektur-Werkzeuge in der Datenverwaltung "
+                    "(Vollbackfill, Verlauf nachrechnen, Per-Tag-Reaggregation) "
+                    "wirken auf diese Sensoren nicht — sie lesen alle aus HA's "
+                    "LTS. Jeder Aussetzer ist permanent verloren, vergangene "
+                    "Monate bleiben leer. Lösung: state_class via "
                     "configuration.yaml customize ergänzen, oder einen anderen "
                     "Sensor mit state_class=total_increasing wählen. "
                     f"Betroffen: {beispiele}"
@@ -1216,19 +1221,22 @@ class DatenChecker:
             if len(counter_missing) > 5:
                 beispiele += f" (+{len(counter_missing) - 5} weitere)"
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
+                kategorie=kat, schwere=CheckSeverity.WARNING,
                 meldung=(
                     f"{len(counter_missing)} Counter-Sensor(en) ohne state_class — "
-                    "Daten lückenhaft"
+                    "Korrektur-Werkzeuge wirken nicht"
                 ),
                 details=(
                     "Counter-Felder wie WP-Kompressor-Starts werden über den stündlichen "
                     "Snapshot-Service erfasst. Ohne state_class fehlt aber HA-Long-Term-"
-                    "Statistics: kein historischer Backfill möglich, vergangene Tage "
-                    "bleiben leer, und einzelne Stunden im laufenden Betrieb können "
-                    "fehlen (typisch 23–24 Uhr). Empfohlen: state_class via "
-                    "configuration.yaml customize ergänzen — dann ist die Erfassung "
-                    f"lückenfrei. Betroffen: {beispiele}"
+                    "Statistics: damit greifen die Korrektur-Werkzeuge in der "
+                    "Datenverwaltung nicht (Vollbackfill, Verlauf nachrechnen, "
+                    "Per-Tag-Reaggregation lesen alle aus HA's LTS). Jeder Aussetzer "
+                    "(HA-/EEDC-Neustart, Polling-Hänger) ist permanent verloren; im "
+                    "Normalbetrieb fehlt zusätzlich häufig die letzte Stunde des Tages "
+                    "(23–24 Uhr). Empfohlen: state_class via configuration.yaml "
+                    "customize ergänzen — dann laufen alle Reparatur-Werkzeuge auf "
+                    f"diesem Sensor. Betroffen: {beispiele}"
                 ),
                 link="/einstellungen/sensor-mapping",
             ))
