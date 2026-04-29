@@ -9,9 +9,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeSlug from 'rehype-slug'
+import rehypeRaw from 'rehype-raw'
 import { BookOpen, ChevronDown, ExternalLink } from 'lucide-react'
 
 interface HelpDoc {
@@ -31,9 +33,34 @@ export default function Hilfe() {
   const [error, setError] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const contentRef = useRef<HTMLDivElement>(null)
 
   const activeSlug = searchParams.get('doc') || DEFAULT_SLUG
+  const targetHash = location.hash ? location.hash.slice(1) : ''
+
+  const scrollToHash = (hash: string) => {
+    const article = contentRef.current
+    if (!hash || !article) return
+    const decoded = (() => { try { return decodeURIComponent(hash) } catch { return hash } })()
+    let el: HTMLElement | null = article.ownerDocument.getElementById(decoded)
+    if (!el) {
+      const escaped = decoded.replace(/"/g, '\\"')
+      el = article.querySelector<HTMLElement>(`a[name="${escaped}"]`)
+    }
+    if (!el || !article.contains(el)) return
+    // Tatsächlich scrollbaren Vorfahren finden — Layout hat verschachtelte
+    // overflow-Container (main > article); je nach Höhen-Constraint scrollt
+    // mal das eine, mal das andere.
+    let container: HTMLElement = article
+    let node: HTMLElement | null = article
+    while (node) {
+      if (node.scrollHeight > node.clientHeight + 1) { container = node; break }
+      node = node.parentElement
+    }
+    const offset = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+    container.scrollTo({ top: Math.max(0, offset - 8), behavior: 'auto' })
+  }
 
   // Index laden
   useEffect(() => {
@@ -64,12 +91,15 @@ export default function Hilfe() {
       })
       .then((md) => {
         setContent(md)
-        // Nach Dokumentenwechsel an den Anfang scrollen
-        contentRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+        // Nach Dokumentenwechsel: zu Hash scrollen oder an den Anfang
+        requestAnimationFrame(() => {
+          if (targetHash) scrollToHash(targetHash)
+          else contentRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+        })
       })
       .catch((e) => setError(`Dokument konnte nicht geladen werden: ${e.message}`))
       .finally(() => setLoading(false))
-  }, [docs, activeSlug])
+  }, [docs, activeSlug, targetHash])
 
   // Filename → slug für interne Link-Rewrites
   const filenameToSlug = useMemo(() => {
@@ -101,7 +131,9 @@ export default function Hilfe() {
   const rewriteLink = (href: string | undefined): { type: 'internal' | 'anchor' | 'external'; target: string } => {
     if (!href) return { type: 'external', target: '#' }
     if (href.startsWith('#')) return { type: 'anchor', target: href }
-    // .md-Links: bekannt → intern, unbekannt → GitHub-URL der Doku
+    // Absolute URLs (http/https/mailto/…) immer extern
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return { type: 'external', target: href }
+    // Relative .md-Links: bekannt → intern, unbekannt → GitHub-URL der Doku
     const mdMatch = href.match(/^([^#?]+\.md)(#.*)?$/)
     if (mdMatch) {
       const [, file, hash] = mdMatch
@@ -219,20 +251,21 @@ export default function Hilfe() {
             )}
             <Markdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw, rehypeSlug]}
               components={{
-                h1: ({ children }) => (
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                h1: ({ children, id }) => (
+                  <h1 id={id} className="text-2xl font-bold text-gray-900 dark:text-white mt-2 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
                     {children}
                   </h1>
                 ),
-                h2: ({ children }) => (
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">{children}</h2>
+                h2: ({ children, id }) => (
+                  <h2 id={id} className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">{children}</h2>
                 ),
-                h3: ({ children }) => (
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2">{children}</h3>
+                h3: ({ children, id }) => (
+                  <h3 id={id} className="text-lg font-semibold text-gray-900 dark:text-white mt-6 mb-2">{children}</h3>
                 ),
-                h4: ({ children }) => (
-                  <h4 className="text-base font-semibold text-gray-900 dark:text-white mt-4 mb-2">{children}</h4>
+                h4: ({ children, id }) => (
+                  <h4 id={id} className="text-base font-semibold text-gray-900 dark:text-white mt-4 mb-2">{children}</h4>
                 ),
                 p: ({ children }) => <p className="my-3 leading-relaxed">{children}</p>,
                 ul: ({ children }) => <ul className="list-disc pl-6 my-3 space-y-1 leading-relaxed">{children}</ul>,
@@ -276,7 +309,12 @@ export default function Hilfe() {
                   </td>
                 ),
                 hr: () => <hr className="my-6 border-gray-200 dark:border-gray-700" />,
-                a: ({ href, children }) => {
+                a: ({ href, children, ...rest }) => {
+                  const name = (rest as { name?: string }).name
+                  // Reine Anker-Targets aus Roh-HTML (z.B. <a name="…"></a>) als ID-Marker rendern
+                  if (!href && name) {
+                    return <a id={name} />
+                  }
                   const { type, target } = rewriteLink(href)
                   if (type === 'internal') {
                     return (
@@ -295,7 +333,14 @@ export default function Hilfe() {
                   }
                   if (type === 'anchor') {
                     return (
-                      <a href={target} className="text-primary-600 dark:text-primary-400 hover:underline">
+                      <a
+                        href={target}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          scrollToHash(target.slice(1))
+                        }}
+                        className="text-primary-600 dark:text-primary-400 hover:underline"
+                      >
                         {children}
                       </a>
                     )
