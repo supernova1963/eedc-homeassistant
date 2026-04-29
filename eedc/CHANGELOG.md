@@ -11,6 +11,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.0] - 2026-04-29
+
+### Refactor
+
+- **refactor(investitions-parameter): Single Source of Truth für `parameter`-JSON-Keys + 7 Drift-Bugs gefixt** — Investitionen tragen ihre typ-spezifischen Detail-Daten in einem unstrukturierten JSON-Feld (`parameter`). Über mehrere Iterationen waren Schlüsselnamen zwischen **Form** ([InvestitionForm.tsx](eedc/frontend/src/components/forms/InvestitionForm.tsx)), **Wizard** ([InvestitionenStep.tsx](eedc/frontend/src/components/setup-wizard/steps/InvestitionenStep.tsx)) und **Backend-Lese-Code** (ROI, Aussichten, Live, HA-Export, PDF, Cockpit, Community) auseinandergedriftet. Der ursprünglich als Schema gedachte API-Endpoint `/investitionen/typen` mit `parameter_schema` war zudem ein Phantom — exportiert und vom Frontend nie aufgerufen, dafür inhaltlich von den echten Form/Wizard-Keys abweichend. Eine Vollinventur (siehe [docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md](docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md)) hat 7 Production-Bugs zutage gefördert, in denen das Backend Schlüssel las, die Form/Wizard nie geschrieben haben — d. h. User-Eingaben wurden im ROI / Aussichten-Tab / Live-Komponenten-Erkennung / Wallbox-Dashboard / Community-Datensatz stillschweigend ignoriert und durch hartkodierte Defaults ersetzt.
+
+  **Strukturelle Änderungen:**
+  - **Single Source of Truth eingeführt:** `eedc/frontend/src/lib/investitionParameter.ts` und `eedc/backend/core/investition_parameter.py` — pro Investitions-Typ eine Konstanten-Map, ein TS-Interface (Frontend) und eine `_DEFAULTS`-Map mit zentral verbindlichen Default-Werten (Frontend und Backend importieren denselben Default, damit Default-Drift wie Bug #7 strukturell unmöglich ist).
+  - **Phantom-Endpoint `/investitionen/typen` entfernt** (165 Zeilen `parameter_schema`-Block in `investitionen.py`, `InvestitionTypInfo` API-Type, `useInvestitionTypen`-Hook, `getTypen`-API-Methode). Nichts ruft das mehr auf, das Schema war historisch toter Code.
+  - **Frontend-Refactor:** Form-Defaults aus den `_DEFAULTS`-Konstanten geladen (vorher hardcoded Strings); Wizard-`getParam('…')`/`updateParam('…', …)`-Calls auf Konstanten-Lookups umgestellt; Render-Stellen ([PVAnlageDashboard](eedc/frontend/src/pages/PVAnlageDashboard.tsx), [Investitionen.tsx](eedc/frontend/src/pages/Investitionen.tsx)) lesen über typed Helper (`speicherParameter(inv.parameter).kapazitaet_kwh`).
+  - **Backend-Refactor:** Alle `inv.parameter.get("…")` in [aussichten.py](eedc/backend/api/routes/aussichten.py), [investitionen.py](eedc/backend/api/routes/investitionen.py), [ha_export.py](eedc/backend/api/routes/ha_export.py), [ha_import.py](eedc/backend/api/routes/ha_import.py), [sensor_mapping.py](eedc/backend/api/routes/sensor_mapping.py), [cockpit/uebersicht.py](eedc/backend/api/routes/cockpit/uebersicht.py), [pdf_operations.py](eedc/backend/api/routes/import_export/pdf_operations.py), [community_service.py](eedc/backend/services/community_service.py) und [live_komponenten_builder.py](eedc/backend/services/live_komponenten_builder.py) auf `PARAM_<TYP>["KEY"]`-Konstanten umgestellt; defensive Doppel-Reads (z. B. `nutzt_v2h or v2h_faehig` in `ha_import.py:80`) durch den Kanon ersetzt, weil die DB-Migration Drift-Inhalte vereinheitlicht.
+  - **DB-Migration `_migrate_investitionen_parameter_keys_v325`** in [database.py](eedc/backend/core/database.py): iteriert beim Start einmalig alle Investitionen, schreibt alte JSON-Keys auf den Kanon um (`nutzt_v2h` → `v2h_faehig`, `km_jahr` → `jahresfahrleistung_km`, `pv_anteil_prozent` → `pv_ladeanteil_prozent` (E-Auto only), `benzin_verbrauch_liter_100km` → `vergleich_verbrauch_l_100km`, `nutzt_arbitrage` → `arbitrage_faehig`, `leistung_kw`/`ladeleistung_kw` → `max_ladeleistung_kw` (Wallbox), `getrennte_strommessung` String → Boolean). Idempotent — läuft beim ersten Mal echt, danach No-Op. Smoke-Test mit synthetischer Drift-DB validiert.
+
+  **Behobene Bugs (User-sichtbar):**
+  - **#1 V2H 3-fach kaputt** — [aussichten.py:1414](eedc/backend/api/routes/aussichten.py#L1414), [live_komponenten_builder.py:130](eedc/backend/services/live_komponenten_builder.py#L130) und [investitionen.py:1167](eedc/backend/api/routes/investitionen.py#L1167) lasen `nutzt_v2h` ohne Fallback, Form/Wizard schreiben `v2h_faehig`. Konsequenz: V2H-Aktivierung in der Maske wurde im Aussichten-Tab, in der Live-Komponenten-Erkennung und im E-Auto-ROI ignoriert. Nur `ha_import.py:80` hatte einen defensiven Doppel-Read.
+  - **#2 E-Auto Jahresfahrleistung im ROI ignoriert** — investitionen.py:1163 las `km_jahr` mit Default 15000, Form schreibt `jahresfahrleistung_km`.
+  - **#3 E-Auto PV-Ladeanteil im ROI ignoriert** — `pv_anteil_prozent` (Default 60) statt `pv_ladeanteil_prozent`.
+  - **#4 E-Auto Vergleichsverbrauch im ROI ignoriert** — `benzin_verbrauch_liter_100km` (Default 7.0) statt `vergleich_verbrauch_l_100km`. Aussichten + ha_export + pdf nutzten den richtigen Key, ROI weichte ab.
+  - **#5 Speicher-Arbitrage-ROI kaputt** — investitionen.py:1018+1140 (DC- und AC-Speicher) lasen `nutzt_arbitrage` mit Default False. Form/Wizard/Dashboard/ha_import nutzten `arbitrage_faehig`. Konsequenz: User aktivierte Arbitrage, ROI ignorierte die Aktivierung — Dashboard zeigte Arbitrage-Sektion korrekt.
+  - **#6 Wallbox-Leistung im Dashboard kaputt** — investitionen.py:2032 las `leistung_kw` (toter Schema-Key) mit Default 11. Form/Wizard schreiben `max_ladeleistung_kw`. Plus 2. Stelle: community_service.py:144 las `ladeleistung_kw` (auch tot) → Community-Datensatz lieferte stets `wallbox_kw=None`.
+  - **#7 WP `alter_preis_cent_kwh` Default-Inkonsistenz** — aussichten.py:1091 und ha_export.py:241 defaulteten auf 10.0, alle anderen auf 12.0. Bei leerem Form-Wert sah der User je nach Tab unterschiedliche Ersparnis. Default jetzt zentral aus `PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"] = 12`.
+  - **#8 WP `getrennte_strommessung` String-vs-Boolean** — Form speicherte als String `'true'`/`'false'`, Dashboard wertete als Boolean aus. `'false'` ist JS-truthy → Schalter ging nicht aus. DB-Migration korrigiert auch das.
+
+  **Auswirkungen für bestehende Anlagen:** Tester, die bisher V2H, Arbitrage oder eine von 11 kW abweichende Wallbox-Leistung im Form aktiviert/eingegeben haben, sehen ab v3.25.0 plötzlich neue Werte im ROI, im Aussichten-Tab und im Wallbox-Dashboard. Die alten Werte waren Default-Anzeigen, nicht User-Werte.
+
+---
+
 ## [3.24.6] - 2026-04-29
 
 ### Bugfixes
