@@ -11,6 +11,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.24.3] - 2026-04-29
+
+### Verbesserungen
+
+- **fix(sensor-zuordnung + daten-checker): state_class-Hinweise auf den richtigen Hebel umgestellt + Counter-Branch zu WARNING (#136 Folge)** — Im Nachgang zu detLANs (#136) und Joachims (Forum #436) Berichten zur 23–24-Uhr-Lücke wurde gemeinsam herausgearbeitet, dass die bisherige Begründung „vergangene Tage bleiben leer" am eigentlichen Problem vorbeigeht: das passiert auch mit `customize.yaml`-Korrektur, weil HA LTS erst ab dem Aktivierungs-Zeitpunkt persistiert. **Der relevante Unterschied im Betrieb:** ohne `state_class` greifen die **Korrektur-Werkzeuge in der Datenverwaltung** nicht — Vollbackfill, „Verlauf nachrechnen" und Per-Tag-Reaggregation lesen alle aus HA's LTS. Jeder Aussetzer (HA-/EEDC-Neustart, Polling-Hänger um Mitternacht) ist bei einem Sensor ohne `state_class` **permanent verloren**, eine zweite Chance gibt es nicht. Drei Stellen entsprechend nachgezogen: **(1) Wizard-Banner** [SensorMappingWizard.tsx](eedc/frontend/src/pages/SensorMappingWizard.tsx) — „Korrektur-Werkzeuge wirken nicht" als zentrale Folge, „Aussetzer permanent verloren" und „23–24 Uhr fehlt häufig" als nachgelagerte Symptome. **(2) Daten-Checker SENSOR_MAPPING_LTS** [daten_checker.py](eedc/backend/services/daten_checker.py) — Counter-Branch von INFO auf **WARNING** hochgestuft (vorher als „erwartetes Verhalten" beschrieben, was angesichts der fehlenden Reparatur-Werkzeuge zu beruhigend war), kWh- und Counter-Details auf den neuen Hebel umformuliert. **(3) Badge-Tooltips** in [FeldMappingInput.tsx](eedc/frontend/src/components/sensor-mapping/FeldMappingInput.tsx) — der irreführende Halbsatz „für Counter unproblematisch" ist raus. **(4) WP-Step-Hilfetext** [WaermepumpeStep.tsx](eedc/frontend/src/components/sensor-mapping/WaermepumpeStep.tsx) — der ausführliche customize-Snippet-Block ist gekürzt auf einen einzeiligen Verweis auf Hilfe → Sensor-Referenz. **Filter-Aufweichung bleibt** — Power-User mit nicht-konfigurierbarer HA-Installation behalten die Möglichkeit, einen Sensor ohne `state_class` zu wählen, sehen aber jetzt klar, was sie damit aufgeben.
+
+---
+
 ## [3.24.2] - 2026-04-28
 
 ### Dokumentation
