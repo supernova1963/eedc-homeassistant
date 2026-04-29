@@ -13,6 +13,7 @@ import {
   type MonatsAuswertung, type HeatmapZelle, type PeakStunde,
   type KomponentenEintrag, type KategorieSumme,
 } from '../../api/energie_profil'
+import { anlagenApi } from '../../api'
 
 interface Props {
   anlageId: number
@@ -103,6 +104,19 @@ export function EnergieprofilMonat({ anlageId }: Props) {
   const [data, setData] = useState<MonatsAuswertung | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [installJahr, setInstallJahr] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!anlageId) return
+    anlagenApi.get(anlageId)
+      .then(a => {
+        if (a.installationsdatum) {
+          const y = new Date(a.installationsdatum).getFullYear()
+          if (Number.isFinite(y)) setInstallJahr(y)
+        }
+      })
+      .catch(() => { /* Fallback: ohne Untergrenze */ })
+  }, [anlageId])
 
   useEffect(() => {
     if (!anlageId) return
@@ -199,9 +213,14 @@ export function EnergieprofilMonat({ anlageId }: Props) {
           className="input w-auto"
           aria-label="Jahr"
         >
-          {Array.from({ length: 6 }, (_, i) => aktJahr - i).map(j => (
-            <option key={j} value={j}>{j}</option>
-          ))}
+          {(() => {
+            // Jahre nur ab Inbetriebnahme; Fallback 6 Jahre rückwärts wenn unbekannt
+            const von = installJahr ?? (aktJahr - 5)
+            const count = Math.max(1, aktJahr - von + 1)
+            return Array.from({ length: count }, (_, i) => aktJahr - i).map(j => (
+              <option key={j} value={j}>{j}</option>
+            ))
+          })()}
         </select>
         <button
           type="button"
