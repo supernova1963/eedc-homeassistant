@@ -85,6 +85,69 @@ Clamp [0.5 ; 1.3], runden auf 3 Nachkommastellen, Cache pro (anlage, quelle).
 
 ---
 
+## Orthogonale Verbesserungen am Skalar (vorziehbar)
+
+Drei Heuristiken, die den heutigen Skalar robuster machen, **ohne** auf den
+6-Monate-Trigger der Varianten A–C zu warten. Inspiriert durch
+[libe.net/pv-forecast](https://www.libe.net/pv-forecast) (Analog-Ensemble-Ansatz
+mit mehrstufiger Gewichtung) — die Detail-Heuristiken passen direkt in unser
+MOS-Schema, der Analog-Ensemble-Kern selbst nicht (eedc nutzt numerische
+Wettermodelle + Kalibrierung, nicht Nearest-Neighbor).
+
+### O1 — Recency-Boost im Lernfaktor
+
+**Problem:** Saisonbins mitteln über mehrere Wochen bis Monate. Schleichende
+Veränderungen (Modul-Verschmutzung, wachsende Bäume, Sensor-Drift) brauchen
+entsprechend lange, bis sie durchschlagen.
+
+**Heuristik:** Tage jünger als 30 Tage erhalten +30 % Gewicht in der
+Aggregation. Stärke und Schwellwert konservativ wählbar.
+
+**Aufwand:** ~halber Tag. Eine Zeile in `_berechne_faktor`
+(Produktionsgewichtung × Recency-Faktor).
+
+**Risiko:** gering. Faktor weiterhin auf [0.5 ; 1.3] geclampt, Saisonbin-Logik
+unverändert.
+
+### O2 — Robuste Statistik gegen Ausreißer
+
+**Problem:** Aktuell `Σ(IST) / Σ(Prognose)` produktionsgewichtet. Ein einzelner
+Tag mit defektem Sensor, MQTT-Aussetzer oder Snapshot-Lücke (<v3.20)
+zerrt den Faktor messbar.
+
+**Heuristik:** Vor der Summation die Tagesquotienten `IST_d / Prognose_d`
+trimmen — z.B. 10 %-getrimmter Mittelwert (oberste/unterste 10 % der Tage
+werden verworfen, Rest gewichtet aggregiert).
+
+**Aufwand:** ~halber Tag. Sortier-Schritt + Slicing in `_berechne_faktor`.
+
+**Risiko:** gering bis null. Bei sauberem Datenbestand identisch zum heutigen
+Mittel; bei Ausreißern systematisch besser. Solcast/Open-Meteo-LOO-Validierung
+(libe.net) ist Overkill — Trim-Mean reicht.
+
+### O3 — Schneeerkennungs-Heuristik (Dez–Feb)
+
+**Problem:** Bei Schneebedeckung produziert die Anlage kaum Strom, das GTI-
+Signal aus der Wettervorhersage ist aber „sauberer Sonnentag". eedc überschätzt
+systematisch, der Lernfaktor reagiert mit ~30 Tagen Lag.
+
+**Heuristik:** Im Fenster Dez–Feb prüfen: wenn die letzten 2–3 Tage
+`IST/Prognose < 30 %` bei klarem GHI (Cloud-Coverage < 30 %), Penalty 50 %
+auf nächstes-Tag-Prognose ansetzen, bis IST/Prognose wieder > 70 %.
+
+**Aufwand:** Mittel. Eigene Detection-Funktion + State im Cache (welche
+Anlage „im Schnee-Modus"). UI-Hinweis im Live-Dashboard sinnvoll
+(„Schnee-Penalty aktiv, geschätzt").
+
+**Risiko:** mittel. Schwellwerte sind heuristisch, falsch ausgelöste Penalty
+ist schlimmer als fehlende. Sollte erst nach mindestens einem Winter-IST-
+Vergleich an drei Anlagen scharfgeschaltet werden.
+
+**Triage:** O1 + O2 sind low-risk und liefern sofortigen Mehrwert für **alle**
+Anlagen. O3 ist nicht-trivial und braucht Test-Daten — eigenes Issue, später.
+
+---
+
 ## Drei Varianten
 
 ### Variante A — Stündliches Korrekturprofil
@@ -235,6 +298,11 @@ Was sinnvoll **vorgezogen** werden kann, ohne ein leeres Feature zu exponieren:
 **Empfehlung:** Variante A als „Etappe 1" planen, Trigger ist „6 Monate Daten
 + konkrete Anfrage". Variante B nur wenn nachweisbarer Bedarf. Variante C nur
 auf explizite Multi-String-Anfrage.
+
+**Hinweis:** Die orthogonalen Skalar-Verbesserungen O1 (Recency-Boost) und
+O2 (Trim-Mean) hängen **nicht** an diesen Triggern und können jederzeit
+vorgezogen werden. O3 (Schneeerkennung) braucht mindestens einen Winter-
+Datenbestand und sollte als separates Issue verfolgt werden.
 
 ---
 
