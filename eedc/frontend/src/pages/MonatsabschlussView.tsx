@@ -13,7 +13,7 @@ import {
   Sun, Battery, Flame, Car, Euro,
   ChevronDown, BarChart3, Wrench, Home, Zap, TrendingUp,
   Plug, Gauge, ArrowUpDown, RefreshCw, CalendarClock, Users, Share2,
-  ArrowUp, ArrowDown, Thermometer, Activity,
+  ArrowUp, ArrowDown, Thermometer, Activity, Power,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
 import { fmtKpi } from '../lib'
@@ -1441,6 +1441,20 @@ export default function MonatsabschlussView() {
                     formel="(Wärme ÷ 0,9 × Gaspreis − Strom × Strompreis)"
                     subtitle={vj?.wp_strom_kwh != null ? `VJ Strom: ${fmt(vj.wp_strom_kwh, 0)} kWh` : undefined} />
                 </div>
+                {/* Issue #169: Kompressor-Starts (nur wenn Counter-Sensor zugeordnet) */}
+                {d.wp_starts_max_tag != null && d.wp_starts_max_tag > 0 && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <KPICard
+                      title="Kompressor-Starts (Max/Tag)"
+                      value={d.wp_starts_max_tag.toString()}
+                      unit=""
+                      icon={Power}
+                      color="gray"
+                      formel="Max einer Tagessumme im Monat (Verschleiß-Indikator)"
+                      subtitle={d.wp_starts_summe_monat != null ? `Σ ${d.wp_starts_summe_monat.toLocaleString('de-DE')} im Monat` : undefined}
+                    />
+                  </div>
+                )}
                 <div className="mt-3">
                   <VglZeile label="Stromverbrauch" aktuell={d.wp_strom_kwh}   vm={hatVmWp ? vm!.wp_strom_kwh : null}  vj={vj?.wp_strom_kwh}  unit="kWh" inv />
                   <VglZeile label="Wärmeertrag"    aktuell={d.wp_waerme_kwh}  vm={vmWaerme} vj={vj?.wp_waerme_kwh} unit="kWh" />

@@ -18,6 +18,7 @@ from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_monat, aktiv_
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import Strompreis
+from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 
@@ -1601,6 +1602,25 @@ async def get_waermepumpe_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
+    # Issue #169: Kompressor-Starts pro WP-Investition aggregieren.
+    # Quelle: TagesZusammenfassung.komponenten_starts (Form
+    # {"wp_starts_anzahl": {"<inv_id>": <int>}}). Pro Inv: Σ aller Tage + Max-Tag.
+    tz_result = await db.execute(
+        select(TagesZusammenfassung.komponenten_starts)
+        .where(TagesZusammenfassung.anlage_id == anlage_id)
+        .where(TagesZusammenfassung.komponenten_starts.is_not(None))
+    )
+    starts_by_inv: dict[int, list[int]] = {wid: [] for wid in wp_ids}
+    for (komp_starts,) in tz_result.all():
+        wp_map = (komp_starts or {}).get("wp_starts_anzahl") or {}
+        for inv_id_str, count in wp_map.items():
+            try:
+                inv_id = int(inv_id_str)
+            except (TypeError, ValueError):
+                continue
+            if inv_id in starts_by_inv and isinstance(count, (int, float)) and count > 0:
+                starts_by_inv[inv_id].append(int(count))
+
     dashboards = []
     for wp in waermepumpen:
         # Issue #153: Daten vor Anschaffungsdatum ignorieren — siehe komponenten.py
@@ -1653,6 +1673,11 @@ async def get_waermepumpe_dashboard(
         strom_co2 = gesamt_strom * 0.38
         co2_ersparnis = gas_co2 - strom_co2
 
+        # Kompressor-Starts (#169): Σ + Max-Tag über die gesamte Lebensdauer
+        wp_starts_list = starts_by_inv.get(wp.id, [])
+        kompressor_starts_gesamt = sum(wp_starts_list) if wp_starts_list else None
+        kompressor_starts_max_tag = max(wp_starts_list) if wp_starts_list else None
+
         zusammenfassung = {
             'gesamt_stromverbrauch_kwh': round(gesamt_strom, 1),
             'gesamt_heizenergie_kwh': round(gesamt_heizung, 1),
@@ -1664,6 +1689,8 @@ async def get_waermepumpe_dashboard(
             'ersparnis_euro': round(ersparnis, 2),
             'co2_ersparnis_kg': round(co2_ersparnis, 1),
             'anzahl_monate': len(monatsdaten),
+            'kompressor_starts_gesamt': kompressor_starts_gesamt,
+            'kompressor_starts_max_tag': kompressor_starts_max_tag,
         }
 
         # Getrennte COP-Werte wenn separate Strommessung vorhanden

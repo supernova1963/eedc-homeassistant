@@ -96,6 +96,10 @@ class AktuellerMonatResponse(BaseModel):
     wp_waerme_kwh: Optional[float] = None
     wp_heizung_kwh: Optional[float] = None
     wp_warmwasser_kwh: Optional[float] = None
+    # Issue #169: Kompressor-Starts. Quelle: TagesZusammenfassung.komponenten_starts
+    # über die Tage des Monats, summiert über alle WP-Investitionen.
+    wp_starts_max_tag: Optional[int] = None
+    wp_starts_summe_monat: Optional[int] = None
     hat_waermepumpe: bool = False
 
     # Komponenten — E-Mobilität
@@ -921,6 +925,39 @@ async def get_aktueller_monat(
     # ── Komponenten-Flags ──
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
+
+    # ── Issue #169: Kompressor-Starts pro Monat aus TagesZusammenfassung ──
+    # Quelle: TagesZusammenfassung.komponenten_starts (JSON, Form
+    # {"wp_starts_anzahl": {"<inv_id>": <int>}}). Pro Tag des Monats werden die
+    # Counts aller WP-Investitionen summiert (= Tagessumme der Anlage), daraus
+    # max(Tagessumme) und Σ(Tagessumme im Monat).
+    wp_starts_max_tag: Optional[int] = None
+    wp_starts_summe_monat: Optional[int] = None
+    if hat_waermepumpe:
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from sqlalchemy import extract
+        wp_inv_id_strs = {str(i.id) for i in investitionen if i.typ == "waermepumpe"}
+        tz_result = await db.execute(
+            select(TagesZusammenfassung.komponenten_starts)
+            .where(TagesZusammenfassung.anlage_id == anlage_id)
+            .where(extract("year", TagesZusammenfassung.datum) == jahr)
+            .where(extract("month", TagesZusammenfassung.datum) == monat)
+            .where(TagesZusammenfassung.komponenten_starts.is_not(None))
+        )
+        tagessummen: list[int] = []
+        for (komp_starts,) in tz_result.all():
+            wp_map = (komp_starts or {}).get("wp_starts_anzahl") or {}
+            tag_sum = 0
+            for inv_id_str, count in wp_map.items():
+                if inv_id_str in wp_inv_id_strs and isinstance(count, (int, float)) and count > 0:
+                    tag_sum += int(count)
+            if tag_sum > 0:
+                tagessummen.append(tag_sum)
+        if tagessummen:
+            wp_starts_max_tag = max(tagessummen)
+            wp_starts_summe_monat = sum(tagessummen)
+
+
     hat_emobilitaet = any(
         i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)
         for i in investitionen
@@ -1092,6 +1129,8 @@ async def get_aktueller_monat(
         wp_waerme_kwh=get_val("wp_waerme_kwh"),
         wp_heizung_kwh=wp_heizung,
         wp_warmwasser_kwh=wp_warmwasser,
+        wp_starts_max_tag=wp_starts_max_tag,
+        wp_starts_summe_monat=wp_starts_summe_monat,
         hat_waermepumpe=hat_waermepumpe,
         # Komponenten — E-Mobilität
         emob_ladung_kwh=get_val("emob_ladung_kwh"),

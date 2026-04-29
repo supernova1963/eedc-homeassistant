@@ -4,7 +4,7 @@
  */
 
 import { Fragment, useState, useEffect } from 'react'
-import { Flame, Zap, Leaf, TrendingUp, Thermometer } from 'lucide-react'
+import { Flame, Zap, Leaf, TrendingUp, Thermometer, Power } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
@@ -284,6 +284,22 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       <p className="text-xs text-gray-400 dark:text-gray-500 italic -mt-2">
         JAZ = Jahresarbeitszahl über die gesamte Laufzeit ({z.anzahl_monate} Monate). Jahresweise Auswertung unter Auswertungen → Komponenten.
       </p>
+
+      {/* Issue #169: Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist) */}
+      {z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <KPICard
+            title="Kompressor-Starts"
+            value={z.kompressor_starts_gesamt.toLocaleString('de-DE')}
+            icon={Power}
+            color="gray"
+            subtitle={z.kompressor_starts_max_tag != null ? `Max/Tag: ${z.kompressor_starts_max_tag}` : undefined}
+            formel="Σ Tages-Starts seit Anschaffung"
+            berechnung={`Höchste Tagessumme: ${z.kompressor_starts_max_tag ?? '—'}`}
+            ergebnis={`= ${z.kompressor_starts_gesamt.toLocaleString('de-DE')} Starts`}
+          />
+        </div>
+      )}
 
       {/* Charts Row 1 */}
       <div className="grid md:grid-cols-2 gap-6">

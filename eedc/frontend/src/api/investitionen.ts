@@ -163,6 +163,9 @@ export interface WaermepumpeDashboardResponse {
     gesamt_warmwasser_getrennt_kwh?: number
     cop_heizen?: number
     cop_warmwasser?: number
+    // Issue #169: Kompressor-Starts über die Lebensdauer
+    kompressor_starts_gesamt?: number | null
+    kompressor_starts_max_tag?: number | null
   }
 }
 

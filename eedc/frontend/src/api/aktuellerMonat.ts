@@ -59,6 +59,9 @@ export interface AktuellerMonatResponse {
   wp_waerme_kwh: number | null
   wp_heizung_kwh: number | null
   wp_warmwasser_kwh: number | null
+  // Issue #169: Kompressor-Starts (aus TagesZusammenfassung über die Tage des Monats)
+  wp_starts_max_tag: number | null
+  wp_starts_summe_monat: number | null
   hat_waermepumpe: boolean
 
   // Komponenten — E-Mobilität
