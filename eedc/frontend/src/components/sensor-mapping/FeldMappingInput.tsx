@@ -118,9 +118,9 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
             {selectedSensor?.has_statistics === false && (
               <span
                 className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                title="Sensor ohne state_class — fehlt in HA-Long-Term-Statistics. Für kWh-Felder ungeeignet, für Counter (z.B. WP-Starts) unproblematisch."
+                title="Sensor ohne state_class — fehlt in HA-Long-Term-Statistics. Folgen: kein historischer Backfill, einzelne Stunden können fehlen (typisch 23–24 Uhr). Bei kWh-Feldern echtes Problem; bei Countern (z.B. WP-Starts) bleibt der laufende Tag meist okay, vergangene Tage leer. Empfohlen: state_class via customize.yaml ergänzen."
               >
-                ohne Statistik
+                keine HA-Statistik
               </span>
             )}
           </span>

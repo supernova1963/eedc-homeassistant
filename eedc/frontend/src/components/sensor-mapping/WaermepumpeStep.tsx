@@ -203,11 +203,12 @@ export default function WaermepumpeStep({
                   Bei Nibe z.B. aus der lokalen „Nibe Heat Pump"-Integration: <code className="text-xs">sensor.compressor_number_of_starts_…</code>
                 </div>
                 <div>
-                  Falls der Sensor nicht in der Auswahl erscheint, fehlt ihm vermutlich <code className="text-xs">state_class</code> (typisch bei Nibe). Über den Link „Alle Sensoren ohne Filter anzeigen" oben wird er sichtbar — alternativ in HA per <code className="text-xs">configuration.yaml</code> nachpatchen:
+                  Falls der Sensor nicht in der Auswahl erscheint, fehlt ihm vermutlich <code className="text-xs">state_class</code> (typisch bei Nibe und Viessmann). <strong>Empfohlen:</strong> in HA per <code className="text-xs">configuration.yaml</code> nachrüsten — danach taucht er im Standard-Filter auf, der Backfill funktioniert, und auch HA-Statistik-Karten zeigen ihn:
                   <pre className="mt-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[11px] overflow-x-auto">{`homeassistant:
   customize:
     sensor.compressor_number_of_starts_…:
       state_class: total_increasing`}</pre>
+                  Notlösung ohne Eingriff in HA: Link „Alle Sensoren ohne Filter anzeigen" oben — dann ist der Sensor zwar wählbar, vergangene Tage bleiben aber leer und einzelne Stunden können fehlen.
                 </div>
               </div>
             </div>

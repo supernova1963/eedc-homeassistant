@@ -1126,7 +1126,8 @@ class DatenChecker:
         Kategorie macht das sichtbar:
 
         - **kWh-Feld + nicht in LTS** → WARNING (still kritisch)
-        - **Counter-Feld + nicht in LTS** → INFO (erwartetes Verhalten — Snapshot-Pfad)
+        - **Counter-Feld + nicht in LTS** → INFO mit Hinweis auf lückenhafte Daten
+          (kein Backfill, einzelne Stunden können fehlen; typisch 23–24 Uhr)
         - **kWh-Feld + LTS vorhanden** → OK
         """
         from backend.services.ha_statistics_service import get_ha_statistics_service
@@ -1211,17 +1212,25 @@ class DatenChecker:
             ))
 
         if counter_missing:
+            beispiele = "; ".join(f"{lbl} ({sid})" for sid, lbl in counter_missing[:5])
+            if len(counter_missing) > 5:
+                beispiele += f" (+{len(counter_missing) - 5} weitere)"
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,
                 meldung=(
-                    f"{len(counter_missing)} Counter-Sensor(en) nicht in HA-Statistics "
-                    "(erwartet, kein Problem)"
+                    f"{len(counter_missing)} Counter-Sensor(en) ohne state_class — "
+                    "Daten lückenhaft"
                 ),
                 details=(
-                    "Counter-Felder wie WP-Kompressor-Starts werden über den "
-                    "stündlichen Snapshot-Service erfasst, nicht über die HA-LTS-"
-                    "Tabelle. Fehlende state_class ist hier ohne Folgen."
+                    "Counter-Felder wie WP-Kompressor-Starts werden über den stündlichen "
+                    "Snapshot-Service erfasst. Ohne state_class fehlt aber HA-Long-Term-"
+                    "Statistics: kein historischer Backfill möglich, vergangene Tage "
+                    "bleiben leer, und einzelne Stunden im laufenden Betrieb können "
+                    "fehlen (typisch 23–24 Uhr). Empfohlen: state_class via "
+                    "configuration.yaml customize ergänzen — dann ist die Erfassung "
+                    f"lückenfrei. Betroffen: {beispiele}"
                 ),
+                link="/einstellungen/sensor-mapping",
             ))
 
         if kwh_sensors and not kwh_missing:

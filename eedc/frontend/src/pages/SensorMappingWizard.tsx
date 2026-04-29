@@ -794,24 +794,45 @@ export default function SensorMappingWizard() {
       {/* Erweiterte Suche: Fallback wenn der Energy-Filter den gesuchten Sensor versteckt
           (z.B. Nibe-Roh-Counter ohne state_class). Lädt alle Sensoren ohne Filter nach. */}
       {currentStepConfig.id !== 'summary' && availableSensors.length > 0 && (
-        <div className="text-xs text-gray-500 dark:text-gray-400 px-1 flex items-center gap-2 flex-wrap">
-          <span>Sensor nicht in der Auswahl?</span>
-          {extendedLoaded ? (
-            <span className="text-green-600 dark:text-green-400">
-              ✓ Alle Sensoren geladen ({availableSensors.length})
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={loadExtendedSensors}
-              disabled={extendedLoading}
-              className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50"
-            >
-              {extendedLoading ? 'Lädt…' : 'Alle Sensoren ohne Filter anzeigen'}
-            </button>
-          )}
-          {extendedError && (
-            <span className="text-red-600 dark:text-red-400">{extendedError}</span>
+        <div className="space-y-2">
+          <div className="text-xs text-gray-500 dark:text-gray-400 px-1 flex items-center gap-2 flex-wrap">
+            <span>Sensor nicht in der Auswahl?</span>
+            {extendedLoaded ? (
+              <span className="text-amber-700 dark:text-amber-400 font-medium">
+                Alle Sensoren geladen ({availableSensors.length}) — Hinweis beachten
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={loadExtendedSensors}
+                disabled={extendedLoading}
+                className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50"
+              >
+                {extendedLoading ? 'Lädt…' : 'Alle Sensoren ohne Filter anzeigen'}
+              </button>
+            )}
+            {extendedError && (
+              <span className="text-red-600 dark:text-red-400">{extendedError}</span>
+            )}
+          </div>
+          {extendedLoaded && (
+            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-900 dark:text-amber-100 space-y-2">
+              <p className="font-medium">
+                Sensoren ohne <code>state_class</code> sind jetzt mit auswählbar — sie sind in der Liste mit dem Label „keine HA-Statistik" markiert.
+              </p>
+              <p>
+                Folgen für so einen Sensor: HA legt für ihn keine Long-Term-Statistics an, daher
+                <strong> kein historischer Backfill</strong> möglich, und auch im laufenden Betrieb können einzelne Stunden fehlen — typisch ist die letzte Stunde des Tages (23–24 Uhr).
+                Für kumulative <strong>kWh-Zähler ist das ein echtes Problem</strong>; bei reinen Countern wie WP-Kompressor-Starts ist der laufende Tag meist okay, vergangene Tage bleiben aber leer.
+              </p>
+              <p>
+                <strong>Empfohlen:</strong> in HA <code>state_class</code> per <code>configuration.yaml</code>-customize ergänzen — dann erscheint der Sensor auch im Standard-Filter, der Backfill funktioniert, und HA-Statistik-Karten zeigen ihn ebenfalls.
+              </p>
+              <pre className="mt-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded text-[11px] overflow-x-auto">{`homeassistant:
+  customize:
+    sensor.<entity_id>:
+      state_class: total_increasing`}</pre>
+            </div>
           )}
         </div>
       )}
