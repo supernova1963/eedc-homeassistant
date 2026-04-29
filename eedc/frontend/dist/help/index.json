@@ -1,5 +1,6 @@
 [
   {"slug": "benutzerhandbuch", "title": "Übersicht", "category": "Einstieg", "filename": "BENUTZERHANDBUCH.md"},
+  {"slug": "was-ist-neu", "title": "Was ist neu", "category": "Einstieg", "filename": "WAS-IST-NEU.md"},
   {"slug": "installation", "title": "Teil I: Installation & Einrichtung", "category": "Handbuch", "filename": "HANDBUCH_INSTALLATION.md"},
   {"slug": "bedienung", "title": "Teil II: Bedienung", "category": "Handbuch", "filename": "HANDBUCH_BEDIENUNG.md"},
   {"slug": "einstellungen", "title": "Teil III: Einstellungen & Sensormapping", "category": "Handbuch", "filename": "HANDBUCH_EINSTELLUNGEN.md"},
