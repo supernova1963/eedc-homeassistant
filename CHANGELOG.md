@@ -11,6 +11,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.24.4] - 2026-04-29
+
+### Verbesserungen
+
+- **feat(cockpit): Kompressor-Starts in Monatsbericht + WP-Dashboard (#169 detLAN)** — KPI-Kacheln für die in v3.24.0 erfassten WP-Kompressor-Starts, Quelle ist `TagesZusammenfassung.komponenten_starts`. **MonatsabschlussView** (Cockpit → Monatsberichte, WP-Sektion): neuer Tile „Kompressor-Starts (Max/Tag)" — höchste Tagessumme im Monat als Hauptzahl (Verschleiß-Indikator), Σ im Monat als Subtitle. **WaermepumpeDashboard** (Cockpit → Wärmepumpe): neuer Tile mit Σ über die Lebensdauer ab Anschaffung als Hauptzahl (Auslegungs-Indikator), Max/Tag als Subtitle. Backend-Aggregation in beiden Endpoints (`get_aktueller_monat` über Monat, `get_waermepumpe_dashboard` über Lebensdauer) liest `TagesZusammenfassung` zusätzlich zu `InvestitionMonatsdaten` — gefiltert pro WP-Investition aus dem JSON `wp_starts_anzahl`-Subfeld. **Live-Dashboard bewusst ausgenommen** — WP-Starts heute sind nur in der Trimming-Phase aussagekräftig; nach Einstellungs-Findung wäre das Feld Karteileiche. Auswertung → Energieprofil → Monat-Tabelle bleibt unverändert (WP-Starts-Spalte ist seit v3.24.0 dort einblendbar).
+
+- **fix(energieprofil-monat): Jahre-Selektor ab Anlagen-Inbetriebnahmejahr (#171 detLAN)** — Der Monat-Tab im Energieprofil zeigte fix die letzten 6 Jahre, also auch Jahre vor Inbetriebnahme der Anlage — bei detLANs Anlage (PV seit 2023) erschienen 2021/2022 als wählbare aber inhaltslose Optionen. `EnergieprofilMonat` lädt jetzt beim Mount die Anlage und nutzt `installationsdatum.year` als Untergrenze der Optionen-Range. Fallback ohne `installationsdatum`: weiterhin 6 Jahre rückwärts.
+
+- **fix(ha-statistik-import): doppeltes Icon entfernt + Navigation in Card-Hülle (#170 detLAN)** — Zwei Kosmetik-Punkte aus detLANs Screenshots: (1) Im Datenbank-Status-Alert standen zwei Häkchen-Icons hintereinander — der `<Alert type="success">` bringt sein Icon selbst mit, der explizite `<CheckCircle>` daneben war redundant. Beide entfernt (auch `<XCircle>` im Error-Branch + ungenutzter Import). (2) Die unteren Navigations-Buttons („Zurück zu Sensor-Zuordnung" / „Zu Monatsdaten") standen direkt auf dem Page-Hintergrund ohne Card-Hülle, während der gesamte Hauptinhalt in weissen Cards mit Border lebt. Jetzt in derselben `bg-white`/Border-Card eingebettet, konsistent mit dem Layout-Stil der Seite.
+
+- **fix(pv-cockpit): Speicher-Kapazität + WR-Eigenleistung in PV-Komponenten anzeigen (#172 detLAN)** — Im PV-Anlagen-Cockpit zeigte der „PV-Komponenten"-Block beim Speicher ausschließlich die Bezeichnung — Kapazität (`batteriekapazitaet_kwh`), nutzbare Kapazität (`nutzbare_kapazitaet_kwh`) und WR-Eigenleistung (`max_leistung_kw`) wurden nirgendwo gerendert, obwohl die Stammdaten gepflegt sein können. Beim Wechselrichter stand rechts nur die Σ-Modul-kWp, was bei einer Anlage mit nur einem Modul-Eintrag wie ein Echo der Modul-Zeile darunter wirkte. Speicher-Zeile zeigt jetzt Kapazität (kWh) wenn gepflegt; bei abweichender nutzbarer Kapazität (DOD-Reserve > ~0.05 kWh) zusätzlich „(X nutzbar)" in Klammern. Wechselrichter-Header zeigt jetzt „WR X kW · Module Σ Y kWp" wenn `max_leistung_kw` gepflegt ist (sonst nur „Module Σ Y kWp"). Lade-/Entladeleistung und Wirkungsgrad bewusst nicht im Cockpit-Kontext — die gehören in die Speicher-Detail-Seite.
+
+---
+
 ## [3.24.3] - 2026-04-29
 
 ### Verbesserungen
