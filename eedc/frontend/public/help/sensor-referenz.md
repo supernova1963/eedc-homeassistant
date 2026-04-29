@@ -284,6 +284,21 @@ Seit v3.24.1 zeigt der Wizard:
 
 Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"** im Wizard-Dropdown. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch." Im Backend trägt `HASensorInfo.has_statistics: bool` (= `state_class is not None`) diese Information.
 
+#### Anleitung zum Nachrüsten
+
+Trägt ein Sensor das Badge — z. B. der Nibe-Counter `sensor.compressor_number_of_starts_…` —, lässt er sich in HA's `customize.yaml` nachträglich klassifizieren:
+
+```yaml
+homeassistant:
+  customize:
+    sensor.compressor_number_of_starts_eb101_ep14_31490:
+      state_class: total_increasing
+```
+
+Nach **HA-Neustart** landet der Sensor in HA-Long-Term-Statistics und steht damit für Backfill, Per-Tag-Reaggregation und Snapshot-Self-Healing zur Verfügung.
+
+> **Wichtig:** Die Korrektur wirkt **ab dem Zeitpunkt** der `state_class`-Aktivierung. HA legt LTS-Werte erst ab diesem Moment an — vorher existieren keine Werte zum Holen, auch keine rückwirkende Reparatur. Bestehende leere Tage bleiben leer; ab Aktivierung wird lückenfrei erfasst.
+
 ### Daten-Checker-Kategorie „Sensor-Mapping – HA-Statistics"
 
 Prüft pro Anlage, ob alle im Mapping verwendeten **kWh-Sensoren** tatsächlich in HA-LTS landen:
@@ -292,20 +307,9 @@ Prüft pro Anlage, ob alle im Mapping verwendeten **kWh-Sensoren** tatsächlich 
 |---|---|
 | **OK** | Alle kWh-Sensoren in LTS verfügbar |
 | **WARNING** | kWh-Feld zeigt auf LTS-losen Sensor — Monatsabschluss bleibt leer (still kritisch) |
-| **INFO** | Counter-Feld zeigt auf LTS-losen Sensor — erwartetes Verhalten (Snapshot-Pfad) |
+| **WARNING** | Counter-Feld zeigt auf LTS-losen Sensor — Snapshot läuft, aber Korrektur-Werkzeuge in der Datenverwaltung wirken nicht |
 
 Live-Mappings (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` direkt und brauchen kein LTS.
-
-### Plan B außerhalb von EEDC
-
-Wenn ein Sensor als „ohne Statistik" markiert ist, kann man ihn in HA's `customize.yaml` nachträglich klassifizieren:
-
-```yaml
-sensor.compressor_number_of_starts_eb101_ep14_31490:
-  state_class: total_increasing
-```
-
-Damit landet er in HA-LTS und steht für Backfill und Snapshot zur Verfügung.
 
 ---
 

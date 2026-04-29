@@ -199,7 +199,7 @@ export default function WaermepumpeStep({
               />
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
                 Optional. Kumulativer Anzahl-Zähler der Kompressor-Starts für Tages-/Monats-KPI (Verschleiß / Auslegung).
-                Bei Nibe und Viessmann fehlt der Sensor häufig im Standard-Filter, weil ihm <code className="text-xs">state_class</code> nicht gesetzt ist — Anleitung zum Nachrüsten siehe Hilfe → Sensor-Referenz.
+                Sollte der Sensor das „ohne Statistik"-Badge aufweisen, beachte bitte die Anleitung zum Nachrüsten — siehe Hilfe → Sensor-Referenz → „ohne Statistik"-Badge.
               </div>
             </div>
 

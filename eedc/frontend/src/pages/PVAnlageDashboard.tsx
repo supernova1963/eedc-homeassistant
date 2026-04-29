@@ -48,9 +48,10 @@ export default function PVAnlageDashboard() {
   const { investitionen, loading: invLoading } = useInvestitionen(selectedAnlageId)
 
   // PV-Systeme gruppieren (Wechselrichter + zugeordnete Module)
-  const { pvSysteme, orphanModule } = useMemo(() => {
+  const { pvSysteme, orphanModule, orphanSpeicher } = useMemo(() => {
     const systeme: PVSystem[] = []
     const orphanMod: Investition[] = []
+    const orphanSp: Investition[] = []
 
     const wechselrichter = investitionen.filter(i => i.typ === 'wechselrichter')
     const pvModule = investitionen.filter(i => i.typ === 'pv-module')
@@ -75,7 +76,14 @@ export default function PVAnlageDashboard() {
       }
     }
 
-    return { pvSysteme: systeme, orphanModule: orphanMod }
+    // Speicher ohne WR-Zuordnung (parent optional) separat ausweisen, damit sie nicht stillschweigend verschwinden
+    for (const s of speicher) {
+      if (!s.parent_investition_id || !wechselrichter.find(wr => wr.id === s.parent_investition_id)) {
+        orphanSp.push(s)
+      }
+    }
+
+    return { pvSysteme: systeme, orphanModule: orphanMod, orphanSpeicher: orphanSp }
   }, [investitionen])
 
   // Daten aus Cockpit-API
@@ -134,7 +142,7 @@ export default function PVAnlageDashboard() {
 
   const loading = anlagenLoading || invLoading || cockpitLoading
   const hasData = gesamtErzeugung > 0
-  const hasPVSystem = pvSysteme.length > 0 || orphanModule.length > 0
+  const hasPVSystem = pvSysteme.length > 0 || orphanModule.length > 0 || orphanSpeicher.length > 0
   const hasMultipleYears = jahresChartData.length > 1
 
   if (loading) return <LoadingSpinner text="Lade PV-Anlage..." />
@@ -251,8 +259,8 @@ export default function PVAnlageDashboard() {
               const wrParams = (system.wechselrichter.parameter || {}) as Record<string, unknown>
               const wrLeistungKw = typeof wrParams.max_leistung_kw === 'number' ? wrParams.max_leistung_kw : null
               return (
-              <div key={system.wechselrichter.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
+              <div key={system.wechselrichter.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
                   <h3 className="font-medium text-gray-900 dark:text-white">
                     {system.wechselrichter.bezeichnung}
                   </h3>
@@ -261,28 +269,71 @@ export default function PVAnlageDashboard() {
                     Module Σ {system.gesamtKwp.toFixed(1)} kWp
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  {system.pvModule.map(mod => (
-                    <div key={mod.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Sun className="h-4 w-4 text-yellow-500" />
-                      <span>{mod.bezeichnung}</span>
-                      <span className="text-gray-400">
-                        {mod.leistung_kwp?.toFixed(1)} kWp
-                        {mod.ausrichtung && ` • ${mod.ausrichtung}`}
-                      </span>
+
+                {system.pvModule.length > 0 && (
+                  <div className="border border-gray-100 dark:border-gray-800 rounded-md p-3 bg-gray-50/50 dark:bg-gray-800/30">
+                    <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Module</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      {system.pvModule.map(mod => (
+                        <div key={mod.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                          <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                          <span className="truncate">{mod.bezeichnung}</span>
+                          <span className="text-gray-400 ml-auto whitespace-nowrap">
+                            {mod.leistung_kwp?.toFixed(1)} kWp
+                            {mod.ausrichtung && ` • ${mod.ausrichtung}`}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  {system.speicher.map(sp => {
+                  </div>
+                )}
+
+                {system.speicher.length > 0 && (
+                  <div className="border border-gray-100 dark:border-gray-800 rounded-md p-3 bg-gray-50/50 dark:bg-gray-800/30">
+                    <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Speicher</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      {system.speicher.map(sp => {
+                        const spParams = (sp.parameter || {}) as Record<string, unknown>
+                        const kapBrutto = typeof spParams.kapazitaet_kwh === 'number' ? spParams.kapazitaet_kwh : null
+                        const kapNutzbar = typeof spParams.nutzbare_kapazitaet_kwh === 'number' ? spParams.nutzbare_kapazitaet_kwh : null
+                        const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
+                        return (
+                          <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                            <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                            <span className="truncate">{sp.bezeichnung}</span>
+                            {kapBrutto != null && (
+                              <span className="text-gray-400 ml-auto whitespace-nowrap">
+                                {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
+                                {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              )
+            })}
+
+            {orphanSpeicher.length > 0 && (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                  Speicher ohne Wechselrichter-Zuordnung
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  {orphanSpeicher.map(sp => {
                     const spParams = (sp.parameter || {}) as Record<string, unknown>
-                    const kapBrutto = typeof spParams.batteriekapazitaet_kwh === 'number' ? spParams.batteriekapazitaet_kwh : null
+                    const kapBrutto = typeof spParams.kapazitaet_kwh === 'number' ? spParams.kapazitaet_kwh : null
                     const kapNutzbar = typeof spParams.nutzbare_kapazitaet_kwh === 'number' ? spParams.nutzbare_kapazitaet_kwh : null
                     const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
                     return (
                       <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                        <Zap className="h-4 w-4 text-blue-500" />
-                        <span>{sp.bezeichnung}</span>
+                        <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                        <span className="truncate">{sp.bezeichnung}</span>
                         {kapBrutto != null && (
-                          <span className="text-gray-400">
+                          <span className="text-gray-400 ml-auto whitespace-nowrap">
                             {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
                             {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
                           </span>
@@ -292,8 +343,7 @@ export default function PVAnlageDashboard() {
                   })}
                 </div>
               </div>
-              )
-            })}
+            )}
           </div>
         </Card>
       )}

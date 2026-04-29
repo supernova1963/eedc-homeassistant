@@ -11,6 +11,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.24.6] - 2026-04-29
+
+### Bugfixes
+
+- **fix(pv-cockpit): Speicher-Kapazität wird wieder angezeigt — Key-Drift behoben (#172 detLAN, Folgefix zu v3.24.4)** — In v3.24.4 sollte die Speicher-Kapazität in „Cockpit → PV-Anlage → PV-Komponenten" zusätzlich zur Bezeichnung erscheinen. Der Render-Code in [PVAnlageDashboard.tsx](eedc/frontend/src/pages/PVAnlageDashboard.tsx) las den Wert aber unter dem falschen Schlüssel `batteriekapazitaet_kwh` (das ist der E-Auto-Key) — gespeichert wird die Speicher-Kapazität überall im Backend und in `InvestitionForm` als `kapazitaet_kwh`. Konsequenz: gepflegte Daten waren da, der Cockpit-Block blieb leer und wirkte „unausgewogen". Ursache ist die in der Memory-Lesson schon notierte Drei-Sprachen-Drift (Backend / Wizard / Form). Jetzt liest das Cockpit denselben Schlüssel wie das Speicher-Formular.
+
+### Verbesserungen
+
+- **feat(pv-cockpit): WR/Module/Speicher in PV-Komponenten visuell getrennt + Orphan-Speicher-Block (#172 detLAN)** — Innerhalb jeder Wechselrichter-Karte werden Module und Speicher jetzt in eigenen, beschrifteten Sub-Sektionen mit hellem Hintergrund-Tint dargestellt — vorher standen sie gemischt in einem 2-Spalten-Grid. Werte (kWp / kWh) richten sich rechtsbündig aus (`ml-auto` + `whitespace-nowrap`), die Bezeichnung darf links truncaten. Speicher ohne Wechselrichter-Zuordnung (Parent ist optional) wurden bisher stillschweigend aus dem Cockpit ausgeblendet — sie erscheinen jetzt in einem separaten Block „Speicher ohne Wechselrichter-Zuordnung" am Ende des PV-Komponenten-Blocks, analog zum bestehenden Orphan-Module-Hinweis.
+
+- **fix(wizard): Kompressor-Starts-Hinweistext gestrafft (#136 detLAN)** — Im Sensor-Mapping → Wärmepumpe-Step war der Erklär-Text unter dem Feld „Kompressor-Starts" auf detail-orientierte Tester zugeschnitten („Bei Nibe und Viessmann fehlt der Sensor häufig…, weil ihm `state_class` nicht gesetzt ist"). detLAN hat die Formulierung als für Einsteiger zu technisch gemeldet und einen klareren Hinweis vorgeschlagen. Jetzt: „Sollte der Sensor das „ohne Statistik"-Badge aufweisen, beachte bitte die Anleitung zum Nachrüsten — siehe Hilfe → Sensor-Referenz → „ohne Statistik"-Badge." Die referenzierte Stelle in `docs/SENSOR-REFERENZ.md` enthält jetzt den `customize.yaml`-Snippet direkt unter §„ohne Statistik"-Badge (statt drei Sektionen weiter unten unter „Plan B außerhalb von EEDC") und einen klaren Hinweis, dass die Korrektur nur ab Aktivierungs-Zeitpunkt greift, nicht rückwirkend (Lesson aus v3.24.3).
+
+---
+
 ## [3.24.5] - 2026-04-29
 
 ### Dokumentation
