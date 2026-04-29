@@ -247,13 +247,19 @@ export default function PVAnlageDashboard() {
             PV-Komponenten
           </h2>
           <div className="space-y-4">
-            {pvSysteme.map((system) => (
+            {pvSysteme.map((system) => {
+              const wrParams = (system.wechselrichter.parameter || {}) as Record<string, unknown>
+              const wrLeistungKw = typeof wrParams.max_leistung_kw === 'number' ? wrParams.max_leistung_kw : null
+              return (
               <div key={system.wechselrichter.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-medium text-gray-900 dark:text-white">
                     {system.wechselrichter.bezeichnung}
                   </h3>
-                  <span className="text-sm text-gray-500">{system.gesamtKwp.toFixed(1)} kWp</span>
+                  <span className="text-sm text-gray-500">
+                    {wrLeistungKw != null && `WR ${wrLeistungKw.toFixed(1)} kW · `}
+                    Module Σ {system.gesamtKwp.toFixed(1)} kWp
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                   {system.pvModule.map(mod => (
@@ -266,15 +272,28 @@ export default function PVAnlageDashboard() {
                       </span>
                     </div>
                   ))}
-                  {system.speicher.map(sp => (
-                    <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Zap className="h-4 w-4 text-blue-500" />
-                      <span>{sp.bezeichnung}</span>
-                    </div>
-                  ))}
+                  {system.speicher.map(sp => {
+                    const spParams = (sp.parameter || {}) as Record<string, unknown>
+                    const kapBrutto = typeof spParams.batteriekapazitaet_kwh === 'number' ? spParams.batteriekapazitaet_kwh : null
+                    const kapNutzbar = typeof spParams.nutzbare_kapazitaet_kwh === 'number' ? spParams.nutzbare_kapazitaet_kwh : null
+                    const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
+                    return (
+                      <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                        <Zap className="h-4 w-4 text-blue-500" />
+                        <span>{sp.bezeichnung}</span>
+                        {kapBrutto != null && (
+                          <span className="text-gray-400">
+                            {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
+                            {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
       )}
