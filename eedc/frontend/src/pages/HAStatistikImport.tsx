@@ -12,7 +12,6 @@ import {
   Download,
   AlertTriangle,
   CheckCircle,
-  XCircle,
   Info,
   Loader2,
   Calendar,
@@ -352,19 +351,11 @@ export default function HAStatistikImport() {
             Prüfe Verbindung...
           </div>
         ) : haVerfuegbar ? (
-          <Alert type="success">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5" />
-              Home Assistant Datenbank ist verfügbar
-            </div>
-          </Alert>
+          <Alert type="success">Home Assistant Datenbank ist verfügbar</Alert>
         ) : (
           <Alert type="error">
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <XCircle className="w-5 h-5" />
-                Home Assistant Datenbank nicht verfügbar
-              </div>
+              <div>Home Assistant Datenbank nicht verfügbar</div>
               {haFehler && <p className="text-sm">{haFehler}</p>}
               <p className="text-sm">
                 Stellen Sie sicher, dass das Add-on mit <code>config:ro</code> Volume-Mapping
@@ -569,7 +560,7 @@ export default function HAStatistikImport() {
       )}
 
       {/* Navigation */}
-      <div className="flex justify-between mt-8">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mt-6 flex justify-between">
         <button
           onClick={() => navigate('/einstellungen/sensor-mapping')}
           className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
