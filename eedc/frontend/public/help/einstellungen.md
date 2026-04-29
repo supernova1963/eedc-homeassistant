@@ -938,31 +938,18 @@ Der Gateway-Tab zeigt live:
 
 **Pfad**: Einstellungen → System → Daten-Checker
 
-Der Daten-Checker prüft die Qualität deiner erfassten Daten in **8 Kategorien**:
+Der Daten-Checker prüft die Qualität deiner erfassten Daten in **8 Kategorien** — von Stammdaten und Strompreisen über Plausibilität der Monatsdaten bis zu MQTT-Topic-Abdeckung und HA-Long-Term-Statistics-Verfügbarkeit der gemappten Sensoren. Pro Befund liefert er Severity (ERROR/WARNING/INFO/OK), erklärenden Text und einen „Beheben"-Link direkt zur betroffenen Stelle.
 
-### Prüfkategorien
+### Severity-Übersicht
 
-| Kategorie | Prüfungen |
-|-----------|-----------|
-| **Stammdaten** | Koordinaten, Anlagenleistung, Bundesland, Land |
-| **Strompreise** | Lücken im Tarifzeitraum, fehlende Preise, Spezialtarif-Konsistenz |
-| **Investitionen** | Fehlende PV-Module, Wechselrichter ohne Module, fehlende Pflicht-Parameter, fehlende kWh-Zähler im Sensor-Mapping |
-| **Vollständigkeit** | Fehlende Monate, leere Pflichtfelder |
-| **Plausibilität** | PV-Produktion vs. PVGIS, unrealistische Werte |
-| **Energieprofil – Zähler-Abdeckung** | Pro Anlage und Komponente: welche kumulativen kWh-Zähler (`pv_erzeugung_kwh`, `ladung_kwh`, `entladung_kwh`, `stromverbrauch_kwh`, Einspeisung/Netzbezug) sind gemappt? Verlinkt zum Sensor-Mapping-Wizard. *Eingeführt v3.19.0.* |
-| **MQTT-Topic-Abdeckung** | Pro Anlage: erwartete Topics aus `field_definitions.py` vs. tatsächlich empfangene Topics. WARNING wenn Topic erwartet, aber nie empfangen oder älter als Schwellwert (live ≤ 2 min, energy ≤ 10 min). Bei nicht-aktiviertem MQTT-Inbound wird die Kategorie still übersprungen. *Eingeführt v3.23.7 (#134), präzisiert v3.23.8.* |
-| **Sensor-Mapping – HA-Statistics** | Pro Anlage: liefert jeder im Mapping verwendete kWh-Sensor tatsächlich HA-Long-Term-Statistics? WARNING bei kWh-Feldern auf LTS-losen Sensoren (Monatsabschluss bleibt leer); INFO bei Counter-Feldern (Snapshot-Pfad ist OK). *Eingeführt v3.24.1.* |
+| Symbol | Stufe | Bedeutung |
+|--------|-------|-----------|
+| ❌ | ERROR | Kerndaten fehlen oder Werte sind logisch unmöglich — Auswertungen sind betroffen. |
+| ⚠️ | WARNING | Plausibilitäts-Abweichung oder fehlende Pflicht-Parameter — App rechnet, blendet aber Bereiche aus. |
+| ℹ️ | INFO | Hinweis auf optionale Felder; Reaktion abhängig vom Anwendungsfall. |
+| ✅ | OK | Prüfung bestanden. |
 
-### PVGIS-Prüfung
-
-Die PV-Produktionsprüfung vergleicht deine tatsächliche Erzeugung mit der PVGIS-Prognose unter Berücksichtigung einer dynamischen Performance Ratio (auf GTI-Basis ab v3.20.0). Zu hohe Systemverluste werden erkannt.
-
-### Ergebnisse
-
-- **KPI-Karten** mit Gesamtbewertung
-- **Fortschrittsbalken** für Monatsabdeckung
-- **Klappbare Kategorien** mit einzelnen Befunden
-- **„Beheben"-Links** verweisen direkt zur betroffenen Stelle (z. B. Monatsabschluss, Sensor-Mapping)
+> **Vollständige Doku** mit allen 8 Kategorien, Befund-Tabellen, Variantenmatrix HA Add-on vs. Standalone und Behebungs-Workflows: **[Daten-Checker-Handbuch](HANDBUCH_DATEN_CHECKER.md)** (auch in der In-App-Hilfe unter *Hilfe → Handbuch → Daten-Checker*).
 
 ---
 

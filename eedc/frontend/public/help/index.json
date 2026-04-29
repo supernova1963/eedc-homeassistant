@@ -5,6 +5,7 @@
   {"slug": "bedienung", "title": "Teil II: Bedienung", "category": "Handbuch", "filename": "HANDBUCH_BEDIENUNG.md"},
   {"slug": "einstellungen", "title": "Teil III: Einstellungen & Sensormapping", "category": "Handbuch", "filename": "HANDBUCH_EINSTELLUNGEN.md"},
   {"slug": "infothek", "title": "Teil IV: Infothek", "category": "Handbuch", "filename": "HANDBUCH_INFOTHEK.md"},
+  {"slug": "daten-checker", "title": "Daten-Checker", "category": "Handbuch", "filename": "HANDBUCH_DATEN_CHECKER.md"},
   {"slug": "berechnungen", "title": "Berechnungen & Kennzahlen", "category": "Referenz", "filename": "BERECHNUNGEN.md"},
   {"slug": "sensor-referenz", "title": "Sensor-Referenz", "category": "Referenz", "filename": "SENSOR-REFERENZ.md"},
   {"slug": "glossar", "title": "Glossar", "category": "Referenz", "filename": "GLOSSAR.md"}
