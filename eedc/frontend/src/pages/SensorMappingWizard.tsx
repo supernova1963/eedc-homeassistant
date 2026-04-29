@@ -821,12 +821,12 @@ export default function SensorMappingWizard() {
                 Sensoren ohne <code>state_class</code> sind jetzt mit auswählbar — sie sind in der Liste mit dem Label „keine HA-Statistik" markiert.
               </p>
               <p>
-                Folgen für so einen Sensor: HA legt für ihn keine Long-Term-Statistics an, daher
-                <strong> kein historischer Backfill</strong> möglich, und auch im laufenden Betrieb können einzelne Stunden fehlen — typisch ist die letzte Stunde des Tages (23–24 Uhr).
-                Für kumulative <strong>kWh-Zähler ist das ein echtes Problem</strong>; bei reinen Countern wie WP-Kompressor-Starts ist der laufende Tag meist okay, vergangene Tage bleiben aber leer.
+                Konsequenz im Betrieb: HA legt für so einen Sensor keine Long-Term-Statistics an. Damit wirken
+                <strong> die Korrektur-Werkzeuge in der Datenverwaltung nicht</strong> — Vollbackfill, „Verlauf nachrechnen" und Per-Tag-Reaggregation greifen alle auf HA's LTS zu.
+                Jeder Aussetzer (HA-/EEDC-Neustart, Polling-Hänger um Mitternacht) ist bei so einem Sensor <strong>permanent verloren</strong>; eine zweite Chance gibt es nicht. Auch im Normalbetrieb fehlt häufig die letzte Stunde des Tages (23–24 Uhr), weil der Mitternachts-Snapshot die Grenze nicht immer trifft.
               </p>
               <p>
-                <strong>Empfohlen:</strong> in HA <code>state_class</code> per <code>configuration.yaml</code>-customize ergänzen — dann erscheint der Sensor auch im Standard-Filter, der Backfill funktioniert, und HA-Statistik-Karten zeigen ihn ebenfalls.
+                <strong>Empfohlen:</strong> in HA <code>state_class</code> per <code>configuration.yaml</code>-customize ergänzen — dann laufen alle Reparatur-Werkzeuge auf diesem Sensor, und HA-Statistik-Karten zeigen ihn ebenfalls.
               </p>
               <pre className="mt-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded text-[11px] overflow-x-auto">{`homeassistant:
   customize:
