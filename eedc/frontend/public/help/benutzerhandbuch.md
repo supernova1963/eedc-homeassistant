@@ -60,7 +60,7 @@ Die Doku ist in vier Teile, ein Zusatz-Modul, zwei Referenzen und ein Glossar ge
 
 ## Was ist neu seit v3.16?
 
-Wer mit einer älteren EEDC-Version vertraut ist und einen schnellen Überblick über die wichtigsten Änderungen sucht: dieser Abschnitt fasst die für Anwender sichtbaren Neuerungen der letzten Monate zusammen. Detaillierte Beschreibungen findest du jeweils in den verlinkten Hilfe-Sektionen.
+Wer mit einer älteren EEDC-Version vertraut ist und einen schnellen Überblick über die wichtigsten Änderungen sucht: dieser Abschnitt fasst die für Anwender sichtbaren Neuerungen der letzten Monate als Schnellübersicht zusammen. Eine **detaillierte, pro-Version gegliederte Beschreibung** mit kurzen Erklärungs-Absätzen findest du auf der eigenen Seite [Was ist neu](WAS-IST-NEU.md).
 
 | Bereich | Änderung | Ab Version | Wo dokumentiert |
 |---|---|---|---|

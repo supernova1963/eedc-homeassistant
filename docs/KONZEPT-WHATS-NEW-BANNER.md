@@ -1,7 +1,9 @@
 # Konzept: What's-new-Banner nach Update
 
-> **Status:** Konzept-Skizze | **Quelle:** Discussion #130 (Safi105) Folge-Reply 2026-04-24
-> **Erstellt:** 2026-04-28 | **Vorbereitung:** „Was ist neu seit v3.16?"-Tabelle in `BENUTZERHANDBUCH.md` als statische Vorlage
+> **Status: verworfen, ersetzt durch eine Pull-Variante in v3.24.5+** — eigene Hilfe-Seite *„Was ist neu"* unter `docs/WAS-IST-NEU.md`, sichtbar in der In-App-Hilfe-Sidebar (Kategorie *Einstieg*). Begründung: HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen — ein zusätzlicher Banner wäre die dritte Stimme zur selben Information („Meldungsorgie"). Pull statt Push spart außerdem die ganze localStorage-/Versionsvergleich-/Bestand-vs-Neuinstall-Mechanik. Dokument unten bleibt als Entscheidungs-Beleg erhalten.
+>
+> **Quelle der ursprünglichen Anfrage:** Discussion #130 (Safi105) Folge-Reply 2026-04-24
+> **Konzept-Datum:** 2026-04-28 | **Verwerf-Datum:** 2026-04-29 | **Vorbereitung:** „Was ist neu seit v3.16?"-Tabelle in `BENUTZERHANDBUCH.md` als statische Vorlage (jetzt zur Detail-Seite `WAS-IST-NEU.md` ausgebaut)
 
 ## Motivation
 

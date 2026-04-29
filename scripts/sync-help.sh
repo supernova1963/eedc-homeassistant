@@ -32,6 +32,7 @@ mkdir -p "$DST"
 # Format: <slug>|<dateiname>|<titel>|<kategorie>
 ENTRIES=(
     "benutzerhandbuch|BENUTZERHANDBUCH.md|Übersicht|Einstieg"
+    "was-ist-neu|WAS-IST-NEU.md|Was ist neu|Einstieg"
     "installation|HANDBUCH_INSTALLATION.md|Teil I: Installation & Einrichtung|Handbuch"
     "bedienung|HANDBUCH_BEDIENUNG.md|Teil II: Bedienung|Handbuch"
     "einstellungen|HANDBUCH_EINSTELLUNGEN.md|Teil III: Einstellungen & Sensormapping|Handbuch"
