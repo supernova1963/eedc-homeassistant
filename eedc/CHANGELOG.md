@@ -11,6 +11,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.1] - 2026-04-29
+
+### Fixed
+
+- **fix(hilfe): Interne Links + Anker im Inhaltsverzeichnis funktionieren wieder** — Drei Bugs in der seit v3.24.0 verfügbaren In-App-Hilfe ([Hilfe.tsx](eedc/frontend/src/pages/Hilfe.tsx)):
+  - **Anker-Links im Inhaltsverzeichnis zerstörten die Hilfe-Seite.** Klick auf TOC-Einträge wie `[Installation](#2-installation)` setzte `window.location.hash` auf `#2-installation`, was den HashRouter-Routen-Hash (`#/hilfe?doc=…`) überschrieb — die Hilfe-Seite verschwand. Da fast jedes Hilfe-Dokument ein TOC mit Anker-Links hat, war das der dominierende Fail-Modus (Rainer-PN).
+  - **Headings hatten gar keine `id`.** Die Custom-Komponenten für `h1`/`h2`/`h3` ließen den `id`-Prop fallen und es war kein Slug-Plugin aktiv — Anker-Targets existierten also nicht.
+  - **Externe `…/CHANGELOG.md`-URLs wurden zu Doppel-URLs umgeschrieben.** Die `rewriteLink`-Regex matchte ALLE Strings die auf `.md` enden (auch absolute `https://`-URLs), und der Fallback-Pfad präfixte dann `https://github.com/.../docs/` vor die volle URL.
+
+  **Fixes:**
+  - `rehype-slug` (Auto-IDs auf Headings) + `rehype-raw` (manuelle `<a name="…">`-Anker im `HANDBUCH_DATEN_CHECKER.md` bleiben erhalten) eingeführt.
+  - `id`-Prop in `h1`–`h4`-Komponenten durchgereicht.
+  - Absolute URLs in `rewriteLink` erkannt (Protokoll-Regex).
+  - Anker-Klicks intercepten jetzt `preventDefault` und scrollen im echten Scroll-Container — `<main>`, nicht `<article>` (verschachtelte Overflow-Container, je nach Höhen-Constraint scrollt mal das eine, mal das andere).
+  - Inter-Doc-Links mit Hash (`?doc=bedienung#3-cockpit-dashboards`) scrollen nach Doc-Wechsel an die Ziel-Heading.
+  - Browser-Back funktioniert wieder, weil jede Navigation einen sauberen History-Eintrag setzt statt die Route zu zerstören.
+
+  Verifiziert mit Headless-Chrome-Click-Test über vier Szenarien (Inter-Doc / extern / Anker-in-Doc / Inter-Doc-mit-Hash).
+
+---
+
 ## [3.25.0] - 2026-04-29
 
 ### Refactor
