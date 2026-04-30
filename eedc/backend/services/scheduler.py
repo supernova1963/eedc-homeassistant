@@ -6,7 +6,7 @@ Verwendet APScheduler für Cron-basierte Job-Ausführung.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from backend.services.activity_service import log_activity

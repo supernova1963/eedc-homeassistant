@@ -270,47 +270,51 @@ export default function PVAnlageDashboard() {
                   </span>
                 </div>
 
-                {system.pvModule.length > 0 && (
-                  <div className="border border-gray-100 dark:border-gray-800 rounded-md p-3 bg-gray-50/50 dark:bg-gray-800/30">
-                    <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Module</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      {system.pvModule.map(mod => (
-                        <div key={mod.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                          <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                          <span className="truncate">{mod.bezeichnung}</span>
-                          <span className="text-gray-400 ml-auto whitespace-nowrap">
-                            {mod.leistung_kwp?.toFixed(1)} kWp
-                            {mod.ausrichtung && ` • ${mod.ausrichtung}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {system.speicher.length > 0 && (
-                  <div className="border border-gray-100 dark:border-gray-800 rounded-md p-3 bg-gray-50/50 dark:bg-gray-800/30">
-                    <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Speicher</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      {system.speicher.map(sp => {
-                        const spParams = speicherParameter(sp.parameter)
-                        const kapBrutto = spParams.kapazitaet_kwh ?? null
-                        const kapNutzbar = spParams.nutzbare_kapazitaet_kwh ?? null
-                        const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
-                        return (
-                          <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                            <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            <span className="truncate">{sp.bezeichnung}</span>
-                            {kapBrutto != null && (
+                {(system.pvModule.length > 0 || system.speicher.length > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {system.pvModule.length > 0 && (
+                      <div className="border border-gray-100 dark:border-gray-800 rounded-md p-3 bg-gray-50/50 dark:bg-gray-800/30">
+                        <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Module</div>
+                        <div className="space-y-1.5 text-sm">
+                          {system.pvModule.map(mod => (
+                            <div key={mod.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                              <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                              <span className="truncate">{mod.bezeichnung}</span>
                               <span className="text-gray-400 ml-auto whitespace-nowrap">
-                                {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
-                                {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
+                                {mod.leistung_kwp?.toFixed(1)} kWp
+                                {mod.ausrichtung && ` • ${mod.ausrichtung}`}
                               </span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {system.speicher.length > 0 && (
+                      <div className="border border-gray-100 dark:border-gray-800 rounded-md p-3 bg-gray-50/50 dark:bg-gray-800/30">
+                        <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Speicher</div>
+                        <div className="space-y-1.5 text-sm">
+                          {system.speicher.map(sp => {
+                            const spParams = speicherParameter(sp.parameter)
+                            const kapBrutto = spParams.kapazitaet_kwh ?? null
+                            const kapNutzbar = spParams.nutzbare_kapazitaet_kwh ?? null
+                            const zeigeNutzbar = kapBrutto != null && kapNutzbar != null && Math.abs(kapBrutto - kapNutzbar) > 0.05
+                            return (
+                              <div key={sp.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                                <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                                <span className="truncate">{sp.bezeichnung}</span>
+                                {kapBrutto != null && (
+                                  <span className="text-gray-400 ml-auto whitespace-nowrap">
+                                    {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
+                                    {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
