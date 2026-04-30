@@ -11,6 +11,16 @@
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April 2026)
 
+### WP-Kompressor-Starts: Slot 23:00 + Tageswerte rückwirkend reparieren *(v3.25.2)*
+
+Bei Wärmepumpen mit Kompressor-Starts-Sensor ohne `state_class` (typisch lokale Nibe/Viessmann-Integration) fehlte regelmäßig der Stunden-Slot 23:00 im Tagesdetail, und derselbe Tag tauchte im Cockpit-WP / Monatsbericht nicht in der Aggregat-Sicht auf. Beide Effekte hatten dieselbe Wurzel: ein verlorener Modul-Import in der Live-Vorab-Erfassung kurz vor Mitternacht ließ den 00:00-Snapshot still ausfallen — und der wird sowohl für die Stunde 23:00 als auch für den Tages-Counter gebraucht. Behoben. Künftige Tage werden sauber erfasst; für die offenen Vortage hilft *Auswertung → Energieprofil → Datenverwaltung → Verlauf nachrechnen* (oder Per-Tag-Reaggregation), weil HA die fehlenden LTS-Einträge inzwischen nachgepflegt hat. Issue [#136](https://github.com/supernova1963/eedc-homeassistant/issues/136), detLAN-Beobachtung.
+
+### PV-Cockpit: Module + Speicher nebeneinander statt untereinander *(v3.25.2)*
+
+Innerhalb der Wechselrichter-Karte unter „Cockpit → PV-Anlage → PV-Komponenten" werden Module und Speicher jetzt nebeneinander in zwei Spalten dargestellt (Desktop) — auf Smartphone-Breite weiterhin gestapelt. Wirkt für typische Anlagen-Konfigurationen ausgewogener als das vertikale Layout aus v3.24.6. Issue [#172](https://github.com/supernova1963/eedc-homeassistant/issues/172), detLAN-Mockup.
+
+→ [Bedienung §3.4 PV-Anlage](HANDBUCH_BEDIENUNG.md#34-pv-anlage-dashboard)
+
 ### Hilfe-Seite: Inhaltsverzeichnis-Links und Browser-Zurück funktionieren wieder *(v3.25.1)*
 
 In der seit v3.24.2 verfügbaren In-App-Hilfe sprangen Klicks auf die Inhaltsverzeichnis-Einträge (z. B. „2. Installation" am Anfang von *Teil I: Installation & Einrichtung*) aus der Hilfe-Seite heraus statt zur Sektion zu scrollen — die Hilfe-Seite verschwand komplett. Das war ein technischer Konflikt zwischen den Anker-Links im TOC und der App-internen Navigation. Behoben: Inhaltsverzeichnisse, Querverweise zwischen Hilfe-Dokumenten und der Browser-Zurück-Knopf funktionieren jetzt erwartungsgemäß. Rainer-PN.

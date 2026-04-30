@@ -11,6 +11,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.2] - 2026-04-30
+
+### Fixed
+
+- **fix(wp-starts): Slot 23:00 + Tagesaggregat-Lücke bei Kompressor-Starts (Issue [#136](https://github.com/supernova1963/eedc-homeassistant/issues/136))** — Im stündlichen Snapshot-Pfad ([sensor_snapshot_preview_job](eedc/backend/services/scheduler.py#L412)) crashte der :55-Vorab-Snapshot-Job seit Einführung in v3.21.0 (Issue #146) still mit `NameError: timedelta is not defined` — der Import in [scheduler.py:9](eedc/backend/services/scheduler.py#L9) fehlte. Konsequenz: der 00:00-Boundary-Snapshot wurde nicht vorab geschrieben, sondern musste vom regulären :05-Job ab Mitternacht aus HA Statistics gezogen werden. Bei Counter-Sensoren ohne `state_class` (typisch Nibe/Viessmann WP-Starts) ist die LTS-Tabelle zu :05 oft noch leer → Snapshot fehlt → sowohl Slot 23 im Tagesdetail (`get_hourly_counter_sum_by_feld` braucht snap[24]) als auch der Tageswert in Monatsbericht/Cockpit-WP (`get_daily_counter_deltas_by_inv` braucht snap @ 00:00 Folgetag) bleiben leer. Beide Lücken haben dieselbe Wurzelursache. Fix: `timedelta` zum Import ergänzt — `:55`-Job läuft wieder und schreibt den 00:00-Snapshot vorab als Live-Approx, der reguläre `:05`-Job überschreibt ihn später mit dem exakten LTS-Wert. detLAN-Mehrfach-Beobachtung über mehrere Tage.
+
+### Changed
+
+- **chore(pv-cockpit): Module + Speicher nebeneinander in 2-Spalten-Grid (Issue [#172](https://github.com/supernova1963/eedc-homeassistant/issues/172))** — In [PVAnlageDashboard.tsx:273-318](eedc/frontend/src/pages/PVAnlageDashboard.tsx#L273) waren die Sub-Sektionen *Module* und *Speicher* innerhalb der Wechselrichter-Karte vertikal gestapelt — bei vielen Komponenten wirkte die Karte länglich und unausgewogen. Jetzt nebeneinander in `grid-cols-1 md:grid-cols-2` (Desktop zwei Spalten, Smartphone weiterhin gestapelt), gemäß detLAN-Mockup. Innerhalb jeder Sub-Sektion bleiben Werte rechtsbündig (`ml-auto`), Bezeichnung darf truncaten.
+
+---
+
 ## [3.25.1] - 2026-04-29
 
 ### Fixed
