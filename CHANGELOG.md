@@ -10,6 +10,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [3.25.10] - 2026-05-01
 
 > 🐛 **Off-by-one-Stunde-Bug in Counter-Snapshots behoben** — `HAStatisticsService.get_value_at` las den `state` einer Zeile bei `start_ts ≈ zeitpunkt`, während HA's Konvention "last value of the period" ist: `state(start_ts=11:00)` ist der Zählerstand AM ENDE der Stunde, also um 12:00 Uhr. Damit waren alle SensorSnapshot-Werte seit v3.19 (Snapshot-Rework, Issue #135) systematisch um eine Stunde nach hinten verschoben. Tagessummen sind unbeeinflusst (zirkular), aber Stundenwerte im `tages_energie_profil` sind betroffen.
+>
+> 📦 **Bündelt v3.25.9 mit ein** — der separat geplante v3.25.9-Release (Drift-Audit-Bündel G) wurde zwischen dem Schreiben des CHANGELOGs und dem eigentlichen Release vom Off-by-one-Fix eingeholt. Statt zwei Releases im Abstand von Minuten zu schießen, sind beide Pakete unter Tag `v3.25.10` zusammengefasst. Die `[3.25.9]`-Sektion unten beschreibt den Bündel-G-Anteil — sie hat kein eigenes Tag, ihr Code (`field_definitions.py`-Reader-Helper, DB-Migration `_migrate_verbrauch_daten_keys_v326`) ist Teil von v3.25.10. Tag-Sprung 3.25.8 → 3.25.10 ist beabsichtigt.
 
 ### Fixed
 
@@ -27,9 +29,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.25.9] - 2026-05-01
+## [3.25.9] - 2026-05-01 *(kein eigener Tag — mit v3.25.10 ausgeliefert)*
 
 > 🧹 **Aufräum-Release ohne User-sichtbare Wirkung** — Letzter Bündel der Drift-Audit-Initiative aus v3.25.7/v3.25.8. Schließt 23 verstreute Doppel-Read-Stellen und konsolidiert die Daten in `verbrauch_daten`-JSONs auf kanonische Schlüssel. Werte-Anzeigen ändern sich nicht.
+>
+> ℹ️ **Tag-Hinweis:** Diese Sektion hat kein eigenes Git-Tag. Der Code (Reader-Helper + DB-Migration `_migrate_verbrauch_daten_keys_v326`) ist Teil von Tag `v3.25.10` — siehe [v3.25.10-Sektion](#32510---2026-05-01) oben für die Begründung.
 
 ### Changed
 
