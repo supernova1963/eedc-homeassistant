@@ -7,6 +7,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.9] - 2026-05-01
+
+> 🧹 **Aufräum-Release ohne User-sichtbare Wirkung** — Letzter Bündel der Drift-Audit-Initiative aus v3.25.7/v3.25.8. Schließt 23 verstreute Doppel-Read-Stellen und konsolidiert die Daten in `verbrauch_daten`-JSONs auf kanonische Schlüssel. Werte-Anzeigen ändern sich nicht.
+
+### Changed
+
+- **Zentrale Reader-Helper für `verbrauch_daten`-JSON (Bündel G)** — Bisher waren Doppel-Read-Muster der Form `data.get("a", 0) or data.get("b", 0)` für historisch umbenannte Felder an 23 Stellen über das Repo verstreut. Bei künftigen Schema-Wechseln musste jede einzelne Stelle gefunden und angepasst werden — ein Drift-Risiko, das bei jeder Code-Generation neu auflebt. Fünf Reader-Helper in `core/field_definitions.py` (`get_pv_erzeugung_kwh`, `get_wp_heizenergie_kwh`, `get_eauto_ladung_kwh`, `get_speicher_netzladung_kwh`, `get_sonstiges_verbrauch_kwh`) sind jetzt SoT. Alle 23 Stellen aufgerufen statt direkter `.get()`-Doppel-Reads. Künftige Schema-Wechsel betreffen nur einen Helper.
+
+### Internal
+
+- **DB-Migration `_migrate_verbrauch_daten_keys_v326`** — Schreibt Legacy-Keys in `InvestitionMonatsdaten.verbrauch_daten` auf den kanonischen Key um, sofern der Kanon-Key noch leer ist (wenn beide gesetzt, gewinnt der Kanon-Key). Pro Investitions-Typ unterschiedliches Mapping — `verbrauch_kwh` bei *Sonstiges* ist legitim und wird NICHT migriert. Idempotent, mit synthetischer Drift-DB verifiziert. Konsolidierte Pairs:
+  - `erzeugung_kwh` → `pv_erzeugung_kwh` (PV-Modul, BKW)
+  - `heizung_kwh` → `heizenergie_kwh` (WP)
+  - `verbrauch_kwh` → `ladung_kwh` (E-Auto, Wallbox)
+  - `speicher_ladung_netz_kwh` → `ladung_netz_kwh` (Speicher-Arbitrage)
+
+  Migration läuft bei jedem Add-on-Start einmalig in `database.py:run_migrations()`. Bestehende Anlagen profitieren automatisch, kein User-Eingriff nötig.
+- **Drift-Audit-Initiative abgeschlossen** — Mit diesem Release sind alle 16 Drifts aus 6 Domänen ([INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)) abgearbeitet. Bündel A (WP) in v3.25.7, Bündel B+C+D+E+F (E-Auto, Konstanten, Speicher-Spread, Strompreis-Helper, Filter) in v3.25.8, Bündel G (Field-Reader) in v3.25.9.
+
+---
+
 ## [3.25.8] - 2026-05-01
 
 > 📊 **Drift-Audit-Initiative** — als Folge des #178-Fixes (siehe v3.25.7) eine systematische Inventur aller Investitions-Berechnungen durchgeführt. 16 Drifts in 6 Domänen identifiziert ([INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)). Diese Version bündelt die Fixes für 5 davon (Bündel B, C, D, E, F). User-sichtbare Hauptänderung: Speicher- und V2H-Ersparnis im Aussichten-Tab werden jetzt nach demselben Spread-Modell berechnet wie das Investitionen-Detail (~25 % niedriger als vorher) — siehe Erklärung unten.
