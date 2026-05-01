@@ -191,11 +191,11 @@ async def live_snapshot_5min_diagnostics(db: AsyncSession = Depends(get_db)):
         SELECT
           cnt.sensor_key,
           EXISTS(SELECT 1 FROM sensor_snapshots s WHERE s.sensor_key=cnt.sensor_key
-            AND s.zeitpunkt = datetime(:y || ' 23:55:00')) AS has_2355,
+            AND datetime(s.zeitpunkt) = datetime(:y || ' 23:55:00')) AS has_2355,
           EXISTS(SELECT 1 FROM sensor_snapshots s WHERE s.sensor_key=cnt.sensor_key
-            AND s.zeitpunkt = datetime(:t || ' 00:00:00')) AS has_0000,
+            AND datetime(s.zeitpunkt) = datetime(:t || ' 00:00:00')) AS has_0000,
           EXISTS(SELECT 1 FROM sensor_snapshots s WHERE s.sensor_key=cnt.sensor_key
-            AND s.zeitpunkt = datetime(:t || ' 00:05:00')) AS has_0005
+            AND datetime(s.zeitpunkt) = datetime(:t || ' 00:05:00')) AS has_0005
         FROM cnt
     """), {"y": yesterday.isoformat(), "t": today.isoformat()})).all()
     boundary_data = [
@@ -267,13 +267,13 @@ async def live_snapshot_5min_diagnostics(db: AsyncSession = Depends(get_db)):
           SELECT b.sensor_key, b.h, s.wert_kwh AS w0
           FROM bounds b
           JOIN sensor_snapshots s ON s.sensor_key = b.sensor_key
-          WHERE s.zeitpunkt = datetime(:d || ' ' || printf('%02d:00:00', b.h))
+          WHERE datetime(s.zeitpunkt) = datetime(:d || ' ' || printf('%02d:00:00', b.h))
         ),
         h_end AS (
           SELECT b.sensor_key, b.h, s.wert_kwh AS w1
           FROM bounds b
           JOIN sensor_snapshots s ON s.sensor_key = b.sensor_key
-          WHERE s.zeitpunkt = datetime(:d || ' ' || printf('%02d:00:00', b.h + 1))
+          WHERE datetime(s.zeitpunkt) = datetime(:d || ' ' || printf('%02d:00:00', b.h + 1))
         ),
         five_min AS (
           SELECT b.sensor_key, b.h,
