@@ -32,6 +32,8 @@ from backend.core.investition_parameter import (
     PARAM_WALLBOX_DEFAULTS,
 )
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
+from backend.core.wirtschaftlichkeit_defaults import EXTERNE_LADUNG_DEFAULT_EURO_KWH
 
 
 # =============================================================================
@@ -1333,32 +1335,44 @@ async def get_eauto_dashboard(
         # PV-Anteil auf Gesamt-Ladung
         pv_anteil_gesamt = (gesamt_pv_ladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
 
-        # Kosten-Berechnung
+        # E-Auto-Ersparnis vs. Verbrenner via SoT-Helper (Drift-Audit A2).
+        # `benzinpreis_euro` kommt als Query-Param explizit oder als Default — der
+        # Helper respektiert dies via `monats_benzinpreis_euro`-Override.
         params = eauto.parameter or {}
-        benzin_verbrauch_100km = params.get('vergleich_verbrauch_l_100km', 7.5)
-
-        # Benzin-Kosten (Alternativ-Szenario)
-        benzin_kosten = (gesamt_km / 100) * benzin_verbrauch_100km * benzinpreis_euro
-
-        # E-Auto Kosten: PV = kostenlos, Netz = Strompreis, Extern = tatsächliche Kosten
+        eauto_result = berechne_eauto_ersparnis(
+            km_gefahren=gesamt_km,
+            ladung_netz_kwh=gesamt_netz_ladung,
+            ladung_extern_euro=gesamt_extern_kosten,
+            wallbox_strompreis_cent=strompreis_cent,
+            eauto_parameter=params,
+            monats_benzinpreis_euro=benzinpreis_euro,
+        )
+        benzin_kosten = eauto_result.benzin_kosten_euro
         heim_netz_kosten = gesamt_netz_ladung * strompreis_cent / 100
-        strom_kosten_gesamt = heim_netz_kosten + gesamt_extern_kosten
-
-        # Ersparnis vs. Verbrenner
-        ersparnis_vs_benzin = benzin_kosten - strom_kosten_gesamt
+        strom_kosten_gesamt = eauto_result.strom_kosten_euro
+        ersparnis_vs_benzin = eauto_result.ersparnis_euro
+        benzin_verbrauch_100km = eauto_result.verwendeter_verbrauch_l_100km
 
         # V2H Ersparnis (Rückspeisung ins Haus)
+        # TODO Bündel D (Drift-Audit): konzeptioneller Drift wie Speicher-Modell —
+        # voller Strompreis überschätzt; korrekt wäre Spread (Bezug − Einspeise
+        # bei PV-Ladung) bzw. (Bezug − Wallbox-Tarif bei Netz-Ladung).
         v2h_preis = params.get('v2h_entlade_preis_cent', strompreis_cent)
         v2h_ersparnis = gesamt_v2h * v2h_preis / 100
 
         # Wallbox-Ersparnis: Was hätte externe Ladung gekostet?
-        # Durchschnittlicher externer Preis (wenn vorhanden) oder Annahme 50 ct/kWh
-        extern_preis_kwh = (gesamt_extern_kosten / gesamt_extern_ladung) if gesamt_extern_ladung > 0 else 0.50
+        # Durchschnittlicher externer Preis (wenn vorhanden) oder kanon. Default.
+        extern_preis_kwh = (
+            gesamt_extern_kosten / gesamt_extern_ladung
+            if gesamt_extern_ladung > 0
+            else EXTERNE_LADUNG_DEFAULT_EURO_KWH
+        )
         heim_ladung_als_extern = gesamt_heim_ladung * extern_preis_kwh
         heim_kosten_tatsaechlich = heim_netz_kosten  # PV ist kostenlos
         wallbox_ersparnis = heim_ladung_als_extern - heim_kosten_tatsaechlich
 
         # CO2 Ersparnis (Benzin: ca. 2.37 kg CO2 pro Liter)
+        # TODO Bündel C: 2.37 + 0.38 → CO2_FAKTOR_BENZIN_KG_LITER + CO2_FAKTOR_STROM_KG_KWH
         benzin_co2 = (gesamt_km / 100) * benzin_verbrauch_100km * 2.37
         strom_co2 = gesamt_verbrauch * 0.38  # Strommix
         co2_ersparnis = benzin_co2 - strom_co2
