@@ -11,6 +11,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.4] - 2026-05-01
+
+### Added
+
+- **feat(diagnostics): Endpoint `/api/diagnostics/live-snapshot-5min` für Phase-1-Validierung** — Wrapper um die sechs Checks aus `scripts/check-live-snapshot-5min.sh`, gibt JSON statt Terminal-Output zurück. Per `curl http://<addon-host>:8099/api/diagnostics/live-snapshot-5min` aus dem LAN abrufbar (kein Auth, weil Add-on-API im LAN läuft). Ersetzt das sqlite3-im-Container-Skript für den schnellen Fern-Check; das Skript bleibt als Standalone-Fallback. Gibt zusätzlich Scheduler-Job-Status (sind die neuen 5-Min-Crons registriert?), Feature-Flag-Wert und eine `summary`-Zeile mit PASS/WARN/FAIL-Tendenz zurück. Wird zur Frontend-Wiring-Entscheidung des Live-Snapshot-Pfads gebraucht (Voraussetzung: Drift gegen HA Energy Dashboard = 0, keine Glitches).
+
+---
+
 ## [3.25.3] - 2026-05-01
 
 ### Added
