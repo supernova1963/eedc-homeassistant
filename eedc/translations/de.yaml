@@ -1,0 +1,8 @@
+configuration:
+  live_snapshot_5min_enabled:
+    name: "5-Min-Snapshots (TEST — bitte aus lassen)"
+    description: >-
+      Internes Test-Feature für Phase 1 der Counter-basierten Live-IST-Linie.
+      Standard-User brauchen nichts zu tun: keine User-sichtbare Wirkung,
+      nur erhöhte HA-API-Last (12× pro Stunde statt 1×). Wird nach Abschluss
+      der Validierung entfernt oder automatisch aktiv geschaltet.

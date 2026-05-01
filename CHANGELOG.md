@@ -11,7 +11,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.6] - 2026-05-01
+
+### Changed
+
+- **chore(addon-config): Add-on-Option `live_snapshot_5min_enabled` als TEST markieren + WAS-IST-NEU.md aktualisieren** — Drei kosmetische Klarstellungen zur Vermeidung versehentlicher Aktivierung des internen Test-Features:
+  - **Add-on-UI Translation:** Neue `eedc/translations/de.yaml` + `en.yaml` geben der Option im Konfig-UI einen sprechenden Namen („5-Min-Snapshots (TEST — bitte aus lassen)") + Beschreibung („Internes Test-Feature ... Standard-User: aus lassen ... wird nach Validierung entfernt"). Andere Optionen ohne Translation bleiben mit YAML-Key-Anzeige (additiv).
+  - **CHANGELOG-Hinweis-Block** prefix in v3.25.3 + v3.25.5 Release-Einträgen — die in GitHub Releases sichtbare Notiz „internes Test-Feature, default off, Standard-User brauchen nichts zu tun".
+  - **WAS-IST-NEU.md** auf v3.25.5 hochgezogen + zwei klar User-sichtbare v3.25.3-Features ergänzt (#173 WP-Lebensdauer-Counter im Cockpit, #175 SortableSection in PV/WP/Monatsabschluss-Dashboards). Live-Snapshot 5-Min bewusst NICHT erwähnt — Test-Features gehören nicht in die User-Pflege-Seite.
+
+---
+
 ## [3.25.5] - 2026-05-01
+
+> ⚠ **Internes Test-Feature** — `live_snapshot_5min_enabled` ist eine Option für die Phase-1-Validierung der Counter-basierten Live-IST-Linie. Standard-User brauchen nichts zu tun (default off). Wird nach Abschluss der Tests entfernt oder default aktiviert.
 
 ### Fixed
 
@@ -28,6 +41,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ---
 
 ## [3.25.3] - 2026-05-01
+
+> ⚠ **Live-Snapshot 5-Min ist ein internes Test-Feature** — die in diesem Release eingeführte Add-on-Option (offiziell ab v3.25.5) ist für die Phase-1-Validierung gedacht. Standard-User brauchen nichts zu tun (default off, keine User-sichtbare Wirkung). Wird nach Abschluss der Tests entfernt oder default aktiviert.
 
 ### Added
 

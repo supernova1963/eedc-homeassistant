@@ -1,0 +1,8 @@
+configuration:
+  live_snapshot_5min_enabled:
+    name: "5-min snapshots (TEST — leave off)"
+    description: >-
+      Internal test feature for Phase 1 of the counter-based live IST line.
+      Regular users: leave this off. No user-visible effect, only increased
+      HA API load (12× per hour instead of 1×). Will be removed or auto-enabled
+      after validation is complete.
