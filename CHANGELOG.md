@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.10] - 2026-05-01
+
+> 🐛 **Off-by-one-Stunde-Bug in Counter-Snapshots behoben** — `HAStatisticsService.get_value_at` las den `state` einer Zeile bei `start_ts ≈ zeitpunkt`, während HA's Konvention "last value of the period" ist: `state(start_ts=11:00)` ist der Zählerstand AM ENDE der Stunde, also um 12:00 Uhr. Damit waren alle SensorSnapshot-Werte seit v3.19 (Snapshot-Rework, Issue #135) systematisch um eine Stunde nach hinten verschoben. Tagessummen sind unbeeinflusst (zirkular), aber Stundenwerte im `tages_energie_profil` sind betroffen.
+
+### Fixed
+
+- **`get_value_at` Off-by-one + sum-Bevorzugung** — Lookup-Target jetzt `zeitpunkt - period_length` (1h hourly, 5min short_term), Spalte `sum` mit Fallback auf `state` für measurement-Sensoren ohne `has_sum`. `sum` ist zusätzlich reset-bereinigt (HA tracked Resets transparent), `state` springt nach Tagesreset zurück. Befund verifiziert via HA-MCP gegen `sensor.sn_3012412676_pv_gen_meter` auf Winterborn 2026-05-01: HA Energy Dashboard 11–12 = 8.897 kWh = `change(start_ts=11)` = `sum(start_ts=11) - sum(start_ts=10)` ✓. Bug war maskiert durch (a) Tagessummen-Symmetrie und (b) HA-:05-Latenz, die beim Hourly-Job oft den korrekten Vorgänger-Slot lieferte. Mit Phase-1 5-Min-Snapshots wurde die Diskrepanz erstmals systematisch sichtbar.
+- **Konsequenz für Phase 1 Live-Snapshot 5-Min** — Vor diesem Fix hätte das Frontend-Wiring auf 5-Min-Counter-Snapshots die Live-Tagesverlauf-Linie um 1 Stunde nach hinten verschoben. Phase-1-Frontend war deshalb zurückgehalten. Nach Resnap der letzten 7 Tage (siehe unten) und positivem Drift-Vergleich gegen HA Energy Dashboard kann das Wiring angegangen werden.
+
+### Added
+
+- **`POST /api/diagnostics/resnap-snapshots?days=N&include_5min=true`** — Schreibt für alle Anlagen die SensorSnapshots der letzten N Tage (1–14, default 7) neu. Sowohl hourly :00 als auch 5-Min Sub-Hour-Slots werden mit dem korrigierten `get_value_at`-Pfad regeneriert. Gedacht für Validierung nach Service-Bugfixes — der `get_value_at`-Fix schlägt sonst nicht auf bestehende Snapshot-Werte durch.
+- **`snapshot_anlage_5min(force=True)`-Parameter** — bestehende 5-Min-Slots überschreiben statt überspringen. Wird vom Resnap-Endpoint genutzt, regulärer Scheduler-Job bleibt idempotent (`force=False`).
+
+### Internal
+
+- **`resnap_anlage_range(von, bis, include_5min)`** — Helper in `sensor_snapshot_service.py`, iteriert über Stunden (und optional 5-Min-Slots) und ruft `snapshot_anlage`/`snapshot_anlage_5min` mit `force=True`. Wiederverwendbar für künftige Service-Bugfixes oder die "Per-Tag-Reaggregation" UX.
+
+---
+
 ## [3.25.9] - 2026-05-01
 
 > 🧹 **Aufräum-Release ohne User-sichtbare Wirkung** — Letzter Bündel der Drift-Audit-Initiative aus v3.25.7/v3.25.8. Schließt 23 verstreute Doppel-Read-Stellen und konsolidiert die Daten in `verbrauch_daten`-JSONs auf kanonische Schlüssel. Werte-Anzeigen ändern sich nicht.

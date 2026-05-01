@@ -615,29 +615,52 @@ class HAStatisticsService:
         """
         Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
 
-        HA Statistics speichert stündliche Snapshots mit state = Zählerstand
-        am Stundenanfang. Sucht die nächstgelegene Zeile innerhalb
-        ±toleranz_minuten und gibt deren state (in kWh) zurück.
+        HA-Statistics-Konvention: Eine Zeile bei `start_ts=X` enthält state und
+        sum AM ENDE der Periode (X+period_length). Beispiel für hourly:
+        `state(start_ts=11:00)` ist der Zählerstand um 12:00 Uhr. Für 5-Min
+        short_term entsprechend +5 Min. Quelle: HA-Recorder-Doku
+        "last value of the period".
+
+        Wir wollen den Wert AT `zeitpunkt` → suchen die Zeile, deren
+        Perioden-Ende ≈ `zeitpunkt` ist, also `start_ts ≈ zeitpunkt - period`.
+
+        Bevorzugt wird `sum` (reset-bereinigt — funktioniert auch bei
+        Tagesreset-Zählern, wo `state` nach Mitternacht zurück springt),
+        Fallback auf `state` wenn sum NULL ist (measurement-Sensoren ohne
+        has_sum).
 
         Zweck: Self-Healing-Lookup für SensorSnapshot-Tabelle bei Lücken
         (z.B. Scheduler-Ausfall, Vollbackfill historischer Tage).
 
         Args:
             sensor_id: HA Entity-ID des kumulativen Zählers
-            zeitpunkt: Zielzeitpunkt (lokale Zeit)
-            toleranz_minuten: Max. Abweichung von zeitpunkt (beidseitig)
-            short_term: Wenn True → liest aus statistics_short_term (5-Min-Slots,
-                Retention ~10–14 Tage). Sonst aus statistics (Hourly, dauerhaft).
-                Für Live-Snapshot-5-Min-Pfad (Phase 1) gesetzt.
+            zeitpunkt: Zielzeitpunkt (lokale Zeit) — gemeint ist der Wert AT
+                diesem Moment, nicht "innerhalb der Periode, die bei
+                zeitpunkt beginnt".
+            toleranz_minuten: Max. Abweichung des gefundenen Perioden-Endes
+                von `zeitpunkt` (beidseitig).
+            short_term: Wenn True → liest aus statistics_short_term (5-Min-
+                Slots, Retention ~10–14 Tage). Sonst aus statistics (Hourly,
+                dauerhaft). Für Live-Snapshot-5-Min-Pfad (Phase 1) gesetzt.
 
         Returns:
             Zählerstand in kWh oder None wenn kein Datenpunkt im Fenster.
+
+        History:
+            v3.25.9 fix: Off-by-one-Stunde-Bug behoben (Befund 2026-05-01,
+            Snapshot-Werte waren systematisch um 1h nach hinten verschoben,
+            weil get_value_at den state der Zeile bei `start_ts ≈ zeitpunkt`
+            zurückgab — das ist Wert am Ende der NÄCHSTEN Periode). Existierte
+            seit v3.19 (Snapshot-Rework, Issue #135), maskiert durch
+            Tagessummen-Symmetrie und HA-:05-Latenz.
         """
         if not self.is_available:
             return None
 
-        von = zeitpunkt - timedelta(minutes=toleranz_minuten)
-        bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
+        period = timedelta(minutes=5) if short_term else timedelta(hours=1)
+        target = zeitpunkt - period
+        von = target - timedelta(minutes=toleranz_minuten)
+        bis = target + timedelta(minutes=toleranz_minuten)
         ts_expr = self._ts_to_datetime("start_ts")
         table = "statistics_short_term" if short_term else "statistics"
 
@@ -653,7 +676,7 @@ class HAStatisticsService:
 
             result = conn.execute(
                 text(f"""
-                    SELECT state
+                    SELECT sum, state
                     FROM {table}
                     WHERE metadata_id = :mid
                       AND {ts_expr} >= :von
@@ -663,16 +686,19 @@ class HAStatisticsService:
                 """),
                 {
                     "mid": meta.id,
-                    "target": zeitpunkt,
+                    "target": target,
                     "von": von,
                     "bis": bis,
                 }
             )
             row = result.fetchone()
-            if not row or row[0] is None:
+            if not row:
                 return None
 
-            wert = row[0]
+            wert = row[0] if row[0] is not None else row[1]
+            if wert is None:
+                return None
+
             faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
             if faktor != 1.0:
                 wert *= faktor

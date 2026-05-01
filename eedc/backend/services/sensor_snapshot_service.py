@@ -951,6 +951,7 @@ async def snapshot_anlage_5min(
     db: AsyncSession,
     anlage,
     zeitpunkt: datetime,
+    force: bool = False,
 ) -> int:
     """
     Schreibt 5-Min-Counter-Snapshots aus HA short_term_statistics für eine
@@ -959,7 +960,7 @@ async def snapshot_anlage_5min(
     Im Gegensatz zu snapshot_anlage() (hourly aus statistics):
       - liest aus statistics_short_term (5-Min-Slots, Retention ~10–14 Tage)
       - überspringt Slots wo bereits ein Snapshot existiert (idempotent,
-        kein Überschreiben des hourly :05-Werts)
+        kein Überschreiben des hourly :05-Werts), außer `force=True`
       - kein MQTT-Pfad (Standalone-Anlagen profitieren erst, wenn
         mqtt_energy_history_service ähnliche 5-Min-Granularität liefert —
         eigener Refactor, siehe Konzept §1 Abgrenzung)
@@ -968,6 +969,8 @@ async def snapshot_anlage_5min(
         db: Async Session
         anlage: Anlage-Objekt
         zeitpunkt: Ziel-Slot, typisch floor(now, 5min)
+        force: Wenn True, bestehende Slots überschreiben (für Resnap nach
+            Service-Bugfixes, siehe resnap_anlage_range).
 
     Returns:
         Anzahl geschriebener Snapshots.
@@ -982,19 +985,20 @@ async def snapshot_anlage_5min(
 
     count = 0
     for sensor_key, entity_id in counter_map.items():
-        # Idempotenz: nicht überschreiben wenn Slot schon belegt ist
-        # (z.B. der :05-hourly-Snapshot, oder vorheriger 5-Min-Lauf).
-        existing = await db.execute(
-            select(SensorSnapshot.id).where(
-                and_(
-                    SensorSnapshot.anlage_id == anlage.id,
-                    SensorSnapshot.sensor_key == sensor_key,
-                    SensorSnapshot.zeitpunkt == zeitpunkt,
+        if not force:
+            # Idempotenz: nicht überschreiben wenn Slot schon belegt ist
+            # (z.B. der :05-hourly-Snapshot, oder vorheriger 5-Min-Lauf).
+            existing = await db.execute(
+                select(SensorSnapshot.id).where(
+                    and_(
+                        SensorSnapshot.anlage_id == anlage.id,
+                        SensorSnapshot.sensor_key == sensor_key,
+                        SensorSnapshot.zeitpunkt == zeitpunkt,
+                    )
                 )
             )
-        )
-        if existing.scalar_one_or_none() is not None:
-            continue
+            if existing.scalar_one_or_none() is not None:
+                continue
         # Toleranz 3 Min: HA short_term schreibt exakt auf :00, :05, :10, ...
         # 3 Min ist eng genug um keinen Nachbar-Slot zu treffen, weit genug
         # für Latenz-Jitter.
@@ -1007,6 +1011,86 @@ async def snapshot_anlage_5min(
         count += 1
 
     return count
+
+
+async def resnap_anlage_range(
+    db: AsyncSession,
+    anlage,
+    von: datetime,
+    bis: datetime,
+    include_5min: bool = True,
+) -> dict[str, int]:
+    """
+    Schreibt SensorSnapshots für [von, bis) neu — sowohl hourly :00 als auch
+    5-Min Sub-Hour-Slots. Existierende Slots werden überschrieben.
+
+    Zweck: Validierung/Recovery nach Service-Bugfixes wie dem off-by-one in
+    `get_value_at` (Befund 2026-05-01). Liest die korrigierten Werte aus HA
+    Statistics und überschreibt die Snapshots der letzten Tage in einem
+    Rutsch — leichter als pro Tag manuell `reaggregate-tag` zu klicken.
+
+    Args:
+        db: Async Session
+        anlage: Anlage-Objekt
+        von: Start (inklusiv, wird auf volle Stunde abgerundet)
+        bis: Ende (exklusiv, wird auf volle Stunde abgerundet)
+        include_5min: Wenn True, auch 5-Min-Slots resnappen (nur sinnvoll
+            für die letzten ~10–14 Tage, dann ist HA short_term gefüllt).
+
+    Returns:
+        {"hourly": <Anzahl>, "5min": <Anzahl>, "stunden": <#h>, "slots_5min": <#5m>}
+    """
+    von_h = von.replace(minute=0, second=0, microsecond=0)
+    bis_h = bis.replace(minute=0, second=0, microsecond=0)
+
+    hourly_count = 0
+    fivemin_count = 0
+    stunden = 0
+    slots_5min = 0
+
+    # 1) Stündliche Slots (überschreiben via _upsert in snapshot_anlage)
+    zp = von_h
+    while zp < bis_h:
+        try:
+            n = await snapshot_anlage(db, anlage, zeitpunkt=zp)
+            hourly_count += n
+        except Exception as e:
+            logger.warning(
+                f"Resnap hourly Anlage {anlage.id} {zp}: {type(e).__name__}: {e}"
+            )
+        stunden += 1
+        zp += timedelta(hours=1)
+
+    # 2) 5-Min-Slots (force=True, da Off-by-one-Fix sonst nicht überschreibt)
+    if include_5min:
+        zp = von_h
+        while zp < bis_h:
+            # Nur Sub-Hour-Slots :05..:55 (volle Stunden bereits durch Schritt 1)
+            for minute in (5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55):
+                slot = zp.replace(minute=minute)
+                if slot >= bis:
+                    break
+                try:
+                    n = await snapshot_anlage_5min(db, anlage, zeitpunkt=slot, force=True)
+                    fivemin_count += n
+                except Exception as e:
+                    logger.debug(
+                        f"Resnap 5min Anlage {anlage.id} {slot}: {type(e).__name__}: {e}"
+                    )
+                slots_5min += 1
+            zp += timedelta(hours=1)
+
+    await db.commit()
+    logger.info(
+        f"Resnap Anlage {anlage.id} [{von_h.isoformat()} → {bis_h.isoformat()}]: "
+        f"{hourly_count} hourly / {fivemin_count} 5min snapshots geschrieben"
+    )
+    return {
+        "hourly": hourly_count,
+        "5min": fivemin_count,
+        "stunden": stunden,
+        "slots_5min": slots_5min,
+    }
 
 
 async def cleanup_5min_snapshots(

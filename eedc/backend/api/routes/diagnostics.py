@@ -1,7 +1,11 @@
 """
 Diagnostics API — operative Validierungs-Endpoints für interne Health-Checks.
 
-Aktuell: GET /live-snapshot-5min (Phase 1 Live-Snapshot 5-Min Validierung).
+Aktuell:
+- GET /live-snapshot-5min: Phase 1 Live-Snapshot 5-Min Validierung
+- POST /resnap-snapshots: Snapshots der letzten N Tage neu schreiben
+  (nach Service-Bugfixes wie get_value_at off-by-one v3.25.9)
+
 Wird vom Notebook aus per curl ausgewertet, ersetzt das Skript
 scripts/check-live-snapshot-5min.sh (das bleibt als Standalone-Fallback).
 """
@@ -10,14 +14,16 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.core.config import settings
+from backend.models.anlage import Anlage
 from backend.services.scheduler import get_scheduler
+from backend.services.sensor_snapshot_service import resnap_anlage_range
 
 logger = logging.getLogger(__name__)
 
@@ -339,4 +345,70 @@ async def live_snapshot_5min_diagnostics(db: AsyncSession = Depends(get_db)):
         scheduler=scheduler_info,
         checks=checks,
         summary=summary,
+    )
+
+
+class ResnapResponse(BaseModel):
+    von: datetime
+    bis: datetime
+    anlagen: int
+    hourly_geschrieben: int
+    fivemin_geschrieben: int
+    stunden_pro_anlage: int
+    slots_5min_pro_anlage: int
+
+
+@router.post("/resnap-snapshots", response_model=ResnapResponse)
+async def resnap_snapshots(
+    days: int = Query(7, ge=1, le=14, description="Anzahl Tage rückwirkend"),
+    include_5min: bool = Query(True, description="Auch Sub-Hour-Slots resnappen"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Schreibt Snapshots der letzten N Tage für ALLE Anlagen neu — sowohl
+    hourly :00 als auch 5-Min Sub-Hour-Slots. Existierende Werte werden
+    überschrieben.
+
+    Use-Case: Nach Service-Bugfixes (z.B. get_value_at off-by-one in v3.25.9)
+    bestehende Snapshot-Werte mit korrigierter Logik neu generieren, damit
+    die Diagnose-Checks und Live-Tagesverlauf gegen frische Daten laufen.
+
+    Hinweis: 5-Min-Slots können nur für die letzten ~10–14 Tage rekonstruiert
+    werden (HA short_term_statistics Retention). Hourly läuft beliebig zurück.
+    """
+    bis = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    von = bis - timedelta(days=days)
+
+    result = await db.execute(select(Anlage))
+    anlagen = result.scalars().all()
+    if not anlagen:
+        raise HTTPException(status_code=404, detail="Keine Anlagen gefunden")
+
+    total_hourly = 0
+    total_5min = 0
+    stunden_pro_anlage = 0
+    slots_5min_pro_anlage = 0
+
+    for anlage in anlagen:
+        try:
+            stats = await resnap_anlage_range(
+                db, anlage, von=von, bis=bis, include_5min=include_5min
+            )
+            total_hourly += stats["hourly"]
+            total_5min += stats["5min"]
+            stunden_pro_anlage = stats["stunden"]
+            slots_5min_pro_anlage = stats["slots_5min"]
+        except Exception as e:
+            logger.warning(
+                f"Resnap Anlage {anlage.id} fehlgeschlagen: {type(e).__name__}: {e}"
+            )
+
+    return ResnapResponse(
+        von=von,
+        bis=bis,
+        anlagen=len(anlagen),
+        hourly_geschrieben=total_hourly,
+        fivemin_geschrieben=total_5min,
+        stunden_pro_anlage=stunden_pro_anlage,
+        slots_5min_pro_anlage=slots_5min_pro_anlage,
     )
