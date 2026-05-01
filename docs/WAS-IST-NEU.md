@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.5)
+> **Stand:** Mai 2026 (v3.25.8)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,44 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Speicher- und V2H-Ersparnis im Aussichten-Tab konsistent zur Detail-Ansicht *(v3.25.8)*
+
+> ⚠ **User-sichtbarer Wert-Sprung** — Wer den Aussichten-Tab als Referenz für Speicher-Ersparnis nutzt, wird nach diesem Update einen ~25 % niedrigeren Wert sehen. Das ist eine Korrektur, kein Verlust.
+
+Bisher rechneten Aussichten und Investitionen-Detail die Speicher-Ersparnis mit unterschiedlichen Formeln: Aussichten nahm den vollen Bezugspreis (`Entladung × 30 ct`), die Detail-Ansicht den Spread zwischen Bezug und Einspeisevergütung (`Entladung × (30 − 8) ct`). Bei einer Anlage mit 2.000 kWh Speicher-Durchsatz/Jahr ergab das 600 € (Aussichten) gegen 440 € (Detail) — für dieselbe Anlage.
+
+Korrekt ist das Spread-Modell, weil der gespeicherte Strom ohne Speicher als Einspeisung Vergütung erwirtschaftet hätte — nur die Differenz ist echter Netto-Gewinn. Aussichten ist jetzt darauf umgestellt; alle Tabs zeigen denselben Wert. Gleiche Logik gilt für V2H (E-Auto-Rückspeisung ins Haus).
+
+Im Speicher-Dashboard war außerdem das Formel-Label ungenau („Ersparnis = Entladung × Strompreis") — passt jetzt zur tatsächlichen Berechnung.
+
+→ [Aussichten-Tab](HANDBUCH_BEDIENUNG.md#5-aussichten--prognose) | [Speicher-Dashboard](HANDBUCH_BEDIENUNG.md#33-speicher-dashboard)
+
+### Cockpit-E-Auto-Ersparnis liest jetzt deine gepflegten Werte *(v3.25.8)*
+
+Cockpit → Übersicht und Cockpit → Monatsberichte hatten bisher 7 L/100 km Vergleichsverbrauch und 1,80 €/L Benzinpreis hartcodiert — selbst wenn du im E-Auto-Formular andere Werte hinterlegt hattest, wurden die ignoriert. Aussichten und PDF haben deine Eingaben schon respektiert; Cockpit zog deshalb 7–9 % höhere Ersparnis-Werte. Jetzt rufen alle Stellen denselben Helper auf, kanonische Defaults sind 7,5 L/100 km und 1,65 €/L (entspricht den Voreinstellungen im Formular).
+
+→ [Investitionen pflegen → E-Auto](HANDBUCH_BEDIENUNG.md#11-investitionen-pflegen)
+
+### Drei stille Datenfehler bei Anlagen mit historischem Backfill behoben *(v3.25.8)*
+
+Wenn du via CSV-Import oder HA-LTS-Backfill Daten geladen hast, die zeitlich vor dem Anschaffungsdatum einer Komponente liegen (z. B. WP-Daten ab Januar, obwohl die WP erst im April installiert wurde), wurden diese Vor-Daten in drei Endpoints fälschlich mitberechnet:
+
+- **Cockpit → Prognose** (Vergleich Soll-PV/Ist-PV) — falls PV-Module mid-year angeschafft wurden
+- **HA-Sensor-Export** (z. B. `eedc_wp_ersparnis_euro`) — falls WP/Speicher mid-year angeschafft wurden
+- **Community-Server-Submission** — gleicher Effekt; bei betroffenen Anlagen wurden Vor-Anschaffungs-Werte als Anlage-Beitrag hochgeladen
+
+Alle drei greifen jetzt auf den gleichen Anschaffungsdatum-Filter zu, der seit v3.23.1 in Cockpit-Übersicht/Auswertungen aktiv ist. Wenn du betroffen warst, normalisiert sich dein Wert beim nächsten Cockpit-Aufruf bzw. nächster Community-Submission automatisch.
+
+### Hintergrund: Drift-Audit-Initiative
+
+Der WP-Ersparnis-Bug aus #178 (v3.25.7) hat eine systematische Inventur aller Investitions-Berechnungen ausgelöst. 16 Drifts in 6 Domänen identifiziert. v3.25.8 schließt davon 5 Bündel; eine weitere Folge-Version macht den Rest (vereinheitlichte Reader für die JSON-Felder im `verbrauch_daten`-Speicher mit Datenbank-Migration). Die komplette Inventur liegt im Repo unter `docs/drafts/INVENTUR-DRIFT-AUDIT.md`.
+
+### Wärmepumpe: Ersparnis-Anzeige in allen vier Tabs konsistent *(v3.25.7)*
+
+Vor v3.25.7 zeigten Cockpit → Monatsberichte, Cockpit → Übersicht, Cockpit → Wärmepumpe und Auswertungen → Komponenten teils unterschiedliche WP-Ersparnis-Werte für dieselbe Anlage (z. B. 7 € / 61 € / 77 € / 61 €). Ursache: vier Code-Pfade mit unterschiedlichen hartcodierten Defaults und teils falschen Param-Keys, sodass gepflegte Werte für „alter Heizungspreis" oder „alter Energieträger" stillschweigend ignoriert wurden. Jetzt rufen alle vier denselben Helper auf — der Wert ist konsistent. Issue [#178](https://github.com/supernova1963/eedc-homeassistant/issues/178), detLAN-Bericht.
+
+→ [Cockpit-Wärmepumpe](HANDBUCH_BEDIENUNG.md#36-wärmepumpe-dashboard)
 
 ### Wärmepumpe: Hersteller-Lebensdauer-Counter im Cockpit *(v3.25.3)*
 
