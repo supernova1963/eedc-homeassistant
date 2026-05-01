@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [3.25.8] - 2026-05-01
 
 > 📊 **Drift-Audit-Initiative** — als Folge des #178-Fixes (siehe v3.25.7) eine systematische Inventur aller Investitions-Berechnungen durchgeführt. 16 Drifts in 6 Domänen identifiziert ([INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)). Diese Version bündelt die Fixes für 5 davon (Bündel B, C, D, E, F). User-sichtbare Hauptänderung: Speicher- und V2H-Ersparnis im Aussichten-Tab werden jetzt nach demselben Spread-Modell berechnet wie das Investitionen-Detail (~25 % niedriger als vorher) — siehe Erklärung unten.
 
