@@ -3,10 +3,12 @@
 </p>
 
 <p align="center">
-  <strong>Version 3.24.1</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Dokumentationsstand 3.25.2</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
+  <a href="https://github.com/supernova1963/eedc-homeassistant/releases/latest"><img src="https://img.shields.io/github/v/release/supernova1963/eedc-homeassistant" alt="Aktuelles Release"></a>
+  <a href="https://github.com/supernova1963/eedc-homeassistant/releases/latest"><img src="https://img.shields.io/github/release-date/supernova1963/eedc-homeassistant" alt="Release-Datum"></a>
   <a href="https://supernova1963.github.io/eedc-homeassistant/"><img src="https://img.shields.io/badge/Website-GitHub%20Pages-blue" alt="Website"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
