@@ -256,6 +256,16 @@ async def live_snapshot_5min_diagnostics(db: AsyncSession = Depends(get_db)):
     # ------------------------------------------------------------------------
     # Check 6: Verdichtungs-Garantie (1h-Δ aus den 5-Min-Slots rekonstruierbar)
     # ------------------------------------------------------------------------
+    # FIXME (v3.25.10 Befund): Check 6 ist konzeptionell falsch und wird beim
+    # nächsten Release entfernt. Die :05..:55-Slots erfassen nur 50 von 60
+    # Minuten — bei monotonen Countern ergibt sich systematisch ein Drift von
+    # ≈ hourly_delta × 2/12 (16.7%), nicht weil Daten falsch sind, sondern
+    # weil die Slot-Definition die :00→:05 und :55→:00(h+1) Tranchen ignoriert.
+    # Verifiziert durch 0.829–0.834 Verhältnis 5min/hourly bei Sonnen-PV.
+    # Die echte Skalen-Konsistenz-Prüfung liegt schon in Check 3 (Monotonie):
+    # wenn hourly.sum und short_term.sum nicht alignen, gibt's beim Übergang
+    # negative Sprünge. Heute PASS → wir wissen genug.
+    # ------------------------------------------------------------------------
     # Pro Counter+Stunde heute: 1h-Δ = snap[h+1:00] - snap[h:00].
     # 5-Min-MAX(wert) - MIN(wert) innerhalb [h:00..h+1:00) = MAX-MIN-Δ.
     # Bei monoton steigenden Countern muss MAX-MIN-Δ ≈ 1h-Δ sein.
