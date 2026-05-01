@@ -7,7 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [3.25.8] - 2026-05-01
+
+> 📊 **Drift-Audit-Initiative** — als Folge des #178-Fixes (siehe v3.25.7) eine systematische Inventur aller Investitions-Berechnungen durchgeführt. 16 Drifts in 6 Domänen identifiziert ([INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)). Diese Version bündelt die Fixes für 5 davon (Bündel B, C, D, E, F). User-sichtbare Hauptänderung: Speicher- und V2H-Ersparnis im Aussichten-Tab werden jetzt nach demselben Spread-Modell berechnet wie das Investitionen-Detail (~25 % niedriger als vorher) — siehe Erklärung unten.
+
+### Changed
+
+- **Speicher- und V2H-Ersparnis im Aussichten-Tab: Spread-Modell statt Voll-Strompreis (Bündel D)** — Bisher rechnete Aussichten `entladung × Bezugspreis`, das Investitionen-Detail aber `entladung × (Bezug − Einspeise)`. Bei typischem Tarif (30/8 ct) ergab das **36 % Differenz** für dieselbe Anlage. Der ökonomisch korrekte Wert ist der Spread, weil die Speicher-Energie ohne Speicher als Einspeisung Vergütung erwirtschaftet hätte — nur die Differenz ist echter Netto-Gewinn. Aussichten ist jetzt auf das Spread-Modell umgestellt → User sehen bei einer Anlage mit z. B. 2000 kWh Durchsatz/Jahr nicht mehr 600 €, sondern 440 € Speicher-Ersparnis. V2H-Berechnung folgt der gleichen Logik. SpeicherDashboard-Label im Frontend korrigiert (vorher: „× Strompreis", war eine Lüge).
+- **Cockpit-E-Auto-Ersparnis liest jetzt User-Werte (Bündel B)** — Bisher waren in den Cockpit-Stellen 7 L/100 km Vergleichsverbrauch und 1,80 €/L Benzinpreis hartcodiert; der gepflegte Pflege-Wert wurde ignoriert. Cockpit zeigte deshalb 7–9 % höhere Ersparnis als Aussichten/PDF (die respektierten den Pflege-Wert schon). Jetzt rufen alle Stellen denselben Helper auf, kanonische Defaults (7,5 L / 1,65 €/L). Folge: Cockpit-Ersparnis sinkt typisch um 3–5 % auf den korrekten Wert.
+- **Hartcodierte Konstanten zentralisiert (Bündel C)** — Wirkungsgrade Gas/Öl (0,90 / 0,85 in 13 Stellen), CO2-Faktoren (0,38 / 2,37 in 7 Stellen) und Default-Tarife (8,2 ct Einspeise in 6 Stellen, 30 ct Bezug in 6 Stellen) werden jetzt aus zentralen Modulen gelesen statt überall dupliziert. Keine User-sichtbare Änderung außer minimalem CO2-Drift bei Gas (0,2 → 0,201 kg/kWh, ≈ 0,5 % höher — der korrekte Wert).
+
+### Fixed
+
+- **Cockpit-Wärmepumpe-Detail / KomponentenTab Ersparnis ignorierte User-Pflege (#178 Folge, Bündel A)** — *Bereits in v3.25.7 released, hier nur als Anker.* Vier UI-Stellen rechneten unterschiedliche WP-Ersparnis für dieselbe Anlage (7 € / 61 € / 77 € / 61 €). Helper `services/wp_wirtschaftlichkeit.py` mit kanonischer Formel + Param-Key-Fix.
+- **Speicher-Dashboard ignorierte Anlagen-Tarife (Bündel E)** — Speicher-Endpoint nutzte bisher die hartcodierten Query-Param-Defaults `30 ct/8 ct` statt die Anlagen-Tarife aus der DB zu lesen. Jetzt werden Anlage-spezifische Tarife herangezogen (`netzbezug_arbeitspreis_cent_kwh`, `einspeiseverguetung_cent_kwh`).
+- **Strompreis-Lookup-Kaskade vereinheitlicht (Bündel E)** — Drei verschachtelte Ternäre der Form `wallbox_tarif → allgemein_tarif → 30.0` durch zentralen Helper `resolve_strompreis_for_komponente(tarife, "allgemein|waermepumpe|wallbox")` ersetzt. Künftige Tarif-Änderungen wirken jetzt automatisch in allen Endpoints.
+- **Cockpit-Prognose, HA-Sensor-Export und Community-Server-Submission ignorierten Anschaffungsdatum-Filter (Bündel F)** — Drei Endpoints aggregierten `InvestitionMonatsdaten` ohne den seit v3.23.1 in den anderen Endpoints aktiven Anschaffungsdatum-Check. Folge: Wenn User vor-Anschaffungs-Daten via CSV-Backfill geladen hatte (z. B. WP-Daten ab Januar, obwohl WP erst im April installiert), flossen diese in Cockpit-Prognose, HA-Sensor `wp_ersparnis_euro` und in den Community-Server-Datensatz ein. Jetzt nutzen alle drei `Investition.ist_aktiv_im_monat(jahr, monat)`. Fix verhindert künftig korrupte Community-Submissions.
+
+### Internal
+
+- **Inventur-Dokument [INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)** — 6 Domänen × 16 Drifts dokumentiert mit Render-Stellen-Matrix, Soll-Formel und Fix-Priorität. Ankerdokument für künftige Drift-Issues — bei neuen Forum-Berichten erst hier prüfen.
+- **Neue Service-Helper als Single Source of Truth:** `wp_wirtschaftlichkeit.berechne_wp_ersparnis()` (Bündel A, schon in v3.25.7), `eauto_wirtschaftlichkeit.berechne_eauto_ersparnis()` (B), `speicher_wirtschaftlichkeit.berechne_speicher_ersparnis() / berechne_v2h_ersparnis()` (D). Konstanten-Module `core/wirtschaftlichkeit_defaults.py` (Backend) + `lib/wirtschaftlichkeitDefaults.ts` (Frontend).
+- **Bündel G** (Field-Reader-Helper für `verbrauch_daten`-Schema-Drift mit DB-Migration, 27+ Doppel-Read-Stellen) wird in einer separaten Folge-Version umgesetzt — Migration-Risiko, sollte allein laufen.
 
 ---
 
