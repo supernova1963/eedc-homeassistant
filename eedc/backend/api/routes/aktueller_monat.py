@@ -24,6 +24,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
+from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 
 logger = logging.getLogger(__name__)
 
@@ -725,6 +726,19 @@ async def get_aktueller_monat(
     wp_ersparnis = None
     emob_ersparnis = None
 
+    # Monats-Gaspreis (für WP-Ersparnis hier + Per-Investition-Block unten).
+    # Drift-Audit Domäne A1 / Issue #178: ohne diesen Override fiel der Code
+    # auf hartcodierte 10ct zurück.
+    md_result = await db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr == jahr,
+            Monatsdaten.monat == monat,
+        )
+    )
+    md_for_gas = md_result.scalar_one_or_none()
+    monats_gaspreis = md_for_gas.gaspreis_cent_kwh if md_for_gas else None
+
     wp_waerme = get_val("wp_waerme_kwh")
     wp_strom = get_val("wp_strom_kwh")
     if wp_waerme is not None and wp_strom is not None and allgemein_tarif:
@@ -734,10 +748,17 @@ async def get_aktueller_monat(
             if wp_tarif and wp_tarif.netzbezug_arbeitspreis_cent_kwh is not None
             else netzbezug_preis_cent
         )
-        GAS_PREIS_CENT = 10.0
-        wp_ersparnis = round(
-            (wp_waerme / 0.9 * GAS_PREIS_CENT - wp_strom * wp_preis_cent) / 100, 2
+        wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
+        wp_ref_parameter = wp_invs[0].parameter if wp_invs else None
+
+        wp_ersparnis_result = berechne_wp_ersparnis(
+            wp_waerme_kwh=wp_waerme,
+            wp_strom_kwh=wp_strom,
+            wp_strompreis_cent=wp_preis_cent,
+            wp_parameter=wp_ref_parameter,
+            monats_gaspreis_cent=monats_gaspreis,
         )
+        wp_ersparnis = round(wp_ersparnis_result.ersparnis_euro, 2)
 
     emob_ladung = get_val("emob_ladung_kwh")
     emob_km = get_val("emob_km")
@@ -999,7 +1020,9 @@ async def get_aktueller_monat(
         wb_p = (wb_tarif_obj.netzbezug_arbeitspreis_cent_kwh
                 if wb_tarif_obj and wb_tarif_obj.netzbezug_arbeitspreis_cent_kwh is not None
                 else netz_p)
-        GAS_PREIS_CENT = 10.0
+        # WP-Ersparnis pro Investition siehe wp_wirtschaftlichkeit.berechne_wp_ersparnis()
+        # — nicht mehr lokal mit hartcodiertem Gaspreis berechnet (Drift-Audit A1).
+        # Der monatliche Gaspreis-Override wird oben (md_for_gas) bereits geladen.
 
         # Alle InvestitionMonatsdaten in einem Query laden
         all_ids = [i.id for i in investitionen]
@@ -1050,12 +1073,21 @@ async def get_aktueller_monat(
                 strom = data.get("stromverbrauch_kwh")
                 waerme_total = (waerme or 0) + (ww or 0)
                 if waerme_total > 0 and strom is not None:
-                    inv_ersparnis = round(
-                        (waerme_total / 0.9 * GAS_PREIS_CENT - strom * wp_p) / 100, 2
+                    wp_result = berechne_wp_ersparnis(
+                        wp_waerme_kwh=waerme_total,
+                        wp_strom_kwh=strom,
+                        wp_strompreis_cent=wp_p,
+                        wp_parameter=inv.parameter,
+                        monats_gaspreis_cent=monats_gaspreis,
                     )
+                    inv_ersparnis = round(wp_result.ersparnis_euro, 2)
                     inv_label = "Ersparnis vs. Gas"
-                    inv_formel = "(Wärme ÷ 0,9 × Gaspreis) − Strom × WP-Strompreis"
-                    inv_berechnung = f"{waerme_total:.1f} kWh / 0,9 × 10 ct − {strom:.1f} kWh × {wp_p:.2f} ct"
+                    inv_formel = "(Wärme ÷ Wirkungsgrad × Gaspreis) − Strom × WP-Strompreis"
+                    inv_berechnung = (
+                        f"{waerme_total:.1f} kWh / {wp_result.verwendeter_wirkungsgrad:.2f} "
+                        f"× {wp_result.verwendeter_gaspreis_cent:.1f} ct − "
+                        f"{strom:.1f} kWh × {wp_p:.2f} ct"
+                    )
 
             elif inv.typ in ("e-auto", "wallbox") and not (inv.parameter or {}).get("ist_dienstlich", False):
                 km = data.get("km_gefahren")

@@ -67,7 +67,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
   }, [chartData])
 
   const wpSummen = useMemo(() => {
-    if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0, stromHeizen: 0, stromWarmwasser: 0, heizungGetrennt: 0, warmwasserGetrennt: 0 }
+    if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0, stromHeizen: 0, stromWarmwasser: 0, heizungGetrennt: 0, warmwasserGetrennt: 0, ersparnis: 0 }
     const waerme = chartData.reduce((sum, z) => sum + z.wp_waerme_kwh, 0)
     const strom = chartData.reduce((sum, z) => sum + z.wp_strom_kwh, 0)
     const heizung = chartData.reduce((sum, z) => sum + z.wp_heizung_kwh, 0)
@@ -77,6 +77,9 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
     // Nur Monate mit getrennter Strommessung für JAZ Heizen/Warmwasser
     const heizungGetrennt = chartData.reduce((sum, z) => sum + (z.wp_strom_heizen_kwh > 0 ? z.wp_heizung_kwh : 0), 0)
     const warmwasserGetrennt = chartData.reduce((sum, z) => sum + (z.wp_strom_warmwasser_kwh > 0 ? z.wp_warmwasser_kwh : 0), 0)
+    // Drift-Audit A1 / Issue #178: Ersparnis kommt jetzt vom Backend
+    // (vorher 8ct hartcodiert ohne Wirkungsgrad → 7€ statt 61€ bei detLAN).
+    const ersparnis = chartData.reduce((sum, z) => sum + (z.wp_ersparnis_euro || 0), 0)
     return {
       waerme,
       strom,
@@ -87,6 +90,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
       stromWarmwasser,
       heizungGetrennt,
       warmwasserGetrennt,
+      ersparnis,
     }
   }, [chartData])
 
@@ -365,12 +369,13 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             />
             <KPICard
               title="Ersparnis vs. Gas"
-              value={strompreis ? ((wpSummen.waerme * 0.08) - (wpSummen.strom * strompreis.netzbezug_arbeitspreis_cent_kwh / 100)).toFixed(0) : '---'}
+              value={wpSummen.ersparnis.toFixed(0)}
               unit="€"
-              subtitle="ca. 8 ct/kWh Gas"
               icon={TrendingUp}
               color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Σ Monatswerte (Backend)"
+              berechnung="(Wärme ÷ Wirkungsgrad × Gaspreis) − Strom × WP-Strompreis"
             />
           </div>
 

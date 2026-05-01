@@ -31,6 +31,7 @@ from backend.core.investition_parameter import (
     PARAM_WALLBOX,
     PARAM_WALLBOX_DEFAULTS,
 )
+from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 
 
 # =============================================================================
@@ -1497,15 +1498,20 @@ async def get_waermepumpe_dashboard(
         gesamt_waerme = gesamt_heizung + gesamt_warmwasser
         durchschnitt_cop = gesamt_waerme / gesamt_strom if gesamt_strom > 0 else 0
 
-        # Kosten WP
-        wp_kosten = gesamt_strom * strompreis_cent / 100
-
-        # Vergleich alte Heizung
-        params = wp.parameter or {}
-        gas_preis = params.get('gas_kwh_preis_cent', 12)
-        alte_heizung_kosten = gesamt_waerme * gas_preis / 100
-
-        ersparnis = alte_heizung_kosten - wp_kosten
+        # Drift-Audit Domäne A1 / Issue #178: vorher las dieser Endpoint
+        # `gas_kwh_preis_cent` (toter Key, Form schreibt `alter_preis_cent_kwh`)
+        # und ignorierte den Wirkungsgrad-Faktor → Ergebnis +16€ Drift.
+        # TODO: monatlicher Gaspreis-Override (analog `aussichten.py`-Loop)
+        # könnte ergänzt werden, ist aber für Lebenszeit-Aggregat weniger relevant.
+        wp_result = berechne_wp_ersparnis(
+            wp_waerme_kwh=gesamt_waerme,
+            wp_strom_kwh=gesamt_strom,
+            wp_strompreis_cent=strompreis_cent,
+            wp_parameter=wp.parameter,
+        )
+        wp_kosten = wp_result.wp_kosten_euro
+        alte_heizung_kosten = wp_result.alte_heizung_kosten_euro
+        ersparnis = wp_result.ersparnis_euro
 
         # CO2 (Gas: ca. 0.2 kg/kWh, Strom: 0.38 kg/kWh)
         gas_co2 = gesamt_waerme * 0.2

@@ -20,6 +20,7 @@ from backend.core.calculations import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
+from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 
 router = APIRouter()
 
@@ -291,8 +292,17 @@ async def get_cockpit_uebersicht(
     wp_invs = [i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_an(today)]
     hat_waermepumpe = len(wp_invs) > 0
     wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 else None
-    gas_preis_cent = 10.0
-    wp_ersparnis = ((wp_waerme / 0.9 * gas_preis_cent) - (wp_strom * wp_preis_cent)) / 100 if wp_waerme > 0 else 0
+    # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
+    # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
+    # User-Param `alter_preis_cent_kwh`.
+    wp_ref_parameter = wp_invs[0].parameter if wp_invs else None
+    wp_ersparnis_result = berechne_wp_ersparnis(
+        wp_waerme_kwh=wp_waerme,
+        wp_strom_kwh=wp_strom,
+        wp_strompreis_cent=wp_preis_cent,
+        wp_parameter=wp_ref_parameter,
+    )
+    wp_ersparnis = wp_ersparnis_result.ersparnis_euro
 
     emob_invs = [
         i for i in investitionen
