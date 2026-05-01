@@ -23,9 +23,13 @@ if [ -f "$CONFIG_PATH" ]; then
 
     # PDF-Engine (Issue #121, opt-in für die neue WeasyPrint-Pipeline)
     export PDF_ENGINE=$(jq -r '.pdf_engine // "reportlab"' $CONFIG_PATH)
+
+    # Live-Snapshot 5-Min (Phase 1 — Counter statt Power-Trapez für Live-Linie)
+    export LIVE_SNAPSHOT_5MIN_ENABLED=$(jq -r '.live_snapshot_5min_enabled // false' $CONFIG_PATH)
 else
     export LOG_LEVEL="info"
     export PDF_ENGINE="reportlab"
+    export LIVE_SNAPSHOT_5MIN_ENABLED="false"
 fi
 
 # Datenbank-Pfad (aiosqlite für async SQLAlchemy)

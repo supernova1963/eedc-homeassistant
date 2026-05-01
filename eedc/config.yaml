@@ -38,6 +38,7 @@ options:
   log_level: info
   pdf_engine: reportlab
   ha_recorder_db_url: ""
+  live_snapshot_5min_enabled: false
   mqtt:
     enabled: false
     host: "core-mosquitto"
@@ -51,6 +52,7 @@ schema:
   log_level: list(debug|info|warning|error)
   pdf_engine: list(reportlab|weasyprint)?
   ha_recorder_db_url: str?
+  live_snapshot_5min_enabled: bool?
   mqtt:
     enabled: bool?
     host: str?
