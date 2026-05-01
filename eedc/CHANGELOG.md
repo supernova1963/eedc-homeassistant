@@ -11,6 +11,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.7] - 2026-05-01
+
+> ⚠ **Folge-Patch zum internen Test-Feature** — interessiert nur, wer den Diagnose-Endpoint nutzt (siehe v3.25.5).
+
+### Fixed
+
+- **fix(diagnostics): Microsecond-Mismatch im Live-Snapshot-5-Min-Endpoint** — In den Checks 4 (Mitternachts-Boundary) und 6 (Verdichtungs-Garantie) verglich der SQL `s.zeitpunkt = datetime('YYYY-MM-DD HH:00:00')`, die DB speichert die Werte aber als `'YYYY-MM-DD HH:00:00.000000'` (mit Microseconds). String-Equality matched nicht → beide Checks lieferten fälschlich `skip` mit „keine vollständigen Stunden". Fix: beide Seiten durch `datetime()` normalisieren, das strippt die Microseconds.
+
+---
+
 ## [3.25.6] - 2026-05-01
 
 ### Changed
