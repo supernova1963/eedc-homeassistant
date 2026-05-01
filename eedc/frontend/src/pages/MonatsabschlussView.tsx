@@ -11,13 +11,13 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Sun, Battery, Flame, Car, Euro,
-  ChevronDown, BarChart3, Wrench, Home, Zap, TrendingUp,
+  BarChart3, Wrench, Home, Zap, TrendingUp,
   Plug, Gauge, ArrowUpDown, RefreshCw, CalendarClock, Users, Share2,
-  ArrowUp, ArrowDown, Thermometer, Activity, Power,
+  Thermometer, Activity, Power,
 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard, FormelTooltip, fmtCalc, SortableSection, OrderedSections } from '../components/ui'
 import { fmtKpi } from '../lib'
-import { useSelectedAnlage, useAggregierteDaten } from '../hooks'
+import { useSelectedAnlage, useAggregierteDaten, useSectionOrder } from '../hooks'
 import { aktuellerMonatApi, AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { cockpitApi } from '../api/cockpit'
 import { communityApi, MonatsVergleich } from '../api/community'
@@ -86,156 +86,11 @@ function VglZeile({ label, aktuell, vm, vj, unit, inv = false, formel, ergebnis 
   return row
 }
 
-// ─── Accordion ────────────────────────────────────────────────────────────────
-function Section({
-  icon: Icon, title, summary, children, defaultOpen = false, color = 'text-blue-500',
-  onMoveUp, onMoveDown,
-}: {
-  icon: React.ElementType
-  title: string
-  summary: React.ReactNode
-  children: React.ReactNode
-  defaultOpen?: boolean
-  color?: string
-  onMoveUp?: () => void
-  onMoveDown?: () => void
-  sectionId?: string  // nur als Marker für <OrderedSections> — nicht gerendert
-}) {
-  const storageKey = `monatsberichte_section_${title}`
-  const [open, setOpen] = useState(() => {
-    try {
-      const stored = localStorage.getItem(storageKey)
-      return stored !== null ? stored === 'true' : defaultOpen
-    } catch {
-      return defaultOpen
-    }
-  })
-
-  const toggle = () => {
-    setOpen(o => {
-      const next = !o
-      try { localStorage.setItem(storageKey, String(next)) } catch { /* localStorage nicht verfügbar */ }
-      return next
-    })
-  }
-  const stop = (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault() }
-  return (
-    <Card className="!p-0 overflow-hidden">
-      <button
-        type="button"
-        onClick={toggle}
-        className="w-full flex items-center gap-3 px-4 py-3.5 text-left rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-      >
-        <Icon className={`h-5 w-5 shrink-0 ${color}`} />
-        <span className="font-semibold text-gray-900 dark:text-white text-sm">{title}</span>
-        <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 flex-1 min-w-0 truncate">{summary}</span>
-        {(onMoveUp || onMoveDown) && (
-          <span className="flex items-center gap-0.5 shrink-0 mr-1 border-r border-gray-200 dark:border-gray-700 pr-2" onClick={stop}>
-            <button
-              type="button"
-              onClick={(e) => { stop(e); onMoveUp?.() }}
-              disabled={!onMoveUp}
-              className="p-1 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-              title="Sektion nach oben verschieben"
-              aria-label="Sektion nach oben verschieben"
-            >
-              <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => { stop(e); onMoveDown?.() }}
-              disabled={!onMoveDown}
-              className="p-1 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-              title="Sektion nach unten verschieben"
-              aria-label="Sektion nach unten verschieben"
-            >
-              <ArrowDown className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </button>
-          </span>
-        )}
-        <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="px-4 pb-5 pt-2 border-t border-gray-100 dark:border-gray-700">
-          {children}
-        </div>
-      )}
-    </Card>
-  )
-}
-
 // ─── Sektions-Reihenfolge (individuell pro Nutzer, localStorage) ──────────────
 const DEFAULT_SECTION_ORDER = [
   'energie', 'finanzen', 'community',
   'speicher', 'waermepumpe', 'emobilitaet', 'balkonkraftwerk', 'sonstiges',
 ] as const
-const SECTION_ORDER_KEY = 'monatsberichte_section_order'
-
-function loadSectionOrder(): string[] {
-  try {
-    const stored = localStorage.getItem(SECTION_ORDER_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      if (Array.isArray(parsed)) {
-        const valid = parsed.filter((id: unknown): id is string =>
-          typeof id === 'string' && (DEFAULT_SECTION_ORDER as readonly string[]).includes(id))
-        // Fehlende Defaults hinten anhängen
-        for (const def of DEFAULT_SECTION_ORDER) {
-          if (!valid.includes(def)) valid.push(def)
-        }
-        return valid
-      }
-    }
-  } catch { /* invalides JSON / localStorage nicht verfügbar */ }
-  return [...DEFAULT_SECTION_ORDER]
-}
-
-function saveSectionOrder(order: string[]) {
-  try { localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(order)) } catch { /* localStorage nicht verfügbar */ }
-}
-
-/**
- * Rendert JSX-Kinder (Section-Komponenten mit `sectionId="<id>"`-Prop)
- * in der durch `order` definierten Reihenfolge und injiziert
- * Up/Down-Handler. Kinder ohne sectionId oder mit unbekannter ID
- * werden am Ende angehängt.
- */
-function OrderedSections({
-  order, onMove, children, className,
-}: {
-  order: string[]
-  onMove: (id: string, dir: 'up' | 'down') => void
-  children: React.ReactNode
-  className?: string
-}) {
-  const all = React.Children.toArray(children).filter(React.isValidElement) as React.ReactElement<{ sectionId?: string }>[]
-  const byId = new Map<string, React.ReactElement<{ sectionId?: string }>>()
-  for (const child of all) {
-    const id = child.props.sectionId
-    if (id) byId.set(id, child)
-  }
-  const ordered: { id: string; el: React.ReactElement<{ sectionId?: string }> }[] = []
-  for (const id of order) {
-    const el = byId.get(id)
-    if (el) ordered.push({ id, el })
-  }
-  // Kinder ohne bekannte ID hinten anhängen
-  for (const child of all) {
-    const id = child.props.sectionId
-    if (!id || !order.includes(id)) {
-      ordered.push({ id: id || `_${ordered.length}`, el: child })
-    }
-  }
-  return (
-    <div className={className}>
-      {ordered.map(({ id, el }, i) => React.cloneElement(el, {
-        key: id,
-        onMoveUp: i > 0 ? () => onMove(id, 'up') : undefined,
-        onMoveDown: i < ordered.length - 1 ? () => onMove(id, 'down') : undefined,
-      } as Partial<React.ComponentProps<typeof Section>>))}
-    </div>
-  )
-}
 
 // ─── Typen ────────────────────────────────────────────────────────────────────
 type TimelineEntry = { jahr: number; monat: number; pv_kwh: number; autarkie: number; laufend?: boolean }
@@ -344,19 +199,7 @@ export default function MonatsabschlussView() {
   const { daten: alleMonate, loading: monateLoading } = useAggregierteDaten(selectedAnlageId)
 
   // Individuelle Sektions-Reihenfolge
-  const [sectionOrder, setSectionOrder] = useState<string[]>(loadSectionOrder)
-  const moveSection = useCallback((id: string, dir: 'up' | 'down') => {
-    setSectionOrder(prev => {
-      const idx = prev.indexOf(id)
-      if (idx < 0) return prev
-      const target = dir === 'up' ? idx - 1 : idx + 1
-      if (target < 0 || target >= prev.length) return prev
-      const next = [...prev]
-      ;[next[idx], next[target]] = [next[target], next[idx]]
-      saveSectionOrder(next)
-      return next
-    })
-  }, [])
+  const { order: sectionOrder, moveSection } = useSectionOrder('monatsberichte_section_order', DEFAULT_SECTION_ORDER)
 
   const heute = useMemo(() => new Date(), [])
   const heuteJahr  = heute.getFullYear()
@@ -602,7 +445,7 @@ export default function MonatsabschlussView() {
           <OrderedSections order={sectionOrder} onMove={moveSection} className="space-y-3">
 
             {/* ════ SEKTION 1: Energie-Bilanz ════════════════════════════ */}
-            <Section sectionId="energie" icon={Sun} color="text-yellow-500" title="Energie-Bilanz" defaultOpen
+            <SortableSection storageKeyPrefix="monatsberichte" sectionId="energie" icon={Sun} color="text-yellow-500" title="Energie-Bilanz" defaultOpen
               summary={
                 <span className="flex items-center gap-3">
                   {d.pv_erzeugung_kwh != null && <span className="font-medium text-gray-700 dark:text-gray-300">{fmt(d.pv_erzeugung_kwh, 0)} kWh PV</span>}
@@ -758,11 +601,11 @@ export default function MonatsabschlussView() {
 
                 </div>
               </div>
-            </Section>
+            </SortableSection>
 
             {/* ════ SEKTION 2: Finanzen ══════════════════════════════════ */}
             {d.einspeise_erloes_euro != null && (
-              <Section sectionId="finanzen" icon={Euro} color="text-green-500" title="Finanzen" defaultOpen
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="finanzen" icon={Euro} color="text-green-500" title="Finanzen" defaultOpen
                 summary={
                   <span className="flex items-center gap-3">
                     {nettoNachAllem != null && (
@@ -1194,12 +1037,12 @@ export default function MonatsabschlussView() {
                     </div>
                   )
                 })()}
-              </Section>
+              </SortableSection>
             )}
 
             {/* ════ SEKTION 2b: Community-Vergleich ═══════════════════════ */}
             {(monatsVergleich || !selectedAnlage?.community_hash) && (
-              <Section sectionId="community" icon={Users} color="text-blue-400" title="Community-Vergleich"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="community" icon={Users} color="text-blue-400" title="Community-Vergleich"
                 summary={
                   monatsVergleich
                     ? <span className="text-xs text-gray-400">{monatsVergleich.anzahl_anlagen} Anlagen im {MONAT_NAMEN[selectedMonat!]} {selectedJahr}</span>
@@ -1317,12 +1160,12 @@ export default function MonatsabschlussView() {
                     </div>
                   </div>
                 )}
-              </Section>
+              </SortableSection>
             )}
 
             {/* ════ SEKTION 3: Speicher ══════════════════════════════════ */}
             {d.hat_speicher && (
-              <Section sectionId="speicher" icon={Battery} color="text-blue-500" title="Speicher"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="speicher" icon={Battery} color="text-blue-500" title="Speicher"
                 summary={
                   <span className="flex gap-3 text-sm">
                     {d.speicher_ladung_kwh != null && <span>{fmt(d.speicher_ladung_kwh, 0)} kWh geladen</span>}
@@ -1404,7 +1247,7 @@ export default function MonatsabschlussView() {
                       )
                     })()}
                 </div>
-              </Section>
+              </SortableSection>
             )}
 
             {/* ════ SEKTION 4: Wärmepumpe ═══════════════════════════════ */}
@@ -1414,7 +1257,7 @@ export default function MonatsabschlussView() {
               const jaz = d.wp_strom_kwh != null && d.wp_waerme_kwh != null && d.wp_strom_kwh > 0
                 ? d.wp_waerme_kwh / d.wp_strom_kwh : null
               return (
-              <Section sectionId="waermepumpe" icon={Flame} color="text-orange-500" title="Wärmepumpe"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="waermepumpe" icon={Flame} color="text-orange-500" title="Wärmepumpe"
                 summary={
                   <span className="flex gap-3 text-sm">
                     {d.wp_strom_kwh != null && <span>{fmt(d.wp_strom_kwh, 0)} kWh Strom</span>}
@@ -1465,13 +1308,13 @@ export default function MonatsabschlussView() {
                     <VglZeile label="  davon Warmwasser" aktuell={d.wp_warmwasser_kwh} unit="kWh" />
                   )}
                 </div>
-              </Section>
+              </SortableSection>
               )
             })()}
 
             {/* ════ SEKTION 5: E-Mobilität ═══════════════════════════════ */}
             {d.hat_emobilitaet && (
-              <Section sectionId="emobilitaet" icon={Car} color="text-purple-500" title="E-Mobilität"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="emobilitaet" icon={Car} color="text-purple-500" title="E-Mobilität"
                 summary={
                   <span className="flex gap-3 text-sm">
                     {d.emob_ladung_kwh != null && <span>{fmt(d.emob_ladung_kwh, 0)} kWh geladen</span>}
@@ -1515,12 +1358,12 @@ export default function MonatsabschlussView() {
                       ergebnis={`= ${fmtCalc(d.emob_ersparnis_euro, 2)} €`} />
                   )}
                 </div>
-              </Section>
+              </SortableSection>
             )}
 
             {/* ════ SEKTION 6: Balkonkraftwerk ══════════════════════════ */}
             {d.hat_balkonkraftwerk && (
-              <Section sectionId="balkonkraftwerk" icon={Sun} color="text-yellow-400" title="Balkonkraftwerk"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="balkonkraftwerk" icon={Sun} color="text-yellow-400" title="Balkonkraftwerk"
                 summary={<span className="text-sm">{fmt(d.bkw_erzeugung_kwh, 0)} kWh erzeugt · in Gesamt-PV enthalten</span>}
               >
                 <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1535,12 +1378,12 @@ export default function MonatsabschlussView() {
                     <KPICard title="Einspeisung" value={fmt(d.bkw_erzeugung_kwh - d.bkw_eigenverbrauch_kwh, 0)} unit="kWh" icon={TrendingUp} color="green" />
                   )}
                 </div>
-              </Section>
+              </SortableSection>
             )}
 
             {/* ════ SEKTION 7: Sonstiges ═════════════════════════════════ */}
             {d.hat_sonstiges && (
-              <Section sectionId="sonstiges" icon={Wrench} color="text-gray-500" title="Sonstiges"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="sonstiges" icon={Wrench} color="text-gray-500" title="Sonstiges"
                 summary={
                   <span className="flex gap-3 text-sm text-gray-400">
                     {d.sonstiges_erzeugung_kwh != null && <span>{fmt(d.sonstiges_erzeugung_kwh, 0)} kWh erzeugt</span>}
@@ -1568,7 +1411,7 @@ export default function MonatsabschlussView() {
                     <KPICard title="Bezug aus Netz" value={fmt(d.sonstiges_bezug_netz_kwh, 0)} unit="kWh" icon={Zap} color="red" />
                   )}
                 </div>
-              </Section>
+              </SortableSection>
             )}
 
             {/* Jahres-Kontext entfernt — vertikaler Zeitstrahl übernimmt die Orientierung */}

@@ -755,6 +755,111 @@ async def get_hourly_counter_sum_by_feld(
     return result
 
 
+async def compute_counter_baseline(
+    db: AsyncSession,
+    anlage,
+    inv,
+    feld: str,
+) -> Optional[dict]:
+    """
+    Berechnet die historische Baseline für einen kumulativen Counter-Sensor
+    (z.B. Kompressor-Starts einer Wärmepumpe, Issue #173).
+
+    Idee: Hersteller-Counter zeigen die echte Lebensdauer-Zahl (z.B. 5234 Starts
+    seit Werks-Inbetriebnahme). EEDC zählt aber erst ab Sensor-Aktivierung über
+    Snapshot-Differenzen — die historische Baseline fehlt damit.
+
+    Berechnung beim Wizard-Save:
+        baseline = sensor.gesamt − Σ(eedc-Tagesdifferenzen seit Inbetriebnahme)
+
+    Anzeige der Lebensdauer-Summe später:
+        Σ_lebensdauer = baseline + Σ(eedc-Tagesdifferenzen seit Inbetriebnahme)
+
+    Bei Wizard-Rerun wird die Baseline neu geeicht (selbstkorrigierend).
+
+    Args:
+        db: Async Session
+        anlage: Anlage-Objekt (mit sensor_mapping)
+        inv: Investition-Objekt (mit typ, parameter, anschaffungsdatum)
+        feld: Counter-Feldname (z.B. "wp_starts_anzahl")
+
+    Returns:
+        Dict {sensor_gesamt, eedc_summe, baseline} oder None wenn Sensor-Wert
+        nicht verfügbar / Mapping fehlt / Feld nicht zum Investitionstyp passt.
+    """
+    if feld not in KUMULATIVE_COUNTER_FELDER.get(inv.typ, ()):
+        return None
+
+    sensor_mapping = anlage.sensor_mapping or {}
+    inv_data = (sensor_mapping.get("investitionen", {}) or {}).get(str(inv.id))
+    if not isinstance(inv_data, dict):
+        return None
+    config = (inv_data.get("felder", {}) or {}).get(feld)
+    if not isinstance(config, dict) or config.get("strategie") != "sensor":
+        return None
+    entity_id = config.get("sensor_id")
+    if not entity_id:
+        return None
+
+    # 1. Aktuellen Sensor-Wert lesen (Live-State, sonst HA-Statistics, sonst jüngster Snapshot)
+    sensor_gesamt: Optional[float] = None
+    try:
+        from backend.services.ha_state_service import get_ha_state_service
+        ha_state = get_ha_state_service()
+        if ha_state.is_available:
+            sensor_gesamt = await ha_state.get_sensor_state(entity_id)
+    except Exception as e:
+        logger.debug(f"Baseline {feld} inv={inv.id}: ha_state Fehler: {type(e).__name__}: {e}")
+
+    if sensor_gesamt is None:
+        ha_svc = get_ha_statistics_service()
+        if ha_svc.is_available:
+            sensor_gesamt = ha_svc.get_value_at(entity_id, datetime.now(), toleranz_minuten=120)
+
+    if sensor_gesamt is None:
+        sensor_key = f"inv:{inv.id}:{feld}"
+        result = await db.execute(
+            select(SensorSnapshot.wert_kwh).where(
+                and_(
+                    SensorSnapshot.anlage_id == anlage.id,
+                    SensorSnapshot.sensor_key == sensor_key,
+                )
+            ).order_by(SensorSnapshot.zeitpunkt.desc()).limit(1)
+        )
+        sensor_gesamt = result.scalar_one_or_none()
+
+    if sensor_gesamt is None:
+        logger.info(
+            f"Baseline {feld} inv={inv.id}: Sensor-Wert nicht ermittelbar "
+            f"({entity_id}) — Wizard erneut durchlaufen, sobald Sensor liefert"
+        )
+        return None
+
+    # 2. eedc.Σ — bisher kumulierte Tagesdifferenzen aus TagesZusammenfassung
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+    tz_query = select(TagesZusammenfassung.komponenten_starts).where(
+        TagesZusammenfassung.anlage_id == anlage.id,
+        TagesZusammenfassung.komponenten_starts.is_not(None),
+    )
+    if inv.anschaffungsdatum:
+        tz_query = tz_query.where(TagesZusammenfassung.datum >= inv.anschaffungsdatum)
+    tz_result = await db.execute(tz_query)
+
+    eedc_summe = 0
+    for (komp_starts,) in tz_result.all():
+        feld_map = (komp_starts or {}).get(feld) or {}
+        wert = feld_map.get(str(inv.id))
+        if isinstance(wert, (int, float)) and wert > 0:
+            eedc_summe += int(wert)
+
+    baseline = max(0, int(round(sensor_gesamt)) - eedc_summe)
+    return {
+        "sensor_gesamt": int(round(sensor_gesamt)),
+        "eedc_summe": eedc_summe,
+        "baseline": baseline,
+    }
+
+
 async def snapshot_anlage(
     db: AsyncSession,
     anlage,
@@ -840,6 +945,102 @@ async def snapshot_anlage(
         count += 1
 
     return count
+
+
+async def snapshot_anlage_5min(
+    db: AsyncSession,
+    anlage,
+    zeitpunkt: datetime,
+) -> int:
+    """
+    Schreibt 5-Min-Counter-Snapshots aus HA short_term_statistics für eine
+    Anlage (Phase 1, Live-Snapshot-5-Min).
+
+    Im Gegensatz zu snapshot_anlage() (hourly aus statistics):
+      - liest aus statistics_short_term (5-Min-Slots, Retention ~10–14 Tage)
+      - überspringt Slots wo bereits ein Snapshot existiert (idempotent,
+        kein Überschreiben des hourly :05-Werts)
+      - kein MQTT-Pfad (Standalone-Anlagen profitieren erst, wenn
+        mqtt_energy_history_service ähnliche 5-Min-Granularität liefert —
+        eigener Refactor, siehe Konzept §1 Abgrenzung)
+
+    Args:
+        db: Async Session
+        anlage: Anlage-Objekt
+        zeitpunkt: Ziel-Slot, typisch floor(now, 5min)
+
+    Returns:
+        Anzahl geschriebener Snapshots.
+    """
+    counter_map = _build_counter_map(anlage)
+    if not counter_map:
+        return 0
+
+    ha_svc = get_ha_statistics_service()
+    if not ha_svc.is_available:
+        return 0
+
+    count = 0
+    for sensor_key, entity_id in counter_map.items():
+        # Idempotenz: nicht überschreiben wenn Slot schon belegt ist
+        # (z.B. der :05-hourly-Snapshot, oder vorheriger 5-Min-Lauf).
+        existing = await db.execute(
+            select(SensorSnapshot.id).where(
+                and_(
+                    SensorSnapshot.anlage_id == anlage.id,
+                    SensorSnapshot.sensor_key == sensor_key,
+                    SensorSnapshot.zeitpunkt == zeitpunkt,
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            continue
+        # Toleranz 3 Min: HA short_term schreibt exakt auf :00, :05, :10, ...
+        # 3 Min ist eng genug um keinen Nachbar-Slot zu treffen, weit genug
+        # für Latenz-Jitter.
+        wert = ha_svc.get_value_at(
+            entity_id, zeitpunkt, toleranz_minuten=3, short_term=True
+        )
+        if wert is None:
+            continue
+        await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+        count += 1
+
+    return count
+
+
+async def cleanup_5min_snapshots(
+    db: AsyncSession,
+    keep_hours: int = 24,
+) -> int:
+    """
+    Löscht Sub-Hour-Snapshots (zeitpunkt.minute != 0) älter als keep_hours.
+
+    Variante A aus dem Konzept: hourly-Snapshots (:00) bleiben dauerhaft,
+    Sub-Hour-Slots werden nach 24h gelöscht. Damit wächst sensor_snapshots
+    pro Anlage nur um ~288 transiente Rows (1 Tag à 5-Min).
+
+    Args:
+        db: Async Session
+        keep_hours: Sub-Hour-Slots jünger als das werden behalten (default 24h).
+
+    Returns:
+        Anzahl gelöschter Rows.
+    """
+    from sqlalchemy import delete, func
+    cutoff = datetime.now() - timedelta(hours=keep_hours)
+    # SQLite-Pfad (eedc.db ist immer SQLite, siehe core/config.py).
+    # strftime('%M', zeitpunkt) liefert "00".."59" als String.
+    result = await db.execute(
+        delete(SensorSnapshot).where(
+            and_(
+                SensorSnapshot.zeitpunkt < cutoff,
+                func.strftime("%M", SensorSnapshot.zeitpunkt) != "00",
+            )
+        )
+    )
+    await db.commit()
+    return result.rowcount or 0
 
 
 async def live_snapshot_if_missing(

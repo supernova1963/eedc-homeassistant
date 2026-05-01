@@ -610,6 +610,7 @@ class HAStatisticsService:
         sensor_id: str,
         zeitpunkt: datetime,
         toleranz_minuten: int = 120,
+        short_term: bool = False,
     ) -> Optional[float]:
         """
         Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
@@ -625,6 +626,9 @@ class HAStatisticsService:
             sensor_id: HA Entity-ID des kumulativen Zählers
             zeitpunkt: Zielzeitpunkt (lokale Zeit)
             toleranz_minuten: Max. Abweichung von zeitpunkt (beidseitig)
+            short_term: Wenn True → liest aus statistics_short_term (5-Min-Slots,
+                Retention ~10–14 Tage). Sonst aus statistics (Hourly, dauerhaft).
+                Für Live-Snapshot-5-Min-Pfad (Phase 1) gesetzt.
 
         Returns:
             Zählerstand in kWh oder None wenn kein Datenpunkt im Fenster.
@@ -635,6 +639,7 @@ class HAStatisticsService:
         von = zeitpunkt - timedelta(minutes=toleranz_minuten)
         bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
         ts_expr = self._ts_to_datetime("start_ts")
+        table = "statistics_short_term" if short_term else "statistics"
 
         if self._is_mysql:
             order_expr = f"ABS(TIMESTAMPDIFF(SECOND, {ts_expr}, :target))"
@@ -649,7 +654,7 @@ class HAStatisticsService:
             result = conn.execute(
                 text(f"""
                     SELECT state
-                    FROM statistics
+                    FROM {table}
                     WHERE metadata_id = :mid
                       AND {ts_expr} >= :von
                       AND {ts_expr} <= :bis

@@ -104,6 +104,15 @@ class Settings(BaseSettings):
     # bis Phase 2/3 die Bestands-Endpoints umgestellt haben.
     pdf_engine: str = os.environ.get("PDF_ENGINE", "reportlab")
 
+    # Live-Snapshot 5-Min (Phase 1, KONZEPT-LIVE-SNAPSHOT-5MIN.md).
+    # Wenn an: zusätzlicher Cron-Job alle 5 Min schreibt Counter-Snapshots
+    # für die laufende Stunde aus HA short_term_statistics in sensor_snapshots.
+    # Cleanup täglich um 00:30 löscht Sub-Hour-Slots > 24h. Default aus —
+    # Roll-out via Winterborn-Test, Drift gegen HA Energy Dashboard messen.
+    live_snapshot_5min_enabled: bool = (
+        os.environ.get("LIVE_SNAPSHOT_5MIN_ENABLED", "").lower() == "true"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
