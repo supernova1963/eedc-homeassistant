@@ -150,6 +150,31 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Live-Snapshot 5-Min (Phase 1, KONZEPT-LIVE-SNAPSHOT-5MIN.md).
+            # Liest alle 5 Min Counter aus HA short_term_statistics in
+            # sensor_snapshots. Cleanup täglich um 00:30 löscht Sub-Hour-Slots
+            # > 24h. Nur aktiv wenn LIVE_SNAPSHOT_5MIN_ENABLED=true.
+            #
+            # CronTrigger '*/5:30': 30s nach jedem 5-Min-Boundary, gibt HA
+            # Zeit, den short_term-Eintrag zu schreiben. Ohne den Offset
+            # würden wir Latenz-Jitter direkt sehen.
+            if app_settings.live_snapshot_5min_enabled:
+                self._scheduler.add_job(
+                    sensor_snapshot_5min_job,
+                    CronTrigger(minute="*/5", second=30),
+                    id="sensor_snapshot_5min",
+                    name="Sensor-Snapshots 5-Min (Live-Heute)",
+                    replace_existing=True,
+                )
+                self._scheduler.add_job(
+                    sensor_snapshot_5min_cleanup_job,
+                    CronTrigger(hour=0, minute=30),
+                    id="sensor_snapshot_5min_cleanup",
+                    name="Sensor-Snapshots 5-Min Cleanup (>24h)",
+                    replace_existing=True,
+                )
+                logger.info("Live-Snapshot 5-Min aktiviert (Cron */5:30 + Cleanup 00:30)")
+
             # Energie-Profil Heute: Alle 15 Minuten (rollierend, laufender Tag)
             self._scheduler.add_job(
                 energie_profil_heute_job,
@@ -165,6 +190,20 @@ class EEDCScheduler:
                 CronTrigger(hour=0, minute=15),
                 id="energie_profil_aggregation",
                 name="Energie-Profil Vortag (Finalisierung)",
+                replace_existing=True,
+            )
+
+            # Energie-Profil Vortag Self-Healing: Täglich um 02:15 (Issue #136).
+            # Wenn HA Long-Term-Statistics für 00:00 verspätet liefert (Counter
+            # ohne state_class), fehlt beim 00:15-Run der Folgetags-Snapshot,
+            # damit auch Slot 23 + Tageswerte. Zweiter Versuch nach 2h gibt HA
+            # Zeit nachzupflegen; aggregate_day ist idempotent (Delete+Insert)
+            # und get_snapshot zieht über HA-Statistics-Fallback nach.
+            self._scheduler.add_job(
+                energie_profil_aggregation_recovery_job,
+                CronTrigger(hour=2, minute=15),
+                id="energie_profil_aggregation_recovery",
+                name="Energie-Profil Vortag Self-Healing (02:15)",
                 replace_existing=True,
             )
 
@@ -454,6 +493,79 @@ async def sensor_snapshot_preview_job() -> None:
         logger.debug(f"Sensor-Snapshot Preview Job fehlgeschlagen: {type(e).__name__}: {e}")
 
 
+async def sensor_snapshot_5min_job() -> None:
+    """
+    Schreibt 5-Min-Snapshots aller gemappten Counter aus HA short_term_statistics
+    (Phase 1, KONZEPT-LIVE-SNAPSHOT-5MIN.md). Läuft */5:30 für alle Anlagen.
+
+    zeitpunkt = floor(now, 5min) — der Slot, den HA gerade in
+    statistics_short_term geschrieben hat. Idempotent über UniqueConstraint;
+    der hourly :05-Job überschreibt :00-Slots nicht (snapshot_anlage_5min
+    skippt belegte Slots).
+    """
+    try:
+        from sqlalchemy import select
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.sensor_snapshot_service import snapshot_anlage_5min
+
+        now = datetime.now()
+        minute_floor = (now.minute // 5) * 5
+        zeitpunkt = now.replace(minute=minute_floor, second=0, microsecond=0)
+
+        total_anlagen = 0
+        total_snapshots = 0
+
+        async with get_session() as db:
+            result = await db.execute(select(Anlage))
+            anlagen = result.scalars().all()
+            for anlage in anlagen:
+                try:
+                    n = await snapshot_anlage_5min(db, anlage, zeitpunkt=zeitpunkt)
+                    if n > 0:
+                        total_snapshots += n
+                        total_anlagen += 1
+                except Exception as e:
+                    logger.debug(
+                        f"5-Min-Snapshot Anlage {anlage.id} fehlgeschlagen: "
+                        f"{type(e).__name__}: {e}"
+                    )
+
+        if total_snapshots > 0:
+            logger.debug(
+                f"5-Min-Snapshots: {total_snapshots} Werte für {total_anlagen} "
+                f"Anlagen @ {zeitpunkt.isoformat()}"
+            )
+    except Exception as e:
+        logger.debug(f"5-Min-Snapshot Job fehlgeschlagen: {type(e).__name__}: {e}")
+
+
+async def sensor_snapshot_5min_cleanup_job() -> None:
+    """
+    Löscht Sub-Hour-Slots (zeitpunkt.minute != 0) älter als 24h
+    (Phase 1, täglich 00:30).
+
+    Variante A: hourly :00-Snapshots bleiben dauerhaft, 5-Min-Slots werden
+    nach einem Tag entsorgt — Steady-State ~288 transiente Rows pro Anlage.
+    """
+    try:
+        from backend.core.database import get_session
+        from backend.services.sensor_snapshot_service import cleanup_5min_snapshots
+
+        async with get_session() as db:
+            count = await cleanup_5min_snapshots(db)
+            if count > 0:
+                logger.info(f"5-Min-Snapshot Cleanup: {count} Sub-Hour-Slots gelöscht")
+                await log_activity(
+                    kategorie="scheduler",
+                    aktion="5-Min-Snapshot Cleanup",
+                    erfolg=True,
+                    details=f"{count} Sub-Hour-Slots > 24h gelöscht",
+                )
+    except Exception as e:
+        logger.warning(f"5-Min-Snapshot Cleanup fehlgeschlagen: {type(e).__name__}: {e}")
+
+
 async def sensor_snapshot_startup_recovery() -> None:
     """
     Holt nach Addon-Restart verpasste Snapshots der letzten 6 Stunden nach.
@@ -480,10 +592,12 @@ async def sensor_snapshot_startup_recovery() -> None:
     """
     try:
         from sqlalchemy import select
+        from backend.core.config import settings as app_settings
         from backend.core.database import get_session
         from backend.models.anlage import Anlage
         from backend.services.sensor_snapshot_service import (
             snapshot_anlage,
+            snapshot_anlage_5min,
             live_snapshot_if_missing,
         )
 
@@ -491,8 +605,21 @@ async def sensor_snapshot_startup_recovery() -> None:
         aktuelle_stunde = now.replace(minute=0, second=0, microsecond=0)
         zeitpunkte = [aktuelle_stunde - timedelta(hours=h) for h in range(7)]  # 0..-6
 
+        # 5-Min-Slots seit 00:00 heute (Phase 1, nur wenn Feature aktiv).
+        # HA short_term_statistics hält ~10–14 Tage; ein Tag ist kein Stress.
+        # Slots :00 werden vom hourly-Pfad bereits abgedeckt → überspringen.
+        five_min_slots: list[datetime] = []
+        if app_settings.live_snapshot_5min_enabled:
+            tag_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            slot = tag_start
+            while slot <= now:
+                if slot.minute != 0:  # :00 macht der hourly-Pfad
+                    five_min_slots.append(slot)
+                slot += timedelta(minutes=5)
+
         total_stats = 0
         total_live = 0
+        total_5min = 0
         async with get_session() as db:
             result = await db.execute(select(Anlage))
             anlagen = result.scalars().all()
@@ -517,11 +644,21 @@ async def sensor_snapshot_startup_recovery() -> None:
                         f"Recovery live_snapshot Anlage {anlage.id}: "
                         f"{type(e).__name__}: {e}"
                     )
+                # 5-Min-Slots des heutigen Tages aus HA short_term nachholen
+                for zp in five_min_slots:
+                    try:
+                        n = await snapshot_anlage_5min(db, anlage, zeitpunkt=zp)
+                        total_5min += n
+                    except Exception as e:
+                        logger.debug(
+                            f"Recovery 5min Anlage {anlage.id} {zp}: "
+                            f"{type(e).__name__}: {e}"
+                        )
 
-        if total_stats > 0 or total_live > 0:
+        if total_stats > 0 or total_live > 0 or total_5min > 0:
             logger.info(
                 f"Startup-Snapshot-Recovery: {total_stats} aus HA-Statistics "
-                f"+ {total_live} Live-Werte geschrieben"
+                f"+ {total_live} Live-Werte + {total_5min} 5-Min-Slots geschrieben"
             )
 
         # Sofortige Aggregation, damit das Energieprofil heute befüllt ist
@@ -549,22 +686,35 @@ async def energie_profil_heute_job() -> None:
 
 async def energie_profil_aggregation_job() -> None:
     """Finalisiert Energieprofil des Vortags für alle Anlagen (täglich um 00:15)."""
+    await _run_yesterday_aggregation(label="Aggregation")
+
+
+async def energie_profil_aggregation_recovery_job() -> None:
+    """Self-Healing-Wiederholung des Vortags um 02:15 (Issue #136).
+
+    Holt Tage nach, bei denen HA-LTS für 00:00 erst nach dem 00:15-Lauf
+    nachgepflegt wurde. aggregate_day ist idempotent.
+    """
+    await _run_yesterday_aggregation(label="Self-Healing")
+
+
+async def _run_yesterday_aggregation(label: str) -> None:
     try:
         from backend.services.energie_profil_service import aggregate_yesterday_all
         results = await aggregate_yesterday_all()
         ok = sum(1 for r in results.values() if r["status"] == "ok")
-        logger.info(f"Energie-Profil Vortag: {ok}/{len(results)} Anlagen finalisiert")
+        logger.info(f"Energie-Profil Vortag ({label}): {ok}/{len(results)} Anlagen finalisiert")
         await log_activity(
             kategorie="scheduler",
-            aktion="Energie-Profil Aggregation",
+            aktion=f"Energie-Profil {label}",
             erfolg=True,
             details=f"{ok}/{len(results)} Anlagen erfolgreich",
         )
     except Exception as e:
-        logger.warning(f"Energie-Profil Aggregation fehlgeschlagen: {type(e).__name__}: {e}")
+        logger.warning(f"Energie-Profil {label} fehlgeschlagen: {type(e).__name__}: {e}")
         await log_activity(
             kategorie="scheduler",
-            aktion="Energie-Profil Aggregation fehlgeschlagen",
+            aktion=f"Energie-Profil {label} fehlgeschlagen",
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )

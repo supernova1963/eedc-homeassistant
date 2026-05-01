@@ -153,6 +153,8 @@ export interface WaermepumpeDashboardResponse {
     // Issue #169: Kompressor-Starts über die Lebensdauer
     kompressor_starts_gesamt?: number | null
     kompressor_starts_max_tag?: number | null
+    // Issue #173: Hersteller-Baseline (vor Sensor-Aktivierung), aus Wizard-Save
+    kompressor_starts_baseline?: number | null
   }
 }
 

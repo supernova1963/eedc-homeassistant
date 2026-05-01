@@ -4,10 +4,10 @@
  */
 
 import { Fragment, useState, useEffect } from 'react'
-import { Flame, Zap, Leaf, TrendingUp, Thermometer, Power } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
+import { Flame, Zap, Leaf, TrendingUp, Thermometer, Power, PieChart as PieChartIcon, BarChart3, Calendar, Table } from 'lucide-react'
+import { Card, LoadingSpinner, Alert, Select, KPICard, SortableSection, OrderedSections } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useSelectedAnlage } from '../hooks'
+import { useSelectedAnlage, useSectionOrder } from '../hooks'
 import type { Anlage } from '../types'
 import { MONAT_KURZ, fmtKpi } from '../lib'
 import { investitionenApi } from '../api'
@@ -124,9 +124,18 @@ function PlaceholderHeader(props: SelectorProps) {
   )
 }
 
+const DEFAULT_WP_SECTION_ORDER = [
+  'waermeverteilung', 'kostenvergleich', 'monatsverlauf', 'monatsvergleich', 'co2', 'details',
+] as const
+
 function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: WaermepumpeDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
+  const { order: sectionOrder, moveSection } = useSectionOrder(
+    `cockpit-wp-${investition.id}_section_order`,
+    DEFAULT_WP_SECTION_ORDER,
+  )
+  const wpStoragePrefix = `cockpit-wp-${investition.id}`
 
   const hatGetrennteStrom = z.cop_heizen !== undefined
 
@@ -285,7 +294,9 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         JAZ = Jahresarbeitszahl über die gesamte Laufzeit ({z.anzahl_monate} Monate). Jahresweise Auswertung unter Auswertungen → Komponenten.
       </p>
 
-      {/* Issue #169: Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist) */}
+      {/* Issue #169: Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist).
+          Issue #173: Hersteller-Baseline (vor Sensor-Aktivierung) wird beim
+          Wizard-Save geeicht und in Σ-Lebensdauer mitgezählt. */}
       {z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <KPICard
@@ -294,106 +305,125 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             icon={Power}
             color="gray"
             subtitle={z.kompressor_starts_max_tag != null ? `Max/Tag: ${z.kompressor_starts_max_tag}` : undefined}
-            formel="Σ Tages-Starts seit Anschaffung"
-            berechnung={`Höchste Tagessumme: ${z.kompressor_starts_max_tag ?? '—'}`}
+            formel={z.kompressor_starts_baseline
+              ? 'Σ Lebensdauer = Hersteller-Baseline + EEDC-Tagesdifferenzen'
+              : 'Σ Tages-Starts seit Anschaffung'}
+            berechnung={z.kompressor_starts_baseline
+              ? `Hersteller-Baseline (Wizard-Save): ${z.kompressor_starts_baseline.toLocaleString('de-DE')}\n+ EEDC seit Aktivierung: ${(z.kompressor_starts_gesamt - z.kompressor_starts_baseline).toLocaleString('de-DE')}\nHöchste Tagessumme: ${z.kompressor_starts_max_tag ?? '—'}`
+              : `Höchste Tagessumme: ${z.kompressor_starts_max_tag ?? '—'}`}
             ergebnis={`= ${z.kompressor_starts_gesamt.toLocaleString('de-DE')} Starts`}
           />
         </div>
       )}
 
-      {/* Charts Row 1 */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Wärme-Verteilung */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Wärme-Verteilung
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={waermePieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                >
-                  <Cell fill="#ef4444" />
-                  <Cell fill="#3b82f6" />
-                </Pie>
-                <Tooltip content={<ChartTooltip unit="kWh" />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex justify-center gap-6 text-sm">
-            <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-red-500"></span>
-              Heizung: {z.gesamt_heizenergie_kwh.toFixed(0)} kWh
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-              Warmwasser: {z.gesamt_warmwasser_kwh.toFixed(0)} kWh
-            </span>
-          </div>
+      <OrderedSections order={sectionOrder} onMove={moveSection} className="space-y-3">
+
+      {/* Wärme-Verteilung */}
+      <SortableSection
+        sectionId="waermeverteilung"
+        storageKeyPrefix={wpStoragePrefix}
+        icon={PieChartIcon}
+        color="text-red-500"
+        title="Wärme-Verteilung"
+        summary={`Heizung ${z.gesamt_heizenergie_kwh.toFixed(0)} · Warmwasser ${z.gesamt_warmwasser_kwh.toFixed(0)} kWh`}
+        defaultOpen
+      >
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={waermePieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="value"
+                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+              >
+                <Cell fill="#ef4444" />
+                <Cell fill="#3b82f6" />
+              </Pie>
+              <Tooltip content={<ChartTooltip unit="kWh" />} />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
-
-        {/* Kostenvergleich */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Kostenvergleich WP vs. Gas/Öl
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={kostenVergleichData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-                <YAxis type="category" dataKey="name" width={110} />
-                <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-                <Bar dataKey="value" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="text-center mt-2">
-            <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-              Ersparnis: {z.ersparnis_euro.toFixed(2)} €
-            </span>
-          </div>
+        <div className="flex justify-center gap-6 text-sm">
+          <span className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-500"></span>
+            Heizung: {z.gesamt_heizenergie_kwh.toFixed(0)} kWh
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+            Warmwasser: {z.gesamt_warmwasser_kwh.toFixed(0)} kWh
+          </span>
         </div>
-      </div>
+      </SortableSection>
 
-      {/* Charts Row 2 */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Wärme pro Monat */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Wärmeerzeugung pro Monat (kWh)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-                <Area type="monotone" dataKey="heizung" stackId="1" fill="#ef4444" stroke="#dc2626" name="Heizung" />
-                <Area type="monotone" dataKey="warmwasser" stackId="1" fill="#3b82f6" stroke="#2563eb" name="Warmwasser" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+      {/* Kostenvergleich */}
+      <SortableSection
+        sectionId="kostenvergleich"
+        storageKeyPrefix={wpStoragePrefix}
+        icon={TrendingUp}
+        color="text-green-500"
+        title="Kostenvergleich WP vs. Gas/Öl"
+        summary={`Ersparnis ${z.ersparnis_euro.toFixed(0)} €`}
+        defaultOpen
+      >
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={kostenVergleichData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" tickFormatter={(v) => `${v}€`} />
+              <YAxis type="category" dataKey="name" width={110} />
+              <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+              <Bar dataKey="value" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
+        <div className="text-center mt-2">
+          <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+            Ersparnis: {z.ersparnis_euro.toFixed(2)} €
+          </span>
+        </div>
+      </SortableSection>
 
-      </div>
+      {/* Wärme pro Monat */}
+      <SortableSection
+        sectionId="monatsverlauf"
+        storageKeyPrefix={wpStoragePrefix}
+        icon={BarChart3}
+        color="text-orange-500"
+        title="Wärmeerzeugung pro Monat"
+        summary={`${monatsdaten.length} Monate`}
+        defaultOpen
+      >
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" fontSize={10} />
+              <YAxis />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend />
+              <Area type="monotone" dataKey="heizung" stackId="1" fill="#ef4444" stroke="#dc2626" name="Heizung" />
+              <Area type="monotone" dataKey="warmwasser" stackId="1" fill="#3b82f6" stroke="#2563eb" name="Warmwasser" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </SortableSection>
 
-      {/* Monatsvergleich über Jahre – volle Breite mit Toggle */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {vergleichModus === 'jaz' ? 'JAZ' : 'Stromverbrauch'} Monatsvergleich {vergleichJahre.length > 1 ? `(${vergleichJahre[0]}–${vergleichJahre[vergleichJahre.length - 1]})` : vergleichJahre[0]}
-          </h3>
+      {/* Monatsvergleich über Jahre – mit Toggle */}
+      <SortableSection
+        sectionId="monatsvergleich"
+        storageKeyPrefix={wpStoragePrefix}
+        icon={Calendar}
+        color="text-purple-500"
+        title={`${vergleichModus === 'jaz' ? 'JAZ' : 'Stromverbrauch'} Monatsvergleich`}
+        summary={vergleichJahre.length > 1 ? `${vergleichJahre[0]}–${vergleichJahre[vergleichJahre.length - 1]}` : `${vergleichJahre[0] ?? ''}`}
+        defaultOpen
+      >
+        <div className="flex items-center justify-end mb-4">
           <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
             <button
               onClick={() => setVergleichModus('strom')}
@@ -428,25 +458,39 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </SortableSection>
 
       {/* CO2 Info */}
-      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 flex items-center gap-4">
-        <Leaf className="h-8 w-8 text-green-500" />
-        <div>
-          <p className="text-sm text-green-600 dark:text-green-400">CO₂ Ersparnis gegenüber fossiler Heizung</p>
-          <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-            {z.co2_ersparnis_kg.toFixed(0)} kg
-          </p>
+      <SortableSection
+        sectionId="co2"
+        storageKeyPrefix={wpStoragePrefix}
+        icon={Leaf}
+        color="text-green-500"
+        title="CO₂-Ersparnis"
+        summary={`${z.co2_ersparnis_kg.toFixed(0)} kg vs. fossile Heizung`}
+        defaultOpen
+      >
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 flex items-center gap-4">
+          <Leaf className="h-8 w-8 text-green-500" />
+          <div>
+            <p className="text-sm text-green-600 dark:text-green-400">CO₂ Ersparnis gegenüber fossiler Heizung</p>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+              {z.co2_ersparnis_kg.toFixed(0)} kg
+            </p>
+          </div>
         </div>
-      </div>
+      </SortableSection>
 
       {/* Detail-Tabelle */}
-      <details className="border-t border-gray-200 dark:border-gray-700 pt-4">
-        <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-          Monatsdaten anzeigen
-        </summary>
-        <div className="mt-4 overflow-x-auto">
+      <SortableSection
+        sectionId="details"
+        storageKeyPrefix={wpStoragePrefix}
+        icon={Table}
+        color="text-gray-500"
+        title="Monatsdaten"
+        summary={`${monatsdaten.length} Einträge`}
+      >
+        <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -476,7 +520,9 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             </tbody>
           </table>
         </div>
-      </details>
+      </SortableSection>
+
+      </OrderedSections>
     </div>
   )
 }

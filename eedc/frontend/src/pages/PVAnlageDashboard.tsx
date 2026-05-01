@@ -9,9 +9,9 @@
  */
 
 import { useMemo } from 'react'
-import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc } from '../components/ui'
-import { useSelectedAnlage, useApiData, useInvestitionen } from '../hooks'
+import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle, PieChart as PieChartIcon, Wrench } from 'lucide-react'
+import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc, SortableSection, OrderedSections } from '../components/ui'
+import { useSelectedAnlage, useApiData, useInvestitionen, useSectionOrder } from '../hooks'
 import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
@@ -30,8 +30,13 @@ interface PVSystem {
   gesamtKwp: number
 }
 
+const DEFAULT_PV_SECTION_ORDER = [
+  'komponenten', 'jahresuebersicht', 'energieverteilung', 'soll-ist',
+] as const
+
 export default function PVAnlageDashboard() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { order: sectionOrder, moveSection } = useSectionOrder('cockpit-pv_section_order', DEFAULT_PV_SECTION_ORDER)
 
   const { data: cockpitData, loading: cockpitLoading } = useApiData<CockpitUebersicht>(
     () => cockpitApi.getUebersicht(selectedAnlageId!),
@@ -248,12 +253,19 @@ export default function PVAnlageDashboard() {
         />
       </div>
 
+      <OrderedSections order={sectionOrder} onMove={moveSection} className="space-y-3">
+
       {/* PV-Komponenten */}
       {hasPVSystem && (
-        <Card>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            PV-Komponenten
-          </h2>
+        <SortableSection
+          sectionId="komponenten"
+          storageKeyPrefix="cockpit-pv"
+          icon={Wrench}
+          color="text-gray-500"
+          title="PV-Komponenten"
+          summary={`${pvSysteme.length} WR · ${gesamtKwp.toFixed(1)} kWp`}
+          defaultOpen
+        >
           <div className="space-y-4">
             {pvSysteme.map((system) => {
               const wrParams = wechselrichterParameter(system.wechselrichter.parameter)
@@ -349,71 +361,99 @@ export default function PVAnlageDashboard() {
               </div>
             )}
           </div>
-        </Card>
+        </SortableSection>
       )}
 
-      {/* Charts: Jahresübersicht + Energieverteilung */}
+      {/* Jahresübersicht */}
       {hasData && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              {hasMultipleYears ? 'Jahresübersicht (Gesamtlaufzeit)' : 'Jahresübersicht'}
-            </h2>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={jahresChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis tickFormatter={jahresFormatter} width={80} />
-                  <Tooltip content={<ChartTooltip unit="kWh" />} />
-                  <Legend />
-                  <Bar dataKey="Erzeugung" fill={COLORS.solar} />
-                  <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} />
-                  <Bar dataKey="Einspeisung" fill={COLORS.feedin} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <Card>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Energieverteilung
-            </h2>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={verteilungData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {verteilungData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<ChartTooltip unit="kWh" />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Eigenverbrauch:</span>
-                <span className="font-medium">{(gesamtEigenverbrauch / 1000).toFixed(1)} MWh</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Einspeisung:</span>
-                <span className="font-medium">{(gesamtEinspeisung / 1000).toFixed(1)} MWh</span>
-              </div>
-            </div>
-          </Card>
-        </div>
+        <SortableSection
+          sectionId="jahresuebersicht"
+          storageKeyPrefix="cockpit-pv"
+          icon={BarChart3}
+          color="text-blue-500"
+          title={hasMultipleYears ? 'Jahresübersicht (Gesamtlaufzeit)' : 'Jahresübersicht'}
+          summary={hasMultipleYears ? `${jahresChartData.length} Jahre` : undefined}
+          defaultOpen
+        >
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={jahresChartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis tickFormatter={jahresFormatter} width={80} />
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
+                <Legend />
+                <Bar dataKey="Erzeugung" fill={COLORS.solar} />
+                <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} />
+                <Bar dataKey="Einspeisung" fill={COLORS.feedin} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </SortableSection>
       )}
+
+      {/* Energieverteilung */}
+      {hasData && (
+        <SortableSection
+          sectionId="energieverteilung"
+          storageKeyPrefix="cockpit-pv"
+          icon={PieChartIcon}
+          color="text-purple-500"
+          title="Energieverteilung"
+          summary={`Eigenverbrauch ${(gesamtEigenverbrauch / 1000).toFixed(1)} MWh · Einspeisung ${(gesamtEinspeisung / 1000).toFixed(1)} MWh`}
+          defaultOpen
+        >
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={verteilungData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={80}
+                  label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {verteilungData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTooltip unit="kWh" />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Eigenverbrauch:</span>
+              <span className="font-medium">{(gesamtEigenverbrauch / 1000).toFixed(1)} MWh</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Einspeisung:</span>
+              <span className="font-medium">{(gesamtEinspeisung / 1000).toFixed(1)} MWh</span>
+            </div>
+          </div>
+        </SortableSection>
+      )}
+
+      {/* SOLL-IST Vergleich (Gesamtlaufzeit) */}
+      {hasPVSystem && hasData && selectedAnlageId && (
+        <SortableSection
+          sectionId="soll-ist"
+          storageKeyPrefix="cockpit-pv"
+          icon={TrendingUp}
+          color="text-emerald-500"
+          title="SOLL-IST-Vergleich pro String"
+          summary="Gesamtlaufzeit"
+          defaultOpen
+        >
+          <PVStringVergleich anlageId={selectedAnlageId} />
+        </SortableSection>
+      )}
+
+      </OrderedSections>
 
       {!hasData && hasPVSystem && (
         <Card className="text-center py-12">
@@ -425,11 +465,6 @@ export default function PVAnlageDashboard() {
             Erfasse Monatsdaten, um Erzeugungsdaten zu sehen.
           </p>
         </Card>
-      )}
-
-      {/* SOLL-IST Vergleich (Gesamtlaufzeit) */}
-      {hasPVSystem && hasData && selectedAnlageId && (
-        <PVStringVergleich anlageId={selectedAnlageId} />
       )}
     </div>
   )

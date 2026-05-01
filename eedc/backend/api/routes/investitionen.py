@@ -1512,9 +1512,18 @@ async def get_waermepumpe_dashboard(
         strom_co2 = gesamt_strom * 0.38
         co2_ersparnis = gas_co2 - strom_co2
 
-        # Kompressor-Starts (#169): Σ + Max-Tag über die gesamte Lebensdauer
+        # Kompressor-Starts (#169): Σ + Max-Tag über die gesamte Lebensdauer.
+        # Issue #173: Baseline aus Wizard-Save addieren, damit historische
+        # Hersteller-Counter-Stände (z.B. Nibe ab Werks-Inbetriebnahme)
+        # in Σ-Lebensdauer korrekt erscheinen.
         wp_starts_list = starts_by_inv.get(wp.id, [])
-        kompressor_starts_gesamt = sum(wp_starts_list) if wp_starts_list else None
+        wp_baseline = (wp.parameter or {}).get('wp_starts_anzahl_baseline') if wp.parameter else None
+        if not isinstance(wp_baseline, (int, float)):
+            wp_baseline = 0
+        if wp_starts_list or wp_baseline:
+            kompressor_starts_gesamt = int(wp_baseline) + sum(wp_starts_list)
+        else:
+            kompressor_starts_gesamt = None
         kompressor_starts_max_tag = max(wp_starts_list) if wp_starts_list else None
 
         zusammenfassung = {
@@ -1530,6 +1539,7 @@ async def get_waermepumpe_dashboard(
             'anzahl_monate': len(monatsdaten),
             'kompressor_starts_gesamt': kompressor_starts_gesamt,
             'kompressor_starts_max_tag': kompressor_starts_max_tag,
+            'kompressor_starts_baseline': int(wp_baseline) if wp_baseline else None,
         }
 
         # Getrennte COP-Werte wenn separate Strommessung vorhanden
