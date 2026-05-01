@@ -160,6 +160,7 @@ export interface KomponentenMonat {
   wp_warmwasser_kwh: number
   wp_strom_heizen_kwh: number
   wp_strom_warmwasser_kwh: number
+  wp_ersparnis_euro: number
 
   // E-Mobilität
   emob_km: number

@@ -15,6 +15,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.api.routes.cockpit._shared import MONATSNAMEN
+from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 
 router = APIRouter()
 
@@ -36,6 +37,10 @@ class KomponentenMonat(BaseModel):
     wp_warmwasser_kwh: float
     wp_strom_heizen_kwh: float
     wp_strom_warmwasser_kwh: float
+    # WP-Ersparnis vs. fossile Heizung — pro Monat berechnet (Drift-Audit A1).
+    # Frontend muss nicht selbst rechnen → Auswertungen→Komponenten + Cockpit nutzen
+    # denselben Wert wie Monatsbericht/Übersicht.
+    wp_ersparnis_euro: float = 0
     emob_km: float
     emob_ladung_kwh: float
     emob_pv_anteil_prozent: Optional[float]
@@ -260,6 +265,12 @@ async def get_komponenten_zeitreihe(
         m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else 30.0
         m_grundpreis = (m_allgemein.grundpreis_euro_monat or 0) if m_allgemein else 0
         m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else 8.2
+        m_wp_tarif = m_tarife.get("waermepumpe")
+        m_wp_preis_cent = (
+            m_wp_tarif.netzbezug_arbeitspreis_cent_kwh
+            if m_wp_tarif and m_wp_tarif.netzbezug_arbeitspreis_cent_kwh is not None
+            else m_preis_cent
+        )
         md = monatsdaten_by_key.get((jahr, monat))
         if md:
             eff_preis = resolve_netzbezug_preis_cent(md, m_preis_cent)
@@ -268,6 +279,27 @@ async def get_komponenten_zeitreihe(
         else:
             m_netzbezug_kosten = 0.0
             m_einspeise_erloes = 0.0
+
+        # WP-Ersparnis pro Monat (Drift-Audit A1, Issue #178).
+        # Aggregat über alle WPs, Parameter aus erster aktiver WP als Referenz.
+        m_wp_ersparnis = 0.0
+        if d["wp_waerme"] > 0:
+            wp_invs_in_monat = [
+                i for i in investitionen
+                if i.typ == "waermepumpe" and (
+                    not i.anschaffungsdatum or
+                    (jahr, monat) >= (i.anschaffungsdatum.year, i.anschaffungsdatum.month)
+                )
+            ]
+            wp_ref_param = wp_invs_in_monat[0].parameter if wp_invs_in_monat else None
+            wp_result = berechne_wp_ersparnis(
+                wp_waerme_kwh=d["wp_waerme"],
+                wp_strom_kwh=d["wp_strom"],
+                wp_strompreis_cent=m_wp_preis_cent,
+                wp_parameter=wp_ref_param,
+                monats_gaspreis_cent=md.gaspreis_cent_kwh if md else None,
+            )
+            m_wp_ersparnis = wp_result.ersparnis_euro
 
         monatswerte.append(KomponentenMonat(
             jahr=jahr, monat=monat, monat_name=MONATSNAMEN[monat],
@@ -283,6 +315,7 @@ async def get_komponenten_zeitreihe(
             wp_warmwasser_kwh=round(d["wp_warmwasser"], 1),
             wp_strom_heizen_kwh=round(d["wp_strom_heizen"], 1),
             wp_strom_warmwasser_kwh=round(d["wp_strom_warmwasser"], 1),
+            wp_ersparnis_euro=round(m_wp_ersparnis, 2),
             emob_km=round(d["emob_km"], 0),
             emob_ladung_kwh=round(d["emob_ladung"], 1),
             emob_pv_anteil_prozent=round(emob_pv_anteil, 1) if emob_pv_anteil else None,
