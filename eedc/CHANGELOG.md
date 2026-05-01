@@ -7,6 +7,47 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.10] - 2026-05-01
+
+> 🐛 **Off-by-one-Stunde-Bug in Counter-Snapshots behoben** — `HAStatisticsService.get_value_at` las den `state` einer Zeile bei `start_ts ≈ zeitpunkt`, während HA's Konvention "last value of the period" ist: `state(start_ts=11:00)` ist der Zählerstand AM ENDE der Stunde, also um 12:00 Uhr. Damit waren alle SensorSnapshot-Werte seit v3.19 (Snapshot-Rework, Issue #135) systematisch um eine Stunde nach hinten verschoben. Tagessummen sind unbeeinflusst (zirkular), aber Stundenwerte im `tages_energie_profil` sind betroffen.
+
+### Fixed
+
+- **`get_value_at` Off-by-one + sum-Bevorzugung** — Lookup-Target jetzt `zeitpunkt - period_length` (1h hourly, 5min short_term), Spalte `sum` mit Fallback auf `state` für measurement-Sensoren ohne `has_sum`. `sum` ist zusätzlich reset-bereinigt (HA tracked Resets transparent), `state` springt nach Tagesreset zurück. Befund verifiziert via HA-MCP gegen `sensor.sn_3012412676_pv_gen_meter` auf Winterborn 2026-05-01: HA Energy Dashboard 11–12 = 8.897 kWh = `change(start_ts=11)` = `sum(start_ts=11) - sum(start_ts=10)` ✓. Bug war maskiert durch (a) Tagessummen-Symmetrie und (b) HA-:05-Latenz, die beim Hourly-Job oft den korrekten Vorgänger-Slot lieferte. Mit Phase-1 5-Min-Snapshots wurde die Diskrepanz erstmals systematisch sichtbar.
+- **Konsequenz für Phase 1 Live-Snapshot 5-Min** — Vor diesem Fix hätte das Frontend-Wiring auf 5-Min-Counter-Snapshots die Live-Tagesverlauf-Linie um 1 Stunde nach hinten verschoben. Phase-1-Frontend war deshalb zurückgehalten. Nach Resnap der letzten 7 Tage (siehe unten) und positivem Drift-Vergleich gegen HA Energy Dashboard kann das Wiring angegangen werden.
+
+### Added
+
+- **`POST /api/diagnostics/resnap-snapshots?days=N&include_5min=true`** — Schreibt für alle Anlagen die SensorSnapshots der letzten N Tage (1–14, default 7) neu. Sowohl hourly :00 als auch 5-Min Sub-Hour-Slots werden mit dem korrigierten `get_value_at`-Pfad regeneriert. Gedacht für Validierung nach Service-Bugfixes — der `get_value_at`-Fix schlägt sonst nicht auf bestehende Snapshot-Werte durch.
+- **`snapshot_anlage_5min(force=True)`-Parameter** — bestehende 5-Min-Slots überschreiben statt überspringen. Wird vom Resnap-Endpoint genutzt, regulärer Scheduler-Job bleibt idempotent (`force=False`).
+
+### Internal
+
+- **`resnap_anlage_range(von, bis, include_5min)`** — Helper in `sensor_snapshot_service.py`, iteriert über Stunden (und optional 5-Min-Slots) und ruft `snapshot_anlage`/`snapshot_anlage_5min` mit `force=True`. Wiederverwendbar für künftige Service-Bugfixes oder die "Per-Tag-Reaggregation" UX.
+
+---
+
+## [3.25.9] - 2026-05-01
+
+> 🧹 **Aufräum-Release ohne User-sichtbare Wirkung** — Letzter Bündel der Drift-Audit-Initiative aus v3.25.7/v3.25.8. Schließt 23 verstreute Doppel-Read-Stellen und konsolidiert die Daten in `verbrauch_daten`-JSONs auf kanonische Schlüssel. Werte-Anzeigen ändern sich nicht.
+
+### Changed
+
+- **Zentrale Reader-Helper für `verbrauch_daten`-JSON (Bündel G)** — Bisher waren Doppel-Read-Muster der Form `data.get("a", 0) or data.get("b", 0)` für historisch umbenannte Felder an 23 Stellen über das Repo verstreut. Bei künftigen Schema-Wechseln musste jede einzelne Stelle gefunden und angepasst werden — ein Drift-Risiko, das bei jeder Code-Generation neu auflebt. Fünf Reader-Helper in `core/field_definitions.py` (`get_pv_erzeugung_kwh`, `get_wp_heizenergie_kwh`, `get_eauto_ladung_kwh`, `get_speicher_netzladung_kwh`, `get_sonstiges_verbrauch_kwh`) sind jetzt SoT. Alle 23 Stellen aufgerufen statt direkter `.get()`-Doppel-Reads. Künftige Schema-Wechsel betreffen nur einen Helper.
+
+### Internal
+
+- **DB-Migration `_migrate_verbrauch_daten_keys_v326`** — Schreibt Legacy-Keys in `InvestitionMonatsdaten.verbrauch_daten` auf den kanonischen Key um, sofern der Kanon-Key noch leer ist (wenn beide gesetzt, gewinnt der Kanon-Key). Pro Investitions-Typ unterschiedliches Mapping — `verbrauch_kwh` bei *Sonstiges* ist legitim und wird NICHT migriert. Idempotent, mit synthetischer Drift-DB verifiziert. Konsolidierte Pairs:
+  - `erzeugung_kwh` → `pv_erzeugung_kwh` (PV-Modul, BKW)
+  - `heizung_kwh` → `heizenergie_kwh` (WP)
+  - `verbrauch_kwh` → `ladung_kwh` (E-Auto, Wallbox)
+  - `speicher_ladung_netz_kwh` → `ladung_netz_kwh` (Speicher-Arbitrage)
+
+  Migration läuft bei jedem Add-on-Start einmalig in `database.py:run_migrations()`. Bestehende Anlagen profitieren automatisch, kein User-Eingriff nötig.
+- **Drift-Audit-Initiative abgeschlossen** — Mit diesem Release sind alle 16 Drifts aus 6 Domänen ([INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)) abgearbeitet. Bündel A (WP) in v3.25.7, Bündel B+C+D+E+F (E-Auto, Konstanten, Speicher-Spread, Strompreis-Helper, Filter) in v3.25.8, Bündel G (Field-Reader) in v3.25.9.
+
+---
+
 ## [3.25.8] - 2026-05-01
 
 > 📊 **Drift-Audit-Initiative** — als Folge des #178-Fixes (siehe v3.25.7) eine systematische Inventur aller Investitions-Berechnungen durchgeführt. 16 Drifts in 6 Domänen identifiziert ([INVENTUR-DRIFT-AUDIT.md](docs/drafts/INVENTUR-DRIFT-AUDIT.md)). Diese Version bündelt die Fixes für 5 davon (Bündel B, C, D, E, F). User-sichtbare Hauptänderung: Speicher- und V2H-Ersparnis im Aussichten-Tab werden jetzt nach demselben Spread-Modell berechnet wie das Investitionen-Detail (~25 % niedriger als vorher) — siehe Erklärung unten.
