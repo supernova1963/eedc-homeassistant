@@ -11,6 +11,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.5] - 2026-05-01
+
+### Fixed
+
+- **fix(addon-config): `live_snapshot_5min_enabled` als Add-on-Option exposen** — In v3.25.3 als Env-Var `LIVE_SNAPSHOT_5MIN_ENABLED` im Backend eingeführt, aber vergessen in `eedc/config.yaml` (`options:` + `schema:`) zu deklarieren und in `eedc/run.sh` als Env-Var aus `/data/options.json` zu exportieren. Konsequenz: User sehen die Option im Add-on-Konfig-UI gar nicht und können das Phase-1-Backend nicht aktivieren — die Schnittstelle war bisher nur per Standalone-Docker mit eigenem Env-Var-Setup erreichbar. Fix: Boolean-Option `live_snapshot_5min_enabled` (default false) im Add-on-UI sichtbar, `run.sh` mappt sie nach `LIVE_SNAPSHOT_5MIN_ENABLED`. Dadurch lässt sich Phase 1 jetzt ohne Standalone-Workaround testen.
+
+---
+
 ## [3.25.4] - 2026-05-01
 
 ### Added
