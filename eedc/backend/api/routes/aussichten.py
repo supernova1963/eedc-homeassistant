@@ -23,6 +23,13 @@ from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.calculations import berechne_ust_eigenverbrauch
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
+    WP_PV_ANTEIL_DEFAULT,
+    WP_WIRKUNGSGRAD_GAS_DEFAULT,
+    WP_WIRKUNGSGRAD_OEL_DEFAULT,
+)
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -859,8 +866,8 @@ async def get_finanz_prognose(
     allgemein_tarif = tarife.get("allgemein")
     wp_tarif = tarife.get("waermepumpe")
 
-    einspeiseverguetung = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else 8.2
-    netzbezug_preis = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0
+    einspeiseverguetung = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
+    netzbezug_preis = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT
     wp_netzbezug_preis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis
 
     # =====================================================================
@@ -1092,7 +1099,7 @@ async def get_finanz_prognose(
     # Bug #7 (v3.25.0): Default vereinheitlicht auf zentrale 12 ct/kWh aus PARAM_WAERMEPUMPE_DEFAULTS
     # (vorher hier 10.0, andernorts 12.0 → User sah unterschiedliche Ersparnis je Tab).
     wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
-    wp_alter_wirkungsgrad = 0.90  # Gasheizung ~90% Wirkungsgrad
+    wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
     wp_alternativ_zusatzkosten_jahr = 0.0  # Schornsteinfeger, Wartung, Grundpreis
     for wp in waermepumpen:
         if wp.parameter:
@@ -1101,7 +1108,7 @@ async def get_finanz_prognose(
                 PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
             )
             if wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-                wp_alter_wirkungsgrad = 0.85  # Öl etwas schlechter
+                wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT
             wp_alternativ_zusatzkosten_jahr += wp.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
 
     # E-Auto: Benzin-Vergleich
@@ -1154,8 +1161,8 @@ async def get_finanz_prognose(
                 # Gas-Alternative: thermisch / Wirkungsgrad * Preis
                 gas_kosten = (thermisch / wp_alter_wirkungsgrad) * monats_gaspreis / 100
                 # WP-Stromkosten (nur Netzanteil, PV-Anteil ist bereits in EV-Ersparnis)
-                # Annahme: ca. 50% aus PV (konservativ)
-                wp_netz_anteil = 0.5
+                # Konservative 50/50-Annahme — TODO: aus tatsächlichen Daten herleiten
+                wp_netz_anteil = 1.0 - WP_PV_ANTEIL_DEFAULT
                 wp_stromkosten_netz = strom * wp_netz_anteil * wp_netzbezug_preis / 100
                 # Netto-Ersparnis (Gas-Alternative minus WP-Netzstrom)
                 bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
@@ -1341,8 +1348,8 @@ async def get_finanz_prognose(
             (wp_thermisch_jahr / wp_alter_wirkungsgrad) * prognose_gaspreis / 100
             + wp_alternativ_zusatzkosten_jahr
         )
-        # WP-Stromkosten pro Jahr (nur Netzanteil, ca. 50%)
-        wp_netz_anteil = 0.5
+        # WP-Stromkosten pro Jahr (nur Netzanteil) — konservative 50/50-Annahme
+        wp_netz_anteil = 1.0 - WP_PV_ANTEIL_DEFAULT
         wp_strom_jahr = jahres_wp_verbrauch
         wp_stromkosten_netz_jahr = wp_strom_jahr * wp_netz_anteil * wp_netzbezug_preis / 100
         # Netto-Ersparnis

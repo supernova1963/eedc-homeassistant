@@ -35,6 +35,12 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
 )
+from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
+from backend.core.wirtschaftlichkeit_defaults import (
+    WP_PV_ANTEIL_DEFAULT,
+    WP_WIRKUNGSGRAD_GAS_DEFAULT,
+    WP_WIRKUNGSGRAD_OEL_DEFAULT,
+)
 
 router = APIRouter(prefix="/ha/export", tags=["HA Export"])
 
@@ -205,7 +211,7 @@ async def calculate_anlage_sensors(
     netto_ertrag = einspeise_erloes + ev_ersparnis
 
     # CO2
-    co2_ersparnis = pv_erzeugung * 0.38  # kg CO2/kWh
+    co2_ersparnis = pv_erzeugung * CO2_FAKTOR_STROM_KG_KWH
 
     # Investitions-KPIs berechnen
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
@@ -242,7 +248,7 @@ async def calculate_anlage_sensors(
 
     # Bug #7 v3.25.0: Default vereinheitlicht aus PARAM_WAERMEPUMPE_DEFAULTS (vorher 10.0)
     wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
-    wp_alter_wirkungsgrad = 0.90
+    wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
     wp_alternativ_zusatzkosten_jahr = 0.0
     for wp in waermepumpen:
         if wp.parameter:
@@ -251,7 +257,7 @@ async def calculate_anlage_sensors(
                 PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
             )
             if wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-                wp_alter_wirkungsgrad = 0.85
+                wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT
             wp_alternativ_zusatzkosten_jahr += wp.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
 
     # Monatsdaten-Dict für Monats-Gaspreis
@@ -273,7 +279,7 @@ async def calculate_anlage_sensors(
                     else wp_alter_preis_cent
                 )
                 gas_kosten = (thermisch / wp_alter_wirkungsgrad) * monats_gaspreis / 100
-                wp_stromkosten_netz = strom * 0.5 * netzbezug_preis_cent / 100
+                wp_stromkosten_netz = strom * (1.0 - WP_PV_ANTEIL_DEFAULT) * netzbezug_preis_cent / 100
                 bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
                 wp_monate_gezaehlt.add((jahr, monat))
     # Fixe Zusatzkosten (Schornsteinfeger, Wartung, Grundpreis) pro erfassten Monat
@@ -614,7 +620,7 @@ async def calculate_investition_sensors(
             elif sensor.key == "wp_ersparnis_euro":
                 if gesamt_waerme > 0:
                     fallback_alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
-                    alter_wirkungsgrad = 0.85 if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel" else 0.90
+                    alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel" else WP_WIRKUNGSGRAD_GAS_DEFAULT
                     zusatzkosten_jahr = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
                     # Monatliche Gaspreise laden (Fallback: statischer Parameter)
                     anlage_md_result = await db.execute(

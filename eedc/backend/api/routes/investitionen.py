@@ -34,6 +34,11 @@ from backend.core.investition_parameter import (
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
 from backend.core.wirtschaftlichkeit_defaults import EXTERNE_LADUNG_DEFAULT_EURO_KWH
+from backend.core.calculations import (
+    CO2_FAKTOR_BENZIN_KG_LITER,
+    CO2_FAKTOR_GAS_KG_KWH,
+    CO2_FAKTOR_STROM_KG_KWH,
+)
 
 
 # =============================================================================
@@ -500,7 +505,6 @@ async def get_roi_dashboard(
         berechne_waermepumpe_einsparung,
         berechne_roi,
         berechne_ust_eigenverbrauch,
-        CO2_FAKTOR_STROM_KG_KWH,
     )
     from sqlalchemy import func
     from backend.models.pvgis_prognose import PVGISPrognose
@@ -1371,10 +1375,9 @@ async def get_eauto_dashboard(
         heim_kosten_tatsaechlich = heim_netz_kosten  # PV ist kostenlos
         wallbox_ersparnis = heim_ladung_als_extern - heim_kosten_tatsaechlich
 
-        # CO2 Ersparnis (Benzin: ca. 2.37 kg CO2 pro Liter)
-        # TODO Bündel C: 2.37 + 0.38 → CO2_FAKTOR_BENZIN_KG_LITER + CO2_FAKTOR_STROM_KG_KWH
-        benzin_co2 = (gesamt_km / 100) * benzin_verbrauch_100km * 2.37
-        strom_co2 = gesamt_verbrauch * 0.38  # Strommix
+        # CO2 Ersparnis: Benzin vs. Strommix
+        benzin_co2 = (gesamt_km / 100) * benzin_verbrauch_100km * CO2_FAKTOR_BENZIN_KG_LITER
+        strom_co2 = gesamt_verbrauch * CO2_FAKTOR_STROM_KG_KWH
         co2_ersparnis = benzin_co2 - strom_co2
 
         zusammenfassung = {
@@ -1527,9 +1530,9 @@ async def get_waermepumpe_dashboard(
         alte_heizung_kosten = wp_result.alte_heizung_kosten_euro
         ersparnis = wp_result.ersparnis_euro
 
-        # CO2 (Gas: ca. 0.2 kg/kWh, Strom: 0.38 kg/kWh)
-        gas_co2 = gesamt_waerme * 0.2
-        strom_co2 = gesamt_strom * 0.38
+        # CO2: Gas vs. Strommix (kanon. 0.201 / 0.38 kg/kWh)
+        gas_co2 = gesamt_waerme * CO2_FAKTOR_GAS_KG_KWH
+        strom_co2 = gesamt_strom * CO2_FAKTOR_STROM_KG_KWH
         co2_ersparnis = gas_co2 - strom_co2
 
         # Kompressor-Starts (#169): Σ + Max-Tag über die gesamte Lebensdauer.
@@ -2005,8 +2008,8 @@ async def get_balkonkraftwerk_dashboard(
         erloes_einspeisung = 0  # BKW-Einspeisung ist unvergütet
         gesamt_ersparnis = ersparnis_eigenverbrauch
 
-        # CO2-Einsparung (0.38 kg/kWh für Eigenverbrauch)
-        co2_ersparnis = gesamt_eigenverbrauch * 0.38
+        # CO2-Einsparung für Eigenverbrauch
+        co2_ersparnis = gesamt_eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
 
         # Spezifischer Ertrag (kWh pro kWp)
         spezifischer_ertrag = (gesamt_erzeugung / (gesamt_leistung_wp / 1000)) if gesamt_leistung_wp > 0 else 0
@@ -2117,7 +2120,7 @@ async def get_sonstiges_dashboard(
             ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
             erloes_einspeisung = gesamt_einspeisung * einspeiseverguetung_cent / 100
             gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung + gesamt_sonstige_netto
-            co2_ersparnis = gesamt_eigenverbrauch * 0.38
+            co2_ersparnis = gesamt_eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
 
             zusammenfassung = {
                 'kategorie': kategorie,

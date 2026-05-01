@@ -16,6 +16,10 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
+)
 
 router = APIRouter()
 
@@ -262,9 +266,9 @@ async def get_komponenten_zeitreihe(
             _tarif_cache_kz[stichtag] = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag)
         m_tarife = _tarif_cache_kz[stichtag]
         m_allgemein = m_tarife.get("allgemein")
-        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else 30.0
+        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
         m_grundpreis = (m_allgemein.grundpreis_euro_monat or 0) if m_allgemein else 0
-        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else 8.2
+        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
         m_wp_tarif = m_tarife.get("waermepumpe")
         m_wp_preis_cent = (
             m_wp_tarif.netzbezug_arbeitspreis_cent_kwh

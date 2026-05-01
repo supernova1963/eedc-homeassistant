@@ -40,6 +40,10 @@ from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_BENZIN_KG_LITER,
 )
+from backend.core.wirtschaftlichkeit_defaults import (
+    WP_WIRKUNGSGRAD_GAS_DEFAULT,
+    WP_WIRKUNGSGRAD_OEL_DEFAULT,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -416,8 +420,8 @@ async def export_pdf(
     wp_cop = (wp_waerme_total / wp_strom_total) if wp_strom_total > 0 else None
     wp_ersparnis = 0.0
     if hat_waermepumpe and wp_waerme_total > 0:
-        wp_alter_preis_cent = 12.0
-        wp_alter_wirkungsgrad = 0.90
+        wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
+        wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
         wp_alternativ_zusatzkosten_jahr = 0.0
         for inv in investitionen:
             if inv.typ == "waermepumpe" and inv.parameter:
@@ -426,7 +430,7 @@ async def export_pdf(
                     PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
                 )
                 if inv.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-                    wp_alter_wirkungsgrad = 0.85
+                    wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT
                 wp_alternativ_zusatzkosten_jahr += inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
                 break
         # Durchschnitt der Monats-Gaspreise, Fallback auf statischen Parameter

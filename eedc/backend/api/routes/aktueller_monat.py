@@ -26,6 +26,10 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.api.routes.connector import _calc_month_delta
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -522,8 +526,8 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         tarife_vj = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag_vj)
         tarif_vj = tarife_vj.get("allgemein")
         if tarif_vj:
-            netz_preis = tarif_vj.netzbezug_arbeitspreis_cent_kwh or 30.0
-            einsp_preis = tarif_vj.einspeiseverguetung_cent_kwh or 8.2
+            netz_preis = tarif_vj.netzbezug_arbeitspreis_cent_kwh or NETZBEZUG_DEFAULT_CENT
+            einsp_preis = tarif_vj.einspeiseverguetung_cent_kwh or EINSPEISEVERGUETUNG_DEFAULT_CENT
             grundpreis = tarif_vj.grundpreis_euro_monat or 0
             # Flexibler Tarif überschreibt wenn vorhanden
             if result.get("netzbezug_durchschnittspreis_cent"):
@@ -707,8 +711,8 @@ async def get_aktueller_monat(
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
     if allgemein_tarif:
-        netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else 30.0
-        einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else 8.2
+        netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else NETZBEZUG_DEFAULT_CENT
+        einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
         # Flexibler Durchschnittspreis überschreibt Netzbezugspreis für Finanzberechnung
         # (wird nach dem Monatsdaten-Laden gesetzt, hier Platzhalter für spätere Überschreibung)
 
@@ -1019,10 +1023,10 @@ async def get_aktueller_monat(
     # ── Per-Investition Finanzdetails (T-Konto) ──
     investitionen_financials: list[InvestitionFinancialDetail] = []
     if investitionen and allgemein_tarif:
-        netz_p = netzbezug_preis_cent or 30.0
+        netz_p = netzbezug_preis_cent or NETZBEZUG_DEFAULT_CENT
         if netzbezug_durchschnittspreis:
             netz_p = netzbezug_durchschnittspreis
-        einsp_p = einspeise_cent or 8.2
+        einsp_p = einspeise_cent or EINSPEISEVERGUETUNG_DEFAULT_CENT
         wp_tarif_obj = tarife.get("waermepumpe")
         wp_p = (wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh
                 if wp_tarif_obj and wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh is not None

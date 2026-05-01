@@ -17,6 +17,11 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER,
 )
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
+    WP_WIRKUNGSGRAD_GAS_DEFAULT,
+)
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.services.community_service import get_region_from_plz
 from backend.api.routes.cockpit._shared import MONATSNAMEN
@@ -182,15 +187,15 @@ async def get_share_text(
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else 0
 
     co2_pv = eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = (wp_waerme / 0.9 * CO2_FAKTOR_GAS_KG_KWH) - (wp_strom * CO2_FAKTOR_STROM_KG_KWH) if wp_waerme > 0 else 0
+    co2_wp = (wp_waerme / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH) - (wp_strom * CO2_FAKTOR_STROM_KG_KWH) if wp_waerme > 0 else 0
     benzin_verbrauch = emob_km * 7 / 100
     co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - ((emob_ladung - emob_pv_ladung) * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
-    einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else 8.2
-    netzbezug_cent = resolve_netzbezug_preis_cent(md, allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else 30.0)
+    einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
+    netzbezug_cent = resolve_netzbezug_preis_cent(md, allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT)
     netto_ertrag = (einspeisung * einspeise_cent + eigenverbrauch * netzbezug_cent) / 100
 
     prognose_kwh = None
