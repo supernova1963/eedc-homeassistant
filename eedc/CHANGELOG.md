@@ -11,6 +11,38 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.3] - 2026-05-01
+
+### Added
+
+- **feat(live-snapshot-5min): Backend-Infrastruktur für Counter-basierte Live-IST-Linie (Phase 1, Konzept [KONZEPT-LIVE-SNAPSHOT-5MIN.md](docs/drafts/KONZEPT-LIVE-SNAPSHOT-5MIN.md))** — Heute lesen die Live-Tagesverlauf-Linie und das Wetter-Widget die IST-Stunden aus dem Power-Sensor (W) per Trapez-Integration über on-change-States. HA Energy Dashboard liest aus dem kWh-Counter (sum-delta). Beide weichen typisch um 1–3 % ab, weil die Trapezregel über ungleichmäßig verteilte Stützstellen systematisch driftet — Anwender sehen das als „die Linien stimmen nie überein, irgendwas an EEDC fabriziert Werte" (Rainer-PN 2026-04-30, hat als Konsequenz seine Energieprofil-Daten gelöscht „weil die eh falsch sind"). Lösung: kaskadierte Counter-Snapshots — wie bisher hourly für historische Tage (`sensor_snapshots` mit `zeitpunkt.minute = 0`, dauerhaft), plus 5-Min-Auflösung für den laufenden Tag (`zeitpunkt.minute ∈ {5,10,…,55}`, Cleanup nach 24h). Schema bleibt unverändert — `SensorSnapshot.zeitpunkt: DateTime` ist seit v3.19 granularitätsfrei.
+
+  **Diese Phase implementiert nur die Backend-Infrastruktur:**
+  - `Settings.live_snapshot_5min_enabled` (Env-Var `LIVE_SNAPSHOT_5MIN_ENABLED`, default off) — Roll-out per Anlage über Add-on-Config
+  - [HAStatisticsService.get_value_at(short_term=True)](eedc/backend/services/ha_statistics_service.py#L613) — liest aus `statistics_short_term` statt `statistics` (HA hält die 5-Min-Slots ~10–14 Tage vor)
+  - [snapshot_anlage_5min()](eedc/backend/services/sensor_snapshot_service.py#L950) — schreibt 5-Min-Snapshots, idempotent (überspringt belegte Slots, damit der reguläre `:05`-hourly-Job die :00-Snapshots nicht zerschießt), Toleranz 3 min gegen Latenz-Jitter
+  - [cleanup_5min_snapshots()](eedc/backend/services/sensor_snapshot_service.py#L1015) — löscht Sub-Hour-Slots > 24h via `strftime('%M', zeitpunkt) != '00'`
+  - Scheduler-Jobs `sensor_snapshot_5min` (`*/5:30` — 30s nach jeder HA short-term-Boundary) und `sensor_snapshot_5min_cleanup` (täglich `00:30`), beide nur registriert wenn Flag an
+  - Restart-Recovery in [sensor_snapshot_startup_recovery](eedc/backend/services/scheduler.py#L569) um 5-Min-Slots seit `00:00` heute erweitert (nur wenn Flag an)
+
+  **Frontend-Wiring (`live_tagesverlauf_service`) ist bewusst zurückgestellt** bis zur empirischen Bestätigung, dass die 5-Min-Snapshots auf einer realen Anlage stabil entstehen und der Drift gegen HA Energy Dashboard wirklich auf 0 fällt — sonst riskieren wir, dass die neue IST-Linie aus zu wenigen oder verglitchten Slots Murks rendert. Roll-out-Reihenfolge: Flag auf Winterborn aktivieren, ein paar Tage Snapshots sammeln (`SELECT COUNT(*) FROM sensor_snapshots WHERE strftime('%M', zeitpunkt) != '00'` sollte ~288 × Counter-Anzahl/Tag ergeben), dann Tagesverlauf-Linie umstellen und Default-on schalten. Power-Pfad bleibt als Fallback für Anlagen ohne Counter-Sensoren (häufig WP/Wallbox).
+
+- **feat(wp-starts-baseline): Hersteller-Lebensdauer-Counter integrieren (Issue [#173](https://github.com/supernova1963/eedc-homeassistant/issues/173))** — Wärmepumpen-Hersteller wie Nibe oder Viessmann haben einen Counter „Kompressor-Starts gesamt" (Lebensdauer ab Werks-Inbetriebnahme, oft 4-stellig im Auslieferungszustand). EEDC zählt erst ab Sensor-Aktivierung über Snapshot-Differenzen — die historische Baseline fehlte, sodass das WP-Cockpit unter „Kompressor-Starts Σ" einen viel zu kleinen Wert zeigte (z.B. 87 statt 5.234). detLAN's Vorschlag im Issue: Baseline einmalig beim Wizard-Save eichen (`baseline = sensor.gesamt − Σ(eedc-Tagesdifferenzen seit Inbetriebnahme)`), dann beim Anzeigen `Σ_lebensdauer = baseline + Σ(eedc-Tagesdifferenzen)` rechnen. Selbstkorrigierend bei Wizard-Rerun.
+
+  Implementierung: [compute_counter_baseline](eedc/backend/services/sensor_snapshot_service.py#L758) liest den aktuellen Sensor-Wert (Live-State → HA-Statistics → jüngster Snapshot) und subtrahiert die kumulierten EEDC-Tagesdifferenzen aus `TagesZusammenfassung.komponenten_starts` ab `inv.anschaffungsdatum`. Das Ergebnis wird beim Sensor-Mapping-Save automatisch in `inv.parameter.{wp_starts_anzahl}_baseline` abgelegt ([_refresh_counter_baselines](eedc/backend/api/routes/sensor_mapping.py#L457)) — Fehler beim Baseline-Lookup (z.B. Sensor noch unavailable) brechen das Mapping-Save **nicht** ab, sondern werden geloggt. WP-Cockpit ([WaermepumpeDashboard.tsx:308](eedc/frontend/src/pages/WaermepumpeDashboard.tsx#L308)) zeigt Σ_lebensdauer = baseline + EEDC, mit Tooltip-Zerlegung „Hersteller-Baseline (Wizard-Save) + EEDC seit Aktivierung + höchste Tagessumme".
+
+### Changed
+
+- **chore(ui): SortableSection als wiederverwendbare Komponente extrahiert + auf 3 Cockpit-Dashboards ausgerollt (Issue [#175](https://github.com/supernova1963/eedc-homeassistant/issues/175), detLAN-Vorschlag)** — Die seit v3.21.0 im Auswertungs-Tab vorhandene Auf-/Zuklappen-+-Sortierung-Mechanik war an die `MonatsabschlussView` hartgekoppelt. detLAN hat im Forum vorgeschlagen, dasselbe Verhalten auch in andere Cockpit-Ansichten zu bringen. Refactor:
+
+  - Neue UI-Komponente [SortableSection](eedc/frontend/src/components/ui/SortableSection.tsx) (mit `OrderedSections`-Container) und Hook [useSectionOrder](eedc/frontend/src/hooks/useSectionOrder.ts) extrahiert. Persistiert die User-Reihenfolge per Anlage in `localStorage` (Schlüssel `eedc.section_order.{viewKey}.{anlageId}`).
+  - [MonatsabschlussView.tsx](eedc/frontend/src/pages/MonatsabschlussView.tsx) auf die neue Komponente migriert (-199 Zeilen — der Großteil war duplizierter Drag-Drop-Boilerplate, jetzt im SortableSection-Modul).
+  - [PVAnlageDashboard.tsx](eedc/frontend/src/pages/PVAnlageDashboard.tsx) und [WaermepumpeDashboard.tsx](eedc/frontend/src/pages/WaermepumpeDashboard.tsx) auf SortableSection umgebaut — die WR-Karten / KPI-Sektionen / Komponenten-Listen lassen sich jetzt einzeln einklappen und neu anordnen, Reihenfolge wird pro Anlage gespeichert.
+
+  Verhalten ist 1:1 identisch zur bisherigen Auswertungs-Implementierung, nur eben jetzt überall. Konzept-Skizze in [docs/drafts/KONZEPT-COCKPIT-LAYOUT.md](docs/drafts/KONZEPT-COCKPIT-LAYOUT.md).
+
+---
+
 ## [3.25.2] - 2026-04-30
 
 ### Fixed
