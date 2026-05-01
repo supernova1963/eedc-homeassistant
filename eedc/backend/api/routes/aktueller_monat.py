@@ -25,6 +25,7 @@ from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
 
 logger = logging.getLogger(__name__)
 
@@ -738,6 +739,7 @@ async def get_aktueller_monat(
     )
     md_for_gas = md_result.scalar_one_or_none()
     monats_gaspreis = md_for_gas.gaspreis_cent_kwh if md_for_gas else None
+    monats_benzinpreis = md_for_gas.kraftstoffpreis_euro if md_for_gas else None
 
     wp_waerme = get_val("wp_waerme_kwh")
     wp_strom = get_val("wp_strom_kwh")
@@ -770,9 +772,18 @@ async def get_aktueller_monat(
             if wallbox_tarif and wallbox_tarif.netzbezug_arbeitspreis_cent_kwh is not None
             else netzbezug_preis_cent
         )
-        benzin_kosten = emob_km * 7 / 100 * 1.80
-        strom_kosten = ((emob_ladung or 0) - emob_pv_ladung) * wallbox_preis_cent / 100
-        emob_ersparnis = round(benzin_kosten - strom_kosten, 2)
+        # Drift-Audit Domäne A2: vorher 7 L/100km + 1,80 €/L hartcodiert.
+        emob_invs_aktiv = [i for i in investitionen if i.typ in ("e-auto", "wallbox")]
+        emob_ref_param = emob_invs_aktiv[0].parameter if emob_invs_aktiv else None
+        emob_result = berechne_eauto_ersparnis(
+            km_gefahren=emob_km,
+            ladung_netz_kwh=(emob_ladung or 0) - emob_pv_ladung,
+            ladung_extern_euro=0.0,
+            wallbox_strompreis_cent=wallbox_preis_cent,
+            eauto_parameter=emob_ref_param,
+            monats_benzinpreis_euro=monats_benzinpreis,
+        )
+        emob_ersparnis = round(emob_result.ersparnis_euro, 2)
 
     # BKW-Ersparnis wird NICHT separat ausgewiesen — BKW-Erzeugung fließt in
     # pv_erzeugung_total und damit in eigenverbrauch ein → bereits in ev_ersparnis enthalten.
@@ -1095,13 +1106,22 @@ async def get_aktueller_monat(
                 ladung_netz = data.get("ladung_netz_kwh")
                 ladung_pv = data.get("ladung_pv_kwh")
                 if km and km > 0:
-                    benzin_kosten = km * 7 / 100 * 1.80
                     netz_kwh = ladung_netz if ladung_netz is not None else ((ladung or 0) - (ladung_pv or 0))
-                    strom_kosten = max(0, netz_kwh) * wb_p / 100
-                    inv_ersparnis = round(benzin_kosten - strom_kosten, 2)
+                    eauto_result = berechne_eauto_ersparnis(
+                        km_gefahren=km,
+                        ladung_netz_kwh=max(0, netz_kwh),
+                        ladung_extern_euro=0.0,
+                        wallbox_strompreis_cent=wb_p,
+                        eauto_parameter=inv.parameter,
+                        monats_benzinpreis_euro=monats_benzinpreis,
+                    )
+                    inv_ersparnis = round(eauto_result.ersparnis_euro, 2)
                     inv_label = "Ersparnis vs. Verbrenner"
-                    inv_formel = "(km × 7 L/100km × 1,80 €/L) − Netzladung × Strompreis"
-                    inv_berechnung = f"{km:.0f} km × 7/100 × 1,80 €"
+                    inv_formel = "(km × Verbrauch × Benzinpreis) − Netzladung × Strompreis"
+                    inv_berechnung = (
+                        f"{km:.0f} km × {eauto_result.verwendeter_verbrauch_l_100km:.1f} L/100km × "
+                        f"{eauto_result.verwendeter_benzinpreis_euro:.2f} €"
+                    )
                 elif inv.typ == "wallbox" and ladung_pv and ladung_pv > 0:
                     inv_ersparnis = round(ladung_pv * wb_p / 100, 2)
                     inv_label = "PV-Ladung-Ersparnis"

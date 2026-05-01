@@ -21,6 +21,7 @@ from backend.core.calculations import (
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
 
 router = APIRouter()
 
@@ -312,10 +313,18 @@ async def get_cockpit_uebersicht(
     ]
     hat_emobilitaet = len(emob_invs) > 0
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
-    benzin_verbrauch = emob_km * 7 / 100
-    benzin_kosten = benzin_verbrauch * 1.80
-    strom_kosten = (emob_ladung - emob_pv_ladung) * wallbox_preis_cent / 100
-    emob_ersparnis = benzin_kosten - strom_kosten if emob_km > 0 else 0
+    # Drift-Audit Domäne A2: vorher 7 L/100km + 1,80 €/L hartcodiert.
+    # Multi-E-Auto: erste Investition als Parameter-Referenz.
+    emob_ref_parameter = emob_invs[0].parameter if emob_invs else None
+    emob_result = berechne_eauto_ersparnis(
+        km_gefahren=emob_km,
+        ladung_netz_kwh=emob_ladung - emob_pv_ladung,
+        ladung_extern_euro=0.0,  # Cockpit-Übersicht aggregiert über Heim-Ladung
+        wallbox_strompreis_cent=wallbox_preis_cent,
+        eauto_parameter=emob_ref_parameter,
+    )
+    emob_ersparnis = emob_result.ersparnis_euro
+    benzin_verbrauch = (emob_km / 100) * emob_result.verwendeter_verbrauch_l_100km
 
     bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]
     hat_balkonkraftwerk = len(bkw_invs) > 0
