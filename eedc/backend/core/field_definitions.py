@@ -633,3 +633,60 @@ def build_feld_labels() -> dict[str, str]:
 
 # Vorgefertigtes Label-Dict (einmalig berechnet)
 FELD_LABELS: dict[str, str] = build_feld_labels()
+
+
+# =============================================================================
+# Reader-Helper für `verbrauch_daten`-JSON
+#
+# Drift-Audit Domäne F: bisher waren 27+ Aufrufer mit Mustern wie
+# `data.get("a", 0) or data.get("b", 0)` über das Repo verstreut. Bei
+# Schema-Drift (alter Key bleibt in Daten, neuer Key fehlt) führte das
+# zu inkonsistentem Verhalten zwischen Endpoints.
+#
+# Diese Helper sind die SoT für PV/WP/E-Auto/Speicher-Energiewerte. Bei
+# künftigen Schema-Wechseln nur hier anpassen.
+# =============================================================================
+
+def get_pv_erzeugung_kwh(data: dict) -> float:
+    """PV-Modul- oder BKW-Erzeugung. Liest `pv_erzeugung_kwh` (kanonisch),
+    Legacy-Fallback `erzeugung_kwh`.
+    """
+    if not data:
+        return 0.0
+    return float(data.get("pv_erzeugung_kwh") or data.get("erzeugung_kwh") or 0)
+
+
+def get_wp_heizenergie_kwh(data: dict) -> float:
+    """Wärmepumpen-Heizenergie (nicht Warmwasser).
+    Liest `heizenergie_kwh` (kanonisch), Legacy-Fallback `heizung_kwh`.
+    """
+    if not data:
+        return 0.0
+    return float(data.get("heizenergie_kwh") or data.get("heizung_kwh") or 0)
+
+
+def get_eauto_ladung_kwh(data: dict) -> float:
+    """E-Auto- oder Wallbox-Gesamtladung in kWh.
+    Liest `ladung_kwh` (kanonisch), Legacy-Fallback `verbrauch_kwh`.
+    """
+    if not data:
+        return 0.0
+    return float(data.get("ladung_kwh") or data.get("verbrauch_kwh") or 0)
+
+
+def get_speicher_netzladung_kwh(data: dict) -> float:
+    """Speicher-Netzladung (Arbitrage). Liest `ladung_netz_kwh` (kanonisch),
+    Legacy-Fallback `speicher_ladung_netz_kwh`.
+    """
+    if not data:
+        return 0.0
+    return float(data.get("ladung_netz_kwh") or data.get("speicher_ladung_netz_kwh") or 0)
+
+
+def get_sonstiges_verbrauch_kwh(data: dict) -> float:
+    """Sonstiges-Verbraucher-Energie. Liest `verbrauch_sonstig_kwh` (kanonisch),
+    Legacy-Fallback `verbrauch_kwh`.
+    """
+    if not data:
+        return 0.0
+    return float(data.get("verbrauch_sonstig_kwh") or data.get("verbrauch_kwh") or 0)

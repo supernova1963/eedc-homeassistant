@@ -14,6 +14,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_im_jahr
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
 from backend.api.routes.cockpit._shared import MONATSNAMEN
+from backend.core.field_definitions import get_pv_erzeugung_kwh
 
 router = APIRouter()
 
@@ -112,7 +113,7 @@ async def get_prognose_vs_ist(
             if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
             data = imd.verbrauch_daten or {}
-            pv_kwh = (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
+            pv_kwh = get_pv_erzeugung_kwh(data)
             ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
 
     prognose_pro_monat = {}
@@ -224,7 +225,7 @@ async def get_prognose_vergleich(
             if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
             data = imd.verbrauch_daten or {}
-            pv_kwh = (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
+            pv_kwh = get_pv_erzeugung_kwh(data)
             ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
 
     monatswerte = []

@@ -15,6 +15,11 @@ from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER,
 )
 from backend.core.wirtschaftlichkeit_defaults import WP_WIRKUNGSGRAD_GAS_DEFAULT
+from backend.core.field_definitions import (
+    get_eauto_ladung_kwh,
+    get_pv_erzeugung_kwh,
+    get_wp_heizenergie_kwh,
+)
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
@@ -100,12 +105,11 @@ async def get_nachhaltigkeit(
             data_by_month[key]["speicher_ladung"] += data.get("ladung_kwh", 0) or 0
             data_by_month[key]["speicher_entladung"] += data.get("entladung_kwh", 0) or 0
         elif inv.typ == "balkonkraftwerk":
-            data_by_month[key]["pv_erzeugung"] += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+            data_by_month[key]["pv_erzeugung"] += get_pv_erzeugung_kwh(data)
         elif inv.typ == "waermepumpe":
             data_by_month[key]["wp_waerme"] += (
                 data.get("waerme_kwh", 0) or
-                (data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0)) +
-                (data.get("warmwasser_kwh", 0) or 0)
+                get_wp_heizenergie_kwh(data) + (data.get("warmwasser_kwh", 0) or 0)
             )
             data_by_month[key]["wp_strom"] += (
                 data.get("stromverbrauch_kwh", 0) or
@@ -114,9 +118,7 @@ async def get_nachhaltigkeit(
             )
         elif inv.typ in ("e-auto", "wallbox"):
             data_by_month[key]["emob_km"] += data.get("km_gefahren", 0) or 0
-            data_by_month[key]["emob_ladung"] += (
-                data.get("ladung_kwh", 0) or data.get("verbrauch_kwh", 0) or 0
-            )
+            data_by_month[key]["emob_ladung"] += get_eauto_ladung_kwh(data)
             data_by_month[key]["emob_pv_ladung"] += data.get("ladung_pv_kwh", 0) or 0
 
     md_result = await db.execute(

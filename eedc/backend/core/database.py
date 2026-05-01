@@ -124,6 +124,92 @@ def _migrate_investitionen_parameter_keys_v325(connection) -> None:
             )
 
 
+def _migrate_verbrauch_daten_keys_v326(connection) -> None:
+    """
+    v3.25.8 Migration: Drift-Pairs in verbrauch_daten-JSON konsolidieren.
+
+    Hintergrund: Drift-Audit Bündel G hat 27+ Stellen identifiziert mit
+    Mustern wie `data.get("a", 0) or data.get("b", 0)` für historisch
+    umbenannte Felder. Beide Keys konnten parallel in derselben Row stehen.
+    Diese Migration zieht den Legacy-Wert auf den kanonischen Key, falls
+    dieser fehlt — danach lesen die zentralen Reader-Helper aus
+    field_definitions.py konsistent.
+
+    Konsolidierte Pairs (Legacy → Kanon):
+      erzeugung_kwh        → pv_erzeugung_kwh        (PV-Modul, BKW)
+      heizung_kwh          → heizenergie_kwh         (WP)
+      verbrauch_kwh        → ladung_kwh              (E-Auto, Wallbox)
+      speicher_ladung_netz_kwh → ladung_netz_kwh     (Speicher Arbitrage)
+
+    Achtung: `verbrauch_kwh` ist bei Sonstiges-Investitionen ein eigenes
+    legitimes Feld (Verbraucher-Kategorie). Diese Migration prüft daher den
+    Investitions-Typ; bei Sonstiges bleibt `verbrauch_kwh` unangetastet.
+
+    Idempotent: läuft beim ersten Mal echt, danach No-Op.
+    """
+    import json
+    from sqlalchemy import text as _text
+
+    # Pro Investitions-Typ: Legacy-Key → Kanon-Key
+    KEY_MAPPING_BY_TYP = {
+        'pv-module': {
+            'erzeugung_kwh': 'pv_erzeugung_kwh',
+        },
+        'balkonkraftwerk': {
+            'erzeugung_kwh': 'pv_erzeugung_kwh',
+        },
+        'waermepumpe': {
+            'heizung_kwh': 'heizenergie_kwh',
+        },
+        'e-auto': {
+            'verbrauch_kwh': 'ladung_kwh',
+        },
+        'wallbox': {
+            'verbrauch_kwh': 'ladung_kwh',
+        },
+        'speicher': {
+            'speicher_ladung_netz_kwh': 'ladung_netz_kwh',
+        },
+        # 'sonstiges': absichtlich nicht — verbrauch_kwh ist dort der kanon. Key
+    }
+
+    # Investitionen mit Typ joinen
+    rows = connection.execute(_text(
+        "SELECT imd.id, i.typ, imd.verbrauch_daten "
+        "FROM investition_monatsdaten imd "
+        "JOIN investitionen i ON i.id = imd.investition_id "
+        "WHERE imd.verbrauch_daten IS NOT NULL"
+    )).fetchall()
+
+    for imd_id, typ, daten_raw in rows:
+        if not daten_raw:
+            continue
+        try:
+            data = json.loads(daten_raw) if isinstance(daten_raw, str) else dict(daten_raw)
+        except (TypeError, ValueError):
+            continue
+
+        if not isinstance(data, dict):
+            continue
+
+        changed = False
+        mapping = KEY_MAPPING_BY_TYP.get(typ, {})
+        for legacy_key, kanon_key in mapping.items():
+            if legacy_key in data:
+                # Wenn Kanon-Key bereits gesetzt → Legacy einfach löschen,
+                # neuen Wert nicht überschreiben.
+                if kanon_key not in data or data[kanon_key] in (None, '', 0):
+                    data[kanon_key] = data[legacy_key]
+                del data[legacy_key]
+                changed = True
+
+        if changed:
+            connection.execute(
+                _text("UPDATE investition_monatsdaten SET verbrauch_daten = :d WHERE id = :id"),
+                {'d': json.dumps(data), 'id': imd_id},
+            )
+
+
 async def run_migrations(conn):
     """
     Führt einfache Migrationen durch.
@@ -251,6 +337,12 @@ async def run_migrations(conn):
             # immer kanonisch war, aber HA-Import o. ä. Schreib-Pfade können zu Drift geführt haben).
             # Diese Migration schreibt alte Keys auf neue Kanon-Keys um. Idempotent.
             _migrate_investitionen_parameter_keys_v325(connection)
+
+            # v3.25.8: verbrauch_daten-JSON Legacy-Keys auf Kanon-Keys umschreiben
+            # (Drift-Audit Bündel G — `pv_erzeugung_kwh`/`erzeugung_kwh`,
+            # `heizenergie_kwh`/`heizung_kwh`, `ladung_kwh`/`verbrauch_kwh`,
+            # `ladung_netz_kwh`/`speicher_ladung_netz_kwh`). Idempotent.
+            _migrate_verbrauch_daten_keys_v326(connection)
 
         # Spezialtarife: verwendung-Feld für Strompreise
         if 'strompreise' in inspector.get_table_names():

@@ -30,6 +30,11 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
+from backend.core.field_definitions import (
+    get_eauto_ladung_kwh,
+    get_pv_erzeugung_kwh,
+    get_wp_heizenergie_kwh,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +340,7 @@ async def _collect_saved_data(
                 )
                 wp_waerme_total += (
                     data.get("waerme_kwh", 0) or
-                    (data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0)) +
+                    get_wp_heizenergie_kwh(data) +
                     (data.get("warmwasser_kwh", 0) or 0)
                 )
             elif inv.typ in ("e-auto", "wallbox"):
@@ -476,7 +481,7 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         for imd in imd_result.scalars().all():
             data = imd.verbrauch_daten or {}
             if imd.investition_id in pv_inv_ids:
-                pv_vj += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+                pv_vj += get_pv_erzeugung_kwh(data)
             elif imd.investition_id in bat_inv_ids:
                 bat_ladung_vj += data.get("ladung_kwh", 0) or 0
                 bat_entladung_vj += data.get("entladung_kwh", 0) or 0
@@ -489,7 +494,7 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                     (data.get("heizenergie_kwh", 0) or 0) + (data.get("warmwasser_kwh", 0) or 0)
                 )
             elif imd.investition_id in emob_inv_ids:
-                emob_ladung_vj += data.get("ladung_kwh", 0) or data.get("verbrauch_kwh", 0) or 0
+                emob_ladung_vj += get_eauto_ladung_kwh(data)
                 emob_km_vj += data.get("km_gefahren", 0) or 0
 
         if pv_vj > 0:
@@ -873,7 +878,7 @@ async def get_aktueller_monat(
         ww_total = 0.0
         for imd in get_imd_for_invs(wp_invs):
             data = imd.verbrauch_daten or {}
-            h_total += data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0
+            h_total += get_wp_heizenergie_kwh(data)
             ww_total += data.get("warmwasser_kwh", 0) or 0
         if h_total > 0:
             wp_heizung = round(h_total, 2)
@@ -1083,7 +1088,7 @@ async def get_aktueller_monat(
                     inv_berechnung = f"{entl_kwh:.1f} kWh × {netz_p:.2f} ct/kWh"
 
             elif inv.typ == "waermepumpe":
-                waerme = (data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0)
+                waerme = get_wp_heizenergie_kwh(data)
                 ww = data.get("warmwasser_kwh", 0) or 0
                 strom = data.get("stromverbrauch_kwh")
                 waerme_total = (waerme or 0) + (ww or 0)
@@ -1106,7 +1111,7 @@ async def get_aktueller_monat(
 
             elif inv.typ in ("e-auto", "wallbox") and not (inv.parameter or {}).get("ist_dienstlich", False):
                 km = data.get("km_gefahren")
-                ladung = data.get("ladung_kwh") or data.get("verbrauch_kwh")
+                ladung = get_eauto_ladung_kwh(data) or None
                 ladung_netz = data.get("ladung_netz_kwh")
                 ladung_pv = data.get("ladung_pv_kwh")
                 if km and km > 0:

@@ -20,6 +20,13 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
+from backend.core.field_definitions import (
+    get_eauto_ladung_kwh,
+    get_pv_erzeugung_kwh,
+    get_sonstiges_verbrauch_kwh,
+    get_speicher_netzladung_kwh,
+    get_wp_heizenergie_kwh,
+)
 
 router = APIRouter()
 
@@ -186,7 +193,7 @@ async def get_komponenten_zeitreihe(
         if inv.typ == "speicher":
             d["speicher_ladung"] += data.get("ladung_kwh", 0) or 0
             d["speicher_entladung"] += data.get("entladung_kwh", 0) or 0
-            arbitrage_kwh = data.get("ladung_netz_kwh", 0) or data.get("speicher_ladung_netz_kwh", 0) or 0
+            arbitrage_kwh = get_speicher_netzladung_kwh(data)
             if arbitrage_kwh > 0:
                 hat_arbitrage = True
                 d["speicher_arbitrage"] += arbitrage_kwh
@@ -196,7 +203,7 @@ async def get_komponenten_zeitreihe(
                     d["speicher_arbitrage_count"] += arbitrage_kwh
 
         elif inv.typ == "waermepumpe":
-            heizung = data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0
+            heizung = get_wp_heizenergie_kwh(data)
             warmwasser = data.get("warmwasser_kwh", 0) or 0
             waerme_gesamt = data.get("waerme_kwh", 0) or (heizung + warmwasser)
             d["wp_heizung"] += heizung
@@ -213,7 +220,7 @@ async def get_komponenten_zeitreihe(
 
         elif inv.typ in ("e-auto", "wallbox"):
             d["emob_km"] += data.get("km_gefahren", 0) or 0
-            d["emob_ladung"] += data.get("ladung_kwh", 0) or data.get("verbrauch_kwh", 0) or 0
+            d["emob_ladung"] += get_eauto_ladung_kwh(data)
             d["emob_pv_ladung"] += data.get("ladung_pv_kwh", 0) or 0
             d["emob_netz_ladung"] += data.get("ladung_netz_kwh", 0) or 0
             d["emob_extern_ladung"] += data.get("ladung_extern_kwh", 0) or 0
@@ -224,7 +231,7 @@ async def get_komponenten_zeitreihe(
                 d["emob_v2h"] += v2h
 
         elif inv.typ == "balkonkraftwerk":
-            d["bkw_erzeugung"] += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+            d["bkw_erzeugung"] += get_pv_erzeugung_kwh(data)
             d["bkw_eigenverbrauch"] += data.get("eigenverbrauch_kwh", 0) or 0
             d["bkw_speicher_ladung"] += data.get("speicher_ladung_kwh", 0) or 0
             d["bkw_speicher_entladung"] += data.get("speicher_entladung_kwh", 0) or 0
@@ -235,10 +242,10 @@ async def get_komponenten_zeitreihe(
             if kategorie == "erzeuger":
                 d["sonstiges_erzeugung"] += data.get("erzeugung_kwh", 0) or 0
             elif kategorie == "verbraucher":
-                d["sonstiges_verbrauch"] += data.get("verbrauch_sonstig_kwh", 0) or data.get("verbrauch_kwh", 0) or 0
+                d["sonstiges_verbrauch"] += get_sonstiges_verbrauch_kwh(data)
             else:
                 d["sonstiges_erzeugung"] += data.get("erzeugung_kwh", 0) or 0
-                d["sonstiges_verbrauch"] += data.get("verbrauch_sonstig_kwh", 0) or data.get("verbrauch_kwh", 0) or 0
+                d["sonstiges_verbrauch"] += get_sonstiges_verbrauch_kwh(data)
 
     monatswerte = []
     _tarif_cache_kz: dict[date, dict] = {}

@@ -20,6 +20,10 @@ from backend.core.calculations import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
+from backend.core.field_definitions import (
+    get_pv_erzeugung_kwh,
+    get_wp_heizenergie_kwh,
+)
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -203,7 +207,7 @@ async def get_cockpit_uebersicht(
             speicher_entladung += data.get("entladung_kwh", 0) or 0
 
         elif inv.typ == "waermepumpe":
-            heizung = data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0
+            heizung = get_wp_heizenergie_kwh(data)
             warmwasser = data.get("warmwasser_kwh", 0) or 0
             wp_heizung += heizung
             wp_warmwasser += warmwasser
@@ -231,7 +235,7 @@ async def get_cockpit_uebersicht(
                 emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
 
         elif inv.typ == "balkonkraftwerk":
-            bkw_kwh = data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+            bkw_kwh = get_pv_erzeugung_kwh(data)
             bkw_erzeugung += bkw_kwh
             bkw_eigenverbrauch += data.get("eigenverbrauch_kwh", 0) or 0
             pv_erzeugung_inv += bkw_kwh

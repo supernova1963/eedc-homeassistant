@@ -44,6 +44,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
     WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
+from backend.core.field_definitions import get_wp_heizenergie_kwh
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -285,7 +286,7 @@ async def export_pdf(
             speicher_ladung_total += data.get("ladung_kwh", 0) or 0
             speicher_entladung_total += data.get("entladung_kwh", 0) or 0
         elif inv.typ == "waermepumpe":
-            heiz = data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0) or 0
+            heiz = get_wp_heizenergie_kwh(data)
             ww = data.get("warmwasser_kwh", 0) or 0
             wp_heizung_total += heiz
             wp_warmwasser_total += ww

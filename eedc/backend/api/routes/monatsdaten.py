@@ -16,6 +16,7 @@ from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
+from backend.core.field_definitions import get_pv_erzeugung_kwh
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
 
 
@@ -228,7 +229,7 @@ async def list_monatsdaten_aggregiert(
             if inv.typ == "pv-module":
                 pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
             elif inv.typ == "balkonkraftwerk":
-                pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0
+                pv_erzeugung += get_pv_erzeugung_kwh(data)
                 # BKW-Speicher
                 speicher_ladung += data.get("speicher_ladung_kwh", 0) or 0
                 speicher_entladung += data.get("speicher_entladung_kwh", 0) or 0

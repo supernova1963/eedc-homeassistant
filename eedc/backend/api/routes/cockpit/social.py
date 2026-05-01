@@ -22,6 +22,11 @@ from backend.core.wirtschaftlichkeit_defaults import (
     NETZBEZUG_DEFAULT_CENT,
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
 )
+from backend.core.field_definitions import (
+    get_eauto_ladung_kwh,
+    get_pv_erzeugung_kwh,
+    get_wp_heizenergie_kwh,
+)
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.services.community_service import get_region_from_plz
 from backend.api.routes.cockpit._shared import MONATSNAMEN
@@ -141,15 +146,14 @@ async def get_share_text(
                 continue
         data = imd.verbrauch_daten or {}
         if inv.typ in ("pv-module", "balkonkraftwerk"):
-            pv_erzeugung += (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
+            pv_erzeugung += get_pv_erzeugung_kwh(data)
         if inv.typ == "speicher":
             speicher_ladung += data.get("ladung_kwh", 0) or 0
             speicher_entladung += data.get("entladung_kwh", 0) or 0
         elif inv.typ == "waermepumpe":
             wp_waerme += (
                 data.get("waerme_kwh", 0) or
-                (data.get("heizenergie_kwh", 0) or data.get("heizung_kwh", 0)) +
-                (data.get("warmwasser_kwh", 0) or 0)
+                get_wp_heizenergie_kwh(data) + (data.get("warmwasser_kwh", 0) or 0)
             )
             wp_strom += (
                 data.get("stromverbrauch_kwh", 0) or
@@ -158,7 +162,7 @@ async def get_share_text(
             )
         elif inv.typ in ("e-auto", "wallbox") and not (inv.parameter or {}).get("ist_dienstlich", False):
             emob_km += data.get("km_gefahren", 0) or 0
-            emob_ladung += data.get("ladung_kwh", 0) or data.get("verbrauch_kwh", 0) or 0
+            emob_ladung += get_eauto_ladung_kwh(data)
             emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
 
     if pv_erzeugung == 0:
