@@ -30,6 +30,10 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
     WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
+from backend.services.speicher_wirtschaftlichkeit import (
+    berechne_speicher_ersparnis,
+    berechne_v2h_ersparnis,
+)
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -1412,9 +1416,13 @@ async def get_finanz_prognose(
     # =====================================================================
     komponenten_beitraege = []
 
-    # Speicher
+    # Speicher (Drift-Audit D: Spread-Modell statt Voll-Strompreis)
     if speicher:
-        speicher_ersparnis = jahres_speicher_beitrag * netzbezug_preis / 100
+        speicher_ersparnis = berechne_speicher_ersparnis(
+            entladung_kwh=jahres_speicher_beitrag,
+            bezug_preis_cent=netzbezug_preis,
+            einspeise_verg_cent=einspeiseverguetung,
+        ).ersparnis_euro
         for sp in speicher:
             komponenten_beitraege.append(KomponentenBeitragSchema(
                 typ="speicher",
@@ -1424,9 +1432,13 @@ async def get_finanz_prognose(
                 beschreibung="Eigenverbrauchserhöhung durch Zwischenspeicherung",
             ))
 
-    # E-Auto / V2H
+    # E-Auto / V2H (Drift-Audit D: Spread-Modell für V2H analog Speicher)
     if e_autos:
-        v2h_ersparnis = jahres_v2h_beitrag * netzbezug_preis / 100
+        v2h_ersparnis = berechne_v2h_ersparnis(
+            v2h_entladung_kwh=jahres_v2h_beitrag,
+            bezug_preis_cent=netzbezug_preis,
+            einspeise_verg_cent=einspeiseverguetung,
+        ).ersparnis_euro
         eauto_ersparnis = jahres_eauto_pv * netzbezug_preis / 100
         for ea in e_autos:
             # Prüfe ob V2H aktiv (Bug #1 v3.25.0: Form/Wizard schreiben v2h_faehig,
@@ -1509,10 +1521,19 @@ async def get_finanz_prognose(
     else:
         datenquellen.insert(0, "pvgis-tmy")
 
-    speicher_ersparnis_euro = jahres_speicher_beitrag * netzbezug_preis / 100
-    v2h_ersparnis_euro = jahres_v2h_beitrag * netzbezug_preis / 100
+    # Drift-Audit D: Spread-Modell für Speicher + V2H (Bezug − Einspeise)
+    speicher_ersparnis_euro = berechne_speicher_ersparnis(
+        entladung_kwh=jahres_speicher_beitrag,
+        bezug_preis_cent=netzbezug_preis,
+        einspeise_verg_cent=einspeiseverguetung,
+    ).ersparnis_euro
+    v2h_ersparnis_euro = berechne_v2h_ersparnis(
+        v2h_entladung_kwh=jahres_v2h_beitrag,
+        bezug_preis_cent=netzbezug_preis,
+        einspeise_verg_cent=einspeiseverguetung,
+    ).ersparnis_euro
     eauto_ersparnis_euro = jahres_eauto_pv * netzbezug_preis / 100
-    wp_pv_kwh_total = jahres_wp_verbrauch * 0.5
+    wp_pv_kwh_total = jahres_wp_verbrauch * WP_PV_ANTEIL_DEFAULT
     wp_pv_ersparnis_euro = wp_pv_kwh_total * netzbezug_preis / 100
 
     return FinanzPrognoseResponse(

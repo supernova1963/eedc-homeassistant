@@ -97,12 +97,20 @@ async def get_prognose_vs_ist(
 
     ist_pro_monat: dict[int, float] = {}
     if pv_ids:
+        # Drift-Audit F: zusätzlich Investition laden für Anschaffungsdatum-Filter
+        inv_result = await db.execute(
+            select(Investition).where(Investition.id.in_(pv_ids))
+        )
+        inv_by_id = {i.id: i for i in inv_result.scalars().all()}
         imd_result = await db.execute(
             select(InvestitionMonatsdaten)
             .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
             .where(InvestitionMonatsdaten.jahr == jahr)
         )
         for imd in imd_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             data = imd.verbrauch_daten or {}
             pv_kwh = (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
             ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
@@ -201,12 +209,20 @@ async def get_prognose_vergleich(
 
     ist_pro_monat: dict[int, float] = {}
     if pv_ids:
+        # Drift-Audit F: zusätzlich Investition laden für Anschaffungsdatum-Filter
+        inv_result = await db.execute(
+            select(Investition).where(Investition.id.in_(pv_ids))
+        )
+        inv_by_id = {i.id: i for i in inv_result.scalars().all()}
         imd_result = await db.execute(
             select(InvestitionMonatsdaten)
             .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
             .where(InvestitionMonatsdaten.jahr == jahr)
         )
         for imd in imd_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             data = imd.verbrauch_daten or {}
             pv_kwh = (data.get("pv_erzeugung_kwh", 0) or data.get("erzeugung_kwh", 0) or 0)
             ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh

@@ -236,20 +236,23 @@ async def prepare_community_data(
         monatsdaten = result.scalars().all()
 
         # InvestitionMonatsdaten für alle Komponenten vorladen
+        # Drift-Audit F: vollständiges Investition-Objekt für Anschaffungsdatum-Filter.
         inv_md_result = await db.execute(
-            select(InvestitionMonatsdaten, Investition.typ)
+            select(InvestitionMonatsdaten, Investition)
             .join(Investition)
             .where(Investition.anlage_id == anlage_id)
         )
         inv_monatsdaten = inv_md_result.all()
 
-        # Nach Jahr/Monat gruppieren
+        # Nach Jahr/Monat gruppieren — Daten vor Anschaffung ignorieren
         inv_by_month: dict[tuple[int, int], list[tuple]] = {}
-        for inv_md, inv_typ in inv_monatsdaten:
+        for inv_md, inv in inv_monatsdaten:
+            if not inv.ist_aktiv_im_monat(inv_md.jahr, inv_md.monat):
+                continue
             key = (inv_md.jahr, inv_md.monat)
             if key not in inv_by_month:
                 inv_by_month[key] = []
-            inv_by_month[key].append((inv_md, inv_typ))
+            inv_by_month[key].append((inv_md, inv.typ))
 
         for md in monatsdaten:
             key = (md.jahr, md.monat)

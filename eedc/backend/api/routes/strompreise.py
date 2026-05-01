@@ -120,6 +120,43 @@ def resolve_netzbezug_preis_cent(monatsdaten_obj, tarif_preis_cent: float) -> fl
     return tarif_preis_cent
 
 
+def resolve_strompreis_for_komponente(
+    tarife: dict,
+    komponente: str = "allgemein",
+    fallback: Optional[float] = None,
+) -> float:
+    """Liest komponenten-spezifischen Tarif mit Fallback auf allgemein.
+
+    Single Source of Truth für die Strompreis-Lookup-Kaskade (Drift-Audit E):
+    1. Komponenten-spezifischer Tarif (z.B. `waermepumpe` oder `wallbox`)
+    2. Allgemeiner Tarif
+    3. Kanonischer Default `NETZBEZUG_DEFAULT_CENT` (oder explizit übergebener Fallback)
+
+    Args:
+        tarife: Dict aus `lade_tarife_fuer_anlage()`
+        komponente: "allgemein" | "waermepumpe" | "wallbox"
+        fallback: Override des kanonischen Defaults (z.B. wenn Caller eine
+                  spezielle Default-Logik braucht)
+
+    Returns:
+        Strompreis in ct/kWh.
+    """
+    from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
+
+    # Komponenten-Tarif zuerst probieren
+    if komponente != "allgemein":
+        komp_tarif = tarife.get(komponente)
+        if komp_tarif and komp_tarif.netzbezug_arbeitspreis_cent_kwh is not None:
+            return komp_tarif.netzbezug_arbeitspreis_cent_kwh
+
+    # Allgemeiner Tarif
+    allgemein = tarife.get("allgemein")
+    if allgemein and allgemein.netzbezug_arbeitspreis_cent_kwh is not None:
+        return allgemein.netzbezug_arbeitspreis_cent_kwh
+
+    return fallback if fallback is not None else NETZBEZUG_DEFAULT_CENT
+
+
 # =============================================================================
 # Router
 # =============================================================================

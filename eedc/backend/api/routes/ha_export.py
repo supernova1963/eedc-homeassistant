@@ -155,8 +155,10 @@ async def calculate_anlage_sensors(
 
     # PV-Module IDs für InvestitionMonatsdaten
     pv_module_ids = [inv.id for inv in investitionen if inv.typ == "pv-module"]
+    inv_by_id = {inv.id: inv for inv in investitionen}
 
     # PV-Erzeugung aus InvestitionMonatsdaten aggregieren
+    # Drift-Audit F: nur Monate ab Anschaffungsdatum berücksichtigen.
     pv_erzeugung = 0.0
     if pv_module_ids:
         imd_result = await db.execute(
@@ -164,6 +166,9 @@ async def calculate_anlage_sensors(
             .where(InvestitionMonatsdaten.investition_id.in_(pv_module_ids))
         )
         for imd in imd_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             data = imd.verbrauch_daten or {}
             pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
 
@@ -188,6 +193,9 @@ async def calculate_anlage_sensors(
             .where(InvestitionMonatsdaten.investition_id.in_(speicher_ids))
         )
         for imd in sp_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             data = imd.verbrauch_daten or {}
             batterie_ladung += data.get("ladung_kwh", 0) or 0
             batterie_entladung += data.get("entladung_kwh", 0) or 0

@@ -194,8 +194,8 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
           icon={TrendingUp}
           color="green"
           trend={z.ersparnis_euro > 0 ? 'up' : undefined}
-          formel="Ersparnis = Entladung × Strompreis"
-          berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh × Strompreis`}
+          formel="Ersparnis = Entladung × (Strompreis − Einspeisevergütung)"
+          berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh × Spread`}
           ergebnis={`= ${z.ersparnis_euro.toFixed(2)} €`}
         />
       </div>
