@@ -70,6 +70,7 @@ class SensorMeta(NamedTuple):
     """Metadata eines Sensors aus statistics_meta."""
     id: int
     unit: Optional[str]
+    has_sum: bool
 
 
 # Konvertierungsfaktoren nach kWh
@@ -203,14 +204,17 @@ class HAStatisticsService:
             SensorMeta oder None wenn Sensor nicht in statistics
         """
         result = conn.execute(
-            text("SELECT id, unit_of_measurement FROM statistics_meta WHERE statistic_id = :sid"),
+            text(
+                "SELECT id, unit_of_measurement, has_sum "
+                "FROM statistics_meta WHERE statistic_id = :sid"
+            ),
             {"sid": sensor_id}
         )
         row = result.fetchone()
         if not row:
             logger.debug(f"Sensor '{sensor_id}' nicht in statistics_meta gefunden")
             return None
-        return SensorMeta(id=row[0], unit=row[1])
+        return SensorMeta(id=row[0], unit=row[1], has_sum=bool(row[2]))
 
     def filter_valid_sensor_ids(self, sensor_ids: list[str]) -> tuple[list[str], list[str]]:
         """
@@ -695,7 +699,20 @@ class HAStatisticsService:
             if not row:
                 return None
 
-            wert = row[0] if row[0] is not None else row[1]
+            # Bei kumulativen Energiezählern (has_sum=True) ausschließlich
+            # `sum` verwenden — niemals auf `state` zurückfallen.
+            # `sum` ist HAs reset-bereinigte Lifetime-Summe; `state` kann
+            # daneben eine andere Größe sein (z. B. Tageswert eines
+            # utility_meter-Sensors). Mischt man beide, entstehen
+            # Counter-Spikes von der Größenordnung des Lifetime-Werts,
+            # sobald ein Slot `sum=NULL` hat (z. B. nach HA-Restart bevor
+            # `recompile_statistics` lief). Bei `sum=NULL` lieber `None`
+            # zurückgeben — der Aufrufer interpoliert (sensor_snapshot
+            # _service._fill_gaps_linear).
+            if meta.has_sum:
+                wert = row[0]
+            else:
+                wert = row[0] if row[0] is not None else row[1]
             if wert is None:
                 return None
 

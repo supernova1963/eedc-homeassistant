@@ -186,6 +186,10 @@ async def get_snapshot(
     von = zeitpunkt - timedelta(minutes=toleranz_minuten)
     bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
 
+    from sqlalchemy import func
+    abstand = func.abs(
+        func.julianday(SensorSnapshot.zeitpunkt) - func.julianday(zeitpunkt)
+    )
     result = await db.execute(
         select(SensorSnapshot.wert_kwh).where(
             and_(
@@ -194,10 +198,7 @@ async def get_snapshot(
                 SensorSnapshot.zeitpunkt >= von,
                 SensorSnapshot.zeitpunkt <= bis,
             )
-        ).order_by(
-            # Nächstliegender Zeitpunkt zuerst (absolute Differenz)
-            SensorSnapshot.zeitpunkt.asc()
-        ).limit(1)
+        ).order_by(abstand.asc()).limit(1)
     )
     row = result.scalar_one_or_none()
     if row is not None:
