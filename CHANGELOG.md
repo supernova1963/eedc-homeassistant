@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.12] - 2026-05-02
+
+> 📝 **Doku-Nachreichung zu v3.25.11** — `WAS-IST-NEU.md` um die drei User-sichtbaren Highlights aus v3.25.11 (Sonstige Erträge im T-Konto, Pool-Doppelzählung Wallbox/E-Auto, Daten-Checker `verbrauch_kwh`/`ladung_kwh`) ergänzt sowie um den Self-Heal-Workflow gegen Counter-Spikes. Kein Funktions-Code geändert, nur die In-App-Hilfe.
+
+### Changed
+
+- **`WAS-IST-NEU.md` aktualisiert** — vier neue Einträge oben in der Liste, Stand-Header von v3.25.10 auf v3.25.12 gezogen. Wer in der In-App-Hilfe „Was ist neu" aufruft, sieht die v3.25.11-Wert-Korrekturen jetzt direkt am Anfang. Die ausführliche technische Beschreibung steht weiterhin im [v3.25.11-CHANGELOG-Block](#32511---2026-05-02).
+
+---
+
 ## [3.25.11] - 2026-05-02
 
 > 🩹 **Sammelpatch: Counter-Spike Self-Heal + Monatsbericht-Korrekturen** — Drei neue Selbstheilungs-Wege für Snapshot-Verzerrungen (Folge des in v3.25.10 behobenen Off-by-one-Bugs) und drei Bug-Fixes aus einer Joachim-Tester-PN (sichtbare Sonstige Erträge, Pool-Doppelzählung E-Auto/Wallbox, Daten-Checker-Drift `verbrauch_kwh` ↔ `ladung_kwh`).

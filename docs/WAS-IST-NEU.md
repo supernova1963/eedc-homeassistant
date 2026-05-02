@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.10)
+> **Stand:** Mai 2026 (v3.25.11)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,50 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Sonstige Erträge im Monatsbericht-T-Konto sichtbar + Monatsergebnis korrigiert *(v3.25.11)*
+
+> ⚠ **User-sichtbare Wert-Korrektur** — Wer Sonstige Erträge erfasst hat (z. B. AG-Erstattung beim Dienstwagen, THG-Quote, eingespielte Kostenrückerstattung), sieht nach diesem Update ein höheres Monatsergebnis und neue HABEN-Zeilen im T-Konto.
+
+Bisher wurden im Monatsabschluss-Wizard erfasste Positionen vom Typ „Ertrag" auf der HABEN-Seite des T-Kontos im Monatsbericht nicht angezeigt und im Monatsergebnis ignoriert — bei E-Autos mit Dienstwagen-Flag wurde sogar der ganze Wirtschaftlichkeits-Block übersprungen, sodass weder die AG-Erstattung als Ertrag noch andere zugehörige Positionen sichtbar waren. Auf der SOLL-Seite tauchte zwar eine Aggregat-Zeile „Sonderkosten" (= Σ Ausgaben) auf, das Pendant für Erträge fehlte aber komplett. Im Monatsergebnis am Card-Header wurden die Ausgaben abgezogen, die Erträge aber nicht aufaddiert — wer also 35 € AG-Erstattung erfasst hatte, fand 35 € weniger in seinem Monatsergebnis als erwartet.
+
+Jetzt wertet der Backend-Pfad `sonstige_positionen` typ-unabhängig pro Investition aus, das Frontend zeigt im T-Konto pro Investition eigene HABEN-Zeilen („Tiguan Hybrid — Sonstige Erträge 35,00 €") und SOLL-Zeilen („Tiguan Hybrid — Sonstige Ausgaben"). Das Monatsergebnis im Card-Header rechnet `Gesamt-Nettoertrag − Betriebskosten + Sonstige Netto`. Wer Erträge erfasst hat, sieht den korrekten Wert ab dem nächsten Cockpit-Aufruf — alte Monate werden automatisch neu berechnet, kein Eingriff nötig.
+
+→ [Monatsabschluss → T-Konto](HANDBUCH_BEDIENUNG.md#10-monatsabschluss)
+
+### Pool-Doppelzählung Wallbox/E-Auto im Cockpit entschärft *(v3.25.11)*
+
+> ⚠ **User-sichtbare Wert-Korrektur** — Wer sowohl eine Wallbox als auch ein E-Auto als getrennte Investitionen pflegt, sieht nach diesem Update niedrigere und realistischere Werte für „Ladung gesamt", „Verbrauch (kWh/100km)" und einen plausiblen PV-Anteil im E-Mobilitäts-Block der Monatsberichte.
+
+Die Wallbox als Investitionstyp misst aus Loadpoint-Sicht (was am Stromanschluss raus geht), das E-Auto als Investitionstyp aus Vehicle-Sicht (was im Auto angekommen ist). Beide messen also denselben Stromfluss aus zwei Perspektiven. Bisher wurden die `ladung_kwh`-Werte beider Investitionen aufaddiert — bei einer Anlage mit 1 E-Auto + 1 Wallbox kam dadurch der Wert für „Ladung gesamt" doppelt so hoch wie real, und der `kWh/100km`-Wert ebenfalls. Bei ungleicher Pflege der zwei Eingabe-Quellen konnte der angezeigte PV-Anteil sogar über 100 % laufen — z. B. wenn die Wallbox einen hohen `ladung_pv_kwh`-Wert hat, das E-Auto aber nur einen kleinen `verbrauch_kwh`-Wert.
+
+Als Übergangslösung nimmt EEDC jetzt pro Feld die größere der beiden Quellen als Wahrheit (Loadpoint-Sicht ist üblicherweise inklusiv) und stellt sicher, dass der PV-Anteil mathematisch ≤ 100 % bleibt. Eine saubere Per-Fahrzeug-Trennung folgt mit der Phase 2 des [Wallbox/E-Auto-Datenarchitektur-Konzepts](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-WALLBOX-EAUTO.md) — bis dahin bleibt die Cockpit-Gesamtübersicht und der HA-Statistics-/MQTT-Aggregator-Pfad bewusst auf der alten Pool-Logik (sichtbar als Drift-Möglichkeit zwischen Cockpit-Übersicht und Monatsbericht).
+
+Bei Anlagen mit Dienstwagen + Privatauto an gemeinsamer Wallbox bleibt eine Restungenauigkeit: die `kWh/100km`-Berechnung dividiert die Wallbox-Lieferung (inkl. Dienstwagen-Strom) durch die Privat-km — der Wert ist nach diesem Update plausibler, aber noch nicht perfekt. Phase 2 löst das mit Vehicle-Sensoren pro Fahrzeug.
+
+→ [Monatsbericht → E-Mobilität](HANDBUCH_BEDIENUNG.md#10-monatsabschluss)
+
+### Selbsthilfe gegen Counter-Spikes im Tagesprofil *(v3.25.11)*
+
+> ℹ️ **Folge des Off-by-one-Fixes aus v3.25.10** — Der dort behobene Bug hat in seltenen Fällen unphysikalisch hohe Stundenwerte hinterlassen (z. B. ein PV-Spike von 2.384 kWh in einer Stunde statt der realistischen 5 kWh). Bestehende Snapshot-Werte werden vom Service-Bugfix selbst nicht repariert.
+
+Drei aufeinander abgestimmte Selbsthilfe-Wege:
+
+- **„Verlauf nachrechnen" mit Überschreiben** in der Datenverwaltung zieht jetzt vor dem Aggregat zusätzlich die SensorSnapshots des Bereichs frisch aus HA-Statistics — repariert verzerrte Stundenwerte in einem Schritt mit dem Tagesprofil-Aggregat. Bei deaktiviertem Überschreiben (Initial-Backfill) bleibt das Verhalten unverändert.
+- **„Tag neu aggregieren"** (das grüne Reload-Symbol in der Tagesliste des Energieprofils) ruft vor dem Aggregat ebenfalls einen Resnap auf — ein Klick auf das Symbol heilt den ausgewählten Tag jetzt vollständig (Snapshots + Aggregate + Heatmap).
+- **Daten-Checker erkennt Counter-Spikes selbst:** Neue Kategorie „Energieprofil-Plausibilität" prüft die letzten 30 Tage und meldet Stunden mit `pv_kw` oder `einspeisung_kw` über 1,5× der Anlagen-Spitzenleistung — eindeutig unphysikalisch. Die Detail-Meldung verlinkt direkt auf den Reparatur-Workflow.
+
+Alte Tage älter als 14 Tage können nur in Hourly-Granularität repariert werden, weil HA selbst die 5-Min-Statistik nur ~10–14 Tage zurück bereithält.
+
+→ [Daten-Checker → Energieprofil-Plausibilität](HANDBUCH_DATEN_CHECKER.md) | [Energieprofil → Tag neu aggregieren](HANDBUCH_BEDIENUNG.md#7-auswertung)
+
+### Daten-Checker-Falsch-Warnung „Komponenten ohne kWh-Zähler-Abdeckung" für E-Autos *(v3.25.11)*
+
+Wenn du einen Sensor für die Gesamt-Ladung deines E-Autos im Sensor-Mapping hinterlegt hattest, blieb trotzdem die Warnung „Komponenten ohne vollständige kWh-Zähler-Abdeckung" mit Hinweis `ladung_kwh` stehen. Hintergrund: Das E-Auto-Schema bietet im Wizard das Feld unter dem Schlüssel `verbrauch_kwh` an, der Daten-Checker prüfte aber hartcodiert auf `ladung_kwh` — ein Schlüssel, den du gar nicht zur Auswahl hattest. Andere Stellen im Code akzeptieren beide Schreibweisen.
+
+Der Checker erkennt jetzt beide Schlüssel als korrekt gemappt. Wer einen Sensor hinterlegt hat, sieht den Befund nicht mehr.
+
+→ [Daten-Checker → Energieprofil-Zähler-Abdeckung](HANDBUCH_DATEN_CHECKER.md)
 
 ### Off-by-one-Stunde-Bug in Counter-Snapshots behoben *(v3.25.10)*
 
