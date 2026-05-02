@@ -23,9 +23,11 @@ Verursacht wurde der Bug durch eine Fehlinterpretation von HA's API-Konvention; 
 
 → [Energieprofil-Auswertung](HANDBUCH_BEDIENUNG.md#7-auswertung)
 
-### Drift-Audit-Initiative abgeschlossen *(v3.25.9)*
+### Drift-Audit-Initiative abgeschlossen *(als Teil von v3.25.10 ausgeliefert)*
 
-Letzter Bündel der Aufräum-Aktion, die mit #178 ([Werte-Drift bei der Wärmepumpe](https://github.com/supernova1963/eedc-homeassistant/issues/178)) startete. Insgesamt wurden 16 Drift-Stellen in 6 Domänen identifiziert und in v3.25.7–v3.25.9 abgearbeitet. v3.25.9 selbst hat **keine User-sichtbare Werte-Wirkung** — es konsolidiert nur intern Daten in der Datenbank auf einheitliche Schlüssel und ersetzt 23 verstreute Doppel-Read-Stellen im Code durch fünf zentrale Helper. Die DB-Migration läuft beim Add-on-Start einmalig automatisch durch.
+> ℹ️ **Versionssprung 3.25.8 → 3.25.10 ist beabsichtigt:** Die hier beschriebenen Drift-Audit-Bündel-G-Änderungen waren ursprünglich für v3.25.9 vorgesehen. Während der CHANGELOG schon stand, wurde der Off-by-one-Bug entdeckt — beide Pakete sind unter Tag `v3.25.10` zusammen ausgeliefert worden, statt zwei Releases im Minutenabstand zu schießen. Es gibt also kein Tag `v3.25.9` im Repository.
+
+Letzter Bündel der Aufräum-Aktion, die mit #178 ([Werte-Drift bei der Wärmepumpe](https://github.com/supernova1963/eedc-homeassistant/issues/178)) startete. Insgesamt wurden 16 Drift-Stellen in 6 Domänen identifiziert und in v3.25.7–v3.25.10 abgearbeitet. Dieses Bündel hat **keine User-sichtbare Werte-Wirkung** — es konsolidiert nur intern Daten in der Datenbank auf einheitliche Schlüssel und ersetzt 23 verstreute Doppel-Read-Stellen im Code durch fünf zentrale Helper. Die DB-Migration läuft beim Add-on-Start einmalig automatisch durch.
 
 Hintergrund: bei mehreren früheren Schema-Wechseln blieben Code-Stellen mit Doppel-Reads der Form `data.get("alt", 0) or data.get("neu", 0)` als Sicherheitsnetz zurück. Gleichzeitig waren in der DB beide Schlüssel-Versionen parallel vorhanden. Beides wurde jetzt vereinheitlicht — bei künftigen Schema-Änderungen muss nur noch eine zentrale Stelle gepflegt werden.
 
