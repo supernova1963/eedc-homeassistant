@@ -256,6 +256,9 @@ export default function Energieprofil() {
                     zum Live Dashboard); ältere Tage können durch Korrekturen abweichen.
                     Starte dann einmalig mit aktivierter Option <em>„Bestehende Tage
                     überschreiben"</em>, damit der gesamte Verlauf konsistent bleibt.
+                    Bei aktiviertem Überschreiben werden zusätzlich die zugrunde liegenden
+                    SensorSnapshots frisch aus HA-Statistics gezogen — repariert verzerrte
+                    Stundenwerte (z. B. nach Update-Restarts mit Counter-Off-by-one).
                     Details im CHANGELOG. Der Daten-Checker zeigt unter
                     „Energieprofil-Abdeckung", welche Zähler dafür gemappt sein müssen.
                   </p>

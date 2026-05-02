@@ -850,6 +850,32 @@ async def backfill_from_statistics(
         | wp_keys | wallbox_keys | sonstige_keys
     )
 
+    # ── Snapshot-Reparatur bei Overwrite ─────────────────────────────────────
+    # Bei "Verlauf nachrechnen" (skip_existing=False) zuerst die SensorSnapshots
+    # der Range frisch aus HA-Statistics ziehen. Aggregate liest die Snapshots
+    # weiter unten und würde sonst Spike-Defekte (z. B. Off-by-one in
+    # get_value_at vor v3.25.10) reproduzieren. Resnap nutzt den korrigierten
+    # get_value_at-Pfad. Bei initialem Backfill (skip_existing=True) übersprungen
+    # — Snapshots werden ohnehin durch den Scheduler frisch geschrieben.
+    if not skip_existing:
+        try:
+            from backend.services.sensor_snapshot_service import resnap_anlage_range
+            von_dt = datetime.combine(von, datetime.min.time())
+            bis_dt = datetime.combine(bis + timedelta(days=1), datetime.min.time())
+            resnap_stats = await resnap_anlage_range(
+                db, anlage, von=von_dt, bis=bis_dt, include_5min=True,
+            )
+            logger.info(
+                f"Anlage {anlage.id}: Pre-Backfill-Resnap — "
+                f"{resnap_stats['hourly']} hourly + {resnap_stats['5min']} 5-Min Slots "
+                f"({resnap_stats['stunden']} Stunden, {resnap_stats['slots_5min']} 5-Min-Slots)"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Anlage {anlage.id}: Pre-Backfill-Resnap fehlgeschlagen "
+                f"(Aggregat läuft trotzdem auf Bestandsdaten): {type(e).__name__}: {e}"
+            )
+
     # ── Bestehende Tage ermitteln ────────────────────────────────────────────
     existing_dates: set[date] = set()
     if skip_existing:
