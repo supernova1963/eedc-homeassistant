@@ -341,7 +341,7 @@ export default function MonatsabschlussView() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col lg:flex-row gap-6 min-h-0">
+    <div className="flex flex-col lg:flex-row gap-6 lg:min-h-0">
 
       {/* Zeitstrahl Desktop */}
       <aside className="hidden lg:block w-48 shrink-0 self-start sticky top-4">
@@ -355,7 +355,7 @@ export default function MonatsabschlussView() {
               </select>
             </div>
           )}
-          <div className="overflow-y-auto max-h-[calc(100vh-6rem)] scrollbar-none">
+          <div className="overflow-y-auto overscroll-contain max-h-[calc(100vh-6rem)] scrollbar-none">
             {selectedJahr !== null && selectedMonat !== null && (
               <VerticalTimeline
                 entries={timelineEntries}
@@ -369,7 +369,7 @@ export default function MonatsabschlussView() {
       </aside>
 
       {/* Hauptinhalt */}
-      <main className="flex-1 min-w-0 space-y-4">
+      <main className="lg:flex-1 min-w-0 space-y-4">
 
         {/* Mobil: horizontaler Selektor */}
         <div className="lg:hidden -mx-3 sm:-mx-6 px-3 sm:px-6 overflow-x-auto scrollbar-none">
