@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.11)
+> **Stand:** Mai 2026 (v3.25.13)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,59 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### WP-Kompressor-Starts-Baseline bleibt nach Investitionen-Speichern erhalten *(v3.25.13)*
+
+> ⚠ **User-sichtbare Wert-Korrektur** — Wer einen Kompressor-Starts-Sensor seiner Wärmepumpe gemappt hat und die im Sensor-Zuordnung-Wizard gesetzte Baseline (Σ aller Lebensdauer-Starts vor dem ersten Tag bei EEDC) erleben möchte, hatte bisher folgendes Problem: jedes Schließen des Investitionen → Wärmepumpe-Dialogs mit „Speichern" — auch ohne irgendeine Datenänderung — setzte die Baseline auf `None` zurück. Cockpit → Wärmepumpe zeigte dann nur die Σ der EEDC-Tagesdifferenzen (also die Starts seit Inbetriebnahme), nicht den korrekten `Baseline + Σ Tagesdifferenzen`-Lebensdauer-Wert.
+
+Hintergrund: das Investitionen-Form sammelte beim Speichern nur die im Form sichtbaren Felder ein und sendete das als komplettes neues `parameter`-Objekt ans Backend. Wizard-only-Felder wie `wp_starts_anzahl_baseline`, die der Sensor-Zuordnung-Wizard direkt in `parameter` schreibt aber nirgendwo im Form sichtbar macht, fielen dadurch raus.
+
+Der Fix mergt jetzt das `parameter`-Objekt mit dem bestehenden statt es zu ersetzen — Wizard-Keys bleiben erhalten. **Nach dem Update einmalig Sensor-Zuordnung → Speichern & Abschließen**, dann ist die Baseline neu gesetzt und bleibt von da an stabil.
+
+→ [Cockpit → Wärmepumpe](HANDBUCH_BEDIENUNG.md#41-cockpit)
+
+### Mobile-Ansicht der Monatsberichte vollständig scrollbar *(v3.25.13)*
+
+> ⚠ **Mobile-Sichtbar** — Wer die App auf einem Smartphone oder im DevTools-Mobile-Mode aufruft, kann jetzt mit aufgeklappter Energie-Bilanz auch die Sektionen darunter (Community-Vergleich, Speicher, Wärmepumpe, E-Mobilität, Balkonkraftwerk, Sonstiges) erreichen.
+
+Vorher endete der Scroll-Bereich bei aufgeklappter Energie-Bilanz an der Finanzen-Sektion — alles darunter war zwar im DOM gerendert, aber außerhalb des Layout-Scroll-Bereichs. Auf Desktop war die Ansicht unbeeinflusst, weil dort der Sticky-Sidebar-Layout-Pfad greift.
+
+→ [Cockpit → Monatsberichte](HANDBUCH_BEDIENUNG.md#41-cockpit)
+
+### iOS-Smartphones / kleine Viewports: kein „Durchscrollen" mehr bis zur HA-Titelleiste *(v3.25.13)*
+
+> ⚠ **Mobile-Sichtbar** — Auf iPhone SE und im HA-Companion-WebView konnte die EEDC-App so weit nach oben gescrollt werden, dass unter dem Footer eine leere Fläche entstand und nur noch die HA-App-Titelleiste sichtbar blieb. Der eigentliche App-Inhalt war dann oberhalb des Sichtbereichs.
+
+Ursache war ein Drift zwischen dem dynamischen Viewport-Layout-Container (`100dvh`) und dem Document-Root, das auf iOS und in DevTools-Mobile-Simulationen unter bestimmten Viewports unabhängig scrollen konnte. Der Layout-Wrapper ist jetzt der einzige Scroll-Owner — Document-Root wurde an die Viewport-Höhe gepinnt.
+
+iPhone 11 und iPhone 16 Pro hatten den Drift in der Praxis nicht gezeigt, das Symptom war auf kleine Viewports beschränkt.
+
+### Stundenwerte-Spike durch Counter-Sensor-Ungereimtheit gefixt *(v3.25.13)*
+
+> ℹ️ **Folge-Patch zu v3.25.10/v3.25.11** — Verstärkt die Counter-Spike-Vermeidung bei Sensoren, die in HA-Statistics zeitweise keinen `sum`-Wert lieferten (typisch nach Restart). Der `get_value_at`-Pfad mischte in solchen Fällen `sum` und `state` aus aufeinanderfolgenden Slots, was extrem große oder kleine Stunden-Differenzen erzeugen konnte.
+
+Wer in den letzten Tagen Counter-Spikes im Tagesprofil gesehen hatte, repariert sie wie in v3.25.11 beschrieben über den Daten-Checker und „Tag neu aggregieren". Neu auftretende Spikes durch dieses Pattern werden ab v3.25.13 nicht mehr produziert.
+
+→ [Daten-Checker → Energieprofil-Plausibilität](HANDBUCH_DATEN_CHECKER.md)
+
+### Wärmepumpe mit getrennter Strommessung: konsistente JAZ in allen Cockpits *(v3.25.13)*
+
+> ⚠ **User-sichtbare Wert-Korrektur** — Wer im WP-Setup `getrennte_strommessung` aktiviert hat (Strom Heizen + Strom Warmwasser separat statt Sammel-Sensor), sieht in v3.25.13 in allen WP-Cockpits + Monatsbericht + ROI + HA-Export + PDF-Jahresbericht **denselben** JAZ-Wert.
+
+Vorher las jede Stelle die Daten leicht unterschiedlich — manche summierten Heizen+Warmwasser, manche nutzten den alten Sammel-Sensor (sofern noch gemappt). Folge: leicht abweichende JAZ-Werte zwischen Cockpit Komponenten und Monatsbericht.
+
+Ein neuer SoT-Helper `get_wp_strom_kwh` ist jetzt der einzige Lese-Pfad. Bei aktiver getrennter Messung wird der Sammel-Sensor ignoriert. Im Sensor-Zuordnung → Zusammenfassung-Schritt erscheint der alte Sammel-Sensor als „(obsolet)" mit Hinweis, dass er entfernt werden kann.
+
+→ [Cockpit → Wärmepumpe](HANDBUCH_BEDIENUNG.md#41-cockpit)
+
+### Energiefluss-Tile: kleinere Optik-Korrekturen *(v3.25.13)*
+
+Zwei Detail-Fixes im Live-Dashboard:
+
+- **Sunset-/Alps-Hintergründe:** die Effekt-Layer (Sonnenstrahlen, Atmosphären-Bögen, Sterne, Aurora) ragten bisher in die abgerundeten Tile-Ecken hinein. Jetzt sauber an den Border-Radius geclippt.
+- **Mittlere Fensterbreite (Notebook-Standard 1024–1280 px):** der Energiefluss zentrierte sich vertikal mit Lücken oberhalb und unterhalb, weil die Heute-Box rechts höher war als das SVG-Aspect-Ratio. Das Side-by-Side-Layout greift jetzt erst ab 1280 px Fensterbreite — im Notebook-Standard stapelt Heute-Box unter dem Energiefluss.
+
+→ [Live-Dashboard → Energiefluss](HANDBUCH_BEDIENUNG.md#3-live-dashboard)
 
 ### Sonstige Erträge im Monatsbericht-T-Konto sichtbar + Monatsergebnis korrigiert *(v3.25.11)*
 
