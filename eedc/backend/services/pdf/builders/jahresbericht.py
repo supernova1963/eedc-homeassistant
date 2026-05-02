@@ -15,6 +15,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.field_definitions import get_wp_strom_kwh
 from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
@@ -189,7 +190,7 @@ async def build_jahresbericht_context(
             wp_heizung += heiz
             wp_warmwasser += ww
             wp_waerme += d.get("waerme_kwh", 0) or (heiz + ww)
-            wp_strom += d.get("stromverbrauch_kwh", 0) or 0
+            wp_strom += get_wp_strom_kwh(d, inv.parameter)
         elif inv.typ in ("e-auto", "wallbox"):
             emob_km += d.get("km_gefahren", 0) or 0
             emob_ladung += d.get("ladung_kwh", 0) or 0

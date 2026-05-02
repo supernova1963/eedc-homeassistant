@@ -26,6 +26,7 @@ from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
     get_wp_heizenergie_kwh,
+    get_wp_strom_kwh,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.services.community_service import get_region_from_plz
@@ -155,11 +156,7 @@ async def get_share_text(
                 data.get("waerme_kwh", 0) or
                 get_wp_heizenergie_kwh(data) + (data.get("warmwasser_kwh", 0) or 0)
             )
-            wp_strom += (
-                data.get("stromverbrauch_kwh", 0) or
-                data.get("strom_kwh", 0) or
-                data.get("verbrauch_kwh", 0) or 0
-            )
+            wp_strom += get_wp_strom_kwh(data, inv.parameter)
         elif inv.typ in ("e-auto", "wallbox") and not (inv.parameter or {}).get("ist_dienstlich", False):
             emob_km += data.get("km_gefahren", 0) or 0
             emob_ladung += get_eauto_ladung_kwh(data)

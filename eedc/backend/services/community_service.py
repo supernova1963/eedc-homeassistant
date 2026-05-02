@@ -245,6 +245,7 @@ async def prepare_community_data(
         inv_monatsdaten = inv_md_result.all()
 
         # Nach Jahr/Monat gruppieren — Daten vor Anschaffung ignorieren
+        # (inv_md, typ, parameter) — parameter wird für getrennte_strommessung gebraucht (#183)
         inv_by_month: dict[tuple[int, int], list[tuple]] = {}
         for inv_md, inv in inv_monatsdaten:
             if not inv.ist_aktiv_im_monat(inv_md.jahr, inv_md.monat):
@@ -252,7 +253,7 @@ async def prepare_community_data(
             key = (inv_md.jahr, inv_md.monat)
             if key not in inv_by_month:
                 inv_by_month[key] = []
-            inv_by_month[key].append((inv_md, inv.typ))
+            inv_by_month[key].append((inv_md, inv.typ, inv.parameter or {}))
 
         for md in monatsdaten:
             key = (md.jahr, md.monat)
@@ -263,96 +264,102 @@ async def prepare_community_data(
                 (inv_md.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
                 or (inv_md.verbrauch_daten or {}).get("erzeugung_kwh", 0)
                 or 0
-                for inv_md, typ in month_inv_data if typ in ("pv-module", "balkonkraftwerk")
+                for inv_md, typ, _params in month_inv_data if typ in ("pv-module", "balkonkraftwerk")
             )
 
             # Speicher-KPIs aggregieren
             speicher_ladung = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "speicher"
+                for inv_md, typ, _params in month_inv_data if typ == "speicher"
             )
             speicher_entladung = sum(
                 (inv_md.verbrauch_daten or {}).get("entladung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "speicher"
+                for inv_md, typ, _params in month_inv_data if typ == "speicher"
             )
             speicher_ladung_netz = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_netz_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "speicher"
+                for inv_md, typ, _params in month_inv_data if typ == "speicher"
             )
 
             # Wärmepumpe-KPIs aggregieren
+            # #183: bei getrennter Strommessung Gesamt aus Einzel-Sensoren bilden
             wp_stromverbrauch = sum(
-                (inv_md.verbrauch_daten or {}).get("stromverbrauch_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "waermepumpe"
+                (
+                    ((inv_md.verbrauch_daten or {}).get("strom_heizen_kwh") or 0) +
+                    ((inv_md.verbrauch_daten or {}).get("strom_warmwasser_kwh") or 0)
+                )
+                if (_params or {}).get("getrennte_strommessung")
+                else (inv_md.verbrauch_daten or {}).get("stromverbrauch_kwh", 0) or 0
+                for inv_md, typ, _params in month_inv_data if typ == "waermepumpe"
             )
             wp_heizwaerme = sum(
                 (inv_md.verbrauch_daten or {}).get("heizenergie_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "waermepumpe"
+                for inv_md, typ, _params in month_inv_data if typ == "waermepumpe"
             )
             wp_warmwasser = sum(
                 (inv_md.verbrauch_daten or {}).get("warmwasser_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "waermepumpe"
+                for inv_md, typ, _params in month_inv_data if typ == "waermepumpe"
             )
 
             # E-Auto-KPIs aggregieren
             eauto_ladung_pv = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_pv_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "e-auto"
+                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
             )
             eauto_ladung_netz = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_netz_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "e-auto"
+                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
             )
             eauto_ladung_extern = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_extern_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "e-auto"
+                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
             )
             eauto_km = sum(
                 (inv_md.verbrauch_daten or {}).get("km_gefahren", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "e-auto"
+                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
             )
             eauto_v2h = sum(
                 (inv_md.verbrauch_daten or {}).get("v2h_entladung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "e-auto"
+                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
             )
             eauto_ladung_gesamt = eauto_ladung_pv + eauto_ladung_netz + eauto_ladung_extern
 
             # Wallbox-KPIs aggregieren
             wallbox_ladung = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "wallbox"
+                for inv_md, typ, _params in month_inv_data if typ == "wallbox"
             )
             wallbox_ladung_pv = sum(
                 (inv_md.verbrauch_daten or {}).get("ladung_pv_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "wallbox"
+                for inv_md, typ, _params in month_inv_data if typ == "wallbox"
             )
             wallbox_ladevorgaenge = sum(
                 (inv_md.verbrauch_daten or {}).get("ladevorgaenge", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "wallbox"
+                for inv_md, typ, _params in month_inv_data if typ == "wallbox"
             )
 
             # Balkonkraftwerk-KPIs aggregieren
             bkw_erzeugung = sum(
                 (inv_md.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "balkonkraftwerk"
+                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
             )
             bkw_eigenverbrauch = sum(
                 (inv_md.verbrauch_daten or {}).get("eigenverbrauch_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "balkonkraftwerk"
+                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
             )
             bkw_speicher_ladung = sum(
                 (inv_md.verbrauch_daten or {}).get("speicher_ladung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "balkonkraftwerk"
+                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
             )
             bkw_speicher_entladung = sum(
                 (inv_md.verbrauch_daten or {}).get("speicher_entladung_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "balkonkraftwerk"
+                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
             )
 
             # Sonstiges-KPIs aggregieren
             sonstiges_verbrauch = sum(
                 (inv_md.verbrauch_daten or {}).get("stromverbrauch_kwh", 0) or 0
-                for inv_md, typ in month_inv_data if typ == "sonstiges"
+                for inv_md, typ, _params in month_inv_data if typ == "sonstiges"
             )
 
             # Autarkie und Eigenverbrauch berechnen

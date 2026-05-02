@@ -26,6 +26,7 @@ from backend.core.field_definitions import (
     get_sonstiges_verbrauch_kwh,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
+    get_wp_strom_kwh,
 )
 
 router = APIRouter()
@@ -209,11 +210,10 @@ async def get_komponenten_zeitreihe(
             d["wp_heizung"] += heizung
             d["wp_warmwasser"] += warmwasser
             d["wp_waerme"] += waerme_gesamt
-            d["wp_strom"] += (
-                data.get("stromverbrauch_kwh", 0) or
-                data.get("strom_kwh", 0) or
-                data.get("verbrauch_kwh", 0) or 0
-            )
+            # #183: bei getrennter Strommessung Gesamt-Strom aus den Einzel-
+            # Sensoren bilden — alter Gesamt-Sensor wird ignoriert, sonst
+            # driften JAZ-Gesamt und JAZ-Einzel gegeneinander.
+            d["wp_strom"] += get_wp_strom_kwh(data, inv.parameter)
             if "strom_heizen_kwh" in data:
                 d["wp_strom_heizen"] += data.get("strom_heizen_kwh", 0) or 0
                 d["wp_strom_warmwasser"] += data.get("strom_warmwasser_kwh", 0) or 0

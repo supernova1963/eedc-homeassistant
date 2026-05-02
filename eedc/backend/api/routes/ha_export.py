@@ -15,6 +15,7 @@ from typing import Optional, Any
 import os
 
 from backend.api.deps import get_db
+from backend.core.field_definitions import get_wp_strom_kwh
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
@@ -279,7 +280,7 @@ async def calculate_anlage_sensors(
                 thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
                     daten.get("warmwasser_kwh", 0) or 0
                 )
-                strom = daten.get("stromverbrauch_kwh", 0) or 0
+                strom = get_wp_strom_kwh(daten, wp.parameter)
                 md = md_by_periode.get((jahr, monat))
                 monats_gaspreis = (
                     md.gaspreis_cent_kwh
@@ -611,7 +612,7 @@ async def calculate_investition_sensors(
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_strom += d.get("stromverbrauch_kwh", 0) or 0
+            gesamt_strom += get_wp_strom_kwh(d, investition.parameter)
             gesamt_heizung += d.get("heizenergie_kwh", 0) or 0
             gesamt_warmwasser += d.get("warmwasser_kwh", 0) or 0
 

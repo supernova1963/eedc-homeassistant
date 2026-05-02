@@ -77,7 +77,7 @@ const LIVE_KEY_LABELS: Record<string, string> = {
   warmwasser_temperatur_c: 'Warmwasser',
 }
 
-function MappingRow({ label, mapping }: { label: string; mapping: FeldMapping | null }) {
+function MappingRow({ label, mapping, obsolet }: { label: string; mapping: FeldMapping | null; obsolet?: string }) {
   if (!mapping) {
     return (
       <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
@@ -88,8 +88,15 @@ function MappingRow({ label, mapping }: { label: string; mapping: FeldMapping | 
   }
 
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-      <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
+    <div className={`flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0 ${obsolet ? 'opacity-60' : ''}`}>
+      <span className="text-sm text-gray-600 dark:text-gray-400">
+        {label}
+        {obsolet && (
+          <span className="ml-2 text-xs italic text-amber-600 dark:text-amber-400" title={obsolet}>
+            (obsolet)
+          </span>
+        )}
+      </span>
       <div className="flex items-center gap-2">
         {STRATEGIE_ICONS[mapping.strategie]}
         <span className="text-sm font-medium text-gray-900 dark:text-white">
@@ -364,13 +371,26 @@ export default function MappingSummaryStep({
               <span className="text-xs text-gray-500">({inv.typ})</span>
             </div>
             <div className="px-4 py-2">
-              {Object.entries(felder).map(([field, mapping]) => (
-                <MappingRow
-                  key={field}
-                  label={field.replace(/_/g, ' ').replace('kwh', '(kWh)')}
-                  mapping={mapping}
-                />
-              ))}
+              {Object.entries(felder).map(([field, mapping]) => {
+                // #183: bei getrennter Strommessung wird der alte Gesamt-
+                // Stromverbrauch-Sensor in der Aggregation nicht mehr genutzt.
+                const isObsolet =
+                  inv.typ === 'waermepumpe' &&
+                  field === 'stromverbrauch_kwh' &&
+                  inv.parameter?.getrennte_strommessung === true
+                return (
+                  <MappingRow
+                    key={field}
+                    label={field.replace(/_/g, ' ').replace('kwh', '(kWh)')}
+                    mapping={mapping}
+                    obsolet={
+                      isObsolet
+                        ? 'Bei aktivierter getrennter Strommessung ignoriert — kann entfernt werden'
+                        : undefined
+                    }
+                  />
+                )
+              })}
               {Object.entries(live).filter(([, v]) => v).length > 0 && (
                 <>
                   <div className="flex items-center gap-1 pt-2 pb-1">

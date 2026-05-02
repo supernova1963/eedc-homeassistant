@@ -19,6 +19,7 @@ from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
     get_wp_heizenergie_kwh,
+    get_wp_strom_kwh,
 )
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
@@ -111,11 +112,7 @@ async def get_nachhaltigkeit(
                 data.get("waerme_kwh", 0) or
                 get_wp_heizenergie_kwh(data) + (data.get("warmwasser_kwh", 0) or 0)
             )
-            data_by_month[key]["wp_strom"] += (
-                data.get("stromverbrauch_kwh", 0) or
-                data.get("strom_kwh", 0) or
-                data.get("verbrauch_kwh", 0) or 0
-            )
+            data_by_month[key]["wp_strom"] += get_wp_strom_kwh(data, inv.parameter)
         elif inv.typ in ("e-auto", "wallbox"):
             data_by_month[key]["emob_km"] += data.get("km_gefahren", 0) or 0
             data_by_month[key]["emob_ladung"] += get_eauto_ladung_kwh(data)

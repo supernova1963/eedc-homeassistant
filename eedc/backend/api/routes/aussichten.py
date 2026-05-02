@@ -23,6 +23,7 @@ from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.calculations import berechne_ust_eigenverbrauch
+from backend.core.field_definitions import get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -985,7 +986,7 @@ async def get_finanz_prognose(
     for wp in waermepumpen:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id and not _vor_anschaffung(wp, jahr, monat):
-                gesamt_wp_strom += daten.get("stromverbrauch_kwh", 0)
+                gesamt_wp_strom += get_wp_strom_kwh(daten, wp.parameter)
 
     # =====================================================================
     # QUOTEN BERECHNEN (aus historischen Daten oder Defaults)
@@ -1152,7 +1153,7 @@ async def get_finanz_prognose(
             if inv_id == wp.id:
                 heiz = daten.get("heizenergie_kwh", 0)
                 ww = daten.get("warmwasser_kwh", 0)
-                strom = daten.get("stromverbrauch_kwh", 0)
+                strom = get_wp_strom_kwh(daten, wp.parameter)
                 thermisch = heiz + ww
                 gesamt_wp_thermisch += thermisch
                 # Monatspreis: Monatsdaten.gaspreis_cent_kwh → Fallback statischer Parameter

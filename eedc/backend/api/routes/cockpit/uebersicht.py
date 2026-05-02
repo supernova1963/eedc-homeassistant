@@ -23,6 +23,7 @@ from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
 from backend.core.field_definitions import (
     get_pv_erzeugung_kwh,
     get_wp_heizenergie_kwh,
+    get_wp_strom_kwh,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -212,11 +213,7 @@ async def get_cockpit_uebersicht(
             wp_heizung += heizung
             wp_warmwasser += warmwasser
             wp_waerme += data.get("waerme_kwh", 0) or (heizung + warmwasser)
-            wp_strom += (
-                data.get("stromverbrauch_kwh", 0) or
-                data.get("strom_kwh", 0) or
-                data.get("verbrauch_kwh", 0) or 0
-            )
+            wp_strom += get_wp_strom_kwh(data, inv.parameter)
 
         elif inv.typ in ("e-auto", "wallbox"):
             if (inv.parameter or {}).get("ist_dienstlich", False):

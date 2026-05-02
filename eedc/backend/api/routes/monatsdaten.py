@@ -16,7 +16,7 @@ from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
-from backend.core.field_definitions import get_pv_erzeugung_kwh
+from backend.core.field_definitions import get_pv_erzeugung_kwh, get_wp_strom_kwh
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
 
 
@@ -237,7 +237,7 @@ async def list_monatsdaten_aggregiert(
                 speicher_ladung += data.get("ladung_kwh", 0) or 0
                 speicher_entladung += data.get("entladung_kwh", 0) or 0
             elif inv.typ == "waermepumpe":
-                wp_strom += data.get("stromverbrauch_kwh", 0) or 0
+                wp_strom += get_wp_strom_kwh(data, inv.parameter)
                 wp_heizung += data.get("heizenergie_kwh", 0) or 0
                 wp_warmwasser += data.get("warmwasser_kwh", 0) or 0
             elif inv.typ == "e-auto":

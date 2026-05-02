@@ -34,6 +34,7 @@ from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
     get_wp_heizenergie_kwh,
+    get_wp_strom_kwh,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 
@@ -354,13 +355,9 @@ async def _collect_saved_data(
                 speicher_ladung_total += data.get("ladung_kwh", 0) or 0
                 speicher_entladung_total += data.get("entladung_kwh", 0) or 0
             elif inv.typ == "waermepumpe":
-                wp_strom_total += (
-                    data.get("stromverbrauch_kwh", 0) or
-                    (data.get("strom_heizen_kwh", 0) or 0) +
-                    (data.get("strom_warmwasser_kwh", 0) or 0) or
-                    data.get("strom_kwh", 0) or
-                    data.get("verbrauch_kwh", 0) or 0
-                )
+                # #183: bei getrennter Strommessung Gesamt-Strom aus Einzel-
+                # Sensoren bilden, alter Gesamt-Sensor wird ignoriert.
+                wp_strom_total += get_wp_strom_kwh(data, inv.parameter)
                 wp_waerme_total += (
                     data.get("waerme_kwh", 0) or
                     get_wp_heizenergie_kwh(data) +
@@ -501,6 +498,7 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     pv_inv_ids = [i.id for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
     bat_inv_ids = [i.id for i in investitionen if i.typ == "speicher"]
     wp_inv_ids = [i.id for i in investitionen if i.typ == "waermepumpe"]
+    wp_params_by_id = {i.id: (i.parameter or {}) for i in investitionen if i.typ == "waermepumpe"}
     # E-Auto und Wallbox separat halten — selbe Pool-Doppelzählungs-Falle wie
     # in `_collect_saved_data` (siehe dort). Max-pro-Feld statt Summe.
     eauto_inv_ids = [i.id for i in investitionen if i.typ == "e-auto" and not (i.parameter or {}).get("ist_dienstlich", False)]
@@ -532,10 +530,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 bat_ladung_vj += data.get("ladung_kwh", 0) or 0
                 bat_entladung_vj += data.get("entladung_kwh", 0) or 0
             elif imd.investition_id in wp_inv_ids:
-                wp_strom_vj += (
-                    data.get("stromverbrauch_kwh", 0) or
-                    (data.get("strom_heizen_kwh", 0) or 0) + (data.get("strom_warmwasser_kwh", 0) or 0) or 0
-                )
+                # #183: bei getrennter Strommessung Gesamt-Strom aus Einzel-
+                # Sensoren bilden.
+                wp_strom_vj += get_wp_strom_kwh(data, wp_params_by_id.get(imd.investition_id))
                 wp_waerme_vj += (
                     (data.get("heizenergie_kwh", 0) or 0) + (data.get("warmwasser_kwh", 0) or 0)
                 )
@@ -1175,7 +1172,7 @@ async def get_aktueller_monat(
             elif inv.typ == "waermepumpe":
                 waerme = get_wp_heizenergie_kwh(data)
                 ww = data.get("warmwasser_kwh", 0) or 0
-                strom = data.get("stromverbrauch_kwh")
+                strom = get_wp_strom_kwh(data, inv.parameter) or None
                 waerme_total = (waerme or 0) + (ww or 0)
                 if waerme_total > 0 and strom is not None:
                     wp_result = berechne_wp_ersparnis(

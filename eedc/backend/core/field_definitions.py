@@ -690,3 +690,32 @@ def get_sonstiges_verbrauch_kwh(data: dict) -> float:
     if not data:
         return 0.0
     return float(data.get("verbrauch_sonstig_kwh") or data.get("verbrauch_kwh") or 0)
+
+
+def get_wp_strom_kwh(data: dict, params: dict | None = None) -> float:
+    """Wärmepumpen-Stromverbrauch in kWh — single source of truth.
+
+    Bei `getrennte_strommessung=True` werden ausschließlich die getrennten
+    Sensoren (`strom_heizen_kwh + strom_warmwasser_kwh`) summiert; das alte
+    `stromverbrauch_kwh`-Feld wird ignoriert, auch wenn ein parallel laufender
+    Sensor noch hineinschreibt. Sonst wird der Gesamt-Sensor genutzt
+    (`stromverbrauch_kwh`/`strom_kwh`/`verbrauch_kwh`-Legacy-Fallbacks).
+
+    Hintergrund #183: Mit beiden Pfaden parallel driften die drei JAZ-Werte
+    (Gesamt vs. Heizen vs. Warmwasser) gegeneinander, weil der Gesamt-JAZ
+    aus der alten Quelle gerechnet wird, die getrennten JAZ aber aus den
+    neuen Sensoren — Folge: Gesamt-JAZ kann mathematisch außerhalb der
+    gewichteten Mitte der beiden Einzel-JAZ liegen.
+    """
+    if not data:
+        return 0.0
+    if params and params.get("getrennte_strommessung"):
+        return float(
+            (data.get("strom_heizen_kwh") or 0) +
+            (data.get("strom_warmwasser_kwh") or 0)
+        )
+    return float(
+        data.get("stromverbrauch_kwh") or
+        data.get("strom_kwh") or
+        data.get("verbrauch_kwh") or 0
+    )

@@ -1479,6 +1479,33 @@ class DatenChecker:
 
         getrennte_strommessung = param.get("getrennte_strommessung", False)
 
+        # #183: bei getrennter Strommessung wird der alte stromverbrauch_kwh-
+        # Sensor in der Aggregation ignoriert. Wenn er trotzdem im Sensor-
+        # Mapping steht, ist das überflüssig (und schreibt parallel Werte
+        # in die JSON, die niemand mehr liest). INFO-Hinweis zum Entfernen.
+        if getrennte_strommessung:
+            anlage = getattr(inv, "anlage", None)
+            sensor_mapping = (anlage.sensor_mapping if anlage else None) or {}
+            inv_map = (sensor_mapping.get("investitionen") or {}).get(str(inv.id)) or {}
+            felder = inv_map.get("felder") or {}
+            alter_sensor = felder.get("stromverbrauch_kwh")
+            if isinstance(alter_sensor, dict) and alter_sensor.get("strategie") == "sensor":
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.INFO,
+                    meldung=(
+                        f"{name}: Alter Gesamt-Stromverbrauch-Sensor "
+                        f"({alter_sensor.get('sensor_id')}) ist bei aktivierter "
+                        f"getrennter Strommessung obsolet"
+                    ),
+                    details=(
+                        "Der Sensor wird in der Aggregation ignoriert — Gesamt-"
+                        "Strom kommt aus Strom Heizen + Strom Warmwasser. Du "
+                        "kannst ihn aus der Sensor-Zuordnung entfernen, ohne "
+                        "etwas zu verlieren."
+                    ),
+                    link="/einstellungen/sensoren",
+                ))
+
         imd_map = {
             (imd.jahr, imd.monat): (imd.verbrauch_daten or {})
             for imd in inv.monatsdaten
