@@ -920,14 +920,22 @@ class DatenChecker:
                 meldung="Basis-Zähler (Einspeisung + Netzbezug) gemappt",
             ))
 
-        # Pro Investition prüfen
-        erwartete_felder = {
-            "pv-module": ["pv_erzeugung_kwh"],
-            "balkonkraftwerk": ["pv_erzeugung_kwh"],
-            "speicher": ["ladung_kwh", "entladung_kwh"],
-            "waermepumpe": ["stromverbrauch_kwh"],
-            "wallbox": ["ladung_kwh"],
-            "e-auto": ["ladung_kwh"],
+        # Pro Investition prüfen.
+        # Jeder Eintrag ist eine Liste von Alternativen — gemappt sein muss
+        # mindestens EINE davon. Hintergrund: e-auto hat zwei akzeptierte
+        # Schlüssel für den Gesamt-Ladung-Zähler (`verbrauch_kwh` aus dem
+        # Field-Schema, `ladung_kwh` als kanonischer Helper-Name; beide werden
+        # vom Snapshot-Service und get_eauto_ladung_kwh akzeptiert). Vorher
+        # prüfte der Checker hartcodiert nur `ladung_kwh` und meldete trotz
+        # korrekt gemapptem `verbrauch_kwh`-Sensor eine fehlende Abdeckung
+        # (Joachim-PN 2026-05-02).
+        erwartete_felder: dict[str, list[list[str]]] = {
+            "pv-module": [["pv_erzeugung_kwh"]],
+            "balkonkraftwerk": [["pv_erzeugung_kwh"]],
+            "speicher": [["ladung_kwh"], ["entladung_kwh"]],
+            "waermepumpe": [["stromverbrauch_kwh"]],
+            "wallbox": [["ladung_kwh"]],
+            "e-auto": [["verbrauch_kwh", "ladung_kwh"]],
         }
 
         fehlend_pro_komponente: list[tuple[str, str, list[str]]] = []
@@ -942,7 +950,11 @@ class DatenChecker:
 
             inv_data = inv_map.get(str(inv.id), {}) or {}
             felder = inv_data.get("felder", {}) or {}
-            fehlend = [f for f in erwartet if not _has_zaehler(felder.get(f))]
+            fehlend = [
+                " oder ".join(alts)
+                for alts in erwartet
+                if not any(_has_zaehler(felder.get(f)) for f in alts)
+            ]
 
             if fehlend:
                 fehlend_pro_komponente.append((inv.bezeichnung, inv.typ, fehlend))
