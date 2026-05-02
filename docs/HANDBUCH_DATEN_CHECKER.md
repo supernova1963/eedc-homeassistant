@@ -20,8 +20,9 @@
    4. [Monatsdaten – Vollständigkeit](#44-monatsdaten--vollstaendigkeit)
    5. [Monatsdaten – Plausibilität](#45-monatsdaten--plausibilitaet)
    6. [Energieprofil – Zähler-Abdeckung](#46-energieprofil--zaehler-abdeckung)
-   7. [MQTT-Topic-Abdeckung](#47-mqtt-topic-abdeckung)
-   8. [Sensor-Mapping – HA-Statistics](#48-sensor-mapping--ha-statistics)
+   7. [Energieprofil – Plausibilität](#47-energieprofil--plausibilitaet)
+   8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
+   9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -69,14 +70,14 @@ Jeder Befund hat genau eine von vier Schweregraden. Sie sind nicht zu addieren �
 
 Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Aktuell:
 
-- **Counter-Sensoren ohne `state_class`** wurden in v3.24.3 von INFO → WARNING hochgestuft, weil ohne `state_class` die Korrektur-Werkzeuge in der Datenverwaltung nicht greifen (vorher beruhigend als „Snapshot-Service erfasst's trotzdem" beschrieben). Siehe §4.8.
+- **Counter-Sensoren ohne `state_class`** wurden in v3.24.3 von INFO → WARNING hochgestuft, weil ohne `state_class` die Korrektur-Werkzeuge in der Datenverwaltung nicht greifen (vorher beruhigend als „Snapshot-Service erfasst's trotzdem" beschrieben). Siehe §4.9.
 - **Kategorien werden still übersprungen**, wenn ihre technische Voraussetzung fehlt (HA-LTS nicht erreichbar, MQTT-Inbound nicht aktiviert) — du siehst dann gar keine Befunde dieser Kategorie, nicht „OK".
 
 ---
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-Zwei Kategorien hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht. Die anderen sechs sind variantenneutral und greifen identisch.
+Zwei Kategorien hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht. Die anderen sieben sind variantenneutral und greifen identisch.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -86,23 +87,24 @@ Zwei Kategorien hängen an Voraussetzungen, die je nach Installation gegeben sin
 | 4 | Monatsdaten – Vollständigkeit | greift | greift |
 | 5 | Monatsdaten – Plausibilität | greift | greift |
 | 6 | Energieprofil – Zähler-Abdeckung | greift (Mapping zu HA-Entitäten `sensor.…`) | greift (Mapping zu MQTT-Topics) |
-| 7 | MQTT-Topic-Abdeckung | nur wenn MQTT-Inbound aktiv | nur wenn MQTT-Inbound aktiv |
-| 8 | Sensor-Mapping – HA-Statistics | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
+| 7 | Energieprofil – Plausibilität | greift | greift |
+| 8 | MQTT-Topic-Abdeckung | nur wenn MQTT-Inbound aktiv | nur wenn MQTT-Inbound aktiv |
+| 9 | Sensor-Mapping – HA-Statistics | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 
 ### Was bedeutet „wird übersprungen"?
 
 - **Stiller Skip:** Die Kategorie erscheint gar nicht in der Ergebnisliste — keine Sektion, keine Meldung. So bleibt die Übersicht für Nicht-Betroffene aufgeräumt.
-  - *MQTT-Topic-Abdeckung* (§4.7) bei nicht aktiviertem MQTT-Inbound.
-  - *Sensor-Mapping HA-Statistics* (§4.8) wenn kein Sensor-Mapping vorhanden.
+  - *MQTT-Topic-Abdeckung* (§4.8) bei nicht aktiviertem MQTT-Inbound.
+  - *Sensor-Mapping HA-Statistics* (§4.9) wenn kein Sensor-Mapping vorhanden.
 - **INFO-Skip:** Die Kategorie erscheint mit einem einzelnen INFO-Eintrag, der den Grund des Überspringens erklärt.
-  - *Sensor-Mapping HA-Statistics* (§4.8) bei Standalone, weil HA-Long-Term-Statistics nicht erreichbar sind.
-  - *MQTT-Topic-Abdeckung* (§4.7) wenn MQTT-Inbound aktiviert ist, der Subscriber aber nicht läuft.
+  - *Sensor-Mapping HA-Statistics* (§4.9) bei Standalone, weil HA-Long-Term-Statistics nicht erreichbar sind.
+  - *MQTT-Topic-Abdeckung* (§4.8) wenn MQTT-Inbound aktiviert ist, der Subscriber aber nicht läuft.
 
 ### Beziehung zu Sensor-Mapping und Datenquellen
 
-Im **HA Add-on** liefern Sensoren ihre Werte über zwei Kanäle: den aktuellen Zustand (`state`, für Live-Anzeigen) und Long-Term-Statistics (LTS, für Monatswerte und Korrektur-Werkzeuge). Kategorie 8 prüft, ob beide Kanäle für die im Mapping verwendeten Sensoren verfügbar sind.
+Im **HA Add-on** liefern Sensoren ihre Werte über zwei Kanäle: den aktuellen Zustand (`state`, für Live-Anzeigen) und Long-Term-Statistics (LTS, für Monatswerte und Korrektur-Werkzeuge). Kategorie 9 prüft, ob beide Kanäle für die im Mapping verwendeten Sensoren verfügbar sind.
 
-Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topics) oder Connector-Pulls. HA-LTS gibt es nicht; dafür greift Kategorie 7, die die MQTT-Topic-Abdeckung gegen die `field_definitions.py`-Erwartung prüft. Beide Kategorien lösen dasselbe Grundproblem („Mapping passt nicht zur Realität") in der jeweiligen Welt.
+Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topics) oder Connector-Pulls. HA-LTS gibt es nicht; dafür greift Kategorie 8, die die MQTT-Topic-Abdeckung gegen die `field_definitions.py`-Erwartung prüft. Beide Kategorien lösen dasselbe Grundproblem („Mapping passt nicht zur Realität") in der jeweiligen Welt.
 
 ---
 
@@ -298,11 +300,30 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **Basis-Zähler (Einspeisung + Netzbezug) gemappt** | ✅ OK | Beide Basis-Zähler im Mapping vorhanden. | – |
 | **Alle N aktiven Komponenten haben kWh-Zähler gemappt** | ✅ OK | Alle aktiven Komponenten mit erwarteten Zählern sind vollständig gemappt. | – |
 
-> **Hinweis:** Diese Kategorie prüft nur das **Vorhandensein** des Mappings — ob der Zähler tatsächlich Daten liefert, prüft §4.7 (MQTT-Topic-Abdeckung) bzw. §4.8 (Sensor-Mapping HA-Statistics).
+> **Hinweis:** Diese Kategorie prüft nur das **Vorhandensein** des Mappings — ob der Zähler tatsächlich Daten liefert, prüft §4.8 (MQTT-Topic-Abdeckung) bzw. §4.9 (Sensor-Mapping HA-Statistics). Plausibilität der bereits aggregierten Stundenwerte (Counter-Spikes durch Update-Restarts) erfasst §4.7.
 
 ---
 
-### 4.7 MQTT-Topic-Abdeckung
+### 4.7 Energieprofil – Plausibilität <a name="47-energieprofil--plausibilitaet"></a>
+
+> **Variantenhinweis:** Diese Kategorie greift in beiden Varianten identisch — sie liest ausschließlich die bereits gespeicherten Stundenwerte des `tages_energie_profil`.
+
+**Was wird geprüft:** Enthält das Tagesprofil der letzten 30 Tage Stundenwerte, die physikalisch unmöglich sind? Konkret: `pv_kw` oder `einspeisung_kw` größer als die Anlagen-Nennleistung × 1.5. Tritt typischerweise nach Update-Restarts während des Tages auf, wenn der Counter-Snapshot-Service einen verzerrten kumulativen Wert speichert (z. B. der `get_value_at`-Off-by-one-Bug aus Befund 2026-05-01, behoben in v3.25.10).
+
+**Schwelle:** `Anlagen-kWp × 1.5`. Eine eindeutige Wahnschwelle — eine Aufdach-PV-Anlage erzeugt selbst bei optimalem Sonnenstand nicht mehr als ~1500 W pro kWp. Werte darüber sind keine Naturereignisse, sondern Rechen-/Snapshot-Artefakte.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **Counter-Spike am YYYY-MM-DD: N Stundenwert(e) > X kW** | ⚠️ WARNING | Ein einzelner Tag enthält mindestens eine Stunde, deren `pv_kw` oder `einspeisung_kw` über der Wahnschwelle liegt. Detail-Liste nennt Stunde und Wert. | Im Tages-Energieprofil-Tab das Reload-Symbol rechts neben dem betroffenen Tag klicken („Tag neu aggregieren"). Seit v3.25.x repariert dieser Klick zuerst die SensorSnapshots aus HA-Statistics und baut danach das Aggregat neu — beides in einem Schritt. Bei mehreren betroffenen Tagen alternativ in *Einstellungen → Energieprofil → Datenverwaltung* den Knopf *„Verlauf nachberechnen"* mit aktiviertem Überschreiben nutzen. |
+| **Keine Counter-Spikes in den letzten 30 Tagen** | ✅ OK | Alle Stundenwerte liegen innerhalb der physikalisch plausiblen Bandbreite. | – |
+
+> **Hinweis:** Ältere Tage (> 30 Tage) werden nicht geprüft, weil dort entweder bereits korrigierte Werte stehen oder sie für die aktuelle Lernfaktor-Basis nicht mehr relevant sind. Wer ältere Tage trotzdem reparieren will, nutzt *„Verlauf nachberechnen"* mit Überschreiben — das Werkzeug greift bis zur HA-LTS-Reichweite zurück.
+
+---
+
+### 4.8 MQTT-Topic-Abdeckung <a name="48-mqtt-topic-abdeckung"></a>
 
 > **Variantenhinweis:** Diese Kategorie greift in beiden Varianten — aber **nur**, wenn der Nutzer MQTT-Inbound bewusst aktiviert hat (Daten → Einrichtung → MQTT-Inbound). Ohne aktivierten Inbound wird die Kategorie still übersprungen, damit Anwender ohne MQTT sie gar nicht erst sehen.
 
@@ -328,9 +349,9 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 ---
 
-### 4.8 Sensor-Mapping – HA-Statistics <a name="48-sensor-mapping--ha-statistics"></a>
+### 4.9 Sensor-Mapping – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 
-> **Variantenhinweis:** Diese Kategorie greift nur im **HA Add-on**. Im Standalone-Betrieb gibt es keine HA-Long-Term-Statistics; ein eventuell vorhandener INFO-Befund weist auf den Skip hin. Funktional wird die analoge Drift-Erkennung im Standalone-Betrieb über §4.7 *MQTT-Topic-Abdeckung* abgedeckt.
+> **Variantenhinweis:** Diese Kategorie greift nur im **HA Add-on**. Im Standalone-Betrieb gibt es keine HA-Long-Term-Statistics; ein eventuell vorhandener INFO-Befund weist auf den Skip hin. Funktional wird die analoge Drift-Erkennung im Standalone-Betrieb über §4.8 *MQTT-Topic-Abdeckung* abgedeckt.
 
 **Was wird geprüft:** Liefert jeder im Sensor-Mapping verwendete Sensor tatsächlich Long-Term-Statistics nach Home Assistant? Sensoren ohne `state_class` haben keine LTS-Einträge und damit greifen die **Korrektur-Werkzeuge in der Datenverwaltung** (Vollbackfill, *Verlauf nachrechnen*, Per-Tag-Reaggregation) nicht — sie lesen alle aus HA-LTS. Live-Anzeigen funktionieren weiter (über `state`), aber jeder Aussetzer im Snapshot-Pfad ist permanent verloren, weil er nicht aus LTS nachgeholt werden kann.
 
@@ -353,7 +374,7 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
 
 ### 5.1 `state_class`-Probleme bei HA-Sensoren beheben
 
-**Symptom:** Befunde aus §4.8 *„kWh-Sensor(en) nicht in HA-Long-Term-Statistics"* oder *„Counter-Sensor(en) ohne state_class"*.
+**Symptom:** Befunde aus §4.9 *„kWh-Sensor(en) nicht in HA-Long-Term-Statistics"* oder *„Counter-Sensor(en) ohne state_class"*.
 
 **Ursache:** HA legt für einen Sensor erst dann Long-Term-Statistics an, wenn dessen Attribut `state_class` gesetzt ist. Typisch sind kumulative Zähler ohne diese Metadata bei Modbus-Roh-Werten oder Hersteller-Integrationen.
 
@@ -389,7 +410,7 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
 5. Wizard durchlaufen und speichern.
 6. Daten-Checker erneut prüfen.
 
-> **Hinweis:** Wenn dir kein passender kWh-Sensor angezeigt wird, ist er möglicherweise vom Filter ausgeschlossen. v3.24.1 hat einen Fallback-Link „Alle Sensoren ohne Filter anzeigen" eingeführt — siehe [HANDBUCH_EINSTELLUNGEN.md §3.6](HANDBUCH_EINSTELLUNGEN.md#3-sensor-mapping). Vorsicht: Sensoren ohne Standard-Metadata führen dann zu §4.8-Befunden — siehe Workflow 5.1.
+> **Hinweis:** Wenn dir kein passender kWh-Sensor angezeigt wird, ist er möglicherweise vom Filter ausgeschlossen. v3.24.1 hat einen Fallback-Link „Alle Sensoren ohne Filter anzeigen" eingeführt — siehe [HANDBUCH_EINSTELLUNGEN.md §3.6](HANDBUCH_EINSTELLUNGEN.md#3-sensor-mapping). Vorsicht: Sensoren ohne Standard-Metadata führen dann zu §4.9-Befunden — siehe Workflow 5.1.
 
 ### 5.3 Monatsdaten-Lücken aufholen
 
@@ -400,24 +421,24 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
 | Anzahl fehlender Monate | Empfohlener Weg |
 |------------------------|-----------------|
 | 1–3 Monate | Monatsabschluss-Wizard pro Monat (Klick auf den „Beheben"-Link führt direkt dorthin). |
-| 4+ Monate, HA-Add-on | HA-Statistik-Import nutzen — holt mehrere Monate aus HA-LTS auf einmal. Siehe [HANDBUCH_EINSTELLUNGEN.md §4](HANDBUCH_EINSTELLUNGEN.md#4-ha-statistik-import). Voraussetzung: §4.8 ist OK (state_class gesetzt). |
+| 4+ Monate, HA-Add-on | HA-Statistik-Import nutzen — holt mehrere Monate aus HA-LTS auf einmal. Siehe [HANDBUCH_EINSTELLUNGEN.md §4](HANDBUCH_EINSTELLUNGEN.md#4-ha-statistik-import). Voraussetzung: §4.9 ist OK (state_class gesetzt). |
 | Bestehende Daten aus anderem System | CSV-Import in Einstellungen → Daten → Import (Template via Download-Link auf der Importseite). |
 
 Nach jedem Schritt: Daten-Checker erneut prüfen.
 
 ### 5.4 MQTT-Drift zwischen Publisher und EEDC schließen
 
-**Symptom:** Befunde aus §4.7 *„N MQTT-Topic(s) erwartet, nie empfangen"* nach einem Re-Import oder neuer Komponente.
+**Symptom:** Befunde aus §4.8 *„N MQTT-Topic(s) erwartet, nie empfangen"* nach einem Re-Import oder neuer Komponente.
 
 **Lösung:**
 
-1. Daten-Checker → §4.7 öffnen, betroffene Topics notieren — sie enthalten typischerweise eine Investitions-ID, die nach dem Re-Import neu vergeben wurde.
+1. Daten-Checker → §4.8 öffnen, betroffene Topics notieren — sie enthalten typischerweise eine Investitions-ID, die nach dem Re-Import neu vergeben wurde.
 2. Publisher-Quelle öffnen (HA-Automation YAML, ioBroker Skript, Node-RED Flow).
 3. Investitions-IDs in den Topic-Pfaden anpassen — die neuen IDs findest du in EEDC unter Einstellungen → Investitionen am jeweiligen Komponenten-Eintrag.
 4. Publisher neu starten / Automation reloaden.
 5. 2 Minuten warten (Live-Topics) bzw. 10 Minuten (Energy-Topics), dann Daten-Checker erneut prüfen.
 
-> **Vorbeugend:** Nach jedem Re-Import einer Anlage einmal §4.7 prüfen — dort wird Drift sofort sichtbar.
+> **Vorbeugend:** Nach jedem Re-Import einer Anlage einmal §4.8 prüfen — dort wird Drift sofort sichtbar.
 
 ### 5.5 Plausibilitäts-WARNINGs bewerten
 
@@ -429,6 +450,27 @@ Nach jedem Schritt: Daten-Checker erneut prüfen.
 2. Eingabefehler ausschließen: Komma vs. Punkt, Faktor 10, Vorzeichen, Verwechslung Einspeisung/Bezug.
 3. Wenn Werte korrekt sind: WARNING als „zur Kenntnis genommen" akzeptieren — der Daten-Checker hat keine Snooze-Funktion, der Hinweis bleibt sichtbar.
 4. Bei Energiebilanz-ERRORs: zuerst Batterie-Daten vervollständigen, dann erneut prüfen — fehlende Batteriewerte sind die häufigste Ursache.
+
+---
+
+### 5.6 Counter-Spike im Tagesprofil reparieren
+
+**Symptom:** Befunde aus §4.7 *„Counter-Spike am YYYY-MM-DD: N Stundenwert(e) > X kW"*. Tritt vor allem nach Update-Restarts während des Tages auf, wenn der Snapshot-Service einen verzerrten kumulativen Counter-Wert aufnimmt.
+
+**Vorgehen für einen einzelnen Tag:**
+
+1. *Aussichten → Energieprofil* öffnen, in der Tages-Tabelle den betroffenen Tag suchen.
+2. Auf das grüne Reload-Symbol rechts in der Zeile klicken (*„Tag X neu aggregieren"*).
+3. Dialog bestätigen — der Endpoint zieht zuerst die SensorSnapshots des Tages frisch aus HA-Statistics (Resnap mit korrigiertem `get_value_at`) und baut danach Tagesprofil + Tageszusammenfassung neu.
+4. Tabelle aktualisiert sich; der Spike ist weg, vorausgesetzt der zugrunde liegende kWh-Zähler hat den fraglichen Stundenslot in HA-LTS plausibel.
+
+**Vorgehen für mehrere Tage / längere Bereiche:**
+
+1. *Einstellungen → Energieprofil → Datenverwaltung* öffnen.
+2. Checkbox *„Bestehende Tage überschreiben"* aktivieren.
+3. *„Verlauf nachberechnen"* klicken. Resnap der gesamten Range + Aggregat-Neuaufbau in einem Schritt. Kann bei mehreren Monaten Bestand einige Minuten dauern.
+
+> **Hinweis:** Tage **löschen** ist *keine* sinnvolle Reparaturstrategie. Eine gelöschte Lerngrundlage kostet die Solarprognose den saisonalen Lernfaktor (Memory: Monatsfaktor ≥ 15 Tage), und der eigentliche Defekt sitzt im Snapshot-Cache, nicht in den HA-LTS-Werten. Resnap holt die Daten zurück — Löschen tut das nicht.
 
 ---
 
@@ -445,19 +487,20 @@ Der Daten-Checker ist Diagnose, nicht Behebung. Er **zeigt** Probleme und verlin
 | §4.4 Vollständigkeit | Monatsabschluss-Wizard (Einzelmonat), HA-Statistik-Import (Bulk), CSV-Import |
 | §4.5 Plausibilität | Monatsabschluss-Wizard (Einzelmonat), bei Sensor-Drift: Connector / Sensor-Mapping prüfen |
 | §4.6 Energieprofil-Zähler | Sensor-Mapping-Wizard |
-| §4.7 MQTT-Topic-Abdeckung | Externe Publisher-Quelle (HA-Automation YAML, ioBroker, Node-RED), MQTT-Inbound-Einstellungen |
-| §4.8 Sensor-Mapping HA-Statistics | HA-`customize.yaml` (state_class), Sensor-Mapping-Wizard (alternativen Sensor wählen) |
+| §4.7 Energieprofil-Plausibilität | „Tag neu aggregieren" oder „Verlauf nachberechnen" mit Überschreiben (zieht Snapshots frisch + baut Aggregate neu) |
+| §4.8 MQTT-Topic-Abdeckung | Externe Publisher-Quelle (HA-Automation YAML, ioBroker, Node-RED), MQTT-Inbound-Einstellungen |
+| §4.9 Sensor-Mapping HA-Statistics | HA-`customize.yaml` (state_class), Sensor-Mapping-Wizard (alternativen Sensor wählen) |
 
 ### Korrektur-Werkzeuge in der Datenverwaltung
 
-Diese Werkzeuge laufen nicht aus dem Daten-Checker heraus, sondern unter Einstellungen → Daten → Datenverwaltung. Sie greifen aber **nur**, wenn die Voraussetzungen aus §4.8 erfüllt sind (Sensoren in HA-Long-Term-Statistics):
+Diese Werkzeuge laufen nicht aus dem Daten-Checker heraus, sondern unter Einstellungen → Daten → Datenverwaltung. Sie greifen aber **nur**, wenn die Voraussetzungen aus §4.9 erfüllt sind (Sensoren in HA-Long-Term-Statistics):
 
 | Werkzeug | Zweck | Voraussetzung |
 |---------|-------|---------------|
-| **Vollbackfill** | Holt rückwirkend alle stündlichen Snapshots aus HA-LTS für gemappte kWh-Felder. | §4.8 OK für betroffene Sensoren |
-| **Verlauf nachrechnen** | Reaggregiert Tages- und Monatswerte aus den vorhandenen Stunden-Snapshots. Erfasst keine neuen Daten, sortiert vorhandene neu. | §4.8 OK |
-| **Per-Tag-Reaggregation** | Wie *Verlauf nachrechnen*, aber nur für einen ausgewählten Tag (Selbsthilfe-Knopf in der Tages-Tabelle der Energieprofil-Seite). | §4.8 OK |
-| **Kraftstoffpreis-Backfill** | Holt EU-Oil-Bulletin-Preise für E-Auto- und Verbrenner-Vergleich rückwirkend. | unabhängig von §4.8 |
+| **Vollbackfill** | Holt rückwirkend alle stündlichen Snapshots aus HA-LTS für gemappte kWh-Felder (Initial-Befüllung historischer Bereiche). | §4.9 OK für betroffene Sensoren |
+| **Verlauf nachrechnen** (Vollbackfill mit Überschreiben) | Schreibt Snapshots des Bereichs aus HA-LTS frisch (Resnap mit korrigiertem `get_value_at`-Pfad) **und** baut Tages-/Monats-Aggregate neu. Repariert Counter-Spikes wie aus §4.7. | §4.9 OK |
+| **Tag neu aggregieren** (Per-Tag-Reaggregation) | Wie *Verlauf nachrechnen*, aber für einen ausgewählten Tag (grünes Reload-Symbol in der Tages-Tabelle). Seit v3.25.x ebenfalls mit Resnap-Vorlauf. | §4.9 OK |
+| **Kraftstoffpreis-Backfill** | Holt EU-Oil-Bulletin-Preise für E-Auto- und Verbrenner-Vergleich rückwirkend. | unabhängig von §4.9 |
 
 > **Wichtig:** Wenn §4.8 für einen Sensor WARNING meldet, sind die ersten drei Werkzeuge für diesen Sensor wirkungslos — sie lesen alle aus HA-LTS, die für state_class-lose Sensoren leer ist. Erst §4.8 beheben, dann Korrektur-Werkzeuge laufen lassen.
 
