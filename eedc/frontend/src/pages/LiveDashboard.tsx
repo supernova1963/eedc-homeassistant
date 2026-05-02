@@ -247,9 +247,11 @@ export default function LiveDashboard() {
       {/* Dashboard Content */}
       {!loading && data?.verfuegbar && (
         <div className="space-y-4">
-          {/* Zeile 1: Energiebilanz (2/3) + Zustandswerte (1/3) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
+          {/* Zeile 1: Energiebilanz (2/3) + Zustandswerte (1/3).
+              Side-by-Side erst ab xl (≥1280px) — bei lg-Breite (1024–1280) führt
+              die hohe Heute-Box zu Aspect-Lücken im Energiefluss-SVG (#164 detLAN). */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
               <EnergieFluss
                 komponenten={data.komponenten}
                 summeErzeugung={data.summe_erzeugung_kw}

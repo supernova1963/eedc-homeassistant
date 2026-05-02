@@ -619,7 +619,9 @@ function EnergieFlussBackground({
             )
 
             return (
-              <>
+              // Border-Radius der Tile auf alle Effekt-Layer ziehen — die inneren
+              // sky/sea-Clips schneiden nur Himmel/Meer, nicht die Tile-Ecken.
+              <g clipPath="url(#ef-photo-clip)">
                 {/* Light Mode */}
                 <g mask="url(#ef-grid-mask-s)" className="opacity-100 dark:opacity-0">
                   {renderGrid('#c47820', '#c05808', '#c47820', '#c05808', '#8b1a50', '#0e6070', '#0e6070', '#c47820')}
@@ -628,7 +630,7 @@ function EnergieFlussBackground({
                 <g mask="url(#ef-grid-mask-s)" className="opacity-0 dark:opacity-100">
                   {renderGrid('#ffd700', '#ff8c00', '#ffd700', '#ff8c00', '#ec4899', '#c47310', '#c47310', '#ffd700')}
                 </g>
-              </>
+              </g>
             )
           })()}
 
@@ -642,7 +644,8 @@ function EnergieFlussBackground({
               return { ex: sunX + Math.cos(angle) * farR, ey: sunY + Math.sin(angle) * farR, isMajor: i % 3 === 0 }
             })
             return (
-              <>
+              // Border-Radius der Tile auf alle Effekt-Layer ziehen (analog Sunset).
+              <g clipPath="url(#ef-photo-clip)">
                 {/* Light: goldene Sonnenstrahlen */}
                 <g mask="url(#ef-alps-mask)" className="opacity-100 dark:opacity-0">
                   {rays.map(({ ex, ey, isMajor }, i) => (
@@ -688,7 +691,7 @@ function EnergieFlussBackground({
                       clipPath="url(#ef-alps-sky-clip)" />
                   ))}
                 </g>
-              </>
+              </g>
             )
           })()}
 
