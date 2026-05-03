@@ -261,7 +261,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             value={fmtKpi(z.cop_heizen, 2)}
             icon={Thermometer}
             color="orange"
-            formel="JAZ Heizen = Heizenergie ÷ Strom Heizen"
+            formel="JAZ Heizen = Heizwärme ÷ Strom Heizen"
             berechnung={`${z.gesamt_heizung_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
             ergebnis={z.cop_heizen ? `= ${z.cop_heizen.toFixed(2)}` : '---'}
           />

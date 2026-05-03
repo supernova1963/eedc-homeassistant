@@ -165,8 +165,10 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Strom_Warmwasser_kWh",
         },
         # Immer vorhanden:
+        # #120: Wording-Schaerfung — abgegebene thermische Waerme, nicht Strom.
+        # CSV-Suffix bleibt fuer Backwards-Kompat unveraendert.
         {
-            "feld": "heizenergie_kwh", "label": "Heizenergie", "einheit": "kWh",
+            "feld": "heizenergie_kwh", "label": "Heizwärme", "einheit": "kWh",
             "csv_suffix": "Heizung_kWh",
         },
         {

@@ -57,7 +57,7 @@ export default function WaermepumpeStep({
     {
       value: 'sensor',
       label: 'Wärmemengenzähler',
-      description: 'Direkte Messung der Heizenergie',
+      description: 'Direkte Messung der abgegebenen Heizwärme (thermisch)',
     },
     {
       value: 'cop_berechnung',
@@ -75,7 +75,7 @@ export default function WaermepumpeStep({
     {
       value: 'sensor',
       label: 'Wärmemengenzähler',
-      description: 'Separater Sensor für Warmwasser',
+      description: 'Separater Sensor für Warmwasser-Wärme (thermisch)',
     },
     {
       value: 'cop_berechnung',
@@ -85,7 +85,7 @@ export default function WaermepumpeStep({
     {
       value: 'keine',
       label: 'Nicht separat erfassen',
-      description: 'Warmwasser ist in Heizenergie enthalten',
+      description: 'Warmwasser ist in Heizwärme enthalten',
     },
   ]
 
@@ -105,10 +105,10 @@ export default function WaermepumpeStep({
   return (
     <div className="space-y-6">
       <Alert type="info" title="JAZ-basierte Berechnung">
-        Wenn kein Wärmemengenzähler vorhanden ist, wird die Heizenergie aus dem
-        Stromverbrauch und der JAZ (Jahresarbeitszahl) berechnet:
-        Heizenergie = Stromverbrauch × JAZ. Die JAZ stammt aus den
-        Investitions-Parametern.
+        Wenn kein Wärmemengenzähler vorhanden ist, wird die abgegebene
+        Heizwärme (thermisch) aus dem Stromverbrauch (elektrisch) und der JAZ
+        (Jahresarbeitszahl) berechnet: Heizwärme = Stromverbrauch × JAZ. Die
+        JAZ stammt aus den Investitions-Parametern.
       </Alert>
 
       {investitionen.map(inv => (
@@ -163,9 +163,10 @@ export default function WaermepumpeStep({
               />
             )}
 
-            {/* Heizenergie */}
+            {/* Heizwärme (#120: Wording-Schaerfung — abgegebene thermische Energie,
+                nicht Strom; rcmcronny verwechselte „Heizenergie" mit Strom) */}
             <FeldMappingInput
-              label="Heizenergie"
+              label="Heizwärme"
               einheit="kWh"
               value={mappings[inv.id.toString()]?.heizenergie_kwh || null}
               onChange={mapping => onChange(inv.id, 'heizenergie_kwh', mapping)}

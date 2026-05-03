@@ -43,12 +43,22 @@ const SPEICHER_FELDER: FeldDefinition[] = [
   { feld: 'speicher_ladepreis_cent', label: 'Ø Ladepreis', einheit: 'ct/kWh', bedingung: 'arbitrage_faehig' },
 ]
 
+// #120: Wording-Schaerfung — Strom (elektrisch) vs. Waerme (thermisch).
+// rcmcronny meldete 2026-04-13, dass „Heizenergie" mit Stromverbrauch
+// verwechselt wird → COP=1 verraet das, ist aber nicht selbsterklaerend.
+// „Heizwaerme" + Tooltip macht klar, dass es die abgegebene Waermemenge
+// (z.B. von einem Waermemengenzaehler) ist, nicht der WP-Strom.
 const WAERMEPUMPE_FELDER: FeldDefinition[] = [
-  { feld: 'stromverbrauch_kwh',   label: 'Stromverbrauch',   einheit: 'kWh', bedingung: '!getrennte_strommessung' },
-  { feld: 'strom_heizen_kwh',     label: 'Strom Heizen',     einheit: 'kWh', bedingung: 'getrennte_strommessung'  },
-  { feld: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', einheit: 'kWh', bedingung: 'getrennte_strommessung'  },
-  { feld: 'heizenergie_kwh',      label: 'Heizenergie',      einheit: 'kWh' },
-  { feld: 'warmwasser_kwh',       label: 'Warmwasser',       einheit: 'kWh' },
+  { feld: 'stromverbrauch_kwh',   label: 'Stromverbrauch',   einheit: 'kWh', bedingung: '!getrennte_strommessung',
+    hint: 'Stromaufnahme der WP (elektrisch)' },
+  { feld: 'strom_heizen_kwh',     label: 'Strom Heizen',     einheit: 'kWh', bedingung: 'getrennte_strommessung',
+    hint: 'Stromaufnahme nur für Heizung (elektrisch)' },
+  { feld: 'strom_warmwasser_kwh', label: 'Strom Warmwasser', einheit: 'kWh', bedingung: 'getrennte_strommessung',
+    hint: 'Stromaufnahme nur für Warmwasser (elektrisch)' },
+  { feld: 'heizenergie_kwh',      label: 'Heizwärme',        einheit: 'kWh',
+    hint: 'Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom' },
+  { feld: 'warmwasser_kwh',       label: 'Warmwasser',       einheit: 'kWh',
+    hint: 'Abgegebene Warmwasser-Wärme (thermisch)' },
 ]
 
 const EAUTO_FELDER: FeldDefinition[] = [

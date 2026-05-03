@@ -42,7 +42,7 @@ const FIELD_LABEL_OVERRIDES: Record<string, string> = {
   stromverbrauch_kwh: 'Stromverbrauch (kWh)',
   strom_heizen_kwh: 'Strom Heizen (kWh)',
   strom_warmwasser_kwh: 'Strom Warmwasser (kWh)',
-  heizenergie_kwh: 'Heizenergie (kWh)',
+  heizenergie_kwh: 'Heizwärme (kWh)',
   warmwasser_kwh: 'Warmwasser (kWh)',
   wp_starts_anzahl: 'Kompressor-Starts',
   ladevorgaenge: 'Ladevorgänge',
