@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.15] - 2026-05-03
+
+> ✨ **UX: Vor/Zurück-Pfeile im Tagesdetail-Datum-Picker** — Kleinstrelease mit einem detLAN-Item (#181). Die Symmetrie zwischen Monats- und Tagesdetail-Ansicht ist jetzt hergestellt.
+
+### Added
+
+- **Vor/Zurück-Pfeile im Tagesdetail-Datum-Picker (#181 detLAN)** — Auswertungen → Energieprofil → Tagesdetail bekommt links und rechts vom Datums-Eingabefeld jeweils einen Chevron-Button (`<` / `>`), analog zur bereits bestehenden Monats-Ansicht (`EnergieprofilMonat.tsx`). Folgetag-Button ist disabled, sobald gestern erreicht ist (heute hat noch keinen abgeschlossenen Energieprofil-Tag). Helper `tagVerschieben(iso, n)` lokal im Tab. Pattern 1:1 von der Monats-Ansicht übernommen — gleiche Tailwind-Klassen, gleiche Aria-Labels, gleiches Disabled-Verhalten.
+
+---
+
 ## [3.25.14] - 2026-05-03
 
 > 🩹 **Forum-Bündel: Counter-Doppelzählung + UI-Polish + WP-Wording** — Eine Wert-Korrektur (WP-Kompressor-Starts Σ Lebensdauer wuchs im Tagesverlauf zu hoch, detLAN-Folgebefund aus #173), zwei UI-Bug-Bündel (Großschreibung / Sortierung / Truncation in Sensor-Zuordnung & MQTT-Export, detLAN #180 + #179) und eine seit April fällige Wording-Schärfung (Heizenergie → Heizwärme + Tooltips, rcmcronny #120).
