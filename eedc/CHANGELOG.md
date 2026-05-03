@@ -7,6 +7,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.16] - 2026-05-03
+
+> 🧹 **Aufräumen statt nachschärfen: WP-Kompressor-Starts ohne Selbstkalibrierung** — detLAN-Folge-Beobachtung nach v3.25.14: Cockpit zeigte 146 statt 134 Starts (+12 Drift), Monatsbericht Mai 112. Statt die Eichungs-Logik (`baseline = sensor.gesamt − Σ TZ < heute` + heute_live-Hochrechnung) noch eine Iteration nachzuschärfen, fliegt sie ganz raus. Σ Lebensdauer im Cockpit kommt direkt aus dem Hersteller-Sensor — Punkt. Drift gegenüber den EEDC-erfassten Tagesinkrementen wird nicht mehr maskiert, sondern bleibt zwischen den Anzeigen sichtbar.
+
+### Changed
+
+- **WP Σ Lebensdauer = Hersteller-Counter direkt (#173 detLAN)** — Cockpit-Aggregation `get_waermepumpe_dashboard` liest den Lebensdauer-Stand jetzt direkt aus dem Hersteller-Sensor (HA-State → HA-Statistics → jüngster Snapshot als Fallback). Keine Wizard-Save-Eichung mehr, keine Live-Hochrechnung, keine Race-Möglichkeit zwischen Save-Zeitpunkt und Aggregations-Job um 00:15. Neuer schlanker Helper `get_counter_lifetime` in `sensor_snapshot_service.py` ersetzt `compute_counter_baseline` + `get_counter_today_live`. `_refresh_counter_baselines` aus `sensor_mapping.py` ebenfalls entfernt — der Wizard-Save schreibt keine Counter-Baselines mehr.
+- **Monatsbericht „Aktueller Monat" zeigt ehrlich was EEDC erfasst hat** — `wp_starts_summe_monat` ist jetzt schlicht `Σ TZ Mai`, kein Live-Add-on für den heutigen Tag mehr. Wenn diese Summe vom Hersteller-Counter abweicht, ist das in der Anzeige sichtbar (Cockpit zeigt Hersteller-Wahrheit, Monatsbericht zeigt EEDC-Erfassung) — Diagnose ohne Magic.
+- **Tooltip im Cockpit auf eine Zeile geschrumpft** — „Aus Hersteller-Sensor (Lebensdauer-Counter)" + Höchste Tagessumme. Drei-Anteile-Aufschlüsselung (Baseline + abgeschlossene Tage + heute live) entfällt, da die zugrundeliegende Berechnung weg ist.
+
+### Migration
+
+- Alte `wp_starts_anzahl_baseline*`-Felder in `Investition.parameter` bleiben in der DB stehen (Deprecated-Regel), werden vom neuen Code nicht mehr gelesen. Keine Migration nötig.
+- detLAN-Heilung nach Update: Cockpit zeigt sofort Hersteller-Wahrheit (134 statt 146). Falls Mai-Bericht weiter zu hoch erscheint und das nicht der tatsächlichen Schalthäufigkeit entspricht, einzelne Tage in Auswertungen → Energieprofil → Tagesdetail über das Reload-Symbol neu aggregieren.
+
+### Internal
+
+- **Lesson learned: keine Selbstkalibrierung gegen instabile Aggregate** — Die `compute_counter_baseline`-Konstruktion (Eichung an einem Punkt, Aktualisierung der Σ über Zeit) hatte zwischen v3.25.13 und v3.25.15 drei verschiedene Drift-Symptome produziert (Wizard-Save-Persistierung, Tagesverlaufs-Doppelzählung, Aggregations-Drift um 00:15). Der vierte Iterations-Versuch wäre vermutlich auch wieder eine Krücke gewesen. Der direkte Hersteller-Read braucht keine Selbstkorrektur, weil er keine Berechnung kennt — der Sensor selbst ist die Wahrheit. Netto −237 Zeilen Code.
+
+---
+
 ## [3.25.15] - 2026-05-03
 
 > ✨ **UX: Vor/Zurück-Pfeile im Tagesdetail-Datum-Picker** — Kleinstrelease mit einem detLAN-Item (#181). Die Symmetrie zwischen Monats- und Tagesdetail-Ansicht ist jetzt hergestellt.
