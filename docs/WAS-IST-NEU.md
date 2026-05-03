@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.17)
+> **Stand:** Mai 2026 (v3.25.18)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,14 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Tagesdetail erreicht heute, Lade-Indikator ohne Flash, Wallbox vor E-Auto *(v3.25.18)*
+
+> ✨ **Drei kleine Feinschliffe** — Auswertungen → Energieprofil → Tagesdetail blättert mit den Pfeilen jetzt bis einschließlich heute (rollierend aktualisiert, vorher endete bei gestern). Der `Lade…`-Hinweis am Datums-Picker erscheint nur noch, wenn der Fetch länger als 250 ms braucht — auf schnellen Rechnern damit kein Aufploppen-und-Weg-Flash, auf langsamen Geräten weiterhin sichtbares Feedback.
+>
+> Reihenfolge im Sensor-Mapping-Wizard und allen abhängigen Stellen: Wallbox steht jetzt direkt nach der Wärmepumpe, das E-Auto kommt danach. Konsistent zum Cockpit-Subtab-Pattern und inhaltlich begründet — die Wallbox ist eine fest installierte Anlagen-Komponente, das E-Auto ein mobiler Verbraucher.
+
+→ [Auswertungen → Energieprofil](HANDBUCH_BEDIENUNG.md#42-auswertungen)
 
 ### „Tag neu aggregieren" repariert prä-#184-Spikes jetzt wirklich *(v3.25.17)*
 

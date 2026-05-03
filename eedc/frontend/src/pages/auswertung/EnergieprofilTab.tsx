@@ -79,6 +79,10 @@ function gesternISO(): string {
   return toISODate(d)
 }
 
+function heuteISO(): string {
+  return toISODate(new Date())
+}
+
 function vorTagenISO(tage: number): string {
   const d = new Date()
   d.setDate(d.getDate() - tage)
@@ -113,6 +117,10 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
   const [daten, setDaten] = useState<StundenWert[]>([])
   const [extraSerien, setExtraSerien] = useState<SerieInfo[]>([])
   const [loading, setLoading] = useState(false)
+  // detLAN D#181: Lade…-Indikator nur einblenden, wenn der Fetch laenger als
+  // 250ms dauert. Auf schnellen Rechnern → kein Flash; auf langsamen
+  // Rechnern / Netzen weiterhin sichtbares Feedback.
+  const [zeigeLader, setZeigeLader] = useState(false)
 
   useEffect(() => {
     if (!anlageId || !datum) return
@@ -125,6 +133,15 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       .catch(() => { setDaten([]); setExtraSerien([]) })
       .finally(() => setLoading(false))
   }, [anlageId, datum])
+
+  useEffect(() => {
+    if (!loading) {
+      setZeigeLader(false)
+      return
+    }
+    const timer = setTimeout(() => setZeigeLader(true), 250)
+    return () => clearTimeout(timer)
+  }, [loading])
 
   const extraErzeuger    = extraSerien.filter(s => s.seite === 'quelle')
   const extraVerbraucher = extraSerien.filter(s => s.seite === 'senke')
@@ -193,7 +210,8 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
   return (
     <div className="space-y-4">
       {/* Datum-Picker mit Vor/Zurueck-Buttons (#181) — analog Monats-Ansicht.
-          Maximum bleibt gestern (heute hat noch keinen abgeschlossenen Energieprofil-Tag). */}
+          Maximum ist heute (rollierend via aggregate_today_all geschrieben).
+          detLAN D#181: heutiger Tag muss erreichbar sein, war vorher disabled. */}
       <div className="flex items-center gap-2 flex-wrap">
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tag:</label>
         <button
@@ -204,18 +222,18 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <input type="date" aria-label="Tag auswählen" value={datum} max={gesternISO()}
+        <input type="date" aria-label="Tag auswählen" value={datum} max={heuteISO()}
           onChange={e => setDatum(e.target.value)} className="input w-auto text-sm" />
         <button
           type="button"
           onClick={() => setDatum(tagVerschieben(datum, 1))}
-          disabled={datum >= gesternISO()}
+          disabled={datum >= heuteISO()}
           className="p-2 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
           aria-label="Nächster Tag"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
-        {loading && <span className="text-xs text-gray-400">Lade…</span>}
+        {zeigeLader && <span className="text-xs text-gray-400">Lade…</span>}
       </div>
 
       {/* KPI-Zeile */}
