@@ -11,11 +11,13 @@
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
 
-### Tagesdetail erreicht heute, Lade-Indikator ohne Flash, Wallbox vor E-Auto *(v3.25.18)*
+### „Tag neu aggregieren" mit Vorschau-Tabelle vor Übernahme *(v3.25.18)*
 
-> ✨ **Drei kleine Feinschliffe** — Auswertungen → Energieprofil → Tagesdetail blättert mit den Pfeilen jetzt bis einschließlich heute (rollierend aktualisiert, vorher endete bei gestern). Der `Lade…`-Hinweis am Datums-Picker erscheint nur noch, wenn der Fetch länger als 250 ms braucht — auf schnellen Rechnern damit kein Aufploppen-und-Weg-Flash, auf langsamen Geräten weiterhin sichtbares Feedback.
+> 🩹 **User-sichtbare Reparatur** — Wer in **Einstellungen → Daten → Energieprofil** auf das Reload-Symbol eines Tages klickt, sieht ab sofort zuerst eine Vergleichstabelle: pro Stunde und Energiefluss (PV / Einspeisung / Bezug / …) eine Spalte „Alt" (was steht in der DB) und eine Spalte „Neu" (was käme jetzt aus Home Assistant). Erst nach „Übernehmen" werden die Werte tatsächlich überschrieben. Differenzen über 1 kWh sind fett markiert, kleinere Abweichungen orange — auf einen Blick sichtbar, ob die Reparatur sinnvoll ist oder ob HA selbst gerade Müll liefert.
 >
-> Reihenfolge im Sensor-Mapping-Wizard und allen abhängigen Stellen: Wallbox steht jetzt direkt nach der Wärmepumpe, das E-Auto kommt danach. Konsistent zum Cockpit-Subtab-Pattern und inhaltlich begründet — die Wallbox ist eine fest installierte Anlagen-Komponente, das E-Auto ein mobiler Verbraucher.
+> Außerdem zwei Bug-Fixes im Reparatur-Pfad: Stunde 0 hängt rechnerisch vom Snapshot des Vortags um 23:00 ab — der wurde bisher beim Reload **nicht** mit überschrieben, sodass ein alter, korrupter Vortags-Wert den Spike beliebig oft wieder produzieren konnte. Ab v3.25.18 wird er mitgenommen. Dazu ist ein zweiter, älterer Mechanismus entfernt, der bei Tagesreset-Zählern (utility_meter daily) gelegentlich den falschen Wert in die Snapshot-Tabelle geschrieben hat — das war die Wurzel des ursprünglichen Issue #184. Wer ältere Counter-Spikes in der Historie hat, kommt damit jetzt mit einem Klick + „Übernehmen" sauber durch.
+>
+> **Außerdem im Bündel** — drei kleine UX-Items aus dem detLAN-Pakt: Tagesdetail-Pfeile blättern bis einschließlich heute (rollierend aktualisiert, vorher endete bei gestern). Der `Lade…`-Hinweis am Datums-Picker erscheint nur noch, wenn der Fetch länger als 250 ms braucht — kein Aufploppen-und-Weg-Flash mehr. Reihenfolge im Sensor-Mapping-Wizard: Wallbox steht jetzt vor E-Auto (konsistent zum Cockpit, fest installierte Komponente vor mobilem Verbraucher).
 
 → [Auswertungen → Energieprofil](HANDBUCH_BEDIENUNG.md#42-auswertungen)
 

@@ -214,6 +214,30 @@ export interface TagesPrognose {
   daten_tage: number
 }
 
+export interface ReaggregatePreviewBoundary {
+  sensor_key: string
+  kategorie: string | null
+  zeitpunkt: string
+  alt_kwh: number | null
+  neu_kwh: number | null
+}
+
+export interface ReaggregatePreviewSlot {
+  stunde: number
+  kategorie: string
+  alt_kwh: number | null
+  neu_kwh: number | null
+}
+
+export interface ReaggregatePreviewResponse {
+  datum: string
+  boundaries: ReaggregatePreviewBoundary[]
+  slot_deltas: ReaggregatePreviewSlot[]
+  tagesumme_alt: Record<string, number | null>
+  tagesumme_neu: Record<string, number | null>
+  ha_verfuegbar: boolean
+}
+
 export const energieProfilApi = {
   getStunden: (anlageId: number, datum: string): Promise<StundenAntwort> =>
     api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
@@ -232,6 +256,9 @@ export const energieProfilApi = {
 
   reaggregateTag: (anlageId: number, datum: string): Promise<{ status: string; datum: string; stunden_verfuegbar: number; stunden_mit_messdaten: number }> =>
     api.post(`/energie-profil/${anlageId}/reaggregate-tag?datum=${datum}`),
+
+  reaggregateTagPreview: (anlageId: number, datum: string): Promise<ReaggregatePreviewResponse> =>
+    api.get(`/energie-profil/${anlageId}/reaggregate-tag/preview?datum=${datum}`),
 
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
     api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),

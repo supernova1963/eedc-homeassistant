@@ -5,6 +5,7 @@ import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../ui'
 import { DataLoadingState } from '../common'
 import { energieProfilApi, type TagesZusammenfassung, type VerfuegbarerMonat } from '../../api/energie_profil'
 import { MONAT_KURZ } from '../../lib'
+import ReaggregatePreviewModal from './ReaggregatePreviewModal'
 
 type ColumnGroupKey = 'peaks' | 'summen' | 'performance' | 'wetter' | 'preise' | 'komponenten'
 
@@ -135,39 +136,32 @@ interface BodyProps {
 
 function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReload, showReaggregate = true }: BodyProps) {
   const [showColumnSelector, setShowColumnSelector] = useState(false)
-  // Reaggregate-State lebt im Body (nicht in DataTable), damit er das
-  // Loading-Remount der DataTable überlebt.
-  const [reagDatum, setReagDatum] = useState<string | null>(null)
+  // Preview-Modal-State: datum != null → Modal offen, lädt Vorschau, Apply nur nach
+  // User-Bestätigung. reagInfo/reagError für Toast nach Apply oder bei Apply-Fehler.
+  const [previewDatum, setPreviewDatum] = useState<string | null>(null)
   const [reagError, setReagError] = useState<string | null>(null)
   const [reagInfo, setReagInfo] = useState<{ message: string; tone: 'success' | 'warning' } | null>(null)
 
-  const handleReaggregate = async (datum: string) => {
-    if (!window.confirm(
-      `Tag ${datum} neu aggregieren?\n\nLädt Stunden aus Snapshots/Statistik neu, korrigiert ggf. fehlerhafte Werte (z. B. 0.00 + Spike). Andere Tage bleiben unberührt.`
-    )) return
-    setReagDatum(datum)
+  const handleReaggregate = (datum: string) => {
     setReagError(null)
     setReagInfo(null)
-    try {
-      const res = await energieProfilApi.reaggregateTag(anlageId, datum)
-      const messdaten = res.stunden_mit_messdaten
-      if (messdaten > 0) {
-        setReagInfo({
-          message: `${datum} reaggregiert: ${messdaten}/24 Stunden mit Messdaten.`,
-          tone: 'success',
-        })
-      } else {
-        setReagInfo({
-          message: `${datum} reaggregiert, aber 0/24 Stunden mit Messdaten — keine Snapshots in der DB und HA-Statistics nicht erreichbar.`,
-          tone: 'warning',
-        })
-      }
-      onReload()
-    } catch (e) {
-      setReagError(e instanceof Error ? e.message : `Neu-Aggregation für ${datum} fehlgeschlagen`)
-    } finally {
-      setReagDatum(null)
+    setPreviewDatum(datum)
+  }
+
+  const handlePreviewApplied = (result: { stunden_mit_messdaten: number }) => {
+    if (!previewDatum) return
+    if (result.stunden_mit_messdaten > 0) {
+      setReagInfo({
+        message: `${previewDatum} reaggregiert: ${result.stunden_mit_messdaten}/24 Stunden mit Messdaten.`,
+        tone: 'success',
+      })
+    } else {
+      setReagInfo({
+        message: `${previewDatum} reaggregiert, aber 0/24 Stunden mit Messdaten — keine Snapshots in der DB und HA-Statistics nicht erreichbar.`,
+        tone: 'warning',
+      })
     }
+    onReload()
   }
 
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
@@ -217,6 +211,15 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
         <Alert type={reagInfo.tone === 'success' ? 'success' : 'warning'} className="mb-2">
           {reagInfo.message}
         </Alert>
+      )}
+
+      {showReaggregate && (
+        <ReaggregatePreviewModal
+          anlageId={anlageId}
+          datum={previewDatum}
+          onClose={() => setPreviewDatum(null)}
+          onApplied={handlePreviewApplied}
+        />
       )}
 
       {showColumnSelector && (
@@ -277,7 +280,7 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
           daten={daten}
           activeColumns={activeColumns}
           onReaggregate={handleReaggregate}
-          reagDatum={reagDatum}
+          reagDatum={previewDatum}
           showReaggregate={showReaggregate}
         />
       )}

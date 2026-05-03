@@ -656,6 +656,214 @@ async def get_hourly_kwh_by_category(
     return final
 
 
+async def get_reaggregate_preview(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> dict:
+    """
+    Liefert die alt/neu-Vergleichstabelle für den geplanten Reload eines Tages.
+
+    Liest pro Counter:
+      - 25 Stunden-Boundaries (Vortag 23:00 .. Folgetag 00:00):
+        `alt` = aktueller DB-Snapshot, `neu` = HA-Statistics-Wert (sum)
+      - 24 Slot-Deltas: alt = snap_alt[h] - snap_alt[h-1],
+                       neu = snap_neu[h] - snap_neu[h-1]
+      - Tagesumme pro Kategorie alt/neu
+
+    **Schreibt nichts.** Der Aufrufer entscheidet (UI-Bestätigung), ob danach
+    `reaggregate_tag` aufgerufen wird, das die `neu`-Werte tatsächlich in die
+    DB schreibt.
+
+    Returns:
+        {
+          "boundaries": [
+            {"sensor_key": str, "kategorie": str|None, "zeitpunkt": datetime,
+             "alt_kwh": float|None, "neu_kwh": float|None},
+            ...  # 25 × n_counter
+          ],
+          "slot_deltas": [
+            {"stunde": int, "kategorie": str,
+             "alt_kwh": float|None, "neu_kwh": float|None},
+            ...  # 24 × n_kategorie
+          ],
+          "tagesumme_alt": {kategorie: float|None},
+          "tagesumme_neu": {kategorie: float|None},
+          "ha_verfuegbar": bool,
+        }
+    """
+    sensor_mapping = anlage.sensor_mapping or {}
+
+    # Counter-Entries sammeln (gleiche Logik wie get_hourly_kwh_by_category)
+    eintraege: list[tuple[str, Optional[str], str]] = []
+    seen_keys: set[str] = set()
+
+    basis = sensor_mapping.get("basis", {}) or {}
+    for feld in BASIS_ZAEHLER_FELDER:
+        config = basis.get(feld)
+        if isinstance(config, dict) and config.get("strategie") == "sensor":
+            eid = config.get("sensor_id")
+            if eid:
+                kat = _categorize_counter(feld, None, None)
+                if kat:
+                    sk = f"basis:{feld}"
+                    eintraege.append((sk, eid, kat))
+                    seen_keys.add(sk)
+
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        for feld, config in felder.items():
+            if not isinstance(config, dict) or config.get("strategie") != "sensor":
+                continue
+            eid = config.get("sensor_id")
+            if not eid:
+                continue
+            kat = _categorize_counter(feld, inv.typ, inv.parameter)
+            if kat:
+                sk = f"inv:{inv_id_str}:{feld}"
+                eintraege.append((sk, eid, kat))
+                seen_keys.add(sk)
+
+    cutoff = datetime.now() - timedelta(days=7)
+    mqtt_keys_result = await db.execute(
+        select(MqttEnergySnapshot.energy_key)
+        .where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= cutoff,
+            )
+        )
+        .distinct()
+    )
+    for (mqtt_key,) in mqtt_keys_result.all():
+        sk = _mqtt_key_to_sensor_key(mqtt_key)
+        if not sk or sk in seen_keys:
+            continue
+        if sk.startswith("basis:"):
+            feld = sk.split(":", 1)[1]
+            kat = _categorize_counter(feld, None, None)
+        elif sk.startswith("inv:"):
+            _, inv_id, feld = sk.split(":", 2)
+            inv = investitionen_by_id.get(inv_id) or investitionen_by_id.get(str(inv_id))
+            if inv is None:
+                continue
+            kat = _categorize_counter(feld, inv.typ, inv.parameter)
+        else:
+            continue
+        if kat:
+            eintraege.append((sk, None, kat))
+            seen_keys.add(sk)
+
+    ha_svc = get_ha_statistics_service()
+    ha_verfuegbar = ha_svc.is_available
+
+    tag_0 = datetime.combine(datum, datetime.min.time())
+    boundaries: list[dict] = []
+
+    # Pro Counter, pro Stunde -1..24: alt aus DB (5min Toleranz), neu aus HA-Stats
+    # h=-1 ist Vortag 23:00 (Slot-0-Boundary), h=24 ist Folgetag 00:00 (für etwaige
+    # Folgetags-Slot-0-Berechnung — aber primär brauchen wir h=-1..23 für Slot 0..23).
+    # Wir liefern 25 Boundaries (h=-1..23), das deckt Slot 0..23 ab.
+    snap_alt: dict[str, dict[int, Optional[float]]] = {sk: {} for sk, _, _ in eintraege}
+    snap_neu: dict[str, dict[int, Optional[float]]] = {sk: {} for sk, _, _ in eintraege}
+
+    for sensor_key, entity_id, kat in eintraege:
+        for h in range(-1, 24):
+            zp = tag_0 + timedelta(hours=h)
+            # alt: DB-Lookup (toleranz 5min)
+            von = zp - timedelta(minutes=5)
+            bis = zp + timedelta(minutes=5)
+            from sqlalchemy import func
+            abstand = func.abs(
+                func.julianday(SensorSnapshot.zeitpunkt) - func.julianday(zp)
+            )
+            r = await db.execute(
+                select(SensorSnapshot.wert_kwh).where(
+                    and_(
+                        SensorSnapshot.anlage_id == anlage.id,
+                        SensorSnapshot.sensor_key == sensor_key,
+                        SensorSnapshot.zeitpunkt >= von,
+                        SensorSnapshot.zeitpunkt <= bis,
+                    )
+                ).order_by(abstand.asc()).limit(1)
+            )
+            alt = r.scalar_one_or_none()
+            snap_alt[sensor_key][h] = alt
+
+            # neu: HA-Stats lookup (kein Schreiben)
+            neu = None
+            if entity_id and ha_verfuegbar:
+                neu = ha_svc.get_value_at(entity_id, zp, toleranz_minuten=10)
+            snap_neu[sensor_key][h] = neu
+
+            boundaries.append({
+                "sensor_key": sensor_key,
+                "kategorie": kat,
+                "zeitpunkt": zp,
+                "alt_kwh": alt,
+                "neu_kwh": neu,
+            })
+
+    # Slot-Deltas aggregieren pro Kategorie (alt und neu getrennt)
+    slot_deltas: list[dict] = []
+    tagesumme_alt: dict[str, Optional[float]] = {}
+    tagesumme_neu: dict[str, Optional[float]] = {}
+
+    # alle Kategorien sammeln, die in eintraege vorkommen
+    alle_kategorien = sorted({kat for _, _, kat in eintraege})
+
+    for h in range(24):
+        per_kat_alt: dict[str, Optional[float]] = {}
+        per_kat_neu: dict[str, Optional[float]] = {}
+        for sensor_key, _eid, kat in eintraege:
+            # alt-Delta
+            a0 = snap_alt[sensor_key].get(h - 1)
+            a1 = snap_alt[sensor_key].get(h)
+            if a0 is not None and a1 is not None:
+                d = a1 - a0
+                if d < -0.01 and a1 < 0.5 and a0 > 0.5:
+                    d = max(0.0, a1)  # Tagesreset-Schutz analog get_hourly_kwh_by_category
+                if d >= -0.01:
+                    d = max(0.0, d)
+                    per_kat_alt[kat] = (per_kat_alt.get(kat) or 0.0) + d
+            # neu-Delta
+            n0 = snap_neu[sensor_key].get(h - 1)
+            n1 = snap_neu[sensor_key].get(h)
+            if n0 is not None and n1 is not None:
+                d = n1 - n0
+                if d < -0.01 and n1 < 0.5 and n0 > 0.5:
+                    d = max(0.0, n1)
+                if d >= -0.01:
+                    d = max(0.0, d)
+                    per_kat_neu[kat] = (per_kat_neu.get(kat) or 0.0) + d
+        for kat in alle_kategorien:
+            slot_deltas.append({
+                "stunde": h,
+                "kategorie": kat,
+                "alt_kwh": per_kat_alt.get(kat),
+                "neu_kwh": per_kat_neu.get(kat),
+            })
+            if per_kat_alt.get(kat) is not None:
+                tagesumme_alt[kat] = (tagesumme_alt.get(kat) or 0.0) + per_kat_alt[kat]
+            if per_kat_neu.get(kat) is not None:
+                tagesumme_neu[kat] = (tagesumme_neu.get(kat) or 0.0) + per_kat_neu[kat]
+
+    return {
+        "boundaries": boundaries,
+        "slot_deltas": slot_deltas,
+        "tagesumme_alt": tagesumme_alt,
+        "tagesumme_neu": tagesumme_neu,
+        "ha_verfuegbar": ha_verfuegbar,
+    }
+
+
 async def get_daily_counter_deltas_by_inv(
     db: AsyncSession,
     anlage,
@@ -1147,23 +1355,28 @@ async def live_snapshot_if_missing(
     zeitpunkt: datetime,
 ) -> int:
     """
-    Schreibt für eine anstehende volle Stunde einen Live-Snapshot pro Sensor,
-    aber nur wenn dort noch kein Eintrag existiert (Issue #146).
+    Schreibt für eine anstehende volle Stunde einen Live-Snapshot pro
+    MQTT-Counter, aber nur wenn dort noch kein Eintrag existiert.
 
     Hintergrund: Der reguläre `snapshot_anlage` läuft erst :05 nach voller
-    Stunde — die laufende Stunde im Energieprofil bleibt bis dahin als
-    "0.00" (bzw. "—") sichtbar, weil aggregate_day Slot[h] nicht ohne
-    snap[h+1:00] berechnen kann. Diese Hilfsroutine läuft :55 vor voller
-    Stunde, holt den AKTUELLEN Live-Zählerstand pro gemapptem Zähler und
-    schreibt ihn als Annäherung für h:00.
+    Stunde. Im Standalone-/Docker-Modus mit MQTT publishen die Geräte ihre
+    kumulativen kWh-Werte kontinuierlich; ein Live-Snapshot kurz vor voller
+    Stunde liefert einen guten Annäherungswert für die laufende Stunde.
 
-    Genauigkeit: Der Live-Wert wird ~5 Minuten vor h:00 gelesen, ist also
-    minimal niedriger als der echte snap[h:00]. Beim regulären :05-Job wird
-    der Eintrag durch den exakten HA-Statistics-Wert überschrieben.
+    HA-Counter-Pfad (Add-on-Modus) wurde in v3.25.18 entfernt:
+    `ha_state_svc.get_sensor_state()` liefert das Sensor-`state`, nicht das
+    Statistics-`sum`. Bei Tagesreset-Zählern (utility_meter daily cycle) sind
+    die zwei verschiedene Skalen — `state`=Tagesenergie, `sum`=Lifetime-
+    bereinigt. Wurde der :05-Hourly-Job nach so einem Live-Schreiben
+    übersprungen (HA/Add-on-Restart, Job-Crash), blieb der `state`-Wert
+    persistent in der Snapshot-Tabelle und produzierte beim nächsten
+    Aggregat einen Lifetime-grossen Stunden-Spike (Issue #184, Befund Rainer
+    1.5.2026). Die laufende Stunde wartet im Add-on-Modus jetzt bis :05 der
+    Folgestunde — wie vor #146 — und der reguläre `snapshot_anlage`-Job
+    schreibt aus HA-Statistics den exakten `sum`-Wert.
 
-    Wichtig: Schreibt NICHT, wenn snap[zeitpunkt] für einen Sensor bereits
-    vorhanden ist — das verhindert Überschreiben durch Approximation
-    während eines Backfills oder nach manueller Aggregation.
+    MQTT hat keinen `state`/`sum`-Split: Topics liefern direkt kumulative
+    Lifetime-Werte. Der MQTT-Pfad bleibt unverändert.
 
     Args:
         db: Async Session
@@ -1171,37 +1384,13 @@ async def live_snapshot_if_missing(
         zeitpunkt: Anstehende volle Stunde (typisch: now+1h auf :00 gerundet)
 
     Returns:
-        Anzahl geschriebener Live-Snapshots.
+        Anzahl geschriebener Live-Snapshots (MQTT-Counter).
     """
     count = 0
 
-    # 1. HA-gemappte Zähler — Live-State von HA-API
-    counter_map = _build_counter_map(anlage)
-    if counter_map:
-        from backend.services.ha_state_service import get_ha_state_service
-        ha_state_svc = get_ha_state_service()
-        if ha_state_svc.is_available:
-            for sensor_key, entity_id in counter_map.items():
-                # Skip wenn snap[zeitpunkt] schon da
-                existing = await db.execute(
-                    select(SensorSnapshot.id).where(
-                        and_(
-                            SensorSnapshot.anlage_id == anlage.id,
-                            SensorSnapshot.sensor_key == sensor_key,
-                            SensorSnapshot.zeitpunkt == zeitpunkt,
-                        )
-                    )
-                )
-                if existing.scalar_one_or_none() is not None:
-                    continue
-                wert = await ha_state_svc.get_sensor_state(entity_id)
-                if wert is None:
-                    continue
-                await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
-                count += 1
-
-    # 2. MQTT-gespeiste Zähler (Standalone-Modus): jüngsten Snapshot der
-    # letzten ~10 Min als Live-Wert verwenden.
+    # MQTT-gespeiste Zähler (Standalone-Modus): jüngsten Snapshot der
+    # letzten ~10 Min als Live-Wert verwenden. Bei MQTT ist der Topic-Wert
+    # die kumulative Lifetime-Energie (kein state/sum-Split wie bei HA).
     cutoff = zeitpunkt - timedelta(minutes=10)
     mqtt_keys_result = await db.execute(
         select(MqttEnergySnapshot.energy_key).where(

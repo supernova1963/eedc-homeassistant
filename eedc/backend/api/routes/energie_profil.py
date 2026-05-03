@@ -1013,6 +1013,96 @@ async def reaggregate_heute():
     return {"status": "ok", "anlagen": results}
 
 
+class ReaggregatePreviewBoundary(BaseModel):
+    sensor_key: str
+    kategorie: Optional[str] = None
+    zeitpunkt: str
+    alt_kwh: Optional[float] = None
+    neu_kwh: Optional[float] = None
+
+
+class ReaggregatePreviewSlot(BaseModel):
+    stunde: int
+    kategorie: str
+    alt_kwh: Optional[float] = None
+    neu_kwh: Optional[float] = None
+
+
+class ReaggregatePreviewResponse(BaseModel):
+    datum: str
+    boundaries: list[ReaggregatePreviewBoundary]
+    slot_deltas: list[ReaggregatePreviewSlot]
+    tagesumme_alt: dict[str, Optional[float]]
+    tagesumme_neu: dict[str, Optional[float]]
+    ha_verfuegbar: bool
+
+
+@router.get("/{anlage_id}/reaggregate-tag/preview", response_model=ReaggregatePreviewResponse)
+async def reaggregate_tag_preview(
+    anlage_id: int,
+    datum: date = Query(..., description="Tag, fuer den die Vorschau erzeugt werden soll"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Liefert eine alt/neu-Vergleichstabelle der Snapshot-Werte und Slot-Deltas,
+    die ein Reload des Tages produzieren WÜRDE — ohne irgendetwas zu schreiben.
+
+    Damit der Nutzer vor der Übernahme sieht, welche Werte aus HA kommen und
+    wie sich die Tagesbilanz ändert. Erst nach manueller Bestätigung
+    (`POST /reaggregate-tag`) werden die Werte tatsächlich übernommen.
+
+    Range: Vortag 23:00 .. Folgetag 00:00 (25 Boundaries pro Counter, 24 Slots).
+    Slot 0 = snap(Tag 00:00) − snap(Vortag 23:00). Damit ist die Slot-0-
+    Boundary in der Tabelle sichtbar — der ehemalige Hauptverdächtige für
+    persistente Counter-Spikes (Befund Rainer 1.5.2026).
+    """
+    from backend.services.sensor_snapshot_service import get_reaggregate_preview
+
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+
+    try:
+        preview = await get_reaggregate_preview(db, anlage, invs_by_id, datum)
+    except Exception as e:
+        logger.error(
+            f"Reaggregate-Preview Anlage {anlage_id} {datum}: {type(e).__name__}: {e}"
+        )
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+    return ReaggregatePreviewResponse(
+        datum=datum.isoformat(),
+        boundaries=[
+            ReaggregatePreviewBoundary(
+                sensor_key=b["sensor_key"],
+                kategorie=b["kategorie"],
+                zeitpunkt=b["zeitpunkt"].isoformat(),
+                alt_kwh=b["alt_kwh"],
+                neu_kwh=b["neu_kwh"],
+            )
+            for b in preview["boundaries"]
+        ],
+        slot_deltas=[
+            ReaggregatePreviewSlot(
+                stunde=s["stunde"],
+                kategorie=s["kategorie"],
+                alt_kwh=s["alt_kwh"],
+                neu_kwh=s["neu_kwh"],
+            )
+            for s in preview["slot_deltas"]
+        ],
+        tagesumme_alt=preview["tagesumme_alt"],
+        tagesumme_neu=preview["tagesumme_neu"],
+        ha_verfuegbar=preview["ha_verfuegbar"],
+    )
+
+
 @router.post("/{anlage_id}/reaggregate-tag")
 async def reaggregate_tag(
     anlage_id: int,
@@ -1049,8 +1139,14 @@ async def reaggregate_tag(
         try:
             from backend.services.sensor_snapshot_service import resnap_anlage_range
             from datetime import datetime as _dt, timedelta as _td
-            von_dt = _dt.combine(datum, _dt.min.time())
-            bis_dt = von_dt + _td(days=1)
+            # Range muss Vortag 23:00 mitnehmen: aggregate_day berechnet Slot 0
+            # als snap(Tag 00:00) − snap(Vortag 23:00). Ohne den Vortags-Boundary
+            # bleibt ein evtl. korrupter Snapshot bei Vortag 23:00 im DB stehen
+            # und produziert dauerhaft einen Stunde-0-Spike — der Reload-Knopf
+            # kann den dann nie heilen (Befund Rainer 1.5.2026).
+            tag_start = _dt.combine(datum, _dt.min.time())
+            von_dt = tag_start - _td(hours=1)   # Vortag 23:00
+            bis_dt = tag_start + _td(days=1)    # Folgetag 00:00
             resnap_stats = await resnap_anlage_range(
                 db, anlage, von=von_dt, bis=bis_dt, include_5min=True,
             )
