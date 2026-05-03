@@ -1,7 +1,19 @@
 # Konzept: Solcast PV Forecast Integration
 
-> **Status:** Planung | **Issue:** #105 | **Zielversion:** v3.17.0
-> **Erstellt:** 2026-04-19 | **Datengrundlage:** Live-Abfragen vom 19.04.2026
+> **Status (2026-05-03):** Etappen 1–3 abgeschlossen (v3.16.4–v3.16.8).
+> **Evaluierungsphase formell beendet.** Etappe 4 (Live/Kurzfristig/
+> PrognoseVsIst-Integration) wird **nicht in der ursprünglich geplanten
+> Form** umgesetzt — abgelöst durch das Quellenwahl-Konzept
+> [`KONZEPT-PROGNOSEQUELLEN-WAHL.md`](KONZEPT-PROGNOSEQUELLEN-WAHL.md).
+> Blended Forecast und MAE-Decision-Support entfallen. Solcast wird
+> künftig als wählbare Quelle pro Anlage angeboten (Solcast pur, ohne
+> Lernfaktor).
+>
+> Die folgenden Inhalte bleiben als technische Implementierungs-Doku der
+> Etappen 1–3 erhalten.
+>
+> **Historischer Header:** Planung | Issue #105 | Zielversion v3.17.0 |
+> erstellt 2026-04-19 | Datengrundlage Live-Abfragen vom 19.04.2026
 
 ## Motivation
 

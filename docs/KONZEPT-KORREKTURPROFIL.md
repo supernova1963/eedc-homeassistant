@@ -1,104 +1,78 @@
-# Konzept: Anlagenspezifisches Korrekturprofil
+# Konzept: EEDC-Lernfaktor — Optimierung und Korrekturprofile
+
+> **Strenger Grundsatz:** Diese Doku enthält **keine Vergleiche** mit
+> Tom-HA-SFML, Solcast oder anderen externen Quellen. Der Lernfaktor ist
+> EEDC-internes Engineering. Wir haben Tom-HA versprochen, nicht gegen
+> „rolling" zu vergleichen — das gilt auch für interne Konzept-Dokumente.
+>
+> **Gehört zusammen mit:** [`KONZEPT-PROGNOSEQUELLEN-WAHL.md`](KONZEPT-PROGNOSEQUELLEN-WAHL.md)
+> (separates Konzept-Dokument, das die Quellenwahl-Architektur abbildet —
+> dort ist EEDC eine von drei Quellen).
 
 ## Motivation
 
-EEDC verwendet aktuell einen **skalaren Lernfaktor** pro Anlage und Prognose-Quelle
-(`live_wetter.py:_get_lernfaktor_detail`), der über die saisonale Kaskade
-„Monat → Quartal → Gesamt" die Tagessummen-Abweichung zwischen Prognose und IST
-nivelliert. Begrenzt auf [0.5 ; 1.3], gerundet auf 3 Nachkommastellen,
-tagesweise gecacht.
+EEDC ist die Default-Quelle für jede Anlage (siehe Quellenwahl-Konzept) —
+und damit die Quelle, die *immer* funktioniert (auch ohne HA-Integration,
+auch im Standalone). Damit der Default robust und konsistent gut ist,
+muss der EEDC-Lernfaktor saisonale Effekte sauber ausgleichen und
+Ausreißer-Tage abfangen.
 
-**Was der Skalar gut kann:**
+Heutiger Skalar-Lernfaktor in
+[`live_wetter.py:_get_lernfaktor_detail`](../eedc/backend/api/routes/live_wetter.py)
+hat bekannte Grenzen — siehe Bestandsaufnahme.
 
-- Pauschale Anlagen-Eigenarten (allgemeine Modul-Degradation, WR-Wirkungsgrad,
-  systematischer GTI-Bias der Wetterquelle)
-- Saisonale Verschiebung über Sonnenstand-Höhe (April vs. Dezember)
+## Bestandsaufnahme — heute
 
-**Was der Skalar NICHT kann:**
-
-- **Verschattung im Tagesverlauf**: Baum/Gebäude/Geländekante schluckt morgens
-  oder abends einen Teil der Strahlung. Tagessumme fällt z.B. um 5 % → Faktor
-  geht auf 0.95. Aber: Live-Dashboard skaliert _alle_ Stunden mit 0.95 — die
-  betroffenen Stunden bräuchten 0.5, die unbetroffenen 1.0. Tagessumme stimmt
-  rechnerisch, das Stundenprofil nicht.
-- **String-spezifische Effekte**: Ostflügel verschattet, Westflügel nicht. Mit
-  einem Anlagen-Skalar werden beide gleich behandelt.
-- **Wetterabhängige Asymmetrie**: bei klarem Himmel wirkt Verschattung stark, bei
-  diffuser Strahlung kaum — wird aktuell nicht differenziert.
-
-### Auslöser
-
-- **Tom-HA-Kontext** (April 2026): Skalarer Lernfaktor ist eine offene Flanke,
-  die in Community-Diskussionen als „Pauschalierung" angreifbar ist. Strategisch
-  relevant, ein präziseres Modell konzeptionell vorbereitet zu haben — auch wenn
-  die Umsetzung erst bei breiter Datenbasis sinnvoll ist.
-- **Etappe 4 Energieprofil** (saisonale Muster): braucht ohnehin 6+ Monate
-  Datenbestand, gleicher Grundzeitpunkt für Korrekturprofil-Aggregation.
-- **Realwelt-Anlagen mit Verschattung**: detLAN, Joachim und andere mit Bäumen
-  oder Nachbargebäuden im Schatten-Wurf zu typischen Sonnenständen.
-
-### Abgrenzung
-
-**Nicht Teil dieses Konzepts:**
-
-- Explizites Schatten-Geometrie-Modell (3D-Hinderniskarte, Ray-Tracing) — dafür
-  bräuchte EEDC Höhen-/Distanz-Eingabe pro Hindernis. Nicht praktikabel im
-  Self-Service-Kontext.
-- Wetterklassifikation (klar/diffus) als separate Dimension — wird im aktuellen
-  Lernfaktor nicht getrennt, soll auch hier zunächst nicht.
-- ML-Modell mit Black-Box-Charakter — Ziel ist explizite, nachvollziehbare
-  Aggregation. Transparenz-Vorteil gegen ML-Konkurrenten.
-
----
-
-## Bestandsaufnahme
-
-### Datenquellen heute
-
-| Baustein | Status | Wo | Granularität |
-|---|---|---|---|
-| `TagesZusammenfassung.pv_prognose_kwh` | Produktiv | `models/tageszusammenfassung.py` | Tagessumme |
-| `TagesZusammenfassung.solcast_prognose_kwh` | Produktiv | dito | Tagessumme |
-| `TagesEnergieProfil` (24 Stunden je Tag, Snapshot-basiert) | Produktiv ab v3.19 | `models/tagesenergieprofil.py` | **Stunden-Slot, IST** |
-| OpenMeteo `hourly` (GTI, Temperatur, Wolken, …) | Produktiv | `services/live_wetter.py` | **Stunden-Slot, Prognose** |
-| Solcast `hourly` (PV-Leistung) | Produktiv ab v3.16 | `services/solcast.py` | **Stunden-Slot, Prognose** |
-| Solar-Position (EOT für Solar-Noon-Split) | Produktiv ab v3.22 | `services/solar_noon.py` | berechnet on-the-fly |
-
-**Schlussfolgerung:** Die Datengrundlage für ein stündliches Korrekturprofil
-ist bereits vollständig vorhanden. Es fehlt nur die Aggregation-/Speicher-/
-Anwendungs-Schicht.
-
-### Aggregations-Logik heute (skalar)
+### Skalarer Lernfaktor
 
 ```text
 _berechne_faktor(tage, db_feld) → Σ(IST) / Σ(Prognose), produktionsgewichtet
   Filter pro Tag: Prognose > 0.5 kWh AND IST > 0.5 kWh
-  
+
 Saisonale Kaskade:
-  1. Monat (gleicher Kalendermonat alle Jahre, ≥15 Tage)
+  1. Monat   (gleicher Kalendermonat alle Jahre, ≥15 Tage)
   2. Quartal (gleiches Q1-Q4 alle Jahre, ≥15 Tage)
-  3. Gesamt (letzte 30 Tage rollierend, ≥7 Tage)
+  3. Gesamt  (letzte 30 Tage rollierend, ≥7 Tage)
   Sonst: kein Faktor
 
 Clamp [0.5 ; 1.3], runden auf 3 Nachkommastellen, Cache pro (anlage, quelle).
 ```
 
----
+### Was der Skalar gut kann
 
-## Orthogonale Verbesserungen am Skalar (vorziehbar)
+- Pauschale Anlagen-Eigenarten (allgemeine Modul-Degradation,
+  WR-Wirkungsgrad, systematischer GTI-Bias der Wetterquelle)
+- Saisonale Verschiebung über Sonnenstand-Höhe (April vs. Dezember)
 
-Drei Heuristiken, die den heutigen Skalar robuster machen, **ohne** auf den
-6-Monate-Trigger der Varianten A–C zu warten. Inspiriert durch
-[libe.net/pv-forecast](https://www.libe.net/pv-forecast) (Analog-Ensemble-Ansatz
-mit mehrstufiger Gewichtung) — die Detail-Heuristiken passen direkt in unser
-MOS-Schema, der Analog-Ensemble-Kern selbst nicht (eedc nutzt numerische
-Wettermodelle + Kalibrierung, nicht Nearest-Neighbor).
+### Was der Skalar nicht kann
 
-### O1 — Recency-Boost im Lernfaktor
+- **Verschattung im Tagesverlauf:** Baum/Gebäude/Geländekante schluckt
+  morgens oder abends einen Teil der Strahlung. Tagessumme fällt z. B.
+  um 5 % → Faktor geht auf 0.95. Aber: Live-Dashboard skaliert *alle*
+  Stunden mit 0.95 — die betroffenen Stunden bräuchten 0.5, die
+  unbetroffenen 1.0. Tagessumme stimmt rechnerisch, das Stundenprofil
+  nicht.
+- **String-spezifische Effekte:** Ostflügel verschattet, Westflügel
+  nicht. Mit einem Anlagen-Skalar werden beide gleich behandelt.
+- **Wetterabhängige Asymmetrie:** Bei klarem Himmel wirkt Verschattung
+  stark, bei diffuser Strahlung kaum — wird aktuell nicht differenziert.
 
-**Problem:** Saisonbins mitteln über mehrere Wochen bis Monate. Schleichende
-Veränderungen (Modul-Verschmutzung, wachsende Bäume, Sensor-Drift) brauchen
-entsprechend lange, bis sie durchschlagen.
+## Skalar-Heuristiken (O1, O2, O3)
+
+Drei Heuristiken, die den Skalar ohne Schema-Änderung robuster machen.
+Status revidiert: O1+O2 jetzt umsetzbar **als zweite Variante neben dem
+Legacy-Skalar**, nicht als Ersatz. Doppel-Berechnung Legacy / O12 →
+empirischer Beleg für oder gegen die Aktivierung als neuer Default.
+Methodisch sauber, weil gleiche Tage gleichbewertet werden.
+
+**Wichtig:** Doppel-Vergleich Legacy/O12 ist EEDC-intern — kein
+Quellenvergleich. Kompatibel mit dem Tom-HA-Versprechen.
+
+### O1 — Recency-Boost
+
+**Problem:** Saisonbins mitteln über mehrere Wochen bis Monate.
+Schleichende Veränderungen (Modul-Verschmutzung, wachsende Bäume, Sensor-
+Drift) brauchen entsprechend lange, bis sie durchschlagen.
 
 **Heuristik:** Tage jünger als 30 Tage erhalten +30 % Gewicht in der
 Aggregation. Stärke und Schwellwert konservativ wählbar.
@@ -106,128 +80,138 @@ Aggregation. Stärke und Schwellwert konservativ wählbar.
 **Aufwand:** ~halber Tag. Eine Zeile in `_berechne_faktor`
 (Produktionsgewichtung × Recency-Faktor).
 
-**Risiko:** gering. Faktor weiterhin auf [0.5 ; 1.3] geclampt, Saisonbin-Logik
-unverändert.
+**Risiko:** gering. Faktor weiterhin auf [0.5 ; 1.3] geclampt, Saisonbin-
+Logik unverändert.
 
 ### O2 — Robuste Statistik gegen Ausreißer
 
-**Problem:** Aktuell `Σ(IST) / Σ(Prognose)` produktionsgewichtet. Ein einzelner
-Tag mit defektem Sensor, MQTT-Aussetzer oder Snapshot-Lücke (<v3.20)
+**Problem:** Aktuell `Σ(IST) / Σ(Prognose)` produktionsgewichtet. Ein
+einzelner Tag mit defektem Sensor, MQTT-Aussetzer oder Snapshot-Lücke
 zerrt den Faktor messbar.
 
 **Heuristik:** Vor der Summation die Tagesquotienten `IST_d / Prognose_d`
-trimmen — z.B. 10 %-getrimmter Mittelwert (oberste/unterste 10 % der Tage
-werden verworfen, Rest gewichtet aggregiert).
+trimmen — z. B. 10 %-getrimmter Mittelwert (oberste/unterste 10 % der
+Tage werden verworfen, Rest gewichtet aggregiert).
 
 **Aufwand:** ~halber Tag. Sortier-Schritt + Slicing in `_berechne_faktor`.
 
-**Risiko:** gering bis null. Bei sauberem Datenbestand identisch zum heutigen
-Mittel; bei Ausreißern systematisch besser. Solcast/Open-Meteo-LOO-Validierung
-(libe.net) ist Overkill — Trim-Mean reicht.
+**Risiko:** gering bis null. Bei sauberem Datenbestand identisch zum
+heutigen Mittel; bei Ausreißern systematisch besser.
 
 ### O3 — Schneeerkennungs-Heuristik (Dez–Feb)
 
-**Problem:** Bei Schneebedeckung produziert die Anlage kaum Strom, das GTI-
-Signal aus der Wettervorhersage ist aber „sauberer Sonnentag". eedc überschätzt
-systematisch, der Lernfaktor reagiert mit ~30 Tagen Lag.
+**Problem:** Bei Schneebedeckung produziert die Anlage kaum Strom, das
+GTI-Signal aus der Wettervorhersage ist aber „sauberer Sonnentag". eedc
+überschätzt systematisch, der Lernfaktor reagiert mit ~30 Tagen Lag.
 
 **Heuristik:** Im Fenster Dez–Feb prüfen: wenn die letzten 2–3 Tage
-`IST/Prognose < 30 %` bei klarem GHI (Cloud-Coverage < 30 %), Penalty 50 %
-auf nächstes-Tag-Prognose ansetzen, bis IST/Prognose wieder > 70 %.
+`IST/Prognose < 30 %` bei klarem GHI (Cloud-Coverage < 30 %), Penalty
+50 % auf nächstes-Tag-Prognose ansetzen, bis IST/Prognose wieder > 70 %.
 
-**Aufwand:** Mittel. Eigene Detection-Funktion + State im Cache (welche
-Anlage „im Schnee-Modus"). UI-Hinweis im Live-Dashboard sinnvoll
-(„Schnee-Penalty aktiv, geschätzt").
+**Aufwand:** mittel. Eigene Detection-Funktion + State im Cache (welche
+Anlage „im Schnee-Modus"). UI-Hinweis im Live-Dashboard sinnvoll.
 
-**Risiko:** mittel. Schwellwerte sind heuristisch, falsch ausgelöste Penalty
-ist schlimmer als fehlende. Sollte erst nach mindestens einem Winter-IST-
-Vergleich an drei Anlagen scharfgeschaltet werden.
+**Risiko:** mittel. Schwellwerte sind heuristisch, falsch ausgelöste
+Penalty ist schlimmer als fehlende. Sollte erst nach mindestens einem
+Winter-IST-Vergleich an drei Anlagen scharfgeschaltet werden.
 
-**Triage:** O1 + O2 sind low-risk und liefern sofortigen Mehrwert für **alle**
-Anlagen. O3 ist nicht-trivial und braucht Test-Daten — eigenes Issue, später.
+**Reihenfolge:** O2 zuerst (geringeres Risiko), O1 zwei Wochen später,
+beide parallel zur Legacy-Berechnung tracked. O3 als eigenes Issue,
+nach Winter 2026/27.
 
----
+## Wetter-Stratifizierung (interne EEDC-Diagnose)
 
-## Drei Varianten
+EEDC-Lernfaktor wird nach Wetter-Klasse (klar / diffus / wechselhaft)
+ausgewertet: zeigt, ob bei bestimmten Wetterlagen systematisch verzerrt
+wird.
+
+- Klassifikation pro Tag aus `cloud_cover_mean` + `precipitation_sum`
+  (Logik in [`wetter/utils.py`](../eedc/backend/services/wetter/utils.py)
+  `wetter_symbol_aus_tag` als Inspiration).
+- Pro Klasse: separater MAE/MBE auf den letzten 30/90 Tagen.
+- **Strikt EEDC-intern** — keine Quellen-Vergleichs-Statistik daneben.
+- Hilft bei der Frage: rechtfertigt sich Variante A (stündliches Profil)
+  oder reicht der Skalar?
+
+## Prognosen-Tab als Übergangs-Diagnose
+
+Aktueller Prognosen-Tab läuft weiter mit **optimiertem EEDC + Wetter-
+Stratifizierung**. Andere Quellen (Solcast, SFML) werden in dieser Tab-
+Sicht nicht angezeigt — wir vergleichen nicht.
+
+- Zweck: saisonale Beobachtung, ob EEDC über alle Saisonen stabil läuft.
+- Geplantes Ende: nach Abschluss der saisonalen Beobachtungsphase
+  (12 Monate) wird der Tab entfernt. Diagnose-Werkzeuge bleiben backend-
+  seitig als Logging / Metriken erhalten, falls nötig.
+
+**Verhältnis zur Solcast-Evaluierungsphase:** Die ursprüngliche Solcast-
+Evaluierungsphase (eingeführt v3.16.4 als Prognosen-Vergleich-Tab,
+„Evaluierungsphase") ist mit der Verabschiedung des
+[`KONZEPT-PROGNOSEQUELLEN-WAHL.md`](KONZEPT-PROGNOSEQUELLEN-WAHL.md)
+**formell beendet**. Der Tab in seiner heutigen Form (mit Solcast-Spalte,
+Genauigkeits-Tracking, Asymmetrie-Cards) wird auf reine EEDC-Diagnose
+umgestellt — Solcast-Spalte raus, Wetter-Stratifizierung rein.
+
+## Varianten A / B / C — technische Optionen, reaktiv
+
+Drei Granularitäten für ein anlagenspezifisches Korrekturprofil. Werden
+**nur** umgesetzt, wenn Diagnose-Schwellen aus Wetter-Stratifizierung
+oder konkrete Anfragen es nahelegen — keine kalenderbasierten Trigger
+(„6 Monate warten" gibt's nicht mehr).
 
 ### Variante A — Stündliches Korrekturprofil
 
-**Schema:** ein Faktor pro `(saisonbin, stunde)` — z.B. „April × 09:00".
+**Schema:** ein Faktor pro `(saisonbin, stunde)` — z. B. „April × 09:00".
 
-**Aggregation:** `Σ(IST_h) / Σ(Prognose_h)` über alle Tage im Saisonbin und
-gleicher Stunde h. Saisonale Kaskade analog zum Skalar.
-
-**Daten-Bedarf:** stündliche IST und Prognose. Beide vorhanden.
+**Aggregation:** `Σ(IST_h) / Σ(Prognose_h)` über alle Tage im Saisonbin
+und gleicher Stunde h. Saisonale Kaskade analog zum Skalar.
 
 **Anwendung:**
 
 - Live-Dashboard: `gti_h = gti_h × faktor_h(monat, h)`
-- Prognose-Tab: stündliches Profil aus Stundenfaktoren rekonstruiert,
-  Tagessumme = Σ aller h
+- Stündliches Profil aus Stundenfaktoren rekonstruiert, Tagessumme = Σ
+  aller h
 
 **Erfasst:** Verschattung im Tagesverlauf (Baum am Ostflügel zu typischen
-Sonnenständen).
+Sonnenständen). Deckt 95 % der real auftretenden Verschattung ab.
 
-**Erfasst NICHT:** Saisonale Verschiebung des Sonnenstands innerhalb desselben
-Monats (Anfang vs. Ende April), wetterabhängige Asymmetrie.
+**Aufwand:** mittel. Aggregation (Background-Job), neues Schema (siehe
+Datenmodell), Frontend-Heatmap (24×12) als Diagnose-Sicht.
 
-**Aufwand:** Mittel. Aggregation (Background-Job), neues Schema (Tabelle oder
-JSONB-Feld in Anlage), Frontend-Heatmap (24×12) als Diagnose-Sicht.
-
-**Tom-Argument:** „Stündlich korrigiert, transparent aggregiert,
-nachvollziehbar." Deckt 95 % der real auftretenden Verschattung ab.
+**Trigger:** Wetter-Stratifizierungs-Daten zeigen systematisches
+Stunden-Bias bei mindestens N Anlagen.
 
 ### Variante B — Sonnenstand-basiertes Korrekturprofil
 
-**Schema:** ein Faktor pro `(azimut_bin, elevation_bin)` — z.B. „Azimut 110°,
-Elevation 30°" als Bin.
+**Schema:** ein Faktor pro `(azimut_bin, elevation_bin)` — z. B.
+„Azimut 110°, Elevation 30°" als Bin (Auflösung 10°×10° = 324 Bins).
 
-**Aggregation:** Sonnenstand für jede `(tag, stunde)` berechnen, Bin zuordnen,
-analog `Σ(IST) / Σ(Prognose)` aggregieren.
-
-**Daten-Bedarf:** wie A, plus Solar-Position-Berechnung pro Slot (Library oder
-eigene Implementierung mit EOT — wir haben die Hälfte schon für Solar-Noon).
-
-**Anwendung:**
-
-- Live-Dashboard: pro Stunde Sonnenstand → Bin → Faktor → `gti × faktor`
-- Prognose-Tab: analog
+**Anwendung:** pro Stunde Sonnenstand → Bin → Faktor → `gti × faktor`.
 
 **Erfasst:** Verschattung physikalisch sauber. Gleicher Sonnenstand =
-gleiche Verschattung egal welche Jahreszeit. Sehr genau bei Anlagen mit
-Hindernissen.
+gleiche Verschattung egal welche Jahreszeit.
 
-**Erfasst NICHT:** wetterabhängige Asymmetrie (klar vs. diffus).
+**Aufwand:** höher. Solar-Position-Helper (~1 Tag, neutraler Helper),
+pre-aggregated Lookup-Tabelle pro Anlage.
 
-**Aufwand:** Höher. Bin-Definition (Auflösung-vs-Datenmenge-Trade-off, z.B.
-10°×10° = 36×9 = 324 Bins), Solar-Position-Helper, vermutlich pre-aggregated
-Lookup-Tabelle pro Anlage.
-
-**Tom-Argument:** „Echtes Solar-Engineering, keine Stundenraster-Pauschalierung."
-Premium-Positionierung.
+**Trigger:** konkrete Verschattungs-Anfrage UND Variante A reicht nicht.
 
 ### Variante C — String-/WR-spezifisches Korrekturprofil
 
-**Schema:** ein Profil (A oder B) **pro Investition** (PV-Modul-Gruppe oder WR)
-mit eigener Ausrichtung.
+**Schema:** ein Profil (A oder B) **pro Investition** (PV-Modul-Gruppe
+oder WR) mit eigener Ausrichtung.
 
-**Daten-Bedarf:** IST-kWh **pro String** (Investitions-MonatsdatenStunde — neue
-Tabelle, oder Erweiterung von `TagesEnergieProfil` pro Investition).
-
-**Anwendung:** pro String eigener Faktor → Summe ergibt Anlagen-Prognose.
+**Daten-Bedarf:** IST-kWh pro String — bei den meisten Anlagen aktuell
+nicht erfasst.
 
 **Erfasst:** „Ostflügel verschattet, Westflügel nicht" sauber.
 
-**Aufwand:** Hoch. Daten-Pipeline pro Investition (selten erfasst —
-bei den meisten Anlagen liegen nur Anlagensummen vor), neues Tabellen-Layout,
+**Aufwand:** hoch. Daten-Pipeline pro Investition, neues Tabellen-Layout,
 Sensor-Mapping pro String.
 
-**Tom-Argument:** Vermutlich keine Konkurrenz hat das. Sehr nischige Premium-
-Funktion, nur sinnvoll bei Multi-WR-Anlagen mit ungleicher Verschattung.
+**Trigger:** konkrete Multi-WR-Anfrage.
 
----
-
-## Datenmodell-Skizze (zukunftssicher)
+## Datenmodell
 
 Ein einziges Schema, das alle drei Varianten ohne Migration trägt:
 
@@ -238,8 +222,8 @@ class Korrekturprofil(Base):
     anlage_id: Mapped[int] = mapped_column(ForeignKey("anlagen.id"))
     investition_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("investitionen.id"), nullable=True
-    )  # NULL = Anlagensumme (heute), gesetzt = Variante C
-    quelle: Mapped[str]  # "openmeteo" | "solcast"
+    )  # NULL = Anlagensumme, gesetzt = Variante C
+    quelle: Mapped[str]  # heute nur "openmeteo" (EEDC-Eingabe)
     profil_typ: Mapped[str]  # "skalar" | "stunde" | "sonnenstand"
     bin_definition: Mapped[dict] = mapped_column(JSON)
     # skalar: {}
@@ -254,65 +238,34 @@ class Korrekturprofil(Base):
 
 **Migrationspfad:**
 
-1. **Heute** — kein Eintrag in `korrekturprofile`. Lernfaktor wie bisher in
-   `_get_lernfaktor_detail` berechnet, kein Cache in DB.
+1. **Heute** — kein Eintrag in `korrekturprofile`. Lernfaktor wie bisher
+   in `_get_lernfaktor_detail` berechnet, kein Cache in DB.
 2. **Etappe 1 (Variante A) ohne Migration** — neue Einträge mit
    `profil_typ='stunde'` werden vom Aggregator angelegt. `_get_lernfaktor`
    prüft erst die Tabelle, fällt sonst auf den alten Skalar zurück.
 3. **Etappe 2 (Variante B) ohne Migration** — `profil_typ='sonnenstand'`
-   ergänzt sich neben Variante A; UI bietet Wahl oder kombiniert beide.
-4. **Etappe 3 (Variante C) ohne Migration** — `investition_id` wird gesetzt,
-   das gleiche Schema trägt das.
+   ergänzt sich neben Variante A.
+4. **Etappe 3 (Variante C) ohne Migration** — `investition_id` wird
+   gesetzt, das gleiche Schema trägt das.
 
----
+## Aufwand und Reihenfolge
 
-## Vorbereitungs-Hooks (jetzt umsetzbar, ohne Surface)
-
-Was sinnvoll **vorgezogen** werden kann, ohne ein leeres Feature zu exponieren:
-
-| Vorbereitung | Aufwand | Kommentar |
+| Schritt | Aufwand | Voraussetzung |
 |---|---|---|
-| **Diese Konzept-Doku** | klein | Internal — sichtbar nur, wenn ich aktiv darauf verweise |
-| **Solar-Position-Helper** (`services/solar_position.py`) — Azimut/Elevation pro `(datum, stunde, lat, lon)` | klein-mittel | Ohnehin nützlich für Etappe 4 saisonale Muster, Wetter-Heatmap, evtl. SOLL/IST-Hour-Plot |
-| **Datenmodell-Skizze** in dieser Doku | erledigt | siehe oben |
-| **Background-Aggregator** als Stub (importierbar, läuft aber noch nicht) | klein | Erst aktivieren, wenn Datenbestand reicht |
-| **API-Endpunkt `/api/korrekturprofile/{anlage_id}`** als Stub | minimal | Geringfügige Surface — nur wenn aktiv geprüft wird |
+| O2 Trim-Mean als Doppel-Variante | ~halber Tag | nichts |
+| O1 Recency als Doppel-Variante | ~halber Tag | nach O2 |
+| Wetter-Stratifizierung im Prognosen-Tab | ~1-2 Tage | Doppel-Vergleich aktiv |
+| Aktivierung O1+O2 als neuer Default | ~Stunde | Doppel-Vergleich zeigt klar Verbesserung |
+| Variante A planen + implementieren | mehrere Wochen | Stratifizierung zeigt Stunden-Bias |
+| Variante B / C | hoch | reaktiv, nur auf konkrete Anfrage |
+| O3 Schneeerkennung | mittel | eigenes Issue, nach Winter 2026/27 |
+| Prognosen-Tab entfernen | ~halber Tag | nach 12 Monaten Saison-Beobachtung |
 
-**Was NICHT jetzt:**
+## Was nicht zu dieser Doku gehört
 
-- Frontend-UI (würde leeres Feature exponieren — Angriffsfläche statt Schutz)
-- Tatsächliche Aggregation (zu wenig Datenbestand bei den meisten Anlagen)
-- Migration auf neues Schema (kein produktiver Bedarf)
-
----
-
-## Trigger-Bedingungen für die Umsetzung
-
-| Bedingung | Erfüllt wann? |
-|---|---|
-| ≥ 6 Monate Stunden-IST-Daten in mindestens 5 Anlagen | TBD — beobachten ab v3.19 (Snapshot-Rework, Apr 2026) |
-| Konkrete Forum-Anfrage zur Stundenprofil-Korrektur | TBD |
-| Tom-HA-Vergleichs-Argument konkret im Raum | TBD |
-| Kapazität für mehrwöchige Implementierung | TBD |
-
-**Empfehlung:** Variante A als „Etappe 1" planen, Trigger ist „6 Monate Daten
-+ konkrete Anfrage". Variante B nur wenn nachweisbarer Bedarf. Variante C nur
-auf explizite Multi-String-Anfrage.
-
-**Hinweis:** Die orthogonalen Skalar-Verbesserungen O1 (Recency-Boost) und
-O2 (Trim-Mean) hängen **nicht** an diesen Triggern und können jederzeit
-vorgezogen werden. O3 (Schneeerkennung) braucht mindestens einen Winter-
-Datenbestand und sollte als separates Issue verfolgt werden.
-
----
-
-## Kommunikations-Hinweis
-
-Diese Konzept-Doku ist ein **internes Strategie-Dokument**, kein
-Marketing-Material. Sollte Tom-HA-Kontext sich verschärfen oder eine konkrete
-Verschattungs-Anfrage kommen, kann die Datenmodell-Skizze und der Migrationspfad
-**innerhalb einer Woche** in Code überführt werden — Schema-Design ist die
-zeitintensivste Arbeit, und die ist hier vorweggenommen.
-
-Bis dahin: skalarer Lernfaktor mit saisonaler Kaskade ist robust, wird aktiv
-genutzt, und ist transparent dokumentiert.
+- Quellenwahl-Architektur (EEDC / Solcast pur / SFML) — siehe
+  [`KONZEPT-PROGNOSEQUELLEN-WAHL.md`](KONZEPT-PROGNOSEQUELLEN-WAHL.md).
+- Vergleichende Decision-Support-Logik zwischen Quellen — explizit
+  ausgeschlossen, siehe Tom-HA-Versprechen.
+- Tom-HA als strategisches Argument — entwaffnet durch Quellenwahl-
+  Architektur, hier nicht mehr Thema.
