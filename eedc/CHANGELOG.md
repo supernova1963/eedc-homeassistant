@@ -7,6 +7,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.18] - 2026-05-03
+
+> 🩹 **Reload-Knopf heilt jetzt auch den Stunde-0-Spike — mit Vorschau-Tabelle vor Übernahme.** Rainer-Befund nach v3.25.17: das Reaggregate-Tool zeigte für 1.5. weiter PV 1.047 / Einspeisung 8.543 / Bezug 2.757 kWh in Stunde 0:00, obwohl 264 Snapshot-Upserts protokolliert wurden. Audit aller Schreib-/Lesepfade hat zwei Bugs aufgedeckt — beide gefixt. Plus: damit das nie wieder „Klick und hoffen" ist, gibt es jetzt eine Übernahmetabelle, die alt vs. neu zeigt, bevor irgendetwas geschrieben wird. Außerdem im Bündel: drei kleine UX-Items aus dem detLAN-Pakt.
+
+### Fixed
+
+- **Reaggregate-Tag deckt jetzt den Vortag-23:00-Boundary ab (Bug A)** — Slot 0 = `snap(Tag 00:00) − snap(Vortag 23:00)`, der Reload-Pfad schrieb aber nur Snapshots für Tag 00:00..23:00 (24 Stück). Ein korrupter Vortags-Snapshot — z. B. aus prä-#184-Phase oder einem aussetzenden :05-Job — blieb dadurch in der DB stehen, und Slot 0 zeigte beliebig oft denselben Spike. Der Range erweitert sich jetzt um eine Stunde nach hinten (`reaggregate_tag` in `energie_profil.py:1052`). 25 Snapshots werden überschrieben, der Vortags-Boundary wird mit dem aktuellen HA-`sum`-Wert frisch geschrieben.
+- **`live_snapshot_if_missing` schreibt keine HA-`state`-Werte mehr (Bug B, Wurzel von #184)** — Der `:55`-Preview-Job las bisher via `ha_state_svc.get_sensor_state()` den Sensor-`state` und schrieb ihn als Snapshot für die anstehende volle Stunde. Bei Tagesreset-Zählern (utility_meter daily) ist `state` aber etwas anderes als das Statistics-`sum`: `state`=Tagesenergie, `sum`=Lifetime-bereinigt. Wurde der reguläre :05-Hourly-Job danach übersprungen (HA-/Add-on-Restart, Job-Crash), blieb der `state`-Wert persistent in der Snapshot-Tabelle und produzierte beim nächsten Aggregat einen Lifetime-grossen Stunden-Spike — genau das Symptom aus Issue #184. Der HA-Counter-Pfad ist entfernt; die laufende Stunde im Energieprofil wartet im Add-on-Modus jetzt bis :05 der Folgestunde (wie vor #146). Der MQTT-Pfad bleibt aktiv — MQTT-Topics liefern direkt kumulative Lifetime-Werte ohne `state`/`sum`-Split.
+
+### Added
+
+- **Vorschau-Tabelle vor Reload („Übernahmetabelle")** — Statt nach Confirm-Dialog blind zu schreiben, öffnet der Reload-Knopf jetzt ein Modal mit einer Stundentabelle. Pro Kategorie (PV/Einspeisung/Bezug/…) eine Alt-Spalte (DB-Snapshot) und eine Neu-Spalte (Wert aus HA jetzt). Slot 0 ist farblich markiert mit „↤ Vortag"-Hinweis, weil er von der Vortags-23:00-Boundary abhängt. Differenzen über 0.1 kWh sind orange, über 1 kWh fett. Tagesumme alt/neu pro Kategorie obendrauf. Erst nach „Übernehmen" werden die Snapshots geschrieben und der Tag neu aggregiert. „Abbrechen" schreibt nichts. Wenn HA-Statistics nicht erreichbar ist (Neu-Spalte leer), ist der Übernahme-Button gesperrt — verhindert das Heilen mit Null-Werten. Neuer Endpoint `GET /api/energie-profil/{anlage}/reaggregate-tag/preview` liefert die Tabelle ohne irgendetwas zu schreiben.
+
+### Changed
+
+- **Tagesdetail-Datums-Picker erreicht den heutigen Tag (D#181 detLAN)** — Vor/Zurück-Pfeile und der date-Input waren bisher auf gestern gedeckelt mit der Begründung „heute hat noch keinen abgeschlossenen Energieprofil-Tag". Stimmt nicht: `aggregate_today_all` schreibt rollierend alle 15 Minuten alle abgeschlossenen Stunden des heutigen Tages. Maximum jetzt `heuteISO()` in `EnergieprofilTab.tsx` — der Pfeil zur rechten Seite springt zu heute, sobald gestern der aktuelle Stand ist.
+- **Lade-Indikator mit 250ms-Threshold (D#181 Nachtrag detLAN)** — Der `Lade…`-Span im Tagesdetail-Datum-Picker erschien bei jedem Tag-Wechsel kurz und wurde dann sofort wieder ausgeblendet — auf schnellen Rechnern ein nutzloser Flash, den detLAN als „kann man nicht erkennen, lieber gleich weglassen" beschrieben hat. Statt ihn ersatzlos zu entfernen kommt jetzt ein 250ms-Threshold: ist der Fetch nach 250ms noch nicht fertig, erscheint der Indikator. Schneller Rechner → kein Flash. Langsamer Rechner / Netz → weiterhin sichtbares Feedback.
+- **Wallbox vor E-Auto in `INVESTITION_TYP_ORDER` (#180 detLAN)** — Die Reihenfolge `'e-auto'` vor `'wallbox'` widersprach dem Cockpit-Subtabs-Pattern (PV → BKW → Speicher → WP → Wallbox → E-Auto → Sonstiges). Inhaltliche Begründung: Wallbox ist eine fest installierte Anlagen-Komponente mit Anschaffungs-/Stilllegungsdatum und JAZ-ähnlicher Effizienz-Auswertung, das E-Auto eher mobiler Verbraucher. Daher Wallbox vor E-Auto. Konstantenfeld in `useSetupWizard.ts` umsortiert — wirkt auf Setup-Wizard, MappingSummaryStep, HAExportSettings und alle anderen Konsumenten der Konstante in einem Schritt.
+
+### Internal
+
+- **Audit aller Snapshot-Pfade vor dem Fix** — `:05`-Hourly-Job, `:55`-Preview-Job, Recovery-Job (Startup), `vollbackfill` (über `leistung_w` — orthogonal), `_fill_gaps_linear` (extrapoliert nicht am Rand, ist OK), `_upsert_snapshot` (UniqueConstraint vorhanden, exakter `zeitpunkt`-Match), `_categorize_counter` + Negative-Delta-Schutz, Daten-Checker Spike-Erkennung, alle Resnap-Endpoints, Zeitzonen/DST. Ergebnis: nur die zwei oben gefixten Stellen waren buggy.
+- **Drei Reproduktionstests vor Release** (in-memory SQLite, gemockte HA-Statistics): pre-Fix Spike persistent / post-Fix sauber, HA-state-Pfad inaktiv / MQTT-Pfad aktiv, Preview liefert alt/neu ohne zu schreiben. Alle drei grün.
+
+---
+
 ## [3.25.17] - 2026-05-03
 
 > 🩹 **Reaggregate-Tag heilt prä-#184-Spikes endlich richtig** — Rainer-Befund nach v3.25.16: das Reparatur-Tool unter „Daten → Energieprofil" konzentrierte die Werte am Tagesanfang, statt sie zu reparieren (PV 1047 kW in Stunde 0:00, alle anderen Stunden ~0). Ursache: `resnap_anlage_range` überschrieb nur Slots, für die HA-Statistics einen Wert lieferte — bei `sum=NULL`-Slots aus prä-#184-Phase blieb der korrupte alte Snapshot in der DB stehen, und `aggregate_day` rechnete jedes Mal denselben Spike zurück.

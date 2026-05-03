@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.17)
+> **Stand:** Mai 2026 (v3.25.18)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,16 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### „Tag neu aggregieren" mit Vorschau-Tabelle vor Übernahme *(v3.25.18)*
+
+> 🩹 **User-sichtbare Reparatur** — Wer in **Einstellungen → Daten → Energieprofil** auf das Reload-Symbol eines Tages klickt, sieht ab sofort zuerst eine Vergleichstabelle: pro Stunde und Energiefluss (PV / Einspeisung / Bezug / …) eine Spalte „Alt" (was steht in der DB) und eine Spalte „Neu" (was käme jetzt aus Home Assistant). Erst nach „Übernehmen" werden die Werte tatsächlich überschrieben. Differenzen über 1 kWh sind fett markiert, kleinere Abweichungen orange — auf einen Blick sichtbar, ob die Reparatur sinnvoll ist oder ob HA selbst gerade Müll liefert.
+>
+> Außerdem zwei Bug-Fixes im Reparatur-Pfad: Stunde 0 hängt rechnerisch vom Snapshot des Vortags um 23:00 ab — der wurde bisher beim Reload **nicht** mit überschrieben, sodass ein alter, korrupter Vortags-Wert den Spike beliebig oft wieder produzieren konnte. Ab v3.25.18 wird er mitgenommen. Dazu ist ein zweiter, älterer Mechanismus entfernt, der bei Tagesreset-Zählern (utility_meter daily) gelegentlich den falschen Wert in die Snapshot-Tabelle geschrieben hat — das war die Wurzel des ursprünglichen Issue #184. Wer ältere Counter-Spikes in der Historie hat, kommt damit jetzt mit einem Klick + „Übernehmen" sauber durch.
+>
+> **Außerdem im Bündel** — drei kleine UX-Items aus dem detLAN-Pakt: Tagesdetail-Pfeile blättern bis einschließlich heute (rollierend aktualisiert, vorher endete bei gestern). Der `Lade…`-Hinweis am Datums-Picker erscheint nur noch, wenn der Fetch länger als 250 ms braucht — kein Aufploppen-und-Weg-Flash mehr. Reihenfolge im Sensor-Mapping-Wizard: Wallbox steht jetzt vor E-Auto (konsistent zum Cockpit, fest installierte Komponente vor mobilem Verbraucher).
+
+→ [Auswertungen → Energieprofil](HANDBUCH_BEDIENUNG.md#42-auswertungen)
 
 ### „Tag neu aggregieren" repariert prä-#184-Spikes jetzt wirklich *(v3.25.17)*
 
