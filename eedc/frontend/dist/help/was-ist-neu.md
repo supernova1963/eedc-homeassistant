@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.16)
+> **Stand:** Mai 2026 (v3.25.17)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,16 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### „Tag neu aggregieren" repariert prä-#184-Spikes jetzt wirklich *(v3.25.17)*
+
+> 🩹 **User-sichtbare Reparatur** — Rainer hat nach v3.25.16 gemeldet, dass das Reparatur-Tool unter **Einstellungen → Daten → Energieprofil** den Counter-Spike vom 1. Mai nicht beseitigt, sondern nur „an den Tagesanfang verschoben" hat: PV plötzlich 1047 kW in Stunde 0:00, alle anderen Stunden ~0. Ursache war, dass das Reparatur-Tool nur Snapshots überschrieb, für die Home Assistant einen sauberen Wert liefert — wenn HA für einen Slot weiterhin `sum=NULL` zurückgibt (typisch nach HA-Restart, bevor `recompile_statistics` durchgelaufen ist), blieb der alte korrupte Snapshot stehen und der Spike kam aus den DB-Werten zurück.
+>
+> Ab v3.25.17: liefert HA für einen Slot `None`, wird der vorhandene Snapshot **gelöscht**. Die Aggregation sieht dann eine echte Lücke und überspringt die Stunde sauber, statt einen falschen Lifetime-Sprung als Stunden-Δ zu interpretieren. Der reguläre stündliche Snapshot-Job ist davon nicht betroffen — er behält sein defensives Verhalten, damit kein temporärer HA-Hänger einen frisch geschriebenen Slot wegnimmt.
+>
+> Wer noch einen alten Counter-Spike in der Historie hat: einmalig den betroffenen Tag unter **Einstellungen → Daten → Energieprofil** über das Reload-Symbol neu aggregieren — der Spike sollte danach weg sein (oder als Lücke sichtbar bleiben, falls HA für die Stunde wirklich keinen Wert mehr hat).
+
+→ [Daten-Werkzeuge](HANDBUCH_EINSTELLUNGEN.md)
 
 ### WP-Kompressor-Starts: Σ Lebensdauer kommt direkt aus dem Hersteller-Sensor *(v3.25.16)*
 
