@@ -1546,7 +1546,7 @@ class DatenChecker:
                 monate_str += f" (+{len(fehlend_heiz) - 6} weitere)"
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,
-                meldung=f"{name}: Heizenergie fehlt in {len(fehlend_heiz)} Monat(en)",
+                meldung=f"{name}: Heizwärme fehlt in {len(fehlend_heiz)} Monat(en)",
                 details=monate_str,
                 link="/einstellungen/monatsdaten",
             ))

@@ -390,7 +390,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 icon={Flame}
                 color="text-red-400"
                 bgColor="bg-red-50 dark:bg-red-900/20"
-                formel="Σ Heizenergie aller Monate"
+                formel="Σ Heizwärme aller Monate"
               />
               <KPICard
                 title="Warmwasser"
@@ -411,7 +411,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   icon={Flame}
                   color="text-red-500"
                   bgColor="bg-red-50 dark:bg-red-900/20"
-                  formel="JAZ Heizen = Heizenergie ÷ Strom Heizen"
+                  formel="JAZ Heizen = Heizwärme ÷ Strom Heizen"
                   berechnung={`${fmtCalc(wpSummen.heizungGetrennt, 0)} kWh ÷ ${fmtCalc(wpSummen.stromHeizen, 0)} kWh`}
                   ergebnis={`= ${(wpSummen.heizungGetrennt / wpSummen.stromHeizen).toFixed(2)}`}
                 />

@@ -112,7 +112,7 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
     elif typ == "waermepumpe":
         return [
             SensorFeld(key="stromverbrauch_kwh", label="Stromverbrauch", unit="kWh", required=True),
-            SensorFeld(key="heizenergie_kwh", label="Heizenergie", unit="kWh", optional=True),
+            SensorFeld(key="heizenergie_kwh", label="Heizwärme", unit="kWh", optional=True),
             SensorFeld(key="warmwasser_kwh", label="Warmwasser", unit="kWh", optional=True),
         ]
 
