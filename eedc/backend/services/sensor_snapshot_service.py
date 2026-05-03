@@ -26,7 +26,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.sensor_snapshot import SensorSnapshot
@@ -227,6 +227,35 @@ async def get_snapshot(
     # Upsert in DB (idempotent bei parallelen Anfragen dank UniqueConstraint)
     await _upsert_snapshot(db, anlage_id, sensor_key, zeitpunkt, wert)
     return wert
+
+
+async def _delete_snapshot_if_exists(
+    db: AsyncSession,
+    anlage_id: int,
+    sensor_key: str,
+    zeitpunkt: datetime,
+) -> bool:
+    """Löscht einen vorhandenen SensorSnapshot-Eintrag (für resnap-Pfad).
+
+    Wird verwendet, wenn HA-Statistics für einen Slot `None` liefert (z.B.
+    `sum=NULL` direkt nach HA-Restart vor `recompile_statistics`) und der
+    alte Eintrag in der DB sonst als korrupte Lifetime-Differenz weiter-
+    propagieren würde. Ohne dieses Löschen bleibt der prä-#184-Spike
+    persistent — `reaggregate-tag` heilt ihn nicht (Befund Rainer 2026-05-03).
+
+    Returns:
+        True wenn ein Eintrag gelöscht wurde, False wenn keiner existierte.
+    """
+    result = await db.execute(
+        delete(SensorSnapshot).where(
+            and_(
+                SensorSnapshot.anlage_id == anlage_id,
+                SensorSnapshot.sensor_key == sensor_key,
+                SensorSnapshot.zeitpunkt == zeitpunkt,
+            )
+        )
+    )
+    return (result.rowcount or 0) > 0
 
 
 async def _upsert_snapshot(
@@ -824,6 +853,7 @@ async def snapshot_anlage(
     db: AsyncSession,
     anlage,
     zeitpunkt: Optional[datetime] = None,
+    force_resnap: bool = False,
 ) -> int:
     """
     Schreibt Snapshots aller verfügbaren kumulativen Zähler einer Anlage.
@@ -840,6 +870,12 @@ async def snapshot_anlage(
         db: Async Session
         anlage: Anlage-Objekt
         zeitpunkt: Zielzeitpunkt. Default: aktuelle Stunde (round down).
+        force_resnap: Wenn True und HA-Statistics für einen Slot `None`
+            liefert (z.B. `sum=NULL` aus prä-#184-Phase), wird der vor-
+            handene Snapshot **gelöscht** statt belassen. Nur im Recovery-
+            Pfad (`resnap_anlage_range`) aktiv — der reguläre :05-hourly-
+            Job behält das alte Verhalten (skip), damit ein temporäres
+            HA-Hänger keinen frisch geschriebenen Slot wegnimmt.
 
     Returns:
         Anzahl geschriebener Snapshots.
@@ -864,6 +900,14 @@ async def snapshot_anlage(
         for sensor_key, entity_id in counter_map.items():
             wert = ha_svc.get_value_at(entity_id, zeitpunkt, toleranz_minuten=10)
             if wert is None:
+                # Recovery-Pfad: existierenden Eintrag löschen, damit ein
+                # prä-#184-Spike (sum=NULL→state-Fallback) nicht persistent
+                # bleibt. aggregate_day sieht dann eine Lücke statt eines
+                # falschen Wertes (Befund Rainer 2026-05-03).
+                if force_resnap:
+                    await _delete_snapshot_if_exists(
+                        db, anlage.id, sensor_key, zeitpunkt
+                    )
                 continue
             await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
             count += 1
@@ -912,6 +956,7 @@ async def snapshot_anlage_5min(
     anlage,
     zeitpunkt: datetime,
     force: bool = False,
+    force_resnap: bool = False,
 ) -> int:
     """
     Schreibt 5-Min-Counter-Snapshots aus HA short_term_statistics für eine
@@ -966,6 +1011,10 @@ async def snapshot_anlage_5min(
             entity_id, zeitpunkt, toleranz_minuten=3, short_term=True
         )
         if wert is None:
+            if force_resnap:
+                await _delete_snapshot_if_exists(
+                    db, anlage.id, sensor_key, zeitpunkt
+                )
             continue
         await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
         count += 1
@@ -1008,11 +1057,14 @@ async def resnap_anlage_range(
     stunden = 0
     slots_5min = 0
 
-    # 1) Stündliche Slots (überschreiben via _upsert in snapshot_anlage)
+    # 1) Stündliche Slots (überschreiben via _upsert in snapshot_anlage).
+    # force_resnap=True: HA-None löscht den vorhandenen Snapshot (prä-#184-
+    # Spike-Recovery, Befund Rainer 2026-05-03). aggregate_day sieht danach
+    # eine echte Lücke statt einer falschen Lifetime-Differenz.
     zp = von_h
     while zp < bis_h:
         try:
-            n = await snapshot_anlage(db, anlage, zeitpunkt=zp)
+            n = await snapshot_anlage(db, anlage, zeitpunkt=zp, force_resnap=True)
             hourly_count += n
         except Exception as e:
             logger.warning(
@@ -1031,7 +1083,9 @@ async def resnap_anlage_range(
                 if slot >= bis:
                     break
                 try:
-                    n = await snapshot_anlage_5min(db, anlage, zeitpunkt=slot, force=True)
+                    n = await snapshot_anlage_5min(
+                        db, anlage, zeitpunkt=slot, force=True, force_resnap=True
+                    )
                     fivemin_count += n
                 except Exception as e:
                     logger.debug(
