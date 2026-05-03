@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.17] - 2026-05-03
+
+> 🩹 **Reaggregate-Tag heilt prä-#184-Spikes endlich richtig** — Rainer-Befund nach v3.25.16: das Reparatur-Tool unter „Daten → Energieprofil" konzentrierte die Werte am Tagesanfang, statt sie zu reparieren (PV 1047 kW in Stunde 0:00, alle anderen Stunden ~0). Ursache: `resnap_anlage_range` überschrieb nur Slots, für die HA-Statistics einen Wert lieferte — bei `sum=NULL`-Slots aus prä-#184-Phase blieb der korrupte alte Snapshot in der DB stehen, und `aggregate_day` rechnete jedes Mal denselben Spike zurück.
+
+### Fixed
+
+- **resnap löscht Snapshots, wenn HA jetzt `None` liefert (Rainer-PN 2026-05-03)** — Neuer Helper `_delete_snapshot_if_exists` und ein `force_resnap`-Parameter in `snapshot_anlage` / `snapshot_anlage_5min`. Im Recovery-Pfad (`resnap_anlage_range`) ist der Modus jetzt aktiv: liefert `get_value_at` für einen Slot `None` (typisch für sum=NULL aus prä-#184-Schreibphase), wird der vorhandene Snapshot gelöscht statt belassen. `aggregate_day` sieht damit eine echte Lücke und überspringt die Slot-Berechnung sauber, anstatt einen falschen Lifetime-Sprung als Stunden-Δ zu interpretieren. Der reguläre stündliche Snapshot-Job (Cron `:05`) behält das alte Skip-Verhalten — ein temporärer HA-Latenz-Hänger nimmt also keinen frisch geschriebenen Slot weg, nur der explizite Recovery-Aufruf räumt aktiv auf.
+- **Repro-Test (Demo-Daten, in-memory SQLite, gemockte HA-Statistics)** — Synthetisches Szenario: korrupter `snap(00:00) = 0`, sauberes `snap(01:00) = 100`, HA liefert für 00:00 weiterhin None (sum=NULL). Vor Fix: nach reaggregate bleibt snap(00:00)=0 und Δ Stunde 0 = 100 kWh als Spike (= Rainer's Symptom). Nach Fix: snap(00:00) wird gelöscht, Δ Stunde 0 = Lücke. Test grün vor Release verifiziert.
+
+### Internal
+
+- **Lesson learned: skip-on-None ≠ idempotenter Recovery** — Der :05-hourly-Job will defensiv bleiben (skip statt überschreiben). Der Recovery-Pfad muss aggressiv aufräumen (None → delete). Beides hatte vorher dieselbe Implementierung — `force_resnap` macht den Unterschied jetzt explizit.
+
+---
+
 ## [3.25.16] - 2026-05-03
 
 > 🧹 **Aufräumen statt nachschärfen: WP-Kompressor-Starts ohne Selbstkalibrierung** — detLAN-Folge-Beobachtung nach v3.25.14: Cockpit zeigte 146 statt 134 Starts (+12 Drift), Monatsbericht Mai 112. Statt die Eichungs-Logik (`baseline = sensor.gesamt − Σ TZ < heute` + heute_live-Hochrechnung) noch eine Iteration nachzuschärfen, fliegt sie ganz raus. Σ Lebensdauer im Cockpit kommt direkt aus dem Hersteller-Sensor — Punkt. Drift gegenüber den EEDC-erfassten Tagesinkrementen wird nicht mehr maskiert, sondern bleibt zwischen den Anzeigen sichtbar.
