@@ -96,15 +96,22 @@ const STEP_ORDER: WizardStep[] = [
   'complete',
 ]
 
-// Investition-Typ Reihenfolge für Anzeige
+// Investition-Typ Reihenfolge für Anzeige.
+// Pattern: erst Erzeuger/Speicher (PV → Speicher → BKW), dann fest installierte
+// Verbraucher-Anlagen (WP → Wallbox), dann mobile Verbraucher (E-Auto), Catch-All
+// am Ende. Konsistent mit der Cockpit-Subtab-Reihenfolge in
+// `components/layout/SubTabs.tsx`.
+// detLAN #180: Wallbox ist eine fest installierte Anlagen-Komponente (Investition
+// mit Anschaffungs-/Stilllegungsdatum), das E-Auto eher ein mobiler Verbraucher —
+// daher Wallbox vor E-Auto.
 export const INVESTITION_TYP_ORDER: InvestitionTyp[] = [
   'wechselrichter',
   'pv-module',
   'speicher',
   'balkonkraftwerk',
   'waermepumpe',
-  'e-auto',
   'wallbox',
+  'e-auto',
   'sonstiges',
 ]
 

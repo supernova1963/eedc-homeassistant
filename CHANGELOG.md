@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.18] - 2026-05-03
+
+> ✨ **detLAN-Feinschliff: Tagesdetail erreicht heute, Lade-Indikator ohne Flash, Wallbox vor E-Auto** — Drei kleine UX-Items aus dem heutigen detLAN-Bündel (D#181 Nachtrag + #180 Folgewunsch).
+
+### Changed
+
+- **Tagesdetail-Datums-Picker erreicht den heutigen Tag (D#181 detLAN)** — Vor/Zurück-Pfeile und der date-Input waren bisher auf gestern gedeckelt mit der Begründung „heute hat noch keinen abgeschlossenen Energieprofil-Tag". Stimmt nicht: `aggregate_today_all` schreibt rollierend alle 15 Minuten alle abgeschlossenen Stunden des heutigen Tages. Maximum jetzt `heuteISO()` in `EnergieprofilTab.tsx` — der Pfeil zur rechten Seite springt zu heute, sobald gestern der aktuelle Stand ist.
+- **Lade-Indikator mit 250ms-Threshold (D#181 Nachtrag detLAN)** — Der `Lade…`-Span im Tagesdetail-Datum-Picker erschien bei jedem Tag-Wechsel kurz und wurde dann sofort wieder ausgeblendet — auf schnellen Rechnern ein nutzloser Flash, den detLAN als „kann man nicht erkennen, lieber gleich weglassen" beschrieben hat. Statt ihn ersatzlos zu entfernen kommt jetzt ein 250ms-Threshold: ist der Fetch nach 250ms noch nicht fertig, erscheint der Indikator. Schneller Rechner → kein Flash. Langsamer Rechner / Netz → weiterhin sichtbares Feedback.
+- **Wallbox vor E-Auto in `INVESTITION_TYP_ORDER` (#180 detLAN)** — Die Reihenfolge `'e-auto'` vor `'wallbox'` widersprach dem Cockpit-Subtabs-Pattern (PV → BKW → Speicher → WP → Wallbox → E-Auto → Sonstiges). Inhaltliche Begründung: Wallbox ist eine fest installierte Anlagen-Komponente mit Anschaffungs-/Stilllegungsdatum und JAZ-ähnlicher Effizienz-Auswertung, das E-Auto eher mobiler Verbraucher. Daher Wallbox vor E-Auto. Konstantenfeld in `useSetupWizard.ts` umsortiert — wirkt auf Setup-Wizard, MappingSummaryStep, HAExportSettings und alle anderen Konsumenten der Konstante in einem Schritt.
+
+---
+
 ## [3.25.17] - 2026-05-03
 
 > 🩹 **Reaggregate-Tag heilt prä-#184-Spikes endlich richtig** — Rainer-Befund nach v3.25.16: das Reparatur-Tool unter „Daten → Energieprofil" konzentrierte die Werte am Tagesanfang, statt sie zu reparieren (PV 1047 kW in Stunde 0:00, alle anderen Stunden ~0). Ursache: `resnap_anlage_range` überschrieb nur Slots, für die HA-Statistics einen Wert lieferte — bei `sum=NULL`-Slots aus prä-#184-Phase blieb der korrupte alte Snapshot in der DB stehen, und `aggregate_day` rechnete jedes Mal denselben Spike zurück.
