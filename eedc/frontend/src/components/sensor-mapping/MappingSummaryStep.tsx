@@ -22,6 +22,43 @@ import {
 } from 'lucide-react'
 import type { FeldMapping, InvestitionInfo, StrategieTyp } from '../../api/sensorMapping'
 import { energieProfilApi, type VollbackfillResult } from '../../api/energie_profil'
+import { TYP_LABELS } from '../../lib/constants'
+import { INVESTITION_TYP_ORDER } from '../../hooks/useSetupWizard'
+
+// #180: Label-Mapping fuer Sensor-Felder. Akronym-aware Formatierung statt
+// nackter `field.replace(/_/g, ' ')`-Anzeige (vorher: `pv erzeugung (kWh)`).
+const FIELD_LABEL_OVERRIDES: Record<string, string> = {
+  pv_erzeugung_kwh: 'PV-Erzeugung (kWh)',
+  einspeisung_kwh: 'Einspeisung (kWh)',
+  netzbezug_kwh: 'Netzbezug (kWh)',
+  ladung_kwh: 'Ladung (kWh)',
+  ladung_pv_kwh: 'Ladung PV (kWh)',
+  ladung_netz_kwh: 'Ladung Netz (kWh)',
+  ladung_extern_kwh: 'Ladung extern (kWh)',
+  entladung_kwh: 'Entladung (kWh)',
+  v2h_entladung_kwh: 'V2H Entladung (kWh)',
+  km_gefahren: 'Kilometer gefahren',
+  verbrauch_kwh: 'Verbrauch (kWh)',
+  stromverbrauch_kwh: 'Stromverbrauch (kWh)',
+  strom_heizen_kwh: 'Strom Heizen (kWh)',
+  strom_warmwasser_kwh: 'Strom Warmwasser (kWh)',
+  heizenergie_kwh: 'Heizenergie (kWh)',
+  warmwasser_kwh: 'Warmwasser (kWh)',
+  wp_starts_anzahl: 'Kompressor-Starts',
+  ladevorgaenge: 'Ladevorgänge',
+  erzeugung_kwh: 'Erzeugung (kWh)',
+  eigenverbrauch_kwh: 'Eigenverbrauch (kWh)',
+  verbrauch_sonstig_kwh: 'Verbrauch (kWh)',
+  bezug_pv_kwh: 'Bezug PV (kWh)',
+  bezug_netz_kwh: 'Bezug Netz (kWh)',
+}
+
+function formatFieldLabel(field: string): string {
+  if (FIELD_LABEL_OVERRIDES[field]) return FIELD_LABEL_OVERRIDES[field]
+  // Generischer Fallback: Title-Case mit kWh-Ergänzung
+  const base = field.replace(/_/g, ' ').replace(/\bkwh\b/i, '(kWh)')
+  return base.charAt(0).toUpperCase() + base.slice(1)
+}
 
 interface MappingSummaryStepProps {
   state: {
@@ -103,7 +140,9 @@ function MappingRow({ label, mapping, obsolet }: { label: string; mapping: FeldM
           {STRATEGIE_LABELS[mapping.strategie]}
         </span>
         {mapping.strategie === 'sensor' && mapping.sensor_id && (
-          <span className="text-xs text-gray-500 max-w-[200px] truncate">
+          // #180: Truncation greift erst auf schmalen Viewports — auf >=lg
+          // genug Platz fuer die volle Sensor-ID, kein „...sensor.bat..."
+          <span className="text-xs text-gray-500 max-w-[200px] sm:max-w-[300px] md:max-w-[400px] lg:max-w-none truncate">
             ({mapping.sensor_id})
           </span>
         )}
@@ -128,7 +167,8 @@ function LiveSensorRow({ label, entityId, inverted }: { label: string; entityId:
       <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
       {entityId ? (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-green-700 dark:text-green-400 font-mono max-w-[250px] truncate">
+          {/* #180: max-w wird auf groesseren Viewports aufgehoben */}
+          <span className="text-xs text-green-700 dark:text-green-400 font-mono max-w-[250px] sm:max-w-[350px] md:max-w-[450px] lg:max-w-none truncate">
             {entityId}
           </span>
           {inverted && (
@@ -354,7 +394,16 @@ export default function MappingSummaryStep({
         </div>
       )}
 
-      {investitionen.map(inv => {
+      {/* #180: feste Reihenfolge nach INVESTITION_TYP_ORDER (PV → Wechselrichter →
+          Speicher → BKW → WP → E-Auto → Wallbox → Sonstiges). Vorher gemischt
+          nach API-Reihenfolge (= Anlage-Insert-Reihenfolge). */}
+      {[...investitionen]
+        .sort((a, b) => {
+          const ai = INVESTITION_TYP_ORDER.indexOf(a.typ as never)
+          const bi = INVESTITION_TYP_ORDER.indexOf(b.typ as never)
+          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+        })
+        .map(inv => {
         const felder = state.investitionen[inv.id.toString()] || {}
         const live = invLive[inv.id.toString()] || {}
         const hasFelder = Object.keys(felder).length > 0
@@ -368,7 +417,7 @@ export default function MappingSummaryStep({
                 {TYP_ICONS[inv.typ] || <Zap className="w-4 h-4" />}
               </span>
               <h3 className="font-medium text-gray-900 dark:text-white">{inv.bezeichnung}</h3>
-              <span className="text-xs text-gray-500">({inv.typ})</span>
+              <span className="text-xs text-gray-500">({TYP_LABELS[inv.typ] ?? inv.typ})</span>
             </div>
             <div className="px-4 py-2">
               {Object.entries(felder).map(([field, mapping]) => {
@@ -381,7 +430,7 @@ export default function MappingSummaryStep({
                 return (
                   <MappingRow
                     key={field}
-                    label={field.replace(/_/g, ' ').replace('kwh', '(kWh)')}
+                    label={formatFieldLabel(field)}
                     mapping={mapping}
                     obsolet={
                       isObsolet

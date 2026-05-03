@@ -100,6 +100,8 @@ import type {
   MQTTConfigFromAddon
 } from '../api/ha'
 import type { Anlage } from '../types'
+import { TYP_LABELS } from '../lib/constants'
+import { INVESTITION_TYP_ORDER } from '../hooks/useSetupWizard'
 
 export default function HAExportSettings() {
   // State
@@ -314,23 +316,58 @@ export default function HAExportSettings() {
     return groups
   }
 
+  // #179: alle Categories aus backend/services/ha_sensors_export.py:SensorCategory
+  // mit deutschen Labels + sprechenden Icons. Fehlende Mappings landeten vorher
+  // als roher Enum-Wert mit Pin-Default-Icon (detLAN-Bild: quote/anlage/
+  // investition/speicher/status).
   const categoryLabels: Record<string, string> = {
+    anlage: 'Anlage',
     energie: 'Energie',
+    quote: 'Quoten',
     finanzen: 'Finanzen',
-    autarkie: 'Autarkie & Eigenverbrauch',
     umwelt: 'Umwelt',
+    investition: 'Investition',
+    waermepumpe: 'Wärmepumpe',
+    speicher: 'Speicher',
+    e_auto: 'E-Auto',
+    wallbox: 'Wallbox',
+    status: 'Status',
+    // Defensive Fallbacks fuer aelteren Backend-Stand
+    autarkie: 'Autarkie & Eigenverbrauch',
     performance: 'Performance',
-    sonstige: 'Sonstige'
+    sonstige: 'Sonstige',
   }
 
   const categoryIcons: Record<string, string> = {
+    anlage: '🏠',
     energie: '⚡',
+    quote: '📊',
     finanzen: '💰',
-    autarkie: '🏠',
     umwelt: '🌱',
+    investition: '💼',
+    waermepumpe: '🔥',
+    speicher: '🔋',
+    e_auto: '🚗',
+    wallbox: '🔌',
+    status: '⚙️',
+    autarkie: '🏠',
     performance: '📊',
-    sonstige: '📌'
+    sonstige: '📌',
   }
+
+  // Anzeige-Reihenfolge — Anlage zuerst (Stamm), dann Energie/Quote/Finanzen/
+  // Umwelt (Auswertungs-Pyramide), dann Investitions-Aspekte, Status zuletzt.
+  const CATEGORY_ORDER = [
+    'anlage', 'energie', 'quote', 'finanzen', 'umwelt',
+    'investition', 'waermepumpe', 'speicher', 'e_auto', 'wallbox',
+    'autarkie', 'performance', 'sonstige', 'status',
+  ]
+  const sortCategories = (entries: [string, SensorExportItem[]][]) =>
+    [...entries].sort(([a], [b]) => {
+      const ai = CATEGORY_ORDER.indexOf(a)
+      const bi = CATEGORY_ORDER.indexOf(b)
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+    })
 
   if (loading) {
     return (
@@ -678,7 +715,7 @@ export default function HAExportSettings() {
           </h2>
 
           <div className="space-y-4">
-            {Object.entries(groupSensorsByCategory(anlageExport.sensors)).map(([category, sensors]) => (
+            {sortCategories(Object.entries(groupSensorsByCategory(anlageExport.sensors))).map(([category, sensors]) => (
               <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                 <button
                   onClick={() => toggleCategory(category)}
@@ -751,14 +788,23 @@ export default function HAExportSettings() {
           </h2>
 
           <div className="space-y-4">
-            {exportData.investitionen.map((inv) => (
-              <details key={inv.investition_id} className="border border-gray-200 dark:border-gray-700 rounded-lg">
+            {/* #179: feste Reihenfolge analog Sensor-Zuordnung-Zusammenfassung,
+                + overflow-hidden fuer Card-Ecken (vorher schnitt der Hover-
+                Hintergrund von <summary> ueber den rounded-lg-Border). */}
+            {[...exportData.investitionen]
+              .sort((a, b) => {
+                const ai = INVESTITION_TYP_ORDER.indexOf(a.typ as never)
+                const bi = INVESTITION_TYP_ORDER.indexOf(b.typ as never)
+                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+              })
+              .map((inv) => (
+              <details key={inv.investition_id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                 <summary className="p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
                   <span className="font-medium text-gray-900 dark:text-white">
                     {inv.bezeichnung}
                   </span>
                   <span className="ml-2 text-sm text-gray-500">
-                    ({inv.typ} - {inv.sensors.length} Sensoren)
+                    ({TYP_LABELS[inv.typ] ?? inv.typ} - {inv.sensors.length} Sensoren)
                   </span>
                 </summary>
                 <div className="p-3 space-y-2">
