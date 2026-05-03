@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.13)
+> **Stand:** Mai 2026 (v3.25.14)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,46 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### WP-Kompressor-Starts: Σ Lebensdauer wächst nicht mehr im Tagesverlauf zu hoch *(v3.25.14)*
+
+> ⚠ **User-sichtbare Wert-Korrektur** — Folgebefund zu v3.25.13: nach dem dortigen Wizard-Save-Fix beobachtete detLAN, dass die Σ-Lebensdauer-Anzeige im Lauf des Tages nach oben driftet — bei 7 realen Kompressor-Starts heute zeigte das Cockpit 136 statt 131. Ursache war keine fehlerhafte Sensor-Erfassung, sondern eine doppelte Buchhaltung des heutigen Tages: zum Save-Zeitpunkt floss er bereits in die Baseline-Berechnung ein, später dann nochmal in die Σ-Aggregation. Beide Stellen lasen den heutigen TagesZusammenfassung-Eintrag, der während des Tages aber noch instabil ist (Snapshot-Job läuft stündlich, der Tagesabschluss `morgen 00:00` existiert ja noch nicht).
+
+Fix: heutiger Tag wird konsistent aus der TagesZusammenfassung-Aggregation ausgeschlossen, der heutige Verlauf kommt stattdessen aus einer Live-Hochrechnung (aktueller Hersteller-Counter minus Snapshot vom heutigen Tagesanfang). Σ Lebensdauer bleibt damit jederzeit synchron mit dem WP-Display, ohne im Lauf des Tages zu driften. Tooltip im Cockpit zerlegt die Anzeige jetzt in drei Anteile: Hersteller-Baseline + EEDC abgeschlossene Tage + heute live. Gleicher Fix gilt auch für die „Aktueller Monat"-Ansicht.
+
+Bei reinen MQTT-Standalone-Setups ohne direkten Live-State-Zugriff fehlt der heutige Anteil bis zum Tagesabschluss — das ist bewusst so, lieber konservativ als doppelt gezählt.
+
+→ [Cockpit → Wärmepumpe](HANDBUCH_BEDIENUNG.md#41-cockpit)
+
+### Sensor-Zuordnung-Zusammenfassung: Großschreibung, Reihenfolge, Sensor-IDs nicht mehr abgeschnitten *(v3.25.14)*
+
+> ✨ **Sichtbar im Sensor-Mapping-Wizard** — Der „Zusammenfassung"-Tab zeigte Investitions-Typen in Klammern als interne Schlüssel (`(e-auto)`, `(pv-module)`, `(speicher)`, `(waermepumpe)`, `(wallbox)`) statt als deutsche Bezeichnung. Feldnamen kamen ungekämmt aus den Backend-Schlüsseln: `pv erzeugung (kWh)`, `wp starts anzahl`, `km gefahren`. Auf breiten Bildschirmen wurde die Sensor-ID rechts trotzdem bei 200 Pixeln abgeschnitten — sichtbar als `…sensor.bat…`.
+
+Behoben: Investitions-Typen jetzt mit deutschen Labels (`(E-Auto)`, `(PV-Module)`, `(Wärmepumpe)`, …), Feldnamen mit Akronym-Behandlung (`PV-Erzeugung (kWh)`, `Kompressor-Starts`, `Kilometer gefahren`), Investitions-Karten in fester Reihenfolge (PV → Wechselrichter → Speicher → BKW → WP → E-Auto → Wallbox → Sonstiges) statt API-Reihenfolge, und die Sensor-ID-Truncation greift nur noch auf schmalen Viewports — auf Desktop wird die volle ID angezeigt.
+
+→ [Sensor-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#11-ha-sensor-zuordnung-add-on)
+
+### MQTT-Export: Kategorien mit deutschen Labels und passenden Icons *(v3.25.14)*
+
+> ✨ **Sichtbar im HA-Sensor-Export-Tab** — Der „Verfügbare Sensoren"-Block listete mehrere Kategorien (Anlage, Quote, Investition, Speicher, Status, Wärmepumpe, E-Auto, Wallbox) als rohen Schlüssel mit Stecknadel-Icon, weil deren Mapping fehlte. Die Investitions-Sensoren-Kachel hatte das gleiche Problem in der Klammer; zusätzlich war die abgerundete Ecke der Karten beim Hover „defekt" — der Hintergrund schnitt über den Border.
+
+Behoben: alle Kategorien haben jetzt deutsche Labels und sprechende Icons (Anlage 🏠, Quoten 📊, Investition 💼, Wärmepumpe 🔥, Speicher 🔋, E-Auto 🚗, Wallbox 🔌, Status ⚙️). Anzeige-Reihenfolge: Anlage zuerst, dann Auswertungs-Pyramide (Energie / Quoten / Finanzen / Umwelt), dann Investitions-Aspekte, Status zuletzt. Investitions-Sensoren-Block analog sortiert. Card-Border-Radius-Bug behoben.
+
+→ [HA-Sensor-Export](HANDBUCH_EINSTELLUNGEN.md#13-ha-sensor-export)
+
+### Wärmepumpe: „Heizenergie" → „Heizwärme" mit Tooltips elektrisch / thermisch *(v3.25.14)*
+
+> ✨ **Sichtbar in der Monatsdaten-Eingabe** — In der Eingabemaske der WP-Monatsdaten wurde „Heizenergie" leicht mit „Stromverbrauch" verwechselt — beide klingen elektrisch. Wer in beiden Feldern denselben Wert eintrug (oder dachte, „Heizenergie" sei einfach der Strom), bekam einen COP von 1.0 angezeigt. Das ist der Verräter, aber für Erstnutzer nicht selbsterklärend.
+
+Konsistent über alle Stellen umgestellt: das Eingabefeld heißt jetzt **„Heizwärme"** (nicht mehr „Heizenergie"), und unter jedem Eingabefeld steht ein erklärender Hinweis:
+
+- **Stromverbrauch / Strom Heizen / Strom Warmwasser:** „Stromaufnahme … (elektrisch)"
+- **Heizwärme:** „Abgegebene Heizwärme (thermisch) — COP = Heizwärme / Strom"
+- **Warmwasser:** „Abgegebene Warmwasser-Wärme (thermisch)"
+
+Wer beim Hovern über das Eingabefeld zusätzlich den HTML-Tooltip sehen möchte: derselbe Text steht auch dort. Der Backend-Schlüssel `heizenergie_kwh` und der CSV-Suffix `_Heizung_kWh` bleiben unverändert — bestehende CSV-Templates und Imports funktionieren weiter.
+
+→ [Monatsdaten erfassen](HANDBUCH_BEDIENUNG.md#43-monatsdaten)
 
 ### WP-Kompressor-Starts-Baseline bleibt nach Investitionen-Speichern erhalten *(v3.25.13)*
 
