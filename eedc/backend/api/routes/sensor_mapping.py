@@ -414,19 +414,6 @@ async def save_sensor_mapping(
 
         await session.commit()
 
-        # Counter-Baselines neu eichen (Issue #173):
-        # Für jede WP mit gemapptem wp_starts_anzahl-Sensor wird die historische
-        # Baseline berechnet und in inv.parameter abgelegt. Selbstkorrigierend
-        # bei Wizard-Rerun. Fehler isolieren — Mapping bleibt gespeichert,
-        # auch wenn Baseline-Lookup scheitert (z.B. Sensor noch unavailable).
-        try:
-            await _refresh_counter_baselines(session, anlage)
-        except Exception as e:
-            logger.warning(
-                f"Counter-Baselines konnten nicht aktualisiert werden für anlage={anlage_id}: "
-                f"{type(e).__name__}: {e}"
-            )
-
         # Zähle konfigurierte Sensoren
         sensor_count = 0
         for basis_field in mapping_dict["basis"].values():
@@ -452,48 +439,6 @@ async def save_sensor_mapping(
             created_sensors=0,
             errors=[],
         )
-
-
-async def _refresh_counter_baselines(session: AsyncSession, anlage: Anlage) -> None:
-    """Berechnet Counter-Baselines (z.B. Kompressor-Starts) neu nach Wizard-Save.
-
-    Nutzt compute_counter_baseline für jede WP mit gemapptem wp_starts_anzahl-
-    Sensor und legt das Ergebnis in inv.parameter ab. Issue #173.
-    """
-    from backend.services.sensor_snapshot_service import (
-        KUMULATIVE_COUNTER_FELDER, compute_counter_baseline,
-    )
-
-    inv_mapping = (anlage.sensor_mapping or {}).get("investitionen") or {}
-    if not inv_mapping:
-        return
-
-    invs_result = await session.execute(
-        select(Investition).where(Investition.anlage_id == anlage.id)
-    )
-    invs = invs_result.scalars().all()
-
-    for inv in invs:
-        counter_felder = KUMULATIVE_COUNTER_FELDER.get(inv.typ, ())
-        if not counter_felder:
-            continue
-        for feld in counter_felder:
-            result = await compute_counter_baseline(session, anlage, inv, feld)
-            if result is None:
-                continue
-            params = dict(inv.parameter or {})
-            params[f"{feld}_baseline"] = result["baseline"]
-            params[f"{feld}_baseline_quelle"] = result["sensor_gesamt"]
-            params[f"{feld}_baseline_eedc_summe"] = result["eedc_summe"]
-            params[f"{feld}_baseline_aktualisiert"] = datetime.now().isoformat()
-            inv.parameter = params
-            flag_modified(inv, "parameter")
-            logger.info(
-                f"Counter-Baseline {feld} inv={inv.id}: sensor={result['sensor_gesamt']} "
-                f"eedc={result['eedc_summe']} → baseline={result['baseline']}"
-            )
-
-    await session.commit()
 
 
 @router.delete("/{anlage_id}")

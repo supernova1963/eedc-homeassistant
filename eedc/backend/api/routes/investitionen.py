@@ -1470,8 +1470,7 @@ async def get_waermepumpe_dashboard(
     if not waermepumpen:
         return []
 
-    # Anlage einmal laden (Live-Read pro WP via get_counter_today_live braucht
-    # sensor_mapping). Issue #173.
+    # Anlage einmal laden — get_counter_lifetime braucht sensor_mapping.
     anlage_result = await db.execute(
         select(Anlage).where(Anlage.id == anlage_id)
     )
@@ -1479,7 +1478,7 @@ async def get_waermepumpe_dashboard(
     if anlage is None:
         return []
 
-    from backend.services.sensor_snapshot_service import get_counter_today_live
+    from backend.services.sensor_snapshot_service import get_counter_lifetime
 
     # Batch-Query: Alle Monatsdaten für alle Wärmepumpen auf einmal laden
     wp_ids = [w.id for w in waermepumpen]
@@ -1493,21 +1492,14 @@ async def get_waermepumpe_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # Issue #169: Kompressor-Starts pro WP-Investition aggregieren.
-    # Quelle: TagesZusammenfassung.komponenten_starts (Form
-    # {"wp_starts_anzahl": {"<inv_id>": <int>}}). Pro Inv: Σ abgeschlossene
-    # Tage + Max-Tag.
-    # Issue #173 Folge: heutiger Tag ausgeschlossen (datum < today). Während des
-    # Tages ist TagesZusammenfassung[heute] noch instabil (siehe Begründung in
-    # compute_counter_baseline). Der heutige Verlauf wird unten via Live-Read
-    # (get_counter_today_live) wieder hinzugefügt — damit bleibt Σ Lebensdauer
-    # synchron mit dem Hersteller-Counter, ohne den Doppelzählungs-Bug.
-    today = date.today()
+    # Kompressor-Starts Tagesinkremente (Issue #169): Quelle
+    # TagesZusammenfassung.komponenten_starts ({"wp_starts_anzahl": {"<inv_id>": <int>}}).
+    # Wird hier nur noch für die Max/Tag-KPI gebraucht. Σ Lebensdauer kommt
+    # direkt aus dem Hersteller-Sensor (get_counter_lifetime).
     tz_result = await db.execute(
         select(TagesZusammenfassung.komponenten_starts)
         .where(TagesZusammenfassung.anlage_id == anlage_id)
         .where(TagesZusammenfassung.komponenten_starts.is_not(None))
-        .where(TagesZusammenfassung.datum < today)
     )
     starts_by_inv: dict[int, list[int]] = {wid: [] for wid in wp_ids}
     for (komp_starts,) in tz_result.all():
@@ -1577,30 +1569,15 @@ async def get_waermepumpe_dashboard(
         strom_co2 = gesamt_strom * CO2_FAKTOR_STROM_KG_KWH
         co2_ersparnis = gas_co2 - strom_co2
 
-        # Kompressor-Starts (#169): Σ + Max-Tag über die gesamte Lebensdauer.
-        # Issue #173: Baseline aus Wizard-Save addieren, damit historische
-        # Hersteller-Counter-Stände (z.B. Nibe ab Werks-Inbetriebnahme)
-        # in Σ-Lebensdauer korrekt erscheinen.
-        # Issue #173 Folge: heute_live aus Live-Sensor-Read addieren (Σ_vor_heute
-        # ist stabil, heute_live = sensor_live − snapshot(heute 00:00)). Bei
-        # MQTT-only-Setups ohne Live-State liefert der Helper None — dann zeigt
-        # Σ Lebensdauer den Stand bis Tagesende gestern (statt mit doppelt
-        # gezählten heutigen Starts zu driften).
+        # Kompressor-Starts: Σ Lebensdauer kommt direkt aus dem Hersteller-
+        # Sensor (Hersteller zählt seit Werks-Inbetriebnahme, das ist die
+        # Wahrheit). Drift zwischen Hersteller-Counter und EEDC-Tagesinkrementen
+        # wird im Daten-Checker sichtbar gemacht, nicht im Read-Pfad versteckt.
+        # Max/Tag bleibt aus EEDC-Tagesinkrementen (echte Höchst-Tagessumme).
         wp_starts_list = starts_by_inv.get(wp.id, [])
-        wp_baseline = (wp.parameter or {}).get('wp_starts_anzahl_baseline') if wp.parameter else None
-        if not isinstance(wp_baseline, (int, float)):
-            wp_baseline = 0
-        kompressor_starts_heute_live = await get_counter_today_live(
+        kompressor_starts_gesamt = await get_counter_lifetime(
             db, anlage, wp, 'wp_starts_anzahl'
         )
-        if wp_starts_list or wp_baseline or kompressor_starts_heute_live:
-            kompressor_starts_gesamt = (
-                int(wp_baseline)
-                + sum(wp_starts_list)
-                + (kompressor_starts_heute_live or 0)
-            )
-        else:
-            kompressor_starts_gesamt = None
         kompressor_starts_max_tag = max(wp_starts_list) if wp_starts_list else None
 
         zusammenfassung = {
@@ -1616,8 +1593,6 @@ async def get_waermepumpe_dashboard(
             'anzahl_monate': len(monatsdaten),
             'kompressor_starts_gesamt': kompressor_starts_gesamt,
             'kompressor_starts_max_tag': kompressor_starts_max_tag,
-            'kompressor_starts_baseline': int(wp_baseline) if wp_baseline else None,
-            'kompressor_starts_heute_live': kompressor_starts_heute_live,
         }
 
         # Getrennte COP-Werte wenn separate Strommessung vorhanden

@@ -294,12 +294,9 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         JAZ = Jahresarbeitszahl über die gesamte Laufzeit ({z.anzahl_monate} Monate). Jahresweise Auswertung unter Auswertungen → Komponenten.
       </p>
 
-      {/* Issue #169: Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist).
-          Issue #173: Hersteller-Baseline (vor Sensor-Aktivierung) wird beim
-          Wizard-Save geeicht und in Σ-Lebensdauer mitgezählt.
-          Issue #173 Folge: abgeschlossene Tage stabil aus TagesZusammenfassung
-          + heutige Live-Hochrechnung aus Hersteller-Counter. Damit bleibt
-          Σ Lebensdauer synchron mit dem WP-Display, ohne Doppelzählung. */}
+      {/* Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist).
+          Σ Lebensdauer = Hersteller-Counter direkt. Drift gegenüber EEDC-
+          erfassten Tagesinkrementen wird im Daten-Checker ausgewiesen. */}
       {z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <KPICard
@@ -308,24 +305,8 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             icon={Power}
             color="gray"
             subtitle={z.kompressor_starts_max_tag != null ? `Max/Tag: ${z.kompressor_starts_max_tag}` : undefined}
-            formel={z.kompressor_starts_baseline
-              ? 'Σ Lebensdauer = Hersteller-Baseline + EEDC-Tagesdifferenzen + heute live'
-              : 'Σ Tages-Starts seit Anschaffung + heute live'}
-            berechnung={(() => {
-              const baseline = z.kompressor_starts_baseline ?? 0
-              const heuteLive = z.kompressor_starts_heute_live ?? 0
-              const eedcAbgeschlossen = z.kompressor_starts_gesamt! - baseline - heuteLive
-              const lines: string[] = []
-              if (z.kompressor_starts_baseline) {
-                lines.push(`Hersteller-Baseline (Wizard-Save): ${baseline.toLocaleString('de-DE')}`)
-              }
-              lines.push(`${z.kompressor_starts_baseline ? '+ ' : ''}EEDC abgeschlossene Tage: ${eedcAbgeschlossen.toLocaleString('de-DE')}`)
-              if (z.kompressor_starts_heute_live != null) {
-                lines.push(`+ heute live (Hersteller-Counter): ${heuteLive.toLocaleString('de-DE')}`)
-              }
-              lines.push(`Höchste Tagessumme: ${z.kompressor_starts_max_tag ?? '—'}`)
-              return lines.join('\n')
-            })()}
+            formel="Aus Hersteller-Sensor (Lebensdauer-Counter)"
+            berechnung={`Höchste Tagessumme (EEDC-erfasst): ${z.kompressor_starts_max_tag ?? '—'}`}
             ergebnis={`= ${z.kompressor_starts_gesamt.toLocaleString('de-DE')} Starts`}
           />
         </div>

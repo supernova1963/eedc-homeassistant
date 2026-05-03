@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.15)
+> **Stand:** Mai 2026 (v3.25.16)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,14 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### WP-Kompressor-Starts: Σ Lebensdauer kommt direkt aus dem Hersteller-Sensor *(v3.25.16)*
+
+> ⚠ **User-sichtbare Wert-Korrektur** — Nach v3.25.14 meldete detLAN, dass das Cockpit immer noch driftet (146 statt 134 Starts). Statt die Eichungs-Logik noch eine Runde nachzuschärfen, fliegt der ganze Selbstkalibrierungs-Mechanismus raus. Σ Lebensdauer im Cockpit zeigt ab sofort einfach das, was der Hersteller-Sensor sagt — keine Berechnung, keine Eichung, keine Drift-Möglichkeit. Wenn EEDC im Lauf der Zeit weniger Tagesinkremente erfasst als der Hersteller intern hochzählt (z. B. wegen Sensor-Aktivierungs-Lücken), bleibt das zwischen den Anzeigen sichtbar: Cockpit zeigt die Hersteller-Wahrheit, Monatsbericht zeigt was EEDC erfasst hat. Diagnose ohne versteckte Magic.
+
+Bei reinen MQTT-Standalone-Setups ohne direkten HA-State-Zugriff fällt der Read auf die Statistics- bzw. den jüngsten Snapshot zurück — höchstens eine Stunde alt.
+
+→ [Cockpit → Wärmepumpe](HANDBUCH_BEDIENUNG.md#41-cockpit)
 
 ### Tagesdetail-Ansicht: Vor/Zurück-Pfeile zum Blättern *(v3.25.15)*
 

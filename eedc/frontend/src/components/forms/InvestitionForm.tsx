@@ -320,8 +320,9 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         anschaffungskosten_alternativ: formData.anschaffungskosten_alternativ ? parseFloat(formData.anschaffungskosten_alternativ) : undefined,
         betriebskosten_jahr: formData.betriebskosten_jahr ? parseFloat(formData.betriebskosten_jahr) : undefined,
         aktiv: formData.aktiv,
-        // Wizard-only-Keys (z. B. wp_starts_anzahl_baseline aus sensor_mapping.py)
-        // mit existing parameter mergen — sonst löscht jeder Form-Save unsichtbare Felder.
+        // Wizard-only-Keys (von sensor_mapping.py oder anderen Pfaden in parameter
+        // geschrieben) mit existing parameter mergen — sonst löscht jeder Form-Save
+        // unsichtbare Felder.
         parameter: Object.keys(convertedParams).length > 0
           ? { ...(investition?.parameter ?? {}), ...convertedParams }
           : undefined,

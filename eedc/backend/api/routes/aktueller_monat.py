@@ -1047,20 +1047,14 @@ async def get_aktueller_monat(
     # Quelle: TagesZusammenfassung.komponenten_starts (JSON, Form
     # {"wp_starts_anzahl": {"<inv_id>": <int>}}). Pro Tag des Monats werden die
     # Counts aller WP-Investitionen summiert (= Tagessumme der Anlage), daraus
-    # max(Tagessumme) und Σ(Tagessumme im Monat).
-    # Issue #173 Folge: heutiger Tag aus TagesZusammenfassung-Aggregation
-    # ausgeschlossen (datum < today) — TZ[heute].komponenten_starts ist während
-    # des Tages instabil, würde Drift in Σ-Monat verursachen. Heutige Hoch-
-    # rechnung kommt aus dem Live-Sensor (get_counter_today_live) und wird zur
-    # stabilen Σ_vor_heute addiert. Bei MQTT-only-Setups ohne Live-Read fehlt
-    # heute in der Σ — erscheint mit dem nächsten Tagesabschluss.
+    # max(Tagessumme) und Σ(Tagessumme im Monat). Zeigt was EEDC erfasst hat —
+    # Drift gegenüber dem Hersteller-Counter (Cockpit) wird im Daten-Checker
+    # ausgewiesen, nicht hier verrechnet.
     wp_starts_max_tag: Optional[int] = None
     wp_starts_summe_monat: Optional[int] = None
     if hat_waermepumpe:
         from backend.models.tages_energie_profil import TagesZusammenfassung
-        from backend.services.sensor_snapshot_service import get_counter_today_live
         from sqlalchemy import extract
-        today = date.today()
         wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
         wp_inv_id_strs = {str(i.id) for i in wp_invs}
         tz_result = await db.execute(
@@ -1068,7 +1062,6 @@ async def get_aktueller_monat(
             .where(TagesZusammenfassung.anlage_id == anlage_id)
             .where(extract("year", TagesZusammenfassung.datum) == jahr)
             .where(extract("month", TagesZusammenfassung.datum) == monat)
-            .where(TagesZusammenfassung.datum < today)
             .where(TagesZusammenfassung.komponenten_starts.is_not(None))
         )
         tagessummen: list[int] = []
@@ -1080,18 +1073,6 @@ async def get_aktueller_monat(
                     tag_sum += int(count)
             if tag_sum > 0:
                 tagessummen.append(tag_sum)
-        # Heutige Live-Hochrechnung addieren (nur im aktuellen Monat) — summiert
-        # über alle WPs der Anlage, analog zur Tages-Aggregation oben.
-        if ist_aktueller_monat:
-            heute_tag_sum = 0
-            for wp in wp_invs:
-                heute_live = await get_counter_today_live(
-                    db, anlage, wp, "wp_starts_anzahl"
-                )
-                if heute_live is not None and heute_live > 0:
-                    heute_tag_sum += heute_live
-            if heute_tag_sum > 0:
-                tagessummen.append(heute_tag_sum)
         if tagessummen:
             wp_starts_max_tag = max(tagessummen)
             wp_starts_summe_monat = sum(tagessummen)

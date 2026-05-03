@@ -756,37 +756,24 @@ async def get_hourly_counter_sum_by_feld(
     return result
 
 
-async def compute_counter_baseline(
+async def get_counter_lifetime(
     db: AsyncSession,
     anlage,
     inv,
     feld: str,
-) -> Optional[dict]:
+) -> Optional[int]:
     """
-    Berechnet die historische Baseline für einen kumulativen Counter-Sensor
-    (z.B. Kompressor-Starts einer Wärmepumpe, Issue #173).
+    Liefert den aktuellen Lebensdauer-Stand eines kumulativen Counter-Sensors
+    direkt aus der Hersteller-Quelle (z.B. WP-Kompressor-Starts).
 
-    Idee: Hersteller-Counter zeigen die echte Lebensdauer-Zahl (z.B. 5234 Starts
-    seit Werks-Inbetriebnahme). EEDC zählt aber erst ab Sensor-Aktivierung über
-    Snapshot-Differenzen — die historische Baseline fehlt damit.
-
-    Berechnung beim Wizard-Save:
-        baseline = sensor.gesamt − Σ(eedc-Tagesdifferenzen seit Inbetriebnahme)
-
-    Anzeige der Lebensdauer-Summe später:
-        Σ_lebensdauer = baseline + Σ(eedc-Tagesdifferenzen seit Inbetriebnahme)
-
-    Bei Wizard-Rerun wird die Baseline neu geeicht (selbstkorrigierend).
-
-    Args:
-        db: Async Session
-        anlage: Anlage-Objekt (mit sensor_mapping)
-        inv: Investition-Objekt (mit typ, parameter, anschaffungsdatum)
-        feld: Counter-Feldname (z.B. "wp_starts_anzahl")
+    Read-Kaskade: HA-Live-State → HA-Statistics → jüngster SensorSnapshot.
+    Keine Berechnung, keine Eichung, keine Drift-Möglichkeit — der Sensor
+    selbst ist die Wahrheit. Vergleich gegen EEDC-erfasste Tagesinkremente
+    erfolgt im Daten-Checker, nicht im Read-Pfad.
 
     Returns:
-        Dict {sensor_gesamt, eedc_summe, baseline} oder None wenn Sensor-Wert
-        nicht verfügbar / Mapping fehlt / Feld nicht zum Investitionstyp passt.
+        Aktueller Counter-Stand (gerundet), oder None wenn weder Live-Read
+        noch Snapshot ermittelbar.
     """
     if feld not in KUMULATIVE_COUNTER_FELDER.get(inv.typ, ()):
         return None
@@ -802,22 +789,21 @@ async def compute_counter_baseline(
     if not entity_id:
         return None
 
-    # 1. Aktuellen Sensor-Wert lesen (Live-State, sonst HA-Statistics, sonst jüngster Snapshot)
-    sensor_gesamt: Optional[float] = None
+    wert: Optional[float] = None
     try:
         from backend.services.ha_state_service import get_ha_state_service
         ha_state = get_ha_state_service()
         if ha_state.is_available:
-            sensor_gesamt = await ha_state.get_sensor_state(entity_id)
+            wert = await ha_state.get_sensor_state(entity_id)
     except Exception as e:
-        logger.debug(f"Baseline {feld} inv={inv.id}: ha_state Fehler: {type(e).__name__}: {e}")
+        logger.debug(f"lifetime {feld} inv={inv.id}: ha_state Fehler: {type(e).__name__}: {e}")
 
-    if sensor_gesamt is None:
+    if wert is None:
         ha_svc = get_ha_statistics_service()
         if ha_svc.is_available:
-            sensor_gesamt = ha_svc.get_value_at(entity_id, datetime.now(), toleranz_minuten=120)
+            wert = ha_svc.get_value_at(entity_id, datetime.now(), toleranz_minuten=120)
 
-    if sensor_gesamt is None:
+    if wert is None:
         sensor_key = f"inv:{inv.id}:{feld}"
         result = await db.execute(
             select(SensorSnapshot.wert_kwh).where(
@@ -827,113 +813,11 @@ async def compute_counter_baseline(
                 )
             ).order_by(SensorSnapshot.zeitpunkt.desc()).limit(1)
         )
-        sensor_gesamt = result.scalar_one_or_none()
+        wert = result.scalar_one_or_none()
 
-    if sensor_gesamt is None:
-        logger.info(
-            f"Baseline {feld} inv={inv.id}: Sensor-Wert nicht ermittelbar "
-            f"({entity_id}) — Wizard erneut durchlaufen, sobald Sensor liefert"
-        )
+    if wert is None:
         return None
-
-    # 2. eedc.Σ — bisher kumulierte Tagesdifferenzen aus TagesZusammenfassung.
-    # Issue #173 Folge: heutiger Tag ausgeschlossen. Während des Tages ist
-    # TagesZusammenfassung[heute].komponenten_starts noch instabil (Snapshot-Job
-    # läuft hourly, get_snapshot mit Toleranz-Fenster nimmt jüngsten verfügbaren
-    # Snapshot statt morgen 00:00) — wenn die heutigen Starts hier mitgezählt
-    # würden, würde sich die baseline beim Wizard-Save um den heute-bisher-Wert
-    # absenken. Wenn TagesZusammenfassung[heute] dann später für denselben Tag
-    # höher geschrieben wird (weitere Starts, reaggregate-tag-Trigger), ergibt
-    # baseline + Σ(eedc inkl. heute) > sensor_gesamt → Doppelzählung
-    # (detLAN-Beobachtung 2026-05-03: 136 statt 131 Starts).
-    from backend.models.tages_energie_profil import TagesZusammenfassung
-    tz_query = select(TagesZusammenfassung.komponenten_starts).where(
-        TagesZusammenfassung.anlage_id == anlage.id,
-        TagesZusammenfassung.komponenten_starts.is_not(None),
-        TagesZusammenfassung.datum < date.today(),
-    )
-    if inv.anschaffungsdatum:
-        tz_query = tz_query.where(TagesZusammenfassung.datum >= inv.anschaffungsdatum)
-    tz_result = await db.execute(tz_query)
-
-    eedc_summe = 0
-    for (komp_starts,) in tz_result.all():
-        feld_map = (komp_starts or {}).get(feld) or {}
-        wert = feld_map.get(str(inv.id))
-        if isinstance(wert, (int, float)) and wert > 0:
-            eedc_summe += int(wert)
-
-    baseline = max(0, int(round(sensor_gesamt)) - eedc_summe)
-    return {
-        "sensor_gesamt": int(round(sensor_gesamt)),
-        "eedc_summe": eedc_summe,
-        "baseline": baseline,
-    }
-
-
-async def get_counter_today_live(
-    db: AsyncSession,
-    anlage,
-    inv,
-    feld: str,
-) -> Optional[int]:
-    """
-    Heutige Tages-Hochrechnung eines kumulativen Counter-Sensors aus Live-Stand
-    minus Snapshot zum heutigen Tag-Anfang. Issue #173.
-
-    Nutzungs-Kontext: Cockpit-Aggregation Σ Lebensdauer summiert nur abge-
-    schlossene Tage aus TagesZusammenfassung (`datum < today`). Damit der heutige
-    Verlauf trotzdem sichtbar bleibt, liefert dieser Helper einen Live-Read,
-    der zur stabilen Σ_vor_heute addiert werden kann. Fällt der Live-Sensor aus
-    (HA nicht erreichbar, MQTT-only-Setup ohne Live-State), gibt die Funktion
-    None — der Aufrufer fällt dann auf „Σ ohne heute" zurück.
-
-    Returns:
-        Anzahl der heutigen Counter-Increments seit 00:00, oder None wenn nicht
-        ermittelbar (kein Mapping, kein Live-Sensor, kein Tag-Start-Snapshot).
-    """
-    if feld not in KUMULATIVE_COUNTER_FELDER.get(inv.typ, ()):
-        return None
-
-    sensor_mapping = anlage.sensor_mapping or {}
-    inv_data = (sensor_mapping.get("investitionen", {}) or {}).get(str(inv.id))
-    if not isinstance(inv_data, dict):
-        return None
-    config = (inv_data.get("felder", {}) or {}).get(feld)
-    if not isinstance(config, dict) or config.get("strategie") != "sensor":
-        return None
-    entity_id = config.get("sensor_id")
-    if not entity_id:
-        return None
-
-    sensor_live: Optional[float] = None
-    try:
-        from backend.services.ha_state_service import get_ha_state_service
-        ha_state = get_ha_state_service()
-        if ha_state.is_available:
-            sensor_live = await ha_state.get_sensor_state(entity_id)
-    except Exception as e:
-        logger.debug(f"today_live {feld} inv={inv.id}: ha_state Fehler: {type(e).__name__}: {e}")
-
-    if sensor_live is None:
-        ha_svc = get_ha_statistics_service()
-        if ha_svc.is_available:
-            sensor_live = ha_svc.get_value_at(entity_id, datetime.now(), toleranz_minuten=120)
-
-    if sensor_live is None:
-        return None
-
-    sensor_key = f"inv:{inv.id}:{feld}"
-    tag_start = datetime.combine(date.today(), datetime.min.time())
-    snap_today_start = await get_snapshot(db, anlage.id, sensor_key, entity_id, tag_start)
-    if snap_today_start is None:
-        return None
-
-    delta = sensor_live - snap_today_start
-    if delta < 0:
-        # Counter-Reset (Firmware-Update) → Live-Hochrechnung nicht mehr sinnvoll
-        return None
-    return int(round(delta))
+    return int(round(wert))
 
 
 async def snapshot_anlage(
