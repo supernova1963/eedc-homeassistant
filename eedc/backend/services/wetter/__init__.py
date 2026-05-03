@@ -26,6 +26,7 @@ from backend.services.wetter.utils import (
     MJ_TO_KWH,
     SECONDS_TO_HOURS,
     wetter_code_zu_symbol,
+    wetter_symbol_aus_tag,
 )
 from backend.services.wetter.open_meteo import (
     OPEN_METEO_ARCHIVE_URL,
@@ -53,7 +54,7 @@ __all__ = [
     # Models
     "WetterProvider", "WETTER_MODELLE", "MODELL_ANZEIGE",
     # Utils
-    "MJ_TO_KWH", "SECONDS_TO_HOURS", "wetter_code_zu_symbol",
+    "MJ_TO_KWH", "SECONDS_TO_HOURS", "wetter_code_zu_symbol", "wetter_symbol_aus_tag",
     # Open-Meteo
     "OPEN_METEO_ARCHIVE_URL", "OPEN_METEO_FORECAST_URL",
     "fetch_open_meteo_archive", "fetch_open_meteo_forecast",

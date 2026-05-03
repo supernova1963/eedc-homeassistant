@@ -42,3 +42,41 @@ def wetter_code_zu_symbol(code: Optional[int]) -> str:
         return "thunderstorm"
     else:
         return "cloudy"
+
+
+def wetter_symbol_aus_tag(
+    wetter_code: Optional[int],
+    bewoelkung_prozent: Optional[float],
+    niederschlag_mm: Optional[float],
+    *,
+    niederschlag_threshold_mm: float = 0.5,
+) -> str:
+    """
+    SoT-Helper: WMO-Code → Symbol mit Plausibilisierung.
+
+    Open-Meteo's Daily-WMO-Code biased Richtung „schlechtester Moment des Tages":
+    Ein Tag mit 14 h Sonne und kurzem Schauer wird oft als „bedeckt" (3) kodiert,
+    obwohl die mittlere Bewölkung deutlich darunter liegt. Diese Funktion korrigiert
+    das anhand `bewoelkung_prozent`. Bei nennenswertem Niederschlag bleibt das
+    Code-basierte Symbol erhalten (drizzle/rainy/snowy/showers/thunderstorm).
+
+    Args:
+        wetter_code: WMO Weather Code (None → 'unknown'-Fallback)
+        bewoelkung_prozent: Mittlere Bewölkung [0–100]; None → keine Plausibilisierung
+        niederschlag_mm: Niederschlag in mm; > Threshold schützt das Code-Symbol
+        niederschlag_threshold_mm: Schwelle für Niederschlags-Schutz.
+            0.5 für Tagessummen (default), 0.05 für Stundenwerte.
+    """
+    symbol = wetter_code_zu_symbol(wetter_code)
+
+    if niederschlag_mm is not None and niederschlag_mm > niederschlag_threshold_mm:
+        return symbol
+    if bewoelkung_prozent is None:
+        return symbol
+    if bewoelkung_prozent < 20:
+        return "sunny"
+    if bewoelkung_prozent < 40:
+        return "mostly_sunny"
+    if bewoelkung_prozent < 70:
+        return "partly_cloudy"
+    return "cloudy"

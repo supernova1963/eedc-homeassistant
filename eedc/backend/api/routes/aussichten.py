@@ -43,7 +43,7 @@ from backend.core.investition_parameter import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_netto
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
-from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.pvgis import get_pvgis_tmy_defaults
 from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
@@ -400,7 +400,11 @@ async def get_kurzfrist_prognose(
             temperatur_min_c=tag["temperatur_min_c"],
             niederschlag_mm=tag["niederschlag_mm"],
             bewoelkung_prozent=tag["bewoelkung_prozent"],
-            wetter_symbol=wetter_code_zu_symbol(tag["wetter_code"]),
+            wetter_symbol=wetter_symbol_aus_tag(
+                tag["wetter_code"],
+                tag.get("bewoelkung_prozent"),
+                tag.get("niederschlag_mm"),
+            ),
         ))
 
         summe_kwh += pv_kwh
@@ -824,7 +828,11 @@ async def get_wetter_vorhersage(
             niederschlag_mm=tag["niederschlag_mm"],
             sonnenstunden=tag["sonnenstunden"],
             bewoelkung_prozent=tag["bewoelkung_prozent"],
-            wetter_symbol=wetter_code_zu_symbol(tag["wetter_code"]),
+            wetter_symbol=wetter_symbol_aus_tag(
+                tag["wetter_code"],
+                tag.get("bewoelkung_prozent"),
+                tag.get("niederschlag_mm"),
+            ),
         )
         for tag in wetter["tage"]
     ]

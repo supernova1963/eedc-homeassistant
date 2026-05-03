@@ -26,7 +26,7 @@ from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
-from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.cache import (
     _cache_get, _cache_set, _error_cache_check, _error_cache_set,
     ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
@@ -326,7 +326,10 @@ def _generate_demo_wetter(kwp: float = 10.0) -> dict:
             "zeit": f"{h:02d}:00",
             "temperatur_c": round(temp, 1),
             "wetter_code": code,
-            "wetter_symbol": wetter_code_zu_symbol(code),
+            "wetter_symbol": wetter_symbol_aus_tag(
+                code, bewoelkung, niederschlag,
+                niederschlag_threshold_mm=0.05,
+            ),
             "bewoelkung_prozent": bewoelkung,
             "niederschlag_mm": niederschlag,
             "globalstrahlung_wm2": round(strahlung, 0),
@@ -843,13 +846,18 @@ async def get_live_wetter(
             if gti is not None and lernfaktor is not None:
                 gti = gti * lernfaktor
 
+            bewoelkung_h = hourly.get("cloud_cover", [None] * len(times))[i]
+            niederschlag_h = hourly.get("precipitation", [None] * len(times))[i]
             stunde = {
                 "zeit": f"{h:02d}:00",
                 "temperatur_c": hourly.get("temperature_2m", [None] * len(times))[i],
                 "wetter_code": code,
-                "wetter_symbol": wetter_code_zu_symbol(code),
-                "bewoelkung_prozent": hourly.get("cloud_cover", [None] * len(times))[i],
-                "niederschlag_mm": hourly.get("precipitation", [None] * len(times))[i],
+                "wetter_symbol": wetter_symbol_aus_tag(
+                    code, bewoelkung_h, niederschlag_h,
+                    niederschlag_threshold_mm=0.05,
+                ),
+                "bewoelkung_prozent": bewoelkung_h,
+                "niederschlag_mm": niederschlag_h,
                 "globalstrahlung_wm2": hourly.get("shortwave_radiation", [None] * len(times))[i],
                 "gti_wm2": gti,
             }

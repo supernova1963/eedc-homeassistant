@@ -19,7 +19,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
-from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.pvgis import fetch_pvgis_tmy_monat, get_pvgis_tmy_defaults
 from backend.services.wetter.models import WETTER_MODELLE
 
@@ -190,7 +190,11 @@ async def get_kurzfrist_prognose(
             "temperatur_min_c": tag["temperatur_min_c"],
             "niederschlag_mm": tag["niederschlag_mm"],
             "bewoelkung_prozent": tag["bewoelkung_prozent"],
-            "wetter_symbol": wetter_code_zu_symbol(tag["wetter_code"]),
+            "wetter_symbol": wetter_symbol_aus_tag(
+                tag["wetter_code"],
+                tag.get("bewoelkung_prozent"),
+                tag.get("niederschlag_mm"),
+            ),
         })
 
         summe_kwh += pv_kwh

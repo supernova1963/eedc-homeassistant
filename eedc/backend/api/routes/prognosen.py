@@ -26,7 +26,7 @@ from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
-from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
@@ -369,7 +369,11 @@ async def get_prognosen_vergleich(
                 temperatur_min_c=tag["temperatur_min_c"],
                 niederschlag_mm=tag["niederschlag_mm"],
                 bewoelkung_prozent=tag["bewoelkung_prozent"],
-                wetter_symbol=wetter_code_zu_symbol(tag["wetter_code"]),
+                wetter_symbol=wetter_symbol_aus_tag(
+                    tag["wetter_code"],
+                    tag.get("bewoelkung_prozent"),
+                    tag.get("niederschlag_mm"),
+                ),
             ))
 
     openmeteo_heute_kwh = openmeteo_tage[0].pv_prognose_kwh if len(openmeteo_tage) >= 1 else None

@@ -21,7 +21,7 @@ from datetime import date, datetime
 from math import radians, sin, cos
 from typing import Optional, List
 
-from backend.services.wetter.utils import wetter_code_zu_symbol
+from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.cache import (
     _cache_get, _cache_set, _error_cache_check, _error_cache_set,
     FORECAST_CACHE_TTL, JITTER_MAX_SECONDS,
@@ -30,32 +30,6 @@ from backend.services.wetter.cache import (
 from backend.services.wetter.models import WETTER_MODELLE, MODELL_ANZEIGE
 
 
-def _plausibles_wetter_symbol(
-    symbol: str,
-    bewoelkung_pct: Optional[float],
-    niederschlag_mm: Optional[float],
-) -> str:
-    """
-    Korrigiert das WMO-basierte Wetter-Symbol anhand der tatsächlichen Bewölkung.
-
-    Manche Modelle (z.B. MeteoSwiss) liefern weather_code inkonsistent zur
-    gemessenen Bewölkung. Diese Funktion plausibilisiert das Symbol.
-    """
-    # Niederschlag hat Vorrang — Symbol nicht überschreiben
-    if niederschlag_mm is not None and niederschlag_mm > 0.5:
-        return symbol
-
-    if bewoelkung_pct is None:
-        return symbol
-
-    # Bewölkung rein → Symbol bestimmen (unabhängig vom WMO-Code)
-    if bewoelkung_pct < 20:
-        return "sunny"
-    if bewoelkung_pct < 40:
-        return "mostly_sunny"
-    if bewoelkung_pct < 70:
-        return "partly_cloudy"
-    return "cloudy"
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -609,8 +583,8 @@ def _build_prognose(
             ),
             niederschlag_mm=daily_precip[i] if i < len(daily_precip) else None,
             schnee_cm=daily_snow[i] if i < len(daily_snow) else None,
-            wetter_symbol=_plausibles_wetter_symbol(
-                wetter_code_zu_symbol(daily_weather_code[i] if i < len(daily_weather_code) else None),
+            wetter_symbol=wetter_symbol_aus_tag(
+                daily_weather_code[i] if i < len(daily_weather_code) else None,
                 round(sum(day.get("cloud_values", [])) / len(day["cloud_values"])) if day.get("cloud_values") else None,
                 daily_precip[i] if i < len(daily_precip) else None,
             ),
