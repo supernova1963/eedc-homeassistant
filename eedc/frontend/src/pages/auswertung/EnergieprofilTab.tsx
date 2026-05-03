@@ -5,7 +5,7 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
+import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns, ChevronLeft, ChevronRight } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { Card, Button } from '../../components/ui'
 import { exportToCSV } from '../../utils/export'
@@ -82,6 +82,13 @@ function gesternISO(): string {
 function vorTagenISO(tage: number): string {
   const d = new Date()
   d.setDate(d.getDate() - tage)
+  return toISODate(d)
+}
+
+// #181: einen Tag relativ zu einem ISO-Datum verschieben (negativ = zurueck)
+function tagVerschieben(isoDatum: string, tage: number): string {
+  const d = new Date(isoDatum)
+  d.setDate(d.getDate() + tage)
   return toISODate(d)
 }
 
@@ -185,11 +192,29 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
 
   return (
     <div className="space-y-4">
-      {/* Datum-Picker */}
-      <div className="flex items-center gap-3">
+      {/* Datum-Picker mit Vor/Zurueck-Buttons (#181) — analog Monats-Ansicht.
+          Maximum bleibt gestern (heute hat noch keinen abgeschlossenen Energieprofil-Tag). */}
+      <div className="flex items-center gap-2 flex-wrap">
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tag:</label>
+        <button
+          type="button"
+          onClick={() => setDatum(tagVerschieben(datum, -1))}
+          className="p-2 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+          aria-label="Vorheriger Tag"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
         <input type="date" aria-label="Tag auswählen" value={datum} max={gesternISO()}
           onChange={e => setDatum(e.target.value)} className="input w-auto text-sm" />
+        <button
+          type="button"
+          onClick={() => setDatum(tagVerschieben(datum, 1))}
+          disabled={datum >= gesternISO()}
+          className="p-2 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="Nächster Tag"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
         {loading && <span className="text-xs text-gray-400">Lade…</span>}
       </div>
 
