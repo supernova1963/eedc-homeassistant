@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.20] - 2026-05-04
+
+> 🩹 **Daten-Checker-Fehlalarme: Strompreis-Sensor und Dienstwagen-E-Autos** — Joachim-PN-Folge nach v3.25.19. Zwei Warnungen im Daten-Checker, die für ihn (und vermutlich für andere mit gleichem Setup) Fehlalarme waren — beide sind jetzt entfernt.
+
+### Fixed
+
+- **Strompreis-Sensor wird nicht mehr als kWh-Counter geprüft** — `_check_sensor_mapping_lts` listete `basis.strompreis` zusammen mit Einspeisung, Netzbezug und PV-Gesamt auf und meldete bei fehlendem `state_class` eine WARNING „kWh-Sensor(en) nicht in HA-Long-Term-Statistics". Strompreis ist aber ct/kWh oder €/kWh — kein kumulativer kWh-Counter, sondern ein Live-Preis-Sensor. Wir lesen ihn live, nicht aus LTS aggregiert; ein fehlendes `state_class` ist hier irrelevant. (Joachim-PN: `sensor.grid_price_monitor_average_price_today` wurde fälschlich angemahnt.) `pv_gesamt` aus der Liste mit entfernt — wird heute nur als `pv_gesamt_w` (Live-W) gemappt, ebenfalls kein LTS-Bedarf.
+- **Dienstwagen-E-Autos werden im Energieprofil-Abdeckungs-Check übersprungen** — Bei einem als Dienstwagen markierten E-Auto gibt es per Definition keinen PV-Bezug und keine Verbrauchsbilanz; ein kumulativer kWh-Counter wäre ohne Funktion. `_check_investitionen` (ROI-Check) hatte den Skip schon, `_check_energieprofil_abdeckung` aber nicht — der hat trotzdem „verbrauch_kwh oder ladung_kwh fehlt" gemeldet. Jetzt konsistent. (Joachim-PN: ID.4 als Dienstwagen meldete trotz korrekt fehlender Zuordnung eine Warnung.)
+
+### Internal
+
+- **Lesson learned: Dienstwagen-Flag muss in ALLEN E-Auto-spezifischen Checks greifen** — Bisher war der Skip nur an einer Stelle. Bei zukünftigen E-Auto-Checks daran denken: `inv.parameter.get("ist_dienstlich")` prüfen, Dienstwagen früh herausfiltern.
+
+---
+
 ## [3.25.19] - 2026-05-04
 
 > ✨ **UX-Konsistenz-Bündel** — Sammlung von kleinen Schliff-Items aus den Issues #185, #186, #187, #188 + ein Joachim-PN-Befund. Inhaltliche Klammer: Cockpit-Reihenfolge konsistent durchziehen, Statistik-Import lesbar machen, Kraftstoff-Hinweis kontextabhängig, KPI-Kachel-Schreibweise vereinheitlichen, Sensor-Mapping-Badge nur dort wo relevant.
