@@ -948,6 +948,15 @@ class DatenChecker:
             if not erwartet:
                 continue  # sonstiges, wechselrichter etc. skippen
 
+            # Dienstwagen: kein PV-Bezug, kein Verbrauchs-Tracking nötig.
+            # Konsistent mit `_check_investitionen` (Zeile ~443), wo ROI-Checks
+            # für Dienstwagen ebenfalls übersprungen werden. (Joachim-PN
+            # 2026-05-04: ID.4 als Dienstwagen meldete trotzdem kWh-Counter
+            # fehlt.)
+            param = inv.parameter or {}
+            if inv.typ == "e-auto" and param.get("ist_dienstlich"):
+                continue
+
             inv_data = inv_map.get(str(inv.id), {}) or {}
             felder = inv_data.get("felder", {}) or {}
             fehlend = [
