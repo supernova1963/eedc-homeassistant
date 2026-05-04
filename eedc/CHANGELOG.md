@@ -7,6 +7,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.19] - 2026-05-04
+
+> ✨ **UX-Konsistenz-Bündel** — Sammlung von kleinen Schliff-Items aus den Issues #185, #186, #187, #188 + ein Joachim-PN-Befund. Inhaltliche Klammer: Cockpit-Reihenfolge konsistent durchziehen, Statistik-Import lesbar machen, Kraftstoff-Hinweis kontextabhängig, KPI-Kachel-Schreibweise vereinheitlichen, Sensor-Mapping-Badge nur dort wo relevant.
+
+### Changed
+
+- **`INVESTITION_TYP_ORDER` global auf Wallbox → E-Auto → WP umgestellt (#187/2 detLAN)** — Bisher `wechselrichter, pv-module, speicher, balkonkraftwerk, waermepumpe, wallbox, e-auto, sonstiges`; jetzt `..., wallbox, e-auto, waermepumpe, sonstiges`. Wirkt zentral aus `hooks/useSetupWizard.ts` auf Setup-Wizard, MappingSummaryStep, HAExportSettings und Statistik-Import. `components/layout/SubTabs.tsx` (Cockpit-Subtab-Reihenfolge) parallel angepasst — Wallbox+E-Auto bilden ein Paar (fest installierte Anschluss-Komponente + mobiler Verbraucher), WP folgt danach.
+- **Statistik-Import (`HAStatistikImport.tsx`) zeigt deutsche Labels (#187/1 detLAN)** — Basis-Felder werden mit `FELD_LABELS` aufgelöst und im Backend (`ha_statistics.py`) als Anzeige-Kopie der Werte mit Label-Keys ausgeliefert (`einspeisung → "Einspeisung"`, `netzbezug → "Netzbezug"`, `pv_gesamt → "PV Erzeugung Gesamt"`). `_basis_aktiv`-Helper im Import-Endpoint akzeptiert sowohl Raw-Keys als auch Labels für `basis_felder` (analog zur bestehenden Komponenten-Logik). Investitions-Typ-Badge im Frontend nutzt `TYP_LABELS` aus `lib/constants.ts` (`waermepumpe → "Wärmepumpe"`, `e-auto → "E-Auto"` etc.). `wp_starts_anzahl` kommt als „Kompressor-Starts" — neuer Eintrag in `build_feld_labels()` für Counter-Felder, die nicht in `INVESTITION_FELDER` registriert sind.
+- **Statistik-Import: Komponenten-Reihenfolge nach `INVESTITION_TYP_ORDER`, Monatsliste chronologisch absteigend (#186/3 detLAN)** — Investitionen pro Monat werden jetzt nach `INVESTITION_TYP_ORDER` sortiert (Wallbox vor E-Auto vor WP, konsistent zum Rest). Monatsliste gespiegelt von aufsteigend zu absteigend (aktuellster Monat oben).
+- **HAExportSettings `CATEGORY_ORDER` (#186/4 detLAN)** — Neue Reihenfolge der „Verfügbare Sensoren"-Kategorien: `anlage, energie, speicher, investition, wallbox, e_auto, waermepumpe, finanzen, quote, umwelt, autarkie, performance, sonstige, status`. Speicher früh (wichtigste Investition), Komponenten-Detailkategorien direkt hinter `investition`, Status zuletzt.
+- **Sensor-Mapping-Wizard „Wallbox & E-Auto" (#186/1 detLAN)** — Sektions-Titel umbenannt von „E-Auto & Wallbox" → „Wallbox & E-Auto" in `SensorMappingWizard.tsx`. In `EAutoStep.tsx` werden Wallbox-Komponenten zuerst gerendert, E-Auto-Komponenten danach (mt-8-Abstand entsprechend verschoben).
+- **Monatsbericht-KPI-Kachel „Kompressor-Starts" (#185 detLAN)** — In `MonatsabschlussView.tsx` werden Σ Monat und Max/Tag getauscht: prominent angezeigt wird jetzt die Monats-Summe (`wp_starts_summe_monat`), der Verschleiß-Indikator (Tages-Maximum) wandert in den Subtitel. Konsistent zu allen anderen Σ-KPI-Kacheln im Monatsbericht. Title verkürzt von „Kompressor-Starts (Max/Tag)" auf „Kompressor-Starts".
+- **Kraftstoff-Box nur bei E-Auto-Anlagen (#188 rapahl)** — Der Hinweis-Block „Kraftstoffpreise nachpflegen" wird in `pages/Monatsdaten.tsx` (Monats-Ebene) und `pages/Energieprofil.tsx` (Tages-Ebene) jetzt zusätzlich gegen `investitionen.some(i => i.typ === 'e-auto')` geprüft. Ohne E-Auto-Investition ist der Backfill für die Anlage ohne Wert.
+
+### Fixed
+
+- **„keine HA-Statistik"-Badge nur bei kumulativen kWh-Countern (Joachim-PN, Wattpilot)** — `SensorAutocomplete` hat einen neuen Prop `requireStatistics` (Default `true` für `FeldMappingInput` = kWh-Counter, die zwingend Long-Term-Statistics brauchen). Live-Sensor-Aufrufer setzen ihn auf `false`: `LiveSensorSection` (alle Live-Felder pro Investitions-Typ — `leistung_w`, `soc`, Temperatur, etc.), `BasisSensorenStep` (`pv_gesamt_w`, `aussentemperatur_c`, `sfml_*`, `netz_kombi_w`, `einspeisung_w`, `netzbezug_w`), `PVModuleStep` (Live-Leistung pro String). Vorher wirkte der Badge bei W/%/°C-Sensoren wie ein echter Mapping-Fehler, obwohl alles korrekt war — diese Sensoren werden direkt aus dem HA-State gelesen, `state_class` ist dafür irrelevant.
+
+### Internal
+
+- **`INVESTITION_TYP_ORDER`-Comment ausführlicher** — Begründungs-Kette dokumentiert (Erzeuger/Speicher → Wallbox+E-Auto-Paar → WP → Catch-All) statt nur ein Detail-Hinweis auf detLAN #180. Hilft bei künftigen Reihenfolge-Diskussionen, alle Decisions auf einen Blick.
+
+---
+
 ## [3.25.18] - 2026-05-03
 
 > 🩹 **Reload-Knopf heilt jetzt auch den Stunde-0-Spike — mit Vorschau-Tabelle vor Übernahme.** Rainer-Befund nach v3.25.17: das Reaggregate-Tool zeigte für 1.5. weiter PV 1.047 / Einspeisung 8.543 / Bezug 2.757 kWh in Stunde 0:00, obwohl 264 Snapshot-Upserts protokolliert wurden. Audit aller Schreib-/Lesepfade hat zwei Bugs aufgedeckt — beide gefixt. Plus: damit das nie wieder „Klick und hoffen" ist, gibt es jetzt eine Übernahmetabelle, die alt vs. neu zeigt, bevor irgendetwas geschrieben wird. Außerdem im Bündel: drei kleine UX-Items aus dem detLAN-Pakt.
