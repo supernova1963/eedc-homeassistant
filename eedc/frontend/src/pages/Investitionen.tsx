@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, ArrowRight, FileText, ChevronDown } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import { useSelectedAnlage, useInvestitionen, useInvestitionenByTyp } from '../hooks'
+import { INVESTITION_TYP_ORDER, INVESTITION_TYP_LABELS } from '../hooks/useSetupWizard'
 import InvestitionForm from '../components/forms/InvestitionForm'
 import InfothekForm from '../components/forms/InfothekForm'
 import type { Investition, InvestitionTyp } from '../types'
@@ -17,22 +18,19 @@ import {
   balkonkraftwerkParameter,
 } from '../lib'
 
-const investitionTypen: {
-  typ: InvestitionTyp
-  label: string
-  icon: React.ElementType
-  color: string
-  bgColor: string
-}[] = [
-  { typ: 'e-auto', label: 'E-Auto', icon: Car, color: 'text-blue-500', bgColor: 'bg-blue-50 dark:bg-blue-900/20' },
-  { typ: 'waermepumpe', label: 'Wärmepumpe', icon: Flame, color: 'text-orange-500', bgColor: 'bg-orange-50 dark:bg-orange-900/20' },
-  { typ: 'speicher', label: 'Speicher', icon: Battery, color: 'text-green-500', bgColor: 'bg-green-50 dark:bg-green-900/20' },
-  { typ: 'wallbox', label: 'Wallbox', icon: Plug, color: 'text-purple-500', bgColor: 'bg-purple-50 dark:bg-purple-900/20' },
-  { typ: 'wechselrichter', label: 'Wechselrichter', icon: Settings2, color: 'text-cyan-500', bgColor: 'bg-cyan-50 dark:bg-cyan-900/20' },
-  { typ: 'pv-module', label: 'PV-Module', icon: Sun, color: 'text-yellow-500', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20' },
-  { typ: 'balkonkraftwerk', label: 'Balkonkraftwerk', icon: LayoutGrid, color: 'text-teal-500', bgColor: 'bg-teal-50 dark:bg-teal-900/20' },
-  { typ: 'sonstiges', label: 'Sonstiges', icon: Settings2, color: 'text-gray-500', bgColor: 'bg-gray-50 dark:bg-gray-900/20' },
-]
+// Icon + Farbe pro Typ. Reihenfolge + Label kommen aus INVESTITION_TYP_ORDER /
+// INVESTITION_TYP_LABELS (zentral), damit Stammdaten konsistent zu Cockpit /
+// Statistik-Import / Sensor-Mapping bleibt.
+const TYP_ICON_STYLE: Record<InvestitionTyp, { icon: React.ElementType; color: string; bgColor: string }> = {
+  'wechselrichter':  { icon: Settings2,  color: 'text-cyan-500',   bgColor: 'bg-cyan-50 dark:bg-cyan-900/20' },
+  'pv-module':       { icon: Sun,        color: 'text-yellow-500', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20' },
+  'balkonkraftwerk': { icon: LayoutGrid, color: 'text-teal-500',   bgColor: 'bg-teal-50 dark:bg-teal-900/20' },
+  'speicher':        { icon: Battery,    color: 'text-green-500',  bgColor: 'bg-green-50 dark:bg-green-900/20' },
+  'waermepumpe':     { icon: Flame,      color: 'text-orange-500', bgColor: 'bg-orange-50 dark:bg-orange-900/20' },
+  'wallbox':         { icon: Plug,       color: 'text-purple-500', bgColor: 'bg-purple-50 dark:bg-purple-900/20' },
+  'e-auto':          { icon: Car,        color: 'text-blue-500',   bgColor: 'bg-blue-50 dark:bg-blue-900/20' },
+  'sonstiges':       { icon: Settings2,  color: 'text-gray-500',   bgColor: 'bg-gray-50 dark:bg-gray-900/20' },
+}
 
 export default function Investitionen() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -81,8 +79,8 @@ export default function Investitionen() {
   // Zähle Investitionen pro Typ
   const typCounts = useMemo(() => {
     const counts: Record<string, number> = {}
-    investitionTypen.forEach(t => {
-      counts[t.typ] = groupedByTyp[t.typ]?.length || 0
+    INVESTITION_TYP_ORDER.forEach(typ => {
+      counts[typ] = groupedByTyp[typ]?.length || 0
     })
     return counts
   }, [groupedByTyp])
@@ -202,21 +200,25 @@ export default function Investitionen() {
 
       {/* Typ-Übersicht */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        {investitionTypen.map((typ) => (
-          <button
-            key={typ.typ}
-            onClick={() => handleCreate(typ.typ)}
-            className={`card p-4 text-center hover:shadow-md transition-shadow ${typ.bgColor}`}
-          >
-            <typ.icon className={`h-8 w-8 mx-auto ${typ.color}`} />
-            <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-              {typ.label}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {typCounts[typ.typ]} vorhanden
-            </p>
-          </button>
-        ))}
+        {INVESTITION_TYP_ORDER.map((typ) => {
+          const style = TYP_ICON_STYLE[typ]
+          const TypIcon = style.icon
+          return (
+            <button
+              key={typ}
+              onClick={() => handleCreate(typ)}
+              className={`card p-4 text-center hover:shadow-md transition-shadow ${style.bgColor}`}
+            >
+              <TypIcon className={`h-8 w-8 mx-auto ${style.color}`} />
+              <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+                {INVESTITION_TYP_LABELS[typ]}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {typCounts[typ]} vorhanden
+              </p>
+            </button>
+          )
+        })}
       </div>
 
       {/* Investitionen Liste */}
@@ -234,28 +236,39 @@ export default function Investitionen() {
         />
       ) : (
         <div className="space-y-6">
-          {investitionTypen.map((typ) => {
-            const typInv = groupedByTyp[typ.typ]
+          {INVESTITION_TYP_ORDER.map((typ) => {
+            const typInv = groupedByTyp[typ]
             if (!typInv || typInv.length === 0) return null
+            const style = TYP_ICON_STYLE[typ]
+            const TypIcon = style.icon
+            // Innerhalb der Typ-Gruppe: neueste Anschaffung oben, fehlende Daten ans Ende.
+            const sortedInv = [...typInv].sort((a, b) => {
+              const ad = a.anschaffungsdatum ?? ''
+              const bd = b.anschaffungsdatum ?? ''
+              if (!ad && !bd) return a.bezeichnung.localeCompare(b.bezeichnung, 'de')
+              if (!ad) return 1
+              if (!bd) return -1
+              return bd.localeCompare(ad)
+            })
 
             return (
-              <Card key={typ.typ}>
+              <Card key={typ}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${typ.bgColor}`}>
-                      <typ.icon className={`h-5 w-5 ${typ.color}`} />
+                    <div className={`p-2 rounded-lg ${style.bgColor}`}>
+                      <TypIcon className={`h-5 w-5 ${style.color}`} />
                     </div>
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {typ.label}
+                      {INVESTITION_TYP_LABELS[typ]}
                     </h2>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => handleCreate(typ.typ)}>
+                  <Button variant="secondary" size="sm" onClick={() => handleCreate(typ)}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
 
                 <div className="space-y-3">
-                  {typInv.map((inv) => (
+                  {sortedInv.map((inv) => (
                     <InvestitionCard
                       key={inv.id}
                       investition={inv}
