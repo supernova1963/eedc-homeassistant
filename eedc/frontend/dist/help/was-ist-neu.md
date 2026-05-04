@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.19)
+> **Stand:** Mai 2026 (v3.25.20)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,15 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Daten-Checker: keine Fehlalarme mehr für Strompreis-Sensor und Dienstwagen-E-Autos *(v3.25.20)*
+
+> 🩹 **Zwei Warnungen, die für viele Anwender keine waren** — nach Joachim-PN-Folge zu v3.25.19:
+>
+> - **Strompreis-Sensor wird nicht mehr als kWh-Counter geprüft.** Die Warnung „1 kWh-Sensor(en) nicht in HA-Long-Term-Statistics" mit Verweis auf `sensor.grid_price_monitor_average_price_today` (oder einen vergleichbaren Tibber-/aWATTar-/EPEX-Sensor) war ein Fehlalarm — der Strompreis ist ct/kWh, kein kumulativer Energiezähler. Wir lesen ihn nur live für die Tagesverlauf-Anzeige; ein fehlendes `state_class` ist hier irrelevant. Warnung verschwindet automatisch nach dem Update.
+> - **Dienstwagen-E-Autos werden im „Energieprofil – Zähler-Abdeckung"-Check übersprungen.** Bisher meldete der Check „verbrauch_kwh oder ladung_kwh fehlt" auch für E-Autos, die als Dienstwagen markiert sind — bei einem Dienstwagen ist die Forderung aber sinnlos: kein PV-Bezug, keine Verbrauchsbilanz, keine ROI-Auswertung. Den Skip hatten wir schon in den ROI-Checks, aber im Abdeckungs-Check vergessen. Wer also ein E-Auto mit gesetzter „Dienstwagen"-Markierung hat, sieht die Warnung nicht mehr.
+
+→ [Daten-Werkzeuge → Daten-Checker](HANDBUCH_EINSTELLUNGEN.md)
 
 ### UX-Konsistenz-Bündel: Cockpit-Reihenfolge, Statistik-Import-Lesbarkeit, Kompressor-KPI *(v3.25.19)*
 
