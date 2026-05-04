@@ -1248,7 +1248,13 @@ class DatenChecker:
         counter_sensors: list[tuple[str, str]] = []
 
         basis = mapping.get("basis") or {}
-        for key in ("einspeisung", "netzbezug", "pv_gesamt", "strompreis"):
+        # Nur kumulative kWh-Counter prüfen. `strompreis` ist ct/kWh bzw. €/kWh
+        # (Live-Preis-Sensor) und braucht kein state_class — wird nur live
+        # gelesen, nicht aus LTS aggregiert. `pv_gesamt` ist heute nur als
+        # `pv_gesamt_w` (Live-W) gemappt, ebenfalls kein LTS-Bedarf.
+        # (Joachim-PN 2026-05-04: grid_price_monitor wurde fälschlich als
+        # fehlender kWh-Sensor gemeldet.)
+        for key in ("einspeisung", "netzbezug"):
             m = basis.get(key)
             if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
                 kwh_sensors.append((m["sensor_id"], f"Basis: {key}"))
