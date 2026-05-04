@@ -58,14 +58,15 @@ const cockpitBaseTabs: TabItem[] = [
 ]
 
 // Investitions-Tabs: werden nur angezeigt wenn der Typ als Investition existiert.
-// Reihenfolge: PV-Anlage (in Base) → Balkonkraftwerk (Erzeuger) → Speicher → Wärmepumpe →
-// Wallbox → E-Auto (Verbraucher) → Sonstiges (Rest).
+// Reihenfolge: PV-Anlage (in Base) → Balkonkraftwerk (Erzeuger) → Speicher →
+// Wallbox → E-Auto (Paar, detLAN #186/1) → Wärmepumpe (detLAN #187/2) →
+// Sonstiges. Konsistent mit `INVESTITION_TYP_ORDER` in `hooks/useSetupWizard.ts`.
 const cockpitInvestitionTabs: (TabItem & { typen: InvestitionTyp[] })[] = [
   { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun,     typen: ['balkonkraftwerk'] },
   { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery, typen: ['speicher'] },
-  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame,   typen: ['waermepumpe'] },
   { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug,    typen: ['wallbox'] },
   { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car,     typen: ['e-auto'] },
+  { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame,   typen: ['waermepumpe'] },
   { name: 'Sonstiges',       href: '/cockpit/sonstiges',        icon: Wrench,  typen: ['sonstiges'] },
 ]
 

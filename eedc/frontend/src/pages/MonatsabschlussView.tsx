@@ -1318,17 +1318,19 @@ export default function MonatsabschlussView() {
                     formel="(Wärme ÷ 0,9 × Gaspreis − Strom × Strompreis)"
                     subtitle={vj?.wp_strom_kwh != null ? `VJ Strom: ${fmt(vj.wp_strom_kwh, 0)} kWh` : undefined} />
                 </div>
-                {/* Issue #169: Kompressor-Starts (nur wenn Counter-Sensor zugeordnet) */}
+                {/* Issue #169 + detLAN #185: Kompressor-Starts — Σ Monat
+                    prominent (konsistent zu anderen Σ-Werten), Max/Tag im
+                    Subtitle als Verschleiß-Indikator. */}
                 {d.wp_starts_max_tag != null && d.wp_starts_max_tag > 0 && (
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     <KPICard
-                      title="Kompressor-Starts (Max/Tag)"
-                      value={d.wp_starts_max_tag.toString()}
+                      title="Kompressor-Starts"
+                      value={d.wp_starts_summe_monat != null ? d.wp_starts_summe_monat.toLocaleString('de-DE') : d.wp_starts_max_tag.toString()}
                       unit=""
                       icon={Power}
                       color="gray"
-                      formel="Max einer Tagessumme im Monat (Verschleiß-Indikator)"
-                      subtitle={d.wp_starts_summe_monat != null ? `Σ ${d.wp_starts_summe_monat.toLocaleString('de-DE')} im Monat` : undefined}
+                      formel="Σ aller Tagessummen im Monat"
+                      subtitle={`Max/Tag: ${d.wp_starts_max_tag}`}
                     />
                   </div>
                 )}

@@ -260,9 +260,9 @@ export default function SensorMappingWizard() {
     if (invByTyp['e-auto']?.length || invByTyp['wallbox']?.length) {
       s.push({
         id: 'eauto',
-        title: 'E-Auto & Wallbox',
+        title: 'Wallbox & E-Auto',
         icon: <Car className="w-5 h-5" />,
-        investitionen: [...(invByTyp['e-auto'] || []), ...(invByTyp['wallbox'] || [])],
+        investitionen: [...(invByTyp['wallbox'] || []), ...(invByTyp['e-auto'] || [])],
       })
     }
 

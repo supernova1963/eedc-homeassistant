@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { Activity, BarChart3, History, RefreshCw, Trash2, Loader2, Info, AlertCircle, Fuel } from 'lucide-react'
 import { Button, Card, Alert, Select, EmptyState } from '../components/ui'
 import { PageHeader, DataLoadingState } from '../components/common'
-import { useSelectedAnlage } from '../hooks'
+import { useSelectedAnlage, useInvestitionen } from '../hooks'
 import { energieProfilApi, type KraftstoffpreisStatus, type AnlageStats } from '../api/energie_profil'
 import EnergieprofilTageTabelle from '../components/energieprofil/EnergieprofilTageTabelle'
 
 export default function Energieprofil() {
   const navigate = useNavigate()
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const { investitionen } = useInvestitionen(selectedAnlageId)
+  const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
 
   const [stats, setStats] = useState<AnlageStats | null>(null)
   const [kpStatus, setKpStatus] = useState<KraftstoffpreisStatus | null>(null)
@@ -286,8 +288,8 @@ export default function Energieprofil() {
             </div>
           </div>
 
-          {/* Kraftstoffpreis-Tages-Backfill */}
-          {kpStatus && kpStatus.tages_offen > 0 && (
+          {/* Kraftstoffpreis-Tages-Backfill — rapahl #188: nur bei E-Auto-Anlage. */}
+          {hatEAuto && kpStatus && kpStatus.tages_offen > 0 && (
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4">
               <div className="flex items-start gap-3">
                 <Fuel className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />

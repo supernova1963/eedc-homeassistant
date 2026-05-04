@@ -355,12 +355,16 @@ export default function HAExportSettings() {
     sonstige: '📌',
   }
 
-  // Anzeige-Reihenfolge — Anlage zuerst (Stamm), dann Energie/Quote/Finanzen/
-  // Umwelt (Auswertungs-Pyramide), dann Investitions-Aspekte, Status zuletzt.
+  // Anzeige-Reihenfolge — detLAN #186/4: Anlage → Energie → Speicher (früh, weil
+  // wichtigster Speicher) → Investition + Komponenten-Aspekte → Finanzen → Quote →
+  // Umwelt → Status (zuletzt). Komponenten-Reihenfolge konsistent zu
+  // INVESTITION_TYP_ORDER (Wallbox → E-Auto → WP).
   const CATEGORY_ORDER = [
-    'anlage', 'energie', 'quote', 'finanzen', 'umwelt',
-    'investition', 'waermepumpe', 'speicher', 'e_auto', 'wallbox',
-    'autarkie', 'performance', 'sonstige', 'status',
+    'anlage', 'energie', 'speicher',
+    'investition', 'wallbox', 'e_auto', 'waermepumpe',
+    'finanzen', 'quote', 'umwelt',
+    'autarkie', 'performance', 'sonstige',
+    'status',
   ]
   const sortCategories = (entries: [string, SensorExportItem[]][]) =>
     [...entries].sort(([a], [b]) => {

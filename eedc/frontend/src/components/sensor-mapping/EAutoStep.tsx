@@ -158,10 +158,86 @@ export default function EAutoStep({
 
   return (
     <div className="space-y-6">
-      {/* E-Autos */}
-      {eAutos.length > 0 && (
+      {/* Wallboxen — detLAN #186/1: vor E-Autos positioniert */}
+      {wallboxen.length > 0 && (
         <>
           <h3 className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <PlugZap className="w-5 h-5" />
+            Wallboxen
+          </h3>
+
+          <Alert type="info">
+            Wallbox-Ladung wird für die Gesamtübersicht verwendet.
+            Ladung PV optional: direkt messen oder manuell im Monatsabschluss-Wizard eingeben.
+          </Alert>
+
+          {wallboxen.map(inv => (
+            <div key={inv.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                  <PlugZap className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-white">
+                    {inv.bezeichnung}
+                  </div>
+                </div>
+              </div>
+
+              {/* Felder */}
+              <div className="p-4 space-y-4">
+                <FeldMappingInput
+                  label="Ladung Gesamt"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.ladung_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'ladung_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={ladungOptionen}
+                />
+
+                <FeldMappingInput
+                  label="Ladung PV"
+                  einheit="kWh"
+                  value={mappings[inv.id.toString()]?.ladung_pv_kwh || null}
+                  onChange={mapping => onChange(inv.id, 'ladung_pv_kwh', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={[...ladungOptionen, { value: 'keine', label: 'Nicht erfassen', description: 'Manuell im Wizard eingeben' }]}
+                  defaultStrategie="keine"
+                />
+
+                <FeldMappingInput
+                  label="Ladevorgänge"
+                  einheit="Anzahl"
+                  value={mappings[inv.id.toString()]?.ladevorgaenge || null}
+                  onChange={mapping => onChange(inv.id, 'ladevorgaenge', mapping)}
+                  availableSensors={availableSensors}
+                  strategieOptionen={ladevorgaengeOptionen}
+                  defaultStrategie="keine"
+                />
+
+                {/* Live-Sensoren */}
+                {onLiveChange && (
+                  <LiveSensorSection
+                    invId={inv.id}
+                    liveMappings={liveMappings}
+                    onLiveChange={onLiveChange}
+                    liveInvertMappings={liveInvertMappings}
+                    onLiveInvertChange={onLiveInvertChange}
+                    availableSensors={availableSensors}
+                    fields={[...LIVE_FIELDS.wallbox]}
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* E-Autos — detLAN #186/1: unter Wallboxen positioniert */}
+      {eAutos.length > 0 && (
+        <>
+          <h3 className="font-medium text-gray-900 dark:text-white flex items-center gap-2 mt-8">
             <Car className="w-5 h-5" />
             E-Autos
           </h3>
@@ -250,82 +326,6 @@ export default function EAutoStep({
                     onLiveInvertChange={onLiveInvertChange}
                     availableSensors={availableSensors}
                     fields={[...LIVE_FIELDS.eauto]}
-                  />
-                )}
-              </div>
-            </div>
-          ))}
-        </>
-      )}
-
-      {/* Wallboxen */}
-      {wallboxen.length > 0 && (
-        <>
-          <h3 className="font-medium text-gray-900 dark:text-white flex items-center gap-2 mt-8">
-            <PlugZap className="w-5 h-5" />
-            Wallboxen
-          </h3>
-
-          <Alert type="info">
-            Wallbox-Ladung wird für die Gesamtübersicht verwendet.
-            Ladung PV optional: direkt messen oder manuell im Monatsabschluss-Wizard eingeben.
-          </Alert>
-
-          {wallboxen.map(inv => (
-            <div key={inv.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-              {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
-                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                  <PlugZap className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {inv.bezeichnung}
-                  </div>
-                </div>
-              </div>
-
-              {/* Felder */}
-              <div className="p-4 space-y-4">
-                <FeldMappingInput
-                  label="Ladung Gesamt"
-                  einheit="kWh"
-                  value={mappings[inv.id.toString()]?.ladung_kwh || null}
-                  onChange={mapping => onChange(inv.id, 'ladung_kwh', mapping)}
-                  availableSensors={availableSensors}
-                  strategieOptionen={ladungOptionen}
-                />
-
-                <FeldMappingInput
-                  label="Ladung PV"
-                  einheit="kWh"
-                  value={mappings[inv.id.toString()]?.ladung_pv_kwh || null}
-                  onChange={mapping => onChange(inv.id, 'ladung_pv_kwh', mapping)}
-                  availableSensors={availableSensors}
-                  strategieOptionen={[...ladungOptionen, { value: 'keine', label: 'Nicht erfassen', description: 'Manuell im Wizard eingeben' }]}
-                  defaultStrategie="keine"
-                />
-
-                <FeldMappingInput
-                  label="Ladevorgänge"
-                  einheit="Anzahl"
-                  value={mappings[inv.id.toString()]?.ladevorgaenge || null}
-                  onChange={mapping => onChange(inv.id, 'ladevorgaenge', mapping)}
-                  availableSensors={availableSensors}
-                  strategieOptionen={ladevorgaengeOptionen}
-                  defaultStrategie="keine"
-                />
-
-                {/* Live-Sensoren */}
-                {onLiveChange && (
-                  <LiveSensorSection
-                    invId={inv.id}
-                    liveMappings={liveMappings}
-                    onLiveChange={onLiveChange}
-                    liveInvertMappings={liveInvertMappings}
-                    onLiveInvertChange={onLiveInvertChange}
-                    availableSensors={availableSensors}
-                    fields={[...LIVE_FIELDS.wallbox]}
                   />
                 )}
               </div>

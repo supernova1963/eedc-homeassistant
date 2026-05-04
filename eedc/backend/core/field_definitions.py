@@ -629,6 +629,9 @@ def build_feld_labels() -> dict[str, str]:
 
     # Extras die nicht in oben definierter Struktur stecken
     labels["pv_gesamt"] = "PV Erzeugung Gesamt"
+    # Counter-Felder (TagesEnergieProfil), erscheinen im Statistik-Import wenn
+    # im Sensor-Mapping einer WP-Investition gemappt — detLAN #187/1.
+    labels["wp_starts_anzahl"] = "Kompressor-Starts"
 
     return labels
 

@@ -198,7 +198,8 @@ export default function MonatsdatenPage() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(selectedAnlageId)
   // Hook wird für MonatsdatenForm benötigt
-  useInvestitionen(selectedAnlageId)
+  const { investitionen } = useInvestitionen(selectedAnlageId)
+  const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
 
   // Aggregierte Daten
   const { data: aggregierteDaten, loading: aggregiertLoading } = useApiData(
@@ -662,8 +663,8 @@ export default function MonatsdatenPage() {
         </>
       )}
 
-      {/* Datenverwaltung */}
-      {selectedAnlageId && kpStatus && kpStatus.monats_offen > 0 && (
+      {/* Datenverwaltung — rapahl #188: Kraftstoffpreis-Hinweis nur bei E-Auto-Anlage. */}
+      {selectedAnlageId && hatEAuto && kpStatus && kpStatus.monats_offen > 0 && (
         <Card>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">

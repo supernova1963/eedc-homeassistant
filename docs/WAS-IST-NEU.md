@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.18)
+> **Stand:** Mai 2026 (v3.25.19)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,20 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### UX-Konsistenz-Bündel: Cockpit-Reihenfolge, Statistik-Import-Lesbarkeit, Kompressor-KPI *(v3.25.19)*
+
+> ✨ **Sichtbar an mehreren Stellen** — Sammlung kleiner Schliff-Items aus den Issues #185, #186, #187, #188 (detLAN + rapahl):
+>
+> - **Wallbox vor E-Auto vor Wärmepumpe** als globale Reihenfolge — wirkt auf Cockpit-Subtabs, HA-Sensoren-Export-Liste, Sensor-Mapping-Wizard, Statistik-Import. Wallbox+E-Auto bilden ein Paar (fest installierte Anschlussstelle + mobiler Verbraucher), Wärmepumpe folgt danach. (#187/2)
+> - **Statistik-Import lesbar** — Basis-Felder erscheinen mit deutschen Labels („Einspeisung", „Netzbezug", „PV Erzeugung Gesamt") statt Backend-Schlüsseln (`einspeisung`, `netzbezug`, `pv_gesamt`). Kompressor-Starts heißen so statt `wp_starts_anzahl`. Investitions-Typen werden als „Wallbox" / „E-Auto" / „Wärmepumpe" angezeigt, nicht als Klein-Slugs. Monatsliste chronologisch absteigend (aktuellster Monat oben). (#187/1, #186/3)
+> - **Cockpit-Übersicht** — Sektion „E-Auto & Wallbox" heißt jetzt „Wallbox & E-Auto", und die E-Auto-Komponenten erscheinen unter den Wallbox-Komponenten — konsistent zur globalen Reihenfolge. (#186/1)
+> - **HA-Sensoren-Export → Verfügbare Sensoren** — Kategorien-Reihenfolge nach detLAN-Vorschlag: Anlage → Energie → Speicher → Investition (+ Komponenten-Detailkategorien) → Finanzen → Quoten → Umwelt → Status. (#186/4)
+> - **Monatsbericht KPI-Kachel „Kompressor-Starts"** — zeigt jetzt die Monats-Summe groß und das Tages-Maximum klein im Subtitel — konsistent zu allen anderen Σ-Werten. (Vorher: Max groß, Σ klein.) (#185)
+> - **Kraftstoff-Box bedingt** — Der Hinweis „Kraftstoffpreise nachpflegen" erscheint nur noch, wenn mindestens eine E-Auto-Investition gepflegt ist; sonst ist die Information für die Anlage irrelevant. Wirkt in **Daten → Monatsdaten** und in **Daten → Energieprofil**. (#188 rapahl)
+> - **Sensor-Mapping „keine HA-Statistik"-Badge** — erscheint nur noch bei kumulativen kWh-Sensoren, wo eine Long-Term-Statistik tatsächlich gebraucht wird. Bei Live-Leistungs-Sensoren (W), SoC-Werten (%) oder Temperaturen (°C) ist der Badge weg — die werden direkt aus dem HA-State gelesen, da gibt es keine Statistik-Voraussetzung. (Joachim-PN nach Wattpilot-Mapping)
+
+→ [Auswertungen → Energieprofil](HANDBUCH_BEDIENUNG.md#42-auswertungen)
 
 ### „Tag neu aggregieren" mit Vorschau-Tabelle vor Übernahme *(v3.25.18)*
 

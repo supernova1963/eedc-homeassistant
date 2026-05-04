@@ -25,6 +25,8 @@ import type { MonatFeldAuswahl } from '../api/haStatistics'
 import Alert from '../components/ui/Alert'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useApiData } from '../hooks'
+import { TYP_LABELS } from '../lib/constants'
+import { INVESTITION_TYP_ORDER } from '../hooks/useSetupWizard'
 
 // Import-Modus für schnelle Auswahl
 type ImportModus = 'alle' | 'nur_basis' | 'nur_komponenten' | 'manuell'
@@ -510,10 +512,12 @@ export default function HAStatistikImport() {
                 </p>
               </div>
 
-              {/* Monatsliste */}
+              {/* Monatsliste — detLAN #186/3: chronologisch absteigend (aktuellster zuerst) */}
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-6">
                 <div className="max-h-96 overflow-y-auto">
-                  {vorschau.monate.map((monat) => {
+                  {[...vorschau.monate]
+                    .sort((a, b) => (b.jahr - a.jahr) || (b.monat - a.monat))
+                    .map((monat) => {
                     const key = `${monat.jahr}-${monat.monat}`
                     return (
                       <MonatRow
@@ -748,13 +752,20 @@ function MonatRow({
             </div>
           )}
 
-          {/* Komponenten-Werte */}
+          {/* Komponenten-Werte — detLAN #187/2: nach INVESTITION_TYP_ORDER
+              (Wallbox vor E-Auto vor Wärmepumpe, konsistent zum Cockpit). */}
           {monat.investitionen && monat.investitionen.length > 0 && (
             <div className="space-y-3">
               <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 Komponenten
               </h4>
-              {monat.investitionen.map(inv => {
+              {[...monat.investitionen]
+                .sort((a, b) => {
+                  const ai = INVESTITION_TYP_ORDER.indexOf(a.typ as never)
+                  const bi = INVESTITION_TYP_ORDER.indexOf(b.typ as never)
+                  return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+                })
+                .map(inv => {
                 const invFelder = feldAuswahl?.investitionen.get(inv.investition_id)
                 return (
                   <div
@@ -770,7 +781,7 @@ function MonatRow({
                         {inv.bezeichnung}
                       </span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                        {inv.typ}
+                        {TYP_LABELS[inv.typ] ?? inv.typ}
                       </span>
                       {inv.hat_abweichung && (
                         <AlertTriangle className="w-4 h-4 text-amber-500" />

@@ -735,6 +735,10 @@ async def get_import_vorschau(
                 hat_abweichung=hat_abw
             ))
 
+        # Anzeige-Versionen mit Labels (detLAN #187/1: Roh-Keys "einspeisung"
+        # → "Einspeisung"). Raw-Variante bleibt für interne Vergleichs-Logik.
+        ha_basis_anzeige = {FELD_LABELS.get(k, k): v for k, v in ha_basis_werte.items()}
+
         if md is None:
             # Keine Daten vorhanden → Importieren
             monate_status.append(MonatImportStatus(
@@ -743,7 +747,7 @@ async def get_import_vorschau(
                 monat_name=ha_monat.monat_name,
                 aktion="importieren",
                 grund="Keine Monatsdaten vorhanden",
-                ha_werte=ha_basis_werte,
+                ha_werte=ha_basis_anzeige,
                 vorhandene_werte=None,
                 investitionen=inv_status_liste if inv_status_liste else None
             ))
@@ -754,6 +758,7 @@ async def get_import_vorschau(
                 "einspeisung": md.einspeisung_kwh,
                 "netzbezug": md.netzbezug_kwh,
             }
+            vorhandene_anzeige = {FELD_LABELS.get(k, k): v for k, v in vorhandene_werte.items()}
 
             # Sind die Basis-Werte leer (0 oder sehr klein)?
             basis_leer = (
@@ -769,8 +774,8 @@ async def get_import_vorschau(
                     monat_name=ha_monat.monat_name,
                     aktion="importieren",
                     grund="Monatsdaten vorhanden aber leer",
-                    ha_werte=ha_basis_werte,
-                    vorhandene_werte=vorhandene_werte,
+                    ha_werte=ha_basis_anzeige,
+                    vorhandene_werte=vorhandene_anzeige,
                     investitionen=inv_status_liste if inv_status_liste else None
                 ))
                 anzahl_importieren += 1
@@ -793,8 +798,8 @@ async def get_import_vorschau(
                         monat_name=ha_monat.monat_name,
                         aktion="ueberspringen",
                         grund=f"Daten stimmen überein (Δ < 1)",
-                        ha_werte=ha_basis_werte,
-                        vorhandene_werte=vorhandene_werte,
+                        ha_werte=ha_basis_anzeige,
+                        vorhandene_werte=vorhandene_anzeige,
                         investitionen=inv_status_liste if inv_status_liste else None
                     ))
                     anzahl_ueberspringen += 1
@@ -811,8 +816,8 @@ async def get_import_vorschau(
                         monat_name=ha_monat.monat_name,
                         aktion="konflikt",
                         grund=" | ".join(grund_teile),
-                        ha_werte=ha_basis_werte,
-                        vorhandene_werte=vorhandene_werte,
+                        ha_werte=ha_basis_anzeige,
+                        vorhandene_werte=vorhandene_anzeige,
                         investitionen=inv_status_liste if inv_status_liste else None
                     ))
                     anzahl_konflikte += 1
@@ -887,9 +892,17 @@ async def import_ha_statistics(
             netzbezug = None
             basis_importiert = False
 
-            # Prüfen ob Basis-Felder importiert werden sollen
-            import_einspeisung = basis_felder_auswahl is None or "einspeisung" in basis_felder_auswahl
-            import_netzbezug = basis_felder_auswahl is None or "netzbezug" in basis_felder_auswahl
+            # Prüfen ob Basis-Felder importiert werden sollen.
+            # basis_felder_auswahl kann raw Keys ("einspeisung") ODER Labels
+            # ("Einspeisung") enthalten, je nachdem was die Vorschau geliefert hat.
+            def _basis_aktiv(raw_key: str) -> bool:
+                if basis_felder_auswahl is None:
+                    return True
+                label = FELD_LABELS.get(raw_key, raw_key)
+                return raw_key in basis_felder_auswahl or label in basis_felder_auswahl
+
+            import_einspeisung = _basis_aktiv("einspeisung")
+            import_netzbezug = _basis_aktiv("netzbezug")
 
             basis_mapping = sensor_mapping.get("basis", {})
             if import_einspeisung and basis_mapping.get("einspeisung", {}).get("sensor_id"):
