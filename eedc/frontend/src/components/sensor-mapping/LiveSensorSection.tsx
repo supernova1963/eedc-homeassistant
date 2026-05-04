@@ -58,6 +58,7 @@ export default function LiveSensorSection({
               onChange={entityId => onLiveChange(invId, field.key, entityId)}
               sensors={availableSensors}
               placeholder={field.placeholder}
+              requireStatistics={false}
             />
             {showInvert && (
               <label className="flex items-center gap-2 mt-2 cursor-pointer">

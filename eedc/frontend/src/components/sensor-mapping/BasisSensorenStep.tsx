@@ -198,6 +198,7 @@ export default function BasisSensorenStep({
                 onChange={entityId => onBasisLiveChange('pv_gesamt_w', entityId)}
                 sensors={availableSensors}
                 placeholder="PV-Gesamt-Leistungssensor suchen..."
+                requireStatistics={false}
               />
               {basisLive.pv_gesamt_w && onBasisLiveInvertChange && (
                 <label className="flex items-center gap-2 mt-2 cursor-pointer">
@@ -236,6 +237,7 @@ export default function BasisSensorenStep({
                 onChange={entityId => onBasisLiveChange('aussentemperatur_c', entityId)}
                 sensors={availableSensors}
                 placeholder="sensor.aussentemperatur"
+                requireStatistics={false}
               />
             </div>
 
@@ -257,6 +259,7 @@ export default function BasisSensorenStep({
                     onChange={entityId => onBasisLiveChange('sfml_today_kwh', entityId)}
                     sensors={availableSensors}
                     placeholder="sensor.prognose_heute"
+                    requireStatistics={false}
                   />
                 </div>
                 <div>
@@ -266,6 +269,7 @@ export default function BasisSensorenStep({
                     onChange={entityId => onBasisLiveChange('sfml_tomorrow_kwh', entityId)}
                     sensors={availableSensors}
                     placeholder="sensor.prognose_morgen"
+                    requireStatistics={false}
                   />
                 </div>
                 <div>
@@ -275,6 +279,7 @@ export default function BasisSensorenStep({
                     onChange={entityId => onBasisLiveChange('sfml_accuracy_pct', entityId)}
                     sensors={availableSensors}
                     placeholder="sensor.solar_forecast_ml_∅_genauigkeit_30_tage"
+                    requireStatistics={false}
                   />
                 </div>
               </div>
@@ -393,6 +398,7 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
               onChange={entityId => onBasisLiveChange('netz_kombi_w', entityId)}
               sensors={availableSensors}
               placeholder="Kombinierten Netz-Sensor suchen..."
+              requireStatistics={false}
             />
             {basisLive.netz_kombi_w && onBasisLiveInvertChange && (
               <label className="flex items-center gap-2 mt-2 cursor-pointer">
@@ -419,6 +425,7 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
                 onChange={entityId => onBasisLiveChange('einspeisung_w', entityId)}
                 sensors={availableSensors}
                 placeholder="Einspeise-Leistungssensor suchen..."
+                requireStatistics={false}
               />
               {basisLive.einspeisung_w && onBasisLiveInvertChange && (
                 <label className="flex items-center gap-2 mt-2 cursor-pointer">
@@ -443,6 +450,7 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
                 onChange={entityId => onBasisLiveChange('netzbezug_w', entityId)}
                 sensors={availableSensors}
                 placeholder="Netzbezug-Leistungssensor suchen..."
+                requireStatistics={false}
               />
               {basisLive.netzbezug_w && onBasisLiveInvertChange && (
                 <label className="flex items-center gap-2 mt-2 cursor-pointer">

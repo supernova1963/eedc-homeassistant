@@ -46,9 +46,20 @@ interface SensorAutocompleteProps {
   onChange: (sensorId: string | null) => void
   sensors: HASensorInfo[]
   placeholder?: string
+  /**
+   * Wenn `true` (Default), wird bei Sensoren ohne `state_class` der Badge
+   * „keine HA-Statistik" angezeigt — relevant für kumulative kWh-Zähler, weil
+   * Vollbackfill/Reaggregate ohne Long-Term-Statistics nicht funktionieren.
+   *
+   * Bei reinen Live-Leistungs-Sensoren (Watt) ist `state_class` irrelevant —
+   * wir lesen den Live-State direkt aus der HA-API. Hier `false` setzen,
+   * damit der Badge nicht irreführend für W-Sensoren erscheint
+   * (Joachim-PN 2026-05-04, Wattpilot Charging Power).
+   */
+  requireStatistics?: boolean
 }
 
-function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAutocompleteProps) {
+function SensorAutocomplete({ value, onChange, sensors, placeholder, requireStatistics = true }: SensorAutocompleteProps) {
   const [search, setSearch] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [openUp, setOpenUp] = useState(false)
@@ -115,7 +126,7 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder }: SensorAut
             {!selectedSensor && (
               <span className="text-xs text-amber-600 dark:text-amber-400 flex-shrink-0">(nicht verfügbar)</span>
             )}
-            {selectedSensor?.has_statistics === false && (
+            {requireStatistics && selectedSensor?.has_statistics === false && (
               <span
                 className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
                 title="Sensor ohne state_class — fehlt in HA-Long-Term-Statistics. Folge: die Korrektur-Werkzeuge in der Datenverwaltung (Vollbackfill, Verlauf nachrechnen, Per-Tag-Reaggregation) wirken auf diesen Sensor nicht — jeder Aussetzer ist permanent verloren. Empfohlen: state_class via customize.yaml ergänzen."

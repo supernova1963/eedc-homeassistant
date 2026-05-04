@@ -123,6 +123,7 @@ export default function PVModuleStep({
                     onChange={entityId => onLiveChange(inv.id, 'leistung_w', entityId)}
                     sensors={availableSensors}
                     placeholder="PV-Leistungssensor suchen..."
+                    requireStatistics={false}
                   />
                   {liveMappings[inv.id.toString()]?.leistung_w && onLiveInvertChange && (
                     <label className="flex items-center gap-2 mt-2 cursor-pointer">
