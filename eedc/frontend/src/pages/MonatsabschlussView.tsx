@@ -343,29 +343,29 @@ export default function MonatsabschlussView() {
   return (
     <div className="flex flex-col lg:flex-row gap-6 lg:min-h-0">
 
-      {/* Zeitstrahl Desktop */}
-      <aside className="hidden lg:block w-48 shrink-0 self-start sticky top-4">
-        <div>
-          {anlagen.length > 1 && (
-            <div className="mb-3">
-              <select aria-label="Anlage" value={selectedAnlageId?.toString() || ''}
-                onChange={e => setSelectedAnlageId(parseInt(e.target.value))}
-                className="input w-full text-xs py-1.5">
-                {anlagen.map(a => <option key={a.id} value={a.id}>{a.anlagenname}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="overflow-y-auto overscroll-contain max-h-[calc(100vh-6rem)] scrollbar-none">
-            {selectedJahr !== null && selectedMonat !== null && (
-              <VerticalTimeline
-                entries={timelineEntries}
-                selectedJahr={selectedJahr}
-                selectedMonat={selectedMonat}
-                onSelect={handleSelect}
-              />
-            )}
+      {/* Zeitstrahl Desktop — Aside ist selbst der scrollende Sticky-Container.
+          max-h muss strikt kleiner sein als der Layout-<main> (Layout.tsx:99),
+          sonst kann sticky nicht greifen und die Spalte scrollt mit der rechten
+          mit (Bug detLAN #182). top-0 (statt top-4), damit die Aside ab dem
+          ersten Pixel klebt — sonst driften die ersten ~12px mit. */}
+      <aside className="hidden lg:block w-48 shrink-0 self-start sticky top-0 max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain scrollbar-none">
+        {anlagen.length > 1 && (
+          <div className="mb-3">
+            <select aria-label="Anlage" value={selectedAnlageId?.toString() || ''}
+              onChange={e => setSelectedAnlageId(parseInt(e.target.value))}
+              className="input w-full text-xs py-1.5">
+              {anlagen.map(a => <option key={a.id} value={a.id}>{a.anlagenname}</option>)}
+            </select>
           </div>
-        </div>
+        )}
+        {selectedJahr !== null && selectedMonat !== null && (
+          <VerticalTimeline
+            entries={timelineEntries}
+            selectedJahr={selectedJahr}
+            selectedMonat={selectedMonat}
+            onSelect={handleSelect}
+          />
+        )}
       </aside>
 
       {/* Hauptinhalt */}
