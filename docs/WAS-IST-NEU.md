@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.20)
+> **Stand:** Mai 2026 (v3.25.21)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,17 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Reihenfolge korrigiert + Stammdaten sortiert + Monatsberichte-Spalte bleibt stehen *(v3.25.21)*
+
+> 🩹 **Drei Folge-Items zum gestrigen UX-Bündel** — direkt aus der detLAN-Rückmeldung zu v3.25.19/20:
+>
+> - **Reihenfolge korrigiert: Wärmepumpe wieder vor Wallbox/E-Auto.** v3.25.19 hatte das Cockpit-Banner-Bild aus #186 falsch gelesen und WB+EAuto vor die WP gestellt. Korrekt ist `PV-Anlage → Speicher → Wärmepumpe → Wallbox → E-Auto` (genau die Reihenfolge im Cockpit-Banner). Wirkt jetzt einheitlich auf Cockpit-Subtabs, Sensor-Mapping-Wizard, Statistik-Import, MQTT-/HA-Sensoren-Export — und neu auch auf **Stammdaten → Investitionen**, das bisher noch eine eigene alte Reihenfolge hatte.
+> - **Stammdaten → Investitionen sortiert jetzt sinnvoll.** Innerhalb jeder Typ-Gruppe steht die neueste Anschaffung oben (nach Anschaffungsdatum absteigend). Investitionen ohne hinterlegtes Datum landen am Ende der jeweiligen Gruppe.
+> - **Monatsberichte: linke Monats-Spalte bleibt jetzt wirklich stehen.** v3.25.13 hatte einen Wheel-Bubble-Bug behoben, das Verhalten beim Klick auf einen alten Monat blieb aber kaputt — die rechte Inhalts-Spalte verschob sich, ältere Monate (2023) waren ohne Umweg nicht erreichbar. Jetzt ist die Monats-Spalte ein eigener, oben klebender Scroll-Container — ältere Monate erreichst du per Wheel direkt in der Spalte, und die rechte Seite bleibt unverrückbar.
+> - **Schreibweise „Gefahrene km"** statt „km gefahren" — wirkt einheitlich im Statistik-Import, in der E-Auto-Σ-Kachel und im Sensor-Mapping.
+
+→ [Cockpit → Monatsberichte](HANDBUCH_BEDIENUNG.md#41-cockpit) · [Stammdaten → Investitionen](HANDBUCH_EINSTELLUNGEN.md)
 
 ### Daten-Checker: keine Fehlalarme mehr für Strompreis-Sensor und Dienstwagen-E-Autos *(v3.25.20)*
 

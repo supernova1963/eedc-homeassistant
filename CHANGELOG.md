@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.21] - 2026-05-04
+
+> 🩹 **detLAN-Folge zum UX-Bündel: Reihenfolge-Korrektur + Stammdaten-Sortierung + Monatsberichte-Stickybug** — Drei Issues aus dem direkten Folge-Tag zu v3.25.19/20: #187 (Reihenfolge falsch interpretiert + Label-Politur), #189 (Stammdaten → Investitionen folgte alter Reihenfolge), #182 (Sticky-Bug in der Monatsberichte-Spalte ließ sich mit `overscroll-contain` allein nicht beheben).
+
+### Fixed
+
+- **`INVESTITION_TYP_ORDER` korrigiert auf Cockpit-Banner-Reihenfolge (#187 detLAN)** — v3.25.19 hatte Wallbox+E-Auto **vor** Wärmepumpe gesetzt, weil die #186-Punkte 1/2/5 als „WB/EAuto vorne" gelesen wurden. Das Cockpit-Banner-Bild aus #186 zeigt aber `PV-Anlage → Speicher → Wärmepumpe → Wallbox → E-Auto`. Korrigiert: `wechselrichter, pv-module, balkonkraftwerk, speicher, waermepumpe, wallbox, e-auto, sonstiges`. Wirkt zentral aus `hooks/useSetupWizard.ts` auf alle Konsumenten (`SubTabs.tsx`, `HAStatistikImport.tsx`, `HAExportSettings.tsx`, `MappingSummaryStep.tsx`, neu auch `Investitionen.tsx`). Innerhalb des WB/EAuto-Paares bleibt E-Auto unter Wallbox (#186-Detail unverändert).
+- **Stammdaten → Investitionen folgt jetzt der globalen Reihenfolge (#189 detLAN)** — `pages/Investitionen.tsx` hatte eine eigene lokale `investitionTypen`-Liste mit anderer Reihenfolge (`e-auto, waermepumpe, speicher, wallbox, ...`), die `INVESTITION_TYP_ORDER` ignorierte — klassischer SoT-Drift. Die lokale Liste ist entfernt; Reihenfolge + Labels kommen aus `INVESTITION_TYP_ORDER` + `INVESTITION_TYP_LABELS`. Innerhalb der Typ-Gruppe wird zusätzlich nach `anschaffungsdatum` absteigend sortiert (neueste Anschaffung oben, fehlende Datums ans Ende mit Bezeichnungs-Fallback).
+- **Monatsberichte-Sticky-Spalte: Aside selbst zum scrollenden Sticky-Container (#182 detLAN)** — v3.25.13 hatte `overscroll-contain` auf einen inneren Wrapper-Div gelegt; das fing zwar Wheel-Bubble ab, löste aber nicht den eigentlichen Bug, dass die Aside beim Klick auf einen alten Monat (oder beim Mitscrollen der rechten Spalte) verschoben wurde. Ursache: der innere Container hatte `max-h-[calc(100vh-6rem)]` (viewport-relativ), aber der eigentliche Scroll-Container ist das Layout-`<main>` (`Layout.tsx:99`), das ist *kleiner* als 100vh — TopNav + SubTabs + Footer + Padding ziehen ~10rem ab. Damit war die Aside höher als ihr scroll-Vorfahre, sticky konnte nicht greifen, sie scrollte mit. Fix: Aside selbst trägt `sticky top-0 max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain`. Reserve 12rem deckt sicher TopNav + SubTabs + Footer + Padding. Plus `100dvh` statt `100vh` für iOS-Safari (Memory-Pattern).
+- **„km gefahren" → „Gefahrene km" überall (#187 detLAN)** — Konsistente Schreibweise in `lib/fieldDefinitions.ts` (Statistik-Import), `pages/EAutoDashboard.tsx` (Σ-KPI-Kachel), `components/sensor-mapping/MappingSummaryStep.tsx` (Mapping-Zusammenfassung), `pages/CustomImportWizard.tsx` (Spalten-Dropdown), `backend/core/field_definitions.py`, `backend/api/routes/custom_import.py`. Ein Label, eine Schreibweise.
+
+### Internal
+
+- **Lesson learned (Drift-Pattern bestätigt)** — Drei UI-Stellen mit eigener Sortierung/Reihenfolge sind in den letzten Wochen aufgefallen (`SubTabs`, `HAStatistikImport`, `Investitionen`). Für künftige Reihenfolge-Themen: `INVESTITION_TYP_ORDER` ist die Single Source of Truth, jede neue UI-Stelle muss sie konsumieren. Der Memory-Eintrag `feedback_typ_labels_pattern.md` ist um diesen Vorfall ergänzt.
+
+---
+
 ## [3.25.20] - 2026-05-04
 
 > 🩹 **Daten-Checker-Fehlalarme: Strompreis-Sensor und Dienstwagen-E-Autos** — Joachim-PN-Folge nach v3.25.19. Zwei Warnungen im Daten-Checker, die für ihn (und vermutlich für andere mit gleichem Setup) Fehlalarme waren — beide sind jetzt entfernt.
