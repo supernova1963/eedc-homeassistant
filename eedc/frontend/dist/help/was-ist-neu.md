@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.21)
+> **Stand:** Mai 2026 (v3.25.22)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,17 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Vollbackfill nur noch additiv + Wärmepumpe-Strom-Splits + Monatsberichte-Scroll *(v3.25.22)*
+
+> ✨ **Vier zusammengehörige Items aus drei Issues** — eines davon eine bewusste Architektur-Korrektur:
+>
+> - **„Vollbackfill" heißt jetzt „Energieprofil-Lücken nachfüllen" und ist immer additiv.** Die Checkbox „Bestehende Tage überschreiben" und die rote Empfehlungsbox sind weg. Hintergrund: der Überschreiben-Modus war ein Recovery-Tool für die alten Aggregations-Bugs (Off-by-one in den Stunden-Snapshots, Counter-Doppelzählung, Vortag-Boundary). Diese Bugs sind seit v3.25.20 alle gefixt — der Modus richtete inzwischen mehr Schaden an als er verhinderte: HA-LTS reicht in vielen Setups (Recorder-Purge, Sensor-Umbau) kürzer zurück als das gepflegte Profil; „löschen + überschreiben" hat dann Wochen oder Monate Historie unwiederbringlich gelöscht. Wer einen einzelnen Tag verzerrt findet, nutzt jetzt ausschließlich den Reload-Knopf in der Tagestabelle (mit Vorschau vor Übernahme — siehe v3.25.18). (#190)
+> - **Vollbackfill-Banner sagt warum nicht alle Tage geschrieben wurden.** Bisher meldete der Erfolgs-Hinweis nur „X von Y Tagen geschrieben" — wer dann nur 79 % sah, dachte an Datenverlust. Tatsächlich wurden Tage ohne HA-Statistics-Werte stillschweigend übersprungen (Sensor existierte noch nicht, HA-Recorder war down). Das Banner zeigt jetzt explizit: „X Tage geschrieben · Y Tage ohne HA-Daten übersprungen · Z Tage bereits vorhanden". (#190 Klausnn)
+> - **Monatsbericht: Wärmepumpe-Strom-Aufteilung Heizung/Warmwasser sichtbar.** Wer in der Wärmepumpe-Investition die getrennte Strommessung aktiviert hat, sieht im Monatsbericht jetzt unter „Stromverbrauch" zwei „davon"-Zeilen — Heizung und Warmwasser. Konsistent zur bereits vorhandenen Wärme-Aufteilung darunter. Anlagen ohne getrennte Messung sehen die Zeilen weiter nicht. (#191 rapahl, der war Ideengeber für die getrennte Strommessung)
+> - **Monatsbericht: Scroll-Position bleibt beim Monatswechsel.** Wer die Wärmepumpe-Sektion aufgeschlagen hat und auf einen anderen Monat klickt, bleibt jetzt an der Wärmepumpe — die rechte Inhaltsspalte springt nicht mehr ungewollt an den Seitenanfang. Der Sprung an den Seitenanfang bei einem Wechsel des Hauptmenü-Punktes (Cockpit → Aussichten etc.) bleibt natürlich erhalten. (#182 detLAN-Folge zu v3.25.21)
+
+→ [Daten → Energieprofil](HANDBUCH_EINSTELLUNGEN.md) · [Cockpit → Monatsberichte](HANDBUCH_BEDIENUNG.md#41-cockpit)
 
 ### Reihenfolge korrigiert + Stammdaten sortiert + Monatsberichte-Spalte bleibt stehen *(v3.25.21)*
 

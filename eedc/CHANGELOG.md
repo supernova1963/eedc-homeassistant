@@ -7,6 +7,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.22] - 2026-05-05
+
+> 🩹 **Vollbackfill-Aufräumen + drei Folge-Items aus #190/#191/#182** — Klausnns Hänger im „Lücken überschreiben"-Modus (#190) hat eine Architektur-Frage aufgedeckt: der Overwrite-Modus war ein Recovery-Tool aus Bug-Zeiten und richtet seit den 3.25.x-Counter-Fixes nur noch Schaden an. Er ist deshalb komplett raus. Plus: WP-Strom-Splits im Monatsbericht (#191 rapahl), Scroll-Position beim Monatswechsel (#182 detLAN), Skip-Transparenz im Vollbackfill-Banner (#190 Klausnn).
+
+### Changed
+
+- **Vollbackfill ist nur noch additiv (#190 Klausnn → Architektur)** — Der Modus „Bestehende Tage überschreiben" + die zugehörige Pre-Backfill-Resnap-Schleife sind aus dem Code raus. Hintergrund: Der Overwrite-Pfad war ein Recovery-Tool für alte Aggregations-Bugs (Off-by-one in `get_value_at` v3.25.9, sum/state-Mix #184, Vortag-Boundary, Counter-Doppelzählung). Nach v3.25.20 sind diese Bugs gefixt — der Recovery-Bedarf entfällt. Gleichzeitig hat der Modus dauerhaften Datenverlust verursacht: HA-LTS reicht in vielen Setups (Recorder-Purge, Sensor-Umbau) kürzer zurück als das gepflegte Profil. „Löschen + neu rechnen" als Reflex bei Datenmisstrauen löschte dann Wochen oder Monate Historie unwiederbringlich. Korrekturprofil, saisonale Mustersuche, Speicher-Simulation und Verschleißkurven hängen aber an dieser Tiefe. Konkrete Code-Änderung: `backfill_from_statistics` und `resolve_and_backfill_from_statistics` haben den `skip_existing`/`overwrite`-Parameter verloren und sind hardcoded additiv. Der Endpoint `/vollbackfill?overwrite=...` akzeptiert den Param weiter (deprecated), ignoriert ihn aber und schreibt eine Info-Zeile ins Log — schützt alte Frontend-Caches und API-Konsumenten vor Crashes.
+- **UI: „Vollbackfill" → „Energieprofil-Lücken aus HA-Statistik nachfüllen"** — Der Knopf in **Daten → Energieprofil** und die Wizard-Box im Sensor-Mapping heißen jetzt klar nach dem, was sie tun. Die Overwrite-Checkbox ist weg, die rote „Empfohlen nach Updates"-Empfehlungsbox ebenso (sie verwies auf den jetzt obsoleten Overwrite-Modus). Stattdessen ein nüchterner Hinweis auf den Reparatur-Pfad: „Möchtest du einen einzelnen Tag reparieren, der verzerrt aussieht? Nutze den Daten-Checker und den Reload-Knopf in der Tagestabelle (mit Vorschau vor Übernahme)."
+
+### Added
+
+- **Monatsbericht WP: Strom-Splits Heizung/Warmwasser sichtbar (#191 rapahl)** — Wer in der Wärmepumpe-Investition `getrennte_strommessung=true` aktiviert hat (Rainer war Ideengeber dafür), sieht jetzt im Monatsbericht unter „Stromverbrauch" zwei „davon"-Zeilen: Heizung und Warmwasser. Konsistent zur bereits vorhandenen Wärme-Aufteilung darunter. Daten waren in `InvestitionMonatsdaten.verbrauch_daten` schon vorhanden (`strom_heizen_kwh` / `strom_warmwasser_kwh`), wurden aber von der `aktueller-monat`- und `monatsdaten/aggregiert`-API nicht herausgereicht. Beide Endpoints + die Pydantic-Response-Models + die TypeScript-Types kennen die Felder jetzt; das Frontend rendert sie nur, wenn das Backend nicht-`null` schickt — Anlagen ohne getrennte Messung sehen die Zeilen weiter nicht.
+- **Vollbackfill-Banner zeigt Skip-Gründe (#190 Klausnn)** — Bisher meldete der Erfolgs-Hinweis nur „X von Y Tagen geschrieben" — der Cap bei z.B. 79,4 % wirkte wie Datenverlust. Tatsächlich werden Tage übersprungen, wenn HA für den Tag keine Statistics-Werte hat (Sensor existierte noch nicht, HA-Recorder war down, …). Das Banner unterscheidet jetzt explizit: „X Tage geschrieben · Y Tage ohne HA-Statistics-Daten übersprungen · Z Tage bereits vorhanden". Backend-Response (`/energie-profil/{id}/vollbackfill`) liefert die Werte als `uebersprungen_keine_daten` und `uebersprungen_existiert`. `BackfillResult`-Dataclass entsprechend erweitert.
+
+### Fixed
+
+- **Monatsbericht: Scroll-Position bleibt beim Monatswechsel (#182 detLAN)** — Wer im Monatsbericht die Wärmepumpe-Sektion aufgeschlagen hat und auf einen anderen Monat klickt, bleibt jetzt an der Wärmepumpe — die rechte Inhaltsspalte springt nicht mehr ungewollt an den Seitenanfang. Mechanik: vor `setSelectedJahr/setSelectedMonat` merkt sich `MonatsabschlussView` die `scrollTop` des `<main>`-Containers in einem Ref, ein `useLayoutEffect` auf `monatData` stellt sie nach dem Daten-Reload wieder her (vor dem Browser-Paint, kein sichtbares Springen). Der Layout-Reset bei Menüpunkt-Wechsel (`Layout.tsx` reagiert auf `location.pathname`) bleibt davon unberührt — innerhalb von Monatsberichten ist der Wechsel ein State-Update, kein Routenwechsel.
+
+### Internal
+
+- **Designprinzip dokumentiert: Vollbackfill ist nur additiv** — Neuer Memory-Eintrag `feedback_vollbackfill_nur_additiv.md` ergänzt `feedback_reparatur_statt_loesch_features.md`: Aggregations-Bug-Fixes gehören in gezielte Migrations-Skripte im Release, nicht in einen User-Knopf für „alles neu rechnen". Reparatur einzelner Tage läuft über `/reaggregate-tag` mit Vorschau (chirurgisch, idempotent). Phase-2-Themen (Lösch-Knopf-Diagnose mit Datenverlust-Vorhersage, Sensor-Mapping-Änderung soll Backfill anbieten, JSON-Restore-Pfad muss `vollbackfill_durchgefuehrt`-Flag explizit zurücksetzen) sind in einem eigenen GitHub-Issue für späteres Anpacken festgehalten.
+- **`resnap_anlage_range` bekommt Progress-Logging (alle 5 %)** — Die Funktion hat noch zwei legitime Caller (`/reaggregate-tag` und `/diagnostics/...`), und der Vollbackfill-Hänger aus #190 hat gezeigt, wie unangenehm sie ohne Log-Output ist. Bei großen Ranges erscheint jetzt regelmäßig „Resnap Anlage X: 240/1440 Stunden (16 %), Y Snapshots geschrieben".
+
+---
+
 ## [3.25.21] - 2026-05-04
 
 > 🩹 **detLAN-Folge zum UX-Bündel: Reihenfolge-Korrektur + Stammdaten-Sortierung + Monatsberichte-Stickybug** — Drei Issues aus dem direkten Folge-Tag zu v3.25.19/20: #187 (Reihenfolge falsch interpretiert + Label-Politur), #189 (Stammdaten → Investitionen folgte alter Reihenfolge), #182 (Sticky-Bug in der Monatsberichte-Spalte ließ sich mit `overscroll-contain` allein nicht beheben).
