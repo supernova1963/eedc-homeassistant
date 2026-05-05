@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.23] - 2026-05-05
+
+> 🩹 **Tab-Bildlaufleiste auf drei Seiten weg (#193 detLAN)** — Patch-Release mit nur einem UI-Fix.
+
+### Fixed
+
+- **Keine permanent sichtbare Scrollbar mehr unter den Tabs auf Auswertung / Aussichten / Community (#193 detLAN)** — Die Tab-Header-Zeilen dieser drei Pages tragen jetzt die bereits in `SubTabs.tsx` und `MonatsabschlussView.tsx` etablierte `scrollbar-none`-Utility auf ihrem `<nav>`-Element. Ursache: das `overflow-x-auto` für horizontales Tab-Scrolling rendert auf Desktop-Browsern und in der HA Companion-App eine permanente graue Scrollbar-Spur, die wie ein Layout-Bug wirkt. Funktional bleibt alles erhalten — Tabs lassen sich weiter per Touch/Wheel/Drag horizontal wischen.
+
+---
+
 ## [3.25.22] - 2026-05-05
 
 > 🩹 **Vollbackfill-Aufräumen + drei Folge-Items aus #190/#191/#182** — Klausnns Hänger im „Lücken überschreiben"-Modus (#190) hat eine Architektur-Frage aufgedeckt: der Overwrite-Modus war ein Recovery-Tool aus Bug-Zeiten und richtet seit den 3.25.x-Counter-Fixes nur noch Schaden an. Er ist deshalb komplett raus. Plus: WP-Strom-Splits im Monatsbericht (#191 rapahl), Scroll-Position beim Monatswechsel (#182 detLAN), Skip-Transparenz im Vollbackfill-Banner (#190 Klausnn).

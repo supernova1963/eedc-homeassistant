@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.22)
+> **Stand:** Mai 2026 (v3.25.23)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,12 @@
 ---
 
 ## v3.25.x — Investitions-Parameter aufgeräumt (April–Mai 2026)
+
+### Tab-Bildlaufleiste auf drei Seiten weg *(v3.25.23)*
+
+> 🩹 **Kleine UI-Politur (#193 detLAN)** — Wer die Tab-Header-Zeile auf den Seiten **Auswertungen**, **Aussichten** und **Community** schmal hatte (Smartphone, geteiltes Browser-Fenster, HA Companion-App), sah unter den Tab-Buttons eine permanente graue Bildlaufleiste. Sie ist weg. Die Tabs lassen sich weiterhin horizontal wischen, scrollen oder per Touch/Wheel verschieben — die statische Scrollbar-Spur darunter ist nur kosmetisch entfernt.
+
+→ [Auswertungen](HANDBUCH_BEDIENUNG.md#42-auswertungen) · [Aussichten](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
 ### Vollbackfill nur noch additiv + Wärmepumpe-Strom-Splits + Monatsberichte-Scroll *(v3.25.22)*
 

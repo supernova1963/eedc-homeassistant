@@ -220,7 +220,7 @@ export default function Community() {
 
         {/* Tabs */}
         <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex gap-4 overflow-x-auto">
+          <nav className="flex gap-4 overflow-x-auto scrollbar-none">
             {tabs.map((tab) => {
               const Icon = tab.icon
               return (
