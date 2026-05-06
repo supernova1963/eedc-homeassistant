@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.4] - 2026-05-06 — Hotfix: Wetter-Backfill schließt jetzt auch die letzten 5 Tage
+
+> 🩹 **Hotfix wenige Stunden nach v3.26.3** — der Wetter-Backfill ließ die letzten 5 Tage strukturell unbefüllt, weil Open-Meteo Archive sie wegen 2-5 Tage Reanalyse-Lag nicht hatte. Per Designkommentar sollten diese Tage über den Live-Forecast-Pfad in `aggregate_day` mitkommen — aber `_get_wetter_ist` routete für *alle* Tage außer heute auf den Archive-Endpoint, also auch für den Vortag, der dort noch fehlt. Resultat: Stratifizierungs-Card zeigte „5 Tage noch nicht geladen" und der Button lieferte „0 Stunden / 0 Tage" — Drift zwischen drei Read-/Write-Sites mit unterschiedlichen Cutoffs.
+
+### Fixed
+
+- **SoT-Helper `archive_cutoff()`** in `wetter_backfill_service.py` — eine zentrale Stelle definiert die Grenze zwischen Archive- und Forecast-Endpoint (`heute - ARCHIVE_LAG_TAGE`).
+- **`_get_wetter_ist` in `energie_profil_service.py`** routet jetzt auf den Forecast-Endpoint für `datum >= archive_cutoff()`, nicht nur für `datum == heute`. Damit befüllt `aggregate_day` für den Vortag (oder rollende Heute-Aggregation) die Wetter-Spalten korrekt aus der Reanalyse-Approximation.
+- **`wetter_backfill_anlage`** holt zwei Range-Calls statt einem: Archive für ältere Tage, Forecast für die jüngsten N Tage. Beide fließen in denselben `_fetch_und_update`-Helper (Code-Deduplikation). Status `ok` solange mindestens einer erfolgreich war.
+- **Stratifizierungs-Card-Empty-State löst sich auf**, sobald der Backfill-Button geklickt wurde — alle backfill-baren Tage werden tatsächlich geladen, kein "5 Tage noch nicht geladen → 0 geladen"-Geisterbild mehr.
+
+### Internal
+
+- **Drift-Vermeidung** (Memory `feedback_aggregations_drift.md`): `ARCHIVE_LAG_TAGE` und `archive_cutoff()` sind die Single-Source-of-Truth, wird von Backfill und aggregate_day gleichermaßen importiert.
+- **Live-Test gegen Open-Meteo** (gegen produktive API): Forecast-Endpoint mit `start_date/end_date` für 5 Tage in der Vergangenheit liefert Stundendaten (`cloud_cover/precipitation/weather_code`).
+
+---
+
 ## [3.26.3] - 2026-05-06 — Hotfix: Aggregator schreibt Skalar auch ohne Day-Ahead-Stundenprofile
 
 > 🩹 **Hotfix wenige Stunden nach v3.26.2** — der Aggregator brach mit `status="skipped" / grund="Keine Day-Ahead-Snapshots im Zeitraum"` ab, sobald `pv_prognose_stundenprofil` (seit v3.26.0 mitgeschrieben, vorher leer) im Auswertungszeitraum noch nicht aufgelaufen war. Bestehende Anlagen haben Tages-Prognose `pv_prognose_kwh` schon seit Monaten, aber das Stundenprofil erst seit Tagen — die Skalar-Stufe war damit auf den meisten Anlagen unerreichbar und der Live-Pfad fiel auf den Legacy-`_get_lernfaktor` zurück, statt auf den Korrekturprofil-Skalar.
