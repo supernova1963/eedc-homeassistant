@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.3)
+> **Stand:** Mai 2026 (v3.26.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,14 @@
 ---
 
 ## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### Hotfix: Wetter-Backfill schließt jetzt auch die letzten 5 Tage *(v3.26.4)*
+
+> 🩹 **Hotfix wenige Stunden nach v3.26.3** — der „Wetter-Historie nachladen"-Button hat die letzten 5 Tage strukturell ausgelassen, weil Open-Meteo Archive sie wegen 2–5 Tage Reanalyse-Lag nicht hat. Per Designkommentar sollten diese Tage über den Live-Forecast-Pfad mitkommen, taten es aber nicht — also blieb die „5 Tage noch nicht geladen"-Meldung dauerhaft sichtbar und ein erneuter Klick lieferte „0 Stunden / 0 Tage geladen". Verständlich verwirrend.
+>
+> Jetzt holt der Backfill zwei Range-Calls: Open-Meteo Archive für ältere Tage, Open-Meteo Forecast (mit Reanalyse-Approximation für die Vergangenheit) für die jüngsten Tage. Der nächtliche Tagesabschluss-Aggregator (`aggregate_day`) verwendet denselben Routing-Cutoff. Damit ist die Lücke der letzten 5 Tage strukturell geschlossen — Empty-State-Ghost und „0 geladen" sollten nach einem Klick verschwinden.
+
+→ [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
 ### Hotfix: Korrekturprofil-Skalar wirkt sofort, auch ohne Stundenprofile *(v3.26.3)*
 
