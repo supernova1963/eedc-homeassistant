@@ -286,7 +286,13 @@ class Korrekturprofil(Base):
 
 ## Aufwand und Reihenfolge — zwei Päckchen plus Reaktives
 
-### Päckchen 1 (~4 Tage) — Daten-Layer und Skalar-Verbesserung
+> **Status (2026-05-06):** Päckchen 1 ✅ ausgeliefert mit v3.26.0 + Hotfix
+> v3.26.1. Päckchen 2 ✅ ausgeliefert mit v3.26.2 + Hotfix v3.26.3
+> (Aggregator-Skipped-Pfad zu strikt: Skalar wird jetzt unabhängig von
+> Day-Ahead-Stundenprofilen berechnet). Beobachtungs-Phase läuft —
+> Sonnenstand-Bins füllen sich ab ~Tag 10, statistisch robust ab ~Tag 30.
+
+### Päckchen 1 (~4 Tage) — Daten-Layer und Skalar-Verbesserung — ✅ v3.26.0/3.26.1
 
 | Schritt | Aufwand |
 |---|---|
@@ -298,7 +304,7 @@ class Korrekturprofil(Base):
 | Stratifizierungs-Endpoint (MAE/MBE pro Klasse × Stunde) | ½ Tag |
 | Frontend: Stratifizierungs-Card + O12-Diagnose-Card (additiv, Solcast-Spalte bleibt — Tester-Pakt mit Rainer) | ½ Tag |
 
-### Päckchen 2 (~5–7 Tage) — Korrekturprofil aktiv
+### Päckchen 2 (~5–7 Tage) — Korrekturprofil aktiv — ✅ v3.26.2/3.26.3
 
 | Schritt | Aufwand |
 |---|---|
