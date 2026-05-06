@@ -25,6 +25,7 @@ import {
   Wetterklasse,
   wetterBackfill,
 } from '../../api/korrekturprofil'
+import { KorrekturprofilHeatmapCard } from './KorrekturprofilHeatmapCard'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -619,6 +620,9 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         </div>
         )
       })()}
+
+      {/* ── Korrekturprofil-Heatmap (Päckchen 2) ── */}
+      <KorrekturprofilHeatmapCard anlageId={anlageId} />
 
       {/* ── Stundenprofil-Chart ── */}
       <Card>

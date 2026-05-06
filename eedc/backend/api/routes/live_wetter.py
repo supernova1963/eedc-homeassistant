@@ -26,7 +26,11 @@ from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.live_power_service import get_live_power_service
-from backend.services.wetter.utils import wetter_symbol_aus_tag
+from backend.services.wetter.utils import (
+    klassifiziere_stunde,
+    wetter_symbol_aus_tag,
+)
+from backend.services.korrekturprofil_lookup import lookup_korrekturfaktor
 from backend.services.wetter.cache import (
     _cache_get, _cache_set, _error_cache_check, _error_cache_set,
     ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
@@ -957,9 +961,13 @@ async def get_live_wetter(
 
         now = datetime.now(ZoneInfo("Europe/Berlin"))
 
-        # Lernfaktor laden (nur bei OpenMeteo-Basis — bei Solcast/SFML wirkt der LF im Prognosen-Tab)
+        # Lernfaktor laden (nur bei OpenMeteo-Basis — bei Solcast/SFML wirkt der LF im Prognosen-Tab).
+        # Korrekturprofil-Lookup hat Vorrang; `_get_lernfaktor` dient als Fallback,
+        # solange noch keine Profile aggregiert sind (z. B. neu installierte Anlage).
         prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
-        lernfaktor = await _get_lernfaktor(anlage_id, db) if prognose_basis == "openmeteo" else None
+        skalar_fallback = (
+            await _get_lernfaktor(anlage_id, db) if prognose_basis == "openmeteo" else None
+        )
 
         alle_stunden = []  # 0-23 für Verbrauchsprofil
         stunden = []       # 6-20 für Wetter-Timeline
@@ -968,14 +976,27 @@ async def get_live_wetter(
 
             code = hourly.get("weather_code", [None] * len(times))[i]
             gti = gti_values[i] if i < len(gti_values) else None
-
-            # Lernfaktor auf GTI anwenden (skaliert die Strahlung, nicht den Ertrag,
-            # damit Temperaturkorrektur weiterhin korrekt greift)
-            if gti is not None and lernfaktor is not None:
-                gti = gti * lernfaktor
-
             bewoelkung_h = hourly.get("cloud_cover", [None] * len(times))[i]
             niederschlag_h = hourly.get("precipitation", [None] * len(times))[i]
+
+            # Korrekturfaktor auf GTI anwenden (skaliert die Strahlung, nicht den Ertrag,
+            # damit Temperaturkorrektur weiterhin korrekt greift). Pro-Stunde-Lookup mit
+            # Fallback-Kaskade (sonnenstand_wetter -> sonnenstand -> Skalar -> Legacy).
+            if gti is not None and prognose_basis == "openmeteo":
+                klasse_h = klassifiziere_stunde(bewoelkung_h, niederschlag_h, code)
+                forecast_datum = date.fromisoformat(t[:10])
+                kp = await lookup_korrekturfaktor(
+                    db,
+                    anlage_id=anlage_id,
+                    lat=anlage.latitude,
+                    lon=anlage.longitude,
+                    datum=forecast_datum,
+                    stunde=h,
+                    klasse=klasse_h,
+                )
+                faktor_h = kp.faktor if kp is not None else skalar_fallback
+                if faktor_h is not None:
+                    gti = gti * faktor_h
             stunde = {
                 "zeit": f"{h:02d}:00",
                 "temperatur_c": hourly.get("temperature_2m", [None] * len(times))[i],

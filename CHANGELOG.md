@@ -7,6 +7,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.2] - 2026-05-06 — Päckchen 2 Korrekturprofil (Sonnenstand × Wetter live)
+
+> ✨ **Päckchen 2 von zwei** — das in v3.26.0 angelegte stündliche Korrekturprofil ist jetzt produktiv. Pro Live-Forecast-Stunde wird die OpenMeteo-Strahlung mit einem Faktor multipliziert, der aus `(azimut_bin, elevation_bin, wetterklasse)` aus der historischen IST/Day-Ahead-Aufschlüsselung kommt. Fallback-Kaskade hält den Pfad für datenarme Anlagen sanft auf den klassischen Skalar-Lernfaktor.
+
+### Added
+
+- **`Korrekturprofil`-Tabelle** (`korrekturprofile`) mit `(anlage_id, investition_id, quelle, profil_typ)` als Scope. JSON-Felder `bin_definition`, `faktoren`, `datenpunkte_pro_bin` tragen alle drei Profil-Stufen ohne Schema-Änderung. Tabelle wird beim Backend-Start via `create_all` automatisch angelegt; bestehende Installationen brauchen keine manuelle Migration.
+- **Solar-Position-Helper** (`services/wetter/solar_position.py`) — vereinfachter NOAA-Algorithmus, ~0.1° Genauigkeit, keine externe Astro-Dependency. Lokalzeit-Konvertierung über `zoneinfo` mit `Europe/Berlin`-Default und Längengrad-basiertem Fallback.
+- **Korrekturprofil-Aggregator** (`services/korrekturprofil_aggregator.py`) — schreibt drei Profil-Stufen pro Anlage:
+  - `sonnenstand_wetter` (primär, ~150–200 belegte Bins × 3 Klassen)
+  - `sonnenstand` (Fallback ohne Wetter-Achse)
+  - `skalar` (O1+O2-Tagesfaktor als letzter Fallback)
+  Idempotent, clamp `[0.5; 1.3]`, Mindest-Summe 1 kWh pro Bin gegen Mini-Quotienten-Verzerrung.
+- **Live-Pfad-Lookup** (`services/korrekturprofil_lookup.py`) mit Fallback-Kaskade und Anlagen-Cache (TTL 1h). Schwellen pro Stufe: ≥10 Datenpunkte (sonnenstand_wetter), ≥15 (sonnenstand), ≥7 Tage (skalar). Aggregator invalidiert Cache nach Re-Build automatisch.
+- **`get_live_wetter` ersetzt globale Skalar-Multiplikation** durch Pro-Stunde-Lookup. Bei fehlendem Profil oder zu wenigen Datenpunkten fällt der Pfad auf den existierenden `_get_lernfaktor`-Skalar zurück (bewusste Variante 1: Sanftverlauf statt Feature-Flag).
+- **Scheduler-Job `korrekturprofil_aggregation`** täglich um 02:30 (zwischen Energie-Profil-Recovery 02:15 und MQTT-Cleanup 03:00). Iteriert über alle Anlagen mit Koordinaten.
+- **Endpoints** `POST /api/korrekturprofil/{anlage_id}/aggregate` (manueller Re-Build) und `GET /api/korrekturprofil/{anlage_id}/profile` (Lesen für Frontend).
+- **Heatmap-Card im Prognosen-Vergleich-Tab** (`KorrekturprofilHeatmapCard.tsx`) — Klassen-Tabs (klar / diffus / wechselhaft / Alle), Azimut × Elevation als Farbverlauf, Empty-State mit Aggregator-Trigger, Stats-Zeile mit Tage/Bins/Skalar.
+
+### Changed
+
+- **`live_wetter.py`** — Skalar-Lernfaktor wird zum Fallback hinter dem Pro-Stunde-Korrekturprofil-Lookup. Bestehende `_get_lernfaktor_detail`-Logik unverändert; nur die Anwendung im Forecast-Loop ersetzt.
+
+### Internal
+
+- **End-to-end-Smoketest** (in-memory SQLite, 9 Tests): skipped-Pfade (no geo, no snapshots), ok-Pfad (60 synth Tage → 43 Bins + Skalar 0.8), Lookup-Kaskade über alle drei Stufen, Cache-Invalidation, Idempotenz, fehlende Anlage → None (Caller-Fallback).
+- **`profil_typ='stunde'`** im Schema vorgesehen, vom Aggregator bewusst nicht geschrieben — Sonnenstand-Bins decken denselben Effekt physikalisch sauberer ab; die Saisonbin × Stunde-Stufe ist konzept-doku-konform durch die direkte Skalar-Stufe ersetzt.
+
+---
+
 ## [3.26.1] - 2026-05-06 — Hotfix: Backfill-Button auch ohne Day-Ahead-Stundenprofile
 
 > 🩹 **Hotfix wenige Stunden nach v3.26.0** — der "Wetter-Historie nachladen"-Empty-State erschien auf vielen Anlagen gar nicht, weil mein Trigger fälschlich an `pv_prognose_stundenprofil` hing (Day-Ahead-Snapshot, first-write-wins, auf vielen länger laufenden Anlagen lückenhaft befüllt). Das hat das Hauptfeature von v3.26.0 unsichtbar gemacht.

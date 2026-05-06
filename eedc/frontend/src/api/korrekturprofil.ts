@@ -64,3 +64,50 @@ export const getStratifizierung = async (
     `/korrekturprofil/${anlageId}/stratifizierung?tage=${tage}`,
   )
 }
+
+// =============================================================================
+// Korrekturprofil — Aggregator + Lesen
+// =============================================================================
+
+export type ProfilTyp =
+  | 'sonnenstand_wetter'
+  | 'sonnenstand'
+  | 'stunde'
+  | 'skalar'
+
+export interface ProfilEintrag {
+  profil_typ: ProfilTyp
+  bin_definition: Record<string, unknown>
+  faktoren: Record<string, number | Record<string, number>>
+  datenpunkte_pro_bin: Record<string, number>
+  tage_eingegangen: number
+  faktor_skalar: number | null
+  aktualisiert_am: string | null
+}
+
+export interface ProfilResponse {
+  anlage_id: number
+  profile: ProfilEintrag[]
+}
+
+export const getProfile = async (anlageId: number): Promise<ProfilResponse> => {
+  return api.get<ProfilResponse>(`/korrekturprofil/${anlageId}/profile`)
+}
+
+export interface AggregateResponse {
+  status: 'ok' | 'skipped' | 'error'
+  grund?: string | null
+  tage_eingegangen?: number | null
+  bins_sonnenstand_wetter?: number | null
+  bins_sonnenstand?: number | null
+  skalar?: number | null
+}
+
+export const aggregateKorrekturprofil = async (
+  anlageId: number,
+  lookbackTage = 730,
+): Promise<AggregateResponse> => {
+  return api.post<AggregateResponse>(
+    `/korrekturprofil/${anlageId}/aggregate?lookback_tage=${lookbackTage}`,
+  )
+}

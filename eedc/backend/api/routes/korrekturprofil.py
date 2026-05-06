@@ -29,6 +29,15 @@ from backend.services.wetter_backfill_service import (
     DEFAULT_MAX_TAGE,
     wetter_backfill_anlage,
 )
+from backend.services.korrekturprofil_aggregator import (
+    DEFAULT_LOOKBACK_TAGE as KP_LOOKBACK_DEFAULT,
+    aggregiere_korrekturprofil_anlage,
+)
+from backend.models.korrekturprofil import (
+    PROFIL_TYP_KASKADE,
+    PROFIL_TYP_SONNENSTAND_WETTER,
+    Korrekturprofil,
+)
 
 router = APIRouter()
 
@@ -264,3 +273,104 @@ async def stratifizierung_endpoint(
         pro_klasse=pro_klasse,
         pro_klasse_stunde=pro_klasse_stunde,
     )
+
+
+# ── Korrekturprofil-Aggregator + Lesen ─────────────────────────────────────
+
+
+class AggregateResponse(BaseModel):
+    status: str
+    grund: Optional[str] = None
+    tage_eingegangen: Optional[int] = None
+    bins_sonnenstand_wetter: Optional[int] = None
+    bins_sonnenstand: Optional[int] = None
+    skalar: Optional[float] = None
+
+
+@router.post(
+    "/{anlage_id}/aggregate",
+    response_model=AggregateResponse,
+)
+async def aggregate_endpoint(
+    anlage_id: int,
+    lookback_tage: int = Query(
+        KP_LOOKBACK_DEFAULT,
+        ge=30,
+        le=2000,
+        description="Lookback-Tiefe in Tagen (Default 730 = 2 Jahre)",
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Aggregiert das Korrekturprofil aus historischen Daten neu.
+
+    Schreibt drei Profil-Stufen pro Anlage:
+    - `sonnenstand_wetter` (primär)
+    - `sonnenstand` (Fallback ohne Wetter)
+    - `skalar` (O1+O2 als letzter Fallback)
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    return await aggregiere_korrekturprofil_anlage(
+        anlage, db, lookback_tage=lookback_tage
+    )
+
+
+class ProfilEintrag(BaseModel):
+    profil_typ: str
+    bin_definition: dict
+    faktoren: dict
+    datenpunkte_pro_bin: dict
+    tage_eingegangen: int
+    faktor_skalar: Optional[float] = None
+    aktualisiert_am: Optional[str] = None
+
+
+class ProfilResponse(BaseModel):
+    """Alle Profile einer Anlage in der Kaskaden-Reihenfolge."""
+    anlage_id: int
+    profile: list[ProfilEintrag]
+
+
+@router.get(
+    "/{anlage_id}/profile",
+    response_model=ProfilResponse,
+)
+async def profile_endpoint(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ProfilResponse:
+    """Liefert alle gespeicherten Korrekturprofile einer Anlage.
+
+    Reihenfolge: Kaskaden-Reihenfolge (sonnenstand_wetter, sonnenstand,
+    stunde, skalar). Profile, die noch nie aggregiert wurden, fehlen.
+    """
+    result = await db.execute(
+        select(Korrekturprofil).where(
+            and_(
+                Korrekturprofil.anlage_id == anlage_id,
+                Korrekturprofil.investition_id.is_(None),
+            )
+        )
+    )
+    profile_raw = list(result.scalars().all())
+    by_typ = {p.profil_typ: p for p in profile_raw}
+    eintraege: list[ProfilEintrag] = []
+    for typ in PROFIL_TYP_KASKADE:
+        p = by_typ.get(typ)
+        if p is None:
+            continue
+        eintraege.append(
+            ProfilEintrag(
+                profil_typ=p.profil_typ,
+                bin_definition=p.bin_definition or {},
+                faktoren=p.faktoren or {},
+                datenpunkte_pro_bin=p.datenpunkte_pro_bin or {},
+                tage_eingegangen=p.tage_eingegangen,
+                faktor_skalar=p.faktor_skalar,
+                aktualisiert_am=p.aktualisiert_am.isoformat() if p.aktualisiert_am else None,
+            )
+        )
+    return ProfilResponse(anlage_id=anlage_id, profile=eintraege)

@@ -207,6 +207,17 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Korrekturprofil-Aggregation: Täglich um 02:30 (nach Energie-Profil-Recovery 02:15).
+            # Aggregator schreibt sonnenstand_wetter / sonnenstand / skalar-Profile pro Anlage,
+            # invalidiert Live-Cache automatisch (siehe korrekturprofil_lookup.invalidate_cache).
+            self._scheduler.add_job(
+                korrekturprofil_aggregation_job,
+                CronTrigger(hour=2, minute=30),
+                id="korrekturprofil_aggregation",
+                name="Korrekturprofil-Aggregation (Sonnenstand × Wetter)",
+                replace_existing=True,
+            )
+
             # Prognose-Prefetch: Alle 45 Min (innerhalb des 60-Min Cache-TTL)
             self._scheduler.add_job(
                 prognose_prefetch_job,
@@ -715,6 +726,70 @@ async def _run_yesterday_aggregation(label: str) -> None:
         await log_activity(
             kategorie="scheduler",
             aktion=f"Energie-Profil {label} fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+        )
+
+
+async def korrekturprofil_aggregation_job() -> None:
+    """Aggregiert das Korrekturprofil pro Anlage (täglich um 02:30).
+
+    Iteriert über alle Anlagen mit Koordinaten und ruft den Aggregator auf.
+    Idempotent — bestehende Profile werden überschrieben, der Live-Cache via
+    Lookup-Service automatisch invalidiert.
+    """
+    try:
+        from sqlalchemy import select
+
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.korrekturprofil_aggregator import (
+            aggregiere_korrekturprofil_anlage,
+        )
+
+        ok = 0
+        skipped = 0
+        async for db in get_session():
+            anlagen_result = await db.execute(
+                select(Anlage).where(
+                    Anlage.latitude.isnot(None),
+                    Anlage.longitude.isnot(None),
+                )
+            )
+            anlagen = list(anlagen_result.scalars().all())
+            for anlage in anlagen:
+                try:
+                    res = await aggregiere_korrekturprofil_anlage(anlage, db)
+                    if res.get("status") == "ok":
+                        ok += 1
+                    else:
+                        skipped += 1
+                except Exception as ex:
+                    logger.warning(
+                        "Korrekturprofil-Aggregation Anlage %s fehlgeschlagen: %s: %s",
+                        anlage.id,
+                        type(ex).__name__,
+                        ex,
+                    )
+            break
+        logger.info(
+            "Korrekturprofil-Aggregation: %d ok, %d übersprungen", ok, skipped
+        )
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Korrekturprofil-Aggregation",
+            erfolg=True,
+            details=f"{ok} ok, {skipped} übersprungen",
+        )
+    except Exception as e:
+        logger.warning(
+            "Korrekturprofil-Aggregation fehlgeschlagen: %s: %s",
+            type(e).__name__,
+            e,
+        )
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Korrekturprofil-Aggregation fehlgeschlagen",
             erfolg=False,
             details=f"{type(e).__name__}: {e}",
         )
