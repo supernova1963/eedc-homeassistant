@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.1)
+> **Stand:** Mai 2026 (v3.26.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,25 @@
 ---
 
 ## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### Päckchen 2: Stündliches Korrekturprofil scharf *(v3.26.2)*
+
+> ✨ **Das stündliche Korrekturprofil aus dem Päckchen-1-Konzept ist jetzt produktiv.** Pro Stunde wird die OpenMeteo-Strahlung mit einem Faktor multipliziert, der von Sonnenstand (Azimut × Elevation) *und* Wetterklasse abhängt — also zum Beispiel "Süd-Mittag bei klarem Himmel" anders als "West-Nachmittag bei diffuser Bewölkung". Damit fängt die Live-Prognose Verschattungs- und Wetter-Asymmetrien strukturell ein, die ein einziger Anlagen-Skalar nicht trennen kann.
+
+#### Was sich für dich ändert
+
+- **Live-Strahlung wird pro Stunde individuell korrigiert.** Bisher wurde der Lernfaktor (z. B. ×0.97) gleichmäßig auf alle Stunden multipliziert. Ab v3.26.2 ermittelt EEDC für jede Stunde Sonnenstand-Bin (10° × 10°) und Wetterklasse, und greift den Korrekturfaktor aus dem über die Anlage gelernten Profil. Effekt sichtbar im Live-Dashboard und in der Tagesrest-Prognose: Stunden mit Verschattung oder schwacher Wetterleistung kriegen einen passenderen Faktor als Stunden ohne.
+- **Heatmap im Prognosen-Vergleich-Tab.** Eine neue Card zeigt das gelernte Korrekturprofil als Tabelle (Azimut horizontal, Elevation vertikal, Farbe = Faktor) — pro Wetterklasse umschaltbar plus Fallback-Sicht ohne Wetter-Achse. Macht sichtbar, welche Sonnenstand-Bereiche bei welcher Wetterlage über- oder unterschätzt werden.
+- **Sanftverlauf für neue oder datenarme Anlagen.** Ein Sonnenstand-Bin braucht mindestens 10 Stunden Datenbestand, um produktiv genutzt zu werden (Stufe 1: Sonnenstand × Wetter), bzw. 15 Stunden ohne Wetter-Achse (Stufe 2). Reicht das nicht, fällt EEDC automatisch auf den klassischen Skalar-Lernfaktor zurück — neue Anlagen merken zunächst nichts und bauen ihr Profil organisch auf.
+- **Nightly Aggregator.** Das Profil wird täglich um 02:30 frisch gerechnet aus Day-Ahead-Snapshots + IST-Stunden + Wetter-Historie. Manuelles "Neu aggregieren" ist über den Button in der Heatmap-Card jederzeit möglich.
+
+#### Was sich *nicht* ändert
+
+- **Solcast-Spalte und alle bisherigen Cards bleiben unverändert.** Die Heatmap kommt additiv unter den vorhandenen Diagnose-Cards.
+- **Anlage ohne Day-Ahead-Snapshots oder Koordinaten** → Aggregator wird übersprungen, Live-Pfad bleibt auf dem klassischen Skalar.
+- **Tagesrest-Pfad konzeptionell wie bisher:** EEDC fragt frische Forecasts und multipliziert mit dem Faktor — neu ist nur, dass der Faktor jetzt pro Stunde aus dem Profil kommt statt einem globalen Skalar.
+
+→ [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
 ### Hotfix: Wetter-Backfill-Button erscheint jetzt zuverlässig *(v3.26.1)*
 
