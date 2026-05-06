@@ -7,6 +7,37 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.0] - 2026-05-06 — Päckchen 1 Korrekturprofil-Konzept
+
+> ✨ **Daten-Layer + Skalar-Verbesserung für das geplante stündliche Korrekturprofil.** Päckchen 1 von zwei: bringt stündliche Wetter-Daten (Bewölkung, Niederschlag, WMO-Code) in `TagesEnergieProfil`, einen Open-Meteo-Archive-Backfill für 2 Jahre Historie, eine zweite Berechnungsvariante des Lernfaktors (Trim-Mean + Recency-Boost, läuft parallel zum Live-Faktor zu Diagnose-Zwecken) und zwei additive Diagnose-Cards im Prognosen-Vergleich-Tab. Die Solcast-Spalte und die Tab-Struktur bleiben unverändert. Päckchen 2 (Sonnenstand-Bin × Wetterklasse als kombinierter stündlicher Korrekturfaktor) folgt nach Beobachtungs-Phase.
+
+### Added
+
+- **Stündliche Wetter-Spalten in `TagesEnergieProfil`** — `bewoelkung_prozent`, `niederschlag_mm`, `wetter_code` werden bei der täglichen Aggregation automatisch aus dem bereits laufenden Open-Meteo-Fetch mitgeschrieben. DB-Migration läuft beim Backend-Start additiv. Speicheraufwand vernachlässigbar (~3 Floats × 24 h × 365 × 2 Jahre pro Anlage).
+- **Wetter-Backfill-Service + Endpoint** (`POST /api/korrekturprofil/{anlage_id}/wetter-backfill`) — füllt fehlende Wetter-Felder rückwirkend aus Open-Meteo Archive (ERA5-Reanalyse, gratis, 2 Jahre). Strikt additiv: bestehende Werte werden nicht überschrieben. Idempotent. Free-Tier-konform (~30 Calls pro Anlage für 2 Jahre).
+- **Wetter-Klassifikations-Helper** (`klassifiziere_stunde()`, `klassifiziere_tag()`) in `services/wetter/utils.py` — drei Klassen (klar / diffus / wechselhaft) mit Schwellen aus Bewölkung, Niederschlag und WMO-Code. Niederschlag-Marker und WMO-Sicht-Beeinträchtigung dominieren.
+- **O1 Recency-Boost + O2 Trim-Mean als Doppel-Variante des Lernfaktors** — `_aggregiere_o12()` läuft parallel zum Legacy-Aggregator auf den gleichen Tagen. Trim-Mean entfernt Sensor-Aussetzer (oberste/unterste 10 % der Tagesquotienten); Recency-Boost gewichtet Tage jünger als 30 Tage mit +30 % stärker. Live-Pfad nutzt weiter den Legacy-Faktor — Aktivierung als Default erst nach mehrwöchiger Beobachtung.
+- **Stratifizierungs-Endpoint** (`GET /api/korrekturprofil/{anlage_id}/stratifizierung?tage=90`) — wetter-stratifizierte Stunden-Genauigkeit (MAE/MBE in % vom IST) der Day-Ahead-Prognose pro Wetter-Klasse, plus Aufschlüsselung pro (Klasse × Stunde) als JSON-Map.
+- **Diagnose-Cards im Prognosen-Vergleich-Tab** (additiv, ändert nichts an bestehenden Inhalten) — *Lernfaktor-Doppel-Variante* (Legacy vs. O1+O2 mit Δ-Anzeige) und *Wetter-Stratifizierung* (Tabelle MAE/MBE pro Klasse). Beide rendern conditional nur wenn Daten vorhanden sind.
+- **Empty-State-Button „Wetter-Historie nachladen"** in der Stratifizierungs-Card. Wenn Day-Ahead-Snapshots vorhanden sind aber Wetter-Historie noch fehlt (typisch direkt nach dem Update), bietet die Card einen Klick-Trigger für den 2-Jahres-Backfill an. Status-Anzeige (lädt / X Stunden geladen / Fehler) inline. Kein automatischer Backfill beim Backend-Start — User behält Kontrolle, kein Quota-Spike beim Add-on-Update.
+
+### Changed
+
+- **`prognosen.py` Response erweitert** um `eedc_lernfaktor_o12` und `eedc_lernfaktor_o12_delta_pct`. Bestehende Felder unverändert, Frontend-Konsumenten ohne O12-Awareness brechen nicht.
+- **`_berechne_faktor` intern refaktoriert** in `_filtere_tage` + `_aggregiere_legacy`. Backwards-Compat-Alias bleibt, externe Aufrufe weiter funktionsfähig.
+- **`_get_wetter_ist`** holt zusätzlich `cloud_cover`, `precipitation`, `weather_code` aus Open-Meteo Forecast/Archive (kostet keinen extra Call, die Variablen sind im selben Endpoint).
+
+### Documentation
+
+- **`docs/KONZEPT-KORREKTURPROFIL.md` v3 verabschiedet** — ersetzt v2 vom 2026-05-03. Varianten A/B/C nicht mehr „nur reaktiv", sondern: eine geplante Ziel-Architektur (Sonnenstand-Bin × Wetterklasse als kombinierte Tabelle, kein multiplikatives Splitting), zwei Päckchen, Variante C bleibt reaktiv. Solcast-Spalte ausdrücklich „bleibt — Tester-Pakt mit Rainer".
+
+### Internal
+
+- **Konzept-Doku zur multiplikativen Faktoren-Trennung** verworfen: Verschattung × Wetter ist eine echte Interaktion, multiplikatives Splitting wäre identifizierungs-bedingt ill-posed. Stattdessen kombinierte Tabelle mit Fallback-Kaskade.
+- **Backfill ist additiv** (Marker-Spalte `bewoelkung_prozent IS NULL`) — `feedback_vollbackfill_nur_additiv.md`-Linie konsequent fortgesetzt.
+
+---
+
 ## [3.25.23] - 2026-05-05
 
 > 🩹 **Tab-Bildlaufleiste auf drei Seiten weg (#193 detLAN)** — Patch-Release mit nur einem UI-Fix.

@@ -1,11 +1,36 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.25.23)
+> **Stand:** Mai 2026 (v3.26.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### Päckchen 1: Daten-Layer für stündliches Korrekturprofil *(v3.26.0)*
+
+> ✨ **Vorbereitungs-Release für ein stündliches PV-Korrekturprofil mit Verschattungs- *und* Wetter-Dimension.** Päckchen 1 von zwei: legt die Datenbasis an, baut zwei neue Diagnose-Cards im Prognosen-Vergleich-Tab und verbessert die Lernfaktor-Berechnung statistisch — der Live-Pfad selbst bleibt unverändert. Päckchen 2 (das eigentliche stündliche Korrekturprofil mit Anwendung im Live-Dashboard) folgt nach einer Beobachtungs-Phase.
+
+#### Was sich für dich ändert
+
+- **Stündliches Wetter wird ab sofort mitgespeichert.** Bei jedem Tagesabschluss schreibt EEDC zusätzlich Bewölkung (%), Niederschlag (mm) und WMO-Wettercode pro Stunde — kommt aus dem Open-Meteo-Aufruf, den EEDC für die Strahlungs-Daten ohnehin macht. Kein neuer API-Call, kein Quota-Verbrauch.
+- **Wetter-Historie nachladen (manuell anstoßbar).** Open-Meteo Archive bietet 2 Jahre Historie kostenlos. Wer den vollen Diagnose-Wert direkt sehen will, kann die Historie für seine Anlage einmalig nachladen lassen — ein Klick reicht (siehe Stratifizierungs-Card im Prognosen-Tab).
+- **Lernfaktor — Doppel-Variante "O1+O2".** EEDC rechnet den Anlage-Skalar (Verhältnis IST/Prognose) ab sofort *zusätzlich* mit zwei statistischen Verbesserungen aus: Trim-Mean (entfernt Ausreißer-Tage durch Sensor-Aussetzer) und Recency-Boost (gewichtet die letzten 30 Tage stärker). **Wichtig:** der Live-Pfad nutzt weiter den klassischen Faktor — die neue Variante läuft parallel und ist nur als Diagnose sichtbar. Erst nach mehrwöchiger Beobachtung wird entschieden, ob sie zum Default wird.
+- **Zwei neue Cards im Prognosen-Vergleich-Tab.**
+  - *Lernfaktor — Doppel-Variante O1+O2:* zeigt Live-Faktor (Legacy) und O1+O2-Faktor nebeneinander mit Δ-Anzeige. Macht sichtbar, ob die statistische Verbesserung stabil zum Legacy-Wert läuft (Δ &lt; 1 %) oder systematisch nach oben/unten zieht.
+  - *Wetter-Stratifizierung:* zeigt MAE/MBE der Day-Ahead-Stundenprognose getrennt nach drei Wetter-Klassen — *klar*, *diffus*, *wechselhaft*. Erst dadurch wird sichtbar, ob die Prognose bei klarem Himmel super läuft und nur bei Schauer-Tagen abweicht (oder umgekehrt). Ohne diese Aufschlüsselung war ein einziger gemittelter Tagesfehler die einzige Sicht.
+
+#### Was sich *nicht* ändert
+
+- **Solcast-Spalte und Tab-Inhalte bleiben** — die Diagnose-Cards sind additiv, nichts wird entfernt oder neu sortiert.
+- **Tagesrest-Prognose im Live-Dashboard** läuft genauso wie bisher: aktuelle Open-Meteo-Forecast × Lernfaktor (Legacy). Wird nicht durch die neue O12-Variante beeinflusst.
+- **Ohne IST-Vergleich keine Stratifizierung.** Die Wetter-Stratifizierungs-Card erscheint erst, wenn EEDC genug Tage mit gleichzeitiger Day-Ahead-Prognose und IST-Stundenwerten gefunden hat — typisch wenige Tage nach Aktivierung.
+
+→ [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
 ---
 
