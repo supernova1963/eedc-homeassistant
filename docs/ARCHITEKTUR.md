@@ -688,7 +688,8 @@ Sonstiges [Eigenständig]
 | `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** |
 | `/api/scheduler` | main.py (inline) | **Scheduler Status/Trigger** |
 | `/api/community` | community.py | **Community-Teilen & Benchmark** |
-| `/api/live` | live_dashboard.py, live_mqtt_inbound.py, live_wetter.py | **Live Dashboard + MQTT + Wetter** (v3.0.0, refactored v3.9.0) |
+| `/api/live` | live_dashboard.py, live_mqtt_inbound.py, live_wetter.py | **Live Dashboard + MQTT + Wetter** (v3.0.0, refactored v3.9.0; Korrekturprofil-Lookup pro Stunde ab v3.26.2) |
+| `/api/korrekturprofil` | korrekturprofil.py | **Lernfaktor-Korrekturprofil** (Wetter-Backfill, Stratifizierungs-Diagnose, Aggregator, Profile) — siehe [`KONZEPT-KORREKTURPROFIL.md`](KONZEPT-KORREKTURPROFIL.md) |
 | `/api/aktueller-monat` | aktueller_monat.py | **Monatsdaten-API** (genutzt von Monatsberichte-View für alle Monate inkl. laufender) |
 | `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** |
 | `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** |
