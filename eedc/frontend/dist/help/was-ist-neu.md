@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.2)
+> **Stand:** Mai 2026 (v3.26.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,14 @@
 ---
 
 ## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### Hotfix: Korrekturprofil-Skalar wirkt sofort, auch ohne Stundenprofile *(v3.26.3)*
+
+> 🩹 **Hotfix wenige Stunden nach v3.26.2** — der Aggregator hat „Keine Day-Ahead-Snapshots im Zeitraum" zurückgemeldet, sobald das stündliche Day-Ahead-Profil (`pv_prognose_stundenprofil`, erst seit v3.26.0 mitgeschrieben) im Auswertungsfenster noch leer war. Bestehende Anlagen haben Tages-Prognose schon seit Monaten — die Skalar-Stufe hätte ab Tag 1 verfügbar sein müssen, war aber wegen meiner zu strikten Voraussetzung gesperrt. Damit fiel der Live-Pfad weiter auf den Legacy-Lernfaktor zurück, statt auf das neue Korrekturprofil.
+>
+> Jetzt schreibt der Aggregator den Skalar unabhängig vom Stundenprofil; Sonnenstand- und Wetter-Bins bleiben leer, solange die Stundenprofile reinwachsen — und füllen sich automatisch über die nächsten Wochen. Die Heatmap-Card erklärt das jetzt explizit, wenn nur die Skalar-Stufe vorhanden ist.
+
+→ [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
 ### Päckchen 2: Stündliches Korrekturprofil scharf *(v3.26.2)*
 

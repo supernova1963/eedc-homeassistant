@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.3] - 2026-05-06 — Hotfix: Aggregator schreibt Skalar auch ohne Day-Ahead-Stundenprofile
+
+> 🩹 **Hotfix wenige Stunden nach v3.26.2** — der Aggregator brach mit `status="skipped" / grund="Keine Day-Ahead-Snapshots im Zeitraum"` ab, sobald `pv_prognose_stundenprofil` (seit v3.26.0 mitgeschrieben, vorher leer) im Auswertungszeitraum noch nicht aufgelaufen war. Bestehende Anlagen haben Tages-Prognose `pv_prognose_kwh` schon seit Monaten, aber das Stundenprofil erst seit Tagen — die Skalar-Stufe war damit auf den meisten Anlagen unerreichbar und der Live-Pfad fiel auf den Legacy-`_get_lernfaktor` zurück, statt auf den Korrekturprofil-Skalar.
+
+### Fixed
+
+- **Skalar-Stufe wird unabhängig vom Stundenprofil berechnet.** `_lade_tagesist_skalar` zieht die Tages-Aggregation jetzt direkt aus `(von, bis)` statt aus `prog_pro_tag.keys()`. Sonnenstand-Bin-Stufen bleiben leer, solange Stundenprofile fehlen — die Skalar-Stufe steht ab Tag 1 zur Verfügung.
+- **Aggregator `status="ok"` auch bei reiner Skalar-Stufe.** Nur bei kompletter Datenleere (weder `pv_prognose_kwh` noch IST) wird noch geskipped. `tage_eingegangen` zeigt im UI die Skalar-Tagesanzahl, wenn keine Bin-Tage vorhanden sind.
+- **Heatmap-Card mit Hinweis-Block,** wenn nur die Skalar-Stufe vorhanden ist: erklärt, dass Sonnenstand- und Wetter-Bins Day-Ahead-Stundenprofile (`pv_prognose_stundenprofil`) brauchen und sich über die nächsten Wochen organisch aufbauen.
+
+### Internal
+
+- **Smoketest erweitert** um den Fall „30 Tage Tagesprognose + IST, ohne Stundenprofile" → Skalar 0.88 geschrieben, Live-Lookup nutzt Stufe `skalar`. Empty-Anlage bleibt korrekt skipped.
+
+---
+
 ## [3.26.2] - 2026-05-06 — Päckchen 2 Korrekturprofil (Sonnenstand × Wetter live)
 
 > ✨ **Päckchen 2 von zwei** — das in v3.26.0 angelegte stündliche Korrekturprofil ist jetzt produktiv. Pro Live-Forecast-Stunde wird die OpenMeteo-Strahlung mit einem Faktor multipliziert, der aus `(azimut_bin, elevation_bin, wetterklasse)` aus der historischen IST/Day-Ahead-Aufschlüsselung kommt. Fallback-Kaskade hält den Pfad für datenarme Anlagen sanft auf den klassischen Skalar-Lernfaktor.
