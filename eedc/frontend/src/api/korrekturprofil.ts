@@ -51,6 +51,7 @@ export interface StratifizierungResponse {
   stunden_klassifiziert: number
   tage_mit_prognose: number
   tage_ohne_wetter: number
+  tep_tage_ohne_wetter: number
   pro_klasse: Record<Wetterklasse, StratifizierungEintrag>
   pro_klasse_stunde: Record<string, StratifizierungEintrag>  // key "klasse.stunde"
 }

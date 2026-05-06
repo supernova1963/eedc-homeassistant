@@ -106,6 +106,11 @@ class StratifizierungResponse(BaseModel):
     # Tage mit Day-Ahead-Snapshot, aber ohne irgendeine klassifizierbare
     # Stunde — typisch wenn Wetter-Backfill noch nicht gelaufen ist.
     tage_ohne_wetter: int
+    # Unabhängig vom Stundenprofil: Anzahl der Tage im Zeitraum mit
+    # mindestens einer TagesEnergieProfil-Zeile ohne Wetter-Spalten.
+    # Dieses Feld treibt den Backfill-Button im UI — sodass der Trigger
+    # auch dann erscheint, wenn Day-Ahead-Snapshots (noch) fehlen.
+    tep_tage_ohne_wetter: int
     pro_klasse: dict[str, StratifizierungEintrag]
     # Schlüssel: "klar.7", "klar.8", ... — JSON-konform und einfach im Frontend
     # zu pivottieren. Nur Stunden 5-21 werden gefüllt (Tageslicht).
@@ -150,6 +155,23 @@ async def stratifizierung_endpoint(
     heute = date.today()
     von = heute - timedelta(days=tage)
 
+    # TagesEnergieProfil-Tage mit fehlendem Wetter zählen — unabhängig von
+    # Day-Ahead-Snapshots. Treibt im Frontend den "Wetter-Historie nachladen"-
+    # Empty-State, auch wenn pv_prognose_stundenprofil noch nicht gefüllt ist.
+    tep_ohne_wetter_query = await db.execute(
+        select(TagesEnergieProfil.datum)
+        .where(
+            and_(
+                TagesEnergieProfil.anlage_id == anlage_id,
+                TagesEnergieProfil.datum >= von,
+                TagesEnergieProfil.datum < heute,
+                TagesEnergieProfil.bewoelkung_prozent.is_(None),
+            )
+        )
+        .distinct()
+    )
+    tep_tage_ohne_wetter = len({r[0] for r in tep_ohne_wetter_query.all()})
+
     # Day-Ahead-Prognose-Stundenprofile laden
     tz_query = await db.execute(
         select(TagesZusammenfassung.datum, TagesZusammenfassung.pv_prognose_stundenprofil)
@@ -174,6 +196,7 @@ async def stratifizierung_endpoint(
             stunden_klassifiziert=0,
             tage_mit_prognose=0,
             tage_ohne_wetter=0,
+            tep_tage_ohne_wetter=tep_tage_ohne_wetter,
             pro_klasse={k: StratifizierungEintrag(stunden_count=0) for k in WETTERKLASSEN},
             pro_klasse_stunde={},
         )
@@ -237,6 +260,7 @@ async def stratifizierung_endpoint(
         stunden_klassifiziert=stunden_total,
         tage_mit_prognose=len(prognose_pro_tag),
         tage_ohne_wetter=tage_ohne_wetter,
+        tep_tage_ohne_wetter=tep_tage_ohne_wetter,
         pro_klasse=pro_klasse,
         pro_klasse_stunde=pro_klasse_stunde,
     )

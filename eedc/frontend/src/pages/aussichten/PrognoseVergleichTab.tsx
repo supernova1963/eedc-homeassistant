@@ -477,7 +477,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         const showO12 = data.eedc_lernfaktor_o12 != null
         const showStrat = stratifizierung != null
           && (stratifizierung.stunden_klassifiziert > 0
-              || stratifizierung.tage_ohne_wetter > 0)
+              || stratifizierung.tage_ohne_wetter > 0
+              || stratifizierung.tep_tage_ohne_wetter > 0)
         if (!showO12 && !showStrat) return null
         const gridClass = showO12 && showStrat
           ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
@@ -575,7 +576,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   </div>
                 )}
               </Card>
-            ) : stratifizierung.tage_ohne_wetter > 0 ? (
+            ) : (stratifizierung.tage_ohne_wetter > 0 || stratifizierung.tep_tage_ohne_wetter > 0) ? (
               <Card>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                   <Cloud className="h-4 w-4 text-gray-500" />
@@ -583,10 +584,16 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 </h3>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                   Wetter-Historie (Bewölkung, Niederschlag, WMO-Code) für{' '}
-                  {stratifizierung.tage_ohne_wetter} Tage mit Day-Ahead-Prognose noch
-                  nicht geladen. EEDC kann sie kostenlos aus dem Open-Meteo-Archiv
-                  nachholen — danach zeigt diese Card MAE/MBE getrennt nach{' '}
-                  <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.
+                  {Math.max(stratifizierung.tage_ohne_wetter, stratifizierung.tep_tage_ohne_wetter)}{' '}
+                  Tage noch nicht geladen. EEDC kann sie kostenlos aus dem Open-Meteo-Archiv
+                  nachholen. {stratifizierung.tage_mit_prognose > 0 ? (
+                    <>Danach zeigt diese Card MAE/MBE getrennt nach{' '}
+                    <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.</>
+                  ) : (
+                    <>Solange noch keine Day-Ahead-Stundenprofile gespeichert sind, bleibt die
+                    Stratifizierungs-Tabelle leer — die Wetter-Daten dienen dann der Vorbereitung
+                    für das stündliche Korrekturprofil (Päckchen 2).</>
+                  )}
                 </div>
                 <button
                   type="button"
