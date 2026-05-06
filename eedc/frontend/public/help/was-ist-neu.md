@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.0)
+> **Stand:** Mai 2026 (v3.26.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,14 @@
 ---
 
 ## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### Hotfix: Wetter-Backfill-Button erscheint jetzt zuverlässig *(v3.26.1)*
+
+> 🩹 **Hotfix wenige Stunden nach v3.26.0** — der Empty-State mit dem "Wetter-Historie nachladen"-Button blieb auf vielen Anlagen unsichtbar, weil meine ursprüngliche Trigger-Bedingung an einem Datenfeld hing (`pv_prognose_stundenprofil` aka Day-Ahead-Snapshot), das auf länger laufenden Anlagen lückenhaft gefüllt ist. Damit war das Hauptfeature von v3.26.0 für viele praktisch unsichtbar. Jetzt erscheint der Button, sobald irgendwo in den letzten 90 Tagen Stunden ohne Wetter-Daten vorhanden sind — also überall.
+>
+> Wenn die Stratifizierungs-Tabelle nach dem Backfill leer bleibt, weil noch keine Day-Ahead-Stundenprofile gespeichert sind, sagt das die Card jetzt explizit — die nachgeladenen Wetter-Daten dienen dann als Vorbereitung für Päckchen 2.
+
+→ [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
 ### Päckchen 1: Daten-Layer für stündliches Korrekturprofil *(v3.26.0)*
 

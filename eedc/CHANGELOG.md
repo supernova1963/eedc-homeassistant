@@ -7,6 +7,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.1] - 2026-05-06 — Hotfix: Backfill-Button auch ohne Day-Ahead-Stundenprofile
+
+> 🩹 **Hotfix wenige Stunden nach v3.26.0** — der "Wetter-Historie nachladen"-Empty-State erschien auf vielen Anlagen gar nicht, weil mein Trigger fälschlich an `pv_prognose_stundenprofil` hing (Day-Ahead-Snapshot, first-write-wins, auf vielen länger laufenden Anlagen lückenhaft befüllt). Das hat das Hauptfeature von v3.26.0 unsichtbar gemacht.
+
+### Fixed
+
+- **Empty-State-Trigger entkoppelt vom Day-Ahead-Snapshot.** Backend-Endpoint `/api/korrekturprofil/{id}/stratifizierung` liefert jetzt zusätzlich `tep_tage_ohne_wetter` — Tage im Auswertungszeitraum, an denen mindestens eine `TagesEnergieProfil`-Zeile noch kein Wetter trägt. Frontend-Empty-State zeigt den Backfill-Button bereits, sobald dieser Wert > 0 ist.
+- **Erklärtext im Empty-State angepasst** je nach Datenlage: wenn Day-Ahead-Snapshots existieren → "Card füllt sich danach mit MAE/MBE pro Klasse"; wenn nicht → "Stratifizierungs-Tabelle bleibt vorerst leer, die Wetter-Daten dienen Päckchen 2".
+
+---
+
 ## [3.26.0] - 2026-05-06 — Päckchen 1 Korrekturprofil-Konzept
 
 > ✨ **Daten-Layer + Skalar-Verbesserung für das geplante stündliche Korrekturprofil.** Päckchen 1 von zwei: bringt stündliche Wetter-Daten (Bewölkung, Niederschlag, WMO-Code) in `TagesEnergieProfil`, einen Open-Meteo-Archive-Backfill für 2 Jahre Historie, eine zweite Berechnungsvariante des Lernfaktors (Trim-Mean + Recency-Boost, läuft parallel zum Live-Faktor zu Diagnose-Zwecken) und zwei additive Diagnose-Cards im Prognosen-Vergleich-Tab. Die Solcast-Spalte und die Tab-Struktur bleiben unverändert. Päckchen 2 (Sonnenstand-Bin × Wetterklasse als kombinierter stündlicher Korrekturfaktor) folgt nach Beobachtungs-Phase.
