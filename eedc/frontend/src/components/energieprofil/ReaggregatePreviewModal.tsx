@@ -23,9 +23,18 @@ const KAT_LABELS: Record<string, string> = {
   verbrauch_sonstiges: 'Sonstiger Verbrauch',
 }
 
+const COUNTER_LABELS: Record<string, string> = {
+  wp_starts_anzahl: 'WP-Kompressor-Starts',
+}
+
 function fmtKwh(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—'
   return v.toFixed(3)
+}
+
+function fmtCount(v: number | null | undefined): string {
+  if (v === null || v === undefined) return '—'
+  return v.toLocaleString('de-DE')
 }
 
 function diffClass(alt: number | null, neu: number | null): string {
@@ -33,6 +42,17 @@ function diffClass(alt: number | null, neu: number | null): string {
   const diff = Math.abs(neu - alt)
   if (diff > 1.0) return 'font-bold text-amber-600 dark:text-amber-400'
   if (diff > 0.1) return 'text-amber-600 dark:text-amber-400'
+  return ''
+}
+
+// Counter sind Ganzzahlen (Anzahl Starts) — schon eine Abweichung von 1 ist
+// auffällig. Threshold für „fett" bei 5, weil Restart-Spikes typischerweise
+// die Tageszahl deutlich verziehen.
+function counterDiffClass(alt: number | null, neu: number | null): string {
+  if (alt === null || neu === null) return ''
+  const diff = Math.abs(neu - alt)
+  if (diff >= 5) return 'font-bold text-amber-600 dark:text-amber-400'
+  if (diff >= 1) return 'text-amber-600 dark:text-amber-400'
   return ''
 }
 
@@ -159,6 +179,43 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
               </tbody>
             </table>
           </div>
+
+          {/* Counter-Tagesgesamt (Anzahl-Zähler ohne kWh-Semantik, z. B. WP-Starts) */}
+          {data.counter_tagesdelta.length > 0 && (
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded">
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                Counter-Tagesgesamt {datum}
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 dark:text-gray-400">
+                    <th className="pb-1">Feld</th>
+                    <th className="pb-1 text-right">Alt</th>
+                    <th className="pb-1"><span className="sr-only">wird zu</span></th>
+                    <th className="pb-1 text-right">Neu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.counter_tagesdelta.map(c => (
+                    <tr key={c.feld}>
+                      <td className="py-0.5">{COUNTER_LABELS[c.feld] || c.feld}</td>
+                      <td className="py-0.5 text-right tabular-nums">{fmtCount(c.alt)}</td>
+                      <td className="py-0.5 text-center text-gray-400">
+                        <ArrowRight className="inline w-3 h-3" />
+                      </td>
+                      <td className={`py-0.5 text-right tabular-nums ${counterDiffClass(c.alt, c.neu)}`}>
+                        {fmtCount(c.neu)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+                Tagesgesamt = snap(Folgetag 00:00) − snap(Tag 00:00). Bei Counter-Spikes
+                nach HA-Neustart kann die „neu"-Spalte auseinanderlaufen — vor dem Übernehmen prüfen.
+              </p>
+            </div>
+          )}
 
           {/* Stundentabelle */}
           <div className="overflow-x-auto max-h-96 border border-gray-200 dark:border-gray-700 rounded">

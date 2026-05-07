@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased] — Setup-Vereinfachung: HA-Energiekonfiguration importieren (#197)
+## [3.26.5] - 2026-05-07 — Setup-Vereinfachung: HA-Energiekonfiguration importieren + Counter im Reload-Vorschau (#197)
 
 > ✨ **Wer schon ein HA-Energy-Dashboard eingerichtet hat, muss seine Sensoren nicht mehr ein zweites Mal von Hand raussuchen.** Beim Aufruf des HA-Sensor-Zuordnungs-Wizards liest EEDC `/config/.storage/core.energy` und befüllt die passenden Felder als Vorschlag vor: Netzbezug, Einspeisung, PV-Erzeugung, Batterie-Ladung/Entladung. Aus der `device_consumption`-Liste werden zusätzlich Wallbox / Wärmepumpe / E-Auto per Namens-Heuristik (Wallbox/go-eCharger/Keba/Tesla/Daikin/…) den passenden Investitionen zugeordnet. Ein Banner oberhalb des Wizards zeigt, wie viele Sensoren übernommen wurden, plus „HA-Energy-Vorschläge entfernen"-Knopf — der entfernt **nur** die unveränderten Vorschläge, manuell editierte Sensoren bleiben unangetastet.
 
@@ -17,6 +17,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Neuer Endpoint `GET /api/sensor-mapping/{anlage_id}/suggest`** kombiniert die HA-Energy-Vorschläge mit den Investitionen der Anlage und liefert direkt anwendbare Sensor-Mapping-Vorschläge (Speicher → erste Speicher-Investition; device_consumption → erste passende Wallbox/WP/E-Auto-Investition).
 - **Auto-Vorbefüllung im SensorMappingWizard** läuft beim ersten Aufruf (= leeres Mapping). Bei späterem Re-Aufruf zeigt der Wizard keinen Banner — manuelle Korrekturen werden nicht überstimmt.
 - **Selektiver Reset-Knopf** im Banner: vergleicht den aktuellen Wizard-Zustand mit dem Snapshot der HA-Energy-Vorschläge und entfernt nur die Felder, die unverändert dem Vorschlag entsprechen. User-Anpassungen bleiben erhalten.
+- **Counter-Tagesgesamt im Reload-Vorschau-Modal** macht reine Counter-Felder (z. B. WP-Kompressor-Starts) vor dem „Übernehmen" sichtbar — Tageszahl alt → neu, summiert über alle Investitionen pro Feld. Bisher zeigte die Vorschau nur kWh-Energiekategorien; Drift bei Counter-Sensoren nach HA-Restart-Spike fiel erst nach dem Klick auf. Boundary: `snap(Tag 00:00)` gegen `snap(Folgetag 00:00)`, alt aus DB, neu aus HA-Statistics.
 
 ### Internal
 

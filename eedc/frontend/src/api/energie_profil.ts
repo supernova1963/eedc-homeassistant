@@ -232,6 +232,12 @@ export interface ReaggregatePreviewSlot {
   neu_kwh: number | null
 }
 
+export interface ReaggregatePreviewCounterTagesdelta {
+  feld: string
+  alt: number | null
+  neu: number | null
+}
+
 export interface ReaggregatePreviewResponse {
   datum: string
   boundaries: ReaggregatePreviewBoundary[]
@@ -239,6 +245,7 @@ export interface ReaggregatePreviewResponse {
   tagesumme_alt: Record<string, number | null>
   tagesumme_neu: Record<string, number | null>
   ha_verfuegbar: boolean
+  counter_tagesdelta: ReaggregatePreviewCounterTagesdelta[]
 }
 
 export const energieProfilApi = {

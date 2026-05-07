@@ -1028,6 +1028,12 @@ class ReaggregatePreviewSlot(BaseModel):
     neu_kwh: Optional[float] = None
 
 
+class ReaggregatePreviewCounterTagesdelta(BaseModel):
+    feld: str
+    alt: Optional[int] = None
+    neu: Optional[int] = None
+
+
 class ReaggregatePreviewResponse(BaseModel):
     datum: str
     boundaries: list[ReaggregatePreviewBoundary]
@@ -1035,6 +1041,7 @@ class ReaggregatePreviewResponse(BaseModel):
     tagesumme_alt: dict[str, Optional[float]]
     tagesumme_neu: dict[str, Optional[float]]
     ha_verfuegbar: bool
+    counter_tagesdelta: list[ReaggregatePreviewCounterTagesdelta]
 
 
 @router.get("/{anlage_id}/reaggregate-tag/preview", response_model=ReaggregatePreviewResponse)
@@ -1100,6 +1107,14 @@ async def reaggregate_tag_preview(
         tagesumme_alt=preview["tagesumme_alt"],
         tagesumme_neu=preview["tagesumme_neu"],
         ha_verfuegbar=preview["ha_verfuegbar"],
+        counter_tagesdelta=[
+            ReaggregatePreviewCounterTagesdelta(
+                feld=c["feld"],
+                alt=c["alt"],
+                neu=c["neu"],
+            )
+            for c in preview.get("counter_tagesdelta", [])
+        ],
     )
 
 

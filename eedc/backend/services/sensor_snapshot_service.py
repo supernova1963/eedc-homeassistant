@@ -691,6 +691,11 @@ async def get_reaggregate_preview(
           "tagesumme_alt": {kategorie: float|None},
           "tagesumme_neu": {kategorie: float|None},
           "ha_verfuegbar": bool,
+          "counter_tagesdelta": [
+            {"feld": str, "alt": int|None, "neu": int|None},
+            ...  # je KUMULATIVE_COUNTER_FELDER-Eintrag mit gemapptem Sensor;
+                 # Werte über alle Investitionen pro Feld summiert.
+          ],
         }
     """
     sensor_mapping = anlage.sensor_mapping or {}
@@ -855,12 +860,88 @@ async def get_reaggregate_preview(
             if per_kat_neu.get(kat) is not None:
                 tagesumme_neu[kat] = (tagesumme_neu.get(kat) or 0.0) + per_kat_neu[kat]
 
+    # ── Counter-Tagesdelta (KUMULATIVE_COUNTER_FELDER) ────────────────────────
+    # Reine Counter (z. B. wp_starts_anzahl) tauchen in den kWh-Slots/Tagesummen
+    # nicht auf — sie haben keine Energiefluss-Kategorie. Damit der Tester vor
+    # einem Reload trotzdem sieht, ob sich die Tageszahl ändert (Befund Bug B
+    # MartyBr 2026-05-07: Verdopplung nach Recycle blieb in der Vorschau
+    # unsichtbar), liefern wir hier die Tagesgesamt-Werte alt vs. neu.
+    # Boundary: snap(Tag 00:00) und snap(Folgetag 00:00), summiert über alle
+    # Investitionen pro Feld (analog zur Spalte „WP-Starts" in der Tagestabelle).
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    tag_ende = tag_0 + timedelta(days=1)
+    counter_alt_per_feld: dict[str, int] = {}
+    counter_neu_per_feld: dict[str, int] = {}
+
+    from sqlalchemy import func as _sql_func
+
+    async def _db_snap_at(sensor_key: str, zp: datetime) -> Optional[float]:
+        von = zp - timedelta(minutes=5)
+        bis = zp + timedelta(minutes=5)
+        abstand = _sql_func.abs(
+            _sql_func.julianday(SensorSnapshot.zeitpunkt) - _sql_func.julianday(zp)
+        )
+        r = await db.execute(
+            select(SensorSnapshot.wert_kwh).where(
+                and_(
+                    SensorSnapshot.anlage_id == anlage.id,
+                    SensorSnapshot.sensor_key == sensor_key,
+                    SensorSnapshot.zeitpunkt >= von,
+                    SensorSnapshot.zeitpunkt <= bis,
+                )
+            ).order_by(abstand.asc()).limit(1)
+        )
+        return r.scalar_one_or_none()
+
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        counter_felder = KUMULATIVE_COUNTER_FELDER.get(inv.typ, ())
+        if not counter_felder:
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        for feld in counter_felder:
+            config = felder.get(feld)
+            if not isinstance(config, dict) or config.get("strategie") != "sensor":
+                continue
+            entity_id = config.get("sensor_id")
+            if not entity_id:
+                continue
+            sensor_key = f"inv:{inv_id_str}:{feld}"
+
+            alt_start = await _db_snap_at(sensor_key, tag_0)
+            alt_ende = await _db_snap_at(sensor_key, tag_ende)
+            if alt_start is not None and alt_ende is not None:
+                d = alt_ende - alt_start
+                if d >= 0:
+                    counter_alt_per_feld[feld] = counter_alt_per_feld.get(feld, 0) + int(round(d))
+
+            if ha_verfuegbar:
+                neu_start = ha_svc.get_value_at(entity_id, tag_0, toleranz_minuten=10)
+                neu_ende = ha_svc.get_value_at(entity_id, tag_ende, toleranz_minuten=10)
+                if neu_start is not None and neu_ende is not None:
+                    d = neu_ende - neu_start
+                    if d >= 0:
+                        counter_neu_per_feld[feld] = counter_neu_per_feld.get(feld, 0) + int(round(d))
+
+    counter_tagesdelta: list[dict] = []
+    for feld in sorted(set(counter_alt_per_feld) | set(counter_neu_per_feld)):
+        counter_tagesdelta.append({
+            "feld": feld,
+            "alt": counter_alt_per_feld.get(feld),
+            "neu": counter_neu_per_feld.get(feld),
+        })
+
     return {
         "boundaries": boundaries,
         "slot_deltas": slot_deltas,
         "tagesumme_alt": tagesumme_alt,
         "tagesumme_neu": tagesumme_neu,
         "ha_verfuegbar": ha_verfuegbar,
+        "counter_tagesdelta": counter_tagesdelta,
     }
 
 
