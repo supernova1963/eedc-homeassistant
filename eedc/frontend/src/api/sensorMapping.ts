@@ -90,6 +90,31 @@ export interface MappingStatus {
   }
 }
 
+// HA-Energy Auto-Vorbefüllung (#197 Olli0103)
+export interface HAEnergyDeviceCandidate {
+  entity_id: string
+  name?: string | null
+  suggested_inv_typ?: 'wallbox' | 'waermepumpe' | 'e-auto' | null
+}
+
+export interface HAEnergyInvestitionMatch {
+  inv_id: number
+  typ: string
+  bezeichnung: string
+  feld: string
+  sensor_id: string
+  source_name?: string | null
+}
+
+export interface HAEnergySuggestResponse {
+  available: boolean
+  reason_unavailable?: string | null
+  basis: Record<string, string>
+  investitionen: Record<string, Record<string, string>>
+  device_consumption_raw: HAEnergyDeviceCandidate[]
+  investition_matches: HAEnergyInvestitionMatch[]
+}
+
 // =============================================================================
 // API Client
 // =============================================================================
@@ -133,5 +158,14 @@ export const sensorMappingApi = {
    */
   async getStatus(anlageId: number): Promise<MappingStatus> {
     return api.get<MappingStatus>(`/sensor-mapping/${anlageId}/status`)
+  },
+
+  /**
+   * Vorschläge aus der HA-Energiekonfiguration abrufen (#197).
+   * Add-on-only: gibt available=false zurück wenn kein SUPERVISOR_TOKEN
+   * gesetzt ist oder /config/.storage/core.energy fehlt.
+   */
+  async getHAEnergySuggestions(anlageId: number): Promise<HAEnergySuggestResponse> {
+    return api.get<HAEnergySuggestResponse>(`/sensor-mapping/${anlageId}/suggest`)
   },
 }

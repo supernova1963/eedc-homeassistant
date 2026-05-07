@@ -25,6 +25,7 @@ import {
   Car,
   Sun,
   Trash2,
+  Sparkles,
 } from 'lucide-react'
 import { sensorMappingApi, anlagenApi } from '../api'
 import { energieProfilApi, type VollbackfillResult } from '../api/energie_profil'
@@ -34,6 +35,7 @@ import type {
   InvestitionInfo,
   SensorMappingResponse,
   HASensorInfo,
+  HAEnergySuggestResponse,
 } from '../api/sensorMapping'
 import Card, { CardHeader } from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -73,6 +75,64 @@ interface StepConfig {
   title: string
   icon: React.ReactNode
   investitionen?: InvestitionInfo[]
+}
+
+// Snapshot der aus HA-Energy übernommenen Vorschläge — wird beim Reset benutzt
+// um nur die unveränderten HA-Energy-Felder zu entfernen, manuell editierte
+// bleiben unangetastet (#197 Olli0103, Decision: Reset wirkt selektiv).
+interface AppliedHAEnergyMapping {
+  basis: Record<string, string>  // {feld_name: entity_id}
+  investitionen: Record<string, Record<string, string>>  // {inv_id: {feld: entity_id}}
+}
+
+const BASIS_FIELDS: Array<keyof WizardState['basis']> = ['einspeisung', 'netzbezug', 'pv_gesamt', 'strompreis']
+
+function applyHAEnergySuggestions(state: WizardState, suggest: HAEnergySuggestResponse): WizardState {
+  const newBasis = { ...state.basis }
+  for (const [feld, entityId] of Object.entries(suggest.basis)) {
+    if ((BASIS_FIELDS as string[]).includes(feld)) {
+      newBasis[feld as keyof WizardState['basis']] = { strategie: 'sensor', sensor_id: entityId }
+    }
+  }
+  const newInv = { ...state.investitionen }
+  for (const [invId, fields] of Object.entries(suggest.investitionen)) {
+    const cur = { ...(newInv[invId] || {}) }
+    for (const [feld, entityId] of Object.entries(fields)) {
+      cur[feld] = { strategie: 'sensor', sensor_id: entityId }
+    }
+    newInv[invId] = cur
+  }
+  return { ...state, basis: newBasis, investitionen: newInv }
+}
+
+function removeUnchangedHAEnergyFields(state: WizardState, applied: AppliedHAEnergyMapping): WizardState {
+  // Selektiver Reset: nur Felder entfernen, die unverändert dem Vorschlag entsprechen
+  // (= User hat sie nicht angefasst). Manuell editierte Werte bleiben erhalten.
+  const newBasis = { ...state.basis }
+  for (const [feld, suggestedEntityId] of Object.entries(applied.basis)) {
+    const key = feld as keyof WizardState['basis']
+    const cur = newBasis[key]
+    if (cur?.strategie === 'sensor' && cur.sensor_id === suggestedEntityId) {
+      newBasis[key] = null
+    }
+  }
+  const newInv = { ...state.investitionen }
+  for (const [invId, fields] of Object.entries(applied.investitionen)) {
+    if (!newInv[invId]) continue
+    const updated = { ...newInv[invId] }
+    for (const [feld, suggestedEntityId] of Object.entries(fields)) {
+      const cur = updated[feld]
+      if (cur?.strategie === 'sensor' && cur.sensor_id === suggestedEntityId) {
+        delete updated[feld]
+      }
+    }
+    if (Object.keys(updated).length === 0) {
+      delete newInv[invId]
+    } else {
+      newInv[invId] = updated
+    }
+  }
+  return { ...state, basis: newBasis, investitionen: newInv }
 }
 
 // =============================================================================
@@ -129,6 +189,10 @@ export default function SensorMappingWizard() {
   const [availableSensors, setAvailableSensors] = useState<HASensorInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // HA-Energy Auto-Vorbefüllung (#197): Snapshot der übernommenen Vorschläge,
+  // damit der Reset-Knopf nur unveränderte Vorschlags-Felder entfernt.
+  // Banner sichtbar solange != null. Nur bei Erstkonfig (leeres Mapping) gesetzt.
+  const [appliedHAEnergy, setAppliedHAEnergy] = useState<AppliedHAEnergyMapping | null>(null)
   // Erweiterte Suche: bei Bedarf alle Sensoren ohne Energy-Filter laden
   // (z.B. für Nibe-Roh-Counter ohne state_class).
   const [extendedLoaded, setExtendedLoaded] = useState(false)
@@ -168,12 +232,21 @@ export default function SensorMappingWizard() {
         setAvailableSensors(sensors)
 
         // Initialize state from existing mapping
+        let mappingHasFields = false
         if (mapping?.mapping) {
           const existingMapping = mapping.mapping as {
             basis?: Record<string, FeldMapping> & { live?: Record<string, string | null>; live_invert?: Record<string, boolean> }
             investitionen?: Record<string, { felder: Record<string, FeldMapping>; live?: Record<string, string | null>; live_invert?: Record<string, boolean> }>
             solcast_config?: { modus: string }
           }
+
+          mappingHasFields = Boolean(
+            existingMapping.basis?.einspeisung ||
+            existingMapping.basis?.netzbezug ||
+            existingMapping.basis?.pv_gesamt ||
+            existingMapping.basis?.strompreis ||
+            Object.keys(existingMapping.investitionen || {}).length > 0
+          )
 
           setState({
             basis: {
@@ -202,6 +275,26 @@ export default function SensorMappingWizard() {
             ),
             solcastHaAktiv: existingMapping.solcast_config?.modus === 'ha_auto',
           })
+        }
+
+        // Auto-Vorbefüllung aus HA-Energy nur bei Erstkonfig (leeres Mapping).
+        // Decision 2a (#197): bei späterem Re-Aufruf des Wizards keinen Banner.
+        if (!mappingHasFields) {
+          try {
+            const suggest = await sensorMappingApi.getHAEnergySuggestions(targetAnlageId)
+            const hasAnything =
+              suggest.available &&
+              (Object.keys(suggest.basis).length > 0 || Object.keys(suggest.investitionen).length > 0)
+            if (hasAnything) {
+              setState(prev => applyHAEnergySuggestions(prev, suggest))
+              setAppliedHAEnergy({ basis: suggest.basis, investitionen: suggest.investitionen })
+            }
+          } catch (err) {
+            // Suggest-Endpoint-Fehler ist nicht fatal — Wizard läuft normal weiter.
+            // Standalone-Setups ohne SUPERVISOR_TOKEN bekommen 200 mit available=false,
+            // ein echter Fehler wäre Backend-Down — dann lieber stillschweigend.
+            console.warn('HA-Energy-Vorschläge nicht verfügbar:', err)
+          }
         }
       } catch (err) {
         setLoadError((err as Error).message || 'Fehler beim Laden')
@@ -478,6 +571,14 @@ export default function SensorMappingWizard() {
     }
   }, [state, effectiveAnlageId, mappingData, availableSensors])
 
+  // Reset der HA-Energy-Vorschläge (#197): entfernt nur Sensoren, die unverändert
+  // dem ursprünglichen Vorschlag entsprechen. Manuelle Anpassungen bleiben erhalten.
+  const handleResetHAEnergySuggestions = useCallback(() => {
+    if (!appliedHAEnergy) return
+    setState(prev => removeUnchangedHAEnergyFields(prev, appliedHAEnergy))
+    setAppliedHAEnergy(null)
+  }, [appliedHAEnergy])
+
   // Handler zum Löschen des Mappings
   const handleDeleteMapping = useCallback(async () => {
     if (!effectiveAnlageId) return
@@ -745,6 +846,45 @@ export default function SensorMappingWizard() {
           </div>
         </Alert>
       )}
+
+      {/* HA-Energy Auto-Vorbefüllung Banner (#197 Olli0103).
+          Erscheint einmalig bei Erstkonfig, wenn aus /config/.storage/core.energy
+          Vorschläge übernommen wurden. Reset-Button entfernt selektiv nur unveränderte
+          Vorschläge — manuell editierte Sensoren bleiben unangetastet. */}
+      {appliedHAEnergy && (() => {
+        const basisCount = Object.keys(appliedHAEnergy.basis).length
+        const invCount = Object.values(appliedHAEnergy.investitionen).reduce(
+          (sum, fields) => sum + Object.keys(fields).length,
+          0,
+        )
+        const total = basisCount + invCount
+        return (
+          <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1">
+                <p className="font-medium text-amber-900 dark:text-amber-100">
+                  {total} Sensor{total === 1 ? '' : 'en'} aus deiner HA-Energiekonfiguration übernommen
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Wir haben deine Einträge aus <em>HA → Einstellungen → Energie</em> als Vorschlag
+                  in die passenden Felder eingetragen. Prüfe sie in den nächsten Schritten und
+                  korrigiere bei Bedarf — manuelle Änderungen bleiben beim Zurücksetzen erhalten.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleResetHAEnergySuggestions}
+                className="flex-shrink-0"
+                title="Entfernt nur die aus HA-Energy übernommenen Sensoren, die du nicht angefasst hast. Manuell zugeordnete Sensoren bleiben erhalten."
+              >
+                HA-Energy-Vorschläge entfernen
+              </Button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Progress */}
       <Card padding="sm">
