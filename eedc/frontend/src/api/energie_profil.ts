@@ -264,8 +264,8 @@ export const energieProfilApi = {
   vollbackfill: (anlageId: number): Promise<VollbackfillResult> =>
     api.post(`/energie-profil/${anlageId}/vollbackfill`),
 
-  reaggregateTag: (anlageId: number, datum: string): Promise<{ status: string; datum: string; stunden_verfuegbar: number; stunden_mit_messdaten: number }> =>
-    api.post(`/energie-profil/${anlageId}/reaggregate-tag?datum=${datum}`),
+  reaggregateTag: (anlageId: number, datum: string, mitResnap: boolean = true): Promise<{ status: string; datum: string; stunden_verfuegbar: number; stunden_mit_messdaten: number }> =>
+    api.post(`/energie-profil/${anlageId}/reaggregate-tag?datum=${datum}&mit_resnap=${mitResnap}`),
 
   reaggregateTagPreview: (anlageId: number, datum: string): Promise<ReaggregatePreviewResponse> =>
     api.get(`/energie-profil/${anlageId}/reaggregate-tag/preview?datum=${datum}`),

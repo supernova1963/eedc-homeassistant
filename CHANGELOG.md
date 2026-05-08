@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.6] - 2026-05-08 — Reload-Vorschau heilt sich selbst: Counter-Boundary + „Nur neu rechnen"
+
+> 🩹 **Folgehotfix nach v3.26.5** — der Reload-Pfad hatte zwei eng verwandte Lücken, die bei Forum-Tester MartyBr (Sensor-Migration Vicare→Optisplitter, Forum #462ff) sichtbar wurden: erstens überschrieb der Resnap die Folgetag-00:00-Boundary nicht, was den Counter-Tagesdelta auf falscher Skala stehen ließ. Zweitens hing das „Übernehmen" für Tage, deren Snapshots längst aktuell waren, im teuren HA-Stats-Polling fest, statt einfach nur das Aggregat neu zu rechnen. Beides gefixt — die Vorschau erkennt jetzt automatisch, ob Resnap nötig ist, oder ob ein „Nur neu rechnen" reicht.
+
+### Fixed
+
+- **Reload-Range schließt Folgetag 00:00 ein.** Bisher resnappte `reaggregate-tag` nur Vortag 23:00 .. Tag 23:00 — passgenau zur Backward-Konvention der kWh-Slots (#144). Counter-Felder (`wp_starts_anzahl`, etc.) lesen aber nach Forward (#136) und brauchen `snap(Folgetag 00:00) − snap(Tag 00:00)` bzw. `snap(Folgetag 00:00) − snap(Tag 23:00)` für Slot 23. Ohne diesen Boundary blieb ein alter (oft korrupter) Wert stehen und faltete sich beim Reload als Lifetime-Sprung in die Tagessumme. Range jetzt um eine Stunde verlängert; kWh-Konsumenten sind unberührt.
+- **„Nur neu rechnen"-Pfad im Reload-Modal.** Wenn die Vorschau zeigt, dass alle Werte alt = neu sind (Snapshots stimmen mit HA-Stats überein, nur das gespeicherte Tages-Aggregat ist veraltet), schaltet der Übernehmen-Knopf automatisch auf `mit_resnap=false`. Damit entfallen 275 5-Min-HA-Stats-Queries plus die DELETE-Operationen für leere Slots — der Reload geht von „möglicherweise hängend" auf „sub-sekündlich". Hängt zusätzlich ein blauer Info-Hinweis im Modal („Snapshots sind bereits aktuell") und ändert das Knopf-Label auf „Nur neu rechnen".
+
+### Internal
+
+- **Konventionsfalle dokumentiert:** ausführlicher Code-Kommentar in `reaggregate_tag` zur Slot-Konvention (kWh Backward / Counter Forward) und warum die Boundary-Erweiterung NUR den Counter-Pfad heilt, ohne die kWh-Slot-Konvention anzufassen. Verhindert, dass künftige Refactor-Versuche den Konvention-Wechsel von #144 wieder kippen.
+
+---
+
 ## [3.26.5] - 2026-05-07 — Setup-Vereinfachung: HA-Energiekonfiguration importieren + Counter im Reload-Vorschau (#197)
 
 > ✨ **Wer schon ein HA-Energy-Dashboard eingerichtet hat, muss seine Sensoren nicht mehr ein zweites Mal von Hand raussuchen.** Beim Aufruf des HA-Sensor-Zuordnungs-Wizards liest EEDC `/config/.storage/core.energy` und befüllt die passenden Felder als Vorschlag vor: Netzbezug, Einspeisung, PV-Erzeugung, Batterie-Ladung/Entladung. Aus der `device_consumption`-Liste werden zusätzlich Wallbox / Wärmepumpe / E-Auto per Namens-Heuristik (Wallbox/go-eCharger/Keba/Tesla/Daikin/…) den passenden Investitionen zugeordnet. Ein Banner oberhalb des Wizards zeigt, wie viele Sensoren übernommen wurden, plus „HA-Energy-Vorschläge entfernen"-Knopf — der entfernt **nur** die unveränderten Vorschläge, manuell editierte Sensoren bleiben unangetastet.

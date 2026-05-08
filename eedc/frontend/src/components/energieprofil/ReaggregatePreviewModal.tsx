@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useMemo } from 'react'
-import { Loader2, AlertTriangle, ArrowRight } from 'lucide-react'
+import { Loader2, AlertTriangle, ArrowRight, Info } from 'lucide-react'
 import { Modal, Button, Alert } from '../ui'
 import { energieProfilApi, type ReaggregatePreviewResponse } from '../../api/energie_profil'
 
@@ -96,12 +96,37 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
     return m
   }, [data])
 
+  // Sind die Snapshots in der DB bereits konsistent mit HA-Stats? Wenn ja,
+  // genügt ein „nur neu rechnen" ohne Resnap — schnell, kein HA-Polling, kein
+  // Hänger-Risiko (Befund MartyBr 7.5.2026: Übernehmen für 5.5. blockierte beim
+  // Resnap obwohl Snapshots bereits korrekt waren — die Vorschau zeigte alt=neu
+  // überall, aber TagesZusammenfassung stand mit altem Wert in der DB).
+  // Toleranz: 0.05 kWh für Slot-Deltas (Float-Noise), exakte Gleichheit für
+  // Counter-Integer.
+  const snapshotsAreCurrent = useMemo(() => {
+    if (!data || !data.ha_verfuegbar) return false
+    const isEqual = (a: number | null, b: number | null, tol: number): boolean => {
+      if (a === null && b === null) return true
+      if (a === null || b === null) return false
+      return Math.abs(a - b) < tol
+    }
+    for (const s of data.slot_deltas) {
+      if (!isEqual(s.alt_kwh, s.neu_kwh, 0.05)) return false
+    }
+    for (const c of data.counter_tagesdelta) {
+      if (!isEqual(c.alt, c.neu, 0.5)) return false
+    }
+    return true
+  }, [data])
+
   const handleApply = async () => {
     if (!datum) return
     setApplying(true)
     setError(null)
     try {
-      const res = await energieProfilApi.reaggregateTag(anlageId, datum)
+      // Snapshots aktuell → mit_resnap=false (schnell, idempotent).
+      // Sonst → mit_resnap=true (HA-Werte ziehen, Snapshots überschreiben).
+      const res = await energieProfilApi.reaggregateTag(anlageId, datum, !snapshotsAreCurrent)
       onApplied({ stunden_mit_messdaten: res.stunden_mit_messdaten })
       onClose()
     } catch (e) {
@@ -275,9 +300,18 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
 
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
             Auffällige Differenzen sind orange markiert ({'>'} 0.1 kWh) bzw. fett ({'>'} 1 kWh).
-            Übernahme schreibt 25 Snapshots (Vortag 23:00 bis Folgetag 00:00) und rechnet
+            Übernahme schreibt 26 Snapshots (Vortag 23:00 bis Folgetag 00:00) und rechnet
             den Tag neu.
           </p>
+
+          {snapshotsAreCurrent && (
+            <Alert type="info" className="mt-3">
+              <Info className="inline w-4 h-4 mr-1" />
+              Alle Werte stimmen überein — die Snapshots in der Datenbank sind
+              bereits aktuell. Übernahme rechnet nur den Tag neu, ohne HA-Statistics
+              erneut anzufragen.
+            </Alert>
+          )}
 
           {/* Aktionen */}
           <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -288,13 +322,16 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
               variant="primary"
               onClick={handleApply}
               disabled={applying || !data.ha_verfuegbar}
+              title={snapshotsAreCurrent
+                ? 'Snapshots sind bereits aktuell — nur das Aggregat wird neu gerechnet (schnell, kein HA-Polling).'
+                : 'HA-Werte werden frisch gezogen, Snapshots überschrieben, Aggregat neu gerechnet.'}
             >
               {applying ? (
                 <>
                   <Loader2 className="inline w-4 h-4 mr-1 animate-spin" />
-                  Übernehme …
+                  {snapshotsAreCurrent ? 'Rechne neu …' : 'Übernehme …'}
                 </>
-              ) : 'Übernehmen'}
+              ) : (snapshotsAreCurrent ? 'Nur neu rechnen' : 'Übernehmen')}
             </Button>
           </div>
         </>

@@ -1154,14 +1154,24 @@ async def reaggregate_tag(
         try:
             from backend.services.sensor_snapshot_service import resnap_anlage_range
             from datetime import datetime as _dt, timedelta as _td
-            # Range muss Vortag 23:00 mitnehmen: aggregate_day berechnet Slot 0
-            # als snap(Tag 00:00) − snap(Vortag 23:00). Ohne den Vortags-Boundary
-            # bleibt ein evtl. korrupter Snapshot bei Vortag 23:00 im DB stehen
-            # und produziert dauerhaft einen Stunde-0-Spike — der Reload-Knopf
-            # kann den dann nie heilen (Befund Rainer 1.5.2026).
+            # Range deckt zwei Boundaries ab, die nach #144 (Slot-Konvention auf
+            # Backward) und #136 (Counter-Felder Forward) asymmetrisch gebraucht
+            # werden:
+            #   - Vortag 23:00: kWh-Slot-0 = snap(Tag 00:00) − snap(Vortag 23:00).
+            #     Ohne den Boundary bleibt ein korrupter Snapshot persistent und
+            #     erzeugt dauerhaft einen Stunde-0-Spike (Befund Rainer 1.5.2026).
+            #   - Folgetag 00:00: Counter-Tagesdelta = snap(Folgetag 00:00) − snap(Tag 00:00)
+            #     UND Counter-Hourly-Slot-23 = snap(Folgetag 00:00) − snap(Tag 23:00).
+            #     Ohne den Boundary stehen alte Werte aus prä-Sensor-Wechsel-Zeiten
+            #     dauerhaft drin und falten sich beim Recycle als Lifetime-Sprung in
+            #     die Tagessumme (Befund MartyBr 7.5.2026, Counter-Migration Vicare→Optisplitter).
+            # Wichtig: NICHT die Slot-Konvention der kWh-Konsumenten ändern —
+            # `get_hourly_kwh_by_category` liest weiterhin h=−1..23 (Backward),
+            # niemals h=24. Die hier zusätzlich geschriebenen Folgetag-00:00-
+            # Snapshots sind ausschließlich für den Counter-Pfad (Forward).
             tag_start = _dt.combine(datum, _dt.min.time())
-            von_dt = tag_start - _td(hours=1)   # Vortag 23:00
-            bis_dt = tag_start + _td(days=1)    # Folgetag 00:00
+            von_dt = tag_start - _td(hours=1)               # Vortag 23:00
+            bis_dt = tag_start + _td(days=1, hours=1)       # Folgetag 01:00 → schließt Folgetag 00:00 ein
             resnap_stats = await resnap_anlage_range(
                 db, anlage, von=von_dt, bis=bis_dt, include_5min=True,
             )
