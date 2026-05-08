@@ -58,12 +58,55 @@ def _is_energy_sensor(eid: str, sensor_units: dict[str, str]) -> bool:
     return sensor_units.get(eid, "") in _KWH_UNITS
 
 
+def _energy_delta_via_statistics(
+    eid: str, start: datetime, end: datetime,
+) -> Optional[float]:
+    """Tages-kWh aus HA-Statistics `sum`-Spalte (reset-bereinigt).
+
+    Robust gegen Counter-Drops in der state-Historie (HA-Restart,
+    Sensor-Unavailable, Recorder-Lücken). Voraussetzung: Sensor hat
+    `has_sum=True` in `statistics_meta` (utility_meter, total_increasing
+    etc.). Liefert None wenn Statistics-DB nicht verfügbar (Standalone)
+    oder Sensor kein has_sum-Sensor ist.
+
+    Fix für #200 — analog zu #131 (Monatswert) und #184 (Snapshot).
+    """
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    stats = get_ha_statistics_service()
+    if not stats.is_available:
+        return None
+    val_start = stats.get_value_at(eid, start, toleranz_minuten=120)
+    if val_start is None:
+        return None
+    # Aktueller Stand: zuerst short_term (5-Min-Slots, bis Minute genau),
+    # Fallback hourly (bei Sensoren ohne short_term-Aktivierung).
+    val_end = stats.get_value_at(eid, end, toleranz_minuten=15, short_term=True)
+    if val_end is None:
+        val_end = stats.get_value_at(eid, end, toleranz_minuten=120)
+    if val_end is None:
+        return None
+    return max(0.0, val_end - val_start)
+
+
 def _energy_delta(
     eid: str,
     history: dict[str, list[tuple[datetime, float]]],
     sensor_units: dict[str, str],
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
 ) -> Optional[float]:
-    """Tages-kWh aus kumulativem Energie-Sensor via Delta (min → letzter Wert)."""
+    """Tages-kWh aus kumulativem Energie-Sensor.
+
+    Bevorzugt HA-Statistics `sum`-Spalte (reset-bereinigt, robust gegen
+    Counter-Drops bei HA-Restart oder kurzzeitigem Sensor-Unavailable).
+    Fallback: state-history via `min → letzter Wert` — anfällig für
+    Drops, daher nur wenn Statistics nicht greifen (Standalone-Modus,
+    Sensor ohne has_sum, oder zu wenig Daten im Toleranz-Fenster).
+    """
+    if start is not None and end is not None:
+        delta = _energy_delta_via_statistics(eid, start, end)
+        if delta is not None:
+            return delta
     pts = history.get(eid)
     if not pts:
         return None
@@ -311,7 +354,7 @@ async def get_tages_kwh(
         if category in basis_kwh_sensors:
             kwh_eid = basis_kwh_sensors[category]
             if kwh_eid in history:
-                kwh = _energy_delta(kwh_eid, history, sensor_units)
+                kwh = _energy_delta(kwh_eid, history, sensor_units, start, end)
                 if kwh is not None:
                     result[category] = round(kwh, 1)
                     continue
@@ -320,7 +363,7 @@ async def get_tages_kwh(
             pv_has_kwh = False
             for comp_key, kwh_eid in separate_kwh_sensors.items():
                 if comp_key.startswith("pv_") and kwh_eid in history:
-                    kwh = _energy_delta(kwh_eid, history, sensor_units)
+                    kwh = _energy_delta(kwh_eid, history, sensor_units, start, end)
                     if kwh is not None:
                         pv_total += kwh
                         pv_has_kwh = True
@@ -335,7 +378,7 @@ async def get_tages_kwh(
             if entity_id not in history:
                 continue
             if _is_energy_sensor(entity_id, sensor_units):
-                kwh = _energy_delta(entity_id, history, sensor_units)
+                kwh = _energy_delta(entity_id, history, sensor_units, start, end)
             else:
                 kwh = trapez_kwh(history[entity_id])
             if kwh is not None:
@@ -358,15 +401,15 @@ async def get_tages_kwh(
             entladung_eid = sep.get("entladung")
 
             if ladung_eid and ladung_eid in history:
-                ladung_kwh = _energy_delta(ladung_eid, history, sensor_units)
+                ladung_kwh = _energy_delta(ladung_eid, history, sensor_units, start, end)
             elif _is_energy_sensor(entity_id, sensor_units):
-                ladung_kwh = _energy_delta(entity_id, history, sensor_units)
+                ladung_kwh = _energy_delta(entity_id, history, sensor_units, start, end)
             else:
                 ladung_pts = [(t, max(p, 0)) for t, p in pts]
                 ladung_kwh = trapez_kwh(ladung_pts)
 
             if entladung_eid and entladung_eid in history:
-                entladung_kwh = _energy_delta(entladung_eid, history, sensor_units)
+                entladung_kwh = _energy_delta(entladung_eid, history, sensor_units, start, end)
             elif not _is_energy_sensor(entity_id, sensor_units):
                 entladung_pts = [(t, abs(min(p, 0))) for t, p in pts]
                 entladung_kwh = trapez_kwh(entladung_pts)
@@ -384,7 +427,7 @@ async def get_tages_kwh(
                 if total > 0:
                     result[comp_key] = round(total, 1)
             elif _is_energy_sensor(entity_id, sensor_units):
-                kwh = _energy_delta(entity_id, history, sensor_units)
+                kwh = _energy_delta(entity_id, history, sensor_units, start, end)
                 if kwh is not None:
                     result[comp_key] = round(abs(kwh), 1)
             else:
@@ -395,9 +438,9 @@ async def get_tages_kwh(
             # WP/Wallbox: kWh-Sensor aus Monatsabschluss bevorzugen (#64 Follow-up)
             sep_eid = separate_kwh_sensors.get(comp_key)
             if sep_eid and sep_eid in history:
-                kwh = _energy_delta(sep_eid, history, sensor_units)
+                kwh = _energy_delta(sep_eid, history, sensor_units, start, end)
             elif _is_energy_sensor(entity_id, sensor_units):
-                kwh = _energy_delta(entity_id, history, sensor_units)
+                kwh = _energy_delta(entity_id, history, sensor_units, start, end)
             else:
                 kwh = trapez_kwh(pts)
             if kwh is not None:
