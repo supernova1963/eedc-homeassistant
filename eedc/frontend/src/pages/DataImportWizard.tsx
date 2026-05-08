@@ -7,7 +7,7 @@
  * Schritt 4: Ergebnis
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   FileSpreadsheet,
@@ -28,6 +28,7 @@ import { anlagenApi } from '../api/anlagen'
 import { portalImportApi } from '../api/portalImport'
 import type {
   ParserInfo,
+  ParsedMonth,
   PreviewResult,
   ApplyResult,
   ZuordnungInfo,
@@ -36,6 +37,34 @@ import type {
 } from '../api/portalImport'
 import type { Anlage } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
+
+// ── Vorschau-Tabellen-Spalten ───────────────────────────────────────────────
+// Adaptive Liste: nur Spalten, für die der gewählte Parser tatsächlich Werte liefert,
+// werden gerendert (EVCC z.B. nur Wallbox/E-Auto, SMA-Portal nur Zähler).
+
+type PreviewColumn = {
+  key: keyof ParsedMonth
+  label: string
+  format: (v: number | null | undefined) => string
+}
+
+const fmtKwh = (v: number | null | undefined) =>
+  v != null ? v.toFixed(1) : '–'
+const fmtInt = (v: number | null | undefined) =>
+  v != null ? String(v) : '–'
+
+const PREVIEW_COLUMNS: PreviewColumn[] = [
+  { key: 'pv_erzeugung_kwh', label: 'PV kWh', format: fmtKwh },
+  { key: 'einspeisung_kwh', label: 'Einsp. kWh', format: fmtKwh },
+  { key: 'netzbezug_kwh', label: 'Bezug kWh', format: fmtKwh },
+  { key: 'eigenverbrauch_kwh', label: 'Eigenv. kWh', format: fmtKwh },
+  { key: 'batterie_ladung_kwh', label: 'Bat. Lad.', format: fmtKwh },
+  { key: 'batterie_entladung_kwh', label: 'Bat. Entl.', format: fmtKwh },
+  { key: 'wallbox_ladung_kwh', label: 'WB kWh', format: fmtKwh },
+  { key: 'wallbox_ladung_pv_kwh', label: 'WB PV kWh', format: fmtKwh },
+  { key: 'wallbox_ladevorgaenge', label: 'Sessions', format: fmtInt },
+  { key: 'eauto_km_gefahren', label: 'km', format: (v) => (v != null ? v.toFixed(0) : '–') },
+]
 
 // ── Zuordnungs-Hilfsfunktionen ──────────────────────────────────────────────
 
@@ -243,6 +272,13 @@ export default function DataImportWizard() {
       selectedMonths.size === allKeys.length ? new Set() : new Set(allKeys)
     )
   }, [preview, selectedMonths])
+
+  const visibleColumns = useMemo(() => {
+    if (!preview) return []
+    return PREVIEW_COLUMNS.filter((col) =>
+      preview.monate.some((m) => m[col.key] != null)
+    )
+  }, [preview])
 
   // ── Step 2 → 3/4: Weiter-Button ──────────────────────────────────────────
 
@@ -538,11 +574,11 @@ export default function DataImportWizard() {
                         <span className="font-medium text-gray-700 dark:text-gray-300">Monat</span>
                       </label>
                     </th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">PV kWh</th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Einsp. kWh</th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Bezug kWh</th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Bat. Lad.</th>
-                    <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Bat. Entl.</th>
+                    {visibleColumns.map((col) => (
+                      <th key={col.key} className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">
+                        {col.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -569,21 +605,11 @@ export default function DataImportWizard() {
                             </span>
                           </label>
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.pv_erzeugung_kwh?.toFixed(1) ?? '–'}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.einspeisung_kwh?.toFixed(1) ?? '–'}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.netzbezug_kwh?.toFixed(1) ?? '–'}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.batterie_ladung_kwh?.toFixed(1) ?? '–'}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.batterie_entladung_kwh?.toFixed(1) ?? '–'}
-                        </td>
+                        {visibleColumns.map((col) => (
+                          <td key={col.key} className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
+                            {col.format(m[col.key] as number | null | undefined)}
+                          </td>
+                        ))}
                       </tr>
                     )
                   })}

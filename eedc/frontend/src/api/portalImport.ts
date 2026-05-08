@@ -25,6 +25,10 @@ export interface ParsedMonth {
   batterie_ladung_kwh: number | null
   batterie_entladung_kwh: number | null
   eigenverbrauch_kwh: number | null
+  wallbox_ladung_kwh?: number | null
+  wallbox_ladung_pv_kwh?: number | null
+  wallbox_ladevorgaenge?: number | null
+  eauto_km_gefahren?: number | null
 }
 
 export interface PreviewResult {
