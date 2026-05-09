@@ -39,6 +39,14 @@ class SourcePriority(IntEnum):
     FALLBACK = 4
     """Best-Effort, lückenanfällig (Snapshot-Aggregator, MQTT-Fallback)."""
 
+    LEGACY = 5
+    """Bestandsdaten ohne dokumentierte Quelle. Initial-Provenance der
+    Pre-3d-Rows: alles, was vor Etappe 3d Päckchen 3 in den Aggregat-Tabellen
+    stand. Niedrigste Priorität — der erste bewusste Schreiber gewinnt
+    automatisch, statt stillschweigend wegen `existing=None` zu greifen.
+    Wird ausschließlich von der Initial-Migration in `_run_data_migrations`
+    gesetzt, nie von Schreib-Pfaden zur Laufzeit."""
+
 
 SOURCE_LABELS: dict[str, SourcePriority] = {
     # Repair (force_override über Repair-Orchestrator, P4-Lieferung)
@@ -92,6 +100,10 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # Fallback — Sensor-Snapshot-Aggregator + MQTT-Inbound-Pfad
     "fallback:sensor_snapshot": SourcePriority.FALLBACK,
     "fallback:mqtt_inbound":    SourcePriority.FALLBACK,
+
+    # Legacy — Bestandsdaten (P3 Initial-Migration). Gesetzt einmalig pro
+    # Installation in `_run_data_migrations`, nie von Live-Schreib-Pfaden.
+    "legacy:unknown": SourcePriority.LEGACY,
 }
 
 
