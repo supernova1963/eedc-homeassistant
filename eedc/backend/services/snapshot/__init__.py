@@ -21,6 +21,8 @@ Slice-Struktur:
 - `reaggregator.py` — get_reaggregate_preview, resnap_anlage_range
 - `source.py`       — SnapshotSource-Konstanten + Validation (Etappe 3c P1, E3)
 - `diagnose.py`     — get_snapshot_source_distribution (Read-Helper für UI)
+- `boundary_range.py` — typed Snapshot-Boundary-Range nach #144 (Etappe 3c P2, E1)
+- `migrate.py`      — einmalige Daten-Migrationen (Etappe 3c P2)
 """
 
 from backend.services.snapshot.keys import (
@@ -57,6 +59,7 @@ from backend.services.snapshot.diagnose import (
     get_snapshot_source_distribution,
     get_snapshot_source_distribution_recent,
 )
+from backend.services.snapshot.boundary_range import BoundaryRange
 
 __all__ = [
     # Konstanten
@@ -86,4 +89,6 @@ __all__ = [
     "assert_valid_source",
     "get_snapshot_source_distribution",
     "get_snapshot_source_distribution_recent",
+    # BoundaryRange (E1)
+    "BoundaryRange",
 ]

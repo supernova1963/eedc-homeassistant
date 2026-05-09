@@ -1154,21 +1154,21 @@ async def reaggregate_tag(
         try:
             from backend.services.sensor_snapshot_service import resnap_anlage_range
             from datetime import datetime as _dt, timedelta as _td
-            # Range deckt zwei Boundaries ab, die nach #144 (Slot-Konvention auf
-            # Backward) und #136 (Counter-Felder Forward) asymmetrisch gebraucht
-            # werden:
-            #   - Vortag 23:00: kWh-Slot-0 = snap(Tag 00:00) − snap(Vortag 23:00).
-            #     Ohne den Boundary bleibt ein korrupter Snapshot persistent und
-            #     erzeugt dauerhaft einen Stunde-0-Spike (Befund Rainer 1.5.2026).
-            #   - Folgetag 00:00: Counter-Tagesdelta = snap(Folgetag 00:00) − snap(Tag 00:00)
-            #     UND Counter-Hourly-Slot-23 = snap(Folgetag 00:00) − snap(Tag 23:00).
-            #     Ohne den Boundary stehen alte Werte aus prä-Sensor-Wechsel-Zeiten
-            #     dauerhaft drin und falten sich beim Recycle als Lifetime-Sprung in
-            #     die Tagessumme (Befund MartyBr 7.5.2026, Counter-Migration Vicare→Optisplitter).
-            # Wichtig: NICHT die Slot-Konvention der kWh-Konsumenten ändern —
-            # `get_hourly_kwh_by_category` liest weiterhin h=−1..23 (Backward),
-            # niemals h=24. Die hier zusätzlich geschriebenen Folgetag-00:00-
-            # Snapshots sind ausschließlich für den Counter-Pfad (Forward).
+            # Range deckt zwei Boundaries ab, die der Read-Pfad braucht:
+            #   - Vortag 23:00: Backward-Slot 0 = snap(Tag 00:00) − snap(Vortag 23:00)
+            #     für kWh- und (seit Etappe 3c P2) Counter-Pfad. Ohne den Boundary
+            #     bleibt ein korrupter Snapshot persistent und erzeugt dauerhaft
+            #     einen Stunde-0-Spike (Befund Rainer 1.5.2026).
+            #   - Folgetag 00:00: HA-konformes Tagesgesamt der Counter
+            #     = snap(Folgetag 00:00) − snap(Tag 00:00). Ohne den Boundary
+            #     stehen alte Werte aus prä-Sensor-Wechsel-Zeiten dauerhaft drin
+            #     und falten sich beim Recycle als Lifetime-Sprung in die
+            #     Tagessumme (Befund MartyBr 7.5.2026, Counter-Migration
+            #     Vicare→Optisplitter).
+            # Slot-Konvention seit Etappe 3c P2 (KONZEPT-ENERGIEPROFIL-3C.md):
+            # Hourly-Konsumenten gehen einheitlich über
+            # `BoundaryRange.for_hourly_slots(datum)` — Backward (#144).
+            # Tages-Counter nutzen Boundary-Diff über das HA-Tagesfenster.
             tag_start = _dt.combine(datum, _dt.min.time())
             von_dt = tag_start - _td(hours=1)               # Vortag 23:00
             bis_dt = tag_start + _td(days=1, hours=1)       # Folgetag 01:00 → schließt Folgetag 00:00 ein

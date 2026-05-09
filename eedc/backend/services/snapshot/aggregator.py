@@ -6,10 +6,11 @@ Liest Boundary-Snapshots aus `sensor_snapshots` (mit Self-Healing über
 Kategorie, stündliche Counter-Inkremente pro Feld und Tages-Counter-Deltas
 pro Investition. Lückenfüllung via linearer Interpolation (Issue #145).
 
-Slot-Konvention heute:
-- `get_hourly_kwh_by_category`: Backward (Issue #144) — `slot[h] = snap[h] − snap[h-1]`
-- `get_hourly_counter_sum_by_feld`: Forward (Drift gegen #144, wird in P2 angeglichen)
-- `get_daily_counter_deltas_by_inv`: Boundary-Diff über Tagesfenster — HA-konform
+Slot-Konvention seit Etappe 3c P2 (KONZEPT-ENERGIEPROFIL-3C.md):
+- Hourly-Konsumenten gehen über `BoundaryRange.for_hourly_slots()` —
+  einheitlich Backward (Issue #144), Slot h = `snap[h] − snap[h-1]`.
+- Tages-Counter-Konsumenten nutzen Boundary-Diff über das HA-Tagesfenster
+  `[Heute 00:00, Folgetag 00:00)`, identisch zum HA Energy Dashboard.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
+from backend.services.snapshot.boundary_range import BoundaryRange
 from backend.services.snapshot.keys import (
     BASIS_ZAEHLER_FELDER,
     KUMULATIVE_COUNTER_FELDER,
@@ -167,22 +169,21 @@ async def get_hourly_kwh_by_category(
         return {}
 
     # 2. Snapshots für alle benötigten Stundenboundaries holen.
-    # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
+    # Backward-Konvention nach Issue #144 — gekapselt in BoundaryRange.
     # Slot 0 = Delta von Vortag 23:00 → Heute 00:00
-    # Slot 1 = Delta von Heute 00:00 → 01:00
     # Slot 23 = Delta von Heute 22:00 → 23:00
-    # → Snapshots bei h=-1..23 werden benötigt (nicht mehr 0..24).
-    tag_0 = datetime.combine(datum, datetime.min.time())
+    # → 25 Boundaries (offsets -1..23), 24 Slots (0..23).
+    rng = BoundaryRange.for_hourly_slots(datum)
     result: dict[int, dict[str, Optional[float]]] = {h: {} for h in range(24)}
 
-    # pro sensor_key: {stunde_-1_bis_23: wert}
+    # pro sensor_key: {boundary_offset: wert}
     snaps: dict[str, dict[int, Optional[float]]] = {}
     for sensor_key, entity_id, _kat in eintraege:
         snaps[sensor_key] = {}
-        for h in range(-1, 24):  # -1 = Vortag 23:00, 0..23 = Heute 00:00..23:00
-            ts = tag_0 + timedelta(hours=h)
+        for offset in rng.boundary_offsets:
+            ts = rng.boundary_at(offset)
             wert = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
-            snaps[sensor_key][h] = wert
+            snaps[sensor_key][offset] = wert
 
     # 2b. Lücken durch lineare Interpolation füllen (Issue #145).
     # Kumulative Zähler sind monoton steigend, aber der genaue stündliche
@@ -195,12 +196,12 @@ async def get_hourly_kwh_by_category(
         _fill_gaps_linear(snaps[sensor_key])
 
     # 3. Deltas pro Stunde und Kategorie summieren (Backward-Konvention).
-    # Slot h = snap[h] - snap[h-1] → Energie [h-1, h).
-    for h in range(24):
+    # Slot h = snap[curr=h] - snap[prev=h-1] → Energie [h-1, h).
+    for slot_idx, prev_off, curr_off in rng.slot_pairs:
         per_kat: dict[str, Optional[float]] = {}
         for sensor_key, _eid, kat in eintraege:
-            s0 = snaps[sensor_key][h - 1]
-            s1 = snaps[sensor_key][h]
+            s0 = snaps[sensor_key][prev_off]
+            s1 = snaps[sensor_key][curr_off]
             if s0 is None or s1 is None:
                 continue  # Kategorie unvollständig für diese Stunde
             d = s1 - s0
@@ -213,12 +214,12 @@ async def get_hourly_kwh_by_category(
                     d = max(0.0, s1)
                 else:
                     logger.warning(
-                        f"Negatives Delta bei {sensor_key} ({datum} Slot{h}): {d:.3f}"
+                        f"Negatives Delta bei {sensor_key} ({datum} Slot{slot_idx}): {d:.3f}"
                     )
                     continue
             d = max(0.0, d)
             per_kat[kat] = (per_kat.get(kat) or 0.0) + d
-        result[h] = per_kat
+        result[slot_idx] = per_kat
 
     # 4. Aggregierte Kategorien zu Bilanz-Feldern:
     #    pv, einspeisung, netzbezug, batterie_lade_netto, wp, wallbox, verbrauch
@@ -338,14 +339,18 @@ async def get_hourly_counter_sum_by_feld(
     Berechnet Stunden-Counter-Summen für ein bestimmtes Feld (z.B. 'wp_starts_anzahl'),
     summiert über alle Investitionen mit gemapptem Counter.
 
-    Für jede Stunde h (0..23) wird snapshot(h+1) − snapshot(h) pro Investition
-    gebildet und über alle Investitionen aufaddiert. Negative Deltas (Counter-Reset)
-    werden als 0 gewertet.
+    Backward-Konvention nach Issue #144 (an kWh-Pfad angeglichen, Etappe 3c P2):
+    Slot h = `snap[h] − snap[h-1]` = Inkremente [Vortag-23 + h, ..., Heute-h)
+    aufgelaufen seit dem vorherigen Stundenboundary.
+
+    Für jede Stunde h (0..23) wird das Inkrement pro Investition aus zwei
+    Snapshots gebildet und über alle Investitionen aufaddiert. Negative Deltas
+    (Counter-Reset) werden als 0 gewertet.
 
     Returns:
-        {h: count} für h in 0..23. Fehlt der Snapshot bei beiden Endpunkten einer
-        Stunde, ist count None (Lücke). Fehlt der Counter komplett (kein Mapping),
-        wird ein leeres Dict zurückgegeben.
+        {h: count} für h in 0..23. Fehlt der Snapshot bei beiden Endpunkten
+        einer Stunde, ist count None (Lücke). Fehlt der Counter komplett
+        (kein Mapping), wird ein leeres Dict zurückgegeben.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
@@ -369,22 +374,22 @@ async def get_hourly_counter_sum_by_feld(
     if not relevant_invs:
         return {}
 
-    tag_0 = datetime.combine(datum, datetime.min.time())
+    rng = BoundaryRange.for_hourly_slots(datum)
     snaps_per_inv: dict[str, dict[int, Optional[float]]] = {}
     for sensor_key, entity_id in relevant_invs:
         snaps: dict[int, Optional[float]] = {}
-        for h in range(25):  # 0..24, damit jede Stunde h ein Boundary-Paar (h, h+1) hat
-            ts = tag_0 + timedelta(hours=h)
-            snaps[h] = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
+        for offset in rng.boundary_offsets:
+            ts = rng.boundary_at(offset)
+            snaps[offset] = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
         snaps_per_inv[sensor_key] = snaps
 
     result: dict[int, Optional[int]] = {}
-    for h in range(24):
+    for slot_idx, prev_off, curr_off in rng.slot_pairs:
         any_value = False
         total = 0
         for sensor_key, _ in relevant_invs:
-            s0 = snaps_per_inv[sensor_key][h]
-            s1 = snaps_per_inv[sensor_key][h + 1]
+            s0 = snaps_per_inv[sensor_key][prev_off]
+            s1 = snaps_per_inv[sensor_key][curr_off]
             if s0 is None or s1 is None:
                 continue
             d = s1 - s0
@@ -392,5 +397,5 @@ async def get_hourly_counter_sum_by_feld(
                 d = 0  # Counter-Reset → 0 (Warnung wäre redundant zur Tages-Aggregation)
             total += int(round(d))
             any_value = True
-        result[h] = total if any_value else None
+        result[slot_idx] = total if any_value else None
     return result
