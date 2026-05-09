@@ -4,11 +4,15 @@ EEDC Datenbank Setup
 SQLite Datenbank mit SQLAlchemy 2.0 (async).
 """
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import event
 
 from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # Async Engine erstellen
@@ -472,6 +476,49 @@ async def run_migrations(conn):
     await conn.run_sync(_run_migrations)
 
 
+async def _run_data_migrations() -> None:
+    """Idempotente asynchrone Daten-Migrationen.
+
+    Im Gegensatz zu `_run_migrations` (sync, SQLite-DDL) brauchen wir hier
+    Snapshot-Reads + Aggregator-Aufrufe, also einen Async-Session-Pfad.
+    Idempotenz über `migrations`-Tabelle: pro `name` läuft die Migration
+    genau einmal pro Installation.
+    """
+    from datetime import datetime as _dt
+    from sqlalchemy import text as _text
+
+    async with async_session_maker() as session:
+        await session.execute(_text(
+            "CREATE TABLE IF NOT EXISTS migrations ("
+            "  name VARCHAR(100) PRIMARY KEY,"
+            "  applied_at TEXT NOT NULL"
+            ")"
+        ))
+        await session.commit()
+
+        async def _apply_once(name: str, fn) -> None:
+            already = await session.execute(
+                _text("SELECT 1 FROM migrations WHERE name = :n"), {"n": name}
+            )
+            if already.scalar_one_or_none():
+                return
+            try:
+                await fn(session)
+            except Exception as e:
+                logger.error(f"Daten-Migration {name} fehlgeschlagen: {type(e).__name__}: {e}")
+                await session.rollback()
+                return
+            await session.execute(
+                _text("INSERT INTO migrations (name, applied_at) VALUES (:n, :t)"),
+                {"n": name, "t": _dt.now().isoformat()},
+            )
+            await session.commit()
+
+        # Etappe 3c P2: Counter-Stundenwerte auf Backward umrechnen
+        from backend.services.snapshot.migrate import migrate_3c_p2_counter_backward
+        await _apply_once("etappe_3c_p2_counter_hourly_backward", migrate_3c_p2_counter_backward)
+
+
 async def init_db():
     """
     Initialisiert die Datenbank.
@@ -487,6 +534,9 @@ async def init_db():
         await run_migrations(conn)
         # Erstelle alle Tabellen
         await conn.run_sync(Base.metadata.create_all)
+
+    # Asynchrone Daten-Migrationen (idempotent über migrations-Tabelle)
+    await _run_data_migrations()
 
 
 async def get_db() -> AsyncSession:
