@@ -16,6 +16,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
+from backend.services.provenance import seed_provenance
 
 from .schemas import DemoDataResult
 
@@ -383,6 +384,26 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     # 4. Monatsdaten erstellen
+    # Etappe 3d Päckchen 2: Lokale Helper für Provenance-Seeding der Demo-Daten.
+    # auto:demo_data ist AUTO_AGGREGATION-Klasse, damit nachträgliche
+    # Form-Bearbeitung sie sauber schlägt (manual:form > auto:demo_data).
+    def _add_demo_md(md_obj, present_fields: list[str]) -> None:
+        seed_provenance(
+            md_obj, source="auto:demo_data", writer="demo_data_loader",
+            fields=present_fields,
+        )
+        db.add(md_obj)
+
+    def _add_demo_imd(inv_id: int, jahr: int, monat: int, vd: dict) -> None:
+        imd = InvestitionMonatsdaten(
+            investition_id=inv_id, jahr=jahr, monat=monat, verbrauch_daten=vd,
+        )
+        seed_provenance(
+            imd, source="auto:demo_data", writer="demo_data_loader",
+            json_subkeys={"verbrauch_daten": list(vd.keys())},
+        )
+        db.add(imd)
+
     monatsdaten_count = 0
     for row in DEMO_MONATSDATEN:
         (jahr, monat, einspeisung, netzbezug, pv_erzeugung, batt_ladung, batt_entladung,
@@ -400,7 +421,10 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             sonnenstunden=sonnenstunden,
             datenquelle="demo",
         )
-        db.add(md)
+        _add_demo_md(md, [
+            "einspeisung_kwh", "netzbezug_kwh",
+            "globalstrahlung_kwh_m2", "sonnenstunden",
+        ])
         monatsdaten_count += 1
 
         # E-Auto Monatsdaten
@@ -431,12 +455,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                     {"bezeichnung": "THG-Quote", "betrag": 85.0, "typ": "ertrag"}
                 ]
 
-            db.add(InvestitionMonatsdaten(
-                investition_id=eauto.id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten=eauto_verbrauch_daten,
-            ))
+            _add_demo_imd(eauto.id, jahr, monat, eauto_verbrauch_daten)
 
         # Speicher Monatsdaten
         if batt_ladung > 0:
@@ -454,12 +473,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                     {"bezeichnung": "Firmware-Update", "betrag": 95.0, "typ": "ausgabe"}
                 ]
 
-            db.add(InvestitionMonatsdaten(
-                investition_id=speicher.id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten=speicher_daten,
-            ))
+            _add_demo_imd(speicher.id, jahr, monat, speicher_daten)
 
         # Wärmepumpe Monatsdaten
         if wp_strom > 0:
@@ -473,12 +487,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                     {"bezeichnung": "Jahreswartung", "betrag": 180.0, "typ": "ausgabe"}
                 ]
 
-            db.add(InvestitionMonatsdaten(
-                investition_id=waermepumpe.id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten=wp_daten,
-            ))
+            _add_demo_imd(waermepumpe.id, jahr, monat, wp_daten)
 
         # Balkonkraftwerk Monatsdaten
         if jahr > 2024 or (jahr == 2024 and monat >= 3):
@@ -488,17 +497,12 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             bkw_speicher_ladung = round(bkw_erzeugung * 0.3, 1)
             bkw_speicher_entladung = round(bkw_speicher_ladung * 0.92, 1)
 
-            db.add(InvestitionMonatsdaten(
-                investition_id=balkonkraftwerk.id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten={
-                    "pv_erzeugung_kwh": bkw_erzeugung,
-                    "eigenverbrauch_kwh": bkw_eigenverbrauch,
-                    "speicher_ladung_kwh": bkw_speicher_ladung,
-                    "speicher_entladung_kwh": bkw_speicher_entladung,
-                },
-            ))
+            _add_demo_imd(balkonkraftwerk.id, jahr, monat, {
+                "pv_erzeugung_kwh": bkw_erzeugung,
+                "eigenverbrauch_kwh": bkw_eigenverbrauch,
+                "speicher_ladung_kwh": bkw_speicher_ladung,
+                "speicher_entladung_kwh": bkw_speicher_entladung,
+            })
 
         # Mini-BHKW Monatsdaten
         if (jahr == 2024 and monat >= 10) or jahr > 2024:
@@ -507,12 +511,7 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
             else:
                 bhkw_erzeugung = 30 + (monat % 2) * 10
 
-            db.add(InvestitionMonatsdaten(
-                investition_id=mini_bhkw.id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten={"erzeugung_kwh": bhkw_erzeugung},
-            ))
+            _add_demo_imd(mini_bhkw.id, jahr, monat, {"erzeugung_kwh": bhkw_erzeugung})
 
         # PV-Module InvestitionMonatsdaten
         if pv_erzeugung > 0:
@@ -524,25 +523,17 @@ async def create_demo_data(db: AsyncSession = Depends(get_db)):
                 sued_anteil, ost_anteil, west_anteil = 0.60, 0.24, 0.16
 
             for pv_inv, anteil in [(pv_sued, sued_anteil), (pv_ost, ost_anteil), (pv_west, west_anteil)]:
-                db.add(InvestitionMonatsdaten(
-                    investition_id=pv_inv.id,
-                    jahr=jahr,
-                    monat=monat,
-                    verbrauch_daten={"pv_erzeugung_kwh": round(pv_erzeugung * anteil, 1)},
-                ))
+                _add_demo_imd(pv_inv.id, jahr, monat, {
+                    "pv_erzeugung_kwh": round(pv_erzeugung * anteil, 1),
+                })
 
         # Wallbox Monatsdaten
         if eauto_km > 0:
             heimladung = eauto_pv + eauto_netz
-            db.add(InvestitionMonatsdaten(
-                investition_id=wallbox.id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten={
-                    "ladung_kwh": heimladung,
-                    "ladevorgaenge": max(4, int(heimladung / 25)),
-                },
-            ))
+            _add_demo_imd(wallbox.id, jahr, monat, {
+                "ladung_kwh": heimladung,
+                "ladevorgaenge": max(4, int(heimladung / 25)),
+            })
 
     # 5. PVGIS Prognose
     pvgis_monatswerte = [

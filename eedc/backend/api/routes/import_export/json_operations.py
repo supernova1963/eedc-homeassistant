@@ -24,6 +24,8 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 
+from backend.services.provenance import seed_provenance
+
 from .schemas import JSONImportResult
 from .helpers import _parse_date
 
@@ -646,13 +648,24 @@ async def import_json(
 
             # Monatsdaten der Investition importieren
             for md_data in inv_data.get("monatsdaten", []):
+                verbrauch_daten = md_data.get("verbrauch_daten") or {}
                 inv_md = InvestitionMonatsdaten(
                     investition_id=inv_id,
                     jahr=md_data.get("jahr"),
                     monat=md_data.get("monat"),
-                    verbrauch_daten=md_data.get("verbrauch_daten"),
+                    verbrauch_daten=verbrauch_daten,
                     einsparung_monat_euro=md_data.get("einsparung_monat_euro"),
                     co2_einsparung_kg=md_data.get("co2_einsparung_kg"),
+                )
+                # Etappe 3d Päckchen 2: Initial-Provenance setzen, damit künftige
+                # Cloud-Syncs diese aus dem Backup wiederhergestellten User-Werte
+                # respektieren (manual:json_backup ist MANUAL-Klasse, blockiert
+                # external:cloud_import:*).
+                seed_provenance(
+                    inv_md,
+                    source="manual:json_backup",
+                    writer="json_backup_restore",
+                    json_subkeys={"verbrauch_daten": list(verbrauch_daten.keys())},
                 )
                 db.add(inv_md)
                 importiert["investition_monatsdaten"] += 1
@@ -714,6 +727,24 @@ async def import_json(
                 sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),
                 datenquelle=md_data.get("datenquelle") or "json_import",
                 notizen=md_data.get("notizen"),
+            )
+            # Etappe 3d Päckchen 2: Initial-Provenance für alle nicht-leeren
+            # Top-Level-Felder (nur die, die im Backup tatsächlich gesetzt waren —
+            # keine Default-Werte mit-provenieren).
+            _BACKUP_FIELDS = [
+                "einspeisung_kwh", "netzbezug_kwh", "pv_erzeugung_kwh",
+                "direktverbrauch_kwh", "eigenverbrauch_kwh", "gesamtverbrauch_kwh",
+                "batterie_ladung_kwh", "batterie_entladung_kwh",
+                "batterie_ladung_netz_kwh", "batterie_ladepreis_cent",
+                "netzbezug_durchschnittspreis_cent",
+                "globalstrahlung_kwh_m2", "sonnenstunden", "durchschnittstemperatur",
+                "sonderkosten_euro",
+            ]
+            seed_provenance(
+                monatsdaten,
+                source="manual:json_backup",
+                writer="json_backup_restore",
+                fields=[f for f in _BACKUP_FIELDS if md_data.get(f) is not None],
             )
             db.add(monatsdaten)
             importiert["monatsdaten"] += 1

@@ -22,6 +22,7 @@ from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.field_definitions import get_felder_fuer_investition, get_felder_fuer_sonstiges
+from backend.services.provenance import seed_provenance, write_with_provenance
 
 from .schemas import ImportResult, CSVTemplateInfo
 from .helpers import (
@@ -435,20 +436,33 @@ async def import_csv(
             elif einspeisung > 0 or netzbezug > 0:
                 gesamtverbrauch = netzbezug + einspeisung
 
+            # Etappe 3d Päckchen 2: Top-Level-Felder über write_with_provenance
+            # bei UPDATE (Hierarchie + Audit-Log greifen), seed_provenance bei
+            # frischer INSERT-Row (kein Audit-Spam — Backup-Restore kann hunderte
+            # Zeilen × Felder umfassen).
+            _CSV_BACKUP_FIELDS_TOP = [
+                ("einspeisung_kwh", einspeisung),
+                ("netzbezug_kwh", netzbezug),
+                ("pv_erzeugung_kwh", pv_erzeugung),
+                ("direktverbrauch_kwh", direktverbrauch),
+                ("eigenverbrauch_kwh", eigenverbrauch),
+                ("gesamtverbrauch_kwh", gesamtverbrauch),
+                ("batterie_ladung_kwh", batterie_ladung),
+                ("batterie_entladung_kwh", batterie_entladung),
+                ("globalstrahlung_kwh_m2", globalstrahlung),
+                ("sonnenstunden", sonnenstunden),
+                ("netzbezug_durchschnittspreis_cent", durchschnittspreis),
+            ]
             if existing_md:
-                # Update
-                existing_md.einspeisung_kwh = einspeisung
-                existing_md.netzbezug_kwh = netzbezug
-                existing_md.pv_erzeugung_kwh = pv_erzeugung
-                existing_md.direktverbrauch_kwh = direktverbrauch
-                existing_md.eigenverbrauch_kwh = eigenverbrauch
-                existing_md.gesamtverbrauch_kwh = gesamtverbrauch
-                existing_md.batterie_ladung_kwh = batterie_ladung
-                existing_md.batterie_entladung_kwh = batterie_entladung
-                existing_md.globalstrahlung_kwh_m2 = globalstrahlung
-                existing_md.sonnenstunden = sonnenstunden
-                if durchschnittspreis is not None:
-                    existing_md.netzbezug_durchschnittspreis_cent = durchschnittspreis
+                # UPDATE: Hierarchie greift — manual:csv_backup ist MANUAL,
+                # blockiert external:cloud_import:*, gleichauf mit manual:form
+                # (Last-Writer-Wins).
+                for field_name, value in _CSV_BACKUP_FIELDS_TOP:
+                    if value is not None or field_name in ("einspeisung_kwh", "netzbezug_kwh"):
+                        await write_with_provenance(
+                            db, existing_md, field_name, value,
+                            source="manual:csv_backup", writer="csv_backup_restore",
+                        )
                 existing_md.notizen = notizen
                 existing_md.datenquelle = "csv"
             else:
@@ -470,11 +484,18 @@ async def import_csv(
                     notizen=notizen,
                     datenquelle="csv"
                 )
+                seed_provenance(
+                    md,
+                    source="manual:csv_backup",
+                    writer="csv_backup_restore",
+                    fields=[fn for fn, val in _CSV_BACKUP_FIELDS_TOP if val is not None],
+                )
                 db.add(md)
 
             # Legacy Investitions-Spalten
             await _import_investition_monatsdaten_legacy(
-                db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben
+                db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben,
+                source="manual:csv_backup", writer="csv_backup_restore",
             )
 
             importiert += 1
