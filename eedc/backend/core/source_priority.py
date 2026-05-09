@@ -82,6 +82,17 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # (services/ha_statistics_service.py + routes/ha_statistics.py)
     "external:ha_statistics": SourcePriority.EXTERNAL_AUTHORITATIVE,
 
+    # External Authoritative — Wetter- und Prognose-Quellen (P3 Stub).
+    # Diese drei Labels sind ein Vorgriff auf die Quellenwahl-Roadmap (Schritt
+    # 4 SFML-Connector wäre sonst neuer Schreiber ohne Provenance — Risiko #3
+    # im Konzept). Heute schreibt nur `routes/live_wetter.py:_persist_pv_prognose`
+    # alle drei Felder an einer Stelle; mit dem Quellenwahl-Picker werden
+    # SFML-Connector und Solcast-Service eigene Schreiber, die unter dem
+    # gleichen Label-Vokabular weiterlaufen.
+    "external:openmeteo":    SourcePriority.EXTERNAL_AUTHORITATIVE,
+    "external:tom_ha_sfml":  SourcePriority.EXTERNAL_AUTHORITATIVE,
+    "external:solcast":      SourcePriority.EXTERNAL_AUTHORITATIVE,
+
     # P2-Erweiterung: Hersteller-Portal-Datei-Upload (Apply-Pfad in
     # routes/data_import.py) und Cloud-Sync-Apply ohne Provider-Spezifizierung.
     # Provider-spezifische external:cloud_import:<provider>-Labels werden

@@ -36,6 +36,23 @@ from backend.services.wetter.cache import (
     ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
 )
 from backend.services.wetter.models import WETTER_MODELLE
+from backend.services.provenance import (
+    seed_provenance,
+    write_with_provenance,
+)
+
+
+# Prognose-Schreib-Pfad ist heute ein gemeinsamer Schreiber für drei
+# disjunkte Quellen (OpenMeteo / Tom-HA-SFML / Solcast). Eigene Source-
+# Labels statt eines Sammeleintrags — Vorgriff auf die Quellenwahl-Roadmap,
+# damit ein späterer dedizierter SFML-Connector unter dem gleichen Vokabular
+# weiterläuft (Konzept Risiko #3).
+_OPENMETEO_SOURCE = "external:openmeteo"
+_OPENMETEO_WRITER = "openmeteo_prognose"
+_SFML_SOURCE = "external:tom_ha_sfml"
+_SFML_WRITER = "tom_ha_sfml_sensor"
+_SOLCAST_SOURCE = "external:solcast"
+_SOLCAST_WRITER = "solcast_provider"
 
 logger = logging.getLogger(__name__)
 
@@ -813,14 +830,32 @@ async def _speichere_prognose(
             tz = result.scalar_one_or_none()
 
             if tz:
-                tz.pv_prognose_kwh = prognose_kwh
+                # UPDATE-Pfad: pro Feld via Resolver mit eigener Source-Klasse,
+                # damit SFML/Solcast-spezifische Schreib-Pfade (Quellenwahl-
+                # Roadmap Schritt 4) sich später disjunkt einfügen können.
+                await write_with_provenance(
+                    db, tz, "pv_prognose_kwh", prognose_kwh,
+                    source=_OPENMETEO_SOURCE, writer=_OPENMETEO_WRITER,
+                )
                 if sfml_kwh is not None:
-                    tz.sfml_prognose_kwh = sfml_kwh
+                    await write_with_provenance(
+                        db, tz, "sfml_prognose_kwh", sfml_kwh,
+                        source=_SFML_SOURCE, writer=_SFML_WRITER,
+                    )
                 if solcast_kwh is not None:
-                    tz.solcast_prognose_kwh = solcast_kwh
-                    tz.solcast_p10_kwh = solcast_p10_kwh
-                    tz.solcast_p90_kwh = solcast_p90_kwh
-                # First-write-wins für Stundenprofile (Day-Ahead-Snapshot)
+                    for feld, wert in (
+                        ("solcast_prognose_kwh", solcast_kwh),
+                        ("solcast_p10_kwh", solcast_p10_kwh),
+                        ("solcast_p90_kwh", solcast_p90_kwh),
+                    ):
+                        await write_with_provenance(
+                            db, tz, feld, wert,
+                            source=_SOLCAST_SOURCE, writer=_SOLCAST_WRITER,
+                        )
+                # First-write-wins für Stundenprofile (Day-Ahead-Snapshot) —
+                # bewusst kein Provenance-Anschluss: das sind interne Caches,
+                # die nach festem Pattern bleiben (siehe _provenance_helpers
+                # Skip-Liste).
                 if pv_stundenprofil is not None and tz.pv_prognose_stundenprofil is None:
                     tz.pv_prognose_stundenprofil = pv_stundenprofil
                 if solcast_stundenprofil is not None and tz.solcast_prognose_stundenprofil is None:
@@ -840,6 +875,30 @@ async def _speichere_prognose(
                     datenquelle="wetter_prognose",
                 )
                 db.add(tz)
+                await db.flush()
+                # Pro Source nur die non-None Felder markieren — sonst würde
+                # eine spätere SFML/Solcast-Schreibung als Same-Source-Override
+                # auf einen leeren Initial-Wert greifen statt sauber „applied".
+                if prognose_kwh is not None:
+                    seed_provenance(
+                        tz, source=_OPENMETEO_SOURCE, writer=_OPENMETEO_WRITER,
+                        fields=["pv_prognose_kwh"],
+                    )
+                if sfml_kwh is not None:
+                    seed_provenance(
+                        tz, source=_SFML_SOURCE, writer=_SFML_WRITER,
+                        fields=["sfml_prognose_kwh"],
+                    )
+                if solcast_kwh is not None:
+                    fresh_solcast = ["solcast_prognose_kwh"]
+                    if solcast_p10_kwh is not None:
+                        fresh_solcast.append("solcast_p10_kwh")
+                    if solcast_p90_kwh is not None:
+                        fresh_solcast.append("solcast_p90_kwh")
+                    seed_provenance(
+                        tz, source=_SOLCAST_SOURCE, writer=_SOLCAST_WRITER,
+                        fields=fresh_solcast,
+                    )
 
             await db.commit()
     except Exception as e:
