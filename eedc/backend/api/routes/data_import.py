@@ -305,16 +305,23 @@ async def apply_import(
     _PROVENANCE_SOURCE = "external:portal_import"
     _PROVENANCE_WRITER = f"portal_apply:{datenquelle}"
 
-    async def _track_upsert(*args, **kwargs):
-        """Wrapper über _upsert_investition_monatsdaten der die rejected_*-
-        Counts in den Apply-Response-Sammler legt. Periode steht im Audit-
-        Log, daher hier nur Sub-Key-Sample für den Wizard-Hinweis."""
-        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
+    def _record_upsert(upsert_res) -> None:
+        """Sammler für die Wizard-Hinweis-Telemetrie. Wird sowohl vom direkten
+        `_track_upsert`-Wrapper als auch via `on_upsert`-Callback aus den
+        Helpers (`_distribute_*`) gerufen, damit indirekt geschriebene Felder
+        nicht ohne Tracking durchschlüpfen."""
         nonlocal geschuetzt_count
         geschuetzt_count += upsert_res.rejected_count
         for sub_key in upsert_res.rejected_fields:
             if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
                 geschuetzte_felder.append(sub_key)
+
+    async def _track_upsert(*args, **kwargs):
+        """Wrapper über _upsert_investition_monatsdaten der die rejected_*-
+        Counts in den Apply-Response-Sammler legt. Periode steht im Audit-
+        Log, daher hier nur Sub-Key-Sample für den Wizard-Hinweis."""
+        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
+        _record_upsert(upsert_res)
         return upsert_res
 
     for monat_input in data.monate:
@@ -370,6 +377,7 @@ async def apply_import(
                         w = await _distribute_legacy_pv_to_modules(
                             db, pv_kwh, pv_module, jahr, monat, ueberschreiben,
                             source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
+                            on_upsert=_record_upsert,
                         )
                         if importiert == 0:
                             warnungen.extend(w)
@@ -402,6 +410,7 @@ async def apply_import(
                             db, bat_ladung_raw or 0, bat_entladung_raw or 0,
                             speicher, jahr, monat, ueberschreiben,
                             source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
+                            on_upsert=_record_upsert,
                         )
                         if importiert == 0:
                             warnungen.extend(w)
