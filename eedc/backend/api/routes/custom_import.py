@@ -139,6 +139,10 @@ class ApplyResponse(BaseModel):
     uebersprungen: int
     fehler: list[str]
     warnungen: list[str]
+    # Etappe 3d Päckchen 3: Hierarchie-Schutz-Tracking — Top-Level-Felder +
+    # Investitions-Sub-Keys, deren manuelle Werte den CSV-Apply abgewiesen haben.
+    geschuetzt_count: int = 0
+    geschuetzte_felder: list[str] = []
 
 
 # ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
@@ -824,6 +828,19 @@ async def apply_custom_import(
     fehler: list[str] = []
     warnungen: list[str] = []
 
+    # Etappe 3d Päckchen 3: Hierarchie-Schutz-Tracking analog zu data_import.py.
+    geschuetzt_count = 0
+    geschuetzte_felder: list[str] = []
+
+    async def _track_upsert(*args, **kwargs):
+        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
+        nonlocal geschuetzt_count
+        geschuetzt_count += upsert_res.rejected_count
+        for sub_key in upsert_res.rejected_fields:
+            if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
+                geschuetzte_felder.append(sub_key)
+        return upsert_res
+
     def parse_float(val: str) -> Optional[float]:
         return _parse_number(val, config.dezimalzeichen)
 
@@ -917,7 +934,7 @@ async def apply_custom_import(
 
             # Manuell gemappte Investitions-Felder speichern + Summen berechnen
             for inv_id_int, verbrauch_daten in inv_collected.items():
-                await _upsert_investition_monatsdaten(
+                await _track_upsert(
                     db, inv_id_int, jahr, monat, verbrauch_daten, ueberschreiben,
                     source="manual:csv_import", writer="csv_wizard",
                 )
@@ -1019,10 +1036,14 @@ async def apply_custom_import(
             ]
             for field_name, value in top_level_writes:
                 if value is not None:
-                    await write_with_provenance(
+                    result = await write_with_provenance(
                         db, md, field_name, value,
                         source="manual:csv_import", writer="csv_wizard",
                     )
+                    if result.decision == "rejected_lower_priority":
+                        geschuetzt_count += 1
+                        if len(geschuetzte_felder) < 15 and field_name not in geschuetzte_felder:
+                            geschuetzte_felder.append(field_name)
             md.datenquelle = "custom_import"
 
             importiert += 1
@@ -1033,12 +1054,24 @@ async def apply_custom_import(
 
     await db.flush()
 
+    # Etappe 3d Päckchen 3: Wizard-Hinweis bei aktivierter Quellen-Hierarchie.
+    if geschuetzt_count > 0:
+        sample = ", ".join(geschuetzte_felder[:5])
+        suffix = f" (z. B. {sample})" if sample else ""
+        warnungen.insert(0, (
+            f"{geschuetzt_count} Felder wurden durch manuell gepflegte Werte "
+            f"geschützt{suffix} — Reset über Reparatur-Werkbank wenn gewollt."
+        ))
+
     await log_activity(
         kategorie="portal_import",
         aktion=f"Custom-Import: {importiert} Monate importiert",
         erfolg=len(fehler) == 0,
-        details=f"Anlage {anlage_id}, übersprungen: {uebersprungen}",
-        details_json={"importiert": importiert, "uebersprungen": uebersprungen, "fehler": fehler[:5]},
+        details=f"Anlage {anlage_id}, übersprungen: {uebersprungen}, geschützt: {geschuetzt_count}",
+        details_json={
+            "importiert": importiert, "uebersprungen": uebersprungen,
+            "geschuetzt": geschuetzt_count, "fehler": fehler[:5],
+        },
         anlage_id=anlage_id,
     )
 
@@ -1048,6 +1081,8 @@ async def apply_custom_import(
         uebersprungen=uebersprungen,
         fehler=fehler[:20],
         warnungen=warnungen[:10],
+        geschuetzt_count=geschuetzt_count,
+        geschuetzte_felder=geschuetzte_felder,
     )
 
 
