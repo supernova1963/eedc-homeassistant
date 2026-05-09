@@ -546,6 +546,15 @@ async def _run_data_migrations() -> None:
         from backend.services.snapshot.migrate import migrate_3c_p2_counter_backward
         await _apply_once("etappe_3c_p2_counter_hourly_backward", migrate_3c_p2_counter_backward)
 
+        # Etappe 3d P3: Initial-source_provenance für Bestandsdaten
+        from backend.services.provenance_migrate import (
+            migrate_3d_p3_initial_provenance_legacy_unknown,
+        )
+        await _apply_once(
+            "etappe_3d_p3_initial_provenance_legacy_unknown",
+            migrate_3d_p3_initial_provenance_legacy_unknown,
+        )
+
 
 async def init_db():
     """
