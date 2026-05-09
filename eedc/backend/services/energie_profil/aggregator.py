@@ -414,6 +414,25 @@ async def aggregate_day(
             f"{type(e).__name__}: {e}"
         )
 
+    # ── Tagesgesamt pro Komponente aus Boundary-Diff (Etappe 3c P3, E2) ──
+    # HA-konformes Tagesfenster [Heute 00:00, Folgetag 00:00) statt Σ-Hourly
+    # über Backward-Slots (Vortag 23 → Heute 23 = um eine Stunde verschoben).
+    # Boundary-Werte überschreiben Live-Σ-Werte für übereinstimmende Keys —
+    # Live-Σ bleibt nur für Keys, die der Helper nicht abdeckt (z.B. WP-Suffix
+    # `waermepumpe_<id>_heizen` aus Live ohne separates heizenergie_kwh-Mapping).
+    try:
+        from backend.services.snapshot.aggregator import get_komponenten_tageskwh
+        boundary_kwh = await get_komponenten_tageskwh(
+            db, anlage, invs_by_id, datum,
+        )
+        for key, val in boundary_kwh.items():
+            komponenten_summen[key] = val
+    except Exception as e:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: Komponenten-Tagesgesamt aus Snapshots "
+            f"fehlgeschlagen, Σ-Hourly-Fallback aktiv: {type(e).__name__}: {e}"
+        )
+
     # ── TagesZusammenfassung speichern ────────────────────────────────────
     zusammenfassung = TagesZusammenfassung(
         anlage_id=anlage.id,

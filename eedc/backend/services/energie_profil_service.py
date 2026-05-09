@@ -735,6 +735,24 @@ async def backfill_from_statistics(
                 f"fehlgeschlagen: {type(e).__name__}: {e}"
             )
 
+        # Tagesgesamt pro Komponente aus Boundary-Diff (Etappe 3c P3, E2):
+        # HA-konformes [Heute 00:00, Folgetag 00:00) statt Σ-Hourly über Backward-
+        # Slots. Boundary-Werte überschreiben Σ-Hourly-Werte für übereinstimmende
+        # Keys; Live-Σ bleibt nur für Keys ohne Counter-Mapping (z.B. WP-Suffix).
+        try:
+            from backend.services.snapshot.aggregator import get_komponenten_tageskwh
+            boundary_kwh = await get_komponenten_tageskwh(
+                db, anlage, investitionen, current,
+            )
+            for key, val in boundary_kwh.items():
+                komponenten_summen[key] = val
+        except Exception as e:
+            logger.warning(
+                f"Backfill (Statistics) Anlage {anlage.id}, {current}: "
+                f"Komponenten-Tagesgesamt aus Snapshots fehlgeschlagen: "
+                f"{type(e).__name__}: {e}"
+            )
+
         tz_obj = TagesZusammenfassung(
             anlage_id=anlage.id,
             datum=current,

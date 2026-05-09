@@ -44,6 +44,7 @@ from backend.services.snapshot.aggregator import (
     get_daily_counter_deltas_by_inv,
     get_hourly_counter_sum_by_feld,
     get_hourly_kwh_by_category,
+    get_komponenten_tageskwh,
 )
 from backend.services.snapshot.fallback import live_snapshot_if_missing
 from backend.services.snapshot.reaggregator import (
@@ -78,6 +79,7 @@ __all__ = [
     "get_daily_counter_deltas_by_inv",
     "get_hourly_counter_sum_by_feld",
     "get_hourly_kwh_by_category",
+    "get_komponenten_tageskwh",
     # Fallback
     "live_snapshot_if_missing",
     # Reaggregator

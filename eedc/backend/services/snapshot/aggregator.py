@@ -328,6 +328,166 @@ async def get_daily_counter_deltas_by_inv(
     return result
 
 
+async def get_komponenten_tageskwh(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> dict[str, float]:
+    """
+    Tagesgesamt pro Komponente aus Snapshot-Boundary-Diff (Etappe 3c P3, E2).
+
+    Liefert `{komponenten_key: tages_kwh}` über das HA-Tagesfenster
+    `[Heute 00:00, Folgetag 00:00)`. Identisch zur HA-Energy-Dashboard-Rechnung
+    `snap[Folgetag 00:00] − snap[Tag 00:00]`. Ersetzt die ältere
+    `Σ-Hourly`-Berechnung im aggregate_day-Pfad für `TagesZusammenfassung.komponenten_kwh`.
+
+    Komponenten-Key folgt der Live-Pfad-Konvention (`live_tagesverlauf_service`):
+        pv-module        → "pv_<inv_id>"            ← inv:<id>:pv_erzeugung_kwh
+        balkonkraftwerk  → "bkw_<inv_id>"           ← inv:<id>:pv_erzeugung_kwh
+        speicher         → "batterie_<inv_id>"      ← (ladung − entladung)_kwh
+        waermepumpe      → "waermepumpe_<inv_id>"   ← Σ stromverbrauch+heizenergie+warmwasser
+        wallbox          → "wallbox_<inv_id>"       ← inv:<id>:ladung_kwh
+        e-auto           → "eauto_<inv_id>"         ← ladung_kwh oder verbrauch_kwh
+        sonstiges        → "sonstige_<inv_id>"      ← (erzeugung − verbrauch)_kwh
+
+    Plus Basis-Schlüssel (ohne Investition):
+        einspeisung → "einspeisung" (≥ 0)
+        netzbezug   → "netzbezug" (≥ 0)
+
+    Investitionen ohne gemappten Counter erscheinen NICHT im Dict — der Aufrufer
+    behält seine eigene Live-Σ-Variante als Fallback für solche Keys (typisch:
+    WP-Suffix-Keys wie `waermepumpe_2_heizen` aus dem Live-Pfad ohne separates
+    `heizenergie_kwh`-Mapping).
+    """
+    sensor_mapping = anlage.sensor_mapping or {}
+    rng = BoundaryRange.for_day_total(datum)
+    start_off, end_off = rng.boundary_offsets  # (0, 24)
+    ts_start = rng.boundary_at(start_off)
+    ts_ende = rng.boundary_at(end_off)
+
+    result: dict[str, float] = {}
+
+    async def _diff(sensor_key: str, sensor_id: Optional[str]) -> Optional[float]:
+        s0 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_start)
+        s1 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_ende)
+        if s0 is None or s1 is None:
+            return None
+        d = s1 - s0
+        if d < -0.01:
+            # Tagesreset-Zähler (HA utility_meter daily): s0 ≈ Tagesendwert,
+            # s1 ≈ 0 nach Mitternachts-Reset → s1 ist die Energie seit Reset
+            # (analog zum Hourly-Pfad in get_hourly_kwh_by_category).
+            if s1 < 0.5 and s0 > 0.5:
+                return max(0.0, s1)
+            logger.warning(
+                f"Negatives Tagesgesamt-Delta für anlage={anlage.id} "
+                f"key={sensor_key} ({datum}): {d:.3f} → ignoriert"
+            )
+            return None
+        return max(0.0, d)
+
+    # 1. Basis: einspeisung + netzbezug
+    basis = sensor_mapping.get("basis", {}) or {}
+    for feld in BASIS_ZAEHLER_FELDER:
+        cfg = basis.get(feld)
+        if not isinstance(cfg, dict) or cfg.get("strategie") != "sensor":
+            continue
+        eid = cfg.get("sensor_id")
+        if not eid:
+            continue
+        d = await _diff(f"basis:{feld}", eid)
+        if d is not None:
+            result[feld] = d  # "einspeisung" / "netzbezug" als Top-Level-Key
+
+    # 2. Investitionen
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        typ = inv.typ
+
+        async def _diff_field(feld: str) -> Optional[float]:
+            cfg = felder.get(feld)
+            if not isinstance(cfg, dict) or cfg.get("strategie") != "sensor":
+                return None
+            eid = cfg.get("sensor_id")
+            if not eid:
+                return None
+            return await _diff(f"inv:{inv_id_str}:{feld}", eid)
+
+        if typ == "pv-module":
+            d = await _diff_field("pv_erzeugung_kwh")
+            if d is not None:
+                result[f"pv_{inv_id_str}"] = d
+
+        elif typ == "balkonkraftwerk":
+            d = await _diff_field("pv_erzeugung_kwh")
+            if d is not None:
+                result[f"bkw_{inv_id_str}"] = d
+
+        elif typ == "speicher":
+            ladung = await _diff_field("ladung_kwh")
+            entladung = await _diff_field("entladung_kwh")
+            if ladung is not None or entladung is not None:
+                # Signed: positiv = Nettoladung, negativ = Nettoentladung
+                result[f"batterie_{inv_id_str}"] = (ladung or 0.0) - (entladung or 0.0)
+
+        elif typ == "waermepumpe":
+            # Bevorzugt: stromverbrauch_kwh (ein Sensor). Sonst Σ heizenergie + warmwasser.
+            verbr = await _diff_field("stromverbrauch_kwh")
+            if verbr is not None:
+                result[f"waermepumpe_{inv_id_str}"] = verbr
+            else:
+                heiz = await _diff_field("heizenergie_kwh")
+                ww = await _diff_field("warmwasser_kwh")
+                if heiz is not None or ww is not None:
+                    result[f"waermepumpe_{inv_id_str}"] = (heiz or 0.0) + (ww or 0.0)
+
+        elif typ == "wallbox":
+            d = await _diff_field("ladung_kwh")
+            if d is not None:
+                result[f"wallbox_{inv_id_str}"] = d
+
+        elif typ == "e-auto":
+            # Live-Pfad überspringt e-auto mit parent_investition_id (Wallbox misst).
+            # Wir spiegeln das, damit kein Doppelzählen passiert.
+            if getattr(inv, "parent_investition_id", None) is not None:
+                continue
+            d = await _diff_field("ladung_kwh")
+            if d is None:
+                d = await _diff_field("verbrauch_kwh")
+            if d is not None:
+                result[f"eauto_{inv_id_str}"] = d
+
+        elif typ == "sonstiges":
+            # Erzeuger nutzen erzeugung_kwh, Verbraucher nutzen verbrauch_kwh
+            # — analog live_power_service: pro Investition genau ein Komponenten-
+            # Wert, immer positiv. Die Seite (quelle/senke) leitet das Frontend
+            # aus inv.parameter.kategorie ab.
+            kategorie = (
+                inv.parameter.get("kategorie", "verbraucher")
+                if isinstance(getattr(inv, "parameter", None), dict)
+                else "verbraucher"
+            )
+            primary, secondary = (
+                ("erzeugung_kwh", "verbrauch_kwh")
+                if kategorie == "erzeuger"
+                else ("verbrauch_kwh", "erzeugung_kwh")
+            )
+            d = await _diff_field(primary)
+            if d is None:
+                d = await _diff_field(secondary)
+            if d is not None:
+                result[f"sonstige_{inv_id_str}"] = d
+
+    return result
+
+
 async def get_hourly_counter_sum_by_feld(
     db: AsyncSession,
     anlage,
