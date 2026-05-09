@@ -146,7 +146,7 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
           {tooltip.region && (
             <div className="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
               <p>{tooltip.region.anzahl_anlagen} Anlage{tooltip.region.anzahl_anlagen !== 1 ? 'n' : ''} · Ø {tooltip.region.durchschnitt_kwp.toFixed(1)} kWp</p>
-              {tooltip.region.avg_speicher_ladung_kwh != null && <p>🔋 {tooltip.region.avg_speicher_ladung_kwh.toFixed(0)} ↑ / {tooltip.region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↓ kWh/Mon</p>}
+              {tooltip.region.avg_speicher_ladung_kwh != null && <p>🔋 {tooltip.region.avg_speicher_ladung_kwh.toFixed(0)} ↓ / {tooltip.region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↑ kWh/Mon</p>}
               {tooltip.region.avg_wp_jaz != null && <p>♨️ JAZ {tooltip.region.avg_wp_jaz.toFixed(1)}</p>}
               {tooltip.region.avg_eauto_km != null && <p>🚗 {tooltip.region.avg_eauto_km.toFixed(0)} km/Mon · {tooltip.region.avg_eauto_ladung_kwh != null ? `${tooltip.region.avg_eauto_ladung_kwh.toFixed(0)} kWh zuhause` : '–'}</p>}
               {tooltip.region.avg_wallbox_kwh != null && <p>🔌 {tooltip.region.avg_wallbox_kwh.toFixed(0)} kWh/Mon{tooltip.region.avg_wallbox_pv_anteil != null ? ` · ${tooltip.region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : ''}</p>}
@@ -477,7 +477,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                   <th className="text-right py-2 px-3 text-gray-500 font-medium">Anlagen</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium">Ø kWp</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium">Ø kWh/kWp</th>
-                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Ladung ↑ / Entladung ↓ pro Monat (kWh)">🔋 Ladung/Entl.</th>
+                  <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Ladung ↓ / Entladung ↑ pro Monat (kWh)">🔋 Ladung/Entl.</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Jahresarbeitszahl (Σ Wärme ÷ Σ Strom)">♨️ JAZ</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø km/Mon · Ø kWh zuhause geladen">🚗 km / kWh</th>
                   <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø kWh geladen/Mon · davon PV-Anteil (wo messbar)">🔌 kWh / PV%</th>
@@ -520,7 +520,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
                           {region.avg_speicher_ladung_kwh != null
-                            ? <><div>{region.avg_speicher_ladung_kwh.toFixed(0)} ↑</div><div className="text-xs text-gray-400">{region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↓ kWh</div></>
+                            ? <><div>{region.avg_speicher_ladung_kwh.toFixed(0)} ↓</div><div className="text-xs text-gray-400">{region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↑ kWh</div></>
                             : '-'}
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">

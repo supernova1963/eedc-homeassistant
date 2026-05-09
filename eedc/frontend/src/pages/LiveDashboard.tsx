@@ -314,9 +314,9 @@ export default function LiveDashboard() {
                              title={`Batterie heute\nLadung: ${ladung.toFixed(1)} kWh\nEntladung: ${entladung.toFixed(1)} kWh`}>
                           <div className="text-xs text-gray-500 dark:text-gray-400">Batterie</div>
                           <div className="text-lg font-bold text-teal-600 dark:text-teal-400">
-                            <span title="Ladung">&#9650;{ladung.toFixed(1)}</span>
+                            <span title="Ladung (in den Speicher)">&#9660;{ladung.toFixed(1)}</span>
                             <span className="text-gray-400 mx-0.5">/</span>
-                            <span title="Entladung">&#9660;{entladung.toFixed(1)}</span>
+                            <span title="Entladung (aus dem Speicher)">&#9650;{entladung.toFixed(1)}</span>
                             <span className="text-xs font-normal ml-0.5">kWh</span>
                           </div>
                         </div>
