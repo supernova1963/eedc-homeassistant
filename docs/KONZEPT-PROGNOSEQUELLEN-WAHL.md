@@ -184,7 +184,7 @@ spezifische Wahl als spätere Erweiterung, falls Bedarf entsteht.
 ## Verhältnis zur Solcast-Evaluierungsphase
 
 Mit Verabschiedung dieses Konzepts ist die **Solcast-Evaluierungsphase**
-(`KONZEPT-SOLCAST.md`, Etappen 1–3 abgeschlossen v3.16.4–v3.16.8)
+(`archive/KONZEPT-SOLCAST.md`, Etappen 1–3 abgeschlossen v3.16.4–v3.16.8)
 **formell beendet**. Die ursprünglich geplante Etappe 4 entfällt in der
 bisherigen Form:
 
@@ -196,7 +196,7 @@ bisherigen Form:
 | Blended Forecast (gewichteter Mittelwert) | gestrichen — User wählt eine Quelle, kein Mischen |
 | MAE-Tracking als Decision-Support | gestrichen (Tom-HA-Versprechen) |
 
-`KONZEPT-SOLCAST.md` wird beim Schreiben dieses Konzepts auf
+`archive/KONZEPT-SOLCAST.md` wird beim Schreiben dieses Konzepts auf
 „Etappen 1–3 abgeschlossen, Etappe 4 durch Quellenwahl-Konzept abgelöst"
 gekennzeichnet.
 
