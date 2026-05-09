@@ -31,8 +31,20 @@ from backend.services.ha_statistics_service import (
     AlleMonateResponse,
     SensorMonatswert,
 )
+from backend.services.provenance import (
+    seed_provenance,
+    write_json_subkey_with_provenance,
+    write_with_provenance,
+)
 
 logger = logging.getLogger(__name__)
+
+# HA Long-Term Statistics ist eine externe autoritative Quelle
+# (Source `external:ha_statistics`, Stufe 2). Manuelle Form-Werte (Stufe 1)
+# überleben den Import strukturell — der Resolver weist HA-Stats-
+# Schreibversuche auf manual:form-Felder mit rejected_lower_priority ab.
+_HA_STATS_SOURCE = "external:ha_statistics"
+_HA_STATS_WRITER = "ha_statistics_import"
 
 router = APIRouter()
 
@@ -924,7 +936,7 @@ async def import_ha_statistics(
                 md = result.scalar_one_or_none()
 
                 if md is None:
-                    # Neu erstellen
+                    # Neu erstellen — fresh row, kein Hierarchie-Konflikt möglich
                     md = Monatsdaten(
                         anlage_id=anlage_id,
                         jahr=jahr,
@@ -934,23 +946,43 @@ async def import_ha_statistics(
                         datenquelle="ha_statistics"
                     )
                     db.add(md)
+                    await db.flush()
+                    fresh_fields = [
+                        f for f in ("einspeisung_kwh", "netzbezug_kwh")
+                        if (f == "einspeisung_kwh" and import_einspeisung)
+                        or (f == "netzbezug_kwh" and import_netzbezug)
+                    ]
+                    if fresh_fields:
+                        seed_provenance(
+                            md, source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+                            fields=fresh_fields,
+                        )
                     basis_importiert = True
                 else:
-                    # Existiert - selektiv überschreiben
+                    # Existiert - selektiv via Resolver. Manuelle Werte (manual:form,
+                    # Stufe 1) gewinnen automatisch gegen HA-Stats (Stufe 2).
+                    # Das `ueberschreiben`-Flag steuert nur die Same-Source-Logik
+                    # bei bereits importierten HA-Stats-Werten.
                     hat_einspeisung = (md.einspeisung_kwh or 0) > 0.1
                     hat_netzbezug = (md.netzbezug_kwh or 0) > 0.1
 
-                    # Einspeisung aktualisieren
                     if import_einspeisung and einspeisung is not None:
                         if not hat_einspeisung or request.ueberschreiben:
-                            md.einspeisung_kwh = einspeisung
-                            basis_importiert = True
+                            result = await write_with_provenance(
+                                db, md, "einspeisung_kwh", einspeisung,
+                                source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+                            )
+                            if result.applied:
+                                basis_importiert = True
 
-                    # Netzbezug aktualisieren
                     if import_netzbezug and netzbezug is not None:
                         if not hat_netzbezug or request.ueberschreiben:
-                            md.netzbezug_kwh = netzbezug
-                            basis_importiert = True
+                            result = await write_with_provenance(
+                                db, md, "netzbezug_kwh", netzbezug,
+                                source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+                            )
+                            if result.applied:
+                                basis_importiert = True
 
                     if basis_importiert:
                         md.datenquelle = "ha_statistics"
@@ -1020,20 +1052,28 @@ async def import_ha_statistics(
                         verbrauch_daten=inv_werte
                     )
                     db.add(imd)
+                    await db.flush()
+                    if inv_werte:
+                        seed_provenance(
+                            imd, source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+                            json_subkeys={"verbrauch_daten": list(inv_werte.keys())},
+                        )
                     inv_importiert = True
                 else:
-                    # Merge mit existierenden Daten
+                    # Merge mit existierenden Daten — Per-Sub-Key durch Resolver.
+                    # manual:form-Sub-Keys überleben den Import (Hierarchie greift).
                     if imd.verbrauch_daten is None:
                         imd.verbrauch_daten = {}
 
                     for feld, wert in inv_werte.items():
-                        # Nur überschreiben wenn leer oder explizit gewünscht
                         vorhandener_wert = imd.verbrauch_daten.get(feld)
                         if vorhandener_wert is None or vorhandener_wert == 0 or request.ueberschreiben:
-                            imd.verbrauch_daten[feld] = wert
-                            inv_importiert = True
-
-                    flag_modified(imd, "verbrauch_daten")
+                            result = await write_json_subkey_with_provenance(
+                                db, imd, "verbrauch_daten", feld, wert,
+                                source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER,
+                            )
+                            if result.applied:
+                                inv_importiert = True
 
             # Zähler aktualisieren
             if basis_importiert or inv_importiert:

@@ -21,8 +21,6 @@ from typing import Any
 from backend.services.provenance import seed_provenance
 
 
-_AUTO_SOURCE = "auto:monatsabschluss"
-
 # Top-Level-Spalten der TagesZusammenfassung, die als JSON-Sub-Key-Träger
 # behandelt werden — Per-Sub-Key-Provenance statt Komplett-Marker auf der
 # JSON-Spalte.
@@ -46,6 +44,7 @@ _TEP_SKIP_COLUMNS = frozenset({
 def _seed_row(
     row: Any,
     *,
+    source: str,
     writer: str,
     skip_columns: frozenset[str],
     json_subkey_columns: tuple[str, ...],
@@ -53,7 +52,7 @@ def _seed_row(
     """Setzt source_provenance auf eine fresh Aggregat-Row.
 
     Pro Row alle non-None Top-Level-Spalten + alle existierenden Sub-Keys
-    der genannten JSON-Spalten als `auto:monatsabschluss`-Provenance.
+    der genannten JSON-Spalten unter dem übergebenen Source-Tag.
     """
     fields: list[str] = []
     json_subkeys: dict[str, list[str]] = {}
@@ -73,27 +72,39 @@ def _seed_row(
         return
     seed_provenance(
         row,
-        source=_AUTO_SOURCE,
+        source=source,
         writer=writer,
         fields=fields or None,
         json_subkeys=json_subkeys or None,
     )
 
 
-def seed_tz_provenance(zusammenfassung: Any, *, writer: str) -> None:
+def seed_tz_provenance(
+    zusammenfassung: Any,
+    *,
+    writer: str,
+    source: str = "auto:monatsabschluss",
+) -> None:
     """Setzt source_provenance auf eine fresh TagesZusammenfassung-Row."""
     _seed_row(
         zusammenfassung,
+        source=source,
         writer=writer,
         skip_columns=_TZ_SKIP_COLUMNS,
         json_subkey_columns=_TZ_JSON_SUBKEY_COLUMNS,
     )
 
 
-def seed_tep_provenance(profil: Any, *, writer: str) -> None:
+def seed_tep_provenance(
+    profil: Any,
+    *,
+    writer: str,
+    source: str = "auto:monatsabschluss",
+) -> None:
     """Setzt source_provenance auf eine fresh TagesEnergieProfil-Row."""
     _seed_row(
         profil,
+        source=source,
         writer=writer,
         skip_columns=_TEP_SKIP_COLUMNS,
         json_subkey_columns=_TEP_JSON_SUBKEY_COLUMNS,
