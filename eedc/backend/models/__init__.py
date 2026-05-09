@@ -10,6 +10,7 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.models.infothek import InfothekEintrag, InfothekDatei
 from backend.models.korrekturprofil import Korrekturprofil
+from backend.models.data_provenance_log import DataProvenanceLog
 
 __all__ = [
     "Anlage",
@@ -29,4 +30,5 @@ __all__ = [
     "InfothekEintrag",
     "InfothekDatei",
     "Korrekturprofil",
+    "DataProvenanceLog",
 ]

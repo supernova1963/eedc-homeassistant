@@ -445,6 +445,34 @@ async def run_migrations(conn):
                     "UPDATE sensor_snapshots SET quelle = 'unknown' WHERE quelle IS NULL"
                 ))
 
+        # Etappe 3d P1 (KONZEPT-DATENPIPELINE.md Sektion 3.2 + 6.1):
+        # source_provenance JSON-Spalte auf 4 Aggregat-Tabellen für Per-Feld-Provenance,
+        # source_hash TEXT-Spalte auf monatsdaten + investition_monatsdaten für
+        # Idempotenz-Detection bei Cloud-/CSV-Re-Imports (P2-Lieferung).
+        # Helper write_with_provenance() liest/schreibt diese Spalten erst ab P3.
+        for tbl in ('monatsdaten', 'investition_monatsdaten',
+                    'tages_zusammenfassung', 'tages_energie_profil'):
+            if tbl in inspector.get_table_names():
+                existing = {col['name'] for col in inspector.get_columns(tbl)}
+                if 'source_provenance' not in existing:
+                    connection.execute(text(
+                        f"ALTER TABLE {tbl} ADD COLUMN source_provenance JSON "
+                        "NOT NULL DEFAULT '{}'"
+                    ))
+                    # Idempotenz-Sicherheitsnetz für ältere SQLite-Versionen,
+                    # bei denen DEFAULT '{}' beim ALTER nicht rückwirkend wirkt.
+                    connection.execute(text(
+                        f"UPDATE {tbl} SET source_provenance = '{{}}' "
+                        "WHERE source_provenance IS NULL"
+                    ))
+        for tbl in ('monatsdaten', 'investition_monatsdaten'):
+            if tbl in inspector.get_table_names():
+                existing = {col['name'] for col in inspector.get_columns(tbl)}
+                if 'source_hash' not in existing:
+                    connection.execute(text(
+                        f"ALTER TABLE {tbl} ADD COLUMN source_hash VARCHAR(80)"
+                    ))
+
         # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
         if 'infothek_eintraege' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}
@@ -527,7 +555,7 @@ async def init_db():
     Wird beim App-Start aufgerufen.
     """
     # Importiere alle Models damit sie registriert werden
-    from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot, mqtt_live_snapshot, tages_energie_profil, mqtt_gateway_mapping, infothek, api_cache, sensor_snapshot
+    from backend.models import anlage, monatsdaten, investition, strompreis, settings as settings_model, pvgis_prognose, activity_log, mqtt_energy_snapshot, mqtt_live_snapshot, tages_energie_profil, mqtt_gateway_mapping, infothek, api_cache, sensor_snapshot, data_provenance_log
 
     async with engine.begin() as conn:
         # Migrationen ausführen

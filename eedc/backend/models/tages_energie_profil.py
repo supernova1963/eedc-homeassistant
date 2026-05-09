@@ -13,7 +13,7 @@ Zwei Tabellen:
 """
 
 from datetime import datetime, date
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     Integer, Float, String, Date, DateTime, ForeignKey,
@@ -92,6 +92,9 @@ class TagesEnergieProfil(Base):
     # Per-Komponenten-Aufschlüsselung (wie Tagesverlauf-Butterfly)
     # z.B. {"pv_3": 2.1, "waermepumpe_5": -0.8, "haushalt": -1.2}
     komponenten: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
+    source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -192,6 +195,9 @@ class TagesZusammenfassung(Base):
     # z.B. {"wp_starts_anzahl": {"5": 12}} = WP-Investition 5 hatte 12 Starts an dem Tag.
     # Wird aus Snapshot-Differenz Tag-Anfang vs. Folgetag-Anfang berechnet.
     komponenten_starts: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
+    source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

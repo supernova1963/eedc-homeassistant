@@ -171,6 +171,12 @@ class InvestitionMonatsdaten(Base):
     einsparung_monat_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     co2_einsparung_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
+    source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    # Idempotenz-Hash für Cloud-/CSV-Re-Imports (P2-Lieferung).
+    source_hash: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

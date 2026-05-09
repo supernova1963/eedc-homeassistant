@@ -5,8 +5,8 @@ Speichert die monatlichen Energie-Messwerte einer Anlage.
 """
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import Integer, Float, String, DateTime, ForeignKey, UniqueConstraint
+from typing import Any, Optional
+from sqlalchemy import Integer, Float, String, DateTime, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
@@ -87,6 +87,15 @@ class Monatsdaten(Base):
     # Metadaten
     datenquelle: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # manual, csv, ha_import
     notizen: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+
+    # Per-Feld-Provenance (Etappe 3d Päckchen 1, KONZEPT-DATENPIPELINE.md Sektion 3.2).
+    # Dict: field_name → {"source": label, "writer": id, "at": iso, "input_hash": ...}
+    # Wird in P1 nur angelegt; aktive Konsumenten kommen ab P3 (Konflikt-Resolver).
+    source_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    # Idempotenz-Hash für Cloud-/CSV-Re-Imports (P2-Lieferung). NULL solange kein
+    # idempotenter Import-Pfad geschrieben hat.
+    source_hash: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
