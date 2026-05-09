@@ -24,6 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.services.energie_profil._provenance_helpers import (
+    seed_tep_provenance,
+    seed_tz_provenance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +67,10 @@ async def aggregate_day(
     from backend.services.live_power_service import get_live_power_service
 
     service = get_live_power_service()
+    # Provenance-Writer codiert die Trigger-Quelle (Scheduler / Monatsabschluss /
+    # manuelles Reaggregate). Source bleibt einheitlich `auto:monatsabschluss`
+    # (Stufe 3) — siehe seed_tz_provenance / seed_tep_provenance.
+    auto_writer = f"energieprofil:{datenquelle}"
 
     # Sensor-Mapping prüfen
     sensor_mapping = anlage.sensor_mapping or {}
@@ -362,6 +370,7 @@ async def aggregate_day(
             wp_starts_anzahl=wp_starts_pro_stunde.get(h),
         )
         db.add(profil)
+        seed_tep_provenance(profil, writer=auto_writer)
         stunden_count += 1
 
     # ── Börsenpreis-Tagesaggregation ────────────────────────────────────
@@ -464,6 +473,7 @@ async def aggregate_day(
         setattr(zusammenfassung, field, val)
 
     db.add(zusammenfassung)
+    seed_tz_provenance(zusammenfassung, writer=auto_writer)
     await db.flush()
 
     logger.info(

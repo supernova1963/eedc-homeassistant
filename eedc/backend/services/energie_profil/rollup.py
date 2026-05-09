@@ -18,8 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesZusammenfassung
+from backend.services.provenance import write_with_provenance
 
 logger = logging.getLogger(__name__)
+
+# Auto-Aggregation aus Tageswerten in 5 Monatsdaten-Felder. Source-Klasse
+# AUTO_AGGREGATION (Stufe 3) — manuelle Eingabe via Wizard/Form (Stufe 1)
+# schlägt das, was den User-Override-Use-Case strukturell schützt.
+_ROLLUP_SOURCE = "auto:monatsabschluss"
+_ROLLUP_WRITER = "rollup_month"
 
 
 async def rollup_month(
@@ -77,16 +84,28 @@ async def rollup_month(
     pr_vals = [t.performance_ratio for t in tage if t.performance_ratio is not None]
     peak_bezug_vals = [t.peak_netzbezug_kw for t in tage if t.peak_netzbezug_kw is not None]
 
-    md.ueberschuss_kwh = round(sum(ueberschuss_vals), 1) if ueberschuss_vals else None
-    md.defizit_kwh = round(sum(defizit_vals), 1) if defizit_vals else None
-    md.batterie_vollzyklen = round(sum(zyklen_vals), 1) if zyklen_vals else None
-    md.performance_ratio = round(sum(pr_vals) / len(pr_vals), 3) if pr_vals else None
-    md.peak_netzbezug_kw = round(max(peak_bezug_vals), 2) if peak_bezug_vals else None
+    rollup_values: dict[str, float | None] = {
+        "ueberschuss_kwh": round(sum(ueberschuss_vals), 1) if ueberschuss_vals else None,
+        "defizit_kwh": round(sum(defizit_vals), 1) if defizit_vals else None,
+        "batterie_vollzyklen": round(sum(zyklen_vals), 1) if zyklen_vals else None,
+        "performance_ratio": round(sum(pr_vals) / len(pr_vals), 3) if pr_vals else None,
+        "peak_netzbezug_kw": round(max(peak_bezug_vals), 2) if peak_bezug_vals else None,
+    }
+    # Per-Feld durch den Resolver — manuelle Korrektur via Wizard/Form
+    # (Source `manual:form`) schlägt diesen Auto-Rollup automatisch.
+    for feld, wert in rollup_values.items():
+        if wert is None:
+            continue
+        await write_with_provenance(
+            db, md, feld, wert,
+            source=_ROLLUP_SOURCE, writer=_ROLLUP_WRITER,
+        )
 
     logger.info(
         f"Monat {jahr}/{monat:02d} Anlage {anlage_id}: "
         f"{len(tage)} Tage aggregiert, "
-        f"Überschuss={md.ueberschuss_kwh}kWh, Defizit={md.defizit_kwh}kWh"
+        f"Überschuss={rollup_values['ueberschuss_kwh']}kWh, "
+        f"Defizit={rollup_values['defizit_kwh']}kWh"
     )
 
     return True
