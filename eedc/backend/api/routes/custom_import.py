@@ -832,13 +832,20 @@ async def apply_custom_import(
     geschuetzt_count = 0
     geschuetzte_felder: list[str] = []
 
-    async def _track_upsert(*args, **kwargs):
-        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
+    def _record_upsert(upsert_res) -> None:
+        """Sammler für Wizard-Telemetrie. Sowohl `_track_upsert` als auch der
+        `on_upsert`-Callback der Helpers (`_distribute_*`,
+        `_import_investition_monatsdaten_v09`) rufen dies, damit indirekt
+        geschriebene Felder nicht ohne Tracking durchschlüpfen."""
         nonlocal geschuetzt_count
         geschuetzt_count += upsert_res.rejected_count
         for sub_key in upsert_res.rejected_fields:
             if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
                 geschuetzte_felder.append(sub_key)
+
+    async def _track_upsert(*args, **kwargs):
+        upsert_res = await _upsert_investition_monatsdaten(*args, **kwargs)
+        _record_upsert(upsert_res)
         return upsert_res
 
     def parse_float(val: str) -> Optional[float]:
@@ -904,6 +911,7 @@ async def apply_custom_import(
                 summen = await _import_investition_monatsdaten_v09(
                     db, row, parse_float, investitionen, jahr, monat, ueberschreiben,
                     source="manual:csv_import", writer="csv_wizard",
+                    on_upsert=_record_upsert,
                 )
 
             # ── Investitions-Felder aus manuellem Mapping (inv:ID:feld) ──────
@@ -992,6 +1000,7 @@ async def apply_custom_import(
                     w = await _distribute_legacy_pv_to_modules(
                         db, pv_mapped, pv_module, jahr, monat, ueberschreiben,
                         source="manual:csv_import", writer="csv_wizard",
+                        on_upsert=_record_upsert,
                     )
                     if importiert == 0:
                         warnungen.extend(w)
@@ -1009,6 +1018,7 @@ async def apply_custom_import(
                         db, bat_ladung_mapped, bat_entladung_mapped or 0,
                         speicher, jahr, monat, ueberschreiben,
                         source="manual:csv_import", writer="csv_wizard",
+                        on_upsert=_record_upsert,
                     )
                     if importiert == 0:
                         warnungen.extend(w)

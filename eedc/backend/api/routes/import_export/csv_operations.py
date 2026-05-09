@@ -251,6 +251,17 @@ async def import_csv(
     geschuetzt_count = 0
     geschuetzte_felder: list[str] = []
 
+    def _record_upsert(upsert_res) -> None:
+        """Sammler für Wizard-Telemetrie. Wird via `on_upsert`-Callback aus
+        den Helpers (`_distribute_*`, `_import_investition_monatsdaten_v09`,
+        `_import_investition_monatsdaten_legacy`) gerufen, damit indirekt
+        geschriebene Felder nicht ohne Tracking durchschlüpfen."""
+        nonlocal geschuetzt_count
+        geschuetzt_count += upsert_res.rejected_count
+        for sub_key in upsert_res.rejected_fields:
+            if len(geschuetzte_felder) < 15 and sub_key not in geschuetzte_felder:
+                geschuetzte_felder.append(sub_key)
+
     pv_module_vorhanden = any(inv.typ == "pv-module" for inv in investitionen)
     speicher_vorhanden = any(inv.typ == "speicher" for inv in investitionen)
 
@@ -332,6 +343,7 @@ async def import_csv(
                 summen = await _import_investition_monatsdaten_v09(
                     db, row, parse_float, investitionen, jahr, monat, ueberschreiben,
                     source="manual:csv_backup", writer="csv_backup_restore",
+                    on_upsert=_record_upsert,
                 )
 
             # Legacy-Spalten Validierung
@@ -365,6 +377,7 @@ async def import_csv(
                     migration_warnungen = await _distribute_legacy_pv_to_modules(
                         db, pv_erzeugung_explicit, pv_module_list, jahr, monat, ueberschreiben,
                         source="manual:csv_backup", writer="csv_backup_restore",
+                        on_upsert=_record_upsert,
                     )
                     warnungen.extend(migration_warnungen)
                     pv_erzeugung = pv_erzeugung_explicit
@@ -419,6 +432,7 @@ async def import_csv(
                         speicher_list,
                         jahr, monat, ueberschreiben,
                         source="manual:csv_backup", writer="csv_backup_restore",
+                        on_upsert=_record_upsert,
                     )
                     warnungen.extend(migration_warnungen)
                     # Für Legacy-Feld in Monatsdaten (Fallback)
@@ -509,6 +523,7 @@ async def import_csv(
             await _import_investition_monatsdaten_legacy(
                 db, row, parse_float, inv_by_type, jahr, monat, ueberschreiben,
                 source="manual:csv_backup", writer="csv_backup_restore",
+                on_upsert=_record_upsert,
             )
 
             importiert += 1
