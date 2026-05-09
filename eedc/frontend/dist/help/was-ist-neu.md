@@ -1,15 +1,25 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.4)
+> **Stand:** Mai 2026 (v3.26.7)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
-> **Kein Banner, kein Pop-up:** EEDC zeigt diese Liste nicht ungefragt an. HA-Add-on-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
+> **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
 
 ---
 
 ## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### UX-Bündel aus Forum-Beobachtungen *(v3.26.7)*
+
+> ✨ **Vier kleine UX-Verbesserungen aus aktiven Tester-Anfragen, in einem Patch zusammengefasst.**
+>
+> - **Live-Heute Batterie-Pfeile** zeigen jetzt in dieselbe Richtung wie das HA Energy Dashboard: ▼ wenn Strom in den Speicher rein, ▲ wenn raus. Vorher umgekehrt (Tank-Metapher), das hat verwirrt. (#201)
+> - **Schreibweise „eedc" durchgängig** (statt gemischt EEDC/eedc), und **„Home Assistant Add-on" → „Home Assistant App"**, wo es um eedc selbst geht. HA-eigene Menü-Pfade („Einstellungen → Add-ons → ⋮") bleiben natürlich — das heißt in HA wirklich so. (#199)
+> - **Redundante Seitentitel entfernt** im Cockpit, in Auswertungen, Aussichten, Live-Daten, Community-Vergleich und mehreren Einstellungs-Seiten. Da die Top-/Sub-Navigation immer sichtbar ist, war die zusätzliche `<h1>` direkt darunter eine reine Doppelung. Pages mit dynamischem Untertitel (Anlagenname etc.) bleiben unverändert. (#196)
+>
+> Alle drei UX-Punkte kommen aus detLAN-Feedback. Auch Ronnys gemeldete „Live-Netzbezug zu hoch"-Anomalie (#200) ist code-seitig bereits seit v3.26.6 gefixt — die Verifikation läuft.
 
 ### Hotfix: Wetter-Backfill schließt jetzt auch die letzten 5 Tage *(v3.26.4)*
 
