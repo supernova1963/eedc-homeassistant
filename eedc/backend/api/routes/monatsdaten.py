@@ -18,6 +18,22 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
 from backend.core.field_definitions import get_pv_erzeugung_kwh, get_wp_strom_kwh
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
+from backend.services.provenance import (
+    log_delete,
+    seed_provenance,
+    write_json_subkey_with_provenance,
+    write_with_provenance,
+)
+
+
+# Source-Tag-Konstanten (Etappe 3d Päckchen 3)
+_MANUAL_WRITER = "monatsdaten_form"
+_AUTO_WRITER = "monatsdaten_compute"
+
+# Berechnete Aggregate werden serverseitig aus User-Eingaben abgeleitet.
+# Source `auto:monatsabschluss` (Stufe 3) erlaubt einem späteren manuellen
+# Override (Stufe 1), den abgeleiteten Wert zu schlagen — bewusst.
+_COMPUTED_FIELDS = ("direktverbrauch_kwh", "eigenverbrauch_kwh", "gesamtverbrauch_kwh")
 
 
 # =============================================================================
@@ -445,6 +461,26 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
 
     db.add(md)
     await db.flush()
+
+    # Provenance-Markierung für fresh row: User-Eingabe vs. abgeleitete Felder
+    user_fields = [
+        f for f in md_data
+        if f not in {"anlage_id", "jahr", "monat"}
+        and f not in _COMPUTED_FIELDS
+        and getattr(md, f, None) is not None
+    ]
+    if user_fields:
+        seed_provenance(
+            md, source="manual:form", writer=_MANUAL_WRITER,
+            fields=user_fields,
+        )
+    auto_fields = [f for f in _COMPUTED_FIELDS if getattr(md, f, None) is not None]
+    if auto_fields:
+        seed_provenance(
+            md, source="auto:monatsabschluss", writer=_AUTO_WRITER,
+            fields=auto_fields,
+        )
+
     await db.refresh(md)
 
     # Investitions-Monatsdaten speichern (E-Auto km, Speicher Ladung, WP Verbrauch, etc.)
@@ -458,16 +494,15 @@ async def _save_investitionen_monatsdaten(
     db: AsyncSession,
     investitionen_daten: dict[str, dict[str, Any]],
     jahr: int,
-    monat: int
+    monat: int,
 ) -> None:
     """
     Speichert Investitions-spezifische Monatsdaten (E-Auto km, Speicher Ladung, etc.).
 
-    Args:
-        db: Datenbank-Session
-        investitionen_daten: Dict mit investition_id als Key und verbrauch_daten als Value
-        jahr: Jahr
-        monat: Monat
+    Provenance: Source `manual:form` pro `verbrauch_daten`-Sub-Key (Etappe 3d
+    Päckchen 3). Per-Sub-Key durch den Resolver, kein Komplett-Override des
+    JSON-Dicts mehr — sonst würden manuell gepflegte Sub-Keys von einem
+    parallelen Cloud-Sync überschrieben.
     """
     for inv_id_str, verbrauch_daten in investitionen_daten.items():
         try:
@@ -488,19 +523,28 @@ async def _save_investitionen_monatsdaten(
             .where(InvestitionMonatsdaten.monat == monat)
         )
         existing = existing_result.scalar_one_or_none()
+        sub_payload = verbrauch_daten or {}
 
         if existing:
-            # Update existierende Daten
-            existing.verbrauch_daten = verbrauch_daten
+            for sub_key, value in sub_payload.items():
+                await write_json_subkey_with_provenance(
+                    db, existing, "verbrauch_daten", sub_key, value,
+                    source="manual:form", writer=_MANUAL_WRITER,
+                )
         else:
-            # Neue Daten erstellen
             imd = InvestitionMonatsdaten(
                 investition_id=inv_id,
                 jahr=jahr,
                 monat=monat,
-                verbrauch_daten=verbrauch_daten
+                verbrauch_daten=sub_payload,
             )
             db.add(imd)
+            if sub_payload:
+                await db.flush()
+                seed_provenance(
+                    imd, source="manual:form", writer=_MANUAL_WRITER,
+                    json_subkeys={"verbrauch_daten": list(sub_payload.keys())},
+                )
 
     await db.flush()
 
@@ -533,17 +577,35 @@ async def update_monatsdaten(
     # investitionen_daten separat behandeln
     investitionen_daten = data.investitionen_daten
     update_data = data.model_dump(exclude_unset=True, exclude={'investitionen_daten'})
-    for field, value in update_data.items():
-        setattr(md, field, value)
 
-    # Berechnete Felder aktualisieren (werden berechnet wenn pv_erzeugung vorhanden)
+    # User-Eingaben durch Resolver — manuelle Werte gewinnen gegen alle
+    # niedriger priorisierten Quellen (auto/external/fallback/legacy).
+    for field, value in update_data.items():
+        await write_with_provenance(
+            db, md, field, value,
+            source="manual:form", writer=_MANUAL_WRITER,
+        )
+
+    # Berechnete Felder aktualisieren (werden berechnet wenn pv_erzeugung vorhanden).
+    # Source `auto:monatsabschluss` — wird von späterer manueller Eingabe
+    # geschlagen, schlägt aber legacy:unknown und fallback.
+    new_computed: dict[str, Optional[float]] = {}
     if md.pv_erzeugung_kwh is not None:
-        md.direktverbrauch_kwh = max(0, md.pv_erzeugung_kwh - md.einspeisung_kwh - (md.batterie_ladung_kwh or 0))
-        md.eigenverbrauch_kwh = md.direktverbrauch_kwh + (md.batterie_entladung_kwh or 0)
-        md.gesamtverbrauch_kwh = md.eigenverbrauch_kwh + md.netzbezug_kwh
+        new_computed["direktverbrauch_kwh"] = max(
+            0, md.pv_erzeugung_kwh - md.einspeisung_kwh - (md.batterie_ladung_kwh or 0)
+        )
+        new_computed["eigenverbrauch_kwh"] = (
+            new_computed["direktverbrauch_kwh"] + (md.batterie_entladung_kwh or 0)
+        )
+        new_computed["gesamtverbrauch_kwh"] = new_computed["eigenverbrauch_kwh"] + md.netzbezug_kwh
     elif md.einspeisung_kwh > 0 or md.netzbezug_kwh > 0:
-        # Fallback: Gesamtverbrauch kann geschätzt werden
-        md.gesamtverbrauch_kwh = md.netzbezug_kwh + md.einspeisung_kwh
+        new_computed["gesamtverbrauch_kwh"] = md.netzbezug_kwh + md.einspeisung_kwh
+
+    for field, value in new_computed.items():
+        await write_with_provenance(
+            db, md, field, value,
+            source="auto:monatsabschluss", writer=_AUTO_WRITER,
+        )
 
     await db.flush()
     await db.refresh(md)
@@ -571,5 +633,8 @@ async def delete_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get
 
     if not md:
         raise HTTPException(status_code=404, detail="Monatsdaten nicht gefunden")
+
+    # Audit-Log VOR dem Delete (sonst sind die Natural-Keys nicht mehr lesbar).
+    log_delete(db, md, source="manual:form", writer=_MANUAL_WRITER)
 
     await db.delete(md)

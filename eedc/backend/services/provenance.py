@@ -313,6 +313,39 @@ def seed_provenance(
     flag_modified(obj, "source_provenance")
 
 
+def log_delete(
+    db: AsyncSession,
+    obj: Any,
+    *,
+    source: str,
+    writer: str,
+    decision_reason: str = "manual_delete",
+) -> None:
+    """Audit-Log-Eintrag für DELETE-Operation auf einer Aggregat-Row.
+
+    DELETE ist auch ein Schreib-Akt: das Entfernen einer Row löscht alle
+    Felder gleichzeitig. Wir loggen pro DELETE einen einzigen Eintrag
+    mit Sentinel-Key `__row__` und `decision="applied"` — analog zu
+    `log_payload_noop` für Re-Imports.
+
+    Anwendung: `routes/monatsdaten.py:delete_monatsdaten` u. ä.
+    Aufrufer ruft VOR `db.delete(obj)`, damit `_row_pk_json(obj)` noch
+    die Natural-Keys serialisieren kann.
+    """
+    _ = SOURCE_LABELS[source]  # KeyError bei unbekanntem Label
+    db.add(_make_audit_entry(
+        obj=obj,
+        provenance_key="__row__",
+        effective_source=source,
+        writer=writer,
+        old_value=None,
+        new_value=None,
+        input_hash=None,
+        decision="applied",
+        decision_reason=decision_reason,
+    ))
+
+
 def log_payload_noop(
     db: AsyncSession,
     obj: Any,

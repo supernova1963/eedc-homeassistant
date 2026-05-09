@@ -35,9 +35,17 @@ from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.services.activity_service import log_activity
+from backend.services.provenance import (
+    write_json_subkey_with_provenance,
+    write_with_provenance,
+)
 
 
 router = APIRouter(prefix="/monatsabschluss", tags=["Monatsabschluss"])
+
+# Wizard-Save ist User-Eingabe = `manual:form`. Auto-Aggregation läuft danach
+# im Background-Task (services/monatsabschluss_aggregator.py).
+_WIZARD_WRITER = "monatsabschluss_wizard"
 
 
 # =============================================================================
@@ -838,14 +846,27 @@ async def save_monatsabschluss(
             monat=monat,
         )
         db.add(monatsdaten)
+        try:
+            await db.flush()  # ID benötigt für Provenance-Audit-Log-Eintrag
+        except Exception as e:
+            logger.error(f"Monatsabschluss flush Monatsdaten fehlgeschlagen: {type(e).__name__}: {e}")
+            raise HTTPException(status_code=500, detail=f"Fehler beim Speichern der Monatsdaten: {e}")
 
-    # Basis-Felder generisch aus Registry setzen
+    # Basis-Felder generisch aus Registry setzen — durch den Provenance-Resolver,
+    # damit manuelle Wizard-Eingaben gegen frühere Cloud/HA-Stats/legacy-Werte
+    # gewinnen (Source `manual:form`, Stufe 1).
     # direktverbrauch_kwh wird automatisch berechnet (PV-Erzeugung - Einspeisung)
     for feld in ALLE_MONATSDATEN_FELDNAMEN:
         wert = getattr(daten, feld, None)
-        if wert is not None:
-            setattr(monatsdaten, feld, wert)
+        if wert is None:
+            continue
+        await write_with_provenance(
+            db, monatsdaten, feld, wert,
+            source="manual:form", writer=_WIZARD_WRITER,
+        )
     if daten.datenquelle:
+        # `datenquelle` ist Metadata-Feld (welcher Wizard-Pfad wurde benutzt) —
+        # kein eigener Provenance-Eintrag nötig.
         monatsdaten.datenquelle = daten.datenquelle
 
     try:
@@ -877,22 +898,35 @@ async def save_monatsabschluss(
                 verbrauch_daten={},
             )
             db.add(imd)
+            try:
+                await db.flush()  # ID für Provenance-Audit-Log-Eintrag
+            except Exception as e:
+                logger.error(f"Monatsabschluss flush Investition {inv_werte.investition_id} fehlgeschlagen: {type(e).__name__}: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Fehler beim Speichern der Investition {inv_werte.investition_id}: {e}"
+                )
 
-        # Felder in verbrauch_daten speichern
-        verbrauch_daten = imd.verbrauch_daten or {}
+        # Felder in verbrauch_daten via Resolver — pro Sub-Key, damit ein
+        # paralleler Cloud-Sync die manuell gepflegten Felder NICHT
+        # überschreiben kann (P3 Akzeptanz Risiko #1).
         for feld_wert in inv_werte.felder:
-            verbrauch_daten[feld_wert.feld] = feld_wert.wert
+            await write_json_subkey_with_provenance(
+                db, imd, "verbrauch_daten", feld_wert.feld, feld_wert.wert,
+                source="manual:form", writer=_WIZARD_WRITER,
+            )
 
-        # Sonstige Positionen (Erträge & Ausgaben) speichern
+        # Sonstige Positionen (Erträge & Ausgaben) — landen als ein Sub-Key
+        # mit Listen-Wert, ebenfalls über den Resolver.
         if inv_werte.sonstige_positionen is not None:
             gueltige = [
                 p for p in inv_werte.sonstige_positionen
                 if isinstance(p, dict) and p.get("betrag", 0) > 0 and str(p.get("bezeichnung", "")).strip()
             ]
-            verbrauch_daten["sonstige_positionen"] = gueltige
-
-        imd.verbrauch_daten = verbrauch_daten
-        flag_modified(imd, "verbrauch_daten")
+            await write_json_subkey_with_provenance(
+                db, imd, "verbrauch_daten", "sonstige_positionen", gueltige,
+                source="manual:form", writer=_WIZARD_WRITER,
+            )
 
         try:
             await db.flush()
