@@ -286,6 +286,14 @@ async def apply_import(
     fehler: list[str] = []
     warnungen: list[str] = []
 
+    # Etappe 3d Päckchen 2: Source-/Writer-Konstanten für Provenance-Wrapper.
+    # Aktuell werden alle Datenquellen unter external:portal_import geführt
+    # (gleiche Hierarchie-Klasse wie external:cloud_import:*), weil das
+    # Frontend den konkreten Cloud-Provider-Slug nicht durchreicht. writer
+    # differenziert via datenquelle für Diagnose-Queries auf data_provenance_log.
+    _PROVENANCE_SOURCE = "external:portal_import"
+    _PROVENANCE_WRITER = f"portal_apply:{datenquelle}"
+
     for monat_input in data.monate:
         try:
             jahr = monat_input.jahr
@@ -331,12 +339,14 @@ async def apply_import(
                             if pv_anteil > 0:
                                 await _upsert_investition_monatsdaten(
                                     db, inv.id, jahr, monat,
-                                    {"pv_erzeugung_kwh": pv_anteil}, ueberschreiben
+                                    {"pv_erzeugung_kwh": pv_anteil}, ueberschreiben,
+                                    source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
                                 )
                     else:
                         # Proportional nach kWp (Default)
                         w = await _distribute_legacy_pv_to_modules(
-                            db, pv_kwh, pv_module, jahr, monat, ueberschreiben
+                            db, pv_kwh, pv_module, jahr, monat, ueberschreiben,
+                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
                         )
                         if importiert == 0:
                             warnungen.extend(w)
@@ -360,13 +370,15 @@ async def apply_import(
                                 vd["entladung_kwh"] = round(bat_entladung_raw * anteil, 1)
                             if vd:
                                 await _upsert_investition_monatsdaten(
-                                    db, inv.id, jahr, monat, vd, ueberschreiben
+                                    db, inv.id, jahr, monat, vd, ueberschreiben,
+                                    source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
                                 )
                     else:
                         # Proportional nach Kapazität (Default)
                         w = await _distribute_legacy_battery_to_storages(
                             db, bat_ladung_raw or 0, bat_entladung_raw or 0,
-                            speicher, jahr, monat, ueberschreiben
+                            speicher, jahr, monat, ueberschreiben,
+                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
                         )
                         if importiert == 0:
                             warnungen.extend(w)
@@ -402,7 +414,8 @@ async def apply_import(
                     if monat_input.wallbox_ladevorgaenge is not None:
                         verbrauch["ladevorgaenge"] = monat_input.wallbox_ladevorgaenge
                     await _upsert_investition_monatsdaten(
-                        db, wb.id, jahr, monat, verbrauch, ueberschreiben
+                        db, wb.id, jahr, monat, verbrauch, ueberschreiben,
+                        source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
                     )
                     if len(wallboxen) > 1 and not (zuordnung and zuordnung.wallbox_id) and importiert == 0:
                         warnungen.append(
@@ -428,6 +441,7 @@ async def apply_import(
                         db, ea.id, jahr, monat,
                         {"km_gefahren": monat_input.eauto_km_gefahren},
                         ueberschreiben,
+                        source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
                     )
 
             importiert += 1

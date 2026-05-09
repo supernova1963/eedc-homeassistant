@@ -884,7 +884,8 @@ async def apply_custom_import(
             summen = {"pv_erzeugung_sum": 0.0, "batterie_ladung_sum": 0.0, "batterie_entladung_sum": 0.0}
             if investitionen:
                 summen = await _import_investition_monatsdaten_v09(
-                    db, row, parse_float, investitionen, jahr, monat, ueberschreiben
+                    db, row, parse_float, investitionen, jahr, monat, ueberschreiben,
+                    source="manual:csv_import", writer="csv_wizard",
                 )
 
             # ── Investitions-Felder aus manuellem Mapping (inv:ID:feld) ──────
@@ -916,7 +917,8 @@ async def apply_custom_import(
             # Manuell gemappte Investitions-Felder speichern + Summen berechnen
             for inv_id_int, verbrauch_daten in inv_collected.items():
                 await _upsert_investition_monatsdaten(
-                    db, inv_id_int, jahr, monat, verbrauch_daten, ueberschreiben
+                    db, inv_id_int, jahr, monat, verbrauch_daten, ueberschreiben,
+                    source="manual:csv_import", writer="csv_wizard",
                 )
                 # PV- und Batterie-Summen für Monatsdaten-Aggregat pflegen
                 if "pv_erzeugung_kwh" in verbrauch_daten:
@@ -970,7 +972,8 @@ async def apply_custom_import(
                 # Nur generischer Wert → auf PV-Module verteilen (wenn vorhanden)
                 if pv_module:
                     w = await _distribute_legacy_pv_to_modules(
-                        db, pv_mapped, pv_module, jahr, monat, ueberschreiben
+                        db, pv_mapped, pv_module, jahr, monat, ueberschreiben,
+                        source="manual:csv_import", writer="csv_wizard",
                     )
                     if importiert == 0:
                         warnungen.extend(w)
@@ -986,7 +989,8 @@ async def apply_custom_import(
                 if bat_ladung_mapped is not None and bat_ladung_mapped > 0 and speicher:
                     w = await _distribute_legacy_battery_to_storages(
                         db, bat_ladung_mapped, bat_entladung_mapped or 0,
-                        speicher, jahr, monat, ueberschreiben
+                        speicher, jahr, monat, ueberschreiben,
+                        source="manual:csv_import", writer="csv_wizard",
                     )
                     if importiert == 0:
                         warnungen.extend(w)
