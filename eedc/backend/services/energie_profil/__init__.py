@@ -2,15 +2,42 @@
 Energie-Profil-Subsystem.
 
 Aggregation eines Tages aus Snapshot-Boundaries + Tagesverlauf-Daten zur
-TagesZusammenfassung + 24 TagesEnergieProfil-Zeilen. Zerlegt aus
-`services/energie_profil_service.py` im Rahmen Etappe 3c P3 — der primäre
-Aggregator (`aggregate_day`) lebt jetzt hier, alle weiteren Pfade
-(`backfill_*`, `rollup_month`, `aggregate_yesterday_all`,
-`aggregate_today_all`) bleiben vorerst im Modul-File und werden bei Bedarf
-in späteren Päckchen extrahiert (siehe KONZEPT-DATENPIPELINE.md
-Päckchen 3, Refactoring-Tail).
+TagesZusammenfassung + 24 TagesEnergieProfil-Zeilen, plus Monats-Rollup,
+Vollbackfill aus HA Long-Term Statistics und Scheduler-Jobs.
+
+Refactoring-Etappen:
+- 3c P3 (v3.26.8): `aggregate_day` extrahiert (`aggregator.py`).
+- 3d P3: `rollup_month`, `backfill_*`, `aggregate_yesterday_all` /
+  `aggregate_today_all` extrahiert (`rollup.py`, `backfill.py`,
+  `scheduler_jobs.py`). Internal helpers (`_get_wetter_ist`, `_get_soc_history`,
+  `_get_strompreis_stunden`, `_tage_zurueck`, `StrompreisStunden`) bleiben
+  vorerst im `services/energie_profil_service.py`-Backbone — sie sind
+  Kanalstrukturen ohne eigene Schreib-Pfade und werden bei Bedarf in einem
+  späteren Refactoring-Tail (3d P5/P6 oder Folge-Sprint) ausgelagert.
 """
 
 from backend.services.energie_profil.aggregator import aggregate_day
+from backend.services.energie_profil.backfill import (
+    BackfillResult,
+    BackfillStatus,
+    backfill_from_statistics,
+    backfill_range,
+    resolve_and_backfill_from_statistics,
+)
+from backend.services.energie_profil.rollup import rollup_month
+from backend.services.energie_profil.scheduler_jobs import (
+    aggregate_today_all,
+    aggregate_yesterday_all,
+)
 
-__all__ = ["aggregate_day"]
+__all__ = [
+    "aggregate_day",
+    "aggregate_today_all",
+    "aggregate_yesterday_all",
+    "backfill_from_statistics",
+    "backfill_range",
+    "BackfillResult",
+    "BackfillStatus",
+    "resolve_and_backfill_from_statistics",
+    "rollup_month",
+]
