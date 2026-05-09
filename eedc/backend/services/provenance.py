@@ -272,6 +272,39 @@ async def write_with_provenance(
     )
 
 
+def log_payload_noop(
+    db: AsyncSession,
+    obj: Any,
+    *,
+    source: str,
+    writer: str,
+    input_hash: str,
+    sentinel_key: str = "__payload__",
+) -> None:
+    """Loggt ein einzelnes no_op_same_value-Event auf Payload-Ebene.
+
+    Anwendung: Re-Import-Pfade (Cloud-Sync, CSV-Re-Import), die einen
+    identischen Payload-Hash erkennen und KEINEN einzelnen Sub-Key durch
+    den Resolver schicken müssen. Statt pro Sub-Key zu spammen,
+    dokumentieren wir EINEN Audit-Eintrag auf einem Sentinel-Key.
+
+    Diagnose-Frage: „liefert der Cloud-Sync was Neues oder nicht?" lässt
+    sich danach via `SELECT decision, COUNT(*) FROM data_provenance_log
+    GROUP BY decision` beantworten.
+    """
+    db.add(_make_audit_entry(
+        obj=obj,
+        provenance_key=sentinel_key,
+        effective_source=source,
+        writer=writer,
+        old_value=None,
+        new_value=None,
+        input_hash=input_hash,
+        decision="no_op_same_value",
+        decision_reason=f"identical payload hash from {source}",
+    ))
+
+
 async def write_json_subkey_with_provenance(
     db: AsyncSession,
     obj: Any,
