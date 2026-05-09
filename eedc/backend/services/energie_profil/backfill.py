@@ -32,9 +32,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.anlage import Anlage
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.services.energie_profil._provenance_helpers import (
+    seed_tep_provenance,
+    seed_tz_provenance,
+)
 from backend.services.energie_profil.aggregator import aggregate_day
 
 logger = logging.getLogger(__name__)
+
+# Backfill aus HA Long-Term Statistics ist eine externe autoritative
+# Datenquelle (Source `external:ha_statistics`, Stufe 2). Manuelle Form-
+# Werte (Stufe 1) gewinnen weiterhin; gegen Auto-Aggregation/Fallback/
+# Legacy gewinnt der HA-Stats-Backfill.
+_HA_STATS_SOURCE = "external:ha_statistics"
+_HA_STATS_WRITER = "ha_statistics_backfill"
 
 
 async def backfill_range(
@@ -531,9 +542,12 @@ async def backfill_from_statistics(
             )
         )
 
-        # Gesammelte Stundendaten schreiben
+        # Gesammelte Stundendaten schreiben + Provenance setzen.
+        # delete+insert oben hat eventuelle bestehende Provenance entfernt;
+        # wir markieren die neuen Rows mit `external:ha_statistics`.
         for tep in pending_tep:
             db.add(tep)
+            seed_tep_provenance(tep, source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER)
 
         # Batterie-Vollzyklen
         vollzyklen = None
@@ -606,6 +620,7 @@ async def backfill_from_statistics(
         for field, val in preserved_prognose.items():
             setattr(tz_obj, field, val)
         db.add(tz_obj)
+        seed_tz_provenance(tz_obj, source=_HA_STATS_SOURCE, writer=_HA_STATS_WRITER)
         await db.flush()
 
         logger.info(
