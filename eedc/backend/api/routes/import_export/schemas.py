@@ -15,6 +15,12 @@ class ImportResult(BaseModel):
     uebersprungen: int
     fehler: list[str]
     warnungen: list[str] = []
+    # Etappe 3d Päckchen 2: Anzahl Feld-Werte, die durch Quellen-Hierarchie
+    # geschützt wurden. Bei CSV-Wizard meist 0, weil manual:csv_import
+    # gleichauf mit manual:form ist (Last-Writer-Wins). Trotzdem im Schema,
+    # damit Frontend einheitlich aufnehmen kann.
+    geschuetzt_count: int = 0
+    geschuetzte_felder: list[str] = []
 
 
 class JSONImportResult(BaseModel):
