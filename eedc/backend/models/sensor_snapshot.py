@@ -29,6 +29,10 @@ class SensorSnapshot(Base):
     sensor_key: Mapped[str] = mapped_column(String(100), nullable=False)
     zeitpunkt: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     wert_kwh: Mapped[float] = mapped_column(Float, nullable=False)
+    # Source-Marker (Etappe 3c P1, KONZEPT-ENERGIEPROFIL-3C.md):
+    # ha_statistics | mqtt_inbound | mqtt_live | live_fallback | unknown.
+    # Whitelist + Validation in backend.services.snapshot.source.
+    quelle: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown")
 
     __table_args__ = (
         UniqueConstraint("anlage_id", "sensor_key", "zeitpunkt",
