@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.7] - 2026-05-09 — UX-Bündel: Pfeile, Schreibweise, Seitentitel
+
+> ✨ **Vier kleine UX-Verbesserungen aus aktivem Tester-Feedback in einem Patch.** Live-Heute Batterie-Pfeile alignieren mit dem HA Energy Dashboard, „eedc" und „Home Assistant App" werden durchgängig geschrieben, redundante Seitentitel im Cockpit/Auswertungen/Aussichten/Live-Daten/Community-Vergleich und mehreren Einstellungs-Seiten sind raus.
+
+### Changed
+
+- **Live-Heute Batterie-Pfeile angepasst an HA Energy Dashboard** (#201 detLAN). eedc zeigte ▲ Ladung / ▼ Entladung (Tank-Logik), HA zeigt umgekehrt: ▼ Strom in den Speicher rein, ▲ aus dem Speicher raus. eedc folgt jetzt der HA-Konvention. Auch in der Community-Regionen-Tabelle gleichgezogen.
+- **Schreibweise „eedc" durchgängig vereinheitlicht** (#199 detLAN). Bisher gemischt EEDC/eedc, ab jetzt überall lowercase wie das Logo und CLAUDE.md-Konvention.
+- **„Home Assistant Add-on" → „Home Assistant App"** durchgehend in user-sichtbaren Strings (#199). Die HA-eigenen Menü-Pfade (z. B. „Einstellungen → Add-ons → ⋮") und Verweise auf andere HACS-Add-ons (Solar Forecast ML) bleiben unverändert.
+- **Redundante Seitentitel entfernt** (#196 detLAN). Die `<h1>`-Doppelung neben dem aktiven Tab/Sub-Tab in 14 Pages ist raus: Dashboard (Übersicht), Aussichten, Auswertung, Live-Daten, Community Vergleich, Daten-Checker, Backup, Solarprognose, Infothek, Einrichtung, Balkonkraftwerk/Speicher/E-Auto/Sonstiges Dashboards. Pages mit dynamischem Untertitel (Anlagenname, Investitions-Bezeichnung) bleiben unverändert — die Top-/Sub-Navigation zeigt die aktive Position bereits sichtbar.
+
+### Internal
+
+- **#200 Folge:** Der Code-Fix für die Live-Tageskonsumenten aus v3.26.6 (`a435a58f`) hatte Ronnys „warte auf Punkt 2"-Comment knapp überholt. Verifikations-Anfrage am Issue gepostet.
+
+---
+
 ## [3.26.6] - 2026-05-08 — Reload-Vorschau heilt sich selbst: Counter-Boundary + „Nur neu rechnen"
 
 > 🩹 **Folgehotfix nach v3.26.5** — der Reload-Pfad hatte zwei eng verwandte Lücken, die bei Forum-Tester MartyBr (Sensor-Migration Vicare→Optisplitter, Forum #462ff) sichtbar wurden: erstens überschrieb der Resnap die Folgetag-00:00-Boundary nicht, was den Counter-Tagesdelta auf falscher Skala stehen ließ. Zweitens hing das „Übernehmen" für Tage, deren Snapshots längst aktuell waren, im teuren HA-Stats-Polling fest, statt einfach nur das Aggregat neu zu rechnen. Beides gefixt — die Vorschau erkennt jetzt automatisch, ob Resnap nötig ist, oder ob ein „Nur neu rechnen" reicht.
