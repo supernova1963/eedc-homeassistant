@@ -245,6 +245,12 @@ async def import_csv(
     fehler = []
     warnungen = []
 
+    # Etappe 3d Päckchen 3: Hierarchie-Schutz-Tracking. Nicht für UPDATE-Pfad
+    # mit gleicher MANUAL-Klasse (Last-Writer-Wins, würde fälschlich als
+    # geschützt gezählt) — wir schauen explizit nach rejected_lower_priority.
+    geschuetzt_count = 0
+    geschuetzte_felder: list[str] = []
+
     pv_module_vorhanden = any(inv.typ == "pv-module" for inv in investitionen)
     speicher_vorhanden = any(inv.typ == "speicher" for inv in investitionen)
 
@@ -324,7 +330,8 @@ async def import_csv(
             summen = {"pv_erzeugung_sum": 0.0, "batterie_ladung_sum": 0.0, "batterie_entladung_sum": 0.0}
             if has_personalized_columns and investitionen:
                 summen = await _import_investition_monatsdaten_v09(
-                    db, row, parse_float, investitionen, jahr, monat, ueberschreiben
+                    db, row, parse_float, investitionen, jahr, monat, ueberschreiben,
+                    source="manual:csv_backup", writer="csv_backup_restore",
                 )
 
             # Legacy-Spalten Validierung
@@ -356,7 +363,8 @@ async def import_csv(
                     # -> Auf PV-Module verteilen
                     pv_module_list = [inv for inv in investitionen if inv.typ == "pv-module"]
                     migration_warnungen = await _distribute_legacy_pv_to_modules(
-                        db, pv_erzeugung_explicit, pv_module_list, jahr, monat, ueberschreiben
+                        db, pv_erzeugung_explicit, pv_module_list, jahr, monat, ueberschreiben,
+                        source="manual:csv_backup", writer="csv_backup_restore",
                     )
                     warnungen.extend(migration_warnungen)
                     pv_erzeugung = pv_erzeugung_explicit
@@ -409,7 +417,8 @@ async def import_csv(
                         batterie_ladung_explicit or 0,
                         batterie_entladung_explicit or 0,
                         speicher_list,
-                        jahr, monat, ueberschreiben
+                        jahr, monat, ueberschreiben,
+                        source="manual:csv_backup", writer="csv_backup_restore",
                     )
                     warnungen.extend(migration_warnungen)
                     # Für Legacy-Feld in Monatsdaten (Fallback)
@@ -459,10 +468,14 @@ async def import_csv(
                 # (Last-Writer-Wins).
                 for field_name, value in _CSV_BACKUP_FIELDS_TOP:
                     if value is not None or field_name in ("einspeisung_kwh", "netzbezug_kwh"):
-                        await write_with_provenance(
+                        result = await write_with_provenance(
                             db, existing_md, field_name, value,
                             source="manual:csv_backup", writer="csv_backup_restore",
                         )
+                        if result.decision == "rejected_lower_priority":
+                            geschuetzt_count += 1
+                            if len(geschuetzte_felder) < 15 and field_name not in geschuetzte_felder:
+                                geschuetzte_felder.append(field_name)
                 existing_md.notizen = notizen
                 existing_md.datenquelle = "csv"
             else:
@@ -507,12 +520,23 @@ async def import_csv(
 
     await db.flush()
 
+    # Etappe 3d Päckchen 3: Wizard-Hinweis bei aktivierter Quellen-Hierarchie.
+    if geschuetzt_count > 0:
+        sample = ", ".join(geschuetzte_felder[:5])
+        suffix = f" (z. B. {sample})" if sample else ""
+        warnungen.insert(0, (
+            f"{geschuetzt_count} Felder wurden durch manuell gepflegte Werte "
+            f"geschützt{suffix} — Reset über Reparatur-Werkbank wenn gewollt."
+        ))
+
     return ImportResult(
         erfolg=len(fehler) == 0,
         importiert=importiert,
         uebersprungen=uebersprungen,
         fehler=fehler[:20],
-        warnungen=warnungen[:10]
+        warnungen=warnungen[:10],
+        geschuetzt_count=geschuetzt_count,
+        geschuetzte_felder=geschuetzte_felder,
     )
 
 
