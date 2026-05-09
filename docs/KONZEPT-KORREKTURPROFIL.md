@@ -155,12 +155,17 @@ Evaluierungsphase (eingeführt v3.16.4 als Prognosen-Vergleich-Tab,
 [`KONZEPT-PROGNOSEQUELLEN-WAHL.md`](KONZEPT-PROGNOSEQUELLEN-WAHL.md)
 **konzept-intern beendet**.
 
-Die UI-Spalte „Solcast" im Prognosen-Vergleich-Tab bleibt jedoch
-**vorerst stehen** — Tester (insb. Rainer) nutzen sie aktiv zur
-Diagnose, eine eigenmächtige Entfernung wäre Tester-Pakt-Verletzung.
-Die Stratifizierungs-Card und O12-Diagnose-Card werden **additiv**
-neben der bestehenden Tab-Struktur eingeführt. Über das Entfernen
-der Solcast-Spalte wird erst nach Rainer-Rückkopplung entschieden.
+**Solcast-Spalte im Prognosen-Vergleich-Tab:** Mit Verabschiedung des
+[`KONZEPT-PROGNOSEQUELLEN-WAHL.md`](KONZEPT-PROGNOSEQUELLEN-WAHL.md) gilt
+die Linie, dass alle Mehrwege-Vergleichsanzeigen auf „gewählte Quelle vs.
+IST" reduziert werden. Die Solcast-Spalte fällt damit als eigenständige
+UI-Spalte im Vergleichs-Tab weg; Solcast bleibt im Picker als wählbare
+Vollwert-Quelle erhalten — wer Solcast als Diagnose-Werkzeug nutzt, stellt
+sie schlicht als aktive Quelle ein. Der Rückbau der Vergleichs-Spalten
+erfolgt im Rahmen von Schritt 5 der Quellenwahl-Roadmap (Frontend-Picker
++ Konsumenten-Umstellung). Die Stratifizierungs-Card und O12-Diagnose-Card
+sind bereits additiv ausgeliefert (Päckchen 1, v3.26.0) und unabhängig
+vom Vergleichs-Tab.
 
 ## Ziel-Architektur — Sonnenstand × Wetterklasse (geplant, nicht reaktiv)
 

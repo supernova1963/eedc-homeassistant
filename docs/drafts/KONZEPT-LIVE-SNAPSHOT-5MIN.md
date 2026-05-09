@@ -1,6 +1,12 @@
 # Konzept: Kaskadierte Live-Snapshots (5-Min heute, 1h historisch)
 
-> Status: **Draft**, nicht implementiert. Trigger und Reife siehe §11.
+> Status (2026-05-09): **Phase 1 Backend ausgeliefert** (v3.25.3–v3.25.6, validiert
+> 2026-05-02 nach Off-by-one-Fix state→sum). **Phase 1 Frontend offen** —
+> `live_tagesverlauf_service` auf 5-Min-Counter-Snapshots umstellen.
+> Phase 2 (`:55`-Preview entfernen, `live_verbrauchsprofil_service` umstellen)
+> noch nicht angefangen. Implementations-Details siehe
+> [project_live_snapshot_5min.md](../../../.claude/projects/-home-gernot-claude-eedc-homeassistant/memory/project_live_snapshot_5min.md)
+> in der Auto-Memory.
 
 ## 1. Motivation
 
