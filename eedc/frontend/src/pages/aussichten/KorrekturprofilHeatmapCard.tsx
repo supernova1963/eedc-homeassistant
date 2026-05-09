@@ -8,7 +8,7 @@
  *
  * Empty-State, wenn noch nie aggregiert: Button stößt eine Aggregation an.
  *
- * Strikt EEDC-intern (kein Quellen-Vergleich, siehe Tom-HA-Versprechen).
+ * Strikt eedc-intern (kein Quellen-Vergleich, siehe Tom-HA-Versprechen).
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Sigma, RefreshCw } from 'lucide-react'

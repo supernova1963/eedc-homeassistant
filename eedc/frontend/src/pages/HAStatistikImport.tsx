@@ -360,7 +360,7 @@ export default function HAStatistikImport() {
               <div>Home Assistant Datenbank nicht verfügbar</div>
               {haFehler && <p className="text-sm">{haFehler}</p>}
               <p className="text-sm">
-                Stellen Sie sicher, dass das Add-on mit <code>config:ro</code> Volume-Mapping
+                Stellen Sie sicher, dass die App mit <code>config:ro</code> Volume-Mapping
                 installiert ist. Siehe CHANGELOG v2.0.0 für Upgrade-Anleitung.
               </p>
             </div>
@@ -417,7 +417,7 @@ export default function HAStatistikImport() {
             {!vorschau && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
                 Wichtig: Stellen Sie sicher, dass das Sensor-Mapping für diese Anlage konfiguriert ist,
-                damit die HA-Sensoren den EEDC-Feldern zugeordnet werden können.
+                damit die HA-Sensoren den eedc-Feldern zugeordnet werden können.
               </p>
             )}
           </div>

@@ -1,5 +1,5 @@
 /**
- * EEDC TypeScript Type Definitions
+ * eedc TypeScript Type Definitions
  */
 
 // Versorger & Zähler Typen
@@ -40,7 +40,7 @@ export type WetterModell =
   | 'icon_eu'
   | 'ecmwf_ifs04'
 
-// Prognose-Basis für EEDC-kalibriert
+// Prognose-Basis für eedc-kalibriert
 export type PrognoseBasis = 'openmeteo' | 'solcast'
 
 // Steuerliche Behandlung

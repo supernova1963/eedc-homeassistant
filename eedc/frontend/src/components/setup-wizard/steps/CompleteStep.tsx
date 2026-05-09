@@ -47,7 +47,7 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
             bereit zur Nutzung.
           </>
         ) : (
-          'EEDC ist bereit zur Nutzung.'
+          'eedc ist bereit zur Nutzung.'
         )}
       </p>
 

@@ -1,7 +1,7 @@
 /**
  * Sensor-Mapping API Client
  *
- * Ermöglicht die Zuordnung von Home Assistant Sensoren zu EEDC-Feldern.
+ * Ermöglicht die Zuordnung von Home Assistant Sensoren zu eedc-Feldern.
  */
 
 import { api } from './client'

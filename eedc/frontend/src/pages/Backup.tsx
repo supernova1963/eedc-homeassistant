@@ -156,7 +156,7 @@ export default function Backup() {
           <p className="font-medium">Infothek-Anhänge (PDFs, Fotos) sind nicht im JSON enthalten.</p>
           <p>Diese werden direkt in der Datenbank gespeichert und sind nur über ein vollständiges Datenbank-Backup gesichert:</p>
           <ul className="list-disc list-inside space-y-0.5 mt-1">
-            <li><span className="font-medium">HA Add-on:</span> Regelmäßige HA-Backups (selektiv EEDC) sichern die komplette <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> inkl. aller Anhänge.</li>
+            <li><span className="font-medium">HA-App:</span> Regelmäßige HA-Backups (selektiv eedc) sichern die komplette <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> inkl. aller Anhänge.</li>
             <li><span className="font-medium">Standalone:</span> Die Datei <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> im Datenverzeichnis manuell sichern.</li>
           </ul>
         </div>
@@ -226,7 +226,7 @@ export default function Backup() {
                   JSON-Backup hierher ziehen oder klicken
                 </p>
                 <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-                  .json Datei aus einem früheren EEDC-Export
+                  .json Datei aus einem früheren eedc-Export
                 </p>
               </>
             )}

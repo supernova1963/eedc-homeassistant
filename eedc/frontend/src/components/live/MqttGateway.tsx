@@ -216,7 +216,7 @@ function MappingForm({
             value={form.ziel_key_custom}
             onChange={e => setForm({ ...form, ziel_key_custom: e.target.value })}
             placeholder="z.B. live/inv/3/leistung_w"
-            hint="EEDC-Topic-Suffix (ohne eedc/{id}/ Prefix)"
+            hint="eedc-Topic-Suffix (ohne eedc/{id}/ Prefix)"
           />
         )}
       </div>
@@ -623,7 +623,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
             MQTT Gateway
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Übersetze externe MQTT-Topics direkt auf EEDC-Inbound-Topics — ohne Node-RED oder HA-Automationen.
+            Übersetze externe MQTT-Topics direkt auf eedc-Inbound-Topics — ohne Node-RED oder HA-Automationen.
           </p>
         </div>
         {status?.aktiv && (
@@ -645,7 +645,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
           <p>
             <strong>Wann brauchst du das Gateway?</strong> Wenn deine Geräte bereits eigene MQTT-Topics
             publishen (z.B. Shelly, Tasmota, OpenDTU, Zigbee2MQTT) und du diese Daten direkt
-            ins EEDC Live-Dashboard bringen willst.
+            ins eedc Live-Dashboard bringen willst.
           </p>
           <p>
             <strong>Connector-Bridge:</strong> Hast du einen Geräte-Connector konfiguriert

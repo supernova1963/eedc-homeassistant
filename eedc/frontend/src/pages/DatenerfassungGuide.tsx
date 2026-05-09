@@ -71,7 +71,7 @@ export default function DatenerfassungGuide() {
           Datenerfassung
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Wie Sie Ihre monatlichen Energiedaten in EEDC erfassen
+          Wie Sie Ihre monatlichen Energiedaten in eedc erfassen
         </p>
       </div>
 
@@ -194,7 +194,7 @@ export default function DatenerfassungGuide() {
               Einmalige Einrichtung: Sensor-Zuordnung
             </h3>
             <p className="text-blue-700 dark:text-blue-300 text-sm mb-3">
-              Verknüpfen Sie Ihre Home Assistant Sensoren einmalig mit den EEDC-Feldern.
+              Verknüpfen Sie Ihre Home Assistant Sensoren einmalig mit den eedc-Feldern.
               Danach werden im Monatsabschluss-Wizard automatisch Vorschläge aus HA geliefert.
             </p>
             <Link
@@ -265,7 +265,7 @@ export default function DatenerfassungGuide() {
         </div>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400 ml-7">
           <li>
-            <strong>EEDC erwartet Monatswerte</strong> (Differenz Monatsanfang → Monatsende),
+            <strong>eedc erwartet Monatswerte</strong> (Differenz Monatsanfang → Monatsende),
             keine kumulierten Zählerstände.
           </li>
           <li>

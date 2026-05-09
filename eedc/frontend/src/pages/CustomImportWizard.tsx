@@ -3,7 +3,7 @@
  *
  * 4-Schritt-Wizard:
  * 1. Datei hochladen → Spalten werden erkannt
- * 2. Spalten auf EEDC-Felder mappen (mit Auto-Detect + Templates)
+ * 2. Spalten auf eedc-Felder mappen (mit Auto-Detect + Templates)
  * 3. Vorschau der gemappten Daten
  * 4. Ergebnis
  */
@@ -303,7 +303,7 @@ export default function CustomImportWizard() {
           Eigene Datei importieren
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          CSV oder JSON-Datei hochladen und Spalten den EEDC-Feldern zuordnen
+          CSV oder JSON-Datei hochladen und Spalten den eedc-Feldern zuordnen
         </p>
       </div>
 
@@ -349,7 +349,7 @@ export default function CustomImportWizard() {
               CSV- oder JSON-Datei mit monatlichen Energiedaten. Die Spalten werden automatisch erkannt.
             </p>
 
-            {/* Anlage wählen (optional, für EEDC-Vorlage) */}
+            {/* Anlage wählen (optional, für eedc-Vorlage) */}
             {anlagen.length > 0 && (
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
@@ -458,13 +458,13 @@ export default function CustomImportWizard() {
               </h3>
               {(analysis.investitions_spalten?.length ?? 0) > 0 ? (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Spalten die weiter unten als <span className="text-green-600 dark:text-green-400 font-medium">EEDC-Investitions-Spalten erkannt</span> sind,
+                  Spalten die weiter unten als <span className="text-green-600 dark:text-green-400 font-medium">eedc-Investitions-Spalten erkannt</span> sind,
                   stehen hier auf <em>– Ignorieren –</em> und müssen nicht zugeordnet werden — sie werden automatisch importiert.
                   Alle anderen Spalten können hier manuell zugeordnet werden.
                 </p>
               ) : (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Weise jeder Spalte ein EEDC-Zielfeld zu. Nicht benötigte Spalten auf <em>– Ignorieren –</em> lassen.
+                  Weise jeder Spalte ein eedc-Zielfeld zu. Nicht benötigte Spalten auf <em>– Ignorieren –</em> lassen.
                 </p>
               )}
               <div className="space-y-2">
@@ -571,12 +571,12 @@ export default function CustomImportWizard() {
             </div>
           </Card>
 
-          {/* Investitions-Spalten (EEDC-Vorlage) */}
+          {/* Investitions-Spalten (eedc-Vorlage) */}
           {(analysis.investitions_spalten?.length ?? 0) > 0 && (
             <Card>
               <div className="p-4">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  EEDC-Investitions-Spalten erkannt
+                  eedc-Investitions-Spalten erkannt
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                   Diese Spalten werden beim Import automatisch den jeweiligen Investitionen zugeordnet.

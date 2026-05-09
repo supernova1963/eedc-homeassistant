@@ -109,7 +109,7 @@ export const systemLogsApi = {
   },
 
   /**
-   * EEDC Add-on / Container neu starten.
+   * eedc Add-on / Container neu starten.
    */
   async restart(): Promise<{ erfolg: boolean; message: string }> {
     return api.post('/system/restart')

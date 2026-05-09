@@ -100,7 +100,7 @@ function SystemLogsTab() {
 
   const formatLogsMarkdown = () => {
     const filter = [level && `Level: ${level}`, module && `Modul: ${module}`, search && `Suche: "${search}"`].filter(Boolean).join(', ')
-    const header = `## EEDC System-Logs${filter ? ` (${filter})` : ''}\n\n`
+    const header = `## eedc System-Logs${filter ? ` (${filter})` : ''}\n\n`
     const table = '| Zeit | Level | Modul | Nachricht |\n|------|-------|-------|-----------|\n'
     const rows = logs.map((log) => {
       const zeit = new Date(log.timestamp).toLocaleString('de-DE')
@@ -314,7 +314,7 @@ function AktivitaetenTab() {
       erfolg === 'false' && 'Fehlgeschlagen',
       search && `Suche: "${search}"`,
     ].filter(Boolean).join(', ')
-    const header = `## EEDC Aktivit\u00e4ten${filter ? ` (${filter})` : ''}\n\n`
+    const header = `## eedc Aktivit\u00e4ten${filter ? ` (${filter})` : ''}\n\n`
     const rows = activities.map((a) => {
       const icon = a.erfolg ? '\u2705' : '\u274c'
       const label = kategorien.find((k) => k.id === a.kategorie)?.label || a.kategorie
@@ -495,7 +495,7 @@ export default function Protokolle() {
   }
 
   const handleRestart = async () => {
-    if (!confirm('EEDC wirklich neu starten? Die Verbindung wird kurz unterbrochen.')) return
+    if (!confirm('eedc wirklich neu starten? Die Verbindung wird kurz unterbrochen.')) return
     setRestarting(true)
     try {
       await systemLogsApi.restart()
@@ -531,7 +531,7 @@ export default function Protokolle() {
           onClick={handleRestart}
           disabled={restarting}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-          title="EEDC neu starten"
+          title="eedc neu starten"
         >
           <RotateCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
           {restarting ? 'Startet neu...' : 'Neustart'}

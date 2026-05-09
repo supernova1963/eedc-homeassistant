@@ -333,7 +333,7 @@ export interface PVStringsGesamtlaufzeitResponse {
 }
 
 // =============================================================================
-// Prognose-Vergleich Types (EEDC vs. ML vs. IST)
+// Prognose-Vergleich Types (eedc vs. ML vs. IST)
 // =============================================================================
 
 export interface PrognoseVergleichMonat {
@@ -431,7 +431,7 @@ export const cockpitApi = {
   },
 
   /**
-   * Holt Prognose-Vergleich (EEDC vs. ML vs. IST) für ein Jahr.
+   * Holt Prognose-Vergleich (eedc vs. ML vs. IST) für ein Jahr.
    * Aggregiert Tagesprognosen aus TagesZusammenfassung.
    */
   async getPrognoseVergleich(anlageId: number, jahr: number): Promise<PrognoseVergleich> {
