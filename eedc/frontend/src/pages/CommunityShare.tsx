@@ -415,7 +415,7 @@ export default function CommunityShare() {
               className="mt-1 h-4 w-4 text-orange-500 border-gray-300 dark:border-gray-600 rounded focus:ring-orange-500"
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">
-              Ich stimme der anonymen Übertragung meiner PV-Anlagendaten an die EEDC Community zu.
+              Ich stimme der anonymen Übertragung meiner PV-Anlagendaten an die eedc Community zu.
               Die Daten werden gemäß der{' '}
               <a
                 href="https://energy.raunet.eu/datenschutz"

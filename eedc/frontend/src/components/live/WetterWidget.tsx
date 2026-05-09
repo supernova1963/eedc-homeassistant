@@ -367,7 +367,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
 {/* SA/SU/Noon werden als vertikale Linien im Chart angezeigt */}
           {wetter.pv_prognose_kwh !== null && (
             <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium"
-                 title="EEDC PV-Tagesprognose (GTI-basiert)">
+                 title="eedc PV-Tagesprognose (GTI-basiert)">
               <BatteryCharging className="h-3.5 w-3.5" />
               <span>~{wetter.pv_prognose_kwh} kWh PV</span>
             </div>

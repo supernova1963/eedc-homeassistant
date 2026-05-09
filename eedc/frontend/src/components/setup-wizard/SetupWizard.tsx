@@ -1,5 +1,5 @@
 /**
- * SetupWizard - Geführte Ersteinrichtung für EEDC
+ * SetupWizard - Geführte Ersteinrichtung für eedc
  *
  * v2.0.0 - Mit JSON-Import für Backup-Wiederherstellung
  *

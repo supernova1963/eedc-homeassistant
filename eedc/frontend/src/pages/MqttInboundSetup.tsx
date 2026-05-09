@@ -524,7 +524,7 @@ function HaAutomationGenerator({ anlagen }: { anlagen: { id: number; anlagenname
 
     return `automation:
   - alias: "${alias}"
-    description: "Generiert von EEDC — sendet ${mapped.length} Sensor(en) per MQTT"
+    description: "Generiert von eedc — sendet ${mapped.length} Sensor(en) per MQTT"
     trigger:
       - platform: time_pattern
         seconds: "/${triggerSeconds}"
@@ -536,11 +536,11 @@ ${actions}`
   }
 
   const liveYaml = useMemo(
-    () => generateYaml(liveTopics, 'EEDC Live-Daten senden', interval),
+    () => generateYaml(liveTopics, 'eedc Live-Daten senden', interval),
     [liveTopics, entityMap, interval],
   )
   const energyYaml = useMemo(
-    () => generateYaml(energyTopics, 'EEDC Energy-Daten senden', '60'),
+    () => generateYaml(energyTopics, 'eedc Energy-Daten senden', '60'),
     [energyTopics, entityMap],
   )
 
@@ -572,7 +572,7 @@ ${actions}`
       {open && (
         <div className="px-5 pb-5 space-y-6">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Ordne deine Home Assistant Sensoren den EEDC-Topics zu.
+            Ordne deine Home Assistant Sensoren den eedc-Topics zu.
             Am Ende erhältst du zwei fertige Automationen (Live + Energy) zum Kopieren.
           </p>
 
@@ -775,7 +775,7 @@ function AndereSystemeFlows({ topics, host }: { topics: MqttTopic[]; host: strin
     "topic": "${exampleTopic}",
     "broker": "${host}",
     "retain": true,
-    "name": "EEDC ${aliasName}"
+    "name": "eedc ${aliasName}"
   }
 ]
 // msg.payload mit dem Sensorwert befüllen (z.B. via Change- oder Function-Node)`,
@@ -799,7 +799,7 @@ define eedc_${sensorId} notify ${sensorId}:.* {\\
 }`,
     },
     {
-      id: 'openhab', label: 'openHAB', code: `rule "EEDC ${aliasName} senden"
+      id: 'openhab', label: 'openHAB', code: `rule "eedc ${aliasName} senden"
 when
     Item ${sensorId} changed  // ← Item-Name anpassen
 then

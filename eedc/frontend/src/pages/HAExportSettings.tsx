@@ -240,7 +240,7 @@ export default function HAExportSettings() {
   // MQTT Sensoren entfernen
   const removeMqttSensors = async () => {
     if (!selectedAnlageId) return
-    if (!confirm('Alle EEDC-Sensoren für diese Anlage aus Home Assistant entfernen?')) return
+    if (!confirm('Alle eedc-Sensoren für diese Anlage aus Home Assistant entfernen?')) return
 
     setMqttRemoving(true)
     try {
@@ -412,7 +412,7 @@ export default function HAExportSettings() {
         <div className="text-sm text-blue-700 dark:text-blue-300">
           <p className="font-medium mb-1">Berechnete KPIs nach Home Assistant exportieren</p>
           <p>
-            EEDC kann berechnete Kennzahlen (Autarkie, Ersparnis, CO₂, ROI) als Sensoren an Home Assistant zurückgeben.
+            eedc kann berechnete Kennzahlen (Autarkie, Ersparnis, CO₂, ROI) als Sensoren an Home Assistant zurückgeben.
             Wähle zwischen REST API (YAML-Konfiguration) oder MQTT Discovery (native Entitäten).
           </p>
         </div>
@@ -475,7 +475,7 @@ export default function HAExportSettings() {
               </h2>
               {mqttConfig && (
                 <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
-                  Aus Add-on Optionen geladen
+                  Aus App-Optionen geladen
                 </span>
               )}
             </div>
@@ -493,7 +493,7 @@ export default function HAExportSettings() {
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Bei HA Add-on: core-mosquitto
+                  Bei HA-App: core-mosquitto
                 </p>
               </div>
               <div>
@@ -645,7 +645,7 @@ export default function HAExportSettings() {
                 {mqttConfig?.auto_publish ? (
                   <> Die automatische Publizierung ist aktiviert (alle {mqttConfig.publish_interval_minutes} Minuten).</>
                 ) : (
-                  <> Um die Werte aktuell zu halten, muss die Publizierung regelmäßig erfolgen (manuell oder via Automatisierung). Aktiviere <strong>auto_publish</strong> in den Add-on Optionen für automatische Updates.</>
+                  <> Um die Werte aktuell zu halten, muss die Publizierung regelmäßig erfolgen (manuell oder via Automatisierung). Aktiviere <strong>auto_publish</strong> in den App-Optionen für automatische Updates.</>
                 )}
               </p>
             </div>

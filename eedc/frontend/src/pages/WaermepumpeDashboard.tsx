@@ -295,7 +295,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       </p>
 
       {/* Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist).
-          Σ Lebensdauer = Hersteller-Counter direkt. Drift gegenüber EEDC-
+          Σ Lebensdauer = Hersteller-Counter direkt. Drift gegenüber eedc-
           erfassten Tagesinkrementen wird im Daten-Checker ausgewiesen. */}
       {z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -306,7 +306,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
             color="gray"
             subtitle={z.kompressor_starts_max_tag != null ? `Max/Tag: ${z.kompressor_starts_max_tag}` : undefined}
             formel="Aus Hersteller-Sensor (Lebensdauer-Counter)"
-            berechnung={`Höchste Tagessumme (EEDC-erfasst): ${z.kompressor_starts_max_tag ?? '—'}`}
+            berechnung={`Höchste Tagessumme (eedc-erfasst): ${z.kompressor_starts_max_tag ?? '—'}`}
             ergebnis={`= ${z.kompressor_starts_gesamt.toLocaleString('de-DE')} Starts`}
           />
         </div>

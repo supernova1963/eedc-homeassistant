@@ -114,7 +114,7 @@ export default function HAConnectionStep({
                     Mögliche Ursachen:
                   </h4>
                   <ul className="space-y-1 text-sm text-amber-700 dark:text-amber-400">
-                    <li>• EEDC läuft nicht als Home Assistant Add-on</li>
+                    <li>• eedc läuft nicht als Home Assistant App</li>
                     <li>• Home Assistant API nicht erreichbar</li>
                     <li>• Supervisor Token fehlt</li>
                   </ul>
@@ -135,7 +135,7 @@ export default function HAConnectionStep({
           {!isLoading && !haConnected && (
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                <strong>Hinweis:</strong> Sie können EEDC auch ohne Home Assistant nutzen.
+                <strong>Hinweis:</strong> Sie können eedc auch ohne Home Assistant nutzen.
                 Investitionen und Daten können manuell oder per CSV-Import erfasst werden.
                 Die HA-Integration kann jederzeit später aktiviert werden.
               </p>

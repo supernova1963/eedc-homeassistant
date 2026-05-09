@@ -1,9 +1,9 @@
 /**
  * Prognosen-Vergleich Tab: Evaluierungs-Cockpit für PV-Prognosen
  *
- * Vergleicht OpenMeteo (roh), EEDC (kalibriert), Solcast und IST.
+ * Vergleicht OpenMeteo (roh), eedc (kalibriert), Solcast und IST.
  * - KPI-Matrix: Quellen als Spalten, Zeiträume als Zeilen
- * - Stundenprofil-Chart mit IST, EEDC, Solcast, OpenMeteo
+ * - Stundenprofil-Chart mit IST, eedc, Solcast, OpenMeteo
  * - 24h-Vergleichstabelle mit Differenzen
  * - 7-Tage-Vergleichstabelle
  * - Genauigkeits-Tracking + Integrations-Vorschlag
@@ -152,7 +152,7 @@ function IstUnvollstaendigPopover({
           </div>
           <div className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-2">
             Ohne Werte für {stundenLabel}.
-            Falls EEDC oder HA kürzlich neu gestartet wurden, schließt sich die Lücke
+            Falls eedc oder HA kürzlich neu gestartet wurden, schließt sich die Lücke
             beim nächsten Snapshot-Zyklus (max. 1 h). Bleibt sie bestehen, ist
             wahrscheinlich der kumulative Zähler im Sensor-Mapping nicht gesetzt.
           </div>
@@ -342,10 +342,10 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 </th>
                 <th className={`text-right py-2 px-3 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'}`}>
                   <SimpleTooltip text={hasEedc && lf != null
-                    ? `EEDC: ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})`
-                    : `EEDC: Lernfaktor noch nicht verfügbar — siehe Hinweis unten`
+                    ? `eedc: ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})`
+                    : `eedc: Lernfaktor noch nicht verfügbar — siehe Hinweis unten`
                   }>
-                    <span>EEDC {hasEedc && lf != null && <span className="text-xs font-normal">×{lf.toFixed(2)}</span>}</span>
+                    <span>eedc {hasEedc && lf != null && <span className="text-xs font-normal">×{lf.toFixed(2)}</span>}</span>
                   </SimpleTooltip>
                 </th>
                 {hasSolcast && (
@@ -385,7 +385,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               {/* Verbleibend */}
               <tr className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-3 text-gray-500 dark:text-gray-400 text-xs">
-                  <SimpleTooltip text="IST bisherig + beste Prognose für verbleibende Stunden (Solcast bevorzugt, sonst EEDC/OpenMeteo)">
+                  <SimpleTooltip text="IST bisherig + beste Prognose für verbleibende Stunden (Solcast bevorzugt, sonst eedc/OpenMeteo)">
                     <span>↳ Verbleibend</span>
                   </SimpleTooltip>
                 </td>
@@ -462,7 +462,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             <div className="flex items-start gap-2">
               <Info className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="text-sm">
-                EEDC-Prognose nicht verfügbar — benötigt mindestens 7 Tage mit IST-Ertragsdaten,
+                eedc-Prognose nicht verfügbar — benötigt mindestens 7 Tage mit IST-Ertragsdaten,
                 um den Lernfaktor (Verhältnis IST/Prognose) zu berechnen
                 {' '}(<strong>{usableDays} von 7 Tagen</strong>{fehlend > 0 ? `, noch ${fehlend} Tag${fehlend === 1 ? '' : 'e'}` : ''}).
                 Der Lernfaktor kalibriert die OpenMeteo-Prognose anlagenspezifisch
@@ -473,7 +473,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         )
       })()}
 
-      {/* ── EEDC-Diagnose: O1+O2 Doppel-Variante + Wetter-Stratifizierung ── */}
+      {/* ── eedc-Diagnose: O1+O2 Doppel-Variante + Wetter-Stratifizierung ── */}
       {(() => {
         const showO12 = data.eedc_lernfaktor_o12 != null
         const showStrat = stratifizierung != null
@@ -586,7 +586,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                   Wetter-Historie (Bewölkung, Niederschlag, WMO-Code) für{' '}
                   {Math.max(stratifizierung.tage_ohne_wetter, stratifizierung.tep_tage_ohne_wetter)}{' '}
-                  Tage noch nicht geladen. EEDC kann sie kostenlos aus dem Open-Meteo-Archiv
+                  Tage noch nicht geladen. eedc kann sie kostenlos aus dem Open-Meteo-Archiv
                   nachholen. {stratifizierung.tage_mit_prognose > 0 ? (
                     <>Danach zeigt diese Card MAE/MBE getrennt nach{' '}
                     <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.</>
@@ -637,7 +637,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
               <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => ({
-                ist: 'IST', eedc: `EEDC${lf != null ? ` (${progBasisLabel} ×${lf.toFixed(2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)'
+                ist: 'IST', eedc: `eedc${lf != null ? ` (${progBasisLabel} ×${lf.toFixed(2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)'
               }[v] || v)} />
               {data.aktuelle_stunde !== null && (
                 <ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke="#6b7280" strokeDasharray="3 3"
@@ -670,7 +670,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-1.5 px-2 font-medium text-gray-500">Std.</th>
                 <th className="text-right py-1.5 px-2 font-medium text-yellow-500">OM</th>
-                <th className={`text-right py-1.5 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>EEDC</th>
+                <th className={`text-right py-1.5 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>eedc</th>
                 {hasSolcast && <th className="text-right py-1.5 px-2 font-medium text-blue-500">SC</th>}
                 <th className="text-right py-1.5 pl-2 pr-3 font-medium text-green-500">IST</th>
               </tr>
@@ -763,7 +763,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 <th className="py-2 px-2" aria-label="Wetter"></th>
                 <th className="text-left py-2 px-2 font-medium text-gray-500">Datum</th>
                 <th className="text-right py-2 px-2 font-medium text-yellow-500">OM</th>
-                <th className={`text-right py-2 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>EEDC</th>
+                <th className={`text-right py-2 px-2 font-medium ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>eedc</th>
                 {hasSolcast && <th className="text-right py-2 px-2 font-medium text-blue-500">Solcast</th>}
                 <th className="text-right py-2 pl-2 pr-3 font-medium text-green-500">IST</th>
               </tr>
@@ -848,7 +848,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <>
                 <MaeMbeCard label="OpenMeteo" mae={genauigkeit.openmeteo_mae_prozent} mbe={genauigkeit.openmeteo_mbe_prozent} color="text-yellow-500" />
                 <MaeMbeCard
-                  label="EEDC"
+                  label="eedc"
                   mae={genauigkeit.eedc_mae_prozent}
                   mbe={genauigkeit.eedc_mbe_prozent}
                   color="text-orange-500"
@@ -859,7 +859,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             ) : (
               <>
                 <AsymmetrieCard label="OpenMeteo" asym={genauigkeit.openmeteo_asymmetrie} color="text-yellow-500" />
-                <AsymmetrieCard label="EEDC" asym={genauigkeit.eedc_asymmetrie} color="text-orange-500" hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined} />
+                <AsymmetrieCard label="eedc" asym={genauigkeit.eedc_asymmetrie} color="text-orange-500" hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined} />
                 <AsymmetrieCard label="Solcast" asym={genauigkeit.solcast_asymmetrie} color="text-blue-500" />
               </>
             )}
@@ -879,8 +879,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   <th className="text-left py-2 px-3 font-medium text-gray-500">Datum</th>
                   <th className="text-right py-2 px-3 font-medium text-yellow-500">OpenMeteo</th>
                   <th className={`text-right py-2 px-3 font-medium ${lf != null ? 'text-orange-500' : 'text-gray-400'}`}>
-                    <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `EEDC = ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)}`}>
-                      <span>EEDC</span>
+                    <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `eedc = ${progBasisLabel} × Lernfaktor ${lf.toFixed(3)}`}>
+                      <span>eedc</span>
                     </SimpleTooltip>
                   </th>
                   <th className="text-right py-2 px-3 font-medium text-blue-500">Solcast</th>
@@ -909,7 +909,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         <div className="flex gap-3">
           <Info className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
           <div className="text-sm text-gray-600 dark:text-gray-300 space-y-4">
-            <p className="font-semibold text-gray-800 dark:text-white">Integrations-Plan: Solcast-Daten in EEDC</p>
+            <p className="font-semibold text-gray-800 dark:text-white">Integrations-Plan: Solcast-Daten in eedc</p>
             <div className="space-y-3">
               <IntegrationItem icon={<Zap className="h-4 w-4 text-yellow-500" />} title="Live → Tagesverlauf + Wetter-Widget"
                 text="Solcast als zusätzliche Linie im Tagesverlauf-Chart (30-Min-Auflösung, feinere Wolkenmuster). Solcast-Tagesprognose als KPI im Wetter-Widget. Solcast liefert direkte PV-Leistung (kW) — keine GTI-Umrechnung nötig." />
@@ -924,7 +924,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             </div>
             <p className="text-xs text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
               <span className="text-yellow-500">OpenMeteo</span> = Wettermodelle (ICON/ECMWF), GTI→kWh, 14 Tage, unbegrenzt.{' '}
-              <span className="text-orange-500">EEDC</span> = {progBasisLabel} × Lernfaktor ({lf?.toFixed(3) ?? 'noch nicht verfügbar'}), MOS-kalibriert{data.eedc_lernfaktor_stufe ? ` (${data.eedc_lernfaktor_stufe})` : ''}.{' '}
+              <span className="text-orange-500">eedc</span> = {progBasisLabel} × Lernfaktor ({lf?.toFixed(3) ?? 'noch nicht verfügbar'}), MOS-kalibriert{data.eedc_lernfaktor_stufe ? ` (${data.eedc_lernfaktor_stufe})` : ''}.{' '}
               <span className="text-blue-500">Solcast</span> = Satellit + NWP, direkte PV-Leistung mit p10/p50/p90, 7 Tage.
             </p>
           </div>
@@ -1086,7 +1086,7 @@ function StundenTooltip({ active, payload, label, hasEedc }: StundenTooltipProps
         if (['solcast_p10', 'solcast_p90'].includes(key)) return null
         if (key === 'ist' && p.value === null) return null
         if (key === 'eedc' && !hasEedc) return null
-        const labels: Record<string, string> = { openmeteo: 'OpenMeteo (roh)', eedc: 'EEDC (kalibriert)', solcast: 'Solcast', ist: 'IST' }
+        const labels: Record<string, string> = { openmeteo: 'OpenMeteo (roh)', eedc: 'eedc (kalibriert)', solcast: 'Solcast', ist: 'IST' }
         return (
           <div key={key} className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke || p.fill }} />

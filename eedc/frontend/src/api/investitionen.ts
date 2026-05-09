@@ -151,7 +151,7 @@ export interface WaermepumpeDashboardResponse {
     cop_heizen?: number
     cop_warmwasser?: number
     // Kompressor-Starts: Σ Lebensdauer aus Hersteller-Sensor (direkter Read),
-    // Max/Tag aus EEDC-Tagesinkrementen.
+    // Max/Tag aus eedc-Tagesinkrementen.
     kompressor_starts_gesamt?: number | null
     kompressor_starts_max_tag?: number | null
   }

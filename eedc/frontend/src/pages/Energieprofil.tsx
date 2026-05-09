@@ -256,7 +256,7 @@ export default function Energieprofil() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   Ergänzt fehlende Tage aus den HA Long-Term Statistics — unabhängig von der ~10-Tage-Sensor-Grenze.
                   <strong className="text-gray-700 dark:text-gray-200"> Bestehende Tage bleiben unverändert.</strong>
-                  {' '}Sinnvoll nach Erstinstallation, längerem Add-on-Stopp oder Sensor-Mapping-Änderungen.
+                  {' '}Sinnvoll nach Erstinstallation, längerem App-Stopp oder Sensor-Mapping-Änderungen.
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
                   Möchtest du einen einzelnen Tag reparieren, der verzerrt aussieht? Nutze den Daten-Checker

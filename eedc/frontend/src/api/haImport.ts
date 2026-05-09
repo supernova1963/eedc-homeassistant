@@ -6,7 +6,7 @@
  * Die komplexe HA-Integration wurde entfernt zugunsten einer
  * Standalone-fokussierten Architektur.
  *
- * EEDC funktioniert primär ohne Home Assistant:
+ * eedc funktioniert primär ohne Home Assistant:
  * - Monatsdaten per CSV-Import oder manuelles Formular erfassen
  * - Optional: MQTT Export für berechnete KPIs nach HA
  */

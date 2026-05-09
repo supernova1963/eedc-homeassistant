@@ -495,14 +495,14 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
       <div className="space-y-3">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <Sun className="w-5 h-5 text-amber-500" />
-          Prognose-Basis (EEDC kalibriert)
+          Prognose-Basis (eedc kalibriert)
         </h3>
         <div>
           <label
             htmlFor="prognose_basis"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >
-            Quelle für EEDC-Kalibrierung
+            Quelle für eedc-Kalibrierung
           </label>
           <select
             id="prognose_basis"
@@ -516,8 +516,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
           </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {formData.prognose_basis === 'openmeteo'
-              ? 'EEDC kalibriert die Open-Meteo Rohprognose mit einem anlagenspezifischen Lernfaktor (MOS-Verfahren).'
-              : 'EEDC kalibriert die Solcast-Prognose mit einem eigenen Lernfaktor. Solcast muss im Sensor-Mapping konfiguriert sein.'}
+              ? 'eedc kalibriert die Open-Meteo Rohprognose mit einem anlagenspezifischen Lernfaktor (MOS-Verfahren).'
+              : 'eedc kalibriert die Solcast-Prognose mit einem eigenen Lernfaktor. Solcast muss im Sensor-Mapping konfiguriert sein.'}
           </p>
         </div>
       </div>

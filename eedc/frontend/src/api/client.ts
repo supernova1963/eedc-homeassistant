@@ -1,5 +1,5 @@
 /**
- * API Client für EEDC Backend
+ * API Client für eedc Backend
  *
  * Zentraler HTTP-Client mit Error Handling und TypeScript Support.
  * Verwendet relative Pfade für HA Ingress Kompatibilität.

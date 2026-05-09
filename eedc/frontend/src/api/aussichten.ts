@@ -260,7 +260,7 @@ export interface PrognosenVergleich {
   openmeteo_tage: TagesPrognose[]
   openmeteo_tageshaelften: (Tageshaelfte | null)[]  // [heute, morgen, übermorgen]
 
-  // EEDC (OpenMeteo × Lernfaktor)
+  // eedc (OpenMeteo × Lernfaktor)
   eedc_heute_kwh: number | null
   eedc_morgen_kwh: number | null
   eedc_uebermorgen_kwh: number | null

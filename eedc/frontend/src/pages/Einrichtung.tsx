@@ -24,7 +24,7 @@ interface DatenquelleCard {
 const datenquellen: DatenquelleCard[] = [
   {
     title: 'HA Sensor-Zuordnung',
-    description: 'Home Assistant Sensoren den EEDC-Feldern zuordnen. Monatswerte werden automatisch aus der HA-Statistik-Datenbank gelesen.',
+    description: 'Home Assistant Sensoren den eedc-Feldern zuordnen. Monatswerte werden automatisch aus der HA-Statistik-Datenbank gelesen.',
     icon: Database,
     href: '/einstellungen/ha-export',
     color: 'text-green-600 dark:text-green-400',
@@ -57,7 +57,7 @@ const datenquellen: DatenquelleCard[] = [
   },
   {
     title: 'Eigene Datei importieren',
-    description: 'Beliebige CSV- oder JSON-Dateien importieren: Spalten flexibel den EEDC-Feldern zuordnen. Mapping als Template speichern.',
+    description: 'Beliebige CSV- oder JSON-Dateien importieren: Spalten flexibel den eedc-Feldern zuordnen. Mapping als Template speichern.',
     icon: Table2,
     href: '/einstellungen/custom-import',
     color: 'text-rose-600 dark:text-rose-400',

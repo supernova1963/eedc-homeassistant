@@ -3,7 +3,7 @@
  *
  * Endpoints rund um das Korrekturprofil-Konzept:
  * - Wetter-Backfill aus Open-Meteo Archive
- * - Wetter-stratifizierte Stunden-Genauigkeit (interne EEDC-Diagnose)
+ * - Wetter-stratifizierte Stunden-Genauigkeit (interne eedc-Diagnose)
  *
  * Siehe docs/KONZEPT-KORREKTURPROFIL.md
  */

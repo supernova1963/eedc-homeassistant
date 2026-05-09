@@ -1,5 +1,5 @@
 /**
- * SensorMappingWizard - Zuordnung HA-Sensoren zu EEDC-Feldern
+ * SensorMappingWizard - Zuordnung HA-Sensoren zu eedc-Feldern
  *
  * Schritte:
  * 1. Basis-Sensoren (Einspeisung, Netzbezug, PV gesamt)
@@ -963,7 +963,7 @@ export default function SensorMappingWizard() {
               <p>
                 Konsequenz im Betrieb: HA legt für so einen Sensor keine Long-Term-Statistics an. Damit wirken
                 <strong> die Korrektur-Werkzeuge in der Datenverwaltung nicht</strong> — Vollbackfill, „Verlauf nachrechnen" und Per-Tag-Reaggregation greifen alle auf HA's LTS zu.
-                Jeder Aussetzer (HA-/EEDC-Neustart, Polling-Hänger um Mitternacht) ist bei so einem Sensor <strong>permanent verloren</strong>; eine zweite Chance gibt es nicht. Auch im Normalbetrieb fehlt häufig die letzte Stunde des Tages (23–24 Uhr), weil der Mitternachts-Snapshot die Grenze nicht immer trifft.
+                Jeder Aussetzer (HA-/eedc-Neustart, Polling-Hänger um Mitternacht) ist bei so einem Sensor <strong>permanent verloren</strong>; eine zweite Chance gibt es nicht. Auch im Normalbetrieb fehlt häufig die letzte Stunde des Tages (23–24 Uhr), weil der Mitternachts-Snapshot die Grenze nicht immer trifft.
               </p>
               <p>
                 <strong>Empfohlen:</strong> in HA <code>state_class</code> per <code>configuration.yaml</code>-customize ergänzen — dann laufen alle Reparatur-Werkzeuge auf diesem Sensor, und HA-Statistik-Karten zeigen ihn ebenfalls.

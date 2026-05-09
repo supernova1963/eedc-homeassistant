@@ -271,7 +271,7 @@ export default function LiveDashboard() {
                     if (stunde?.pv_ml_prognose_kw != null && stunde.pv_ml_prognose_kw > 0) {
                       return stunde.pv_ml_prognose_kw
                     }
-                    // Fallback: EEDC-Prognose der aktuellen Stunde
+                    // Fallback: eedc-Prognose der aktuellen Stunde
                     if (stunde && stunde.pv_ertrag_kw > 0) {
                       return stunde.pv_ertrag_kw
                     }

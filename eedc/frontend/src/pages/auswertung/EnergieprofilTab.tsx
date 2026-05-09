@@ -889,9 +889,9 @@ function InfoPanel() {
             <section>
               <h4 className="font-semibold mb-1">Datenquellen</h4>
               <p className="text-xs leading-relaxed opacity-90">
-                <strong>HA Add-on:</strong> Stündliche Mittelwerte aus der Home Assistant Sensor-History.
+                <strong>HA-App:</strong> Stündliche Mittelwerte aus der Home Assistant Sensor-History.
                 HA speichert diese nur ~10 Tage — deshalb werden die Daten täglich persistent in der
-                EEDC-Datenbank gespeichert.
+                eedc-Datenbank gespeichert.
               </p>
               <p className="text-xs leading-relaxed opacity-90 mt-1">
                 <strong>Docker Standalone:</strong> MQTT Live-Snapshots werden alle 5 Minuten in der DB
