@@ -426,6 +426,21 @@ async def run_migrations(conn):
             if 'wetter_code' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wetter_code INTEGER'))
 
+        # Etappe 3c P1 (KONZEPT-ENERGIEPROFIL-3C.md): Source-Marker auf SensorSnapshot.
+        # Diagnostiziert Schreib-Pfad pro Snapshot — Voraussetzung für 3d-Schablone.
+        if 'sensor_snapshots' in inspector.get_table_names():
+            existing_columns = {col['name'] for col in inspector.get_columns('sensor_snapshots')}
+            if 'quelle' not in existing_columns:
+                connection.execute(text(
+                    "ALTER TABLE sensor_snapshots ADD COLUMN quelle VARCHAR(20) NOT NULL DEFAULT 'unknown'"
+                ))
+                # Idempotenz-Sicherheitsnetz: bestehende Zeilen explizit auf 'unknown'
+                # setzen, falls die DEFAULT-Klausel auf älteren SQLite-Versionen nicht
+                # rückwirkend wirkt.
+                connection.execute(text(
+                    "UPDATE sensor_snapshots SET quelle = 'unknown' WHERE quelle IS NULL"
+                ))
+
         # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
         if 'infothek_eintraege' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}

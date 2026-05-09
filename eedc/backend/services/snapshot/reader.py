@@ -27,6 +27,7 @@ from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     _sensor_key_to_mqtt_key,
 )
+from backend.services.snapshot.source import SnapshotSource
 from backend.services.snapshot.writer import _upsert_snapshot
 
 logger = logging.getLogger(__name__)
@@ -131,16 +132,23 @@ async def get_snapshot(
 
     # Self-Healing via HA Statistics (wenn HA-Sensor-ID bekannt)
     wert: Optional[float] = None
+    quelle: Optional[str] = None
     if sensor_id:
         ha_svc = get_ha_statistics_service()
         if ha_svc.is_available:
             wert = ha_svc.get_value_at(sensor_id, zeitpunkt, ha_toleranz_minuten)
+            if wert is not None:
+                quelle = SnapshotSource.HA_STATISTICS
 
     # Fallback: MQTT-Energy-Snapshot (Standalone/Docker-Modus)
     if wert is None:
         mqtt_key = _sensor_key_to_mqtt_key(sensor_key)
         if mqtt_key:
             wert = await _get_mqtt_snapshot_at(db, anlage_id, mqtt_key, zeitpunkt)
+            if wert is not None:
+                # Self-Healing-Read über MQTT-Backup, wenn HA nichts lieferte —
+                # konzeptionell die `live_fallback`-Quelle (siehe source.py).
+                quelle = SnapshotSource.LIVE_FALLBACK
 
     if wert is None:
         logger.debug(
@@ -150,7 +158,8 @@ async def get_snapshot(
         return None
 
     # Upsert in DB (idempotent bei parallelen Anfragen dank UniqueConstraint)
-    await _upsert_snapshot(db, anlage_id, sensor_key, zeitpunkt, wert)
+    assert quelle is not None  # eine der beiden Quellen muss gegriffen haben
+    await _upsert_snapshot(db, anlage_id, sensor_key, zeitpunkt, wert, quelle=quelle)
     return wert
 
 

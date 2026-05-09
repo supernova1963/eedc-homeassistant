@@ -19,6 +19,8 @@ Slice-Struktur:
                       get_daily_counter_deltas_by_inv
 - `fallback.py`     — live_snapshot_if_missing (MQTT-Live-Pfad)
 - `reaggregator.py` — get_reaggregate_preview, resnap_anlage_range
+- `source.py`       — SnapshotSource-Konstanten + Validation (Etappe 3c P1, E3)
+- `diagnose.py`     — get_snapshot_source_distribution (Read-Helper für UI)
 """
 
 from backend.services.snapshot.keys import (
@@ -46,6 +48,15 @@ from backend.services.snapshot.reaggregator import (
     get_reaggregate_preview,
     resnap_anlage_range,
 )
+from backend.services.snapshot.source import (
+    ALL_SOURCES,
+    SnapshotSource,
+    assert_valid_source,
+)
+from backend.services.snapshot.diagnose import (
+    get_snapshot_source_distribution,
+    get_snapshot_source_distribution_recent,
+)
 
 __all__ = [
     # Konstanten
@@ -69,4 +80,10 @@ __all__ = [
     # Reaggregator
     "get_reaggregate_preview",
     "resnap_anlage_range",
+    # Source-Marker (E3)
+    "ALL_SOURCES",
+    "SnapshotSource",
+    "assert_valid_source",
+    "get_snapshot_source_distribution",
+    "get_snapshot_source_distribution_recent",
 ]

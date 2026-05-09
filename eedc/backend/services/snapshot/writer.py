@@ -28,6 +28,10 @@ from backend.services.snapshot.keys import (
     _is_kumulativ_feld,
     _mqtt_key_to_sensor_key,
 )
+from backend.services.snapshot.source import (
+    SnapshotSource,
+    assert_valid_source,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +120,18 @@ async def _upsert_snapshot(
     sensor_key: str,
     zeitpunkt: datetime,
     wert_kwh: float,
+    *,
+    quelle: str,
 ) -> None:
-    """Upsert (insert or update) eines Snapshot-Eintrags."""
+    """Upsert (insert or update) eines Snapshot-Eintrags.
+
+    `quelle` ist Pflicht-Parameter (Etappe 3c P1) und muss aus
+    `SnapshotSource`-Konstanten kommen. Bei UPDATE wird die Quelle ebenfalls
+    überschrieben — wer zuletzt schreibt, prägt den Marker (für `sensor_snapshots`
+    bewusst Last-Writer-Wins, weil pro Zeile nur ein Wert + Zeitpunkt existiert
+    und der jüngste Schreiber den aktuellen Stand repräsentiert).
+    """
+    assert_valid_source(quelle)
     existing = await db.execute(
         select(SensorSnapshot).where(
             and_(
@@ -130,12 +144,14 @@ async def _upsert_snapshot(
     row = existing.scalar_one_or_none()
     if row is not None:
         row.wert_kwh = wert_kwh
+        row.quelle = quelle
     else:
         db.add(SensorSnapshot(
             anlage_id=anlage_id,
             sensor_key=sensor_key,
             zeitpunkt=zeitpunkt,
             wert_kwh=wert_kwh,
+            quelle=quelle,
         ))
     await db.flush()
 
@@ -204,7 +220,10 @@ async def snapshot_anlage(
                         db, anlage.id, sensor_key, zeitpunkt
                     )
                 continue
-            await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+            await _upsert_snapshot(
+                db, anlage.id, sensor_key, zeitpunkt, wert,
+                quelle=SnapshotSource.HA_STATISTICS,
+            )
             count += 1
 
     # 2. MQTT-Energy-Snapshots (Standalone-Modus, ergänzt/deckt HA-Gap ab)
@@ -240,7 +259,10 @@ async def snapshot_anlage(
         wert = await _get_mqtt_snapshot_at(db, anlage.id, mqtt_key, zeitpunkt, toleranz_minuten=10)
         if wert is None:
             continue
-        await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+        await _upsert_snapshot(
+            db, anlage.id, sensor_key, zeitpunkt, wert,
+            quelle=SnapshotSource.MQTT_INBOUND,
+        )
         count += 1
 
     return count
@@ -311,7 +333,10 @@ async def snapshot_anlage_5min(
                     db, anlage.id, sensor_key, zeitpunkt
                 )
             continue
-        await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+        await _upsert_snapshot(
+            db, anlage.id, sensor_key, zeitpunkt, wert,
+            quelle=SnapshotSource.HA_STATISTICS,
+        )
         count += 1
 
     return count

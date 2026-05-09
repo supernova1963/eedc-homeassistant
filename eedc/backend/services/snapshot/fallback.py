@@ -20,6 +20,7 @@ from backend.models.sensor_snapshot import SensorSnapshot
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
 from backend.services.snapshot.keys import _mqtt_key_to_sensor_key
+from backend.services.snapshot.source import SnapshotSource
 from backend.services.snapshot.writer import _upsert_snapshot
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,10 @@ async def live_snapshot_if_missing(
         wert = recent.scalar_one_or_none()
         if wert is None:
             continue
-        await _upsert_snapshot(db, anlage.id, sensor_key, zeitpunkt, wert)
+        await _upsert_snapshot(
+            db, anlage.id, sensor_key, zeitpunkt, wert,
+            quelle=SnapshotSource.MQTT_LIVE,
+        )
         count += 1
 
     return count
