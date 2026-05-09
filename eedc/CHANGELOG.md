@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.8] - 2026-05-09 — Etappe 3c: Energieprofil Read-/Write-Architektur konsolidiert
+
+> 🧱 **Architektur-Etappe — Anwender-sichtbar als Konsistenz-Patch.** Vier Päckchen aus dem Etappe-3c-Detail-Konzept (`docs/KONZEPT-ENERGIEPROFIL-3C.md`): Slot-Konvention zwischen kWh- und Counter-Feldern symmetrisch, Tagesgesamt für Komponenten-Energien strikt aus Boundary-Diff (HA-konform), SensorSnapshots tragen einen Source-Marker als 3d-Schablone, Reaggregate-Modal trennt Resnap+Aggregat klar von „Nur neu rechnen". Verbessert die Self-Healing-Eigenschaften aus v3.26.6 strukturell — kein neuer Anwender-Knopf, sondern saubere Pfade darunter.
+
+### Changed
+
+- **Counter-Felder folgen jetzt der #144-Backward-Slot-Konvention** (Etappe 3c P2, E1). WP-Kompressor-Starts und alle künftigen Counter-Sensoren werden symmetrisch zu kWh-Slots auf das Stunden-Ende ausgerichtet (Slot N = Δ aus [N-1, N)). Vorher trug der Counter-Pfad noch die ursprüngliche Forward-Konvention der Snapshot-Erfassung — bei Re-Aggregation entstand dadurch eine Stunden-Verschiebung gegenüber der kWh-Heatmap. Bestehende Daten werden beim ersten App-Start nach Update einmalig idempotent migriert (`migrations`-Tabelle, kein User-Eingriff nötig). `BoundaryRange`-Helper als zentraler Slot-Cutoff für beide Aggregat-Typen.
+- **Tagesgesamt für komponenten-kWh-Felder kommt strikt aus dem Boundary-Diff** (Etappe 3c P3, E2). Statt Slot-Σ über 24 Heatmap-Werte wird `snap(Folgetag 00:00) − snap(Tag 00:00)` als Tagessumme geschrieben — identisch zur Logik des HA Energy Dashboards. Dadurch sind EEDC-Tagessummen ab jetzt strukturell mit HA konsistent, auch wenn ein Slot durch Sensor-Reset/Spike degradiert ist. Slot-Σ bleibt unverändert für die Verteilungs-Heatmap, ist aber jetzt semantisch klar von der „Tagesgesamt"-Sicht (Boundary) getrennt.
+- **Reaggregate-Modal trennt Resnap+Aggregat von „Nur neu rechnen"** (Etappe 3c P4, E4). Der Vorschau-Knopf zeigt zwei Aktionsbuttons statt einem: *Snapshots neu holen + Tagesaggregat rechnen* (langsam, ~275 HA-Stats-Queries) und *Nur neu rechnen* (sub-sekündlich, wenn Snapshots schon stimmen). Die heuristische Auto-Erkennung aus v3.26.6 setzt den Default, ist aber jetzt User-übersteuerbar — z. B. nach Sensor-Tausch sinnvoll, wenn Snapshots ungeprüft erscheinen. Cancel-Knopf erscheint nach 30 Sekunden Resnap-Laufzeit (bricht nur die Anzeige ab; der Backend-Job läuft idempotent zu Ende).
+
+### Added
+
+- **Source-Marker `quelle` auf SensorSnapshots** (Etappe 3c P1, E3). Jeder geschriebene Snapshot trägt jetzt eine Herkunftsnotiz — `ha_statistics`, `mqtt_inbound`, `mqtt_live`, `live_fallback`, `unknown`. Bestehende Snapshots bleiben auf `unknown` (rückwirkend nicht rekonstruierbar). Schablone für Etappe 3d (Daten-Provenance); wird in der Datenverwaltungs-Seite später sichtbar gemacht. Aktuell Lese-Konsument nur intern im Reaggregate-Pfad (welche Slots dürfen überschrieben werden).
+
+### Internal
+
+- **`sensor_snapshot_service.py` (1530 Zeilen) in 6 Slices zerlegt** als Refactoring-Tail von Päckchen 1. Schnittstelle nach außen unverändert; intern jetzt nach Reader / Writer / Aggregator / Counter-Logik / Migration / Range-Helper getrennt.
+- **`aggregate_day` in eigenen Slice extrahiert** als Refactoring-Tail von Päckchen 3. Tagesaggregations-Logik nicht mehr in Snapshot-Service eingebettet.
+- **Aufräum-Sprint Phase B Konzept-Docs auf v3.26.7-Stand**: 9 Konzept-Dokumente (KONZEPT-ENERGIEPROFIL, KONZEPT-INFOTHEK, KONZEPT-KORREKTURPROFIL, KONZEPT-MQTT-GATEWAY, KONZEPT-SPEICHER-AUSWERTUNG, KONZEPT-STROMPREIS-MITSCHRIFT, KONZEPT-UMFRAGE, KONZEPT-WALLBOX-EAUTO, KONZEPT-COCKPIT-LAYOUT) mit aktuellen Status-Headern und Implementierungstabellen. 10 abgeschlossene oder verworfene Docs nach `docs/archive/` verschoben (Solcast-Konzept, What's-new-Banner, Standalone-API-Stub, Drift-Audit-Vorbereitungen, Doku-Sweep-Arbeitsdoku, PN-Drafts). KONZEPT-LIVE-SNAPSHOT-5MIN von `drafts/` nach `docs/` befördert.
+- **Etappe-3c-Detail-Konzept** als `docs/KONZEPT-ENERGIEPROFIL-3C.md` abgelegt (vier E-Entscheidungen, vier Päckchen P1–P4, Refactoring-Tails). Etappe-3d-Vorbereitungs-Konzept `docs/KONZEPT-DATENPIPELINE.md` parallel ausgearbeitet (5-Stufen-Hierarchie, Hybrid-Provenance, Konflikt-Resolver, Repair-Orchestrator).
+
+---
+
 ## [3.26.7] - 2026-05-09 — UX-Bündel: Pfeile, Schreibweise, Seitentitel
 
 > ✨ **Vier kleine UX-Verbesserungen aus aktivem Tester-Feedback in einem Patch.** Live-Heute Batterie-Pfeile alignieren mit dem HA Energy Dashboard, „eedc" und „Home Assistant App" werden durchgängig geschrieben, redundante Seitentitel im Cockpit/Auswertungen/Aussichten/Live-Daten/Community-Vergleich und mehreren Einstellungs-Seiten sind raus.

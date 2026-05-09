@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.7)
+> **Stand:** Mai 2026 (v3.26.8)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,26 @@
 ---
 
 ## v3.26.x — Wetter-Stratifizierung und Lernfaktor-Diagnose (Mai 2026)
+
+### Architektur-Konsolidierung Etappe 3c — Konsistenz-Fixes unter der Haube *(v3.26.8)*
+
+> 🧱 **Architektur-Etappe sichtbar nur als saubereres Verhalten.** Vier strukturelle Aufräum-Päckchen am Energieprofil-Datenpfad: Slot-Ausrichtung, Tagessumme HA-konform, Snapshot-Herkunft trackbar, Reaggregat-Modal mit klar getrennten Aktionen. Kein neuer Knopf, keine neuen Konzepte — die Selbst-Heilung aus v3.26.6 ist jetzt strukturell abgesichert statt heuristisch.
+
+#### Was sich für dich ändert
+
+- **WP-Kompressor-Starts-Heatmap wandert beim ersten Start um eine Stunde nach rechts — das ist Absicht, kein Bug.** Wer WP-Kompressor-Starts erfasst (seit v3.24.0 möglich), wird nach dem Update einmalig sehen, dass die gewohnte Stundenverteilung in der Heatmap um eine Spalte verschoben ist. Was vorher in Stunde 6 stand (Aktivität *zwischen* 06:00–07:00), steht ab jetzt in Stunde 7 — derselbe Wert, andere Spalte. Die Verschiebung gleicht den Counter-Pfad an die kWh-Heatmap an, die schon seit v3.20.0 die HA-übliche Backward-Konvention nutzt (Slot N = Aktivität *zwischen* (N−1):00 und N:00, [#144](https://github.com/supernova1963/eedc-homeassistant/issues/144)). Vorher waren beide Heatmaps eine Stunde gegeneinander verschoben — jetzt symmetrisch. **Tagessumme der Kompressor-Starts ändert sich nicht.** Die Migration läuft beim ersten App-Start einmalig und automatisch (idempotent über interne `migrations`-Tabelle), keine User-Aktion nötig.
+- **EEDC-Tagessummen für Komponenten-Energien entsprechen ab jetzt exakt dem HA Energy Dashboard.** Für Wallbox / WP / BKW / E-Auto / Speicher wird die Tageszahl ab jetzt aus Tagesanfang/Tagesende-Zählerdiff gerechnet — derselbe Pfad, den auch HA selbst nutzt. Bei normalen Anlagen ohne Sensor-Lücken praktisch identisch zur alten Stundensummen-Variante; bei Anlagen mit Sensor-Resets oder Spike-Korrekturen kann es geringfügig anders aussehen — und genau dort ist der neue Wert der konsistente. Greift für *neue* Aggregate (heute und morgen); historische Tagessummen bleiben unverändert, können aber bei Bedarf über den Reaggregate-Knopf pro Tag nachgezogen werden.
+- **Reaggregate-Modal mit zwei klaren Aktions-Buttons.** Statt einem „Übernehmen"-Knopf zeigt das Vorschau-Modal jetzt *Snapshots neu holen + Tagesaggregat rechnen* (vollständiger Resnap) und *Nur neu rechnen* (wenn die Snapshots längst stimmen). Die Auto-Erkennung aus v3.26.6 macht den Default-Knopf vor — du kannst aber jetzt explizit überschreiben (z. B. nach Sensor-Tausch, wenn Snapshots ungeprüft erscheinen). Cancel-Knopf erscheint, wenn der Resnap länger als 30 Sekunden braucht.
+- **Vorbereitung Daten-Herkunft sichtbar machen** (Schablone für Etappe 3d). Jeder gespeicherte Sensor-Schnappschuss trägt ab jetzt einen Quelle-Marker (HA-Statistics / MQTT-Inbound / MQTT-Live / Live-Fallback / Unknown für historische Snapshots). Sichtbar wird das später in der Datenverwaltungs-Seite — als Vorlage für Konflikt-Auflösung zwischen Cloud-Import, manueller Eingabe und Auto-Aggregation in Etappe 3d.
+
+#### Was sich *nicht* ändert
+
+- **Tagessumme der Kompressor-Starts bleibt unverändert** — die kommt aus einem eigenen Pfad, der schon vorher korrekt war (Tagesanfang/Tagesende-Counter-Diff). Nur die Stundenverteilung in der Heatmap wandert um eine Spalte.
+- **Werte gehen nicht verloren.** Slot-Wert-Anzahl bleibt gleich; an Stellen, wo bei der neuen Konvention ein Snapshot-Boundary fehlt, wird ein Slot leer — an genau einer anderen Stelle als vorher (NULL-Slots wandern mit, die Anzahl bleibt).
+- **Historische komponenten_kwh-Tagessummen werden nicht stillschweigend umgeschrieben.** Der Reaggregate-Knopf pro Tag liefert auf Wunsch den HA-konformen Boundary-Diff-Wert.
+- **Resnap-Backend war seit v3.26.6 schon da.** Was neu ist, ist die UX-Trennung im Frontend — die `mit_resnap=true/false`-Auswahl gab es serverseitig schon.
+
+→ [Auswertung → Energieprofil](HANDBUCH_BEDIENUNG.md#42-auswertung)
 
 ### UX-Bündel aus Forum-Beobachtungen *(v3.26.7)*
 
