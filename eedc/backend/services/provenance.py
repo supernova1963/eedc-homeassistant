@@ -272,6 +272,47 @@ async def write_with_provenance(
     )
 
 
+def seed_provenance(
+    obj: Any,
+    *,
+    source: str,
+    writer: str,
+    fields: Optional[list[str]] = None,
+    json_subkeys: Optional[dict[str, list[str]]] = None,
+) -> None:
+    """Setzt source_provenance für eine FRISCHE Row mit bekanntem Initial-Inhalt.
+
+    Anwendung: Backup-Restore + Demo-Daten + andere Initial-Bulk-Pfade.
+    Pro fresh-Anlage hunderte Felder einzeln durch write_with_provenance
+    zu schicken würde hunderte Audit-Log-Einträge generieren — ohne
+    Diagnose-Mehrwert, weil bei einer fresh Row kein Hierarchie-Konflikt
+    möglich ist (existing ist überall None).
+
+    Args:
+        fields: Top-Level-ORM-Attribute, deren Provenance gesetzt werden soll.
+        json_subkeys: dict[json_attr, list[sub_key]] für JSON-Sub-Keys.
+
+    Verhalten:
+        - source_provenance wird direkt gesetzt (KEIN Audit-Log).
+        - Caller darf optional EIN summarisches Audit-Event über
+          `log_payload_noop()` mit decision="applied"-Sentinel ergänzen.
+        - SOURCE_LABELS wird trotzdem geprüft — KeyError bei unbekanntem Label.
+    """
+    _ = SOURCE_LABELS[source]  # KeyError wenn unbekannt, kein silent fallback
+    entry = _provenance_entry(source, writer, input_hash=None)
+
+    provenance: dict[str, Any] = obj.source_provenance or {}
+    if fields:
+        for field in fields:
+            provenance[field] = dict(entry)
+    if json_subkeys:
+        for json_attr, sub_keys in json_subkeys.items():
+            for sub_key in sub_keys:
+                provenance[f"{json_attr}.{sub_key}"] = dict(entry)
+    obj.source_provenance = provenance
+    flag_modified(obj, "source_provenance")
+
+
 def log_payload_noop(
     db: AsyncSession,
     obj: Any,
