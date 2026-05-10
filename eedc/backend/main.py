@@ -47,7 +47,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select, func
 from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME, HA_INTEGRATION_AVAILABLE
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, prognosen, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, diagnostics, aktueller_monat, live_dashboard, live_mqtt_inbound, live_wetter, energie_profil, mqtt_gateway, mqtt_presets, infothek, dokumentation, korrekturprofil
+from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, prognosen, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, diagnostics, aktueller_monat, live_dashboard, live_mqtt_inbound, live_wetter, energie_profil, mqtt_gateway, mqtt_presets, infothek, dokumentation, korrekturprofil, repair
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -345,6 +345,7 @@ app.include_router(energie_profil.router, prefix="/api/energie-profil", tags=["E
 app.include_router(infothek.router, prefix="/api/infothek", tags=["Infothek"])
 app.include_router(dokumentation.router, prefix="/api/dokumentation", tags=["Dokumentation"])
 app.include_router(korrekturprofil.router, prefix="/api/korrekturprofil", tags=["Korrekturprofil"])
+app.include_router(repair.router, prefix="/api/repair", tags=["Reparatur-Werkbank"])
 
 # =============================================================================
 # API Routes - Home Assistant (nur mit SUPERVISOR_TOKEN)
