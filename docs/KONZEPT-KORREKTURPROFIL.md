@@ -1,14 +1,16 @@
 # Konzept: EEDC-Lernfaktor — Optimierung und Korrekturprofile
 
-> **Status (2026-05-09):** Päckchen 1+2 (Wetter-Layer + O1+O2-Doppel-Variante + stündliches
+> **Status (2026-05-10):** Päckchen 1+2 (Wetter-Layer + O1+O2-Doppel-Variante + stündliches
 > Korrekturprofil mit Sonnenstand × Wetter im Live-Pfad) ✅ **ausgeliefert in v3.26.0–v3.26.2**
 > (Commits 06558529, 6fc92681). Skalar-Hotfix in v3.26.3, Wetter-Backfill-Hotfix v3.26.4.
 > O1 Recency-Boost und O2 Trim-Mean laufen aktuell **parallel zum Legacy-Skalar als
-> Diagnose**; Live-Pfad nutzt weiter Legacy. Was offen ist: empirische Bewertung der
-> O12-Daten über mehrere Wochen, dann Default-Aktivierungs-Entscheidung. Variante A
-> (Anlagenspezifisches Stunden-Korrekturprofil pro Saisonbin) bleibt reaktiv —
-> Trigger sind Diagnose-Daten aus der Wetter-Stratifizierung. Variante v1 archiviert
-> in [`archive/KONZEPT-KORREKTURPROFIL-v1-2026-05-03.md`](archive/KONZEPT-KORREKTURPROFIL-v1-2026-05-03.md).
+> Diagnose**; Live-Pfad nutzt weiter Legacy. Beobachtungs-Phase läuft seit 2026-05-06
+> (Tag 4 von „mehreren Wochen"). **O1+O2-Default-Aktivierung erfolgt frühestens
+> nach v3.27.0 und nach Abschluss der empirischen Beobachtung** — Tag 4 ist zu
+> früh, eine Aktivierung jetzt würde gegen das eigene Konzept verstoßen.
+> Variante A (Anlagenspezifisches Stunden-Korrekturprofil pro Saisonbin) bleibt
+> reaktiv — Trigger sind Diagnose-Daten aus der Wetter-Stratifizierung. Variante v1
+> archiviert in [`archive/KONZEPT-KORREKTURPROFIL-v1-2026-05-03.md`](archive/KONZEPT-KORREKTURPROFIL-v1-2026-05-03.md).
 >
 > **Strenger Grundsatz:** Diese Doku enthält **keine Vergleiche** mit
 > Tom-HA-SFML, Solcast oder anderen externen Quellen. Der Lernfaktor ist
@@ -334,7 +336,7 @@ class Korrekturprofil(Base):
 
 | Schritt | Trigger |
 |---|---|
-| Aktivierung O1+O2 als neuer Skalar-Default | Doppel-Vergleich zeigt klar Verbesserung über mehrere Wochen |
+| Aktivierung O1+O2 als neuer Skalar-Default | Doppel-Vergleich zeigt klar Verbesserung über mehrere Wochen — **frühestens nach v3.27.0**, nicht innerhalb der laufenden Beobachtungs-Phase |
 | Variante C (String-spezifisch) | Konkrete Multi-WR-Anfrage |
 | O3 Schneeerkennung | Eigenes Issue, nach Winter 2026/27 |
 | Prognosen-Tab entfernen | Nach 12 Monaten saisonaler Beobachtung, wenn Korrekturprofil sich bewährt |
