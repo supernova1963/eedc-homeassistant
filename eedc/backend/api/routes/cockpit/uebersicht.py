@@ -172,9 +172,18 @@ async def get_cockpit_uebersicht(
     wp_strom = 0.0
     wp_heizung = 0.0
     wp_warmwasser = 0.0
-    emob_km = 0.0
-    emob_ladung = 0.0
-    emob_pv_ladung = 0.0
+    # E-Mobilität: getrennt nach E-Auto (Vehicle-Sicht) und Wallbox (Loadpoint-
+    # Sicht) sammeln, danach pro Feld die größere Quelle als Wahrheit + PV ≤
+    # Gesamt erzwingen. Identische Logik wie in
+    # `aktueller_monat._collect_saved_data` (Commit 92d522a8); ohne diese
+    # Trennung würde 1 EAuto + 1 WB mit ähnlich gepflegten Werten doppelt
+    # zählen (Joachim/Gernot 2026-05-02). Saubere Trennung pro Fahrzeug folgt
+    # in Phase 2 des Wallbox/E-Auto-Konzepts.
+    eauto_ladung = 0.0
+    eauto_pv_ladung = 0.0
+    eauto_km = 0.0
+    wb_ladung = 0.0
+    wb_pv_ladung = 0.0
     bkw_erzeugung = 0.0
     bkw_eigenverbrauch = 0.0
     sonstige_ertraege_gesamt = 0.0
@@ -223,13 +232,16 @@ async def get_cockpit_uebersicht(
                     netz_kwh * wallbox_preis_cent +
                     pv_kwh * einspeise_verguetung_cent
                 ) / 100
-            else:
-                emob_km += data.get("km_gefahren", 0) or 0
-                emob_ladung += (
+            elif inv.typ == "e-auto":
+                eauto_ladung += (
                     data.get("ladung_kwh", 0) or
                     data.get("verbrauch_kwh", 0) or 0
                 )
-                emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
+                eauto_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
+                eauto_km += data.get("km_gefahren", 0) or 0
+            else:  # wallbox (nicht-dienstlich)
+                wb_ladung += data.get("ladung_kwh", 0) or 0
+                wb_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
 
         elif inv.typ == "balkonkraftwerk":
             bkw_kwh = get_pv_erzeugung_kwh(data)
@@ -242,6 +254,16 @@ async def get_cockpit_uebersicht(
         sonstige_ausgaben_gesamt += summen["ausgaben_euro"]
 
     sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
+
+    # E-Mobilitäts-Pool: pro Feld die größere Quelle gewinnt (analog zu
+    # `aktueller_monat._collect_saved_data`). Wallbox liefert üblicherweise
+    # Loadpoint-Wahrheit, E-Auto die Vehicle-Sicht; ist nur eine gepflegt,
+    # gewinnt sie automatisch. PV ≤ Gesamt erzwingen.
+    emob_ladung = max(eauto_ladung, wb_ladung)
+    emob_pv_ladung = max(eauto_pv_ladung, wb_pv_ladung)
+    if emob_pv_ladung > emob_ladung:
+        emob_pv_ladung = emob_ladung
+    emob_km = eauto_km
 
     # Monatsdaten NUR für Anlagen-Energiebilanz
     md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)

@@ -703,8 +703,12 @@ async def get_aktueller_monat(
             "heizenergie_kwh": "wp_waerme_kwh",
             "warmwasser_kwh": "wp_waerme_kwh",
         },
-        "e-auto": {"ladung_kwh": "emob_ladung_kwh", "verbrauch_kwh": "emob_ladung_kwh", "km_gefahren": "emob_km"},
-        "wallbox": {"ladung_kwh": "emob_ladung_kwh"},
+        # E-Auto und Wallbox NICHT hier — sie messen denselben Stromfluss aus
+        # zwei Perspektiven (Vehicle vs. Loadpoint). Aufsummieren über beide
+        # Typen würde Pool-Doppelzählung produzieren (Joachim/Gernot
+        # 2026-05-02). Aggregation passiert unten als max-Pool nach dem
+        # Standard-Loop, identisch zu `_collect_saved_data` (Commit 92d522a8)
+        # und `cockpit/uebersicht.py`.
         "balkonkraftwerk": {"pv_erzeugung_kwh": "bkw_erzeugung_kwh"},
     }
 
@@ -728,6 +732,41 @@ async def get_aktueller_monat(
         agg_map = typ_aggregation.get(inv.typ, {})
         for inv_suffix, top_level_feld in agg_map.items():
             _aggregate(top_level_feld, f"inv_{inv.id}_{inv_suffix}")
+
+    # ── E-Mobilität: max-Pool über E-Auto + Wallbox ──
+    # Dienstliche Fahrzeuge früh herausfiltern (sie zählen separat in
+    # `dienstlich_ladekosten`, nicht in der Haus-Energiebilanz). Pro Feld die
+    # größere Quelle gewinnt; PV ≤ Gesamt erzwingen. Identische Logik wie in
+    # `_collect_saved_data` (Commit 92d522a8) und `cockpit/uebersicht.py`.
+    if "emob_ladung_kwh" not in direct_fields:
+        eauto_ladung = 0.0
+        eauto_km = 0.0
+        wb_ladung = 0.0
+        emob_quelle: Optional[tuple] = None
+        for inv in investitionen:
+            if (inv.parameter or {}).get("ist_dienstlich", False):
+                continue
+            if inv.typ == "e-auto":
+                for suffix in ("ladung_kwh", "verbrauch_kwh"):
+                    entry = resolved.get(f"inv_{inv.id}_{suffix}")
+                    if entry:
+                        eauto_ladung += entry[0]
+                        emob_quelle = entry[1]
+                        break
+                km_entry = resolved.get(f"inv_{inv.id}_km_gefahren")
+                if km_entry:
+                    eauto_km += km_entry[0]
+                    emob_quelle = km_entry[1]
+            elif inv.typ == "wallbox":
+                entry = resolved.get(f"inv_{inv.id}_ladung_kwh")
+                if entry:
+                    wb_ladung += entry[0]
+                    emob_quelle = entry[1]
+        emob_ladung = max(eauto_ladung, wb_ladung)
+        if emob_ladung > 0 and emob_quelle is not None:
+            resolved["emob_ladung_kwh"] = (emob_ladung, emob_quelle)
+        if "emob_km" not in direct_fields and eauto_km > 0 and emob_quelle is not None:
+            resolved["emob_km"] = (eauto_km, emob_quelle)
 
     # ── Werte extrahieren ──
     def get_val(feld: str) -> Optional[float]:
