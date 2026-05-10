@@ -1,73 +1,51 @@
 """
-Monatsabschluss API Routes.
+Monatsabschluss API — Read- und Vorschau-Endpoints.
 
-Endpoints für den Monatsabschluss-Wizard:
-- Vorschläge und Status für Monatsdaten
-- Speichern mit Plausibilitätsprüfung
-- MQTT-Integration
+GET  /{anlage_id}/{jahr}/{monat}                — Status aller Felder, Vorschläge, Warnungen
+POST /{anlage_id}/{jahr}/{monat}/cloud-fetch    — Cloud-Werte fetchen (read-only, keine DB-Änderung)
+GET  /naechster/{anlage_id}                     — Nächster unvollständiger Monat
+GET  /historie/{anlage_id}                      — Historie der letzten N Monatsabschlüsse
+
+Schreib-Pfad (POST {anlage_id}/{jahr}/{monat}) liegt in wizard.py.
 """
 
-import logging
-from datetime import date, datetime
-from typing import Optional, Any
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel, Field
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
-from sqlalchemy.orm.attributes import flag_modified
 
-from backend.core.database import get_db, async_session_maker
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.core.config import HA_INTEGRATION_AVAILABLE
+from backend.core.database import get_db
 from backend.core.field_definitions import (
-    BASIS_FELDER, BEDINGTE_BASIS_FELDER, OPTIONALE_FELDER, INVESTITION_FELDER,
-    ALLE_MONATSDATEN_FELDNAMEN,
-    get_basis_felder, get_felder_fuer_investition, get_felder_fuer_sonstiges,
+    OPTIONALE_FELDER,
+    get_basis_felder,
+    get_felder_fuer_investition,
 )
-
-logger = logging.getLogger(__name__)
 from backend.models.anlage import Anlage
+from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.services.vorschlag_service import VorschlagService, Vorschlag, VorschlagQuelle, PlausibilitaetsWarnung
-from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
+from backend.services.activity_service import log_activity
 from backend.services.ha_state_service import get_ha_state_service
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
-from backend.core.config import HA_INTEGRATION_AVAILABLE
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage
-from backend.services.activity_service import log_activity
-from backend.services.provenance import (
-    write_json_subkey_with_provenance,
-    write_with_provenance,
+from backend.services.vorschlag_service import Vorschlag, VorschlagQuelle, VorschlagService
+
+from ._shared import (
+    MONAT_NAMEN,
+    _vorschlag_to_response,
+    _warnung_to_response,
+    logger,
 )
 
-
-router = APIRouter(prefix="/monatsabschluss", tags=["Monatsabschluss"])
-
-# Wizard-Save ist User-Eingabe = `manual:form`. Auto-Aggregation läuft danach
-# im Background-Task (services/monatsabschluss_aggregator.py).
-_WIZARD_WRITER = "monatsabschluss_wizard"
+router = APIRouter()
 
 
 # =============================================================================
-# Pydantic Models
+# Pydantic-Models — view-spezifisch
 # =============================================================================
-
-class VorschlagResponse(BaseModel):
-    """Vorschlag für einen Feldwert."""
-    wert: float
-    quelle: str
-    konfidenz: int
-    beschreibung: str
-    details: Optional[dict] = None
-
-
-class WarnungResponse(BaseModel):
-    """Plausibilitätswarnung."""
-    typ: str
-    schwere: str
-    meldung: str
-    details: Optional[dict] = None
-
 
 class FeldStatus(BaseModel):
     """Status eines einzelnen Feldes."""
@@ -77,8 +55,8 @@ class FeldStatus(BaseModel):
     aktueller_wert: Optional[float] = None
     aktueller_text: Optional[str] = None  # Für Textfelder wie Beschreibung, Notizen
     quelle: Optional[str] = None  # ha_sensor, snapshot, manuell, berechnet
-    vorschlaege: list[VorschlagResponse] = []
-    warnungen: list[WarnungResponse] = []
+    vorschlaege: list = []
+    warnungen: list = []
     strategie: Optional[str] = None  # Aus sensor_mapping
     sensor_id: Optional[str] = None  # Wenn strategie=sensor
     typ: str = "number"  # number oder text
@@ -119,51 +97,16 @@ class MonatsabschlussResponse(BaseModel):
     investitionen: list[InvestitionStatus]
 
 
-class FeldWert(BaseModel):
-    """Wert für ein Feld."""
+class CloudMonatswertFeld(BaseModel):
     feld: str
+    label: str
     wert: float
+    einheit: str
 
 
-class InvestitionWerte(BaseModel):
-    """Werte für eine Investition."""
-    investition_id: int
-    felder: list[FeldWert]
-    sonstige_positionen: Optional[list[dict]] = None  # Strukturierte Erträge & Ausgaben
-
-
-class MonatsabschlussInput(BaseModel):
-    """Eingabedaten für den Monatsabschluss."""
-    # Basis-Zählerdaten
-    # HINWEIS: direktverbrauch_kwh wird automatisch berechnet (PV-Erzeugung - Einspeisung)
-    einspeisung_kwh: Optional[float] = None
-    netzbezug_kwh: Optional[float] = None
-    globalstrahlung_kwh_m2: Optional[float] = None
-    sonnenstunden: Optional[float] = None
-    durchschnittstemperatur: Optional[float] = None
-
-    # Optionale manuelle Felder (nicht aus HA)
-    netzbezug_durchschnittspreis_cent: Optional[float] = None
-    kraftstoffpreis_euro: Optional[float] = None  # €/L Monatsdurchschnitt
-    gaspreis_cent_kwh: Optional[float] = None  # ct/kWh Endpreis Gas/Öl für WP-Vergleich
-    sonderkosten_euro: Optional[float] = None
-    sonderkosten_beschreibung: Optional[str] = None
-    notizen: Optional[str] = None
-
-    # Investitionen
-    investitionen: list[InvestitionWerte] = []
-
-    # Datenquelle (z.B. "mqtt_inbound", "cloud_import", "ha_statistics")
-    datenquelle: Optional[str] = None
-
-
-class MonatsabschlussResult(BaseModel):
-    """Ergebnis des Monatsabschlusses."""
-    success: bool
-    message: str
-    monatsdaten_id: Optional[int] = None
-    investition_monatsdaten_ids: list[int] = []
-    warnungen: list[WarnungResponse] = []
+class CloudMonatswerteResponse(BaseModel):
+    basis: list[CloudMonatswertFeld]
+    investitionen: list[dict]
 
 
 class NaechsterMonatResponse(BaseModel):
@@ -177,41 +120,7 @@ class NaechsterMonatResponse(BaseModel):
 
 
 # =============================================================================
-# Hilfsfunktionen
-# =============================================================================
-
-MONAT_NAMEN = [
-    "", "Januar", "Februar", "März", "April", "Mai", "Juni",
-    "Juli", "August", "September", "Oktober", "November", "Dezember"
-]
-
-# BASIS_FELDER, OPTIONALE_FELDER, INVESTITION_FELDER werden aus
-# backend.core.field_definitions importiert (Single Source of Truth)
-
-
-def _vorschlag_to_response(v: Vorschlag) -> VorschlagResponse:
-    """Konvertiert Vorschlag zu Response-Model."""
-    return VorschlagResponse(
-        wert=v.wert,
-        quelle=v.quelle.value,
-        konfidenz=v.konfidenz,
-        beschreibung=v.beschreibung,
-        details=v.details,
-    )
-
-
-def _warnung_to_response(w: PlausibilitaetsWarnung) -> WarnungResponse:
-    """Konvertiert Warnung zu Response-Model."""
-    return WarnungResponse(
-        typ=w.typ,
-        schwere=w.schwere,
-        meldung=w.meldung,
-        details=w.details,
-    )
-
-
-# =============================================================================
-# API Endpoints
+# Endpoints
 # =============================================================================
 
 @router.get("/{anlage_id}/{jahr}/{monat}", response_model=MonatsabschlussResponse)
@@ -608,18 +517,6 @@ async def get_monatsabschluss(
     )
 
 
-class CloudMonatswertFeld(BaseModel):
-    feld: str
-    label: str
-    wert: float
-    einheit: str
-
-
-class CloudMonatswerteResponse(BaseModel):
-    basis: list[CloudMonatswertFeld]
-    investitionen: list[dict]
-
-
 @router.post("/{anlage_id}/{jahr}/{monat}/cloud-fetch", response_model=CloudMonatswerteResponse)
 async def fetch_cloud_monatswerte(
     anlage_id: int,
@@ -726,256 +623,6 @@ async def fetch_cloud_monatswerte(
     return CloudMonatswerteResponse(basis=basis, investitionen=inv_result)
 
 
-async def _post_save_hintergrund(
-    anlage_id: int,
-    jahr: int,
-    monat: int,
-    monatsdaten_dict: dict,
-    community_auto_share: bool,
-    community_hash: str | None,
-) -> None:
-    """MQTT-Publish, Energie-Profil-Auto-Aggregation und Community Auto-Share im Hintergrund."""
-    from backend.services.monatsabschluss_aggregator import (
-        run_post_monatsabschluss_aggregation,
-    )
-
-    # 1. MQTT Publish
-    mqtt_sync = get_ha_mqtt_sync_service()
-    try:
-        await mqtt_sync.publish_final_month_data(anlage_id, jahr, monat, monatsdaten_dict)
-    except Exception as e:
-        logger.warning(f"MQTT-Publish fehlgeschlagen: {type(e).__name__}: {e}")
-
-    # 2. Energie-Profil: Closing-Month-Backfill + Rollup + einmaliger Auto-Vollbackfill
-    async with async_session_maker() as db:
-        result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-        anlage = result.scalar_one_or_none()
-        if anlage is None:
-            return
-
-        await run_post_monatsabschluss_aggregation(anlage, jahr, monat, db)
-
-    # 3. Community Auto-Share
-    if community_auto_share:
-        async with async_session_maker() as db:
-            try:
-                from backend.services.community_service import prepare_community_data, COMMUNITY_SERVER_URL
-                import httpx
-                share_data = await prepare_community_data(db, anlage_id)
-                if share_data and share_data.get("monatswerte"):
-                    async with httpx.AsyncClient(timeout=15.0) as client:
-                        resp = await client.post(f"{COMMUNITY_SERVER_URL}/api/submit", json=share_data)
-                        if resp.status_code == 200:
-                            result_data = resp.json()
-                            if result_data.get("anlage_hash") and not community_hash:
-                                result2 = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-                                anlage_obj = result2.scalar_one_or_none()
-                                if anlage_obj:
-                                    anlage_obj.community_hash = result_data["anlage_hash"]
-                                    await db.commit()
-                            logger.info(f"Auto-Share für Anlage {anlage_id} erfolgreich")
-                        else:
-                            logger.warning(f"Auto-Share HTTP {resp.status_code}: {resp.text[:200]}")
-            except Exception as e:
-                logger.warning(f"Auto-Share fehlgeschlagen: {type(e).__name__}: {e}")
-
-
-@router.post("/{anlage_id}/{jahr}/{monat}", response_model=MonatsabschlussResult)
-async def save_monatsabschluss(
-    anlage_id: int,
-    jahr: int,
-    monat: int,
-    daten: MonatsabschlussInput,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Speichert Monatsdaten.
-
-    Ablauf:
-    1. Validierung + Plausibilitätsprüfung
-    2. Speichern in Monatsdaten + InvestitionMonatsdaten
-    3. Optional: Startwerte für nächsten Monat auf MQTT publizieren
-    """
-    logger.info(
-        f"Monatsabschluss speichern: Anlage {anlage_id}, {monat:02d}/{jahr}, "
-        f"Basis: einspeisung={daten.einspeisung_kwh}, netzbezug={daten.netzbezug_kwh}, "
-        f"Investitionen: {len(daten.investitionen)} Stück"
-    )
-    for inv_w in daten.investitionen:
-        logger.info(
-            f"  Investition {inv_w.investition_id}: "
-            f"{len(inv_w.felder)} Felder [{', '.join(f'{f.feld}={f.wert}' for f in inv_w.felder)}]"
-        )
-
-    # Anlage laden
-    result = await db.execute(
-        select(Anlage).where(Anlage.id == anlage_id)
-    )
-    anlage = result.scalar_one_or_none()
-    if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
-
-    vorschlag_service = VorschlagService(db)
-    alle_warnungen: list[WarnungResponse] = []
-
-    # Plausibilität prüfen
-    for feld in ["einspeisung_kwh", "netzbezug_kwh"]:
-        wert = getattr(daten, feld, None)
-        if wert is not None:
-            warnungen = await vorschlag_service.pruefe_plausibilitaet(
-                anlage_id, feld, wert, jahr, monat
-            )
-            alle_warnungen.extend([_warnung_to_response(w) for w in warnungen])
-
-    # Monatsdaten erstellen oder aktualisieren
-    md_result = await db.execute(
-        select(Monatsdaten)
-        .where(and_(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == jahr,
-            Monatsdaten.monat == monat,
-        ))
-    )
-    monatsdaten = md_result.scalar_one_or_none()
-
-    if not monatsdaten:
-        monatsdaten = Monatsdaten(
-            anlage_id=anlage_id,
-            jahr=jahr,
-            monat=monat,
-        )
-        db.add(monatsdaten)
-        try:
-            await db.flush()  # ID benötigt für Provenance-Audit-Log-Eintrag
-        except Exception as e:
-            logger.error(f"Monatsabschluss flush Monatsdaten fehlgeschlagen: {type(e).__name__}: {e}")
-            raise HTTPException(status_code=500, detail=f"Fehler beim Speichern der Monatsdaten: {e}")
-
-    # Basis-Felder generisch aus Registry setzen — durch den Provenance-Resolver,
-    # damit manuelle Wizard-Eingaben gegen frühere Cloud/HA-Stats/legacy-Werte
-    # gewinnen (Source `manual:form`, Stufe 1).
-    # direktverbrauch_kwh wird automatisch berechnet (PV-Erzeugung - Einspeisung)
-    for feld in ALLE_MONATSDATEN_FELDNAMEN:
-        wert = getattr(daten, feld, None)
-        if wert is None:
-            continue
-        await write_with_provenance(
-            db, monatsdaten, feld, wert,
-            source="manual:form", writer=_WIZARD_WRITER,
-        )
-    if daten.datenquelle:
-        # `datenquelle` ist Metadata-Feld (welcher Wizard-Pfad wurde benutzt) —
-        # kein eigener Provenance-Eintrag nötig.
-        monatsdaten.datenquelle = daten.datenquelle
-
-    try:
-        await db.flush()
-    except Exception as e:
-        logger.error(f"Monatsabschluss flush Monatsdaten fehlgeschlagen: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern der Monatsdaten: {e}")
-    monatsdaten_id = monatsdaten.id
-
-    # Investition-Monatsdaten speichern
-    inv_ids: list[int] = []
-    for inv_werte in daten.investitionen:
-        # Bestehenden Datensatz suchen oder neu erstellen
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(and_(
-                InvestitionMonatsdaten.investition_id == inv_werte.investition_id,
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            ))
-        )
-        imd = imd_result.scalar_one_or_none()
-
-        if not imd:
-            imd = InvestitionMonatsdaten(
-                investition_id=inv_werte.investition_id,
-                jahr=jahr,
-                monat=monat,
-                verbrauch_daten={},
-            )
-            db.add(imd)
-            try:
-                await db.flush()  # ID für Provenance-Audit-Log-Eintrag
-            except Exception as e:
-                logger.error(f"Monatsabschluss flush Investition {inv_werte.investition_id} fehlgeschlagen: {type(e).__name__}: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Fehler beim Speichern der Investition {inv_werte.investition_id}: {e}"
-                )
-
-        # Felder in verbrauch_daten via Resolver — pro Sub-Key, damit ein
-        # paralleler Cloud-Sync die manuell gepflegten Felder NICHT
-        # überschreiben kann (P3 Akzeptanz Risiko #1).
-        for feld_wert in inv_werte.felder:
-            await write_json_subkey_with_provenance(
-                db, imd, "verbrauch_daten", feld_wert.feld, feld_wert.wert,
-                source="manual:form", writer=_WIZARD_WRITER,
-            )
-
-        # Sonstige Positionen (Erträge & Ausgaben) — landen als ein Sub-Key
-        # mit Listen-Wert, ebenfalls über den Resolver.
-        if inv_werte.sonstige_positionen is not None:
-            gueltige = [
-                p for p in inv_werte.sonstige_positionen
-                if isinstance(p, dict) and p.get("betrag", 0) > 0 and str(p.get("bezeichnung", "")).strip()
-            ]
-            await write_json_subkey_with_provenance(
-                db, imd, "verbrauch_daten", "sonstige_positionen", gueltige,
-                source="manual:form", writer=_WIZARD_WRITER,
-            )
-
-        try:
-            await db.flush()
-        except Exception as e:
-            logger.error(f"Monatsabschluss flush Investition {inv_werte.investition_id} fehlgeschlagen: {type(e).__name__}: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Fehler beim Speichern der Investition {inv_werte.investition_id}: {e}"
-            )
-        inv_ids.append(imd.id)
-
-    try:
-        await db.commit()
-    except Exception as e:
-        logger.error(f"Monatsabschluss commit fehlgeschlagen: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Commit: {e}")
-
-    # MQTT, Energie-Profil Rollup und Community Auto-Share im Hintergrund
-    background_tasks.add_task(
-        _post_save_hintergrund,
-        anlage_id=anlage_id,
-        jahr=jahr,
-        monat=monat,
-        monatsdaten_dict={
-            "jahr": jahr,
-            "monat": monat,
-            "einspeisung_kwh": daten.einspeisung_kwh,
-            "netzbezug_kwh": daten.netzbezug_kwh,
-        },
-        community_auto_share=bool(anlage.community_auto_share),
-        community_hash=anlage.community_hash,
-    )
-
-    await log_activity(
-        kategorie="monatsabschluss",
-        aktion=f"Monatsabschluss {MONAT_NAMEN[monat]} {jahr} gespeichert",
-        erfolg=True,
-        anlage_id=anlage_id,
-    )
-
-    return MonatsabschlussResult(
-        success=True,
-        message=f"Monatsdaten für {MONAT_NAMEN[monat]} {jahr} gespeichert",
-        monatsdaten_id=monatsdaten_id,
-        investition_monatsdaten_ids=inv_ids,
-        warnungen=alle_warnungen,
-    )
-
-
 @router.get("/naechster/{anlage_id}", response_model=Optional[NaechsterMonatResponse])
 async def get_naechster_monat(
     anlage_id: int,
@@ -988,6 +635,8 @@ async def get_naechster_monat(
     - Nächster Monat nach dem letzten vollständigen
     - Oder aktueller Monat wenn vergangen und nicht vollständig
     """
+    from datetime import date
+
     # Anlage laden
     result = await db.execute(
         select(Anlage).where(Anlage.id == anlage_id)
