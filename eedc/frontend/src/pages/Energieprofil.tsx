@@ -6,6 +6,7 @@ import { PageHeader, DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useInvestitionen } from '../hooks'
 import { energieProfilApi, type KraftstoffpreisStatus, type AnlageStats } from '../api/energie_profil'
 import EnergieprofilTageTabelle from '../components/energieprofil/EnergieprofilTageTabelle'
+import RepairWorkbench from '../components/repair/RepairWorkbench'
 
 export default function Energieprofil() {
   const navigate = useNavigate()
@@ -334,6 +335,14 @@ export default function Energieprofil() {
           )}
         </div>
       </Card>
+
+      {/* Reparatur-Werkbank (Etappe 3d Päckchen 4) — Plan + Execute + Verlauf */}
+      {selectedAnlageId && (
+        <RepairWorkbench
+          anlageId={selectedAnlageId}
+          anlagenname={anlagen.find((a) => a.id === selectedAnlageId)?.anlagenname}
+        />
+      )}
     </div>
   )
 }
