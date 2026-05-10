@@ -80,8 +80,14 @@ class RepairOperationType(str, Enum):
 
 
 class RepairOperationRequest(BaseModel):
-    """Plan-Request — operation-spezifische Parameter im `params`-dict."""
-    anlage_id: int
+    """Plan-Request — operation-spezifische Parameter im `params`-dict.
+
+    `anlage_id` ist optional, weil REAGGREGATE_TODAY eine system-weite
+    Operation ist und keine konkrete Anlage adressiert. Alle anderen
+    Operationen brauchen anlage_id und schlagen mit ValueError fehl, wenn
+    sie fehlt.
+    """
+    anlage_id: Optional[int] = None
     operation: RepairOperationType
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -108,7 +114,7 @@ class FieldDiff(BaseModel):
 class RepairPlan(BaseModel):
     """Vorschau einer Reparatur-Operation."""
     plan_id: UUID
-    anlage_id: int
+    anlage_id: Optional[int] = None
     operation: RepairOperationType
     operation_params: dict[str, Any]
     created_at: datetime
@@ -125,7 +131,7 @@ class RepairPlan(BaseModel):
 class RepairResult(BaseModel):
     """Ergebnis einer ausgeführten Reparatur-Operation."""
     plan_id: UUID
-    anlage_id: int
+    anlage_id: Optional[int] = None
     operation: RepairOperationType
     executed_at: datetime
     actual_changes: dict[str, int]
