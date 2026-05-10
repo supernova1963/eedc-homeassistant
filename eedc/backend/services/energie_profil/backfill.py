@@ -12,9 +12,8 @@ Drei Funktionen extrahiert aus `services/energie_profil_service.py`:
 - `resolve_and_backfill_from_statistics(anlage, db, von, bis)` orchestriert
   den additiven Vollbackfill (resolve Live-Sensoren, ermittele Range).
 
-`_get_wetter_ist` bleibt im Service-Backbone und wird lazy importiert, weil
-das alte Modul gleichzeitig diese Funktionen re-exportiert (zirkulärer
-Top-Level-Import vermieden, analog zum 3c-Pattern in aggregator.py).
+`_get_wetter_ist` liegt in `backend.services.energie_profil._helpers` und
+wird lazy importiert.
 """
 
 from __future__ import annotations
@@ -122,8 +121,7 @@ async def backfill_from_statistics(
         extract_live_config,
     )
     from backend.services.ha_statistics_service import get_ha_statistics_service
-    # _get_wetter_ist bleibt im Service-Backbone (zirkulärer Re-Export)
-    from backend.services.energie_profil_service import _get_wetter_ist
+    from backend.services.energie_profil._helpers import _get_wetter_ist
 
     # Investitionen laden — alle die im Backfill-Zeitraum aktiv waren,
     # nicht nur die heute aktiven (sonst fehlen stillgelegte Investitionen

@@ -9,11 +9,11 @@ Refactoring-Etappen:
 - 3c P3 (v3.26.8): `aggregate_day` extrahiert (`aggregator.py`).
 - 3d P3: `rollup_month`, `backfill_*`, `aggregate_yesterday_all` /
   `aggregate_today_all` extrahiert (`rollup.py`, `backfill.py`,
-  `scheduler_jobs.py`). Internal helpers (`_get_wetter_ist`, `_get_soc_history`,
-  `_get_strompreis_stunden`, `_tage_zurueck`, `StrompreisStunden`) bleiben
-  vorerst im `services/energie_profil_service.py`-Backbone — sie sind
-  Kanalstrukturen ohne eigene Schreib-Pfade und werden bei Bedarf in einem
-  späteren Refactoring-Tail (3d P5/P6 oder Folge-Sprint) ausgelagert.
+  `scheduler_jobs.py`).
+- 3d-Etappenabschluss-Tail (2026-05-10): Internal helpers (`_get_wetter_ist`,
+  `_get_soc_history`, `_get_strompreis_stunden`, `_tage_zurueck`,
+  `StrompreisStunden`) in `_helpers.py` ausgelagert; das alte Modul
+  `services/energie_profil_service.py` bleibt als Re-Export-Fassade erhalten.
 """
 
 from backend.services.energie_profil.aggregator import aggregate_day

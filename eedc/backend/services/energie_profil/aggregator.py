@@ -6,10 +6,9 @@ TagesEnergieProfil + 1 TagesZusammenfassung. Wird vom Scheduler täglich
 für den Vortag, vom Reaggregat-Endpoint manuell und vom Vollbackfill
 historisch aufgerufen.
 
-Helper bleiben in `backend.services.energie_profil_service` (`_tage_zurueck`,
+Helper liegen in `backend.services.energie_profil._helpers` (`_tage_zurueck`,
 `_get_wetter_ist`, `_get_soc_history`, `_get_strompreis_stunden`) und werden
-hier lazy importiert, weil das alte Modul gleichzeitig `aggregate_day`
-re-exportiert (zirkulärer Top-Level-Import vermieden).
+hier lazy importiert.
 """
 
 from __future__ import annotations
@@ -56,9 +55,7 @@ async def aggregate_day(
     Returns:
         TagesZusammenfassung oder None bei Fehler
     """
-    # Lazy imports — vermeiden zirkulären Top-Level-Import zu energie_profil_service,
-    # das diesen aggregator gleichzeitig re-exportiert.
-    from backend.services.energie_profil_service import (
+    from backend.services.energie_profil._helpers import (
         _get_soc_history,
         _get_strompreis_stunden,
         _get_wetter_ist,
