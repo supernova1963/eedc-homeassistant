@@ -322,6 +322,19 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
       }
     }
 
+    // Wallbox (vor E-Auto, #211 detLAN: Reihenfolge Wallbox → E-Auto)
+    if (benchmark.benchmark_erweitert?.wallbox?.pv_anteil?.community_avg) {
+      const wb = benchmark.benchmark_erweitert.wallbox
+      const abw = wb.pv_anteil!.wert - wb.pv_anteil!.community_avg!
+      metriken.push({
+        label: 'Wallbox PV-Anteil',
+        abweichungProzent: abw,
+        einheit: 'PP',
+        icon: <Plug className="h-4 w-4" />,
+        kategorie: 'wallbox',
+      })
+    }
+
     // E-Auto
     if (benchmark.benchmark_erweitert?.eauto?.pv_anteil?.community_avg) {
       const ea = benchmark.benchmark_erweitert.eauto
@@ -332,19 +345,6 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
         einheit: 'PP',
         icon: <Car className="h-4 w-4" />,
         kategorie: 'eauto',
-      })
-    }
-
-    // Wallbox
-    if (benchmark.benchmark_erweitert?.wallbox?.pv_anteil?.community_avg) {
-      const wb = benchmark.benchmark_erweitert.wallbox
-      const abw = wb.pv_anteil!.wert - wb.pv_anteil!.community_avg!
-      metriken.push({
-        label: 'Wallbox PV-Anteil',
-        abweichungProzent: abw,
-        einheit: 'PP',
-        icon: <Plug className="h-4 w-4" />,
-        kategorie: 'wallbox',
       })
     }
 

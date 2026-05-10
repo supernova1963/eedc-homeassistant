@@ -162,7 +162,7 @@ export default function KomponentenTab({ zeitraum, benchmark, benchmarkLoading, 
           </h2>
           <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
             Für Komponenten-Vergleiche benötigst du mindestens eine Zusatzkomponente
-            (Speicher, Wärmepumpe, E-Auto, Wallbox oder Balkonkraftwerk) mit erfassten Monatsdaten.
+            (Speicher, Wärmepumpe, Wallbox, E-Auto oder Balkonkraftwerk) mit erfassten Monatsdaten.
           </p>
         </div>
       </Card>
@@ -194,18 +194,18 @@ export default function KomponentenTab({ zeitraum, benchmark, benchmarkLoading, 
         />
       )}
 
+      {/* Wallbox Deep-Dive (vor E-Auto, #211 detLAN) */}
+      {verfuegbareKomponenten.includes('wallbox') && (
+        <WallboxDeepDive
+          benchmark={benchmark}
+        />
+      )}
+
       {/* E-Auto Deep-Dive */}
       {verfuegbareKomponenten.includes('eauto') && (
         <EAutoDeepDive
           benchmark={benchmark}
           communityStats={eautoByUsage}
-        />
-      )}
-
-      {/* Wallbox Deep-Dive */}
-      {verfuegbareKomponenten.includes('wallbox') && (
-        <WallboxDeepDive
-          benchmark={benchmark}
         />
       )}
 

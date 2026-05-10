@@ -23,13 +23,16 @@ export default function FeldInput({
         <span className="text-gray-400 ml-1">({feld.einheit})</span>
       </label>
 
-      <div className="relative">
+      {/* Eingabefeld + Übernehmen daneben — der Übernehmen-Button saß früher
+          absolute-overlay im Input und überdeckte die Number-Spinner-Pfeile
+          (#213 detLAN). Jetzt nebeneinander, Spinner bleiben bedienbar. */}
+      <div className="flex items-stretch gap-2">
         <input
           type="number"
           step="0.01"
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
-          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+          className={`flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
             hasWarnings
               ? 'border-amber-300 focus:border-amber-500'
               : 'border-gray-300'
@@ -37,12 +40,12 @@ export default function FeldInput({
           placeholder={hasVorschlaege ? `Vorschlag: ${feld.vorschlaege[0].wert}` : ''}
         />
 
-        {/* Vorschlag-Button */}
+        {/* Vorschlag-Übernehmen-Button — nur sichtbar wenn Wert leer ist */}
         {hasVorschlaege && value === null && (
           <button
             type="button"
             onClick={() => onChange(feld.vorschlaege[0].wert)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+            className="flex-shrink-0 px-3 py-2 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20"
           >
             Übernehmen
           </button>

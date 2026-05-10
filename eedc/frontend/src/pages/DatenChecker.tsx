@@ -57,9 +57,13 @@ function severityIcon(schwere: string) {
 
 function severityBadge(counts: Record<string, number>) {
   const parts: string[] = []
-  if (counts.error > 0) parts.push(`${counts.error} Fehler`)
-  if (counts.warning > 0) parts.push(`${counts.warning} Warnungen`)
-  if (counts.info > 0) parts.push(`${counts.info} Hinweise`)
+  if (counts.error > 0) parts.push(`${counts.error} Fehler`)  // Singular = Plural
+  if (counts.warning > 0) {
+    parts.push(`${counts.warning} ${counts.warning === 1 ? 'Warnung' : 'Warnungen'}`)
+  }
+  if (counts.info > 0) {
+    parts.push(`${counts.info} ${counts.info === 1 ? 'Hinweis' : 'Hinweise'}`)
+  }
   if (parts.length === 0) return 'OK'
   return parts.join(', ')
 }

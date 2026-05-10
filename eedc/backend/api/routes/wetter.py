@@ -55,6 +55,9 @@ class WetterDatenResponse(BaseModel):
     monat: int = Field(..., ge=1, le=12)
     globalstrahlung_kwh_m2: float = Field(..., ge=0, description="Globalstrahlung in kWh/m²")
     sonnenstunden: float = Field(..., ge=0, description="Sonnenstunden im Monat")
+    durchschnittstemperatur_c: float | None = Field(
+        None, description="Monats-Tagesdurchschnittstemperatur in °C (open-meteo + brightsky)"
+    )
     datenquelle: str = Field(..., description="open-meteo, brightsky, pvgis-tmy oder defaults")
     standort: StandortInfo
     abdeckung_prozent: float | None = Field(None, description="Prozent der Tage mit Daten")

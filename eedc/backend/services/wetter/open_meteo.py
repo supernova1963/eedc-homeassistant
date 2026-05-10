@@ -77,7 +77,7 @@ async def fetch_open_meteo_archive(
         "longitude": longitude,
         "start_date": start_date,
         "end_date": end_date,
-        "daily": "shortwave_radiation_sum,sunshine_duration",
+        "daily": "shortwave_radiation_sum,sunshine_duration,temperature_2m_mean",
         "timezone": "Europe/Berlin",
     }
 
@@ -93,6 +93,7 @@ async def fetch_open_meteo_archive(
             daily = data.get("daily", {})
             radiation_values = daily.get("shortwave_radiation_sum", [])
             sunshine_values = daily.get("sunshine_duration", [])
+            temperature_values = daily.get("temperature_2m_mean", [])
 
             if not radiation_values or not sunshine_values:
                 logger.warning(f"Open-Meteo: Keine Daten für {monat}/{jahr}")
@@ -106,6 +107,15 @@ async def fetch_open_meteo_archive(
             globalstrahlung_kwh = round(radiation_sum * MJ_TO_KWH, 1)
             sonnenstunden = round(sunshine_sum * SECONDS_TO_HOURS, 0)
 
+            # Tagesdurchschnitts-Temperatur über den Monat mitteln (None-Werte
+            # herausfiltern). Das ist die Quelle für `durchschnittstemperatur`
+            # im Monatsabschluss-Wizard.
+            valid_temps = [v for v in temperature_values if v is not None]
+            durchschnitts_temperatur_c = (
+                round(sum(valid_temps) / len(valid_temps), 1)
+                if valid_temps else None
+            )
+
             logger.info(
                 f"Open-Meteo: {monat}/{jahr} @ ({latitude}, {longitude}) - "
                 f"Globalstrahlung: {globalstrahlung_kwh} kWh/m², "
@@ -115,6 +125,7 @@ async def fetch_open_meteo_archive(
             result = {
                 "globalstrahlung_kwh_m2": globalstrahlung_kwh,
                 "sonnenstunden": sonnenstunden,
+                "durchschnitts_temperatur_c": durchschnitts_temperatur_c,
                 "tage_mit_daten": len([v for v in radiation_values if v is not None]),
                 "tage_gesamt": last_day,
             }

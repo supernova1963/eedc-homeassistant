@@ -9,7 +9,7 @@
  * - Genauigkeits-Tracking + Integrations-Vorschlag
  */
 import { useState, useEffect, useRef } from 'react'
-import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, AlertCircle, Info, Zap, BarChart3, Calendar } from 'lucide-react'
+import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, Info, Zap, BarChart3, Calendar } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
 import {
@@ -443,10 +443,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
       {/* ── Status-Hinweise ── */}
       {data.solcast_status && data.solcast_status !== 'ok' && data.solcast_hinweis && (
         <Alert type={data.solcast_status === 'tageslimit' ? 'warning' : 'info'}>
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="text-sm">{data.solcast_hinweis}</div>
-          </div>
+          <div className="text-sm">{data.solcast_hinweis}</div>
         </Alert>
       )}
 
@@ -459,15 +456,12 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         const fehlend = Math.max(0, 7 - usableDays)
         return (
           <Alert type="info">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 mt-0.5 shrink-0" />
-              <div className="text-sm">
-                eedc-Prognose nicht verfügbar — benötigt mindestens 7 Tage mit IST-Ertragsdaten,
-                um den Lernfaktor (Verhältnis IST/Prognose) zu berechnen
-                {' '}(<strong>{usableDays} von 7 Tagen</strong>{fehlend > 0 ? `, noch ${fehlend} Tag${fehlend === 1 ? '' : 'e'}` : ''}).
-                Der Lernfaktor kalibriert die OpenMeteo-Prognose anlagenspezifisch
-                und gleicht systematische Abweichungen (Verschattung, Ausrichtung, Alterung) aus.
-              </div>
+            <div className="text-sm">
+              eedc-Prognose nicht verfügbar — benötigt mindestens 7 Tage mit IST-Ertragsdaten,
+              um den Lernfaktor (Verhältnis IST/Prognose) zu berechnen
+              {' '}(<strong>{usableDays} von 7 Tagen</strong>{fehlend > 0 ? `, noch ${fehlend} Tag${fehlend === 1 ? '' : 'e'}` : ''}).
+              Der Lernfaktor kalibriert die OpenMeteo-Prognose anlagenspezifisch
+              und gleicht systematische Abweichungen (Verschattung, Ausrichtung, Alterung) aus.
             </div>
           </Alert>
         )

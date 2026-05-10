@@ -32,6 +32,7 @@ import type {
   FeldWert,
 } from '../api'
 import Alert from '../components/ui/Alert'
+import Button from '../components/ui/Button'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { MONAT_NAMEN } from '../lib/constants'
 import {
@@ -162,16 +163,25 @@ export default function MonatsabschlussWizard() {
           sonstigePositionen: invSonstigePos,
         })
 
-        // Wetterdaten automatisch im Hintergrund holen, falls noch nicht vorhanden
-        if (basisValues.globalstrahlung_kwh_m2 == null && basisValues.sonnenstunden == null) {
+        // Wetterdaten automatisch im Hintergrund holen, falls noch nicht vorhanden.
+        // Pro Feld nur dann übernehmen, wenn der Tester den Wert noch nicht selbst
+        // gepflegt hat — sonst überschreiben wir manuelle Korrekturen still.
+        const fehltWetter =
+          basisValues.globalstrahlung_kwh_m2 == null ||
+          basisValues.sonnenstunden == null ||
+          basisValues.durchschnittstemperatur == null
+        if (fehltWetter) {
           wetterApi.getMonatsdaten(parseInt(anlageId!), targetJahr, targetMonat)
             .then(wetter => {
               setValues(prev => ({
                 ...prev,
                 basis: {
                   ...prev.basis,
-                  globalstrahlung_kwh_m2: wetter.globalstrahlung_kwh_m2,
-                  sonnenstunden: wetter.sonnenstunden,
+                  globalstrahlung_kwh_m2:
+                    prev.basis.globalstrahlung_kwh_m2 ?? wetter.globalstrahlung_kwh_m2,
+                  sonnenstunden: prev.basis.sonnenstunden ?? wetter.sonnenstunden,
+                  durchschnittstemperatur:
+                    prev.basis.durchschnittstemperatur ?? wetter.durchschnittstemperatur_c ?? null,
                 },
               }))
             })
@@ -792,16 +802,17 @@ export default function MonatsabschlussWizard() {
         )}
       </div>
 
-      {/* Navigation Buttons */}
+      {/* Navigation Buttons — Zurück mit Box-Stil (Button variant="secondary"),
+          konsistent zum Sensor-Mapping-Wizard (#213 detLAN). */}
       <div className="flex items-center justify-between">
-        <button
+        <Button
+          variant="secondary"
           onClick={() => setCurrentStep(s => Math.max(0, s - 1))}
           disabled={currentStep === 0}
-          className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-4 h-4 mr-2" />
           Zurück
-        </button>
+        </Button>
 
         {currentStep < steps.length - 1 ? (
           <button

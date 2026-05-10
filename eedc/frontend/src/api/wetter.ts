@@ -38,6 +38,7 @@ export interface WetterDaten {
   monat: number
   globalstrahlung_kwh_m2: number
   sonnenstunden: number
+  durchschnittstemperatur_c?: number
   datenquelle: 'open-meteo' | 'brightsky' | 'pvgis-tmy' | 'defaults'
   standort: StandortInfo
   abdeckung_prozent?: number

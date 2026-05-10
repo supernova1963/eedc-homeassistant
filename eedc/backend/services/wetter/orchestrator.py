@@ -148,6 +148,7 @@ async def get_wetterdaten_multi(
                     result.update({
                         "globalstrahlung_kwh_m2": data["globalstrahlung_kwh_m2"],
                         "sonnenstunden": data["sonnenstunden"],
+                        "durchschnittstemperatur_c": data.get("durchschnitts_temperatur_c"),
                         "datenquelle": "brightsky",
                         "abdeckung_prozent": round(
                             data["tage_mit_daten"] / data["tage_gesamt"] * 100, 0
@@ -169,6 +170,7 @@ async def get_wetterdaten_multi(
                     result.update({
                         "globalstrahlung_kwh_m2": data["globalstrahlung_kwh_m2"],
                         "sonnenstunden": data["sonnenstunden"],
+                        "durchschnittstemperatur_c": data.get("durchschnitts_temperatur_c"),
                         "datenquelle": "open-meteo",
                         "abdeckung_prozent": round(
                             data["tage_mit_daten"] / data["tage_gesamt"] * 100, 0
@@ -177,6 +179,7 @@ async def get_wetterdaten_multi(
                             "name": "Open-Meteo Archive",
                             "tage_mit_daten": data["tage_mit_daten"],
                             "tage_gesamt": data["tage_gesamt"],
+                            "temperatur_c": data.get("durchschnitts_temperatur_c"),
                         },
                     })
                     return result
@@ -291,6 +294,7 @@ async def get_provider_comparison(
                 "abdeckung_prozent": round(
                     data["tage_mit_daten"] / data["tage_gesamt"] * 100, 0
                 ),
+                "temperatur_c": data.get("durchschnitts_temperatur_c"),
             }
         else:
             results["provider"]["open-meteo"] = {"verfuegbar": False}
