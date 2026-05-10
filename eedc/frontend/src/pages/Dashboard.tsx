@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Sun, Zap, Battery, TrendingUp, Flame, Car, Home,
   ArrowDownToLine, ArrowUpFromLine, Percent, Gauge, Euro, Leaf,
-  Calendar, Receipt, Share2, Activity, Thermometer
+  Receipt, Share2, Activity, Thermometer
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Select, fmtCalc } from '../components/ui'
 import { fmtKpi } from '../lib'
@@ -113,15 +113,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Home className="h-8 w-8 text-primary-500" />
-          <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {anlage?.anlagenname} • {data.anlagenleistung_kwp.toFixed(1)} kWp
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          <span className="font-medium text-gray-700 dark:text-gray-300">{anlage?.anlagenname}</span>
+          <span className="mx-1.5 text-gray-400">•</span>
+          {data.anlagenleistung_kwp.toFixed(1)} kWp
+        </p>
         <div className="flex items-center gap-2">
           {anlagen.length > 1 && (
             <Select
@@ -129,16 +126,17 @@ export default function Dashboard() {
               value={selectedAnlageId?.toString() || ''}
               onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
               options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+              aria-label="Anlage wählen"
             />
           )}
           <button
+            type="button"
             onClick={() => setShowShareModal(true)}
             className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             aria-label="Monatstext für Social Media"
           >
             <Share2 className="h-4 w-4" />
           </button>
-          <Calendar className="h-4 w-4 text-gray-400" />
           <select
             value={selectedYear || ''}
             onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : undefined)}

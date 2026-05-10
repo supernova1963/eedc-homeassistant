@@ -7,6 +7,39 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.27.1] - 2026-05-10 — UX-Sprint A1+A2+A3 & Power-Sensor-Bug (#200)
+
+> 🪛 **Bugfix-Release zwischen den Etappen.** Bündelt drei UX-Sprints aus dem detLAN-Cluster (#205/#206/#208/#209/#211/#212/#213/#214) und einen handfesten Datenintegritäts-Bug, den rcmcronny gemeldet hatte (#200): Leistungs-Sensoren (W/kW) ließen sich versehentlich in kWh-Slots des Sensor-Mappings eintragen, der Live-Heute-Pfad rechnete sie dann als kumulative Energie und produzierte Quatsch (mal 0, mal 1000+ kWh). Plus zentrale `INVESTITION_TYP_ORDER`-Konsolidierung — drei drift-anfällige Reihenfolge-Definitionen wurden auf eine einzige SoT zusammengeführt.
+
+### Fixed
+
+- **Power-Sensor in kWh-Slot rechnete Quatsch** (#200 rcmcronny). Wer einen Leistungs-Sensor (`unit=kW`, `device_class=power`) in einen kWh-Slot des Sensor-Mappings eingetragen hatte (z. B. „Netzbezug Tageswert"), bekam im Live-Heute-Pfad völlig falsche Tagessummen — meist nahe 0, gelegentlich 1000+ kWh. Drei Schutz-Stellen ergänzt: Live-Pfad (`live_history_service:_energy_delta`) prüft jetzt vor dem Stats-Lookup, ob der Sensor überhaupt eine Energie-Einheit hat, sonst Trapez-Integration der W-Werte (physikalisch korrekt). Stats-API (`ha_statistics_service:get_value_at`) gibt bei Sensoren ohne `has_sum` und Nicht-Energie-Einheit `None` statt rohen `state` zurück. Sensor-Mapping-Wizard zeigt eine Warnung „Einheit XXX passt nicht in einen kWh-Slot" mit Wegweiser zum Live-Sensoren-Slot, sobald ein W/kW-Sensor in einen kWh-Slot ausgewählt wird (nicht blockierend, mit Workaround-Hinweis).
+- **Wallbox-Card im Dark Mode war rahmenlos** (#211 P1 detLAN). Die Komponenten-Karten in Community → Statistiken → Ausstattung nutzten dynamische Tailwind-Klassen (`bg-${color}-50`), die der JIT-Compiler beim Build wegpurged hat — bei Wallbox (cyan) war der Dark-Mode-Rahmen daher unsichtbar. Klassen jetzt in einer statischen Map ausgeschrieben; alle fünf Cards rendern zuverlässig.
+- **Performance-Profil Radar-Chart Community-Linie verschmolz mit Gitterlinien** (#211 P2 detLAN). Community-Datenreihe war auf `#9ca3af` (gray-400) gesetzt — identisch zu den Polar-Grid-Linien. Im Dark Mode war die Linie kaum erkennbar. Farbe jetzt amber `#f59e0b` mit erhöhter Opacity 0.15.
+- **Doppeltes Info-Icon in Aussichten → Prognosen** (#212 detLAN, schon in Sprint A1). Eine zweite AlertCircle-Instanz war versehentlich mitgerendert; Imports aufgeräumt.
+- **Plural-Bug „1 Hinweise / 1 Warnungen" im Daten-Checker** (#214 detLAN, schon in Sprint A1). Singular/Plural sauber unterschieden.
+- **Übernehmen-Knopf im Monatsabschluss-Wizard verdeckte Number-Input-Spinner-Pfeile** (#213 P1 detLAN, schon in Sprint A1). Knopf jetzt neben dem Input statt darüber, Zurück-Button auf `<Button variant="secondary">` umgestellt.
+
+### Changed
+
+- **Tab-Navigation in Auswertungen, Aussichten, Community jetzt als Schaltflächen** (#208 P1+P4+P5 detLAN). Statt der bisherigen Underline-Tabs jetzt eine einheitliche Pill-Style-Leiste (active = primary-Hintergrund, inaktiv = grau). Neue zentrale `<PillTabs>`-Komponente in `components/ui/` — drift-arme SoT für künftige Tab-Leisten.
+- **Community-Hauptseite ohne Überschrift „Community"** (#208 P9 detLAN). Die Seitenüberschrift mit Users-Icon im Hauptmenü-Bereich war redundant zur Hauptnav. Onboarding-Empty-State (wenn noch nicht geteilt) behält die Überschrift als Orientierung.
+- **Daten → Monatsdaten ohne Überschrift, Selektoren in einer Zeile, Anlage-Selektor verschwindet bei einer Anlage** (#209 P1+P2+P4 detLAN). Statt `<PageHeader title="Monatsdaten">` jetzt nur noch eine rechte Action-Bar mit Anlage-Select (nur sichtbar wenn ≥ 2 Anlagen), „Aus HA laden" und „Neuer Monat" — alles auf einer Zeile.
+- **Cockpit Top-Banner kompakter** (#206 P1+P2 detLAN). Großes Home-Icon (h-8 w-8) entfernt, Anlagenname und kWp inline statt zweispaltig. Decoratives Calendar-Icon vor dem Jahres-Filter entfernt — es war nicht klickbar während der Share-Button daneben klickbar war (verwirrend, „weniger ist mehr").
+- **„Erstellt mit EEDC" jetzt auch in der kompakten Share-Variante** (#206 P4 detLAN). Die ausführliche Variante hatte den Hinweis schon, in der kompakten fehlte er — jetzt konsistent in beiden, am Ende des Texts.
+- **Wallbox vor E-Auto in Community Übersicht-Stärken/Schwächen + Komponenten-Tab + Empty-State** (#211 P4+P5 detLAN, schon in Sprint A1). Reihenfolge spiegelt Anwender-Workflow: Wallbox als Ladeinfrastruktur vor dem Fahrzeug.
+- **Daten-Checker: Wärmepumpe vor Wallbox** (#214 Reihenfolge detLAN). Anomalie-Liste pro Komponente folgt jetzt der zentralen `INVESTITION_TYP_ORDER` (Wechselrichter → PV-Module → Speicher → Balkonkraftwerk → WP → Wallbox → E-Auto → Sonstiges) statt DB-Insert-Reihenfolge.
+- **Jahresübersicht in Community → PV-Ertrag absteigend (neueste oben)** (#211 P3 detLAN).
+- **Auto-Fill Ø-Temperatur im Monatsabschluss-Wizard** (#205-Bug Rainer, schon in Sprint A1). `WetterDatenResponse` und Open-Meteo-Archive ergänzt um `temperature_2m_mean`; Frontend füllt das Feld pro-Feld auto, wenn es leer ist und die Wetter-Daten verfügbar sind.
+
+### Internal
+
+- **Zentrale `INVESTITION_TYP_ORDER`-SoT** in `frontend/src/lib/constants.ts` und `backend/utils/investition_filter.py` (Spiegel). Vorher gab es drei abweichende Reihenfolge-Definitionen: `useSetupWizard.ts:INVESTITION_TYP_ORDER`, lokale `TYP_REIHENFOLGE` im PDF-Builder, neuer `lib/constants.ts`-Versuch. Konsolidiert auf eine SoT, alle Konsumenten umgestellt (5 Frontend-Stellen + Backend Daten-Checker + PDF-Builder). Neue Helper: `compareTyp` (Frontend) und `sort_investitionen_nach_typ` (Backend). `useSetupWizard.ts:INVESTITION_TYP_LABELS` entfernt — alle Konsumenten nutzen jetzt `TYP_LABELS` aus `lib/constants.ts`.
+- **`<PillTabs>`-Komponente** als shared Sub-Tab-Primitive in `components/ui/`. Ersetzt drei nahezu identische, individuelle Tab-Implementationen in Auswertungen/Aussichten/Community. Tooltip-Support via `SimpleTooltip`, Beta-Badge integriert.
+- **Smoke-Check vor Release** (Pre-Check via `scripts/smoke.sh`) bleibt grün: 217 Routes + 31 Akzeptanz-Tests.
+
+---
+
 ## [3.27.0] - 2026-05-10 — Etappe 3d: Daten-Provenance & Reparatur-Werkbank
 
 > 🧱 **Architektur-Etappe — sichtbar als Reparatur-Werkbank im Energieprofil + neue Schutz-Mechanik gegen Daten-Drift.** Vier Päckchen aus dem Etappe-3d-Detail-Konzept (`docs/KONZEPT-DATENPIPELINE.md`): Schema-Fundament für Quellen-Hierarchie pro Feld, Cloud-/CSV-/Backup-Pfade an Provenance angeschlossen, Konflikt-Resolver aktiviert, Reparatur-Orchestrator mit Plan-Vorschau + Apply-Pfad. Plus 3d-Etappenabschluss-Sprint mit drei pragma-verschobenen Refactoring-Tails und einer Pool-Bug-Konsistenz-Fix-Runde. Plus Test-Infrastruktur: pytest-Migration + Pre-Release-Smoke-Skript. Insgesamt 33 Commits seit v3.26.8 + Test-Infra-Commit.

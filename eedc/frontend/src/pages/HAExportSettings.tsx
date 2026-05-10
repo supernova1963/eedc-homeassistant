@@ -100,8 +100,7 @@ import type {
   MQTTConfigFromAddon
 } from '../api/ha'
 import type { Anlage } from '../types'
-import { TYP_LABELS } from '../lib/constants'
-import { INVESTITION_TYP_ORDER } from '../hooks/useSetupWizard'
+import { TYP_LABELS, INVESTITION_TYP_ORDER } from '../lib/constants'
 
 export default function HAExportSettings() {
   // State

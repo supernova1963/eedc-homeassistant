@@ -121,7 +121,8 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
     if (!benchmark?.anlage.monatswerte) return null
 
     const monatswerte = benchmark.anlage.monatswerte
-    const jahre = [...new Set(monatswerte.map(m => m.jahr))].sort()
+    // Absteigend sortieren (#211 P3 detLAN: neueste oben)
+    const jahre = [...new Set(monatswerte.map(m => m.jahr))].sort((a, b) => b - a)
 
     return jahre.map(jahr => {
       const jahrDaten = monatswerte.filter(m => m.jahr === jahr)

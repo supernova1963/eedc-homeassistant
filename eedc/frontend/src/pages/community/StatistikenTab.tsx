@@ -84,6 +84,9 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
   }, [benchmark])
 
   // Ausstattungs-Vergleich (was hat deine Anlage vs. was ist möglich)
+  // Reihenfolge folgt INVESTITION_TYP_ORDER: Speicher → WP → Wallbox → E-Auto → BKW
+  // (#214 detLAN: WP vor Wallbox). Farb-Klassen ausgeschrieben, weil Tailwind
+  // dynamische `bg-${color}-50`-Klassen purged (#211 P1: Wallbox-Cyan unsichtbar).
   const ausstattung = useMemo(() => {
     if (!benchmark) return []
 
@@ -93,35 +96,35 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
         icon: <Battery className="h-5 w-5" />,
         vorhanden: !!benchmark.anlage.speicher_kwh,
         details: benchmark.anlage.speicher_kwh ? `${benchmark.anlage.speicher_kwh} kWh` : null,
-        color: 'green',
+        cls: { bg: 'bg-green-50 dark:bg-green-900/20',  border: 'border-green-200 dark:border-green-800',  icon: 'text-green-500' },
       },
       {
         name: 'Wärmepumpe',
         icon: <Home className="h-5 w-5" />,
         vorhanden: benchmark.anlage.hat_waermepumpe,
         details: null,
-        color: 'blue',
-      },
-      {
-        name: 'E-Auto',
-        icon: <Car className="h-5 w-5" />,
-        vorhanden: benchmark.anlage.hat_eauto,
-        details: null,
-        color: 'purple',
+        cls: { bg: 'bg-blue-50 dark:bg-blue-900/20',    border: 'border-blue-200 dark:border-blue-800',    icon: 'text-blue-500' },
       },
       {
         name: 'Wallbox',
         icon: <Plug className="h-5 w-5" />,
         vorhanden: benchmark.anlage.hat_wallbox,
         details: benchmark.anlage.wallbox_kw ? `${benchmark.anlage.wallbox_kw} kW` : null,
-        color: 'cyan',
+        cls: { bg: 'bg-cyan-50 dark:bg-cyan-900/20',    border: 'border-cyan-200 dark:border-cyan-800',    icon: 'text-cyan-500' },
+      },
+      {
+        name: 'E-Auto',
+        icon: <Car className="h-5 w-5" />,
+        vorhanden: benchmark.anlage.hat_eauto,
+        details: null,
+        cls: { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', icon: 'text-purple-500' },
       },
       {
         name: 'Balkonkraftwerk',
         icon: <Sun className="h-5 w-5" />,
         vorhanden: benchmark.anlage.hat_balkonkraftwerk,
         details: benchmark.anlage.bkw_wp ? `${benchmark.anlage.bkw_wp} Wp` : null,
-        color: 'amber',
+        cls: { bg: 'bg-amber-50 dark:bg-amber-900/20',  border: 'border-amber-200 dark:border-amber-800',  icon: 'text-amber-500' },
       },
     ]
   }, [benchmark])
@@ -294,13 +297,13 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
           {ausstattung.map((item) => (
             <div
               key={item.name}
-              className={`flex items-center gap-2 p-3 rounded-lg ${
+              className={`flex items-center gap-2 p-3 rounded-lg border ${
                 item.vorhanden
-                  ? `bg-${item.color}-50 dark:bg-${item.color}-900/20 border border-${item.color}-200 dark:border-${item.color}-800`
-                  : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                  ? `${item.cls.bg} ${item.cls.border}`
+                  : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
               }`}
             >
-              <div className={item.vorhanden ? `text-${item.color}-500` : 'text-gray-400'}>
+              <div className={item.vorhanden ? item.cls.icon : 'text-gray-400'}>
                 {item.icon}
               </div>
               <div className="flex-1 min-w-0">
@@ -318,7 +321,7 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
                 )}
               </div>
               {item.vorhanden ? (
-                <CheckCircle2 className={`h-4 w-4 text-${item.color}-500`} />
+                <CheckCircle2 className={`h-4 w-4 ${item.cls.icon}`} />
               ) : (
                 <XCircle className="h-4 w-4 text-gray-300 dark:text-gray-600" />
               )}

@@ -103,6 +103,11 @@ def _energy_delta(
     Drops, daher nur wenn Statistics nicht greifen (Standalone-Modus,
     Sensor ohne has_sum, oder zu wenig Daten im Toleranz-Fenster).
     """
+    # Power-Sensoren (W/kW) dürfen nicht als kumulative Energie gelesen werden:
+    # state-Differenz wäre eine Power-Differenz, nicht kWh (#200 rcmcronny).
+    # Caller fällt auf Trapez-Integration der W-Werte zurück.
+    if not _is_energy_sensor(eid, sensor_units):
+        return None
     if start is not None and end is not None:
         delta = _energy_delta_via_statistics(eid, start, end)
         if delta is not None:

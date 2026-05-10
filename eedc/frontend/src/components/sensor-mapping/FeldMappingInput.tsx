@@ -11,8 +11,11 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useId } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X, AlertTriangle } from 'lucide-react'
 import type { FeldMapping, StrategieTyp, HASensorInfo } from '../../api/sensorMapping'
+
+// Energie-Einheiten für kWh-Slots (#200 — Power-Sensor in kWh-Slot ist Bug-Quelle)
+const ENERGIE_EINHEITEN = new Set(['kWh', 'Wh', 'MWh', 'GWh'])
 
 // =============================================================================
 // Types
@@ -200,6 +203,37 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder, requireStat
 }
 
 // =============================================================================
+// UnitMismatchHint — Warnung bei Power-Sensor in kWh-Slot (#200 rcmcronny)
+// =============================================================================
+
+interface UnitMismatchHintProps {
+  einheit: string
+  sensorId: string | null | undefined
+  sensors: HASensorInfo[]
+}
+
+function UnitMismatchHint({ einheit, sensorId, sensors }: UnitMismatchHintProps) {
+  if (einheit !== 'kWh' || !sensorId) return null
+  const selected = sensors.find(s => s.entity_id === sensorId)
+  // Nicht in Liste (Import / nicht verfügbar) → Einheit unbekannt, keine Warnung
+  if (!selected || !selected.unit) return null
+  if (ENERGIE_EINHEITEN.has(selected.unit)) return null
+
+  return (
+    <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200">
+      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+      <div>
+        <span className="font-medium">Einheit „{selected.unit}" passt nicht in einen kWh-Slot.</span>{' '}
+        Dieser Slot erwartet einen Energie-Zähler (kWh, Wh, MWh) — der ausgewählte
+        Sensor liefert {selected.device_class === 'power' ? 'momentane Leistung' : 'einen anderen Wert'}.
+        Wähle einen Energie-Sensor, oder trag den Sensor unten unter „Live-Sensoren (Leistung)"
+        ein — daraus wird der Tageswert dann automatisch berechnet.
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
 // FeldMappingInput Component
 // =============================================================================
 
@@ -300,6 +334,11 @@ export default function FeldMappingInput({
                   <SensorAutocomplete
                     value={value?.sensor_id}
                     onChange={handleSensorChange}
+                    sensors={availableSensors}
+                  />
+                  <UnitMismatchHint
+                    einheit={einheit}
+                    sensorId={value?.sensor_id}
                     sensors={availableSensors}
                   />
                 </div>

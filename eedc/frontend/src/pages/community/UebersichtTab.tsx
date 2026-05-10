@@ -593,9 +593,9 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
                   <Radar
                     name="Community"
                     dataKey="community"
-                    stroke="#9ca3af"
-                    fill="#9ca3af"
-                    fillOpacity={0.1}
+                    stroke="#f59e0b"
+                    fill="#f59e0b"
+                    fillOpacity={0.15}
                   />
                   <Legend />
                 </RadarChart>

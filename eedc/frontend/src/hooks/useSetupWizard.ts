@@ -17,6 +17,7 @@ import { anlagenApi } from '../api/anlagen'
 import { strompreiseApi } from '../api/strompreise'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
 import { pvgisApi, type GespeichertePrognose } from '../api/pvgis'
+import { TYP_LABELS } from '../lib/constants'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../types'
 
 // Wizard-Schritte (v1.0: ohne HA)
@@ -96,32 +97,6 @@ const STEP_ORDER: WizardStep[] = [
   'complete',
 ]
 
-// Investition-Typ Reihenfolge für Anzeige.
-// Referenz: Cockpit-Subtab-Banner (PV-Anlage → Speicher → Wärmepumpe → Wallbox → E-Auto).
-// Innerhalb des WB/EAuto-Paares: E-Auto unter Wallbox (detLAN #186).
-// Konsistent mit `components/layout/SubTabs.tsx`.
-export const INVESTITION_TYP_ORDER: InvestitionTyp[] = [
-  'wechselrichter',
-  'pv-module',
-  'balkonkraftwerk',
-  'speicher',
-  'waermepumpe',
-  'wallbox',
-  'e-auto',
-  'sonstiges',
-]
-
-// Labels für Investitions-Typen
-export const INVESTITION_TYP_LABELS: Record<InvestitionTyp, string> = {
-  'wechselrichter': 'Wechselrichter',
-  'pv-module': 'PV-Module',
-  'speicher': 'Speicher',
-  'wallbox': 'Wallbox',
-  'e-auto': 'E-Auto',
-  'waermepumpe': 'Wärmepumpe',
-  'balkonkraftwerk': 'Balkonkraftwerk',
-  'sonstiges': 'Sonstiges',
-}
 
 // Welche Typen können einem Parent zugeordnet werden?
 export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
@@ -451,7 +426,7 @@ export function useSetupWizard(): UseSetupWizardReturn {
       const newInvestition = await investitionenApi.create({
         anlage_id: wizardState.anlageId,
         typ,
-        bezeichnung: `Neue ${INVESTITION_TYP_LABELS[typ]}`,
+        bezeichnung: `Neue ${TYP_LABELS[typ] ?? typ}`,
         aktiv: true,
         ...(parentId ? { parent_investition_id: parentId } : {}),
       })

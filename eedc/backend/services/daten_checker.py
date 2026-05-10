@@ -22,6 +22,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose
+from backend.utils.investition_filter import sort_investitionen_nach_typ
 
 
 # ─── Enums & Dataclasses ────────────────────────────────────────────────────
@@ -374,7 +375,8 @@ class DatenChecker:
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.INVESTITIONEN
 
-        aktive = [i for i in anlage.investitionen if i.aktiv]
+        # Reihenfolge nach Typ (#214 detLAN: WP vor Wallbox), nicht DB-ID
+        aktive = sort_investitionen_nach_typ(i for i in anlage.investitionen if i.aktiv)
         if not aktive:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,
@@ -947,7 +949,8 @@ class DatenChecker:
         fehlend_pro_komponente: list[tuple[str, str, list[str]]] = []
         gemappt_count = 0
 
-        for inv in anlage.investitionen:
+        # Reihenfolge nach Typ (#214 detLAN: WP vor Wallbox), nicht DB-ID
+        for inv in sort_investitionen_nach_typ(anlage.investitionen):
             if not inv.aktiv:
                 continue
             erwartet = erwartete_felder.get(inv.typ)

@@ -263,6 +263,7 @@ async def get_share_text(
             f"CO₂ gespart: {f(co2_gesamt)} kg",
             "",
             "#Photovoltaik #PV #Energiewende",
+            "Erstellt mit EEDC",
         ]
         text = "\n".join(lines)
 

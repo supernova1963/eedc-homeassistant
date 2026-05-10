@@ -18,10 +18,47 @@ gefiltert werden müssen): siehe Model-Methoden `Investition.ist_aktiv_an()`,
 
 from calendar import monthrange
 from datetime import date
+from typing import Iterable, TypeVar
 
 from sqlalchemy import and_, or_
 
 from backend.models.investition import Investition
+
+
+# Anzeige-Reihenfolge der DB-Investitions-Typen — Single Source of Truth.
+# Reihenfolge: Wechselrichter → PV-Module → Speicher → Balkonkraftwerk →
+# Verbraucher nach Wirkung auf Hausverbrauch (#214 detLAN: WP vor Wallbox).
+# `pv-system` ist nicht enthalten — virtueller Aggregat-Typ in der ROI-Tabelle
+# mit eigenem Container, wird nicht in dieser Reihe sortiert.
+# Spiegel im Frontend: `frontend/src/lib/constants.ts:INVESTITION_TYP_ORDER`.
+INVESTITION_TYP_ORDER: list[str] = [
+    "wechselrichter",
+    "pv-module",
+    "speicher",
+    "balkonkraftwerk",
+    "waermepumpe",
+    "wallbox",
+    "e-auto",
+    "sonstiges",
+]
+
+
+_T = TypeVar("_T")
+
+
+def sort_investitionen_nach_typ(items: Iterable[_T]) -> list[_T]:
+    """Sortiert Investitionen nach `INVESTITION_TYP_ORDER`, Tiebreaker ID.
+
+    Erwartet Objekte mit `.typ`-Attribut. Unbekannte Typen landen ans Ende.
+    """
+    order_len = len(INVESTITION_TYP_ORDER)
+
+    def key(it: _T) -> tuple[int, int]:
+        typ = getattr(it, "typ", None)
+        idx = INVESTITION_TYP_ORDER.index(typ) if typ in INVESTITION_TYP_ORDER else order_len
+        return (idx, getattr(it, "id", 0) or 0)
+
+    return sorted(items, key=key)
 
 
 def aktiv_jetzt():

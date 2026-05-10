@@ -712,6 +712,11 @@ class HAStatisticsService:
             if meta.has_sum:
                 wert = row[0]
             else:
+                # Power-Sensor (kW/W) ohne `sum` darf nicht als kumulative
+                # Energie ausgegeben werden — `state` ist die momentane
+                # Leistung, keine kWh (#200 rcmcronny).
+                if not meta.unit or meta.unit not in _ENERGY_UNIT_TO_KWH:
+                    return None
                 wert = row[0] if row[0] is not None else row[1]
             if wert is None:
                 return None

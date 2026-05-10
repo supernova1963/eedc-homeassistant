@@ -47,18 +47,8 @@ TYP_LABELS = {
     "sonstiges": "Sonstiges",
 }
 
-# Reihenfolge der Folgeseiten (PV zuerst, dann Erzeugungstechnik, dann
-# Verbraucher, dann Rest)
-TYP_REIHENFOLGE = [
-    "pv-module",
-    "wechselrichter",
-    "speicher",
-    "waermepumpe",
-    "wallbox",
-    "e-auto",
-    "balkonkraftwerk",
-    "sonstiges",
-]
+# Reihenfolge der Folgeseiten — zentrale SoT in `backend.utils.investition_filter`.
+from backend.utils.investition_filter import INVESTITION_TYP_ORDER as TYP_REIHENFOLGE  # noqa: E402
 
 # Welche Felder der Komponenten-Akte sind Freitext-Blöcke (nicht ins Grid)
 FREITEXT_FELDER = ("technische_daten", "bedingungen", "zugehoerige_vertraege")

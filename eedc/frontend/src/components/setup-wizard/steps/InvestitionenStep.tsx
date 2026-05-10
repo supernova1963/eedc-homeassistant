@@ -24,7 +24,8 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import type { Investition, Anlage, InvestitionTyp } from '../../../types'
-import { INVESTITION_TYP_ORDER, INVESTITION_TYP_LABELS, PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
+import { PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
+import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
 import {
   PARAM_E_AUTO,
   PARAM_SPEICHER,

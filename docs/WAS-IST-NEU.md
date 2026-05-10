@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.27.0)
+> **Stand:** Mai 2026 (v3.27.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,35 @@
 ---
 
 ## v3.27.x — Reparatur-Werkbank und Daten-Schutz (Mai 2026)
+
+### UX-Sprint und Power-Sensor-Bug *(v3.27.1)*
+
+> 🪛 **Bugfix-Release zwischen den Etappen.** Bündelt UX-Quick-Wins aus dem detLAN-Cluster (Tab-Style einheitlich als Schaltfläche, kompakteres Cockpit-Banner, konsistente Komponenten-Reihenfolge mit Wärmepumpe vor Wallbox) und einen Datenintegritäts-Bug, den rcmcronny gemeldet hatte: Leistungs-Sensoren ließen sich versehentlich als kWh-Tageswert eintragen — die Live-Heute-Anzeige zeigte dann mal 0, mal 1000+ kWh.
+
+#### Was sich für dich ändert
+
+- **Power-Sensor schützt sich jetzt selbst.** Wer im Sensor-Mapping einen Leistungs-Sensor (Einheit W/kW) versehentlich in einen kWh-Slot wie „Netzbezug Tageswert" einträgt, bekommt im Wizard direkt eine Warnung „Einheit XXX passt nicht in einen kWh-Slot" mit Wegweiser auf den richtigen Slot („Live-Sensoren / Aktuelle Leistung"). Falls der Sensor schon eingetragen war: der Live-Heute-Pfad ignoriert ihn jetzt für die Tagessumme und rechnet stattdessen aus dem Wattverlauf — physikalisch korrekt. Vorher kam es bei dieser Konstellation zu unsinnigen Werten.
+- **Tab-Leisten in Auswertungen, Aussichten, Community jetzt als Schaltflächen** statt Unterstrich. Konsistenter Look mit dem Sensor-Mapping-Wizard und der Cockpit-Sub-Navigation. Aktiver Tab in Akzentfarbe, inaktive in dezentem Grau — leichter erfassbar, gerade auf kleinen Bildschirmen.
+- **Cockpit Top-Banner kompakter.** Das große Home-Icon ist weg, Anlagenname und kWp stehen jetzt inline statt zweizeilig. Das nutzlose Calendar-Icon vor dem Jahres-Filter ist auch weg — es war nicht klickbar (im Gegensatz zum Share-Button daneben), das war verwirrend.
+- **Daten → Monatsdaten ohne Überschrift, Selektoren in einer Zeile.** Die „Monatsdaten"-Überschrift wiederholte den Hauptmenü-Titel — weg. Anlage-Selektor verschwindet automatisch, wenn du nur eine Anlage hast. Mehr Platz für die eigentlichen Daten.
+- **„Erstellt mit EEDC" jetzt auch in der kompakten Share-Variante.** Bisher war der Hinweis nur im ausführlichen Teilen-Text — jetzt konsistent in beiden, am Ende des Texts.
+- **Wallbox vor E-Auto** in der Community-Übersicht („Stärken/Schwächen"-Reihen + Komponenten-Tab + Empty-State). Spiegelt den Anwender-Workflow: Ladeinfrastruktur vor Fahrzeug.
+- **Wärmepumpe vor Wallbox** im Daten-Checker. Die Anomalie-Liste pro Komponente folgt jetzt einer einheitlichen Reihenfolge (Wechselrichter → PV-Module → Speicher → Balkonkraftwerk → Wärmepumpe → Wallbox → E-Auto → Sonstiges) statt der zufälligen DB-Reihenfolge.
+- **Jahresübersicht in Community → PV-Ertrag absteigend** (neueste oben).
+- **Wallbox-Card im Dark Mode hat wieder einen sichtbaren Rahmen.** Bei der Komponenten-Übersicht in Community → Statistiken war die Wallbox-Card im dunklen Modus rahmenlos (CSS-Build-Falle); jetzt sauber mit Cyan-Akzent wie die anderen Cards.
+- **Performance-Profil Radar-Chart: Community-Linie jetzt in Amber statt Grau.** Die alte graue Linie verschmolz mit den grauen Gitterlinien des Charts — jetzt klar erkennbar.
+- **Plural-Bug „1 Hinweise" / „1 Warnungen" gefixt.** Steht jetzt korrekt „1 Hinweis" / „1 Warnung".
+- **Übernehmen-Knopf im Monatsabschluss-Wizard rückt neben das Eingabefeld** statt darüber — die Spinner-Pfeile am Number-Input sind dadurch nicht mehr verdeckt.
+- **Doppeltes Info-Icon in Aussichten → Prognosen** entfernt.
+- **Auto-Fill für die Ø-Außentemperatur im Monatsabschluss-Wizard.** Wenn das Feld leer ist und die Wetter-Daten verfügbar sind (Bright Sky oder Open-Meteo Archive), füllt eedc den Wert direkt vor — du musst ihn nur prüfen oder bewusst überschreiben.
+
+#### Was sich *nicht* ändert
+
+- **Funktionsumfang bleibt identisch.** Es ist ein Bugfix- und UX-Polish-Release — keine neue Architektur-Etappe, keine neuen Konzepte. Was du bisher gewohnt bist, funktioniert weiter wie zuvor.
+
+→ [Auswertung → Energieprofil](HANDBUCH_BEDIENUNG.md#42-auswertung) · [Cockpit](HANDBUCH_BEDIENUNG.md#41-cockpit)
+
+---
 
 ### Daten-Provenance & Reparatur-Werkbank *(v3.27.0)*
 

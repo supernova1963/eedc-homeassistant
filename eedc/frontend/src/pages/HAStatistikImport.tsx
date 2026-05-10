@@ -25,8 +25,7 @@ import type { MonatFeldAuswahl } from '../api/haStatistics'
 import Alert from '../components/ui/Alert'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useApiData } from '../hooks'
-import { TYP_LABELS } from '../lib/constants'
-import { INVESTITION_TYP_ORDER } from '../hooks/useSetupWizard'
+import { TYP_LABELS, INVESTITION_TYP_ORDER } from '../lib/constants'
 
 // Import-Modus für schnelle Auswahl
 type ImportModus = 'alle' | 'nur_basis' | 'nur_komponenten' | 'manuell'

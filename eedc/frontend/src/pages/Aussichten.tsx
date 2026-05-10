@@ -4,8 +4,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, TrendingUp, Calendar, ArrowRight, Euro, BarChart3 } from 'lucide-react'
-import { Card, Button, Alert } from '../components/ui'
-import { SimpleTooltip } from '../components/ui/FormelTooltip'
+import { Card, Button, Alert, PillTabs } from '../components/ui'
+import type { PillTab } from '../components/ui'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
 import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab, PrognoseVergleichTab } from './aussichten/index'
@@ -58,7 +58,7 @@ export default function Aussichten() {
     )
   }
 
-  const tabs: { key: TabType; label: string; icon: typeof Sun; tooltip: string }[] = [
+  const tabs: PillTab<TabType>[] = [
     { key: 'kurzfristig', label: 'Kurzfristig', icon: Sun, tooltip: '7-14 Tage Wetterprognose mit PV-Ertragsprognose' },
     { key: 'prognosen', label: 'Prognosen', icon: BarChart3, tooltip: 'PV-Prognosen vergleichen (OpenMeteo, Solcast, SFML)' },
     { key: 'langfristig', label: 'Langfristig', icon: Calendar, tooltip: '12-Monats-Prognose basierend auf PVGIS-Daten' },
@@ -85,28 +85,7 @@ export default function Aussichten() {
         )}
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex gap-4 overflow-x-auto scrollbar-none">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              return (
-                <SimpleTooltip key={tab.key} text={tab.tooltip}>
-                  <button
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`py-3 px-1 border-b-2 text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${
-                      activeTab === tab.key
-                        ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {tab.label}
-                  </button>
-                </SimpleTooltip>
-              )
-            })}
-          </nav>
-        </div>
+        <PillTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
       </div>
 
       {/* Tab-Inhalte */}

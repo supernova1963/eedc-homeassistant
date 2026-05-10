@@ -22,8 +22,7 @@ import {
 } from 'lucide-react'
 import type { FeldMapping, InvestitionInfo, StrategieTyp } from '../../api/sensorMapping'
 import { energieProfilApi, type VollbackfillResult } from '../../api/energie_profil'
-import { TYP_LABELS } from '../../lib/constants'
-import { INVESTITION_TYP_ORDER } from '../../hooks/useSetupWizard'
+import { TYP_LABELS, INVESTITION_TYP_ORDER } from '../../lib/constants'
 
 // #180: Label-Mapping fuer Sensor-Felder. Akronym-aware Formatierung statt
 // nackter `field.replace(/_/g, ' ')`-Anzeige (vorher: `pv erzeugung (kWh)`).

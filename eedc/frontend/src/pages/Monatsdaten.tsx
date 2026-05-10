@@ -469,12 +469,15 @@ export default function MonatsdatenPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Monatsdaten">
-        <Select
-          value={selectedAnlageId?.toString() || ''}
-          onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
-          options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
-        />
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        {anlagen.length > 1 && (
+          <Select
+            value={selectedAnlageId?.toString() || ''}
+            onChange={(e) => setSelectedAnlageId(parseInt(e.target.value))}
+            options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
+            aria-label="Anlage wählen"
+          />
+        )}
         {haVerfuegbar && (
           <Button variant="secondary" onClick={() => setShowHaModal(true)}>
             <Database className="h-5 w-5 mr-2" />
@@ -488,7 +491,7 @@ export default function MonatsdatenPage() {
           <Plus className="h-5 w-5 mr-2" />
           Neuer Monat
         </Button>
-      </PageHeader>
+      </div>
 
       {error && <Alert type="error">{error}</Alert>}
 

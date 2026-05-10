@@ -2,7 +2,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sun, ArrowRight, Calendar, FileText } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
+import { Card, Button, LoadingSpinner, Alert, PillTabs } from '../components/ui'
+import type { PillTab } from '../components/ui'
 import { useSelectedAnlage, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis, useStrompreise } from '../hooks'
 import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab, TabelleTab, EnergieprofilTab } from './auswertung/index'
 
@@ -92,7 +93,7 @@ export default function Auswertung() {
     )
   }
 
-  const tabs: { key: TabType; label: string; beta?: boolean }[] = [
+  const tabs: PillTab<TabType>[] = [
     { key: 'energie', label: 'Energie' },
     { key: 'pv', label: 'PV-Anlage' },
     { key: 'komponenten', label: 'Komponenten' },
@@ -149,30 +150,7 @@ export default function Auswertung() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex gap-4 overflow-x-auto scrollbar-none">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`py-3 px-1 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
-                  activeTab === tab.key
-                    ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  {tab.label}
-                  {tab.beta && (
-                    <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 leading-none">
-                      Beta
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
-          </nav>
-        </div>
+        <PillTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
       </div>
 
       {/* Tab Content */}

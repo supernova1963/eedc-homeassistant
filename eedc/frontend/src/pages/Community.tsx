@@ -23,7 +23,8 @@ import {
   AlertCircle,
   HelpCircle,
 } from 'lucide-react'
-import { Card, Alert } from '../components/ui'
+import { Card, Alert, PillTabs } from '../components/ui'
+import type { PillTab } from '../components/ui'
 import { communityApi, type CommunityBenchmarkResponse } from '../api/community'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { DataLoadingState } from '../components/common'
@@ -154,7 +155,7 @@ export default function Community() {
     )
   }
 
-  const tabs: { key: TabType; label: string; icon: typeof Trophy; hatZeitraum: boolean }[] = [
+  const tabs: (PillTab<TabType> & { hatZeitraum: boolean })[] = [
     { key: 'uebersicht', label: 'Übersicht', icon: Trophy, hatZeitraum: true },
     { key: 'pv-ertrag', label: 'PV-Ertrag', icon: Sun, hatZeitraum: true },
     { key: 'komponenten', label: 'Komponenten', icon: Battery, hatZeitraum: true },
@@ -170,76 +171,52 @@ export default function Community() {
     <div className="space-y-6">
       {/* Sticky Header mit Filter */}
       <div className="sticky -top-3 sm:-top-6 z-30 bg-gray-50 dark:bg-gray-900 pb-4 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-3 sm:pt-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Users className="h-8 w-8 text-primary-500" />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Community</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Link zum Community-Server */}
-            <a
-              href="https://energy.raunet.eu"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Community-Server im Browser öffnen"
-              className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        <div className="flex items-center justify-end gap-3 mb-4 flex-wrap">
+          {/* Link zum Community-Server */}
+          <a
+            href="https://energy.raunet.eu"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Community-Server im Browser öffnen"
+            className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <ExternalLink className="h-5 w-5" />
+          </a>
+          {/* Anlagen-Filter */}
+          {anlagen.length > 1 && (
+            <select
+              value={anlageId ?? ''}
+              onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
+              aria-label="Anlage wählen"
+              className="input w-auto"
             >
-              <ExternalLink className="h-5 w-5" />
-            </a>
-            {/* Anlagen-Filter */}
-            {anlagen.length > 1 && (
+              {anlagen.map((a) => (
+                <option key={a.id} value={a.id}>{a.anlagenname}</option>
+              ))}
+            </select>
+          )}
+          {/* Zeitraum-Filter - nur bei relevanten Tabs */}
+          {zeigeZeitraumFilter && (
+            <div className="flex items-center gap-1">
               <select
-                value={anlageId ?? ''}
-                onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
+                value={zeitraum}
+                onChange={(e) => setZeitraum(e.target.value as ZeitraumTyp)}
+                aria-label="Zeitraum wählen"
                 className="input w-auto"
               >
-                {anlagen.map((a) => (
-                  <option key={a.id} value={a.id}>{a.anlagenname}</option>
+                {ZEITRAUM_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
-            )}
-            {/* Zeitraum-Filter - nur bei relevanten Tabs */}
-            {zeigeZeitraumFilter && (
-              <div className="flex items-center gap-1">
-                <select
-                  value={zeitraum}
-                  onChange={(e) => setZeitraum(e.target.value as ZeitraumTyp)}
-                  className="input w-auto"
-                >
-                  {ZEITRAUM_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <SimpleTooltip text={ZEITRAUM_OPTIONS.find(o => o.value === zeitraum)?.tooltip || 'Betrachtungszeitraum wählen'}>
-                  <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
-                </SimpleTooltip>
-              </div>
-            )}
-          </div>
+              <SimpleTooltip text={ZEITRAUM_OPTIONS.find(o => o.value === zeitraum)?.tooltip || 'Betrachtungszeitraum wählen'}>
+                <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+              </SimpleTooltip>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex gap-4 overflow-x-auto scrollbar-none">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`py-3 px-1 border-b-2 text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    activeTab === tab.key
-                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              )
-            })}
-          </nav>
-        </div>
+        <PillTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
       </div>
 
       {/* Tab-Inhalte */}

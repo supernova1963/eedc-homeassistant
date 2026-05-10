@@ -5,6 +5,8 @@
  * Definitionen, die in vielen Seiten dupliziert waren.
  */
 
+import type { InvestitionTyp } from '../types'
+
 // ─── Monatsnamen ─────────────────────────────────────────────────────────────
 
 /** Kurze Monatsnamen, 1-basiert (Index 0 = leer). Für Chart-Labels, Tabellen. */
@@ -26,6 +28,33 @@ export const TYP_LABELS: Record<string, string> = {
   'balkonkraftwerk': 'Balkonkraftwerk',
   'sonstiges': 'Sonstiges',
   'pv-system': 'PV-System',
+}
+
+/**
+ * Anzeige-Reihenfolge der DB-Investitions-Typen — Single Source of Truth.
+ * Reihenfolge: Wechselrichter → PV-Module → Speicher → Balkonkraftwerk →
+ * Verbraucher nach Wirkung auf Hausverbrauch (#214 detLAN: WP vor Wallbox).
+ * `pv-system` ist nicht enthalten — virtueller Aggregat-Typ in der ROI-Tabelle
+ * mit eigenem Container, wird nicht in dieser Reihe sortiert.
+ * Spiegel im Backend: `backend/utils/investition_filter.py:INVESTITION_TYP_ORDER`.
+ */
+export const INVESTITION_TYP_ORDER: InvestitionTyp[] = [
+  'wechselrichter',
+  'pv-module',
+  'speicher',
+  'balkonkraftwerk',
+  'waermepumpe',
+  'wallbox',
+  'e-auto',
+  'sonstiges',
+]
+
+/** Sort-Comparator für Listen mit `.typ`-Feld. Unbekannte Typen ans Ende. */
+export function compareTyp(a: { typ?: string | null }, b: { typ?: string | null }): number {
+  const len = INVESTITION_TYP_ORDER.length
+  const idxA = a.typ ? (INVESTITION_TYP_ORDER as readonly string[]).indexOf(a.typ) : -1
+  const idxB = b.typ ? (INVESTITION_TYP_ORDER as readonly string[]).indexOf(b.typ) : -1
+  return (idxA === -1 ? len : idxA) - (idxB === -1 ? len : idxB)
 }
 
 // ─── Regionen (Bundesländer + DACH) ─────────────────────────────────────────
