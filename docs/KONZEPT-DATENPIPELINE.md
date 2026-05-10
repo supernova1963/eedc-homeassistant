@@ -1,6 +1,6 @@
 # Konzept: Daten-Pipeline & Reparatur-Architektur (Etappe 3d)
 
-> **Status:** Päckchen 1 + 2 + 3 ausgeliefert 2026-05-09 (20 Commits seit v3.26.8, kein Release). Päckchen 4 (Reparatur-Orchestrator) als nächstes. 27 SOURCE_LABELS, 6 Hierarchie-Stufen, 23 Tests grün.
+> **Status:** Päckchen 1 + 2 + 3 + 4 ausgeliefert 2026-05-09/10 (28 Commits seit v3.26.8, kein Release). 3d-Etappe komplett. Quellenwahl + Päckchen 5–7 als nächste Etappen positioniert. 27 SOURCE_LABELS, 6 Hierarchie-Stufen, 31 Tests grün (23 P1-P3 + 8 RepairOrchestrator).
 > **Voraussetzung Implementierung:** Etappe 3c abgeschlossen ✅ v3.26.8 (Detail-Konzept: [`KONZEPT-ENERGIEPROFIL-3C.md`](KONZEPT-ENERGIEPROFIL-3C.md) — Slot-Konvention an [#144](https://github.com/supernova1963/eedc-homeassistant/issues/144) angleichen + `quelle`-Marker auf `sensor_snapshots` als Schema-Vorlage).
 > **Ziel:** Provenance, Konflikt-Resolver, Reparatur-Orchestrator, Idempotenz und Aufräumen der Monster-Module der gesamten Aggregat-Daten-Schicht.
 
@@ -586,15 +586,17 @@ Reihenfolge: Etappe 3c zuerst abschließen, dann Etappe 3d in nummerierten Päck
 
 → **Akzeptanz erfüllt** (Stand 2026-05-09): Manuelle Korrektur überlebt nächtlichen Auto-Aggregations-Job. Daten-Checker meldet Doppel-Schreiber-Felder. Bestandsdaten haben Initial-Provenance. **23 Tests grün** (10 P1 + 7 P2 + 6 P3).
 
-### Päckchen 4 — Reparatur-Orchestrator (NÄCHSTES PÄCKCHEN)
-- **Refactoring-Tail:** `routes/energie_profil.py` zerlegen (Sektion 7.2). Repair-Endpoints landen in `routes/energie_profil/repair.py`.
-- `RepairOrchestrator`-Service mit Plan + Execute
-- Bestehende Repair-Endpoints zu Wrapper umstellen (kein Frontend-Break)
-- Neue Plan-API + Vorschau-API
-- Frontend: zentrale Reparatur-Werkbank in Datenverwaltung
-- Verlauf-Ansicht mit Audit-Log-Verknüpfung
+### Päckchen 4 — Reparatur-Orchestrator — ✅ AUSGELIEFERT 2026-05-10 (5 Commits, kein Release)
 
-→ **Akzeptanz:** Vor jeder Reparatur sieht User Diff-Vorschau. Verlauf zeigt mindestens letzte 20 Operationen.
+- **Refactoring-Tail (ausgeliefert):**
+  - `d97c5769` — `routes/energie_profil.py` (1741 Z) in Paket `routes/energie_profil/` zerlegt: `views.py` (10 Read-Endpoints), `repair.py` (8 Repair-Endpoints), `_shared.py` (Helper + 17 Pydantic-Models + Logger), `__init__.py` als Aggregations-Fassade. Externer Import-Pfad `from backend.api.routes import energie_profil` + `energie_profil.router` unverändert.
+- **Architektur (ausgeliefert):**
+  - `b9675d37` — `services/repair_orchestrator.py` mit `RepairOperationType`-Enum (7 Werte; SOLCAST_REWRITE bleibt Stub für P6), `FieldDiff` / `RepairPlan` / `RepairResult` / `RepairPlanView`-Models. `plan(req, db)` simuliert + liefert Plan, `execute(plan_id, db)` führt aus + sammelt `audit_log_ids` via Marker-Diff (`max(id)` vor/nach). `list_plans(anlage_id)` + `discard_plan(plan_id)`. In-memory Cache + asyncio.Lock + 1h-Expiry. `_reset_value_for_field()` liest SQLAlchemy-Reflection: nullable=False → Column-Default (z. B. 0 für `Monatsdaten.einspeisung_kwh`), sonst None. RESET_CLOUD_IMPORT scant `monatsdaten` + `investition_monatsdaten` der Anlage nach `external:cloud_import:*`-Provenance, optional providers-Filter, force_override=True bricht Hierarchie. **8 Akzeptanz-Tests grün** (plan ohne/mit Daten, execute, force_override, double-execute LookupError, providers-Filter, list_plans Reihenfolge, discard).
+  - `17db2350` — 6 bestehende Repair-Endpoints in `routes/energie_profil/repair.py` zu Orchestrator-Wrappern umgebaut: `/reaggregate-heute` → REAGGREGATE_TODAY, `/reaggregate-tag` → REAGGREGATE_DAY, `/vollbackfill` → VOLLBACKFILL, drei `/kraftstoffpreis-backfill[/tages|/monats]` → KRAFTSTOFFPREIS_BACKFILL (3× scope). DELETE `/{id}/rohdaten` + DELETE `/rohdaten` bleiben direkter Pfad (Bulk-Delete kein Plan-Mehrwert). `_run_via_orchestrator()`-Helper kapselt LookupError → 404, ValueError → 400, RuntimeError → 503/500, NotImplementedError → 501. Body-Parameter + Response-Felder unverändert für Frontend-Backward-Compat. `RepairOperationRequest.anlage_id` ist optional[int] = None (REAGGREGATE_TODAY-System-weit).
+  - `1cd9066d` — Neue Plan-API in `routes/repair.py` (Top-Level-Router, registriert in `main.py`): POST `/api/repair/plan` → erstellt Plan + liefert Vorschau, POST `/api/repair/execute/{plan_id}` → führt aus + liefert RepairResult, GET `/api/repair/plans?anlage_id=` → letzte 20 Pläne, DELETE `/api/repair/plans/{plan_id}` → discard. Status-Code-Mapping inkl. 410 Gone bei Plan-Expiry.
+  - `6efedc44` — Frontend Reparatur-Werkbank: `frontend/src/api/repair.ts` mit TypeScript-Mirror der Backend-Models + `OPERATION_META`-Liste (`inWorkbench`-Flag — REAGGREGATE_TODAY + DELETE_MONATSDATEN aus Werkbank gehalten). `frontend/src/components/repair/RepairWorkbench.tsx` mit Operation-Auswahl + operation-spezifischen Parametern + Plan-Vorschau-Block (geschätzte Änderungen als Badges, Warnungen prominent, Diff-Tabelle gruppiert nach Tabelle, Sticky-Header mit `overscroll-contain`, capped 200 + "und N weitere"-Footer) + „Diese N Änderungen anwenden"-Bestätigungs-Knopf + AbortController + Cancel-Knopf nach 30s + Verlauf-Akkordeon mit Status-Badge + Audit-Log-Counter. Integration in `pages/Energieprofil.tsx` unterhalb der Datenverwaltung-Card. Alte Schnellbuttons bleiben — sie rufen via Wrapper-Endpoints denselben Orchestrator. TS-Check + Production-Build grün. A11y: aria-label auf date-Inputs.
+
+→ **Akzeptanz erfüllt:** Vor jeder Reparatur sieht User Plan-Vorschau (Warnungen + estimated_changes + Diff-Tabelle für RESET_CLOUD_IMPORT). Verlauf zeigt letzte 20 Operationen pro Anlage mit Audit-Log-Verknüpfung. Bestehende Schnellbuttons brechen nicht (Wrapper-Pattern). 31 Tests grün (23 P1-P3 + 8 RepairOrchestrator).
 
 ### Päckchen 5 — Snapshot-Source-Marker (Risiko #4)
 - **Refactoring-Tail:** keiner — `sensor_snapshot_service` ist bereits in Päckchen 3 zerlegt.
