@@ -1,11 +1,35 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.26.8)
+> **Stand:** Mai 2026 (v3.27.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.27.x — Reparatur-Werkbank und Daten-Schutz (Mai 2026)
+
+### Daten-Provenance & Reparatur-Werkbank *(v3.27.0)*
+
+> 🛠 **Architektur-Etappe 3d sichtbar als zwei neue Anwender-Funktionen:** eine zentrale Reparatur-Werkbank ersetzt die verstreuten Schnellbuttons, und manuell gepflegte Werte werden jetzt automatisch vor Cloud-/Portal-Import geschützt. Dazu wurde unter der Haube eine Quellen-Hierarchie eingeführt, die jeder Schreiber respektieren muss — keine stillen Überschreibungen mehr.
+
+#### Was sich für dich ändert
+
+- **Reparatur-Werkbank** im Energieprofil unter „Datenverwaltung". Du wählst eine Operation (z. B. *Heute neu aggregieren*, *Vollbackfill*, *Cloud-Import-Werte zurücksetzen*) und siehst **vor** dem Klick auf „Anwenden" eine Vorschau-Tabelle mit jeder Feld-Änderung — gruppiert pro Datensatz, mit Sticky-Header. Erst der Bestätigungs-Knopf „N Änderungen anwenden" schreibt etwas. Der Vorgang lässt sich nach 30 Sekunden über einen Cancel-Knopf abbrechen, das Verlauf-Akkordeon zeigt, was du bisher angewendet hast inklusive Audit-Log-Counter. Die alten Schnellbuttons (Aggregat heute / Vollbackfill / etc.) bleiben als Wrapper bestehen — wer sie gewohnt ist, drückt sie einfach weiter.
+- **Manuell gepflegte Werte überleben Cloud- oder Portal-Import.** Wer einen Wert im Monatsabschluss-Wizard eingetragen oder per CSV-Backup wiederhergestellt hat, war bisher der Willkür des nächsten Cloud-Apply ausgeliefert: ein „Überschreiben"-Klick im Wizard zog auch manuell gepflegte Werte mit. Ab v3.27.0 schützt eine Quellen-Hierarchie die manuellen Werte automatisch — der Cloud-Apply gibt anschließend zurück „X Felder durch manuelle Werte geschützt — Reset über Reparatur-Werkbank wenn gewollt". Du siehst also explizit, was nicht überschrieben wurde, und kannst es bewusst über die Reparatur-Werkbank zurücknehmen, falls du den Cloud-Wert doch willst.
+- **Daten-Checker zeigt Provenance-Konflikte.** Wenn ein Cloud-Import versucht hätte, einen manuellen Wert zu überschreiben, und das blockiert wurde, taucht das in der Anlagen-Diagnose als neuer Befund `PROVENANCE_CONFLICT` auf. Hilft, Drift zwischen Cloud-Quelle und manueller Pflege zu sehen, bevor sie zu einer Vertrauensfrage wird.
+- **Pool-Doppelzählung bei E-Auto + Wallbox im Cockpit + Monatsbericht weg.** Wer 1 E-Auto + 1 Wallbox erfasst hatte, sah teils E-Mob-PV-Anteil > 100 % (mathematisch unmöglich, aber Folge davon dass Vehicle und Loadpoint denselben Stromfluss aus zwei Perspektiven messen). Saubere Trennung pro Fahrzeug folgt erst mit Phase 2 des Wallbox/E-Auto-Konzepts (eigene Vehicle-Sensor-Zuordnung).
+
+#### Was sich *nicht* ändert
+
+- **Tagesgesamt-Werte und Heatmaps bleiben unverändert.** Die Etappe ist eine Architektur-Konsolidierung der Schreib-Pfade — sie aggregiert nicht neu und verwirft nichts. Nur die Schreib-Reihenfolge bei mehreren Quellen pro Feld ist jetzt explizit geregelt.
+- **Manuelle Eingabe geht weiter wie bisher.** Du musst keine Reparatur-Werkbank öffnen, um einen Wert einzugeben — der Monatsabschluss-Wizard und das direkte Bearbeiten in der Anlagen-Sicht bleiben unverändert.
+- **Bestandsdaten gehen nicht verloren.** Beim ersten App-Start nach Update werden vorhandene Werte einmalig als Quelle „Legacy unbekannt" markiert. Sie bleiben sichtbar und nutzbar; jeder neue Schreiber gewinnt automatisch gegen sie.
+- **Cloud-Import-Buttons bleiben sichtbar und nutzbar.** Sie laden weiter Werte — die Hierarchie greift nur, wenn du an derselben Stelle bereits einen manuellen Wert hast. Bei leeren Feldern landet der Cloud-Wert wie zuvor direkt.
+
+→ [Auswertung → Energieprofil → Datenverwaltung](HANDBUCH_BEDIENUNG.md#42-auswertung)
 
 ---
 

@@ -7,6 +7,35 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.27.0] - 2026-05-10 — Etappe 3d: Daten-Provenance & Reparatur-Werkbank
+
+> 🧱 **Architektur-Etappe — sichtbar als Reparatur-Werkbank im Energieprofil + neue Schutz-Mechanik gegen Daten-Drift.** Vier Päckchen aus dem Etappe-3d-Detail-Konzept (`docs/KONZEPT-DATENPIPELINE.md`): Schema-Fundament für Quellen-Hierarchie pro Feld, Cloud-/CSV-/Backup-Pfade an Provenance angeschlossen, Konflikt-Resolver aktiviert, Reparatur-Orchestrator mit Plan-Vorschau + Apply-Pfad. Plus 3d-Etappenabschluss-Sprint mit drei pragma-verschobenen Refactoring-Tails und einer Pool-Bug-Konsistenz-Fix-Runde. Plus Test-Infrastruktur: pytest-Migration + Pre-Release-Smoke-Skript. Insgesamt 33 Commits seit v3.26.8 + Test-Infra-Commit.
+
+### Added
+
+- **Reparatur-Werkbank** im Energieprofil unter „Datenverwaltung" (Etappe 3d Päckchen 4). Operation-Auswahl (`REAGGREGATE_TODAY` / `REAGGREGATE_DAY` / `VOLLBACKFILL` / `RESET_CLOUD_IMPORT` / `KRAFTSTOFFPREIS_BACKFILL_*`), Plan-Vorschau zeigt **vor** dem Apply was sich an welchen Feldern ändert (gruppierte Diff-Tabelle, Sticky-Header, capped 200 Zeilen), Bestätigungs-Knopf „N Änderungen anwenden", AbortController + Cancel-Knopf nach 30 s, Verlauf-Akkordeon mit Audit-Log-Counter. Die alten Schnellbuttons bleiben als Wrapper bestehen.
+- **Wizard-Hinweis „X Felder durch manuelle Werte geschützt — Reset über Reparatur-Werkbank wenn gewollt"** in Cloud-Import-Wizards + CSV-Apply (Etappe 3d Päckchen 2). Manuell gepflegte Werte überleben jetzt Cloud-/Portal-Apply auch bei `ueberschreiben=true` — die Quellen-Hierarchie blockiert die niedriger-priorisierten Schreiber pro Sub-Key, der Wizard zeigt sichtbar wie viele Felder betroffen waren.
+- **Daten-Checker-Kategorie `PROVENANCE_CONFLICT`** (Etappe 3d Päckchen 3). Macht sichtbar, wenn Cloud-Werte versuchen, manuell gepflegte Werte zu überschreiben — ohne dass eine Reparatur-Werkbank-Aktion läuft.
+- **Plan-API für Reparatur** als REST-Layer (`POST /api/repair/plan`, `POST /api/repair/execute/{id}`, `GET /api/repair/plans`, `DELETE /api/repair/plans/{id}`). Plan-Lookup über In-Memory-Cache mit 1 h Expiry; nach Ablauf liefert Execute `410 Gone`.
+- **Test-Infrastruktur:** `eedc/backend/requirements-dev.txt` (pytest + pytest-asyncio, getrennt von Production), `eedc/pytest.ini` (`asyncio_mode=auto`), `scripts/smoke.sh` (Dev-venv + App-Boot mit Routen-Schwelle ≥217 + 31 Akzeptanz-Tests in einem Befehl). `scripts/release.sh` läuft Smoke-Check als Pre-Check vor dem Version-Bump.
+
+### Changed
+
+- **Quellen-Hierarchie pro Feld aktiv** (Etappe 3d Päckchen 1). 22 Source-Labels in fünf Stufen: `repair` > `manual:*` > `external:cloud_import:*` / `external:ha_statistics` / `external:portal_import` > `auto:monatsabschluss` > `fallback:*`. Höhere Priorität gewinnt; gleicher Rang folgt Last-Writer-Wins. Audit-Log dokumentiert jede Entscheidung (`applied` / `rejected_lower_priority` / `no_op_same_value`).
+- **Manual-Form / Auto-Aggregation / HA-Stats-Import / Custom-Import / Live-Wetter / Kraftstoff-Preis-Service auf `write_with_provenance` umgestellt** (Etappe 3d Päckchen 3). Initial-Migration für Bestandsdaten markiert vorgefundene Werte als `legacy:unknown` — sie verlieren gegen jeden neuen Schreiber. Akzeptanz: manuelle Korrektur überlebt nächtlichen Auto-Aggregations-Job.
+- **Pool-Doppelzählung E-Auto + Wallbox in Cockpit + Monatsbericht behoben** (3d-Etappenabschluss-Sprint, Folge zu Quick-Fix `92d522a8`). Bei Setups mit 1 E-Auto + 1 Wallbox produzieren beide Investitionstypen denselben Stromfluss aus zwei Perspektiven (Vehicle vs. Loadpoint) — Aufsummieren ergab z. B. PV-Anteil > 100 %. `cockpit/uebersicht.py` und `aktueller_monat._aggregate` (sensor-basierter Pfad ohne InvestitionMonatsdaten) ziehen jetzt das Quick-Fix-Pattern: getrennte Akkumulatoren `eauto_*` / `wb_*`, max-Pool pro Feld, PV ≤ Gesamt erzwingen, Dienstwagen-Filter (`ist_dienstlich`) früh. Saubere Trennung pro Fahrzeug folgt erst in Phase 2 des Wallbox/E-Auto-Konzepts.
+
+### Internal
+
+- **`backend/services/provenance.py`** mit `write_with_provenance()` + `write_json_subkey_with_provenance()` (Hierarchie-Check + No-Op-Detection + flag_modified-Pflicht + Append-Only-Audit-Log). 10 Akzeptanz-Tests grün.
+- **`backend/services/import_writer.py`** als gemeinsamer Provenance-Wrapper für Cloud-/CSV-/Portal-Apply-Pfade. Per-Sub-Key-Hierarchie + Full-Payload-No-Op + `geschuetzt_count` / `geschuetzte_felder`-Antwort. 7 Akzeptanz-Tests grün.
+- **`backend/services/repair_orchestrator.py`** mit `Operation`-Enum (7 Werte), `FieldDiff` / `Plan` / `Result`-Models, In-Memory-Cache + Lock + 1 h Expiry, `_reset_value_for_field` per SQLAlchemy-Reflection für NOT-NULL-Defaults, `RESET_CLOUD_IMPORT` mit `force_override` + providers-Filter. 8 Akzeptanz-Tests grün.
+- **Schema-Migration:** `data_provenance_log`-Tabelle + `source_provenance`-JSON-Spalte in `monatsdaten` / `investition_monatsdaten` / `tages_zusammenfassung` / `tages_energie_profil` + `source_hash`-TEXT-Spalte in `monatsdaten` / `investition_monatsdaten`. Migrationen idempotent; Initial-Provenance läuft beim ersten App-Start nach Update einmalig.
+- **Refactoring-Tails (3d-P3 + 3d-Etappenabschluss-Sprint):** `services/energie_profil_service.py` von 1224 → 360 → ~46 Zeilen reduziert (`rollup` / `backfill` / `scheduler_jobs` / `aggregator` / `_helpers` als Slices); `services/monatsabschluss_aggregator.py` neu; `routes/energie_profil.py` (1741 Z) in Paket `views.py` / `repair.py` / `_shared.py` / `__init__.py`-Fassade zerlegt; `routes/monatsabschluss.py` (1078 Z) in Paket `monatsabschluss/views.py` / `wizard.py` / `_shared.py`; `routes/custom_import.py` (1102 Z) in Paket `custom_import/analyze.py` / `preview.py` / `apply.py` / `templates.py` / `_shared.py`. App-Boot 217 Routen identisch zum Vor-3d-Stand.
+- **31 Akzeptanz-Tests grün** (10 Provenance + 7 ImportWriter + 6 ProvenanceMigrate + 8 RepairOrchestrator). Tests bleiben rückwärtskompatibel als Standalone-Skripte aufrufbar; pytest collected sie ohne Code-Anpassung.
+
+---
+
 ## [3.26.8] - 2026-05-09 — Etappe 3c: Energieprofil Read-/Write-Architektur konsolidiert
 
 > 🧱 **Architektur-Etappe — Anwender-sichtbar als Konsistenz-Patch.** Vier Päckchen aus dem Etappe-3c-Detail-Konzept (`docs/KONZEPT-ENERGIEPROFIL-3C.md`): Slot-Konvention zwischen kWh- und Counter-Feldern symmetrisch, Tagesgesamt für Komponenten-Energien strikt aus Boundary-Diff (HA-konform), SensorSnapshots tragen einen Source-Marker als 3d-Schablone, Reaggregate-Modal trennt Resnap+Aggregat klar von „Nur neu rechnen". Verbessert die Self-Healing-Eigenschaften aus v3.26.6 strukturell — kein neuer Anwender-Knopf, sondern saubere Pfade darunter.
