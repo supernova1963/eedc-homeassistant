@@ -19,6 +19,26 @@ Backward-kompatibel mit Legacy:
 from typing import Any
 
 
+def _safe_float(value: Any) -> float | None:
+    """Robuster Cast nach float — toleriert deutsche Komma-Strings.
+
+    Schützt Export/Aggregat-Pfade gegen historische Datenkorruption
+    (String-Werte in Zahl-JSON-Slots, z.B. '150,00' aus Alt-Frontends).
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.replace(",", "."))
+        except ValueError:
+            return None
+    return None
+
+
 def get_sonstige_positionen(verbrauch_daten: dict[str, Any] | None) -> list[dict]:
     """
     Liest sonstige_positionen aus verbrauch_daten.
@@ -33,13 +53,13 @@ def get_sonstige_positionen(verbrauch_daten: dict[str, Any] | None) -> list[dict
         return verbrauch_daten["sonstige_positionen"] or []
 
     # Legacy-Format: on-the-fly konvertieren
-    legacy_euro = verbrauch_daten.get("sonderkosten_euro")
+    legacy_euro = _safe_float(verbrauch_daten.get("sonderkosten_euro"))
     legacy_notiz = verbrauch_daten.get("sonderkosten_notiz", "")
 
     if legacy_euro is not None and legacy_euro > 0:
         return [{
             "bezeichnung": legacy_notiz or "Sonderkosten (migriert)",
-            "betrag": float(legacy_euro),
+            "betrag": legacy_euro,
             "typ": "ausgabe"
         }]
 
@@ -53,12 +73,12 @@ def berechne_sonstige_summen(verbrauch_daten: dict[str, Any] | None) -> dict:
     """
     positionen = get_sonstige_positionen(verbrauch_daten)
     ertraege = sum(
-        p.get("betrag", 0) or 0
+        _safe_float(p.get("betrag")) or 0
         for p in positionen
         if p.get("typ") == "ertrag"
     )
     ausgaben = sum(
-        p.get("betrag", 0) or 0
+        _safe_float(p.get("betrag")) or 0
         for p in positionen
         if p.get("typ") == "ausgabe"
     )
