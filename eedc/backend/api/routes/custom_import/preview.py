@@ -75,6 +75,7 @@ def _apply_mapping(
         values: dict[str, Optional[float]] = {}
         jahr: Optional[int] = None
         monat: Optional[int] = None
+        row_has_inv_data = False
 
         # Datum aus kombinierter Spalte?
         if config.datum_spalte and config.datum_spalte in row:
@@ -98,6 +99,9 @@ def _apply_mapping(
                     monat = int(float(raw))
                 except (ValueError, TypeError):
                     pass
+            elif eedc_feld.startswith("inv:"):
+                if _parse_number(raw, config.dezimalzeichen) is not None:
+                    row_has_inv_data = True
             else:
                 num = _parse_number(raw, config.dezimalzeichen)
                 if num is not None:
@@ -125,12 +129,14 @@ def _apply_mapping(
             eauto_km_gefahren=values.get("eauto_km_gefahren"),
         )
 
-        # Nur Monate mit mindestens einem Wert
-        has_data = any(
+        # Nur Monate mit mindestens einem Wert (inkl. Investitions-Slot-Daten,
+        # die in der Vorschau zwar nicht sichtbar sind, aber beim Import landen).
+        has_data = row_has_inv_data or any(
             v is not None for v in [
                 month.pv_erzeugung_kwh, month.einspeisung_kwh, month.netzbezug_kwh,
                 month.eigenverbrauch_kwh, month.batterie_ladung_kwh, month.batterie_entladung_kwh,
-                month.wallbox_ladung_kwh, month.eauto_km_gefahren,
+                month.wallbox_ladung_kwh, month.wallbox_ladung_pv_kwh,
+                month.wallbox_ladevorgaenge, month.eauto_km_gefahren,
             ]
         )
         if has_data:
@@ -138,6 +144,14 @@ def _apply_mapping(
 
     if skipped > 0:
         warnungen.append(f"{skipped} Zeilen übersprungen (kein gültiges Jahr/Monat)")
+
+    inv_mapping_count = sum(1 for f in field_map.values() if f.startswith("inv:"))
+    if inv_mapping_count > 0:
+        warnungen.append(
+            f"{inv_mapping_count} Spalte(n) als Investitions-Daten gemappt — "
+            "werden beim Import automatisch der zugehörigen Investition zugeordnet "
+            "(Werte in der Vorschau-Tabelle nicht sichtbar)."
+        )
 
     # Nach Jahr+Monat sortieren
     results.sort(key=lambda m: (m.jahr, m.monat))
@@ -180,10 +194,17 @@ async def preview_mapping(
     monate, warnungen = _apply_mapping(headers, rows, config)
 
     if not monate:
+        diagnose = " ".join(warnungen) if warnungen else (
+            f"Mapping hat {len(rows)} Zeilen gelesen, aber keine enthielt erkennbare Zahlenwerte."
+        )
         raise HTTPException(
             400,
             "Keine gültigen Monatsdaten mit diesem Mapping gefunden. "
-            "Bitte prüfe die Zuordnung von Jahr und Monat."
+            f"{diagnose} "
+            "Häufige Ursachen: Datums-Format der Quelldatei nicht erkannt "
+            "(z. B. ISO-Zeitstempel wie '2026-05-10T14:32:00'), oder Dezimalzeichen falsch "
+            "gewählt (Punkt vs. Komma). Bitte Datums-Spalte/-Format und Dezimalzeichen "
+            "im Wizard prüfen."
         )
 
     return PreviewResponse(
