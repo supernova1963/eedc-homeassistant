@@ -9,7 +9,6 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Home,
   RefreshCw,
   Loader2,
   CheckCircle,
@@ -382,16 +381,13 @@ export default function HAExportSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Home className="h-6 w-6 text-cyan-500" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            HA-Sensor-Export
-          </h1>
-        </div>
+      {/* #218 P11: Überschrift „HA-Sensor-Export" entfernt — passt nicht zum
+          Sub-Tab „MQTT-Export". Erklärung liefert die Info-Box unten. */}
+      <div className="flex items-center justify-end">
         <button
           onClick={loadData}
           disabled={loading}
+          type="button"
           className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           title="Aktualisieren"
         >

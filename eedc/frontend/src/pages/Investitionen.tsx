@@ -129,7 +129,6 @@ export default function Investitionen() {
   if (anlagen.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Investitionen</h1>
         <Alert type="warning">
           Bitte lege zuerst eine PV-Anlage an, um Investitionen zu verwalten.
         </Alert>
@@ -139,10 +138,8 @@ export default function Investitionen() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Investitionen
-        </h1>
+      {/* #218: Überschrift „Investitionen" entfernt — der Sub-Tab benennt den Bereich */}
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-3">
           {anlagen.length > 1 && (
             <select

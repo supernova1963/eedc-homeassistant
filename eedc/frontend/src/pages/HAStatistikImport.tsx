@@ -8,7 +8,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Database,
   Download,
   AlertTriangle,
   CheckCircle,
@@ -329,13 +328,10 @@ export default function HAStatistikImport() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      {/* Header */}
+      {/* #218: Überschrift „HA-Statistik Import" entfernt — der Sub-Tab
+          benennt den Bereich. Erklärung bleibt für Kontext. */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-          <Database className="w-7 h-7 text-primary-500" />
-          HA-Statistik Import
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
+        <p className="text-gray-600 dark:text-gray-400">
           Importiere historische Monatsdaten aus der Home Assistant Langzeitstatistik-Datenbank.
         </p>
       </div>

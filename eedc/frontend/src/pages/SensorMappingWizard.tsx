@@ -757,13 +757,11 @@ export default function SensorMappingWizard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* #218: Überschrift „Sensor-Zuordnung" entfernt — der Sub-Tab benennt
+          den Bereich. Kontext-Subtitle bleibt als Erklärung & Anlage-Auswahl. */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Sensor-Zuordnung
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-gray-500 dark:text-gray-400">
             {anlagen && anlagen.length > 1 ? (
               <span className="inline-flex items-center gap-2">
                 <select

@@ -41,10 +41,8 @@ export default function Anlagen() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Anlagen
-        </h1>
+      {/* #218: Überschrift „Anlagen" entfernt — der Sub-Tab benennt den Bereich */}
+      <div className="flex items-center justify-end">
         <Button onClick={() => setShowForm(true)}>
           <Plus className="h-5 w-5 mr-2" />
           Neue Anlage

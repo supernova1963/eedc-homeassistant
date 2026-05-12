@@ -80,7 +80,7 @@ const einstellungenGruppen: TabGroup[] = [
       '/einstellungen/solarprognose',
     ],
     tabs: [
-      { name: 'Anlage',        href: '/einstellungen/anlage',        icon: Home },
+      { name: 'Anlagen',       href: '/einstellungen/anlage',        icon: Home },
       { name: 'Strompreise',   href: '/einstellungen/strompreise',   icon: Zap },
       { name: 'Investitionen', href: '/einstellungen/investitionen', icon: PiggyBank },
       { name: 'Solarprognose', href: '/einstellungen/solarprognose', icon: Sun },
