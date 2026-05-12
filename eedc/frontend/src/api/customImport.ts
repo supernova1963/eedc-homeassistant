@@ -108,14 +108,17 @@ export const customImportApi = {
   },
 
   /**
-   * Mapping auf Datei anwenden und Vorschau erhalten
+   * Mapping auf Datei anwenden und Vorschau erhalten.
+   * Mit anlageId kennt die Vorschau die im Analyze-Schritt erkannten
+   * Investitions-Spalten und wertet sie als Daten-Marker (#222).
    */
-  async preview(file: File, mapping: MappingConfig): Promise<PreviewResult> {
+  async preview(file: File, mapping: MappingConfig, anlageId?: number | null): Promise<PreviewResult> {
     const formData = new FormData()
     formData.append('file', file)
 
     const params = new URLSearchParams()
     params.append('mapping_json', JSON.stringify(mapping))
+    if (anlageId) params.append('anlage_id', String(anlageId))
 
     const response = await fetch(
       `${API_BASE}/custom-import/preview?${params.toString()}`,

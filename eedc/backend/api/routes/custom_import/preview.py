@@ -8,8 +8,11 @@ POST /preview — wendet Mapping auf hochgeladene Datei an und liefert
 import json
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.core.database import get_db
 
 from ._shared import (
     MappingConfig,
@@ -57,8 +60,18 @@ def _apply_mapping(
     headers: list[str],
     rows: list[dict[str, str]],
     config: MappingConfig,
+    auto_inv_spalten: Optional[set[str]] = None,
 ) -> tuple[list[PreviewMonth], list[str]]:
-    """Wendet das Mapping auf die Daten an und gibt PreviewMonths zurück."""
+    """Wendet das Mapping auf die Daten an und gibt PreviewMonths zurück.
+
+    `auto_inv_spalten` sind CSV-Spaltennamen, die in einem vorhergehenden
+    Analyze-Schritt als Investitions-Suffix-Match erkannt wurden (z.B.
+    `Wollis_ID5_Ladung_PV_kWh`). Sie stehen im Wizard-Mapping auf
+    „Ignorieren", werden aber beim Apply trotzdem automatisch importiert.
+    Damit die Vorschau diese Zeilen nicht fälschlich als leer verwirft,
+    werten wir sie hier mit aus (Wert-Marker, kein PreviewMonth-Slot).
+    """
+    auto_inv_spalten = auto_inv_spalten or set()
     # Mapping aufbauen: spalte → eedc_feld, invertieren
     field_map: dict[str, str] = {}
     invert_map: dict[str, bool] = {}
@@ -110,6 +123,16 @@ def _apply_mapping(
                         val = abs(val)
                     values[eedc_feld] = val
 
+        # Auto-erkannte Investitions-Spalten (Suffix-Match in Analyze) zählen
+        # auch als „Daten in dieser Zeile", auch wenn sie im Mapping auf
+        # „Ignorieren" stehen — Apply würde sie automatisch importieren.
+        if not row_has_inv_data:
+            for spalte in auto_inv_spalten:
+                raw = row.get(spalte, "")
+                if raw and _parse_number(raw, config.dezimalzeichen) is not None:
+                    row_has_inv_data = True
+                    break
+
         if jahr is None or monat is None or monat < 1 or monat > 12:
             skipped += 1
             continue
@@ -153,6 +176,13 @@ def _apply_mapping(
             "(Werte in der Vorschau-Tabelle nicht sichtbar)."
         )
 
+    if auto_inv_spalten:
+        warnungen.append(
+            f"{len(auto_inv_spalten)} eedc-Investitions-Spalte(n) automatisch erkannt: "
+            f"{', '.join(sorted(auto_inv_spalten))} — werden beim Import den passenden "
+            "Investitionen zugeordnet (Werte in der Vorschau-Tabelle nicht sichtbar)."
+        )
+
     # Nach Jahr+Monat sortieren
     results.sort(key=lambda m: (m.jahr, m.monat))
 
@@ -166,6 +196,8 @@ def _apply_mapping(
 async def preview_mapping(
     file: UploadFile = File(...),
     mapping_json: str = Query(..., description="JSON-String mit MappingConfig"),
+    anlage_id: Optional[int] = Query(None, description="Für Auto-Erkennung von Investitions-Spalten"),
+    db: AsyncSession = Depends(get_db),
 ):
     """Wendet das Mapping auf die Datei an und gibt eine Vorschau zurück."""
     try:
@@ -191,7 +223,17 @@ async def preview_mapping(
     if not rows:
         raise HTTPException(400, "Keine Datenzeilen in der Datei gefunden.")
 
-    monate, warnungen = _apply_mapping(headers, rows, config)
+    # Investitions-Spalten der Anlage erkennen (gleiche Logik wie in /analyze).
+    # Wenn anlage_id mitgegeben, kennt die Vorschau Spalten, die beim Apply
+    # automatisch zugeordnet werden — sonst würden Zeilen ohne globale Felder
+    # fälschlich als „keine Daten" verworfen (#222 NongJoWo).
+    auto_inv_spalten: set[str] = set()
+    if anlage_id is not None:
+        from .analyze import _detect_investition_spalten
+        inv_info = await _detect_investition_spalten(headers, anlage_id, db)
+        auto_inv_spalten = {info.spalte for info in inv_info}
+
+    monate, warnungen = _apply_mapping(headers, rows, config, auto_inv_spalten)
 
     if not monate:
         diagnose = " ".join(warnungen) if warnungen else (
