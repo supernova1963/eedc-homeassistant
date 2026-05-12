@@ -22,7 +22,7 @@ export default function ChartTooltip({
   nameFormatter,
   itemSorter,
   unit,
-  decimals = 0,
+  decimals,
   locale = 'de-DE',
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
@@ -47,10 +47,18 @@ export default function ChartTooltip({
         const p = entry.payload as Record<string, unknown> | undefined
         const color: string = entry.color || entry.fill || (typeof p?.fill === 'string' ? p.fill : undefined) || (typeof p?.color === 'string' ? p.color : undefined) || '#888'
         let formatted: string | null
+        const isNum = typeof val === 'number' && Number.isFinite(val)
         if (formatter) {
           formatted = formatter(val, entry.name as string)
-        } else if (unit !== undefined) {
-          formatted = `${val.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${unit}`
+        } else if (isNum) {
+          // #228: decimals werden konsistent angewandt — auch ohne unit.
+          // Vorher fiel der Fall „decimals ohne unit" auf String(val) durch
+          // und zeigte Roh-Floats wie 10.5252891704708 statt 10,5.
+          const opts = decimals !== undefined
+            ? { minimumFractionDigits: decimals, maximumFractionDigits: decimals }
+            : undefined
+          const num = val.toLocaleString(locale, opts)
+          formatted = unit !== undefined ? `${num} ${unit}` : num
         } else {
           formatted = String(val)
         }
