@@ -690,7 +690,12 @@ async def export_csv(
         writer.writerow(row)
 
     output.seek(0)
-    filename = f"eedc_export_{anlage.anlagenname}_{jahr or 'alle'}.csv"
+    # Anlagenname sanitisieren (Umlaute → ae/oe/ue, Sonderzeichen → _) — HTTP-Header
+    # erlaubt nur Latin-1, ungequoteted nur Token-Zeichen (kein Leerzeichen, kein ;, " etc.).
+    # Ohne Sanitization kann der Header bei Sonderzeichen/Umlauten ungültig werden, was
+    # HA-Ingress oder fetch() als Stream-Abbruch interpretiert ("Failed to fetch"; #220).
+    safe_name = _sanitize_column_name(anlage.anlagenname) or "anlage"
+    filename = f"eedc_export_{safe_name}_{jahr or 'alle'}.csv"
 
     # BOM für Excel/LibreOffice UTF-8-Erkennung
     csv_content = "\ufeff" + output.getvalue()
@@ -698,5 +703,5 @@ async def export_csv(
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
