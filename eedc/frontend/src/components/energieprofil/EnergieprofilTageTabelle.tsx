@@ -63,12 +63,34 @@ function sumKomponentenStarts(t: TagesZusammenfassung, feld: string): number | n
   return any ? sum : null
 }
 
+// Hilfsfunktion: Summe eines kWh-Aggregats über alle Komponenten-Keys, die
+// mit einem der angegebenen Prefixe beginnen. `komponenten_kwh` folgt der
+// Konvention `pv_<id>`, `bkw_<id>`, `batterie_<id>` usw. (siehe
+// snapshot/aggregator.py:get_komponenten_tageskwh).
+function sumKomponentenKwhByPrefix(
+  t: TagesZusammenfassung, prefixes: readonly string[]
+): number | null {
+  const k = t.komponenten_kwh
+  if (!k) return null
+  let sum = 0
+  let any = false
+  for (const [key, val] of Object.entries(k)) {
+    if (typeof val !== 'number' || isNaN(val)) continue
+    if (prefixes.some((p) => key.startsWith(p))) {
+      sum += val
+      any = true
+    }
+  }
+  return any ? sum : null
+}
+
 const COLUMNS: ColumnConfig[] = [
   // Peaks
   { key: 'peak_pv',           label: 'Peak PV',         group: 'peaks',       getValue: (t) => t.peak_pv_kw,           format: 'kw', defaultVisible: true,  agg: 'max', tone: 'green'  },
   { key: 'peak_netzbezug',    label: 'Peak Netzbezug',  group: 'peaks',       getValue: (t) => t.peak_netzbezug_kw,    format: 'kw', defaultVisible: true,  agg: 'max', tone: 'orange' },
   { key: 'peak_einspeisung',  label: 'Peak Einspeisung', group: 'peaks',      getValue: (t) => t.peak_einspeisung_kw,  format: 'kw', defaultVisible: true,  agg: 'max', tone: 'blue'   },
   // Tages-Summen
+  { key: 'pv_ertrag',         label: 'PV-Ertrag',       group: 'summen',      getValue: (t) => sumKomponentenKwhByPrefix(t, ['pv_', 'bkw_']), format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'green'  },
   { key: 'ueberschuss',       label: 'Überschuss',      group: 'summen',      getValue: (t) => t.ueberschuss_kwh,      format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'amber'  },
   { key: 'defizit',           label: 'Defizit',         group: 'summen',      getValue: (t) => t.defizit_kwh,          format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'red'    },
   // Performance
@@ -89,6 +111,16 @@ const COLUMNS: ColumnConfig[] = [
 ]
 
 const COLUMNS_STORAGE_KEY = 'eedc-energieprofil-tage-columns-v1'
+const COLUMNS_VERSION_KEY = 'eedc-energieprofil-tage-columns-version'
+const CURRENT_COLUMNS_VERSION = 2
+
+// Per-Version-Migration: ergänzt neue Default-Spalten in bestehenden
+// User-Selektionen, ohne deren Anpassungen zu überschreiben. Spalten, die
+// User aktiv ausgeblendet hatten, bleiben ausgeblendet, weil sie schon vor
+// der Migration in ihrer Auswahl fehlten — der Marker `__migrations_applied`
+// ist hier nicht nötig, weil wir per Versionsnummer wissen, ab welcher
+// Storage-Version welche Keys ergänzt werden müssen.
+const COLUMNS_V2_NEW_DEFAULT_VISIBLE: readonly string[] = ['pv_ertrag']
 
 function formatValue(val: number | null, format: ColumnConfig['format']): string {
   if (val === null || val === undefined || isNaN(val)) return '-'
@@ -167,7 +199,26 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(COLUMNS_STORAGE_KEY)
-      if (stored) return new Set(JSON.parse(stored))
+      if (!stored) {
+        localStorage.setItem(COLUMNS_VERSION_KEY, String(CURRENT_COLUMNS_VERSION))
+        return new Set(COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+      }
+      const fromStorage = new Set<string>(JSON.parse(stored))
+      const version = parseInt(localStorage.getItem(COLUMNS_VERSION_KEY) || '1', 10)
+
+      // Migration v1 → v2: PV-Ertrag-Spalte (#494 dietmar1968) ergänzen.
+      if (version < 2) {
+        COLUMNS_V2_NEW_DEFAULT_VISIBLE.forEach((k) => fromStorage.add(k))
+      }
+
+      // Verwaiste Keys aus alten Versionen herausfiltern.
+      const allKeys = new Set(COLUMNS.map((c) => c.key))
+      for (const key of [...fromStorage]) {
+        if (!allKeys.has(key)) fromStorage.delete(key)
+      }
+
+      localStorage.setItem(COLUMNS_VERSION_KEY, String(CURRENT_COLUMNS_VERSION))
+      return fromStorage
     } catch { /* ignore */ }
     return new Set(COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   })
