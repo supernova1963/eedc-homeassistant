@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.27.3)
+> **Stand:** Mai 2026 (v3.27.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,21 @@
 ---
 
 ## v3.27.x — Reparatur-Werkbank und Daten-Schutz (Mai 2026)
+
+### Wärmepumpen-Aggregation für getrennte Strommessung *(v3.27.4)*
+
+> 🪛 **Zwei strukturelle Lücken im Wärmepumpen-Stundenpfad behoben**, beide aus Martins Forum-Befund.
+
+#### Was sich für dich ändert
+
+- **Wärmepumpe-Spalte in der Stundenwerte-Tabelle wird befüllt, wenn du Strom Heizen und Strom Warmwasser getrennt erfasst.** Wer im Sensor-Mapping die seit v3.25.x verfügbare Option "Getrennte Strommessung" gewählt hat und zwei Stromsensoren für Heizung und Warmwasser gemappt hatte, sah im Live-Tagesverlauf eine korrekte WP-Kurve, aber in „Auswertungen → Energieprofil → Tagesdetail" blieb die Wärmepumpe-Spalte leer und die Heatmap zeigte für die WP nichts. Der stündliche Snapshot-Mechanismus kannte die getrennten Feldnamen nicht und hat sie ignoriert. Behoben — beide Felder werden jetzt regulär stündlich aufgezeichnet und in der Stundenwerte-Tabelle als Wärmepumpen-Verbrauch summiert. **Damit Bestandstage rückwirkend korrekt erscheinen, einmal über Auswertungen → Energieprofil → Datenverwaltung → "Vollbackfill" laufen lassen**: HA-Statistics hat die Historie, eedc holt die fehlenden Snapshots nach.
+- **WP-Kompressor-Starts: kein einzelner Unsinns-Wert mehr in der Stunden-Detail-Tabelle.** Wenn der Tagestab 0 WP-Starts für einen Tag zeigt, aber die Stunden-Detail-Tabelle in einer einzelnen Stunde dann z. B. 49.073 stehen hat, ist das kein realer Wert sondern ein bekannter HA-Statistics-Bug (`sum=NULL` direkt nach HA-Restart, der `state`-Fallback liefert den Lebensdauer-Zählerstand). eedc filtert solche Spikes jetzt im Stunden-Pfad heraus (Plausibilitäts-Schwelle: > 200 Starts/h sind physikalisch ausgeschlossen). Sobald du den Tag über die Reparatur-Werkbank reaggregierst, ist die Anzeige bereinigt. *(Dank an MartyBr für die scharfe Beobachtung mit Screenshots.)*
+
+#### Was sich *nicht* ändert
+
+- **Reines Aggregations-Fix.** Keine neuen Funktionen, keine Schema-Änderungen. Wer keine getrennte Strommessung für die WP nutzt und auch sonst keine WP-Starts-Anomalien gesehen hat, merkt nichts vom Release.
+
+---
 
 ### Folge-Päckchen Tester-Bugs *(v3.27.3)*
 
