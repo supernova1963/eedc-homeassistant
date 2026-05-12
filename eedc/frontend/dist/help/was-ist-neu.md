@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.27.2)
+> **Stand:** Mai 2026 (v3.27.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,24 @@
 ---
 
 ## v3.27.x — Reparatur-Werkbank und Daten-Schutz (Mai 2026)
+
+### Folge-Päckchen Tester-Bugs *(v3.27.3)*
+
+> 🪛 **Reaktion auf v3.27.2-Feedback + drei frische Bug-Meldungen.** Rainer und NongJoWo hatten gemeldet, dass die v3.27.2-Fixes ihre Probleme nicht gelöst hatten — diesmal mit Backend-Logs bzw. Datei-Anhang, sodass die tatsächlichen Pfade gefunden werden konnten. Plus drei neue Issues von JanKgh und NongJoWo. Alles Polish, kein neuer Funktionsumfang.
+
+#### Was sich für dich ändert
+
+- **CSV-Export funktioniert auch mit Sonderzeichen im Anlagenname.** Wer als Browser-Fehler "Failed to fetch" gesehen hat, obwohl der Server in den Logs ein sauberes HTTP 200 OK zeigte, hatte vermutlich Leerzeichen, Umlaute oder andere Sonderzeichen im Anlagenname — die landeten ungefiltert in einem HTTP-Header und der Browser-Fetch hat den Stream als ungültig abgebrochen. Backend sanitisiert den Namen jetzt vor dem Header (Umlaute → ae/oe/ue, Sonderzeichen → _) und quotet den Filename korrekt. *(Dank an rapahl für die ausführlichen Backend-Logs.)*
+- **"Eigene Dateien" — Vorschau erkennt automatisch zugeordnete Investitions-Spalten.** Bisher meldete die Vorschau "Keine gültigen Monatsdaten", wenn deine CSV-Datei nur Jahr/Monat plus Spalten enthielt, die eedc automatisch einer E-Auto- oder Wallbox-Investition zuordnen würde (Suffix-Match auf den csv_suffix in den Felddefinitionen). Beim eigentlichen Import hätten sie sauber gelandet — die Vorschau wusste nur nichts davon. Jetzt prüft sie die gleiche Auto-Erkennung wie der Apply-Pfad und zeigt einen klaren Hinweis "X Investitions-Spalten automatisch erkannt". *(Dank an NongJoWo mit Test-CSV.)*
+- **Datenchecker mahnt keine Batterie-Daten für Monate vor der Batterie-Installation an.** Wer eine PV-Anlage vor der Batterie hatte (typisch: PV 2021, Speicher 2022 oder später) bekam für jeden Vor-Anschaffungs-Monat eine Warnung "Batterie-Ladung nicht erfasst" — was per Definition nicht erfasst werden konnte. Der Datenchecker respektiert jetzt Anschaffungs- und Stilllegungsdatum pro Speicher. *(Dank an JanKgh.)*
+- **Tagesverlaufsgrafik addiert Wallbox und E-Auto nicht mehr doppelt.** Wenn deine Wallbox und das E-Auto unabhängig in eedc angelegt sind und beide denselben Leistungs-Sensor nutzen (typisch bei "Wallbox misst Ladung am Stecker, E-Auto-App misst die gleiche Leistung von der anderen Seite"), wurden bisher beide getrennt im Tagesverlauf gestackt — Σ Verbrauch um die Fahrzeug-Ladung zu hoch. Backend dedupliziert jetzt automatisch: wenn zwei Investitionen dieselbe Entity teilen, wird die Wallbox bevorzugt, das E-Auto entfällt. Sauberer Weg bleibt: Fahrzeug-Investition öffnen → "Gehört zu Wallbox" → Wallbox auswählen — damit der bestehende parent-basierte Schutz greift. *(Dank an JanKgh mit Tooltip-Screenshot.)*
+- **Vollzyklen pro Monat zeigt wieder einen runden Wert.** Im Cockpit → Speicher → "Vollzyklen pro Monat"-Diagramm zeigte der Tooltip Werte wie "10.5252891704708..." statt "10,5". Ein Edge-Case in der Tooltip-Komponente hat die Nachkommastellen-Vorgabe verschluckt, sobald keine Einheit dabei war. Behoben. Bonus: deutsches Komma-Trennzeichen wird in Chart-Tooltips jetzt durchgängig verwendet, auch wenn die Zahl ohne Einheit angezeigt wird. *(Dank an NongJoWo.)*
+
+#### Was sich *nicht* ändert
+
+- **Keine Funktionen verändert.** Reines Bugfix-Päckchen ohne neue Konzepte oder Architektur-Etappen.
+
+---
 
 ### Tester-Bugfix-Päckchen *(v3.27.2)*
 
