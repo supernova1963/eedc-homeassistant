@@ -37,7 +37,6 @@ export default function LiveDashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [mqttStatus, setMqttStatus] = useState<MqttInboundStatus | null>(null)
   const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(null)
@@ -54,7 +53,6 @@ export default function LiveDashboard() {
     if (!selectedAnlageId) return
     const requestAnlageId = selectedAnlageId
     if (!isAutoRefresh) setLoading(true)
-    else setIsRefreshing(true)
 
     try {
       const result = await liveDashboardApi.getData(requestAnlageId, demoMode)
@@ -69,7 +67,6 @@ export default function LiveDashboard() {
       }
     } finally {
       setLoading(false)
-      setIsRefreshing(false)
     }
   }, [selectedAnlageId, demoMode])
 
@@ -154,60 +151,55 @@ export default function LiveDashboard() {
 
   return (
     <div className="p-3 sm:p-4 space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {/* Pulsierender Punkt */}
+      {/* Header — #207: pulsierender Live-Punkt + Refresh-Spinner waren auf
+          schmalen Fenstern unruhig, Mehrwert minimal. Indikator zusammengelegt
+          mit der Update-Zeile und entanimiert. */}
+      <div className="flex items-center justify-end gap-4 flex-wrap">
+        {/* Anlage-Auswahl */}
+        {anlagen.length > 1 && (
+          <select
+            value={selectedAnlageId ?? ''}
+            onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
+            className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+          >
+            {anlagen.map((a) => (
+              <option key={a.id} value={a.id}>{a.anlagenname}</option>
+            ))}
+          </select>
+        )}
+        {/* Demo-Toggle — nur sichtbar mit ?debug=1 */}
+        {isDebug && (
+          <button
+            onClick={() => setDemoMode(!demoMode)}
+            className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${
+              demoMode
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+            }`}
+          >
+            {demoMode ? 'Demo an' : 'Demo'}
+          </button>
+        )}
+        {/* MQTT-Status */}
+        {mqttStatus?.subscriber_aktiv && (
+          <span
+            className="text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+            title={`MQTT: ${mqttStatus.broker}\nNachrichten: ${mqttStatus.empfangene_nachrichten ?? 0}${mqttStatus.letzte_nachricht ? `\nLetzte: ${new Date(mqttStatus.letzte_nachricht).toLocaleTimeString('de-DE')}` : ''}`}
+          >
+            MQTT {mqttStatus.empfangene_nachrichten ? `(${mqttStatus.empfangene_nachrichten})` : ''}
+          </span>
+        )}
+        {/* Refresh-Status: statischer Live-Punkt + Update-Zeit. Kein Spinner,
+            kein animate-ping. */}
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           {data?.verfuegbar && (
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {/* Anlage-Auswahl */}
-          {anlagen.length > 1 && (
-            <select
-              value={selectedAnlageId ?? ''}
-              onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
-              className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            >
-              {anlagen.map((a) => (
-                <option key={a.id} value={a.id}>{a.anlagenname}</option>
-              ))}
-            </select>
-          )}
-          {/* Demo-Toggle — nur sichtbar mit ?debug=1 */}
-          {isDebug && (
-            <button
-              onClick={() => setDemoMode(!demoMode)}
-              className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${
-                demoMode
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-              }`}
-            >
-              {demoMode ? 'Demo an' : 'Demo'}
-            </button>
-          )}
-          {/* MQTT-Status */}
-          {mqttStatus?.subscriber_aktiv && (
             <span
-              className="text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-              title={`MQTT: ${mqttStatus.broker}\nNachrichten: ${mqttStatus.empfangene_nachrichten ?? 0}${mqttStatus.letzte_nachricht ? `\nLetzte: ${new Date(mqttStatus.letzte_nachricht).toLocaleTimeString('de-DE')}` : ''}`}
-            >
-              MQTT {mqttStatus.empfangene_nachrichten ? `(${mqttStatus.empfangene_nachrichten})` : ''}
-            </span>
+              className="inline-block h-2 w-2 rounded-full bg-green-500"
+              aria-label="Live-Daten verfügbar"
+            />
           )}
-          {/* Refresh-Status */}
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            {isRefreshing && (
-              <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary-500" />
-            )}
-            {lastUpdate && <span aria-live="polite">Update: {lastUpdate}</span>}
-            <span className="text-xs">(5s)</span>
-          </div>
+          {lastUpdate && <span aria-live="polite">Update: {lastUpdate}</span>}
+          <span className="text-xs">(5s)</span>
         </div>
       </div>
 
