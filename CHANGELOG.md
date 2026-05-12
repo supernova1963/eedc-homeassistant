@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.27.4] - 2026-05-12 — Wärmepumpen-Aggregation: Split-Strommessung + Counter-Spike-Cap (#230)
+
+> 🪛 **Zwei strukturelle Lücken im Snapshot-Aggregations-Pfad**, beide aus Martins Forum-Befund (#230). Setups mit getrennter Strom-Messung für Heizen/Warmwasser (seit #191 unterstützt) hatten in der Stundenwerte-Tabelle des Energieprofils eine leere Wärmepumpe-Spalte, und WP-Kompressor-Start-Counter-Spikes aus HA-Statistics-`sum`/`state`-Mix (siehe #184) standen als 49.000+-Werte in einer einzelnen Stunde, während die Tages-Boundary-Diff sauber bei 0 lag.
+
+### Fixed
+
+- **Wärmepumpe-Spalte in Stundenwerte-Tabelle leer trotz korrekt gemappter Strom-Heizen/-Warmwasser-Sensoren** (#230 MartyBr). Wer im Sensor-Mapping `getrennte_strommessung=True` setzt und die Sensoren `strom_heizen_kwh` + `strom_warmwasser_kwh` mappt, hatte zwar im Live-Tagesverlauf eine sichtbare WP-Kurve (Live-Pfad liest HA direkt), aber die Auswertungs-Stundenwerte blieben leer und die Tages-Heatmap zeigte für die WP nichts. Ursache: `KUMULATIVE_ZAEHLER_FELDER["waermepumpe"]` in [keys.py:23](eedc/backend/services/snapshot/keys.py#L23) kannte nur den Single-Sensor `stromverbrauch_kwh` und die thermischen Felder `heizenergie_kwh`/`warmwasser_kwh`; die Split-Sensoren wurden vom Snapshot-Writer per `_is_kumulativ_feld`-Whitelist silently gedroppt, also nie in `sensor_snapshots` geschrieben. `_categorize_counter` summierte zudem nur `stromverbrauch_kwh` als `verbrauch_wp`, und `get_komponenten_tageskwh` hatte einen semantisch falschen Fallback `heizenergie + warmwasser` (thermische Wärmeabgabe, nicht elektrischer Verbrauch — Faktor 4-5× zu hoch). Dreifach-Fix: Whitelist erweitert (Split-Felder mit aufgenommen), `_categorize_counter` fall-abhängig nach `parameter.getrennte_strommessung` (analog zur SoT `get_wp_strom_kwh()` in `field_definitions.py`), `get_komponenten_tageskwh` mit korrekter Split-Sensor-Summe statt thermischem Fallback. Anwender mit `getrennte_strommessung=True` müssen nach dem Update einmal in der Reparatur-Werkbank den betroffenen Zeitraum vollbackfillen, damit fehlende Snapshots aus HA-Statistics nachgezogen werden.
+- **WP-Starts-Spike (49.073) in einzelner Stunde der Stundenwerte-Tabelle, während Tages-Tab denselben Tag mit 0 Starts zeigt** (#230 MartyBr). Klassischer Drift zwischen `get_daily_counter_deltas_by_inv` (Boundary-Diff `snap[24:00] − snap[00:00]`, ignoriert Mitten-Spikes) und `get_hourly_counter_sum_by_feld` (24× `snap[h] − snap[h-1]`, sieht jeden Snapshot). Wenn HA-Statistics nach Restart `sum=NULL` liefert und der `state`-Fallback einen Lifetime-Counter-Wert (Größenordnung 10⁴+) zurückgibt, landet dieser als Snapshot in der DB; der Stunden-Pfad rechnet die nachfolgende negative Differenz korrekt auf 0, aber der Spike-Slot selbst stand ungeklemmt. Plausibilitäts-Cap `MAX_PLAUSIBLE_COUNTER_PER_HOUR = 200` ergänzt — WP-Kompressor-Starts sind physikalisch durch Mindeststillstand/-laufzeit auf realistisch < 20/h begrenzt, 200 ist eine 10×-Sicherheitsmarge. Bei Überschreitung Clamp auf 0 + Logwarnung. Nach Reparatur-Werkbank-Reaggregation des Tages bereinigt sich die Anzeige.
+
+### Internal
+
+- `KUMULATIVE_ZAEHLER_FELDER["waermepumpe"]` erweitert um `strom_heizen_kwh` + `strom_warmwasser_kwh`; `_categorize_counter` parameter-sensitiv (getrennte_strommessung); `get_komponenten_tageskwh` analog. Sieben Akzeptanz-Tests in `test_wp_aggregator_bugs.py` (drei für Kategorisierung, zwei für Tages-Summe, zwei für Counter-Cap). Smoke grün: 217 Routes + 38 Tests.
+
+---
+
 ## [3.27.3] - 2026-05-12 — Folge-Päckchen Tester-Bugs (#220 #222 #226 #227 #228)
 
 > 🪛 **Reaktion auf v3.27.2-Tester-Feedback + drei neu gemeldete Bugs.** Rainer (#220) und NongJoWo (#222) hatten gemeldet, dass v3.27.2 ihre Probleme nicht gelöst hat — diesmal mit echten Logs/Reproduktionsdaten, sodass die tatsächlichen Bug-Pfade gefunden werden konnten. Plus drei frische Issues von JanKgh und NongJoWo (#226 #227 #228). Alle fünf Fixes lokal reproduziert + verifiziert.
