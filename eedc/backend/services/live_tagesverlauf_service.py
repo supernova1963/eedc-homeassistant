@@ -157,6 +157,28 @@ async def get_tagesverlauf(
         })
         serie_entities[serie_key] = [live["leistung_w"]]
 
+    # Pool-Doppelzählungs-Schutz: Wenn zwei Investitionen die gleiche leistung_w-
+    # Entity teilen (typischer Fall: Wallbox + E-Auto, wo der User die Verknüpfung
+    # via parent_investition_id noch nicht gesetzt hat — beide messen denselben
+    # Stromfluss), entfernen wir Duplikate. Wallbox > E-Auto in der Priorität,
+    # weil die Wallbox den Stromfluss primär darstellt (Infrastruktur vor Fahrzeug).
+    # Vermeidet Σ Verbrauch = 2× wahres E-Auto-Laden in der Tagesverlaufsgrafik (#227).
+    _serie_priority = {"wallbox": 0, "e-auto": 1}  # niedriger = wichtiger
+    serien.sort(key=lambda s: _serie_priority.get(s["kategorie"], 2))
+    _seen_entity: set[str] = set()
+    _deduped: list[dict] = []
+    for serie in serien:
+        eids = serie_entities.get(serie["key"], [])
+        primary = eids[0] if eids else None
+        if primary and primary in _seen_entity:
+            # Diese Entity ist schon durch eine vorherige Serie abgedeckt → skippen
+            serie_entities.pop(serie["key"], None)
+            continue
+        if primary:
+            _seen_entity.add(primary)
+        _deduped.append(serie)
+    serien = _deduped
+
     # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
     has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
     if not has_individual_pv and basis_live.get("pv_gesamt_w"):
