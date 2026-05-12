@@ -438,15 +438,22 @@ async def get_komponenten_tageskwh(
                 result[f"batterie_{inv_id_str}"] = (ladung or 0.0) - (entladung or 0.0)
 
         elif typ == "waermepumpe":
-            # Bevorzugt: stromverbrauch_kwh (ein Sensor). Sonst Σ heizenergie + warmwasser.
-            verbr = await _diff_field("stromverbrauch_kwh")
-            if verbr is not None:
-                result[f"waermepumpe_{inv_id_str}"] = verbr
-            else:
-                heiz = await _diff_field("heizenergie_kwh")
-                ww = await _diff_field("warmwasser_kwh")
+            # Elektrischer Verbrauch — analog zu get_wp_strom_kwh (SoT in
+            # field_definitions.py): bei getrennte_strommessung=True zählen
+            # strom_heizen_kwh + strom_warmwasser_kwh, sonst der Gesamt-Sensor
+            # stromverbrauch_kwh. heizenergie_kwh/warmwasser_kwh sind
+            # *thermische* Abgabewerte (~ Stromverbrauch × COP) und gehören
+            # nicht in die elektrische Energie-Bilanz.
+            params = getattr(inv, "parameter", None) or {}
+            if params.get("getrennte_strommessung"):
+                heiz = await _diff_field("strom_heizen_kwh")
+                ww = await _diff_field("strom_warmwasser_kwh")
                 if heiz is not None or ww is not None:
                     result[f"waermepumpe_{inv_id_str}"] = (heiz or 0.0) + (ww or 0.0)
+            else:
+                verbr = await _diff_field("stromverbrauch_kwh")
+                if verbr is not None:
+                    result[f"waermepumpe_{inv_id_str}"] = verbr
 
         elif typ == "wallbox":
             d = await _diff_field("ladung_kwh")
@@ -543,6 +550,15 @@ async def get_hourly_counter_sum_by_feld(
             snaps[offset] = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
         snaps_per_inv[sensor_key] = snaps
 
+    # Plausibilitäts-Cap pro Stunde: Counter wie WP-Kompressor-Starts haben
+    # physikalische Obergrenzen (Mindeststillstand-/-laufzeit), realistisch
+    # max. ~20/h. HA-Statistics-Spikes nach Restarts (sum=NULL → state-Fallback,
+    # #184) können dagegen Werte in der Größenordnung 10⁴ produzieren, die in
+    # einer einzelnen Stunden-Zelle stehenbleiben, während der Tages-Pfad sie
+    # über die Boundary-Diff wegfrisst (→ sichtbar als Drift zwischen Tagestab
+    # und Stundentab, Forum-Befund Martin 2026-05-11).
+    MAX_PLAUSIBLE_COUNTER_PER_HOUR = 200
+
     result: dict[int, Optional[int]] = {}
     for slot_idx, prev_off, curr_off in rng.slot_pairs:
         any_value = False
@@ -555,6 +571,13 @@ async def get_hourly_counter_sum_by_feld(
             d = s1 - s0
             if d < 0:
                 d = 0  # Counter-Reset → 0 (Warnung wäre redundant zur Tages-Aggregation)
+            elif d > MAX_PLAUSIBLE_COUNTER_PER_HOUR:
+                logger.warning(
+                    f"Unplausibler Counter-Spike {feld} für anlage={anlage.id} "
+                    f"key={sensor_key} ({datum} h={slot_idx}): {d:.0f} > "
+                    f"{MAX_PLAUSIBLE_COUNTER_PER_HOUR} → 0"
+                )
+                d = 0
             total += int(round(d))
             any_value = True
         result[slot_idx] = total if any_value else None

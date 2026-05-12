@@ -20,7 +20,13 @@ KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = {
     "pv-module": ("pv_erzeugung_kwh",),
     "balkonkraftwerk": ("pv_erzeugung_kwh",),
     "speicher": ("ladung_kwh", "entladung_kwh", "ladung_netz_kwh"),
-    "waermepumpe": ("stromverbrauch_kwh", "heizenergie_kwh", "warmwasser_kwh"),
+    "waermepumpe": (
+        "stromverbrauch_kwh",
+        "strom_heizen_kwh",
+        "strom_warmwasser_kwh",
+        "heizenergie_kwh",
+        "warmwasser_kwh",
+    ),
     "wallbox": ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh"),
     "e-auto": ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh"),
     "sonstiges": ("verbrauch_kwh", "erzeugung_kwh"),
@@ -122,8 +128,18 @@ def _categorize_counter(
             return "ladung_batterie"
         if feld == "entladung_kwh":
             return "entladung_batterie"
-    if inv_typ == "waermepumpe" and feld == "stromverbrauch_kwh":
-        return "verbrauch_wp"
+    if inv_typ == "waermepumpe":
+        # Wenn die Anlage Strom-Heizen/-Warmwasser getrennt erfasst (#191),
+        # sind die beiden Einzel-Sensoren die elektrische Wahrheit; das alte
+        # `stromverbrauch_kwh`-Feld wird ignoriert (analog zu get_wp_strom_kwh
+        # in field_definitions.py). Andernfalls zählt der Gesamt-Strom-Sensor.
+        getrennte = bool((parameter or {}).get("getrennte_strommessung"))
+        if getrennte:
+            if feld in ("strom_heizen_kwh", "strom_warmwasser_kwh"):
+                return "verbrauch_wp"
+        else:
+            if feld == "stromverbrauch_kwh":
+                return "verbrauch_wp"
     if inv_typ == "wallbox" and feld == "ladung_kwh":
         return "ladung_wallbox"
     if inv_typ == "e-auto" and feld in ("verbrauch_kwh", "ladung_kwh"):
