@@ -175,14 +175,16 @@ export default function PVGISSettings() {
               options={anlagen.map(a => ({ value: a.id.toString(), label: a.anlagenname }))}
             />
           )}
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={loadData}
             disabled={loading}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             title="Aktualisieren"
           >
-            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Aktualisieren
+          </Button>
         </div>
       </div>
 

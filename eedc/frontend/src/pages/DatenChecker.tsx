@@ -12,7 +12,7 @@ import {
   RefreshCw, XCircle, AlertTriangle, Info,
   CheckCircle, ChevronRight, ChevronDown,
 } from 'lucide-react'
-import { LoadingSpinner } from '../components/ui'
+import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
@@ -220,14 +220,16 @@ export default function DatenChecker() {
               ))}
             </select>
           )}
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => { setResult(null); setRefreshKey(k => k + 1) }}
             disabled={loading}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-            aria-label="Aktualisieren"
+            title="Aktualisieren"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Aktualisieren
+          </Button>
         </div>
       </div>
 

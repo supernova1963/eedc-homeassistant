@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Moon, Sun, Monitor, Home, Database, RefreshCw, CheckCircle, XCircle, Loader2, Info } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 import { systemApi, haApi, type StatsResponse, type SettingsResponse, type HASensor } from '../api'
+import { Button } from '../components/ui'
 
 export default function Settings() {
   const { theme, setTheme } = useTheme()
@@ -48,14 +49,16 @@ export default function Settings() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Einstellungen
         </h1>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={loadData}
           disabled={loading}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           title="Aktualisieren"
         >
-          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Aktualisieren
+        </Button>
       </div>
 
       {error && (

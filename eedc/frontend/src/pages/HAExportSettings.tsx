@@ -54,6 +54,7 @@ import {
   mdiHelpCircleOutline
 } from '@mdi/js'
 import { haApi, anlagenApi } from '../api'
+import { Button } from '../components/ui'
 
 const MDI_ICON_MAP: Record<string, string> = {
   'mdi:solar-power': mdiSolarPower,
@@ -382,17 +383,19 @@ export default function HAExportSettings() {
   return (
     <div className="space-y-6">
       {/* #218 P11: Überschrift „HA-Sensor-Export" entfernt — passt nicht zum
-          Sub-Tab „MQTT-Export". Erklärung liefert die Info-Box unten. */}
+          Sub-Tab „MQTT-Export". Erklärung liefert die Info-Box unten.
+          #217: Refresh als Schaltfläche statt flach. */}
       <div className="flex items-center justify-end">
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={loadData}
           disabled={loading}
-          type="button"
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           title="Aktualisieren"
         >
-          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Aktualisieren
+        </Button>
       </div>
 
       {error && (
