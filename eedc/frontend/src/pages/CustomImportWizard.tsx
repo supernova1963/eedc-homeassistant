@@ -227,7 +227,7 @@ export default function CustomImportWizard() {
 
     try {
       const config = buildMappingConfig()
-      const result = await customImportApi.preview(file, config)
+      const result = await customImportApi.preview(file, config, selectedAnlageId)
       setPreview(result)
       const keys = new Set(result.monate.map(m => `${m.jahr}-${m.monat}`))
       setSelectedMonths(keys)
