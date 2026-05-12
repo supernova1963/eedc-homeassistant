@@ -699,8 +699,22 @@ class DatenChecker:
         # das ist korrekt und darf keine Warnung auslösen.
         # Werte werden auch für die Energiebilanz gebraucht (aggregiert über alle Speicher).
         speicher_imd_bat: dict[tuple[int, int], tuple[float, float]] = {}  # (jahr,monat) → (ladung, entladung)
+        # Monate, in denen mind. ein Speicher zeitlich aktiv war (Anschaffung erfolgt,
+        # noch nicht stillgelegt). Verhindert Warnungen für Monate VOR der ersten
+        # Batterie-Installation (Issue #226 JanKgh: PV seit 11/2021, Speicher erst
+        # ab 11/2022 — der Datenchecker monierte Batterie-Daten für 11/2021).
+        speicher_aktiv_monate: set[tuple[int, int]] = set()
         for inv in anlage.investitionen:
             if inv.typ == "speicher" and inv.aktiv:
+                start = (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month) if inv.anschaffungsdatum else None
+                end = (inv.stilllegungsdatum.year, inv.stilllegungsdatum.month) if inv.stilllegungsdatum else None
+                for md in monatsdaten:
+                    md_key = (md.jahr, md.monat)
+                    if start is not None and md_key < start:
+                        continue
+                    if end is not None and md_key > end:
+                        continue
+                    speicher_aktiv_monate.add(md_key)
                 for imd in inv.monatsdaten:
                     daten = imd.verbrauch_daten or {}
                     ladung = daten.get("ladung_kwh")
@@ -738,7 +752,11 @@ class DatenChecker:
                     details="Kernfeld – ohne Netzbezug sind Hausverbrauch und Stromkosten nicht berechenbar",
                     link=md_link,
                 ))
-            if hat_speicher and (md.jahr, md.monat) not in speicher_imd_monate:
+            if (
+                hat_speicher
+                and (md.jahr, md.monat) in speicher_aktiv_monate
+                and (md.jahr, md.monat) not in speicher_imd_monate
+            ):
                 # Legacy-Felder nur prüfen wenn keine InvestitionMonatsdaten vorhanden
                 if md.batterie_ladung_kwh is None:
                     ergebnisse.append(CheckErgebnis(
