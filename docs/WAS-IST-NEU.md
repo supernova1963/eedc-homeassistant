@@ -1,11 +1,33 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.28.0)
+> **Stand:** Mai 2026 (v3.29.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.29.x — Aggregations- und UX-Bündel (Mai 2026)
+
+### Fünf Reparaturen + ein UX-Fix in der Vorschau *(v3.29.0)*
+
+> 🪛 **Tester-Welle vom 12./13. Mai gebündelt geschlossen.** Fünf Bugfixes aus detLAN- und NongJoWo-Meldungen plus ein UX-Fix in „Eigene Dateien". Kein neuer Funktionsumfang.
+
+#### Was sich für dich ändert
+
+- **Anschaffungs- und Stilllegungsdatum greifen jetzt überall in den Auswertungen.** Wer für eine Investition (z. B. Wärmepumpe, Speicher, Wallbox) ein Anschaffungsdatum hinterlegt hat, sah trotzdem in einigen Auswertungs-Ansichten Werte aus Monaten *vor* der Anschaffung — typischerweise wegen versehentlich erfasster Vor-Anschaffungs-Sensordaten. Der Filter wirkt jetzt einheitlich über 13 Read-Sites (Cockpit-Übersicht, Komponenten-Tab, Aktueller Monat, Aussichten, Investitionen-Dashboards, Aggregierte Monatsdaten, HA-Sensor-Export, PDF-Jahresbericht, PV-Strings, Nachhaltigkeit, Sozial-Bilanz). Außerdem unterscheidet die API jetzt sauber zwischen `0` (Komponente aktiv, Wert echt 0 — z. B. Wärmepumpe im Sommer) und `—` (Komponente in dem Monat nicht aktiv). Bonus: die JAZ-Kachel im Wärmepumpen-Dashboard zeigt jetzt den tatsächlichen WP-Datenbereich („2025-2026") statt den Anlagen-weiten Zeitraum. *(detLAN, Issue #236.)*
+- **Live-Heute zeigt korrekte Werte, wenn dein Energiezähler in Wh meldet.** Wer einen Energiesensor mit Einheit `Wh` statt `kWh` gemappt hatte, sah heute morgen in den Live-Heute-Kacheln Werte mit Faktor 1000 zu hoch (z. B. 87.000 statt 87 kWh) — der Wh→kWh-Konverter fehlte in einem Statistics-Pfad. Behoben — der gleiche `_is_energy_sensor`-Check, der schon im Sensor-Mapping-Wizard und im Live-Pfad greift, ist jetzt auch im Statistics-Fallback aktiv. *(NongJoWo, Issue #232.)*
+- **Wallbox + E-Auto: keine Doppelzählung mehr in Auswertungen → Komponenten.** Wenn du eine Wallbox und ein E-Auto unabhängig in eedc führst und beide denselben Stromfluss aus unterschiedlichen Perspektiven messen (Loadpoint-Seite + Vehicle-Seite), wurden die Werte bisher in „Auswertungen → Komponenten" addiert — PV-Anteil konnte > 100 % anzeigen. Backend führt jetzt eine Max-Pool-Logik pro Monat (analog zu „Aktueller Monat") — die größere Quelle gewinnt, Dienstwagen werden ohnehin ausgeschlossen. Km und V2H bleiben vom E-Auto, Wallbox kennt das nicht. *(NongJoWo, Issue #231.)*
+- **Reparatur-Werkbank: „Plan erstellen" verschwindet nicht mehr nach erfolgreichem Lauf.** Nach einem Tag- oder Range-Lauf wurden die Steuerelemente in der Werkbank weiter ausgeblendet — neuer Plan war nur mit Modal-Schließen-Öffnen erreichbar. Der UI-State setzt sich jetzt nach Abschluss eines Laufs sauber zurück. *(detLAN, Issues #234 + #235.)*
+- **„Eigene Dateien" — Vorschau zeigt die automatisch erkannten Investitions-Spalten als Tabellen-Spalten.** Wer eine CSV mit ausschließlich Investitions-Spalten (z. B. nur E-Auto-Ladewerte) importieren wollte, sah in der Vorschau eine Tabelle voller „—" — die Spalten wurden korrekt erkannt, aber die Werte tauchten in der Vorschau-Tabelle nicht auf, sondern erst nach dem eigentlichen Import. Jetzt rendert die Tabelle die Investitions-Spalten zusätzlich zu den fünf Standard-Spalten dynamisch — der „nicht sichtbar"-Banner-Text entfällt. *(NongJoWo, Issue #222.)*
+
+#### Was sich *nicht* ändert
+
+- **Reine Reparatur-/Polish-Welle.** Keine neuen Konzepte, keine Schema-Updates über das `AggregierteMonatsdatenResponse`-Nullable hinaus.
+- **Bestehende Workflows bleiben gleich.** Wer keinen der genannten Pfade nutzt, merkt nichts vom Release.
+- **Vollbackfill bleibt additiv** (siehe v3.25.3) — kein Massenheiler-Knopf hier dazugekommen.
 
 ---
 
