@@ -46,12 +46,14 @@ class PreviewMonth(BaseModel):
     wallbox_ladung_pv_kwh: Optional[float] = None
     wallbox_ladevorgaenge: Optional[int] = None
     eauto_km_gefahren: Optional[float] = None
+    inv_werte: dict[str, float] = {}
 
 
 class PreviewResponse(BaseModel):
     monate: list[PreviewMonth]
     anzahl_monate: int
     warnungen: list[str]
+    inv_spalten: list[str] = []
 
 
 # ─── Mapping-Anwendung ───────────────────────────────────────────────────────
@@ -61,15 +63,18 @@ def _apply_mapping(
     rows: list[dict[str, str]],
     config: MappingConfig,
     auto_inv_spalten: Optional[set[str]] = None,
-) -> tuple[list[PreviewMonth], list[str]]:
+) -> tuple[list[PreviewMonth], list[str], list[str]]:
     """Wendet das Mapping auf die Daten an und gibt PreviewMonths zurück.
 
     `auto_inv_spalten` sind CSV-Spaltennamen, die in einem vorhergehenden
     Analyze-Schritt als Investitions-Suffix-Match erkannt wurden (z.B.
     `Wollis_ID5_Ladung_PV_kWh`). Sie stehen im Wizard-Mapping auf
     „Ignorieren", werden aber beim Apply trotzdem automatisch importiert.
-    Damit die Vorschau diese Zeilen nicht fälschlich als leer verwirft,
-    werten wir sie hier mit aus (Wert-Marker, kein PreviewMonth-Slot).
+    Sowohl diese auto-erkannten Spalten als auch manuell auf `inv:…`
+    gemappte Spalten werden pro Monat in `inv_werte` gesammelt, damit die
+    Vorschau-Tabelle sie als eigene Spalten anzeigen kann (#222).
+
+    Rückgabe: (monate, warnungen, inv_spalten_sortiert).
     """
     auto_inv_spalten = auto_inv_spalten or set()
     # Mapping aufbauen: spalte → eedc_feld, invertieren
@@ -80,15 +85,20 @@ def _apply_mapping(
         if m.invertieren:
             invert_map[m.spalte] = True
 
+    # Manuell auf inv:… gemappte CSV-Spalten + auto-erkannte
+    manual_inv_spalten = {s for s, f in field_map.items() if f.startswith("inv:")}
+    alle_inv_spalten = manual_inv_spalten | auto_inv_spalten
+
     results: list[PreviewMonth] = []
     warnungen: list[str] = []
     skipped = 0
+    used_inv_spalten: set[str] = set()  # nur Spalten, die in mind. einer Zeile einen Wert hatten
 
     for row_idx, row in enumerate(rows):
         values: dict[str, Optional[float]] = {}
+        inv_werte: dict[str, float] = {}
         jahr: Optional[int] = None
         monat: Optional[int] = None
-        row_has_inv_data = False
 
         # Datum aus kombinierter Spalte?
         if config.datum_spalte and config.datum_spalte in row:
@@ -113,8 +123,13 @@ def _apply_mapping(
                 except (ValueError, TypeError):
                     pass
             elif eedc_feld.startswith("inv:"):
-                if _parse_number(raw, config.dezimalzeichen) is not None:
-                    row_has_inv_data = True
+                num = _parse_number(raw, config.dezimalzeichen)
+                if num is not None:
+                    val = _convert_unit(num, config.einheit)
+                    if val is not None and invert_map.get(spalte):
+                        val = abs(val)
+                    if val is not None:
+                        inv_werte[spalte] = val
             else:
                 num = _parse_number(raw, config.dezimalzeichen)
                 if num is not None:
@@ -123,15 +138,20 @@ def _apply_mapping(
                         val = abs(val)
                     values[eedc_feld] = val
 
-        # Auto-erkannte Investitions-Spalten (Suffix-Match in Analyze) zählen
-        # auch als „Daten in dieser Zeile", auch wenn sie im Mapping auf
-        # „Ignorieren" stehen — Apply würde sie automatisch importieren.
-        if not row_has_inv_data:
-            for spalte in auto_inv_spalten:
-                raw = row.get(spalte, "")
-                if raw and _parse_number(raw, config.dezimalzeichen) is not None:
-                    row_has_inv_data = True
-                    break
+        # Auto-erkannte Investitions-Spalten (Suffix-Match in Analyze) auch
+        # auswerten — sie stehen im Mapping auf „Ignorieren", werden aber
+        # beim Apply automatisch zugeordnet.
+        for spalte in auto_inv_spalten:
+            if spalte in inv_werte:
+                continue  # bereits via manuelles Mapping erfasst
+            raw = row.get(spalte, "")
+            if not raw:
+                continue
+            num = _parse_number(raw, config.dezimalzeichen)
+            if num is not None:
+                val = _convert_unit(num, config.einheit)
+                if val is not None:
+                    inv_werte[spalte] = val
 
         if jahr is None or monat is None or monat < 1 or monat > 12:
             skipped += 1
@@ -150,11 +170,10 @@ def _apply_mapping(
             wallbox_ladung_pv_kwh=values.get("wallbox_ladung_pv_kwh"),
             wallbox_ladevorgaenge=int(values["wallbox_ladevorgaenge"]) if values.get("wallbox_ladevorgaenge") is not None else None,
             eauto_km_gefahren=values.get("eauto_km_gefahren"),
+            inv_werte=inv_werte,
         )
 
-        # Nur Monate mit mindestens einem Wert (inkl. Investitions-Slot-Daten,
-        # die in der Vorschau zwar nicht sichtbar sind, aber beim Import landen).
-        has_data = row_has_inv_data or any(
+        has_data = bool(inv_werte) or any(
             v is not None for v in [
                 month.pv_erzeugung_kwh, month.einspeisung_kwh, month.netzbezug_kwh,
                 month.eigenverbrauch_kwh, month.batterie_ladung_kwh, month.batterie_entladung_kwh,
@@ -164,29 +183,25 @@ def _apply_mapping(
         )
         if has_data:
             results.append(month)
+            used_inv_spalten.update(inv_werte.keys())
 
     if skipped > 0:
         warnungen.append(f"{skipped} Zeilen übersprungen (kein gültiges Jahr/Monat)")
-
-    inv_mapping_count = sum(1 for f in field_map.values() if f.startswith("inv:"))
-    if inv_mapping_count > 0:
-        warnungen.append(
-            f"{inv_mapping_count} Spalte(n) als Investitions-Daten gemappt — "
-            "werden beim Import automatisch der zugehörigen Investition zugeordnet "
-            "(Werte in der Vorschau-Tabelle nicht sichtbar)."
-        )
 
     if auto_inv_spalten:
         warnungen.append(
             f"{len(auto_inv_spalten)} eedc-Investitions-Spalte(n) automatisch erkannt: "
             f"{', '.join(sorted(auto_inv_spalten))} — werden beim Import den passenden "
-            "Investitionen zugeordnet (Werte in der Vorschau-Tabelle nicht sichtbar)."
+            "Investitionen zugeordnet."
         )
 
     # Nach Jahr+Monat sortieren
     results.sort(key=lambda m: (m.jahr, m.monat))
 
-    return results, warnungen
+    # Inv-Spalten sortiert, beschränkt auf Spalten mit tatsächlichen Werten
+    inv_spalten_sortiert = sorted(used_inv_spalten)
+
+    return results, warnungen, inv_spalten_sortiert
 
 
 # ─── Endpoint ────────────────────────────────────────────────────────────────
@@ -233,7 +248,7 @@ async def preview_mapping(
         inv_info = await _detect_investition_spalten(headers, anlage_id, db)
         auto_inv_spalten = {info.spalte for info in inv_info}
 
-    monate, warnungen = _apply_mapping(headers, rows, config, auto_inv_spalten)
+    monate, warnungen, inv_spalten = _apply_mapping(headers, rows, config, auto_inv_spalten)
 
     if not monate:
         diagnose = " ".join(warnungen) if warnungen else (
@@ -253,4 +268,5 @@ async def preview_mapping(
         monate=monate,
         anzahl_monate=len(monate),
         warnungen=warnungen,
+        inv_spalten=inv_spalten,
     )
