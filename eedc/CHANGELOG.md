@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.28.0] - 2026-05-13 — Mehrere Tage neu aggregieren in Reparatur-Werkbank (#230)
+
+> 🪛 **Neue Reparatur-Operation `REAGGREGATE_RANGE`** — Schleife über `aggregate_day` pro Tag, max. 31 Tage pro Lauf, Per-Tag-Commit für Abbruch-Robustheit, Pflicht-Checkbox „ohne Support-Anspruch" im UI. Aus Martins Anregung in #230 zu mehreren Schüben Reaggregation für historische WP-Daten nach Sensor-Wechsel. Bewusst eng dimensioniert (Memory-Linie `feedback_kein_grosser_heiler_knopf.md`): kein Universal-Reset-Knopf, sondern transparent dimensioniertes Power-User-Werkzeug.
+
+### Added
+
+- **`RepairOperationType.REAGGREGATE_RANGE`** in [services/repair_orchestrator.py](eedc/backend/services/repair_orchestrator.py). Plan validiert von/bis (von ≤ bis, bis < heute, anzahl_tage ≤ `REAGGREGATE_RANGE_MAX_DAYS=31`), zählt vorhandene Tageszusammenfassungen im Bereich, liefert eine sechspunktige Warnungs-Liste (Per-Feld-Provenance-Überschreibung, MQTT-Only-Verlust-Risiko, Strompreis-Sensor-Verlust-Risiko, Prognose+Korrekturprofil-Erhaltung, Support-Disclaimer). Execute schleift seriell mit `aggregate_day(datenquelle="manuell")` + optionalem `resnap_anlage_range` pro Tag, macht **Per-Tag-Commit** für Abbruch-Robustheit, sammelt Erfolg/keine_daten/Fehlgeschlagen-Counter plus Cap-Detail-Liste (20 Einträge max im Response-Body, vollständig im Backend-Log).
+- **Endpoint `POST /api/energie-profil/{anlage_id}/reaggregate-bereich`** in [routes/energie_profil/repair.py](eedc/backend/api/routes/energie_profil/repair.py). Params `von` + `bis` (Pflicht), `mit_resnap` (Default true). Wrapper über Orchestrator-Plan+Execute.
+- **UI-Operation „Mehrere Tage neu aggregieren"** in [components/repair/RepairWorkbench.tsx](eedc/frontend/src/components/repair/RepairWorkbench.tsx) + Metadaten in [api/repair.ts](eedc/frontend/src/api/repair.ts). Date-Range-Picker mit 31-Tage-Frontend-Cap (Backend-Cap-Kopie), `mit_resnap`-Toggle und prominente amber-Pflicht-Bestätigung im Editor-Block. Validierung vor dem Plan-Erstellen (von ≤ bis, bis < heute, anzahl_tage ≤ 31, Checkbox geahkt).
+
+### Internal
+
+- Drei neue Akzeptanztests in [backend/tests/test_repair_orchestrator.py](eedc/backend/tests/test_repair_orchestrator.py): `test_plan_reaggregate_range_rejects_invalid_bounds` (drei ValueError-Pfade), `test_plan_reaggregate_range_valid_returns_warnings` (Warnungs-Liste vollständig), `test_execute_reaggregate_range_iterates_and_commits_per_day` (Schleife läuft auch nach Tages-Fehler weiter, Summary mit korrekten Zählern, `aggregate_day`+`resnap_anlage_range` via AsyncMock). Alle 11 Tests grün.
+- Memory-Linie `feedback_kein_grosser_heiler_knopf.md` neu — dokumentiert, warum Massen-Reaggregation kein Default-Vorschlag ist (Reflex zur „pauschalen Heiler-Funktion" kehrt wieder, auch nach Kritik) und unter welchen Bedingungen sie trotzdem verantwortbar gebaut werden kann (explizit, mit Warnung, ohne Support).
+
+---
+
 ## [3.27.5] - 2026-05-12 — UX-Cluster detLAN + PV-Ertrag-Spalte (#207 #215 #217 #218 #494)
 
 > 🪛 **detLAN-Cluster aus #203–#218 strukturell abgearbeitet** plus eine Spalten-Erweiterung von dietmar1968 (#494). Kein neuer Funktionsumfang — fünf koordinierte Detail-Verbesserungen, die in Summe die UI-Konsistenz spürbar anziehen (Tab-Header vs. Page-Titel, Schaltflächen-Stil, Komponenten-Reihenfolge).

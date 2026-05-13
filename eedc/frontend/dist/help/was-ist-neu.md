@@ -1,11 +1,32 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.27.5)
+> **Stand:** Mai 2026 (v3.28.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.28.x — Mehrere Tage neu aggregieren (Mai 2026)
+
+### Reparatur-Werkbank: Zeitbereich-Reaggregation *(v3.28.0)*
+
+> 🪛 **Neue Reparatur-Operation für mehrere Tage am Stück.** Bisher konnte die Reparatur-Werkbank Tagesprofile nur Tag für Tag neu aggregieren — für einen größeren Zeitraum hieß das viele Einzelklicks. Jetzt gibt es eine Mehrere-Tage-Variante mit Datums-Bereich und Pflicht-Bestätigung, weil pauschale Reparatur-Knöpfe mit Datenverlust-Risiken einhergehen können und das transparent kommuniziert werden soll. Auslöser war Martins Anregung in #230.
+
+#### Was sich für dich ändert
+
+- **Neue Operation „Mehrere Tage neu aggregieren" in der Reparatur-Werkbank.** Du wählst Start- und Enddatum (max. 31 Tage pro Lauf), entscheidest ob Snapshots pro Tag frisch aus HA-Statistics gezogen werden sollen (Default an), und haakst die Pflicht-Bestätigung. Die Operation läuft seriell pro Tag — bei Abbruch (Netz, Browser zu, Worker-Restart) sind die bereits verarbeiteten Tage drin, der Rest unverändert.
+- **31 Tage als Maximum pro Lauf** — bewusst eng gesetzt: ein längerer Lauf wäre Black-Box-Verhalten ohne Zwischen-Feedback, ein Abbruch in Stunde 5 weniger ärgerlich als in Stunde 1. Für größere Zeiträume (z. B. komplettes Vorjahr) einfach mehrere 31-Tage-Schübe hintereinander.
+- **Prognosen und Korrekturprofil-Daten bleiben erhalten.** Pro Tag rettet der Mechanismus die PV-Prognose, SFML-Prognose, Solcast-Prognose und die gefrorenen Day-Ahead-Stundenprofile (die seit v3.26.0 die Datenbasis für das Korrekturprofil-Lernen sind) — sie werden nach der Neu-Aggregation zurückgeschrieben. Diese Werte stammen aus Live-Endpoints und wären sonst nicht rekonstruierbar.
+- **Explizite Bestätigung „ohne Support-Anspruch".** Vor dem Plan-Erstellen muss eine Pflicht-Checkbox angehakt werden: Per-Feld-Provenance älterer Verfahrensläufe wird überschrieben, MQTT-Only-Felder und Strompreis-Sensor-Werte ohne HA-LTS-Pendant gehen verloren falls vorhanden. Wir wollen, dass dieser Knopf bewusst gedrückt wird, nicht versehentlich.
+
+#### Was sich *nicht* ändert
+
+- **Bestehendes „Tag neu aggregieren" bleibt unverändert.** Der Einzeltag-Pfad ist weiterhin der konservative Default für punktuelle Reparatur.
+- **Vollbackfill bleibt strikt additiv** (siehe v3.25.3). Bereits vorhandene Tage rührt er nicht an — wer einen Tag *überschreiben* will, nutzt den neuen Mehrere-Tage-Pfad.
+- **Kein automatisches Pauschal-Heilen.** eedc bietet weiterhin keine „heile alles"-Funktion an — die neue Operation ist Power-User-Werkzeug mit klarer Auswirkung auf einen begrenzten Zeitraum, nicht der Universal-Reset-Knopf.
 
 ---
 
