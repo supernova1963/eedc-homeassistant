@@ -71,12 +71,14 @@ export interface PreviewMonth {
   wallbox_ladung_pv_kwh: number | null
   wallbox_ladevorgaenge: number | null
   eauto_km_gefahren: number | null
+  inv_werte?: Record<string, number>
 }
 
 export interface PreviewResult {
   monate: PreviewMonth[]
   anzahl_monate: number
   warnungen: string[]
+  inv_spalten?: string[]
 }
 
 export interface TemplateInfo {

@@ -816,6 +816,11 @@ export default function CustomImportWizard() {
                     <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Bezug kWh</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Bat. Lad.</th>
                     <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">Bat. Entl.</th>
+                    {(preview.inv_spalten ?? []).map(sp => (
+                      <th key={sp} className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300" title={sp}>
+                        {sp}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -857,6 +862,11 @@ export default function CustomImportWizard() {
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
                           {m.batterie_entladung_kwh?.toFixed(1) ?? '–'}
                         </td>
+                        {(preview.inv_spalten ?? []).map(sp => (
+                          <td key={sp} className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
+                            {m.inv_werte?.[sp] !== undefined ? m.inv_werte[sp].toFixed(1) : '–'}
+                          </td>
+                        ))}
                       </tr>
                     )
                   })}
