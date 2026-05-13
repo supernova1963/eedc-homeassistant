@@ -239,14 +239,21 @@ async def calculate_anlage_sensors(
     ]
     balkonkraftwerke = [i for i in investitionen if i.typ == "balkonkraftwerk"]
 
+    # IMD vor anschaffungsdatum / nach stilllegungsdatum überspringen (#236):
+    # Sonst fließen Werte in HA-Sensor-Aggregate ein, obwohl die Komponente
+    # in dem Monat noch gar nicht / nicht mehr aktiv war.
     historische_inv_daten: dict[tuple[int, int, int], dict] = {}
     inv_ids = [i.id for i in investitionen]
+    inv_by_id_export = {i.id: i for i in investitionen}
     if inv_ids:
         imd_alle = await db.execute(
             select(InvestitionMonatsdaten)
             .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
         )
         for imd in imd_alle.scalars().all():
+            inv = inv_by_id_export.get(imd.investition_id)
+            if not inv or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             historische_inv_daten[(imd.investition_id, imd.jahr, imd.monat)] = (
                 imd.verbrauch_daten or {}
             )

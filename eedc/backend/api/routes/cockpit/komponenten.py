@@ -169,15 +169,10 @@ async def get_komponenten_zeitreihe(
         if not inv:
             continue
 
-        # Issue #153: Daten vor Anschaffungsdatum ignorieren — sonst fließen
-        # historische, vor-Inbetriebnahme-Werte (z. B. unvollständige Test-Daten,
-        # Sensor mit anderer Erfassungsmethode) in JAZ/Aggregate ein und
-        # verfälschen die Komponenten-Auswertung.
-        if inv.anschaffungsdatum:
-            anschaffung_jahr = inv.anschaffungsdatum.year
-            anschaffung_monat = inv.anschaffungsdatum.month
-            if (imd.jahr, imd.monat) < (anschaffung_jahr, anschaffung_monat):
-                continue
+        # Issue #153 / #236: SoT-Filter inkl. stilllegungsdatum — vor-Inbetriebnahme-
+        # bzw. nach-Stilllegungs-Werte sollen nicht in JAZ/Aggregate fließen.
+        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+            continue
 
         key = (imd.jahr, imd.monat)
         if key not in inv_data_by_month:
@@ -297,10 +292,7 @@ async def get_komponenten_zeitreihe(
         if d["wp_waerme"] > 0:
             wp_invs_in_monat = [
                 i for i in investitionen
-                if i.typ == "waermepumpe" and (
-                    not i.anschaffungsdatum or
-                    (jahr, monat) >= (i.anschaffungsdatum.year, i.anschaffungsdatum.month)
-                )
+                if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(jahr, monat)
             ]
             wp_ref_param = wp_invs_in_monat[0].parameter if wp_invs_in_monat else None
             wp_result = berechne_wp_ersparnis(

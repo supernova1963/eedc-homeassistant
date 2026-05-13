@@ -1332,13 +1332,13 @@ export default function MonatsabschlussView() {
                   <KPICard title="JAZ" value={fmtKpi(jaz, 2)} unit=""
                     icon={Thermometer} color="orange"
                     formel="JAZ = Wärme ÷ Strom"
-                    subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmtCalc(vmWaerme / vm!.wp_strom_kwh, 2)}` : undefined} />
+                    subtitle={hatVmWp && vmWaerme != null && vm?.wp_strom_kwh ? `VM: ${fmtCalc(vmWaerme / vm.wp_strom_kwh, 2)}` : undefined} />
                   <KPICard title="Wärme erzeugt" value={fmt(d.wp_waerme_kwh, 0)} unit="kWh"
                     icon={Flame} color="red"
                     subtitle={hatVmWp && vmWaerme != null ? `VM: ${fmt(vmWaerme, 0)} kWh` : undefined} />
                   <KPICard title="Strom verbraucht" value={fmt(d.wp_strom_kwh, 0)} unit="kWh"
                     icon={Zap} color="yellow"
-                    subtitle={hatVmWp ? `VM: ${fmt(vm!.wp_strom_kwh, 0)} kWh` : undefined} />
+                    subtitle={hatVmWp && vm?.wp_strom_kwh != null ? `VM: ${fmt(vm.wp_strom_kwh, 0)} kWh` : undefined} />
                   <KPICard title="Ersparnis vs. Gas" value={d.wp_ersparnis_euro != null ? `+${fmt(d.wp_ersparnis_euro, 2)}` : '---'} unit="€"
                     icon={TrendingUp} color="green"
                     formel="(Wärme ÷ 0,9 × Gaspreis − Strom × Strompreis)"
@@ -1394,7 +1394,7 @@ export default function MonatsabschlussView() {
               >
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <KPICard title="Ladung gesamt" value={fmt(d.emob_ladung_kwh, 0)} unit="kWh" icon={Plug} color="purple"
-                    subtitle={vm ? `VM: ${fmt((vm.eauto_ladung_kwh + vm.wallbox_ladung_kwh), 0)} kWh` : undefined} />
+                    subtitle={vm ? `VM: ${fmt(((vm.eauto_ladung_kwh ?? 0) + (vm.wallbox_ladung_kwh ?? 0)), 0)} kWh` : undefined} />
                   <KPICard title="PV-Anteil" value={d.emob_ladung_pv_kwh != null && d.emob_ladung_kwh ? fmt(d.emob_ladung_pv_kwh / d.emob_ladung_kwh * 100, 0) : '—'} unit="%"
                     icon={Sun} color="yellow"
                     subtitle={d.emob_ladung_pv_kwh != null ? `${fmt(d.emob_ladung_pv_kwh, 0)} kWh PV` : undefined}
@@ -1407,7 +1407,7 @@ export default function MonatsabschlussView() {
                     formel="Ladung ÷ km × 100" />
                 </div>
                 <div className="mt-3">
-                  <VglZeile label="Ladung gesamt"    aktuell={d.emob_ladung_kwh}       vm={vm ? vm.eauto_ladung_kwh + vm.wallbox_ladung_kwh : null} vj={vj?.emob_ladung_kwh}  unit="kWh" />
+                  <VglZeile label="Ladung gesamt"    aktuell={d.emob_ladung_kwh}       vm={vm ? (vm.eauto_ladung_kwh ?? 0) + (vm.wallbox_ladung_kwh ?? 0) : null} vj={vj?.emob_ladung_kwh}  unit="kWh" />
                   {d.emob_ladung_pv_kwh != null && (
                     <VglZeile label="  PV-Anteil"    aktuell={d.emob_ladung_pv_kwh}    vm={vm?.wallbox_ladung_pv_kwh} unit="kWh" />
                   )}

@@ -1317,15 +1317,11 @@ async def get_eauto_dashboard(
 
     dashboards = []
     for eauto in eautos:
-        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-        if eauto.anschaffungsdatum:
-            anschaffung_key = (eauto.anschaffungsdatum.year, eauto.anschaffungsdatum.month)
-            monatsdaten = [
-                md for md in md_by_inv.get(eauto.id, [])
-                if (md.jahr, md.monat) >= anschaffung_key
-            ]
-        else:
-            monatsdaten = md_by_inv.get(eauto.id, [])
+        # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
+        monatsdaten = [
+            md for md in md_by_inv.get(eauto.id, [])
+            if eauto.ist_aktiv_im_monat(md.jahr, md.monat)
+        ]
 
         # Zusammenfassung berechnen
         gesamt_km = 0
@@ -1514,16 +1510,11 @@ async def get_waermepumpe_dashboard(
 
     dashboards = []
     for wp in waermepumpen:
-        # Issue #153: Daten vor Anschaffungsdatum ignorieren — siehe komponenten.py
-        # für die Begründung. Konsistent mit Auswertung > Komponenten.
-        if wp.anschaffungsdatum:
-            anschaffung_key = (wp.anschaffungsdatum.year, wp.anschaffungsdatum.month)
-            monatsdaten = [
-                md for md in md_by_inv.get(wp.id, [])
-                if (md.jahr, md.monat) >= anschaffung_key
-            ]
-        else:
-            monatsdaten = md_by_inv.get(wp.id, [])
+        # Issue #153 / #236: SoT-Filter inkl. stilllegungsdatum
+        monatsdaten = [
+            md for md in md_by_inv.get(wp.id, [])
+            if wp.ist_aktiv_im_monat(md.jahr, md.monat)
+        ]
 
         gesamt_strom = 0
         gesamt_strom_heizen = 0
@@ -1682,15 +1673,11 @@ async def get_speicher_dashboard(
 
     dashboards = []
     for speicher in speicher_list:
-        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-        if speicher.anschaffungsdatum:
-            anschaffung_key = (speicher.anschaffungsdatum.year, speicher.anschaffungsdatum.month)
-            monatsdaten = [
-                md for md in md_by_inv.get(speicher.id, [])
-                if (md.jahr, md.monat) >= anschaffung_key
-            ]
-        else:
-            monatsdaten = md_by_inv.get(speicher.id, [])
+        # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
+        monatsdaten = [
+            md for md in md_by_inv.get(speicher.id, [])
+            if speicher.ist_aktiv_im_monat(md.jahr, md.monat)
+        ]
 
         gesamt_ladung = 0
         gesamt_entladung = 0
@@ -1865,17 +1852,18 @@ async def get_wallbox_dashboard(
     inv_by_id = {e.id: e for e in eautos}
     inv_by_id.update({w.id: w for w in wallboxen})
 
-    def _vor_anschaffung(inv_id: int, jahr: int, monat: int) -> bool:
+    def _nicht_aktiv_im_monat(inv_id: int, jahr: int, monat: int) -> bool:
+        """#236: nicht-aktive Monate (vor anschaffungs- / nach stilllegungsdatum) überspringen."""
         inv = inv_by_id.get(inv_id)
-        if not inv or not inv.anschaffungsdatum:
+        if not inv:
             return False
-        return (jahr, monat) < (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month)
+        return not inv.ist_aktiv_im_monat(jahr, monat)
 
     eauto_id_set = set(eauto_ids)
     for inv_id, md_list in md_by_inv.items():
         if inv_id in eauto_id_set:
             for md in md_list:
-                if _vor_anschaffung(inv_id, md.jahr, md.monat):
+                if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
                     continue
                 d = md.verbrauch_daten or {}
                 gesamt_heim_pv += d.get('ladung_pv_kwh', 0)
@@ -1891,7 +1879,7 @@ async def get_wallbox_dashboard(
     for inv_id, md_list in md_by_inv.items():
         if inv_id in wallbox_id_set:
             for md in md_list:
-                if _vor_anschaffung(inv_id, md.jahr, md.monat):
+                if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
                     continue
                 d = md.verbrauch_daten or {}
                 gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
@@ -1917,15 +1905,11 @@ async def get_wallbox_dashboard(
     dashboards = []
     for wallbox in wallboxen:
         # Wallbox-eigene Monatsdaten aus Batch-Ergebnis
-        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-        if wallbox.anschaffungsdatum:
-            anschaffung_key = (wallbox.anschaffungsdatum.year, wallbox.anschaffungsdatum.month)
-            monatsdaten = [
-                md for md in md_by_inv.get(wallbox.id, [])
-                if (md.jahr, md.monat) >= anschaffung_key
-            ]
-        else:
-            monatsdaten = md_by_inv.get(wallbox.id, [])
+        # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
+        monatsdaten = [
+            md for md in md_by_inv.get(wallbox.id, [])
+            if wallbox.ist_aktiv_im_monat(md.jahr, md.monat)
+        ]
 
         params = wallbox.parameter or {}
         # Bug #6 v3.25.0: vorher 'leistung_kw' (toter Schema-Key), Form/Wizard schreiben
@@ -1998,15 +1982,11 @@ async def get_balkonkraftwerk_dashboard(
 
     dashboards = []
     for bkw in balkonkraftwerke:
-        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-        if bkw.anschaffungsdatum:
-            anschaffung_key = (bkw.anschaffungsdatum.year, bkw.anschaffungsdatum.month)
-            monatsdaten = [
-                md for md in md_by_inv.get(bkw.id, [])
-                if (md.jahr, md.monat) >= anschaffung_key
-            ]
-        else:
-            monatsdaten = md_by_inv.get(bkw.id, [])
+        # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
+        monatsdaten = [
+            md for md in md_by_inv.get(bkw.id, [])
+            if bkw.ist_aktiv_im_monat(md.jahr, md.monat)
+        ]
 
         gesamt_erzeugung = 0
         gesamt_eigenverbrauch = 0

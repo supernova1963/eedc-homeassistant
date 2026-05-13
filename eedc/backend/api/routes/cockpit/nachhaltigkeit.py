@@ -85,10 +85,9 @@ async def get_nachhaltigkeit(
         if not inv:
             continue
 
-        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-        if inv.anschaffungsdatum:
-            if (imd.jahr, imd.monat) < (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month):
-                continue
+        # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
+        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+            continue
 
         key = (imd.jahr, imd.monat)
         if key not in data_by_month:

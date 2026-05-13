@@ -58,23 +58,23 @@ export interface AggregierteMonatsdaten {
   netzbezug_kwh: number
   globalstrahlung_kwh_m2: number | null
   sonnenstunden: number | null
-  // Aggregiert aus InvestitionMonatsdaten - PV
-  pv_erzeugung_kwh: number
-  // Aggregiert aus InvestitionMonatsdaten - Speicher
-  speicher_ladung_kwh: number
-  speicher_entladung_kwh: number
-  // Aggregiert aus InvestitionMonatsdaten - Wärmepumpe
-  wp_strom_kwh: number
-  wp_strom_heizen_kwh: number  // #191: nur > 0 wenn getrennte_strommessung
-  wp_strom_warmwasser_kwh: number  // #191: nur > 0 wenn getrennte_strommessung
-  wp_heizung_kwh: number
-  wp_warmwasser_kwh: number
-  // Aggregiert aus InvestitionMonatsdaten - E-Auto
-  eauto_ladung_kwh: number
-  eauto_km: number
-  // Aggregiert aus InvestitionMonatsdaten - Wallbox
-  wallbox_ladung_kwh: number
-  wallbox_ladung_pv_kwh: number
+  // Komponenten-Aggregate: null = "in dem Monat keine aktive Komponente
+  // dieses Typs" (vor Anschaffung / nach Stilllegung / Anlage hat den Typ
+  // nicht). 0 = "Komponente aktiv, IMD vorhanden, Wert echt 0" (z.B.
+  // WP-Heizung im Sommer). UI muss die Unterscheidung respektieren —
+  // null als "—" rendern, nicht als "0 kWh" (#236).
+  pv_erzeugung_kwh: number | null
+  speicher_ladung_kwh: number | null
+  speicher_entladung_kwh: number | null
+  wp_strom_kwh: number | null
+  wp_strom_heizen_kwh: number | null  // #191: nur befüllt wenn getrennte_strommessung
+  wp_strom_warmwasser_kwh: number | null  // #191: nur befüllt wenn getrennte_strommessung
+  wp_heizung_kwh: number | null
+  wp_warmwasser_kwh: number | null
+  eauto_ladung_kwh: number | null
+  eauto_km: number | null
+  wallbox_ladung_kwh: number | null
+  wallbox_ladung_pv_kwh: number | null
   // Berechnet
   direktverbrauch_kwh: number
   eigenverbrauch_kwh: number

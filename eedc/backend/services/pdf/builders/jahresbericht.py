@@ -124,7 +124,12 @@ async def build_jahresbericht_context(
                     InvestitionMonatsdaten.jahr == jahr,
                 )
             )
-        all_imd = list(res.scalars().all())
+        # #236: IMD vor anschaffungs- / nach stilllegungsdatum überspringen
+        all_imd = [
+            imd for imd in res.scalars().all()
+            if (inv := inv_by_id.get(imd.investition_id))
+            and inv.ist_aktiv_im_monat(imd.jahr, imd.monat)
+        ]
 
     # ── 6. Monatsdaten (Zähler-Werte) ───────────────────────────────────
     if ist_gesamtzeitraum:

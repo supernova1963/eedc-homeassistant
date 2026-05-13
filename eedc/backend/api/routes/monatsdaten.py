@@ -130,33 +130,41 @@ router = APIRouter()
 # =============================================================================
 
 class AggregierteMonatsdatenResponse(BaseModel):
-    """Monatsdaten mit aggregierten Werten aus InvestitionMonatsdaten."""
+    """Monatsdaten mit aggregierten Werten aus InvestitionMonatsdaten.
+
+    Komponenten-Aggregate sind Optional[float]: **None bedeutet "in dem
+    Monat keine aktive Komponente dieses Typs"** (vor Anschaffung / nach
+    Stilllegung / Anlage hat den Typ nicht), **0 bedeutet "Komponente
+    aktiv, IMD vorhanden, Wert tatsächlich 0"** (z.B. Heizung im Sommer).
+    Die Unterscheidung darf nicht durch Default-0 verwischt werden
+    (CLAUDE.md "0-Werte prüfen" + #236).
+    """
     id: int
     anlage_id: int
     jahr: int
     monat: int
-    # Zählerwerte (aus Monatsdaten)
+    # Zählerwerte (aus Monatsdaten) — Anlage-weit, bleiben float
     einspeisung_kwh: float
     netzbezug_kwh: float
     globalstrahlung_kwh_m2: Optional[float]
     sonnenstunden: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - PV
-    pv_erzeugung_kwh: float  # Summe PV-Module + BKW
+    pv_erzeugung_kwh: Optional[float]  # Summe PV-Module + BKW
     # Aggregiert aus InvestitionMonatsdaten - Speicher
-    speicher_ladung_kwh: float  # Summe alle Speicher
-    speicher_entladung_kwh: float  # Summe alle Speicher
+    speicher_ladung_kwh: Optional[float]  # Summe alle Speicher
+    speicher_entladung_kwh: Optional[float]  # Summe alle Speicher
     # Aggregiert aus InvestitionMonatsdaten - Wärmepumpe
-    wp_strom_kwh: float
-    wp_strom_heizen_kwh: float  # Nur > 0 wenn getrennte_strommessung=True (#191)
-    wp_strom_warmwasser_kwh: float  # Nur > 0 wenn getrennte_strommessung=True (#191)
-    wp_heizung_kwh: float
-    wp_warmwasser_kwh: float
+    wp_strom_kwh: Optional[float]
+    wp_strom_heizen_kwh: Optional[float]  # Nur > 0 wenn getrennte_strommessung=True (#191)
+    wp_strom_warmwasser_kwh: Optional[float]  # Nur > 0 wenn getrennte_strommessung=True (#191)
+    wp_heizung_kwh: Optional[float]
+    wp_warmwasser_kwh: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - E-Auto
-    eauto_ladung_kwh: float  # Summe PV + Netz
-    eauto_km: float
+    eauto_ladung_kwh: Optional[float]  # Summe PV + Netz
+    eauto_km: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - Wallbox
-    wallbox_ladung_kwh: float
-    wallbox_ladung_pv_kwh: float
+    wallbox_ladung_kwh: Optional[float]
+    wallbox_ladung_pv_kwh: Optional[float]
     # Berechnet
     direktverbrauch_kwh: float
     eigenverbrauch_kwh: float
@@ -196,7 +204,9 @@ async def list_monatsdaten_aggregiert(
 
     # Investitionen laden — KEIN aktiv-Filter (Issue #123): historische Aggregate
     # dürfen Investitionen nicht rückwirkend ausblenden, wenn sie später pausiert
-    # oder stillgelegt werden. Die Rohdaten in InvestitionMonatsdaten bleiben gültig.
+    # werden. Der Per-IMD-Filter unten respektiert aber anschaffungsdatum +
+    # stilllegungsdatum, sodass IMD vor Anschaffung / nach Stilllegung nicht
+    # mit-aggregiert werden (#236 detLAN).
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
@@ -215,15 +225,19 @@ async def list_monatsdaten_aggregiert(
     else:
         inv_monatsdaten = []
 
-    # Gruppieren nach (jahr, monat)
+    # Gruppieren nach (jahr, monat) — IMD vor anschaffungsdatum / nach
+    # stilllegungsdatum überspringen (#236 detLAN).
     inv_data_by_month: dict[tuple[int, int], list[tuple[Investition, dict]]] = {}
     for imd in inv_monatsdaten:
+        inv = inv_by_id.get(imd.investition_id)
+        if not inv:
+            continue
+        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+            continue
         key = (imd.jahr, imd.monat)
         if key not in inv_data_by_month:
             inv_data_by_month[key] = []
-        inv = inv_by_id.get(imd.investition_id)
-        if inv:
-            inv_data_by_month[key].append((inv, imd.verbrauch_daten or {}))
+        inv_data_by_month[key].append((inv, imd.verbrauch_daten or {}))
 
     # Aggregierte Daten erstellen
     result = []
@@ -231,7 +245,9 @@ async def list_monatsdaten_aggregiert(
         key = (md.jahr, md.monat)
         inv_data = inv_data_by_month.get(key, [])
 
-        # Aggregieren - alle Komponenten
+        # Aggregieren - alle Komponenten. Zähler tracken, ob mindestens eine
+        # IMD pro Komponenten-Familie beigetragen hat — sonst None statt 0
+        # ausspielen (#236, CLAUDE.md "0-Werte prüfen": 0 ≠ nicht vorhanden).
         pv_erzeugung = 0.0
         speicher_ladung = 0.0
         speicher_entladung = 0.0
@@ -245,28 +261,43 @@ async def list_monatsdaten_aggregiert(
         wallbox_ladung = 0.0
         wallbox_ladung_pv = 0.0
 
+        hat_pv_imd = False
+        hat_speicher_imd = False
+        hat_wp_imd = False
+        hat_wp_split_imd = False  # für strom_heizen / strom_warmwasser
+        hat_eauto_imd = False
+        hat_wallbox_imd = False
+
         for inv, data in inv_data:
             if inv.typ == "pv-module":
+                hat_pv_imd = True
                 pv_erzeugung += data.get("pv_erzeugung_kwh", 0) or 0
             elif inv.typ == "balkonkraftwerk":
+                hat_pv_imd = True
                 pv_erzeugung += get_pv_erzeugung_kwh(data)
                 # BKW-Speicher
+                hat_speicher_imd = True
                 speicher_ladung += data.get("speicher_ladung_kwh", 0) or 0
                 speicher_entladung += data.get("speicher_entladung_kwh", 0) or 0
             elif inv.typ == "speicher":
+                hat_speicher_imd = True
                 speicher_ladung += data.get("ladung_kwh", 0) or 0
                 speicher_entladung += data.get("entladung_kwh", 0) or 0
             elif inv.typ == "waermepumpe":
+                hat_wp_imd = True
                 wp_strom += get_wp_strom_kwh(data, inv.parameter)
                 if (inv.parameter or {}).get("getrennte_strommessung"):
+                    hat_wp_split_imd = True
                     wp_strom_heizen += data.get("strom_heizen_kwh", 0) or 0
                     wp_strom_warmwasser += data.get("strom_warmwasser_kwh", 0) or 0
                 wp_heizung += data.get("heizenergie_kwh", 0) or 0
                 wp_warmwasser += data.get("warmwasser_kwh", 0) or 0
             elif inv.typ == "e-auto":
+                hat_eauto_imd = True
                 eauto_ladung += (data.get("ladung_pv_kwh", 0) or 0) + (data.get("ladung_netz_kwh", 0) or 0)
                 eauto_km += data.get("km_gefahren", 0) or 0
             elif inv.typ == "wallbox":
+                hat_wallbox_imd = True
                 wallbox_ladung += data.get("ladung_kwh", 0) or 0
                 wallbox_ladung_pv += data.get("ladung_pv_kwh", 0) or 0
 
@@ -307,18 +338,21 @@ async def list_monatsdaten_aggregiert(
             netzbezug_kwh=round(netzbezug, 1),
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
             sonnenstunden=md.sonnenstunden,
-            pv_erzeugung_kwh=round(pv_erzeugung, 1),
-            speicher_ladung_kwh=round(speicher_ladung, 1),
-            speicher_entladung_kwh=round(speicher_entladung, 1),
-            wp_strom_kwh=round(wp_strom, 1),
-            wp_strom_heizen_kwh=round(wp_strom_heizen, 1),
-            wp_strom_warmwasser_kwh=round(wp_strom_warmwasser, 1),
-            wp_heizung_kwh=round(wp_heizung, 1),
-            wp_warmwasser_kwh=round(wp_warmwasser, 1),
-            eauto_ladung_kwh=round(eauto_ladung, 1),
-            eauto_km=round(eauto_km, 1),
-            wallbox_ladung_kwh=round(wallbox_ladung, 1),
-            wallbox_ladung_pv_kwh=round(wallbox_ladung_pv, 1),
+            # Komponenten-Aggregate: None wenn keine aktive IMD beigetragen
+            # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
+            # Sommer 0 kWh Heizung).
+            pv_erzeugung_kwh=round(pv_erzeugung, 1) if hat_pv_imd else None,
+            speicher_ladung_kwh=round(speicher_ladung, 1) if hat_speicher_imd else None,
+            speicher_entladung_kwh=round(speicher_entladung, 1) if hat_speicher_imd else None,
+            wp_strom_kwh=round(wp_strom, 1) if hat_wp_imd else None,
+            wp_strom_heizen_kwh=round(wp_strom_heizen, 1) if hat_wp_split_imd else None,
+            wp_strom_warmwasser_kwh=round(wp_strom_warmwasser, 1) if hat_wp_split_imd else None,
+            wp_heizung_kwh=round(wp_heizung, 1) if hat_wp_imd else None,
+            wp_warmwasser_kwh=round(wp_warmwasser, 1) if hat_wp_imd else None,
+            eauto_ladung_kwh=round(eauto_ladung, 1) if hat_eauto_imd else None,
+            eauto_km=round(eauto_km, 1) if hat_eauto_imd else None,
+            wallbox_ladung_kwh=round(wallbox_ladung, 1) if hat_wallbox_imd else None,
+            wallbox_ladung_pv_kwh=round(wallbox_ladung_pv, 1) if hat_wallbox_imd else None,
             direktverbrauch_kwh=round(direktverbrauch, 1),
             eigenverbrauch_kwh=round(eigenverbrauch, 1),
             gesamtverbrauch_kwh=round(gesamtverbrauch, 1),

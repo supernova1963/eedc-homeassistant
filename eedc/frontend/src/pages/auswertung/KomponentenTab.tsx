@@ -66,6 +66,19 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
     }
   }, [chartData])
 
+  // #236 P4: JAZ-Subtitle muss den tatsächlichen WP-Datenzeitraum zeigen,
+  // nicht das Anlagen-weite `zeitraumLabel` (Anlage seit 2023, WP-Investition
+  // erst ab 2025 → "Jahresarbeitszahl 2023–2026" war irreführend).
+  const wpZeitraumLabel = useMemo(() => {
+    if (!chartData.length) return zeitraumLabel
+    const wpJahre = Array.from(
+      new Set(chartData.filter(m => m.wp_strom_kwh > 0).map(m => m.jahr))
+    ).sort((a, b) => a - b)
+    if (wpJahre.length === 0) return zeitraumLabel
+    if (wpJahre.length === 1) return `${wpJahre[0]}`
+    return `${wpJahre[0]}–${wpJahre[wpJahre.length - 1]}`
+  }, [chartData, zeitraumLabel])
+
   const wpSummen = useMemo(() => {
     if (!chartData.length) return { waerme: 0, strom: 0, cop: null, heizung: 0, warmwasser: 0, stromHeizen: 0, stromWarmwasser: 0, heizungGetrennt: 0, warmwasserGetrennt: 0, ersparnis: 0 }
     const waerme = chartData.reduce((sum, z) => sum + z.wp_waerme_kwh, 0)
@@ -337,7 +350,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               title="JAZ"
               value={wpSummen.cop?.toFixed(2) || '---'}
               unit=""
-              subtitle={zeitraumLabel ? `Jahresarbeitszahl ${zeitraumLabel}` : 'Jahresarbeitszahl'}
+              subtitle={`Jahresarbeitszahl ${wpZeitraumLabel}`}
               icon={Thermometer}
               color="text-orange-500"
               bgColor="bg-orange-50 dark:bg-orange-900/20"

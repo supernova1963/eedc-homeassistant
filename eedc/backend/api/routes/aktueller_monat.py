@@ -348,10 +348,9 @@ async def _collect_saved_data(
             inv = inv_by_id.get(imd.investition_id)
             if not inv:
                 continue
-            # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
-            if inv.anschaffungsdatum:
-                if (imd.jahr, imd.monat) < (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month):
-                    continue
+            # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
+            if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             data = imd.verbrauch_daten or {}
 
             if inv.typ == "pv-module":

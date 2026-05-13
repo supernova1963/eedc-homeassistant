@@ -39,17 +39,17 @@ export interface MonatsZeitreihe {
   autarkie: number
   evQuote: number
   spezErtrag: number
-  // Speicher
-  speicher_ladung: number
-  speicher_entladung: number
+  // Speicher — null = keine aktive Speicher-Komponente in dem Monat
+  speicher_ladung: number | null
+  speicher_entladung: number | null
   speicher_effizienz: number | null
-  // Wärmepumpe
-  wp_waerme: number
-  wp_strom: number
+  // Wärmepumpe — null = keine aktive WP in dem Monat (vor Anschaffung / nach Stilllegung)
+  wp_waerme: number | null
+  wp_strom: number | null
   wp_cop: number | null
-  // E-Auto
-  eauto_km: number
-  eauto_ladung: number
+  // E-Auto — null = kein aktives E-Auto in dem Monat
+  eauto_km: number | null
+  eauto_ladung: number | null
   eauto_pv_anteil: number | null
   // Finanzen
   einspeise_erloes: number
@@ -105,19 +105,30 @@ export function createMonatsZeitreihe(
     const evQuote = md.eigenverbrauchsquote_prozent ?? calcEigenverbrauchsquote(eigenverbrauch, erzeugung)
     const spezErtrag = calcSpezifischerErtrag(erzeugung, anlage?.leistung_kwp)
 
-    // Speicher - jetzt aus aggregierten InvestitionMonatsdaten
-    const speicher_ladung = md.speicher_ladung_kwh || 0
-    const speicher_entladung = md.speicher_entladung_kwh || 0
-    const speicher_effizienz = calcSpeicherEffizienz(speicher_entladung, speicher_ladung)
+    // Speicher: null = keine Speicher-Komponente aktiv (Backend liefert null).
+    // calcSpeicherEffizienz arbeitet auf 0-Default — null-Werte als 0 hineingeben
+    // ergibt null Effizienz (kein Ladestrom).
+    const speicher_ladung = md.speicher_ladung_kwh
+    const speicher_entladung = md.speicher_entladung_kwh
+    const speicher_effizienz = (speicher_ladung != null && speicher_entladung != null)
+      ? calcSpeicherEffizienz(speicher_entladung, speicher_ladung)
+      : null
 
-    // Wärmepumpe - aus aggregierten InvestitionMonatsdaten
-    const wp_waerme = (md.wp_heizung_kwh || 0) + (md.wp_warmwasser_kwh || 0)
-    const wp_strom = md.wp_strom_kwh || 0
-    const wp_cop = calcCOP(wp_waerme, wp_strom)
+    // Wärmepumpe: null = WP in dem Monat nicht aktiv. Wenn auch nur eines
+    // der Komponenten-Felder null ist, gilt der ganze Block als nicht aktiv.
+    const wp_heizung = md.wp_heizung_kwh
+    const wp_warmwasser = md.wp_warmwasser_kwh
+    const wp_waerme = (wp_heizung != null && wp_warmwasser != null)
+      ? wp_heizung + wp_warmwasser
+      : null
+    const wp_strom = md.wp_strom_kwh
+    const wp_cop = (wp_waerme != null && wp_strom != null)
+      ? calcCOP(wp_waerme, wp_strom)
+      : null
 
-    // E-Auto - aus aggregierten InvestitionMonatsdaten
-    const eauto_km = md.eauto_km || 0
-    const eauto_ladung = md.eauto_ladung_kwh || 0
+    // E-Auto: null = kein aktives E-Auto.
+    const eauto_km = md.eauto_km
+    const eauto_ladung = md.eauto_ladung_kwh
     const eauto_pv_anteil = null // Wird später berechnet wenn PV-Anteil verfügbar
 
     // Finanzen: historisch korrekter Tarif pro Monat, Fallback auf aktuellen

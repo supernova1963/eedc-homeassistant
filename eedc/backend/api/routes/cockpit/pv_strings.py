@@ -186,11 +186,15 @@ async def get_pv_strings(
     inv_monatsdaten = result.scalars().all()
 
     md_by_inv: dict[int, dict[int, float]] = {m.id: {} for m in pv_module}
+    pv_by_id = {m.id: m for m in pv_module}
     for imd in inv_monatsdaten:
+        # #236: Vor anschaffungs- / nach stilllegungsdatum überspringen
+        modul = pv_by_id.get(imd.investition_id)
+        if not modul or not modul.ist_aktiv_im_monat(imd.jahr, imd.monat):
+            continue
         data = imd.verbrauch_daten or {}
         pv_erzeugt = data.get("pv_erzeugung_kwh", 0) or 0
-        if imd.investition_id in md_by_inv:
-            md_by_inv[imd.investition_id][imd.monat] = pv_erzeugt
+        md_by_inv[imd.investition_id][imd.monat] = pv_erzeugt
 
     strings_data = []
     prognose_gesamt = 0
@@ -359,13 +363,17 @@ async def get_pv_strings_gesamtlaufzeit(
     anzahl_jahre = len(jahre)
 
     md_by_inv: dict[int, dict[int, dict[int, float]]] = {m.id: {} for m in pv_module}
+    pv_by_id_total = {m.id: m for m in pv_module}
     for imd in alle_monatsdaten:
+        # #236: Vor anschaffungs- / nach stilllegungsdatum überspringen
+        modul = pv_by_id_total.get(imd.investition_id)
+        if not modul or not modul.ist_aktiv_im_monat(imd.jahr, imd.monat):
+            continue
         data = imd.verbrauch_daten or {}
         pv_erzeugt = data.get("pv_erzeugung_kwh", 0) or 0
-        if imd.investition_id in md_by_inv:
-            if imd.jahr not in md_by_inv[imd.investition_id]:
-                md_by_inv[imd.investition_id][imd.jahr] = {}
-            md_by_inv[imd.investition_id][imd.jahr][imd.monat] = pv_erzeugt
+        if imd.jahr not in md_by_inv[imd.investition_id]:
+            md_by_inv[imd.investition_id][imd.jahr] = {}
+        md_by_inv[imd.investition_id][imd.jahr][imd.monat] = pv_erzeugt
 
     strings_data = []
     prognose_gesamt_total = 0

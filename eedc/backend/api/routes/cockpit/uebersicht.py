@@ -196,15 +196,13 @@ async def get_cockpit_uebersicht(
         if not inv:
             continue
 
-        # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren — sonst fließen
-        # historische, vor-Inbetriebnahme-Werte (z. B. unvollständige Test-Daten,
-        # Sensor mit anderer Erfassungsmethode) in JAZ/Aggregate ein und
-        # verfälschen die Cockpit-Übersicht.
-        if inv.anschaffungsdatum:
-            anschaffung_jahr = inv.anschaffungsdatum.year
-            anschaffung_monat = inv.anschaffungsdatum.month
-            if (imd.jahr, imd.monat) < (anschaffung_jahr, anschaffung_monat):
-                continue
+        # Issue #153 / #155 / #236: IMD vor anschaffungsdatum / nach
+        # stilllegungsdatum überspringen — sonst fließen vor-Inbetriebnahme-
+        # bzw. nach-Stilllegungs-Werte in JAZ/Aggregate ein und verfälschen
+        # die Cockpit-Übersicht. SoT-Helper statt inline-Check
+        # (feedback_aggregations_drift.md).
+        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+            continue
 
         data = imd.verbrauch_daten or {}
         zeitraum_monate.add((imd.jahr, imd.monat))

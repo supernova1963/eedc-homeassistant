@@ -27,7 +27,8 @@ export default function SparklineChart({ monatsdaten, selectedYear }: {
     name: m.jahr !== firstJahr
       ? `${MONAT_KURZ[m.monat]} ${m.jahr}`
       : MONAT_KURZ[m.monat],
-    kwh: Math.round(m.pv_erzeugung_kwh),
+    // null = keine aktive PV im Monat (vor Anschaffung) → 0 fürs Sparkline-Chart
+    kwh: Math.round(m.pv_erzeugung_kwh ?? 0),
   }))
   const max = Math.max(...chartData.map(d => d.kwh))
 
