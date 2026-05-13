@@ -1098,8 +1098,18 @@ async def get_aktueller_monat(
         netzbezug_durchschnittspreis = md_flex.netzbezug_durchschnittspreis_cent
 
     # ── Komponenten-Flags ──
-    hat_speicher = any(i.typ == "speicher" for i in investitionen)
-    hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
+    # #239 detLAN: pro Monat filtern, nicht pro Anlage. Sonst wird die
+    # Sektion (z.B. Wärmepumpe) im Monatsbericht angezeigt, bevor die
+    # Investition angeschafft wurde — alle Werte sind dann "—", was den
+    # User irritiert ("Investition vor Anschaffung darstellen" #236 P2).
+    hat_speicher = any(
+        i.typ == "speicher" and i.ist_aktiv_im_monat(jahr, monat)
+        for i in investitionen
+    )
+    hat_waermepumpe = any(
+        i.typ == "waermepumpe" and i.ist_aktiv_im_monat(jahr, monat)
+        for i in investitionen
+    )
 
     # ── Issue #169: Kompressor-Starts pro Monat aus TagesZusammenfassung ──
     # Quelle: TagesZusammenfassung.komponenten_starts (JSON, Form
@@ -1113,7 +1123,10 @@ async def get_aktueller_monat(
     if hat_waermepumpe:
         from backend.models.tages_energie_profil import TagesZusammenfassung
         from sqlalchemy import extract
-        wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
+        wp_invs = [
+            i for i in investitionen
+            if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(jahr, monat)
+        ]
         wp_inv_id_strs = {str(i.id) for i in wp_invs}
         tz_result = await db.execute(
             select(TagesZusammenfassung.komponenten_starts)
@@ -1137,11 +1150,19 @@ async def get_aktueller_monat(
 
 
     hat_emobilitaet = any(
-        i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)
+        i.typ in ("e-auto", "wallbox")
+        and not (i.parameter or {}).get("ist_dienstlich", False)
+        and i.ist_aktiv_im_monat(jahr, monat)
         for i in investitionen
     )
-    hat_balkonkraftwerk = any(i.typ == "balkonkraftwerk" for i in investitionen)
-    hat_sonstiges = any(i.typ == "sonstiges" for i in investitionen)
+    hat_balkonkraftwerk = any(
+        i.typ == "balkonkraftwerk" and i.ist_aktiv_im_monat(jahr, monat)
+        for i in investitionen
+    )
+    hat_sonstiges = any(
+        i.typ == "sonstiges" and i.ist_aktiv_im_monat(jahr, monat)
+        for i in investitionen
+    )
 
     # ── Vergleichsdaten ──
     vorjahr = await _load_vorjahr(anlage_id, investitionen, jahr, monat, db)

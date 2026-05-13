@@ -77,6 +77,41 @@ def test_ist_aktiv_im_monat_nach_stilllegung():
     assert inv.ist_aktiv_im_monat(2025, 9) is False, "September nach Aug-Stilllegung"
 
 
+def test_monatsbericht_hat_flags_filtern_vor_anschaffung():
+    """#239 detLAN-Folge zu #236: hat_*-Flags im Monatsbericht müssen pro
+    Monat nach anschaffungsdatum filtern, nicht pro Anlage.
+
+    Sonst rendert MonatsabschlussView.tsx die WP-Sektion auch in Monaten
+    vor Anschaffung (alle Werte "—") — genau das, was detLAN als P2 in
+    #236 monierte. Spiegelt die Logik aus aktueller_monat.py:1101+.
+    """
+    wp_april = Investition(typ="waermepumpe", anschaffungsdatum=date(2025, 4, 1))
+    eauto_april = Investition(
+        typ="e-auto", anschaffungsdatum=date(2025, 4, 1), parameter={}
+    )
+    speicher_alt = Investition(typ="speicher", anschaffungsdatum=date(2023, 1, 1))
+    investitionen = [wp_april, eauto_april, speicher_alt]
+
+    def _hat(typ: str, jahr: int, monat: int) -> bool:
+        if typ in ("e-auto", "wallbox"):
+            return any(
+                i.typ == typ
+                and not (i.parameter or {}).get("ist_dienstlich", False)
+                and i.ist_aktiv_im_monat(jahr, monat)
+                for i in investitionen
+            )
+        return any(
+            i.typ == typ and i.ist_aktiv_im_monat(jahr, monat)
+            for i in investitionen
+        )
+
+    assert _hat("waermepumpe", 2025, 3) is False, "März darf WP-Sektion nicht zeigen"
+    assert _hat("waermepumpe", 2025, 4) is True, "April muss WP-Sektion zeigen"
+    assert _hat("e-auto", 2025, 3) is False, "März darf E-Auto-Sektion nicht zeigen"
+    assert _hat("e-auto", 2025, 4) is True, "April muss E-Auto-Sektion zeigen"
+    assert _hat("speicher", 2025, 3) is True, "Speicher (seit 2023) muss in März zeigen"
+
+
 def test_ist_aktiv_im_monat_kombiniert():
     """Anschaffungs- und Stilllegungsdatum gemeinsam — Sandwich-Test."""
     inv = Investition(
@@ -224,6 +259,7 @@ _SYNC_TESTS = [
     test_ist_aktiv_im_monat_vor_anschaffung,
     test_ist_aktiv_im_monat_nach_stilllegung,
     test_ist_aktiv_im_monat_kombiniert,
+    test_monatsbericht_hat_flags_filtern_vor_anschaffung,
 ]
 
 _ASYNC_TESTS = [
