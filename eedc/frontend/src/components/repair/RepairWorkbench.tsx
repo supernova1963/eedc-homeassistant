@@ -112,6 +112,18 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anlageId])
 
+  // #235 detLAN: Bei Parameter-Änderung Execute-Result-Banner verwerfen,
+  // sonst bleibt der "Plan erstellen"-Button hinter dem letzten Result
+  // versteckt (`!plan && !executeResult`-Bedingung) und User muss
+  // Operation wechseln und zurück, um wieder einen Plan erstellen zu können.
+  useEffect(() => {
+    setExecuteResult(null)
+    setError(null)
+  }, [
+    params.datum, params.von, params.bis, params.mit_resnap,
+    params.range_confirmed, params.scope, params.providers,
+  ])
+
   // Operation-Wechsel: Plan-Vorschau + Result zurücksetzen
   const handleOpChange = (op: RepairOperationType) => {
     setSelectedOp(op)

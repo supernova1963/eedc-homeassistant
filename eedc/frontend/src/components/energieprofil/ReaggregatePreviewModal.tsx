@@ -83,6 +83,14 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
       setError(null)
       return
     }
+    // #234 detLAN: Modal wird nicht ge-unmountet wenn datum auf null geht
+    // (parent rendert `{showReaggregate && <Modal …/>}` permanent, nur die
+    // datum-prop wechselt). Daher überleben applyMode / forceCloseAvailable
+    // sonst aus dem vorherigen Lauf — Row-Buttons + Modal-Buttons bleiben
+    // in "busy"-State stecken. Bei neuem datum hart resetten.
+    setApplyMode(null)
+    setForceCloseAvailable(false)
+    setApplyElapsedMs(0)
     const controller = new AbortController()
     abortRef.current = controller
     setLoading(true)
@@ -171,6 +179,10 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
       const mitResnap = mode === 'with_resnap'
       const res = await energieProfilApi.reaggregateTag(anlageId, datum, mitResnap, controller.signal)
       onApplied({ stunden_mit_messdaten: res.stunden_mit_messdaten })
+      // #234 detLAN: applyMode auch im Success-Pfad zurücksetzen, sonst
+      // bleibt der Modal-Inner-State auf "applying" stehen und der nächste
+      // Modal-Aufruf erbt das (siehe Reset-Block im datum-useEffect oben).
+      setApplyMode(null)
       onClose()
     } catch (e) {
       // AbortError = User hat Modal geschlossen mit Force-Close — Backend läuft weiter
