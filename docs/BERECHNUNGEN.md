@@ -1,8 +1,8 @@
-# EEDC Berechnungsreferenz
+# eedc Berechnungsreferenz
 
 **Version 3.24.1** | Stand: April 2026
 
-Dieses Dokument beschreibt alle Berechnungsketten im EEDC-System: von den Eingabefeldern
+Dieses Dokument beschreibt alle Berechnungsketten im eedc-System: von den Eingabefeldern
 über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche
 und zum Verständnis der Datenflüsse.
 
@@ -530,7 +530,7 @@ Wenn Temperatur > 25°C:
 | `GTI_kWh_m2` | **Global Tilted Irradiance** aus Open-Meteo Solar (modul-projiziert mit Tilt + Azimut). Bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert. | – |
 | `Lernfaktor` | Anlagenspezifischer Korrekturfaktor (siehe §4.1c) | 1.0 (vor 7 Tagen Daten) |
 
-> **GTI vs. GHI:** Bis v3.19.x rechnete EEDC mit GHI (`shortwave_radiation`, horizontal). Bei steilen Modulen und tiefstehender Wintersonne ist die Modul-projizierte GTI 2–3× höher — der GHI-basierte „theoretische Ertrag" lag im Winter systematisch zu niedrig (PR-Werte > 1 möglich). Seit v3.20.0 werden GTI-Werte für Prognose und Performance Ratio verwendet.
+> **GTI vs. GHI:** Bis v3.19.x rechnete eedc mit GHI (`shortwave_radiation`, horizontal). Bei steilen Modulen und tiefstehender Wintersonne ist die Modul-projizierte GTI 2–3× höher — der GHI-basierte „theoretische Ertrag" lag im Winter systematisch zu niedrig (PR-Werte > 1 möglich). Seit v3.20.0 werden GTI-Werte für Prognose und Performance Ratio verwendet.
 
 > **Multi-String / PV-Parameter-Quelle (v3.20.2/v3.20.3):** kWp, Neigung und Azimut werden über den Helper `services/pv_orientation.py` gelesen, der in dieser Reihenfolge prüft: Top-Level-Spalte der Investition → `parameter.{neigung,ausrichtung}_grad` (Zahl) → `parameter.{neigung,ausrichtung}` (Zahl oder String mit Mapping `{"süd": 0, "ost": -90, "west": 90, ...}`) → Default. Damit liefern alle drei Prognose-Pfade (Energieprofil-Tagesprognose, Aussichten-Kurzfrist, Prefetch-Cache) identische Eingabe-Parameter an Open-Meteo.
 
@@ -546,7 +546,7 @@ Das verwendete Wettermodell ist pro Anlage konfigurierbar (`Anlage.wettermodell`
 | `icon_eu` | DWD ICON-EU | ~7 km | Europa |
 | `ecmwf_ifs04` | ECMWF IFS | 0,25° | Global |
 
-Bei einem spezifischen Modell versucht EEDC zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Die verwendete Quelle pro Tag wird im Response als `datenquelle`-Kürzel (MS/D2/EU/EC/BM) mitgeliefert.
+Bei einem spezifischen Modell versucht eedc zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Die verwendete Quelle pro Tag wird im Response als `datenquelle`-Kürzel (MS/D2/EU/EC/BM) mitgeliefert.
 
 ### 4.1b Solar Forecast ML (SFML)
 
@@ -554,14 +554,14 @@ Bei einem spezifischen Modell versucht EEDC zuerst dieses Modell. Schlägt der A
 **Service:** `services/solar_forecast_service.py`
 **Externe API:** forecast.solar oder solcast.com (konfigurierbar)
 
-SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der EEDC-Eigenprognose und den IST-Werten.
+SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der eedc-Eigenprognose und den IST-Werten.
 
 #### Datenfluss
 
 ```
 1. Externer SFML-Anbieter liefert kWh-Prognose pro Tag
 2. Werte werden in DB persistiert (Tabelle: SolarForecastML)
-3. Endpoint gibt SFML-Werte zusammen mit EEDC-Prognose zurück
+3. Endpoint gibt SFML-Werte zusammen mit eedc-Prognose zurück
 ```
 
 #### Response-Felder (pro Tag)
@@ -595,26 +595,26 @@ Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
 | Quelle | Bedeutung |
 |---|---|
 | **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus Globalstrahlung × kWp × (1 − System_Losses) |
-| **EEDC (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
+| **eedc (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
 | **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet. |
 | **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
 
 #### Lernfaktor (saisonale MOS-Kaskade, ab v3.16.15)
 
-Die EEDC-Prognose ist `OpenMeteo × Lernfaktor`. Der Lernfaktor wird aus historischen `(Prognose, IST)`-Tag-Paaren berechnet — nur Tage mit gültiger OpenMeteo-Prognose **UND** IST-Ertrag > 0.5 kWh fließen ein (Schlechtwetter-Tage mit ~0 kWh würden den Faktor sonst verzerren).
+Die eedc-Prognose ist `OpenMeteo × Lernfaktor`. Der Lernfaktor wird aus historischen `(Prognose, IST)`-Tag-Paaren berechnet — nur Tage mit gültiger OpenMeteo-Prognose **UND** IST-Ertrag > 0.5 kWh fließen ein (Schlechtwetter-Tage mit ~0 kWh würden den Faktor sonst verzerren).
 
 ```
 faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)
 ```
 
-Seit v3.16.15 nutzt EEDC eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
+Seit v3.16.15 nutzt eedc eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
 
 | Stufe | Bedingung | Bezugszeitraum |
 |---|---|---|
 | **Monatsfaktor** | ≥ 15 gültige Tage im selben Kalendermonat | Tage des Kalendermonats über alle Jahre |
 | **Quartalsfaktor** | ≥ 15 gültige Tage im selben Quartal | Tage des Quartals über alle Jahre |
 | **30-Tage-Fenster** | ≥ 7 gültige Tage | Letzte 30 Kalendertage |
-| **Inaktiv** | < 7 Tage | Lernfaktor = 1.0, EEDC-Spalte gedämpft mit `—` und Tooltip-Verweis |
+| **Inaktiv** | < 7 Tage | Lernfaktor = 1.0, eedc-Spalte gedämpft mit `—` und Tooltip-Verweis |
 
 Die aktive Stufe wird im Status-Banner und im KPI-Card-Header angezeigt.
 
@@ -624,7 +624,7 @@ Die aktive Stufe wird im Status-Banner und im KPI-Card-Header angezeigt.
 
 #### Genauigkeits-Tracking: MAE + MBE getrennt (v3.22.0, #151)
 
-Über alle Tage mit gleichzeitig verfügbarer Prognose und IST werden zwei Kennzahlen pro Quelle (OM, EEDC, Solcast) berechnet, auf **vorzeichenbehafteten relativen Fehlern**:
+Über alle Tage mit gleichzeitig verfügbarer Prognose und IST werden zwei Kennzahlen pro Quelle (OM, eedc, Solcast) berechnet, auf **vorzeichenbehafteten relativen Fehlern**:
 
 ```
 err_rel(tag) = (Prognose_kWh - IST_kWh) / IST_kWh
@@ -893,7 +893,7 @@ Stunden-kWh werden **nicht mehr** aus 10-Min-Leistungs-Samples integriert (±5�
 
 **Snapshot-Lücken-Interpolation (v3.20.0, #145):**
 
-Wenn ein Snapshot fehlt (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), interpoliert EEDC linear zwischen den vorhandenen Nachbar-Stunden:
+Wenn ein Snapshot fehlt (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), interpoliert eedc linear zwischen den vorhandenen Nachbar-Stunden:
 
 ```
 Beispiel: snap[10] = 1500 kWh, snap[11] = None, snap[12] = 1505 kWh
@@ -907,7 +907,7 @@ Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoli
 
 **Restart-Recovery (v3.23.0):** Beim Scheduler-Start läuft `sensor_snapshot_startup_recovery()` im Hintergrund — holt für die letzten 6 Stunden je Anlage HA-Statistics-Snapshots (idempotent dank Upsert) plus für die laufende Stunde einen Live-Snapshot, anschließend `aggregate_today_all`.
 
-**Tagesreset-Heuristik (v3.23.0):** HA-`utility_meter`-Sensoren mit täglichem Reset werfen um Mitternacht ein stark negatives Delta. Erkannt am Muster `s1 < 0.5 ∧ s0 > 0.5`, EEDC nimmt dann `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Bei untypischen negativen Deltas mitten am Tag bleibt die Reset-Warnung wie bisher.
+**Tagesreset-Heuristik (v3.23.0):** HA-`utility_meter`-Sensoren mit täglichem Reset werfen um Mitternacht ein stark negatives Delta. Erkannt am Muster `s1 < 0.5 ∧ s0 > 0.5`, eedc nimmt dann `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Bei untypischen negativen Deltas mitten am Tag bleibt die Reset-Warnung wie bisher.
 
 **Phase D Cleanup (v3.21.0, #138):** Seit v3.21.0 ist der Zähler-Snapshot-Pfad die einzige kWh-Quelle. Der frühere W-Integration-Fallback (`_val()`-Helper, `else`-Branch in `backfill_from_statistics`) und das Feature-Flag `EEDC_ENERGIEPROFIL_QUELLE` sind entfernt. Auf Anlagen ohne kumulative Zähler erscheinen Stunden-kWh-Felder als `NULL` statt geschätzter Werte.
 
@@ -917,7 +917,7 @@ Alle Stunden-Slots im Energieprofil und in den Prognose-Quellen folgen seit v3.2
 
 | Konvention | Slot N enthält Energie aus … |
 |---|---|
-| **Backward** (EEDC, ab v3.20.0) | `[N-1, N)` — „die letzte Stunde". Slot 0 = Energie 23:00–24:00 des Vortags. |
+| **Backward** (eedc, ab v3.20.0) | `[N-1, N)` — „die letzte Stunde". Slot 0 = Energie 23:00–24:00 des Vortags. |
 | Forward (Strompreis, weiterhin) | `[N, N+1)` — „gilt ab jetzt". Industrieüblich für aWATTar/Tibber/EPEX. |
 
 Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Tibber.
@@ -941,7 +941,7 @@ Verbrauch_kWh     = PV + Netzbezug + Bat_Entladung - Einspeisung - Bat_Ladung
 Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
 ```
 
-**Strikte NULL-Semantik:** Wenn ein Zähler nicht gemappt ist, bleibt das zugehörige Feld `NULL` (statt aus Leistungs-Samples zu schätzen). Im Frontend zeigt EEDC ein ⚠-Badge bei Datenlücken — siehe Reparatur-Popover in §4.1c.
+**Strikte NULL-Semantik:** Wenn ein Zähler nicht gemappt ist, bleibt das zugehörige Feld `NULL` (statt aus Leistungs-Samples zu schätzen). Im Frontend zeigt eedc ein ⚠-Badge bei Datenlücken — siehe Reparatur-Popover in §4.1c.
 
 **Peaks aus W-Integration (für Spitzenwerte):**
 

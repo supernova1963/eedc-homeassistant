@@ -1,7 +1,7 @@
 // Auswertung Hauptseite - Tab-Navigation
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, ArrowRight, Calendar, FileText } from 'lucide-react'
+import { Sun, ArrowRight, FileText } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Alert, PillTabs } from '../components/ui'
 import type { PillTab } from '../components/ui'
 import { useSelectedAnlage, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis, useStrompreise } from '../hooks'
@@ -119,20 +119,21 @@ export default function Auswertung() {
             </Button>
           </div>
           <div className="flex items-center gap-3">
-            {/* Jahr-Filter - für alle Tabs */}
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-gray-400" />
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="input w-auto"
-              >
-                <option value="all">Alle Jahre</option>
-                {verfuegbareJahre.map(j => (
-                  <option key={j} value={j}>{j}</option>
-                ))}
-              </select>
-            </div>
+            {/* Jahr-Filter - für alle Tabs. Dekoratives Calendar-Icon entfernt
+                (#206 P2 detLAN-Folge: nicht-klickbares Icon neben klickbarem
+                Select verwirrt). */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="input w-auto"
+              aria-label="Jahr-Filter"
+              title="Jahr-Filter"
+            >
+              <option value="all">Alle Jahre</option>
+              {verfuegbareJahre.map(j => (
+                <option key={j} value={j}>{j}</option>
+              ))}
+            </select>
 
             {/* Anlagen-Filter */}
             {anlagen.length > 1 && (
@@ -140,6 +141,8 @@ export default function Auswertung() {
                 value={anlageId ?? ''}
                 onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
                 className="input w-auto"
+                aria-label="Anlagen-Filter"
+                title="Anlagen-Filter"
               >
                 {anlagen.map((a) => (
                   <option key={a.id} value={a.id}>{a.anlagenname}</option>

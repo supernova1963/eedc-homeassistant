@@ -59,7 +59,7 @@ async def get_ha_status():
             "connected": False,
             "rest_api": False,
             "ha_version": None,
-            "message": "Kein Supervisor Token gefunden. Läuft EEDC als HA Add-on?"
+            "message": "Kein Supervisor Token gefunden. Läuft eedc als HA Add-on?"
         }
 
     result = {

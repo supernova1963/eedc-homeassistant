@@ -366,7 +366,7 @@ async def geocode_address(
     }
 
     headers = {
-        "User-Agent": "EEDC-HomeAssistant/0.8.0 (PV-Anlagen-Verwaltung)"
+        "User-Agent": "eedc-HomeAssistant/0.8.0 (PV-Anlagen-Verwaltung)"
     }
 
     try:

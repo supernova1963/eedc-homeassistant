@@ -1,5 +1,5 @@
 
-# EEDC Benutzerhandbuch
+# eedc Benutzerhandbuch
 
 **Version 3.24.1** | Stand: April 2026
 
@@ -7,7 +7,7 @@
 
 ## Über diese Hilfe
 
-Du liest gerade das **EEDC-Benutzerhandbuch** — die Übersicht über die ganze Dokumentation. Wenn du die Seite über den Hauptmenü-Punkt **Hilfe** geöffnet hast (eingeführt in v3.24.2, Discussion #130), läuft sie als In-App-Hilfe direkt in EEDC: alle Inhalte werden lokal gerendert, ohne externen Browser-Tab und ohne Ingress-Login-Stolpersteine in der HA-Companion-App.
+Du liest gerade das **eedc-Benutzerhandbuch** — die Übersicht über die ganze Dokumentation. Wenn du die Seite über den Hauptmenü-Punkt **Hilfe** geöffnet hast (eingeführt in v3.24.2, Discussion #130), läuft sie als In-App-Hilfe direkt in eedc: alle Inhalte werden lokal gerendert, ohne externen Browser-Tab und ohne Ingress-Login-Stolpersteine in der HA-Companion-App.
 
 **Bedienung der Hilfe-Seite:**
 - **Sidebar (Desktop) / Dropdown (Mobile)** links: Auswahl des Dokuments aus drei Kategorien — *Einstieg*, *Handbuch*, *Referenz*.
@@ -20,7 +20,7 @@ Du liest gerade das **EEDC-Benutzerhandbuch** — die Übersicht über die ganze
 
 ## Empfohlene Nutzung
 
-eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachsige Charts, Tabellen mit vielen Spalten. Optimal nutzbar auf **Desktop**. Smartphone in Standard-Anzeigegröße funktioniert für Live-Dashboard, Cockpit und Monatsberichte; für die datendichten Auswertungs-Bereiche (Auswertung → Energieprofil, Aussichten → Prognosen) ist ein größerer Bildschirm sinnvoll. Im Hochformat zeigt EEDC für die drei datendichten Tabellen im Prognosen-Tab statt überlappender Spalten einen Hinweis „Querformat oder Desktop nutzen".
+eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachsige Charts, Tabellen mit vielen Spalten. Optimal nutzbar auf **Desktop**. Smartphone in Standard-Anzeigegröße funktioniert für Live-Dashboard, Cockpit und Monatsberichte; für die datendichten Auswertungs-Bereiche (Auswertung → Energieprofil, Aussichten → Prognosen) ist ein größerer Bildschirm sinnvoll. Im Hochformat zeigt eedc für die drei datendichten Tabellen im Prognosen-Tab statt überlappender Spalten einen Hinweis „Querformat oder Desktop nutzen".
 
 Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom über Standard) können einzelne Layouts eng werden — bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
 
@@ -60,12 +60,12 @@ Die Doku ist in vier Teile, ein Zusatz-Modul, zwei Referenzen und ein Glossar ge
 
 ## Was ist neu seit v3.16?
 
-Wer mit einer älteren EEDC-Version vertraut ist und einen schnellen Überblick über die wichtigsten Änderungen sucht: dieser Abschnitt fasst die für Anwender sichtbaren Neuerungen der letzten Monate als Schnellübersicht zusammen. Eine **detaillierte, pro-Version gegliederte Beschreibung** mit kurzen Erklärungs-Absätzen findest du auf der eigenen Seite [Was ist neu](WAS-IST-NEU.md).
+Wer mit einer älteren eedc-Version vertraut ist und einen schnellen Überblick über die wichtigsten Änderungen sucht: dieser Abschnitt fasst die für Anwender sichtbaren Neuerungen der letzten Monate als Schnellübersicht zusammen. Eine **detaillierte, pro-Version gegliederte Beschreibung** mit kurzen Erklärungs-Absätzen findest du auf der eigenen Seite [Was ist neu](WAS-IST-NEU.md).
 
 | Bereich | Änderung | Ab Version | Wo dokumentiert |
 |---|---|---|---|
 | Hilfe | In-App-Hilfe-Seite (`/hilfe`) mit kuratierter Doku | v3.24.2 | Diese Seite |
-| Aussichten | Neuer Tab **„Prognosen"** (OpenMeteo / EEDC kalibriert / Solcast / IST), MAE+MBE getrennt, Asymmetrie-Diagnostik, Reparatur-Popover bei IST-Lücken | v3.16.4 → v3.23.3 | [Bedienung §7.2](HANDBUCH_BEDIENUNG.md#72-prognosen) |
+| Aussichten | Neuer Tab **„Prognosen"** (OpenMeteo / eedc kalibriert / Solcast / IST), MAE+MBE getrennt, Asymmetrie-Diagnostik, Reparatur-Popover bei IST-Lücken | v3.16.4 → v3.23.3 | [Bedienung §7.2](HANDBUCH_BEDIENUNG.md#72-prognosen) |
 | Auswertung | Neuer Tab **„Energieprofil"** (Beta) mit Tagesdetail / Monat (CollapsibleSection, Tage-Tabelle) / Verbrauchsprognose | v3.16.16 → v3.21.0 | [Bedienung §5.8](HANDBUCH_BEDIENUNG.md#58-energieprofil-tab-beta) |
 | Cockpit | Reihenfolge der Sub-Tabs umsortiert (Erzeuger oben, Speicher in der Mitte, Verbraucher unten); WP-KPIs in fester Reihenfolge JAZ → Wärme → Strom → Ersparnis; Anlagenname als h1 | v3.23.4 | [Bedienung §3](HANDBUCH_BEDIENUNG.md#3-cockpit-dashboards) |
 | Cockpit | Aggregate ignorieren Monatsdaten **vor dem Anschaffungsdatum** der Komponente | v3.23.0 → v3.23.1 | [Bedienung §3.6 / §3.5](HANDBUCH_BEDIENUNG.md#36-wärmepumpe-dashboard) |

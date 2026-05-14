@@ -167,4 +167,4 @@ async def restart_addon():
         # Standalone: Prozess beenden, Container/Systemd startet neu
         import asyncio
         asyncio.get_event_loop().call_later(1.0, lambda: os._exit(0))
-        return {"erfolg": True, "message": "EEDC wird neu gestartet..."}
+        return {"erfolg": True, "message": "eedc wird neu gestartet..."}

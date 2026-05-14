@@ -2,10 +2,11 @@
  * Finanzen-Tab: Finanzprognose mit ROI und Amortisation
  */
 import { useState, useEffect } from 'react'
-import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame } from 'lucide-react'
+import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, Fuel } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
+import { INVESTITION_TYP_ORDER } from '../../lib/constants'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -25,12 +26,28 @@ interface Props {
   anlageId: number
 }
 
-// Icons für Komponenten-Typen
+// Icons für Komponenten-Typen — Backend liefert Suffix-Typen wie `waermepumpe-pv`,
+// `waermepumpe-ersparnis`, `e-auto-benzin`. Komplettes Mapping verhindert Fallback
+// auf Battery (#210 detLAN).
 const KOMPONENTEN_ICONS: Record<string, typeof Battery> = {
   'speicher': Battery,
   'e-auto-v2h': Car,
   'e-auto-ladung': Car,
-  'waermepumpe': Flame,
+  'e-auto-benzin': Fuel,
+  'waermepumpe-pv': Flame,
+  'waermepumpe-ersparnis': Flame,
+}
+
+// Komponenten-Beitrags-Typen auf die Basis-Typen aus INVESTITION_TYP_ORDER mappen
+// (`waermepumpe-pv` → `waermepumpe`, `e-auto-ladung` → `e-auto` etc.) und nach
+// dieser Hierarchie sortieren. #210 detLAN: WP vor E-Auto, Reihenfolge konsistent
+// zur App-weiten Komponenten-Sortierung in INVESTITION_TYP_ORDER.
+function komponentenBeitragTypIndex(typ: string): number {
+  const order = INVESTITION_TYP_ORDER as readonly string[]
+  for (let i = 0; i < order.length; i++) {
+    if (typ === order[i] || typ.startsWith(order[i] + '-')) return i
+  }
+  return order.length
 }
 
 export default function FinanzenTab({ anlageId }: Props) {
@@ -334,7 +351,9 @@ export default function FinanzenTab({ anlageId }: Props) {
         <Card className="p-4">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Komponenten-Beiträge zur Finanzierung</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {prognose.komponenten_beitraege.map((k, idx) => {
+            {[...prognose.komponenten_beitraege]
+              .sort((a, b) => komponentenBeitragTypIndex(a.typ) - komponentenBeitragTypIndex(b.typ))
+              .map((k, idx) => {
               const Icon = KOMPONENTEN_ICONS[k.typ] || Battery
               return (
                 <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -355,7 +374,8 @@ export default function FinanzenTab({ anlageId }: Props) {
               )
             })}
           </div>
-          {/* Zusammenfassung */}
+          {/* Zusammenfassung — Reihenfolge konsistent zu INVESTITION_TYP_ORDER:
+              Speicher → WP → E-Auto-Cluster (V2H zuerst, dann PV-Ladung). #210 detLAN. */}
           {(prognose.speicher_ev_erhoehung_kwh > 0 || prognose.v2h_rueckspeisung_kwh > 0 || prognose.wp_pv_anteil_kwh > 0) && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
@@ -364,6 +384,13 @@ export default function FinanzenTab({ anlageId }: Props) {
                     <p className="text-gray-500">Speicher EV+</p>
                     <p className="font-semibold">{prognose.speicher_ev_erhoehung_kwh.toLocaleString('de-DE')} kWh</p>
                     <p className="text-green-600">+{prognose.speicher_ev_erhoehung_euro.toFixed(0)} €</p>
+                  </div>
+                )}
+                {prognose.wp_pv_anteil_kwh > 0 && (
+                  <div>
+                    <p className="text-gray-500">WP PV-Direkt</p>
+                    <p className="font-semibold">{prognose.wp_pv_anteil_kwh.toLocaleString('de-DE')} kWh</p>
+                    <p className="text-green-600">+{prognose.wp_pv_ersparnis_euro.toFixed(0)} €</p>
                   </div>
                 )}
                 {prognose.v2h_rueckspeisung_kwh > 0 && (
@@ -378,13 +405,6 @@ export default function FinanzenTab({ anlageId }: Props) {
                     <p className="text-gray-500">E-Auto PV-Ladung</p>
                     <p className="font-semibold">{prognose.eauto_ladung_pv_kwh.toLocaleString('de-DE')} kWh</p>
                     <p className="text-green-600">+{prognose.eauto_ersparnis_euro.toFixed(0)} €</p>
-                  </div>
-                )}
-                {prognose.wp_pv_anteil_kwh > 0 && (
-                  <div>
-                    <p className="text-gray-500">WP PV-Direkt</p>
-                    <p className="font-semibold">{prognose.wp_pv_anteil_kwh.toLocaleString('de-DE')} kWh</p>
-                    <p className="text-green-600">+{prognose.wp_pv_ersparnis_euro.toFixed(0)} €</p>
                   </div>
                 )}
               </div>

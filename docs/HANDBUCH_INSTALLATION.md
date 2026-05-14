@@ -1,9 +1,9 @@
 
-# EEDC Handbuch — Teil I: Installation & Einrichtung
+# eedc Handbuch — Teil I: Installation & Einrichtung
 
 **Version 3.24.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -32,7 +32,7 @@
 
 ### Grundprinzipien
 
-1. **Standalone-First**: EEDC funktioniert komplett ohne Home Assistant
+1. **Standalone-First**: eedc funktioniert komplett ohne Home Assistant
 2. **Lokale Datenspeicherung**: Alle Daten bleiben auf deinem Server
 3. **Monatliche Granularität**: Daten werden pro Monat erfasst und ausgewertet
 4. **Flexible Datenquellen**: CSV-Import, manuelle Eingabe, oder Wetter-API
@@ -45,9 +45,9 @@
 
 ### Empfohlene Nutzung
 
-EEDC ist als datendichte Analyse-App konzipiert und entfaltet seinen vollen Nutzen am **Desktop**. Smartphone in Standard-Anzeigegröße deckt das Live-Dashboard, das Cockpit und die Monatsberichte komfortabel ab — die datendichten Auswertungs-Bereiche (Auswertung → Energieprofil, Aussichten → Prognosen) profitieren spürbar von einem größeren Bildschirm. Im Hochformat zeigt EEDC für die drei datendichten Tabellen im Prognosen-Tab statt überlappender Spalten einen Hinweis „Querformat oder Desktop nutzen".
+eedc ist als datendichte Analyse-App konzipiert und entfaltet seinen vollen Nutzen am **Desktop**. Smartphone in Standard-Anzeigegröße deckt das Live-Dashboard, das Cockpit und die Monatsberichte komfortabel ab — die datendichten Auswertungs-Bereiche (Auswertung → Energieprofil, Aussichten → Prognosen) profitieren spürbar von einem größeren Bildschirm. Im Hochformat zeigt eedc für die drei datendichten Tabellen im Prognosen-Tab statt überlappender Spalten einen Hinweis „Querformat oder Desktop nutzen".
 
-Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden. Das ist eine bewusste Designentscheidung: Layout-Patches, die den datendichten Charakter aufweichen würden, werden nicht eingebaut. Wer EEDC primär in der HA-Companion-App nutzt, sollte den Seitenzoom nahe der Standardgröße halten.
+Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden. Das ist eine bewusste Designentscheidung: Layout-Patches, die den datendichten Charakter aufweichen würden, werden nicht eingebaut. Wer eedc primär in der HA-Companion-App nutzt, sollte den Seitenzoom nahe der Standardgröße halten.
 
 > Diese Empfehlung formuliert eine technische App-Eigenschaft (datendicht, Desktop empfohlen) — keine Aussage zu Barrierefreiheit oder Accessibility.
 
@@ -63,7 +63,7 @@ Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoo
    - Füge hinzu: `https://github.com/supernova1963/eedc-homeassistant`
 
 2. **Add-on installieren**:
-   - Suche nach "EEDC" im Add-on Store
+   - Suche nach "eedc" im Add-on Store
    - Klicke auf *Installieren*
    - Aktiviere "In Sidebar anzeigen"
    - Starte das Add-on
@@ -192,7 +192,7 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 
 #### Wärmepumpe
 - **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi:
-  - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP. (EEDC-Standard.)
+  - **JAZ (Jahresarbeitszahl):** Gemessener Wert am eigenen Standort - der genaueste Wert, wenn verfügbar. Typisch 3,0-4,0 für Luft-WP, 4,0-5,0 für Sole-WP. (eedc-Standard.)
   - **SCOP (EU-Label):** Saisonaler COP vom EU-Energielabel - realistischer als Hersteller-COP, aber standortunabhängig. Wähle die passende Vorlauftemperatur (35°C für Fußbodenheizung, 55°C für Heizkörper).
   - **Getrennte COPs:** Separate Werte für Heizung (~3,5-4,5 bei 35°C) und Warmwasser (~2,5-3,5 bei 55°C) - präziser bei unterschiedlichen Betriebspunkten.
 - **Wärmebedarf:** Heiz- und Warmwasserbedarf in kWh/Jahr (aus Energieausweis)
@@ -368,7 +368,7 @@ Die letzten Abschlüsse werden angezeigt:
 
 **Problem**: Die Monats-Summe (PV-Erzeugung, Einspeisung) bleibt z. B. bei 60 kWh stehen, obwohl Live- und Tagesdaten korrekt weiterlaufen.
 
-**Lösung**: Bei Sensoren mit **Tagesreset** (Zähler springt täglich um 0:00 auf 0, z. B. „Erzeugung heute") aggregierte EEDC vor v3.23.8 die Monatssumme über `MAX(state) − MIN(state)` — bei Tagesreset-Zählern ergibt das fälschlich die größte Tagessumme statt der Monatssumme. Seit v3.23.8 nutzt EEDC die **`sum`-Spalte** aus HA-Statistics (reset-bereinigte Kumulation, identisch zum HA Energy Dashboard).
+**Lösung**: Bei Sensoren mit **Tagesreset** (Zähler springt täglich um 0:00 auf 0, z. B. „Erzeugung heute") aggregierte eedc vor v3.23.8 die Monatssumme über `MAX(state) − MIN(state)` — bei Tagesreset-Zählern ergibt das fälschlich die größte Tagessumme statt der Monatssumme. Seit v3.23.8 nutzt eedc die **`sum`-Spalte** aus HA-Statistics (reset-bereinigte Kumulation, identisch zum HA Energy Dashboard).
 1. Auf v3.23.8+ updaten
 2. Monat in den Monatsberichten neu öffnen — die Summe wird neu aus `MAX(sum) − MIN(sum)` berechnet
 3. Wenn die Summe weiterhin nicht passt: Sensor-Mapping prüfen, ob der gemappte Sensor `state_class: total_increasing` hat (Daten-Checker-Kategorie „Sensor-Mapping – HA-Statistics", siehe [Handbuch Einstellungen §8](HANDBUCH_EINSTELLUNGEN.md#8-daten-checker))
@@ -386,7 +386,7 @@ Die letzten Abschlüsse werden angezeigt:
 
 **Problem**: Klick auf Backup, CSV-Export oder PDF-Dokumentation in der iOS HA-Companion-App liefert „401: unauthorized". Im Browser funktioniert der Download.
 
-**Lösung**: Auf v3.23.2 oder neuer updaten. Vor v3.23.2 nutzte EEDC `window.open(url, '_blank')` für Downloads — auf iOS öffnet `_blank` extern in Safari, das hat keine HA-Ingress-Session und der Ingress-Endpoint antwortet mit 401. Seit v3.23.2 läuft die HTTP-Anfrage als `fetch + Blob` in der bestehenden iframe-Session, der Download kommt als `blob:`-URL ins Filesystem — funktioniert in HA-App und Browser gleichermaßen.
+**Lösung**: Auf v3.23.2 oder neuer updaten. Vor v3.23.2 nutzte eedc `window.open(url, '_blank')` für Downloads — auf iOS öffnet `_blank` extern in Safari, das hat keine HA-Ingress-Session und der Ingress-Endpoint antwortet mit 401. Seit v3.23.2 läuft die HTTP-Anfrage als `fetch + Blob` in der bestehenden iframe-Session, der Download kommt als `blob:`-URL ins Filesystem — funktioniert in HA-App und Browser gleichermaßen.
 
 ### „Aktueller Monat"-Tab fehlt im Cockpit
 

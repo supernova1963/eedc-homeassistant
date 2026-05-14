@@ -1,9 +1,9 @@
 
-# EEDC Handbuch — Teil III: Einstellungen & Sensormapping
+# eedc Handbuch — Teil III: Einstellungen & Sensormapping
 
 **Version 3.24.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -49,13 +49,13 @@ Bearbeite die Stammdaten deiner PV-Anlage:
 > **Hinweis:** Beim Anlegen eines neuen Stromvertrag-Eintrags in der Infothek werden Anbieter, Tarif und Zählernummer automatisch aus diesen Versorger-Daten vorbelegt.
 
 **Wettermodell:**
-- **auto** (Standard): EEDC wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match)
+- **auto** (Standard): eedc wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match)
 - **MeteoSwiss ICON-CH2**: Empfohlen für alpine Standorte in der Schweiz und Südtirol (2 km Auflösung)
 - **ICON-D2**: Hochauflösendes DWD-Modell für Deutschland (2,2 km)
 - **ICON-EU**: Europäisches Modell mit mittlerer Auflösung
 - **ECMWF IFS**: Globales ECMWF-Modell (0,25°)
 
-Bei spezifischer Modellauswahl versucht EEDC zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Datenquelle wird pro Tag in der Kurzfrist-Ansicht mit einem Kürzel angezeigt (MS/D2/EU/EC/BM).
+Bei spezifischer Modellauswahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Datenquelle wird pro Tag in der Kurzfrist-Ansicht mit einem Kürzel angezeigt (MS/D2/EU/EC/BM).
 
 **Steuerliche Behandlung:**
 - **Keine USt-Auswirkung** (Standard): Für Anlagen ab 2023 mit Nullsteuersatz (≤ 30 kWp) oder Kleinunternehmer
@@ -210,7 +210,7 @@ Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen
 
 **Prognose-Basis:**
 
-In den Anlagenstammdaten (Anlage-Form) lässt sich seit v3.16.15 auch die **Prognose-Basis** wählen — also auf welcher Quelle der EEDC-Lernfaktor und die kalibrierte Prognose aufbauen sollen. Aktuell sind OpenMeteo (Standard) und Solcast (wenn konfiguriert) als Basis verfügbar; SFML ist als künftige Erweiterung im Code-Registry vorbereitet.
+In den Anlagenstammdaten (Anlage-Form) lässt sich seit v3.16.15 auch die **Prognose-Basis** wählen — also auf welcher Quelle der eedc-Lernfaktor und die kalibrierte Prognose aufbauen sollen. Aktuell sind OpenMeteo (Standard) und Solcast (wenn konfiguriert) als Basis verfügbar; SFML ist als künftige Erweiterung im Code-Registry vorbereitet.
 
 ### 1.6 Energieprofil-Seite
 
@@ -440,7 +440,7 @@ Mit dem Custom-Import kannst du beliebige CSV- oder JSON-Dateien importieren, di
 
 **Wizard-Ablauf (4 Schritte):**
 1. **Upload**: CSV- oder JSON-Datei per Drag & Drop oder Dateiauswahl hochladen. Die Datei wird automatisch analysiert, Spalten und Beispielwerte werden erkannt.
-2. **Mapping**: Jede erkannte Spalte einem EEDC-Zielfeld zuordnen (z. B. „Energy_kWh" → „PV-Erzeugung"). Optionen:
+2. **Mapping**: Jede erkannte Spalte einem eedc-Zielfeld zuordnen (z. B. „Energy_kWh" → „PV-Erzeugung"). Optionen:
    - **Auto-Detect**: Erkennt gängige Spaltenbezeichnungen automatisch (deutsch + englisch)
    - **Einheit**: Wh, kWh oder MWh – wird automatisch umgerechnet
    - **Dezimalzeichen**: Auto-Erkennung oder manuell (Punkt/Komma)
@@ -468,7 +468,7 @@ Zum Ausprobieren ohne echte Daten:
 
 ## 3. Sensor-Mapping
 
-Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den EEDC-Feldern.
+Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den eedc-Feldern.
 
 ### 3.1 Wizard starten
 
@@ -493,9 +493,9 @@ Ordne die grundlegenden Energie-Sensoren zu:
 | **Strompreis (dynamischer Tarif)** | Optional: aktueller Strompreis (ct/kWh) | HA-Sensor, leer = automatisches EPEX-Fallback |
 
 **Strompreis-Sensor (v3.16.0):**
-Geeignet für Tibber, aWATTar, EPEX, eigene Template-Sensoren. Akzeptiert Einheiten `ct/kWh`, `EUR/kWh`, `EUR/MWh` (wird ×0.1 nach ct/kWh normalisiert), `Cent`, `€`. Wird im Live-Tagesverlauf als gepunktete Linie auf sekundärer Y-Achse angezeigt. Ohne eigenen Sensor lädt EEDC automatisch den **EPEX-Börsenpreis (DE/AT)** über aWATTar API als Fallback — die Linie heißt dann „Börsenpreis (EPEX)".
+Geeignet für Tibber, aWATTar, EPEX, eigene Template-Sensoren. Akzeptiert Einheiten `ct/kWh`, `EUR/kWh`, `EUR/MWh` (wird ×0.1 nach ct/kWh normalisiert), `Cent`, `€`. Wird im Live-Tagesverlauf als gepunktete Linie auf sekundärer Y-Achse angezeigt. Ohne eigenen Sensor lädt eedc automatisch den **EPEX-Börsenpreis (DE/AT)** über aWATTar API als Fallback — die Linie heißt dann „Börsenpreis (EPEX)".
 
-**Vorzeichen-Inversion:** Manche Sensoren liefern Leistungswerte mit invertiertem Vorzeichen (z. B. Einspeisung als negativer Wert). Pro Leistungs-Sensor gibt es eine Checkbox **„Vorzeichen invertieren"** — aktiviere sie, wenn der Sensor negative statt positive Werte liefert. EEDC rechnet intern immer mit positiven Werten.
+**Vorzeichen-Inversion:** Manche Sensoren liefern Leistungswerte mit invertiertem Vorzeichen (z. B. Einspeisung als negativer Wert). Pro Leistungs-Sensor gibt es eine Checkbox **„Vorzeichen invertieren"** — aktiviere sie, wenn der Sensor negative statt positive Werte liefert. eedc rechnet intern immer mit positiven Werten.
 
 **Solcast PV Forecast (v3.16.5, optional):**
 Toggle „Solcast PV Forecast" am Ende des Basis-Schritts. Aktiviert die automatische Erkennung der Solcast HA-Integration (BJReplay) — kein manueller DB-Eintrag, kein API-Key nötig. Die 7-Tage-Prognose (Heute + Morgen + Tag 3–7) wird direkt als Sensor-State gelesen. Wer die Solcast-Anbindung lieber per API-Key (Free/Paid) nutzen will, konfiguriert das in den Anlagenstammdaten — siehe Aussichten → Prognosen für die Anzeige.
@@ -579,13 +579,13 @@ Der Sensor-Filter wurde in v3.24.1 aufgeweicht, damit auch Roh-Counter ohne Stan
 - `state_class` ∈ `total_increasing` / `total` ist **immer** zugelassen (Unit egal — kumulativer Counter ist per Definition Mapping-Kandidat).
 - Zusätzlich werden Sensoren mit **ganzzahligem State ohne jegliche Metadaten** (kein `state_class`, keine `unit_of_measurement`) zugelassen — z. B. Coils der Nibe-Heat-Pump-Integration.
 
-Wenn der gesuchte Sensor trotzdem nicht erscheint, gibt es einen **Fallback-Link** über dem Step-Inhalt: „Sensor nicht in der Auswahl? Alle Sensoren ohne Filter anzeigen." On-demand werden alle `sensor.*`-Entities ungefiltert nachgeladen und in die bestehende Liste gemerged. Plan B außerhalb von EEDC: in HA `customize.yaml` `state_class: total_increasing` für den Roh-Counter ergänzen.
+Wenn der gesuchte Sensor trotzdem nicht erscheint, gibt es einen **Fallback-Link** über dem Step-Inhalt: „Sensor nicht in der Auswahl? Alle Sensoren ohne Filter anzeigen." On-demand werden alle `sensor.*`-Entities ungefiltert nachgeladen und in die bestehende Liste gemerged. Plan B außerhalb von eedc: in HA `customize.yaml` `state_class: total_increasing` für den Roh-Counter ergänzen.
 
 #### „ohne Statistik"-Badge (v3.24.1)
 
 Sensoren ohne `state_class` haben **keine Einträge in HA's `statistics_meta`-Tabelle** — für **kWh-Felder** (Monatswerte, Vollbackfill) liefern sie still keine Daten. Counter-Felder (z. B. WP-Kompressor-Starts) sind nicht betroffen, weil sie über den Snapshot-Service laufen.
 
-EEDC macht dieses Risiko an drei Stellen sichtbar:
+eedc macht dieses Risiko an drei Stellen sichtbar:
 
 1. **Backend-Schema**: `HASensorInfo.has_statistics: bool` (= `state_class is not None`).
 2. **Wizard-Dropdown**: kleines amber-farbiges Badge **„ohne Statistik"** neben dem Sensor-Namen — sowohl in der Suchergebnis-Liste als auch in der „bereits gewählt"-Anzeige. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch."
@@ -603,19 +603,19 @@ Live-Mappings (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` 
 
 Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der Installation deiner PV-Anlage** automatisch aus der Home Assistant Langzeitstatistik-Datenbank importieren. Das ist besonders nützlich, wenn du:
 
-- EEDC neu installiert hast und Altdaten übernehmen möchtest
+- eedc neu installiert hast und Altdaten übernehmen möchtest
 - Monatsdaten nachträglich befüllen willst
 - Von manueller auf automatische Erfassung umstellen möchtest
 
 ### 4.2 Voraussetzungen
 
-- **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den EEDC-Feldern zugeordnet sein
+- **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den eedc-Feldern zugeordnet sein
 - **Home Assistant Langzeitstatistiken**: Deine Sensoren müssen in der HA-Datenbank gespeichert werden
-- **EEDC v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
+- **eedc v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
 
-> **MariaDB/MySQL-Nutzer:** Der HA-Statistik Import unterstützt seit v3.4.11 auch MariaDB und MySQL als Recorder-Backend — nicht nur SQLite. EEDC erkennt den Datenbanktyp automatisch anhand der konfigurierten Verbindungsdaten.
+> **MariaDB/MySQL-Nutzer:** Der HA-Statistik Import unterstützt seit v3.4.11 auch MariaDB und MySQL als Recorder-Backend — nicht nur SQLite. eedc erkennt den Datenbanktyp automatisch anhand der konfigurierten Verbindungsdaten.
 
-> **Tagesreset-Zähler (v3.23.8 Discussion #131):** Bei Sensoren mit Tagesreset (Zähler springt täglich um 0:00 auf 0) nutzt EEDC seit v3.23.8 die `MAX(sum) − MIN(sum)`-Spalte aus HA-Statistics statt einer State-Differenz. HA's `sum`-Spalte ist die reset-bereinigte Kumulation — funktioniert auch bei Tagesreset und Mehrfach-Resets. Vorher lieferte `MAX(state) − MIN(state)` über einen Monat fälschlich die größte Tagessumme statt der Monatssumme (Symptom: „Aktueller Monat bleibt bei 60 kWh fest").
+> **Tagesreset-Zähler (v3.23.8 Discussion #131):** Bei Sensoren mit Tagesreset (Zähler springt täglich um 0:00 auf 0) nutzt eedc seit v3.23.8 die `MAX(sum) − MIN(sum)`-Spalte aus HA-Statistics statt einer State-Differenz. HA's `sum`-Spalte ist die reset-bereinigte Kumulation — funktioniert auch bei Tagesreset und Mehrfach-Resets. Vorher lieferte `MAX(state) − MIN(state)` über einen Monat fälschlich die größte Tagessumme statt der Monatssumme (Symptom: „Aktueller Monat bleibt bei 60 kWh fest").
 
 > ⚠ **Wichtig**: Bei Update von v1.x auf v2.0.0 ist eine Neuinstallation des Add-ons erforderlich. Siehe CHANGELOG für die Upgrade-Anleitung.
 
@@ -644,7 +644,7 @@ Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 2. Wähle den gewünschten Monat aus der Liste verfügbarer HA-Statistik-Monate
 3. **Bei neuem Monat**: Die Werte werden direkt ins Formular übernommen
 4. **Bei existierendem Monat**: Ein Vergleichs-Modal zeigt die Unterschiede:
-   - Spalte „Vorhanden" zeigt aktuelle Werte in EEDC
+   - Spalte „Vorhanden" zeigt aktuelle Werte in eedc
    - Spalte „HA-Statistik" zeigt Werte aus Home Assistant
    - Spalte „Diff" zeigt die Abweichung (farbcodiert bei > 10 %)
    - Wähle „HA-Werte übernehmen" oder „Abbrechen"
@@ -663,7 +663,7 @@ Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 
 ### 4.5 Startwerte beim Sensor-Mapping
 
-Beim Speichern des Sensor-Mappings bietet EEDC zwei Optionen für die Startwerte:
+Beim Speichern des Sensor-Mappings bietet eedc zwei Optionen für die Startwerte:
 
 1. **Aus HA-Statistik laden (empfohlen)**: Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank
 2. **Aktuelle Werte verwenden**: Setzt die aktuellen Sensorwerte als Startwerte (Monatswert startet bei 0)
@@ -674,10 +674,10 @@ Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
 | Situation | Standard-Auswahl | Beschreibung |
 |-----------|------------------|--------------|
-| Neuer Monat | ✓ Ausgewählt | Monat existiert noch nicht in EEDC |
+| Neuer Monat | ✓ Ausgewählt | Monat existiert noch nicht in eedc |
 | Leerer Monat | ✓ Ausgewählt | Monatsdaten vorhanden, aber alle Felder leer |
 | Ausgefüllter Monat | ✗ Nicht ausgewählt | Mindestens ein Feld hat einen Wert |
-| Konflikt | ✗ Nicht ausgewählt | Werte in EEDC weichen von HA ab |
+| Konflikt | ✗ Nicht ausgewählt | Werte in eedc weichen von HA ab |
 
 **Hinweis**: Du kannst jeden Monat individuell per Checkbox auswählen oder abwählen.
 
@@ -685,7 +685,7 @@ Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
 ## 5. Home Assistant Integration
 
-EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
+eedc kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
 
 ### 5.1 Voraussetzungen
 
@@ -694,7 +694,7 @@ EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home
 
 ### 5.2 MQTT konfigurieren
 
-**Pfad**: EEDC Add-on Konfiguration in Home Assistant
+**Pfad**: eedc Add-on Konfiguration in Home Assistant
 
 In der Add-on-Konfiguration:
 ```yaml
@@ -708,7 +708,7 @@ mqtt:
 
 ### 5.3 MQTT Auto-Discovery
 
-Wenn du das **Sensor-Mapping** konfigurierst und speicherst (→ siehe [§3 Sensor-Mapping](#3-sensor-mapping)), erstellt EEDC automatisch MQTT-Entities in Home Assistant.
+Wenn du das **Sensor-Mapping** konfigurierst und speicherst (→ siehe [§3 Sensor-Mapping](#3-sensor-mapping)), erstellt eedc automatisch MQTT-Entities in Home Assistant.
 
 #### Wie funktioniert es?
 
@@ -742,8 +742,8 @@ Die Entity-IDs enthalten den technischen Key für Eindeutigkeit:
 - `sensor.eedc_{anlage}_{key}_monat` — Monatswert
 
 Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
-- „EEDC BYD HVS 12.8 Ladung Monatsanfang"
-- „EEDC SMA eCharger 22 Ladung Monat"
+- „eedc BYD HVS 12.8 Ladung Monatsanfang"
+- „eedc SMA eCharger 22 Ladung Monat"
 
 ### 5.4 Monatsstartwerte initialisieren
 
@@ -760,7 +760,7 @@ Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
 1. Gehe zu **Einstellungen → Sensor-Zuordnung**
 2. Nach dem Speichern erscheint ein Dialog „Startwerte initialisieren?"
 3. Klicke auf **„Startwerte initialisieren"**
-4. EEDC liest die aktuellen Zählerstände aus HA und setzt sie als Startwerte
+4. eedc liest die aktuellen Zählerstände aus HA und setzt sie als Startwerte
 
 #### Methode 2: Manuell in Home Assistant
 
@@ -796,7 +796,7 @@ Oder im **MQTT Explorer**:
 1. Navigiere zu `homeassistant/number/` und `homeassistant/sensor/`
 2. Lösche alle Topics, die mit `eedc_` beginnen
 3. Home Assistant neu starten
-4. In EEDC: Sensor-Mapping erneut speichern
+4. In eedc: Sensor-Mapping erneut speichern
 
 ### 5.6 KPI-Export (klassisch)
 
@@ -828,7 +828,7 @@ rest:
   - resource: http://localhost:8099/api/ha/export/sensors/1
     scan_interval: 3600
     sensor:
-      - name: "EEDC PV Erzeugung"
+      - name: "eedc PV Erzeugung"
         value_template: "{{ value_json.pv_erzeugung_kwh }}"
         unit_of_measurement: "kWh"
 ```
@@ -837,7 +837,7 @@ rest:
 
 ## 6. MQTT-Inbound
 
-MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Smarthome-System** an EEDC zu senden.
+MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Smarthome-System** an eedc zu senden.
 
 ### Voraussetzungen
 
@@ -846,7 +846,7 @@ MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Sma
 
 ### Topic-Struktur
 
-EEDC definiert zwei Topic-Typen:
+eedc definiert zwei Topic-Typen:
 
 ```
 eedc/{anlage_id}/live/{key}    → Echtzeit-Leistung in Watt (W)
@@ -879,7 +879,7 @@ Der Generator erzeugt zwei Automationen: **Live** (Echtzeit-Leistung) und **Ener
 
 MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfidenz 91 %). Tageswerte werden aus SQLite-Snapshots berechnet (alle 5 Minuten gespeichert, 31 Tage Retention).
 
-> **Topic-Drift erkennen:** Sobald in EEDC neue Felder dazukommen oder Investitions-IDs nach einem Re-Import wechseln, kann der statische Publisher (HA-Automation/iobroker/Node-RED) gegen den dynamisch aus `field_definitions.py` erzeugten Konsumenten driften. Der Daten-Checker meldet das in der Kategorie **MQTT-Topic-Abdeckung** (siehe §8) — pro Anlage erscheinen die fehlenden bzw. veralteten Topics mit Beispielen.
+> **Topic-Drift erkennen:** Sobald in eedc neue Felder dazukommen oder Investitions-IDs nach einem Re-Import wechseln, kann der statische Publisher (HA-Automation/iobroker/Node-RED) gegen den dynamisch aus `field_definitions.py` erzeugten Konsumenten driften. Der Daten-Checker meldet das in der Kategorie **MQTT-Topic-Abdeckung** (siehe §8) — pro Anlage erscheinen die fehlenden bzw. veralteten Topics mit Beispielen.
 
 ---
 
@@ -887,9 +887,9 @@ MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfiden
 
 **Pfad**: Einstellungen → Home Assistant → MQTT-Gateway
 
-Das **MQTT-Gateway** ergänzt den MQTT-Inbound um ein flexibles Topic-Mapping: Du kannst die MQTT-Topics deiner eigenen Geräte (Shelly, OpenDTU, Tasmota, …) direkt auf EEDC-Felder mappen — ohne dein Smarthome-System zu ändern.
+Das **MQTT-Gateway** ergänzt den MQTT-Inbound um ein flexibles Topic-Mapping: Du kannst die MQTT-Topics deiner eigenen Geräte (Shelly, OpenDTU, Tasmota, …) direkt auf eedc-Felder mappen — ohne dein Smarthome-System zu ändern.
 
-> **Unterschied zu MQTT-Inbound:** MQTT-Inbound erwartet Daten auf fixen EEDC-Topics (`eedc/{id}/live/...`). Das Gateway übersetzt beliebige eigene Topics in diese Struktur.
+> **Unterschied zu MQTT-Inbound:** MQTT-Inbound erwartet Daten auf fixen eedc-Topics (`eedc/{id}/live/...`). Das Gateway übersetzt beliebige eigene Topics in diese Struktur.
 
 ### 7.1 Geräte-Presets
 
@@ -909,7 +909,7 @@ Nach dem Laden eines Presets werden die Topic-Pfade mit deinen Gerätedaten (z. 
 
 Für Geräte ohne Preset kannst du das Mapping manuell konfigurieren:
 
-1. **EEDC-Zielfeld wählen** (z. B. „PV-Leistung gesamt")
+1. **eedc-Zielfeld wählen** (z. B. „PV-Leistung gesamt")
 2. **Quell-Topic eingeben** (z. B. `solar/openDTU12345/total/Power`)
 3. **JSON-Pfad** angeben, falls das Payload ein JSON-Objekt ist (z. B. `data.power`)
 4. **Einheit** wählen (W oder kW — wird automatisch umgerechnet)
@@ -917,7 +917,7 @@ Für Geräte ohne Preset kannst du das Mapping manuell konfigurieren:
 
 ### 7.3 Bridge-Modus (Connector → MQTT)
 
-Geräte-Connectors (SMA, Fronius etc.) können ihre Messwerte über die MQTT-Bridge regelmäßig auf EEDC-Topics publishen — auch wenn das Gerät kein natives MQTT spricht:
+Geräte-Connectors (SMA, Fronius etc.) können ihre Messwerte über die MQTT-Bridge regelmäßig auf eedc-Topics publishen — auch wenn das Gerät kein natives MQTT spricht:
 
 **Pfad**: Einstellungen → Datenerfassung → Connector → „Als MQTT-Bridge aktivieren"
 
@@ -964,7 +964,7 @@ Die Protokolle-Seite ist das zentrale Werkzeug zur Fehlersuche. Sie besteht aus 
 | Button | Funktion |
 |--------|----------|
 | **Debug** (Käfer-Icon) | Schaltet den Log-Level zwischen INFO und DEBUG um. Debug zeigt alle Detail-Meldungen — ideal für Fehlersuche, danach wieder deaktivieren (erhöhter Speicherverbrauch). Kein Restart nötig. |
-| **Neustart** (Pfeil-Icon) | Startet EEDC neu. Bei HA über die Supervisor-API, Standalone über Container-Restart. Bestätigungsdialog vor Ausführung. |
+| **Neustart** (Pfeil-Icon) | Startet eedc neu. Bei HA über die Supervisor-API, Standalone über Container-Restart. Bestätigungsdialog vor Ausführung. |
 
 ### Tab 1: System-Logs
 
@@ -1039,7 +1039,7 @@ Bei einem Support-Fall empfehlen wir diesen Ablauf:
 
 ## 10. Energieprofile — Hintergrund
 
-EEDC sammelt automatisch stündliche Energiedaten und verdichtet sie zu Tages- und Monatswerten. Der Datenfluss:
+eedc sammelt automatisch stündliche Energiedaten und verdichtet sie zu Tages- und Monatswerten. Der Datenfluss:
 
 ### Snapshot-basierte Architektur (ab v3.19.0, #135)
 
@@ -1058,7 +1058,7 @@ Slot N enthält die Energie aus dem Intervall **[N−1, N)** — „die letzte S
 
 ### Strikte NULL-Semantik (ab v3.19.0)
 
-Wenn keine kumulativen Zähler gemappt sind, bleiben die betroffenen `TagesEnergieProfil`-Felder `NULL` statt aus Leistungs-Samples geschätzt zu werden. Im Frontend zeigt EEDC ein **⚠-Badge** neben IST-Werten bei Datenlücken — Klick öffnet den Reparatur-Popover (siehe Teil II §7.2).
+Wenn keine kumulativen Zähler gemappt sind, bleiben die betroffenen `TagesEnergieProfil`-Felder `NULL` statt aus Leistungs-Samples geschätzt zu werden. Im Frontend zeigt eedc ein **⚠-Badge** neben IST-Werten bei Datenlücken — Klick öffnet den Reparatur-Popover (siehe Teil II §7.2).
 
 ### Restart-Recovery (v3.23.0)
 
@@ -1066,7 +1066,7 @@ Wird das Add-on zwischen `:55` und `:05` der Folgestunde neu gestartet, fehlten 
 
 ### Tagesreset-Heuristik für utility_meter
 
-HA-`utility_meter`-Sensoren mit täglichem Reset (z. B. „Erzeugung heute") werfen um Mitternacht ein stark negatives Delta. Seit v3.23.0 erkennt EEDC das Daily-Reset-Muster (`s1 < 0.5 ∧ s0 > 0.5`) und nimmt `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Vorher war Slot 0 dauerhaft `None` und der ganze Tag wurde als „IST unvollständig" geflaggt.
+HA-`utility_meter`-Sensoren mit täglichem Reset (z. B. „Erzeugung heute") werfen um Mitternacht ein stark negatives Delta. Seit v3.23.0 erkennt eedc das Daily-Reset-Muster (`s1 < 0.5 ∧ s0 > 0.5`) und nimmt `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Vorher war Slot 0 dauerhaft `None` und der ganze Tag wurde als „IST unvollständig" geflaggt.
 
 ### WP-Kompressor-Starts (ab v3.24.0, #136)
 
@@ -1080,7 +1080,7 @@ Zwei JSON-Felder in `TagesZusammenfassung` (`pv_prognose_stundenprofil`, `solcas
 
 - Ein **Sensor-Mapping** muss eingerichtet sein (kumulative kWh-Zähler für PV, Verbrauch etc.)
 - Funktioniert mit HA-Sensoren und MQTT-Inbound
-- HA-History hat nur ~10 Tage Retention. EEDC sichert die Daten dauerhaft, sodass auch langfristige Analysen (Jahresvergleiche, Speicher-Dimensionierung) möglich sind.
+- HA-History hat nur ~10 Tage Retention. eedc sichert die Daten dauerhaft, sodass auch langfristige Analysen (Jahresvergleiche, Speicher-Dimensionierung) möglich sind.
 
 ### Datenbestand & Aktionen
 
@@ -1088,7 +1088,7 @@ UI-Bedienung: **Einstellungen → Daten → Energieprofil** — siehe §1.6.
 
 ### Kraftstoffpreis-Backfill (ab v3.17.0)
 
-Für die korrekte Berechnung der E-Auto-Ersparnis nutzt EEDC echte monatliche Benzinpreise aus dem **EU Weekly Oil Bulletin**. Um Monatsdaten rückwirkend mit Preisen zu befüllen:
+Für die korrekte Berechnung der E-Auto-Ersparnis nutzt eedc echte monatliche Benzinpreise aus dem **EU Weekly Oil Bulletin**. Um Monatsdaten rückwirkend mit Preisen zu befüllen:
 
 **API:**
 - `POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill/tages` — befüllt `TagesZusammenfassung.kraftstoffpreis_euro`

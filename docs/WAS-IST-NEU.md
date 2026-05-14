@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.29.1)
+> **Stand:** Mai 2026 (v3.29.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,30 @@
 ---
 
 ## v3.29.x — Aggregations- und UX-Bündel (Mai 2026)
+
+### Vorab-Fixes vor Menüstruktur-Konzept *(v3.29.2)*
+
+> 🧹 **Stall ausmisten vor dem großen Konzept.** Kleine UX-Fehler und Schreibweisen-Drift, die nicht auf das künftige Menüstruktur-Konzept warten sollten. Kein neuer Funktionsumfang.
+
+#### Was sich für dich ändert
+
+- **Komponenten-Beiträge zur Finanzierung — Reihenfolge und Icons konsistent**. In **Aussichten → Finanzen** stehen die Komponenten-Beiträge ab jetzt in derselben Reihenfolge wie überall in der App: Speicher → Wärmepumpe → Wallbox/E-Auto-Cluster → Sonstiges. Vorher stand die Wärmepumpe hinter dem E-Auto, und drei Beitragstypen („WP-PV-Nutzung", „WP-Ersparnis vs. Gas/Öl", „E-Auto vs. Benziner") zeigten als Icon einen Batterie-Fallback — jetzt das passende WP-Flammen- bzw. Tank-Icon. Die kleine 4-Kacheln-Zusammenfassung darunter (Speicher EV+ / V2H / E-Auto-PV-Ladung / WP-PV-Direkt) folgt derselben Reihenfolge. *(detLAN, Issue #210.)*
+- **Auswertungen: dekoratives Kalender-Icon vor dem Jahres-Filter entfernt**. Genau das gleiche Phänomen, das schon im Cockpit-Banner gefixt war: ein nicht-klickbares Kalender-Icon stand direkt neben dem Jahres-Dropdown — verwirrt, weil's aussieht wie ein Knopf, ist aber keiner. Weniger ist mehr. *(detLAN, Issue #206 P2-Folge.)*
+- **Schreibweise „eedc" jetzt durchgängig kleingeschrieben** — passend zum Logo und zur seit v3.26.7 angefangenen Linie:
+    - **In der App**: Browser-Tab-Titel, „Erstellt mit eedc"-Footer in Share-Texten, PDF-Bericht-Titel („eedc Anlagenbericht …"), Neustart-Bestätigungs-Meldung, HA-Verbindungsfehler.
+    - **In MQTT-Discovery**: HA-Devices erscheinen ab jetzt unter „eedc - <Anlagenname>" statt „EEDC - <Anlagenname>". Entity-IDs bleiben gleich (`sensor.eedc_*`) — keine Daten-Migration nötig, kein Re-Mapping in Dashboards.
+    - **Im HA-Sensor-Export-YAML**: die generierten Sensor-Friendly-Names heißen ab jetzt „eedc <SensorName>" statt „EEDC <SensorName>". Wer das Snippet manuell in seine `configuration.yaml` übernommen hat: Nichts brennt, aber für Konsistenz das Snippet aus *Einstellungen → HA-Export* neu kopieren.
+    - **In allen Hilfe-Dokumenten**: ~130 Stellen Inline-Erwähnungen umgestellt. Formel-Variablen (z. B. `EEDC_Prognose` in den Berechnungs-Formeln) und historische Env-Var-Namen bleiben in Code-Form unangetastet.
+
+  *(detLAN, Issue #206 P4 — Hilfe-Sweep der noch ausstand seit v3.26.7.)*
+
+#### Was sich *nicht* ändert
+
+- **Funktional ändert sich nichts.** Reine Reparatur-/Polish-Welle.
+- **Keine ID-Migration bei MQTT- oder Sensor-Export-Nutzern.** Nur Anzeige-Namen.
+- **Code-Identifier und Formel-Variablen** wie `EEDC_ENERGIEPROFIL_QUELLE` (historisches Feature-Flag) oder `EEDC_Abweichung` (Berechnungs-Variable) bleiben — das sind keine Marken-Erwähnungen.
+
+---
 
 ### Anschaffungsdatum-Komplettierung + UX-Cluster *(v3.29.1)*
 
@@ -147,7 +171,7 @@
 - **Tab-Leisten in Auswertungen, Aussichten, Community jetzt als Schaltflächen** statt Unterstrich. Konsistenter Look mit dem Sensor-Mapping-Wizard und der Cockpit-Sub-Navigation. Aktiver Tab in Akzentfarbe, inaktive in dezentem Grau — leichter erfassbar, gerade auf kleinen Bildschirmen.
 - **Cockpit Top-Banner kompakter.** Das große Home-Icon ist weg, Anlagenname und kWp stehen jetzt inline statt zweizeilig. Das nutzlose Calendar-Icon vor dem Jahres-Filter ist auch weg — es war nicht klickbar (im Gegensatz zum Share-Button daneben), das war verwirrend.
 - **Daten → Monatsdaten ohne Überschrift, Selektoren in einer Zeile.** Die „Monatsdaten"-Überschrift wiederholte den Hauptmenü-Titel — weg. Anlage-Selektor verschwindet automatisch, wenn du nur eine Anlage hast. Mehr Platz für die eigentlichen Daten.
-- **„Erstellt mit EEDC" jetzt auch in der kompakten Share-Variante.** Bisher war der Hinweis nur im ausführlichen Teilen-Text — jetzt konsistent in beiden, am Ende des Texts.
+- **„Erstellt mit eedc" jetzt auch in der kompakten Share-Variante.** Bisher war der Hinweis nur im ausführlichen Teilen-Text — jetzt konsistent in beiden, am Ende des Texts.
 - **Wallbox vor E-Auto** in der Community-Übersicht („Stärken/Schwächen"-Reihen + Komponenten-Tab + Empty-State). Spiegelt den Anwender-Workflow: Ladeinfrastruktur vor Fahrzeug.
 - **Wärmepumpe vor Wallbox** im Daten-Checker. Die Anomalie-Liste pro Komponente folgt jetzt einer einheitlichen Reihenfolge (Wechselrichter → PV-Module → Speicher → Balkonkraftwerk → Wärmepumpe → Wallbox → E-Auto → Sonstiges) statt der zufälligen DB-Reihenfolge.
 - **Jahresübersicht in Community → PV-Ertrag absteigend** (neueste oben).
@@ -197,7 +221,7 @@
 #### Was sich für dich ändert
 
 - **WP-Kompressor-Starts-Heatmap wandert beim ersten Start um eine Stunde nach rechts — das ist Absicht, kein Bug.** Wer WP-Kompressor-Starts erfasst (seit v3.24.0 möglich), wird nach dem Update einmalig sehen, dass die gewohnte Stundenverteilung in der Heatmap um eine Spalte verschoben ist. Was vorher in Stunde 6 stand (Aktivität *zwischen* 06:00–07:00), steht ab jetzt in Stunde 7 — derselbe Wert, andere Spalte. Die Verschiebung gleicht den Counter-Pfad an die kWh-Heatmap an, die schon seit v3.20.0 die HA-übliche Backward-Konvention nutzt (Slot N = Aktivität *zwischen* (N−1):00 und N:00, [#144](https://github.com/supernova1963/eedc-homeassistant/issues/144)). Vorher waren beide Heatmaps eine Stunde gegeneinander verschoben — jetzt symmetrisch. **Tagessumme der Kompressor-Starts ändert sich nicht.** Die Migration läuft beim ersten App-Start einmalig und automatisch (idempotent über interne `migrations`-Tabelle), keine User-Aktion nötig.
-- **EEDC-Tagessummen für Komponenten-Energien entsprechen ab jetzt exakt dem HA Energy Dashboard.** Für Wallbox / WP / BKW / E-Auto / Speicher wird die Tageszahl ab jetzt aus Tagesanfang/Tagesende-Zählerdiff gerechnet — derselbe Pfad, den auch HA selbst nutzt. Bei normalen Anlagen ohne Sensor-Lücken praktisch identisch zur alten Stundensummen-Variante; bei Anlagen mit Sensor-Resets oder Spike-Korrekturen kann es geringfügig anders aussehen — und genau dort ist der neue Wert der konsistente. Greift für *neue* Aggregate (heute und morgen); historische Tagessummen bleiben unverändert, können aber bei Bedarf über den Reaggregate-Knopf pro Tag nachgezogen werden.
+- **eedc-Tagessummen für Komponenten-Energien entsprechen ab jetzt exakt dem HA Energy Dashboard.** Für Wallbox / WP / BKW / E-Auto / Speicher wird die Tageszahl ab jetzt aus Tagesanfang/Tagesende-Zählerdiff gerechnet — derselbe Pfad, den auch HA selbst nutzt. Bei normalen Anlagen ohne Sensor-Lücken praktisch identisch zur alten Stundensummen-Variante; bei Anlagen mit Sensor-Resets oder Spike-Korrekturen kann es geringfügig anders aussehen — und genau dort ist der neue Wert der konsistente. Greift für *neue* Aggregate (heute und morgen); historische Tagessummen bleiben unverändert, können aber bei Bedarf über den Reaggregate-Knopf pro Tag nachgezogen werden.
 - **Reaggregate-Modal mit zwei klaren Aktions-Buttons.** Statt einem „Übernehmen"-Knopf zeigt das Vorschau-Modal jetzt *Snapshots neu holen + Tagesaggregat rechnen* (vollständiger Resnap) und *Nur neu rechnen* (wenn die Snapshots längst stimmen). Die Auto-Erkennung aus v3.26.6 macht den Default-Knopf vor — du kannst aber jetzt explizit überschreiben (z. B. nach Sensor-Tausch, wenn Snapshots ungeprüft erscheinen). Cancel-Knopf erscheint, wenn der Resnap länger als 30 Sekunden braucht.
 - **Vorbereitung Daten-Herkunft sichtbar machen** (Schablone für Etappe 3d). Jeder gespeicherte Sensor-Schnappschuss trägt ab jetzt einen Quelle-Marker (HA-Statistics / MQTT-Inbound / MQTT-Live / Live-Fallback / Unknown für historische Snapshots). Sichtbar wird das später in der Datenverwaltungs-Seite — als Vorlage für Konflikt-Auflösung zwischen Cloud-Import, manueller Eingabe und Auto-Aggregation in Etappe 3d.
 
@@ -215,7 +239,7 @@
 > ✨ **Vier kleine UX-Verbesserungen aus aktiven Tester-Anfragen, in einem Patch zusammengefasst.**
 >
 > - **Live-Heute Batterie-Pfeile** zeigen jetzt in dieselbe Richtung wie das HA Energy Dashboard: ▼ wenn Strom in den Speicher rein, ▲ wenn raus. Vorher umgekehrt (Tank-Metapher), das hat verwirrt. (#201)
-> - **Schreibweise „eedc" durchgängig** (statt gemischt EEDC/eedc), und **„Home Assistant Add-on" → „Home Assistant App"**, wo es um eedc selbst geht. HA-eigene Menü-Pfade („Einstellungen → Add-ons → ⋮") bleiben natürlich — das heißt in HA wirklich so. (#199)
+> - **Schreibweise „eedc" durchgängig** (statt gemischt eedc/eedc), und **„Home Assistant Add-on" → „Home Assistant App"**, wo es um eedc selbst geht. HA-eigene Menü-Pfade („Einstellungen → Add-ons → ⋮") bleiben natürlich — das heißt in HA wirklich so. (#199)
 > - **Redundante Seitentitel entfernt** im Cockpit, in Auswertungen, Aussichten, Live-Daten, Community-Vergleich und mehreren Einstellungs-Seiten. Da die Top-/Sub-Navigation immer sichtbar ist, war die zusätzliche `<h1>` direkt darunter eine reine Doppelung. Pages mit dynamischem Untertitel (Anlagenname etc.) bleiben unverändert. (#196)
 >
 > Alle drei UX-Punkte kommen aus detLAN-Feedback. Auch Ronnys gemeldete „Live-Netzbezug zu hoch"-Anomalie (#200) ist code-seitig bereits seit v3.26.6 gefixt — die Verifikation läuft.
@@ -242,16 +266,16 @@
 
 #### Was sich für dich ändert
 
-- **Live-Strahlung wird pro Stunde individuell korrigiert.** Bisher wurde der Lernfaktor (z. B. ×0.97) gleichmäßig auf alle Stunden multipliziert. Ab v3.26.2 ermittelt EEDC für jede Stunde Sonnenstand-Bin (10° × 10°) und Wetterklasse, und greift den Korrekturfaktor aus dem über die Anlage gelernten Profil. Effekt sichtbar im Live-Dashboard und in der Tagesrest-Prognose: Stunden mit Verschattung oder schwacher Wetterleistung kriegen einen passenderen Faktor als Stunden ohne.
+- **Live-Strahlung wird pro Stunde individuell korrigiert.** Bisher wurde der Lernfaktor (z. B. ×0.97) gleichmäßig auf alle Stunden multipliziert. Ab v3.26.2 ermittelt eedc für jede Stunde Sonnenstand-Bin (10° × 10°) und Wetterklasse, und greift den Korrekturfaktor aus dem über die Anlage gelernten Profil. Effekt sichtbar im Live-Dashboard und in der Tagesrest-Prognose: Stunden mit Verschattung oder schwacher Wetterleistung kriegen einen passenderen Faktor als Stunden ohne.
 - **Heatmap im Prognosen-Vergleich-Tab.** Eine neue Card zeigt das gelernte Korrekturprofil als Tabelle (Azimut horizontal, Elevation vertikal, Farbe = Faktor) — pro Wetterklasse umschaltbar plus Fallback-Sicht ohne Wetter-Achse. Macht sichtbar, welche Sonnenstand-Bereiche bei welcher Wetterlage über- oder unterschätzt werden.
-- **Sanftverlauf für neue oder datenarme Anlagen.** Ein Sonnenstand-Bin braucht mindestens 10 Stunden Datenbestand, um produktiv genutzt zu werden (Stufe 1: Sonnenstand × Wetter), bzw. 15 Stunden ohne Wetter-Achse (Stufe 2). Reicht das nicht, fällt EEDC automatisch auf den klassischen Skalar-Lernfaktor zurück — neue Anlagen merken zunächst nichts und bauen ihr Profil organisch auf.
+- **Sanftverlauf für neue oder datenarme Anlagen.** Ein Sonnenstand-Bin braucht mindestens 10 Stunden Datenbestand, um produktiv genutzt zu werden (Stufe 1: Sonnenstand × Wetter), bzw. 15 Stunden ohne Wetter-Achse (Stufe 2). Reicht das nicht, fällt eedc automatisch auf den klassischen Skalar-Lernfaktor zurück — neue Anlagen merken zunächst nichts und bauen ihr Profil organisch auf.
 - **Nightly Aggregator.** Das Profil wird täglich um 02:30 frisch gerechnet aus Day-Ahead-Snapshots + IST-Stunden + Wetter-Historie. Manuelles "Neu aggregieren" ist über den Button in der Heatmap-Card jederzeit möglich.
 
 #### Was sich *nicht* ändert
 
 - **Solcast-Spalte und alle bisherigen Cards bleiben unverändert.** Die Heatmap kommt additiv unter den vorhandenen Diagnose-Cards.
 - **Anlage ohne Day-Ahead-Snapshots oder Koordinaten** → Aggregator wird übersprungen, Live-Pfad bleibt auf dem klassischen Skalar.
-- **Tagesrest-Pfad konzeptionell wie bisher:** EEDC fragt frische Forecasts und multipliziert mit dem Faktor — neu ist nur, dass der Faktor jetzt pro Stunde aus dem Profil kommt statt einem globalen Skalar.
+- **Tagesrest-Pfad konzeptionell wie bisher:** eedc fragt frische Forecasts und multipliziert mit dem Faktor — neu ist nur, dass der Faktor jetzt pro Stunde aus dem Profil kommt statt einem globalen Skalar.
 
 → [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
@@ -269,9 +293,9 @@
 
 #### Was sich für dich ändert
 
-- **Stündliches Wetter wird ab sofort mitgespeichert.** Bei jedem Tagesabschluss schreibt EEDC zusätzlich Bewölkung (%), Niederschlag (mm) und WMO-Wettercode pro Stunde — kommt aus dem Open-Meteo-Aufruf, den EEDC für die Strahlungs-Daten ohnehin macht. Kein neuer API-Call, kein Quota-Verbrauch.
+- **Stündliches Wetter wird ab sofort mitgespeichert.** Bei jedem Tagesabschluss schreibt eedc zusätzlich Bewölkung (%), Niederschlag (mm) und WMO-Wettercode pro Stunde — kommt aus dem Open-Meteo-Aufruf, den eedc für die Strahlungs-Daten ohnehin macht. Kein neuer API-Call, kein Quota-Verbrauch.
 - **Wetter-Historie nachladen (manuell anstoßbar).** Open-Meteo Archive bietet 2 Jahre Historie kostenlos. Wer den vollen Diagnose-Wert direkt sehen will, kann die Historie für seine Anlage einmalig nachladen lassen — ein Klick reicht (siehe Stratifizierungs-Card im Prognosen-Tab).
-- **Lernfaktor — Doppel-Variante "O1+O2".** EEDC rechnet den Anlage-Skalar (Verhältnis IST/Prognose) ab sofort *zusätzlich* mit zwei statistischen Verbesserungen aus: Trim-Mean (entfernt Ausreißer-Tage durch Sensor-Aussetzer) und Recency-Boost (gewichtet die letzten 30 Tage stärker). **Wichtig:** der Live-Pfad nutzt weiter den klassischen Faktor — die neue Variante läuft parallel und ist nur als Diagnose sichtbar. Erst nach mehrwöchiger Beobachtung wird entschieden, ob sie zum Default wird.
+- **Lernfaktor — Doppel-Variante "O1+O2".** eedc rechnet den Anlage-Skalar (Verhältnis IST/Prognose) ab sofort *zusätzlich* mit zwei statistischen Verbesserungen aus: Trim-Mean (entfernt Ausreißer-Tage durch Sensor-Aussetzer) und Recency-Boost (gewichtet die letzten 30 Tage stärker). **Wichtig:** der Live-Pfad nutzt weiter den klassischen Faktor — die neue Variante läuft parallel und ist nur als Diagnose sichtbar. Erst nach mehrwöchiger Beobachtung wird entschieden, ob sie zum Default wird.
 - **Zwei neue Cards im Prognosen-Vergleich-Tab.**
   - *Lernfaktor — Doppel-Variante O1+O2:* zeigt Live-Faktor (Legacy) und O1+O2-Faktor nebeneinander mit Δ-Anzeige. Macht sichtbar, ob die statistische Verbesserung stabil zum Legacy-Wert läuft (Δ &lt; 1 %) oder systematisch nach oben/unten zieht.
   - *Wetter-Stratifizierung:* zeigt MAE/MBE der Day-Ahead-Stundenprognose getrennt nach drei Wetter-Klassen — *klar*, *diffus*, *wechselhaft*. Erst dadurch wird sichtbar, ob die Prognose bei klarem Himmel super läuft und nur bei Schauer-Tagen abweicht (oder umgekehrt). Ohne diese Aufschlüsselung war ein einziger gemittelter Tagesfehler die einzige Sicht.
@@ -280,7 +304,7 @@
 
 - **Solcast-Spalte und Tab-Inhalte bleiben** — die Diagnose-Cards sind additiv, nichts wird entfernt oder neu sortiert.
 - **Tagesrest-Prognose im Live-Dashboard** läuft genauso wie bisher: aktuelle Open-Meteo-Forecast × Lernfaktor (Legacy). Wird nicht durch die neue O12-Variante beeinflusst.
-- **Ohne IST-Vergleich keine Stratifizierung.** Die Wetter-Stratifizierungs-Card erscheint erst, wenn EEDC genug Tage mit gleichzeitiger Day-Ahead-Prognose und IST-Stundenwerten gefunden hat — typisch wenige Tage nach Aktivierung.
+- **Ohne IST-Vergleich keine Stratifizierung.** Die Wetter-Stratifizierungs-Card erscheint erst, wenn eedc genug Tage mit gleichzeitiger Day-Ahead-Prognose und IST-Stundenwerten gefunden hat — typisch wenige Tage nach Aktivierung.
 
 → [Aussichten → Prognosen-Vergleich](HANDBUCH_BEDIENUNG.md#43-aussichten)
 
@@ -361,7 +385,7 @@
 
 ### WP-Kompressor-Starts: Σ Lebensdauer kommt direkt aus dem Hersteller-Sensor *(v3.25.16)*
 
-> ⚠ **User-sichtbare Wert-Korrektur** — Nach v3.25.14 meldete detLAN, dass das Cockpit immer noch driftet (146 statt 134 Starts). Statt die Eichungs-Logik noch eine Runde nachzuschärfen, fliegt der ganze Selbstkalibrierungs-Mechanismus raus. Σ Lebensdauer im Cockpit zeigt ab sofort einfach das, was der Hersteller-Sensor sagt — keine Berechnung, keine Eichung, keine Drift-Möglichkeit. Wenn EEDC im Lauf der Zeit weniger Tagesinkremente erfasst als der Hersteller intern hochzählt (z. B. wegen Sensor-Aktivierungs-Lücken), bleibt das zwischen den Anzeigen sichtbar: Cockpit zeigt die Hersteller-Wahrheit, Monatsbericht zeigt was EEDC erfasst hat. Diagnose ohne versteckte Magic.
+> ⚠ **User-sichtbare Wert-Korrektur** — Nach v3.25.14 meldete detLAN, dass das Cockpit immer noch driftet (146 statt 134 Starts). Statt die Eichungs-Logik noch eine Runde nachzuschärfen, fliegt der ganze Selbstkalibrierungs-Mechanismus raus. Σ Lebensdauer im Cockpit zeigt ab sofort einfach das, was der Hersteller-Sensor sagt — keine Berechnung, keine Eichung, keine Drift-Möglichkeit. Wenn eedc im Lauf der Zeit weniger Tagesinkremente erfasst als der Hersteller intern hochzählt (z. B. wegen Sensor-Aktivierungs-Lücken), bleibt das zwischen den Anzeigen sichtbar: Cockpit zeigt die Hersteller-Wahrheit, Monatsbericht zeigt was eedc erfasst hat. Diagnose ohne versteckte Magic.
 
 Bei reinen MQTT-Standalone-Setups ohne direkten HA-State-Zugriff fällt der Read auf die Statistics- bzw. den jüngsten Snapshot zurück — höchstens eine Stunde alt.
 
@@ -377,7 +401,7 @@ Bei reinen MQTT-Standalone-Setups ohne direkten HA-State-Zugriff fällt der Read
 
 > ⚠ **User-sichtbare Wert-Korrektur** — Folgebefund zu v3.25.13: nach dem dortigen Wizard-Save-Fix beobachtete detLAN, dass die Σ-Lebensdauer-Anzeige im Lauf des Tages nach oben driftet — bei 7 realen Kompressor-Starts heute zeigte das Cockpit 136 statt 131. Ursache war keine fehlerhafte Sensor-Erfassung, sondern eine doppelte Buchhaltung des heutigen Tages: zum Save-Zeitpunkt floss er bereits in die Baseline-Berechnung ein, später dann nochmal in die Σ-Aggregation. Beide Stellen lasen den heutigen TagesZusammenfassung-Eintrag, der während des Tages aber noch instabil ist (Snapshot-Job läuft stündlich, der Tagesabschluss `morgen 00:00` existiert ja noch nicht).
 
-Fix: heutiger Tag wird konsistent aus der TagesZusammenfassung-Aggregation ausgeschlossen, der heutige Verlauf kommt stattdessen aus einer Live-Hochrechnung (aktueller Hersteller-Counter minus Snapshot vom heutigen Tagesanfang). Σ Lebensdauer bleibt damit jederzeit synchron mit dem WP-Display, ohne im Lauf des Tages zu driften. Tooltip im Cockpit zerlegt die Anzeige jetzt in drei Anteile: Hersteller-Baseline + EEDC abgeschlossene Tage + heute live. Gleicher Fix gilt auch für die „Aktueller Monat"-Ansicht.
+Fix: heutiger Tag wird konsistent aus der TagesZusammenfassung-Aggregation ausgeschlossen, der heutige Verlauf kommt stattdessen aus einer Live-Hochrechnung (aktueller Hersteller-Counter minus Snapshot vom heutigen Tagesanfang). Σ Lebensdauer bleibt damit jederzeit synchron mit dem WP-Display, ohne im Lauf des Tages zu driften. Tooltip im Cockpit zerlegt die Anzeige jetzt in drei Anteile: Hersteller-Baseline + eedc abgeschlossene Tage + heute live. Gleicher Fix gilt auch für die „Aktueller Monat"-Ansicht.
 
 Bei reinen MQTT-Standalone-Setups ohne direkten Live-State-Zugriff fehlt der heutige Anteil bis zum Tagesabschluss — das ist bewusst so, lieber konservativ als doppelt gezählt.
 
@@ -415,7 +439,7 @@ Wer beim Hovern über das Eingabefeld zusätzlich den HTML-Tooltip sehen möchte
 
 ### WP-Kompressor-Starts-Baseline bleibt nach Investitionen-Speichern erhalten *(v3.25.13)*
 
-> ⚠ **User-sichtbare Wert-Korrektur** — Wer einen Kompressor-Starts-Sensor seiner Wärmepumpe gemappt hat und die im Sensor-Zuordnung-Wizard gesetzte Baseline (Σ aller Lebensdauer-Starts vor dem ersten Tag bei EEDC) erleben möchte, hatte bisher folgendes Problem: jedes Schließen des Investitionen → Wärmepumpe-Dialogs mit „Speichern" — auch ohne irgendeine Datenänderung — setzte die Baseline auf `None` zurück. Cockpit → Wärmepumpe zeigte dann nur die Σ der EEDC-Tagesdifferenzen (also die Starts seit Inbetriebnahme), nicht den korrekten `Baseline + Σ Tagesdifferenzen`-Lebensdauer-Wert.
+> ⚠ **User-sichtbare Wert-Korrektur** — Wer einen Kompressor-Starts-Sensor seiner Wärmepumpe gemappt hat und die im Sensor-Zuordnung-Wizard gesetzte Baseline (Σ aller Lebensdauer-Starts vor dem ersten Tag bei eedc) erleben möchte, hatte bisher folgendes Problem: jedes Schließen des Investitionen → Wärmepumpe-Dialogs mit „Speichern" — auch ohne irgendeine Datenänderung — setzte die Baseline auf `None` zurück. Cockpit → Wärmepumpe zeigte dann nur die Σ der eedc-Tagesdifferenzen (also die Starts seit Inbetriebnahme), nicht den korrekten `Baseline + Σ Tagesdifferenzen`-Lebensdauer-Wert.
 
 Hintergrund: das Investitionen-Form sammelte beim Speichern nur die im Form sichtbaren Felder ein und sendete das als komplettes neues `parameter`-Objekt ans Backend. Wizard-only-Felder wie `wp_starts_anzahl_baseline`, die der Sensor-Zuordnung-Wizard direkt in `parameter` schreibt aber nirgendwo im Form sichtbar macht, fielen dadurch raus.
 
@@ -433,7 +457,7 @@ Vorher endete der Scroll-Bereich bei aufgeklappter Energie-Bilanz an der Finanze
 
 ### iOS-Smartphones / kleine Viewports: kein „Durchscrollen" mehr bis zur HA-Titelleiste *(v3.25.13)*
 
-> ⚠ **Mobile-Sichtbar** — Auf iPhone SE und im HA-Companion-WebView konnte die EEDC-App so weit nach oben gescrollt werden, dass unter dem Footer eine leere Fläche entstand und nur noch die HA-App-Titelleiste sichtbar blieb. Der eigentliche App-Inhalt war dann oberhalb des Sichtbereichs.
+> ⚠ **Mobile-Sichtbar** — Auf iPhone SE und im HA-Companion-WebView konnte die eedc-App so weit nach oben gescrollt werden, dass unter dem Footer eine leere Fläche entstand und nur noch die HA-App-Titelleiste sichtbar blieb. Der eigentliche App-Inhalt war dann oberhalb des Sichtbereichs.
 
 Ursache war ein Drift zwischen dem dynamischen Viewport-Layout-Container (`100dvh`) und dem Document-Root, das auf iOS und in DevTools-Mobile-Simulationen unter bestimmten Viewports unabhängig scrollen konnte. Der Layout-Wrapper ist jetzt der einzige Scroll-Owner — Document-Root wurde an die Viewport-Höhe gepinnt.
 
@@ -482,7 +506,7 @@ Jetzt wertet der Backend-Pfad `sonstige_positionen` typ-unabhängig pro Investit
 
 Die Wallbox als Investitionstyp misst aus Loadpoint-Sicht (was am Stromanschluss raus geht), das E-Auto als Investitionstyp aus Vehicle-Sicht (was im Auto angekommen ist). Beide messen also denselben Stromfluss aus zwei Perspektiven. Bisher wurden die `ladung_kwh`-Werte beider Investitionen aufaddiert — bei einer Anlage mit 1 E-Auto + 1 Wallbox kam dadurch der Wert für „Ladung gesamt" doppelt so hoch wie real, und der `kWh/100km`-Wert ebenfalls. Bei ungleicher Pflege der zwei Eingabe-Quellen konnte der angezeigte PV-Anteil sogar über 100 % laufen — z. B. wenn die Wallbox einen hohen `ladung_pv_kwh`-Wert hat, das E-Auto aber nur einen kleinen `verbrauch_kwh`-Wert.
 
-Als Übergangslösung nimmt EEDC jetzt pro Feld die größere der beiden Quellen als Wahrheit (Loadpoint-Sicht ist üblicherweise inklusiv) und stellt sicher, dass der PV-Anteil mathematisch ≤ 100 % bleibt. Eine saubere Per-Fahrzeug-Trennung folgt mit der Phase 2 des [Wallbox/E-Auto-Datenarchitektur-Konzepts](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-WALLBOX-EAUTO.md) — bis dahin bleibt die Cockpit-Gesamtübersicht und der HA-Statistics-/MQTT-Aggregator-Pfad bewusst auf der alten Pool-Logik (sichtbar als Drift-Möglichkeit zwischen Cockpit-Übersicht und Monatsbericht).
+Als Übergangslösung nimmt eedc jetzt pro Feld die größere der beiden Quellen als Wahrheit (Loadpoint-Sicht ist üblicherweise inklusiv) und stellt sicher, dass der PV-Anteil mathematisch ≤ 100 % bleibt. Eine saubere Per-Fahrzeug-Trennung folgt mit der Phase 2 des [Wallbox/E-Auto-Datenarchitektur-Konzepts](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-WALLBOX-EAUTO.md) — bis dahin bleibt die Cockpit-Gesamtübersicht und der HA-Statistics-/MQTT-Aggregator-Pfad bewusst auf der alten Pool-Logik (sichtbar als Drift-Möglichkeit zwischen Cockpit-Übersicht und Monatsbericht).
 
 Bei Anlagen mit Dienstwagen + Privatauto an gemeinsamer Wallbox bleibt eine Restungenauigkeit: die `kWh/100km`-Berechnung dividiert die Wallbox-Lieferung (inkl. Dienstwagen-Strom) durch die Privat-km — der Wert ist nach diesem Update plausibler, aber noch nicht perfekt. Phase 2 löst das mit Vehicle-Sensoren pro Fahrzeug.
 
@@ -514,9 +538,9 @@ Der Checker erkennt jetzt beide Schlüssel als korrekt gemappt. Wer einen Sensor
 
 > ⚠ **Stiller Bug seit v3.19** — Der Bug betrifft die Stundenwerte im Energieprofil (z. B. Tagesverlauf, Heatmap, 24h-Tabellen). Tagessummen und Monatswerte waren NICHT betroffen, weil sich die Verschiebung über 24 h ausmittelt.
 
-Ein Lookup-Helfer in EEDC's HA-Statistics-Service las den Zählerstand pro Stunde aus der falschen Zeile in HA's Statistik-Tabelle. HA's Konvention ist „last value of the period": die Zeile bei Stunde 11 enthält den Zählerstand AM ENDE der Stunde, also um 12:00 Uhr — wir lasen aber denselben Wert für Stunde 12. Konsequenz: alle Stunden-Werte im Tagesverlauf seit v3.19 (Snapshot-Rework Oktober 2025) waren systematisch um eine Stunde nach hinten verschoben. Bei einer Anlage mit z. B. 9 kWh PV-Erzeugung in der Stunde 11–12 hat EEDC diese 9 kWh stattdessen unter „Stunde 12" verbucht — die Tagessumme war richtig, aber die Stundenposition falsch.
+Ein Lookup-Helfer in eedc's HA-Statistics-Service las den Zählerstand pro Stunde aus der falschen Zeile in HA's Statistik-Tabelle. HA's Konvention ist „last value of the period": die Zeile bei Stunde 11 enthält den Zählerstand AM ENDE der Stunde, also um 12:00 Uhr — wir lasen aber denselben Wert für Stunde 12. Konsequenz: alle Stunden-Werte im Tagesverlauf seit v3.19 (Snapshot-Rework Oktober 2025) waren systematisch um eine Stunde nach hinten verschoben. Bei einer Anlage mit z. B. 9 kWh PV-Erzeugung in der Stunde 11–12 hat eedc diese 9 kWh stattdessen unter „Stunde 12" verbucht — die Tagessumme war richtig, aber die Stundenposition falsch.
 
-Verursacht wurde der Bug durch eine Fehlinterpretation von HA's API-Konvention; maskiert wurde er einerseits dadurch, dass Tagessummen unbeeinflusst sind, andererseits durch HA-Latenz beim hourly-Snapshot-Job (der zufällig oft den korrekten Vorgänger-Slot las, weil die aktuelle Stunde noch nicht finalisiert war). Mit der Phase-1-Erprobung der 5-Min-Snapshots auf Winterborn 2026-05-01 wurde die Diskrepanz erstmals systematisch sichtbar: HA Energy Dashboard zeigte 8,9 kWh für Stunde 11–12, EEDC zeigte 10,1 kWh.
+Verursacht wurde der Bug durch eine Fehlinterpretation von HA's API-Konvention; maskiert wurde er einerseits dadurch, dass Tagessummen unbeeinflusst sind, andererseits durch HA-Latenz beim hourly-Snapshot-Job (der zufällig oft den korrekten Vorgänger-Slot las, weil die aktuelle Stunde noch nicht finalisiert war). Mit der Phase-1-Erprobung der 5-Min-Snapshots auf Winterborn 2026-05-01 wurde die Diskrepanz erstmals systematisch sichtbar: HA Energy Dashboard zeigte 8,9 kWh für Stunde 11–12, eedc zeigte 10,1 kWh.
 
 **Was du tun kannst:** Nichts — der Fix wirkt automatisch ab dem nächsten Snapshot. Wer die Vergangenheit korrigieren will, kann den neuen Resnap-Endpoint `POST /api/diagnostics/resnap-snapshots?days=7` aufrufen (regeneriert die letzten 7 Tage). Für Tage älter als 14 Tage steht nur die Hourly-Korrektur zur Verfügung; die 5-Min-Granularität limitiert HA selbst auf ~10–14 Tage. Der reguläre `Vollbackfill aus HA Statistics` (Datenverwaltung) bleibt unverändert nutzbar — dieser nutzt eine andere Quelle (mean-Werte) und war vom Bug nicht betroffen.
 
@@ -570,7 +594,7 @@ Vor v3.25.7 zeigten Cockpit → Monatsberichte, Cockpit → Übersicht, Cockpit 
 
 ### Wärmepumpe: Hersteller-Lebensdauer-Counter im Cockpit *(v3.25.3)*
 
-Wärmepumpen-Hersteller wie Nibe oder Viessmann liefern einen Counter „Kompressor-Starts gesamt" — die echte Lebensdauer-Zahl ab Werks-Inbetriebnahme, oft 4-stellig im Auslieferungszustand. EEDC zählt seit v3.24.0 selbst über Snapshot-Differenzen — das hat den 4-stelligen Sockel aber nicht abgebildet, sodass das WP-Cockpit unter „Σ Kompressor-Starts" eine viel zu kleine Zahl zeigte (z. B. 87 statt 5.234). Beim nächsten Speichern im Sensor-Mapping-Wizard eicht EEDC die Hersteller-Baseline jetzt einmalig (`baseline = sensor.gesamt − Σ EEDC-Tagesdifferenzen seit Anschaffung`) und addiert sie beim Anzeigen wieder dazu. Der Tooltip auf der Kachel zeigt die Zerlegung Hersteller-Baseline + EEDC-seit-Aktivierung + höchste Tagessumme. Selbstkorrigierend bei jedem Wizard-Rerun. Issue [#173](https://github.com/supernova1963/eedc-homeassistant/issues/173), detLAN-Vorschlag.
+Wärmepumpen-Hersteller wie Nibe oder Viessmann liefern einen Counter „Kompressor-Starts gesamt" — die echte Lebensdauer-Zahl ab Werks-Inbetriebnahme, oft 4-stellig im Auslieferungszustand. eedc zählt seit v3.24.0 selbst über Snapshot-Differenzen — das hat den 4-stelligen Sockel aber nicht abgebildet, sodass das WP-Cockpit unter „Σ Kompressor-Starts" eine viel zu kleine Zahl zeigte (z. B. 87 statt 5.234). Beim nächsten Speichern im Sensor-Mapping-Wizard eicht eedc die Hersteller-Baseline jetzt einmalig (`baseline = sensor.gesamt − Σ eedc-Tagesdifferenzen seit Anschaffung`) und addiert sie beim Anzeigen wieder dazu. Der Tooltip auf der Kachel zeigt die Zerlegung Hersteller-Baseline + eedc-seit-Aktivierung + höchste Tagessumme. Selbstkorrigierend bei jedem Wizard-Rerun. Issue [#173](https://github.com/supernova1963/eedc-homeassistant/issues/173), detLAN-Vorschlag.
 
 → [Bedienung §3.6 Wärmepumpe](HANDBUCH_BEDIENUNG.md#36-wärmepumpe-dashboard)
 
@@ -627,7 +651,7 @@ Die Seite, die du gerade liest. Statt eines Banner-Pop-ups nach Update gibt es e
 
 ### In-App-Hilfe-Seite *(v3.24.2)*
 
-Das Benutzerhandbuch ist jetzt direkt in EEDC verfügbar — ohne Browser-Wechsel und ohne Ingress-Login-Probleme in der HA-Companion-App. Acht kuratierte Dokumente in drei Kategorien (*Einstieg* / *Handbuch* / *Referenz*), Sidebar am Desktop, Dropdown auf dem Smartphone. URL-Parameter `?doc=<slug>` macht Direktlinks teilbar (z. B. `?doc=bedienung#7-aussichten-prognosen`). Discussion [#130](https://github.com/supernova1963/eedc-homeassistant/discussions/130).
+Das Benutzerhandbuch ist jetzt direkt in eedc verfügbar — ohne Browser-Wechsel und ohne Ingress-Login-Probleme in der HA-Companion-App. Acht kuratierte Dokumente in drei Kategorien (*Einstieg* / *Handbuch* / *Referenz*), Sidebar am Desktop, Dropdown auf dem Smartphone. URL-Parameter `?doc=<slug>` macht Direktlinks teilbar (z. B. `?doc=bedienung#7-aussichten-prognosen`). Discussion [#130](https://github.com/supernova1963/eedc-homeassistant/discussions/130).
 
 → [Bedienung §9 Hilfe](HANDBUCH_BEDIENUNG.md#9-hilfe-in-der-app)
 
@@ -663,7 +687,7 @@ Cockpit- und Auswertungs-Aggregate für Wärmepumpe / Speicher / Wallbox / E-Aut
 
 ### Asymmetrie-Diagnostik im Genauigkeits-Tracking *(v3.23.3)*
 
-Toggle **„Kompakt / Diagnostisch"** in der Genauigkeits-Tracking-Card. Der Diagnostisch-Modus splittet die Streuung pro Quelle (OpenMeteo / EEDC / Solcast) in „darüber"-und „darunter"-Boxen — Ø-Über-/Unterschätzung in Prozent plus Anzahl Tage. Damit sichtbar, ob ein systematischer Hebel vorliegt („bei dichten Wolken zu hoch, bei klarem Himmel zu niedrig") oder reine Streuung. Issue [#151](https://github.com/supernova1963/eedc-homeassistant/issues/151).
+Toggle **„Kompakt / Diagnostisch"** in der Genauigkeits-Tracking-Card. Der Diagnostisch-Modus splittet die Streuung pro Quelle (OpenMeteo / eedc / Solcast) in „darüber"-und „darunter"-Boxen — Ø-Über-/Unterschätzung in Prozent plus Anzahl Tage. Damit sichtbar, ob ein systematischer Hebel vorliegt („bei dichten Wolken zu hoch, bei klarem Himmel zu niedrig") oder reine Streuung. Issue [#151](https://github.com/supernova1963/eedc-homeassistant/issues/151).
 
 → [Bedienung §7.2 Prognosen](HANDBUCH_BEDIENUNG.md#72-prognosen)
 
@@ -683,7 +707,7 @@ Tageswerte-Kacheln im Live-Dashboard in Energie-Logik-Reihenfolge: **PV → Batt
 
 ### MAE und Bias getrennt ausweisen
 
-Genauigkeits-Tracking zeigt jetzt zwei Kennzahlen pro Quelle: **MAE** (mittlere absolute Abweichung — Streuung) und **MBE** (mittlerer signed Error — systematischer Bias). Bias neutral gefärbt (das Vorzeichen ist Information, nicht Wertung). EEDC wird zusätzlich zu OpenMeteo und Solcast bewertet. Spaltenstruktur stabilisiert: kein Spaltenflattern mehr nach Tag 7, gedämpfter Header bei fehlendem Lernfaktor.
+Genauigkeits-Tracking zeigt jetzt zwei Kennzahlen pro Quelle: **MAE** (mittlere absolute Abweichung — Streuung) und **MBE** (mittlerer signed Error — systematischer Bias). Bias neutral gefärbt (das Vorzeichen ist Information, nicht Wertung). eedc wird zusätzlich zu OpenMeteo und Solcast bewertet. Spaltenstruktur stabilisiert: kein Spaltenflattern mehr nach Tag 7, gedämpfter Header bei fehlendem Lernfaktor.
 
 ### Mobile-Layout-Bündel
 
@@ -695,7 +719,7 @@ Tageshälften (Vormittag/Nachmittag) splitten jetzt am Solar Noon (via Equation 
 
 ### Banner: Restzeit bis Lernfaktor-Schwelle
 
-Der Hinweis „EEDC-Prognose nicht verfügbar" zeigt jetzt zusätzlich, wie viele Tage bereits gesammelt sind und wie viele bis zur 7-Tage-Schwelle fehlen.
+Der Hinweis „eedc-Prognose nicht verfügbar" zeigt jetzt zusätzlich, wie viele Tage bereits gesammelt sind und wie viele bis zur 7-Tage-Schwelle fehlen.
 
 ---
 
@@ -798,7 +822,7 @@ Statt statischem `benzinpreis_euro`-Parameter werden jetzt **echte monatliche Kr
 
 ### Solcast PV Forecast — Neuer Prognosen-Tab *(v3.16.4–v3.16.8)*
 
-Neuer Tab **„Prognosen"** in Aussichten als Evaluierungs-Cockpit für das Zusammenspiel von OpenMeteo, EEDC (kalibriert mit Lernfaktor), Solcast und IST. KPI-Matrix Heute/Morgen/Übermorgen mit VM/NM-Split, Stundenprofil-Chart mit p10/p90-Konfidenzband, 24h- und 7-Tage-Vergleichstabellen, Genauigkeits-Tracking. Solcast wird über einen Toggle im Sensor-Mapping-Wizard aktiviert — entweder API-Zugang (Free/Paid) oder via HA-Integration BJReplay. L1/L2-Cache überlebt Neustarts.
+Neuer Tab **„Prognosen"** in Aussichten als Evaluierungs-Cockpit für das Zusammenspiel von OpenMeteo, eedc (kalibriert mit Lernfaktor), Solcast und IST. KPI-Matrix Heute/Morgen/Übermorgen mit VM/NM-Split, Stundenprofil-Chart mit p10/p90-Konfidenzband, 24h- und 7-Tage-Vergleichstabellen, Genauigkeits-Tracking. Solcast wird über einen Toggle im Sensor-Mapping-Wizard aktiviert — entweder API-Zugang (Free/Paid) oder via HA-Integration BJReplay. L1/L2-Cache überlebt Neustarts.
 
 → [Bedienung §7.2 Prognosen](HANDBUCH_BEDIENUNG.md#72-prognosen)
 

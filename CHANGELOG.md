@@ -7,6 +7,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.29.2] - 2026-05-14 — Vorab-Fixes vor Menüstruktur-Konzept (#206 #210)
+
+> 🧹 **Stall ausmisten vor dem großen Konzept.** Kleine UX-Fehler und Schreibweisen-Drift, die nicht auf das künftige Menüstruktur-Konzept warten sollten. Kein neuer Funktionsumfang.
+
+### Fixed
+
+- **Komponenten-Beiträge zur Finanzierung — Sortierung und Icons** (#210 detLAN). In Aussichten → Finanzen wurden die Beiträge in der Reihenfolge Speicher → E-Auto-V2H → E-Auto-Benzin → E-Auto-PV → WP-PV → WP-Ersparnis angezeigt — Wärmepumpe stand also nach E-Auto, inkonsistent zur App-weiten `INVESTITION_TYP_ORDER` (Wallbox/E-Auto-Cluster nach WP). Zusätzlich fielen drei Beitragstypen (`waermepumpe-pv`, `waermepumpe-ersparnis`, `e-auto-benzin`) auf den `Battery`-Fallback-Icon durch, weil das Mapping in `FinanzenTab.tsx` die Suffix-Typen nicht kannte. Beides behoben:
+    - Neuer `komponentenBeitragTypIndex()`-Helper mappt Suffix-Typen auf ihren Basis-Typ (z. B. `waermepumpe-pv` → `waermepumpe`) und sortiert nach dem Index in `INVESTITION_TYP_ORDER`.
+    - `KOMPONENTEN_ICONS` um die drei Suffix-Typen erweitert: `e-auto-benzin` → `Fuel`, `waermepumpe-pv` und `waermepumpe-ersparnis` → `Flame`.
+    - Die 4-Kacheln-Zusammenfassung unter der Karte (Speicher EV+ / V2H / E-Auto PV-Ladung / WP PV-Direkt) zieht in dieselbe Reihenfolge: Speicher → WP → V2H → E-Auto-PV-Ladung.
+- **Dekoratives Calendar-Icon vor Jahres-Filter in Auswertungen entfernt** (#206 P2-Folge detLAN). Das gleiche Phänomen wie im Cockpit (in v3.27.1 schon entfernt) saß noch in der Auswertungen-Top-Bar: nicht-klickbares `Calendar`-Icon neben klickbarem Year-`<select>` verwirrt — weniger ist mehr. Beide Selects (Jahr + Anlage) haben jetzt `aria-label`/`title` für Bildschirmleser.
+- **Schreibweise „eedc" durchgängig — Code-Sichtbares + Hilfe-Dokumente** (#206 P4 detLAN). Bisherige `EEDC`-Reste in anwender-sichtbaren Stellen auf das lower-case Marken-Token umgestellt:
+    - **Code (8 Bereiche, 19 Stellen)**: Share-Text-Footer (`social.py` 2×), HA-Verbindungsfehler-Message (`ha_integration.py`), HA-Sensor-Export-YAML-Header + Friendly-Name-Präfix + Device-Doc (`ha_export.py` 3×), MQTT-Device-Name + manufacturer (`mqtt_client.py` 5×), Restart-Message (`system_logs.py`), Fallback-API-Antwort (`main.py`), PDF-Bericht-Titel (`pdf_service.py` 3×), PVGIS-User-Agent (`anlagen.py`), Browser-Tab-Titel + meta description (`index.html` 2×).
+    - **Hilfe-Dokumente (10 Dateien, ~130 Treffer)**: BENUTZERHANDBUCH, WAS-IST-NEU, HANDBUCH_INSTALLATION/BEDIENUNG/EINSTELLUNGEN/INFOTHEK/DATEN_CHECKER, BERECHNUNGEN, SENSOR-REFERENZ, GLOSSAR — `\bEEDC\b` mit Wortgrenze ersetzt, schützte Code-Identifier wie `EEDC_ENERGIEPROFIL_QUELLE` und Formel-Variablen `EEDC_Abweichung`/`EEDC_Prognose`/`EEDC_Roh_Prognose_kWh` automatisch. ReportLab-Style `EEDCBody` und Doc-Strings/Code-Kommentare im Backend (Dev-Sicht) unverändert.
+
+> **Hinweis für Bestandsnutzer mit MQTT-Discovery**: HA-Devices erscheinen ab diesem Update mit Friendly-Name „eedc - <Anlagenname>" statt „EEDC - <Anlagenname>". Entity-IDs (`eedc_anlage_*`, `sensor.eedc_*`) bleiben gleich, keine Daten-Migration. Wer im YAML-Sensor-Export-Snippet die Friendly-Names manuell übernommen hat, kann das Snippet aus „Einstellungen → HA-Export" neu kopieren — funktional ändert sich nichts.
+
+### Internal
+
+- A6 (globaler `pt-4`-Whitespace zwischen Sub-Tabs und erstem Page-Inhalt) bereits in v3.29.1 via `Layout.tsx`-Commit `650adb09` (#233 P15) erledigt — detLAN's #209 P5-Comment lag vor v3.29.1 und ist seitdem implizit gefixt.
+- Vorbereitung für **Konzept-Issue „Durchgängige Menüstruktur + Mobile-Strategie"**: bestehende Sub-Tracker #203, #204, #206, #208, #209, #210, #216 werden mit Verweis aufs neue Konzept geschlossen.
+
+---
+
 ## [3.29.1] - 2026-05-14 — Anschaffungsdatum-Komplettierung + UX-Cluster (#229 #233 #237 #239 #240 #241)
 
 > 🪛 **Tester-Welle vom 13./14. Mai gebündelt** — detLAN-Folge zu #236 mit zwei zusätzlichen Pfaden, JanKgh-Multi-String-Verteilungsbug, fünf UX-Verbesserungen aus detLAN/NongJoWo. Kein neuer Funktionsumfang.

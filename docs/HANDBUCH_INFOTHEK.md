@@ -1,9 +1,9 @@
 
-# EEDC Handbuch — Infothek
+# eedc Handbuch — Infothek
 
 **Version 3.24.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -25,7 +25,7 @@
 
 ## 1. Was ist die Infothek?
 
-Die **Infothek** ist ein optionales Modul innerhalb von EEDC für die Verwaltung aller Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung.
+Die **Infothek** ist ein optionales Modul innerhalb von eedc für die Verwaltung aller Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung.
 
 PV-Anlagenbetreiber haben typischerweise viele Beteiligte:
 - Stromanbieter und Netzbetreiber (oft unterschiedliche!)
@@ -42,7 +42,7 @@ Diese Informationen sind verstreut — mal in Ordnern, mal in E-Mails, mal im Ko
 - **15 Kategorien** mit passenden Vorlagen-Feldern (Strom, Gas, Wasser, Versicherung, ...)
 - **Komponenten-Akte** mit technischen Daten, Seriennummern, Prüfterminen
 - **Bis zu 15 Fotos und PDFs** pro Eintrag speichern (z.B. Datenblätter, Zählerfotos, Vertragsscans)
-- **Mehrfach-Verknüpfung (N:M)** mit EEDC-Investitionen (z.B. ein Datenblatt für alle 6 PV-Strings)
+- **Mehrfach-Verknüpfung (N:M)** mit eedc-Investitionen (z.B. ein Datenblatt für alle 6 PV-Strings)
 - **Anlagendokumentation + Finanzbericht** als PDF — ziehen automatisch Infothek-Daten
 - **Infothek-Dossier** als PDF-Export aller Einträge
 - **Archivierung** statt Löschung — alte Einträge bleiben auffindbar
@@ -122,7 +122,7 @@ Upload von bis zu 15 Fotos oder PDFs pro Eintrag (je bis zu 10 MB). Siehe [§6 D
 
 #### Verknüpfte Investitionen
 
-Mehrfach-Verknüpfung mit EEDC-Investitionen per Checkbox-Liste. Siehe [§7 Verknüpfung](#7-verknüpfung-mit-investitionen-nm).
+Mehrfach-Verknüpfung mit eedc-Investitionen per Checkbox-Liste. Siehe [§7 Verknüpfung](#7-verknüpfung-mit-investitionen-nm).
 
 #### In Anlagendokumentation anzeigen
 
@@ -388,7 +388,7 @@ PDFs zeigen ein PDF-Icon — Klick öffnet die PDF in einem neuen Browser-Tab.
 
 ### Speicherung
 
-Alle Dateien werden direkt in der EEDC-Datenbank gespeichert (BLOB). Das bedeutet:
+Alle Dateien werden direkt in der eedc-Datenbank gespeichert (BLOB). Das bedeutet:
 - Kein separates Backup nötig — Dateien sind im normalen DB-Backup enthalten
 - Bei Home Assistant: Dateien überleben Container-Neustarts
 - Nachteil: Jede Datei vergrößert die Datenbank um ~500 KB (Bilder) bzw. bis zu 10 MB (PDFs)
@@ -418,7 +418,7 @@ Im Formular-Bereich **"Verknüpfte Investitionen"** erscheint eine **Checkbox-Li
 
 **N:M-Migration (v3.15.2):** Bestehende 1:1-Verknüpfungen wurden automatisch in die neue N:M-Struktur migriert. Es ist keine manuelle Nacharbeit nötig.
 
-**Stammdaten-Migration:** Ältere EEDC-Versionen hatten Gerätedaten, Ansprechpartner und Wartungsverträge direkt im Investitionsformular. Diese Felder wurden entfernt — alle Daten werden jetzt über die Infothek verwaltet. Falls noch alte Daten vorhanden sind, erscheint in der **Investitions-Übersicht** ein blauer Hinweis "Stammdaten in Infothek übernehmen?". Ein Klick auf **"Übernehmen"** migriert alle Einträge automatisch in die passenden Infothek-Kategorien (Komponente/Datenblatt, Vertragspartner, Wartungsvertrag).
+**Stammdaten-Migration:** Ältere eedc-Versionen hatten Gerätedaten, Ansprechpartner und Wartungsverträge direkt im Investitionsformular. Diese Felder wurden entfernt — alle Daten werden jetzt über die Infothek verwaltet. Falls noch alte Daten vorhanden sind, erscheint in der **Investitions-Übersicht** ein blauer Hinweis "Stammdaten in Infothek übernehmen?". Ein Klick auf **"Übernehmen"** migriert alle Einträge automatisch in die passenden Infothek-Kategorien (Komponente/Datenblatt, Vertragspartner, Wartungsvertrag).
 
 ---
 

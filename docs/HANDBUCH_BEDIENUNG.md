@@ -1,9 +1,9 @@
 
-# EEDC Handbuch — Teil II: Bedienung
+# eedc Handbuch — Teil II: Bedienung
 
 **Version 3.24.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -62,7 +62,7 @@ Das Dropdown-Menü ist in Kategorien unterteilt:
 - Allgemein – Theme, HA-Integration, Datenbank-Info
 
 **Home Assistant** (nur bei HA-Nutzung sichtbar):
-- Sensor-Zuordnung – HA-Sensoren zu EEDC-Feldern zuordnen
+- Sensor-Zuordnung – HA-Sensoren zu eedc-Feldern zuordnen
 - Statistik-Import – Bulk-Import aus HA-Langzeitstatistik
 - MQTT-Export – MQTT Auto-Discovery Konfiguration
 - MQTT-Inbound – Universelle Datenbrücke konfigurieren
@@ -79,7 +79,7 @@ Unter der Hauptnavigation erscheinen kontextabhängige Links:
 
 Jeder Investitions-Tab erscheint nur, wenn mindestens ein Investment des passenden Typs angelegt ist.
 
-> **Hinweis zum Layout:** EEDC ist als datendichte Analyse-App primär für den Desktop konzipiert. Live-Dashboard, Cockpit-Übersicht und Monatsberichte funktionieren am Smartphone gut. Für die datendichten Tabellen in Auswertung → Energieprofil und Aussichten → Prognosen empfehlen wir Querformat oder Desktop. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
+> **Hinweis zum Layout:** eedc ist als datendichte Analyse-App primär für den Desktop konzipiert. Live-Dashboard, Cockpit-Übersicht und Monatsberichte funktionieren am Smartphone gut. Für die datendichten Tabellen in Auswertung → Energieprofil und Aussichten → Prognosen empfehlen wir Querformat oder Desktop. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
 
 ---
 
@@ -107,11 +107,11 @@ Das zentrale Element ist ein **animiertes Energiefluss-Diagramm** (ähnlich dem 
 
 **Hintergrund-Varianten** (Auswahl im Live-Header): Sterne (Default), Sunset, Alps oder eigenes Foto aus der Anlagen-Galerie. Dezent und animiert.
 
-**Lite- vs. Effekt-Modus:** Auf iPads und schwächeren Mobile-Geräten erkennt EEDC die Plattform automatisch und schaltet auf einen reduzierten Lite-Modus (CSS-animierte Stromlinien, ohne SVG-Partikel und Filter). Im Effekt-Modus laufen zusätzlich Sonnenstrahlen, Reflexionen, Schneefunkeln und SoC-Partikel. Manueller Toggle im Header möglich.
+**Lite- vs. Effekt-Modus:** Auf iPads und schwächeren Mobile-Geräten erkennt eedc die Plattform automatisch und schaltet auf einen reduzierten Lite-Modus (CSS-animierte Stromlinien, ohne SVG-Partikel und Filter). Im Effekt-Modus laufen zusätzlich Sonnenstrahlen, Reflexionen, Schneefunkeln und SoC-Partikel. Manueller Toggle im Header möglich.
 
 ### Tageswerte (Bilanz-Sortierung)
 
-Unterhalb des Diagramms zeigt EEDC die Heute-Werte als Kacheln in dieser Reihenfolge — **bilanztreu**, von Quellen über Eigenverbrauch zu Verbrauchern:
+Unterhalb des Diagramms zeigt eedc die Heute-Werte als Kacheln in dieser Reihenfolge — **bilanztreu**, von Quellen über Eigenverbrauch zu Verbrauchern:
 
 1. **PV-Erzeugung** (Heute, kWh)
 2. **Batterie** (Lade- und Entladebilanz)
@@ -482,7 +482,7 @@ Kombinierte Verbrauchs- + PV- + Batterie-Prognose für einen Tag (Etappe 3b Phas
 - **Batterie-SoC-Simulation** mit Speicher-voll/leer-Zeitpunkt
 - Chart (PV / Verbrauch / Netto + SoC-Overlay), KPI-Cards, Stundentabelle
 
-> **Datenbasis:** Stunden-kWh stammen seit v3.19.0 aus kumulativen Zähler-Snapshots (statt aus 10-Min-Leistungs-Integration), Tageswerte über die Backward-Slot-Konvention (Slot N = Energie [N-1, N), Industriestandard). Bei fehlenden Snapshots zeigt EEDC ein ⚠-Badge — siehe [§7.2 Prognosen-Tab](#72-prognosen) für den klickbaren Reparatur-Popover.
+> **Datenbasis:** Stunden-kWh stammen seit v3.19.0 aus kumulativen Zähler-Snapshots (statt aus 10-Min-Leistungs-Integration), Tageswerte über die Backward-Slot-Konvention (Slot N = Energie [N-1, N), Industriestandard). Bei fehlenden Snapshots zeigt eedc ein ⚠-Badge — siehe [§7.2 Prognosen-Tab](#72-prognosen) für den klickbaren Reparatur-Popover.
 
 ---
 
@@ -567,12 +567,12 @@ Kurzfristig | Prognosen | Langfristig | Trend | Finanzen
 Wetterbasierte Ertragsschätzung für die nächsten 7–14 Tage:
 
 - **Datenquelle**: Open-Meteo Wetterprognose
-- **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung (kalibriert mit dem **EEDC-Lernfaktor**, sobald genug IST-Daten vorliegen)
+- **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung (kalibriert mit dem **eedc-Lernfaktor**, sobald genug IST-Daten vorliegen)
 - **Wettersymbole**: Sonnig, bewölkt, regnerisch
 - **Datenquelle-Kürzel** pro Tag: MS (MeteoSwiss ICON-CH2), D2 (ICON-D2), EU (ICON-EU), EC (ECMWF IFS), BM (best_match)
 - **Solar Forecast ML (SFML)**: Wenn SFML konfiguriert ist, erscheint im Chart eine zweite Linie mit dem KI-basierten Ertrag
 
-Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z. B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt EEDC automatisch (auto).
+Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z. B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt eedc automatisch (auto).
 
 ### 7.2 Prognosen
 
@@ -581,7 +581,7 @@ Der **Prognosen-Tab** ist die Vergleichs- und Evaluierungsfläche für mehrere P
 | Quelle | Bedeutung |
 |---|---|
 | **OpenMeteo (OM)** | Wetterbasierte Prognose, Standardquelle |
-| **EEDC (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
+| **eedc (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
 | **Solcast** | Optionale dritte Quelle, entweder via Solcast-API-Key oder über die HA-Integration „BJReplay" |
 | **IST** | Tatsächlich gemessener Ertrag (sobald verfügbar) |
 
@@ -589,10 +589,10 @@ Der **Prognosen-Tab** ist die Vergleichs- und Evaluierungsfläche für mehrere P
 Tageswerte aller Quellen, mit VM/NM-Split (Vormittag/Nachmittag) — der Split erfolgt am astronomischen **Solar Noon** (proportional, je nach Standort und Datum kann das bis ~30 min von 12:00 abweichen).
 
 #### Stundenprofil-Chart
-Vier Linien (IST grün, EEDC orange, Solcast blau, OpenMeteo gelb).
+Vier Linien (IST grün, eedc orange, Solcast blau, OpenMeteo gelb).
 
 #### 24h-Stundenvergleich + 7-Tage-Vergleich
-Tabellarisch, mit Wetter-Symbolen pro Tag und Δ-Spalten farbkodiert (grün < 15 %, gelb 15–30 %, rot > 30 %). Spaltenstruktur ist über alle vier Tabellen des Tabs konsistent (`table-fixed`, `<colgroup>`), OM/EEDC/Solcast/IST stehen vertikal in derselben Linie übereinander.
+Tabellarisch, mit Wetter-Symbolen pro Tag und Δ-Spalten farbkodiert (grün < 15 %, gelb 15–30 %, rot > 30 %). Spaltenstruktur ist über alle vier Tabellen des Tabs konsistent (`table-fixed`, `<colgroup>`), OM/eedc/Solcast/IST stehen vertikal in derselben Linie übereinander.
 
 #### Genauigkeits-Tracking
 Über alle Tage mit gleichzeitig verfügbarer Prognose und IST:
@@ -602,7 +602,7 @@ Tabellarisch, mit Wetter-Symbolen pro Tag und Δ-Spalten farbkodiert (grün < 15
 - **Modus „Diagnostisch"** (Toggle im Card-Header): zeigt pro Quelle zwei Boxen — **darüber** (Tage mit Überschätzung, amber) und **darunter** (Tage mit Unterschätzung, sky-blau) mit jeweils Ø-Abweichung in % und Anzahl Tage. Damit wird Asymmetrie sichtbar — z. B. „bei dichten Wolken systematisch zu hoch, bei klarem Himmel zu niedrig" lässt sich nur mit asymmetrischen Lernfaktoren auflösen.
 
 #### Restzeit-Banner Lernfaktor
-Wenn der EEDC-Lernfaktor noch nicht aktiv ist, zeigt ein Hinweis-Banner, wie viele Tage mit gültiger Prognose + IST > 0,5 kWh bereits gesammelt sind und wie viele noch bis zur 7-Tage-Schwelle fehlen (z. B. „3 von 7 Tagen, noch 4 Tage").
+Wenn der eedc-Lernfaktor noch nicht aktiv ist, zeigt ein Hinweis-Banner, wie viele Tage mit gültiger Prognose + IST > 0,5 kWh bereits gesammelt sind und wie viele noch bis zur 7-Tage-Schwelle fehlen (z. B. „3 von 7 Tagen, noch 4 Tage").
 
 #### Saisonaler Lernfaktor (MOS-Kaskade)
 Sobald genug Daten verfügbar sind, wechselt der Lernfaktor automatisch in eine saisonale Kaskade:
@@ -627,7 +627,7 @@ Alle Quellen im Prognosen-Tab nutzen seit v3.20.0 die **Backward-Slot-Konvention
 
 #### Mobil-Hinweis
 
-Im Hochformat zeigt EEDC anstelle der drei datendichten Tabellen (KPI-Matrix, 7-Tage, Genauigkeits-Tracking) einen Hinweis „Querformat oder Desktop nutzen". Die Stundenvergleich-Tabelle, der Ertrags-Chart und die MAE/MBE-KPIs bleiben auf allen Geräten sichtbar.
+Im Hochformat zeigt eedc anstelle der drei datendichten Tabellen (KPI-Matrix, 7-Tage, Genauigkeits-Tracking) einen Hinweis „Querformat oder Desktop nutzen". Die Stundenvergleich-Tabelle, der Ertrags-Chart und die MAE/MBE-KPIs bleiben auf allen Geräten sichtbar.
 
 ### 7.3 Langfristig
 
@@ -680,7 +680,7 @@ Die **Infothek** ist ein optionales Modul für Verträge, Zähler, Kontakte und 
 **Funktionen im Überblick:**
 - 14 Kategorien mit passenden Vorlagen-Feldern (Strom-, Gas-, Wasservertrag, Versicherung, Wartung, MaStR, …)
 - Bis zu 3 Fotos oder PDFs pro Eintrag (JPEG, PNG, HEIC, PDF)
-- Optionale N:M-Verknüpfung mit EEDC-Investitionen (ein Datenblatt für mehrere Investments möglich)
+- Optionale N:M-Verknüpfung mit eedc-Investitionen (ein Datenblatt für mehrere Investments möglich)
 - PDF-Export aller Einträge für den Hefter
 - Archivierung statt Löschung
 

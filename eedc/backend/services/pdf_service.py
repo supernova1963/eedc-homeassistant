@@ -488,8 +488,8 @@ class PDFService:
         canvas_obj.setFillColor(self.TEXT_COLOR)
         canvas_obj.drawString(1.5*cm, y, self._doc_anlagenname)
 
-        # Mitte: EEDC Anlagenbericht [Zeitraum]
-        titel = f"EEDC Anlagenbericht {self._doc_zeitraum}"
+        # Mitte: eedc Anlagenbericht [Zeitraum]
+        titel = f"eedc Anlagenbericht {self._doc_zeitraum}"
         canvas_obj.setFont("Helvetica", 9)
         canvas_obj.setFillColor(self.ACCENT_COLOR)
         text_width = canvas_obj.stringWidth(titel, "Helvetica", 9)
@@ -555,9 +555,9 @@ class PDFService:
 
         # Bei Gesamtzeitraum: "Anlagenbericht", bei Jahr: "Jahresbericht"
         if "-" in zeitraum or zeitraum == "Gesamtzeitraum":
-            titel = f"EEDC Anlagenbericht {zeitraum}"
+            titel = f"eedc Anlagenbericht {zeitraum}"
         else:
-            titel = f"EEDC Jahresbericht {zeitraum}"
+            titel = f"eedc Jahresbericht {zeitraum}"
 
         elements.append(Paragraph(
             titel,

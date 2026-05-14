@@ -1,7 +1,7 @@
 """
 MQTT Client für Home Assistant Integration.
 
-Ermöglicht das Publizieren von EEDC-Sensoren über MQTT Auto-Discovery.
+Ermöglicht das Publizieren von eedc-Sensoren über MQTT Auto-Discovery.
 Home Assistant erkennt die Sensoren automatisch und erstellt native Entitäten.
 
 MQTT Discovery Format:
@@ -116,8 +116,8 @@ class MQTTClient:
         """Baut die Device-Info für MQTT Discovery."""
         return {
             "identifiers": [f"eedc_anlage_{anlage_id}"],
-            "name": f"EEDC - {anlage_name}",
-            "manufacturer": "EEDC",
+            "name": f"eedc - {anlage_name}",
+            "manufacturer": "eedc",
             "model": "PV-Auswertung",
             "sw_version": "1.0.0",
         }
@@ -148,12 +148,12 @@ class MQTTClient:
             unique_id = f"eedc_{anlage_id}_{investition_id}_{sensor.key}"
             state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/investition/{investition_id}/{sensor.key}"
             device_id = f"eedc_inv_{investition_id}"
-            device_name = f"EEDC - {investition_name}"
+            device_name = f"eedc - {investition_name}"
         else:
             unique_id = f"eedc_{anlage_id}_{sensor.key}"
             state_topic = f"{self.config.state_prefix}/anlage/{anlage_id}/{sensor.key}"
             device_id = f"eedc_anlage_{anlage_id}"
-            device_name = f"EEDC - {anlage_name}"
+            device_name = f"eedc - {anlage_name}"
 
         payload = {
             "name": sensor.name,
@@ -175,7 +175,7 @@ class MQTTClient:
         payload["device"] = {
             "identifiers": [device_id],
             "name": device_name,
-            "manufacturer": "EEDC",
+            "manufacturer": "eedc",
             "model": "PV-Auswertung",
             "sw_version": "0.9.2",
         }

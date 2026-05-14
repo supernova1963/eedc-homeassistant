@@ -857,7 +857,7 @@ async def get_ha_yaml_snippet(
 
     # YAML generieren
     yaml_lines = [
-        "# EEDC Sensoren für Home Assistant",
+        "# eedc Sensoren für Home Assistant",
         "# Füge dies in deine configuration.yaml ein",
         "",
         "rest:",
@@ -869,7 +869,7 @@ async def get_ha_yaml_snippet(
     for sv in sensor_values:
         sensor = sv.definition
         safe_name = sensor.key.replace("_", " ").title()
-        yaml_lines.append(f'      - name: "EEDC {safe_name}"')
+        yaml_lines.append(f'      - name: "eedc {safe_name}"')
         yaml_lines.append(f'        unique_id: "eedc_{anlage_id}_{sensor.key}"')
         yaml_lines.append(f'        value_template: "{{{{ value_json.sensors | selectattr(\'key\', \'eq\', \'{sensor.key}\') | map(attribute=\'value\') | first }}}}"')
         yaml_lines.append(f'        unit_of_measurement: "{sensor.unit}"')
@@ -942,7 +942,7 @@ async def publish_sensors_mqtt(
     Publiziert alle Sensoren einer Anlage via MQTT Discovery.
 
     Die Sensoren erscheinen automatisch in Home Assistant unter
-    dem Device "EEDC - {Anlagenname}".
+    dem Device "eedc - {Anlagenname}".
     """
     # Anlage laden
     result = await db.execute(

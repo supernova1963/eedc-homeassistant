@@ -733,7 +733,7 @@ else:
     async def no_frontend():
         """Fallback wenn Frontend nicht gebaut wurde."""
         return {
-            "message": "EEDC API läuft. Frontend nicht gefunden.",
+            "message": "eedc API läuft. Frontend nicht gefunden.",
             "hint": "Bitte 'npm run build' im frontend/ Verzeichnis ausführen.",
             "api_docs": "/api/docs"
         }

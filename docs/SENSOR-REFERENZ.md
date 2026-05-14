@@ -35,7 +35,7 @@
 | `netzbezug_w` | Netzbezug | W | Momentan | Aktuelle Netzbezugsleistung. Muss ≥ 0 sein. |
 | `pv_gesamt_w` | PV Gesamt | W | Momentan | Gesamte aktuelle PV-Leistung. Nur nötig wenn keine individuellen PV-Investitions-Sensoren konfiguriert sind. |
 | `netz_kombi_w` | Kombinierter Netz-Sensor | W | Momentan, bidirektional | Alternative zu getrennt `einspeisung_w`/`netzbezug_w`. Positiv = Netzbezug, negativ = Einspeisung. Nur verwenden wenn kein getrennter Zähler vorhanden. |
-| `strompreis` | Strompreis (dynamischer Tarif) | ct/kWh | Momentan | **Optional, ab v3.16.0.** Aktueller Strompreis aus Tibber, aWATTar, EPEX oder eigenem Template-Sensor. Akzeptierte Einheiten: `ct/kWh`, `EUR/kWh`, `EUR/MWh` (×0.1 → ct/kWh), `Cent`, `€`. Wird im Live-Tagesverlauf als gepunktete Linie auf sekundärer Y-Achse gezeigt. Ohne eigenen Sensor lädt EEDC automatisch den EPEX-Börsenpreis (DE/AT) via aWATTar API als Fallback. |
+| `strompreis` | Strompreis (dynamischer Tarif) | ct/kWh | Momentan | **Optional, ab v3.16.0.** Aktueller Strompreis aus Tibber, aWATTar, EPEX oder eigenem Template-Sensor. Akzeptierte Einheiten: `ct/kWh`, `EUR/kWh`, `EUR/MWh` (×0.1 → ct/kWh), `Cent`, `€`. Wird im Live-Tagesverlauf als gepunktete Linie auf sekundärer Y-Achse gezeigt. Ohne eigenen Sensor lädt eedc automatisch den EPEX-Börsenpreis (DE/AT) via aWATTar API als Fallback. |
 
 ### MQTT-Topic-Mapping (Basis)
 
@@ -224,7 +224,7 @@ Zwei alternative Pfade — Toggle „Solcast PV Forecast" am Ende von Schritt 1 
 
 ### Variante A: HA-Integration (BJReplay)
 
-Setzt die [BJReplay Solcast HA-Integration](https://github.com/BJReplay/ha-solcast-solar) voraus. EEDC liest die 7-Tage-Prognose direkt als Sensor-State — kein API-Key in EEDC nötig.
+Setzt die [BJReplay Solcast HA-Integration](https://github.com/BJReplay/ha-solcast-solar) voraus. eedc liest die 7-Tage-Prognose direkt als Sensor-State — kein API-Key in eedc nötig.
 
 **Auto-Discovery (v3.16.10):** Sensoren werden über `/api/states` per Suffix-Pattern gematcht:
 
@@ -251,7 +251,7 @@ Direkter API-Aufruf für Standalone-Nutzer ohne HA-Integration. Konfiguration in
 
 ## 9. Counter vs. kWh — strikte Trennung
 
-EEDC unterscheidet seit v3.24.0 zwei Klassen kumulativer Sensoren:
+eedc unterscheidet seit v3.24.0 zwei Klassen kumulativer Sensoren:
 
 | Klasse | Beispiele | Verarbeitung |
 |---|---|---|
@@ -317,7 +317,7 @@ Live-Mappings (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` 
 
 ### Tagessensoren (Utility Meter)
 
-HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **EEDC unterstützt das** — sowohl in der HA-History-Auswertung als auch in MQTT Energy Snapshots. Der Monatswechsel-Reset (negativer Delta) wird automatisch erkannt: `end_val` wird dann direkt als Tageswert verwendet.
+HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **eedc unterstützt das** — sowohl in der HA-History-Auswertung als auch in MQTT Energy Snapshots. Der Monatswechsel-Reset (negativer Delta) wird automatisch erkannt: `end_val` wird dann direkt als Tageswert verwendet.
 
 **Empfehlung:** Für MQTT Energy Topics sind Tagessensoren (HA Utility Meter) ideal — sie liefern direkt den Tageswert ohne Delta-Berechnung.
 

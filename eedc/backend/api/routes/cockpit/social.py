@@ -249,7 +249,7 @@ async def get_share_text(
             f"💰 Netto-Ertrag: {f(netto_ertrag, 2)} €",
             f"🌍 CO₂ gespart: {f(co2_gesamt)} kg",
             "",
-            "Erstellt mit EEDC",
+            "Erstellt mit eedc",
         ])
         text = "\n".join(lines)
     else:
@@ -262,7 +262,7 @@ async def get_share_text(
             f"CO₂ gespart: {f(co2_gesamt)} kg",
             "",
             "#Photovoltaik #PV #Energiewende",
-            "Erstellt mit EEDC",
+            "Erstellt mit eedc",
         ]
         text = "\n".join(lines)
 

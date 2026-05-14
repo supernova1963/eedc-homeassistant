@@ -1,9 +1,9 @@
 
-# EEDC Handbuch — Daten-Checker
+# eedc Handbuch — Daten-Checker
 
 **Version 3.24.5** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen & Sensormapping](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -327,7 +327,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 > **Variantenhinweis:** Diese Kategorie greift in beiden Varianten — aber **nur**, wenn der Nutzer MQTT-Inbound bewusst aktiviert hat (Daten → Einrichtung → MQTT-Inbound). Ohne aktivierten Inbound wird die Kategorie still übersprungen, damit Anwender ohne MQTT sie gar nicht erst sehen.
 
-**Was wird geprüft:** Werden die aus `field_definitions.py` und dem Sensor-Mapping erwarteten MQTT-Topics tatsächlich vom Subscriber empfangen? Diese Kategorie schließt die Lücke zwischen der dynamischen Konsumenten-Seite (Erwartungsliste aus dem EEDC-Code) und der statisch hartkodierten Publisher-Seite (HA-Automation, ioBroker, Node-RED). Wenn dort jemand neue Felder vergisst oder Investitions-IDs nach einem Re-Import nicht nachzieht, läuft die Erwartung gegen die Realität auseinander — diese Kategorie macht's sichtbar.
+**Was wird geprüft:** Werden die aus `field_definitions.py` und dem Sensor-Mapping erwarteten MQTT-Topics tatsächlich vom Subscriber empfangen? Diese Kategorie schließt die Lücke zwischen der dynamischen Konsumenten-Seite (Erwartungsliste aus dem eedc-Code) und der statisch hartkodierten Publisher-Seite (HA-Automation, ioBroker, Node-RED). Wenn dort jemand neue Felder vergisst oder Investitions-IDs nach einem Re-Import nicht nachzieht, läuft die Erwartung gegen die Realität auseinander — diese Kategorie macht's sichtbar.
 
 **Schwellwerte für „veraltet":**
 
@@ -341,7 +341,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **MQTT-Inbound aktiviert, Subscriber läuft jedoch nicht** | ℹ️ INFO | Inbound ist in den Einstellungen aktiviert, aber der Subscriber konnte nicht starten (z. B. Broker nicht erreichbar, falsche Zugangsdaten). | Daten → Einrichtung → MQTT-Inbound öffnen, Broker-Adresse und Zugangsdaten prüfen. Oder MQTT-Inbound deaktivieren, wenn keine Live-Daten via MQTT gewünscht. |
-| **N MQTT-Topic(s) erwartet, nie empfangen** | ⚠️ WARNING | Subscriber läuft, aber für die genannten Topics liefert noch keine Quelle Daten. Beispiele werden gelistet (max. 6, Rest aggregiert). | Mögliche Ursachen: (a) Publisher-Automation noch nicht eingerichtet — siehe [HANDBUCH_EINSTELLUNGEN.md §6 MQTT-Inbound](HANDBUCH_EINSTELLUNGEN.md#6-mqtt-inbound). (b) Investitions-IDs nach Re-Import nicht in der Automation nachgezogen — Topic-Struktur enthält die EEDC-interne ID. (c) Wenn die Topics gar nicht gebraucht werden: MQTT-Inbound deaktivieren. |
+| **N MQTT-Topic(s) erwartet, nie empfangen** | ⚠️ WARNING | Subscriber läuft, aber für die genannten Topics liefert noch keine Quelle Daten. Beispiele werden gelistet (max. 6, Rest aggregiert). | Mögliche Ursachen: (a) Publisher-Automation noch nicht eingerichtet — siehe [HANDBUCH_EINSTELLUNGEN.md §6 MQTT-Inbound](HANDBUCH_EINSTELLUNGEN.md#6-mqtt-inbound). (b) Investitions-IDs nach Re-Import nicht in der Automation nachgezogen — Topic-Struktur enthält die eedc-interne ID. (c) Wenn die Topics gar nicht gebraucht werden: MQTT-Inbound deaktivieren. |
 | **N MQTT-Topic(s) mit veralteten Werten** | ⚠️ WARNING | Topics werden grundsätzlich empfangen, aber älter als der Schwellwert. Beispiele zeigen Topic + Alter in Minuten. | Publisher-Automation prüfen: läuft sie noch? Hat sie ihre Quelle verloren (z. B. Wechselrichter offline)? Bei dauerhaft fehlenden Quellen die Automation aufräumen oder die Sensoren neu zuordnen. |
 | **Alle N erwarteten MQTT-Topics aktuell empfangen** | ✅ OK | Subscriber läuft, alle erwarteten Topics liefern frische Daten innerhalb der Toleranz. | – |
 
@@ -359,7 +359,7 @@ Der Wizard-Filter wurde in v3.24.1 aufgeweicht („Alle Sensoren ohne Filter anz
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen** | ℹ️ INFO | EEDC kann HA-LTS gerade nicht abfragen (z. B. Standalone-Betrieb, oder HA-API zwischenzeitlich nicht erreichbar). Die Kategorie wird übersprungen. | Standalone: keine Aktion nötig — die Kategorie ist hier irrelevant. HA Add-on: HA-API-Zugriff prüfen ([Einstellungen → Home Assistant](HANDBUCH_EINSTELLUNGEN.md#5-home-assistant-integration)). |
+| **HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen** | ℹ️ INFO | eedc kann HA-LTS gerade nicht abfragen (z. B. Standalone-Betrieb, oder HA-API zwischenzeitlich nicht erreichbar). Die Kategorie wird übersprungen. | Standalone: keine Aktion nötig — die Kategorie ist hier irrelevant. HA Add-on: HA-API-Zugriff prüfen ([Einstellungen → Home Assistant](HANDBUCH_EINSTELLUNGEN.md#5-home-assistant-integration)). |
 | **N kWh-Sensor(en) nicht in HA-Long-Term-Statistics** | ⚠️ WARNING | Mindestens ein kWh-Feld im Sensor-Mapping (z. B. *Basis: einspeisung*, *Wärmepumpe: stromverbrauch_kwh*) zeigt auf einen Sensor ohne `state_class`. Korrektur-Werkzeuge greifen für diese Felder nicht; vergangene Monate bleiben leer, wenn der Snapshot-Pfad eine Lücke hatte. | Bevorzugt: `state_class: total_increasing` über HA-`customize.yaml` ergänzen. Alternativ: einen anderen Sensor wählen, der bereits LTS liefert. Siehe [HANDBUCH_EINSTELLUNGEN.md §3 Sensor-Mapping](HANDBUCH_EINSTELLUNGEN.md#3-sensor-mapping). |
 | **N Counter-Sensor(en) ohne state_class — Korrektur-Werkzeuge wirken nicht** | ⚠️ WARNING | Counter-Felder (z. B. WP-Kompressor-Starts) werden über den stündlichen Snapshot-Service erfasst und funktionieren live. Ohne `state_class` greifen aber dieselben Korrektur-Werkzeuge nicht: Aussetzer (Neustart, Polling-Hänger) sind permanent verloren, häufig fehlt zusätzlich die letzte Tagesstunde (23–24 Uhr). | `state_class: total_increasing` per `customize.yaml` ergänzen, dann laufen alle Reparatur-Werkzeuge auf diesem Sensor. |
 | **Alle N kWh-Sensor(en) im Mapping in HA-Long-Term-Statistics verfügbar** | ✅ OK | Jeder kWh-Sensor des Mappings liefert LTS — Korrektur-Werkzeuge wirken auf alle Felder. | – |
@@ -393,9 +393,9 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
    ```
 
 3. Home Assistant neu starten.
-4. In EEDC: Daten-Checker erneut prüfen — der Befund muss verschwinden.
+4. In eedc: Daten-Checker erneut prüfen — der Befund muss verschwinden.
 
-> **Wichtig:** HA legt LTS **erst ab Aktivierung** an. Vergangene Tage vor der `state_class`-Aktivierung bleiben permanent leer — das ist eine HA-Eigenschaft, kein EEDC-Bug. Korrektur-Werkzeuge (Vollbackfill, *Verlauf nachrechnen*, Per-Tag-Reaggregation) wirken erst auf den Zeitraum **nach** Aktivierung.
+> **Wichtig:** HA legt LTS **erst ab Aktivierung** an. Vergangene Tage vor der `state_class`-Aktivierung bleiben permanent leer — das ist eine HA-Eigenschaft, kein eedc-Bug. Korrektur-Werkzeuge (Vollbackfill, *Verlauf nachrechnen*, Per-Tag-Reaggregation) wirken erst auf den Zeitraum **nach** Aktivierung.
 
 ### 5.2 Fehlende kWh-Zähler im Sensor-Mapping ergänzen
 
@@ -426,7 +426,7 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
 
 Nach jedem Schritt: Daten-Checker erneut prüfen.
 
-### 5.4 MQTT-Drift zwischen Publisher und EEDC schließen
+### 5.4 MQTT-Drift zwischen Publisher und eedc schließen
 
 **Symptom:** Befunde aus §4.8 *„N MQTT-Topic(s) erwartet, nie empfangen"* nach einem Re-Import oder neuer Komponente.
 
@@ -434,7 +434,7 @@ Nach jedem Schritt: Daten-Checker erneut prüfen.
 
 1. Daten-Checker → §4.8 öffnen, betroffene Topics notieren — sie enthalten typischerweise eine Investitions-ID, die nach dem Re-Import neu vergeben wurde.
 2. Publisher-Quelle öffnen (HA-Automation YAML, ioBroker Skript, Node-RED Flow).
-3. Investitions-IDs in den Topic-Pfaden anpassen — die neuen IDs findest du in EEDC unter Einstellungen → Investitionen am jeweiligen Komponenten-Eintrag.
+3. Investitions-IDs in den Topic-Pfaden anpassen — die neuen IDs findest du in eedc unter Einstellungen → Investitionen am jeweiligen Komponenten-Eintrag.
 4. Publisher neu starten / Automation reloaden.
 5. 2 Minuten warten (Live-Topics) bzw. 10 Minuten (Energy-Topics), dann Daten-Checker erneut prüfen.
 
