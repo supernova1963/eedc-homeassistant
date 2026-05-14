@@ -208,7 +208,7 @@ export default function PVAnlageDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           title="Anlagenleistung"
-          value={gesamtKwp > 0 ? gesamtKwp.toFixed(1) : '---'}
+          value={gesamtKwp > 0 ? gesamtKwp.toFixed(1) : '—'}
           unit="kWp"
           subtitle={(() => {
             const wrCount = pvSysteme.length
@@ -221,7 +221,7 @@ export default function PVAnlageDashboard() {
         />
         <KPICard
           title="Gesamterzeugung"
-          value={gesamtErzeugung > 0 ? (gesamtErzeugung / 1000).toFixed(1) : '---'}
+          value={gesamtErzeugung > 0 ? (gesamtErzeugung / 1000).toFixed(1) : '—'}
           unit="MWh"
           subtitle={anzahlMonate > 0 ? `${anzahlMonate} Monate Gesamtlaufzeit` : undefined}
           icon={Zap}
@@ -229,7 +229,7 @@ export default function PVAnlageDashboard() {
         />
         <KPICard
           title="Spez. Ertrag"
-          value={spezifischerErtrag > 0 ? spezifischerErtrag.toFixed(0) : '---'}
+          value={spezifischerErtrag > 0 ? spezifischerErtrag.toFixed(0) : '—'}
           unit="kWh/kWp"
           subtitle="Durchschnitt Gesamtlaufzeit"
           icon={TrendingUp}
@@ -240,7 +240,7 @@ export default function PVAnlageDashboard() {
         />
         <KPICard
           title="Eigenverbrauch"
-          value={eigenverbrauchsQuote > 0 ? eigenverbrauchsQuote.toFixed(1) : '---'}
+          value={eigenverbrauchsQuote > 0 ? eigenverbrauchsQuote.toFixed(1) : '—'}
           unit="%"
           subtitle={gesamtEigenverbrauch > 0 ? `${(gesamtEigenverbrauch / 1000).toFixed(1)} MWh` : undefined}
           icon={Activity}

@@ -32,7 +32,7 @@ export default function HeroLeiste({ data, prevData, year }: {
       label: 'Spez. Ertrag',
       value: data.spezifischer_ertrag_kwh_kwp
         ? `${data.spezifischer_ertrag_kwh_kwp.toFixed(0)} kWh/kWp`
-        : '---',
+        : '—',
       delta: trend(data.spezifischer_ertrag_kwh_kwp || 0, prevData?.spezifischer_ertrag_kwh_kwp ?? undefined),
       color: 'text-yellow-600 dark:text-yellow-400',
       bg: 'bg-yellow-50 dark:bg-yellow-900/20',

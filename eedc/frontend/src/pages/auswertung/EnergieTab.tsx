@@ -95,7 +95,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
         />
         <KPICard
           title="Spez. Ertrag"
-          value={anlage?.leistung_kwp ? (stats.gesamtErzeugung / anlage.leistung_kwp).toFixed(0) : '---'}
+          value={anlage?.leistung_kwp ? (stats.gesamtErzeugung / anlage.leistung_kwp).toFixed(0) : '—'}
           unit="kWh/kWp"
           subtitle={anlage?.leistung_kwp ? `${anlage.leistung_kwp} kWp` : undefined}
           icon={Sun}
@@ -274,12 +274,12 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
           </div>
           <div>
             <p className="text-gray-500 dark:text-gray-400">Anlagenleistung</p>
-            <p className="font-medium text-gray-900 dark:text-white">{anlage?.leistung_kwp || '---'} kWp</p>
+            <p className="font-medium text-gray-900 dark:text-white">{anlage?.leistung_kwp || '—'} kWp</p>
           </div>
           <div>
             <p className="text-gray-500 dark:text-gray-400">Netto-Ertrag</p>
             <p className="font-medium text-green-600 dark:text-green-400">
-              {nettoErtrag ? `${nettoErtrag.toFixed(0)} €` : '---'}
+              {nettoErtrag ? `${nettoErtrag.toFixed(0)} €` : '—'}
             </p>
           </div>
           <div>

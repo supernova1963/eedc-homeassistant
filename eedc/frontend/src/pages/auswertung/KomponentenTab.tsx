@@ -271,14 +271,14 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             />
             <KPICard
               title="Effizienz"
-              value={speicherSummen.effizienz?.toFixed(1) || '---'}
+              value={speicherSummen.effizienz?.toFixed(1) || '—'}
               unit="%"
               icon={Activity}
               color="text-cyan-500"
               bgColor="bg-cyan-50 dark:bg-cyan-900/20"
               formel="Entladung ÷ Ladung × 100"
               berechnung={`${fmtCalc(speicherSummen.entladung, 0)} kWh ÷ ${fmtCalc(speicherSummen.ladung, 0)} kWh × 100`}
-              ergebnis={speicherSummen.effizienz ? `= ${fmtCalc(speicherSummen.effizienz, 1)}%` : '---'}
+              ergebnis={speicherSummen.effizienz ? `= ${fmtCalc(speicherSummen.effizienz, 1)}%` : '—'}
             />
             {komponenten.hat_arbitrage && speicherSummen.arbitrage > 0 ? (
               <KPICard
@@ -317,7 +317,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <YAxis yAxisId="left" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
                   <Tooltip content={<ChartTooltip formatter={(value, name) => {
-                      if (name.includes('Effizienz')) return `${value?.toFixed(1) || '---'} %`
+                      if (name.includes('Effizienz')) return `${value?.toFixed(1) || '—'} %`
                       return `${value.toFixed(0)} kWh`
                     }} />} />
                   <Legend />
@@ -348,7 +348,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="JAZ"
-              value={wpSummen.cop?.toFixed(2) || '---'}
+              value={wpSummen.cop?.toFixed(2) || '—'}
               unit=""
               subtitle={`Jahresarbeitszahl ${wpZeitraumLabel}`}
               icon={Thermometer}
@@ -356,7 +356,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               bgColor="bg-orange-50 dark:bg-orange-900/20"
               formel="JAZ = Wärme ÷ Strom"
               berechnung={`${fmtCalc(wpSummen.waerme, 0)} kWh ÷ ${fmtCalc(wpSummen.strom, 0)} kWh`}
-              ergebnis={wpSummen.cop ? `= ${fmtCalc(wpSummen.cop, 2)}` : '---'}
+              ergebnis={wpSummen.cop ? `= ${fmtCalc(wpSummen.cop, 2)}` : '—'}
             />
             <KPICard
               title="Wärme erzeugt"
@@ -459,7 +459,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <YAxis yAxisId="left" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="right" orientation="right" domain={[0, 'auto']} tick={{ fontSize: 11 }} />
                   <Tooltip content={<ChartTooltip formatter={(value, name) => {
-                      if (name === 'COP') return `${value?.toFixed(2) || '---'}`
+                      if (name === 'COP') return `${value?.toFixed(2) || '—'}`
                       return `${value.toFixed(0)} kWh`
                     }} />} />
                   <Legend />
@@ -521,25 +521,25 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             />
             <KPICard
               title="Ø PV-Anteil"
-              value={emobSummen.pvAnteil?.toFixed(0) || '---'}
+              value={emobSummen.pvAnteil?.toFixed(0) || '—'}
               unit="%"
               icon={Car}
               color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
               formel="PV-Ladung ÷ Gesamtladung × 100"
               berechnung={`${fmtCalc(emobSummen.pvLadung, 0)} kWh ÷ ${fmtCalc(emobSummen.ladung, 0)} kWh × 100`}
-              ergebnis={emobSummen.pvAnteil ? `= ${fmtCalc(emobSummen.pvAnteil, 0)}%` : '---'}
+              ergebnis={emobSummen.pvAnteil ? `= ${fmtCalc(emobSummen.pvAnteil, 0)}%` : '—'}
             />
             <KPICard
               title="Verbrauch"
-              value={emobSummen.km > 0 ? (emobSummen.ladung / emobSummen.km * 100).toFixed(1) : '---'}
+              value={emobSummen.km > 0 ? (emobSummen.ladung / emobSummen.km * 100).toFixed(1) : '—'}
               unit="kWh/100km"
               icon={Car}
               color="text-amber-500"
               bgColor="bg-amber-50 dark:bg-amber-900/20"
               formel="Ladung ÷ km × 100"
               berechnung={`${fmtCalc(emobSummen.ladung, 0)} kWh ÷ ${fmtCalc(emobSummen.km, 0)} km × 100`}
-              ergebnis={emobSummen.km > 0 ? `= ${fmtCalc(emobSummen.ladung / emobSummen.km * 100, 1)} kWh/100km` : '---'}
+              ergebnis={emobSummen.km > 0 ? `= ${fmtCalc(emobSummen.ladung / emobSummen.km * 100, 1)} kWh/100km` : '—'}
             />
           </div>
 
@@ -606,7 +606,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
                   <Tooltip content={<ChartTooltip formatter={(value, name) => {
-                      if (name.includes('PV-Anteil')) return `${value?.toFixed(0) || '---'} %`
+                      if (name.includes('PV-Anteil')) return `${value?.toFixed(0) || '—'} %`
                       if (name.includes('km')) return `${value.toFixed(0)} km`
                       if (name.includes('€')) return `${value.toFixed(2)} €`
                       return `${value.toFixed(0)} kWh`
@@ -672,14 +672,14 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             />
             <KPICard
               title="EV-Quote"
-              value={bkwSummen.erzeugung > 0 ? ((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100).toFixed(0) : '---'}
+              value={bkwSummen.erzeugung > 0 ? ((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100).toFixed(0) : '—'}
               unit="%"
               icon={Sun}
               color="text-purple-500"
               bgColor="bg-purple-50 dark:bg-purple-900/20"
               formel="Eigenverbrauch ÷ Erzeugung × 100"
               berechnung={`${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh ÷ ${fmtCalc(bkwSummen.erzeugung, 0)} kWh × 100`}
-              ergebnis={bkwSummen.erzeugung > 0 ? `= ${fmtCalc((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100, 0)}%` : '---'}
+              ergebnis={bkwSummen.erzeugung > 0 ? `= ${fmtCalc((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100, 0)}%` : '—'}
             />
             <KPICard
               title="Einspeisung"
@@ -715,7 +715,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               />
               <KPICard
                 title="Speicher Effizienz"
-                value={bkwSummen.speicherLadung > 0 ? ((bkwSummen.speicherEntladung / bkwSummen.speicherLadung) * 100).toFixed(0) : '---'}
+                value={bkwSummen.speicherLadung > 0 ? ((bkwSummen.speicherEntladung / bkwSummen.speicherLadung) * 100).toFixed(0) : '—'}
                 unit="%"
                 icon={Activity}
                 color="text-cyan-500"

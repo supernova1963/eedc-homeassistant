@@ -251,7 +251,7 @@ export default function Dashboard() {
           />
           <KPICard
             title="Spez. Ertrag"
-            value={data.spezifischer_ertrag_kwh_kwp?.toFixed(0) || '---'}
+            value={data.spezifischer_ertrag_kwh_kwp?.toFixed(0) || '—'}
             unit="kWh/kWp"
             subtitle="Anlageneffizienz"
             icon={Sun}
@@ -299,11 +299,11 @@ export default function Dashboard() {
               bgColor="bg-cyan-50 dark:bg-cyan-900/20"
               formel="Entladung ÷ Ladung × 100"
               berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} ÷ ${fmtCalc(data.speicher_ladung_kwh, 0)} × 100`}
-              ergebnis={data.speicher_effizienz_prozent ? `= ${fmtCalc(data.speicher_effizienz_prozent, 1)} %` : '---'}
+              ergebnis={data.speicher_effizienz_prozent ? `= ${fmtCalc(data.speicher_effizienz_prozent, 1)} %` : '—'}
             />
             <KPICard
               title="Vollzyklen"
-              value={data.speicher_vollzyklen?.toFixed(0) || '---'}
+              value={data.speicher_vollzyklen?.toFixed(0) || '—'}
               unit=""
               subtitle={`${data.speicher_kapazitaet_kwh.toFixed(1)} kWh Kapazität`}
               icon={Battery}
@@ -330,7 +330,7 @@ export default function Dashboard() {
               bgColor="bg-orange-50 dark:bg-orange-900/20"
               formel="JAZ = Wärme ÷ Strom"
               berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} ÷ ${fmtCalc(data.wp_strom_kwh, 0)}`}
-              ergebnis={data.wp_cop ? `= ${fmtCalc(data.wp_cop, 2)}` : '---'}
+              ergebnis={data.wp_cop ? `= ${fmtCalc(data.wp_cop, 2)}` : '—'}
             />
             <KPICard
               title="Wärme erzeugt"
@@ -397,7 +397,7 @@ export default function Dashboard() {
             />
             <KPICard
               title="PV-Anteil"
-              value={data.emob_pv_anteil_prozent?.toFixed(0) || '---'}
+              value={data.emob_pv_anteil_prozent?.toFixed(0) || '—'}
               unit="%"
               icon={Sun}
               color="text-yellow-500"
@@ -487,7 +487,7 @@ export default function Dashboard() {
           />
           <KPICard
             title="Jahres-Rendite"
-            value={data.jahres_rendite_prozent?.toFixed(1) || '---'}
+            value={data.jahres_rendite_prozent?.toFixed(1) || '—'}
             unit="%"
             subtitle={`von ${data.investition_gesamt_euro.toFixed(0)} € Invest`}
             icon={Gauge}
