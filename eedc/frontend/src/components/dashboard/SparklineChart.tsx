@@ -2,7 +2,7 @@
  * Sparkline Chart: PV-Monatserträge als Balkendiagramm
  */
 
-import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell } from 'recharts'
+import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell, XAxis } from 'recharts'
 import { ChartTooltip } from '../../components/ui'
 import { MONAT_KURZ } from '../../lib'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
@@ -40,6 +40,9 @@ export default function SparklineChart({ monatsdaten, selectedYear }: {
       <div className="h-20">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+            {/* #241 NongJoWo: XAxis (hidden) damit der Tooltip-Header
+                den Monatsnamen zeigt statt den Bar-Index. */}
+            <XAxis dataKey="name" hide />
             <Tooltip content={<ChartTooltip unit="kWh" />} />
             <Bar dataKey="kwh" name="PV-Ertrag" radius={[2, 2, 0, 0]}>
               {chartData.map((entry, i) => (
