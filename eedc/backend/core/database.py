@@ -23,12 +23,16 @@ engine = create_async_engine(
 )
 
 
-# SQLite Foreign Keys aktivieren (WICHTIG für CASCADE DELETE)
+# SQLite PRAGMAs: Foreign Keys (CASCADE DELETE), WAL (concurrent reads + 1 writer)
+# und busy_timeout (zweiter Writer wartet 10s statt sofort "database is locked").
 @event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Aktiviert SQLite Foreign Key Constraints."""
+    """Aktiviert SQLite Foreign Keys, WAL-Journal und Busy-Timeout."""
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=10000")
+    cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
 
 # Session Factory
