@@ -844,8 +844,17 @@ class DatenChecker:
                 ))
 
             # 5. Extreme Sprünge zum Vorjahr
+            # #240 NongJoWo: Wenn der Vorjahresmonat der Inbetriebnahme-Monat
+            # der Anlage (oder davor) ist, sind die Werte nur Bruchteil-
+            # Erfassung — keine valide Vergleichsbasis. Beispiel: Anlage seit
+            # Ende März 2022 → März 2022 = ein paar Tage, der März-2023-
+            # Vergleich (3× höher) ist deshalb keine Anomalie.
             vorjahr = md_map.get((md.jahr - 1, md.monat))
-            if vorjahr:
+            inst = anlage.installationsdatum
+            if (
+                vorjahr
+                and not (inst and (vorjahr.jahr, vorjahr.monat) <= (inst.year, inst.month))
+            ):
                 for feld, wert, vj_wert in [
                     ("Einspeisung", md.einspeisung_kwh, vorjahr.einspeisung_kwh),
                     ("Netzbezug", md.netzbezug_kwh, vorjahr.netzbezug_kwh),
