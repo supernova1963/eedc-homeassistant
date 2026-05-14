@@ -41,13 +41,20 @@ const KOMPONENTEN_ICONS: Record<string, typeof Battery> = {
 // Komponenten-Beitrags-Typen auf die Basis-Typen aus INVESTITION_TYP_ORDER mappen
 // (`waermepumpe-pv` → `waermepumpe`, `e-auto-ladung` → `e-auto` etc.) und nach
 // dieser Hierarchie sortieren. #210 detLAN: WP vor E-Auto, Reihenfolge konsistent
-// zur App-weiten Komponenten-Sortierung in INVESTITION_TYP_ORDER.
+// zur App-weiten Komponenten-Sortierung in INVESTITION_TYP_ORDER. #244 detLAN:
+// innerhalb derselben Hauptgruppe PV-Beitrags-Suffixe vor Ersparnis-Suffixen.
 function komponentenBeitragTypIndex(typ: string): number {
   const order = INVESTITION_TYP_ORDER as readonly string[]
-  for (let i = 0; i < order.length; i++) {
-    if (typ === order[i] || typ.startsWith(order[i] + '-')) return i
+  const suffixRang = (suffix: string): number => {
+    if (suffix === 'pv' || suffix === 'ladung' || suffix === 'v2h') return 0
+    if (suffix === 'benzin' || suffix === 'gas' || suffix === 'ersparnis') return 1
+    return 2
   }
-  return order.length
+  for (let i = 0; i < order.length; i++) {
+    if (typ === order[i]) return i * 10
+    if (typ.startsWith(order[i] + '-')) return i * 10 + suffixRang(typ.slice(order[i].length + 1))
+  }
+  return order.length * 10
 }
 
 export default function FinanzenTab({ anlageId }: Props) {
