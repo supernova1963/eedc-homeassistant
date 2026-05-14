@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.29.1] - 2026-05-14 — Anschaffungsdatum-Komplettierung + UX-Cluster (#229 #233 #237 #239 #240 #241)
+
+> 🪛 **Tester-Welle vom 13./14. Mai gebündelt** — detLAN-Folge zu #236 mit zwei zusätzlichen Pfaden, JanKgh-Multi-String-Verteilungsbug, fünf UX-Verbesserungen aus detLAN/NongJoWo. Kein neuer Funktionsumfang.
+
+### Fixed
+
+- **Monatsbericht-Sektion vor Anschaffungsdatum ausblenden** (#239 detLAN-Folge zu #236). v3.29.0 hatte den Aggregat-Filter ausgerollt, aber die Sektions-Sichtbarkeit im Monatsbericht (Wärmepumpe / Speicher / E-Mobilität / Balkonkraftwerk / Sonstiges) wurde weiter anlagenweit berechnet. Folge: WP-Sektion erschien auch in Monaten vor Anschaffung — alle Werte „—", aber der Block stand. Fix in `aktueller_monat.py:1101+`: die `hat_*`-Flags und die `wp_invs`-Liste für Kompressor-Starts respektieren jetzt `ist_aktiv_im_monat(jahr, monat)`. Sektion verschwindet komplett, Folgesektionen rücken hoch.
+- **HA-Statistics-/MQTT-Aggregation respektiert Anschaffungsdatum** (#239 detLAN-Folge). Zweiter Pfad, der nach dem v3.29.0-Fix immer noch Vor-Anschaffungs-Werte durchließ: `aktueller_monat.py` aggregierte HA-Sensor-Werte über `inv_{id}_*`-Keys ohne Anschaffungsdatum-Filter. Sensoren existieren in HA häufig schon vor der EEDC-Registrierung. Beispiel detLAN: WP-Anschaffungsdatum April, im März-Monatsbericht standen trotzdem 145 kWh Strom. Fix: `ist_aktiv_im_monat(jahr, monat)` als Vor-Filter in beiden Aggregations-Schleifen (typ_aggregation + E-Mob-Pool).
+- **Einheitliches Display-Token '—' statt '---' für leere Felder** (#239 detLAN). An manchen Stellen wurde '---' (drei ASCII-Bindestriche), an anderen '—' (em-dash) für „kein Wert" gezeigt. Alle 41 Frontend-Vorkommen auf em-dash umgestellt (war ohnehin Mehrheit mit 68 Stellen). Display-Token-Änderung, keine Code-Logik berührt.
+- **Modul-Verteilung primär aus Tabellen-Spalte, parameter als Fallback** (#229 JanKgh, SolarEdge-Multi-String). Bei 4 PV-Modul-Investitionen Ost/West × 2 Neigungen wurde die Anlagengesamterzeugung gleichverteilt (1/4 je Modul) statt anteilig nach kWp — der Verteilungs-Helper las `leistung_kwp` aus `parameter`-JSON, gepflegt ist aber die Tabellen-Spalte. SoT-Helper `backend/utils/investition_value.py:get_inv_value(inv, key)` liest primär die Spalte, fällt auf `parameter` zurück. Beide Verteilungs-Helper umgestellt (`import_export/helpers.py:_distribute_legacy_pv_to_modules` für CSV-Import, `connector.py:_distribute_by_param` für HA-Live-Daten). Mapping `_COLUMN_FOR_PARAM` erweiterbar.
+- **UX-Konsistenz Einstellungen → Allgemein/Protokolle + globaler Page-Whitespace** (#233 detLAN P13–P18). Zwei weitere überflüssige Page-Überschriften, die in v3.27.5 übersehen wurden, entfernt: „Einstellungen" (Allgemein-Tab) und „Protokolle" (Protokolle-Tab). „Debug" + „Neustart" rücken in dieselbe Reihe wie die Sub-Sub-Tabs „System-Logs/Aktivitäten" — gemeinsame Toolbar statt zwei getrennter Header-Zeilen. **Layout-weit**: Main-Container von `pt-1` auf `pt-4` — zusammen mit `SubTabs py-2` ergibt das 24 px Whitespace zwischen Sub-Tabs und erstem Page-Inhalt, konsistent zu `space-y-6` zwischen Cards.
+- **kWh-Einheiten an Wärmepumpe-Dashboard ergänzt** (#237 detLAN). Drei Stellen ohne Einheitsangabe in „Cockpit → Wärmepumpe": Monatsdaten-Tabellen-Header (Strom/Heizung/Warmwasser → jeweils „(kWh)"), Wärme-Verteilung Summary „Heizung 1621 kWh · Warmwasser 133 kWh" (vorher fehlte Einheit bei Heizung), Wärmeerzeugung-pro-Monat Chart — Y-Achse beschriftet mit „kWh", Tooltip mit Einheit.
+- **Daten-Checker: Inbetriebnahme-Monat als Vorjahres-Vergleichsbasis ausgeschlossen** (#240 NongJoWo). Anlage seit Ende März 2022 → März-2022-Werte (50 kWh, Bruchteil) im März-2023-Vergleich (261 kWh) als „3× Vorjahr" gemeldet. Fix in `_check_monatsdaten_plausibilitaet`: Vergleich überspringt Monate, in denen die Anlage im Inbetriebnahme-Monat (oder davor) war — die Werte sind dann strukturell unvollständig. Linie: Daten-Checker-Hinweise bleiben nicht-quittierbar, stattdessen die Heuristik schärfen.
+- **Sparkline-Tooltip zeigt Monatsnamen statt Bar-Index** (#241 NongJoWo). Cockpit → Übersicht → Energie-Bilanz → PV-Monatserträge-Sparkline zeigte beim Hover „1" / „2" / „3" als Header. Hidden `XAxis` mit `dataKey="name"` ergänzt — Tooltip liest jetzt den Monatsnamen aus den Daten („Mär 22" / „Jan 26").
+
+### Internal
+
+- Drei neue/erweiterte Test-Dateien: `test_monatsbericht_hat_flags_filtern_vor_anschaffung` in `test_investition_aktiv_filter.py` (für #239), `test_inv_value_spalten_fallback.py` (6 Tests für #229), `test_daten_checker_vorjahr_inbetriebnahme.py` (2 Tests für #240). Alle grün, bestehende Suiten weiterhin grün.
+- SoT-Helper `backend/utils/investition_value.py` (`get_inv_value`) mit Mapping `_COLUMN_FOR_PARAM` für künftige Spalten-vs.-Parameter-Drift.
+
+---
+
 ## [3.29.0] - 2026-05-13 — Aggregations-/UX-Bündel (#222 #231 #232 #234 #235 #236)
 
 > 🪛 **Tester-Welle vom 12./13. Mai gebündelt** — fünf strukturelle Reparaturen aus detLAN-/NongJoWo-Meldungen plus ein UX-Fix in „Eigene Dateien"-Vorschau. Kein neuer Funktionsumfang.

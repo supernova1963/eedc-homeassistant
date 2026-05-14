@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.29.0)
+> **Stand:** Mai 2026 (v3.29.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,22 @@
 ---
 
 ## v3.29.x — Aggregations- und UX-Bündel (Mai 2026)
+
+### Anschaffungsdatum-Komplettierung + UX-Cluster *(v3.29.1)*
+
+> 🪛 **Tester-Welle vom 13./14. Mai gebündelt geschlossen.** detLAN-Folge zu #236 mit zwei zusätzlichen Pfaden, JanKgh-Multi-String-Verteilungsbug, fünf UX-Verbesserungen. Kein neuer Funktionsumfang.
+
+#### Was sich für dich ändert
+
+- **Wärmepumpe / Speicher / E-Mobilität / Balkonkraftwerk / Sonstiges**: in Monaten vor Anschaffungsdatum wird die Sektion im Monatsbericht jetzt komplett ausgeblendet — kein leerer Block mehr mit „—" überall. Zwei zusätzliche Pfade zu v3.29.0 wurden geschlossen: Sektions-Sichtbarkeit + HA-Sensor-Aggregation respektieren jetzt ebenfalls das Anschaffungsdatum. *(detLAN, Issue #239.)*
+- **„—" einheitlich für leere Felder**: an manchen Stellen wurde „---" (drei Bindestriche), an anderen „—" gezeigt — jetzt überall einheitlich „—". *(detLAN, Issue #239.)*
+- **Modul-Verteilung bei SolarEdge-Multi-String-Setups**: Wer mehrere PV-Modul-Investitionen mit unterschiedlicher kWp pflegt (z. B. Ost/West-Aufteilung) und die Anlagengesamterzeugung aus einem Wechselrichter-Sensor importiert, sah bisher eine Gleichverteilung (1/N je Modul) statt anteilig nach Modulleistung. Der Verteilungs-Algorithmus liest die kWp jetzt primär aus der Tabellen-Spalte (sauberer Source of Truth) und fällt nur als Fallback auf das Parameter-JSON zurück. Wirkt im CSV-Import und im HA-Live-Datenstrom gleichermaßen. *(JanKgh, Diskussion #229.)*
+- **Einstellungen → Allgemein und Protokolle**: zwei weitere überflüssige Page-Überschriften entfernt. In den Protokollen sitzen „Debug" und „Neustart" jetzt in der gleichen Reihe wie die Sub-Sub-Tabs „System-Logs / Aktivitäten" — eine gemeinsame Toolbar statt zwei getrennter Header-Zeilen. Bonus für alle Einstellungs-Seiten: gleichmäßiger Abstand zwischen Sub-Tabs und erstem Inhalt (vorher war der zu eng). *(detLAN, Issue #233.)*
+- **Cockpit → Wärmepumpe: kWh-Einheiten überall**. Tabellen-Header („Strom (kWh)" usw.), Wärme-Verteilung Summary und der Wärmeerzeugung-pro-Monat-Chart (Y-Achsen-Beschriftung + Tooltip-Einheit) zeigen jetzt durchgehend die Einheit. *(detLAN, Issue #237.)*
+- **Daten-Checker: keine „3× Vorjahr"-Warnung mehr, wenn die Anlage im Vorjahresmonat erst in Betrieb genommen wurde**. Beispiel: Anlage seit Ende März 2022 → März 2022 hat nur ein paar Tage Daten, der März-2023-Vergleich (3× höher) ist deshalb kein Anomaliefall. *(NongJoWo, Issue #240.)*
+- **Cockpit → Übersicht → Energie-Bilanz → PV-Monatserträge**: der Mouseover-Tooltip zeigt jetzt den Monatsnamen („Mär 22" / „Jan 26") statt der fortlaufenden Nummer. *(NongJoWo, Issue #241.)*
+
+---
 
 ### Fünf Reparaturen + ein UX-Fix in der Vorschau *(v3.29.0)*
 
