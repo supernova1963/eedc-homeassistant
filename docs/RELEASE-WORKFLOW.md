@@ -26,7 +26,7 @@ eedc-community (unabhängig)
 Ein Befehl macht alles:
 
 ```bash
-cd /home/gernot/claude/eedc-homeassistant
+# im lokalen Checkout von eedc-homeassistant:
 ./scripts/release.sh 3.2.0
 ```
 

@@ -16,9 +16,7 @@
 | **[eedc](https://github.com/supernova1963/eedc)** | Standalone-Distribution für Nutzer ohne HA | Spiegel von eedc/ |
 | **[eedc-community](https://github.com/supernova1963/eedc-community)** | Anonymer Community-Benchmark-Server | FastAPI, React, PostgreSQL |
 
-**Lokale Pfade:**
-- eedc: `/home/gernot/claude/eedc`
-- eedc-community: `/home/gernot/claude/eedc-community`
+**Lokale Pfade:** Repos liegen nebeneinander im selben Parent-Verzeichnis (`eedc-homeassistant/`, `eedc/`, `eedc-community/`). Der konkrete Pfad ist maschinenabhängig und sollte nicht hartcodiert werden.
 
 **Live:** https://energy.raunet.eu (Community) | https://supernova1963.github.io/eedc-homeassistant/ (Website)
 
@@ -65,6 +63,21 @@ eedc-homeassistant/           ← Source of Truth
 
 ### Entwicklungsserver starten
 
+**Einmaliges Setup (Backend-venv anlegen):**
+
+Die venv ist in `.gitignore` — sie ist maschinen-/OS-spezifisch und wird nicht mitversioniert. Beim ersten Checkout (oder auf einem neuen Rechner) lokal anlegen:
+
+```bash
+cd eedc
+python3 -m venv backend/venv
+source backend/venv/bin/activate
+pip install -r backend/requirements.txt
+# Optional für Tests/Lint:
+pip install -r backend/requirements-dev.txt
+```
+
+**Server starten:**
+
 ```bash
 # Backend (Terminal 1)
 cd eedc && source backend/venv/bin/activate
@@ -79,7 +92,7 @@ cd eedc/frontend && npm run dev
 ### Release-Workflow (ein Script für alles!)
 
 ```bash
-cd /home/gernot/claude/eedc-homeassistant
+# im lokalen Checkout von eedc-homeassistant:
 ./scripts/release.sh 3.17.0
 ```
 

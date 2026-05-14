@@ -1509,7 +1509,7 @@ docker run -p 8099:8099 -v $(pwd)/data:/data eedc
 Ein Script erledigt alles — Version bumpen, committen, taggen, pushen und Standalone-Repo synchronisieren:
 
 ```bash
-cd /home/gernot/claude/eedc-homeassistant
+# im lokalen Checkout von eedc-homeassistant:
 ./scripts/release.sh 2.8.6
 ```
 

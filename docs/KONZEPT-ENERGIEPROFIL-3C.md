@@ -216,7 +216,7 @@ Wenn |Δ| > 0.5 % UND alle 24 Slots gefüllt:
     → Anomalie "EP_HOURLY_DAY_DRIFT" für (anlage_id, datum, kategorie)
 ```
 
-Bei lückenlosen Snapshots ist das mathematisch identisch. Anomalie schlägt nur an, wenn Daten inkonsistent geschrieben wurden — echter Bug-Indikator. UI-Behandlung folgt [`feedback_daten_checker_kein_akzeptiert.md`](../.claude/projects/-home-gernot-claude-eedc-homeassistant/memory/feedback_daten_checker_kein_akzeptiert.md): nur Hinweis, kein Quittier-Knopf.
+Bei lückenlosen Snapshots ist das mathematisch identisch. Anomalie schlägt nur an, wenn Daten inkonsistent geschrieben wurden — echter Bug-Indikator. UI-Behandlung: nur Hinweis, kein Quittier-Knopf (gemäß interner Konvention für den Daten-Checker).
 
 ## 5. E3 — `quelle`-Spalte auf `sensor_snapshots`
 

@@ -4,9 +4,8 @@
 > 2026-05-02 nach Off-by-one-Fix state→sum). **Phase 1 Frontend offen** —
 > `live_tagesverlauf_service` auf 5-Min-Counter-Snapshots umstellen.
 > Phase 2 (`:55`-Preview entfernen, `live_verbrauchsprofil_service` umstellen)
-> noch nicht angefangen. Implementations-Details siehe
-> [project_live_snapshot_5min.md](../../../.claude/projects/-home-gernot-claude-eedc-homeassistant/memory/project_live_snapshot_5min.md)
-> in der Auto-Memory.
+> noch nicht angefangen. Implementations-Details siehe Auto-Memory
+> (`project_live_snapshot_5min`).
 
 ## 1. Motivation
 

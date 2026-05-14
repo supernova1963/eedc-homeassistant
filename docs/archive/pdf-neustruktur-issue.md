@@ -2,7 +2,7 @@
 
 > **Status:** Entwurf, noch nicht gepostet. Nach Review via `gh issue create` in `supernova1963/eedc-homeassistant` anlegen.
 >
-> **Hintergrund:** Konzept liegt unter `/home/gernot/.claude/plans/sleepy-frolicking-cupcake.md`.
+> **Hintergrund:** Konzept liegt im lokalen Claude-Plans-Verzeichnis (`sleepy-frolicking-cupcake.md`).
 >
 > **Nach dem Erstellen:**
 > 1. Roadmap-Issue **#110** aktualisieren — neuer Checkbox-Eintrag in Sektion *Geplant*
