@@ -47,6 +47,6 @@ export const SPEICHER_ENTLADUNG_KPI: KpiStyle = {
 }
 
 export function fmtKpi(value: number | null | undefined, decimals = 0): string {
-  if (value == null || !Number.isFinite(value)) return '---'
+  if (value == null || !Number.isFinite(value)) return '—'
   return value.toFixed(decimals)
 }

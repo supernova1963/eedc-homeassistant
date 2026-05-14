@@ -170,7 +170,7 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
           color="cyan"
           formel="Effizienz = Entladung ÷ Ladung × 100"
           berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh ÷ ${z.gesamt_ladung_kwh.toFixed(0)} kWh × 100`}
-          ergebnis={z.effizienz_prozent ? `= ${z.effizienz_prozent.toFixed(1)} %` : '---'}
+          ergebnis={z.effizienz_prozent ? `= ${z.effizienz_prozent.toFixed(1)} %` : '—'}
         />
         <KPICard
           title="Durchsatz"

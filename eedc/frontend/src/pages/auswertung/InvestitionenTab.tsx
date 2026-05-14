@@ -202,7 +202,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
         />
         <KPICard
           title="ROI"
-          value={roiData?.gesamt_roi_prozent?.toFixed(1) || '---'}
+          value={roiData?.gesamt_roi_prozent?.toFixed(1) || '—'}
           unit="%"
           subtitle="pro Jahr"
           icon={TrendingUp}
@@ -215,7 +215,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
         />
         <KPICard
           title="Amortisation"
-          value={roiData?.gesamt_amortisation_jahre?.toFixed(1) || '---'}
+          value={roiData?.gesamt_amortisation_jahre?.toFixed(1) || '—'}
           unit="Jahre"
           icon={Calendar}
           color="text-amber-500"
@@ -450,7 +450,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                             ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)}% p.a.` : 'nicht berechenbar'}
                           >
                             <span className="cursor-help border-b border-dotted border-gray-400">
-                              {b.roi_prozent?.toFixed(1) || '---'}%
+                              {b.roi_prozent?.toFixed(1) || '—'}%
                             </span>
                           </FormelTooltip>
                         </td>
@@ -462,7 +462,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                             ergebnis={b.amortisation_jahre ? `= ${b.amortisation_jahre.toFixed(1)} Jahre` : 'nicht berechenbar'}
                           >
                             <span className="cursor-help border-b border-dotted border-gray-400">
-                              {b.amortisation_jahre?.toFixed(1) || '---'} J.
+                              {b.amortisation_jahre?.toFixed(1) || '—'} J.
                             </span>
                           </FormelTooltip>
                         </td>
@@ -567,7 +567,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                 </div>
                 <div className="text-center">
                   <p className="text-base font-bold text-gray-700 dark:text-gray-200">
-                    {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
+                    {amortRealisiert ? amortRealisiert.toFixed(1) : '—'} Jahre
                   </p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">Amortisation</p>
                 </div>
@@ -622,7 +622,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                     <div className="cursor-help">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Amortisation</p>
                       <p className="font-semibold text-gray-700 dark:text-gray-200 border-b border-dotted border-gray-400 inline-block">
-                        {amortRealisiert ? amortRealisiert.toFixed(1) : '---'} Jahre
+                        {amortRealisiert ? amortRealisiert.toFixed(1) : '—'} Jahre
                       </p>
                     </div>
                   </FormelTooltip>

@@ -1244,7 +1244,7 @@ export default function MonatsabschlussView() {
                     berechnung={d.speicher_ladung_kwh != null && d.speicher_entladung_kwh != null
                       ? `${fmt(d.speicher_entladung_kwh, 0)} ÷ ${fmt(d.speicher_ladung_kwh, 0)} kWh`
                       : undefined}
-                    ergebnis={d.speicher_wirkungsgrad_prozent != null ? `= ${fmtCalc(d.speicher_wirkungsgrad_prozent, 1)} %` : '---'} />
+                    ergebnis={d.speicher_wirkungsgrad_prozent != null ? `= ${fmtCalc(d.speicher_wirkungsgrad_prozent, 1)} %` : '—'} />
                   <KPICard title="Vollzyklen" value={fmt(d.speicher_vollzyklen, 2)} unit=""
                     icon={ArrowUpDown} color="blue"
                     subtitle={d.speicher_kapazitaet_kwh != null ? `Kapazität: ${fmt(d.speicher_kapazitaet_kwh, 0)} kWh` : undefined}
@@ -1339,7 +1339,7 @@ export default function MonatsabschlussView() {
                   <KPICard title="Strom verbraucht" value={fmt(d.wp_strom_kwh, 0)} unit="kWh"
                     icon={Zap} color="yellow"
                     subtitle={hatVmWp && vm?.wp_strom_kwh != null ? `VM: ${fmt(vm.wp_strom_kwh, 0)} kWh` : undefined} />
-                  <KPICard title="Ersparnis vs. Gas" value={d.wp_ersparnis_euro != null ? `+${fmt(d.wp_ersparnis_euro, 2)}` : '---'} unit="€"
+                  <KPICard title="Ersparnis vs. Gas" value={d.wp_ersparnis_euro != null ? `+${fmt(d.wp_ersparnis_euro, 2)}` : '—'} unit="€"
                     icon={TrendingUp} color="green"
                     formel="(Wärme ÷ 0,9 × Gaspreis − Strom × Strompreis)"
                     subtitle={vj?.wp_strom_kwh != null ? `VJ Strom: ${fmt(vj.wp_strom_kwh, 0)} kWh` : undefined} />
