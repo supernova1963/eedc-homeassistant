@@ -239,7 +239,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       {/* KPI-Zeile */}
       {kpis && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <KpiCard label="Gesamterzeugung" value={`${fmt1(kpis.gesamterzKwh)} kWh`} color="text-yellow-600 dark:text-yellow-400" />
+          <KpiCard label="Verfügbare Energie" value={`${fmt1(kpis.gesamterzKwh)} kWh`} color="text-yellow-600 dark:text-yellow-400" />
           <KpiCard label="PV-Anteil"       value={`${fmt1(kpis.pvKwh)} kWh`}         color="text-amber-500 dark:text-amber-400" />
           <KpiCard label="Gesamtverbrauch" value={`${fmt1(kpis.vKwh)} kWh`}          color="text-gray-600 dark:text-gray-300" />
           <KpiCard label="Netzbezug"       value={`${fmt1(kpis.netzbezugKwh)} kWh`}  color="text-red-600 dark:text-red-400" />
@@ -258,7 +258,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
         <Card>
           <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between">
             <span>▲ Quellen (Erzeugung, Bezug)</span>
-            <span>Stundenmittelwerte aus Energieprofil · gestrichelt = Gesamterzeugung</span>
+            <span>Stundenmittelwerte aus Energieprofil · gestrichelt = Verfügbare Energie</span>
             <span>▼ Senken (Verbrauch, Einspeisung)</span>
           </div>
           <ResponsiveContainer width="100%" height={320}>
@@ -502,7 +502,7 @@ interface TdColDef {
 
 const TD_COLUMNS: TdColDef[] = [
   // Erzeugung
-  { key: 'gesamterzeugung', label: 'Gesamterzeugung', unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true,  calc: true  },
+  { key: 'gesamterzeugung', label: 'Verfügbare Energie', unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true,  calc: true  },
   { key: 'pv_kw',           label: 'PV',              unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true                },
   { key: 'batterie_kw',     label: 'Batterie',        unit: 'kW', group: 'erzeugung', decimals: 2, isSum: true,  defaultVisible: true                },
   // Netz
