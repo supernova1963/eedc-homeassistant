@@ -45,11 +45,13 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Einstellungen
-        </h1>
+      {/* #233 P13/P14: Überschrift „Einstellungen" entfernt — Sub-Tab heißt
+          ohnehin „Allgemein"/„Backup"/„Protokolle", die H1 wiederholte nur
+          den Page-Titel. Refresh-Button bleibt rechts, gleichmäßige Abstände
+          via space-y-6. */}
+      <div className="flex items-center justify-end">
         <Button
+          type="button"
           variant="secondary"
           size="sm"
           onClick={loadData}

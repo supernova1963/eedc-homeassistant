@@ -509,35 +509,9 @@ export default function Protokolle() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <ScrollText className="w-6 h-6 text-gray-500" />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Protokolle
-        </h1>
-        <div className="flex-1" />
-        <button
-          onClick={toggleDebug}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            isDebug
-              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-1 ring-amber-300 dark:ring-amber-700'
-              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-          }`}
-          title={isDebug ? 'Debug-Modus deaktivieren (zur\u00fcck auf INFO)' : 'Debug-Modus aktivieren (zeigt alle Detail-Meldungen)'}
-        >
-          <Bug className="h-4 w-4" />
-          {isDebug ? 'Debug aktiv' : 'Debug'}
-        </button>
-        <button
-          onClick={handleRestart}
-          disabled={restarting}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-          title="eedc neu starten"
-        >
-          <RotateCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
-          {restarting ? 'Startet neu...' : 'Neustart'}
-        </button>
-      </div>
-
+      {/* #233 P16/P17/P18: H1 „Protokolle“ entfernt (wiederholte den Sub-Tab),
+          Debug + Neustart in die Tab-Bar-Reihe gerückt — gemeinsame Toolbar
+          mit System-Logs/Aktivitäten statt zwei getrennter Header-Zeilen. */}
       {isDebug && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -545,25 +519,53 @@ export default function Protokolle() {
         </div>
       )}
 
-      {/* Tab Bar */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-700 dark:text-blue-300'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          )
-        })}
+      {/* Tab Bar + Action-Buttons in einer Reihe (#233 P17/P18) */}
+      <div className="flex items-center border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-700 dark:text-blue-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex items-center gap-2 pb-1">
+          <button
+            type="button"
+            onClick={toggleDebug}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              isDebug
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-1 ring-amber-300 dark:ring-amber-700'
+                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title={isDebug ? 'Debug-Modus deaktivieren (zur\u00fcck auf INFO)' : 'Debug-Modus aktivieren (zeigt alle Detail-Meldungen)'}
+          >
+            <Bug className="h-4 w-4" />
+            {isDebug ? 'Debug aktiv' : 'Debug'}
+          </button>
+          <button
+            type="button"
+            onClick={handleRestart}
+            disabled={restarting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+            title="eedc neu starten"
+          >
+            <RotateCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
+            {restarting ? 'Startet neu...' : 'Neustart'}
+          </button>
+        </div>
       </div>
 
       {/* Tab Content */}

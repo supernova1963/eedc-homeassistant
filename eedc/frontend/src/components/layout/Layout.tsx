@@ -95,8 +95,10 @@ export default function Layout() {
       {/* Sub-Tabs (kontextabhängig) */}
       <SubTabs />
 
-      {/* Main Content */}
-      <main ref={mainRef} className="flex-1 overflow-auto px-3 pb-3 pt-1 sm:px-6 sm:pb-6 sm:pt-1">
+      {/* Main Content — #233 P15 detLAN: pt-4 statt pt-1, ergibt zusammen mit
+          SubTabs py-2 = 24px Whitespace zwischen Sub-Tabs und erstem Page-
+          Inhalt, konsistent zu space-y-6 zwischen Cards innerhalb der Page. */}
+      <main ref={mainRef} className="flex-1 overflow-auto px-3 pb-3 pt-4 sm:px-6 sm:pb-6 sm:pt-4">
         <div className="max-w-[1920px] mx-auto">
           <Outlet />
         </div>
