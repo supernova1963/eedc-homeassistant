@@ -95,6 +95,8 @@ class LiveWetterResponse(BaseModel):
     profil_typ: str = "bdew_h0"  # "individuell_werktag", "individuell_wochenende", "bdew_h0"
     profil_quelle: Optional[str] = None  # "ha", "mqtt" — woher die History kam
     profil_tage: Optional[int] = None  # Anzahl Tage die ins individuelle Profil einflossen
+    prognose_quelle: Optional[str] = None  # Aktive Prognosequelle: "eedc", "solcast", "sfml"
+    prognose_quelle_hinweis: Optional[str] = None  # Fallback-Hinweis wenn gewünschte Quelle nicht verfügbar
     sfml_prognose_kwh: Optional[float] = None  # Solar Forecast ML Tagesprognose
     sfml_tomorrow_kwh: Optional[float] = None  # Solar Forecast ML Morgen-Prognose
     sfml_accuracy_pct: Optional[float] = None  # Solar Forecast ML Modellgenauigkeit
@@ -750,28 +752,32 @@ async def _get_lernfaktor_detail(
         _lernfaktor_cache[cache_key] = (heute_str, lf_result)
         return lf_result
 
-    faktor = round(max(0.5, min(1.3, raw_legacy)), 3)
+    faktor_legacy = round(max(0.5, min(1.3, raw_legacy)), 3)
 
-    # O1+O2 als Doppel-Variante auf den GLEICHEN Tagen — methodisch sauber.
+    # O1+O2 (Trim-Mean + Recency-Boost) — seit v3.30 als Live-Default.
+    # Legacy-Skalar bleibt als Diagnose-Vergleich im Log.
     raw_o12, _ = _aggregiere_o12(daten_aktiv, heute)
     faktor_o12: Optional[float] = None
     delta_o12_pct: Optional[float] = None
     if raw_o12 is not None:
         faktor_o12 = round(max(0.5, min(1.3, raw_o12)), 3)
-        if faktor > 0:
-            delta_o12_pct = round(100.0 * (faktor_o12 - faktor) / faktor, 2)
+        if faktor_legacy > 0:
+            delta_o12_pct = round(100.0 * (faktor_o12 - faktor_legacy) / faktor_legacy, 2)
+
+    # Live-Faktor: O12 wenn verfügbar, Legacy als Fallback
+    faktor = faktor_o12 if faktor_o12 is not None else faktor_legacy
 
     sum_ist = sum(d[1] for d in daten_aktiv)
     sum_prognose = sum(d[2] for d in daten_aktiv)
     quelle_label = quelle_config["label"]
-    o12_log = (
-        f", O12={faktor_o12:.3f} (Δ {delta_o12_pct:+.1f} %)"
-        if faktor_o12 is not None and delta_o12_pct is not None
+    legacy_log = (
+        f", Legacy={faktor_legacy:.3f} (Δ {delta_o12_pct:+.1f} %)"
+        if delta_o12_pct is not None
         else ""
     )
     logger.info(
         f"Lernfaktor Anlage {anlage_id} ({quelle_label}): {faktor:.3f} — {label} "
-        f"(Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh){o12_log}"
+        f"(Σ IST={sum_ist:.1f} kWh / Σ Prognose={sum_prognose:.1f} kWh){legacy_log}"
     )
 
     lf_result = LernfaktorResult(
@@ -1020,12 +1026,13 @@ async def get_live_wetter(
 
         now = datetime.now(ZoneInfo("Europe/Berlin"))
 
-        # Lernfaktor laden (nur bei OpenMeteo-Basis — bei Solcast/SFML wirkt der LF im Prognosen-Tab).
+        # Lernfaktor laden (nur bei EEDC-Quelle — bei Solcast/SFML pur, ohne Korrektur).
         # Korrekturprofil-Lookup hat Vorrang; `_get_lernfaktor` dient als Fallback,
         # solange noch keine Profile aggregiert sind (z. B. neu installierte Anlage).
-        prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
+        from backend.services.prognose_router import resolve_prognose_quelle
+        pq = resolve_prognose_quelle(anlage)
         skalar_fallback = (
-            await _get_lernfaktor(anlage_id, db) if prognose_basis == "openmeteo" else None
+            await _get_lernfaktor(anlage_id, db) if pq.braucht_lernfaktor else None
         )
 
         alle_stunden = []  # 0-23 für Verbrauchsprofil
@@ -1041,7 +1048,7 @@ async def get_live_wetter(
             # Korrekturfaktor auf GTI anwenden (skaliert die Strahlung, nicht den Ertrag,
             # damit Temperaturkorrektur weiterhin korrekt greift). Pro-Stunde-Lookup mit
             # Fallback-Kaskade (sonnenstand_wetter -> sonnenstand -> Skalar -> Legacy).
-            if gti is not None and prognose_basis == "openmeteo":
+            if gti is not None and pq.ist_eedc:
                 klasse_h = klassifiziere_stunde(bewoelkung_h, niederschlag_h, code)
                 forecast_datum = date.fromisoformat(t[:10])
                 kp = await lookup_korrekturfaktor(
@@ -1140,49 +1147,56 @@ async def get_live_wetter(
             wp_profil=wp_stunden_profil, referenz_temp_c=referenz_temp_c,
         )
 
-        # ── HA-Sensoren parallel lesen (Temperatur + SFML in 1 Batch-Call) ──
+        # ── HA-Sensor: Außentemperatur ──
         basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
         temp_entity = basis_live.get("aussentemperatur_c") if basis_live else None
-        sfml_entity = basis_live.get("sfml_today_kwh") if basis_live else None
-        tomorrow_entity = basis_live.get("sfml_tomorrow_kwh") if basis_live else None
-        accuracy_entity = basis_live.get("sfml_accuracy_pct") if basis_live else None
-
-        sfml_kwh = None
-        sfml_tomorrow = None
-        sfml_accuracy = None
         ha_temp_found = False
 
-        ha_entities = [e for e in [temp_entity, sfml_entity, tomorrow_entity, accuracy_entity] if e]
-        if ha_entities:
+        if temp_entity:
             try:
                 from backend.services.ha_state_service import get_ha_state_service
                 ha_svc = get_ha_state_service()
-                ha_batch = await ha_svc.get_sensor_states_batch(ha_entities)
-
-                # Außentemperatur
-                if temp_entity and ha_batch.get(temp_entity):
+                ha_batch = await ha_svc.get_sensor_states_batch([temp_entity])
+                if ha_batch.get(temp_entity):
                     ha_temp = ha_batch[temp_entity][0]
                     if aktuelle_stunde is not None:
                         aktuelle_stunde["temperatur_c"] = ha_temp
                         ha_temp_found = True
-
-                # SFML
-                if sfml_entity and ha_batch.get(sfml_entity):
-                    sfml_kwh = ha_batch[sfml_entity][0]
-                if tomorrow_entity and ha_batch.get(tomorrow_entity):
-                    sfml_tomorrow = ha_batch[tomorrow_entity][0]
-                if accuracy_entity and ha_batch.get(accuracy_entity):
-                    sfml_accuracy = ha_batch[accuracy_entity][0]
-
-                # Tages-kWh auf GTI-Kurvenform verteilen
-                if sfml_kwh is not None and sfml_kwh > 0 and profil:
-                    gti_summe = sum(p["pv_ertrag_kw"] for p in profil)
-                    if gti_summe > 0:
-                        sfml_factor = sfml_kwh / gti_summe
-                        for p in profil:
-                            p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
             except Exception as e:
-                logger.debug(f"HA-Sensoren (Wetter) nicht lesbar: {e}")
+                logger.debug(f"HA-Sensor Temperatur nicht lesbar: {e}")
+
+        # ── SFML per Auto-Discovery (wenn als aktive Quelle gewählt) ──
+        sfml_kwh = None
+        sfml_tomorrow = None
+        sfml_accuracy = None
+
+        if pq.ist_sfml:
+            try:
+                from backend.services.prognose_discovery import discover_prognose_sensoren
+                sfml_disc = await discover_prognose_sensoren("sfml")
+                if sfml_disc.gefunden:
+                    sfml_kwh = sfml_disc.wert("heute_kwh")
+                    sfml_tomorrow = sfml_disc.wert("morgen_kwh")
+                    sfml_accuracy = sfml_disc.wert("genauigkeit_30d")
+
+                    # Tages-kWh auf GTI-Kurvenform verteilen
+                    if sfml_kwh is not None and sfml_kwh > 0 and profil:
+                        gti_summe = sum(p["pv_ertrag_kw"] for p in profil)
+                        if gti_summe > 0:
+                            sfml_factor = sfml_kwh / gti_summe
+                            for p in profil:
+                                p["pv_ml_prognose_kw"] = round(p["pv_ertrag_kw"] * sfml_factor, 2)
+            except Exception as e:
+                logger.debug(f"SFML-Discovery fehlgeschlagen: {e}")
+
+        # SFML-Fallback: wenn SFML gewählt aber keine Daten → Fallback auf eedc
+        if pq.ist_sfml and sfml_kwh is None:
+            from backend.services.prognose_router import PrognoseQuelleResult
+            pq = PrognoseQuelleResult(
+                quelle="eedc", ist_fallback=True,
+                hinweis="SFML liefert aktuell keine Daten, eedc-Prognose aktiv.",
+                gewuenscht="sfml",
+            )
 
         # ── MQTT-Fallback für Außentemperatur (Standalone / HA-Sensor nicht erreichbar) ──
         if not ha_temp_found and aktuelle_stunde is not None:
@@ -1220,6 +1234,13 @@ async def get_live_wetter(
         if profil and len(profil) == 24:
             pv_stundenprofil = [round(p.get("pv_ertrag_kw", 0.0) or 0.0, 3) for p in profil]
 
+        # pv_prognose_kwh = Wert der aktiven Quelle (für KPI-Anzeige im Frontend)
+        pv_prognose_aktiv = pv_prognose  # Default: EEDC (OpenMeteo × Lernfaktor)
+        if pq.ist_solcast and solcast_kwh is not None:
+            pv_prognose_aktiv = solcast_kwh
+        elif pq.ist_sfml and sfml_kwh is not None:
+            pv_prognose_aktiv = sfml_kwh
+
         # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget)
         if pv_prognose is not None and pv_prognose > 0:
             asyncio.create_task(
@@ -1243,12 +1264,14 @@ async def get_live_wetter(
             "sonnenstunden": round(sunshine_s / 3600, 1) if sunshine_s is not None else None,
             "sonnenstunden_bisher": round(sunshine_bisher_s / 3600, 1) if sunshine_bisher_s is not None else None,
             "sonnenstunden_rest": round(sunshine_remaining_s / 3600, 1) if sunshine_remaining_s is not None else None,
-            "pv_prognose_kwh": pv_prognose,
+            "pv_prognose_kwh": pv_prognose_aktiv,
             "grundlast_kw": grundlast,
             "verbrauchsprofil": profil,
             "profil_typ": profil_typ if ist_ind else "bdew_h0",
             "profil_quelle": ind_profil_data.get("quelle") if ind_profil_data and ist_ind else None,
             "profil_tage": profil_tage,
+            "prognose_quelle": pq.quelle,
+            "prognose_quelle_hinweis": pq.hinweis,
             "sfml_prognose_kwh": round(sfml_kwh, 1) if sfml_kwh is not None else None,
             "sfml_tomorrow_kwh": round(sfml_tomorrow, 1) if sfml_tomorrow is not None else None,
             "sfml_accuracy_pct": round(sfml_accuracy, 1) if sfml_accuracy is not None else None,

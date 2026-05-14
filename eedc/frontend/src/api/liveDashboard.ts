@@ -84,6 +84,8 @@ export interface LiveWetterResponse {
   profil_typ?: string  // "individuell_werktag", "individuell_wochenende", "bdew_h0"
   profil_quelle?: string | null  // "ha", "mqtt"
   profil_tage?: number | null  // Anzahl Tage im individuellen Profil
+  prognose_quelle?: string | null  // Aktive Prognosequelle: "eedc", "solcast", "sfml"
+  prognose_quelle_hinweis?: string | null  // Fallback-Hinweis
   sfml_prognose_kwh?: number | null  // Solar Forecast ML Tagesprognose
   sfml_tomorrow_kwh?: number | null  // Solar Forecast ML Morgen-Prognose
   sfml_accuracy_pct?: number | null  // Solar Forecast ML Modellgenauigkeit

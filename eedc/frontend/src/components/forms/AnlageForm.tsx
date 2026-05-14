@@ -5,6 +5,7 @@ import VersorgerSection from './VersorgerSection'
 import AnlagenfotoSection from './AnlagenfotoSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
 import type { Anlage, AnlageCreate, VersorgerDaten } from '../../types'
+import { useHAAvailable } from '../../hooks/useHAAvailable'
 
 interface AnlageFormProps {
   anlage?: Anlage | null
@@ -15,6 +16,7 @@ interface AnlageFormProps {
 export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const haAvailable = useHAAvailable()
 
   const [formData, setFormData] = useState({
     anlagenname: anlage?.anlagenname || '',
@@ -33,7 +35,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     ust_satz_prozent: anlage?.ust_satz_prozent?.toString() || '',
     community_auto_share: anlage?.community_auto_share ?? false,
     netz_puffer_w: anlage?.netz_puffer_w?.toString() || '100',
-    prognose_basis: anlage?.prognose_basis || 'openmeteo',
+    prognose_quelle: anlage?.prognose_quelle || 'eedc',
   })
 
   // Track if user manually changed USt-Satz
@@ -108,7 +110,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
         ust_satz_prozent: formData.ust_satz_prozent ? parseFloat(formData.ust_satz_prozent) : undefined,
         community_auto_share: formData.community_auto_share,
         netz_puffer_w: formData.netz_puffer_w ? parseInt(formData.netz_puffer_w) : 100,
-        prognose_basis: formData.prognose_basis || 'openmeteo',
+        prognose_quelle: formData.prognose_quelle || 'eedc',
       } as AnlageCreate)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
@@ -495,29 +497,36 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
       <div className="space-y-3">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <Sun className="w-5 h-5 text-amber-500" />
-          Prognose-Basis (eedc kalibriert)
+          Prognosequelle
         </h3>
         <div>
           <label
-            htmlFor="prognose_basis"
+            htmlFor="prognose_quelle"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >
-            Quelle für eedc-Kalibrierung
+            PV-Prognose-Quelle für diese Anlage
           </label>
           <select
-            id="prognose_basis"
-            name="prognose_basis"
-            value={formData.prognose_basis}
+            id="prognose_quelle"
+            name="prognose_quelle"
+            value={formData.prognose_quelle}
             onChange={handleChange}
             className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
           >
-            <option value="openmeteo">Open-Meteo (Standard, Standalone)</option>
-            <option value="solcast">Solcast (wenn konfiguriert)</option>
+            <option value="eedc">eedc-optimiert (Standard)</option>
+            <option value="solcast">Solcast (pur, ohne Korrektur)</option>
+            <option value="sfml" disabled={!haAvailable}>
+              Solar Forecast ML (pur{!haAvailable ? ' — nur im HA-Add-on verfügbar' : ', nur HA-Add-on'})
+            </option>
           </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {formData.prognose_basis === 'openmeteo'
-              ? 'eedc kalibriert die Open-Meteo Rohprognose mit einem anlagenspezifischen Lernfaktor (MOS-Verfahren).'
-              : 'eedc kalibriert die Solcast-Prognose mit einem eigenen Lernfaktor. Solcast muss im Sensor-Mapping konfiguriert sein.'}
+            {formData.prognose_quelle === 'eedc'
+              ? 'Open-Meteo Rohprognose mit anlagenspezifischem Lernfaktor (MOS-Verfahren). Funktioniert überall, auch standalone.'
+              : formData.prognose_quelle === 'solcast'
+                ? haAvailable
+                  ? 'Solcast-Prognose direkt über die HA-Integration, ohne eedc-Korrektur.'
+                  : 'Solcast-Prognose direkt via API-Token, ohne eedc-Korrektur. API-Token muss konfiguriert sein.'
+                : 'Solar Forecast ML direkt aus der HA-Integration, ohne eedc-Korrektur. Nur im HA-Add-on verfügbar.'}
           </p>
         </div>
       </div>

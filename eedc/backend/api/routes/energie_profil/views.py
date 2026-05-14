@@ -908,11 +908,11 @@ async def get_tagesprognose(
     pv_stunden = [0.0] * 24
     pv_quelle = "openmeteo"
 
-    # Versuche Solcast zuerst (wenn konfiguriert)
-    prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
-    solcast_config = (anlage.sensor_mapping or {}).get("solcast_config")
+    # Versuche Solcast zuerst (wenn als Quelle gewählt)
+    from backend.services.prognose_router import resolve_prognose_quelle
+    pq = resolve_prognose_quelle(anlage)
 
-    if solcast_config and prognose_basis == "solcast":
+    if pq.ist_solcast:
         try:
             from backend.services.solcast_service import get_solcast_forecast
             solcast = await get_solcast_forecast(anlage)

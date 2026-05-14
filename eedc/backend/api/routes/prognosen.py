@@ -99,7 +99,7 @@ class PrognosenVergleichResponse(BaseModel):
     # Zwecken neben dem Legacy-Faktor. Live-Pfad nutzt nur eedc_lernfaktor.
     eedc_lernfaktor_o12: Optional[float] = None
     eedc_lernfaktor_o12_delta_pct: Optional[float] = None  # 100 * (O12 - Legacy) / Legacy
-    eedc_prognose_basis: str = "openmeteo"  # "openmeteo" oder "solcast"
+    eedc_prognose_basis: str = "eedc"  # "eedc" oder "solcast" (für EEDC-Diagnose)
     eedc_tageshaelften: List[Optional[TageshaelfteSchema]] = []
 
     # Solcast (wenn konfiguriert)
@@ -413,15 +413,13 @@ async def get_prognosen_vergleich(
             if tag_idx == 0:
                 openmeteo_stundenprofil.append(entry)
 
-    # ── EEDC = Basis × Lernfaktor (MOS-Kaskade: saisonal → quartal → gesamt) ──
-    prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
-    lf_result = await _get_lernfaktor_detail(anlage_id, db, quelle=prognose_basis)
+    # ── EEDC = OpenMeteo × Lernfaktor (MOS-Kaskade: saisonal → quartal → gesamt) ──
+    # EEDC nutzt immer OpenMeteo als Basis — Solcast/SFML sind eigene Quellen.
+    lf_result = await _get_lernfaktor_detail(anlage_id, db, quelle="openmeteo")
     lernfaktor = lf_result.faktor
     eedc_stundenprofil = []
     eedc_tagesprofile: list[list[StundenProfilEintrag]] = [[], [], []]
-    # Basis-Werte abhängig von prognose_basis (Solcast-Stundenprofil wird weiter unten gefüllt,
-    # daher hier vorab merken — die endgültige EEDC-Berechnung erfolgt nach Solcast-Aufbereitung)
-    _eedc_basis_om = prognose_basis == "openmeteo"
+    _eedc_basis_om = True  # EEDC basiert immer auf OpenMeteo
     if _eedc_basis_om and lernfaktor is not None:
         for s in openmeteo_stundenprofil:
             eedc_stundenprofil.append(StundenProfilEintrag(
@@ -510,23 +508,6 @@ async def get_prognosen_vergleich(
             if t["datum"] == uebermorgen_str:
                 solcast_uebermorgen_kwh = t["kwh"]
 
-    # ── EEDC auf Solcast-Basis (wenn prognose_basis == "solcast") ──
-    if not _eedc_basis_om and solcast and solcast_stundenprofil:
-        if lernfaktor is not None:
-            for s in solcast_stundenprofil:
-                eedc_stundenprofil.append(StundenProfilEintrag(
-                    stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
-                ))
-            eedc_heute_kwh = round(solcast.daily_kwh * lernfaktor, 1) if solcast.daily_kwh is not None else None
-            eedc_morgen_kwh = round(solcast.tomorrow_kwh * lernfaktor, 1) if solcast.tomorrow_kwh is not None else None
-            eedc_uebermorgen_kwh = round(solcast_uebermorgen_kwh * lernfaktor, 1) if solcast_uebermorgen_kwh is not None else None
-        else:
-            # Solcast als Basis ohne Lernfaktor: Rohwerte als EEDC übernehmen
-            eedc_stundenprofil = list(solcast_stundenprofil)
-            eedc_heute_kwh = round(solcast.daily_kwh, 1) if solcast.daily_kwh is not None else None
-            eedc_morgen_kwh = round(solcast.tomorrow_kwh, 1) if solcast.tomorrow_kwh is not None else None
-            eedc_uebermorgen_kwh = round(solcast_uebermorgen_kwh, 1) if solcast_uebermorgen_kwh is not None else None
-
     # ── Tageshälften (je 3 Einträge: heute, morgen, übermorgen) ──
     # Solar Noon pro Tag (Equation of Time) — Split an astronomischer Tagesmitte,
     # nicht an 12:00 Clockzeit. Konsistent zu solar_forecast_service.
@@ -585,7 +566,7 @@ async def get_prognosen_vergleich(
         eedc_lernfaktor_stufe=lf_result.label,
         eedc_lernfaktor_o12=lf_result.faktor_o12,
         eedc_lernfaktor_o12_delta_pct=lf_result.delta_o12_pct,
-        eedc_prognose_basis=prognose_basis,
+        eedc_prognose_basis="eedc",  # EEDC basiert immer auf OpenMeteo
         solcast_verfuegbar=solcast is not None,
         solcast_status=sc_status,
         solcast_hinweis=sc_hinweis if sc_hinweis else None,
@@ -643,9 +624,8 @@ async def get_prognosen_genauigkeit(
     )
     tage_daten = result.scalars().all()
 
-    # Lernfaktor + Basis-Quelle (openmeteo oder solcast) für EEDC-Genauigkeit
-    prognose_basis = getattr(anlage, "prognose_basis", None) or "openmeteo"
-    lernfaktor = await _get_lernfaktor(anlage_id, db, quelle=prognose_basis)
+    # Lernfaktor für EEDC-Genauigkeit (immer OpenMeteo-basiert)
+    lernfaktor = await _get_lernfaktor(anlage_id, db, quelle="openmeteo")
 
     eintraege = []
     om_signed = []  # vorzeichenbehaftete relative Fehler (Prognose - IST) / IST * 100
@@ -663,12 +643,10 @@ async def get_prognosen_genauigkeit(
                 if v > 0 and k not in _NICHT_PV
             )
 
-        # EEDC = Basis × Lernfaktor (historisch — Lernfaktor kalibriert auf aktuellen Stand)
+        # EEDC = OpenMeteo × Lernfaktor (historisch)
         eedc_kwh = None
-        if lernfaktor is not None:
-            basis_kwh = tz.solcast_prognose_kwh if prognose_basis == "solcast" else tz.pv_prognose_kwh
-            if basis_kwh and basis_kwh > 0:
-                eedc_kwh = basis_kwh * lernfaktor
+        if lernfaktor is not None and tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
+            eedc_kwh = tz.pv_prognose_kwh * lernfaktor
 
         eintraege.append(GenauigkeitsEintrag(
             datum=tz.datum.isoformat(),

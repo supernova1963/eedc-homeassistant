@@ -333,32 +333,26 @@ export interface PVStringsGesamtlaufzeitResponse {
 }
 
 // =============================================================================
-// Prognose-Vergleich Types (eedc vs. ML vs. IST)
+// Prognose-Vergleich Types (eedc vs. IST)
 // =============================================================================
 
 export interface PrognoseVergleichMonat {
   monat: number
   monat_name: string
   eedc_kwh: number
-  sfml_kwh: number
   ist_kwh: number
   eedc_abweichung_pct: number | null
-  sfml_abweichung_pct: number | null
   tage_mit_daten: number
 }
 
 export interface PrognoseVergleich {
   anlage_id: number
   jahr: number
-  hat_sfml_daten: boolean
   eedc_jahres_kwh: number
-  sfml_jahres_kwh: number
   ist_jahres_kwh: number
   eedc_abweichung_pct: number | null
-  sfml_abweichung_pct: number | null
   monatswerte: PrognoseVergleichMonat[]
   tage_mit_eedc: number
-  tage_mit_sfml: number
 }
 
 // =============================================================================

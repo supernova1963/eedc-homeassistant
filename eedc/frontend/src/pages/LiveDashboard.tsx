@@ -387,7 +387,7 @@ export default function LiveDashboard() {
               {prognose3Tage && prognose3Tage.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Solar-Aussicht <SimpleTooltip text="GTI-basierte Prognose (Open-Meteo) mit Neigung/Ausrichtung der Module. VM/NM = Split an Solar Noon."><Info className="inline w-3 h-3 text-gray-400 opacity-50 cursor-help" /></SimpleTooltip>
+                    Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`${wetter?.prognose_quelle === 'solcast' ? 'Solcast-Prognose (pur)' : wetter?.prognose_quelle === 'sfml' ? 'Solar Forecast ML (pur)' : 'GTI-basierte Prognose (Open-Meteo) mit Lernfaktor'}. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 opacity-50 cursor-help" /></SimpleTooltip>
                   </h3>
                   {prognose3Tage.some(t => t.pv_ertrag_morgens_kwh != null) && (
                     <div className="grid grid-cols-[auto_1fr_7rem] px-3 mb-0.5">
@@ -404,7 +404,6 @@ export default function LiveDashboard() {
                     {prognose3Tage.map((tag, i) => {
                       const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
                       const hasVmNm = tag.pv_ertrag_morgens_kwh != null
-                      const sfml = i === 0 ? wetter?.sfml_prognose_kwh : i === 1 ? wetter?.sfml_tomorrow_kwh : null
                       const isProminent = i < 3
                       const verbrPrognKwh = i === 0 && wetter?.verbrauchsprofil?.length
                         ? wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0)
@@ -433,10 +432,8 @@ export default function LiveDashboard() {
                         }`}>
                           <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
                           <div className="flex flex-col items-end">
-                            <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}
-                                  title={sfml != null ? `ML: ${sfml.toFixed(1)} kWh` : undefined}>
+                            <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}>
                               {(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : tag.pv_ertrag_kwh).toFixed(1)}
-                              {sfml != null && <span className="text-[10px] text-purple-400 font-normal ml-1">{sfml.toFixed(0)}</span>}
                               <span className="text-xs font-normal ml-0.5">kWh</span>
                             </span>
                             {verbleibenKwh != null && (

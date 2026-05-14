@@ -60,26 +60,37 @@ async def get_solcast_forecast(anlage) -> Optional[SolcastForecast]:
     """
     Holt Solcast-Prognose je nach Konfiguration (API oder HA-Sensor).
 
+    Reihenfolge:
+    1. Explizite solcast_config vorhanden → Modus daraus (api / ha_auto)
+    2. Keine Config, aber HA verfügbar → Auto-Discovery der Solcast-Integration
+    3. Sonst → None
+
     Returns:
         SolcastForecast oder None wenn nicht konfiguriert/nicht verfügbar.
         Fehlerstatus über get_solcast_status() abrufbar.
     """
     cfg = (anlage.sensor_mapping or {}).get("solcast_config")
-    if not cfg:
-        return None
 
-    modus = cfg.get("modus")
-    if modus == "api":
-        return await _fetch_solcast_api(
-            cfg.get("api_key", ""),
-            cfg.get("resource_ids", []),
-            cfg.get("tier", "free"),
-        )
-    elif modus in ("ha_sensor", "ha_auto"):
+    if cfg:
+        modus = cfg.get("modus")
+        if modus == "api":
+            return await _fetch_solcast_api(
+                cfg.get("api_key", ""),
+                cfg.get("resource_ids", []),
+                cfg.get("tier", "free"),
+            )
+        elif modus in ("ha_sensor", "ha_auto"):
+            return await _fetch_solcast_ha_auto()
+        else:
+            logger.warning(f"Unbekannter Solcast-Modus: {modus}")
+            return None
+
+    # Keine explizite Config → im HA-Add-on per Auto-Discovery versuchen
+    from backend.core.config import HA_INTEGRATION_AVAILABLE
+    if HA_INTEGRATION_AVAILABLE:
         return await _fetch_solcast_ha_auto()
-    else:
-        logger.warning(f"Unbekannter Solcast-Modus: {modus}")
-        return None
+
+    return None
 
 
 def get_solcast_status(anlage) -> tuple[str, str]:
@@ -90,11 +101,19 @@ def get_solcast_status(anlage) -> tuple[str, str]:
         (status, hinweis) — status: "ok"|"nicht_konfiguriert"|"tageslimit"|...
     """
     cfg = (anlage.sensor_mapping or {}).get("solcast_config")
+
     if not cfg:
+        # Keine explizite Config → im HA-Add-on per Auto-Discovery verfügbar?
+        from backend.core.config import HA_INTEGRATION_AVAILABLE as _ha_avail
+        if _ha_avail:
+            cached = _cache_get("solcast_ha:auto")
+            if cached is not None:
+                return ("ok", "Solcast HA-Integration automatisch erkannt.")
+            return ("ok", "Solcast HA-Integration wird beim nächsten Abruf geprüft.")
         return ("nicht_konfiguriert",
                 "Solcast nicht eingerichtet. Für eine satellitenbasierte PV-Prognose "
                 "kannst du einen kostenlosen Solcast-Account anlegen (solcast.com, 10 Abrufe/Tag) "
-                "und den API-Key im Sensor-Mapping eintragen. Alternativ die Solcast HA-Integration nutzen.")
+                "und den API-Key in den Anlagen-Einstellungen eintragen.")
 
     modus = cfg.get("modus", "")
 

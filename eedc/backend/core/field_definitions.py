@@ -359,9 +359,8 @@ BASIS_LIVE_FELDER: list[dict] = [
     {"key": "netz_kombi_w",        "label": "Netz kombiniert (±)",      "einheit": "W"},
     {"key": "pv_gesamt_w",         "label": "PV gesamt",                "einheit": "W"},
     {"key": "aussentemperatur_c",  "label": "Außentemperatur",          "einheit": "°C"},
-    {"key": "sfml_today_kwh",      "label": "Solar Forecast heute",     "einheit": "kWh"},
-    {"key": "sfml_tomorrow_kwh",   "label": "Solar Forecast morgen",    "einheit": "kWh"},
-    {"key": "sfml_accuracy_pct",   "label": "Solar Forecast Genauigkeit","einheit": "%"},
+    # SFML- und Solcast-Sensoren werden per Auto-Discovery erkannt (prognose_discovery.py),
+    # kein manuelles Mapping mehr nötig.
 ]
 
 # Typen mit SoC-Live-Sensor (aus LIVE_FELDER_INV abgeleitet)

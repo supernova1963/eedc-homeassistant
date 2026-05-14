@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.24.2 | **Status:** Stable Release
+**Version:** 3.29.2 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -170,31 +170,64 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
-**v3.16.x** - Dynamischer Strompreis + Solcast Prognosen:
+**v3.29.x** (2026-05-13/14) — Aggregations-Hardening + UX-Bündel vor Menüstruktur-Konzept:
 
-- **Solcast PV Forecast (v3.16.4):** Prognosen-Vergleich Tab in Aussichten — OpenMeteo / EEDC (kalibriert) / Solcast / IST, KPI-Matrix mit VM/NM, Stundenprofil-Chart, 24h+7-Tage-Tabellen, Genauigkeits-Tracking, L1/L2-Cache, Statusmeldungen. Evaluierungsphase.
-- **Sensor-Mapping Strompreis (v3.16.0):** Optionaler Strompreis-Sensor (Tibber, aWATTar, EPEX) im Sensor-Mapping Wizard, EPEX-Börsenpreis automatisch via aWATTar API, Overlay im Tagesverlauf
-- **Stündliche Strompreis-Mitschrift:** Zwei getrennte Preisfelder im TagesEnergieProfil (Endpreis + Börsenpreis), Tagesaggregation mit Negativpreis-Analyse
-- **Infothek Etappe 3.6 (v3.16.2):** stamm_*/ansprechpartner_*/wartung_*-Felder aus Investitionsformular entfernt, Infothek-Verknüpfungen inline im Formular, PDF-Jahresbericht bereinigt
+- **Anschaffungs-/Stilllegungsdatum-Filter durchgängig (v3.29.0/v3.29.1, #236 #239):** alle Read-Sites (Cockpit, Energieprofil, HA-Stats-Aggregation, Monatsbericht-Sektionen) respektieren jetzt `inv.installationsdatum`/`stilllegungsdatum`. Folgewelle nach #236 zeigte: Filter auf einer Schicht reicht nicht bei parallelen Pfaden.
+- **SoT-Helper `get_inv_value` für `leistung_kwp` (#229):** PV-String-Verteilung liest jetzt Spalten-Wert mit Fallback auf `parameter`-JSON statt Gleichverteilung.
+- **UX-Cluster #233 (P13–P18):** chirurgische Fixes Display-Token `'—'`, kWh-Einheiten im WP-Dashboard (#237), Daten-Checker Inbetriebnahme-Monat ausgeschlossen (#240), Sparkline-Tooltip mit Monatsname (#241).
+- **eedc-Schreibweise (v3.29.2):** ~130 Treffer in Code + Hilfe-Docs auf Wort „eedc" vereinheitlicht; `\bEEDC\b`-Wortgrenze schützt Identifier wie `EEDC_Prognose` automatisch.
 
-**v3.15.x** - PDF-Dokumente, Infothek N:M, Performance:
+**v3.28.0** (2026-05-13) — Reparatur-Werkbank: Mehrere Tage neu aggregieren (#230).
 
-- **Anlagendokumentation + Finanzbericht (v3.15.0):** Zwei neue PDF-Dokumente (Beta), Dokumente-Dialog, Anlagenfoto-Upload
-- **Infothek N:M Verknüpfung (v3.15.2):** Ein Datenblatt für mehrere Investitionen, Komponenten-Akte direkt am Investment
-- **N+1 Queries + Code-Splitting (v3.15.3):** Batch-Queries, React.lazy für 33 Seiten, Konstanten zentralisiert
-- **Tagesverlauf Einspeisung + Strompreis-Overlay (v3.15.8):** Netzbezug/Einspeisung getrennt, sekundäre Y-Achse
+**v3.27.x** (2026-05-10/12) — Etappe 3d + Tester-Päckchen:
 
-**v3.14.0** - Stilllegungsdatum:
+- **Etappe 3d Daten-Provenance & Reparatur-Werkbank (v3.27.0):** Anomalie-Erkennung mit punktuellem Reparatur-Pfad; bewusst KEIN globaler Heiler-Knopf.
+- **UX-Sprint A1+A2+A3 + Power-Sensor-Bug (v3.27.1, #200):** Wizard + Live-Heute + Stats-API ziehen jetzt `_is_energy_sensor` konsistent durch (kW darf nicht in kWh-Slot).
+- **WP-Aggregation: Split-Strommessung + Counter-Spike-Cap (v3.27.4, #230):** MartyBr-Bug-Report mit Screenshot als Vorlage.
+- **UX-Cluster detLAN (v3.27.5, #207 #215 #217 #218 #494) + Folge-Päckchen Tester-Bugs (v3.27.3, #220 #222 #226 #227 #228).**
 
-- **Stilllegungsdatum auf Investitionen:** Historische Aggregate behalten deaktivierte Komponenten, 32 Call-Sites korrigiert
-- **Infothek Komponentenakte:** Garantie-Kategorie zum vollwertigen Datenblatt ausgebaut
+**v3.26.x** (2026-05-06/09) — Korrekturprofil + HA-Energy-Import + Etappe 3c:
 
-**v3.12.0–v3.13.0** - Monatsberichte, Energieprofil Etappe 3:
+- **EEDC-Korrekturprofil O1+O2 (v3.26.0–v3.26.2):** Päckchen 1 (Recency) + Päckchen 2 (Sonnenstand × Wetter live) parallel zum Legacy-Skalar als Diagnose. Live-Pfad-Switch wird in Prognosequellen-Wahl Schritt 2 mitgemacht.
+- **HA-Energiekonfiguration importieren (v3.26.5, #197):** Setup-Vereinfachung Olli0103 — Energy-Dashboard-Konfig aus HA wird im Setup-Wizard übernommen.
+- **Etappe 3c Energieprofil Read-/Write-Architektur konsolidiert (v3.26.8):** zentraler SoT-Helper statt Drift-Patches; siehe `docs/KONZEPT-DATENPIPELINE.md`.
+- **Reload-Vorschau Counter-Boundary + „Nur neu rechnen" (v3.26.6):** Vorschau heilt sich selbst.
 
-- **Monatsberichte (v3.12.0):** Ersetzt "Aktueller Monat", Zeitstrahl-Integration, Community-Vergleich, T-Konto
-- **Energieprofil Monatsauswertung (v3.13.0):** Heatmap 24h×N, KPIs, Kategorien-Leiste, Geräte-Tabelle, Peak-Analyse
+**v3.25.x** (2026-04-29/05-05) — Live-Snapshot 5-Min + Investitions-Parameter-SoT:
 
-**Ältere Meilensteine:** Live Dashboard + MQTT-Inbound (v3.0), GTI-Prognose (v3.3), Wettermodell-Kaskade (v3.4), Infothek (v3.5), L2-Cache (v3.7), Live Dashboard Generalüberholung (v3.9), Import-Strategie (v3.10)
+- **Live-Snapshot 5-Min Backend (v3.25.3–v3.25.6):** Phase 1 Backend für Live-Tagesverlauf-Service ausgeliefert + validiert (Off-by-one-Fix state→sum). Frontend-Umstellung noch offen.
+- **Investitions-Parameter Single Source of Truth (v3.25.0):** `lib/investitionParameter.ts` + `core/investition_parameter.py` als gemeinsame Konstanten-Map; DB-Migration `_migrate_investitionen_parameter_keys_v325` korrigiert 7 Drift-Bugs (V2H, Jahresfahrleistung, PV-Ladeanteil, Vergleichsverbrauch, Speicher-Arbitrage, Wallbox-Leistung, WP-Preis-Default).
+- **Pool-Bug Quick-Fix Wallbox+E-Auto (v3.25.11):** Drift-Konsistenz zwischen `cockpit/uebersicht.py` und `aktueller_monat._aggregate` angeglichen.
+
+**v3.24.x** (2026-04-27/29) — WP-Kompressor-Starts + In-App-Hilfe + Sensor-LTS:
+
+- **WP-Kompressor-Starts (v3.24.0, #136):** optionaler Total-Increasing-Sensor pro WP, neue `KUMULATIVE_COUNTER_FELDER`-Architektur trennt Counter strikt von kWh-Feldern. KPI-Kacheln in Monatsbericht + WP-Dashboard (v3.24.4, #169).
+- **Sensor-Filter aufgeweicht + „ohne Statistik"-Badge (v3.24.1, #136 Folge):** Nibe-Roh-Counter ohne `state_class` jetzt auswählbar, Frontend-Fallback-Link, Daten-Checker-Kategorie SENSOR_MAPPING_LTS — siehe `feedback_ha_lts_keine_zeitmaschine.md`.
+- **In-App-Hilfe als pflegbares Werk (v3.24.2):** Sweep aller acht Hilfe-Dokumente (BENUTZERHANDBUCH, HANDBUCH_INSTALLATION/BEDIENUNG/EINSTELLUNGEN/INFOTHEK, BERECHNUNGEN, SENSOR-REFERENZ, GLOSSAR) auf v3.24-Stand. Sidebar-Eintrag „Was ist neu" (v3.24.5, Discussion #130 Folge Safi105).
+- **PV-Cockpit: Speicher-Kapazität + WR-Eigenleistung sichtbar (v3.24.4/v3.24.6, #172 detLAN):** Key-Drift `batteriekapazitaet_kwh` vs. `kapazitaet_kwh` korrigiert, Orphan-Speicher-Block ergänzt.
+
+**v3.23.x** (2026-04-25/27) — MAE/MBE + MQTT-Daten-Checker + Mobile-Hardening:
+
+- **MAE + Bias trennen im Genauigkeits-Tracking (v3.22.0/v3.23.x, #151):** drei Quellen (OpenMeteo/EEDC/Solcast), Bias neutral gefärbt, Spaltenstruktur stabil auch ohne Lernfaktor.
+- **MQTT-Topic-Abdeckung im Daten-Checker (v3.23.7, #134):** Drift zwischen dynamischer Konsumenten-Seite und statischer Publisher-Seite wird sichtbar; bei nicht aktivem Subscriber stillschweigend übersprungen (v3.23.8 detLAN/rapahl).
+- **Klickbarer Reparatur-Popover bei IST-Lücke (v3.23.0, #147):** Button „Tag neu berechnen" + Fallback-Link Sensor-Mapping. Restart-Recovery für verpasste :05/:55-Snapshot-Jobs.
+- **iOS Safari `h-dvh` + COP→JAZ-Harmonisierung (v3.23.6/v3.23.4, #161/#167):** siehe `feedback_ios_companion_app.md` und Wizard-Sweep für Key-Drift (`batterie_kwh`→`batteriekapazitaet_kwh` u. a.).
+
+**v3.19.0–v3.22.0** (2026-04-22/25) — Architekturwechsel + Slot-Konvention + WP-Gaspreis:
+
+- **kWh aus Zähler-Snapshots statt Leistungs-Integration (v3.19.0, #135):** kritischer Architekturwechsel — stündliche `sensor_snapshots`-Tabelle, Self-Healing, ±5–15 % Drift weg.
+- **Performance Ratio nutzt GTI statt GHI (v3.20.0, #139):** physikalisch unmögliche PR-Werte >1.2 im Winter korrigiert.
+- **Slot-Konvention auf Backward vereinheitlicht (v3.20.0, #144):** OpenMeteo/Solcast/IST jetzt alle Slot N = Energie [N-1, N), Industriestandard.
+- **WP-Alternativvergleich + Monats-Gaspreis (v3.21.0, #141) + aufklappbare Energieprofil-Sektionen (#148).**
+
+**v3.17.0–v3.18.0** (2026-04-21) — Dynamische Benzinpreise + Energieprofil-Tab:
+
+- **Dynamische Benzinpreise aus EU Weekly Oil Bulletin (v3.17.0):** echte monatliche Kraftstoffpreise statt statischem Parameter, History seit 2005.
+- **Energieprofil-Tab + anlage-spezifische Datenverwaltung (v3.18.0, #133):** Tages-Tabelle mit Spalten-Selektor, Pro-Tag-Reaggregation, Vollbackfill aus HA-Statistik.
+
+**v3.16.x** (April 2026) — Solcast PV Forecast (v3.16.4): Prognosen-Vergleich-Tab (OpenMeteo / EEDC kalibriert / Solcast / IST); Sensor-Mapping Strompreis (Tibber/aWATTar/EPEX), Stündliche Strompreis-Mitschrift; Infothek Etappe 3.6 (v3.16.2).
+
+**Ältere Meilensteine:** PDF-Dokumente + Infothek N:M (v3.15), Stilllegungsdatum (v3.14), Monatsberichte + Energieprofil Etappe 3 (v3.12/3.13), Import-Strategie (v3.10), Live Dashboard Generalüberholung (v3.9), L2-Cache (v3.7), Infothek (v3.5), Wettermodell-Kaskade (v3.4), GTI-Prognose (v3.3), Live Dashboard + MQTT-Inbound (v3.0).
 
 Für Details siehe [CHANGELOG.md](CHANGELOG.md) und [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
 

@@ -271,7 +271,7 @@ export interface PrognosenVergleich {
   // Faktor zu Diagnose-Zwecken. Live-Pfad nutzt nur eedc_lernfaktor.
   eedc_lernfaktor_o12?: number | null
   eedc_lernfaktor_o12_delta_pct?: number | null  // 100 * (O12 - Legacy) / Legacy
-  eedc_prognose_basis: string  // "openmeteo" | "solcast"
+  eedc_prognose_basis: string  // "eedc" | "solcast"
   eedc_tageshaelften: (Tageshaelfte | null)[]
 
   // Solcast

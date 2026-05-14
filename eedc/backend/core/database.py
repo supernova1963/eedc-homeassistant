@@ -23,12 +23,16 @@ engine = create_async_engine(
 )
 
 
-# SQLite Foreign Keys aktivieren (WICHTIG für CASCADE DELETE)
+# SQLite PRAGMAs: Foreign Keys (CASCADE DELETE), WAL (concurrent reads + 1 writer)
+# und busy_timeout (zweiter Writer wartet 10s statt sofort "database is locked").
 @event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Aktiviert SQLite Foreign Key Constraints."""
+    """Aktiviert SQLite Foreign Keys, WAL-Journal und Busy-Timeout."""
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=10000")
+    cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
 
 # Session Factory
@@ -261,8 +265,10 @@ async def run_migrations(conn):
                 # v3.5.0: Netz-Puffer für Energiefluss-Farbwechsel (Watt)
                 ('netz_puffer_w', 'INTEGER DEFAULT 100'),
                 ('vollbackfill_durchgefuehrt', 'BOOLEAN DEFAULT 0'),
-                # v3.17: Prognose-Basis (openmeteo, solcast, sfml)
+                # v3.17: Prognose-Basis (openmeteo, solcast, sfml) — DEPRECATED, durch prognose_quelle ersetzt
                 ('prognose_basis', "VARCHAR(30) DEFAULT 'openmeteo'"),
+                # v3.30: Prognosequelle pro Anlage (eedc, solcast, sfml)
+                ('prognose_quelle', "VARCHAR(30) DEFAULT 'eedc'"),
             ]
             newly_added = set()
             for col_name, col_type in new_columns:
@@ -280,6 +286,17 @@ async def run_migrations(conn):
                         SELECT anlage_id FROM tages_zusammenfassung
                         GROUP BY anlage_id HAVING COUNT(*) > {VOLLBACKFILL_BESTAND_SCHWELLE_TAGE}
                     )
+                """))
+
+            # v3.30: prognose_basis → prognose_quelle migrieren
+            if 'prognose_quelle' in newly_added:
+                # openmeteo → eedc (Default), solcast → solcast (pur)
+                connection.execute(text("""
+                    UPDATE anlagen SET prognose_quelle = CASE
+                        WHEN prognose_basis = 'solcast' THEN 'solcast'
+                        ELSE 'eedc'
+                    END
+                    WHERE prognose_quelle IS NULL OR prognose_quelle = 'eedc'
                 """))
 
         # v1.1.0: Neue Spalten zur monatsdaten Tabelle

@@ -68,6 +68,8 @@ interface WizardState {
   investitionenLive: Record<string, Record<string, string | null>>  // {inv_id: {leistung_w: entity_id, soc: entity_id}}
   investitionenLiveInvert: Record<string, Record<string, boolean>>  // {inv_id: {leistung_w: true}}
   solcastHaAktiv: boolean  // Solcast HA-Integration aktiviert
+  solcastApiKey: string  // Solcast API-Token (Standalone)
+  solcastResourceIds: { id: string; name: string }[]  // Solcast Resource-IDs
 }
 
 interface StepConfig {
@@ -152,6 +154,8 @@ const initialState: WizardState = {
   investitionenLive: {},
   investitionenLiveInvert: {},
   solcastHaAktiv: false,
+  solcastApiKey: '',
+  solcastResourceIds: [],
 }
 
 // =============================================================================
@@ -237,7 +241,7 @@ export default function SensorMappingWizard() {
           const existingMapping = mapping.mapping as {
             basis?: Record<string, FeldMapping> & { live?: Record<string, string | null>; live_invert?: Record<string, boolean> }
             investitionen?: Record<string, { felder: Record<string, FeldMapping>; live?: Record<string, string | null>; live_invert?: Record<string, boolean> }>
-            solcast_config?: { modus: string }
+            solcast_config?: { modus: string; api_key?: string; resource_ids?: { id: string; name: string }[] }
           }
 
           mappingHasFields = Boolean(
@@ -274,6 +278,8 @@ export default function SensorMappingWizard() {
                 .map(([id, inv]) => [id, inv.live_invert!])
             ),
             solcastHaAktiv: existingMapping.solcast_config?.modus === 'ha_auto',
+            solcastApiKey: existingMapping.solcast_config?.api_key || '',
+            solcastResourceIds: existingMapping.solcast_config?.resource_ids || [],
           })
         }
 
@@ -553,7 +559,11 @@ export default function SensorMappingWizard() {
             },
           ])
         ),
-        solcast_config: state.solcastHaAktiv ? { modus: 'ha_auto' } : undefined,
+        solcast_config: state.solcastHaAktiv
+          ? { modus: 'ha_auto' }
+          : state.solcastApiKey
+            ? { modus: 'api', api_key: state.solcastApiKey, resource_ids: state.solcastResourceIds, tier: 'free' }
+            : undefined,
       }
 
       await sensorMappingApi.saveMapping(effectiveAnlageId, request)
@@ -1008,6 +1018,10 @@ export default function SensorMappingWizard() {
               onBasisLiveInvertChange={updateBasisLiveInvert}
               solcastHaAktiv={state.solcastHaAktiv}
               onSolcastHaChange={(aktiv) => setState(prev => ({ ...prev, solcastHaAktiv: aktiv }))}
+              solcastApiKey={state.solcastApiKey}
+              onSolcastApiKeyChange={(key) => setState(prev => ({ ...prev, solcastApiKey: key }))}
+              solcastResourceIds={state.solcastResourceIds}
+              onSolcastResourceIdsChange={(ids) => setState(prev => ({ ...prev, solcastResourceIds: ids }))}
             />
           )}
 

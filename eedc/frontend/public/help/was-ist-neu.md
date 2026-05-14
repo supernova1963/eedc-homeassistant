@@ -1,11 +1,42 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.29.2)
+> **Stand:** Mai 2026 (v3.30.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.30.0 — Prognosequellen-Wahl pro Anlage (Mai 2026)
+
+> ☀️ **Du kannst jetzt pro Anlage wählen, woher deine PV-Prognose kommt.** Drei Quellen stehen zur Auswahl — eedc erkennt die installierten Integrationen automatisch.
+
+### Was sich für dich ändert
+
+- **Neue Einstellung „Prognosequelle"** in den Anlagen-Einstellungen. Du kannst wählen zwischen:
+  - **eedc-optimiert** (Standard): Die bewährte OpenMeteo-Prognose mit anlagenspezifischem Lernfaktor. Funktioniert überall, auch standalone — du brauchst nichts zu ändern.
+  - **Solcast** (pur): Die Solcast-Prognose direkt, ohne eedc-Korrektur. Wenn du die Solcast HA-Integration (BJReplay) installiert hast, erkennt eedc die Sensoren automatisch. Im Standalone-Betrieb kannst du deinen API-Token im Sensor-Mapping-Wizard eintragen.
+  - **Solar Forecast ML** (pur): Die ML-Prognose aus der Solar Forecast ML Integration, ohne eedc-Korrektur. Nur im HA-Add-on verfügbar — im Standalone-Betrieb ist die Option ausgegraut.
+
+- **Automatische Sensor-Erkennung**: Wenn du Solcast oder SFML als Quelle wählst, musst du keine Sensoren mehr manuell zuordnen. eedc erkennt die installierte Integration und mappt alle relevanten Sensoren automatisch.
+
+- **Automatischer Fallback**: Wenn die gewählte Quelle keine Daten liefert (z. B. SFML-Sensor unavailable, Solcast-Tageslimit), springt eedc automatisch auf die eedc-Prognose zurück — mit einem unauffälligen Hinweis.
+
+- **Quellen-Anzeige**: Im WetterWidget und der Solar-Aussicht siehst du, welche Quelle gerade aktiv ist (nur wenn nicht eedc-Standard).
+
+- **Verbesserter Lernfaktor**: Der eedc-Lernfaktor nutzt jetzt ein verbessertes Verfahren mit Recency-Boost und Trim-Mean (O1+O2). Jüngere Tage werden stärker gewichtet, Ausreißer werden gedämpft.
+
+### Was entfällt
+
+- Die **lila ML-Linie** im Stundenverlauf-Chart und die **lila ML-Zahl** neben der Tagesprognose im Live-Dashboard. SFML-Daten werden jetzt nur noch angezeigt, wenn du SFML als aktive Quelle gewählt hast.
+- Die **SFML-Vergleichs-Card** (eedc vs. ML vs. IST) unter Aussichten → Prognosen. Die Prognosen-Seite zeigt jetzt nur noch den eedc-Vergleich (OpenMeteo roh vs. eedc-kalibriert vs. Solcast vs. IST).
+- Die **manuelle SFML-Sensor-Zuordnung** im Wizard (drei Felder für Solar Forecast ML). Ersetzt durch Auto-Discovery.
+
+### Für Solcast-Nutzer
+
+Wenn du bisher „Solcast" als Prognose-Basis eingestellt hattest: Deine Einstellung wird automatisch auf `prognose_quelle=solcast` migriert. Der Unterschied: Solcast wird jetzt **direkt** als Prognose angezeigt (ohne eedc-Lernfaktor darauf). Das ist konsistenter — Solcast optimiert sich selbst.
 
 ---
 

@@ -14,6 +14,7 @@ import { Zap, Download, Upload, Activity, Thermometer, TrendingUp, Sun } from 'l
 import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import { useHAAvailable } from '../../hooks/useHAAvailable'
 
 interface BasisSensorenStepProps {
   value: {
@@ -30,6 +31,10 @@ interface BasisSensorenStepProps {
   onBasisLiveInvertChange?: (key: string, invert: boolean) => void
   solcastHaAktiv?: boolean
   onSolcastHaChange?: (aktiv: boolean) => void
+  solcastApiKey?: string
+  onSolcastApiKeyChange?: (key: string) => void
+  solcastResourceIds?: { id: string; name: string }[]
+  onSolcastResourceIdsChange?: (ids: { id: string; name: string }[]) => void
 }
 
 export default function BasisSensorenStep({
@@ -42,6 +47,10 @@ export default function BasisSensorenStep({
   onBasisLiveInvertChange,
   solcastHaAktiv = false,
   onSolcastHaChange,
+  solcastApiKey = '',
+  onSolcastApiKeyChange,
+  solcastResourceIds = [],
+  onSolcastResourceIdsChange,
 }: BasisSensorenStepProps) {
   const basisOptionen = [
     {
@@ -241,82 +250,20 @@ export default function BasisSensorenStep({
               />
             </div>
 
-            {/* Solar Forecast ML (optional) */}
-            <div className="border border-purple-200 dark:border-purple-700/50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-sm text-gray-900 dark:text-white">Solar Forecast ML</span>
-                <span className="text-xs text-purple-500">optional</span>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                ML-basierte PV-Prognose aus dem Solar Forecast ML Add-on.
-                Wird als zusätzliche Linie im Wetter-Chart angezeigt.
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Tages-Forecast (kWh)</span>
-                  <SensorAutocomplete
-                    value={basisLive.sfml_today_kwh}
-                    onChange={entityId => onBasisLiveChange('sfml_today_kwh', entityId)}
-                    sensors={availableSensors}
-                    placeholder="sensor.prognose_heute"
-                    requireStatistics={false}
-                  />
-                </div>
-                <div>
-                  <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Morgen-Forecast (kWh)</span>
-                  <SensorAutocomplete
-                    value={basisLive.sfml_tomorrow_kwh}
-                    onChange={entityId => onBasisLiveChange('sfml_tomorrow_kwh', entityId)}
-                    sensors={availableSensors}
-                    placeholder="sensor.prognose_morgen"
-                    requireStatistics={false}
-                  />
-                </div>
-                <div>
-                  <span className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Genauigkeit (%)</span>
-                  <SensorAutocomplete
-                    value={basisLive.sfml_accuracy_pct}
-                    onChange={entityId => onBasisLiveChange('sfml_accuracy_pct', entityId)}
-                    sensors={availableSensors}
-                    placeholder="sensor.solar_forecast_ml_∅_genauigkeit_30_tage"
-                    requireStatistics={false}
-                  />
-                </div>
-              </div>
-            </div>
+            {/* SFML + Solcast: Sensoren werden per Auto-Discovery erkannt (prognose_discovery),
+                kein manuelles Mapping nötig. Quellenwahl erfolgt in den Anlagen-Einstellungen. */}
 
-            {/* Solcast PV Forecast (optional) */}
+            {/* Solcast PV Forecast (optional — Standalone API-Token) */}
             {onSolcastHaChange && (
-              <div className="border border-blue-200 dark:border-blue-700/50 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Sun className="w-5 h-5 text-blue-500" />
-                    <div>
-                      <span className="font-medium text-sm text-gray-900 dark:text-white">Solcast PV Forecast</span>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        Satellitenbasierte PV-Prognose mit Konfidenzband (p10/p90), 7 Tage.
-                        Benötigt die Solcast HA-Integration (BJReplay).
-                      </p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer" title="Solcast HA-Integration aktivieren">
-                    <input
-                      type="checkbox"
-                      checked={solcastHaAktiv}
-                      onChange={e => onSolcastHaChange(e.target.checked)}
-                      className="sr-only peer"
-                      title="Solcast HA-Integration aktivieren"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-500"></div>
-                  </label>
-                </div>
-                {solcastHaAktiv && (
-                  <p className="text-xs text-blue-500 mt-2">
-                    Sensoren werden automatisch erkannt (unabhängig von der HA-Spracheinstellung).
-                    Ergebnis sichtbar unter Aussichten → Prognosen.
-                  </p>
-                )}
-              </div>
+              <SolcastConfigBlock
+                haAvailable={useHAAvailable()}
+                solcastHaAktiv={solcastHaAktiv}
+                onSolcastHaChange={onSolcastHaChange}
+                solcastApiKey={solcastApiKey}
+                onSolcastApiKeyChange={onSolcastApiKeyChange}
+                solcastResourceIds={solcastResourceIds}
+                onSolcastResourceIdsChange={onSolcastResourceIdsChange}
+              />
             )}
           </div>
         </div>
@@ -470,5 +417,123 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
         )}
       </div>
     </>
+  )
+}
+
+
+// =============================================================================
+// SolcastConfigBlock — HA-Toggle oder API-Token je nach Umgebung
+// =============================================================================
+
+interface SolcastConfigBlockProps {
+  haAvailable: boolean
+  solcastHaAktiv: boolean
+  onSolcastHaChange: (aktiv: boolean) => void
+  solcastApiKey?: string
+  onSolcastApiKeyChange?: (key: string) => void
+  solcastResourceIds?: { id: string; name: string }[]
+  onSolcastResourceIdsChange?: (ids: { id: string; name: string }[]) => void
+}
+
+function SolcastConfigBlock({
+  haAvailable,
+  solcastHaAktiv,
+  onSolcastHaChange,
+  solcastApiKey = '',
+  onSolcastApiKeyChange,
+  solcastResourceIds = [],
+  onSolcastResourceIdsChange,
+}: SolcastConfigBlockProps) {
+  const [newResourceId, setNewResourceId] = useState('')
+
+  return (
+    <div className="border border-blue-200 dark:border-blue-700/50 rounded-lg p-4">
+      <div className="flex items-center gap-3 mb-2">
+        <Sun className="w-5 h-5 text-blue-500" />
+        <div>
+          <span className="font-medium text-sm text-gray-900 dark:text-white">Solcast PV Forecast</span>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Satellitenbasierte PV-Prognose mit Konfidenzband (p10/p90), 7 Tage.
+          </p>
+        </div>
+      </div>
+
+      {haAvailable ? (
+        /* HA-Modus: Toggle für automatische Sensor-Erkennung */
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-700 dark:text-gray-300">HA-Integration (BJReplay)</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={solcastHaAktiv}
+                onChange={e => onSolcastHaChange(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-500" />
+            </label>
+          </div>
+          {solcastHaAktiv && (
+            <p className="text-xs text-blue-500 mt-2">
+              Sensoren werden automatisch erkannt. Ergebnis sichtbar unter Aussichten → Prognosen.
+            </p>
+          )}
+        </>
+      ) : (
+        /* Standalone-Modus: API-Token + Resource-IDs */
+        <div className="space-y-3 mt-2">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              API-Token (solcast.com → API Keys)
+            </label>
+            <input
+              type="password"
+              value={solcastApiKey}
+              onChange={e => onSolcastApiKeyChange?.(e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Resource-IDs (solcast.com → My Sites)
+            </label>
+            {solcastResourceIds.map((r, i) => (
+              <div key={r.id} className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-gray-600 dark:text-gray-400 flex-1 truncate">{r.id}</span>
+                <button
+                  type="button"
+                  onClick={() => onSolcastResourceIdsChange?.(solcastResourceIds.filter((_, j) => j !== i))}
+                  className="text-xs text-red-500 hover:text-red-700"
+                >×</button>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newResourceId}
+                onChange={e => setNewResourceId(e.target.value)}
+                placeholder="xxxx-xxxx-xxxx-xxxx"
+                className="flex-1 px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                disabled={!newResourceId.trim()}
+                onClick={() => {
+                  if (newResourceId.trim()) {
+                    onSolcastResourceIdsChange?.([...solcastResourceIds, { id: newResourceId.trim(), name: `Site ${solcastResourceIds.length + 1}` }])
+                    setNewResourceId('')
+                  }
+                }}
+                className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >+</button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Kostenloser Solcast-Account: 10 Abrufe/Tag. eedc cached automatisch.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }

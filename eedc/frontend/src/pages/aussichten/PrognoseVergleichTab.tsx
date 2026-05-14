@@ -255,10 +255,9 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   if (!data) return null
 
   const hasSolcast = data.solcast_verfuegbar
-  const hasEedc = data.eedc_lernfaktor !== null || (data.eedc_prognose_basis === 'solcast' && data.eedc_heute_kwh !== null)
+  const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
   const lf = data.eedc_lernfaktor
-  const progBasis = data.eedc_prognose_basis || 'openmeteo'
-  const progBasisLabel = progBasis === 'solcast' ? 'Solcast' : 'OpenMeteo'
+  const progBasisLabel = 'OpenMeteo'  // EEDC basiert immer auf OpenMeteo
 
   // ── Chart-Daten ──
   const chartData = Array.from({ length: 24 }, (_, h) => {

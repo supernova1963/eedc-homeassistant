@@ -60,7 +60,7 @@ export default function Aussichten() {
 
   const tabs: PillTab<TabType>[] = [
     { key: 'kurzfristig', label: 'Kurzfristig', icon: Sun, tooltip: '7-14 Tage Wetterprognose mit PV-Ertragsprognose' },
-    { key: 'prognosen', label: 'Prognosen', icon: BarChart3, tooltip: 'PV-Prognosen vergleichen (OpenMeteo, Solcast, SFML)' },
+    { key: 'prognosen', label: 'Prognosen', icon: BarChart3, tooltip: 'PV-Prognosen vergleichen (OpenMeteo, eedc-kalibriert, Solcast)' },
     { key: 'langfristig', label: 'Langfristig', icon: Calendar, tooltip: '12-Monats-Prognose basierend auf PVGIS-Daten' },
     { key: 'trend', label: 'Trend', icon: TrendingUp, tooltip: 'Historische Trends und Degradationsanalyse' },
     { key: 'finanzen', label: 'Finanzen', icon: Euro, tooltip: 'Finanzielle Prognosen und Amortisation' },

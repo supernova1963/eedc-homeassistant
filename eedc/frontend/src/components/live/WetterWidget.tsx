@@ -221,10 +221,10 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
     if (!wetter?.verfuegbar) return []
 
     // Prognose-Daten indexieren
-    const prognoseMap: Record<number, { pv: number; verbrauch: number; pv_ml: number | null }> = {}
+    const prognoseMap: Record<number, { pv: number; verbrauch: number }> = {}
     for (const v of wetter.verbrauchsprofil) {
       const h = parseInt(v.zeit.replace(':00', ''))
-      prognoseMap[h] = { pv: v.pv_ertrag_kw, verbrauch: v.verbrauch_kw, pv_ml: v.pv_ml_prognose_kw ?? null }
+      prognoseMap[h] = { pv: v.pv_ertrag_kw, verbrauch: v.verbrauch_kw }
     }
 
     const data: Array<Record<string, number | string | null>> = []
@@ -238,9 +238,6 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
       if (prognose) {
         punkt.pv_prognose = prognose.pv
         punkt.verbrauch_prognose = prognose.verbrauch
-        if (prognose.pv_ml != null) {
-          punkt.pv_ml = prognose.pv_ml
-        }
       }
 
       if (h <= currentHour) {
@@ -322,7 +319,6 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   const tooltipLabels: Record<string, string> = {
     pv_ist: 'PV (IST)',
     pv_prognose: 'PV (Prognose)',
-    pv_ml: 'PV (ML-Prognose)',
     haushalt_ist: 'Haushalt',
     batterie_ladung_ist: 'Speicher-Ladung',
     wallbox_ist: 'Wallbox',
@@ -461,10 +457,6 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 <linearGradient id="pvProgGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#eab308" stopOpacity={0.2} />
                   <stop offset="95%" stopColor="#eab308" stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="pvMlGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#a855f7" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#a855f7" stopOpacity={0.02} />
                 </linearGradient>
                 {/* Verbrauch-Gradienten pro Kategorie */}
                 <linearGradient id="haushaltGrad" x1="0" y1="0" x2="0" y2="1">
@@ -653,19 +645,6 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   dot={false}
                 />
               )}
-              {/* ML-Prognose: PV — dotted, lila */}
-              {showPv && (
-                <Area
-                  type="monotone"
-                  dataKey="pv_ml"
-                  stroke="#a855f7"
-                  fill="url(#pvMlGrad)"
-                  strokeWidth={1.5}
-                  strokeDasharray="3 3"
-                  connectNulls={false}
-                  dot={false}
-                />
-              )}
               {/* Prognose: Verbrauch — dashed, blass (nur Gesamt) */}
               {showVerbrauch && (
                 <Area
@@ -693,11 +672,6 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 <span className="w-3 h-0.5 bg-yellow-500/40 rounded" style={{ borderTop: '1px dashed #eab308' }} /> PV (Prognose)
               </span>
             )}
-            {showPv && wetter.sfml_prognose_kwh != null && (
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-0.5 bg-purple-500/40 rounded" style={{ borderTop: '1.5px dotted #a855f7' }} /> PV (ML)
-              </span>
-            )}
             {showVerbrauch && aktiveKategorien.map(k => (
               <span key={k.key} className="flex items-center gap-1">
                 <span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: k.farbe, opacity: 0.7 }} /> {k.label}
@@ -717,6 +691,17 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               </span>
             )}
           </div>
+          {/* Quellen-Hinweis (nur wenn nicht eedc-Default) */}
+          {wetter.prognose_quelle && wetter.prognose_quelle !== 'eedc' && (
+            <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 mt-0.5">
+              Quelle: {wetter.prognose_quelle === 'solcast' ? 'Solcast' : wetter.prognose_quelle === 'sfml' ? 'Solar Forecast ML' : wetter.prognose_quelle}
+            </p>
+          )}
+          {wetter.prognose_quelle_hinweis && (
+            <p className="text-[10px] text-center text-amber-500 dark:text-amber-400 mt-0.5">
+              {wetter.prognose_quelle_hinweis}
+            </p>
+          )}
         </div>
       )}
     </div>
