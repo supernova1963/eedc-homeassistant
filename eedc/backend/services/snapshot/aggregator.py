@@ -31,6 +31,10 @@ from backend.services.snapshot.keys import (
     _categorize_counter,
     _mqtt_key_to_sensor_key,
 )
+from backend.services.snapshot.plausibility import (
+    cap_pv_einspeisung_stunde,
+    schwelle_pv_einspeisung_stunde_kwh,
+)
 from backend.services.snapshot.reader import get_snapshot
 
 logger = logging.getLogger(__name__)
@@ -223,6 +227,9 @@ async def get_hourly_kwh_by_category(
 
     # 4. Aggregierte Kategorien zu Bilanz-Feldern:
     #    pv, einspeisung, netzbezug, batterie_lade_netto, wp, wallbox, verbrauch
+    schwelle_spike = schwelle_pv_einspeisung_stunde_kwh(
+        getattr(anlage, "leistung_kwp", None)
+    )
     final: dict[int, dict[str, Optional[float]]] = {}
     for h in range(24):
         d = result[h]
@@ -241,6 +248,20 @@ async def get_hourly_kwh_by_category(
         pv_total = None
         if pv is not None or sonst_erz is not None:
             pv_total = (pv or 0.0) + (sonst_erz or 0.0)
+
+        # Plausibilitäts-Cap (Counter-Spike-Schutz, dietmar1968/Forum #529):
+        # Wenn PV oder Einspeisung > kwp × 1.5 → None, weil physikalisch
+        # unmöglich und typisch für HA-Counter-Off-by-ones nach Restarts.
+        # Daten-Checker `_check_energieprofil_plausibilitaet` teilt die
+        # Schwelle (SoT in `plausibility.py`).
+        pv_total = cap_pv_einspeisung_stunde(
+            pv_total, schwelle_spike,
+            anlage_id=anlage.id, datum=datum, stunde=h, kategorie="pv",
+        )
+        einsp = cap_pv_einspeisung_stunde(
+            einsp, schwelle_spike,
+            anlage_id=anlage.id, datum=datum, stunde=h, kategorie="einspeisung",
+        )
 
         # Batterie netto (positiv = Ladung, negativ = Entladung)
         batt_netto = None

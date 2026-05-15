@@ -1,11 +1,72 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.29.2)
+> **Stand:** Mai 2026 (v3.30.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.30.x — Prognosequellen-Wahl, Strompreis-Vorschlag, Counter-Spike-Schutz (Mai 2026)
+
+### PV-Counter-Spike-Cap *(v3.30.2)*
+
+> 🛡️ **Schluss mit „die Reparatur ändert nichts".** Wenn der HA-PV-Zähler nach einem Neustart einen unsinnigen Stunden-Sprung hatte (z. B. +109 kWh in einer Stunde bei einer 11-kWp-Anlage), wurde dieser Spike bisher vom Daten-Checker zwar *erkannt*, aber „Tag neu aggregieren" hat ihn nicht geheilt — Reaggregation lieferte denselben falschen Wert. Ab v3.30.2 cappt der Aggregator solche Stundenwerte präventiv.
+
+#### Was sich für dich ändert
+
+- **Stundenwerte > kWp × 1,5 werden zur Datenlücke**. Beispiel bei einer 11,2 kWp-Anlage: alles über 16,8 kWh in einer einzelnen Stunde gilt als Counter-Off-by-one und wird in `TagesEnergieProfil` als Lücke (—) gespeichert statt als Spike. Heatmap, Lernfaktor und Monatsbericht zeigen die Lücke ehrlich statt einen physikalisch unmöglichen Wert mitzuschleppen.
+- **„Tag neu aggregieren" funktioniert jetzt auch bei Counter-Spikes**. Wer einen Spike in der Vergangenheit hat: **Wartung → Reparatur-Werkbank → Tag neu aggregieren** für den betroffenen Tag — die Werkbank zeigt jetzt eine echte Änderung statt „0 Slots geändert".
+- **Anlagen ohne hinterlegte PV-Leistung** sind nicht betroffen — ohne kWp-Angabe kann eedc keine sinnvolle Schwelle ableiten. Der Stammdaten-Check erinnert ohnehin separat daran.
+
+*(Forum-Beitrag #529, dietmar1968.)*
+
+---
+
+### Prognosequellen-Wahl pro Anlage *(v3.30.0 / v3.30.1)*
+
+> ☀️ **Drei PV-Prognosequellen zur Auswahl.** Jede Anlage kann jetzt entscheiden, welche Quelle sie als Tagesprognose hernimmt — und Auto-Discovery erkennt die installierten Integrationen automatisch.
+
+#### Was sich für dich ändert
+
+- **Drei Optionen in den Anlagen-Einstellungen**:
+    - **eedc-optimiert** (Standard, Empfehlung): OpenMeteo × anlagenspezifischer Lernfaktor — funktioniert überall, auch standalone, lernt mit der Zeit aus deinen eigenen IST-Werten.
+    - **Solcast** (pur): Satellitenbasierte Prognose direkt, ohne eedc-Korrektur. Ideal für alle, die Solcast schon nutzen und der Quelle vertrauen.
+    - **Solar Forecast ML** (pur): ML-basierte Prognose direkt aus der HA-Integration, ohne eedc-Korrektur. Nur im HA-Add-on verfügbar.
+- **Auto-Discovery**: Wenn du Solcast oder Solar Forecast ML in HA installiert hast, erkennt eedc die Sensoren automatisch — kein Sensor-Mapping mehr im Wizard nötig.
+- **Solcast Standalone**: Wer eedc als Docker-Container ohne HA betreibt, kann den Solcast-API-Token + Resource-IDs direkt im Sensor-Mapping-Wizard eintragen.
+- **Quellen-Hinweis im Dashboard**: WetterWidget und Live-Dashboard zeigen die aktive Quelle an (nur bei Nicht-Default-Wahl). Wenn die gewählte Quelle ausfällt (Solcast-Quota leer, SFML-Sensor unbekannt), erscheint ein Amber-Hinweis und eedc fällt automatisch auf den eedc-Standard zurück.
+- **Lernfaktor O12 ist jetzt der Live-Default** statt einer Diagnose-Option: Der verbesserte Lernfaktor mit Recency-Boost und Trim-Mean (über extreme Tage drüber). Der alte Legacy-Skalar dient nur noch als Fallback und Vergleichs-Wert im Log.
+- **Migration alter Einstellungen**: Wer früher `prognose_basis=solcast` gesetzt hatte (Solcast als eedc-Basis), wird automatisch auf `prognose_quelle=solcast` (Solcast pur) migriert.
+
+#### Was sich *nicht* ändert
+
+- **Wer nichts ändert, bekommt eedc-optimiert** — die bewährte Standardwahl mit Lernfaktor. Keine Aktion nötig.
+- **Kein Quellenvergleich mehr in Aussichten → Prognosen**: Die alte SFML-Vergleichs-Tabelle/Chart-Spalte entfällt zugunsten der direkten Wahl. Prognosen-Tab bleibt als reine eedc-Diagnose-Sicht (OpenMeteo vs. eedc-kalibriert vs. Solcast vs. IST).
+
+---
+
+### Verbrauchsgewichteter Ø-Strompreis im Monatsabschluss *(v3.30.1)*
+
+> 💶 **Bei dynamischen Tarifen rechnet eedc jetzt mit.** Wer Tibber, aWATTar oder einen anderen stündlich variablen Tarif nutzt: Der Wizard schlägt im Monatsabschluss ab jetzt den verbrauchsgewichteten Monats-Durchschnittspreis vor — aus den über den Monat gesammelten Stundendaten.
+
+#### Was sich für dich ändert
+
+- **Im Monatsabschluss-Wizard**: bei dynamischen Tarifen erscheint der vorgeschlagene Wert direkt mit einer **Konfidenz-Staffelung** (je nachdem, wie viele Stunden im Monat mit Preisdaten abgedeckt sind — voll, teilweise, dünn).
+- **Berechnung**: `Σ(strompreis_cent × netzbezug_kWh)` ÷ `Σ(netzbezug_kWh)` über den Monat — also nicht der arithmetische Stundenmittelwert, sondern der tatsächlich-bezahlte Schnitt. Wer abends viel bezieht, sieht den Abendpreis stärker gewichtet.
+- **Fallback bleibt**: Wer keine Stunden-Mitschrift hat (kein Strompreis-Sensor gemappt), bekommt wie bisher den aktuellen HA-Sensor-Momentanwert — nur mit reduzierter Konfidenz und einem Hinweis.
+
+*(stlorenz + Joachim-xo, Issue #250 + #122 vandecook.)*
+
+---
+
+### „Database is locked"-Reparatur *(v3.30.1)*
+
+> 🔓 **SQLite-Journal auf WAL umgestellt.** Wer parallel zur Add-on-UI noch andere Schreibvorgänge laufen hatte (MQTT-Inbound, Background-Aggregator, Wizard), bekam gelegentlich „database is locked"-Fehler. Mit Write-Ahead-Logging + 10-Sekunden-Timeout warten parallele Writer jetzt aufeinander statt sofort abzubrechen.
+
+*(PR #248, @stlorenz.)*
 
 ---
 

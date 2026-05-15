@@ -7,6 +7,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.30.2] - 2026-05-15 — PV-Counter-Spike-Cap (Forum #529)
+
+> 🛡️ **Schutz vor Counter-Off-by-ones.** HA-Statistics liefert nach manchen Restarts einen falschen Stunden-Sprung im PV-Counter (z. B. +109 kWh in einer Stunde bei einer 11 kWp-Anlage). Der Daten-Checker hat solche Spikes bisher *erkannt*, aber der Aggregator schrieb sie ungekappt in den Stundenwert — Reaggregation war idempotent und konnte sie nicht heilen. Ab v3.30.2 cappt der Aggregator PV- und Einspeisungs-Stundenwerte präventiv gegen `kwp × 1.5`.
+
+### Fixed
+
+- **PV-/Einspeisungs-Stundenwerte werden gegen Plausibilität gecappt** (Forum #529, dietmar1968): Wenn ein Stunden-kWh-Wert mehr als das 1,5-fache der PV-Anlagenleistung beträgt, wird er in `TagesEnergieProfil` als Lücke (None) gespeichert statt als Spike. Damit greift „Tag neu aggregieren" in der Reparatur-Werkbank jetzt auch bei klassischen Counter-Off-by-ones, die bei der bisherigen idempotenten Reaggregation unverändert zurückkamen.
+- **SoT-Konvention zwischen Detektor und Cap**: Schwelle `kwp × 1.5` lebt jetzt zentral in `backend/services/snapshot/plausibility.py`. Daten-Checker und Aggregator ziehen dieselbe Schwelle aus diesem Helper — kein Drift mehr möglich.
+
+### Hinweis für Betroffene
+
+Nach dem Update einmal über **Wartung → Reparatur-Werkbank → Tag neu aggregieren** für den betroffenen Tag laufen. Stundenwert mit Spike wird zur Lücke, Tageswerte fallen auf das physikalisch plausible Niveau. Anlagen ohne hinterlegte `leistung_kwp` werden nicht gecappt (Stammdaten-Check meldet das schon separat).
+
+---
+
 ## [3.30.1] - 2026-05-15 — Prognosequellen-Wahl pro Anlage + Strompreis-Vorschlag
 
 > ☀️ **Drei PV-Prognosequellen zur Auswahl.** Jede Anlage kann jetzt zwischen eedc-optimiert (Standard), Solcast und Solar Forecast ML wählen. Auto-Discovery erkennt installierte Integrationen in HA automatisch — kein manuelles Sensor-Mapping mehr nötig.

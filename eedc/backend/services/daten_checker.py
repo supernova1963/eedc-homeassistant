@@ -1046,17 +1046,19 @@ class DatenChecker:
         Pfade ziehen seit v3.25.x intern Resnap voran.
         """
         from backend.models.tages_energie_profil import TagesEnergieProfil
+        from backend.services.snapshot.plausibility import (
+            schwelle_pv_einspeisung_stunde_kwh,
+        )
         from datetime import date, timedelta
 
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.ENERGIEPROFIL_PLAUSIBILITAET
 
         kwp = anlage.leistung_kwp or 0
-        if kwp <= 0:
+        schwelle_kw = schwelle_pv_einspeisung_stunde_kwh(kwp)
+        if schwelle_kw is None:
             # Ohne kWp keine sinnvolle Schwelle — Stammdaten-Check meldet das schon
             return ergebnisse
-
-        schwelle_kw = kwp * 1.5
 
         # Nur die letzten 30 Tage prüfen (ältere Tage sind oft schon korrigiert
         # oder nicht mehr relevant für aktuelle Lernfaktor-Basis)
