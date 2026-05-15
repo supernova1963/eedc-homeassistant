@@ -22,6 +22,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Quellen-Hinweis**: WetterWidget und Live-Dashboard zeigen die aktive Quelle an (nur bei Nicht-Default). Bei Fallback auf eedc erscheint ein Amber-Hinweis mit Erklärung
 - **Resolver-Service** (`prognose_router.py`): zentrale Quellen-Auflösung mit Verfügbarkeits-Check und automatischem Fallback auf eedc
 - **Discovery-Endpoint** `GET /api/anlagen/prognose-quellen/discover`: zeigt dem Frontend die in HA erkannten Integrationen + Sensoren
+- **Verbrauchsgewichteter Ø-Strompreis im Monatsabschluss-Wizard** (#250): Bei dynamischen Tarifen (Tibber, aWATTar) berechnet eedc jetzt automatisch den verbrauchsgewichteten Monats-Durchschnittspreis aus den gesammelten Stundendaten — als Vorschlag mit Konfidenz-Staffelung (je nach Stunden-Abdeckung). Der bisherige HA-Sensor-Momentanwert bleibt als Fallback mit reduzierter Konfidenz erhalten
 
 ### Changed
 

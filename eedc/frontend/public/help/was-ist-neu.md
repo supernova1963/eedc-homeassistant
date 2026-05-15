@@ -38,6 +38,10 @@
 
 Wenn du bisher „Solcast" als Prognose-Basis eingestellt hattest: Deine Einstellung wird automatisch auf `prognose_quelle=solcast` migriert. Der Unterschied: Solcast wird jetzt **direkt** als Prognose angezeigt (ohne eedc-Lernfaktor darauf). Das ist konsistenter — Solcast optimiert sich selbst.
 
+### Dynamischer Strompreis — Monatsabschluss-Vorschlag
+
+- **Verbrauchsgewichteter Ø-Strompreis** als Vorschlag im Monatsabschluss-Wizard. Wenn du einen dynamischen Tarif nutzt (Tibber, aWATTar) und einen Strompreis-Sensor im Sensor-Mapping konfiguriert hast, berechnet eedc automatisch den effektiven Monatsdurchschnitt aus den gesammelten Stundendaten: `Σ(Preis × Bezug) / Σ(Bezug)`. Der Vorschlag zeigt die Stunden-Abdeckung in Prozent — bei hoher Abdeckung (>95%) ist der Wert sehr zuverlässig. Der bisherige HA-Sensor-Wert (Momentanpreis) bleibt als Fallback erhalten, wird aber als solcher gekennzeichnet. *(Dank an @stlorenz, Issue #250 + Joachim-xo Forum #449 + vandecook Discussion #122.)*
+
 ### Stabilität
 
 - **„Database is locked" beim Monatsabschluss behoben.** SQLite nutzt jetzt WAL-Journal (Write-Ahead Logging) + Busy-Timeout. Parallele Zugriffe (MQTT-Inbound, Hintergrund-Aggregator, Wizard) blockieren sich nicht mehr gegenseitig, sondern warten bis zu 10 Sekunden aufeinander. *(Dank an @stlorenz, PR #248.)*

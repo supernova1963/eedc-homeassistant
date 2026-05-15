@@ -208,9 +208,21 @@ Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen
   - **Open-Meteo**: Historische und Forecast-Daten weltweit
   - **Open-Meteo Solar**: GTI-basierte Prognose für geneigte Module
 
-**Prognose-Basis:**
+**Prognosequelle (v3.30.0):**
 
-In den Anlagenstammdaten (Anlage-Form) lässt sich seit v3.16.15 auch die **Prognose-Basis** wählen — also auf welcher Quelle der eedc-Lernfaktor und die kalibrierte Prognose aufbauen sollen. Aktuell sind OpenMeteo (Standard) und Solcast (wenn konfiguriert) als Basis verfügbar; SFML ist als künftige Erweiterung im Code-Registry vorbereitet.
+In den Anlagenstammdaten lässt sich die **PV-Prognosequelle** pro Anlage wählen:
+
+| Quelle | Beschreibung | Verfügbarkeit |
+|--------|-------------|---------------|
+| **eedc-optimiert** (Standard) | OpenMeteo-Rohprognose × anlagenspezifischer Lernfaktor (O1+O2: Recency-Boost + Trim-Mean). Passt sich automatisch an deine Anlage an. | Überall (HA-Add-on + Standalone) |
+| **Solcast** (pur) | Satellitenbasierte Prognose direkt von Solcast, ohne eedc-Korrektur. Im HA-Add-on wird die Solcast HA-Integration (BJReplay) automatisch erkannt. Im Standalone-Betrieb wird ein API-Token benötigt (im Sensor-Mapping-Wizard einzutragen). | HA-Add-on (Auto-Discovery) oder Standalone (API-Token) |
+| **Solar Forecast ML** (pur) | ML-basierte Prognose aus der Solar Forecast ML Integration (Zara-Toorox), ohne eedc-Korrektur. Sensoren werden automatisch erkannt. | Nur HA-Add-on |
+
+**Automatischer Fallback:** Wenn die gewählte Quelle keine Daten liefert (Sensor unavailable, Tageslimit, Integration nicht installiert), springt eedc automatisch auf die eedc-Prognose zurück — mit einem unauffälligen Hinweis im Live-Dashboard.
+
+**Quellen-Anzeige:** Im WetterWidget und der Solar-Aussicht siehst du, welche Quelle gerade aktiv ist (nur wenn nicht eedc-Standard). Bei Fallback erscheint ein Amber-farbiger Hinweis.
+
+**Migration:** Wer vorher „Solcast" als Prognose-Basis eingestellt hatte, wird automatisch auf `Solcast (pur)` migriert. Der Unterschied: Solcast wird jetzt direkt als Prognose angezeigt, ohne eedc-Lernfaktor darauf.
 
 ### 1.6 Energieprofil-Seite
 
@@ -497,8 +509,14 @@ Geeignet für Tibber, aWATTar, EPEX, eigene Template-Sensoren. Akzeptiert Einhei
 
 **Vorzeichen-Inversion:** Manche Sensoren liefern Leistungswerte mit invertiertem Vorzeichen (z. B. Einspeisung als negativer Wert). Pro Leistungs-Sensor gibt es eine Checkbox **„Vorzeichen invertieren"** — aktiviere sie, wenn der Sensor negative statt positive Werte liefert. eedc rechnet intern immer mit positiven Werten.
 
-**Solcast PV Forecast (v3.16.5, optional):**
-Toggle „Solcast PV Forecast" am Ende des Basis-Schritts. Aktiviert die automatische Erkennung der Solcast HA-Integration (BJReplay) — kein manueller DB-Eintrag, kein API-Key nötig. Die 7-Tage-Prognose (Heute + Morgen + Tag 3–7) wird direkt als Sensor-State gelesen. Wer die Solcast-Anbindung lieber per API-Key (Free/Paid) nutzen will, konfiguriert das in den Anlagenstammdaten — siehe Aussichten → Prognosen für die Anzeige.
+**Solcast PV Forecast (v3.16.5, aktualisiert v3.30.0):**
+
+- **Im HA-Add-on:** Solcast wird automatisch per Auto-Discovery erkannt, wenn die Solcast HA-Integration (BJReplay) installiert ist. Kein manuelles Mapping nötig — wähle einfach „Solcast" als Prognosequelle in den Anlagenstammdaten.
+- **Im Standalone-Betrieb:** Am Ende des Basis-Schritts erscheint ein Block mit API-Token + Resource-IDs Eingabefeldern. Kostenlosen Solcast-Account anlegen (solcast.com, 10 Abrufe/Tag), Token und Resource-IDs hier eintragen — eedc cached automatisch.
+
+**Solar Forecast ML (SFML, v3.30.0):**
+
+SFML-Sensoren werden automatisch per Auto-Discovery erkannt, wenn die Solar Forecast ML Integration (Zara-Toorox) im HA installiert ist. Kein manuelles Mapping nötig — wähle „Solar Forecast ML" als Prognosequelle in den Anlagenstammdaten. Nur im HA-Add-on verfügbar (im Standalone ausgegraut).
 
 #### Schritt 2: PV-Module
 
