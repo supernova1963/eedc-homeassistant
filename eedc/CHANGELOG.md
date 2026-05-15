@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.30.0] - 2026-05-15 — Prognosequellen-Wahl pro Anlage
+## [3.30.1] - 2026-05-15 — Prognosequellen-Wahl pro Anlage + Strompreis-Vorschlag
 
 > ☀️ **Drei PV-Prognosequellen zur Auswahl.** Jede Anlage kann jetzt zwischen eedc-optimiert (Standard), Solcast und Solar Forecast ML wählen. Auto-Discovery erkennt installierte Integrationen in HA automatisch — kein manuelles Sensor-Mapping mehr nötig.
 
