@@ -321,16 +321,30 @@ async def get_monatsabschluss(
 
         # ── Feld-spezifische Vorschläge (bedingte Felder) ──────────────────
         if feld == "netzbezug_durchschnittspreis_cent":
-            # HA-Sensor-Vorschlag: Direktes Lesen (kein MWD)
+            # 1. Verbrauchsgewichteter Ø aus Energieprofil-Stundendaten (höchste Qualität)
+            from backend.services.strompreis_aggregator import berechne_monats_durchschnittspreis
+            aggr = await berechne_monats_durchschnittspreis(anlage_id, jahr, monat, db)
+            if aggr and aggr.gewichtet_cent is not None:
+                abdeckung_pct = round(aggr.abdeckung * 100)
+                vorschlaege.insert(0, Vorschlag(
+                    wert=aggr.gewichtet_cent,
+                    quelle=VorschlagQuelle.BERECHNUNG,
+                    konfidenz=aggr.konfidenz,
+                    beschreibung=(
+                        f"Verbrauchsgewichteter Ø aus {aggr.abgedeckte_stunden} "
+                        f"Stundenpreisen ({abdeckung_pct} % Abdeckung)"
+                    ),
+                ))
+            # 2. HA-Sensor-Vorschlag als Fallback (Momentanwert, weniger genau)
             if strategie == "sensor" and sensor_id:
                 ha_state_svc = get_ha_state_service()
                 sensor_wert = await ha_state_svc.get_sensor_state(sensor_id)
                 if sensor_wert is not None:
-                    vorschlaege.insert(0, Vorschlag(
+                    vorschlaege.append(Vorschlag(
                         wert=round(sensor_wert, 2),
                         quelle=VorschlagQuelle.HA_SENSOR,
-                        konfidenz=90,
-                        beschreibung="Aus HA-Sensor (Ø Strompreis)",
+                        konfidenz=70,
+                        beschreibung="Aktueller HA-Sensor-Wert (Momentanpreis, kein Monatsmittel)",
                     ))
         elif feld == "kraftstoffpreis_euro":
             # Vorschlag aus TagesZusammenfassung-Durchschnitt
