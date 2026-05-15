@@ -30,6 +30,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Solcast im HA-Add-on ohne manuelle Konfiguration**: `solcast_service.py` erkennt die Solcast-Integration automatisch per Auto-Discovery, auch ohne explizite `solcast_config` im Sensor-Mapping
 - **Prognosen-Tab**: reine EEDC-Diagnose-Sicht (OpenMeteo vs. eedc-kalibriert vs. Solcast vs. IST), keine SFML-Vergleichs-Spalte mehr
 
+### Fixed
+
+- **„Database is locked" beim Monatsabschluss**: SQLite WAL-Journal + `busy_timeout=10000` + `synchronous=NORMAL`. Parallele Writer (MQTT-Inbound, Background-Aggregator, Wizard) warten jetzt aufeinander statt sofort abzubrechen. *(PR #248, @stlorenz)*
+
 ### Removed
 
 - **SFML-Vergleichs-Card** in Aussichten → Prognosen (eedc vs. ML vs. IST Tabelle + Chart) — entfällt zugunsten der Quellenwahl

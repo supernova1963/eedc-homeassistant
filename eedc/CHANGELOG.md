@@ -7,6 +7,43 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.30.0] - 2026-05-15 — Prognosequellen-Wahl pro Anlage
+
+> ☀️ **Drei PV-Prognosequellen zur Auswahl.** Jede Anlage kann jetzt zwischen eedc-optimiert (Standard), Solcast und Solar Forecast ML wählen. Auto-Discovery erkennt installierte Integrationen in HA automatisch — kein manuelles Sensor-Mapping mehr nötig.
+
+### Added
+
+- **Prognosequelle pro Anlage wählbar**: neues Feld `prognose_quelle` in den Anlagen-Einstellungen mit drei Optionen:
+  - **eedc-optimiert** (Standard): OpenMeteo × anlagenspezifischer Lernfaktor — funktioniert überall, auch standalone
+  - **Solcast** (pur): Satellitenbasierte Prognose direkt, ohne eedc-Korrektur
+  - **Solar Forecast ML** (pur): ML-basierte Prognose direkt aus der HA-Integration, ohne eedc-Korrektur (nur im HA-Add-on)
+- **Auto-Discovery**: SFML- und Solcast-Sensoren werden automatisch in HA erkannt — kein manuelles Sensor-Mapping im Wizard mehr nötig. Discovery erkennt die Integration anhand der Entity-ID-Patterns und mappt alle relevanten Sensoren automatisch
+- **Solcast Standalone**: API-Token + Resource-IDs können im Sensor-Mapping-Wizard eingegeben werden (für Nutzer ohne HA-Integration)
+- **Quellen-Hinweis**: WetterWidget und Live-Dashboard zeigen die aktive Quelle an (nur bei Nicht-Default). Bei Fallback auf eedc erscheint ein Amber-Hinweis mit Erklärung
+- **Resolver-Service** (`prognose_router.py`): zentrale Quellen-Auflösung mit Verfügbarkeits-Check und automatischem Fallback auf eedc
+- **Discovery-Endpoint** `GET /api/anlagen/prognose-quellen/discover`: zeigt dem Frontend die in HA erkannten Integrationen + Sensoren
+
+### Changed
+
+- **EEDC-Lernfaktor O12 als Live-Default**: Der verbesserte Lernfaktor mit Recency-Boost und Trim-Mean (O1+O2) ist jetzt der aktive Live-Faktor. Legacy-Skalar dient als Fallback und wird im Log als Diagnose-Vergleich ausgegeben
+- **EEDC nutzt immer OpenMeteo als Basis**: Die bisherige Option „Solcast als EEDC-Basis" entfällt — Solcast ist jetzt eine eigenständige Quelle (pur, ohne Korrektur). Wer vorher `prognose_basis=solcast` hatte, wird automatisch auf `prognose_quelle=solcast` migriert
+- **Solcast im HA-Add-on ohne manuelle Konfiguration**: `solcast_service.py` erkennt die Solcast-Integration automatisch per Auto-Discovery, auch ohne explizite `solcast_config` im Sensor-Mapping
+- **Prognosen-Tab**: reine EEDC-Diagnose-Sicht (OpenMeteo vs. eedc-kalibriert vs. Solcast vs. IST), keine SFML-Vergleichs-Spalte mehr
+
+### Fixed
+
+- **„Database is locked" beim Monatsabschluss**: SQLite WAL-Journal + `busy_timeout=10000` + `synchronous=NORMAL`. Parallele Writer (MQTT-Inbound, Background-Aggregator, Wizard) warten jetzt aufeinander statt sofort abzubrechen. *(PR #248, @stlorenz)*
+
+### Removed
+
+- **SFML-Vergleichs-Card** in Aussichten → Prognosen (eedc vs. ML vs. IST Tabelle + Chart) — entfällt zugunsten der Quellenwahl
+- **SFML-Anzeigen im Live-Dashboard**: lila ML-Zahl neben Tagesprognose + Tooltip
+- **SFML-Linie im WetterWidget**: lila dotted ML-Prognose-Linie + Legende + Gradient
+- **Manuelle SFML-Sensor-Zuordnung** im Wizard (3 Felder: sfml_today_kwh, sfml_tomorrow_kwh, sfml_accuracy_pct) — ersetzt durch Auto-Discovery
+- **`prognose_basis`-Feld**: deprecated, wird automatisch zu `prognose_quelle` migriert
+
+---
+
 ## [3.29.2] - 2026-05-14 — Vorab-Fixes vor Menüstruktur-Konzept (#206 #210)
 
 > 🧹 **Stall ausmisten vor dem großen Konzept.** Kleine UX-Fehler und Schreibweisen-Drift, die nicht auf das künftige Menüstruktur-Konzept warten sollten. Kein neuer Funktionsumfang.

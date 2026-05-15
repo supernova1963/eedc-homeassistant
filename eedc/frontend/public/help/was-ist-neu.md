@@ -38,6 +38,10 @@
 
 Wenn du bisher „Solcast" als Prognose-Basis eingestellt hattest: Deine Einstellung wird automatisch auf `prognose_quelle=solcast` migriert. Der Unterschied: Solcast wird jetzt **direkt** als Prognose angezeigt (ohne eedc-Lernfaktor darauf). Das ist konsistenter — Solcast optimiert sich selbst.
 
+### Stabilität
+
+- **„Database is locked" beim Monatsabschluss behoben.** SQLite nutzt jetzt WAL-Journal (Write-Ahead Logging) + Busy-Timeout. Parallele Zugriffe (MQTT-Inbound, Hintergrund-Aggregator, Wizard) blockieren sich nicht mehr gegenseitig, sondern warten bis zu 10 Sekunden aufeinander. *(Dank an @stlorenz, PR #248.)*
+
 ---
 
 ## v3.29.x — Aggregations- und UX-Bündel (Mai 2026)
