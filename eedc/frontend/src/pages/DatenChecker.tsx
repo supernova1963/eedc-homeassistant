@@ -30,6 +30,7 @@ const kategorieLabels: Record<string, string> = {
   mqtt_topic_abdeckung: 'MQTT – Topic-Abdeckung',
   sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
   provenance_conflict: 'Daten-Quellen – Konflikte',
+  datenquelle_status: 'Datenquelle – aktiver Pfad',
 }
 
 const kategorieReihenfolge = [
@@ -43,6 +44,7 @@ const kategorieReihenfolge = [
   'mqtt_topic_abdeckung',
   'sensor_mapping_lts',
   'provenance_conflict',
+  'datenquelle_status',
 ]
 
 function severityIcon(schwere: string) {

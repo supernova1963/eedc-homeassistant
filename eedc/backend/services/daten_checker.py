@@ -58,6 +58,10 @@ class CheckKategorie(str, Enum):
     # 30 Tage. Hinweis-Charakter ohne Quittier-Knopf — Diagnose für die
     # Reparatur-Werkbank (P4). Memory-Linie feedback_daten_checker_kein_akzeptiert.md.
     PROVENANCE_CONFLICT = "provenance_conflict"
+    # Etappe 4 v3.31.0: zeigt, welcher Datenquellen-Pfad für die
+    # Energie-Aggregate aktiv ist (HA-LTS direkt vs Sensor-Snapshot-Fallback
+    # vs Standalone-MQTT). Info-Charakter, transparent für den Anwender.
+    DATENQUELLE_STATUS = "datenquelle_status"
 
 
 @dataclass
@@ -156,6 +160,7 @@ class DatenChecker:
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
+        ergebnisse.extend(await self._check_datenquelle_status(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -1721,4 +1726,89 @@ class DatenChecker:
                 f"Werkbank kann sie aufdröseln."
             ),
             details=details,
+        )]
+
+    async def _check_datenquelle_status(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """Etappe 4 v3.31.0: zeigt, welcher Datenquellen-Pfad für die Energie-
+        Aggregate aktiv ist.
+
+        Drei Konstellationen:
+          a) HA-LTS aktiv (HA-Add-on-Modus, sensor_mapping vorhanden) →
+             externe Statistics-Quelle, höchste Genauigkeit (Σ Hourly == Daily)
+          b) Snapshot-Fallback (HA-LTS verfügbar, aber Aggregat-Provenance
+             noch auf älteren Quellen) → typischer Zustand nach Upgrade,
+             heilt sich mit nächstem Auto-Vollbackfill
+          c) Standalone-Modus (kein HA-LTS) → MQTT-Sensor-Snapshots,
+             eingeschränkt durch Sub-Stunden-Boundary-Effekte
+
+        Memory-Linie `feedback_grenze_externe_daten_diagnose.md`: ehrliche
+        Diagnose, keine Beschönigung. Memory `project_etappe_4_ha_lts_sot.md`.
+        """
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+
+        kat = CheckKategorie.DATENQUELLE_STATUS.value
+        ha_svc = get_ha_statistics_service()
+        ha_lts_verfuegbar = ha_svc.is_available
+
+        # Letzte TagesZusammenfassung-Provenance prüfen (Hint, welcher Pfad
+        # tatsächlich beim letzten Aggregator-Lauf griff)
+        result = await self.db.execute(
+            select(TagesZusammenfassung)
+            .where(TagesZusammenfassung.anlage_id == anlage.id)
+            .order_by(TagesZusammenfassung.datum.desc())
+            .limit(1)
+        )
+        tz = result.scalar_one_or_none()
+
+        letzte_source: Optional[str] = None
+        if tz and tz.source_provenance:
+            # source_provenance ist {field_name: {source, writer, at}} —
+            # nehme die häufigste Source als Repräsentant
+            sources = [
+                entry.get("source", "") for entry in tz.source_provenance.values()
+                if isinstance(entry, dict)
+            ]
+            if sources:
+                # Häufigste Source als Repräsentant
+                from collections import Counter
+                letzte_source = Counter(sources).most_common(1)[0][0]
+
+        if ha_lts_verfuegbar and letzte_source in (
+            "external:ha_statistics:hourly", "external:ha_statistics:daily",
+        ):
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="HA-Statistics als Source-of-Truth aktiv",
+                details=(
+                    "Energie-Aggregate werden direkt aus den HA-Long-Term-"
+                    "Statistics gelesen. Stunden- und Tageswerte sind konsistent "
+                    "(Σ Stundenwerte = Tagessumme per Konstruktion)."
+                ),
+            )]
+        if ha_lts_verfuegbar:
+            # HA verfügbar, aber Aggregate aus älterem Pfad — typisch nach
+            # Upgrade auf v3.31.0 vor erstem Reaggregations-Lauf
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung="HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle",
+                details=(
+                    "HA-Statistics ist verfügbar, die TagesZusammenfassung "
+                    f"vom {tz.datum.isoformat() if tz else '?'} wurde aber noch "
+                    f"aus '{letzte_source or 'unbekannt'}' geschrieben. "
+                    "Mit dem nächsten Monatsabschluss läuft Auto-Vollbackfill, "
+                    "danach gilt HA-LTS als Source-of-Truth."
+                ),
+                link="/wartung/reparatur-werkbank",
+            )]
+        # HA-LTS nicht verfügbar → Standalone-Modus (Docker ohne HA-Verbindung
+        # oder fehlende HA-Recorder-URL)
+        return [CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.INFO.value,
+            meldung="Standalone-Modus aktiv (kein HA-LTS)",
+            details=(
+                "Keine HA-Long-Term-Statistics verfügbar — Energie-Aggregate "
+                "werden aus 5-Minuten-Sensor-Snapshots berechnet. Im HA-Add-on-"
+                "Modus wäre eine höhere Konsistenz möglich (Σ Stunden = Tag)."
+            ),
         )]
