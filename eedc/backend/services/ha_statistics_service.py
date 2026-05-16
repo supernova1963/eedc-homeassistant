@@ -738,6 +738,164 @@ class HAStatisticsService:
                 wert *= faktor
             return round(wert, 3)
 
+    def get_hourly_kwh_deltas_for_day(
+        self,
+        sensor_ids: list[str],
+        datum: date,
+    ) -> dict[str, dict[int, Optional[float]]]:
+        """
+        Etappe 4 (v3.31.0): Liest stündliche kWh-Deltas direkt aus
+        HA-LTS-Statistics für einen Tag — ohne sensor_snapshots-Zwischenschritt.
+
+        Pro Sensor 24 Stunden-Deltas: Slot h = Energie zwischen H:00 und
+        (H+1):00, berechnet als Counter-Differenz nach HA-Statistics-Konvention.
+
+        HA-Statistics-Konvention (siehe get_value_at-Docstring): state/sum bei
+        start_ts=H ist der Counter-Stand AM ENDE der Periode (H+1). Für
+        Slot h (Energie im Intervall [H, H+1)) gilt damit:
+            end   = state at start_ts=H        (= Counter um H+1:00)
+            start = state at start_ts=(H-1)    (= Counter um H:00)
+            delta = end - start
+
+        Boundary-Spezialfälle:
+            - Slot 0: end = state at start_ts=00:00 heute,
+                      start = state at start_ts=23:00 vortag
+            - Slot 23: end = state at start_ts=23:00 heute,
+                       start = state at start_ts=22:00 heute
+
+        Verwendet die `sum`-Spalte (HA-recompile-bereinigte Lifetime-Summe,
+        reset-tolerant). Fallback auf `state` nur für Sensoren ohne has_sum
+        (keine Energie-Counter — wird im Energie-Pfad ignoriert).
+
+        Bei Counter-Resets in der Mitte des Tages (negative Deltas): das
+        Plausibility-Cap aus snapshot/plausibility.py greift im Aufrufer
+        (Schritt 4) — diese Funktion liefert das Roh-Delta einschliesslich
+        Vorzeichen, damit der Aufrufer kategorisierte Cap-Entscheidungen
+        treffen kann.
+
+        Args:
+            sensor_ids: HA Entity-IDs der kumulativen kWh-Counter
+            datum: Der Tag (Slots 0..23)
+
+        Returns:
+            {entity_id: {slot_h: kwh_delta_or_None}}
+            None pro Slot bei Lücke (fehlende Boundary in Statistics).
+            entity_id fehlt im Result, wenn der Sensor in statistics_meta
+            nicht gefunden wurde oder keine Daten im Zeitraum hat.
+        """
+        if not self.is_available or not sensor_ids:
+            return {}
+
+        import time as time_module
+
+        # Wir brauchen 25 Boundaries: start_ts=23:00 vortag bis start_ts=23:00 heute.
+        # SQL-Range: ein 5-Min-Sicherheitspolster auf beiden Seiten gegen
+        # Boundary-Drift (manche HA-Versionen haben start_ts=H:00:01 statt H:00:00).
+        boundary_start = datetime.combine(datum - timedelta(days=1), datetime.min.time()).replace(hour=23)
+        boundary_end = datetime.combine(datum, datetime.min.time()).replace(hour=23)
+        ts_von = time_module.mktime((boundary_start - timedelta(minutes=5)).timetuple())
+        ts_bis = time_module.mktime((boundary_end + timedelta(minutes=5)).timetuple())
+
+        params: dict = {f"id_{i}": sid for i, sid in enumerate(sensor_ids)}
+        placeholders = ", ".join(f":id_{i}" for i in range(len(sensor_ids)))
+        params["ts_von"] = ts_von
+        params["ts_bis"] = ts_bis
+
+        # Per-Sensor: {boundary_hour_index: counter_value_in_kwh}
+        # boundary_hour_index: 0 = 00:00 heute (= state at start_ts=23:00 vortag),
+        # 1 = 01:00 heute (= state at start_ts=00:00 heute), ..., 24 = 00:00 folgetag (= state at start_ts=23:00 heute)
+        per_sensor_boundaries: dict[str, dict[int, float]] = {sid: {} for sid in sensor_ids}
+
+        try:
+            with self._engine.connect() as conn:
+                # Metadaten laden (faktor, has_sum)
+                meta_by_id: dict[str, SensorMeta] = {}
+                for sid in sensor_ids:
+                    m = self.get_metadata(conn, sid)
+                    if m:
+                        meta_by_id[sid] = m
+
+                if not meta_by_id:
+                    return {}
+
+                placeholders_meta = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
+                meta_params: dict = {f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())}
+                meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
+
+                rows = conn.execute(
+                    text(f"""
+                        SELECT metadata_id, start_ts, sum, state
+                        FROM statistics
+                        WHERE metadata_id IN ({placeholders_meta})
+                          AND start_ts >= :ts_von
+                          AND start_ts <= :ts_bis
+                        ORDER BY metadata_id, start_ts
+                    """),
+                    {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
+                )
+                for row in rows:
+                    metadata_id = row[0]
+                    start_ts = row[1]
+                    sum_val = row[2]
+                    state_val = row[3]
+                    sid = meta_id_to_sensor.get(metadata_id)
+                    if not sid:
+                        continue
+                    meta = meta_by_id[sid]
+
+                    # Counter-Wert in kWh
+                    if meta.has_sum:
+                        if sum_val is None:
+                            continue  # NULL → Lücke, Caller interpoliert oder verwirft
+                        raw = sum_val
+                    else:
+                        # Nicht-Energie-Sensor — wird im Aufrufer durch
+                        # _categorize_counter ohnehin ausgefiltert (Power-Sensor
+                        # liefert keine Energie-Kategorie). Defensiv überspringen.
+                        continue
+
+                    faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
+                    wert_kwh = raw * faktor
+
+                    # start_ts=H → Counter am Ende von H = (H+1):00.
+                    # Mappe auf Boundary-Hour-Index 0..24 (0 = 00:00 heute).
+                    dt = datetime.fromtimestamp(start_ts)
+                    boundary_dt = dt + timedelta(hours=1)
+                    if boundary_dt.date() == datum:
+                        b_idx = boundary_dt.hour  # 1..23
+                    elif boundary_dt.date() == datum + timedelta(days=1) and boundary_dt.hour == 0:
+                        b_idx = 24
+                    elif boundary_dt.date() == datum and boundary_dt.hour == 0:
+                        b_idx = 0
+                    elif boundary_dt.date() == datum - timedelta(days=1) and boundary_dt.hour == 23:
+                        # Vortag-Stunde 23 → Boundary am Ende = 00:00 heute, das ist b_idx=0
+                        # Aber durch die +1h-Logik kommt das eigentlich nie hier rein
+                        continue
+                    else:
+                        continue  # Außerhalb relevanter Boundary-Range
+                    per_sensor_boundaries[sid][b_idx] = wert_kwh
+
+        except Exception as e:
+            logger.warning(f"get_hourly_kwh_deltas_for_day Fehler: {type(e).__name__}: {e}")
+            return {}
+
+        # Stunden-Deltas berechnen: Slot h = boundary[h+1] - boundary[h]
+        result: dict[str, dict[int, Optional[float]]] = {}
+        for sid, boundaries in per_sensor_boundaries.items():
+            if not boundaries:
+                continue  # Sensor hatte keine Daten — wird im Aufrufer als Lücke behandelt
+            slots: dict[int, Optional[float]] = {}
+            for h in range(24):
+                start = boundaries.get(h)
+                end = boundaries.get(h + 1)
+                if start is None or end is None:
+                    slots[h] = None
+                else:
+                    slots[h] = round(end - start, 3)
+            result[sid] = slots
+
+        return result
+
 
 # Singleton
 _ha_statistics_service: Optional[HAStatisticsService] = None
