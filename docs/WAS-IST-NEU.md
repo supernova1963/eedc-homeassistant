@@ -1,11 +1,43 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.30.3)
+> **Stand:** Mai 2026 (v3.31.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.31.0 — Energie-Aggregate konsistent aus HA-Statistics (Mai 2026)
+
+### Eine Quelle für PV, Verbrauch, Einspeisung *(v3.31.0)*
+
+> 🎯 **Schluss mit „drei verschiedenen Zahlen für denselben Tag".** Im Genauigkeits-Tracking, in der Tages-Energieprofile-Tabelle und in der Stunden-Σ-Zeile im Monatsbericht konnten bisher leicht abweichende Werte für die PV-Erzeugung auftauchen — bei manchen Anlagen ein paar Prozent, bei einzelnen Konstellationen sogar zehn Prozent. Ursache: zwei parallele Rechenpfade (Live-Tagesverlauf-Integration plus Sensor-Snapshot-Diff) mit leicht unterschiedlichen Aggregationsfenstern. Ab v3.31.0 lesen alle Sichten aus derselben HA-Statistics-Quelle.
+
+#### Was sich für dich ändert
+
+- **Identische Werte über alle Sichten**: Tages-Energieprofile-Tabelle „PV-Ertrag", Σ der 24 Stundenwerte im Monatsbericht-Energieprofil und Genauigkeits-Tracking-IST sind ab v3.31.0 immer gleich — per Konstruktion, nicht per Zufall. Das gilt analog für Einspeisung, Netzbezug, Wärmepumpen-Strom, Wallbox-Ladung und Speicher-Netto.
+- **Identisch zum HA-Energy-Dashboard**: Die kanonische Tagessumme stimmt jetzt durchgängig mit dem überein, was du im HA-Energy-Dashboard für denselben Tag siehst. Wer beide Apps offen hat, kann sich auf jedes Wert verlassen.
+- **Genauigkeits-Tracking-Bug nebenbei gefixt**: Der IST-Wert summierte bisher auch Batterie-Netto-Ladung mit ein (wenn die Batterie über den Tag mehr geladen als entladen hatte). Bei einer ~5-kWh-Netto-Ladung pro Tag waren das ~5 kWh künstliche IST-Überschätzung — Prognose-MAE wurde dadurch geschönt. Jetzt zählt nur noch echte PV- und Balkonkraftwerk-Erzeugung als IST.
+
+#### Migration ohne Aufwand
+
+Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration einmalig der Auto-Vollbackfill aus HA-Statistics ausgelöst — das passiert automatisch beim nächsten Monatsabschluss, ohne dass du etwas anstoßen musst. Die alten Aggregat-Werte werden dabei durch saubere HA-Statistics-Werte ersetzt. Bei vielen Anwendern bleiben die Werte praktisch identisch (Drift war meist klein); bei Setups mit größerer Sub-Stunden-Volatilität kann sich der Tageswert um wenige Prozent verschieben — auf den HA-Energy-Dashboard-Wert.
+
+#### Wo siehst du, dass es funktioniert
+
+Im Daten-Checker (Einstellungen → Daten-Checker) gibt es eine neue Kategorie **„Datenquelle – aktiver Pfad"**. Drei mögliche Stati:
+
+1. **HA-Statistics als Source-of-Truth aktiv** (grünes Häkchen) — alles läuft, Werte sind durchgängig konsistent
+2. **HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle** (blauer Info-Hinweis) — der Auto-Vollbackfill ist noch nicht durchgelaufen, der nächste Monatsabschluss heilt das
+3. **Standalone-Modus aktiv (kein HA-LTS)** (blauer Info-Hinweis) — gilt für Anwender ohne HA-Add-on; eedc nutzt 5-Minuten-Sensor-Snapshots als Fallback, mit leicht eingeschränkter Genauigkeit
+
+#### Hintergrund
+
+Detaillierte Architektur-Beschreibung (für technisch Interessierte): das Aggregat-System ist ab v3.31.0 ein Cache von HA-Statistics-Long-Term, nicht mehr eine eigenständige Berechnung parallel dazu. Damit gilt automatisch: was im HA-Energy-Dashboard steht, steht auch in eedc. Vollständiges Konzept in `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` im Repo.
+
+*(Aus dem Forum + PNs als Anwender-Beobachtung über mehrere Wochen — Konsistenz-Drift war eine echte Vertrauenslücke.)*
 
 ---
 
