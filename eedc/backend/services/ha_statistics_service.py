@@ -573,6 +573,99 @@ class HAStatisticsService:
 
         return result
 
+    def get_hourly_minmax_sensor_data(
+        self,
+        sensor_ids: list[str],
+        von: date,
+        bis: date,
+    ) -> dict[str, dict[str, dict[int, dict[str, float]]]]:
+        """
+        Etappe 5 (v3.31.0): Liest stündliche Min/Max für Leistungssensoren.
+
+        HA-Recorder schreibt für `has_mean=True`-Sensoren neben `mean` auch
+        `min` und `max` pro Stunde — die im 5-Sekunden-State-Bucket
+        beobachteten Extremwerte. Genau die richtige Quelle für
+        Tages-Peak-Werte (peak_pv_kw, peak_netzbezug_kw, peak_einspeisung_kw),
+        ohne dass eedc Leistungen über 10-Min-Mittel selbst rekonstruieren muss.
+
+        Filter und Einheitenumrechnung sind identisch zu
+        `get_hourly_sensor_data()`: kWh-Counter werden übersprungen, W→kW.
+
+        Args:
+            sensor_ids: HA Entity-IDs der Leistungssensoren
+            von: Startdatum (inklusiv)
+            bis: Enddatum (inklusiv)
+
+        Returns:
+            {entity_id: {datum_iso: {stunde_0_23: {"min": kW, "max": kW}}}}
+        """
+        if not self.is_available or not sensor_ids:
+            return {}
+
+        import time as time_module
+        from datetime import time
+
+        von_dt = datetime.combine(von, time.min)
+        bis_dt = datetime.combine(bis + timedelta(days=1), time.min)
+        ts_von = time_module.mktime(von_dt.timetuple())
+        ts_bis = time_module.mktime(bis_dt.timetuple())
+
+        params: dict = {f"id_{i}": sid for i, sid in enumerate(sensor_ids)}
+        placeholders = ", ".join(f":id_{i}" for i in range(len(sensor_ids)))
+        params["ts_von"] = ts_von
+        params["ts_bis"] = ts_bis
+
+        result: dict[str, dict[str, dict[int, dict[str, float]]]] = {}
+
+        try:
+            with self._engine.connect() as conn:
+                rows = conn.execute(
+                    text(f"""
+                        SELECT sm.statistic_id, s.start_ts, s.min, s.max, sm.unit_of_measurement
+                        FROM statistics s
+                        JOIN statistics_meta sm ON s.metadata_id = sm.id
+                        WHERE sm.statistic_id IN ({placeholders})
+                          AND s.start_ts >= :ts_von
+                          AND s.start_ts < :ts_bis
+                          AND (s.min IS NOT NULL OR s.max IS NOT NULL)
+                        ORDER BY sm.statistic_id, s.start_ts
+                    """),
+                    params,
+                )
+                for row in rows:
+                    entity_id: str = row[0]
+                    start_ts: float = row[1]
+                    min_v = row[2]
+                    max_v = row[3]
+                    unit: Optional[str] = row[4]
+
+                    if unit in ("kWh", "Wh", "MWh"):
+                        continue
+
+                    if unit == "W":
+                        skala = 1 / 1000.0
+                    elif unit in ("kW", "%"):
+                        skala = 1.0
+                    else:
+                        skala = 1 / 1000.0  # konservativ — wie get_hourly_sensor_data
+
+                    dt = datetime.fromtimestamp(start_ts)
+                    datum_iso = dt.date().isoformat()
+                    hour = dt.hour
+
+                    bucket = result.setdefault(entity_id, {}).setdefault(datum_iso, {})
+                    slot: dict[str, float] = {}
+                    if min_v is not None:
+                        slot["min"] = float(min_v) * skala
+                    if max_v is not None:
+                        slot["max"] = float(max_v) * skala
+                    if slot:
+                        bucket[hour] = slot
+        except Exception as e:
+            logger.warning(f"get_hourly_minmax_sensor_data Fehler: {type(e).__name__}: {e}")
+
+        return result
+
     def get_hourly_mean_for_day(
         self,
         sensor_id: str,

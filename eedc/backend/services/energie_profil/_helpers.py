@@ -292,6 +292,179 @@ def _strompreis_faktor(unit: Optional[str]) -> float:
     return 1.0
 
 
+@dataclass
+class TagesPeaks:
+    """Tages-Peak-Werte aus HA-LTS-Min/Max pro Stunde (Etappe 5).
+
+    Werte sind kW. None heißt: kein Peak ermittelbar (Sensor fehlt, keine
+    HA-LTS-Daten, oder Aufrufer-Fallback soll greifen).
+    """
+    pv: Optional[float]
+    netzbezug: Optional[float]
+    einspeisung: Optional[float]
+
+
+async def _get_tagespeaks_aus_ha_lts(
+    anlage: Anlage,
+    datum: date,
+    db: AsyncSession,
+) -> TagesPeaks:
+    """
+    Etappe 5 (v3.31.0): Tages-Peak-Werte für PV / Netzbezug / Einspeisung
+    aus HA-LTS-Min/Max pro Stunde (`statistics.min`/`statistics.max`).
+
+    HA-Recorder schreibt für `has_mean=True`-Sensoren je Stunde die im
+    State-Bucket beobachteten Extremwerte. Das ist die richtige Quelle für
+    Tages-Peak-Leistungen — eedc muss sie nicht aus 10-Min-Mittelwerten
+    rekonstruieren (siehe `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`).
+
+    Aggregation:
+      - peak_pv: max über Stunden von Σ max(pv_sensor[h]) für alle PV-Entities.
+        Bei mehreren PV-Sensoren ist Σ_max eine obere Schranke (Einzelpeaks
+        können unterschiedliche Minuten innerhalb der Stunde treffen) — in der
+        Praxis weichen Module gleicher Anlage minutengenau wenig ab.
+      - peak_einspeisung / peak_netzbezug: aus dedizierten Sensoren
+        (`einspeisung_w` / `netzbezug_w`) oder dem Kombi-Sensor
+        (`netz_kombi_w`): negativer Teil = Einspeisung, positiver = Bezug.
+      - `live_invert`-Flags werden angewendet (min↔max getauscht + Vorzeichen).
+
+    Returns:
+        TagesPeaks; jeder Wert None wenn nicht ermittelbar (Caller-Fallback
+        greift dann auf den Tagesverlauf-Pfad).
+    """
+    from backend.core.config import HA_INTEGRATION_AVAILABLE
+    if not HA_INTEGRATION_AVAILABLE:
+        return TagesPeaks(None, None, None)
+
+    from backend.models.investition import Investition
+    from backend.services.live_sensor_config import extract_live_config
+
+    basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
+
+    # ── PV-Entities ermitteln ─────────────────────────────────────────────
+    pv_entities: set[str] = set()
+    inv_result = await db.execute(
+        select(Investition.id, Investition.typ).where(Investition.anlage_id == anlage.id)
+    )
+    pv_typ = {"pv-module", "balkonkraftwerk"}
+    for inv_id, typ in inv_result.all():
+        if typ in pv_typ:
+            live = inv_live_map.get(str(inv_id), {})
+            eid = live.get("leistung_w")
+            if eid:
+                pv_entities.add(eid)
+
+    has_individual_pv = bool(pv_entities)
+    if not has_individual_pv and basis_live.get("pv_gesamt_w"):
+        pv_entities.add(basis_live["pv_gesamt_w"])
+
+    # ── Netz-Entities ermitteln ──────────────────────────────────────────
+    netz_kombi = basis_live.get("netz_kombi_w")
+    netz_bezug = basis_live.get("netzbezug_w")
+    netz_einspeisung = basis_live.get("einspeisung_w")
+    # Wenn dedizierte Bezug/Einspeisung existieren, Kombi nicht zusätzlich nutzen
+    if netz_bezug or netz_einspeisung:
+        netz_kombi = None
+
+    netz_entities = {e for e in (netz_kombi, netz_bezug, netz_einspeisung) if e}
+
+    if not pv_entities and not netz_entities:
+        return TagesPeaks(None, None, None)
+
+    # ── Invert-Set bauen ─────────────────────────────────────────────────
+    invert_eids: set[str] = set()
+    for key, should_invert in basis_invert.items():
+        if should_invert and key in basis_live:
+            invert_eids.add(basis_live[key])
+    for inv_id, invert_flags in inv_invert_map.items():
+        live = inv_live_map.get(inv_id, {})
+        for key, should_invert in invert_flags.items():
+            if should_invert and key in live:
+                invert_eids.add(live[key])
+
+    # ── HA-LTS-Min/Max lesen ─────────────────────────────────────────────
+    try:
+        import asyncio
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+
+        stats = get_ha_statistics_service()
+        if not stats.is_available:
+            return TagesPeaks(None, None, None)
+
+        all_eids = list(pv_entities | netz_entities)
+        minmax = await asyncio.to_thread(
+            stats.get_hourly_minmax_sensor_data, all_eids, datum, datum,
+        )
+    except Exception as e:
+        logger.debug(f"Peak-HA-LTS für {datum}: {e}")
+        return TagesPeaks(None, None, None)
+
+    if not minmax:
+        return TagesPeaks(None, None, None)
+
+    datum_iso = datum.isoformat()
+
+    def slot_for(eid: str, h: int) -> dict[str, float]:
+        s = minmax.get(eid, {}).get(datum_iso, {}).get(h)
+        if not s:
+            return {}
+        if eid in invert_eids:
+            # invert: min wird zu -max, max wird zu -min
+            return {
+                "min": -s["max"] if "max" in s else None,
+                "max": -s["min"] if "min" in s else None,
+            }
+        return s
+
+    # ── peak_pv ──────────────────────────────────────────────────────────
+    peak_pv: Optional[float] = None
+    if pv_entities:
+        for h in range(24):
+            stundensumme = 0.0
+            haben_daten = False
+            for eid in pv_entities:
+                s = slot_for(eid, h)
+                v = s.get("max") if s else None
+                if v is not None and v > 0:
+                    stundensumme += v
+                    haben_daten = True
+            if haben_daten and (peak_pv is None or stundensumme > peak_pv):
+                peak_pv = stundensumme
+
+    # ── peak_netzbezug / peak_einspeisung ────────────────────────────────
+    peak_bezug: Optional[float] = None
+    peak_einsp: Optional[float] = None
+
+    def best_max_positiv(eid: str) -> Optional[float]:
+        best: Optional[float] = None
+        for h in range(24):
+            v = slot_for(eid, h).get("max")
+            if v is not None and v > 0 and (best is None or v > best):
+                best = v
+        return best
+
+    def best_betrag_negativ(eid: str) -> Optional[float]:
+        """|min|, wenn min negativ — z. B. für Einspeisung aus Kombi-Sensor."""
+        best: Optional[float] = None
+        for h in range(24):
+            v = slot_for(eid, h).get("min")
+            if v is not None and v < 0:
+                betrag = -v
+                if best is None or betrag > best:
+                    best = betrag
+        return best
+
+    if netz_bezug:
+        peak_bezug = best_max_positiv(netz_bezug)
+    if netz_einspeisung:
+        peak_einsp = best_max_positiv(netz_einspeisung)
+    if netz_kombi:
+        peak_bezug = best_max_positiv(netz_kombi)
+        peak_einsp = best_betrag_negativ(netz_kombi)
+
+    return TagesPeaks(pv=peak_pv, netzbezug=peak_bezug, einspeisung=peak_einsp)
+
+
 async def _get_strompreis_stunden(
     anlage: Anlage,
     sensor_mapping: dict,
