@@ -32,15 +32,20 @@ sys.path.insert(0, str(_BACKEND_ROOT))
 from backend.services.live_history_service import _energy_delta  # noqa: E402
 
 
-def test_wh_sensor_statistics_pfad_skaliert_auf_kwh():
-    """Wh-Sensor liefert 31442700 Wh aus Statistics → 31442.7 kWh (#232)."""
+def test_wh_sensor_statistics_pfad_durchreicht_kwh():
+    """Wh-Sensor im Statistics-Pfad: `get_value_at` skaliert intern bereits
+    Wh → kWh (ha_statistics_service.py:736-738), liefert den Wert also
+    schon in kWh. `_energy_delta` darf den Wert nicht nochmal skalieren.
+    """
     eid = "sensor.pv_gesamt_energy"
     sensor_units = {eid: "Wh"}
     history = {eid: []}  # leer, da Statistics-Pfad genutzt wird
 
+    # Mock simuliert echtes Verhalten: get_value_at hat bereits skaliert,
+    # _energy_delta_via_statistics gibt damit einen kWh-Wert zurück.
     with patch(
         "backend.services.live_history_service._energy_delta_via_statistics",
-        return_value=31_442_700.0,  # Wh, sum-Delta aus HA-Statistics
+        return_value=31442.7,  # bereits in kWh
     ):
         from datetime import datetime
         result = _energy_delta(
@@ -49,11 +54,9 @@ def test_wh_sensor_statistics_pfad_skaliert_auf_kwh():
             end=datetime(2026, 5, 13, 12, 11, 40),
         )
 
-    # 31442700 Wh × 0.001 = 31442.7 kWh — der bug-bringende Wert wird
-    # durch die Skalierung jetzt korrekt zu 31442.7 kWh (statt 31442700 kWh).
     assert result == 31442.7, (
-        f"Wh-Sensor muss auf kWh skaliert werden — erwartet 31442.7, "
-        f"war {result!r}"
+        f"Wh-Sensor: Statistics-Pfad ist schon in kWh, _energy_delta darf "
+        f"nicht doppelt skalieren — erwartet 31442.7 kWh, war {result!r}"
     )
 
 
@@ -78,14 +81,22 @@ def test_kwh_sensor_statistics_pfad_unveraendert():
 
 
 def test_mwh_sensor_statistics_pfad_skaliert_auf_kwh():
-    """MWh-Sensor: 0.0314 MWh × 1000 = 31.4 kWh."""
+    """MWh-Sensor im Statistics-Pfad: `get_value_at` skaliert bereits selbst
+    mit `_ENERGY_UNIT_TO_KWH` (ha_statistics_service.py:736-738), liefert
+    den Wert also schon in kWh zurück. `_energy_delta` darf diesen Pfad
+    NICHT nochmal mit `_KWH_SCALE` multiplizieren — sonst Faktor 1000²
+    (NongJoWo-Befund #242, Forum 2026-05-16: 8.11 kWh wurden als 8097
+    kWh angezeigt).
+    """
     eid = "sensor.pv_mwh"
     sensor_units = {eid: "MWh"}
     history = {eid: []}
 
+    # Mock simuliert echtes Verhalten: get_value_at hat bereits skaliert,
+    # _energy_delta_via_statistics gibt damit einen kWh-Wert zurück.
     with patch(
         "backend.services.live_history_service._energy_delta_via_statistics",
-        return_value=0.0314,
+        return_value=31.4,  # bereits in kWh
     ):
         from datetime import datetime
         result = _energy_delta(
@@ -94,9 +105,11 @@ def test_mwh_sensor_statistics_pfad_skaliert_auf_kwh():
             end=datetime(2026, 5, 13, 12, 0, 0),
         )
 
-    # 0.0314 MWh × 1000 = 31.4 kWh
+    # _energy_delta darf den schon-skalierten Wert nicht nochmal mit 1000
+    # multiplizieren.
     assert abs(result - 31.4) < 0.0001, (
-        f"MWh-Sensor × 1000 muss 31.4 kWh ergeben, war {result!r}"
+        f"MWh-Sensor: Statistics-Pfad ist schon in kWh, _energy_delta darf "
+        f"nicht doppelt skalieren — erwartet 31.4 kWh, war {result!r}"
     )
 
 
@@ -134,7 +147,7 @@ def test_wh_sensor_state_history_fallback_skaliert_weiterhin():
 
 
 _TESTS = [
-    test_wh_sensor_statistics_pfad_skaliert_auf_kwh,
+    test_wh_sensor_statistics_pfad_durchreicht_kwh,
     test_kwh_sensor_statistics_pfad_unveraendert,
     test_mwh_sensor_statistics_pfad_skaliert_auf_kwh,
     test_wh_sensor_state_history_fallback_skaliert_weiterhin,
