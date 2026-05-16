@@ -632,15 +632,22 @@ async def get_prognosen_genauigkeit(
     eedc_signed = []
     sc_signed = []
 
-    # Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
-    _NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
+    # Prefix-Whitelist statt Negativliste (Rainer-PN 2026-05-16): die alte
+    # Negativliste `{strompreis, netzbezug, einspeisung}` ließ Batterie-Sub-Keys
+    # mit netto positiver Tages-Ladung als "IST-Erzeugung" durch — bei einer
+    # Anlage mit ~5 kWh Netto-Batterie-Ladung am Tag entstand 5 kWh künstliche
+    # Überschätzung des IST gegenüber PV-Ertrag. Genauigkeits-Tracking ist
+    # explizit PV-IST (vergleicht mit PV-Prognosen), also Whitelist auf
+    # die Erzeugungs-Komponenten — analog Frontend `EnergieprofilTageTabelle.tsx`,
+    # das exakt diesen Prefix-Filter für die Spalte "PV-Ertrag" verwendet.
+    _PV_PREFIXES = ("pv_", "bkw_")
 
     for tz in tage_daten:
         ist_kwh = None
         if tz.komponenten_kwh:
             ist_kwh = sum(
                 v for k, v in tz.komponenten_kwh.items()
-                if v > 0 and k not in _NICHT_PV
+                if v > 0 and k.startswith(_PV_PREFIXES)
             )
 
         # EEDC = OpenMeteo × Lernfaktor (historisch)
