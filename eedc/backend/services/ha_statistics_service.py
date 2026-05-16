@@ -103,13 +103,25 @@ class HAStatisticsService:
 
         # Priorität: Konfigurierte MariaDB URL → SQLite-Datei
         if settings.ha_recorder_db_url:
+            url = settings.ha_recorder_db_url
+            # Auto-Treiber-Mapping: SQLAlchemy will bei `mysql://...` das
+            # C-Modul `MySQLdb` (mysqlclient) laden, das im Add-on-Image nicht
+            # installiert ist. Nur `pymysql` ist enthalten (siehe requirements.txt).
+            # Anwender tragen aber natürlich `mysql://user:pass@host/db` ein
+            # (wie es die HA-Recorder-Doku zeigt) und bekamen dann
+            # `ModuleNotFoundError: No module named 'MySQLdb'` (#251 FrodoVDR).
+            # Diese Schreibweisen werden auf den vorhandenen Treiber umgebogen.
+            if url.startswith("mysql://"):
+                url = "mysql+pymysql://" + url[len("mysql://"):]
+            elif url.startswith("mariadb://"):
+                url = "mariadb+pymysql://" + url[len("mariadb://"):]
             try:
                 self._engine = create_engine(
-                    settings.ha_recorder_db_url,
+                    url,
                     pool_pre_ping=True,
                     pool_recycle=3600,
                 )
-                self._is_mysql = "mysql" in settings.ha_recorder_db_url
+                self._is_mysql = "mysql" in url or "mariadb" in url
                 # Verbindungstest
                 with self._engine.connect() as conn:
                     conn.execute(text("SELECT 1"))

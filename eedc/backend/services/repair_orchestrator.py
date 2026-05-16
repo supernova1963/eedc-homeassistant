@@ -34,7 +34,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Literal, Optional
 from uuid import UUID
@@ -172,7 +172,7 @@ _lock = asyncio.Lock()
 
 def _purge_expired_unlocked() -> None:
     """Entfernt abgelaufene Pläne (Lock muss vom Caller gehalten werden)."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expired = [pid for pid, plan in _plans.items() if plan.expires_at <= now]
     for pid in expired:
         _plans.pop(pid, None)
@@ -948,7 +948,10 @@ async def plan(req: RepairOperationRequest, db: AsyncSession) -> RepairPlan:
     else:
         raise ValueError(f"Unbekannte Operation: {req.operation}")
 
-    now = datetime.utcnow()
+    # tz-aware UTC: Pydantic serialisiert dann mit `+00:00`-Marker, damit
+    # Frontend `new Date(iso)` korrekt interpretiert (sonst wird naive UTC
+    # als lokale Zeit gerendert, #257 detLAN).
+    now = datetime.now(timezone.utc)
     plan_obj = RepairPlan(
         plan_id=uuid.uuid4(),
         anlage_id=req.anlage_id,
@@ -988,7 +991,7 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
             raise LookupError(f"Plan {plan_id} nicht gefunden (abgelaufen oder ungültig)")
         if plan_id in _results:
             raise LookupError(f"Plan {plan_id} bereits ausgeführt")
-        if plan_obj.expires_at <= datetime.utcnow():
+        if plan_obj.expires_at <= datetime.now(timezone.utc):
             raise TimeoutError(f"Plan {plan_id} abgelaufen")
 
     req = RepairOperationRequest(
@@ -1030,7 +1033,7 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
         plan_id=plan_id,
         anlage_id=plan_obj.anlage_id,
         operation=plan_obj.operation,
-        executed_at=datetime.utcnow(),
+        executed_at=datetime.now(timezone.utc),
         actual_changes=actual,
         audit_log_ids=audit_log_ids,
         operation_summary=summary,

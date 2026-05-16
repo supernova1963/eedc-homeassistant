@@ -20,6 +20,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 
 - **Cockpit-Übersicht zeigt jetzt eine Sonstiges-Sektion** (Forum #548): Bisher hatten „Sonstiges"-Investitionen (Pool, Sauna, Klima ohne WP-Kategorie, Zweit-Erzeuger) zwar im Detail-Tab und in der Monatsübersicht ihre Werte — die Cockpit-Übersicht (Hauptseite) hat sie aber komplett ignoriert. Backend-Endpoint `/api/cockpit/uebersicht` liefert jetzt `sonstiges_erzeugung_kwh` + `sonstiges_verbrauch_kwh` + `hat_sonstiges`, das Cockpit-Dashboard rendert eine entsprechende Section mit Erzeugungs- und Verbrauchs-KPI-Kacheln (sichtbar nur wenn die Investition mindestens eine Seite gepflegt hat).
+- **MariaDB-Verbindung mit `mysql://`-URL funktioniert jetzt** (#251 FrodoVDR): Der HA-Recorder-Doku-Standard `mysql://user:pass@host/db` führte zu `ModuleNotFoundError: No module named 'MySQLdb'`, weil SQLAlchemy bei dieser Schreibweise das C-Modul mysqlclient lädt (im Add-on-Image ist nur `pymysql` installiert). Auto-Treiber-Mapping in `ha_statistics_service.py` biegt `mysql://` und `mariadb://` intern auf `mysql+pymysql://` bzw. `mariadb+pymysql://` um. Wer den `+pymysql`-Suffix bereits in der URL stehen hat, ist unverändert.
+- **Plan-Vorschau zeigt korrekte Uhrzeit für die Gültigkeit** (#257 detLAN): Der „Plan gültig bis"-Header in der Reparatur-Werkbank zeigte die UTC-Zeit als wäre sie Lokalzeit — in MESZ ergab das eine Differenz von 2 Stunden (z. B. „21:00" statt korrekt „23:00"). Backend liefert die Zeit jetzt als tz-aware UTC mit `+00:00`-Marker, Frontend interpretiert korrekt + defensive Normalisierung für Übergangs-Cache-Fälle.
 
 ### Hinweis für Anwender
 
