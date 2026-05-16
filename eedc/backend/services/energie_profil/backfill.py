@@ -336,6 +336,21 @@ async def backfill_from_statistics(
             )
             kwh_pro_stunde_tag = {}
 
+        # Stunden-Counter (Issue #136 / Forum #259 detLAN): WP-Kompressor-Starts
+        # pro Stunde. Im Backfill bisher nicht mit-aggregiert → Tagesdetail-
+        # Tabelle zeigte leere wp_starts_anzahl-Spalten für nachgefüllte Tage.
+        wp_starts_pro_stunde: dict[int, Optional[int]] = {}
+        try:
+            from backend.services.sensor_snapshot_service import get_hourly_counter_sum_by_feld
+            wp_starts_pro_stunde = await get_hourly_counter_sum_by_feld(
+                db, anlage, investitionen, current, "wp_starts_anzahl",
+            )
+        except Exception as e:
+            logger.warning(
+                f"Anlage {anlage.id}, {current}: WP-Starts-Aggregation "
+                f"fehlgeschlagen: {type(e).__name__}: {e}"
+            )
+
         # Stundenschleife: werte-Dict aufbauen (Butterfly-Konvention)
         tages_ueberschuss = 0.0
         tages_defizit = 0.0
@@ -496,6 +511,7 @@ async def backfill_from_statistics(
                 wetter_code=int(wcode) if wcode is not None else None,
                 soc_prozent=round(soc, 1) if soc is not None else None,
                 komponenten=werte if werte else None,
+                wp_starts_anzahl=wp_starts_pro_stunde.get(h),
             ))
             stunden_count += 1
 
