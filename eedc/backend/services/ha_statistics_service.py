@@ -573,6 +573,73 @@ class HAStatisticsService:
 
         return result
 
+    def get_hourly_mean_for_day(
+        self,
+        sensor_id: str,
+        datum: date,
+    ) -> tuple[dict[int, float], Optional[str]]:
+        """
+        Etappe 5 (v3.31.0): Stunden-Mean roh + Einheit für einen Sensor und Tag.
+
+        Im Gegensatz zu `get_hourly_sensor_data()` (das W→kW konvertiert und
+        unbekannte Einheiten konservativ /1000 nimmt) werden hier rohe
+        Mean-Werte zurückgegeben. Der Aufrufer kennt den Anwendungsfall
+        besser (z. B. Strompreis-Skalierung EUR/kWh → cent/kWh) und kann
+        seine eigene Faktor-Logik anwenden.
+
+        Args:
+            sensor_id: HA Entity-ID des Sensors
+            datum: Der Tag (0..23 Stundenmittel)
+
+        Returns:
+            ({stunde_0_23: roher_mean}, unit_of_measurement)
+            Leere Slots + None wenn Sensor unbekannt oder keine Daten.
+        """
+        if not self.is_available:
+            return {}, None
+
+        import time as time_module
+        from datetime import time
+
+        von_dt = datetime.combine(datum, time.min)
+        bis_dt = datetime.combine(datum + timedelta(days=1), time.min)
+        ts_von = time_module.mktime(von_dt.timetuple())
+        ts_bis = time_module.mktime(bis_dt.timetuple())
+
+        slots: dict[int, float] = {}
+        unit: Optional[str] = None
+
+        try:
+            with self._engine.connect() as conn:
+                meta = self.get_metadata(conn, sensor_id)
+                if not meta:
+                    return {}, None
+                unit = meta.unit
+
+                rows = conn.execute(
+                    text(
+                        "SELECT start_ts, mean FROM statistics "
+                        "WHERE metadata_id = :mid "
+                        "AND start_ts >= :ts_von "
+                        "AND start_ts < :ts_bis "
+                        "AND mean IS NOT NULL "
+                        "ORDER BY start_ts"
+                    ),
+                    {"mid": meta.id, "ts_von": ts_von, "ts_bis": ts_bis},
+                )
+                for row in rows:
+                    start_ts = row[0]
+                    mean = row[1]
+                    dt = datetime.fromtimestamp(start_ts)
+                    if dt.date() != datum:
+                        continue
+                    slots[dt.hour] = float(mean)
+        except Exception as e:
+            logger.warning(f"get_hourly_mean_for_day Fehler: {type(e).__name__}: {e}")
+            return {}, unit
+
+        return slots, unit
+
     def get_monatsanfang_wert(
         self,
         sensor_id: str,

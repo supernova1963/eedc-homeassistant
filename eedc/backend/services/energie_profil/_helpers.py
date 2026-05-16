@@ -190,6 +190,11 @@ async def _get_soc_history(
     E-Auto-SoC darf hier NICHT enthalten sein, sonst kontaminiert er die
     Batterie-Vollzyklen-Berechnung der PV-Anlage (E-Auto-ΔSoC ≠ Speicher-ΔSoC).
 
+    Etappe 5 (v3.31.0): bevorzugt HA-LTS-Hourly-Mean direkt aus
+    `statistics.mean` — dieselbe Quelle, aus der HA das Energy-Dashboard
+    speist. State-History-Mittelung nur als Fallback wenn LTS leer (frischer
+    Sensor, has_mean=False, oder Tag liegt vor LTS-Recompile).
+
     Returns:
         {stunde: float (SoC %)}
     """
@@ -221,6 +226,25 @@ async def _get_soc_history(
     if not soc_entities:
         return {}
 
+    # ── Pfad 1: HA-LTS-Hourly-Mean (Etappe 5) ────────────────────────────
+    try:
+        import asyncio
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+
+        stats = get_ha_statistics_service()
+        if stats.is_available:
+            datum_iso = datum.isoformat()
+            hourly = await asyncio.to_thread(
+                stats.get_hourly_sensor_data, soc_entities, datum, datum
+            )
+            for entity_id in soc_entities:
+                slots = hourly.get(entity_id, {}).get(datum_iso, {})
+                if slots:
+                    return {h: float(v) for h, v in slots.items()}
+    except Exception as e:
+        logger.debug(f"SoC-LTS-Hourly für {datum}: {e}")
+
+    # ── Pfad 2: Fallback auf State-History-Mittelung ─────────────────────
     try:
         from backend.services.ha_state_service import get_ha_state_service
         ha_service = get_ha_state_service()
@@ -230,7 +254,6 @@ async def _get_soc_history(
 
         history = await ha_service.get_sensor_history(soc_entities, start, end)
 
-        # Stundenmittel berechnen (erstes SoC-Entity verwenden)
         result = {}
         for entity_id in soc_entities:
             points = history.get(entity_id, [])
@@ -260,6 +283,15 @@ class StrompreisStunden:
     boerse: dict[int, float]   # EPEX Day-Ahead Börsenpreis (aWATTar), immer befüllt
 
 
+def _strompreis_faktor(unit: Optional[str]) -> float:
+    """Faktor von Sensor-Einheit nach cent/kWh."""
+    if unit in ("EUR/kWh", "€/kWh"):
+        return 100.0
+    if unit in ("EUR/MWh", "€/MWh"):
+        return 0.1
+    return 1.0
+
+
 async def _get_strompreis_stunden(
     anlage: Anlage,
     sensor_mapping: dict,
@@ -283,38 +315,57 @@ async def _get_strompreis_stunden(
     sensor_id = sp.get("sensor_id") if isinstance(sp, dict) else None
 
     if sensor_id:
-        try:
-            from backend.core.config import HA_INTEGRATION_AVAILABLE
-            if HA_INTEGRATION_AVAILABLE:
-                from backend.services.ha_state_service import get_ha_state_service
-                ha_service = get_ha_state_service()
+        from backend.core.config import HA_INTEGRATION_AVAILABLE
+        if HA_INTEGRATION_AVAILABLE:
+            # ── Pfad 1: HA-LTS-Hourly-Mean (Etappe 5) ────────────────────
+            try:
+                import asyncio
+                from backend.services.ha_statistics_service import get_ha_statistics_service
 
-                start = datetime.combine(datum, datetime.min.time())
-                end = start + timedelta(days=1)
-                history = await ha_service.get_sensor_history([sensor_id], start, end)
-                units = await ha_service.get_sensor_units([sensor_id])
+                stats = get_ha_statistics_service()
+                if stats.is_available:
+                    slots, unit = await asyncio.to_thread(
+                        stats.get_hourly_mean_for_day, sensor_id, datum,
+                    )
+                    if slots:
+                        faktor = _strompreis_faktor(unit)
+                        for h, mean in slots.items():
+                            sensor_preise[h] = mean * faktor
+                        logger.debug(
+                            "Strompreis %s: %d Stunden aus HA-LTS-Hourly %s (Einheit %s)",
+                            datum, len(sensor_preise), sensor_id, unit,
+                        )
+            except Exception as e:
+                logger.debug("Strompreis LTS %s für %s: %s", sensor_id, datum, e)
 
-                points = history.get(sensor_id, [])
-                if points:
-                    unit = units.get(sensor_id, "")
-                    faktor = 1.0
-                    if unit in ("EUR/kWh", "€/kWh"):
-                        faktor = 100.0
-                    elif unit in ("EUR/MWh", "€/MWh"):
-                        faktor = 0.1
+            # ── Pfad 2: Fallback State-History-Mittelung ─────────────────
+            if not sensor_preise:
+                try:
+                    from backend.services.ha_state_service import get_ha_state_service
+                    ha_service = get_ha_state_service()
 
-                    for h in range(24):
-                        h_start = start + timedelta(hours=h)
-                        h_end = h_start + timedelta(hours=1)
-                        h_pts = [p[1] * faktor for p in points if h_start <= p[0] < h_end]
-                        if h_pts:
-                            sensor_preise[h] = sum(h_pts) / len(h_pts)
+                    start = datetime.combine(datum, datetime.min.time())
+                    end = start + timedelta(days=1)
+                    history = await ha_service.get_sensor_history([sensor_id], start, end)
+                    units = await ha_service.get_sensor_units([sensor_id])
 
-                    if sensor_preise:
-                        logger.debug("Strompreis %s: %d Stunden aus HA-Sensor %s",
-                                     datum, len(sensor_preise), sensor_id)
-        except Exception as e:
-            logger.debug("Strompreis HA-Sensor %s für %s: %s", sensor_id, datum, e)
+                    points = history.get(sensor_id, [])
+                    if points:
+                        unit = units.get(sensor_id, "")
+                        faktor = _strompreis_faktor(unit)
+
+                        for h in range(24):
+                            h_start = start + timedelta(hours=h)
+                            h_end = h_start + timedelta(hours=1)
+                            h_pts = [p[1] * faktor for p in points if h_start <= p[0] < h_end]
+                            if h_pts:
+                                sensor_preise[h] = sum(h_pts) / len(h_pts)
+
+                        if sensor_preise:
+                            logger.debug("Strompreis %s: %d Stunden aus HA-Sensor %s (Fallback)",
+                                         datum, len(sensor_preise), sensor_id)
+                except Exception as e:
+                    logger.debug("Strompreis HA-Sensor %s für %s: %s", sensor_id, datum, e)
 
     # ── Börsenpreis (aWATTar/EPEX, immer) ────────────────────────────────
     try:
