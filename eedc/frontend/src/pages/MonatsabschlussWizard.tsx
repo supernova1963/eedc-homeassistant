@@ -509,20 +509,39 @@ export default function MonatsabschlussWizard() {
       )
 
       if (result.success) {
-        setSuccess(result.message)
-        // Community-Nudge: Anlage laden und prüfen ob Auto-Share aktiv
-        try {
-          const anlageObj = await anlagenApi.get(parseInt(anlageId!))
-          if (!anlageObj.community_hash && !anlageObj.community_auto_share) {
-            setSuccess(result.message + ' — Tipp: Teile deine Daten anonym mit der Community!')
-          } else if (anlageObj.community_auto_share) {
-            setSuccess(result.message + ' — Daten werden automatisch an die Community gesendet.')
-          }
-        } catch { /* ignore */ }
-        // Nach 3s zur nächsten Seite navigieren (etwas mehr Zeit für Community-Hinweis)
-        setTimeout(() => {
-          navigate('/einstellungen/monatsdaten')
-        }, 3000)
+        // Schreibschutz-Warnungen sichtbar machen (FrodoVDR #251 Folge):
+        // bisher gingen Provenance-Rejects still durch; jetzt zeigt Backend
+        // sie als warnungen[] mit typ="schreibschutz_aktiv" zurück.
+        const blockiert = (result.warnungen || []).filter(
+          (w: { typ?: string }) => w.typ === 'schreibschutz_aktiv',
+        )
+        if (blockiert.length > 0) {
+          const meldungen = blockiert
+            .map((w: { meldung: string }) => `• ${w.meldung}`)
+            .join('\n')
+          setError(
+            `Einige Felder wurden nicht übernommen:\n${meldungen}\n\n` +
+            'Hinweis: Über Wartung → Reparatur-Werkbank → „Daten-Quellen-Konflikte ' +
+            'auflösen" können konfliktierende Cloud-/Import-Quellen zurückgesetzt ' +
+            'werden, danach greift die manuelle Eingabe.',
+          )
+          // Bei Schreibschutz nicht weiter-navigieren — User soll Werkbank nutzen
+        } else {
+          setSuccess(result.message)
+          // Community-Nudge: Anlage laden und prüfen ob Auto-Share aktiv
+          try {
+            const anlageObj = await anlagenApi.get(parseInt(anlageId!))
+            if (!anlageObj.community_hash && !anlageObj.community_auto_share) {
+              setSuccess(result.message + ' — Tipp: Teile deine Daten anonym mit der Community!')
+            } else if (anlageObj.community_auto_share) {
+              setSuccess(result.message + ' — Daten werden automatisch an die Community gesendet.')
+            }
+          } catch { /* ignore */ }
+          // Nach 3s zur nächsten Seite navigieren (etwas mehr Zeit für Community-Hinweis)
+          setTimeout(() => {
+            navigate('/einstellungen/monatsdaten')
+          }, 3000)
+        }
       } else {
         setError('Speichern fehlgeschlagen')
       }

@@ -289,11 +289,37 @@ async def save_monatsabschluss(
         # Felder in verbrauch_daten via Resolver — pro Sub-Key, damit ein
         # paralleler Cloud-Sync die manuell gepflegten Felder NICHT
         # überschreiben kann (P3 Akzeptanz Risiko #1).
+        # Rejected Writes sammeln (FrodoVDR #251 Folge): bisher gingen
+        # Schreibversuche, die wegen höherwertiger bestehender Quelle
+        # abgelehnt wurden, still durch — User sah „erfolgreich gespeichert"
+        # aber Werte unverändert. Jetzt: rejected_fields → Warnung im Result.
+        inv_label = f"Investition {inv_werte.investition_id}"
         for feld_wert in inv_werte.felder:
-            await write_json_subkey_with_provenance(
+            res = await write_json_subkey_with_provenance(
                 db, imd, "verbrauch_daten", feld_wert.feld, feld_wert.wert,
                 source="manual:form", writer=_WIZARD_WRITER,
             )
+            if not res.applied and res.decision == "rejected_lower_priority":
+                alle_warnungen.append(WarnungResponse(
+                    typ="schreibschutz_aktiv",
+                    schwere="warning",
+                    meldung=(
+                        f"{inv_label} – {feld_wert.feld}: Eintrag wurde nicht "
+                        f"übernommen, weil bereits ein Wert höherer Quelle "
+                        f"({res.conflicting_source}) existiert."
+                    ),
+                    details={
+                        "investition_id": inv_werte.investition_id,
+                        "feld": feld_wert.feld,
+                        "konflikt_quelle": res.conflicting_source,
+                        "hinweis": (
+                            "Über Wartung → Reparatur-Werkbank → 'Daten-Quellen-"
+                            "Konflikte auflösen' können konfliktierende Cloud-/"
+                            "Import-Quellen zurückgesetzt werden, danach greift "
+                            "die manuelle Eingabe."
+                        ),
+                    },
+                ))
 
         # Sonstige Positionen (Erträge & Ausgaben) — landen als ein Sub-Key
         # mit Listen-Wert, ebenfalls über den Resolver.
@@ -302,10 +328,25 @@ async def save_monatsabschluss(
                 p for p in inv_werte.sonstige_positionen
                 if isinstance(p, dict) and p.get("betrag", 0) > 0 and str(p.get("bezeichnung", "")).strip()
             ]
-            await write_json_subkey_with_provenance(
+            res = await write_json_subkey_with_provenance(
                 db, imd, "verbrauch_daten", "sonstige_positionen", gueltige,
                 source="manual:form", writer=_WIZARD_WRITER,
             )
+            if not res.applied and res.decision == "rejected_lower_priority":
+                alle_warnungen.append(WarnungResponse(
+                    typ="schreibschutz_aktiv",
+                    schwere="warning",
+                    meldung=(
+                        f"{inv_label} – Sonstige Positionen: Eintrag wurde nicht "
+                        f"übernommen, weil bereits ein Wert höherer Quelle "
+                        f"({res.conflicting_source}) existiert."
+                    ),
+                    details={
+                        "investition_id": inv_werte.investition_id,
+                        "feld": "sonstige_positionen",
+                        "konflikt_quelle": res.conflicting_source,
+                    },
+                ))
 
         try:
             await db.flush()
