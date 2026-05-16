@@ -82,6 +82,17 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # (services/ha_statistics_service.py + routes/ha_statistics.py)
     "external:ha_statistics": SourcePriority.EXTERNAL_AUTHORITATIVE,
 
+    # Etappe 4 (v3.31.0): HA-Statistics-LTS als Source-of-Truth für
+    # TagesEnergieProfil + TagesZusammenfassung. Aufgesplittet nach
+    # Auflösung, damit das Audit-Log unterscheiden kann, ob Stunden-
+    # oder Tagessumme geschrieben wurde — wichtig für Konsistenz-
+    # Diagnose (Σ Hourly == Daily-Summe?). Generisches `external:ha_statistics`
+    # bleibt für punktuelle Snapshot-Self-Healing-Reads (sensor_snapshots).
+    # Hierarchie identisch (EXTERNAL_AUTHORITATIVE), kein Wettbewerb mit
+    # bestehendem Label.
+    "external:ha_statistics:hourly": SourcePriority.EXTERNAL_AUTHORITATIVE,
+    "external:ha_statistics:daily":  SourcePriority.EXTERNAL_AUTHORITATIVE,
+
     # External Authoritative — Wetter- und Prognose-Quellen (P3 Stub).
     # Diese drei Labels sind ein Vorgriff auf die Quellenwahl-Roadmap (Schritt
     # 4 SFML-Connector wäre sonst neuer Schreiber ohne Provenance — Risiko #3

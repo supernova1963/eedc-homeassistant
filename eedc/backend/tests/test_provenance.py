@@ -73,16 +73,17 @@ async def _session_ctx():
         await engine.dispose()
 
 
-async def _make_md(session: AsyncSession) -> Monatsdaten:
+async def _make_md(session: AsyncSession, jahr: int = 2026, monat: int = 4) -> Monatsdaten:
     """Erstellt Anlage + Monatsdaten und committet, damit der Helper auf einer
-    realen Row arbeitet."""
+    realen Row arbeitet. jahr/monat optional, damit ein Test mehrere Rows
+    anlegen kann (UniqueConstraint anlage_id+jahr+monat)."""
     anlage = Anlage(anlagenname="Test", leistung_kwp=10.0, standort_land="DE")
     session.add(anlage)
     await session.flush()
     md = Monatsdaten(
         anlage_id=anlage.id,
-        jahr=2026,
-        monat=4,
+        jahr=jahr,
+        monat=monat,
         einspeisung_kwh=0.0,
         netzbezug_kwh=0.0,
         source_provenance={},
@@ -331,6 +332,58 @@ async def test_manual_subkey_overrides_repair_unconditionally():
         assert imd.source_provenance["verbrauch_daten.pv_erzeugung_kwh"]["source"] == "manual:form"
 
 
+async def test_ha_lts_hourly_daily_labels_accepted():
+    """Etappe 4 (v3.31.0): neue Source-Labels external:ha_statistics:hourly
+    und external:ha_statistics:daily werden vom Resolver akzeptiert und
+    haben EXTERNAL_AUTHORITATIVE-Priorität — schlagen auto:* und fallback:*,
+    verlieren gegen manual:*."""
+    async with _session_ctx() as session:
+        # Hourly schlägt auto:monatsabschluss
+        md1 = await _make_md(session)
+        await write_with_provenance(
+            session, md1, "netzbezug_kwh", 50.0,
+            source="auto:monatsabschluss", writer="rollup_op",
+        )
+        result = await write_with_provenance(
+            session, md1, "netzbezug_kwh", 75.0,
+            source="external:ha_statistics:hourly", writer="lts_reader",
+        )
+        await session.commit()
+        assert result.applied is True
+        assert md1.netzbezug_kwh == 75.0
+        assert md1.source_provenance["netzbezug_kwh"]["source"] == "external:ha_statistics:hourly"
+
+        # Daily schlägt fallback:sensor_snapshot
+        md2 = await _make_md(session, jahr=2026, monat=6)
+        await write_with_provenance(
+            session, md2, "einspeisung_kwh", 100.0,
+            source="fallback:sensor_snapshot", writer="snap_agg",
+        )
+        result = await write_with_provenance(
+            session, md2, "einspeisung_kwh", 110.0,
+            source="external:ha_statistics:daily", writer="lts_reader",
+        )
+        await session.commit()
+        assert result.applied is True
+        assert md2.einspeisung_kwh == 110.0
+
+        # Daily verliert gegen bestehendes manual:form (Schutzrichtung
+        # für vom User gepflegte Werte bleibt — manual:* always wins).
+        md3 = await _make_md(session, jahr=2026, monat=7)
+        await write_with_provenance(
+            session, md3, "netzbezug_kwh", 42.0,
+            source="manual:form", writer="alice@example.com",
+        )
+        result = await write_with_provenance(
+            session, md3, "netzbezug_kwh", 88.0,
+            source="external:ha_statistics:daily", writer="lts_reader",
+        )
+        await session.commit()
+        assert result.applied is False
+        assert result.decision == "rejected_lower_priority"
+        assert md3.netzbezug_kwh == 42.0
+
+
 async def test_unknown_source_raises_keyerror():
     """Unbekannte Source-Labels werden NICHT stillschweigend akzeptiert
     (Memory-Linie feedback_silent_except_logs.md). KeyError ist gewollt."""
@@ -445,6 +498,8 @@ _TESTS = [
     # FrodoVDR #251 — manuelle Eingabe gewinnt unbedingt
     test_manual_overrides_repair_unconditionally,
     test_manual_subkey_overrides_repair_unconditionally,
+    # Etappe 4 (v3.31.0) — HA-LTS-Labels
+    test_ha_lts_hourly_daily_labels_accepted,
     # P2 — JSON-Sub-Key-Variante
     test_json_subkey_initial_write_applied,
     test_json_subkey_per_field_hierarchy_protection,
