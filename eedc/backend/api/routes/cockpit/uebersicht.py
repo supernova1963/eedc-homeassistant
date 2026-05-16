@@ -22,6 +22,7 @@ from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
 from backend.core.field_definitions import (
     get_pv_erzeugung_kwh,
+    get_sonstiges_verbrauch_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
@@ -82,6 +83,13 @@ class CockpitUebersichtResponse(BaseModel):
     bkw_erzeugung_kwh: float
     bkw_eigenverbrauch_kwh: float
     hat_balkonkraftwerk: bool
+
+    # Sonstiges aggregiert (Pool, Sauna, Klima — wenn nicht als WP/Luft-Luft
+    # geführt, etc.). Erzeuger und Verbraucher getrennt, weil pro Investition
+    # nur eine Seite aktiv ist (siehe inv.parameter.kategorie).
+    sonstiges_erzeugung_kwh: float
+    sonstiges_verbrauch_kwh: float
+    hat_sonstiges: bool
 
     # Finanzen (Euro)
     einspeise_erloes_euro: float
@@ -186,6 +194,8 @@ async def get_cockpit_uebersicht(
     wb_pv_ladung = 0.0
     bkw_erzeugung = 0.0
     bkw_eigenverbrauch = 0.0
+    sonstiges_erzeugung = 0.0
+    sonstiges_verbrauch = 0.0
     sonstige_ertraege_gesamt = 0.0
     sonstige_ausgaben_gesamt = 0.0
     dienstlich_ladekosten_euro = 0.0
@@ -246,6 +256,14 @@ async def get_cockpit_uebersicht(
             bkw_erzeugung += bkw_kwh
             bkw_eigenverbrauch += data.get("eigenverbrauch_kwh", 0) or 0
             pv_erzeugung_inv += bkw_kwh
+
+        elif inv.typ == "sonstiges":
+            # Pro Investition entweder Erzeuger- oder Verbraucher-Seite
+            # (siehe inv.parameter.kategorie) — Werte sind sich gegenseitig
+            # ausschließend, beide Felder bleiben bei der jeweils anderen
+            # Sicht 0. SoT-Helper liest auch Legacy-Felder mit.
+            sonstiges_erzeugung += data.get("erzeugung_kwh", 0) or 0
+            sonstiges_verbrauch += get_sonstiges_verbrauch_kwh(data)
 
         summen = berechne_sonstige_summen(data)
         sonstige_ertraege_gesamt += summen["ertraege_euro"]
@@ -318,7 +336,11 @@ async def get_cockpit_uebersicht(
 
     wp_invs = [i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_an(today)]
     hat_waermepumpe = len(wp_invs) > 0
-    wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 else None
+    # JAZ/COP nur wenn beide Seiten gemessen sind. Bei Split-Klimaanlagen
+    # (wp_art="luft_luft") ist Wärmemengenzähler typischerweise nicht
+    # vorhanden → wp_waerme=0 obwohl Stromverbrauch läuft. Heute lieferte
+    # die Formel dann 0.0 (irreführende JAZ), jetzt None ("—" im UI).
+    wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 and wp_waerme > 0 else None
     # Multi-WP: erste WP als Parameter-Referenz (Wirkungsgrad/Gas-Default).
     # Drift-Audit Domäne A1 / Issue #178: vorher 10ct hartcodiert + ignorierte
     # User-Param `alter_preis_cent_kwh`.
@@ -354,6 +376,9 @@ async def get_cockpit_uebersicht(
 
     bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]
     hat_balkonkraftwerk = len(bkw_invs) > 0
+
+    sonstiges_invs = [i for i in investitionen if i.typ == "sonstiges" and i.ist_aktiv_an(today)]
+    hat_sonstiges = len(sonstiges_invs) > 0
 
     # Finanzen
     _tarif_cache: dict[date, dict] = {}
@@ -499,6 +524,9 @@ async def get_cockpit_uebersicht(
         bkw_erzeugung_kwh=round(bkw_erzeugung, 1),
         bkw_eigenverbrauch_kwh=round(bkw_eigenverbrauch, 1),
         hat_balkonkraftwerk=hat_balkonkraftwerk,
+        sonstiges_erzeugung_kwh=round(sonstiges_erzeugung, 1),
+        sonstiges_verbrauch_kwh=round(sonstiges_verbrauch, 1),
+        hat_sonstiges=hat_sonstiges,
         einspeise_erloes_euro=round(einspeise_erloes, 2),
         ev_ersparnis_euro=round(ev_ersparnis, 2),
         netzbezug_kosten_euro=round(netzbezug_kosten, 2),

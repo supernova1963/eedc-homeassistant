@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.30.3] - 2026-05-16 — Split-Klimaanlagen als Luft-Luft-WP (Forum #548)
+
+> ❄️ **Klimaanlagen sind jetzt Wärmepumpen.** Eine Split-Klimaanlage ist physikalisch eine Luft-Luft-Wärmepumpe (Reverse-Cycle, Heizen + Kühlen). Bisher wurden sie pragmatisch unter „Sonstiges" geführt — was im Cockpit-Wärmepumpenbereich keinen Eintrag erzeugt und die JAZ-Statistik verfälscht. Ab v3.30.3 steht `wp_art = "luft_luft"` als gleichwertiger WP-Subtyp zur Verfügung; das System rechnet und meldet entsprechend.
+
+### Changed
+
+- **JAZ/COP-Berechnung tolerant gegen fehlenden Wärmemengenzähler** (Forum #548 alex_s9027): Die JAZ wird jetzt nur ausgegeben, wenn **beide** Seiten gemessen sind — Stromverbrauch UND Heizenergie. Bisher kam bei Klimas (Stromverbrauch ja, Heizenergie nein) ein irreführender Wert „0.0" heraus, jetzt sauber „—" (Lücke). Betroffene Endpunkte: Cockpit-Übersicht, Cockpit-Komponenten, PDF-Jahresbericht, PDF-Operationen, Sozial-Bilanz.
+- **Daten-Checker still bei Klimaanlagen**: Bei `wp_art = "luft_luft"` wird die „Heizwärme fehlt"-INFO nicht mehr gemeldet — bei Klimas ist das normal (Standardausstattung HACS-Integrationen liefert nur Stromzähler), nicht ein Datenloch. Klassische Luft-Wasser-WPs bekommen die Warnung weiterhin (kein Regress).
+- **WP-Wizard: Hinweis-Box bei Wahl „Luft-Luft (Klimaanlage)"**: erklärt, dass nur der Stromverbrauchs-Sensor nötig ist, die JAZ-Kachel bleibt leer.
+
+### Fixed
+
+- **Cockpit-Übersicht zeigt jetzt eine Sonstiges-Sektion** (Forum #548): Bisher hatten „Sonstiges"-Investitionen (Pool, Sauna, Klima ohne WP-Kategorie, Zweit-Erzeuger) zwar im Detail-Tab und in der Monatsübersicht ihre Werte — die Cockpit-Übersicht (Hauptseite) hat sie aber komplett ignoriert. Backend-Endpoint `/api/cockpit/uebersicht` liefert jetzt `sonstiges_erzeugung_kwh` + `sonstiges_verbrauch_kwh` + `hat_sonstiges`, das Cockpit-Dashboard rendert eine entsprechende Section mit Erzeugungs- und Verbrauchs-KPI-Kacheln (sichtbar nur wenn die Investition mindestens eine Seite gepflegt hat).
+
+### Hinweis für Anwender
+
+Wenn du eine Split-Klimaanlage bisher unter „Sonstiges" hattest: lege sie als neue Investition vom Typ „Wärmepumpe" mit `wp_art = "Luft-Luft (Klimaanlage)"` an, weise denselben Stromverbrauchs-Sensor zu, lösche die alte „Sonstiges"-Investition. Sie taucht dann im Cockpit-Wärmepumpenbereich auf, in der Komponenten-Auswertung und im Community-Benchmark (gruppiert mit anderen Luft-Luft-Klimas). Wer „Sonstiges" für andere Verbraucher/Erzeuger nutzt (Pool/Sauna/etc.), bekommt sie ab v3.30.3 automatisch im Cockpit angezeigt.
+
+Was Phase 1 **nicht** enthält (folgt anlassbezogen): eigene Kühlenergie-Erfassung (`kuehlenergie_kwh`), EER-Effizienz-Metrik für Kühlbetrieb, Modus-Erkennung über Thermostat-Entitäten.
+
+---
+
 ## [3.30.2] - 2026-05-15 — PV-Counter-Spike-Cap (Forum #529)
 
 > 🛡️ **Schutz vor Counter-Off-by-ones.** HA-Statistics liefert nach manchen Restarts einen falschen Stunden-Sprung im PV-Counter (z. B. +109 kWh in einer Stunde bei einer 11 kWp-Anlage). Der Daten-Checker hat solche Spikes bisher *erkannt*, aber der Aggregator schrieb sie ungekappt in den Stundenwert — Reaggregation war idempotent und konnte sie nicht heilen. Ab v3.30.2 cappt der Aggregator PV- und Einspeisungs-Stundenwerte präventiv gegen `kwp × 1.5`.

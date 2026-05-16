@@ -795,6 +795,13 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Wird für den fairen JAZ-Vergleich in der Community verwendet
             </p>
+            {paramData.wp_art === 'luft_luft' && (
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded px-2 py-1.5">
+                <strong>Split-Klimaanlage:</strong> Es genügt der Stromverbrauchs-Sensor.
+                Heizenergie/Warmwasser sind bei Klimas meist nicht gemessen — die JAZ-Kachel
+                bleibt dann leer („—"), die Stromauswertung funktioniert trotzdem.
+              </p>
+            )}
           </div>
 
           {/* Modus-Auswahl */}

@@ -178,7 +178,8 @@ async def get_share_text(
     speicher_eff = (speicher_entladung / speicher_ladung * 100) if speicher_ladung > 0 else 0
 
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
-    wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 else 0
+    # JAZ/COP nur wenn beide Seiten gemessen sind (siehe komponenten.py).
+    wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 and wp_waerme > 0 else 0
 
     hat_emobilitaet = any(
         i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)
