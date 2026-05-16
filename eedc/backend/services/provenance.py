@@ -111,6 +111,18 @@ def _decide(
     existing_priority = SOURCE_LABELS.get(existing_source)
     existing_hash = existing.get("input_hash")
 
+    # FrodoVDR #251: User-Eingabe (manual:*) ist nicht verhandelbar — sie
+    # gewinnt IMMER, auch gegen `repair` und gegen historisch falsch
+    # gestempelte Provenance. Wenn jemand explizit auf Speichern klickt,
+    # muss der Wert in die DB. Hintergrund-Quellen (auto/external/fallback)
+    # dürfen keine UI-Eingabe blockieren — Bedienbarkeit > Audit-Symmetrie.
+    if effective_source.startswith("manual:"):
+        return (
+            "applied",
+            f"manual override — user-driven write always applied (was {existing_source!r})",
+            existing_source if existing_source else None,
+        )
+
     # No-Op-Detection: gleicher Wert + gleicher Input-Hash heißt
     # idempotenter Re-Import. Spart Audit-Log-Spam bei vollem No-Op,
     # dokumentiert aber den Aufruf trotzdem (Diagnose: „liefert der

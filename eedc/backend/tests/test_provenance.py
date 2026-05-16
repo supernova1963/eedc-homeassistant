@@ -272,6 +272,65 @@ async def test_force_override_breaks_hierarchy():
 # ─────────────────────────── Bonus-Test-Cases ────────────────────────────
 
 
+async def test_manual_overrides_repair_unconditionally():
+    """FrodoVDR #251: manual:* muss IMMER schreiben können, auch gegen
+    bestehende repair-Provenance. Wenn User auf Speichern klickt, ist
+    das nicht verhandelbar — keine Reparatur-Werkbank-Schleife mehr.
+    """
+    async with _session_ctx() as session:
+        md = await _make_md(session)
+
+        # Vorbedingung: Feld steht auf repair-Quelle (z. B. durch früheren
+        # RESET_CLOUD_IMPORT oder Migrations-Artefakt).
+        await write_with_provenance(
+            session, md, "netzbezug_kwh", 0.0,
+            source="manual:form",  # wird durch force_override zu "repair"
+            writer="repair_op_42",
+            force_override=True,
+        )
+        assert md.source_provenance["netzbezug_kwh"]["source"] == "repair"
+
+        # Manuelle Eingabe danach: muss durchgehen.
+        result = await write_with_provenance(
+            session, md, "netzbezug_kwh", 250.0,
+            source="manual:form", writer="alice@example.com",
+        )
+        await session.commit()
+
+        assert result.applied is True
+        assert result.decision == "applied"
+        assert "manual override" in result.reason
+        assert md.netzbezug_kwh == 250.0
+        assert md.source_provenance["netzbezug_kwh"]["source"] == "manual:form"
+
+
+async def test_manual_subkey_overrides_repair_unconditionally():
+    """Pendant zu test_manual_overrides_repair_unconditionally für
+    JSON-Sub-Keys (InvestitionMonatsdaten.verbrauch_daten). Genau Frodos
+    Fall — PV-String-Wert auf `0` setzen muss durchgehen, selbst wenn
+    Sub-Key auf repair gestempelt wäre.
+    """
+    async with _session_ctx() as session:
+        imd = await _make_imd(session)
+
+        await write_json_subkey_with_provenance(
+            session, imd, "verbrauch_daten", "pv_erzeugung_kwh", 999.0,
+            source="manual:form", writer="repair_op_99",
+            force_override=True,
+        )
+        assert imd.source_provenance["verbrauch_daten.pv_erzeugung_kwh"]["source"] == "repair"
+
+        result = await write_json_subkey_with_provenance(
+            session, imd, "verbrauch_daten", "pv_erzeugung_kwh", 0.0,
+            source="manual:form", writer="alice@example.com",
+        )
+        await session.commit()
+
+        assert result.applied is True
+        assert imd.verbrauch_daten["pv_erzeugung_kwh"] == 0.0
+        assert imd.source_provenance["verbrauch_daten.pv_erzeugung_kwh"]["source"] == "manual:form"
+
+
 async def test_unknown_source_raises_keyerror():
     """Unbekannte Source-Labels werden NICHT stillschweigend akzeptiert
     (Memory-Linie feedback_silent_except_logs.md). KeyError ist gewollt."""
@@ -383,6 +442,9 @@ _TESTS = [
     test_no_op_same_value_with_input_hash,
     test_force_override_breaks_hierarchy,
     test_unknown_source_raises_keyerror,
+    # FrodoVDR #251 — manuelle Eingabe gewinnt unbedingt
+    test_manual_overrides_repair_unconditionally,
+    test_manual_subkey_overrides_repair_unconditionally,
     # P2 — JSON-Sub-Key-Variante
     test_json_subkey_initial_write_applied,
     test_json_subkey_per_field_hierarchy_protection,
