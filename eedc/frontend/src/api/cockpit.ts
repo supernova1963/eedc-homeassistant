@@ -53,6 +53,11 @@ export interface CockpitUebersicht {
   bkw_eigenverbrauch_kwh: number
   hat_balkonkraftwerk: boolean
 
+  // Sonstiges aggregiert (Pool, Sauna, Klima ohne WP-Kategorie etc.)
+  sonstiges_erzeugung_kwh: number
+  sonstiges_verbrauch_kwh: number
+  hat_sonstiges: boolean
+
   // Finanzen (Euro)
   einspeise_erloes_euro: number
   ev_ersparnis_euro: number

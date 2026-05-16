@@ -418,7 +418,9 @@ async def export_pdf(
     speicher_effizienz = (speicher_entladung_total / speicher_ladung_total * 100) if speicher_ladung_total > 0 else None
 
     # WP-Metriken
-    wp_cop = (wp_waerme_total / wp_strom_total) if wp_strom_total > 0 else None
+    # JAZ/COP nur wenn beide Seiten gemessen sind (Klima-Sicht: Luft-Luft-WP
+    # ohne Wärmemengenzähler liefert wp_waerme=0 → JAZ wäre irreführend 0).
+    wp_cop = (wp_waerme_total / wp_strom_total) if wp_strom_total > 0 and wp_waerme_total > 0 else None
     wp_ersparnis = 0.0
     if hat_waermepumpe and wp_waerme_total > 0:
         wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]

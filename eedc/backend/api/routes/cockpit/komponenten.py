@@ -278,7 +278,9 @@ async def get_komponenten_zeitreihe(
             d["speicher_arbitrage_preis_sum"] / d["speicher_arbitrage_count"]
         ) if d["speicher_arbitrage_count"] > 0 else None
 
-        wp_cop = (d["wp_waerme"] / d["wp_strom"]) if d["wp_strom"] > 0 else None
+        # JAZ/COP nur wenn beide Seiten gemessen sind (siehe uebersicht.py
+        # für Erklärung — bei Split-Klimaanlagen kein Wärmemengenzähler).
+        wp_cop = (d["wp_waerme"] / d["wp_strom"]) if d["wp_strom"] > 0 and d["wp_waerme"] > 0 else None
 
         # E-Mobilitäts-Pool: pro Feld die größere Quelle gewinnt
         # (analog aktueller_monat._aggregate + #231 NongJoWo).

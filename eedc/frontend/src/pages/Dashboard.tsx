@@ -369,6 +369,40 @@ export default function Dashboard() {
         </SectionLink>
       )}
 
+      {/* Sektion: Sonstiges (Pool, Sauna, Klima ohne WP-Kategorie etc.) */}
+      {data.hat_sonstiges && (data.sonstiges_erzeugung_kwh > 0 || data.sonstiges_verbrauch_kwh > 0) && (
+        <SectionLink title="Sonstiges" icon={Activity} onClick={() => navigate('/cockpit/sonstiges')}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {data.sonstiges_erzeugung_kwh > 0 && (
+              <KPICard
+                title="Erzeugung"
+                value={(data.sonstiges_erzeugung_kwh / 1000).toFixed(2)}
+                unit="MWh"
+                icon={Sun}
+                color="text-green-500"
+                bgColor="bg-green-50 dark:bg-green-900/20"
+                formel="Σ Erzeugung über alle Sonstige-Erzeuger"
+                berechnung={`${fmtCalc(data.sonstiges_erzeugung_kwh, 0)} kWh`}
+                ergebnis={`= ${fmtCalc(data.sonstiges_erzeugung_kwh / 1000, 2)} MWh`}
+              />
+            )}
+            {data.sonstiges_verbrauch_kwh > 0 && (
+              <KPICard
+                title="Verbrauch"
+                value={(data.sonstiges_verbrauch_kwh / 1000).toFixed(2)}
+                unit="MWh"
+                icon={Zap}
+                color="text-red-500"
+                bgColor="bg-red-50 dark:bg-red-900/20"
+                formel="Σ Verbrauch über alle Sonstige-Verbraucher"
+                berechnung={`${fmtCalc(data.sonstiges_verbrauch_kwh, 0)} kWh`}
+                ergebnis={`= ${fmtCalc(data.sonstiges_verbrauch_kwh / 1000, 2)} MWh`}
+              />
+            )}
+          </div>
+        </SectionLink>
+      )}
+
       {/* Sektion 5: E-Mobilität */}
       {data.hat_emobilitaet && (
         <SectionLink title="E-Mobilität" icon={Car} onClick={() => navigate('/cockpit/e-auto')}>

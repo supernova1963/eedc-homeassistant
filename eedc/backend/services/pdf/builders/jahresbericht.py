@@ -279,7 +279,8 @@ async def build_jahresbericht_context(
 
     speicher_zyklen = _safe_div(speicher_ladung, speicher_kapazitaet) if speicher_kapazitaet else None
     speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None
-    wp_cop = _safe_div(wp_waerme, wp_strom) if wp_strom else None
+    # JAZ/COP nur wenn beide Seiten gemessen sind (Klima ohne Wärmemengenzähler).
+    wp_cop = _safe_div(wp_waerme, wp_strom) if (wp_strom and wp_waerme) else None
     emob_pv_anteil = _safe_div(emob_pv, emob_ladung) * 100 if emob_ladung else None
 
     # ── 10. String-Vergleich SOLL/IST ───────────────────────────────────
