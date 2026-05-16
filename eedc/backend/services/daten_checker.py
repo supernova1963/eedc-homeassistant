@@ -1556,11 +1556,10 @@ class DatenChecker:
                     ),
                     details=(
                         "Der Sensor wird in der Aggregation ignoriert — Gesamt-"
-                        "Strom kommt aus Strom Heizen + Strom Warmwasser. Du "
-                        "kannst ihn aus der Sensor-Zuordnung entfernen, ohne "
-                        "etwas zu verlieren."
+                        "Strom kommt aus Strom Heizen + Strom Warmwasser. Beim "
+                        "nächsten Speichern des Sensor-Mappings wird der Eintrag "
+                        "automatisch entfernt — kein Klick nötig."
                     ),
-                    link="/einstellungen/sensoren",
                 ))
 
         imd_map = {
