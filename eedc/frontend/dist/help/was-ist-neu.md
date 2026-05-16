@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.30.2)
+> **Stand:** Mai 2026 (v3.30.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,51 @@
 
 ---
 
-## v3.30.x — Prognosequellen-Wahl, Strompreis-Vorschlag, Counter-Spike-Schutz (Mai 2026)
+## v3.30.x — Prognosequellen-Wahl, Strompreis-Vorschlag, Counter-Spike-Schutz, Klimaanlagen (Mai 2026)
+
+### Split-Klimaanlagen sind jetzt Wärmepumpen *(v3.30.3)*
+
+> ❄️ **Klimaanlage = Luft-Luft-Wärmepumpe.** Wer eine Split-Klimaanlage in eedc abbilden will, kann sie ab v3.30.3 direkt als Wärmepumpe vom Typ „Luft-Luft (Klimaanlage)" anlegen — sie landet damit im Cockpit-Wärmepumpenbereich und in der Komponenten-Auswertung, statt bisher unsichtbar unter „Sonstiges" zu bleiben.
+
+#### Was sich für dich ändert
+
+- **Wärmepumpenart „Luft-Luft (Klimaanlage)" voll unterstützt**: bei Anlage-/Investitions-Bearbeitung den Subtyp wählen, eedc erwartet dann nur den Stromverbrauchs-Sensor. Die JAZ-Kachel bleibt sauber leer („—") statt einen irreführenden Wert „0.0" zu zeigen — Klimaanlagen haben üblicherweise keinen Wärmemengenzähler, das ist physikalisch korrekt so.
+- **Daten-Checker meldet keine „Heizwärme fehlt"-Warnung mehr** für Luft-Luft-WPs. Bei klassischen Luft-Wasser-/Sole-Wasser-/Grundwasser-WPs bleibt die Warnung erhalten (sie haben in der Regel einen Wärmemengenzähler).
+- **WP-Wizard zeigt einen Hinweis** beim Wählen von „Luft-Luft (Klimaanlage)": kurze Erklärung, dass Stromverbrauch ausreicht.
+
+#### Migrations-Tipp für Bestandsanwender
+
+Wenn deine Klimaanlage bisher als „Sonstiges" geführt wird:
+1. Neue Investition vom Typ „Wärmepumpe" anlegen, Wärmepumpenart **„Luft-Luft (Klimaanlage)"** wählen
+2. Denselben Stromverbrauchs-Sensor zuweisen
+3. Alte „Sonstiges"-Investition löschen
+
+Die Klima taucht danach im Cockpit-Wärmepumpenbereich auf, in der Komponenten-Auswertung und in der Community (gruppiert mit anderen Luft-Luft-Klimas).
+
+#### Was Phase 1 *nicht* enthält
+
+Eigene Kühlenergie-Erfassung, EER für den Kühlbetrieb und Modus-Erkennung (heizt jetzt / kühlt jetzt) über Thermostat-Entitäten — das sind Themen für eine spätere Phase 2, anlassbezogen.
+
+#### Bonus: Sonstiges-Sektion im Cockpit-Hauptbild
+
+Wer „Sonstiges" für andere Verbraucher (Pool, Sauna, Werkstatt) oder Erzeuger nutzt, sah die Werte bisher in der Monatsübersicht und im Detail-Dashboard — aber **nicht** in der Cockpit-Übersicht (Hauptseite). Ab v3.30.3 erscheint dort eine eigene Sonstiges-Sektion mit Erzeugungs- und/oder Verbrauchs-KPI-Kacheln (je nachdem, was du gepflegt hast).
+
+*(alex_s9027, Forum-Beitrag #548 vom 2026-05-15.)*
+
+---
+
+### Manuelle Eingaben gewinnen immer *(v3.30.3)*
+
+> ✏️ **Wenn du auf „Speichern" klickst, wird gespeichert.** Es konnte vorkommen, dass eine im Wizard oder Monatsformular eingegebene Zahl nach dem Speichern verschwand, weil der interne Quellen-Konflikt-Schutz aus einer früheren Reparatur-Aktion noch wirkte. Ab v3.30.3 gewinnt jede explizite User-Eingabe — egal, welche Quelle das Feld vorher beschrieben hat.
+
+#### Was sich für dich ändert
+
+- **Im Monatsabschluss-Wizard und im Monatsformular** kannst du jedes Feld jederzeit überschreiben. Auch wenn das Feld früher per Reparatur-Operation gesetzt wurde, gilt jetzt: explizite Eingabe schlägt alles.
+- **Schutzrichtung umgekehrt** wirkt weiter wie bisher: Hintergrund-Vorgänge (Cloud-Sync, HA-Statistics-Backfill, Aggregator-Roll-up) können einen manuell gepflegten Wert nicht überschreiben. Diese Schutzrichtung war schon immer korrekt — neu ist, dass es keinen Schlupfloch-Fall mehr gibt, in dem manuelle Eingabe still abgewiesen wird.
+
+*(FrodoVDR, GitHub-Issue #251.)*
+
+---
 
 ### PV-Counter-Spike-Cap *(v3.30.2)*
 
