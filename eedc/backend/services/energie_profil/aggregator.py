@@ -478,6 +478,23 @@ async def aggregate_day(
     for key, val in boundary_kwh.items():
         komponenten_summen[key] = val
 
+    # ── Peak-Werte aus HA-LTS-Min/Max (Etappe 5 v3.31.0) ─────────────────
+    # HA-Recorder schreibt für has_mean=True-Sensoren die im 5-Sekunden-Bucket
+    # beobachteten Extremwerte pro Stunde. Das ist die richtige Quelle für
+    # Tages-Peaks — die Berechnung aus 10-Min-Mittelwerten unterschätzt sie
+    # systematisch. Fallback bleibt die Tagesverlauf-Berechnung oben.
+    try:
+        from backend.services.energie_profil._helpers import _get_tagespeaks_aus_ha_lts
+        lts_peaks = await _get_tagespeaks_aus_ha_lts(anlage, datum, db)
+        if lts_peaks.pv is not None:
+            peak_pv = lts_peaks.pv
+        if lts_peaks.netzbezug is not None:
+            peak_bezug = lts_peaks.netzbezug
+        if lts_peaks.einspeisung is not None:
+            peak_einspeisung = lts_peaks.einspeisung
+    except Exception as e:
+        logger.debug(f"Peak-HA-LTS-Override für {datum}: {e}")
+
     # ── TagesZusammenfassung speichern ────────────────────────────────────
     zusammenfassung = TagesZusammenfassung(
         anlage_id=anlage.id,
