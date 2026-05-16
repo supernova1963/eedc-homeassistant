@@ -11,15 +11,17 @@
 
 ## v3.31.0 — Energie-Aggregate konsistent aus HA-Statistics (Mai 2026)
 
-### Eine Quelle für PV, Verbrauch, Einspeisung *(v3.31.0)*
+### Eine Quelle für PV, Verbrauch, Einspeisung — und auch Peak-Werte *(v3.31.0)*
 
-> 🎯 **Schluss mit „drei verschiedenen Zahlen für denselben Tag".** Im Genauigkeits-Tracking, in der Tages-Energieprofile-Tabelle und in der Stunden-Σ-Zeile im Monatsbericht konnten bisher leicht abweichende Werte für die PV-Erzeugung auftauchen — bei manchen Anlagen ein paar Prozent, bei einzelnen Konstellationen sogar zehn Prozent. Ursache: zwei parallele Rechenpfade (Live-Tagesverlauf-Integration plus Sensor-Snapshot-Diff) mit leicht unterschiedlichen Aggregationsfenstern. Ab v3.31.0 lesen alle Sichten aus derselben HA-Statistics-Quelle.
+> 🎯 **Schluss mit „drei verschiedenen Zahlen für denselben Tag".** Im Genauigkeits-Tracking, in der Tages-Energieprofile-Tabelle und in der Stunden-Σ-Zeile im Monatsbericht konnten bisher leicht abweichende Werte für die PV-Erzeugung auftauchen — bei manchen Anlagen ein paar Prozent, bei einzelnen Konstellationen sogar zehn Prozent. Ursache: zwei parallele Rechenpfade (Live-Tagesverlauf-Integration plus Sensor-Snapshot-Diff) mit leicht unterschiedlichen Aggregationsfenstern. Ab v3.31.0 lesen alle Sichten aus derselben HA-Statistics-Quelle — und auch die Tages-Peaks (höchste PV-Leistung, Netzbezug-Spitze, Einspeise-Spitze) sowie Speicher-SoC und Strompreis-Stundenmittel kommen jetzt direkt aus HA-Statistics, nicht mehr aus eigener Berechnung.
 
 #### Was sich für dich ändert
 
 - **Identische Werte über alle Sichten**: Tages-Energieprofile-Tabelle „PV-Ertrag", Σ der 24 Stundenwerte im Monatsbericht-Energieprofil und Genauigkeits-Tracking-IST sind ab v3.31.0 immer gleich — per Konstruktion, nicht per Zufall. Das gilt analog für Einspeisung, Netzbezug, Wärmepumpen-Strom, Wallbox-Ladung und Speicher-Netto.
 - **Identisch zum HA-Energy-Dashboard**: Die kanonische Tagessumme stimmt jetzt durchgängig mit dem überein, was du im HA-Energy-Dashboard für denselben Tag siehst. Wer beide Apps offen hat, kann sich auf jedes Wert verlassen.
 - **Genauigkeits-Tracking-Bug nebenbei gefixt**: Der IST-Wert summierte bisher auch Batterie-Netto-Ladung mit ein (wenn die Batterie über den Tag mehr geladen als entladen hatte). Bei einer ~5-kWh-Netto-Ladung pro Tag waren das ~5 kWh künstliche IST-Überschätzung — Prognose-MAE wurde dadurch geschönt. Jetzt zählt nur noch echte PV- und Balkonkraftwerk-Erzeugung als IST.
+- **Tages-Peak-Werte ohne Unterschätzung**: Die höchste PV-Leistung, die Netzbezug-Spitze und die Einspeise-Spitze eines Tages wurden bisher aus 10-Minuten-Mittelwerten geschätzt — kurze Spitzen verschwanden dabei systematisch in der Mittelung. Ab v3.31.0 liest eedc diese Werte direkt aus den Stunden-Min/Max-Spalten der HA-Statistics — denselben Werten, die HA-Recorder im 5-Sekunden-Bucket beobachtet hat. Das ergibt die physikalisch korrekte Tagesspitze.
+- **Speicher-SoC und Strompreis-Stunden aus HA-Statistics**: Die stündlichen Speicher-SoC-Mittelwerte und Tibber/aWATTar-Strompreise im Tages-Energieprofil lesen jetzt direkt aus `statistics.mean` statt selbst aus der State-History gemittelt zu werden — gleiche Quelle wie das HA-Energy-Dashboard, gleiche Recompile-Logik. Fällt HA-Statistics für einen Sensor aus, greift der bisherige Mittelungs-Pfad als Fallback.
 
 #### Migration ohne Aufwand
 

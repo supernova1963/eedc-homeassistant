@@ -200,6 +200,64 @@ Modus-Erkennung über existierende `HA_AVAILABLE`-Flag in `core/config.py`.
 
 **Entscheidung:** Nach Implementation. Wenn die migrierten Werte bei den vier Test-Anlagen (HA-Add-on, Standalone-Docker mit/ohne HA, Demo) sichtbar abweichen → v3.31.0. Wenn drift-frei → v3.30.4 möglich.
 
+## 9a. Etappe 5 — Letzte Klimmzüge eliminieren (v3.31.0 Anhang)
+
+Während der Etappe-4-Implementation wurde ein Audit gemacht: drei eedc-eigene
+Berechnungen blieben übrig, die HA-LTS ebenso direkt liefert. Sie wurden noch
+in v3.31.0 mitgezogen, statt sie auf v3.32.0 zu verschieben — sie passen in
+dieselbe Architektur-Linie („falsche Werte nach HA verlagern").
+
+### Klimmzug 1 — Batterie-SoC-Stundenmittel
+
+- **Vorher:** `_get_soc_history()` las State-History, mittelte selbst über Stunden-Buckets.
+- **Nachher:** `HAStatisticsService.get_hourly_mean_for_day()` liest `statistics.mean` direkt — derselbe Wert, aus dem HA das Energy-Dashboard speist. State-History bleibt Fallback wenn LTS leer.
+
+### Klimmzug 2 — Strompreis-Stundenmittel (Tibber/aWATTar-Sensor)
+
+- **Vorher:** identisches State-History-Mittel-Muster wie SoC.
+- **Nachher:** dieselbe Methode + einheitsspezifischer Faktor (EUR/kWh → cent/kWh, EUR/MWh → cent/kWh). State-History-Mittel als Fallback.
+
+### Klimmzug 3 — Tages-Peak-Werte
+
+- **Vorher:** `peak_pv_kw`, `peak_netzbezug_kw`, `peak_einspeisung_kw` aus 10-Min-Mittelwerten der Tagesverlauf-Schicht. 10-Min-Mittel unterschätzt Peaks systematisch.
+- **Nachher:** `HAStatisticsService.get_hourly_minmax_sensor_data()` liest `statistics.max` und `statistics.min` — die im 5-Sekunden-Bucket beobachteten Extremwerte, die HA-Recorder für `has_mean=True`-Sensoren ohnehin schreibt.
+- **Aggregation:**
+  - `peak_pv` = max über Stunden von Σ max(pv_sensor[h]) für alle PV-Entities.
+    Σ_max ist bei mehreren Modulen eine obere Schranke (Einzelpeaks können
+    unterschiedliche Minuten treffen) — in der Praxis < 5 % Abweichung.
+  - `peak_netzbezug` / `peak_einspeisung`: dedizierter Sensor → max(max);
+    Kombi-Sensor → max(max>0) bzw. max(|min<0|).
+  - `live_invert`-Flags werden vor der Aggregation angewendet (min↔max
+    getauscht + negiert).
+- **Fallback:** wenn HA-LTS keine Min/Max-Daten liefert (kein `has_mean`,
+  Standalone-MQTT-Modus), bleibt die bisherige Tagesverlauf-Berechnung
+  als Backup — wie schon für die Stunden-kWh-Schicht in Etappe 4.
+
+### Architektur-Erweiterung
+
+Mit Etappe 5 ist die Aggregat-Tabelle TagesZusammenfassung in *allen*
+energiebezogenen Spalten ein Cache von HA-Statistics:
+
+| Spalte | Quelle |
+|---|---|
+| `komponenten_kwh` (Tagessummen) | HA-LTS `statistics.sum` Day-Boundary-Diff |
+| `pv_kw`, `verbrauch_kw`, … in TagesEnergieProfil | HA-LTS `statistics.sum` Hour-Boundary-Diff |
+| `peak_pv_kw`, `peak_netzbezug_kw`, `peak_einspeisung_kw` | HA-LTS `statistics.max`/`statistics.min` |
+| `temperatur_min_c`, `temperatur_max_c`, `strahlung_summe_wh_m2` | Open-Meteo (externe Quelle, nicht HA) |
+| `soc_prozent` pro Stunde | HA-LTS `statistics.mean` |
+| `strompreis_cent` pro Stunde | HA-LTS `statistics.mean` (Sensor) / aWATTar (Börse) |
+
+`boersenpreis_*`, `negative_preis_stunden`, `einspeisung_neg_preis_kwh`,
+`batterie_vollzyklen`, `performance_ratio`: rechnerisch aus Stundenwerten —
+keine Klimmzüge mehr.
+
+### Akzeptanz-Kriterien Etappe 5
+
+- [ ] Peak-Werte aus HA-LTS-Max sind ≥ Tagesverlauf-Peaks (sanity check)
+- [ ] SoC + Strompreis-Stundenmittel zeigen keine Drift gegenüber HA-Dashboard
+- [ ] Fallback-Pfade greifen sauber wenn LTS leer (keine NULL-Crashes)
+- [ ] 11 neue Tests grün (5 mean-reader, 5 minmax-reader, 6 peak-helper)
+
 ## 10. Risiken
 
 | Risiko | Wahrscheinlich | Schwere | Gegenmaßnahme |
