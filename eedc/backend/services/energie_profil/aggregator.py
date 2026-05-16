@@ -170,26 +170,48 @@ async def aggregate_day(
     # ── Strompreis-Stundenwerte holen ─────────────────────────────────────
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
 
-    # ── Zähler-basierte Stunden-kWh (Issue #135) ─────────────────────────
-    # Stunden-kWh werden aus kumulativen Snapshot-Deltas berechnet.
-    # Fehlt der Zähler einer Kategorie, bleibt der Wert None (kein W-Fallback).
+    # ── Zähler-basierte Stunden-kWh (Issue #135 / Etappe 4 v3.31.0) ──────
+    # Etappe 4: HA-Statistics-LTS ist Source-of-Truth, wenn verfügbar
+    # (HA-Add-on oder Docker mit HA-Recorder-URL). Snapshot-Variante bleibt
+    # als Standalone-Fallback (MQTT-Energy-Snapshots).
+    # Provenance-Source wird je nach Pfad gesetzt (siehe seed_*_provenance
+    # unten) — `external:ha_statistics:hourly` vs `auto:monatsabschluss`.
     kwh_pro_stunde: dict[int, dict[str, Optional[float]]] = {}
+    kwh_source_label: str  # für seed_*_provenance
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id)
+    )
+    invs = inv_result.scalars().all()
+    invs_by_id = {str(inv.id): inv for inv in invs}
     try:
-        from backend.services.sensor_snapshot_service import get_hourly_kwh_by_category
-        inv_result = await db.execute(
-            select(Investition).where(Investition.anlage_id == anlage.id)
-        )
-        invs = inv_result.scalars().all()
-        invs_by_id = {str(inv.id): inv for inv in invs}
-        kwh_pro_stunde = await get_hourly_kwh_by_category(
+        from backend.services.snapshot.lts_aggregator import get_hourly_kwh_by_category_lts
+        kwh_pro_stunde = await get_hourly_kwh_by_category_lts(
             db, anlage, invs_by_id, datum,
         )
     except Exception as e:
         logger.warning(
-            f"Anlage {anlage.id}, {datum}: Zähler-Snapshot-Pfad fehlgeschlagen: "
+            f"Anlage {anlage.id}, {datum}: HA-LTS-Pfad fehlgeschlagen: "
             f"{type(e).__name__}: {e}"
         )
         kwh_pro_stunde = {}
+
+    if kwh_pro_stunde:
+        kwh_source_label = "external:ha_statistics:hourly"
+    else:
+        # Fallback auf Snapshot-Variante (MQTT-/sensor_snapshots-Pfad).
+        # Gleicher Output-Vertrag — nur die Quelle ändert sich.
+        try:
+            from backend.services.sensor_snapshot_service import get_hourly_kwh_by_category
+            kwh_pro_stunde = await get_hourly_kwh_by_category(
+                db, anlage, invs_by_id, datum,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Snapshot-Fallback fehlgeschlagen: "
+                f"{type(e).__name__}: {e}"
+            )
+            kwh_pro_stunde = {}
+        kwh_source_label = "auto:monatsabschluss"
 
     # ── Stunden-Counter (Issue #136: WP-Starts pro Stunde) ────────────────
     wp_starts_pro_stunde: dict[int, Optional[int]] = {}
@@ -367,7 +389,7 @@ async def aggregate_day(
             wp_starts_anzahl=wp_starts_pro_stunde.get(h),
         )
         db.add(profil)
-        seed_tep_provenance(profil, writer=auto_writer)
+        seed_tep_provenance(profil, writer=auto_writer, source=kwh_source_label)
         stunden_count += 1
 
     # ── Börsenpreis-Tagesaggregation ────────────────────────────────────
@@ -420,24 +442,41 @@ async def aggregate_day(
             f"{type(e).__name__}: {e}"
         )
 
-    # ── Tagesgesamt pro Komponente aus Boundary-Diff (Etappe 3c P3, E2) ──
-    # HA-konformes Tagesfenster [Heute 00:00, Folgetag 00:00) statt Σ-Hourly
-    # über Backward-Slots (Vortag 23 → Heute 23 = um eine Stunde verschoben).
-    # Boundary-Werte überschreiben Live-Σ-Werte für übereinstimmende Keys —
-    # Live-Σ bleibt nur für Keys, die der Helper nicht abdeckt (z.B. WP-Suffix
-    # `waermepumpe_<id>_heizen` aus Live ohne separates heizenergie_kwh-Mapping).
-    try:
-        from backend.services.snapshot.aggregator import get_komponenten_tageskwh
-        boundary_kwh = await get_komponenten_tageskwh(
-            db, anlage, invs_by_id, datum,
-        )
-        for key, val in boundary_kwh.items():
-            komponenten_summen[key] = val
-    except Exception as e:
-        logger.warning(
-            f"Anlage {anlage.id}, {datum}: Komponenten-Tagesgesamt aus Snapshots "
-            f"fehlgeschlagen, Σ-Hourly-Fallback aktiv: {type(e).__name__}: {e}"
-        )
+    # ── Tagesgesamt pro Komponente (Etappe 3c P3 + Etappe 4 v3.31.0) ─────
+    # Etappe 4: wenn der Stunden-Pfad aus HA-LTS gespeist wurde, nutzen wir
+    # auch für die Tages-Komponenten-Summe den HA-LTS-Pfad — damit gilt
+    # Σ Hourly == Daily per Konstruktion und die Drift zwischen
+    # TagesEnergieProfil.*_kw und TagesZusammenfassung.komponenten_kwh
+    # verschwindet (Rainer-PN 2026-05-16).
+    # Fallback: Snapshot-Boundary-Diff (HA-konformes Tagesfenster).
+    # Live-Σ aus der Stunden-Schleife (Riemann) bleibt nur für Keys, die
+    # weder LTS noch Snapshot abdecken — z.B. WP-Suffix-Keys aus dem
+    # Tagesverlauf-Service ohne separates Counter-Mapping.
+    boundary_kwh: dict[str, float] = {}
+    if kwh_source_label == "external:ha_statistics:hourly":
+        try:
+            from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
+            boundary_kwh = await get_komponenten_tageskwh_lts(
+                anlage, invs_by_id, datum,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Komponenten-Tagesgesamt HA-LTS "
+                f"fehlgeschlagen, Snapshot-Fallback aktiv: {type(e).__name__}: {e}"
+            )
+    if not boundary_kwh:
+        try:
+            from backend.services.snapshot.aggregator import get_komponenten_tageskwh
+            boundary_kwh = await get_komponenten_tageskwh(
+                db, anlage, invs_by_id, datum,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Komponenten-Tagesgesamt aus Snapshots "
+                f"fehlgeschlagen, Σ-Hourly-Fallback aktiv: {type(e).__name__}: {e}"
+            )
+    for key, val in boundary_kwh.items():
+        komponenten_summen[key] = val
 
     # ── TagesZusammenfassung speichern ────────────────────────────────────
     zusammenfassung = TagesZusammenfassung(
@@ -469,8 +508,16 @@ async def aggregate_day(
     for field, val in preserved_prognose.items():
         setattr(zusammenfassung, field, val)
 
+    # Etappe 4: TagesZusammenfassung-Source spiegelt die Hauptquelle der
+    # Daily-Werte. Wenn die Stunden aus HA-LTS kamen, ist auch die
+    # Tagessumme aus HA-LTS-Daten konsistent (Σ Hourly = Daily).
+    tz_source_label = (
+        "external:ha_statistics:daily"
+        if kwh_source_label == "external:ha_statistics:hourly"
+        else "auto:monatsabschluss"
+    )
     db.add(zusammenfassung)
-    seed_tz_provenance(zusammenfassung, writer=auto_writer)
+    seed_tz_provenance(zusammenfassung, writer=auto_writer, source=tz_source_label)
     await db.flush()
 
     logger.info(
