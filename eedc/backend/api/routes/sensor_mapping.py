@@ -391,6 +391,35 @@ async def save_sensor_mapping(
                     inv_data["live_invert"] = invert_clean
             mapping_dict["investitionen"][inv_id] = inv_data
 
+        # Auto-Cleanup obsoleter Sensoren: bei Wärmepumpen mit aktivierter
+        # getrennter Strommessung wird `stromverbrauch_kwh` in der Aggregation
+        # ignoriert (#183). Wenn der alte Gesamt-Strom-Sensor noch im Mapping
+        # steht, ist er strukturell wertlos — die UI blendet das Feld in
+        # WaermepumpeStep aus, der User hat keinen direkten Lösch-Pfad
+        # (rapahl PN 2026-05-16). Wir entfernen ihn beim nächsten Save still,
+        # damit der Daten-Checker-Hinweis von selbst verschwindet.
+        inv_q = await session.execute(
+            select(Investition).where(Investition.anlage_id == anlage_id)
+        )
+        invs_by_id = {str(inv.id): inv for inv in inv_q.scalars().all()}
+        cleanup_count = 0
+        for inv_id_str, inv_data in mapping_dict["investitionen"].items():
+            inv_obj = invs_by_id.get(inv_id_str)
+            if inv_obj is None or inv_obj.typ != "waermepumpe":
+                continue
+            if not (inv_obj.parameter or {}).get("getrennte_strommessung"):
+                continue
+            felder = inv_data.get("felder") or {}
+            if "stromverbrauch_kwh" in felder:
+                felder.pop("stromverbrauch_kwh", None)
+                cleanup_count += 1
+        if cleanup_count:
+            logger.info(
+                "Sensor-Mapping anlage=%s: %d obsolete(r) WP-Stromverbrauch-Eintrag/-Einträge "
+                "entfernt (getrennte Strommessung aktiv).",
+                anlage_id, cleanup_count,
+            )
+
         # Solcast-Config (optional)
         if mapping.solcast_config:
             sc = mapping.solcast_config
