@@ -23,16 +23,21 @@
 - **Tages-Peak-Werte ohne Unterschätzung**: Die höchste PV-Leistung, die Netzbezug-Spitze und die Einspeise-Spitze eines Tages wurden bisher aus 10-Minuten-Mittelwerten geschätzt — kurze Spitzen verschwanden dabei systematisch in der Mittelung. Ab v3.31.0 liest eedc diese Werte direkt aus den Stunden-Min/Max-Spalten der HA-Statistics — denselben Werten, die HA-Recorder im 5-Sekunden-Bucket beobachtet hat. Das ergibt die physikalisch korrekte Tagesspitze.
 - **Speicher-SoC und Strompreis-Stunden aus HA-Statistics**: Die stündlichen Speicher-SoC-Mittelwerte und Tibber/aWATTar-Strompreise im Tages-Energieprofil lesen jetzt direkt aus `statistics.mean` statt selbst aus der State-History gemittelt zu werden — gleiche Quelle wie das HA-Energy-Dashboard, gleiche Recompile-Logik. Fällt HA-Statistics für einen Sensor aus, greift der bisherige Mittelungs-Pfad als Fallback.
 
-#### Migration ohne Aufwand
+#### Was passiert beim Update — und was du selbst tun kannst
 
-Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration einmalig der Auto-Vollbackfill aus HA-Statistics ausgelöst — das passiert automatisch beim nächsten Monatsabschluss, ohne dass du etwas anstoßen musst. Die alten Aggregat-Werte werden dabei durch saubere HA-Statistics-Werte ersetzt. Bei vielen Anwendern bleiben die Werte praktisch identisch (Drift war meist klein); bei Setups mit größerer Sub-Stunden-Volatilität kann sich der Tageswert um wenige Prozent verschieben — auf den HA-Energy-Dashboard-Wert.
+**Neue Tage (ab dem Update-Zeitpunkt)** werden automatisch aus HA-Statistics aggregiert — du musst nichts tun, der Scheduler greift den neuen Pfad sofort.
+
+**Bestehende Tage (vor dem Update)** bleiben zunächst auf ihrem alten Wert. Der Auto-Vollbackfill beim nächsten Monatsabschluss füllt nur *fehlende* Tage nach (er ist bewusst additiv, damit manuell korrigierte Werte nicht überschrieben werden). Wenn du gezielt einen bestehenden Tag auf die saubere HA-Statistics-Quelle umstellen willst, hast du zwei Wege:
+
+1. **Einzelner Tag** (z. B. der Tag mit der bekannten Drift): `Aussichten → Energieprofil → Tagestabelle → Reload-Knopf (↻)` beim betreffenden Tag — du bekommst eine Vorschau (alt vs. neu) vor der Übernahme.
+2. **Zeitraum** (z. B. ein Monat): `Wartung → Reparatur-Werkbank → Bereich neu aggregieren` mit Von-/Bis-Datum.
 
 #### Wo siehst du, dass es funktioniert
 
 Im Daten-Checker (Einstellungen → Daten-Checker) gibt es eine neue Kategorie **„Datenquelle – aktiver Pfad"**. Drei mögliche Stati:
 
-1. **HA-Statistics als Source-of-Truth aktiv** (grünes Häkchen) — alles läuft, Werte sind durchgängig konsistent
-2. **HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle** (blauer Info-Hinweis) — der Auto-Vollbackfill ist noch nicht durchgelaufen, der nächste Monatsabschluss heilt das
+1. **HA-Statistics als Source-of-Truth aktiv** (grünes Häkchen) — die letzte Tages-Aggregation lief aus HA-LTS, neue Tage sind sauber
+2. **HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle** (blauer Info-Hinweis) — frisch nach Update, vor dem ersten neuen Aggregations-Lauf; löst sich von selbst spätestens beim nächsten Tageswechsel
 3. **Standalone-Modus aktiv (kein HA-LTS)** (blauer Info-Hinweis) — gilt für Anwender ohne HA-Add-on; eedc nutzt 5-Minuten-Sensor-Snapshots als Fallback, mit leicht eingeschränkter Genauigkeit
 
 #### Hintergrund

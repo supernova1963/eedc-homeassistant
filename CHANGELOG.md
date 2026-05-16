@@ -25,7 +25,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Migration
 
-- **Automatischer Vollbackfill bei Upgrade**: Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration und bestehenden Aggregat-Daten das `vollbackfill_durchgefuehrt`-Flag auf `False` zurückgesetzt. Beim nächsten Monatsabschluss läuft dann der bestehende Auto-Vollbackfill aus HA-LTS einmalig durch und ersetzt die alten Mix-Source-Aggregate durch saubere HA-Statistics-Werte. Anwender müssen nichts aktiv tun. Anlagen ohne HA-Integration (Standalone-Docker) bleiben unverändert — ihr Snapshot-basierter Pfad funktioniert weiter wie bisher.
+- **Automatischer Vollbackfill bei Upgrade**: Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration und bestehenden Aggregat-Daten das `vollbackfill_durchgefuehrt`-Flag auf `False` zurückgesetzt. Beim nächsten Monatsabschluss läuft dann der Auto-Vollbackfill aus HA-LTS einmalig durch und füllt **fehlende** Tage nach (additiv, bestehende Tage bleiben unverändert — Schutz manueller Korrekturen). Anwender müssen für neue Tage nichts aktiv tun; um bestehende Tage gezielt auf die HA-Statistics-Werte umzustellen, stehen `Energieprofil → Tag-Reload` (Vorschau) und `Wartung → Reparatur-Werkbank → Bereich neu aggregieren` zur Verfügung. Anlagen ohne HA-Integration (Standalone-Docker) bleiben unverändert — ihr Snapshot-basierter Pfad funktioniert weiter wie bisher.
 
 ### Hinweis für Anwender
 
