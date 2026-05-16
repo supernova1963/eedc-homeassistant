@@ -42,6 +42,19 @@ Wer „Sonstiges" für andere Verbraucher (Pool, Sauna, Werkstatt) oder Erzeuger
 
 ---
 
+### Manuelle Eingaben gewinnen immer *(v3.30.3)*
+
+> ✏️ **Wenn du auf „Speichern" klickst, wird gespeichert.** Es konnte vorkommen, dass eine im Wizard oder Monatsformular eingegebene Zahl nach dem Speichern verschwand, weil der interne Quellen-Konflikt-Schutz aus einer früheren Reparatur-Aktion noch wirkte. Ab v3.30.3 gewinnt jede explizite User-Eingabe — egal, welche Quelle das Feld vorher beschrieben hat.
+
+#### Was sich für dich ändert
+
+- **Im Monatsabschluss-Wizard und im Monatsformular** kannst du jedes Feld jederzeit überschreiben. Auch wenn das Feld früher per Reparatur-Operation gesetzt wurde, gilt jetzt: explizite Eingabe schlägt alles.
+- **Schutzrichtung umgekehrt** wirkt weiter wie bisher: Hintergrund-Vorgänge (Cloud-Sync, HA-Statistics-Backfill, Aggregator-Roll-up) können einen manuell gepflegten Wert nicht überschreiben. Diese Schutzrichtung war schon immer korrekt — neu ist, dass es keinen Schlupfloch-Fall mehr gibt, in dem manuelle Eingabe still abgewiesen wird.
+
+*(FrodoVDR, GitHub-Issue #251.)*
+
+---
+
 ### PV-Counter-Spike-Cap *(v3.30.2)*
 
 > 🛡️ **Schluss mit „die Reparatur ändert nichts".** Wenn der HA-PV-Zähler nach einem Neustart einen unsinnigen Stunden-Sprung hatte (z. B. +109 kWh in einer Stunde bei einer 11-kWp-Anlage), wurde dieser Spike bisher vom Daten-Checker zwar *erkannt*, aber „Tag neu aggregieren" hat ihn nicht geheilt — Reaggregation lieferte denselben falschen Wert. Ab v3.30.2 cappt der Aggregator solche Stundenwerte präventiv.
