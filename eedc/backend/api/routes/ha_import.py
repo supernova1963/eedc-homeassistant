@@ -95,11 +95,25 @@ def get_felder_fuer_typ(typ: str, parameter: dict | None = None) -> list[SensorF
             SensorFeld(key="ladung_kwh", label="Ladung", unit="kWh", required=True),
             SensorFeld(key="entladung_kwh", label="Entladung", unit="kWh", required=True),
         ]
+        # Netzladung schon ohne Arbitrage anbieten (z. B. Backup-/Notladung).
+        # Arbitrage impliziert Netzladung — Bedingung ist daher das OR.
+        laedt_aus_netz = bool(
+            parameter
+            and (
+                parameter.get(PARAM_SPEICHER["LAEDT_AUS_NETZ"])
+                or parameter.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"])
+            )
+        )
+        if laedt_aus_netz:
+            felder.append(SensorFeld(
+                key="speicher_ladung_netz_kwh", label="Netzladung", unit="kWh",
+                optional=True, hint="Ladung aus dem Netz",
+            ))
+        # Ladepreis nur bei echter Arbitrage relevant — sonst läuft Netzladung zum Bezugspreis.
         if parameter and parameter.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"]):
-            felder.extend([
-                SensorFeld(key="speicher_ladung_netz_kwh", label="Netzladung", unit="kWh", optional=True, hint="Arbitrage"),
-                SensorFeld(key="speicher_ladepreis_cent", label="Ø Ladepreis", unit="ct/kWh", optional=True),
-            ])
+            felder.append(SensorFeld(
+                key="speicher_ladepreis_cent", label="Ø Ladepreis", unit="ct/kWh", optional=True,
+            ))
         return felder
 
     elif typ == "wallbox":

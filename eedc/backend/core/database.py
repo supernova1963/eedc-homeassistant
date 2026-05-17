@@ -132,6 +132,48 @@ def _migrate_investitionen_parameter_keys_v325(connection) -> None:
             )
 
 
+def _migrate_speicher_laedt_aus_netz_backfill(connection) -> None:
+    """
+    Etappe A (Issue #264): `laedt_aus_netz` als eigener Erfassungs-Schalter.
+
+    `arbitrage_faehig=true` impliziert Netzladung — Bestands-Anlagen mit
+    aktivem Arbitrage-Flag bekommen `laedt_aus_netz=true` gesetzt, damit das
+    Eingabefeld `ladung_netz_kwh` weiter sichtbar bleibt (Bedingung wechselt
+    von `arbitrage_faehig` auf `laedt_aus_netz`).
+
+    Idempotent: läuft beim ersten Mal echt, danach No-Op.
+    """
+    import json
+    from sqlalchemy import text as _text
+
+    rows = connection.execute(_text(
+        "SELECT id, parameter FROM investitionen "
+        "WHERE typ = 'speicher' AND parameter IS NOT NULL"
+    )).fetchall()
+
+    for inv_id, parameter_raw in rows:
+        if not parameter_raw:
+            continue
+        try:
+            params = json.loads(parameter_raw) if isinstance(parameter_raw, str) else dict(parameter_raw)
+        except (TypeError, ValueError):
+            continue
+
+        if not isinstance(params, dict):
+            continue
+
+        if not params.get('arbitrage_faehig'):
+            continue
+        if params.get('laedt_aus_netz') is True:
+            continue  # bereits gesetzt — No-Op
+
+        params['laedt_aus_netz'] = True
+        connection.execute(
+            _text("UPDATE investitionen SET parameter = :p WHERE id = :id"),
+            {'p': json.dumps(params), 'id': inv_id},
+        )
+
+
 def _migrate_verbrauch_daten_keys_v326(connection) -> None:
     """
     v3.25.8 Migration: Drift-Pairs in verbrauch_daten-JSON konsolidieren.
@@ -364,6 +406,10 @@ async def run_migrations(conn):
             # `heizenergie_kwh`/`heizung_kwh`, `ladung_kwh`/`verbrauch_kwh`,
             # `ladung_netz_kwh`/`speicher_ladung_netz_kwh`). Idempotent.
             _migrate_verbrauch_daten_keys_v326(connection)
+
+            # Etappe A (Issue #264): `laedt_aus_netz` als eigener Erfassungs-
+            # Schalter. Backfill: arbitrage_faehig=true ⇒ laedt_aus_netz=true.
+            _migrate_speicher_laedt_aus_netz_backfill(connection)
 
         # Spezialtarife: verwendung-Feld für Strompreise
         if 'strompreise' in inspector.get_table_names():

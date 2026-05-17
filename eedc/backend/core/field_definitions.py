@@ -133,12 +133,13 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Entladung_kWh",
             "aggregiert_in": "batterie_entladung_sum",
         },
-        # Konditionell — nur wenn arbitrage_faehig=true:
+        # Konditionell — nur wenn laedt_aus_netz=true (arbitrage_faehig impliziert das):
         {
             "feld": "ladung_netz_kwh", "label": "Netzladung", "einheit": "kWh",
-            "bedingung": "arbitrage_faehig",
+            "bedingung": "laedt_aus_netz",
             "csv_suffix": "Netzladung_kWh",
         },
+        # Ladepreis nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis.
         {
             "feld": "speicher_ladepreis_cent", "label": "Ø Ladepreis", "einheit": "ct/kWh",
             "bedingung": "arbitrage_faehig",
@@ -424,6 +425,9 @@ def get_felder_fuer_investition(
     result = []
     getrennte_strommessung = bool(params.get("getrennte_strommessung"))
     arbitrage_faehig = bool(params.get("arbitrage_faehig"))
+    # Arbitrage impliziert Netzladung — das Flag ist nur ein Erfassungs-Schalter,
+    # die UI für `ladung_netz_kwh` muss auch ohne Arbitrage sichtbar sein können.
+    laedt_aus_netz = bool(params.get("laedt_aus_netz")) or arbitrage_faehig
     v2h_faehig = bool(params.get("v2h_faehig") or params.get("nutzt_v2h"))
     hat_speicher = bool(params.get("hat_speicher"))
 
@@ -446,6 +450,8 @@ def get_felder_fuer_investition(
         elif bedingung == "!getrennte_strommessung" and getrennte_strommessung:
             continue
         elif bedingung == "arbitrage_faehig" and not arbitrage_faehig:
+            continue
+        elif bedingung == "laedt_aus_netz" and not laedt_aus_netz:
             continue
         elif bedingung == "v2h_faehig" and not v2h_faehig:
             continue

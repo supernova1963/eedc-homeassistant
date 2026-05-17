@@ -69,6 +69,7 @@ PARAM_SPEICHER: Final[dict[str, str]] = {
     "MAX_LADELEISTUNG_KW": "max_ladeleistung_kw",
     "MAX_ENTLADELEISTUNG_KW": "max_entladeleistung_kw",
     "WIRKUNGSGRAD_PROZENT": "wirkungsgrad_prozent",
+    "LAEDT_AUS_NETZ": "laedt_aus_netz",
     "ARBITRAGE_FAEHIG": "arbitrage_faehig",
     "LADE_DURCHSCHNITTSPREIS_CENT": "lade_durchschnittspreis_cent",
     "ENTLADE_VERMIEDENER_PREIS_CENT": "entlade_vermiedener_preis_cent",
@@ -76,6 +77,7 @@ PARAM_SPEICHER: Final[dict[str, str]] = {
 
 PARAM_SPEICHER_DEFAULTS: Final[dict[str, object]] = {
     "wirkungsgrad_prozent": 95,
+    "laedt_aus_netz": False,
     "arbitrage_faehig": False,
     "lade_durchschnittspreis_cent": 12,
     "entlade_vermiedener_preis_cent": 35,

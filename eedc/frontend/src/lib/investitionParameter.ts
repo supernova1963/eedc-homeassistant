@@ -75,6 +75,7 @@ export const PARAM_SPEICHER = {
   MAX_LADELEISTUNG_KW: 'max_ladeleistung_kw',
   MAX_ENTLADELEISTUNG_KW: 'max_entladeleistung_kw',
   WIRKUNGSGRAD_PROZENT: 'wirkungsgrad_prozent',
+  LAEDT_AUS_NETZ: 'laedt_aus_netz',
   ARBITRAGE_FAEHIG: 'arbitrage_faehig',
   LADE_DURCHSCHNITTSPREIS_CENT: 'lade_durchschnittspreis_cent',
   ENTLADE_VERMIEDENER_PREIS_CENT: 'entlade_vermiedener_preis_cent',
@@ -82,6 +83,7 @@ export const PARAM_SPEICHER = {
 
 export const PARAM_SPEICHER_DEFAULTS = {
   wirkungsgrad_prozent: 95,
+  laedt_aus_netz: false,
   arbitrage_faehig: false,
   lade_durchschnittspreis_cent: 12,
   entlade_vermiedener_preis_cent: 35,
@@ -93,6 +95,7 @@ export interface SpeicherParameter {
   max_ladeleistung_kw?: number
   max_entladeleistung_kw?: number
   wirkungsgrad_prozent?: number
+  laedt_aus_netz?: boolean
   arbitrage_faehig?: boolean
   lade_durchschnittspreis_cent?: number
   entlade_vermiedener_preis_cent?: number
