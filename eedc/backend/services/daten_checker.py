@@ -1012,6 +1012,16 @@ class DatenChecker:
             if inv.typ == "e-auto" and param.get("ist_dienstlich"):
                 continue
 
+            # WP mit getrennter Strommessung (#183): hier zählen
+            # `strom_heizen_kwh` und `strom_warmwasser_kwh` getrennt — das
+            # Legacy-Gesamt-Feld `stromverbrauch_kwh` wird vom Aggregator
+            # ohnehin ignoriert, wenn `getrennte_strommessung=True`. Ohne
+            # diesen Zweig meldete der Checker bei korrekt konfiguriertem
+            # Premium-Setup (dietmar1968 Forum-PN 2026-05-17) eine fehlende
+            # Abdeckung trotz vollständig gemappten getrennten Sensoren.
+            if inv.typ == "waermepumpe" and param.get("getrennte_strommessung", False):
+                erwartet = [["strom_heizen_kwh"], ["strom_warmwasser_kwh"]]
+
             inv_data = inv_map.get(str(inv.id), {}) or {}
             felder = inv_data.get("felder", {}) or {}
             fehlend = [
