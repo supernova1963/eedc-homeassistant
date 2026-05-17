@@ -7,6 +7,46 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.0] - 2026-05-17 — Etappe 4+5: HA-Statistics als Source-of-Truth
+
+> 🎯 **Konsistenz der Energie-Aggregate erzwungen.** Drei Sichten auf denselben Tag (Genauigkeits-Tracking IST, Tages-Energieprofile PV-Ertrag, Σ Stundenwerte im Monatsbericht) zeigten bei manchen Anlagen voneinander abweichende Werte für die PV-Erzeugung — teils um ~10 %. Ursache: zwei parallel laufende Datenpfade (Riemann-Integration aus dem Live-Tagesverlauf + Counter-Boundary-Diff aus Sensor-Snapshots) mit unterschiedlichen Aggregationsfenstern, plus ein Filter-Bug im Genauigkeits-Tracking. Ab v3.31.0 sind die Aggregat-Tabellen Cache von HA-Statistics-Long-Term — eine einzige Quelle für alle Sichten, Σ Stundenwerte = Tagessumme per Konstruktion. Zusätzlich werden mit Etappe 5 die letzten drei eedc-eigenen Berechnungen (Tages-Peaks, Batterie-SoC-Stundenmittel, Strompreis-Stundenmittel) durch direkten HA-Statistics-Read ersetzt.
+
+### Fixed
+
+- **Genauigkeits-Tracking IST enthält keine Batterie-Netto-Ladung mehr**: Der IST-Wert für PV-Erzeugung im Genauigkeits-Tracking summierte bisher `komponenten_kwh`-Subkeys mit positivem Wert über eine Negativliste hinaus — bei Anlagen, deren Batterie über den Tag netto geladen hatte (z. B. 4–6 kWh Überschuss), wurde diese Ladung als IST-Erzeugung mitgezählt. Der Filter wurde auf eine Prefix-Whitelist `pv_*` und `bkw_*` umgestellt, analog zur Frontend-Spalte „PV-Ertrag" in der Tages-Energieprofile-Tabelle. Die Prognose-MAE-Werte werden dadurch realistischer (kein künstlich besserer Wert mehr).
+
+### Changed
+
+- **TagesEnergieProfil + TagesZusammenfassung werden Cache von HA-Statistics-LTS**: Die Stunden- und Tageswerte für PV, Einspeisung, Netzbezug, Batterie, Wärmepumpe, Wallbox usw. werden im HA-Add-on-Modus jetzt direkt aus den HA-Long-Term-Statistics gelesen (über die neue Funktion `HAStatisticsService.get_hourly_kwh_deltas_for_day`). Damit gilt für alle Anlagen mit HA-Integration: `Σ TagesEnergieProfil.pv_kw == TagesZusammenfassung.komponenten_kwh["pv_<id>"]` (und analog für alle anderen Kategorien). Der bestehende Sensor-Snapshot-Pfad bleibt als Fallback für Standalone-Anlagen ohne HA aktiv.
+- **Schreib-Provenance-Vokabular erweitert**: Neue Source-Labels `external:ha_statistics:hourly` (für Stundenwerte in `TagesEnergieProfil`) und `external:ha_statistics:daily` (für `TagesZusammenfassung.komponenten_kwh`). Die Aufsplittung ermöglicht im Audit-Log die Diagnose, ob Stunden- oder Tagessumme den jeweiligen Wert geschrieben hat. Beide auf Stufe EXTERNAL_AUTHORITATIVE — manuelle Einträge gewinnen weiterhin unbedingt (Schutzrichtung aus v3.30.3 bleibt).
+- **Daten-Checker zeigt aktiven Datenquellen-Pfad**: Neue Kategorie „Datenquelle – aktiver Pfad" mit drei möglichen Stati: (1) HA-Statistics als Source-of-Truth aktiv (OK), (2) HA-Statistics verfügbar, Aggregate noch aus älterer Quelle (Info, heilt sich beim nächsten Monatsabschluss), (3) Standalone-Modus ohne HA-LTS (Info, eingeschränkt durch Sub-Stunden-Boundary-Effekte). Transparente Diagnose für Anwender, die wissen wollen, woher ihre Zahlen kommen.
+- **Etappe 5 — Tages-Peak-Werte aus HA-Statistics-Min/Max**: `peak_pv_kw`, `peak_netzbezug_kw` und `peak_einspeisung_kw` werden bevorzugt aus den Stunden-Extremwerten gelesen, die HA-Recorder für `has_mean=True`-Sensoren ohnehin schreibt (`statistics.max` / `statistics.min`). Die bisherige Berechnung aus 10-Min-Mittelwerten unterschätzte Peaks systematisch — der HA-Wert entspricht jetzt der physikalisch korrekten Tagesspitze. Mehrere PV-Sensoren werden per Σ max je Stunde aggregiert (obere Schranke, in der Praxis < 5 % Drift). Fallback auf den bisherigen Pfad bleibt für Standalone-Modus ohne HA-LTS.
+- **Etappe 5 — Batterie-SoC- und Strompreis-Stundenmittel aus HA-Statistics**: `_get_soc_history()` und `_get_strompreis_stunden()` lesen Stundenwerte direkt aus `statistics.mean` statt sie aus der State-History selbst zu mitteln. Damit sind alle Stundenwerte im TagesEnergieProfil aus derselben HA-Statistics-Quelle wie das HA-Energy-Dashboard, mit gemeinsamer Recompile- und Kompression-Logik. State-History-Mittelung bleibt als Fallback wenn LTS leer.
+
+### Migration
+
+- **Automatischer Vollbackfill bei Upgrade**: Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration und bestehenden Aggregat-Daten das `vollbackfill_durchgefuehrt`-Flag auf `False` zurückgesetzt. Beim nächsten Monatsabschluss läuft dann der Auto-Vollbackfill aus HA-LTS einmalig durch und füllt **fehlende** Tage nach (additiv, bestehende Tage bleiben unverändert — Schutz manueller Korrekturen). Anwender müssen für neue Tage nichts aktiv tun; um bestehende Tage gezielt auf die HA-Statistics-Werte umzustellen, stehen `Energieprofil → Tag-Reload` (Vorschau) und `Wartung → Reparatur-Werkbank → Bereich neu aggregieren` zur Verfügung. Anlagen ohne HA-Integration (Standalone-Docker) bleiben unverändert — ihr Snapshot-basierter Pfad funktioniert weiter wie bisher.
+
+### Hinweis für Anwender
+
+Wenn dir nach dem Update auffällt, dass historische Tageswerte sich um wenige Prozent ändern: das ist beabsichtigt. Die Werte wurden von dem rechnerisch nicht ganz sauberen Mix-Pfad auf die HA-Statistics-konformen Werte umgezogen (gleiches Ergebnis wie das HA-Energy-Dashboard). Die neuen Werte sind durchgängig konsistent zwischen allen eedc-Sichten — die Drift, die manche Anwender zuvor zwischen Genauigkeits-Tracking, Tages-Energieprofile und Stunden-Σ gesehen hatten, ist Geschichte.
+
+### Konzept-Dokumentation
+
+Vollständige Architektur + Pfad-Inventar + Test-Plan: `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` (Etappe 5 als Anhang 9a).
+
+### Tests
+
+Suite wächst von 96 auf 125 Tests (29 neue, alle grün):
+- 5 Tests für `HAStatisticsService.get_hourly_kwh_deltas_for_day` (Lückenbehandlung, Einheiten, Mehrfach-Sensoren)
+- 7 Konsistenz-Tests für die LTS-Aggregator-Pfade (Σ Hourly == Daily über alle Investitionstypen)
+- 6 Tests für die Migration (Reset-Verhalten, Idempotenz, Standalone-No-Op)
+- 5 Tests für `HAStatisticsService.get_hourly_mean_for_day` (Etappe 5: SoC + Strompreis, Roh-Einheit)
+- 5 Tests für `HAStatisticsService.get_hourly_minmax_sensor_data` (Etappe 5: Stunden-Extrema, Einheiten-Filter, Boundary)
+- 6 Tests für `_get_tagespeaks_aus_ha_lts` (Etappe 5: Einzel-/Multi-PV, Kombi-Netz, Invert-Flag, Fallback)
+
+---
+
 ## [3.30.3] - 2026-05-16 — Split-Klimaanlagen als Luft-Luft-WP (Forum #548)
 
 > ❄️ **Klimaanlagen sind jetzt Wärmepumpen.** Eine Split-Klimaanlage ist physikalisch eine Luft-Luft-Wärmepumpe (Reverse-Cycle, Heizen + Kühlen). Bisher wurden sie pragmatisch unter „Sonstiges" geführt — was im Cockpit-Wärmepumpenbereich keinen Eintrag erzeugt und die JAZ-Statistik verfälscht. Ab v3.30.3 steht `wp_art = "luft_luft"` als gleichwertiger WP-Subtyp zur Verfügung; das System rechnet und meldet entsprechend.

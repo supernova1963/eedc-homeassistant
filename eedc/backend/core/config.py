@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings
 # =============================================================================
 # Zentrale Versionskonfiguration
 # =============================================================================
-APP_VERSION = "3.30.3"
+APP_VERSION = "3.31.0"
 APP_NAME = "eedc"
 APP_FULL_NAME = "Energie Effizienz Data Center"
 
