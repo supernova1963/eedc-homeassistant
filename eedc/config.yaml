@@ -67,6 +67,10 @@ map:
   - data:rw
   - config:ro  # Lesezugriff auf HA-Config für statistics Datenbank-Abfrage
 
+# Hot-Backup-Konsistenz: WAL ins Hauptfile zurückspielen + truncaten, bevor
+# der Supervisor /data tarballt. App bleibt online, MQTT-Inbound läuft weiter.
+backup_pre: "sqlite3 /data/eedc.db 'PRAGMA wal_checkpoint(TRUNCATE);'"
+
 # Netzwerk (nur intern via Ingress)
 ports:
   8099/tcp: null
