@@ -37,6 +37,7 @@ from backend.core.field_definitions import (
     get_wp_strom_kwh,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.investition_parameter import ist_dienstlich
 
 logger = logging.getLogger(__name__)
 
@@ -368,7 +369,7 @@ async def _collect_saved_data(
                     (data.get("warmwasser_kwh", 0) or 0)
                 )
             elif inv.typ == "e-auto":
-                if not (inv.parameter or {}).get("ist_dienstlich", False):
+                if not ist_dienstlich(inv):
                     eauto_ladung_total += (
                         data.get("ladung_kwh", 0) or
                         data.get("verbrauch_kwh", 0) or 0
@@ -376,7 +377,7 @@ async def _collect_saved_data(
                     eauto_pv_ladung_total += data.get("ladung_pv_kwh", 0) or 0
                     eauto_km_total += data.get("km_gefahren", 0) or 0
             elif inv.typ == "wallbox":
-                if not (inv.parameter or {}).get("ist_dienstlich", False):
+                if not ist_dienstlich(inv):
                     wb_ladung_total += data.get("ladung_kwh", 0) or 0
                     wb_pv_ladung_total += data.get("ladung_pv_kwh", 0) or 0
             elif inv.typ == "balkonkraftwerk":
@@ -505,8 +506,8 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     wp_params_by_id = {i.id: (i.parameter or {}) for i in investitionen if i.typ == "waermepumpe"}
     # E-Auto und Wallbox separat halten — selbe Pool-Doppelzählungs-Falle wie
     # in `_collect_saved_data` (siehe dort). Max-pro-Feld statt Summe.
-    eauto_inv_ids = [i.id for i in investitionen if i.typ == "e-auto" and not (i.parameter or {}).get("ist_dienstlich", False)]
-    wb_inv_ids = [i.id for i in investitionen if i.typ == "wallbox" and not (i.parameter or {}).get("ist_dienstlich", False)]
+    eauto_inv_ids = [i.id for i in investitionen if i.typ == "e-auto" and not ist_dienstlich(i)]
+    wb_inv_ids = [i.id for i in investitionen if i.typ == "wallbox" and not ist_dienstlich(i)]
     all_inv_ids = pv_inv_ids + bat_inv_ids + wp_inv_ids + eauto_inv_ids + wb_inv_ids
 
     if all_inv_ids:
@@ -750,7 +751,7 @@ async def get_aktueller_monat(
         wb_ladung = 0.0
         emob_quelle: Optional[tuple] = None
         for inv in investitionen:
-            if (inv.parameter or {}).get("ist_dienstlich", False):
+            if ist_dienstlich(inv):
                 continue
             # #239 detLAN-Folge: HA-Statistics-Werte aus vor-Anschaffungs-
             # Monaten nicht in den Monatsbericht-Pool aggregieren.
@@ -1036,7 +1037,7 @@ async def get_aktueller_monat(
     emob_ladung_extern = None
     emob_v2h = None
 
-    emob_invs = [i for i in investitionen if i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)]
+    emob_invs = [i for i in investitionen if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)]
     if emob_invs:
         netz_total = 0.0
         extern_total = 0.0
@@ -1162,7 +1163,7 @@ async def get_aktueller_monat(
 
     hat_emobilitaet = any(
         i.typ in ("e-auto", "wallbox")
-        and not (i.parameter or {}).get("ist_dienstlich", False)
+        and not ist_dienstlich(i)
         and i.ist_aktiv_im_monat(jahr, monat)
         for i in investitionen
     )
@@ -1284,7 +1285,7 @@ async def get_aktueller_monat(
                         f"{strom:.1f} kWh × {wp_p:.2f} ct"
                     )
 
-            elif inv.typ in ("e-auto", "wallbox") and not (inv.parameter or {}).get("ist_dienstlich", False):
+            elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
                 km = data.get("km_gefahren")
                 ladung = get_eauto_ladung_kwh(data) or None
                 ladung_netz = data.get("ladung_netz_kwh")

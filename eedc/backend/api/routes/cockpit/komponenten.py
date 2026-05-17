@@ -16,6 +16,7 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -226,7 +227,7 @@ async def get_komponenten_zeitreihe(
             # Dienstwagen rausfiltern (Joachim-Pattern, feedback_dienstwagen_alle_checks.md):
             # ist_dienstlich-Komponenten gehören in dienstliche Ladekosten,
             # nicht in den E-Mobilitäts-Pool der eigenen Anlage.
-            if (inv.parameter or {}).get("ist_dienstlich", False):
+            if ist_dienstlich(inv):
                 continue
             if inv.typ == "e-auto":
                 d["eauto_km"] += data.get("km_gefahren", 0) or 0
