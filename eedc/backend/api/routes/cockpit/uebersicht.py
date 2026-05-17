@@ -13,6 +13,7 @@ from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.models.pvgis_prognose import PVGISPrognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH,
@@ -323,7 +324,59 @@ async def get_cockpit_uebersicht(
     if anlagenleistung_kwp == 0 and anlage.leistung_kwp:
         anlagenleistung_kwp = anlage.leistung_kwp
 
-    spez_ertrag = (pv_erzeugung / anlagenleistung_kwp) if anlagenleistung_kwp > 0 else None
+    # Spezifischer Ertrag periodengenau & jahresverlauf-gewichtet (#YTD-spez-ertrag):
+    # Roh-Division pv_erzeugung / kWp ergibt im laufenden Jahr einen viel zu
+    # niedrigen Wert, weil der Nenner für 12 Monate ausgelegt ist. Naive
+    # Proration (Monate/12) ignoriert den Jahresverlauf — Jan–Mai sind ~30%
+    # des Jahresertrags, nicht 42%. Daher Periodenanteil über die
+    # PVGIS-Monatsverteilung gewichten; Fallback auf typische 52°N-Verteilung
+    # bzw. Gleichverteilung wenn keine PVGIS-Prognose vorliegt.
+    covered_months: set[tuple[int, int]] = set(zeitraum_monate)
+    for md in monatsdaten_list:
+        covered_months.add((md.jahr, md.monat))
+
+    monthly_weight: dict[int, float] = {}
+    if covered_months and anlagenleistung_kwp > 0:
+        pvgis_res = await db.execute(
+            select(PVGISPrognose)
+            .where(PVGISPrognose.anlage_id == anlage_id, PVGISPrognose.ist_aktiv == True)
+            .order_by(PVGISPrognose.abgerufen_am.desc())
+            .limit(1)
+        )
+        pvgis = pvgis_res.scalar_one_or_none()
+        if pvgis and pvgis.monatswerte:
+            for entry in pvgis.monatswerte:
+                try:
+                    m = int(entry.get("monat"))
+                    e = float(entry.get("e_m") or 0.0)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= m <= 12 and e > 0:
+                    monthly_weight[m] = e
+        if not monthly_weight:
+            # Typische 52°N-Verteilung in % des Jahresertrags
+            monthly_weight = {
+                1: 2.5, 2: 4.5, 3: 8.0, 4: 11.5, 5: 13.0, 6: 13.5,
+                7: 13.5, 8: 12.0, 9: 9.0, 10: 6.5, 11: 3.5, 12: 2.5,
+            }
+
+    periode_anteil: Optional[float] = None
+    weight_sum_year = sum(monthly_weight.values())
+    if covered_months and weight_sum_year > 0:
+        months_per_year: dict[int, set[int]] = {}
+        for (j, m) in covered_months:
+            months_per_year.setdefault(j, set()).add(m)
+        anteil = 0.0
+        for monate_set in months_per_year.values():
+            anteil += sum(monthly_weight.get(m, 0.0) for m in monate_set) / weight_sum_year
+        periode_anteil = anteil if anteil > 0 else None
+
+    if anlagenleistung_kwp > 0 and periode_anteil and pv_erzeugung > 0:
+        spez_ertrag = pv_erzeugung / (anlagenleistung_kwp * periode_anteil)
+    elif anlagenleistung_kwp > 0:
+        spez_ertrag = pv_erzeugung / anlagenleistung_kwp if pv_erzeugung > 0 else None
+    else:
+        spez_ertrag = None
 
     # Komponenten-Flags und Berechnungen (nur aktive Investitionen)
     speicher_invs = [i for i in investitionen if i.typ == "speicher" and i.ist_aktiv_an(today)]
