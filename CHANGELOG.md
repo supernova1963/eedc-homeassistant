@@ -7,6 +7,35 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.1] - 2026-05-17 — Etappe 6: Per-Tag-Drift-Anzeige + Reparatur
+
+> 🔍 **Sichtbar machen, was Etappe 4 erst möglich gemacht hat.** v3.31.0 hat die Architektur auf HA-Statistics umgestellt — neue Tage werden sauber aus HA-LTS aggregiert, bestehende Tage bleiben aber auf ihren alten Werten (Auto-Vollbackfill ist additiv, schützt manuelle Korrekturen). v3.31.1 zeigt jetzt im Daten-Checker pro Tag, wo dein eedc-Wert vom HA-Statistics-Wert abweicht, und legt einen „Tag reparieren"-Knopf direkt neben jeden Eintrag.
+
+### Added
+
+- **Daten-Checker-Kategorie *„Datenquelle – Drift zu HA-Statistics"***: vergleicht die PV-Tagessumme der TagesZusammenfassung mit der HA-Statistics-Tagessumme der letzten 90 Tage. Tage mit Drift bekommen pro Tag einen INFO-Eintrag mit eedc-Wert, HA-Wert und Differenz in kWh und Prozent. Direkt daneben ein „Tag reparieren"-Knopf, der den bestehenden `/reaggregate-tag`-Endpoint aufruft. Schwelle: ≥ 2 kWh UND ≥ 5 % Abweichung gleichzeitig (Boundary-Rauschen wird unterdrückt). Liste auf die 20 Tage mit größtem |Δ| begrenzt. Bewusst kein Sammel-Reparatur-Knopf in der Liste — für mehrere Tage gibt es weiterhin `Wartung → Reparatur-Werkbank → Bereich neu aggregieren`.
+- **`CheckErgebnis`-Felder für Inline-Reparatur-Aktionen**: `action_kind`, `action_params`, `action_label`. Rückwärtskompatibel — bestehende Check-Kategorien lassen die Felder leer.
+
+### Changed
+
+- **Daten-Checker-Frontend rendert Reparatur-Knöpfe für `action_kind="reaggregate_day"`-Einträge**. Beim Klick wird der reaggregate-Tag-Endpoint aufgerufen, ein Erfolgs-/Fehler-Toast erscheint, und der Daten-Checker lädt neu. Drift-Einträge verschwinden dadurch automatisch, wenn der Tag jetzt unter der Schwelle liegt.
+
+### Hinweis für Anwender
+
+Direkt nach dem Update v3.31.0 (gestern) standen deine *bestehenden* Tages-Werte noch auf ihren alten Mix-Source-Werten — neue Tage wurden ab sofort sauber aus HA-Statistics aggregiert. v3.31.1 macht jetzt sichtbar, welche bestehenden Tage signifikant abweichen, und bietet pro Tag einen sicheren Reparatur-Pfad ohne Massen-Aktion. Liste leer → alles sauber, kein Handlungsbedarf.
+
+### Konzept-Dokumentation
+
+`docs/KONZEPT-ETAPPE-6-DRIFT-ANZEIGE.md` mit Architektur-Detail, Schwellen-Begründung, vermiedenen Anti-Patterns (kein „Akzeptiert"-Button, kein Sammel-Heiler-Knopf, kein Lösch-Pfad).
+
+### Tests
+
+Suite wächst von 125 auf 133 Tests:
+
+- 8 neue Tests für `_check_datenquelle_drift` (Schwellen-Logik, Sortierung, Max-20-Cap, Inbetriebnahme-Edge-Case, HA-LTS-Fallback, leere Anlage)
+
+---
+
 ## [3.31.0] - 2026-05-17 — Etappe 4+5: HA-Statistics als Source-of-Truth
 
 > 🎯 **Konsistenz der Energie-Aggregate erzwungen.** Drei Sichten auf denselben Tag (Genauigkeits-Tracking IST, Tages-Energieprofile PV-Ertrag, Σ Stundenwerte im Monatsbericht) zeigten bei manchen Anlagen voneinander abweichende Werte für die PV-Erzeugung — teils um ~10 %. Ursache: zwei parallel laufende Datenpfade (Riemann-Integration aus dem Live-Tagesverlauf + Counter-Boundary-Diff aus Sensor-Snapshots) mit unterschiedlichen Aggregationsfenstern, plus ein Filter-Bug im Genauigkeits-Tracking. Ab v3.31.0 sind die Aggregat-Tabellen Cache von HA-Statistics-Long-Term — eine einzige Quelle für alle Sichten, Σ Stundenwerte = Tagessumme per Konstruktion. Zusätzlich werden mit Etappe 5 die letzten drei eedc-eigenen Berechnungen (Tages-Peaks, Batterie-SoC-Stundenmittel, Strompreis-Stundenmittel) durch direkten HA-Statistics-Read ersetzt.

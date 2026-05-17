@@ -9,6 +9,38 @@
 
 ---
 
+## v3.31.1 — Drift zu HA-Statistics sichtbar machen und tagesweise reparieren (Mai 2026)
+
+### Welche Tage weichen vom HA-Statistics-Wert ab? *(v3.31.1)*
+
+> 🔍 **Direkt nach dem Update auf v3.31.0 standen deine bestehenden Tage noch auf ihren alten Werten** — der Auto-Vollbackfill beim Monatsabschluss füllt nur Lücken, ersetzt keine vorhandenen Werte. v3.31.1 macht jetzt im Daten-Checker sichtbar, welche Tage signifikant vom HA-Energy-Dashboard abweichen, und legt einen *Tag reparieren*-Knopf direkt neben jeden Eintrag.
+
+#### Was du tun kannst
+
+1. Öffne **Einstellungen → Daten-Checker**
+2. Schau nach der neuen Kategorie **„Datenquelle – Drift zu HA-Statistics"**
+3. Pro Eintrag siehst du Datum, eedc-Wert, HA-Statistics-Wert und Differenz in kWh und %
+4. Ein Klick auf *„Tag reparieren"* — eedc holt die Werte direkt aus HA-Statistics und schreibt sie in deine Tages-Zusammenfassung
+5. Liste leer → alles sauber, kein Handlungsbedarf
+
+#### Schwelle bewusst hoch
+
+Angezeigt werden nur Tage, die *gleichzeitig* mindestens **2 kWh** und mindestens **5 %** vom HA-Statistics-Wert abweichen. Kleine Boundary-Rauschen (Counter-Reset um Mitternacht, Sub-Stunden-Snapshot-Versatz) wird damit unterdrückt — die Liste bleibt fokussiert auf das, was wirklich Bedeutung hat.
+
+Außerdem: maximal 20 Tage werden angezeigt, sortiert nach der absoluten Abweichung. Wenn mehr Tage betroffen sind, erscheint ein zusätzlicher Hinweis-Eintrag „… plus X weitere Tage".
+
+#### Mehrere Tage auf einmal
+
+Wenn du z. B. einen ganzen Monat reparieren willst, ist *Wartung → Reparatur-Werkbank → Bereich neu aggregieren* der schnellere Weg. **Bewusst nicht als Massen-Knopf in der Diff-Liste** — Massen-Aktionen sollen aktiv gewählt werden, nicht versehentlich passieren.
+
+#### Was passiert beim Klick auf „Tag reparieren"
+
+eedc liest die Stunden-kWh des Tages frisch aus HA-Statistics, baut die TagesEnergieProfil-Zeilen und die TagesZusammenfassung neu auf — exakt mit den Werten, die HA selbst für diesen Tag in der Statistik hat. Die alten eedc-Werte werden überschrieben. Manuell überschriebene Werte (Provenance `manual:*`) bleiben unverändert — die Schutzhierarchie aus v3.30.3 gilt weiter.
+
+*(Direkt-Konsequenz aus Etappe 4 — die Architektur ist sauber, jetzt bekommen Anwender auch das Werkzeug, sie für bestehende Tage zu nutzen.)*
+
+---
+
 ## v3.31.0 — Energie-Aggregate konsistent aus HA-Statistics (Mai 2026)
 
 ### Eine Quelle für PV, Verbrauch, Einspeisung — und auch Peak-Werte *(v3.31.0)*

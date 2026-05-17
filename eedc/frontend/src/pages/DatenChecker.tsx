@@ -10,12 +10,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   RefreshCw, XCircle, AlertTriangle, Info,
-  CheckCircle, ChevronRight, ChevronDown,
+  CheckCircle, ChevronRight, ChevronDown, Wrench, Loader2,
 } from 'lucide-react'
 import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
+import { energieProfilApi } from '../api/energie_profil'
 
 // ─── Konstanten ─────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ const kategorieLabels: Record<string, string> = {
   sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
   provenance_conflict: 'Daten-Quellen – Konflikte',
   datenquelle_status: 'Datenquelle – aktiver Pfad',
+  datenquelle_drift: 'Datenquelle – Drift zu HA-Statistics',
 }
 
 const kategorieReihenfolge = [
@@ -45,6 +47,7 @@ const kategorieReihenfolge = [
   'sensor_mapping_lts',
   'provenance_conflict',
   'datenquelle_status',
+  'datenquelle_drift',
 ]
 
 function severityIcon(schwere: string) {
@@ -76,10 +79,14 @@ function KategorieSektion({
   kategorie,
   ergebnisse,
   defaultOpen,
+  onReaggregate,
+  reparaturBusy,
 }: {
   kategorie: string
   ergebnisse: CheckErgebnis[]
   defaultOpen: boolean
+  onReaggregate?: (anlageId: number, datum: string) => Promise<void>
+  reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` der laufenden Reparatur
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const navigate = useNavigate()
@@ -119,29 +126,53 @@ function KategorieSektion({
 
       {open && (
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {ergebnisse.map((e, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-3 px-4 py-2.5"
-            >
-              <div className="mt-0.5">{severityIcon(e.schwere)}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800 dark:text-gray-200">{e.meldung}</p>
-                {e.details && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{e.details}</p>
+          {ergebnisse.map((e, i) => {
+            const actionAnlageId = e.action_kind === 'reaggregate_day'
+              ? Number(e.action_params?.anlage_id) : undefined
+            const actionDatum = e.action_kind === 'reaggregate_day'
+              ? String(e.action_params?.datum ?? '') : undefined
+            const reparaturKey = actionAnlageId && actionDatum
+              ? `${actionAnlageId}:${actionDatum}` : null
+            const isReparaturBusy = reparaturKey && reparaturBusy === reparaturKey
+
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-3 px-4 py-2.5"
+              >
+                <div className="mt-0.5">{severityIcon(e.schwere)}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800 dark:text-gray-200">{e.meldung}</p>
+                  {e.details && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{e.details}</p>
+                  )}
+                </div>
+                {e.action_kind === 'reaggregate_day' && onReaggregate && actionAnlageId && actionDatum && (
+                  <button
+                    onClick={() => onReaggregate(actionAnlageId, actionDatum)}
+                    disabled={!!reparaturBusy}
+                    className="flex-shrink-0 text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {isReparaturBusy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Wrench className="h-3 w-3" />
+                    )}
+                    {e.action_label ?? 'Tag reparieren'}
+                  </button>
+                )}
+                {e.link && !e.action_kind && (
+                  <button
+                    onClick={() => navigate(e.link!)}
+                    className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                  >
+                    Beheben
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
                 )}
               </div>
-              {e.link && (
-                <button
-                  onClick={() => navigate(e.link!)}
-                  className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
-                >
-                  Beheben
-                  <ChevronRight className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -156,6 +187,33 @@ export default function DatenChecker() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [reparaturBusy, setReparaturBusy] = useState<string | null>(null)
+  const [reparaturMessage, setReparaturMessage] = useState<{
+    art: 'ok' | 'fehler'; text: string
+  } | null>(null)
+
+  // Etappe 6 v3.31.1: Per-Tag-Reparatur über bestehenden reaggregate-tag-Endpoint.
+  const handleReaggregateDay = async (anlageId: number, datum: string) => {
+    const key = `${anlageId}:${datum}`
+    setReparaturBusy(key)
+    setReparaturMessage(null)
+    try {
+      await energieProfilApi.reaggregateTag(anlageId, datum, true)
+      setReparaturMessage({
+        art: 'ok',
+        text: `Tag ${datum} aus HA-Statistics neu aggregiert.`,
+      })
+      // Daten-Checker neu laden → Eintrag verschwindet, wenn Drift jetzt unter Schwelle
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      setReparaturMessage({
+        art: 'fehler',
+        text: e instanceof Error ? e.message : `Reparatur für ${datum} fehlgeschlagen`,
+      })
+    } finally {
+      setReparaturBusy(null)
+    }
+  }
 
   // Check laden wenn Anlage ausgewählt
   useEffect(() => {
@@ -303,6 +361,17 @@ export default function DatenChecker() {
             </div>
           )}
 
+          {/* Reparatur-Status-Toast */}
+          {reparaturMessage && (
+            <div className={`px-3 py-2 rounded text-sm ${
+              reparaturMessage.art === 'ok'
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+            }`}>
+              {reparaturMessage.text}
+            </div>
+          )}
+
           {/* Kategorien */}
           <div className="space-y-3">
             {kategorieReihenfolge.map((kat) => {
@@ -315,6 +384,8 @@ export default function DatenChecker() {
                   kategorie={kat}
                   ergebnisse={items}
                   defaultOpen={hasIssues}
+                  onReaggregate={handleReaggregateDay}
+                  reparaturBusy={reparaturBusy}
                 />
               )
             })}

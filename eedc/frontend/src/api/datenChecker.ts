@@ -7,11 +7,15 @@
 import { api } from './client'
 
 export interface CheckErgebnis {
-  kategorie: 'stammdaten' | 'strompreise' | 'investitionen' | 'monatsdaten_vollstaendigkeit' | 'monatsdaten_plausibilitaet' | 'energieprofil_abdeckung' | 'mqtt_topic_abdeckung' | 'sensor_mapping_lts'
+  kategorie: string
   schwere: 'error' | 'warning' | 'info' | 'ok'
   meldung: string
   details?: string
   link?: string
+  // Etappe 6 v3.31.1: optionale Inline-Reparatur-Action.
+  action_kind?: 'reaggregate_day'
+  action_params?: Record<string, unknown>
+  action_label?: string
 }
 
 export interface MonatsdatenAbdeckung {

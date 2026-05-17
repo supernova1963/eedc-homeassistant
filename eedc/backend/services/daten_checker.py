@@ -62,6 +62,12 @@ class CheckKategorie(str, Enum):
     # Energie-Aggregate aktiv ist (HA-LTS direkt vs Sensor-Snapshot-Fallback
     # vs Standalone-MQTT). Info-Charakter, transparent für den Anwender.
     DATENQUELLE_STATUS = "datenquelle_status"
+    # Etappe 6 v3.31.1: Per-Tag-Drift zwischen TagesZusammenfassung-PV und
+    # HA-LTS-Daily-Read. Pro betroffenem Tag ein eigener Eintrag mit
+    # Reparatur-Action (reaggregate_day). Schließt die Anwender-Lücke aus
+    # Etappe 4: bestehende Tage bleiben nach Update auf ihren alten
+    # Mix-Source-Werten, ohne dieses Werkzeug sieht der Anwender das nicht.
+    DATENQUELLE_DRIFT = "datenquelle_drift"
 
 
 @dataclass
@@ -71,6 +77,13 @@ class CheckErgebnis:
     meldung: str
     details: Optional[str] = None
     link: Optional[str] = None
+    # Etappe 6 v3.31.1: optionale Inline-Reparatur-Action.
+    # action_kind="reaggregate_day" + action_params={"anlage_id", "datum"}
+    # → Frontend rendert Knopf, der `/api/energie-profil/{id}/reaggregate-tag`
+    # ruft. Alle anderen Kategorien lassen diese Felder None.
+    action_kind: Optional[str] = None
+    action_params: Optional[dict] = None
+    action_label: Optional[str] = None
 
 
 @dataclass
@@ -161,6 +174,7 @@ class DatenChecker:
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
+        ergebnisse.extend(await self._check_datenquelle_drift(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -1812,3 +1826,149 @@ class DatenChecker:
                 "Modus wäre eine höhere Konsistenz möglich (Σ Stunden = Tag)."
             ),
         )]
+
+    async def _check_datenquelle_drift(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """Etappe 6 v3.31.1: Per-Tag-PV-Tagessumme der TagesZusammenfassung
+        gegen HA-LTS-Daily-Read der letzten 90 Tage vergleichen. Bei Drift
+        über Schwelle pro Tag ein Eintrag mit Inline-Reparatur-Action.
+
+        Hintergrund: Etappe 4 hat den Aggregator auf HA-LTS umgestellt,
+        bestehende Tage stehen aber noch auf alten Mix-Source-Werten
+        (additive Migration, #190). Dieses Werkzeug macht die Drift
+        sichtbar und bietet pro Tag einen Reparatur-Pfad — getrennt von
+        Sammel-Aktionen in der Reparatur-Werkbank, damit Massen-
+        Reparaturen aktiv gewählt werden müssen.
+
+        Schwelle: |Δ| ≥ 2 kWh UND |Δ|/max ≥ 5 % gleichzeitig. Sortierung
+        nach |Δ| desc, Limit 20 Einträge. Vergleicht NUR PV-Tagessumme
+        (Σ pv_* + bkw_* Keys), nicht andere Kategorien — fokussierte
+        Liste, andere Größen koppeln meistens mit.
+
+        Memory-Linien:
+          - feedback_kein_grosser_heiler_knopf.md (keine Sammel-Reparatur
+            in der Liste — Verweis auf Reparatur-Werkbank)
+          - feedback_daten_checker_kein_akzeptiert.md (keine Quittier-
+            Aktion — Eintrag verschwindet nur durch tatsächliche Reparatur)
+          - feedback_reparatur_statt_loesch_features.md (Reparatur-Pfad
+            ist der einzige Pfad)
+        """
+        from datetime import date, timedelta as _td
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.models.investition import Investition as _Inv
+
+        kat = CheckKategorie.DATENQUELLE_DRIFT.value
+
+        ha_svc = get_ha_statistics_service()
+        if not ha_svc.is_available:
+            return []  # Standalone-Modus: kein Vergleich möglich
+
+        bis = date.today() - _td(days=1)
+        von = bis - _td(days=89)  # 90 Tage inkl. bis
+
+        tz_result = await self.db.execute(
+            select(TagesZusammenfassung).where(
+                TagesZusammenfassung.anlage_id == anlage.id,
+                TagesZusammenfassung.datum >= von,
+                TagesZusammenfassung.datum <= bis,
+            )
+        )
+        tz_list = list(tz_result.scalars().all())
+        if not tz_list:
+            return []  # Keine Daten — frische Anlage, kein Vergleich nötig
+
+        inv_result = await self.db.execute(
+            select(_Inv).where(_Inv.anlage_id == anlage.id)
+        )
+        invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+
+        drift_pro_tag: list[tuple[date, float, float]] = []  # (datum, eedc, ha)
+        for tz in tz_list:
+            eedc_kwh = 0.0
+            if tz.komponenten_kwh:
+                for k, v in tz.komponenten_kwh.items():
+                    if isinstance(v, (int, float)) and (
+                        k.startswith("pv_") or k.startswith("bkw_")
+                    ):
+                        eedc_kwh += float(v)
+
+            try:
+                ha_komp = await get_komponenten_tageskwh_lts(
+                    anlage, invs_by_id, tz.datum,
+                )
+            except Exception as e:
+                logger.debug(
+                    f"Drift-Check Anlage {anlage.id} {tz.datum}: "
+                    f"HA-LTS-Read fehlgeschlagen: {type(e).__name__}: {e}"
+                )
+                continue
+
+            ha_kwh = sum(
+                float(v) for k, v in ha_komp.items()
+                if isinstance(v, (int, float))
+                and (k.startswith("pv_") or k.startswith("bkw_"))
+            )
+
+            if eedc_kwh <= 0 and ha_kwh <= 0:
+                continue  # Nichts zu vergleichen (z. B. Inbetriebnahme-Monat)
+
+            delta = abs(eedc_kwh - ha_kwh)
+            maxv = max(eedc_kwh, ha_kwh)
+            rel = delta / maxv if maxv > 0 else 0.0
+
+            if delta >= 2.0 and rel >= 0.05:
+                drift_pro_tag.append((tz.datum, eedc_kwh, ha_kwh))
+
+        if not drift_pro_tag:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)",
+                details=(
+                    "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-Tagessumme. "
+                    "Schwelle: ≥ 2 kWh UND ≥ 5 % Abweichung gleichzeitig — kleinere "
+                    "Boundary-Drift wird bewusst ignoriert."
+                ),
+            )]
+
+        # Sortierung nach |Δ| desc, max 20 Einträge
+        drift_pro_tag.sort(key=lambda x: abs(x[1] - x[2]), reverse=True)
+        gekuerzt = drift_pro_tag[:20]
+        rest = len(drift_pro_tag) - len(gekuerzt)
+
+        ergebnisse: list[CheckErgebnis] = []
+        for datum_, eedc, ha in gekuerzt:
+            delta_signed = ha - eedc
+            rel_signed = (delta_signed / max(eedc, ha)) * 100 if max(eedc, ha) > 0 else 0.0
+            details = (
+                f"Dein eedc-Wert für {datum_.isoformat()} ist {eedc:.2f} kWh PV-Erzeugung. "
+                f"Die HA-Statistics liefert für denselben Tag {ha:.2f} kWh. "
+                f"Mit „Tag reparieren“ schreibt eedc den Wert aus HA-Statistics "
+                f"in deine Tages-Zusammenfassung."
+            )
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=(
+                    f"{datum_.isoformat()}: PV {eedc:.1f} → HA {ha:.1f} kWh "
+                    f"(Δ {delta_signed:+.1f} kWh, {rel_signed:+.1f}%)"
+                ),
+                details=details,
+                link=f"/aussichten/energieprofil?datum={datum_.isoformat()}",
+                action_kind="reaggregate_day",
+                action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
+                action_label="Tag reparieren",
+            ))
+
+        if rest > 0:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=f"… plus {rest} weitere Tag(e) mit Drift",
+                details=(
+                    f"Anzeige auf die 20 Tage mit größtem |Δ| begrenzt. "
+                    f"Für alle Drift-Tage auf einmal: Wartung → Reparatur-Werkbank "
+                    f"→ Bereich neu aggregieren (Datumsbereich aktiv wählen, "
+                    f"keine automatische Sammel-Aktion)."
+                ),
+            ))
+
+        return ergebnisse
