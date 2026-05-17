@@ -29,6 +29,11 @@ class CheckErgebnisResponse(BaseModel):
     meldung: str
     details: Optional[str] = None
     link: Optional[str] = None
+    # Etappe 6 v3.31.1 (Schema-Durchreichung in v3.31.2 nachgereicht):
+    # optionale Inline-Reparatur-Action. Bestehende Kategorien lassen leer.
+    action_kind: Optional[str] = None
+    action_params: Optional[dict] = None
+    action_label: Optional[str] = None
 
 
 class MonatsdatenAbdeckungResponse(BaseModel):
@@ -76,6 +81,9 @@ async def daten_check(
                 meldung=e.meldung,
                 details=e.details,
                 link=e.link,
+                action_kind=e.action_kind,
+                action_params=e.action_params,
+                action_label=e.action_label,
             )
             for e in result.ergebnisse
         ],

@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.2] - 2026-05-17 — Hotfix: „Tag reparieren"-Knopf in Daten-Checker
+
+### Fixed
+
+- **Reparatur-Knopf erscheint jetzt wirklich**: In v3.31.1 wurde der neue Per-Tag-Reparatur-Knopf in der Drift-Anzeige des Daten-Checkers nicht angezeigt — stattdessen kam der alte „Beheben"-Link, der nur zum Tag im Energieprofil-Tab springt. Ursache: das API-Response-Schema (`CheckErgebnisResponse` in `backend/api/routes/daten_checker.py`) wurde nicht um die neuen Felder `action_kind`/`action_params`/`action_label` erweitert, Pydantic filterte sie raus. Mit v3.31.2 kommen die Felder durch — Frontend rendert wie geplant den „Tag reparieren"-Knopf neben jedem Drift-Eintrag.
+- **Schutz gegen Wiederholung**: neuer Akzeptanz-Test `test_daten_checker_schema_durchreichung.py` prüft per Reflection, dass jedes Feld der internen `CheckErgebnis`-Dataclass auch im Pydantic-Response-Schema existiert. Künftige Felder-Erweiterungen können nicht mehr stillschweigend rausgefiltert werden.
+
+### Hinweis für Anwender
+
+Wer v3.31.1 bereits installiert hat: einmal aktualisieren, dann erscheint der Reparatur-Knopf wie versprochen. Wer den Workaround genutzt hat („Beheben"-Klick → Reload-Knopf im Energieprofil): das hat funktional dasselbe erreicht, war nur ein Klick mehr.
+
+---
+
 ## [3.31.1] - 2026-05-17 — Etappe 6: Per-Tag-Drift-Anzeige + Reparatur
 
 > 🔍 **Sichtbar machen, was Etappe 4 erst möglich gemacht hat.** v3.31.0 hat die Architektur auf HA-Statistics umgestellt — neue Tage werden sauber aus HA-LTS aggregiert, bestehende Tage bleiben aber auf ihren alten Werten (Auto-Vollbackfill ist additiv, schützt manuelle Korrekturen). v3.31.1 zeigt jetzt im Daten-Checker pro Tag, wo dein eedc-Wert vom HA-Statistics-Wert abweicht, und legt einen „Tag reparieren"-Knopf direkt neben jeden Eintrag.
