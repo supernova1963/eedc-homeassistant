@@ -53,3 +53,10 @@ logs/
 .coverage
 htmlcov/
 .claude/
+
+# SQLite Backup-Begleitdateien (WAL + Shared-Memory) — entstehen während
+# des HA-Backup-WAL-Checkpoint-Hooks (#266) parallel zur .bak-Datei und
+# enthalten flüchtige Transaktionsdaten. Pattern ist bewusst breit, damit
+# zusätzliche Backup-Targets oder Test-Snapshots automatisch mit greifen.
+eedc/data/*-wal
+eedc/data/*-shm
