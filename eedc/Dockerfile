@@ -35,6 +35,7 @@ LABEL \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     jq \
+    sqlite3 \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     fontconfig \
