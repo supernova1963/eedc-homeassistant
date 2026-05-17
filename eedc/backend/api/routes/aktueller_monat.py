@@ -339,8 +339,10 @@ async def _collect_saved_data(
         eauto_ladung_total = 0.0
         eauto_pv_ladung_total = 0.0
         eauto_km_total = 0.0
+        eauto_extern_euro_total = 0.0
         wb_ladung_total = 0.0
         wb_pv_ladung_total = 0.0
+        wb_extern_euro_total = 0.0
         bkw_erzeugung_total = 0.0
         bkw_eigenverbrauch_total = 0.0
 
@@ -375,10 +377,12 @@ async def _collect_saved_data(
                     )
                     eauto_pv_ladung_total += data.get("ladung_pv_kwh", 0) or 0
                     eauto_km_total += data.get("km_gefahren", 0) or 0
+                    eauto_extern_euro_total += data.get("ladung_extern_euro", 0) or 0
             elif inv.typ == "wallbox":
                 if not (inv.parameter or {}).get("ist_dienstlich", False):
                     wb_ladung_total += data.get("ladung_kwh", 0) or 0
                     wb_pv_ladung_total += data.get("ladung_pv_kwh", 0) or 0
+                    wb_extern_euro_total += data.get("ladung_extern_euro", 0) or 0
             elif inv.typ == "balkonkraftwerk":
                 bkw_kwh = (
                     data.get("pv_erzeugung_kwh", 0) or
@@ -403,6 +407,12 @@ async def _collect_saved_data(
         if emob_pv_ladung_total > emob_ladung_total:
             emob_pv_ladung_total = emob_ladung_total
         emob_km_total = eauto_km_total
+        # Externe Lade-Kosten (öffentliche Ladesäulen, etc.) ebenfalls poolen,
+        # gleiche Begründung wie ladung_kwh — Vehicle- oder Loadpoint-Sicht,
+        # größere Quelle gewinnt. Issue #260: vorher überhaupt nicht aggregiert
+        # und in der Ersparnis-Berechnung als 0 € durchgereicht → Cockpit-Wert
+        # zu hoch im Vergleich zum E-Auto-Dashboard.
+        emob_extern_euro_total = max(eauto_extern_euro_total, wb_extern_euro_total)
 
         if pv_erzeugung_total > 0:
             resolved["pv_erzeugung_kwh"] = (pv_erzeugung_total, quelle)
@@ -420,6 +430,8 @@ async def _collect_saved_data(
             resolved["emob_km"] = (emob_km_total, quelle)
         if emob_pv_ladung_total > 0:
             resolved["emob_pv_ladung_kwh"] = (emob_pv_ladung_total, quelle)
+        if emob_extern_euro_total > 0:
+            resolved["emob_ladung_extern_euro"] = (emob_extern_euro_total, quelle)
         if bkw_erzeugung_total > 0:
             resolved["bkw_erzeugung_kwh"] = (bkw_erzeugung_total, quelle)
         if bkw_eigenverbrauch_total > 0:
@@ -747,7 +759,9 @@ async def get_aktueller_monat(
     if "emob_ladung_kwh" not in direct_fields:
         eauto_ladung = 0.0
         eauto_km = 0.0
+        eauto_extern_euro = 0.0
         wb_ladung = 0.0
+        wb_extern_euro = 0.0
         emob_quelle: Optional[tuple] = None
         for inv in investitionen:
             if (inv.parameter or {}).get("ist_dienstlich", False):
@@ -767,16 +781,27 @@ async def get_aktueller_monat(
                 if km_entry:
                     eauto_km += km_entry[0]
                     emob_quelle = km_entry[1]
+                extern_entry = resolved.get(f"inv_{inv.id}_ladung_extern_euro")
+                if extern_entry:
+                    eauto_extern_euro += extern_entry[0]
             elif inv.typ == "wallbox":
                 entry = resolved.get(f"inv_{inv.id}_ladung_kwh")
                 if entry:
                     wb_ladung += entry[0]
                     emob_quelle = entry[1]
+                extern_entry = resolved.get(f"inv_{inv.id}_ladung_extern_euro")
+                if extern_entry:
+                    wb_extern_euro += extern_entry[0]
         emob_ladung = max(eauto_ladung, wb_ladung)
         if emob_ladung > 0 and emob_quelle is not None:
             resolved["emob_ladung_kwh"] = (emob_ladung, emob_quelle)
         if "emob_km" not in direct_fields and eauto_km > 0 and emob_quelle is not None:
             resolved["emob_km"] = (eauto_km, emob_quelle)
+        # #260: externe Lade-Kosten poolen wie ladung_kwh
+        if "emob_ladung_extern_euro" not in direct_fields:
+            emob_extern_euro = max(eauto_extern_euro, wb_extern_euro)
+            if emob_extern_euro > 0 and emob_quelle is not None:
+                resolved["emob_ladung_extern_euro"] = (emob_extern_euro, emob_quelle)
 
     # ── Werte extrahieren ──
     def get_val(feld: str) -> Optional[float]:
@@ -878,6 +903,7 @@ async def get_aktueller_monat(
     emob_ladung = get_val("emob_ladung_kwh")
     emob_km = get_val("emob_km")
     emob_pv_ladung = get_val("emob_pv_ladung_kwh") or 0.0
+    emob_extern_euro = get_val("emob_ladung_extern_euro") or 0.0
     if emob_km is not None and emob_km > 0 and allgemein_tarif:
         wallbox_tarif = tarife.get("wallbox")
         wallbox_preis_cent = (
@@ -888,10 +914,12 @@ async def get_aktueller_monat(
         # Drift-Audit Domäne A2: vorher 7 L/100km + 1,80 €/L hartcodiert.
         emob_invs_aktiv = [i for i in investitionen if i.typ in ("e-auto", "wallbox")]
         emob_ref_param = emob_invs_aktiv[0].parameter if emob_invs_aktiv else None
+        # #260 NongJoWo: ladung_extern_euro muss aus dem Aggregat kommen,
+        # vorher 0 € → Cockpit-Wert um die externen Lade-Kosten zu hoch.
         emob_result = berechne_eauto_ersparnis(
             km_gefahren=emob_km,
             ladung_netz_kwh=(emob_ladung or 0) - emob_pv_ladung,
-            ladung_extern_euro=0.0,
+            ladung_extern_euro=emob_extern_euro,
             wallbox_strompreis_cent=wallbox_preis_cent,
             eauto_parameter=emob_ref_param,
             monats_benzinpreis_euro=monats_benzinpreis,
@@ -1291,10 +1319,12 @@ async def get_aktueller_monat(
                 ladung_pv = data.get("ladung_pv_kwh")
                 if km and km > 0:
                     netz_kwh = ladung_netz if ladung_netz is not None else ((ladung or 0) - (ladung_pv or 0))
+                    # #260: externe Lade-Kosten dieses Monats für diese Investition
+                    extern_euro = data.get("ladung_extern_euro", 0) or 0
                     eauto_result = berechne_eauto_ersparnis(
                         km_gefahren=km,
                         ladung_netz_kwh=max(0, netz_kwh),
-                        ladung_extern_euro=0.0,
+                        ladung_extern_euro=extern_euro,
                         wallbox_strompreis_cent=wb_p,
                         eauto_parameter=inv.parameter,
                         monats_benzinpreis_euro=monats_benzinpreis,

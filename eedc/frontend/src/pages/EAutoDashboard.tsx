@@ -197,12 +197,12 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
         />
         <KPICard
           title="Ersparnis vs. Benzin"
-          value={(z.gesamt_ersparnis_euro || 0).toFixed(0)}
+          value={(z.ersparnis_vs_benzin_euro || 0).toFixed(0)}
           unit="€"
           subtitle={`+ Wallbox: ${(z.wallbox_ersparnis_euro || 0).toFixed(0)} €`}
           icon={TrendingUp}
           color="green"
-          trend={(z.gesamt_ersparnis_euro || 0) > 0 ? 'up' : undefined}
+          trend={(z.ersparnis_vs_benzin_euro || 0) > 0 ? 'up' : undefined}
           formel="Ersparnis = Benzinkosten − Stromkosten"
           berechnung={`${(z.benzin_kosten_alternativ_euro || 0).toFixed(0)} € − ${(z.strom_kosten_gesamt_euro || 0).toFixed(0)} €`}
           ergebnis={`= ${(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €`}

@@ -191,8 +191,10 @@ async def get_cockpit_uebersicht(
     eauto_ladung = 0.0
     eauto_pv_ladung = 0.0
     eauto_km = 0.0
+    eauto_extern_euro = 0.0
     wb_ladung = 0.0
     wb_pv_ladung = 0.0
+    wb_extern_euro = 0.0
     bkw_erzeugung = 0.0
     bkw_eigenverbrauch = 0.0
     sonstiges_erzeugung = 0.0
@@ -248,9 +250,11 @@ async def get_cockpit_uebersicht(
                 )
                 eauto_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
                 eauto_km += data.get("km_gefahren", 0) or 0
+                eauto_extern_euro += data.get("ladung_extern_euro", 0) or 0
             else:  # wallbox (nicht-dienstlich)
                 wb_ladung += data.get("ladung_kwh", 0) or 0
                 wb_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
+                wb_extern_euro += data.get("ladung_extern_euro", 0) or 0
 
         elif inv.typ == "balkonkraftwerk":
             bkw_kwh = get_pv_erzeugung_kwh(data)
@@ -281,6 +285,10 @@ async def get_cockpit_uebersicht(
     if emob_pv_ladung > emob_ladung:
         emob_pv_ladung = emob_ladung
     emob_km = eauto_km
+    # #260: externe Lade-Kosten poolen wie ladung_kwh — sonst rechnet die
+    # Cockpit-Übersicht externe Ladevorgänge als 0 € und liefert eine zu hohe
+    # E-Mob-Ersparnis im Vergleich zum E-Auto-Dashboard.
+    emob_extern_euro_total = max(eauto_extern_euro, wb_extern_euro)
 
     # Monatsdaten NUR für Anlagen-Energiebilanz
     md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
@@ -420,7 +428,7 @@ async def get_cockpit_uebersicht(
     emob_result = berechne_eauto_ersparnis(
         km_gefahren=emob_km,
         ladung_netz_kwh=emob_ladung - emob_pv_ladung,
-        ladung_extern_euro=0.0,  # Cockpit-Übersicht aggregiert über Heim-Ladung
+        ladung_extern_euro=emob_extern_euro_total,  # #260: war 0.0 hartcodiert
         wallbox_strompreis_cent=wallbox_preis_cent,
         eauto_parameter=emob_ref_parameter,
     )
