@@ -1303,17 +1303,67 @@ async def get_eauto_dashboard(
     if not eautos:
         return []
 
-    # Batch-Query: Alle Monatsdaten für alle E-Autos auf einmal laden
+    # Batch-Query: E-Auto-Monatsdaten + Wallbox-Monatsdaten auf einmal laden
+    # (#262 junky84: evcc-Portal-Import schreibt Ladedaten in die Wallbox-
+    # Investition; ohne diesen Pool sähe das E-Auto-Dashboard nichts).
     eauto_ids = [e.id for e in eautos]
+    wallbox_result = await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.WALLBOX.value)
+    )
+    wallboxen = wallbox_result.scalars().all()
+    wallbox_ids = [w.id for w in wallboxen]
+
     all_md_result = await db.execute(
         select(InvestitionMonatsdaten)
-        .where(InvestitionMonatsdaten.investition_id.in_(eauto_ids))
+        .where(InvestitionMonatsdaten.investition_id.in_(eauto_ids + wallbox_ids))
         .order_by(InvestitionMonatsdaten.investition_id, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
     )
     all_monatsdaten = all_md_result.scalars().all()
     md_by_inv: dict[int, list] = {}
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
+
+    # Wallbox-Aggregat über alle aktiven Wallboxen (für Pool-Fallback bei
+    # E-Autos ohne eigene Ladedaten — typischer evcc-Import-Fall).
+    wb_pool_pv = 0.0
+    wb_pool_netz = 0.0
+    wb_pool_extern_kwh = 0.0
+    wb_pool_extern_euro = 0.0
+    for w in wallboxen:
+        for md in md_by_inv.get(w.id, []):
+            if not w.ist_aktiv_im_monat(md.jahr, md.monat):
+                continue
+            d = md.verbrauch_daten or {}
+            wb_pool_pv += d.get('ladung_pv_kwh', 0) or 0
+            wb_pool_netz += d.get('ladung_netz_kwh', 0) or 0
+            wb_pool_extern_kwh += d.get('ladung_extern_kwh', 0) or 0
+            wb_pool_extern_euro += d.get('ladung_extern_euro', 0) or 0
+
+    # Σ E-Auto-Ladedaten über alle E-Autos für die Pool-Entscheidung
+    eauto_pool_pv = sum(
+        (md.verbrauch_daten or {}).get('ladung_pv_kwh', 0) or 0
+        for e in eautos for md in md_by_inv.get(e.id, [])
+        if e.ist_aktiv_im_monat(md.jahr, md.monat)
+    )
+    eauto_pool_netz = sum(
+        (md.verbrauch_daten or {}).get('ladung_netz_kwh', 0) or 0
+        for e in eautos for md in md_by_inv.get(e.id, [])
+        if e.ist_aktiv_im_monat(md.jahr, md.monat)
+    )
+    # Wallbox-Pool aktivieren, wenn Wallbox MEHR Heim-Ladung hat als die
+    # E-Autos zusammen (klassisches evcc-Setup). Pool-Anteil je E-Auto
+    # erfolgt anteilig nach gefahrenen km (siehe unten).
+    eauto_pool_summe = eauto_pool_pv + eauto_pool_netz
+    wb_pool_summe = wb_pool_pv + wb_pool_netz
+    use_wb_pool = wb_pool_summe > eauto_pool_summe
+
+    eauto_total_km = sum(
+        (md.verbrauch_daten or {}).get('km_gefahren', 0) or 0
+        for e in eautos for md in md_by_inv.get(e.id, [])
+        if e.ist_aktiv_im_monat(md.jahr, md.monat)
+    )
 
     dashboards = []
     for eauto in eautos:
@@ -1341,6 +1391,18 @@ async def get_eauto_dashboard(
             gesamt_extern_ladung += d.get('ladung_extern_kwh', 0)
             gesamt_extern_kosten += d.get('ladung_extern_euro', 0)
             gesamt_v2h += d.get('v2h_entladung_kwh', 0)
+
+        # Wallbox-Pool-Fallback (#262 junky84): wenn die Wallbox-Investition
+        # mehr Heim-Ladung enthält als alle E-Autos zusammen, sind die Daten
+        # offenbar via evcc-Portal-Import in die Wallbox geflossen. Anteilig
+        # nach gefahrenen km auf die E-Autos verteilen, damit das E-Auto-
+        # Dashboard nicht 0 zeigt.
+        if use_wb_pool and eauto_total_km > 0 and gesamt_km > 0:
+            anteil = gesamt_km / eauto_total_km
+            gesamt_pv_ladung = wb_pool_pv * anteil
+            gesamt_netz_ladung = wb_pool_netz * anteil
+            gesamt_extern_ladung = wb_pool_extern_kwh * anteil
+            gesamt_extern_kosten = wb_pool_extern_euro * anteil
 
         # Heim-Ladung (Wallbox) = PV + Netz
         gesamt_heim_ladung = gesamt_pv_ladung + gesamt_netz_ladung
@@ -1840,12 +1902,23 @@ async def get_wallbox_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # Aggregiere E-Auto-Heimladung über alle E-Autos
-    gesamt_heim_pv = 0
-    gesamt_heim_netz = 0
-    gesamt_extern_kwh = 0
-    gesamt_extern_euro = 0
-    gesamt_ladevorgaenge = 0
+    # E-Auto- und Wallbox-Aggregate getrennt erfassen — danach Pool-Max
+    # pro Feld (#262 junky84): evcc-Portal-Import schreibt die Ladedaten in
+    # die Wallbox-Investition (data_import.py:453), das Premium-Setup
+    # (separate E-Auto-Sensoren) befüllt sie aus E-Auto-Sicht. Vorher las
+    # das Dashboard nur die E-Auto-Sicht → bei evcc-Import zeigte das
+    # Wallbox-Dashboard "Noch keine Ladedaten". Pool-Max-Logik analog zu
+    # `cockpit/uebersicht.py:278-281` und `cockpit/komponenten.py:291-295`.
+    eauto_pv = 0
+    eauto_netz = 0
+    eauto_extern_kwh = 0
+    eauto_extern_euro = 0
+    eauto_ladevorgaenge = 0
+    wb_pv = 0
+    wb_netz = 0
+    wb_extern_kwh = 0
+    wb_extern_euro = 0
+    wb_ladevorgaenge = 0
     monate_set = set()
 
     # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
@@ -1860,30 +1933,32 @@ async def get_wallbox_dashboard(
         return not inv.ist_aktiv_im_monat(jahr, monat)
 
     eauto_id_set = set(eauto_ids)
-    for inv_id, md_list in md_by_inv.items():
-        if inv_id in eauto_id_set:
-            for md in md_list:
-                if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
-                    continue
-                d = md.verbrauch_daten or {}
-                gesamt_heim_pv += d.get('ladung_pv_kwh', 0)
-                gesamt_heim_netz += d.get('ladung_netz_kwh', 0)
-                gesamt_extern_kwh += d.get('ladung_extern_kwh', 0)
-                gesamt_extern_euro += d.get('ladung_extern_euro', 0)
-                # Fallback: ladevorgaenge aus E-Auto-Daten (manuelle Altdaten)
-                gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
-                monate_set.add((md.jahr, md.monat))
-
-    # Ladevorgänge aus Wallbox-Monatsdaten (Sensor-Mapping speichert hier)
     wallbox_id_set = set(wallbox_ids)
     for inv_id, md_list in md_by_inv.items():
-        if inv_id in wallbox_id_set:
-            for md in md_list:
-                if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
-                    continue
-                d = md.verbrauch_daten or {}
-                gesamt_ladevorgaenge += d.get('ladevorgaenge', 0)
-                monate_set.add((md.jahr, md.monat))
+        for md in md_list:
+            if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
+                continue
+            d = md.verbrauch_daten or {}
+            if inv_id in eauto_id_set:
+                eauto_pv += d.get('ladung_pv_kwh', 0)
+                eauto_netz += d.get('ladung_netz_kwh', 0)
+                eauto_extern_kwh += d.get('ladung_extern_kwh', 0)
+                eauto_extern_euro += d.get('ladung_extern_euro', 0)
+                eauto_ladevorgaenge += d.get('ladevorgaenge', 0)
+            elif inv_id in wallbox_id_set:
+                wb_pv += d.get('ladung_pv_kwh', 0)
+                wb_netz += d.get('ladung_netz_kwh', 0)
+                wb_extern_kwh += d.get('ladung_extern_kwh', 0)
+                wb_extern_euro += d.get('ladung_extern_euro', 0)
+                wb_ladevorgaenge += d.get('ladevorgaenge', 0)
+            monate_set.add((md.jahr, md.monat))
+
+    # Pool-Max pro Feld: größere Quelle gewinnt (Vehicle- vs. Loadpoint-Sicht).
+    gesamt_heim_pv = max(eauto_pv, wb_pv)
+    gesamt_heim_netz = max(eauto_netz, wb_netz)
+    gesamt_extern_kwh = max(eauto_extern_kwh, wb_extern_kwh)
+    gesamt_extern_euro = max(eauto_extern_euro, wb_extern_euro)
+    gesamt_ladevorgaenge = max(eauto_ladevorgaenge, wb_ladevorgaenge)
 
     gesamt_heim_ladung = gesamt_heim_pv + gesamt_heim_netz
     anzahl_monate = len(monate_set)
