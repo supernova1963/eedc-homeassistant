@@ -36,9 +36,9 @@ export default function HeroLeiste({ data, prevData, year }: {
       delta: trend(data.spezifischer_ertrag_kwh_kwp || 0, prevData?.spezifischer_ertrag_kwh_kwp ?? undefined),
       color: 'text-yellow-600 dark:text-yellow-400',
       bg: 'bg-yellow-50 dark:bg-yellow-900/20',
-      formel: 'PV-Erzeugung ÷ Anlagenleistung',
+      formel: 'PV-Erzeugung ÷ (Anlagenleistung × Periodenanteil)',
       berechnung: data.pv_erzeugung_kwh && data.anlagenleistung_kwp
-        ? `${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.anlagenleistung_kwp, 1)} kWp`
+        ? `${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.anlagenleistung_kwp, 1)} kWp — periodengenau (Jahresverlauf gewichtet)`
         : undefined,
     },
     {
