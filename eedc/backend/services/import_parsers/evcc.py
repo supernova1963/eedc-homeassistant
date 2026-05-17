@@ -4,9 +4,10 @@ EVCC (Electric Vehicle Charge Controller) CSV Parser.
 Unterstützt den CSV-Export der Ladevorgänge aus EVCC.
 
 Format:
-- Semikolon-getrennt, UTF-8 mit BOM
+- Komma- oder Semikolon-getrennt, UTF-8 mit BOM
 - Eine Zeile pro Ladevorgang (Session)
-- Spalten: Startzeit, Endzeit, Ladepunkt, Fahrzeug, Energie, Sonne %, Kilometerstand etc.
+- Spalten (DE): Startzeit, Endzeit, Ladepunkt, Fahrzeug, Energie, Sonne %, Kilometerstand etc.
+- Spalten (EN): Created, Finished, Charging point, Vehicle, Energy, Solar %, Mileage etc.
 - Wird pro Monat aggregiert: Summe Energie, Anzahl Ladevorgänge, PV-Anteil
 
 Besonderheiten:
@@ -22,6 +23,13 @@ from typing import Optional
 from .base import PortalExportParser, ParsedMonthData, ParserInfo
 from .registry import register_parser
 from .sma_sunny_portal import _normalize, _parse_float
+
+
+def _detect_delimiter(header_line: str) -> str:
+    """Wählt Delimiter anhand der ersten Zeile: häufigeres Zeichen gewinnt, Default ','."""
+    if header_line.count(";") > header_line.count(","):
+        return ";"
+    return ","
 
 
 def _parse_evcc_datetime(val: str) -> Optional[tuple[int, int]]:
@@ -56,35 +64,46 @@ class EVCCParser(PortalExportParser):
                 "(Electric Vehicle Charge Controller). Einzelne Sessions werden "
                 "pro Monat aggregiert: Gesamtenergie, Anzahl Ladevorgänge und PV-Anteil."
             ),
-            erwartetes_format="CSV (Semikolon-getrennt, UTF-8)",
+            erwartetes_format="CSV (Komma- oder Semikolon-getrennt, UTF-8)",
             anleitung=(
                 "1. EVCC Web-UI öffnen (z.B. http://evcc.local:7070)\n"
-                "2. Menü → 'Ladevorgänge' öffnen\n"
+                "2. Menü → 'Ladevorgänge' / 'Sessions' öffnen\n"
                 "3. Gewünschten Zeitraum auswählen\n"
                 "4. CSV-Download Button klicken\n"
                 "5. Die heruntergeladene CSV-Datei hier hochladen"
             ),
-            beispiel_header="Startzeit;Endzeit;Ladepunkt;Kennung;Fahrzeug;Kilometerstand (km);...;Energie (kWh);...;Sonne (%)",
+            beispiel_header="Created,Finished,Charging point,Vehicle,Mileage (km),Energy (kWh),Solar (%) — oder DE-Variante mit Startzeit;Energie;Sonne",
         )
 
     def can_parse(self, content: str, filename: str) -> bool:
-        """Erkennt EVCC-Format anhand typischer Spaltenbezeichnungen."""
+        """Erkennt EVCC-Format anhand typischer Spaltenbezeichnungen (DE + EN).
+
+        Andere EVCC-UI-Sprachen werden hier bewusst NICHT erkannt — bei manueller
+        EVCC-Auswahl liefert parse() dann eine klare Sprach-Hinweis-Fehlermeldung
+        statt False Positives gegen andere Wallbox-Exporte zu riskieren.
+        """
         lines = content.split("\n", 5)
         if not lines:
             return False
 
-        # Prüfe erste Zeile (Header) auf EVCC-typische Spalten
         header_line = lines[0].lower()
-        if ";" not in header_line:
+        if "," not in header_line and ";" not in header_line:
             return False
 
-        evcc_indicators = ["startzeit", "ladepunkt", "energie", "sonne"]
+        evcc_indicators = [
+            # DE
+            "startzeit", "ladepunkt", "energie", "sonne", "kilometerstand", "fahrzeug",
+            # EN
+            "created", "finished", "charging point", "energy", "solar", "mileage", "vehicle",
+        ]
         matches = sum(1 for ind in evcc_indicators if ind in header_line)
         return matches >= 3
 
     def parse(self, content: str) -> list[ParsedMonthData]:
         """Parsed EVCC CSV und aggregiert Sessions pro Monat."""
-        reader = csv.reader(StringIO(content), delimiter=";")
+        first_line = content.split("\n", 1)[0]
+        delimiter = _detect_delimiter(first_line)
+        reader = csv.reader(StringIO(content), delimiter=delimiter)
         rows = list(reader)
 
         if len(rows) < 2:
@@ -93,15 +112,30 @@ class EVCCParser(PortalExportParser):
         headers = [h.strip() for h in rows[0]]
         normalized_headers = [_normalize(h) for h in headers]
 
-        # Spalten-Indizes finden
-        col_startzeit = self._find_col(normalized_headers, ["startzeit", "start"])
-        col_energie = self._find_col(normalized_headers, ["energie"])
-        col_sonne = self._find_col(normalized_headers, ["sonne"])
-        col_solarenergie = self._find_col(normalized_headers, ["solarenergie"])
-        col_km = self._find_col(normalized_headers, ["kilometerstand"])
+        # Spalten-Indizes finden (DE + EN). Reihenfolge der Patterns ist egal —
+        # _find_col scannt spaltenweise und gibt den ersten Treffer zurück.
+        # Wichtig: "start" allein würde "meter start" matchen → bewusst weggelassen.
+        col_startzeit = self._find_col(
+            normalized_headers, ["startzeit", "created", "start time", "begin"]
+        )
+        col_energie = self._find_col(normalized_headers, ["energie", "energy"])
+        col_sonne = self._find_col(normalized_headers, ["sonne", "solar", "sun"])
+        col_solarenergie = self._find_col(
+            normalized_headers, ["solarenergie", "solar energy"]
+        )
+        col_km = self._find_col(normalized_headers, ["kilometerstand", "mileage"])
 
         if col_startzeit is None or col_energie is None:
-            return []
+            # Header in einer anderen Sprache als DE/EN — EVCC lokalisiert die
+            # Spaltennamen anhand der UI-Sprache. Klare Anweisung statt
+            # generischem "keine Monatsdaten gefunden".
+            raise ValueError(
+                "EVCC-Spalten konnten nicht erkannt werden. Der Parser unterstützt "
+                "bisher nur deutsche und englische EVCC-Exporte. Bitte in EVCC "
+                "die UI-Sprache auf Deutsch oder Englisch umstellen "
+                "(Einstellungen → Sprache) und die CSV-Datei erneut exportieren. "
+                f"Erkannte Spalten: {', '.join(headers[:8])}…"
+            )
 
         # Sessions pro Monat aggregieren
         monthly_energie: dict[tuple[int, int], float] = defaultdict(float)
