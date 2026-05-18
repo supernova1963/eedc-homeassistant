@@ -2,6 +2,8 @@
 
 > **ARCHIVIERT** — Alle Phasen umgesetzt.
 > Phase 1 (v3.4.0): WetterWidget KPI + Chart-Linie | Phase 2 (v3.4.1): Cockpit-Vergleich + Morgen-Vorschau | Auslöser: User-Anfragen (2 User)
+>
+> **Korrektur 2026-05-18:** SFML Stats läuft sowohl auf ARM als auch auf x86_64. Die Aussagen in der Plattform-Tabelle und im „Warum leichtgewichtig"-Abschnitt, dass SFML Stats nur auf x86_64 läuft, sind nicht korrekt — Hinweis vom Entwickler Tom-HA / Zara-Toorox. Das damalige „EEDC schließt die Lücke auf ARM/Pi"-Argument gilt entsprechend nicht; der eigentliche Mehrwert lag immer im Kontext (Monatsdaten, ROI, Multi-Anlagen).
 
 ## Kontext
 
