@@ -24,6 +24,7 @@
 - **Wallbox- und E-Auto-Dashboards mit Pool-Daten gefüllt** (#262 junky84): Wer evcc-Portal-Import nutzt, sah die Ladedaten in der Cockpit-Übersicht korrekt, aber Wallbox- und E-Auto-Dashboards standen leer. Architektur-Grund: evcc-CSV schreibt Ladedaten in die Wallbox-Investition, beide Dashboards lasen aber nur ihren eigenen Pfad. Sie greifen jetzt analog zur Cockpit-Übersicht auf den Pool zurück; das E-Auto-Dashboard verteilt das Wallbox-Aggregat km-anteilig auf die E-Autos.
 - **Spezifischer Ertrag periodengenau** (PR #265 stlorenz): Bei Anlagen mit nachträglicher Erweiterung (Modul oder Speicher hinzu) wird der spezifische Ertrag jetzt periodengenau monatsweise gewichtet bestimmt, nicht auf Stichtag-Leistung.
 - **HA-Backup-Konsistenz** (PR #266 stlorenz): WAL-Checkpoint vor jedem Snapshot-Export — verhindert die Race-Condition, in der ein HA-Backup eine inkonsistente eedc-DB aufnehmen konnte.
+- **Daten-Checker „Tag reparieren": konkrete Rückmeldung** (Feedback dietmar1968): Bisher kam pauschal „Tag aus HA-Statistics neu aggregiert" zurück — auch wenn der Wert sich tatsächlich nicht geändert hat. Der Toast zeigt jetzt drei Varianten: tatsächliche Reparatur („PV 71,8 → 67,6 kWh"), unveränderter Wert mit Hinweis aufs Sensor-Mapping (HA-LTS deckt einen Sensor möglicherweise nicht ab), oder Fallback ohne Vorher-Wert. Damit erkennst du beim mehrfachen Klicken auf einen Schlag, ob die Reparatur greift oder nicht.
 
 #### Außerdem: UI-Pfad-Hinweise konsistent korrigiert
 

@@ -147,18 +147,54 @@ async def reaggregate_tag(
     zur Vor-3d-Direkt-Variante: mit_resnap=True (Default) zieht vorher
     Snapshots aus HA-LTS für Vortag-23:00 + Folgetag-00:00 Boundaries,
     danach `aggregate_day(datenquelle="manuell")`.
+
+    Response enthält die PV-Tagessumme vor und nach dem Lauf, damit das
+    Frontend dem Anwender konkret zeigen kann, was sich geändert hat
+    (oder eben nicht — siehe Drift-Knopf-Diagnose im Daten-Checker).
     """
+    pv_kwh_alt = await _pv_tagessumme(db, anlage_id, datum)
     summary = await _run_via_orchestrator(
         db,
         anlage_id=anlage_id,
         operation=RepairOperationType.REAGGREGATE_DAY,
         params={"datum": datum.isoformat(), "mit_resnap": mit_resnap},
     )
+    pv_kwh_neu = await _pv_tagessumme(db, anlage_id, datum)
     return {
         "status": "ok",
         "datum": summary.get("datum", datum.isoformat()),
         "stunden_verfuegbar": summary.get("stunden_verfuegbar"),
+        "pv_kwh_alt": pv_kwh_alt,
+        "pv_kwh_neu": pv_kwh_neu,
     }
+
+
+async def _pv_tagessumme(
+    db: AsyncSession, anlage_id: int, datum: date,
+) -> Optional[float]:
+    """Liefert die PV-Tagessumme (Σ pv_* + bkw_* aus komponenten_kwh) für
+    einen Tag. None, wenn keine TagesZusammenfassung existiert.
+
+    Nutzt dieselbe Aggregationslogik wie _check_datenquelle_drift —
+    damit ist das Frontend-Δ konsistent mit der Drift-Anzeige.
+    """
+    tz_result = await db.execute(
+        select(TagesZusammenfassung).where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum == datum,
+        )
+    )
+    tz = tz_result.scalar_one_or_none()
+    if tz is None or not tz.komponenten_kwh:
+        return None
+    return round(
+        sum(
+            float(v) for k, v in tz.komponenten_kwh.items()
+            if isinstance(v, (int, float))
+            and (k.startswith("pv_") or k.startswith("bkw_"))
+        ),
+        2,
+    )
 
 
 @router.post("/{anlage_id}/reaggregate-bereich")

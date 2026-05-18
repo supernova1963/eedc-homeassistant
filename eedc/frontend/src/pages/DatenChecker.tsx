@@ -198,11 +198,25 @@ export default function DatenChecker() {
     setReparaturBusy(key)
     setReparaturMessage(null)
     try {
-      await energieProfilApi.reaggregateTag(anlageId, datum, true)
-      setReparaturMessage({
-        art: 'ok',
-        text: `Tag ${datum} aus HA-Statistics neu aggregiert.`,
-      })
+      const result = await energieProfilApi.reaggregateTag(anlageId, datum, true)
+      // PV-Tagessumme vor/nach dem Lauf konkretisieren — Etappe-6-Drift-Knopf
+      // gibt sonst pauschal "OK" zurück, auch wenn aggregate_day inhaltlich
+      // nichts geändert hat (z.B. weil HA-LTS für einen Sensor leer liefert
+      // und die Drift aus eedc-eigener Riemann-Summe stammt).
+      const alt = result.pv_kwh_alt
+      const neu = result.pv_kwh_neu
+      let text: string
+      if (alt !== null && neu !== null && Math.abs(alt - neu) < 0.1) {
+        text =
+          `Tag ${datum}: PV-Wert blieb ${alt.toFixed(1)} kWh (keine Änderung). ` +
+          `Wenn die Drift-Anzeige bestehen bleibt, liegt sie vermutlich an einem ` +
+          `Sensor ohne HA-LTS-Daten — Sensor-Mapping prüfen (state_class total_increasing).`
+      } else if (alt !== null && neu !== null) {
+        text = `Tag ${datum} repariert: PV ${alt.toFixed(1)} → ${neu.toFixed(1)} kWh.`
+      } else {
+        text = `Tag ${datum} aus HA-Statistics neu aggregiert.`
+      }
+      setReparaturMessage({ art: 'ok', text })
       // Daten-Checker neu laden → Eintrag verschwindet, wenn Drift jetzt unter Schwelle
       setRefreshKey(k => k + 1)
     } catch (e) {
