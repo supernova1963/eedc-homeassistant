@@ -76,13 +76,18 @@ Bei der ersten Verwendung: `claude` ausführen und mit Anthropic-Account authent
 
 ## 4. Git konfigurieren
 
+> **Wichtig:** Trage deine eigene Identität ein — nicht die hier nur als
+> Platzhalter gezeigten Werte des Maintainers übernehmen. Das Setup-Skript
+> setzt diese Werte bewusst NICHT automatisch, sondern weist nur darauf hin,
+> wenn noch keine globale Git-Identität existiert.
+
 ```bash
-git config --global user.name "supernova1963"
-git config --global user.email "supernova1963@users.noreply.github.com"
+git config --global user.name "Dein Name"
+git config --global user.email "deine@email.tld"
 git config --global init.defaultBranch main
 
 # GitHub SSH-Key einrichten (empfohlen)
-ssh-keygen -t ed25519 -C "supernova1963@users.noreply.github.com"
+ssh-keygen -t ed25519 -C "deine@email.tld"
 cat ~/.ssh/id_ed25519.pub
 # → Public Key zu GitHub hinzufügen: https://github.com/settings/keys
 ```
@@ -281,7 +286,7 @@ ls ~/claude/eedc-homeassistant/eedc/backend/venv/bin/python3  # venv vorhanden
 ls ~/claude/eedc-homeassistant/eedc/frontend/node_modules/.bin/vite  # npm installiert
 
 echo "=== Git ==="
-git config --global user.email  # supernova1963@users.noreply.github.com
+git config --global user.email  # → deine eigene Email
 ```
 
 ---

@@ -49,14 +49,17 @@ else
 fi
 
 section "4. Git konfigurieren"
+# Git-Identität setzt das Skript bewusst NICHT — das ist eine persönliche
+# Einstellung und gehört zur jeweiligen Maschine/dem jeweiligen Account.
+# Hardcoding meiner GitHub-Identität würde fremde User überschreiben.
 CURRENT_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
 if [ -z "$CURRENT_EMAIL" ]; then
-  git config --global user.name "supernova1963"
-  git config --global user.email "supernova1963@users.noreply.github.com"
-  git config --global init.defaultBranch main
-  info "Git konfiguriert"
+  warn "Keine globale Git-Identität gesetzt. Bitte selbst konfigurieren:"
+  warn "  git config --global user.name  \"Dein Name\""
+  warn "  git config --global user.email \"deine@email.tld\""
+  warn "  git config --global init.defaultBranch main"
 else
-  info "Git bereits konfiguriert: $CURRENT_EMAIL"
+  info "Git-Identität bereits konfiguriert: $CURRENT_EMAIL (unverändert)"
 fi
 
 section "5. VS Code"
