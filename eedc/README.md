@@ -30,6 +30,24 @@ docker-compose up -d
 
 EEDC ist erreichbar unter: http://localhost:8099
 
+## ⚠️ Sicherheit: Standalone-Modus ist für LAN-Betrieb gedacht
+
+Die Standalone-Distribution (dieser Container, `docker-compose up`) bietet **keine eigene Authentifizierung** auf der HTTP-API. Anders als die Home-Assistant-Add-on-Variante (die hinter dem HA-Ingress-Auth-Proxy läuft) wird der Port `8099` direkt vom Container an das Host-LAN exponiert.
+
+**Daraus folgt:**
+
+- ✅ Betrieb im **eigenen, vertrauenswürdigen LAN** (Heimnetz hinter Router-Firewall) ist der gedachte Anwendungsfall.
+- ❌ **Niemals direkt ins Internet exponieren** — kein Port-Forwarding auf 8099, keine Cloudflare-Tunnel ohne Auth-Layer davor, kein Reverse-Proxy ohne Basic-Auth oder mTLS.
+- ⚠️ **In geteilten Netzen vorsichtig** (Gäste-WLAN, WG, Co-Working): wer im selben Subnetz ist, erreicht die API. Cloud-Credentials und Anlagendaten sind damit ohne Auth lesbar.
+
+**Wer Internet-Zugriff braucht:**
+
+- VPN ins Heimnetz (WireGuard, Tailscale) ist der einfachste und sicherste Weg.
+- Reverse-Proxy mit Basic-Auth / OAuth2-Proxy / Cloudflare Access davor, wenn HTTPS-Zugang von außen wirklich nötig ist.
+- Oder: die Home-Assistant-Add-on-Variante installieren — HA-Login schützt die API dann automatisch.
+
+Ein eigener API-Auth-Layer für den Standalone-Container ist in der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110), aber bis dahin gilt: **LAN-Only, niemals ungeschützt ins Internet**.
+
 ### Entwicklung
 
 ```bash
