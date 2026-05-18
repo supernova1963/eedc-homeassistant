@@ -20,7 +20,7 @@ from backend.core.calculations import (
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
-from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE
+from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
 from backend.core.field_definitions import (
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
@@ -236,7 +236,7 @@ async def get_cockpit_uebersicht(
             wp_strom += get_wp_strom_kwh(data, inv.parameter)
 
         elif inv.typ in ("e-auto", "wallbox"):
-            if (inv.parameter or {}).get("ist_dienstlich", False):
+            if ist_dienstlich(inv):
                 netz_kwh = data.get("ladung_netz_kwh", 0) or 0
                 pv_kwh = data.get("ladung_pv_kwh", 0) or 0
                 dienstlich_ladekosten_euro += (
@@ -418,7 +418,7 @@ async def get_cockpit_uebersicht(
         i for i in investitionen
         if i.typ in ("e-auto", "wallbox")
         and i.ist_aktiv_an(today)
-        and not (i.parameter or {}).get("ist_dienstlich", False)
+        and not ist_dienstlich(i)
     ]
     hat_emobilitaet = len(emob_invs) > 0
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None

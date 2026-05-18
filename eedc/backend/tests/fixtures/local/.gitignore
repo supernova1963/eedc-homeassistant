@@ -1,0 +1,5 @@
+# Alles in diesem Ordner ist lokal — nicht in git tracken
+*
+# außer dieser .gitignore und der README
+!.gitignore
+!README.md

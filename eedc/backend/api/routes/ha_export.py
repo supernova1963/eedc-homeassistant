@@ -35,6 +35,7 @@ from backend.core.investition_parameter import (
     PARAM_SPEICHER,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
+    ist_dienstlich,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -235,7 +236,7 @@ async def calculate_anlage_sensors(
     waermepumpen = [i for i in investitionen if i.typ == "waermepumpe"]
     e_autos = [
         i for i in investitionen
-        if i.typ == "e-auto" and not (i.parameter or {}).get("ist_dienstlich", False)
+        if i.typ == "e-auto" and not ist_dienstlich(i)
     ]
     balkonkraftwerke = [i for i in investitionen if i.typ == "balkonkraftwerk"]
 

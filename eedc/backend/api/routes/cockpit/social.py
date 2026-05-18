@@ -31,6 +31,7 @@ from backend.core.field_definitions import (
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.services.community_service import get_region_from_plz
 from backend.api.routes.cockpit._shared import MONATSNAMEN
+from backend.core.investition_parameter import ist_dienstlich
 
 router = APIRouter()
 
@@ -156,7 +157,7 @@ async def get_share_text(
                 get_wp_heizenergie_kwh(data) + (data.get("warmwasser_kwh", 0) or 0)
             )
             wp_strom += get_wp_strom_kwh(data, inv.parameter)
-        elif inv.typ in ("e-auto", "wallbox") and not (inv.parameter or {}).get("ist_dienstlich", False):
+        elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
             emob_km += data.get("km_gefahren", 0) or 0
             emob_ladung += get_eauto_ladung_kwh(data)
             emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
@@ -182,7 +183,7 @@ async def get_share_text(
     wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 and wp_waerme > 0 else 0
 
     hat_emobilitaet = any(
-        i.typ in ("e-auto", "wallbox") and not (i.parameter or {}).get("ist_dienstlich", False)
+        i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
         for i in investitionen
     )
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else 0
