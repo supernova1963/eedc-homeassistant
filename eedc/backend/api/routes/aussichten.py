@@ -40,6 +40,7 @@ from backend.core.investition_parameter import (
     PARAM_E_AUTO_DEFAULTS,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
+    ist_dienstlich,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_netto
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
@@ -901,7 +902,7 @@ async def get_finanz_prognose(
     pv_module = [i for i in alle_investitionen if i.typ == "pv-module"]
     speicher = [i for i in alle_investitionen if i.typ == "speicher"]
     e_autos = [i for i in alle_investitionen
-               if i.typ == "e-auto" and not (i.parameter or {}).get("ist_dienstlich", False)]
+               if i.typ == "e-auto" and not ist_dienstlich(i)]
     waermepumpen = [i for i in alle_investitionen if i.typ == "waermepumpe"]
     balkonkraftwerke = [i for i in alle_investitionen if i.typ == "balkonkraftwerk"]
     sonstiges_investitionen = [i for i in alle_investitionen if i.typ == "sonstiges"]
@@ -1226,7 +1227,7 @@ async def get_finanz_prognose(
     # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene Einspeisung)
     bisherige_dienstlich_ladekosten = 0.0
     for inv in alle_investitionen:
-        if inv.typ in ("e-auto", "wallbox") and (inv.parameter or {}).get("ist_dienstlich", False):
+        if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
             for (inv_id, jahr, monat), daten in historische_inv_daten.items():
                 if inv_id == inv.id:
                     netz_kwh = daten.get("ladung_netz_kwh", 0) or 0
