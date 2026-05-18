@@ -1,11 +1,34 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.31.0)
+> **Stand:** Mai 2026 (v3.31.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.31.3 — Bündel-Release: Sieben Bugfixes + Pfad-Hinweise (Mai 2026)
+
+### Bündel-Release nach Etappen-Tagen *(v3.31.3)*
+
+> 🛠 **Bündel statt Einzel-Patches.** Aus Forum und Issues sind sieben kleinere Bugfixes aufgelaufen — jeder für sich kein Release wert, gemeinsam aber der saubere Abschluss. Schwerpunkt: drei Aggregations-Drifts (E-Mobilität, Strompreis, Wallbox-Dashboards), zwei Robustheits-Fixes (Cloud-Import, getrennte WP-Strommessung), zwei stlorenz-Beiträge zur Genauigkeit.
+
+#### Was sich für dich ändert
+
+- **E-Mobilität-Ersparnis stimmt jetzt überall** (#260 NongJoWo): Die Cockpit-Übersicht zeigte ~273 € weniger Ersparnis als das E-Auto-Dashboard. Drei Cockpit-Pfade hatten externe Lade-Kosten hartcodiert auf 0 € — sie ziehen jetzt denselben Wert wie das Dashboard.
+- **Cloud-Import-Credentials werden automatisch getrimmt** (#261 FrodoVDR): API-Keys werden beim Einfügen aus Hersteller-Portalen oft mit Leerzeichen kopiert, was SolarEdge mit HTTP 403 quittierte. Frontend + Backend trimmen jetzt User-Eingaben vor dem API-Call.
+- **Daten-Checker meldet WP mit getrennter Strommessung nicht mehr als „fehlend"** (Forum dietmar1968): Wer seit v3.25.x Strom Heizen und Strom Warmwasser getrennt erfasst, bekam unter Daten-Checker fälschlich „WP-Stromverbrauch fehlt" angezeigt. Die Prüfung respektiert jetzt den getrennten Pfad.
+- **Live-Tagesverlauf: glatte Strompreis-Treppe statt EPEX-Sprünge** (#267 rilmor-mhrs): Bei Tibber liefert HA alle 15 Minuten ein Step-Update, die Live-Tagesverlauf-Logik prüfte aber pro 10-Min-Slot — leere Slots fielen auf den EPEX-Börsenpreis zurück (~8 ct statt ~35 ct), die Kurve sah wie ein Sägezahn aus. Jetzt: leerer Slot übernimmt zuerst den letzten Tibber-Wert (Step-Funktion-Semantik), EPEX nur noch als finaler Fallback ohne jeden Tagespunkt.
+- **Wallbox- und E-Auto-Dashboards mit Pool-Daten gefüllt** (#262 junky84): Wer evcc-Portal-Import nutzt, sah die Ladedaten in der Cockpit-Übersicht korrekt, aber Wallbox- und E-Auto-Dashboards standen leer. Architektur-Grund: evcc-CSV schreibt Ladedaten in die Wallbox-Investition, beide Dashboards lasen aber nur ihren eigenen Pfad. Sie greifen jetzt analog zur Cockpit-Übersicht auf den Pool zurück; das E-Auto-Dashboard verteilt das Wallbox-Aggregat km-anteilig auf die E-Autos.
+- **Spezifischer Ertrag periodengenau** (PR #265 stlorenz): Bei Anlagen mit nachträglicher Erweiterung (Modul oder Speicher hinzu) wird der spezifische Ertrag jetzt periodengenau monatsweise gewichtet bestimmt, nicht auf Stichtag-Leistung.
+- **HA-Backup-Konsistenz** (PR #266 stlorenz): WAL-Checkpoint vor jedem Snapshot-Export — verhindert die Race-Condition, in der ein HA-Backup eine inkonsistente eedc-DB aufnehmen konnte.
+- **Daten-Checker „Tag reparieren": konkrete Rückmeldung** (Feedback dietmar1968): Bisher kam pauschal „Tag aus HA-Statistics neu aggregiert" zurück — auch wenn der Wert sich tatsächlich nicht geändert hat. Der Toast zeigt jetzt drei Varianten: tatsächliche Reparatur („PV 71,8 → 67,6 kWh"), unveränderter Wert mit Hinweis aufs Sensor-Mapping (HA-LTS deckt einen Sensor möglicherweise nicht ab), oder Fallback ohne Vorher-Wert. Damit erkennst du beim mehrfachen Klicken auf einen Schlag, ob die Reparatur greift oder nicht.
+
+#### Außerdem: UI-Pfad-Hinweise konsistent korrigiert
+
+Hinweistexte in der App (Monatsabschluss-Wizard, Daten-Checker-Drift-Liste) und in den Release-Notes verwiesen auf einen nicht existierenden Menüpunkt „Wartung". Der korrekte Pfad lautet **Einstellungen → Daten → Energieprofil → Reparatur-Werkbank**. Elf Stellen in einem Rutsch gefixt — App + In-App-Hilfe + Release-Notes durchgängig stimmig.
 
 ---
 
@@ -31,7 +54,7 @@ Außerdem: maximal 20 Tage werden angezeigt, sortiert nach der absoluten Abweich
 
 #### Mehrere Tage auf einmal
 
-Wenn du z. B. einen ganzen Monat reparieren willst, ist *Wartung → Reparatur-Werkbank → Bereich neu aggregieren* der schnellere Weg. **Bewusst nicht als Massen-Knopf in der Diff-Liste** — Massen-Aktionen sollen aktiv gewählt werden, nicht versehentlich passieren.
+Wenn du z. B. einen ganzen Monat reparieren willst, ist *Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren* der schnellere Weg. **Bewusst nicht als Massen-Knopf in der Diff-Liste** — Massen-Aktionen sollen aktiv gewählt werden, nicht versehentlich passieren.
 
 #### Was passiert beim Klick auf „Tag reparieren"
 
@@ -61,8 +84,8 @@ eedc liest die Stunden-kWh des Tages frisch aus HA-Statistics, baut die TagesEne
 
 **Bestehende Tage (vor dem Update)** bleiben zunächst auf ihrem alten Wert. Der Auto-Vollbackfill beim nächsten Monatsabschluss füllt nur *fehlende* Tage nach (er ist bewusst additiv, damit manuell korrigierte Werte nicht überschrieben werden). Wenn du gezielt einen bestehenden Tag auf die saubere HA-Statistics-Quelle umstellen willst, hast du zwei Wege:
 
-1. **Einzelner Tag** (z. B. der Tag mit der bekannten Drift): `Aussichten → Energieprofil → Tagestabelle → Reload-Knopf (↻)` beim betreffenden Tag — du bekommst eine Vorschau (alt vs. neu) vor der Übernahme.
-2. **Zeitraum** (z. B. ein Monat): `Wartung → Reparatur-Werkbank → Bereich neu aggregieren` mit Von-/Bis-Datum.
+1. **Einzelner Tag** (z. B. der Tag mit der bekannten Drift): `Auswertungen → Energieprofil → Tagestabelle → Reload-Knopf (↻)` beim betreffenden Tag — du bekommst eine Vorschau (alt vs. neu) vor der Übernahme.
+2. **Zeitraum** (z. B. ein Monat): `Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren` mit Von-/Bis-Datum.
 
 #### Wo siehst du, dass es funktioniert
 
@@ -133,7 +156,7 @@ Wer „Sonstiges" für andere Verbraucher (Pool, Sauna, Werkstatt) oder Erzeuger
 #### Was sich für dich ändert
 
 - **Stundenwerte > kWp × 1,5 werden zur Datenlücke**. Beispiel bei einer 11,2 kWp-Anlage: alles über 16,8 kWh in einer einzelnen Stunde gilt als Counter-Off-by-one und wird in `TagesEnergieProfil` als Lücke (—) gespeichert statt als Spike. Heatmap, Lernfaktor und Monatsbericht zeigen die Lücke ehrlich statt einen physikalisch unmöglichen Wert mitzuschleppen.
-- **„Tag neu aggregieren" funktioniert jetzt auch bei Counter-Spikes**. Wer einen Spike in der Vergangenheit hat: **Wartung → Reparatur-Werkbank → Tag neu aggregieren** für den betroffenen Tag — die Werkbank zeigt jetzt eine echte Änderung statt „0 Slots geändert".
+- **„Tag neu aggregieren" funktioniert jetzt auch bei Counter-Spikes**. Wer einen Spike in der Vergangenheit hat: **Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Tag neu aggregieren** für den betroffenen Tag — die Werkbank zeigt jetzt eine echte Änderung statt „0 Slots geändert".
 - **Anlagen ohne hinterlegte PV-Leistung** sind nicht betroffen — ohne kWp-Angabe kann eedc keine sinnvolle Schwelle ableiten. Der Stammdaten-Check erinnert ohnehin separat daran.
 
 *(Forum-Beitrag #529, dietmar1968.)*

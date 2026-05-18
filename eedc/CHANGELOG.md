@@ -7,6 +7,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.3] - 2026-05-18 — Bündel-Release: Aggregations-Drifts + Forum-Bugfixes + Pfad-Hinweise
+
+> 🛠 **Bündel-Release nach drei Etappen-Tagen.** Sieben anwender-relevante Bugfixes aus Forum + Issues, dazu eine konsistente Korrektur veralteter UI-Pfad-Hinweise. Schwerpunkt: drei Aggregations-Drifts in unterschiedlichen Verbrauchsbereichen (E-Mob-Ersparnis, Live-Tagesverlauf-Strompreis, Wallbox+E-Auto-Dashboards), zwei Robustheits-Fixes (Cloud-Import-Whitespace, getrennte WP-Strommessung), zwei stlorenz-Beiträge (Cockpit-Genauigkeit, HA-Backup-Konsistenz).
+
+### Fixed
+
+- **E-Mobilität-Ersparnis: externe Lade-Kosten in Cockpit-Pfaden mitrechnen** (#260 NongJoWo): Die Cockpit-Übersicht und der aktuelle Monatsbericht zeigten ~273 € weniger Ersparnis als das E-Auto-Dashboard. Ursache: drei Aufrufer von `berechne_eauto_ersparnis` hatten `ladung_extern_euro=0.0` hartcodiert, das E-Auto-Dashboard zog den Wert korrekt aus den evcc-Portal-Daten. Alle drei Aufrufer ziehen jetzt denselben Wert. Memory-Linie `feedback_aggregations_drift.md`.
+- **Cloud-Import: Whitespace in Credentials trimmen** (#261 FrodoVDR): API-Keys aus Hersteller-Portalen werden oft mit Leerzeichen am Anfang oder Ende kopiert, SolarEdge antwortet darauf mit 403. Frontend und Backend trimmen jetzt User-Eingaben für Cloud-Import-Credentials vor dem API-Call. Memory-Linie `feedback_credential_whitespace.md`.
+- **Daten-Checker: WP mit getrennter Strommessung nicht als fehlend melden** (Forum dietmar1968): Der Daten-Checker prüfte hartcodiert das Legacy-Feld `stromverbrauch_kwh` und meldete eine fehlende Konfiguration, auch wenn `stromverbrauch_heizen_kwh` + `stromverbrauch_warmwasser_kwh` korrekt gemappt waren (getrennte Strommessung seit v3.25.x). Prüfung respektiert jetzt den `getrennte_strommessung`-Pfad.
+- **Live-Tagesverlauf: Strompreis-Carry-Forward statt EPEX-Sprung** (#267 rilmor-mhrs): Bei Tibber liefert HA alle 15 Minuten ein Step-Update — der Live-Tagesverlauf prüfte aber pro 10-Min-Slot, ob ein Update *innerhalb* des Slots liegt. Jeder zweite oder dritte Slot ohne Update fiel auf den EPEX-Börsenpreis-Fallback (~8-12 ct statt ~35 ct Tibber-Endkundenpreis) — die Strompreis-Linie zeigte hässliche Sprünge. Tibber/aWATTar sind Step-Funktionen: bei leerem Slot wird jetzt zuerst der letzte bekannte Wert weitergeführt, EPEX nur noch als finaler Fallback ohne jeden Tagespunkt. Fünf Akzeptanztests.
+- **Wallbox- und E-Auto-Dashboards: Pool-Fallback bei evcc-Import** (#262 junky84): evcc-Portal-Import schreibt Ladedaten architektonisch in die Wallbox-Investition (km gehen zum E-Auto). Die Cockpit-Übersicht griff das korrekt via Pool-Max ab, aber Wallbox- und E-Auto-Dashboards lasen jeweils nur den eigenen Pfad — bei junky84 zeigten beide „Noch keine Ladedaten vorhanden" trotz 4,12 MWh im Pool. Beide Dashboards bekommen jetzt dieselbe Pool-Max-Logik wie Cockpit; E-Auto-Dashboard verteilt Wallbox-Aggregate km-anteilig auf die E-Autos. Premium-Setups mit separat gepflegten E-Auto-Sensoren unverändert.
+- **Cockpit: Spezifischer Ertrag periodengenau & jahresverlauf-gewichtet** (PR #265 stlorenz): KPI „Spezifischer Ertrag" bezog sich bisher auf die Anlagenleistung zum Stichtag — bei nachträglichen Erweiterungen (Modul hinzu, Speicher dazu) verzerrte das die Anzeige. Der spezifische Ertrag wird jetzt periodengenau gewichtet pro Monat über den Jahresverlauf bestimmt.
+- **HA-Backup-Konsistenz via WAL-Checkpoint** (PR #266 stlorenz): Vor jedem Snapshot-Export wird jetzt ein WAL-Checkpoint geschrieben — verhindert die Race-Condition, in der HA-Backups eine inkonsistente DB-Datei aufnehmen konnten.
+- **Daten-Checker Drift-Knopf: konkrete Vorher/Nachher-Anzeige im Toast** (PN dietmar1968): „Tag reparieren" gab bisher pauschal „OK" zurück, auch wenn `aggregate_day` inhaltlich nichts geändert hatte (z. B. weil HA-LTS für einen der gemappten PV-Sensoren keine `sum`-Spalte hat — die Riemann-Summe aus dem Live-Tagesverlauf wird dann nicht durch HA-LTS-Boundaries überschrieben, die Drift bleibt). Endpoint liefert jetzt `pv_kwh_alt` + `pv_kwh_neu` mit derselben Aggregations-Logik wie der Drift-Check. Frontend zeigt drei Toast-Varianten: tatsächliche Änderung („PV 71,8 → 67,6 kWh"), unveränderter Wert mit Sensor-Mapping-Hinweis, oder Fallback ohne Werte (frische Aggregation ohne vorherige Zusammenfassung). Memory-Linie `feedback_daten_checker_kein_akzeptiert.md`.
+
+### Changed
+
+- **UI-Pfad-Hinweise konsistent korrigiert**: Hinweistexte im Monatsabschluss-Wizard, in der Daten-Checker-Drift-Liste und in den Release-Notes verwiesen auf einen nicht existierenden Menüpunkt „Wartung". Korrekt: „Einstellungen → Daten → Energieprofil → Reparatur-Werkbank". Elf Stellen synchron gefixt (Frontend-Wizard, Backend-API-Response, Daten-Checker-Hinweis, CHANGELOG, WAS-IST-NEU, KONZEPT-Doku, In-App-Hilfe via sync-help.sh). Außerdem ein „Aussichten → Energieprofil"-Tippfehler korrigiert (richtig „Auswertungen").
+
+### Tests
+
+151/151 grün — bestehende Suite, keine neuen Tests dazu/entfernt.
+
+---
+
 ## [3.31.2] - 2026-05-17 — Hotfix: „Tag reparieren"-Knopf in Daten-Checker
 
 ### Fixed
@@ -26,7 +51,7 @@ Wer v3.31.1 bereits installiert hat: einmal aktualisieren, dann erscheint der Re
 
 ### Added
 
-- **Daten-Checker-Kategorie *„Datenquelle – Drift zu HA-Statistics"***: vergleicht die PV-Tagessumme der TagesZusammenfassung mit der HA-Statistics-Tagessumme der letzten 90 Tage. Tage mit Drift bekommen pro Tag einen INFO-Eintrag mit eedc-Wert, HA-Wert und Differenz in kWh und Prozent. Direkt daneben ein „Tag reparieren"-Knopf, der den bestehenden `/reaggregate-tag`-Endpoint aufruft. Schwelle: ≥ 2 kWh UND ≥ 5 % Abweichung gleichzeitig (Boundary-Rauschen wird unterdrückt). Liste auf die 20 Tage mit größtem |Δ| begrenzt. Bewusst kein Sammel-Reparatur-Knopf in der Liste — für mehrere Tage gibt es weiterhin `Wartung → Reparatur-Werkbank → Bereich neu aggregieren`.
+- **Daten-Checker-Kategorie *„Datenquelle – Drift zu HA-Statistics"***: vergleicht die PV-Tagessumme der TagesZusammenfassung mit der HA-Statistics-Tagessumme der letzten 90 Tage. Tage mit Drift bekommen pro Tag einen INFO-Eintrag mit eedc-Wert, HA-Wert und Differenz in kWh und Prozent. Direkt daneben ein „Tag reparieren"-Knopf, der den bestehenden `/reaggregate-tag`-Endpoint aufruft. Schwelle: ≥ 2 kWh UND ≥ 5 % Abweichung gleichzeitig (Boundary-Rauschen wird unterdrückt). Liste auf die 20 Tage mit größtem |Δ| begrenzt. Bewusst kein Sammel-Reparatur-Knopf in der Liste — für mehrere Tage gibt es weiterhin `Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren`.
 - **`CheckErgebnis`-Felder für Inline-Reparatur-Aktionen**: `action_kind`, `action_params`, `action_label`. Rückwärtskompatibel — bestehende Check-Kategorien lassen die Felder leer.
 
 ### Changed
@@ -67,7 +92,7 @@ Suite wächst von 125 auf 133 Tests:
 
 ### Migration
 
-- **Automatischer Vollbackfill bei Upgrade**: Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration und bestehenden Aggregat-Daten das `vollbackfill_durchgefuehrt`-Flag auf `False` zurückgesetzt. Beim nächsten Monatsabschluss läuft dann der Auto-Vollbackfill aus HA-LTS einmalig durch und füllt **fehlende** Tage nach (additiv, bestehende Tage bleiben unverändert — Schutz manueller Korrekturen). Anwender müssen für neue Tage nichts aktiv tun; um bestehende Tage gezielt auf die HA-Statistics-Werte umzustellen, stehen `Energieprofil → Tag-Reload` (Vorschau) und `Wartung → Reparatur-Werkbank → Bereich neu aggregieren` zur Verfügung. Anlagen ohne HA-Integration (Standalone-Docker) bleiben unverändert — ihr Snapshot-basierter Pfad funktioniert weiter wie bisher.
+- **Automatischer Vollbackfill bei Upgrade**: Beim Update auf v3.31.0 wird für Anlagen mit HA-Integration und bestehenden Aggregat-Daten das `vollbackfill_durchgefuehrt`-Flag auf `False` zurückgesetzt. Beim nächsten Monatsabschluss läuft dann der Auto-Vollbackfill aus HA-LTS einmalig durch und füllt **fehlende** Tage nach (additiv, bestehende Tage bleiben unverändert — Schutz manueller Korrekturen). Anwender müssen für neue Tage nichts aktiv tun; um bestehende Tage gezielt auf die HA-Statistics-Werte umzustellen, stehen `Auswertungen → Energieprofil → Tag-Reload` (Vorschau) und `Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren` zur Verfügung. Anlagen ohne HA-Integration (Standalone-Docker) bleiben unverändert — ihr Snapshot-basierter Pfad funktioniert weiter wie bisher.
 
 ### Hinweis für Anwender
 
@@ -106,7 +131,7 @@ Suite wächst von 96 auf 125 Tests (29 neue, alle grün):
 - **Plan-Vorschau zeigt korrekte Uhrzeit für die Gültigkeit** (#257 detLAN): Der „Plan gültig bis"-Header in der Reparatur-Werkbank zeigte die UTC-Zeit als wäre sie Lokalzeit — in MESZ ergab das eine Differenz von 2 Stunden (z. B. „21:00" statt korrekt „23:00"). Backend liefert die Zeit jetzt als tz-aware UTC mit `+00:00`-Marker, Frontend interpretiert korrekt + defensive Normalisierung für Übergangs-Cache-Fälle.
 - **Obsolete WP-Stromverbrauchs-Sensoren werden beim Wizard-Speichern automatisch entfernt** (rapahl PN 2026-05-16): Wer eine Wärmepumpe von „Gesamt-Strommessung" auf „getrennte Strommessung" (Strom Heizen + Strom Warmwasser) umgestellt hat, hatte den alten `stromverbrauch_kwh`-Eintrag weiterhin im Sensor-Mapping liegen — die UI blendete das Feld bei aktivierter getrennter Messung aus, der Daten-Checker zeigte daher einen INFO-Hinweis ohne klickbaren Lösch-Pfad. Ab v3.30.3 räumt der Wizard-Save den Eintrag still auf (kein Datenverlust, der Sensor wird in der Aggregation ohnehin ignoriert), der Daten-Checker-Hinweis erklärt das Verhalten und entfällt nach dem nächsten Speichern.
 - **Live-Heute: doppelte Skalierung bei MWh/Wh-Sensoren behoben** (#242 NongJoWo): Energie-Sensoren mit Einheit Wh oder MWh wurden im Live-Heute-Pfad doppelt skaliert — `ha_statistics_service.get_value_at` skaliert intern bereits auf kWh, aber `live_history_service._energy_delta` multiplizierte den Statistics-Pfad-Wert nochmal mit `_KWH_SCALE`. Folge: MWh-Werte wurden mit Faktor 1000 zu hoch angezeigt (NongJoWo: 8.11 kWh Einspeisung wurden als 8097 kWh dargestellt). Fix: Statistics-Pfad wird unverändert weitergegeben (Werte sind bereits kWh), `_KWH_SCALE` greift nur noch im state-history-Fallback (rohe state-Werte). Tests entsprechend angepasst — die alte Test-Erwartung mockte das echte Verhalten falsch und ließ den Bug durchrutschen.
-- **WP-Kompressor-Starts werden jetzt auch beim Vollbackfill aus HA-Statistics geschrieben** (#259 detLAN): Bisher füllte der Vollbackfill-Pfad (`Wartung → Lücken aus HA-LTS nachfüllen`) zwar alle Energiewerte, ließ aber `wp_starts_anzahl` leer — die Tagesdetail-Tabelle in „Auswertungen → Energieprofil" zeigte leere WP-Starts-Spalten für nachgefüllte Tage. `aggregate_day` hatte den Pfad bereits korrekt (v3.24.0), Backfill nicht. Jetzt analog implementiert.
+- **WP-Kompressor-Starts werden jetzt auch beim Vollbackfill aus HA-Statistics geschrieben** (#259 detLAN): Bisher füllte der Vollbackfill-Pfad (`Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Lücken aus HA-LTS nachfüllen`) zwar alle Energiewerte, ließ aber `wp_starts_anzahl` leer — die Tagesdetail-Tabelle in „Auswertungen → Energieprofil" zeigte leere WP-Starts-Spalten für nachgefüllte Tage. `aggregate_day` hatte den Pfad bereits korrekt (v3.24.0), Backfill nicht. Jetzt analog implementiert.
 - **Manuelle Eingabe schlägt jetzt jede andere Datenquelle — auch `repair`** (#251 FrodoVDR): Bisher konnte der Provenance-Resolver eine Wizard-Eingabe still verwerfen, wenn das Feld zuvor von einer Reparatur-Operation (Quelle `repair`) gestempelt war — der User sah „erfolgreich gespeichert", aber die DB blieb unverändert. Auch der zwischenzeitlich eingebaute Schreib-Reject-Hinweis war Symptombehandlung, nicht der Fix. Jetzt: jede explizite User-Eingabe über Wizard oder Monatsformular gewinnt unbedingt, unabhängig von der existierenden Provenance. Hintergrund-Quellen (Cloud, HA-Stats, Aggregation, Fallback) können den manuell gepflegten Wert weiterhin nicht überschreiben — die Schutzrichtung war schon immer korrekt, jetzt ist sie auch ohne Schlupfloch.
 
 ### Hinweis für Anwender
@@ -128,7 +153,7 @@ Was Phase 1 **nicht** enthält (folgt anlassbezogen): eigene Kühlenergie-Erfass
 
 ### Hinweis für Betroffene
 
-Nach dem Update einmal über **Wartung → Reparatur-Werkbank → Tag neu aggregieren** für den betroffenen Tag laufen. Stundenwert mit Spike wird zur Lücke, Tageswerte fallen auf das physikalisch plausible Niveau. Anlagen ohne hinterlegte `leistung_kwp` werden nicht gecappt (Stammdaten-Check meldet das schon separat).
+Nach dem Update einmal über **Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Tag neu aggregieren** für den betroffenen Tag laufen. Stundenwert mit Spike wird zur Lücke, Tageswerte fallen auf das physikalisch plausible Niveau. Anlagen ohne hinterlegte `leistung_kwp` werden nicht gecappt (Stammdaten-Check meldet das schon separat).
 
 ---
 
