@@ -43,11 +43,66 @@ from backend.core.wirtschaftlichkeit_defaults import (
     NETZBEZUG_DEFAULT_CENT,
 )
 from backend.services.speicher_wirtschaftlichkeit import (
+    EffektiverLadepreisErgebnis,
     SpeicherIstAggregat,
+    WirkungsgradErgebnis,
     aggregiere_speicher_ist,
+    berechne_effektiver_ladepreis,
+    berechne_ist_wirkungsgrad,
     berechne_speicher_ersparnis,
     berechne_v2h_ersparnis,
+    ist_eta_degradation_alarm,
 )
+
+
+# ============================================================================
+# Etappe C (#264): Helper-Auflösung Param-Fallback ↔ IST-Werte
+# ============================================================================
+
+def _aufloesen_wirkungsgrad(
+    eta_ist: Optional[WirkungsgradErgebnis],
+    *,
+    param_wirkungsgrad: float,
+) -> tuple[float, str]:
+    """Liefert (wirkungsgrad_prozent, quelle) für die ROI-Berechnung.
+
+    Etappe C1: Helper liefert immer ein Ergebnis. Bei `wirkungsgrad_prozent
+    is None` (z. B. `quelle="fenster-zu-kurz"`) fallen wir auf den Param-Wert
+    zurück, geben aber die Helper-Quelle weiter, damit das Frontend die
+    Datenbasis im Badge ausweisen kann.
+    """
+    if eta_ist is None:
+        return param_wirkungsgrad, "param"
+    if eta_ist.wirkungsgrad_prozent is None:
+        # Helper hat geantwortet, aber nichts berechenbar (kurzes Fenster +
+        # keine SoC-Werte, oder ladung_kwh=0). Param mit Helper-Quelle.
+        return param_wirkungsgrad, eta_ist.quelle
+    return eta_ist.wirkungsgrad_prozent, eta_ist.quelle
+
+
+def _aufloesen_ladepreis(
+    eff_ladepreis: Optional[EffektiverLadepreisErgebnis],
+    *,
+    nutzt_arbitrage: bool,
+    param_lade_preis: float,
+) -> tuple[Optional[float], str]:
+    """Liefert (ladepreis_cent, quelle) für die ROI-Berechnung.
+
+    Etappe C1/C4: Helper liefert immer ein Ergebnis. Bei nicht-belastbarer
+    Quelle (`keine-tep-daten`, `keine-netzladung`, `datenbasis-zu-duenn` mit
+    `effektiver_ladepreis_cent=None`) Param-Fallback. Ohne Arbitrage und
+    ohne Param: `None` → der Spread-Service behandelt das als kostenneutral.
+    """
+    if eff_ladepreis is None:
+        # Helper wurde gar nicht aufgerufen (z. B. kein Speicher)
+        if nutzt_arbitrage:
+            return param_lade_preis, "param"
+        return None, "bezugspreis-fallback"
+    if eff_ladepreis.effektiver_ladepreis_cent is None:
+        if nutzt_arbitrage:
+            return param_lade_preis, eff_ladepreis.quelle
+        return None, eff_ladepreis.quelle
+    return eff_ladepreis.effektiver_ladepreis_cent, eff_ladepreis.quelle
 from backend.core.calculations import (
     CO2_FAKTOR_BENZIN_KG_LITER,
     CO2_FAKTOR_GAS_KG_KWH,
@@ -778,8 +833,15 @@ async def get_roi_dashboard(
     # aktiven Monatsdaten summiert und auf ein Jahr hochgerechnet, damit
     # das ROI-Modell die echte PV/Netz-Aufteilung nutzen kann statt der
     # impliziten 100%-PV-Annahme.
+    #
+    # Etappe C (#264): zusätzlich aus dem stündlichen TagesEnergieProfil
+    # den effektiven Ø-Netzladepreis (Tibber/aWATTar) und den SoC-
+    # korrigierten IST-Wirkungsgrad ermitteln. Beide werden an den Spread-
+    # Service durchgereicht und überstimmen den Param-Wert.
     speicher_invs_alle = [i for i in investitionen if i.typ == InvestitionTyp.SPEICHER.value]
     speicher_ist_by_inv: dict[int, "SpeicherIstAggregat | None"] = {}
+    speicher_ladepreis_anlage: Optional[EffektiverLadepreisErgebnis] = None
+    speicher_eta_by_inv: dict[int, "WirkungsgradErgebnis | None"] = {}
     if speicher_invs_alle:
         speicher_ids = [i.id for i in speicher_invs_alle]
         sp_imd_result = await db.execute(
@@ -797,6 +859,39 @@ async def get_roi_dashboard(
                 if sp.ist_aktiv_im_monat(imd.jahr, imd.monat)
             ]
             speicher_ist_by_inv[sp.id] = aggregiere_speicher_ist(aktive_daten)
+
+        # Etappe C: TEP-Lookups einmalig pro Anlage. Periode = älteste
+        # Speicher-Inbetriebnahme bis heute (oder neueste Stilllegung).
+        installs = [sp.installationsdatum for sp in speicher_invs_alle if sp.installationsdatum]
+        stilllegungen = [sp.stilllegungsdatum for sp in speicher_invs_alle if sp.stilllegungsdatum]
+        if installs:
+            periode_von = min(installs)
+            periode_bis = max(stilllegungen) if stilllegungen and len(stilllegungen) == len(speicher_invs_alle) else date.today()
+            speicher_ladepreis_anlage = await berechne_effektiver_ladepreis(
+                db, anlage_id=anlage_id, von=periode_von, bis=periode_bis,
+            )
+
+            # Pro Speicher η-IST aus IMD-Aggregaten und (bei kurzem Fenster)
+            # SoC-Werten am Periodenrand.
+            for sp in speicher_invs_alle:
+                ist = speicher_ist_by_inv.get(sp.id)
+                if ist is None:
+                    continue
+                params_sp = sp.parameter or {}
+                nutzbar = params_sp.get(
+                    PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"],
+                    params_sp.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0),
+                ) or 0
+                speicher_eta_by_inv[sp.id] = await berechne_ist_wirkungsgrad(
+                    db,
+                    anlage_id=anlage_id,
+                    von=periode_von,
+                    bis=periode_bis,
+                    ladung_kwh=ist.ladung_kwh_jahr / ist.jahres_faktor,
+                    entladung_kwh=ist.entladung_kwh_jahr / ist.jahres_faktor,
+                    nutzbare_kapazitaet_kwh=float(nutzbar),
+                    fenster_monate=ist.anzahl_monate,
+                )
 
     # PV-Einsparung einmal berechnen (wird auf Module verteilt)
     pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()
@@ -901,13 +996,29 @@ async def get_roi_dashboard(
             )
 
             ist_aggregat = speicher_ist_by_inv.get(inv.id)
+            # Etappe C (#264): dyn. Ladepreis aus TEP überstimmt Param,
+            # IST-η aus SoC-korrigierter Bilanz überstimmt Param-η. Beide
+            # Helper liefern immer ein Ergebnis (C1); Wert ist `None` wenn
+            # Datenbasis zu dünn → Fallback auf Param mit Quelle-Indikator.
+            eff_ladepreis = speicher_ladepreis_anlage
+            eta_ist = speicher_eta_by_inv.get(inv.id)
+
+            wirkungsgrad_eff, wirkungsgrad_quelle = _aufloesen_wirkungsgrad(
+                eta_ist, param_wirkungsgrad=wirkungsgrad,
+            )
+            lade_preis_eff, ladepreis_quelle = _aufloesen_ladepreis(
+                eff_ladepreis,
+                nutzt_arbitrage=nutzt_arbitrage,
+                param_lade_preis=lade_preis_dc,
+            )
+
             result = berechne_speicher_einsparung(
                 kapazitaet_kwh=kapazitaet,
-                wirkungsgrad_prozent=wirkungsgrad,
+                wirkungsgrad_prozent=wirkungsgrad_eff,
                 netzbezug_preis_cent=strompreis_cent,
                 einspeiseverguetung_cent=einspeiseverguetung_cent,
                 nutzt_arbitrage=nutzt_arbitrage,
-                lade_preis_cent=lade_preis_dc,
+                lade_preis_cent=lade_preis_eff,
                 ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
                 ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
             )
@@ -925,7 +1036,21 @@ async def get_roi_dashboard(
                     'ist_monate': ist_aggregat.anzahl_monate,
                     'pv_anteil_euro': result.pv_anteil_euro,
                     'netz_anteil_euro': result.arbitrage_anteil_euro,
+                    'effektiver_ladepreis_cent': round(lade_preis_eff, 2) if (lade_preis_eff is not None and nutzt_arbitrage) else None,
+                    'ladepreis_quelle': ladepreis_quelle,
+                    'verwendetes_wirkungsgrad_prozent': round(wirkungsgrad_eff, 1),
+                    'wirkungsgrad_quelle': wirkungsgrad_quelle,
                 })
+                # Etappe C1 Diagnose-Felder für UI-Badge bei dünner Datenbasis.
+                if eff_ladepreis is not None and eff_ladepreis.quelle == "datenbasis-zu-duenn":
+                    komp_detail['ladepreis_abdeckung_prozent'] = round(eff_ladepreis.abdeckung_prozent, 0)
+                # Etappe C3 Degradations-Alarm an der η-KPI.
+                if eta_ist is not None and eta_ist.wirkungsgrad_prozent is not None:
+                    komp_detail['eta_degradation_alarm'] = ist_eta_degradation_alarm(
+                        ist_wirkungsgrad_prozent=eta_ist.wirkungsgrad_prozent,
+                        param_wirkungsgrad_prozent=wirkungsgrad,
+                    )
+                    komp_detail['param_wirkungsgrad_prozent'] = round(wirkungsgrad, 1)
             else:
                 komp_detail['modus'] = 'prognose'
             komponenten.append(ROIKomponente(
@@ -1037,13 +1162,27 @@ async def get_roi_dashboard(
             entlade_preis = params.get(PARAM_SPEICHER["ENTLADE_VERMIEDENER_PREIS_CENT"], PARAM_SPEICHER_DEFAULTS["entlade_vermiedener_preis_cent"])
 
             ist_aggregat = speicher_ist_by_inv.get(inv.id)
+            # Etappe C (#264): siehe DC-Pfad oben — dieselbe Param-Fallback-
+            # Auflösung via _aufloesen_wirkungsgrad / _aufloesen_ladepreis.
+            eff_ladepreis = speicher_ladepreis_anlage
+            eta_ist = speicher_eta_by_inv.get(inv.id)
+
+            wirkungsgrad_eff, wirkungsgrad_quelle = _aufloesen_wirkungsgrad(
+                eta_ist, param_wirkungsgrad=wirkungsgrad,
+            )
+            lade_preis_eff, ladepreis_quelle = _aufloesen_ladepreis(
+                eff_ladepreis,
+                nutzt_arbitrage=nutzt_arbitrage,
+                param_lade_preis=lade_preis,
+            )
+
             result = berechne_speicher_einsparung(
                 kapazitaet_kwh=kapazitaet,
-                wirkungsgrad_prozent=wirkungsgrad,
+                wirkungsgrad_prozent=wirkungsgrad_eff,
                 netzbezug_preis_cent=strompreis_cent,
                 einspeiseverguetung_cent=einspeiseverguetung_cent,
                 nutzt_arbitrage=nutzt_arbitrage,
-                lade_preis_cent=lade_preis,
+                lade_preis_cent=lade_preis_eff,
                 entlade_preis_cent=entlade_preis,
                 ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
                 ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
@@ -1065,7 +1204,19 @@ async def get_roi_dashboard(
                     # `arbitrage_anteil_euro` ist im IST-Modus der gemessene
                     # Netz-Anteil-Vorteil (siehe calculations.berechne_speicher_einsparung).
                     'netz_anteil_euro': result.arbitrage_anteil_euro,
+                    'effektiver_ladepreis_cent': round(lade_preis_eff, 2) if (lade_preis_eff is not None and nutzt_arbitrage) else None,
+                    'ladepreis_quelle': ladepreis_quelle,
+                    'verwendetes_wirkungsgrad_prozent': round(wirkungsgrad_eff, 1),
+                    'wirkungsgrad_quelle': wirkungsgrad_quelle,
                 })
+                if eff_ladepreis is not None and eff_ladepreis.quelle == "datenbasis-zu-duenn":
+                    detail['ladepreis_abdeckung_prozent'] = round(eff_ladepreis.abdeckung_prozent, 0)
+                if eta_ist is not None and eta_ist.wirkungsgrad_prozent is not None:
+                    detail['eta_degradation_alarm'] = ist_eta_degradation_alarm(
+                        ist_wirkungsgrad_prozent=eta_ist.wirkungsgrad_prozent,
+                        param_wirkungsgrad_prozent=wirkungsgrad,
+                    )
+                    detail['param_wirkungsgrad_prozent'] = round(wirkungsgrad, 1)
 
         elif inv.typ == InvestitionTyp.E_AUTO.value:
             # Bugs #1, #2, #3, #4 v3.25.0: vorher las dieser Block aus toten Schema-Keys
