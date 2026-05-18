@@ -6,9 +6,17 @@ Anleitung zum Aufsetzen einer identischen Entwicklungsumgebung auf einem neuen U
 
 ## Schnellstart: Setup-Script ausführen
 
+> **Sicherheitshinweis:** Lade das Script herunter, **sichte den Inhalt**, und führe es dann aus. Pipe-to-shell (`curl | bash`) wird hier bewusst nicht empfohlen — ein kompromittiertes Repo würde den fremden Code sonst ohne Prüfung mit deinem Login-User laufen lassen.
+
 ```bash
-# Script herunterladen und ausführen
-curl -fsSL https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/setup-devmachine.sh | bash
+# 1. Script herunterladen
+curl -fsSL -o /tmp/eedc-setup.sh https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/setup-devmachine.sh
+
+# 2. Inhalt sichten (insbesondere die `sudo`- und `npm install -g`-Stellen)
+less /tmp/eedc-setup.sh
+
+# 3. Nach Prüfung ausführen
+bash /tmp/eedc-setup.sh
 ```
 
 Oder manuell Schritt für Schritt nach dieser Anleitung.
@@ -32,8 +40,11 @@ sudo apt update && sudo apt install -y \
 ## 2. Node.js via NVM
 
 ```bash
-# NVM installieren
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+# NVM-Installer herunterladen, sichten, dann ausführen
+# (Aktuelle Version: https://github.com/nvm-sh/nvm/releases — Tag-Pfad ggf. anpassen)
+curl -fsSL -o /tmp/nvm-install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh
+less /tmp/nvm-install.sh
+bash /tmp/nvm-install.sh
 
 # Shell neu laden
 source ~/.bashrc   # oder: source ~/.zshrc
