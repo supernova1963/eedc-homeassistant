@@ -43,6 +43,8 @@ from backend.core.wirtschaftlichkeit_defaults import (
     NETZBEZUG_DEFAULT_CENT,
 )
 from backend.services.speicher_wirtschaftlichkeit import (
+    SpeicherIstAggregat,
+    aggregiere_speicher_ist,
     berechne_speicher_ersparnis,
     berechne_v2h_ersparnis,
 )
@@ -770,6 +772,32 @@ async def get_roi_dashboard(
     gesamt_einsparung = 0.0
     gesamt_co2 = 0.0
 
+    # Etappe B (#264): Speicher-IST-Aggregate einmal laden — sowohl für
+    # DC-gekoppelte (Phase 3) als auch standalone AC-Speicher (Phase 5).
+    # Pro Speicher wird `entladung_kwh` und `ladung_netz_kwh` aus allen
+    # aktiven Monatsdaten summiert und auf ein Jahr hochgerechnet, damit
+    # das ROI-Modell die echte PV/Netz-Aufteilung nutzen kann statt der
+    # impliziten 100%-PV-Annahme.
+    speicher_invs_alle = [i for i in investitionen if i.typ == InvestitionTyp.SPEICHER.value]
+    speicher_ist_by_inv: dict[int, "SpeicherIstAggregat | None"] = {}
+    if speicher_invs_alle:
+        speicher_ids = [i.id for i in speicher_invs_alle]
+        sp_imd_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(speicher_ids))
+        )
+        sp_imd_by_inv: dict[int, list[InvestitionMonatsdaten]] = {}
+        for imd in sp_imd_result.scalars().all():
+            sp_imd_by_inv.setdefault(imd.investition_id, []).append(imd)
+        for sp in speicher_invs_alle:
+            # Filter analog #236: Stilllegung/Inbetriebnahme respektieren.
+            aktive_daten = [
+                (imd.verbrauch_daten or {})
+                for imd in sp_imd_by_inv.get(sp.id, [])
+                if sp.ist_aktiv_im_monat(imd.jahr, imd.monat)
+            ]
+            speicher_ist_by_inv[sp.id] = aggregiere_speicher_ist(aktive_daten)
+
     # PV-Einsparung einmal berechnen (wird auf Module verteilt)
     pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()
 
@@ -867,19 +895,39 @@ async def get_roi_dashboard(
             wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
             # Bug #5 v3.25.0: vorher 'nutzt_arbitrage' (toter Schema-Key), Form/Wizard schreiben 'arbitrage_faehig'.
             nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
+            lade_preis_dc = params.get(
+                PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"],
+                PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"],
+            )
 
+            ist_aggregat = speicher_ist_by_inv.get(inv.id)
             result = berechne_speicher_einsparung(
                 kapazitaet_kwh=kapazitaet,
                 wirkungsgrad_prozent=wirkungsgrad,
                 netzbezug_preis_cent=strompreis_cent,
                 einspeiseverguetung_cent=einspeiseverguetung_cent,
                 nutzt_arbitrage=nutzt_arbitrage,
+                lade_preis_cent=lade_preis_dc,
+                ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
+                ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
             )
             inv_einsparung = result.jahres_einsparung_euro
             inv_co2 = result.co2_einsparung_kg
             system_einsparung += inv_einsparung
             system_co2 += inv_co2
 
+            komp_detail: dict[str, Any] = {'kapazitaet_kwh': kapazitaet, 'dc_gekoppelt': True}
+            if ist_aggregat is not None:
+                komp_detail.update({
+                    'modus': 'ist',
+                    'ist_entladung_kwh_jahr': round(ist_aggregat.entladung_kwh_jahr, 1),
+                    'ist_ladung_netz_kwh_jahr': round(ist_aggregat.ladung_netz_kwh_jahr, 1),
+                    'ist_monate': ist_aggregat.anzahl_monate,
+                    'pv_anteil_euro': result.pv_anteil_euro,
+                    'netz_anteil_euro': result.arbitrage_anteil_euro,
+                })
+            else:
+                komp_detail['modus'] = 'prognose'
             komponenten.append(ROIKomponente(
                 investition_id=inv.id,
                 bezeichnung=f"{inv.bezeichnung} ({kapazitaet} kWh)",
@@ -889,7 +937,7 @@ async def get_roi_dashboard(
                 relevante_kosten=inv_kosten - inv_alternativ,
                 einsparung=round(inv_einsparung, 2),
                 co2_einsparung_kg=round(inv_co2, 1),
-                detail={'kapazitaet_kwh': kapazitaet, 'dc_gekoppelt': True}
+                detail=komp_detail,
             ))
 
         # System-ROI berechnen
@@ -988,6 +1036,7 @@ async def get_roi_dashboard(
             lade_preis = params.get(PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"], PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"])
             entlade_preis = params.get(PARAM_SPEICHER["ENTLADE_VERMIEDENER_PREIS_CENT"], PARAM_SPEICHER_DEFAULTS["entlade_vermiedener_preis_cent"])
 
+            ist_aggregat = speicher_ist_by_inv.get(inv.id)
             result = berechne_speicher_einsparung(
                 kapazitaet_kwh=kapazitaet,
                 wirkungsgrad_prozent=wirkungsgrad,
@@ -996,6 +1045,8 @@ async def get_roi_dashboard(
                 nutzt_arbitrage=nutzt_arbitrage,
                 lade_preis_cent=lade_preis,
                 entlade_preis_cent=entlade_preis,
+                ist_entladung_kwh=ist_aggregat.entladung_kwh_jahr if ist_aggregat else None,
+                ist_ladung_netz_kwh=ist_aggregat.ladung_netz_kwh_jahr if ist_aggregat else 0,
             )
             jahres_einsparung = result.jahres_einsparung_euro
             co2_einsparung = result.co2_einsparung_kg
@@ -1004,7 +1055,17 @@ async def get_roi_dashboard(
                 'pv_anteil_euro': result.pv_anteil_euro,
                 'arbitrage_anteil_euro': result.arbitrage_anteil_euro,
                 'hinweis': 'AC-gekoppelter Speicher',
+                'modus': 'ist' if ist_aggregat is not None else 'prognose',
             }
+            if ist_aggregat is not None:
+                detail.update({
+                    'ist_entladung_kwh_jahr': round(ist_aggregat.entladung_kwh_jahr, 1),
+                    'ist_ladung_netz_kwh_jahr': round(ist_aggregat.ladung_netz_kwh_jahr, 1),
+                    'ist_monate': ist_aggregat.anzahl_monate,
+                    # `arbitrage_anteil_euro` ist im IST-Modus der gemessene
+                    # Netz-Anteil-Vorteil (siehe calculations.berechne_speicher_einsparung).
+                    'netz_anteil_euro': result.arbitrage_anteil_euro,
+                })
 
         elif inv.typ == InvestitionTyp.E_AUTO.value:
             # Bugs #1, #2, #3, #4 v3.25.0: vorher las dieser Block aus toten Schema-Keys

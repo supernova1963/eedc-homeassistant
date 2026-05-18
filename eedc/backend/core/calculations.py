@@ -176,30 +176,71 @@ def berechne_speicher_einsparung(
     lade_preis_cent: float = 0,
     entlade_preis_cent: float = 0,
     zyklen_pro_jahr: int = SPEICHER_ZYKLEN_PRO_JAHR,
+    ist_entladung_kwh: Optional[float] = None,
+    ist_ladung_netz_kwh: float = 0,
 ) -> SpeicherEinsparung:
     """
-    Berechnet jährliche Speicher-Einsparung (Prognose).
+    Berechnet jährliche Speicher-Einsparung.
 
-    Ohne Arbitrage:
-        Einsparung = Zyklen × Kapazität × Wirkungsgrad × (Netzbezug - Einspeisung)
+    Modi (siehe Issue #264 Etappe B):
 
-    Mit Arbitrage (70/30 Modell):
-        70% PV-Anteil: Statt Einspeisung → Eigenverbrauch
-        30% Arbitrage: Netzladung mit günstigen Tarifen
+    1. **Prognose** (`ist_entladung_kwh=None`, Default) — wie bisher:
+       - Ohne Arbitrage: `Zyklen × Kapazität × η × (Bezug − Einspeisung)`
+       - Mit Arbitrage: fixes 70/30-Modell aus `lade_preis_cent` / `entlade_preis_cent`
+
+    2. **IST-basiert** (`ist_entladung_kwh` gepflegt): delegiert an den kanonischen
+       Spread-Service `speicher_wirtschaftlichkeit.berechne_speicher_ersparnis()`
+       — derselbe Helper, den Aussichten verwendet. Damit driften die beiden
+       Berechnungspfade (Aussichten ↔ Investitionen-ROI) im IST-Pfad nicht
+       mehr auseinander (Drift-Audit D). Der gemessene Netz-Anteil korrigiert
+       den Spread, sodass nicht mehr implizit 100 % PV-Ladung unterstellt wird.
 
     Args:
-        kapazitaet_kwh: Speicherkapazität in kWh
+        kapazitaet_kwh: Speicherkapazität in kWh (für Prognose)
         wirkungsgrad_prozent: Wirkungsgrad des Speichers (z.B. 95)
         netzbezug_preis_cent: Normaler Strompreis in Cent
         einspeiseverguetung_cent: Einspeisevergütung in Cent
-        nutzt_arbitrage: True wenn dynamische Tarife genutzt werden
-        lade_preis_cent: Typischer Ladungspreis bei Arbitrage (z.B. 12 ct nachts)
-        entlade_preis_cent: Typischer vermiedener Preis (z.B. 35 ct abends)
-        zyklen_pro_jahr: Anzahl Vollzyklen pro Jahr
+        nutzt_arbitrage: True wenn dynamische Tarife genutzt werden (Prognose-Modus)
+        lade_preis_cent: Ø-Ladepreis bei Arbitrage (z.B. 12 ct nachts)
+        entlade_preis_cent: Vermiedener Preis bei Arbitrage (z.B. 35 ct abends)
+        zyklen_pro_jahr: Anzahl Vollzyklen pro Jahr (Prognose-Modus)
+        ist_entladung_kwh: Tatsächliche Jahres-Entladung (aggregiert aus IMD) —
+            schaltet auf den Spread-Service-Pfad um.
+        ist_ladung_netz_kwh: Tatsächliche Jahres-Netzladung (für PV/Netz-Aufteilung)
 
     Returns:
-        SpeicherEinsparung: Berechnete Werte
+        SpeicherEinsparung mit gemappten pv_anteil_euro / arbitrage_anteil_euro.
     """
+    # --- IST-Modus: Delegation an den kanonischen Spread-Service ---
+    if ist_entladung_kwh is not None:
+        # Lokaler Import vermeidet eine Modul-Zyklen-Falle, falls calculations.py
+        # je in den Service zurückgezogen wird.
+        from backend.services.speicher_wirtschaftlichkeit import berechne_speicher_ersparnis
+
+        # Im Arbitrage-Modus liefert `lade_preis_cent` den Ø-Ladepreis; sonst None →
+        # Netzladung wird im Service als kostenneutral behandelt.
+        ladepreis = lade_preis_cent if nutzt_arbitrage and lade_preis_cent > 0 else None
+
+        result = berechne_speicher_ersparnis(
+            entladung_kwh=ist_entladung_kwh,
+            bezug_preis_cent=netzbezug_preis_cent,
+            einspeise_verg_cent=einspeiseverguetung_cent,
+            ladung_netz_kwh=ist_ladung_netz_kwh,
+            wirkungsgrad_prozent=wirkungsgrad_prozent,
+            lade_preis_cent=ladepreis,
+        )
+        # Der CO2-Vorteil bezieht sich auf die effektiv aus PV-Strom ersetzte
+        # Netzenergie — der Netz-Anteil ist nur Tarif-Arbitrage und spart kein CO2.
+        co2 = result.pv_anteil_entladung_kwh * CO2_FAKTOR_STROM_KG_KWH
+        return SpeicherEinsparung(
+            jahres_einsparung_euro=round(result.ersparnis_euro, 2),
+            nutzbare_speicherung_kwh=round(ist_entladung_kwh, 1),
+            pv_anteil_euro=round(result.pv_anteil_euro, 2),
+            arbitrage_anteil_euro=round(result.netz_anteil_euro, 2),
+            co2_einsparung_kg=round(co2, 1),
+        )
+
+    # --- Prognose-Modus (unverändert) ---
     wirkungsgrad = wirkungsgrad_prozent / 100
     nutzbare_speicherung = kapazitaet_kwh * zyklen_pro_jahr * wirkungsgrad
     standard_spread = netzbezug_preis_cent - einspeiseverguetung_cent
