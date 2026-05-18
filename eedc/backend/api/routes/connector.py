@@ -6,9 +6,12 @@ Endpoints für die direkte Verbindung zu Wechselrichtern/Energiemanagement-Syste
 """
 
 import base64
+import ipaddress
 import logging
+import socket
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -62,6 +65,80 @@ def _decode_password(encoded: str) -> str:
     return base64.b64decode(encoded.encode()).decode()
 
 
+def _extract_hostname(host: str) -> Optional[str]:
+    """Extrahiert den reinen Hostnamen aus einer URL oder einem Bare-Host-String.
+
+    `https://192.168.1.50:80/api` → `192.168.1.50`
+    `192.168.1.50:80` → `192.168.1.50`
+    `wechselrichter.lan` → `wechselrichter.lan`
+    """
+    if not host:
+        return None
+    parsed = urlparse(host if "://" in host else f"//{host}", scheme="")
+    return parsed.hostname
+
+
+def _validate_connector_host(host: str) -> None:
+    """Defense-in-Depth: blockt SSRF-Ziele bevor der Connector requestet.
+
+    Erlaubt: Public-IPs, private LAN-Bereiche (10/8, 172.16/12, 192.168/16) und
+    DNS-Namen, die auf solche Adressen auflösen. Geblockt:
+
+      - Loopback (`127.0.0.0/8`, `::1`)
+      - Link-local (`169.254.0.0/16`, `fe80::/10`) — schließt Cloud-Metadata-Endpoints ein
+      - Multicast (`224.0.0.0/4`, `ff00::/8`)
+      - Unspecified (`0.0.0.0`, `::`)
+      - Reserviert (`240.0.0.0/4`)
+
+    DNS-Rebinding: alle aus `getaddrinfo` zurückgegebenen Adressen werden geprüft
+    — wenn ein Hostname auf eine geblockte Adresse auflöst, schlägt die
+    Validierung fehl.
+
+    Raises HTTPException(400) bei Verstoß.
+    """
+    hostname = _extract_hostname(host)
+    if not hostname:
+        raise HTTPException(status_code=400, detail="Host fehlt oder ungültig.")
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Host nicht auflösbar: {hostname} ({exc})",
+        )
+
+    seen_addresses: set[str] = set()
+    for family, _socktype, _proto, _canonname, sockaddr in addrinfo:
+        ip_str = sockaddr[0]
+        if ip_str in seen_addresses:
+            continue
+        seen_addresses.add(ip_str)
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_unspecified
+            or ip.is_reserved
+        ):
+            logger.warning(
+                "Connector-Host blockiert (SSRF-Schutz): hostname=%s, resolved=%s",
+                hostname, ip_str,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Ziel-Host nicht erlaubt: {hostname} → {ip_str} "
+                    f"(Loopback/Link-local/Metadata-Endpunkte sind aus "
+                    f"Sicherheitsgründen ausgeschlossen)."
+                ),
+            )
+
+
 async def _get_anlage(anlage_id: int, db: AsyncSession) -> Anlage:
     """Lädt eine Anlage oder wirft 404."""
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -93,6 +170,7 @@ async def test_connection(req: ConnectorTestRequest):
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unbekannter Connector: {req.connector_id}")
 
+    _validate_connector_host(req.host)
     result = await connector.test_connection(req.host, req.username, req.password)
     await log_activity(
         kategorie="connector_test",
@@ -119,6 +197,8 @@ async def setup_connector(
         connector = get_connector(req.connector_id)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unbekannter Connector: {req.connector_id}")
+
+    _validate_connector_host(req.host)
 
     # Verbindung testen + initialen Snapshot holen
     test_result = await connector.test_connection(req.host, req.username, req.password)
