@@ -19,7 +19,13 @@ info "System-Pakete installiert"
 
 section "2. NVM + Node.js 20"
 if [ ! -d "$HOME/.nvm" ]; then
-  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+  # Installer erst lokal ziehen statt direkt zu pipen, dann ausführen.
+  # Defense-in-Depth: wenn diese Datei selbst kompromittiert wäre, sieht der
+  # Caller wenigstens die NVM-Installer-Datei in /tmp vor dem zweiten Schritt.
+  NVM_INSTALLER=$(mktemp /tmp/nvm-install.XXXXXX.sh)
+  curl -fsSL -o "$NVM_INSTALLER" https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh
+  bash "$NVM_INSTALLER"
+  rm -f "$NVM_INSTALLER"
   info "NVM installiert"
 else
   info "NVM bereits vorhanden"

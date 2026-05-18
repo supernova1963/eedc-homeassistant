@@ -35,6 +35,53 @@ def _trim_credentials(credentials: dict) -> dict:
     }
 
 
+# Heuristik-Fallback für die Maskierung in GET /credentials/{anlage_id}.
+# Greift, wenn der Provider nicht aufgelöst werden kann (entfernt/umbenannt)
+# oder ein Provider neue sensible Feld-IDs einführt, ohne `type="password"`
+# zu setzen. Pattern werden als Substring im Key-Lower gesucht.
+_SENSITIVE_KEY_PATTERNS: tuple[str, ...] = (
+    "secret", "password", "token", "api_key", "access_key",
+    "private_key", "app_secret", "client_secret", "system_code",
+)
+
+
+def _maskiere_credentials(creds: dict, provider_id: Optional[str]) -> dict:
+    """Maskiert sensible Credential-Werte für die Anzeige.
+
+    Strategie (deny-by-default für unbekannte Felder):
+      1. Felder mit Provider-Definition `type="password"` werden maskiert.
+      2. Zusätzlich Heuristik: Key enthält ein bekanntes sensibles Substring
+         (`secret`, `password`, `token`, `api_key`, `access_key`, ...). Greift
+         auch, wenn der Provider nicht auflösbar ist (entfernt/umbenannt).
+      3. Identifier (`username`, `email`, `site_id`, `region`, ...) bleiben
+         lesbar, damit das Frontend die gespeicherte Konfiguration zeigen kann.
+
+    Leere/None-Werte werden ausgelassen.
+    """
+    password_field_ids: set[str] = set()
+    if provider_id:
+        try:
+            provider = get_provider(provider_id)
+            password_field_ids = {
+                f.id for f in provider.info().credential_fields if f.type == "password"
+            }
+        except Exception:
+            # Unbekannter/entfernter Provider oder Info-Fehler darf nicht zur
+            # Klartext-Antwort führen — Heuristik unten übernimmt dann allein.
+            password_field_ids = set()
+
+    masked: dict = {}
+    for key, val in (creds or {}).items():
+        if val is None or val == "":
+            continue
+        is_sensitive = (
+            key in password_field_ids
+            or any(pat in key.lower() for pat in _SENSITIVE_KEY_PATTERNS)
+        )
+        masked[key] = "***" if is_sensitive else val
+    return masked
+
+
 # ─── Schemas ─────────────────────────────────────────────────────────────────
 
 
@@ -216,14 +263,14 @@ async def get_credentials(
     if not cloud_config:
         return CredentialsResponse(has_credentials=False)
 
-    # Secrets maskieren
-    creds = dict(cloud_config.get("credentials", {}))
-    for key in ("secret_key", "password", "token"):
-        if key in creds and creds[key]:
-            creds[key] = "***"
+    # Secrets maskieren — Provider-aware (type="password") + Heuristik-Fallback,
+    # damit `api_key`, `app_secret`, `access_key_value` etc. nicht mehr im Klartext
+    # zurückgegeben werden. Identifier (username/email/site_id/...) bleiben sichtbar.
+    provider_id = cloud_config.get("provider_id")
+    creds = _maskiere_credentials(cloud_config.get("credentials", {}), provider_id)
 
     return CredentialsResponse(
-        provider_id=cloud_config.get("provider_id"),
+        provider_id=provider_id,
         credentials=creds,
         has_credentials=True,
     )
