@@ -113,6 +113,13 @@ class AktuellerMonatResponse(BaseModel):
     speicher_wirkungsgrad_prozent: Optional[float] = None  # Entladung / Ladung * 100
     speicher_vollzyklen: Optional[float] = None        # Ladung / Kapazität
     speicher_kapazitaet_kwh: Optional[float] = None    # Aus Investition.parameter
+    # Etappe C (#264): SoC-Drift über die Monatsgrenze macht den Monats-η
+    # unzuverlässig (Speicher Anfang voll → Ende leer ergibt naiv > 100 %).
+    # Flag setzen, wenn |ΔSoC × Kapazität| > 10 % der Monats-Ladung; das
+    # Frontend blendet dann den Monats-η aus und verweist auf den Jahreswert.
+    speicher_soc_drift_signifikant: bool = False
+    speicher_effektiver_ladepreis_cent: Optional[float] = None
+    speicher_effektiver_ladepreis_quelle: Optional[str] = None  # dyn-tarif | boersenpreis
     hat_speicher: bool = False
 
     # Komponenten — Wärmepumpe
@@ -1007,11 +1014,18 @@ async def get_aktueller_monat(
     speicher_kapazitaet = None
 
     speicher_invs = [i for i in investitionen if i.typ == "speicher"]
+    speicher_soc_drift_flag = False
+    speicher_eff_ladepreis = None
+    speicher_eff_ladepreis_quelle = None
     if speicher_invs:
         # Kapazität aus parameter
         kap_sum = sum((i.parameter or {}).get("kapazitaet_kwh", 0) or 0 for i in speicher_invs)
         if kap_sum > 0:
             speicher_kapazitaet = round(kap_sum, 1)
+        nutzbare_kapazitaet = sum(
+            (i.parameter or {}).get("nutzbare_kapazitaet_kwh") or (i.parameter or {}).get("kapazitaet_kwh", 0) or 0
+            for i in speicher_invs
+        )
 
         # Arbitrage-Ladung aus gespeicherten Daten
         ladung_netz_total = 0.0
@@ -1024,10 +1038,63 @@ async def get_aktueller_monat(
         # Wirkungsgrad und Vollzyklen
         sl = speicher_ladung or 0
         se = speicher_entladung or 0
-        if sl > 0 and se > 0:
+
+        # Etappe C2 (#264): SoC-Drift über den Monat erkennen, bevor der naive
+        # Quotient ausgewiesen wird. Maintainer-Vorgabe: Schwelle
+        # |soc_ende − soc_start| > 20 pp (≈ ein voller Lade-/Entladezyklus
+        # über die Monatsgrenze hinaus), nicht relativ zur Ladung.
+        if sl > 0:
+            from calendar import monthrange
+            from backend.services.speicher_wirtschaftlichkeit import (
+                _lese_soc_am_periodenrand,
+                ist_soc_drift_signifikant,
+            )
+            try:
+                monat_start = date(jahr, monat, 1)
+                monat_ende = date(jahr, monat, monthrange(jahr, monat)[1])
+                soc_start = await _lese_soc_am_periodenrand(
+                    db, anlage_id=anlage_id, datum=monat_start, richtung="erste",
+                )
+                soc_ende = await _lese_soc_am_periodenrand(
+                    db, anlage_id=anlage_id, datum=monat_ende, richtung="letzte",
+                )
+                if soc_start is not None and soc_ende is not None:
+                    speicher_soc_drift_flag = ist_soc_drift_signifikant(
+                        soc_start_prozent=soc_start,
+                        soc_ende_prozent=soc_ende,
+                    )
+            except Exception:  # noqa: BLE001
+                # SoC-Lookup darf den Endpoint nicht killen — bei Fehler
+                # bleibt das Drift-Flag False und der Monats-η wird angezeigt.
+                pass
+
+        # Monats-η nur ausweisen, wenn SoC-Drift nicht signifikant ist
+        if sl > 0 and se > 0 and not speicher_soc_drift_flag:
             speicher_wirkungsgrad = round(se / sl * 100, 1)
         if sl > 0 and speicher_kapazitaet and speicher_kapazitaet > 0:
             speicher_vollzyklen = round(sl / speicher_kapazitaet, 2)
+
+        # Etappe C1+C4: stundengewichteter effektiver Netz-Ladepreis für den Monat.
+        # Helper liefert immer ein Ergebnis (auch bei dünner Datenlage) — UI
+        # entscheidet anhand der `quelle`, ob KPI anzeigen oder nur Param.
+        if speicher_ladung_netz is not None and speicher_ladung_netz > 0:
+            from calendar import monthrange as _monthrange
+            from backend.services.speicher_wirtschaftlichkeit import (
+                berechne_effektiver_ladepreis as _berechne_eff_ladepreis,
+            )
+            try:
+                _ende = date(jahr, monat, _monthrange(jahr, monat)[1])
+                eff = await _berechne_eff_ladepreis(
+                    db, anlage_id=anlage_id, von=date(jahr, monat, 1), bis=_ende,
+                )
+                # Wert nur zurückgeben, wenn belastbar (dyn-tarif/boersenpreis)
+                # ODER zumindest mit Diagnose (datenbasis-zu-duenn). Bei
+                # `keine-netzladung`/`keine-tep-daten` bleibt das Feld None.
+                if eff.effektiver_ladepreis_cent is not None:
+                    speicher_eff_ladepreis = round(eff.effektiver_ladepreis_cent, 2)
+                speicher_eff_ladepreis_quelle = eff.quelle
+            except Exception:  # noqa: BLE001
+                pass
 
     # WP: Heizung/Warmwasser-Split (Wärme + bei getrennter Strommessung auch Strom, #191)
     wp_heizung = None
@@ -1433,6 +1500,9 @@ async def get_aktueller_monat(
         speicher_wirkungsgrad_prozent=speicher_wirkungsgrad,
         speicher_vollzyklen=speicher_vollzyklen,
         speicher_kapazitaet_kwh=speicher_kapazitaet,
+        speicher_soc_drift_signifikant=speicher_soc_drift_flag,
+        speicher_effektiver_ladepreis_cent=speicher_eff_ladepreis,
+        speicher_effektiver_ladepreis_quelle=speicher_eff_ladepreis_quelle,
         hat_speicher=hat_speicher,
         # Komponenten — WP
         wp_strom_kwh=get_val("wp_strom_kwh"),

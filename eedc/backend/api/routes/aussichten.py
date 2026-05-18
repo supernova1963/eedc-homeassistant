@@ -32,6 +32,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
 from backend.services.speicher_wirtschaftlichkeit import (
+    berechne_effektiver_ladepreis,
     berechne_speicher_ersparnis,
     berechne_v2h_ersparnis,
 )
@@ -1476,6 +1477,34 @@ async def get_finanz_prognose(
         ) / len(arbitrage_speicher)
         if arbitrage_speicher else None
     )
+
+    # Etappe C (#264): stundengranularen effektiven Ladepreis aus TEP
+    # vorziehen — Tibber/aWATTar-Setups bekommen den echten gewichteten
+    # Mittelwert über die Lade-Stunden statt User-Param-Schätzung.
+    if speicher and arbitrage_speicher:
+        installs_c = [sp.installationsdatum for sp in speicher if sp.installationsdatum]
+        if installs_c:
+            try:
+                eff_ladepreis_c = await berechne_effektiver_ladepreis(
+                    db,
+                    anlage_id=anlage_id,
+                    von=min(installs_c),
+                    bis=_date.today(),
+                )
+                # Etappe C1: Helper liefert immer ein Ergebnis. Nur belastbare
+                # Quellen (dyn-tarif/boersenpreis) den Param-Mittelwert überstimmen
+                # lassen — bei `datenbasis-zu-duenn` oder `keine-netzladung`
+                # bleibt der Param-Wert aus Etappe B.
+                if (
+                    eff_ladepreis_c is not None
+                    and eff_ladepreis_c.effektiver_ladepreis_cent is not None
+                    and eff_ladepreis_c.quelle in ("dyn-tarif", "boersenpreis")
+                ):
+                    speicher_lade_preis_cent = eff_ladepreis_c.effektiver_ladepreis_cent
+            except Exception:  # noqa: BLE001
+                # Helper darf Aussichten-Antwort nie killen — bei Fehler
+                # bleibt der Param-Mittelwert aus Etappe B.
+                pass
     # Aus Entladung auf Ladung zurückrechnen (η-Verluste), daraus den
     # projizierten Netz-Anteil-kWh der Prognoseperiode bestimmen.
     speicher_wirkungsgrad_frac = max(0.5, speicher_wirkungsgrad_avg / 100)
