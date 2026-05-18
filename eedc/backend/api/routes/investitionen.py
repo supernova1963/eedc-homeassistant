@@ -53,6 +53,10 @@ from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
 )
+from backend.core.field_definitions import (
+    get_eauto_ladung_kwh,
+    get_emob_pv_netz_kwh,
+)
 
 
 # =============================================================================
@@ -1388,6 +1392,8 @@ async def get_eauto_dashboard(
 
     # Wallbox-Aggregat über alle aktiven Wallboxen (für Pool-Fallback bei
     # E-Autos ohne eigene Ladedaten — typischer evcc-Import-Fall).
+    # #262: PV/Netz via SoT-Helper, der bei fehlendem `ladung_netz_kwh`
+    # automatisch aus `Total − PV` ableitet (evcc-Import-Datenform).
     wb_pool_pv = 0.0
     wb_pool_netz = 0.0
     wb_pool_extern_kwh = 0.0
@@ -1397,22 +1403,22 @@ async def get_eauto_dashboard(
             if not w.ist_aktiv_im_monat(md.jahr, md.monat):
                 continue
             d = md.verbrauch_daten or {}
-            wb_pool_pv += d.get('ladung_pv_kwh', 0) or 0
-            wb_pool_netz += d.get('ladung_netz_kwh', 0) or 0
+            pv, netz = get_emob_pv_netz_kwh(d)
+            wb_pool_pv += pv
+            wb_pool_netz += netz
             wb_pool_extern_kwh += d.get('ladung_extern_kwh', 0) or 0
             wb_pool_extern_euro += d.get('ladung_extern_euro', 0) or 0
 
     # Σ E-Auto-Ladedaten über alle E-Autos für die Pool-Entscheidung
-    eauto_pool_pv = sum(
-        (md.verbrauch_daten or {}).get('ladung_pv_kwh', 0) or 0
-        for e in eautos for md in md_by_inv.get(e.id, [])
-        if e.ist_aktiv_im_monat(md.jahr, md.monat)
-    )
-    eauto_pool_netz = sum(
-        (md.verbrauch_daten or {}).get('ladung_netz_kwh', 0) or 0
-        for e in eautos for md in md_by_inv.get(e.id, [])
-        if e.ist_aktiv_im_monat(md.jahr, md.monat)
-    )
+    eauto_pool_pv = 0.0
+    eauto_pool_netz = 0.0
+    for e in eautos:
+        for md in md_by_inv.get(e.id, []):
+            if not e.ist_aktiv_im_monat(md.jahr, md.monat):
+                continue
+            pv, netz = get_emob_pv_netz_kwh(md.verbrauch_daten or {})
+            eauto_pool_pv += pv
+            eauto_pool_netz += netz
     # Wallbox-Pool aktivieren, wenn Wallbox MEHR Heim-Ladung hat als die
     # E-Autos zusammen (klassisches evcc-Setup). Pool-Anteil je E-Auto
     # erfolgt anteilig nach gefahrenen km (siehe unten).
@@ -1447,8 +1453,10 @@ async def get_eauto_dashboard(
             d = md.verbrauch_daten or {}
             gesamt_km += d.get('km_gefahren', 0)
             gesamt_verbrauch += d.get('verbrauch_kwh', 0)
-            gesamt_pv_ladung += d.get('ladung_pv_kwh', 0)
-            gesamt_netz_ladung += d.get('ladung_netz_kwh', 0)
+            # #262: PV/Netz via SoT-Helper (evcc-Import schreibt nur Total + PV).
+            pv, netz = get_emob_pv_netz_kwh(d)
+            gesamt_pv_ladung += pv
+            gesamt_netz_ladung += netz
             gesamt_extern_ladung += d.get('ladung_extern_kwh', 0)
             gesamt_extern_kosten += d.get('ladung_extern_euro', 0)
             gesamt_v2h += d.get('v2h_entladung_kwh', 0)
@@ -2000,15 +2008,18 @@ async def get_wallbox_dashboard(
             if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
                 continue
             d = md.verbrauch_daten or {}
+            # #262: PV/Netz via SoT-Helper — evcc-Import liefert nur Total + PV,
+            # Netz wird aus `Total − PV` abgeleitet wenn der Key fehlt.
+            pv, netz = get_emob_pv_netz_kwh(d)
             if inv_id in eauto_id_set:
-                eauto_pv += d.get('ladung_pv_kwh', 0)
-                eauto_netz += d.get('ladung_netz_kwh', 0)
+                eauto_pv += pv
+                eauto_netz += netz
                 eauto_extern_kwh += d.get('ladung_extern_kwh', 0)
                 eauto_extern_euro += d.get('ladung_extern_euro', 0)
                 eauto_ladevorgaenge += d.get('ladevorgaenge', 0)
             elif inv_id in wallbox_id_set:
-                wb_pv += d.get('ladung_pv_kwh', 0)
-                wb_netz += d.get('ladung_netz_kwh', 0)
+                wb_pv += pv
+                wb_netz += netz
                 wb_extern_kwh += d.get('ladung_extern_kwh', 0)
                 wb_extern_euro += d.get('ladung_extern_euro', 0)
                 wb_ladevorgaenge += d.get('ladevorgaenge', 0)

@@ -15,7 +15,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.field_definitions import get_wp_strom_kwh
+from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
@@ -198,9 +198,13 @@ async def build_jahresbericht_context(
             wp_strom += get_wp_strom_kwh(d, inv.parameter)
         elif inv.typ in ("e-auto", "wallbox"):
             emob_km += d.get("km_gefahren", 0) or 0
-            emob_ladung += d.get("ladung_kwh", 0) or 0
-            emob_pv += d.get("ladung_pv_kwh", 0) or 0
-            emob_netz += d.get("ladung_netz_kwh", 0) or 0
+            total = d.get("ladung_kwh", 0) or 0
+            emob_ladung += total
+            # #262: PV/Netz via SoT-Helper — evcc-Import liefert nur Total + PV,
+            # Netz wird aus `Total − PV` abgeleitet wenn der Key fehlt.
+            pv, netz = get_emob_pv_netz_kwh(d, total_kwh=total)
+            emob_pv += pv
+            emob_netz += netz
             emob_v2h += d.get("v2h_entladung_kwh", 0) or 0
 
     # ── 8. Monats-Tabelle aufbauen ──────────────────────────────────────

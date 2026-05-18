@@ -22,6 +22,7 @@ from backend.core.calculations import (
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
 from backend.core.field_definitions import (
+    get_emob_pv_netz_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
     get_wp_heizenergie_kwh,
@@ -237,8 +238,9 @@ async def get_cockpit_uebersicht(
 
         elif inv.typ in ("e-auto", "wallbox"):
             if ist_dienstlich(inv):
-                netz_kwh = data.get("ladung_netz_kwh", 0) or 0
-                pv_kwh = data.get("ladung_pv_kwh", 0) or 0
+                # #262: SoT-Helper liefert (pv, netz) inkl. Fallback für
+                # evcc-Imports ohne expliziten `ladung_netz_kwh`-Key.
+                pv_kwh, netz_kwh = get_emob_pv_netz_kwh(data)
                 dienstlich_ladekosten_euro += (
                     netz_kwh * wallbox_preis_cent +
                     pv_kwh * einspeise_verguetung_cent

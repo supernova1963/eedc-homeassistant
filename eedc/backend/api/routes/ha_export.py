@@ -15,7 +15,7 @@ from typing import Optional, Any
 import os
 
 from backend.api.deps import get_db
-from backend.core.field_definitions import get_wp_strom_kwh
+from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
@@ -317,7 +317,8 @@ async def calculate_anlage_sensors(
         for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
             if inv_id == ea.id:
                 km = daten.get("km_gefahren", 0) or 0
-                netz = daten.get("ladung_netz_kwh", 0) or 0
+                # #262: SoT-Helper konsolidiert den Netz-Read mit Fallback.
+                _, netz = get_emob_pv_netz_kwh(daten)
                 benzin_liter = km / 100 * eauto_vergleich_l_100km
                 bisherige_eauto_ersparnis += (
                     benzin_liter * eauto_benzinpreis - netz * netzbezug_preis_cent / 100
@@ -555,8 +556,11 @@ async def calculate_investition_sensors(
             d = md.verbrauch_daten or {}
             gesamt_km += d.get("km_gefahren", 0) or 0
             gesamt_verbrauch += d.get("verbrauch_kwh", 0) or 0
-            gesamt_pv_ladung += d.get("ladung_pv_kwh", 0) or 0
-            gesamt_netz_ladung += d.get("ladung_netz_kwh", 0) or 0
+            # #262: PV/Netz via SoT-Helper — bei Imports ohne expliziten
+            # `ladung_netz_kwh`-Key wird aus `Total − PV` abgeleitet.
+            pv, netz = get_emob_pv_netz_kwh(d)
+            gesamt_pv_ladung += pv
+            gesamt_netz_ladung += netz
 
         gesamt_ladung = gesamt_pv_ladung + gesamt_netz_ladung
 
@@ -595,7 +599,8 @@ async def calculate_investition_sensors(
                     for md in monatsdaten:
                         d = md.verbrauch_daten or {}
                         km = d.get("km_gefahren", 0) or 0
-                        netz = d.get("ladung_netz_kwh", 0) or 0
+                        # #262: SoT-Helper liefert (pv, netz) mit Fallback.
+                        _, netz = get_emob_pv_netz_kwh(d)
                         amd = anlage_md_dict.get((md.jahr, md.monat))
                         bp = (amd.kraftstoffpreis_euro
                               if amd and amd.kraftstoffpreis_euro is not None

@@ -23,6 +23,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
 )
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
+    get_emob_pv_netz_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
     get_speicher_netzladung_kwh,
@@ -229,11 +230,15 @@ async def get_komponenten_zeitreihe(
             # nicht in den E-Mobilitäts-Pool der eigenen Anlage.
             if ist_dienstlich(inv):
                 continue
+            # #262: PV/Netz via SoT-Helper — evcc-Import liefert nur Total + PV,
+            # Netz wird aus `Total − PV` abgeleitet wenn der Key fehlt.
+            total_kwh = get_eauto_ladung_kwh(data)
+            pv, netz = get_emob_pv_netz_kwh(data, total_kwh=total_kwh)
             if inv.typ == "e-auto":
                 d["eauto_km"] += data.get("km_gefahren", 0) or 0
-                d["eauto_ladung"] += get_eauto_ladung_kwh(data)
-                d["eauto_pv_ladung"] += data.get("ladung_pv_kwh", 0) or 0
-                d["eauto_netz_ladung"] += data.get("ladung_netz_kwh", 0) or 0
+                d["eauto_ladung"] += total_kwh
+                d["eauto_pv_ladung"] += pv
+                d["eauto_netz_ladung"] += netz
                 d["eauto_extern_ladung"] += data.get("ladung_extern_kwh", 0) or 0
                 d["eauto_extern_euro"] += data.get("ladung_extern_euro", 0) or 0
                 v2h = data.get("v2h_entladung_kwh", 0) or 0
@@ -241,9 +246,9 @@ async def get_komponenten_zeitreihe(
                     hat_v2h = True
                     d["eauto_v2h"] += v2h
             else:  # wallbox
-                d["wb_ladung"] += get_eauto_ladung_kwh(data)
-                d["wb_pv_ladung"] += data.get("ladung_pv_kwh", 0) or 0
-                d["wb_netz_ladung"] += data.get("ladung_netz_kwh", 0) or 0
+                d["wb_ladung"] += total_kwh
+                d["wb_pv_ladung"] += pv
+                d["wb_netz_ladung"] += netz
                 d["wb_extern_ladung"] += data.get("ladung_extern_kwh", 0) or 0
                 d["wb_extern_euro"] += data.get("ladung_extern_euro", 0) or 0
 

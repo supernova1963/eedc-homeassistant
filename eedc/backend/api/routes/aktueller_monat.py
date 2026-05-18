@@ -32,6 +32,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
 )
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
+    get_emob_pv_netz_kwh,
     get_pv_erzeugung_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
@@ -1072,7 +1073,10 @@ async def get_aktueller_monat(
         v2h_total = 0.0
         for imd in get_imd_for_invs(emob_invs):
             data = imd.verbrauch_daten or {}
-            netz_total += data.get("ladung_netz_kwh", 0) or 0
+            # #262: Netz via SoT-Helper — bei evcc-Imports wird aus Total − PV
+            # abgeleitet, wenn `ladung_netz_kwh` nicht als eigener Key existiert.
+            _, netz = get_emob_pv_netz_kwh(data)
+            netz_total += netz
             extern_total += data.get("ladung_extern_kwh", 0) or 0
             v2h_total += data.get("v2h_entladung_kwh", 0) or 0
         if netz_total > 0:
@@ -1316,10 +1320,12 @@ async def get_aktueller_monat(
             elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
                 km = data.get("km_gefahren")
                 ladung = get_eauto_ladung_kwh(data) or None
-                ladung_netz = data.get("ladung_netz_kwh")
-                ladung_pv = data.get("ladung_pv_kwh")
+                # #262: SoT-Helper konsolidiert den vorherigen Inline-Fallback
+                # (netz = ladung_netz ?? total − pv) — gleiche Semantik, gleiche
+                # Drift-Quelle wie in den anderen Read-Sites.
+                ladung_pv, netz_kwh = get_emob_pv_netz_kwh(data, total_kwh=ladung or 0)
+                ladung_pv = ladung_pv or None
                 if km and km > 0:
-                    netz_kwh = ladung_netz if ladung_netz is not None else ((ladung or 0) - (ladung_pv or 0))
                     # #260: externe Lade-Kosten dieses Monats für diese Investition
                     extern_euro = data.get("ladung_extern_euro", 0) or 0
                     eauto_result = berechne_eauto_ersparnis(

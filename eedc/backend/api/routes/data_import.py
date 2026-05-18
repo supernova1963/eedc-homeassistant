@@ -460,6 +460,16 @@ async def apply_import(
                     verbrauch = {"ladung_kwh": monat_input.wallbox_ladung_kwh}
                     if monat_input.wallbox_ladung_pv_kwh is not None:
                         verbrauch["ladung_pv_kwh"] = monat_input.wallbox_ladung_pv_kwh
+                        # #262: Pool-Max-Aggregationen (Cockpit, Wallbox-/E-Auto-
+                        # Dashboard) lesen `ladung_netz_kwh` direkt. evcc-CSV liefert
+                        # nur Gesamt + Solar-% → Netz wird hier explizit aus
+                        # `Total − PV` abgeleitet, damit PV-Anteil + Netz-Lade-Kosten
+                        # in allen Sichten konsistent sind. Read-Site-Helper deckt
+                        # Legacy-Daten ohne diesen Key zusätzlich ab.
+                        verbrauch["ladung_netz_kwh"] = max(
+                            0.0,
+                            monat_input.wallbox_ladung_kwh - monat_input.wallbox_ladung_pv_kwh,
+                        )
                     if monat_input.wallbox_ladevorgaenge is not None:
                         verbrauch["ladevorgaenge"] = monat_input.wallbox_ladevorgaenge
                     await _track_upsert(

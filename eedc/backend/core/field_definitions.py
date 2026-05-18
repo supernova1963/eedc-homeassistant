@@ -693,6 +693,31 @@ def get_speicher_netzladung_kwh(data: dict) -> float:
     return float(data.get("ladung_netz_kwh") or data.get("speicher_ladung_netz_kwh") or 0)
 
 
+def get_emob_pv_netz_kwh(data: dict, total_kwh: float | None = None) -> tuple[float, float]:
+    """E-Mobilitäts-PV-/Netz-Anteil aus Wallbox-/E-Auto-Monatsdaten.
+
+    Liest `ladung_pv_kwh` direkt. Für `ladung_netz_kwh`:
+    - wenn als Key vorhanden → verwenden (auch 0 ist ein gültiger gepflegter Wert)
+    - sonst aus Gesamt-Ladung ableiten: `netz = max(0, total - pv)`.
+
+    Hintergrund #262 (junky84): der evcc-Portal-Import liefert pro Session nur
+    `Energie (kWh)` + `Sonne (%)` und schreibt damit `ladung_kwh` + `ladung_pv_kwh`,
+    aber kein `ladung_netz_kwh`. Pool-Max-Aggregationen, die nur diese beiden Keys
+    direkt lasen, sahen Netz = 0 und damit PV-Anteil = 100 %.
+
+    `total_kwh` darf vom Aufrufer übergeben werden, wenn die Gesamt-Ladung bereits
+    via `get_eauto_ladung_kwh()` bestimmt wurde — spart eine zweite Lesung.
+    """
+    if not data:
+        return (0.0, 0.0)
+    pv = float(data.get("ladung_pv_kwh") or 0)
+    if "ladung_netz_kwh" in data and data["ladung_netz_kwh"] is not None:
+        return (pv, float(data["ladung_netz_kwh"]))
+    if total_kwh is None:
+        total_kwh = get_eauto_ladung_kwh(data)
+    return (pv, max(0.0, total_kwh - pv))
+
+
 def get_sonstiges_verbrauch_kwh(data: dict) -> float:
     """Sonstiges-Verbraucher-Energie. Liest `verbrauch_sonstig_kwh` (kanonisch),
     Legacy-Fallback `verbrauch_kwh`.
