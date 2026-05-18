@@ -39,7 +39,7 @@ export const BASIS_FELDER: FeldDefinition[] = [
 const SPEICHER_FELDER: FeldDefinition[] = [
   { feld: 'ladung_kwh',            label: 'Ladung',     einheit: 'kWh'    },
   { feld: 'entladung_kwh',         label: 'Entladung',  einheit: 'kWh'    },
-  { feld: 'ladung_netz_kwh',       label: 'Netzladung', einheit: 'kWh',    bedingung: 'arbitrage_faehig' },
+  { feld: 'ladung_netz_kwh',       label: 'Netzladung', einheit: 'kWh',    bedingung: 'laedt_aus_netz' },
   { feld: 'speicher_ladepreis_cent', label: 'Ø Ladepreis', einheit: 'ct/kWh', bedingung: 'arbitrage_faehig' },
 ]
 
@@ -147,6 +147,8 @@ export function getFelderFuerInvestition(
 
   const getrennt = Boolean(params.getrennte_strommessung)
   const arbitrage = Boolean(params.arbitrage_faehig)
+  // Arbitrage impliziert Netzladung — Flag ist nur Erfassungs-Schalter.
+  const laedtAusNetz = Boolean(params.laedt_aus_netz) || arbitrage
   const v2h = Boolean(params.v2h_faehig || params.nutzt_v2h)
   const hatSpeicher = Boolean(params.hat_speicher)
 
@@ -155,6 +157,7 @@ export function getFelderFuerInvestition(
     if (f.bedingung === 'getrennte_strommessung')  return getrennt
     if (f.bedingung === '!getrennte_strommessung') return !getrennt
     if (f.bedingung === 'arbitrage_faehig')        return arbitrage
+    if (f.bedingung === 'laedt_aus_netz')          return laedtAusNetz
     if (f.bedingung === 'v2h_faehig')              return v2h
     if (f.bedingung === 'hat_speicher')            return hatSpeicher
     return true

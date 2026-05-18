@@ -154,15 +154,20 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           v2h_entladeleistung_kw: paramStr(params.v2h_entladeleistung_kw),
           ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_E_AUTO_DEFAULTS.ist_dienstlich,
         }
-      case 'speicher':
+      case 'speicher': {
+        const arbitrage = (params.arbitrage_faehig as boolean) ?? PARAM_SPEICHER_DEFAULTS.arbitrage_faehig
+        // Arbitrage impliziert Netzladung — Initial-State spiegelt die Implikation.
+        const laedtAusNetzGespeichert = (params.laedt_aus_netz as boolean) ?? PARAM_SPEICHER_DEFAULTS.laedt_aus_netz
         return {
           kapazitaet_kwh: paramStr(params.kapazitaet_kwh),
           nutzbare_kapazitaet_kwh: paramStr(params.nutzbare_kapazitaet_kwh),
           max_ladeleistung_kw: paramStr(params.max_ladeleistung_kw),
           max_entladeleistung_kw: paramStr(params.max_entladeleistung_kw),
           wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_SPEICHER_DEFAULTS.wirkungsgrad_prozent),
-          arbitrage_faehig: (params.arbitrage_faehig as boolean) ?? PARAM_SPEICHER_DEFAULTS.arbitrage_faehig,
+          laedt_aus_netz: arbitrage ? true : laedtAusNetzGespeichert,
+          arbitrage_faehig: arbitrage,
         }
+      }
       case 'waermepumpe':
         return {
           leistung_kw: paramStr(params.leistung_kw),
@@ -236,10 +241,15 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     const { name, value, type, checked } = e.target
     if (name.startsWith('param_')) {
       const paramName = name.replace('param_', '')
-      setParamData(prev => ({
-        ...prev,
-        [paramName]: type === 'checkbox' ? checked : value
-      }))
+      setParamData(prev => {
+        const next = { ...prev, [paramName]: type === 'checkbox' ? checked : value }
+        // Speicher: Arbitrage impliziert Netzladung — Flag mitziehen,
+        // damit das Monatsdaten-Feld `ladung_netz_kwh` sichtbar bleibt.
+        if (paramName === 'arbitrage_faehig' && type === 'checkbox' && checked) {
+          next.laedt_aus_netz = true
+        }
+        return next
+      })
     } else {
       setFormData(prev => ({
         ...prev,
@@ -756,6 +766,24 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               onChange={onChange}
             />
           </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="param_laedt_aus_netz"
+              checked={(paramData.laedt_aus_netz as boolean) || (paramData.arbitrage_faehig as boolean)}
+              disabled={paramData.arbitrage_faehig as boolean}
+              onChange={onChange}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-60"
+            />
+            <span className="text-gray-700 dark:text-gray-300">
+              Lädt aus dem Netz (z. B. Backup-/Notladung)
+              {(paramData.arbitrage_faehig as boolean) && (
+                <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                  — automatisch aktiv durch Arbitrage
+                </span>
+              )}
+            </span>
+          </label>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
