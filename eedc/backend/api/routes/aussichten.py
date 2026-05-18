@@ -38,6 +38,8 @@ from backend.services.speicher_wirtschaftlichkeit import (
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
+    PARAM_SPEICHER,
+    PARAM_SPEICHER_DEFAULTS,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
     ist_dienstlich,
@@ -1426,12 +1428,69 @@ async def get_finanz_prognose(
     # =====================================================================
     komponenten_beitraege = []
 
+    # Etappe B (#264): Speicher-Spread-Service bekommt jetzt PV/Netz-Anteil.
+    # Wir leiten den historischen Netz-Anteil an der Ladung ab und projizieren
+    # ihn auf den prognostizierten Speicher-Beitrag. Ohne IST-Netzladung
+    # (z. B. reiner PV-Speicher) bleibt das Verhalten exakt wie bisher.
+    speicher_ladung_hist_total = 0.0
+    speicher_netzladung_hist_total = 0.0
+    if speicher:
+        for sp in speicher:
+            for (inv_id, jhr, mon), daten in historische_inv_daten.items():
+                if inv_id != sp.id or not sp.ist_aktiv_im_monat(jhr, mon):
+                    continue
+                speicher_ladung_hist_total += float(daten.get("ladung_kwh") or 0)
+                speicher_netzladung_hist_total += float(
+                    daten.get("ladung_netz_kwh")
+                    or daten.get("speicher_ladung_netz_kwh")
+                    or 0
+                )
+
+    speicher_netz_anteil = (
+        speicher_netzladung_hist_total / speicher_ladung_hist_total
+        if speicher_ladung_hist_total > 0 else 0.0
+    )
+    speicher_wirkungsgrad_avg = (
+        sum(
+            (sp.parameter or {}).get(
+                PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"],
+                PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"],
+            )
+            for sp in speicher
+        ) / len(speicher)
+        if speicher else PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"]
+    )
+    # Ladepreis nur bei arbitragefähigen Speichern relevant — sonst ist die
+    # Netzladung kostenneutrale Durchleitung (z. B. Backup-Ladung).
+    arbitrage_speicher = [
+        sp for sp in speicher
+        if (sp.parameter or {}).get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"])
+    ]
+    speicher_lade_preis_cent = (
+        sum(
+            (sp.parameter or {}).get(
+                PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"],
+                PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"],
+            )
+            for sp in arbitrage_speicher
+        ) / len(arbitrage_speicher)
+        if arbitrage_speicher else None
+    )
+    # Aus Entladung auf Ladung zurückrechnen (η-Verluste), daraus den
+    # projizierten Netz-Anteil-kWh der Prognoseperiode bestimmen.
+    speicher_wirkungsgrad_frac = max(0.5, speicher_wirkungsgrad_avg / 100)
+    prog_speicher_ladung = jahres_speicher_beitrag / speicher_wirkungsgrad_frac
+    prog_speicher_netzladung = prog_speicher_ladung * speicher_netz_anteil
+
     # Speicher (Drift-Audit D: Spread-Modell statt Voll-Strompreis)
     if speicher:
         speicher_ersparnis = berechne_speicher_ersparnis(
             entladung_kwh=jahres_speicher_beitrag,
             bezug_preis_cent=netzbezug_preis,
             einspeise_verg_cent=einspeiseverguetung,
+            ladung_netz_kwh=prog_speicher_netzladung,
+            wirkungsgrad_prozent=speicher_wirkungsgrad_avg,
+            lade_preis_cent=speicher_lade_preis_cent,
         ).ersparnis_euro
         for sp in speicher:
             komponenten_beitraege.append(KomponentenBeitragSchema(
@@ -1531,11 +1590,16 @@ async def get_finanz_prognose(
     else:
         datenquellen.insert(0, "pvgis-tmy")
 
-    # Drift-Audit D: Spread-Modell für Speicher + V2H (Bezug − Einspeise)
+    # Drift-Audit D: Spread-Modell für Speicher + V2H (Bezug − Einspeise).
+    # Etappe B (#264): mit PV/Netz-Anteil aus der historischen Aufteilung
+    # (siehe Speicher-Netz-Anteil-Block oben — gleiche Args).
     speicher_ersparnis_euro = berechne_speicher_ersparnis(
         entladung_kwh=jahres_speicher_beitrag,
         bezug_preis_cent=netzbezug_preis,
         einspeise_verg_cent=einspeiseverguetung,
+        ladung_netz_kwh=prog_speicher_netzladung,
+        wirkungsgrad_prozent=speicher_wirkungsgrad_avg,
+        lade_preis_cent=speicher_lade_preis_cent,
     ).ersparnis_euro
     v2h_ersparnis_euro = berechne_v2h_ersparnis(
         v2h_entladung_kwh=jahres_v2h_beitrag,
