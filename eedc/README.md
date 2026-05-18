@@ -40,13 +40,13 @@ Die Standalone-Distribution (dieser Container, `docker-compose up`) bietet **kei
 - ❌ **Niemals direkt ins Internet exponieren** — kein Port-Forwarding auf 8099, keine Cloudflare-Tunnel ohne Auth-Layer davor, kein Reverse-Proxy ohne Basic-Auth oder mTLS.
 - ⚠️ **In geteilten Netzen vorsichtig** (Gäste-WLAN, WG, Co-Working): wer im selben Subnetz ist, erreicht die API. Cloud-Credentials und Anlagendaten sind damit ohne Auth lesbar.
 
-**Wer Internet-Zugriff braucht:**
+**Wer Internet-Zugriff braucht** (Auth selbst beistellen, das ist das Anwender-Setup):
 
 - VPN ins Heimnetz (WireGuard, Tailscale) ist der einfachste und sicherste Weg.
-- Reverse-Proxy mit Basic-Auth / OAuth2-Proxy / Cloudflare Access davor, wenn HTTPS-Zugang von außen wirklich nötig ist.
-- Oder: die Home-Assistant-Add-on-Variante installieren — HA-Login schützt die API dann automatisch.
+- Reverse-Proxy mit Basic-Auth / OAuth2-Proxy / Cloudflare Access / Tailscale Funnel davor. Das ist gelöstes Problem mit Standard-Tooling — wir bauen keinen eigenen Auth-Layer im Container nach.
+- Oder: die Home-Assistant-Add-on-Variante installieren — dann übernimmt der HA-Ingress die Auth.
 
-Ein eigener API-Auth-Layer für den Standalone-Container ist in der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110), aber bis dahin gilt: **LAN-Only, niemals ungeschützt ins Internet**.
+**LAN-Only, niemals ungeschützt ins Internet** — auch wenn die HTTPS-Verbindung TLS-verschlüsselt wäre, fehlt ohne Auth davor die Zugriffskontrolle.
 
 ### Entwicklung
 
