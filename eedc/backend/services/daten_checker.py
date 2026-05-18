@@ -1019,7 +1019,7 @@ class DatenChecker:
             # diesen Zweig meldete der Checker bei korrekt konfiguriertem
             # Premium-Setup (dietmar1968 Forum-PN 2026-05-17) eine fehlende
             # Abdeckung trotz vollständig gemappten getrennten Sensoren.
-            if inv.typ == "waermepumpe" and param.get("getrennte_strommessung", False):
+            if inv.typ == "waermepumpe" and (inv.parameter or {}).get("getrennte_strommessung", False):
                 erwartet = [["strom_heizen_kwh"], ["strom_warmwasser_kwh"]]
 
             inv_data = inv_map.get(str(inv.id), {}) or {}
