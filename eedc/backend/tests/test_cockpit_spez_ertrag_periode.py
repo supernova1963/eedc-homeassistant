@@ -199,6 +199,196 @@ async def test_fallback_ohne_pvgis_nutzt_52n_verteilung():
         )
 
 
+async def test_alle_jahre_mit_anlagen_erweiterung():
+    """Regression: Anlage über die Jahre erweitert. Bei „alle Jahre" darf
+    der Nenner nicht den heutigen kWp-Stand × Jahresanzahl nutzen, sondern
+    muss die pro Monat tatsächlich aktive PV-Leistung verwenden.
+
+    Szenario: 3 kWp seit 2020, +6 kWp seit 2023 (heute 9 kWp).
+    Jeder Modul-Anteil produziert sauber 1000 kWh/kWp/Jahr.
+      - A (3 kWp): 6 Jahre × 3000 kWh = 18000 kWh
+      - B (6 kWp): 3 Jahre × 6000 kWh = 18000 kWh
+      - Σ = 36000 kWh
+    Korrekt: 3 kWp·3 Jahre + 9 kWp·3 Jahre = 36 kWp·Jahre → 1000 kWh/kWp.
+    Buggy (heutige 9 kWp × 6 Jahre = 54): nur ~667 kWh/kWp.
+    """
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+
+    async with _session_ctx() as session:
+        anlage = Anlage(
+            anlagenname="ErweiterungsAnlage", leistung_kwp=9.0,
+            latitude=52.0, longitude=10.0,
+        )
+        session.add(anlage)
+        await session.flush()
+
+        pv_a = Investition(
+            anlage_id=anlage.id, typ="pv-module", bezeichnung="PV A",
+            leistung_kwp=3.0, anschaffungsdatum=date(2020, 1, 1),
+        )
+        pv_b = Investition(
+            anlage_id=anlage.id, typ="pv-module", bezeichnung="PV B",
+            leistung_kwp=6.0, anschaffungsdatum=date(2023, 1, 1),
+        )
+        session.add_all([pv_a, pv_b])
+        await session.flush()
+
+        # PVGIS-Prognose (Jahresertrag/kWp ist hier irrelevant, nur Verteilung)
+        _add_pvgis_prognose(session, anlage.id)
+
+        # A: 2020–2025 (6 Jahre × 3000 kWh)
+        for jahr in range(2020, 2026):
+            for m in range(1, 13):
+                kwh = 3000.0 * (SEASON_52N[m] / 100.0)
+                _add_imd(session, pv_a.id, jahr, m, kwh)
+        # B: 2023–2025 (3 Jahre × 6000 kWh)
+        for jahr in range(2023, 2026):
+            for m in range(1, 13):
+                kwh = 6000.0 * (SEASON_52N[m] / 100.0)
+                _add_imd(session, pv_b.id, jahr, m, kwh)
+        await session.commit()
+
+        resp = await get_cockpit_uebersicht(anlage_id=anlage.id, jahr=None, db=session)
+
+        # Sanity-Check Eingangsdaten
+        assert abs(resp.pv_erzeugung_kwh - 36000.0) < 1.0, (
+            f"Test-Setup defekt: pv_erzeugung sollte 36000 sein, war {resp.pv_erzeugung_kwh}"
+        )
+        assert resp.spezifischer_ertrag_kwh_kwp is not None
+        assert abs(resp.spezifischer_ertrag_kwh_kwp - 1000.0) < 5.0, (
+            f"Anlagen-Erweiterung: spez_ertrag muss 1000 kWh/kWp sein "
+            f"(per-Monat-aktives kWp), war {resp.spezifischer_ertrag_kwh_kwp}. "
+            f"Bug-Wert wäre ~667."
+        )
+
+
+async def test_alle_jahre_ignoriert_vor_pv_monate():
+    """Regression: bei jahr=None (alle Jahre) darf periode_anteil nicht aus
+    WP-/Zähler-Monaten vor PV-Inbetriebnahme aufgebläht werden.
+
+    Szenario: PV seit 2024 (2 volle Jahre 2024+2025), WP-IMDs seit 2020 (4
+    weitere Jahre nur WP), Stromzähler-Monatsdaten seit 2018 (6 weitere
+    Jahre). Bug-Symptom war: covered_months umfasste 2018–2025 → periode
+    ≈ 8, spez_ertrag = total_pv / (kWp × 8) statt × 2.
+    """
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+
+    async with _session_ctx() as session:
+        anlage, pv = await _setup_anlage_5kwp(session)
+        # PV-Anschaffung explizit 2024 setzen (überschreibt _setup-Default)
+        pv.anschaffungsdatum = date(2024, 1, 1)
+
+        # WP seit 2020 — IMDs vor PV-Zeit
+        wp = Investition(
+            anlage_id=anlage.id, typ="waermepumpe",
+            bezeichnung="WP", anschaffungsdatum=date(2020, 1, 1),
+        )
+        session.add(wp)
+        await session.flush()
+
+        _add_pvgis_prognose(session, anlage.id)
+
+        # WP-IMDs für 2020–2023 (vor PV) — dürfen periode_anteil NICHT aufblähen
+        for jahr in (2020, 2021, 2022, 2023):
+            for m in range(1, 13):
+                session.add(InvestitionMonatsdaten(
+                    investition_id=wp.id, jahr=jahr, monat=m,
+                    verbrauch_daten={"stromverbrauch_kwh": 100.0, "heizenergie_kwh": 400.0},
+                ))
+
+        # Zähler-Monatsdaten ab 2018 (noch früher) — dürfen ebenfalls nicht zählen
+        for jahr in (2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025):
+            for m in range(1, 13):
+                session.add(Monatsdaten(
+                    anlage_id=anlage.id, jahr=jahr, monat=m,
+                    netzbezug_kwh=200.0, einspeisung_kwh=50.0,
+                ))
+
+        # PV-IMDs für 2 volle Jahre 2024+2025 (gemäß 52°N-Verteilung)
+        for jahr in (2024, 2025):
+            for m in range(1, 13):
+                kwh = 5000.0 * (SEASON_52N[m] / 100.0)
+                _add_imd(session, pv.id, jahr, m, kwh)
+        await session.commit()
+
+        resp = await get_cockpit_uebersicht(anlage_id=anlage.id, jahr=None, db=session)
+
+        # 2 PV-Jahre × 5000 kWh / (5 kWp × 2) = 1000 kWh/kWp.
+        # Buggy-Verhalten lieferte ~250 (Faktor ~4 zu niedrig).
+        assert resp.spezifischer_ertrag_kwh_kwp is not None
+        assert abs(resp.spezifischer_ertrag_kwh_kwp - 1000.0) < 5.0, (
+            f"'Alle Jahre' muss 1000 kWh/kWp ergeben (2 volle PV-Jahre), "
+            f"war {resp.spezifischer_ertrag_kwh_kwp}"
+        )
+
+
+async def test_alle_jahre_mit_teil_stilllegung():
+    """Regression: Anlage wird über die Jahre verkleinert (Teil-Rückbau).
+    Bei „alle Jahre" muss der Nenner pro Monat die DAMALS aktive Leistung
+    nutzen — sonst wird in den frühen Jahren mit der heute noch
+    verbleibenden Restleistung gerechnet und der Wert ist zu hoch.
+
+    Szenario: 10 kWp seit 2020. Anfang 2023 wird ein 4-kWp-Modul
+    stillgelegt → ab 2023 nur noch 6 kWp aktiv.
+      - A (6 kWp, durchgehend): 6 Jahre × 6000 kWh = 36000 kWh
+      - B (4 kWp, 2020–2022):   3 Jahre × 4000 kWh = 12000 kWh
+      - Σ pv_erzeugung = 48000 kWh
+    Korrekt: 6 kWp·6 Jahre + 4 kWp·3 Jahre = 48 kWp·Jahre → 1000 kWh/kWp.
+    Buggy (heutige 6 kWp × 6 Jahre = 36): 48000/36 ≈ 1333 (zu hoch).
+    """
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+
+    async with _session_ctx() as session:
+        anlage = Anlage(
+            anlagenname="StilllegungsAnlage", leistung_kwp=6.0,
+            latitude=52.0, longitude=10.0,
+        )
+        session.add(anlage)
+        await session.flush()
+
+        pv_a = Investition(
+            anlage_id=anlage.id, typ="pv-module", bezeichnung="PV A (Bestand)",
+            leistung_kwp=6.0, anschaffungsdatum=date(2020, 1, 1),
+        )
+        pv_b = Investition(
+            anlage_id=anlage.id, typ="pv-module", bezeichnung="PV B (rückgebaut)",
+            leistung_kwp=4.0,
+            anschaffungsdatum=date(2020, 1, 1),
+            stilllegungsdatum=date(2022, 12, 31),
+        )
+        session.add_all([pv_a, pv_b])
+        await session.flush()
+
+        _add_pvgis_prognose(session, anlage.id)
+
+        # A: 2020–2025 (6 Jahre × 6000 kWh)
+        for jahr in range(2020, 2026):
+            for m in range(1, 13):
+                _add_imd(session, pv_a.id, jahr, m, 6000.0 * (SEASON_52N[m] / 100.0))
+        # B: 2020–2022 (3 Jahre × 4000 kWh) — stillgelegt Ende 2022
+        for jahr in range(2020, 2023):
+            for m in range(1, 13):
+                _add_imd(session, pv_b.id, jahr, m, 4000.0 * (SEASON_52N[m] / 100.0))
+        await session.commit()
+
+        resp = await get_cockpit_uebersicht(anlage_id=anlage.id, jahr=None, db=session)
+
+        assert abs(resp.pv_erzeugung_kwh - 48000.0) < 1.0, (
+            f"Test-Setup defekt: pv_erzeugung sollte 48000 sein, war {resp.pv_erzeugung_kwh}"
+        )
+        # anlagenleistung_kwp = heute aktive Module = 6 kWp (B ist stillgelegt)
+        assert abs(resp.anlagenleistung_kwp - 6.0) < 0.01, (
+            f"anlagenleistung_kwp soll 6.0 (nur PV A heute aktiv) sein, "
+            f"war {resp.anlagenleistung_kwp}"
+        )
+        assert resp.spezifischer_ertrag_kwh_kwp is not None
+        assert abs(resp.spezifischer_ertrag_kwh_kwp - 1000.0) < 5.0, (
+            f"Teil-Rückbau: spez_ertrag muss 1000 kWh/kWp sein "
+            f"(per-Monat-aktives kWp), war {resp.spezifischer_ertrag_kwh_kwp}. "
+            f"Bug-Wert wäre ~1333 (heutige 6 kWp über alle 6 Jahre)."
+        )
+
+
 # ── Runner ──────────────────────────────────────────────────────────────────
 
 
@@ -206,6 +396,9 @@ _ASYNC_TESTS = [
     test_ytd_mit_pvgis_wird_annualisiert,
     test_komplettes_jahr_unveraendert,
     test_fallback_ohne_pvgis_nutzt_52n_verteilung,
+    test_alle_jahre_mit_anlagen_erweiterung,
+    test_alle_jahre_mit_teil_stilllegung,
+    test_alle_jahre_ignoriert_vor_pv_monate,
 ]
 
 
