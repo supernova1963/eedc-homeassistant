@@ -1,6 +1,6 @@
 # Konzept: Wallbox / E-Auto — Datenarchitektur
 
-> **Status (2026-05-09): Konzept-Entwurf, Phase 1 (Pool-Bug Quick-Fix) ✅ ausgeliefert in v3.25.11** (getrennte Akkumulatoren EAuto/WB + Max-pro-Feld, siehe Memory `project_pool_fix_emob.md`). **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item. Folge-Pfade `cockpit/uebersicht.py` + `_aggregate`-Pfad in v3.25.11 bewusst offen gelassen, sollen mit Phase 2 zusammen angepackt werden.
+> **Status (2026-05-19): Phase 1 (Pool-Bug Quick-Fix) vollständig.** Quick-Fix in v3.25.11 (getrennte Akkumulatoren EAuto/WB + Max-pro-Feld, siehe Memory `project_pool_fix_emob.md`) wurde in v3.31.5 zur SoT-Helper-Konsolidierung erweitert: `compute_emob_pool_attribution` + `attribute_emob_pool_by_km` + `pick_emob_ref_parameter` in `eedc/backend/services/eauto_wirtschaftlichkeit.py`. Cockpit-Übersicht, AktuellerMonat (Hauptwert + Komponenten-Loop) und EAutoDashboard sprechen jetzt dieselbe Pool-Logik — schließt die in v3.25.11 offen gelassenen Folge-Pfade. **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item.
 
 ## Motivation
 

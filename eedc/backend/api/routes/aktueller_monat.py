@@ -25,7 +25,12 @@ from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
-from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import (
+    attribute_emob_pool_by_km,
+    berechne_eauto_ersparnis,
+    compute_emob_pool_attribution,
+    pick_emob_ref_parameter,
+)
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -913,17 +918,12 @@ async def get_aktueller_monat(
             if wallbox_tarif and wallbox_tarif.netzbezug_arbeitspreis_cent_kwh is not None
             else netzbezug_preis_cent
         )
-        # Drift-Audit Domäne A2: vorher 7 L/100km + 1,80 €/L hartcodiert.
-        emob_invs_aktiv = [i for i in investitionen if i.typ in ("e-auto", "wallbox")]
-        emob_ref_param = emob_invs_aktiv[0].parameter if emob_invs_aktiv else None
-        # #260 NongJoWo: ladung_extern_euro muss aus dem Aggregat kommen,
-        # vorher 0 € → Cockpit-Wert um die externen Lade-Kosten zu hoch.
         emob_result = berechne_eauto_ersparnis(
             km_gefahren=emob_km,
             ladung_netz_kwh=(emob_ladung or 0) - emob_pv_ladung,
             ladung_extern_euro=emob_extern_euro,
             wallbox_strompreis_cent=wallbox_preis_cent,
-            eauto_parameter=emob_ref_param,
+            eauto_parameter=pick_emob_ref_parameter(investitionen),
             monats_benzinpreis_euro=monats_benzinpreis,
         )
         emob_ersparnis = round(emob_result.ersparnis_euro, 2)
@@ -1259,6 +1259,27 @@ async def get_aktueller_monat(
         for imd in all_imd_result.scalars().all():
             imd_by_inv[imd.investition_id] = imd.verbrauch_daten or {}
 
+        # Wallbox-Pool-Attribution für die E-Auto-Komponente: bei evcc-Setups
+        # steht die Ladung auf der Wallbox-IMD, das E-Auto trägt nur km. Ohne
+        # diese Attribution rechnet die Komponente mit netz=0 + extern=0 und
+        # weicht vom Hauptwert (Pool-Tile) ab — Drift gleicher Sicht.
+        eauto_imd_data: list[dict] = []
+        wb_imd_data: list[dict] = []
+        for i in investitionen:
+            if (not i.aktiv
+                or not i.ist_aktiv_im_monat(jahr, monat)
+                or ist_dienstlich(i)
+                or i.id not in imd_by_inv):
+                continue
+            if i.typ == "e-auto":
+                eauto_imd_data.append(imd_by_inv[i.id])
+            elif i.typ == "wallbox":
+                wb_imd_data.append(imd_by_inv[i.id])
+        emob_pool_attr = compute_emob_pool_attribution(
+            eauto_imd_data=eauto_imd_data,
+            wallbox_imd_data=wb_imd_data,
+        )
+
         for inv in investitionen:
             if not inv.aktiv:
                 continue
@@ -1326,8 +1347,16 @@ async def get_aktueller_monat(
                 ladung_pv, netz_kwh = get_emob_pv_netz_kwh(data, total_kwh=ladung or 0)
                 ladung_pv = ladung_pv or None
                 if km and km > 0:
-                    # #260: externe Lade-Kosten dieses Monats für diese Investition
                     extern_euro = data.get("ladung_extern_euro", 0) or 0
+                    # Wallbox-Pool-Override für evcc-Setups (Ladedaten auf der
+                    # Wallbox-IMD, nur km am E-Auto). Selbes Pattern wie im
+                    # EAutoDashboard.
+                    if emob_pool_attr.use_wb_pool and inv.typ == "e-auto":
+                        share = attribute_emob_pool_by_km(emob_pool_attr, km)
+                        if share.netz_kwh + share.pv_kwh > 0:
+                            netz_kwh = share.netz_kwh
+                            ladung_pv = share.pv_kwh or None
+                            extern_euro = share.extern_euro
                     eauto_result = berechne_eauto_ersparnis(
                         km_gefahren=km,
                         ladung_netz_kwh=max(0, netz_kwh),

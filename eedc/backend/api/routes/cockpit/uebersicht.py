@@ -34,7 +34,10 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
 )
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
-from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import (
+    berechne_eauto_ersparnis,
+    pick_emob_ref_parameter,
+)
 
 router = APIRouter()
 
@@ -466,15 +469,12 @@ async def get_cockpit_uebersicht(
     ]
     hat_emobilitaet = len(emob_invs) > 0
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
-    # Drift-Audit Domäne A2: vorher 7 L/100km + 1,80 €/L hartcodiert.
-    # Multi-E-Auto: erste Investition als Parameter-Referenz.
-    emob_ref_parameter = emob_invs[0].parameter if emob_invs else None
     emob_result = berechne_eauto_ersparnis(
         km_gefahren=emob_km,
         ladung_netz_kwh=emob_ladung - emob_pv_ladung,
-        ladung_extern_euro=emob_extern_euro_total,  # #260: war 0.0 hartcodiert
+        ladung_extern_euro=emob_extern_euro_total,
         wallbox_strompreis_cent=wallbox_preis_cent,
-        eauto_parameter=emob_ref_parameter,
+        eauto_parameter=pick_emob_ref_parameter(emob_invs),
     )
     emob_ersparnis = emob_result.ersparnis_euro
     benzin_verbrauch = (emob_km / 100) * emob_result.verwendeter_verbrauch_l_100km

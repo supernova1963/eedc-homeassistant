@@ -22,8 +22,9 @@ Strompreis: separater Wallbox-Tarif > allgemeiner Tarif.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
+from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -117,3 +118,115 @@ def berechne_eauto_ersparnis(
         verwendeter_verbrauch_l_100km=verbrauch_l_100km,
         verwendeter_benzinpreis_euro=benzinpreis_euro,
     )
+
+
+@dataclass
+class EmobPoolAttribution:
+    """Pool-Aggregat über E-Auto- und Wallbox-IMDs für evcc-artige Setups.
+
+    Wallbox = Loadpoint-Wahrheit (evcc/Portal-Import schreibt hier),
+    E-Auto = Vehicle-Wahrheit (km + ggf. eigene Ladedaten).
+    `use_wb_pool` ist True, wenn die Wallbox-Heimladung größer ist als die
+    aller E-Autos zusammen — dann fließen die Ladedaten anteilig nach km
+    in die E-Auto-Sichten zurück.
+    """
+    wb_pool_pv: float
+    wb_pool_netz: float
+    wb_pool_extern_kwh: float
+    wb_pool_extern_euro: float
+    eauto_total_km: float
+    use_wb_pool: bool
+
+
+@dataclass
+class EmobPoolShare:
+    """Km-anteilige Verteilung des Wallbox-Pools auf ein einzelnes E-Auto."""
+    pv_kwh: float
+    netz_kwh: float
+    extern_kwh: float
+    extern_euro: float
+
+
+def compute_emob_pool_attribution(
+    *,
+    eauto_imd_data: Iterable[dict],
+    wallbox_imd_data: Iterable[dict],
+) -> EmobPoolAttribution:
+    """Aggregiert WB- + E-Auto-IMD-`verbrauch_daten` und entscheidet, ob das
+    Wallbox-Aggregat als Pool-Quelle für die E-Auto-Sichten dient.
+
+    Aufrufer übergibt bereits gefilterte Iterables (nach `ist_aktiv_im_monat`
+    und ggf. `ist_dienstlich`).
+    """
+    wb_pool_pv = 0.0
+    wb_pool_netz = 0.0
+    wb_pool_extern_kwh = 0.0
+    wb_pool_extern_euro = 0.0
+    for d in wallbox_imd_data:
+        pv, netz = get_emob_pv_netz_kwh(d)
+        wb_pool_pv += pv
+        wb_pool_netz += netz
+        wb_pool_extern_kwh += d.get("ladung_extern_kwh", 0) or 0
+        wb_pool_extern_euro += d.get("ladung_extern_euro", 0) or 0
+
+    eauto_pool_pv = 0.0
+    eauto_pool_netz = 0.0
+    eauto_total_km = 0.0
+    for d in eauto_imd_data:
+        pv, netz = get_emob_pv_netz_kwh(d)
+        eauto_pool_pv += pv
+        eauto_pool_netz += netz
+        eauto_total_km += d.get("km_gefahren", 0) or 0
+
+    use_wb_pool = (wb_pool_pv + wb_pool_netz) > (eauto_pool_pv + eauto_pool_netz)
+
+    return EmobPoolAttribution(
+        wb_pool_pv=wb_pool_pv,
+        wb_pool_netz=wb_pool_netz,
+        wb_pool_extern_kwh=wb_pool_extern_kwh,
+        wb_pool_extern_euro=wb_pool_extern_euro,
+        eauto_total_km=eauto_total_km,
+        use_wb_pool=use_wb_pool,
+    )
+
+
+_ZERO_SHARE = EmobPoolShare(0.0, 0.0, 0.0, 0.0)
+
+
+def attribute_emob_pool_by_km(
+    attribution: EmobPoolAttribution, eauto_km: float,
+) -> EmobPoolShare:
+    """Liefert den km-anteiligen Wallbox-Pool-Anteil für ein einzelnes E-Auto.
+
+    Gibt einen geteilten Null-Share zurück, wenn `use_wb_pool` falsch ist oder
+    km fehlt — der Aufrufer darf bedenkenlos abrufen ohne vorher zu prüfen.
+    """
+    if (
+        not attribution.use_wb_pool
+        or attribution.eauto_total_km <= 0
+        or eauto_km <= 0
+    ):
+        return _ZERO_SHARE
+    anteil = eauto_km / attribution.eauto_total_km
+    return EmobPoolShare(
+        pv_kwh=attribution.wb_pool_pv * anteil,
+        netz_kwh=attribution.wb_pool_netz * anteil,
+        extern_kwh=attribution.wb_pool_extern_kwh * anteil,
+        extern_euro=attribution.wb_pool_extern_euro * anteil,
+    )
+
+
+def pick_emob_ref_parameter(investitionen: Iterable) -> Optional[dict]:
+    """Wählt das `parameter`-Dict für emob-Hauptberechnungen (Vergleichsverbrauch,
+    Benzinpreis).
+
+    E-Auto bevorzugt, weil die Felder E-Auto-spezifisch sind. Bei evcc-Setups
+    steht die Wallbox häufig als erste emob-Investition vorne und hat diese
+    Params naturgemäß nicht — Default 7,5 L/100km statt User-Wert war eine
+    Drift-Quelle zwischen Hauptwert und Komponenten-Sicht.
+    """
+    eauto = next((i for i in investitionen if i.typ == "e-auto"), None)
+    if eauto is not None:
+        return eauto.parameter
+    wb = next((i for i in investitionen if i.typ == "wallbox"), None)
+    return wb.parameter if wb is not None else None

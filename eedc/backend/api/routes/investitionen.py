@@ -36,7 +36,11 @@ from backend.core.investition_parameter import (
     PARAM_WALLBOX_DEFAULTS,
 )
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
-from backend.services.eauto_wirtschaftlichkeit import berechne_eauto_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import (
+    attribute_emob_pool_by_km,
+    berechne_eauto_ersparnis,
+    compute_emob_pool_attribution,
+)
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     EXTERNE_LADUNG_DEFAULT_EURO_KWH,
@@ -1390,46 +1394,19 @@ async def get_eauto_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # Wallbox-Aggregat über alle aktiven Wallboxen (für Pool-Fallback bei
-    # E-Autos ohne eigene Ladedaten — typischer evcc-Import-Fall).
-    # #262: PV/Netz via SoT-Helper, der bei fehlendem `ladung_netz_kwh`
-    # automatisch aus `Total − PV` ableitet (evcc-Import-Datenform).
-    wb_pool_pv = 0.0
-    wb_pool_netz = 0.0
-    wb_pool_extern_kwh = 0.0
-    wb_pool_extern_euro = 0.0
-    for w in wallboxen:
-        for md in md_by_inv.get(w.id, []):
-            if not w.ist_aktiv_im_monat(md.jahr, md.monat):
-                continue
-            d = md.verbrauch_daten or {}
-            pv, netz = get_emob_pv_netz_kwh(d)
-            wb_pool_pv += pv
-            wb_pool_netz += netz
-            wb_pool_extern_kwh += d.get('ladung_extern_kwh', 0) or 0
-            wb_pool_extern_euro += d.get('ladung_extern_euro', 0) or 0
-
-    # Σ E-Auto-Ladedaten über alle E-Autos für die Pool-Entscheidung
-    eauto_pool_pv = 0.0
-    eauto_pool_netz = 0.0
-    for e in eautos:
-        for md in md_by_inv.get(e.id, []):
-            if not e.ist_aktiv_im_monat(md.jahr, md.monat):
-                continue
-            pv, netz = get_emob_pv_netz_kwh(md.verbrauch_daten or {})
-            eauto_pool_pv += pv
-            eauto_pool_netz += netz
-    # Wallbox-Pool aktivieren, wenn Wallbox MEHR Heim-Ladung hat als die
-    # E-Autos zusammen (klassisches evcc-Setup). Pool-Anteil je E-Auto
-    # erfolgt anteilig nach gefahrenen km (siehe unten).
-    eauto_pool_summe = eauto_pool_pv + eauto_pool_netz
-    wb_pool_summe = wb_pool_pv + wb_pool_netz
-    use_wb_pool = wb_pool_summe > eauto_pool_summe
-
-    eauto_total_km = sum(
-        (md.verbrauch_daten or {}).get('km_gefahren', 0) or 0
-        for e in eautos for md in md_by_inv.get(e.id, [])
-        if e.ist_aktiv_im_monat(md.jahr, md.monat)
+    # Wallbox-Heimladung als Wahrheit, wenn größer als Σ E-Auto-Heimladung
+    # (typisches evcc-Portal-Import-Setup). Km-Anteile pro E-Auto unten.
+    pool_attr = compute_emob_pool_attribution(
+        eauto_imd_data=[
+            (md.verbrauch_daten or {})
+            for e in eautos for md in md_by_inv.get(e.id, [])
+            if e.ist_aktiv_im_monat(md.jahr, md.monat)
+        ],
+        wallbox_imd_data=[
+            (md.verbrauch_daten or {})
+            for w in wallboxen for md in md_by_inv.get(w.id, [])
+            if w.ist_aktiv_im_monat(md.jahr, md.monat)
+        ],
     )
 
     dashboards = []
@@ -1464,14 +1441,13 @@ async def get_eauto_dashboard(
         # Wallbox-Pool-Fallback (#262 junky84): wenn die Wallbox-Investition
         # mehr Heim-Ladung enthält als alle E-Autos zusammen, sind die Daten
         # offenbar via evcc-Portal-Import in die Wallbox geflossen. Anteilig
-        # nach gefahrenen km auf die E-Autos verteilen, damit das E-Auto-
-        # Dashboard nicht 0 zeigt.
-        if use_wb_pool and eauto_total_km > 0 and gesamt_km > 0:
-            anteil = gesamt_km / eauto_total_km
-            gesamt_pv_ladung = wb_pool_pv * anteil
-            gesamt_netz_ladung = wb_pool_netz * anteil
-            gesamt_extern_ladung = wb_pool_extern_kwh * anteil
-            gesamt_extern_kosten = wb_pool_extern_euro * anteil
+        # nach gefahrenen km auf die E-Autos verteilen.
+        share = attribute_emob_pool_by_km(pool_attr, gesamt_km)
+        if pool_attr.use_wb_pool and share.netz_kwh + share.pv_kwh > 0:
+            gesamt_pv_ladung = share.pv_kwh
+            gesamt_netz_ladung = share.netz_kwh
+            gesamt_extern_ladung = share.extern_kwh
+            gesamt_extern_kosten = share.extern_euro
 
         # Heim-Ladung (Wallbox) = PV + Netz
         gesamt_heim_ladung = gesamt_pv_ladung + gesamt_netz_ladung
