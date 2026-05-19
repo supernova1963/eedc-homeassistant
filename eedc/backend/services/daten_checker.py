@@ -1809,6 +1809,7 @@ class DatenChecker:
                 f"Werkbank kann sie aufdröseln."
             ),
             details=details,
+            link="/aussichten/energieprofil",
         )]
 
     async def _check_datenquelle_status(self, anlage: Anlage) -> list[CheckErgebnis]:
