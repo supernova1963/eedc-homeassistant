@@ -294,28 +294,43 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   const hMax = helleStunden.length > 0 ? Math.min(23, helleStunden[helleStunden.length - 1] + 1) : 23
   const visibleChartData = chartData.slice(hMin, hMax + 1)
 
-  // ── 7-Tage-Daten ──
+  // ── 7-Tage-Daten (rapahl-PN 2026-05-19): 4 Tage Vergangenheit + 3 Tage Zukunft. ──
+  // Heute steht oben in der KPI-Matrix und wird hier ausgelassen. Historische
+  // Tage ohne Wetter-Icon/Temp/Solcast-Band — diese Forecast-Felder ergeben
+  // im Rückblick keinen Sinn, IST und Tages-Vorhersagewerte reichen.
   const heute = new Date().toISOString().slice(0, 10)
-  const genauigkeitMap = new Map(
-    (genauigkeit?.tage ?? []).map(t => [t.datum, t.ist_kwh])
-  )
-  const vergleichsTage = data.openmeteo_tage.slice(0, 7).map(om => {
-    const sc = data.solcast_tage.find(s => s.datum === om.datum)
-    const istKwh = om.datum === heute
-      ? data.ist_heute_kwh
-      : genauigkeitMap.get(om.datum) ?? null
-    return {
-      datum: om.datum,
-      om_kwh: om.pv_prognose_kwh,
-      eedc_kwh: hasEedc ? round(om.pv_prognose_kwh * lf!, 1) : null,
-      sc_kwh: sc?.kwh ?? null,
-      sc_p10: sc?.p10 ?? null,
-      sc_p90: sc?.p90 ?? null,
-      wetter_symbol: om.wetter_symbol,
-      temp_max: om.temperatur_max_c,
-      ist_kwh: istKwh,
-    }
-  })
+  const historisch = (genauigkeit?.tage ?? [])
+    .filter(t => t.datum < heute)
+    .slice(-4)
+    .map(t => ({
+      datum: t.datum,
+      om_kwh: t.openmeteo_kwh,
+      eedc_kwh: t.eedc_kwh,
+      sc_kwh: t.solcast_kwh,
+      sc_p10: null as number | null,
+      sc_p90: null as number | null,
+      wetter_symbol: null as string | null,
+      temp_max: null as number | null,
+      ist_kwh: t.ist_kwh,
+    }))
+  const zukunft = data.openmeteo_tage
+    .filter(om => om.datum > heute)
+    .slice(0, 3)
+    .map(om => {
+      const sc = data.solcast_tage.find(s => s.datum === om.datum)
+      return {
+        datum: om.datum,
+        om_kwh: om.pv_prognose_kwh as number | null,
+        eedc_kwh: hasEedc ? round(om.pv_prognose_kwh * lf!, 1) : null,
+        sc_kwh: sc?.kwh ?? null,
+        sc_p10: sc?.p10 ?? null,
+        sc_p90: sc?.p90 ?? null,
+        wetter_symbol: om.wetter_symbol as string | null,
+        temp_max: om.temperatur_max_c as number | null,
+        ist_kwh: null as number | null,
+      }
+    })
+  const vergleichsTage = [...historisch, ...zukunft]
 
   return (
     <div className="space-y-6">
@@ -762,24 +777,33 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               </tr>
             </thead>
             <tbody>
-              {vergleichsTage.map((tag) => {
+              {vergleichsTage.map((tag, idx) => {
                 // Referenz: IST wenn vorhanden, sonst Mittelwert aller Prognosen
                 const ref = tag.ist_kwh
                 const prognosen = [tag.om_kwh, tag.eedc_kwh, tag.sc_kwh].filter((v): v is number => v !== null)
                 const mean = prognosen.length > 1 ? prognosen.reduce((a, b) => a + b, 0) / prognosen.length : null
                 const devRef = ref ?? mean
+                // Trennlinie zwischen letzter Vergangenheits- und erster Zukunfts-Zeile.
+                const isFirstFuture = idx > 0 && vergleichsTage[idx - 1].ist_kwh !== null && tag.ist_kwh === null
                 return (
-                  <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
+                  <tr
+                    key={tag.datum}
+                    className={`border-b border-gray-100 dark:border-gray-800${
+                      isFirstFuture ? ' border-t-2 border-t-gray-300 dark:border-t-gray-600' : ''
+                    }`}
+                  >
                     <td className="py-2 px-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />
-                        {tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}
-                      </div>
+                      {tag.wetter_symbol !== null ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />
+                          {tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="py-2 px-2 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
                     <td className="py-2 px-2 text-right font-mono">
-                      {tag.om_kwh.toFixed(1)}
-                      {devRef !== null && <DevBadge prognose={tag.om_kwh} ist={devRef} />}
+                      {tag.om_kwh !== null ? tag.om_kwh.toFixed(1) : '—'}
+                      {devRef !== null && tag.om_kwh !== null && <DevBadge prognose={tag.om_kwh} ist={devRef} />}
                     </td>
                     <td className={`py-2 px-2 text-right font-mono ${hasEedc ? 'text-orange-500' : 'text-gray-400'}`}>
                       {hasEedc ? (
