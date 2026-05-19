@@ -7,6 +7,56 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.5] - 2026-05-19 — Bündel-Release: BKW-Doppelzählung weg + Berechnungs-Layer (ADR-001) + Tester-Bündel
+
+> 🧮 **Strukturelle Antwort auf die BKW-Drift-Klasse.** Rainer-PN 2026-05-19 zeigte eine systematische IST-Über-Erfassung (~5-8 % Bias gegenüber Solcast) bei einer Anlage mit Balkonkraftwerk. Diagnose: `TV_SERIE_CONFIG["balkonkraftwerk"].kategorie = "pv"` ließ den Live-Tagesverlauf-Service den BKW-Wert unter `pv_<inv_id>` akkumulieren, der HA-LTS-Boundary-Aggregator nutzt aber `bkw_<inv_id>`. Bei Schema-Mismatch blieben beide Keys parallel in `komponenten_kwh`, alle Konsumenten mit Whitelist `("pv_", "bkw_")` zählten BKW doppelt. **Strukturelle Lösung statt Pflaster:** Live-Σ-Riemann-Akkumulation für `komponenten_kwh` ist im HA-Add-on-Modus jetzt komplett deaktiviert — `boundary_kwh` (HA-LTS) ist alleiniger Schreiber. Damit ist die ganze Bug-Klasse strukturell weg, nicht nur das eine Symptom. Plus: neuer Berechnungs-Layer `backend/core/berechnungen/` als SoT für Aggregat-Helper, Pytest-Konformitäts-Test blockiert künftige Whitelist-Duplikate, Pflicht-Invariante im Aggregator loggt Schreib-Drift sofort.
+
+### Added
+
+- **Berechnungs-Layer `backend/core/berechnungen/` als Single Source of Truth** ([ADR-001](docs/ADR-001-BERECHNUNGS-LAYER.md), [Konzept](docs/KONZEPT-BERECHNUNGS-LAYER.md)): Whitelist-Konstanten, Σ-Helper und Konsistenz-Invarianten leben jetzt in einem eigenen Layer statt verteilt über Domain-Module. Submodule:
+  - `energie.py` — `PV_KOMPONENTEN_PREFIXE` + `summe_pv_bkw_kwh` (SoT für Aggregat aus `TagesZusammenfassung.komponenten_kwh`)
+  - `invarianten.py` — `pruefe_tep_tz_konsistenz` / `assert_tep_tz_konsistent` (Σ Hourly == Daily über `pv_kw` ↔ `komponenten_kwh[pv_*, bkw_*]`)
+  - `__init__.py` mit Re-Exports
+  Erster migrierter Konsument: `services/daten_checker.py` (`_summe_pv_bkw_kwh` ist jetzt ein Re-Import statt eigener Definition). Weitere Konsumenten (prognosen.py, repair.py u. a.) werden step-by-step beim nächsten Touch migriert — siehe `INLINE_PATTERN_GRANDFATHERED` in `tests/test_berechnungs_layer_konformitaet.py`.
+- **Pytest-Konformitäts-Test** (`tests/test_berechnungs_layer_konformitaet.py`): drei Schichten Pflichten-Test — `("pv_", "bkw_")`-Tuple und `startswith("pv_") or startswith("bkw_")`-Inline-Pattern dürfen nur in `core/berechnungen/` stehen (mit Grandfathered-Whitelist für die bekannten Altlasten); zusätzlich „veraltete Grandfathered-Einträge"-Check, der schlägt an, wenn eine Datei das Pattern nach Migration nicht mehr enthält — verhindert Karteileichen.
+- **Pflicht-Invariante im Aggregator** (`energie_profil/aggregator.py::aggregate_day`): nach jedem Schreib-Lauf wird `pruefe_tep_tz_konsistenz(tep_rows, zusammenfassung.komponenten_kwh)` aufgerufen. Verletzung wird als Warning geloggt — kein Tag wird zurückgehalten, aber Drift ist im Add-on-Log sofort sichtbar (statt erst Wochen später durch Anwender-Meldungen).
+- **Daten-Checker: PR-Plausibilitäts-Check für PV-Doppelerfassung** (rapahl-PN, Etappe-6-Erweiterung): neuer Check `_check_pv_ueber_erfassung` meldet, wenn die Performance Ratio an ≥ 3 von ≥ 20 % der PR-Tage über 1,05 liegt oder der spezifische Tagesertrag > 7 kWh/kWp an ≥ 3 Tagen erreicht. Diagnose-Charakter, keine automatische Reparatur. 10 Akzeptanztests in `test_daten_checker_pv_ueber_erfassung.py`. Memory-Linie `feedback_grenze_externe_daten_diagnose`.
+- **Prognose-Vergleichs-Tab: 4 Tage zurück + 3 Tage vorwärts** (rapahl-PN): die 7-Tages-Tabelle zeigt jetzt 4 historische Tage (aus `genauigkeit.tage` mit echtem IST + gespeicherten Prognosen) plus 3 zukünftige Tage. Trennlinie zwischen Vergangenheit und Zukunft; historische Zeilen ohne Wetter-Icon/Solcast-Konfidenzband.
+- **Cloud-Import: Backend-Fehler im Wizard sichtbar**: bei fehlgeschlagenem Verbindungstest zeigt der Wizard jetzt den vollen `testResult.fehler`-Text in einem roten Detail-Block mit Monospace-Schrift — bisher wurde die konkrete API-Antwort verschluckt zugunsten eines generischen „Verbindung fehlgeschlagen". EcoFlow-PowerOcean-Connector zusätzlich mit ausführlichem Diagnose-Logging vor jedem Return (HTTP-Status, Body-Auszug, Hersteller-`code`/`message`). Trigger: Dirk-PN.
+
+### Changed
+
+- **Aggregator-Mode-Switch: Live-Σ-Riemann nur noch im Standalone-Modus** (`energie_profil/aggregator.py:358-368`): die Live-Akkumulation pro Stunde (`kW × 1h = kWh` über `werte`-Keys) läuft im HA-Add-on-Modus (`kwh_source_label == "external:ha_statistics:hourly"`) NICHT mehr — `boundary_kwh` (HA-LTS) ist alleiniger Schreiber für `komponenten_kwh`. Etappe-4-Komplettierung: der Riemann-Pfad-Rückbau, der im ursprünglichen v3.31.0-Release laut Konzept-Doc geplant war, ist jetzt strukturell vollzogen. Im Standalone-Modus (kein HA-LTS) bleibt der Live-Pfad als Pfad-2-Fallback aktiv.
+- **`docs/KONZEPT-DATENPIPELINE.md` Abschnitt 3.5 ergänzt** um Berechnungs-Layer-Verweis; **`docs/KONZEPT-COUNTER-DAILY-DRIFT.md`** als Sub-Konzept des Berechnungs-Layers verankert; **`docs/KONZEPT-DATENCHECKER-KONSISTENZ.md`** mit Querverweis, dass Achse-A/B/C-Refactor `core/berechnungen` benutzen MUSS.
+
+### Fixed
+
+- **Stilllegungs-Filter in kWp-Summe + Sensor-Mapping-Check + Inbetriebnahme-Monat** (#608, Steffen2-PN): die stillgelegte Dachanlage trotz Stilllegungs-Datum (a) wurde in der Modul-kWp-Summen-Anzeige des Daten-Checkers mitgezählt → führte zur Warnung „PV-Module kWp stimmt nicht mit Anlagenleistung überein", obwohl die echte Anlagenleistung korrekt war, (b) wurde im Sensor-Mapping-Vollständigkeits-Check als „fehlt" gemeldet, (c) der Inbetriebnahme-Monat (Monat vor Stilllegung) wurde als Datenlücke fehlinterpretiert. Alle drei behoben durch `ist_aktiv_an(heute)`-Filter analog zu den Read-Sites in v3.29.x. Acht Akzeptanztests in `test_daten_checker_stilllegung.py` + `test_daten_checker_vorjahr_inbetriebnahme.py`.
+- **Daten-Checker: Reparatur-Werkbank-Link im Provenance-Konflikt-Eintrag** (Steffen2-PN): das Daten-Checker-Eintrag „14 Felder mit mehreren Quellen in den letzten 30 Tagen — der Resolver hat schon entschieden, die Reparatur-Werkbank kann sie aufdröseln" enthielt bisher keinen `link`, deshalb keinen „Beheben"-Button. Link auf `/einstellungen/energieprofil` (Reparatur-Werkbank ganz unten) jetzt im CheckErgebnis.
+- **Daten-Checker: Route-Korrektur `/aussichten/energieprofil` → `/einstellungen/energieprofil`** an drei Stellen (Reparatur-Werkbank-Link aus dem vorherigen Fix + zwei ältere Counter-Spike-/Drift-Links). Die alte Route gibt's nicht — die SubTabs-Kategorie ist „Daten" unter Einstellungen.
+- **E-Mobilität: Pool-vs-Komponente-Drift bei evcc-Setups** (#260 Folge nach v3.31.3): die Cockpit-Komponenten-Sicht und die Aktueller-Monat-Sicht zeigten unterschiedliche Ersparnisse für dasselbe E-Auto bei mehreren Wallbox-Sessions pro Monat. Ursache: inkonsistente Aggregation über mehrere Komponenten — der Pool-Helper aus #260 wurde nicht überall sauber durchgereicht. Fünf neue Akzeptanztests in `test_emob_pool_komponenten.py`.
+- **Custom-Import: Einheits-Konvertierung Wh/MWh → kWh + Legacy-Top-Level-Targets** (#229 JanKgh-Folge): CSV-Import-Pipeline konvertiert jetzt automatisch von Wh oder MWh nach kWh, falls die Quelldatei nicht-kWh-Einheiten verwendet (typisch z. B. bei Solarmanager-Exporten). Zusätzlich akzeptiert die Mapping-Logik auch ältere Top-Level-Spalten-Namen aus früheren eedc-Versionen, ohne Wizard-Rename. Vier neue Akzeptanztests in `test_custom_import_einheit_non_energy.py`.
+
+### Removed
+
+- **`backend/services/daten_checker.py:_summe_pv_bkw_kwh` als eigene Definition**: ersetzt durch Re-Import aus `backend.core.berechnungen` (semantisch identisch, Migration zum SoT-Layer). Externe Aufrufer ändern sich nicht.
+
+### Internal
+
+- **Test-Aufräumen Plan E**: zentrale `db`-Fixture in `backend/tests/conftest.py`, 18 Test-Dateien migriert, alle `_session_ctx`-Definitionen + 14 Standalone-`__main__`-Runner entfernt. Sonderfälle: `test_repair_orchestrator.py` hat lokale `autouse`-Fixture für `_reset_state_for_tests()`, `test_lts_aggregator_konsistenz.py` nutzt inline `db=None` (LTS-Pfad braucht keine echte Session). −712 Netto-Zeilen.
+- **Konzept-Pflege**: 7 abgeschlossene Konzepte ins `docs/archive/` verschoben (`KONZEPT-ETAPPE-4-HA-LTS-SOT`, `KONZEPT-ETAPPE-6-DRIFT-ANZEIGE`, `KONZEPT-INFOTHEK`, `KONZEPT-KORREKTURPROFIL`, `KONZEPT-MQTT-GATEWAY`, `KONZEPT-PROGNOSEQUELLEN-WAHL`, `KONZEPT-STROMPREIS-MITSCHRIFT`), Forum-Post-Entwurf `forum-post-iobroker-mqtt.md` ebenfalls archiviert, `KONZEPT-ENERGIEPROFIL-3C` ins Archiv nach Re-Audit (Drift-Befunde gegen 3d/4/5/6-Stand geprüft). Neu: `KONZEPT-DATENCHECKER-KONSISTENZ.md` als geparktes Konzept für die Daten-Checker-Aufräumung.
+- **Roadmap (#110)** auf v3.31.5-Stand aktualisiert: neuer Geplant-Punkt „Berechnungs-Layer step-by-step Migration", neuer In-Arbeit-Punkt „Komponenten-Drill-down in der Energieprofil-Tagestabelle" (Rainer-Wunsch).
+
+### Tests
+
+- 256/256 grün (253 Stand vor Session + 3 neue Konformitäts-Tests; die 2 obsoleten BKW-Pflaster-Tests sind im strukturellen Fix gelöscht worden).
+
+### Verhalten / Memory
+
+Heute zweimal in die „User verdächtigen statt eigenen Code prüfen"-Falle gelaufen (Steffen2 + Rainer) bevor Code-Audit den BKW-Bug fand. Neue Memory-Linie `feedback_eigenen_code_zuerst` adressiert das Reflex-Pattern; `feedback_aggregations_drift` erweitert um Write-Side-Variante (zwei parallele Schreiber auf demselben JSON-Feld); `feedback_step_by_step_berechnungs_layer` formalisiert die Migrations-Disziplin.
+
+---
+
 ## [3.31.4] - 2026-05-18 — Bündel-Release: Security-Hardening + Speicher-Etappe A/B + Tester-Beiträge
 
 > 🔐 **Sicherheits-Härtung als Schwerpunkt.** Drei Schichten gegen typische Angriffsvektoren in selbst-gehosteten Apps: Credential-Maskierung deny-by-default, SSRF-Schutz im Connector-Test gegen Loopback/Link-Local/Multicast-Ziele (inkl. DNS-Rebinding), und das `curl | bash`-Anti-Pattern aus der Setup-Anleitung ersetzt durch `curl → less → bash`. Plus zwei Etappen aus Stefans Speicher-Konzept (`laedt_aus_netz`-Schalter + Speicher-Wirtschaftlichkeit mit PV-/Netz-Anteil), klarere README für den Standalone-Modus, und ein Pool-Drift-Fix für die E-Mob-Auswertung beim evcc-Import.

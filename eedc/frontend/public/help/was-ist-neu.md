@@ -1,11 +1,42 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.31.4)
+> **Stand:** Mai 2026 (v3.31.5)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.31.5 — Bündel-Release: BKW-Doppelzählung weg, Prognosen-Tab erweitert, Daten-Checker präziser (Mai 2026)
+
+### Was sich für dich ändert — PV-Werte und IST
+
+> Schwerpunkt der Tester-Feedback-Runde von Rainer und Steffen2 — wenn deine Anzeige bisher höher war als erwartet, sind hier die Erklärungen.
+
+- **PV-IST-Wert beim Balkonkraftwerk wird nicht mehr doppelt gezählt**: Wer ein Balkonkraftwerk neben „normalen" PV-Modulen in eedc als eigene Investition geführt hat, sah in den Tages-, Wochen- und Monats-Auswertungen einen IST-Wert, der die BKW-Erzeugung doppelt enthielt — einmal über die Zähler-Tagesgesamtwerte und ein zweites Mal über die Live-Tagesverlauf-Daten. Die Differenz war je nach BKW-Größe spürbar (bei einem typischen 600-800-Watt-BKW etwa 1-2 kWh pro Tag, kumuliert deutlich). Mit diesem Release stimmen die IST-Werte wieder. **Bestehende Tage werden nicht automatisch neu gerechnet** — wenn du Wert auf saubere historische Werte legst, repariere die betroffenen Tage über *Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → Mehrere Tage neu berechnen*. Künftige Tage sind automatisch korrekt. Mit Dank an Rainer (rapahl) für die genaue Diagnose.
+- **PV-Über-Erfassung wird im Daten-Checker erkannt**: Neuer Plausibilitäts-Check meldet, wenn die Performance Ratio (Verhältnis IST zu PVGIS-Soll) an mindestens drei Tagen über 1,05 liegt oder der spezifische Tagesertrag auf >7 kWh/kWp steigt. Beides sind typische Hinweise auf Doppelerfassung (z. B. wenn ein BKW-Sensor im Wechselrichter-Wert schon enthalten ist und zusätzlich extra gemappt wurde). Hinweis-Charakter, keine automatische Reparatur — du siehst die Treffer der letzten 30 Tage als Diagnose-Eintrag und entscheidest selbst.
+
+### Was sich für dich ändert — Prognosen
+
+- **Prognose-Vergleichs-Tab: 4 Tage zurück + 3 Tage vorwärts**: Die 7-Tages-Tabelle im Prognosen-Tab zeigte bisher nur die kommenden 7 Tage. Rainer-Hinweis: Niemand schreibt sich vergangene Prognose-Werte auf, sie verschwinden sonst spurlos. Die Tabelle zeigt jetzt 4 historische Tage (mit echtem IST und den damals gespeicherten Prognosen aus OpenMeteo, eedc-kalibriert und Solcast) plus 3 zukünftige Tage. Eine Trennlinie trennt Vergangenheit und Zukunft; historische Zeilen blenden Wetter-Icons und Solcast-Konfidenzband aus, weil die im Rückblick keinen Mehrwert haben.
+
+### Was sich für dich ändert — Daten-Checker
+
+- **Stilllegungs-Filter greift jetzt auch in der kWp-Summe + Sensor-Mapping-Prüfung** (#608): Wenn du eine Anlage stillgelegt hast (z. B. alte PV-Module durch eine neue Aufteilung Nord/Süd ersetzt mit Stilllegungs-Datum), wurde die stillgelegte Anlage trotz Datum noch in zwei Daten-Checker-Sichten mitgerechnet: in der Summe der Modul-kWp und im Sensor-Mapping-Vollständigkeits-Check. Beide ignorieren das Stilllegungs-Datum jetzt korrekt. Inbetriebnahme-Monat (also der Monat *vor* dem Stilllegungs-Datum) wurde versehentlich als „fehlend" gemeldet — auch behoben. Mit Dank an Steffen2 für die Befund-Liste.
+- **Reparatur-Werkbank-Link in den Datenquellen-Konflikten**: Bei „14 Felder mit mehreren Quellen…" gab es bisher zwar einen Hinweis auf die Reparatur-Werkbank, aber keinen Knopf, der dich direkt dorthin bringt. Jetzt liegt der „Beheben"-Link direkt im Eintrag und geht auf die richtige Stelle (vorher zeigten drei Daten-Checker-Links auf eine veraltete Route, die zu „Seite nicht gefunden" führte — auch korrigiert).
+
+### Was sich für dich ändert — E-Mobilität, Custom-Import, Cloud-Import
+
+- **E-Mobilitäts-Ersparnis bei evcc: Pool-Drift zwischen Cockpit-Komponenten und Aktueller-Monat-Sicht** (#260 Folge): Im Cockpit-Komponenten-Sicht und in der Aktueller-Monat-Sicht zeigten dasselbe E-Auto unterschiedliche Ersparnisse, wenn evcc mehrere Wallbox-Sessions im Monat hatte. Ursache war eine Inkonsistenz in der Pool-Aggregation — bereits gefixt.
+- **Custom-Import: Einheits-Konvertierung + Legacy-Top-Level-Targets** (#229 JanKgh-Folge): Wer per CSV-Import Werte in Wh oder MWh statt kWh hochlädt, wird jetzt automatisch in kWh konvertiert. Außerdem akzeptiert der Import auch ältere Top-Level-Spalten-Namen aus früheren eedc-Versionen, ohne dass du sie umbenennen musst.
+- **Cloud-Import: Fehlermeldungen sichtbar im Wizard** (Dirk-PN): Wenn ein Verbindungstest fehlschlug, sahst du bisher nur „Verbindung fehlgeschlagen" — die konkrete API-Antwort vom Anbieter (z. B. „Invalid signature", „Access key not found") wurde verschluckt. Jetzt zeigt der Wizard die volle Fehlermeldung direkt unter dem Status-Indikator. Beim EcoFlow-PowerOcean-Connector zusätzlich ausführlicheres Logging im Backend zur Diagnose (Provider ist als „nicht mit echtem Gerät getestet" markiert — falls du ihn nutzt, sind die neuen Meldungen das Sprungbrett für eine gemeinsame Fehlersuche).
+
+### Unter der Haube — für Mitwirkende
+
+- **Berechnungs-Layer als Single Source of Truth** ([ADR-001](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/ADR-001-BERECHNUNGS-LAYER.md)): Aggregat-Funktionen (Whitelist-Filter für PV-Erzeugung, Σ-Helper, Invarianten) liegen jetzt in `backend/core/berechnungen/` — bisher waren sie über mehrere Domain-Module verteilt, was zur BKW-Doppelzählung beigetragen hat. Pytest-Konformitäts-Test blockiert künftig PRs mit dupliziertem Pattern, und der Tages-Aggregator (`aggregate_day`) prüft am Ende jedes Schreib-Laufs eine Konsistenz-Invariante zwischen Stunden- und Tages-Werten — Drift wird sofort im Log sichtbar statt erst Wochen später durch Anwender-Meldungen.
+- **Etappe 4 (HA-Statistics-LTS als Source-of-Truth) zu Ende geführt**: Im HA-Add-on-Modus ist der Live-Σ-Riemann-Pfad in der Tages-Aggregation jetzt vollständig deaktiviert — HA-Long-Term-Statistics ist alleinige Datenquelle für Tages-Komponenten-Summen. Im Standalone-Modus ohne HA-Anbindung bleibt der Live-Pfad als Fallback aktiv.
 
 ---
 
