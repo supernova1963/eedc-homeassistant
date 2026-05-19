@@ -478,6 +478,22 @@ async def aggregate_day(
     for key, val in boundary_kwh.items():
         komponenten_summen[key] = val
 
+    # BKW-Doppelzählungs-Schutz (Rainer-PN 2026-05-19): Der Live-Tagesverlauf-Service
+    # ordnet `balkonkraftwerk` der Kategorie "pv" zu (TV_SERIE_CONFIG) und schreibt
+    # den Live-Σ-Riemann-Wert daher unter `pv_<inv_id>`. Der Boundary-Aggregator
+    # (LTS/Snapshot) nutzt für dieselbe Investition aber `bkw_<inv_id>`. Ohne diesen
+    # Drop bleiben beide Keys nebeneinander in `komponenten_kwh` stehen, und alle
+    # Konsumenten, die `PV_KOMPONENTEN_PREFIXE = ("pv_", "bkw_")` summieren
+    # (prognosen.py:_PV_PREFIXES, daten_checker._summe_pv_bkw_kwh,
+    # energie_profil/repair._pv_tagessumme), zählen das BKW doppelt.
+    for inv in invs:
+        if inv.typ != "balkonkraftwerk":
+            continue
+        bkw_key = f"bkw_{inv.id}"
+        pv_key = f"pv_{inv.id}"
+        if bkw_key in komponenten_summen and pv_key in komponenten_summen:
+            komponenten_summen.pop(pv_key)
+
     # ── Peak-Werte aus HA-LTS-Min/Max (Etappe 5 v3.31.0) ─────────────────
     # HA-Recorder schreibt für has_mean=True-Sensoren die im 5-Sekunden-Bucket
     # beobachteten Extremwerte pro Stunde. Das ist die richtige Quelle für
