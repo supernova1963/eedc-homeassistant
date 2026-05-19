@@ -11,45 +11,19 @@ Fix:
   - Wallbox-Dashboard: Pool-Max über E-Auto + Wallbox pro Feld
   - E-Auto-Dashboard: Wallbox-Pool wird km-anteilig auf die E-Autos verteilt,
     wenn die Wallbox mehr Heim-Ladung hat als alle E-Autos zusammen.
-
-Self-contained:
-
-    eedc/backend/venv/bin/python -m pytest \
         eedc/backend/tests/test_dashboards_evcc_pool_fallback.py
 """
 
 from __future__ import annotations
 
-import sys
-from contextlib import asynccontextmanager
 from datetime import date
-from pathlib import Path
 
-import pytest
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-
-from backend.core.database import Base  # noqa: E402
-from backend.models import (  # noqa: E402, F401
+from backend.models import (  # noqa: F401
     Anlage, Investition, InvestitionMonatsdaten,
 )
-
-
-@asynccontextmanager
-async def _session_ctx():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    session = Session()
-    try:
-        yield session
-    finally:
-        await session.close()
-        await engine.dispose()
 
 
 async def _seed_anlage(db: AsyncSession) -> int:
@@ -76,121 +50,113 @@ async def _add_imd(db, inv_id, jahr, monat, daten):
     ))
 
 
-@pytest.mark.asyncio
-async def test_wallbox_dashboard_evcc_setup_zeigt_ladedaten():
+async def test_wallbox_dashboard_evcc_setup_zeigt_ladedaten(db):
     """junky84-Setup: Ladedaten nur in Wallbox-Inv, E-Auto hat nur km.
     Vorher: Wallbox-Dashboard zeigte 0. Jetzt: Pool-Max greift."""
     from backend.api.routes.investitionen import get_wallbox_dashboard
 
-    async with _session_ctx() as db:
-        anlage_id = await _seed_anlage(db)
-        wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
-        ea = await _add_inv(db, anlage_id, "e-auto", "Cupra Born")
+    anlage_id = await _seed_anlage(db)
+    wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
+    ea = await _add_inv(db, anlage_id, "e-auto", "Cupra Born")
 
-        # Wallbox bekommt Ladedaten (evcc-Import-Style)
-        await _add_imd(db, wb.id, 2026, 4, {
-            "ladung_kwh": 250, "ladung_pv_kwh": 120, "ladung_netz_kwh": 130,
-            "ladevorgaenge": 18,
-        })
-        # E-Auto bekommt nur km
-        await _add_imd(db, ea.id, 2026, 4, {"km_gefahren": 1244})
-        await db.commit()
+    # Wallbox bekommt Ladedaten (evcc-Import-Style)
+    await _add_imd(db, wb.id, 2026, 4, {
+        "ladung_kwh": 250, "ladung_pv_kwh": 120, "ladung_netz_kwh": 130,
+        "ladevorgaenge": 18,
+    })
+    # E-Auto bekommt nur km
+    await _add_imd(db, ea.id, 2026, 4, {"km_gefahren": 1244})
+    await db.commit()
 
-        result = await get_wallbox_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
-        assert len(result) == 1
-        z = result[0].zusammenfassung
-        # gesamt_heim_ladung sollte 250 kWh sein (aus Wallbox-Daten, vorher 0)
-        assert z["gesamt_heim_ladung_kwh"] == 250.0, (
-            f"Erwartet 250 kWh, war {z['gesamt_heim_ladung_kwh']}"
-        )
-        assert z["ladung_pv_kwh"] == 120.0
-        assert z["ladung_netz_kwh"] == 130.0
+    result = await get_wallbox_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
+    assert len(result) == 1
+    z = result[0].zusammenfassung
+    # gesamt_heim_ladung sollte 250 kWh sein (aus Wallbox-Daten, vorher 0)
+    assert z["gesamt_heim_ladung_kwh"] == 250.0, (
+        f"Erwartet 250 kWh, war {z['gesamt_heim_ladung_kwh']}"
+    )
+    assert z["ladung_pv_kwh"] == 120.0
+    assert z["ladung_netz_kwh"] == 130.0
 
 
-@pytest.mark.asyncio
-async def test_eauto_dashboard_evcc_setup_zeigt_ladedaten_anteilig():
+async def test_eauto_dashboard_evcc_setup_zeigt_ladedaten_anteilig(db):
     """junky84-Setup: Ladedaten in Wallbox, 1 E-Auto. Wallbox-Pool wird
     komplett auf das eine E-Auto verteilt (Anteil km/km_total = 1.0)."""
     from backend.api.routes.investitionen import get_eauto_dashboard
 
-    async with _session_ctx() as db:
-        anlage_id = await _seed_anlage(db)
-        wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
-        ea = await _add_inv(db, anlage_id, "e-auto", "Cupra Born")
+    anlage_id = await _seed_anlage(db)
+    wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
+    ea = await _add_inv(db, anlage_id, "e-auto", "Cupra Born")
 
-        await _add_imd(db, wb.id, 2026, 4, {
-            "ladung_kwh": 250, "ladung_pv_kwh": 120, "ladung_netz_kwh": 130,
-        })
-        await _add_imd(db, ea.id, 2026, 4, {"km_gefahren": 1244})
-        await db.commit()
+    await _add_imd(db, wb.id, 2026, 4, {
+        "ladung_kwh": 250, "ladung_pv_kwh": 120, "ladung_netz_kwh": 130,
+    })
+    await _add_imd(db, ea.id, 2026, 4, {"km_gefahren": 1244})
+    await db.commit()
 
-        result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
-        assert len(result) == 1
-        z = result[0].zusammenfassung
-        assert z["ladung_pv_kwh"] == 120.0, f"PV-Anteil 120, war {z['ladung_pv_kwh']}"
-        assert z["ladung_netz_kwh"] == 130.0
-        assert z["ladung_heim_kwh"] == 250.0
-        assert z["gesamt_km"] == 1244
+    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
+    assert len(result) == 1
+    z = result[0].zusammenfassung
+    assert z["ladung_pv_kwh"] == 120.0, f"PV-Anteil 120, war {z['ladung_pv_kwh']}"
+    assert z["ladung_netz_kwh"] == 130.0
+    assert z["ladung_heim_kwh"] == 250.0
+    assert z["gesamt_km"] == 1244
 
 
-@pytest.mark.asyncio
-async def test_eauto_dashboard_premium_setup_unveraendert():
+async def test_eauto_dashboard_premium_setup_unveraendert(db):
     """Premium-Setup: E-Auto hat eigene Ladedaten, mehr als Wallbox.
     Pool-Fallback greift NICHT, E-Auto-eigene Werte bleiben."""
     from backend.api.routes.investitionen import get_eauto_dashboard
 
-    async with _session_ctx() as db:
-        anlage_id = await _seed_anlage(db)
-        wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
-        ea = await _add_inv(db, anlage_id, "e-auto", "Cupra Born")
+    anlage_id = await _seed_anlage(db)
+    wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
+    ea = await _add_inv(db, anlage_id, "e-auto", "Cupra Born")
 
-        # Wallbox-Sicht: 200 kWh
-        await _add_imd(db, wb.id, 2026, 4, {
-            "ladung_kwh": 200, "ladung_pv_kwh": 100, "ladung_netz_kwh": 100,
-        })
-        # E-Auto-Sicht: 250 kWh (mehr) — Premium-Setup, getrennt gepflegt
-        await _add_imd(db, ea.id, 2026, 4, {
-            "ladung_kwh": 250, "ladung_pv_kwh": 150, "ladung_netz_kwh": 100,
-            "km_gefahren": 1244,
-        })
-        await db.commit()
+    # Wallbox-Sicht: 200 kWh
+    await _add_imd(db, wb.id, 2026, 4, {
+        "ladung_kwh": 200, "ladung_pv_kwh": 100, "ladung_netz_kwh": 100,
+    })
+    # E-Auto-Sicht: 250 kWh (mehr) — Premium-Setup, getrennt gepflegt
+    await _add_imd(db, ea.id, 2026, 4, {
+        "ladung_kwh": 250, "ladung_pv_kwh": 150, "ladung_netz_kwh": 100,
+        "km_gefahren": 1244,
+    })
+    await db.commit()
 
-        result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
-        z = result[0].zusammenfassung
-        # E-Auto-Werte bleiben (eauto_pool_summe > wb_pool_summe → use_wb_pool=False)
-        assert z["ladung_pv_kwh"] == 150.0
-        assert z["ladung_netz_kwh"] == 100.0
+    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
+    z = result[0].zusammenfassung
+    # E-Auto-Werte bleiben (eauto_pool_summe > wb_pool_summe → use_wb_pool=False)
+    assert z["ladung_pv_kwh"] == 150.0
+    assert z["ladung_netz_kwh"] == 100.0
 
 
-@pytest.mark.asyncio
-async def test_eauto_dashboard_multi_eauto_km_anteilig():
+async def test_eauto_dashboard_multi_eauto_km_anteilig(db):
     """2 E-Autos, Wallbox-Pool, km-anteilige Verteilung."""
     from backend.api.routes.investitionen import get_eauto_dashboard
 
-    async with _session_ctx() as db:
-        anlage_id = await _seed_anlage(db)
-        wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
-        ea1 = await _add_inv(db, anlage_id, "e-auto", "Auto A")
-        ea2 = await _add_inv(db, anlage_id, "e-auto", "Auto B")
+    anlage_id = await _seed_anlage(db)
+    wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
+    ea1 = await _add_inv(db, anlage_id, "e-auto", "Auto A")
+    ea2 = await _add_inv(db, anlage_id, "e-auto", "Auto B")
 
-        # Wallbox: 300 kWh PV + 200 kWh Netz = 500 kWh
-        await _add_imd(db, wb.id, 2026, 4, {
-            "ladung_kwh": 500, "ladung_pv_kwh": 300, "ladung_netz_kwh": 200,
-        })
-        # Auto A: 600 km, Auto B: 400 km → 60/40 Aufteilung
-        await _add_imd(db, ea1.id, 2026, 4, {"km_gefahren": 600})
-        await _add_imd(db, ea2.id, 2026, 4, {"km_gefahren": 400})
-        await db.commit()
+    # Wallbox: 300 kWh PV + 200 kWh Netz = 500 kWh
+    await _add_imd(db, wb.id, 2026, 4, {
+        "ladung_kwh": 500, "ladung_pv_kwh": 300, "ladung_netz_kwh": 200,
+    })
+    # Auto A: 600 km, Auto B: 400 km → 60/40 Aufteilung
+    await _add_imd(db, ea1.id, 2026, 4, {"km_gefahren": 600})
+    await _add_imd(db, ea2.id, 2026, 4, {"km_gefahren": 400})
+    await db.commit()
 
-        result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
-        by_name = {r.investition.bezeichnung: r.zusammenfassung for r in result}
+    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
+    by_name = {r.investition.bezeichnung: r.zusammenfassung for r in result}
 
-        # Auto A (60% km): PV 180, Netz 120
-        assert abs(by_name["Auto A"]["ladung_pv_kwh"] - 180.0) < 0.1
-        assert abs(by_name["Auto A"]["ladung_netz_kwh"] - 120.0) < 0.1
-        # Auto B (40% km): PV 120, Netz 80
-        assert abs(by_name["Auto B"]["ladung_pv_kwh"] - 120.0) < 0.1
-        assert abs(by_name["Auto B"]["ladung_netz_kwh"] - 80.0) < 0.1
+    # Auto A (60% km): PV 180, Netz 120
+    assert abs(by_name["Auto A"]["ladung_pv_kwh"] - 180.0) < 0.1
+    assert abs(by_name["Auto A"]["ladung_netz_kwh"] - 120.0) < 0.1
+    # Auto B (40% km): PV 120, Netz 80
+    assert abs(by_name["Auto B"]["ladung_pv_kwh"] - 120.0) < 0.1
+    assert abs(by_name["Auto B"]["ladung_netz_kwh"] - 80.0) < 0.1
 
 
 # ── #262 Folge-Bündel: evcc-Datenform ohne expliziten ladung_netz_kwh-Key ───
@@ -205,77 +171,73 @@ async def test_eauto_dashboard_multi_eauto_km_anteilig():
 # 14 kWh Netz) + seine HA-Template-Helper (gleiche Formel).
 
 
-@pytest.mark.asyncio
-async def test_wallbox_dashboard_evcc_ohne_netz_key():
+async def test_wallbox_dashboard_evcc_ohne_netz_key(db):
     """junky84 Folge-Bug: Wallbox hat nur ladung_kwh + ladung_pv_kwh (kein
     ladung_netz_kwh-Key — typische evcc-Import-Datenform). Vor dem Fix wurde
     PV-Anteil als 100 % gerendert, weil netz direkt 0 zurückgab.
     """
     from backend.api.routes.investitionen import get_wallbox_dashboard
 
-    async with _session_ctx() as db:
-        anlage_id = await _seed_anlage(db)
-        wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
-        ea = await _add_inv(db, anlage_id, "e-auto", "Smart #1")
+    anlage_id = await _seed_anlage(db)
+    wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
+    ea = await _add_inv(db, anlage_id, "e-auto", "Smart #1")
 
-        # evcc-Datenform: nur Total + PV (ladung_netz_kwh fehlt absichtlich)
-        await _add_imd(db, wb.id, 2026, 5, {
-            "ladung_kwh": 80.02,        # 5 Sessions, ~14 kWh Netz drin
-            "ladung_pv_kwh": 65.97,
-            "ladevorgaenge": 5,
-        })
-        await _add_imd(db, ea.id, 2026, 5, {"km_gefahren": 115})
-        await db.commit()
+    # evcc-Datenform: nur Total + PV (ladung_netz_kwh fehlt absichtlich)
+    await _add_imd(db, wb.id, 2026, 5, {
+        "ladung_kwh": 80.02,        # 5 Sessions, ~14 kWh Netz drin
+        "ladung_pv_kwh": 65.97,
+        "ladevorgaenge": 5,
+    })
+    await _add_imd(db, ea.id, 2026, 5, {"km_gefahren": 115})
+    await db.commit()
 
-        result = await get_wallbox_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
-        assert len(result) == 1
-        z = result[0].zusammenfassung
-        # SoT-Helper leitet netz = 80.02 − 65.97 = 14.05 kWh ab
-        assert abs(z["ladung_pv_kwh"] - 65.97) < 0.1, (
-            f"Erwartet PV 65.97, war {z['ladung_pv_kwh']}"
-        )
-        assert abs(z["ladung_netz_kwh"] - 14.05) < 0.1, (
-            f"Erwartet Netz 14.05 (= total − pv), war {z['ladung_netz_kwh']}"
-        )
-        assert abs(z["gesamt_heim_ladung_kwh"] - 80.02) < 0.1
-        # PV-Anteil sollte NICHT 100 % sein (vor dem Fix: 100 %)
-        assert z["pv_anteil_prozent"] < 100.0, (
-            f"PV-Anteil darf nicht 100 % sein wenn Netz-Anteil existiert, war "
-            f"{z['pv_anteil_prozent']}"
-        )
-        assert abs(z["pv_anteil_prozent"] - 82.4) < 0.5, (
-            f"Erwartet PV-Anteil ~82.4 %, war {z['pv_anteil_prozent']}"
-        )
+    result = await get_wallbox_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
+    assert len(result) == 1
+    z = result[0].zusammenfassung
+    # SoT-Helper leitet netz = 80.02 − 65.97 = 14.05 kWh ab
+    assert abs(z["ladung_pv_kwh"] - 65.97) < 0.1, (
+        f"Erwartet PV 65.97, war {z['ladung_pv_kwh']}"
+    )
+    assert abs(z["ladung_netz_kwh"] - 14.05) < 0.1, (
+        f"Erwartet Netz 14.05 (= total − pv), war {z['ladung_netz_kwh']}"
+    )
+    assert abs(z["gesamt_heim_ladung_kwh"] - 80.02) < 0.1
+    # PV-Anteil sollte NICHT 100 % sein (vor dem Fix: 100 %)
+    assert z["pv_anteil_prozent"] < 100.0, (
+        f"PV-Anteil darf nicht 100 % sein wenn Netz-Anteil existiert, war "
+        f"{z['pv_anteil_prozent']}"
+    )
+    assert abs(z["pv_anteil_prozent"] - 82.4) < 0.5, (
+        f"Erwartet PV-Anteil ~82.4 %, war {z['pv_anteil_prozent']}"
+    )
 
 
-@pytest.mark.asyncio
-async def test_eauto_dashboard_evcc_ohne_netz_key():
+async def test_eauto_dashboard_evcc_ohne_netz_key(db):
     """Spiegelbild für E-Auto-Dashboard: Pool-Fallback muss bei evcc-only-Daten
     (kein ladung_netz_kwh-Key) den Netz-Anteil aus Total − PV ableiten.
     """
     from backend.api.routes.investitionen import get_eauto_dashboard
 
-    async with _session_ctx() as db:
-        anlage_id = await _seed_anlage(db)
-        wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
-        ea = await _add_inv(db, anlage_id, "e-auto", "Smart #1")
+    anlage_id = await _seed_anlage(db)
+    wb = await _add_inv(db, anlage_id, "wallbox", "Warp3")
+    ea = await _add_inv(db, anlage_id, "e-auto", "Smart #1")
 
-        await _add_imd(db, wb.id, 2026, 5, {
-            "ladung_kwh": 80.02,
-            "ladung_pv_kwh": 65.97,
-        })
-        await _add_imd(db, ea.id, 2026, 5, {"km_gefahren": 115})
-        await db.commit()
+    await _add_imd(db, wb.id, 2026, 5, {
+        "ladung_kwh": 80.02,
+        "ladung_pv_kwh": 65.97,
+    })
+    await _add_imd(db, ea.id, 2026, 5, {"km_gefahren": 115})
+    await db.commit()
 
-        result = await get_eauto_dashboard(
-            anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db
-        )
-        z = result[0].zusammenfassung
-        assert abs(z["ladung_pv_kwh"] - 65.97) < 0.1
-        assert abs(z["ladung_netz_kwh"] - 14.05) < 0.1, (
-            f"E-Auto-Dashboard muss Netz aus Wallbox-Pool ableiten, war "
-            f"{z['ladung_netz_kwh']}"
-        )
+    result = await get_eauto_dashboard(
+        anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db
+    )
+    z = result[0].zusammenfassung
+    assert abs(z["ladung_pv_kwh"] - 65.97) < 0.1
+    assert abs(z["ladung_netz_kwh"] - 14.05) < 0.1, (
+        f"E-Auto-Dashboard muss Netz aus Wallbox-Pool ableiten, war "
+        f"{z['ladung_netz_kwh']}"
+    )
 
 
 def test_helper_get_emob_pv_netz_kwh_evcc_form():

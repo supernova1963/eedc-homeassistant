@@ -7,10 +7,6 @@ Damit ist beweisbar, dass Rainers ~10 % Drift (72,1 / 67 / 64,49 kWh am
 lesen aus derselben Quelle, Σ Hourly = Daily ist Konstruktion, kein
 Glück.
 
-Self-contained:
-
-    eedc/backend/venv/bin/python eedc/backend/tests/test_lts_aggregator_konsistenz.py
-
 Testet:
   1. Σ Hourly pv == Σ Daily pv_*-Keys (über alle PV-Investitionen)
   2. Σ Hourly einspeisung == Daily einspeisung
@@ -20,35 +16,21 @@ Testet:
   6. Sonstige Investitions-Typ-Keys mit korrekter Präfix-Konvention
   7. Fehlendes HA-LTS → leeres Result
   8. Anlage ohne PV-Investition → keine pv_*-Keys
+
+Hinweis: Der LTS-Pfad liest direkt aus HA-Statistics, das `db`-Argument
+ist nur Symmetrie-Parameter zur Snapshot-Variante (immer `None`).
 """
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
-from contextlib import asynccontextmanager
 from datetime import date
-from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]  # eedc/
-sys.path.insert(0, str(_BACKEND_ROOT))
-
-from types import SimpleNamespace  # noqa: E402
-
-from backend.services.snapshot.lts_aggregator import (  # noqa: E402
+from backend.services.snapshot.lts_aggregator import (
     get_hourly_kwh_by_category_lts,
     get_komponenten_tageskwh_lts,
 )
-
-
-@asynccontextmanager
-async def _session_ctx():
-    """Dummy-Context — die LTS-Aggregator-Funktionen nutzen db nur weil die
-    Snapshot-Variante das tut (Output-Vertrag-Symmetrie); LTS-Pfad liest
-    direkt aus HA-Statistics."""
-    yield None  # type: ignore[misc]
 
 
 def _make_anlage_dict(sensor_mapping: dict):
@@ -117,9 +99,8 @@ async def test_sigma_hourly_pv_gleich_sigma_daily_pv_keys():
     mock_svc = _build_mock_ha_svc(deltas)
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            hourly = await get_hourly_kwh_by_category_lts(db, anlage, invs, date(2026, 5, 15))
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        hourly = await get_hourly_kwh_by_category_lts(None, anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     # Σ Hourly pv (kategorisiert, mit Cap)
     # Achtung: Cap greift bei pv > 10 kWp × 1.5 = 15 kWh pro Stunde — bei unserem
@@ -154,9 +135,8 @@ async def test_sigma_hourly_einspeisung_netzbezug():
     mock_svc = _build_mock_ha_svc(deltas)
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            hourly = await get_hourly_kwh_by_category_lts(db, anlage, invs, date(2026, 5, 15))
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        hourly = await get_hourly_kwh_by_category_lts(None, anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     sigma_hourly_einsp = sum((h.get("einspeisung") or 0.0) for h in hourly.values())
     sigma_hourly_bezug = sum((h.get("netzbezug") or 0.0) for h in hourly.values())
@@ -200,9 +180,8 @@ async def test_speicher_vorzeichen_konsistent():
     mock_svc = _build_mock_ha_svc(deltas)
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            hourly = await get_hourly_kwh_by_category_lts(db, anlage, invs, date(2026, 5, 15))
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        hourly = await get_hourly_kwh_by_category_lts(None, anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     sigma_hourly_netto = sum((h.get("batterie_netto") or 0.0) for h in hourly.values())
     daily_netto = daily["batterie_5"]
@@ -242,9 +221,8 @@ async def test_wp_wallbox_sigma_konsistent():
     mock_svc = _build_mock_ha_svc(deltas)
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            hourly = await get_hourly_kwh_by_category_lts(db, anlage, invs, date(2026, 5, 15))
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        hourly = await get_hourly_kwh_by_category_lts(None, anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     sigma_hourly_wp = sum((h.get("wp") or 0.0) for h in hourly.values())
     sigma_hourly_wb = sum((h.get("wallbox") or 0.0) for h in hourly.values())
@@ -275,8 +253,7 @@ async def test_balkonkraftwerk_und_sonstiges_keys():
     mock_svc = _build_mock_ha_svc(deltas)
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     assert "bkw_11" in daily, f"bkw_11-Key fehlt: {list(daily.keys())}"
     assert abs(daily["bkw_11"] - 7.2) < 0.01
@@ -298,9 +275,8 @@ async def test_kein_ha_lts_liefert_leer():
     mock_svc.is_available = False
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            hourly = await get_hourly_kwh_by_category_lts(db, anlage, invs, date(2026, 5, 15))
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        hourly = await get_hourly_kwh_by_category_lts(None, anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     assert hourly == {}
     assert daily == {}
@@ -328,8 +304,7 @@ async def test_anlage_ohne_pv_keine_pv_keys():
     mock_svc = _build_mock_ha_svc(deltas)
 
     with patch("backend.services.snapshot.lts_aggregator.get_ha_statistics_service", return_value=mock_svc):
-        async with _session_ctx() as db:
-            daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
+        daily = await get_komponenten_tageskwh_lts(anlage, invs, date(2026, 5, 15))
 
     pv_keys = [k for k in daily if k.startswith("pv_")]
     bkw_keys = [k for k in daily if k.startswith("bkw_")]
@@ -363,10 +338,3 @@ async def _run_all() -> int:
             traceback.print_exc()
     return failures
 
-
-if __name__ == "__main__":
-    failures = asyncio.run(_run_all())
-    if failures:
-        print(f"\n{failures} von {len(_TESTS)} Tests fehlgeschlagen.")
-        sys.exit(1)
-    print(f"\nAlle {len(_TESTS)} Tests grün.")

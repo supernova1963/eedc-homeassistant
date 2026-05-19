@@ -14,21 +14,14 @@ Fix v3.30.2:
 
 from __future__ import annotations
 
-import sys
-from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-
-from backend.core.database import Base  # noqa: E402
-from backend.models import Anlage, Investition  # noqa: E402
-from backend.models.sensor_snapshot import SensorSnapshot  # noqa: E402
-from backend.services.snapshot.aggregator import get_hourly_kwh_by_category  # noqa: E402
-from backend.services.snapshot.plausibility import (  # noqa: E402
+from backend.models import Anlage, Investition
+from backend.models.sensor_snapshot import SensorSnapshot
+from backend.services.snapshot.aggregator import get_hourly_kwh_by_category
+from backend.services.snapshot.plausibility import (
     SPIKE_FAKTOR_STUNDE,
     cap_pv_einspeisung_stunde,
     schwelle_pv_einspeisung_stunde_kwh,
@@ -36,20 +29,6 @@ from backend.services.snapshot.plausibility import (  # noqa: E402
 
 
 # ───────────────────────────── Helper ──────────────────────────────
-
-
-@asynccontextmanager
-async def _session_ctx():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    session = Session()
-    try:
-        yield session
-    finally:
-        await session.close()
-        await engine.dispose()
 
 
 async def _make_anlage_with_pv(
@@ -165,101 +144,98 @@ def test_cap_grenzwert_exakt_durchlassen():
 # ───────────────────────────── Integration: Aggregator ──────────────────────────────
 
 
-async def test_aggregator_pv_spike_geklemmt():
+async def test_aggregator_pv_spike_geklemmt(db):
     """
     Forum #529-Szenario: pv_kw=109 kW um 11:00 bei 11.2-kWp-Anlage.
     Slot 11 muss nach Cap None liefern, andere Slots unverändert.
 
     Backward-Konvention: Slot h = snap[h] − snap[h−1] (Boundary-Offsets −1..23).
     """
-    async with _session_ctx() as session:
-        anlage, inv = await _make_anlage_with_pv(session, leistung_kwp=11.2)
+    anlage, inv = await _make_anlage_with_pv(db, leistung_kwp=11.2)
 
-        datum = date(2026, 5, 14)
-        sensor_key = f"inv:{inv.id}:pv_erzeugung_kwh"
+    datum = date(2026, 5, 14)
+    sensor_key = f"inv:{inv.id}:pv_erzeugung_kwh"
 
-        # 25 Boundary-Snapshots: Counter wächst stündlich um 2 kWh,
-        # außer von h=10 → h=11 wo der Spike-Sprung +109 kWh passiert.
-        base = 1000.0
-        for offset in range(-1, 24):
-            ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=offset)
-            # Stunde 11 hat einen Sprung von +109 statt +2
-            if offset >= 11:
-                wert = base + (offset + 1) * 2 + 107  # +107 zusätzlich nach Spike
-            else:
-                wert = base + (offset + 1) * 2
-            await _put_snapshot(session, anlage.id, sensor_key, ts, wert)
-        await session.commit()
+    # 25 Boundary-Snapshots: Counter wächst stündlich um 2 kWh,
+    # außer von h=10 → h=11 wo der Spike-Sprung +109 kWh passiert.
+    base = 1000.0
+    for offset in range(-1, 24):
+        ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=offset)
+        # Stunde 11 hat einen Sprung von +109 statt +2
+        if offset >= 11:
+            wert = base + (offset + 1) * 2 + 107  # +107 zusätzlich nach Spike
+        else:
+            wert = base + (offset + 1) * 2
+        await _put_snapshot(db, anlage.id, sensor_key, ts, wert)
+    await db.commit()
 
-        result = await get_hourly_kwh_by_category(
-            session, anlage, {str(inv.id): inv}, datum
-        )
+    result = await get_hourly_kwh_by_category(
+        db, anlage, {str(inv.id): inv}, datum
+    )
 
-        # Slot 11 enthält den Spike → muss nach Cap None sein
-        assert result[11]["pv"] is None, f"Slot 11 sollte gekappt sein, ist: {result[11]['pv']}"
+    # Slot 11 enthält den Spike → muss nach Cap None sein
+    assert result[11]["pv"] is None, f"Slot 11 sollte gekappt sein, ist: {result[11]['pv']}"
 
-        # Slot 10 (vor Spike): normaler Wert ~2 kWh
-        assert result[10]["pv"] is not None
-        assert abs(result[10]["pv"] - 2.0) < 0.01
+    # Slot 10 (vor Spike): normaler Wert ~2 kWh
+    assert result[10]["pv"] is not None
+    assert abs(result[10]["pv"] - 2.0) < 0.01
 
-        # Slot 12 (nach Spike): normaler Wert ~2 kWh — kein Folge-Cap
-        assert result[12]["pv"] is not None
-        assert abs(result[12]["pv"] - 2.0) < 0.01
+    # Slot 12 (nach Spike): normaler Wert ~2 kWh — kein Folge-Cap
+    assert result[12]["pv"] is not None
+    assert abs(result[12]["pv"] - 2.0) < 0.01
 
 
-async def test_aggregator_pv_normal_kein_cap():
+async def test_aggregator_pv_normal_kein_cap(db):
     """Normalbetrieb: alle Stundenwerte unter Schwelle → keine None-Werte."""
-    async with _session_ctx() as session:
-        anlage, inv = await _make_anlage_with_pv(session, leistung_kwp=11.2)
+    anlage, inv = await _make_anlage_with_pv(db, leistung_kwp=11.2)
 
-        datum = date(2026, 5, 14)
-        sensor_key = f"inv:{inv.id}:pv_erzeugung_kwh"
+    datum = date(2026, 5, 14)
+    sensor_key = f"inv:{inv.id}:pv_erzeugung_kwh"
 
-        # Counter wächst stündlich um 8 kWh (Sommer-Peak realistisch < 16.8)
-        for offset in range(-1, 24):
-            ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=offset)
-            wert = 1000.0 + (offset + 1) * 8
-            await _put_snapshot(session, anlage.id, sensor_key, ts, wert)
-        await session.commit()
+    # Counter wächst stündlich um 8 kWh (Sommer-Peak realistisch < 16.8)
+    for offset in range(-1, 24):
+        ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=offset)
+        wert = 1000.0 + (offset + 1) * 8
+        await _put_snapshot(db, anlage.id, sensor_key, ts, wert)
+    await db.commit()
 
-        result = await get_hourly_kwh_by_category(
-            session, anlage, {str(inv.id): inv}, datum
-        )
+    result = await get_hourly_kwh_by_category(
+        db, anlage, {str(inv.id): inv}, datum
+    )
 
-        # Alle Slots haben pv ≈ 8 kWh (unter Schwelle 16.8)
-        for h in range(24):
-            assert result[h]["pv"] is not None, f"Slot {h} sollte gefüllt sein"
-            assert abs(result[h]["pv"] - 8.0) < 0.01, f"Slot {h}: {result[h]['pv']}"
+    # Alle Slots haben pv ≈ 8 kWh (unter Schwelle 16.8)
+    for h in range(24):
+        assert result[h]["pv"] is not None, f"Slot {h} sollte gefüllt sein"
+        assert abs(result[h]["pv"] - 8.0) < 0.01, f"Slot {h}: {result[h]['pv']}"
 
 
-async def test_aggregator_anlage_ohne_kwp_kein_cap():
+async def test_aggregator_anlage_ohne_kwp_kein_cap(db):
     """
     Anlage ohne leistung_kwp → kein Cap (Schwelle None). Selbst absurde
     Stundenwerte bleiben unverändert, weil ohne kWp keine sinnvolle Grenze
     bekannt ist (Daten-Checker filtert solche Anlagen aus eigenem Pfad).
     """
-    async with _session_ctx() as session:
-        anlage, inv = await _make_anlage_with_pv(session, leistung_kwp=0.0)
+    anlage, inv = await _make_anlage_with_pv(db, leistung_kwp=0.0)
 
-        datum = date(2026, 5, 14)
-        sensor_key = f"inv:{inv.id}:pv_erzeugung_kwh"
+    datum = date(2026, 5, 14)
+    sensor_key = f"inv:{inv.id}:pv_erzeugung_kwh"
 
-        # Spike von +50 kWh
-        for offset in range(-1, 24):
-            ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=offset)
-            wert = 1000.0 + (offset + 1) * 2
-            if offset >= 11:
-                wert += 48
-            await _put_snapshot(session, anlage.id, sensor_key, ts, wert)
-        await session.commit()
+    # Spike von +50 kWh
+    for offset in range(-1, 24):
+        ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=offset)
+        wert = 1000.0 + (offset + 1) * 2
+        if offset >= 11:
+            wert += 48
+        await _put_snapshot(db, anlage.id, sensor_key, ts, wert)
+    await db.commit()
 
-        result = await get_hourly_kwh_by_category(
-            session, anlage, {str(inv.id): inv}, datum
-        )
+    result = await get_hourly_kwh_by_category(
+        db, anlage, {str(inv.id): inv}, datum
+    )
 
-        # Slot 11 enthält den Spike (~50 kWh) — bleibt erhalten, kein Cap
-        assert result[11]["pv"] is not None
-        assert result[11]["pv"] > 40
+    # Slot 11 enthält den Spike (~50 kWh) — bleibt erhalten, kein Cap
+    assert result[11]["pv"] is not None
+    assert result[11]["pv"] > 40
 
 
 # ───────────────────────────── Daten-Checker SoT-Konsistenz ──────────────────────────────

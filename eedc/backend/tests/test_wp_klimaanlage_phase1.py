@@ -14,35 +14,13 @@ Phase 1 macht zwei Anpassungen:
 
 from __future__ import annotations
 
-import sys
-from contextlib import asynccontextmanager
 from datetime import date
-from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_BACKEND_ROOT))
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from sqlalchemy import select  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-from sqlalchemy.orm import selectinload  # noqa: E402
-
-from backend.core.database import Base  # noqa: E402
-from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten  # noqa: E402
-from backend.services.daten_checker import DatenChecker  # noqa: E402
-
-
-@asynccontextmanager
-async def _session_ctx():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    session = Session()
-    try:
-        yield session
-    finally:
-        await session.close()
-        await engine.dispose()
+from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
+from backend.services.daten_checker import DatenChecker
 
 
 async def _reload_anlage(session, anlage_id):
@@ -71,140 +49,137 @@ def _imd(inv_id, jahr, monat, *, stromverbrauch_kwh=None, heizenergie_kwh=None):
     )
 
 
-async def test_klima_meldet_keine_heizwaerme_warnung():
+async def test_klima_meldet_keine_heizwaerme_warnung(db):
     """Bei wp_art='luft_luft' fehlt die Heizenergie-Warnung im Daten-Checker."""
-    async with _session_ctx() as session:
-        anlage = Anlage(
-            anlagenname="TestKlima",
-            leistung_kwp=10.0,
-            installationsdatum=date(2025, 1, 1),
-        )
-        session.add(anlage)
-        await session.flush()
+    anlage = Anlage(
+        anlagenname="TestKlima",
+        leistung_kwp=10.0,
+        installationsdatum=date(2025, 1, 1),
+    )
+    db.add(anlage)
+    await db.flush()
 
-        klima = Investition(
-            anlage_id=anlage.id, typ="waermepumpe",
-            bezeichnung="Daikin Split", anschaffungsdatum=date(2025, 1, 1),
-            parameter={"wp_art": "luft_luft"},
-        )
-        session.add(klima)
-        await session.flush()
+    klima = Investition(
+        anlage_id=anlage.id, typ="waermepumpe",
+        bezeichnung="Daikin Split", anschaffungsdatum=date(2025, 1, 1),
+        parameter={"wp_art": "luft_luft"},
+    )
+    db.add(klima)
+    await db.flush()
 
-        # Stromverbrauch vorhanden, Heizenergie NICHT (Klima-Realität)
-        for monat in range(1, 6):
-            session.add(_imd(klima.id, 2025, monat, stromverbrauch_kwh=100.0))
+    # Stromverbrauch vorhanden, Heizenergie NICHT (Klima-Realität)
+    for monat in range(1, 6):
+        db.add(_imd(klima.id, 2025, monat, stromverbrauch_kwh=100.0))
 
-        # Mindest-Anlagenmonatsdaten, damit Checker läuft
-        for monat in range(1, 6):
-            session.add(Monatsdaten(
-                anlage_id=anlage.id, jahr=2025, monat=monat,
-                einspeisung_kwh=200.0, netzbezug_kwh=150.0,
-            ))
-        await session.commit()
+    # Mindest-Anlagenmonatsdaten, damit Checker läuft
+    for monat in range(1, 6):
+        db.add(Monatsdaten(
+            anlage_id=anlage.id, jahr=2025, monat=monat,
+            einspeisung_kwh=200.0, netzbezug_kwh=150.0,
+        ))
+    await db.commit()
 
-        anlage_loaded, monatsdaten = await _reload_anlage(session, anlage.id)
-        klima_loaded = next(i for i in anlage_loaded.investitionen if i.typ == "waermepumpe")
+    anlage_loaded, monatsdaten = await _reload_anlage(db, anlage.id)
+    klima_loaded = next(i for i in anlage_loaded.investitionen if i.typ == "waermepumpe")
 
-        checker = DatenChecker(session)
-        ergebnisse = checker._check_wp_monatsdaten(
-            klima_loaded, "Daikin Split", klima_loaded.parameter, []
-        )
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_wp_monatsdaten(
+        klima_loaded, "Daikin Split", klima_loaded.parameter, []
+    )
 
-        # Es darf KEINE "Heizwärme fehlt"-Meldung kommen
-        heiz_warnungen = [
-            e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
-        ]
-        assert not heiz_warnungen, (
-            f"Klimaanlage darf keine Heizwärme-Warnung bekommen, "
-            f"erhielt aber: {[e.meldung for e in heiz_warnungen]}"
-        )
+    # Es darf KEINE "Heizwärme fehlt"-Meldung kommen
+    heiz_warnungen = [
+        e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
+    ]
+    assert not heiz_warnungen, (
+        f"Klimaanlage darf keine Heizwärme-Warnung bekommen, "
+        f"erhielt aber: {[e.meldung for e in heiz_warnungen]}"
+    )
 
 
-async def test_klassische_wp_meldet_heizwaerme_warnung_weiterhin():
+async def test_klassische_wp_meldet_heizwaerme_warnung_weiterhin(db):
     """Bei wp_art='luft_wasser' (Standard-WP) fehlt die Heizwärme-Warnung weiterhin
     wenn heizenergie_kwh nicht vorliegt — kein Regress."""
-    async with _session_ctx() as session:
-        anlage = Anlage(
-            anlagenname="TestWP",
-            leistung_kwp=10.0,
-            installationsdatum=date(2025, 1, 1),
-        )
-        session.add(anlage)
-        await session.flush()
+    anlage = Anlage(
+        anlagenname="TestWP",
+        leistung_kwp=10.0,
+        installationsdatum=date(2025, 1, 1),
+    )
+    db.add(anlage)
+    await db.flush()
 
-        wp = Investition(
-            anlage_id=anlage.id, typ="waermepumpe",
-            bezeichnung="Vitocal", anschaffungsdatum=date(2025, 1, 1),
-            parameter={"wp_art": "luft_wasser"},
-        )
-        session.add(wp)
-        await session.flush()
+    wp = Investition(
+        anlage_id=anlage.id, typ="waermepumpe",
+        bezeichnung="Vitocal", anschaffungsdatum=date(2025, 1, 1),
+        parameter={"wp_art": "luft_wasser"},
+    )
+    db.add(wp)
+    await db.flush()
 
-        for monat in range(1, 6):
-            session.add(_imd(wp.id, 2025, monat, stromverbrauch_kwh=100.0))
+    for monat in range(1, 6):
+        db.add(_imd(wp.id, 2025, monat, stromverbrauch_kwh=100.0))
 
-        for monat in range(1, 6):
-            session.add(Monatsdaten(
-                anlage_id=anlage.id, jahr=2025, monat=monat,
-                einspeisung_kwh=200.0, netzbezug_kwh=150.0,
-            ))
-        await session.commit()
+    for monat in range(1, 6):
+        db.add(Monatsdaten(
+            anlage_id=anlage.id, jahr=2025, monat=monat,
+            einspeisung_kwh=200.0, netzbezug_kwh=150.0,
+        ))
+    await db.commit()
 
-        anlage_loaded, monatsdaten = await _reload_anlage(session, anlage.id)
-        wp_loaded = next(i for i in anlage_loaded.investitionen if i.typ == "waermepumpe")
+    anlage_loaded, monatsdaten = await _reload_anlage(db, anlage.id)
+    wp_loaded = next(i for i in anlage_loaded.investitionen if i.typ == "waermepumpe")
 
-        checker = DatenChecker(session)
-        ergebnisse = checker._check_wp_monatsdaten(
-            wp_loaded, "Vitocal", wp_loaded.parameter, monatsdaten
-        )
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_wp_monatsdaten(
+        wp_loaded, "Vitocal", wp_loaded.parameter, monatsdaten
+    )
 
-        heiz_warnungen = [
-            e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
-        ]
-        assert heiz_warnungen, (
-            "Klassische Luft-Wasser-WP muss Heizwärme-Warnung bekommen, "
-            "wenn heizenergie_kwh fehlt — sonst ist die Klima-Sonderbehandlung "
-            "zu breit."
-        )
+    heiz_warnungen = [
+        e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
+    ]
+    assert heiz_warnungen, (
+        "Klassische Luft-Wasser-WP muss Heizwärme-Warnung bekommen, "
+        "wenn heizenergie_kwh fehlt — sonst ist die Klima-Sonderbehandlung "
+        "zu breit."
+    )
 
 
-async def test_wp_ohne_param_meldet_heizwaerme_warnung():
+async def test_wp_ohne_param_meldet_heizwaerme_warnung(db):
     """Legacy-WP ohne wp_art-Parameter zählt als klassische WP, bekommt Warnung."""
-    async with _session_ctx() as session:
-        anlage = Anlage(
-            anlagenname="TestLegacy",
-            leistung_kwp=10.0,
-            installationsdatum=date(2025, 1, 1),
-        )
-        session.add(anlage)
-        await session.flush()
+    anlage = Anlage(
+        anlagenname="TestLegacy",
+        leistung_kwp=10.0,
+        installationsdatum=date(2025, 1, 1),
+    )
+    db.add(anlage)
+    await db.flush()
 
-        wp = Investition(
-            anlage_id=anlage.id, typ="waermepumpe",
-            bezeichnung="Legacy WP", anschaffungsdatum=date(2025, 1, 1),
-            parameter={},  # kein wp_art
-        )
-        session.add(wp)
-        await session.flush()
+    wp = Investition(
+        anlage_id=anlage.id, typ="waermepumpe",
+        bezeichnung="Legacy WP", anschaffungsdatum=date(2025, 1, 1),
+        parameter={},  # kein wp_art
+    )
+    db.add(wp)
+    await db.flush()
 
-        for monat in range(1, 6):
-            session.add(_imd(wp.id, 2025, monat, stromverbrauch_kwh=100.0))
-        for monat in range(1, 6):
-            session.add(Monatsdaten(
-                anlage_id=anlage.id, jahr=2025, monat=monat,
-                einspeisung_kwh=200.0, netzbezug_kwh=150.0,
-            ))
-        await session.commit()
+    for monat in range(1, 6):
+        db.add(_imd(wp.id, 2025, monat, stromverbrauch_kwh=100.0))
+    for monat in range(1, 6):
+        db.add(Monatsdaten(
+            anlage_id=anlage.id, jahr=2025, monat=monat,
+            einspeisung_kwh=200.0, netzbezug_kwh=150.0,
+        ))
+    await db.commit()
 
-        anlage_loaded, monatsdaten = await _reload_anlage(session, anlage.id)
-        wp_loaded = next(i for i in anlage_loaded.investitionen if i.typ == "waermepumpe")
+    anlage_loaded, monatsdaten = await _reload_anlage(db, anlage.id)
+    wp_loaded = next(i for i in anlage_loaded.investitionen if i.typ == "waermepumpe")
 
-        checker = DatenChecker(session)
-        ergebnisse = checker._check_wp_monatsdaten(
-            wp_loaded, "Legacy WP", wp_loaded.parameter, monatsdaten
-        )
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_wp_monatsdaten(
+        wp_loaded, "Legacy WP", wp_loaded.parameter, monatsdaten
+    )
 
-        heiz_warnungen = [
-            e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
-        ]
-        assert heiz_warnungen, "Legacy-WP ohne wp_art darf nicht als Klima durchgehen"
+    heiz_warnungen = [
+        e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
+    ]
+    assert heiz_warnungen, "Legacy-WP ohne wp_art darf nicht als Klima durchgehen"
