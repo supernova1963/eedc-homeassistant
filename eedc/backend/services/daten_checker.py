@@ -69,6 +69,12 @@ class CheckKategorie(str, Enum):
     # Etappe 4: bestehende Tage bleiben nach Update auf ihren alten
     # Mix-Source-Werten, ohne dieses Werkzeug sieht der Anwender das nicht.
     DATENQUELLE_DRIFT = "datenquelle_drift"
+    # PR-Plausi v3.31.5 (rapahl-PN 2026-05-19): Performance Ratio > 1.05 oder
+    # spez. Tagesertrag > kwp × 7 kWh über mehrere Tage hindurch — beides
+    # physikalisch implausibel und typisches Symptom einer Doppelerfassung
+    # (z. B. BKW-Sensor im WR-Smart-Meter schon enthalten + zusätzlich
+    # gemappt). Diagnose statt stillem Cap — feedback_grenze_externe_daten_diagnose.
+    PV_UEBER_ERFASSUNG = "pv_ueber_erfassung"
 
 
 @dataclass
@@ -113,11 +119,40 @@ PV_MAX_KWH_PRO_KWP = {
     7: 180, 8: 165, 9: 140, 10: 90, 11: 55, 12: 40,
 }
 
+# Komponenten-Keys in TagesZusammenfassung.komponenten_kwh, die zur PV-Σ
+# beitragen — ein neues PV-Präfix (z. B. `wr_`) muss hier ergänzt werden,
+# sonst zählen Daten-Checker und Drift-Check ihn nicht mit. SoT für alle
+# Stellen, die "PV-Tageserzeugung" zusammenrechnen.
+PV_KOMPONENTEN_PREFIXE = ("pv_", "bkw_")
+
+
+def _summe_pv_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
+    """Tages-PV-Σ aus dem JSON-Feld `TagesZusammenfassung.komponenten_kwh`."""
+    if not komponenten_kwh:
+        return 0.0
+    return sum(
+        float(v)
+        for k, v in komponenten_kwh.items()
+        if isinstance(v, (int, float))
+        and any(k.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)
+    )
+
 
 # ─── Service ─────────────────────────────────────────────────────────────────
 
 class DatenChecker:
     """Prüft alle Daten einer Anlage auf Vollständigkeit und Plausibilität."""
+
+    # PR > 1.05 ist physikalisch unmöglich (mehr Energie raus als rein),
+    # spez. Tagesertrag > kwp × 7 kWh entspricht > 7 Vollbenutzungsstunden —
+    # in DE auch im Hochsommer extrem selten. Beides zusammen oder einzeln
+    # über mehrere Tage = typisches Symptom Doppelerfassung (BKW im WR-Wert
+    # enthalten + separates Mapping). Memory: feedback_grenze_externe_daten_diagnose.
+    PR_PLAUSI_SCHWELLE = 1.05
+    PR_PLAUSI_MINDESTTAGE = 3
+    PR_PLAUSI_MINDEST_ANTEIL = 0.20
+    PR_PLAUSI_FENSTER_TAGE = 30
+    SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP = 7.0
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -176,6 +211,7 @@ class DatenChecker:
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
         ergebnisse.extend(await self._check_datenquelle_drift(anlage))
+        ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -1918,13 +1954,7 @@ class DatenChecker:
 
         drift_pro_tag: list[tuple[date, float, float]] = []  # (datum, eedc, ha)
         for tz in tz_list:
-            eedc_kwh = 0.0
-            if tz.komponenten_kwh:
-                for k, v in tz.komponenten_kwh.items():
-                    if isinstance(v, (int, float)) and (
-                        k.startswith("pv_") or k.startswith("bkw_")
-                    ):
-                        eedc_kwh += float(v)
+            eedc_kwh = _summe_pv_bkw_kwh(tz.komponenten_kwh)
 
             try:
                 ha_komp = await get_komponenten_tageskwh_lts(
@@ -1937,11 +1967,7 @@ class DatenChecker:
                 )
                 continue
 
-            ha_kwh = sum(
-                float(v) for k, v in ha_komp.items()
-                if isinstance(v, (int, float))
-                and (k.startswith("pv_") or k.startswith("bkw_"))
-            )
+            ha_kwh = _summe_pv_bkw_kwh(ha_komp)
 
             if eedc_kwh <= 0 and ha_kwh <= 0:
                 continue  # Nichts zu vergleichen (z. B. Inbetriebnahme-Monat)
@@ -2003,5 +2029,102 @@ class DatenChecker:
                     f"(Datumsbereich aktiv wählen, keine automatische Sammel-Aktion)."
                 ),
             ))
+
+        return ergebnisse
+
+    async def _check_pv_ueber_erfassung(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """
+        Doppelerfassungs-Verdacht aus eedc-eigenen Tageswerten.
+
+        Zwei unabhängige Signale aus `TagesZusammenfassung` der letzten 30 Tage:
+        - PR > 1.05 an ≥ 3 Tagen UND ≥ 20 % der Tage mit verfügbarem PR-Wert
+        - Spez. Tagesertrag > 7 kWh/kWp an ≥ 3 Tagen
+
+        Diagnose-Charakter, kein Cap und keine Reparatur-Action — der Anwender
+        muss am Sensor-Mapping entscheiden (Memory: feedback_kein_grosser_heiler_knopf).
+        """
+        from datetime import date, timedelta
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+
+        kat = CheckKategorie.PV_UEBER_ERFASSUNG.value
+        ergebnisse: list[CheckErgebnis] = []
+
+        kwp = anlage.leistung_kwp or 0
+        if kwp <= 0:
+            return ergebnisse  # Stammdaten-Check meldet das schon
+
+        bis = date.today()
+        von = bis - timedelta(days=self.PR_PLAUSI_FENSTER_TAGE)
+
+        result = await self.db.execute(
+            select(TagesZusammenfassung).where(
+                TagesZusammenfassung.anlage_id == anlage.id,
+                TagesZusammenfassung.datum >= von,
+                TagesZusammenfassung.datum <= bis,
+            )
+        )
+        tz_list = result.scalars().all()
+        if not tz_list:
+            return ergebnisse
+
+        pr_ueberschreitungen: list[tuple[date, float]] = []
+        spez_ertrag_ueberschreitungen: list[tuple[date, float]] = []
+        tage_mit_pr = 0
+        for tz in tz_list:
+            if tz.performance_ratio is not None:
+                tage_mit_pr += 1
+                if tz.performance_ratio > self.PR_PLAUSI_SCHWELLE:
+                    pr_ueberschreitungen.append((tz.datum, tz.performance_ratio))
+
+            tages_pv = _summe_pv_bkw_kwh(tz.komponenten_kwh)
+            if tages_pv > 0:
+                spez = tages_pv / kwp
+                if spez > self.SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP:
+                    spez_ertrag_ueberschreitungen.append((tz.datum, spez))
+
+        anzahl_pr_drueber = len(pr_ueberschreitungen)
+        anteil_pr = anzahl_pr_drueber / tage_mit_pr if tage_mit_pr > 0 else 0.0
+        pr_signal = (
+            anzahl_pr_drueber >= self.PR_PLAUSI_MINDESTTAGE
+            and anteil_pr >= self.PR_PLAUSI_MINDEST_ANTEIL
+        )
+        spez_signal = len(spez_ertrag_ueberschreitungen) >= self.PR_PLAUSI_MINDESTTAGE
+
+        if not pr_signal and not spez_signal:
+            return ergebnisse
+
+        # Auflistung der jüngsten Treffer (max 5 pro Marker)
+        pr_recent = sorted(pr_ueberschreitungen, reverse=True)[:5]
+        spez_recent = sorted(spez_ertrag_ueberschreitungen, reverse=True)[:5]
+
+        marker_zeilen: list[str] = []
+        if pr_signal:
+            beispiele = ", ".join(f"{d.isoformat()}: PR={pr:.2f}" for d, pr in pr_recent)
+            marker_zeilen.append(
+                f"Performance Ratio > {self.PR_PLAUSI_SCHWELLE} an "
+                f"{anzahl_pr_drueber} von {tage_mit_pr} Tagen ({beispiele})"
+            )
+        if spez_signal:
+            beispiele = ", ".join(f"{d.isoformat()}: {s:.1f} kWh/kWp" for d, s in spez_recent)
+            marker_zeilen.append(
+                f"Spez. Tagesertrag > {self.SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP:.0f} kWh/kWp "
+                f"an {len(spez_ertrag_ueberschreitungen)} Tagen ({beispiele})"
+            )
+
+        ergebnisse.append(CheckErgebnis(
+            kategorie=kat,
+            schwere=CheckSeverity.WARNING.value,
+            meldung="Verdacht auf PV-Doppelerfassung (PR > 1 oder spez. Ertrag zu hoch)",
+            details=(
+                f"Diagnose-Marker aus den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen: "
+                + "; ".join(marker_zeilen) + ". "
+                "Häufige Ursache: WR-Smart-Meter misst AC-seitig nach dem "
+                "Einspeisepunkt eines Balkonkraftwerks — die BKW-Erzeugung ist "
+                "im WR-Wert enthalten, ein separates BKW-Mapping zählt sie "
+                "nochmal. Prüfen: Sensor-Mapping unter Investitionen → BKW. "
+                "Test-Variante: BKW-Mapping temporär abklemmen und schauen, "
+                "ob PR und Tagesertrag in den physikalischen Bereich zurückkommen."
+            ),
+        ))
 
         return ergebnisse
