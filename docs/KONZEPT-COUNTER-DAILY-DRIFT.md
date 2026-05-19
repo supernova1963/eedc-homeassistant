@@ -1,8 +1,8 @@
 # Konzept: Counter-Daily-Drift — `wp_starts_anzahl` vs `komponenten_starts`
 
-> **Status (2026-05-19):** Klein-Konzept, Spin-off aus dem 3C-Re-Audit (archivierte Haupt-Doc unter [`docs/archive/KONZEPT-ENERGIEPROFIL-3C.md`](archive/KONZEPT-ENERGIEPROFIL-3C.md)). Befund-Liste aus 3C komplett abgearbeitet außer Befund 2 (Counter-Anteil); dieses Konzept hält den Rest fest.
+> **Status (2026-05-19, aktualisiert):** Sub-Konzept des Berechnungs-Layers ([`KONZEPT-BERECHNUNGS-LAYER.md`](KONZEPT-BERECHNUNGS-LAYER.md), [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)). Beim Touch des betroffenen Counter-Codes wird der Fix in `backend/core/berechnungen/counter.py` umgesetzt und die Pflicht-Invariante `pruefe_counter_konsistent` ergänzt — analog zum kWh-Pfad. Klein-Konzept, Spin-off aus dem 3C-Re-Audit (archivierte Haupt-Doc unter [`docs/archive/KONZEPT-ENERGIEPROFIL-3C.md`](archive/KONZEPT-ENERGIEPROFIL-3C.md)).
 >
-> **Priorität:** niedrig — Etappe 4 hat die kWh-Drift bereits geschlossen, die hier verbleibende Counter-Drift greift nur bei NULL-Slots / Snapshot-Lücken. Anlassbezogen mitnehmen, wenn der WP-Sprint sowieso angefasst wird (#238 detLAN WP-Betriebszeiten ist plausibler Trigger, weil dort das Counter-Pattern erweitert wird).
+> **Priorität:** niedrig — Etappe 4 hat die kWh-Drift bereits geschlossen (Berechnungs-Layer-Akut-Fix 2026-05-19 hat die strukturelle Wurzel zusätzlich entfernt), die hier verbleibende Counter-Drift greift nur bei NULL-Slots / Snapshot-Lücken. Anlassbezogen mitnehmen, wenn der WP-Sprint sowieso angefasst wird (#238 detLAN WP-Betriebszeiten ist plausibler Trigger, weil dort das Counter-Pattern erweitert wird).
 
 ## Problem
 

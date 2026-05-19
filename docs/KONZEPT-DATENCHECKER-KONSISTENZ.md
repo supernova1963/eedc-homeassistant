@@ -92,6 +92,8 @@ Anmerkung: Die Kategorie `PROVENANCE_CONFLICT` (Etappe 3d) liest zwar das Audit-
 
 ## 5. Lösungs-Achsen
 
+> **Querverweis 2026-05-19 (ADR-001):** Beim Achse-A-/B-/C-Refactor MUSS der Daten-Checker bestehende Aggregat-Helper aus dem Berechnungs-Layer (`backend/core/berechnungen/`) benutzen — nicht eigene Σ-Logik inline implementieren. `_summe_pv_bkw_kwh` ist seit 2026-05-19 bereits ein Re-Export aus `core/berechnungen.energie`; neue PV-/BKW-/Counter-Aggregate, die im Refactor entstehen, gehören auch dorthin. Siehe [`KONZEPT-BERECHNUNGS-LAYER.md`](KONZEPT-BERECHNUNGS-LAYER.md) und [`ADR-001-BERECHNUNGS-LAYER.md`](ADR-001-BERECHNUNGS-LAYER.md).
+
 ### 5.1 Achse A — Strategie-Schema aufräumen
 
 **Drei Varianten, sich gegenseitig ausschließend:**

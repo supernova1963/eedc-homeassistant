@@ -119,23 +119,16 @@ PV_MAX_KWH_PRO_KWP = {
     7: 180, 8: 165, 9: 140, 10: 90, 11: 55, 12: 40,
 }
 
-# Komponenten-Keys in TagesZusammenfassung.komponenten_kwh, die zur PV-Σ
-# beitragen — ein neues PV-Präfix (z. B. `wr_`) muss hier ergänzt werden,
-# sonst zählen Daten-Checker und Drift-Check ihn nicht mit. SoT für alle
-# Stellen, die "PV-Tageserzeugung" zusammenrechnen.
-PV_KOMPONENTEN_PREFIXE = ("pv_", "bkw_")
-
-
-def _summe_pv_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
-    """Tages-PV-Σ aus dem JSON-Feld `TagesZusammenfassung.komponenten_kwh`."""
-    if not komponenten_kwh:
-        return 0.0
-    return sum(
-        float(v)
-        for k, v in komponenten_kwh.items()
-        if isinstance(v, (int, float))
-        and any(k.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)
-    )
+# PV-Tageserzeugungs-Σ — SoT im Berechnungs-Layer (ADR-001).
+# `PV_KOMPONENTEN_PREFIXE` + `_summe_pv_bkw_kwh` waren historisch hier definiert,
+# wurden 2026-05-19 in `core/berechnungen/energie.py` migriert (Rainer-PN
+# BKW-Doppelzählung). Diese Re-Imports halten die internen Aufrufer-Namen
+# stabil — neue Konsumenten sollten direkt aus `backend.core.berechnungen`
+# importieren.
+from backend.core.berechnungen import (
+    PV_KOMPONENTEN_PREFIXE,
+    summe_pv_bkw_kwh as _summe_pv_bkw_kwh,
+)
 
 
 # ─── Service ─────────────────────────────────────────────────────────────────

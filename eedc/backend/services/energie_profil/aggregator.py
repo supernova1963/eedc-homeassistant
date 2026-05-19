@@ -355,9 +355,15 @@ async def aggregate_day(
         strompreis = strompreis_stunden.sensor.get(h)
         boersenpreis = strompreis_stunden.boerse.get(h)
 
-        # Per-Komponenten kWh akkumulieren (kW × 1h = kWh)
-        # strompreis ist kein Energiefluss → ausschließen
-        if werte:
+        # Per-Komponenten kWh akkumulieren (kW × 1h = kWh) — Live-Σ-Riemann.
+        # Nur im Standalone-Fallback (kein HA-LTS) aktiv. Im HA-Add-on-Modus
+        # ist diese Akkumulation redundant zum Boundary-Pfad (boundary_kwh
+        # weiter unten) und war historische Drift-Quelle: bei Schema-Mismatch
+        # zwischen Live-Service-Key und Boundary-Key (z.B. balkonkraftwerk
+        # → Live `pv_<id>`, Boundary `bkw_<id>`) blieben beide Keys parallel
+        # in `komponenten_summen` und wurden von Whitelist-Konsumenten
+        # doppelt gezählt (BKW-Bug 2026-05-19, Rainer-PN).
+        if werte and kwh_source_label != "external:ha_statistics:hourly":
             for komp_key, komp_kw in werte.items():
                 if komp_kw is not None and komp_key != "strompreis":
                     komponenten_summen[komp_key] = komponenten_summen.get(komp_key, 0.0) + komp_kw
@@ -478,22 +484,6 @@ async def aggregate_day(
     for key, val in boundary_kwh.items():
         komponenten_summen[key] = val
 
-    # BKW-Doppelzählungs-Schutz (Rainer-PN 2026-05-19): Der Live-Tagesverlauf-Service
-    # ordnet `balkonkraftwerk` der Kategorie "pv" zu (TV_SERIE_CONFIG) und schreibt
-    # den Live-Σ-Riemann-Wert daher unter `pv_<inv_id>`. Der Boundary-Aggregator
-    # (LTS/Snapshot) nutzt für dieselbe Investition aber `bkw_<inv_id>`. Ohne diesen
-    # Drop bleiben beide Keys nebeneinander in `komponenten_kwh` stehen, und alle
-    # Konsumenten, die `PV_KOMPONENTEN_PREFIXE = ("pv_", "bkw_")` summieren
-    # (prognosen.py:_PV_PREFIXES, daten_checker._summe_pv_bkw_kwh,
-    # energie_profil/repair._pv_tagessumme), zählen das BKW doppelt.
-    for inv in invs:
-        if inv.typ != "balkonkraftwerk":
-            continue
-        bkw_key = f"bkw_{inv.id}"
-        pv_key = f"pv_{inv.id}"
-        if bkw_key in komponenten_summen and pv_key in komponenten_summen:
-            komponenten_summen.pop(pv_key)
-
     # ── Peak-Werte aus HA-LTS-Min/Max (Etappe 5 v3.31.0) ─────────────────
     # HA-Recorder schreibt für has_mean=True-Sensoren die im 5-Sekunden-Bucket
     # beobachteten Extremwerte pro Stunde. Das ist die richtige Quelle für
@@ -552,6 +542,34 @@ async def aggregate_day(
     db.add(zusammenfassung)
     seed_tz_provenance(zusammenfassung, writer=auto_writer, source=tz_source_label)
     await db.flush()
+
+    # Pflicht-Invariante (ADR-001 Berechnungs-Layer):
+    # Σ pv_kw aus der Stunden-Schleife muss mit Σ PV+BKW aus dem
+    # Tages-JSON übereinstimmen. Verletzung deutet auf einen parallelen
+    # Schreibpfad mit Schema-Mismatch (BKW-Bug-Klasse 2026-05-19).
+    # Wir loggen Warning + speichern trotzdem — Drift soll sichtbar werden,
+    # aber kein Tag soll wegen einer Invariante verloren gehen.
+    from backend.core.berechnungen import pruefe_tep_tz_konsistenz
+
+    # TagesEnergieProfil-Rows aus der aktuellen Session ziehen (db.add wurde
+    # in der Stunden-Schleife aufgerufen, db.flush hat sie persistiert).
+    tep_rows_result = await db.execute(
+        select(TagesEnergieProfil).where(
+            and_(
+                TagesEnergieProfil.anlage_id == anlage.id,
+                TagesEnergieProfil.datum == datum,
+            )
+        )
+    )
+    tep_rows = tep_rows_result.scalars().all()
+    invariante = pruefe_tep_tz_konsistenz(
+        tep_rows, zusammenfassung.komponenten_kwh,
+    )
+    if not invariante.konsistent:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: Berechnungs-Layer-Invariante "
+            f"verletzt — {invariante}"
+        )
 
     logger.info(
         f"Anlage {anlage.id}, {datum}: {stunden_count}h aggregiert, "

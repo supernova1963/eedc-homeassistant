@@ -326,6 +326,18 @@ def write_with_provenance(
 
 `force_override=True` ist allein dem Repair-Orchestrator (Sektion 5) vorbehalten und immer mit explizitem Audit-Log-Eintrag inklusive Operation-ID.
 
+### 3.5 Aggregat-Berechnungen — Berechnungs-Layer als SoT (ADR-001, 2026-05-19)
+
+Erweiterung des Helper-Prinzips aus 3.4 für Aggregat-Berechnungen über die zentralen Tabellen: **Whitelist-Filter, Σ-Helper, Invarianten und Sub-Key-Resolver leben in `backend/core/berechnungen/`** — nicht in Domain-Modulen wie `daten_checker.py`, `services/live_*`, `api/routes/*`. Auslöser war die BKW-Doppelzählung in `komponenten_kwh` (Rainer-PN 2026-05-19), wo eine Whitelist `("pv_", "bkw_")` in mehreren Modulen dupliziert war und ein paralleler Schreibpfad (Live-Σ-Riemann + HA-LTS-Boundary) mit Schema-Mismatch unerkannt durchlief.
+
+**Pflicht ab v3.31.5:**
+
+- Pytest-Konformitäts-Test `tests/test_berechnungs_layer_konformitaet.py` blockiert PRs mit neuen Whitelist-/Inline-Σ-Definitionen außerhalb des Layers.
+- Aggregator (`energie_profil/aggregator.py::aggregate_day`) ruft am Ende jedes Schreib-Laufs `pruefe_tep_tz_konsistenz` auf. Verletzung wird als Warning geloggt — Schreib-Drift ist sofort sichtbar, kein Tag wird zurückgehalten.
+- Bestehende Konsumenten werden step-by-step beim nächsten Touch migriert. Liste offener Stellen: Memory `project_berechnungs_layer_offen`.
+
+Detail-Architektur: [`KONZEPT-BERECHNUNGS-LAYER.md`](KONZEPT-BERECHNUNGS-LAYER.md). Regel-Notation: [`ADR-001-BERECHNUNGS-LAYER.md`](ADR-001-BERECHNUNGS-LAYER.md).
+
 ## 4. Konflikt-Resolver-Architektur
 
 ### 4.1 Synchroner Resolver im Write-Pfad
