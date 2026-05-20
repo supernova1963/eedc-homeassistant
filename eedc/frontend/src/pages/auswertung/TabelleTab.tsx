@@ -77,6 +77,22 @@ function fmtVal(v: number | null, decimals: number): string {
 type SortKey = 'jahr' | 'monat' | string
 type RowData = Record<string, number | null>
 
+// Σ/Ø je Spalte über eine Monatsreihe — geteilt von der laufenden Zeitreihe
+// und der Vorjahres-Vergleichsreihe, damit die Aggregat-Logik nicht driftet.
+function aggregateRows(rows: MonatsZeitreihe[]): Record<string, number | null> {
+  const result: Record<string, number | null> = {}
+  for (const col of COLUMNS) {
+    const vals = rows
+      .map(r => (r as unknown as RowData)[col.key])
+      .filter((v): v is number => v != null)
+    if (vals.length === 0) { result[col.key] = null; continue }
+    if (col.aggregation === 'sum')      result[col.key] = vals.reduce((s, v) => s + v, 0)
+    else if (col.aggregation === 'avg') result[col.key] = vals.reduce((s, v) => s + v, 0) / vals.length
+    else                                result[col.key] = null
+  }
+  return result
+}
+
 interface TabelleTabProps extends TabProps {
   alleDaten: AggregierteMonatsdaten[]
   selectedYear: number | 'all'
@@ -207,20 +223,12 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     })
   }, [zeitreihe, sortKey, sortDir])
 
-  // Aggregationszeile
-  const aggregation = useMemo(() => {
-    const result: Record<string, number | null> = {}
-    for (const col of COLUMNS) {
-      const vals = zeitreihe
-        .map(r => (r as unknown as RowData)[col.key])
-        .filter((v): v is number => v != null)
-      if (vals.length === 0) { result[col.key] = null; continue }
-      if (col.aggregation === 'sum')      result[col.key] = vals.reduce((s, v) => s + v, 0)
-      else if (col.aggregation === 'avg') result[col.key] = vals.reduce((s, v) => s + v, 0) / vals.length
-      else                                result[col.key] = null
-    }
-    return result
-  }, [zeitreihe])
+  // Aggregationszeile — laufende Reihe + Vorjahres-Vergleichsreihe
+  const aggregation = useMemo(() => aggregateRows(zeitreihe), [zeitreihe])
+  const vorjahrAggregation = useMemo(
+    () => (vorjahrLookup ? aggregateRows(Object.values(vorjahrLookup)) : null),
+    [vorjahrLookup]
+  )
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -240,8 +248,14 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     const activeCols = colOrder.map(k => COLUMNS.find(c => c.key === k)!).filter(c => visibleCols.has(c.key))
     const headers: string[] = ['Jahr', 'Monat']
     activeCols.forEach(c => {
-      headers.push(c.unit ? `${c.label} (${c.unit})` : c.label)
-      if (vorjahrVerfuegbar) headers.push(`Δ vs. ${compareYear}`)
+      const base = c.unit ? `${c.label} (${c.unit})` : c.label
+      if (vorjahrVerfuegbar) {
+        headers.push(`${base} ${selectedYear}`)
+        headers.push(`${base} ${compareYear}`)
+        headers.push(`Δ vs. ${compareYear}`)
+      } else {
+        headers.push(base)
+      }
     })
 
     const rows: (string | number)[][] = sortedRows.map(r => {
@@ -252,6 +266,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
         row.push(v != null ? v : '')
         if (vorjahrVerfuegbar) {
           const pv = prevRow ? (prevRow as unknown as RowData)[c.key] : null
+          row.push(pv != null ? pv : '')
           const delta = v != null && pv != null ? v - pv : null
           row.push(delta != null ? delta : '')
         }
@@ -269,7 +284,12 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
     activeCols.forEach(c => {
       const v = aggregation[c.key]
       aggRow.push(v != null ? v : '')
-      if (vorjahrVerfuegbar) aggRow.push('')
+      if (vorjahrVerfuegbar) {
+        const pvAgg = vorjahrAggregation?.[c.key] ?? null
+        aggRow.push(pvAgg != null ? pvAgg : '')
+        const delta = v != null && pvAgg != null ? v - pvAgg : null
+        aggRow.push(delta != null ? delta : '')
+      }
     })
     rows.push(aggRow)
 
@@ -473,7 +493,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                     className={`px-3 py-2.5 text-right font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 whitespace-nowrap select-none ${
                       vorjahrVerfuegbar && showVorjahr ? 'border-r border-gray-200 dark:border-gray-700' : ''
                     }`}
-                    colSpan={vorjahrVerfuegbar && showVorjahr ? 2 : 1}
+                    colSpan={vorjahrVerfuegbar && showVorjahr ? 3 : 1}
                     onClick={() => handleSort(col.key)}
                   >
                     <span className="flex items-center justify-end gap-1">
@@ -492,8 +512,11 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                       <td className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
                         {selectedYear as number}
                       </td>
+                      <td className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                        {compareYear}
+                      </td>
                       <td className="px-3 py-1 text-right text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap border-r border-gray-200 dark:border-gray-700">
-                        Δ vs. {compareYear}
+                        Δ
                       </td>
                     </Fragment>
                   ))}
@@ -520,6 +543,9 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                           <Fragment key={col.key}>
                             <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
                               {fmtVal(v, col.decimals)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-gray-400">
+                              {fmtVal(pv, col.decimals)}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-xs border-r border-gray-100 dark:border-gray-800">
                               <DeltaCell current={v} prev={pv} col={col} />
@@ -552,12 +578,18 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                     const v = aggregation[col.key]
                     const prefix = col.aggregation === 'avg' ? 'Ø ' : ''
                     if (vorjahrVerfuegbar && showVorjahr) {
+                      const pvAgg = vorjahrAggregation?.[col.key] ?? null
                       return (
                         <Fragment key={col.key}>
                           <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
                             {v != null ? `${prefix}${fmtVal(v, col.decimals)}` : '—'}
                           </td>
-                          <td className="px-3 py-2.5 border-r border-gray-300 dark:border-gray-600" />
+                          <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-500 dark:text-gray-400">
+                            {pvAgg != null ? `${prefix}${fmtVal(pvAgg, col.decimals)}` : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs border-r border-gray-300 dark:border-gray-600">
+                            <DeltaCell current={v} prev={pvAgg} col={col} />
+                          </td>
                         </Fragment>
                       )
                     }
