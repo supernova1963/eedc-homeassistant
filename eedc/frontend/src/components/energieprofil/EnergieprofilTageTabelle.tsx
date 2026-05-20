@@ -3,7 +3,7 @@ import { Columns, Calendar, RefreshCw } from 'lucide-react'
 import { Button, Card, Alert, EmptyState } from '../ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../ui'
 import { DataLoadingState } from '../common'
-import { energieProfilApi, type TagesZusammenfassung, type VerfuegbarerMonat } from '../../api/energie_profil'
+import { energieProfilApi, type TagesZusammenfassung, type VerfuegbarerMonat, type SerieInfo } from '../../api/energie_profil'
 import { MONAT_KURZ } from '../../lib'
 import ReaggregatePreviewModal from './ReaggregatePreviewModal'
 
@@ -84,7 +84,7 @@ function sumKomponentenKwhByPrefix(
   return any ? sum : null
 }
 
-const COLUMNS: ColumnConfig[] = [
+const STATIC_COLUMNS: ColumnConfig[] = [
   // Peaks
   { key: 'peak_pv',           label: 'Peak PV',         group: 'peaks',       getValue: (t) => t.peak_pv_kw,           format: 'kw', defaultVisible: true,  agg: 'max', tone: 'green'  },
   { key: 'peak_netzbezug',    label: 'Peak Netzbezug',  group: 'peaks',       getValue: (t) => t.peak_netzbezug_kw,    format: 'kw', defaultVisible: true,  agg: 'max', tone: 'orange' },
@@ -109,6 +109,34 @@ const COLUMNS: ColumnConfig[] = [
   // Komponenten-Counter (Issue #136). Summe über alle WPs einer Anlage; Footer zeigt Monatssumme.
   { key: 'wp_starts',         label: 'WP-Starts',       group: 'komponenten', getValue: (t) => sumKomponentenStarts(t, 'wp_starts_anzahl'), format: 'int', defaultVisible: false, agg: 'sum', tone: 'amber' },
 ]
+
+// Tonfarbe pro Komponenten-Seite für die dynamischen Diagnose-Spalten.
+const SEITE_TONE: Record<string, ColorTone> = {
+  quelle:         'green',
+  senke:          'red',
+  bidirektional:  'blue',
+}
+
+// Baut pro Komponenten-Serie eine dynamische Spalte mit dem aufgelösten
+// Investitions-Label. `komponenten_kwh`-Keys werden serverseitig (Endpoint
+// energie-profil/komponenten-serien) zu SerieInfo aufgelöst. Das Key-Prefix
+// `komp_` trennt sie von statischen Spalten-Keys — u. a. damit der
+// localStorage-Orphan-Filter sie nicht als verwaiste Keys entfernt.
+function buildKomponentenColumns(serien: SerieInfo[]): ColumnConfig[] {
+  return serien.map((s) => ({
+    key: `komp_${s.key}`,
+    label: s.label,
+    group: 'komponenten' as ColumnGroupKey,
+    getValue: (t: TagesZusammenfassung) => {
+      const v = t.komponenten_kwh?.[s.key]
+      return typeof v === 'number' && !isNaN(v) ? v : null
+    },
+    format: 'kwh' as const,
+    defaultVisible: false,
+    agg: 'sum' as AggKind,
+    tone: SEITE_TONE[s.seite] ?? null,
+  }))
+}
 
 const COLUMNS_STORAGE_KEY = 'eedc-energieprofil-tage-columns-v1'
 const COLUMNS_VERSION_KEY = 'eedc-energieprofil-tage-columns-version'
@@ -156,6 +184,8 @@ function monatsBereich(jahr: number, monat: number): { von: string; bis: string 
 interface BodyProps {
   anlageId: number
   daten: TagesZusammenfassung[]
+  /** Komponenten-Serien des Zeitraums (Label-Auflösung für Diagnose-Spalten). */
+  serien: SerieInfo[]
   loading: boolean
   error: string | null
   jahr: number | null
@@ -166,7 +196,7 @@ interface BodyProps {
   showReaggregate?: boolean
 }
 
-function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReload, showReaggregate = true }: BodyProps) {
+function TageTabelleBody({ anlageId, daten, serien, loading, error, jahr, monat, onReload, showReaggregate = true }: BodyProps) {
   const [showColumnSelector, setShowColumnSelector] = useState(false)
   // Preview-Modal-State: datum != null → Modal offen, lädt Vorschau, Apply nur nach
   // User-Bestätigung. reagInfo/reagError für Toast nach Apply oder bei Apply-Fehler.
@@ -201,7 +231,7 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
       const stored = localStorage.getItem(COLUMNS_STORAGE_KEY)
       if (!stored) {
         localStorage.setItem(COLUMNS_VERSION_KEY, String(CURRENT_COLUMNS_VERSION))
-        return new Set(COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+        return new Set(STATIC_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
       }
       const fromStorage = new Set<string>(JSON.parse(stored))
       const version = parseInt(localStorage.getItem(COLUMNS_VERSION_KEY) || '1', 10)
@@ -211,21 +241,28 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
         COLUMNS_V2_NEW_DEFAULT_VISIBLE.forEach((k) => fromStorage.add(k))
       }
 
-      // Verwaiste Keys aus alten Versionen herausfiltern.
-      const allKeys = new Set(COLUMNS.map((c) => c.key))
+      // Verwaiste Keys aus alten Versionen herausfiltern. `komp_`-Keys
+      // (dynamische Komponenten-Spalten) sind hier noch nicht bekannt — sie
+      // werden erst nach dem Serien-Load aufgebaut — und bleiben erhalten.
+      const allKeys = new Set(STATIC_COLUMNS.map((c) => c.key))
       for (const key of [...fromStorage]) {
-        if (!allKeys.has(key)) fromStorage.delete(key)
+        if (!allKeys.has(key) && !key.startsWith('komp_')) fromStorage.delete(key)
       }
 
       localStorage.setItem(COLUMNS_VERSION_KEY, String(CURRENT_COLUMNS_VERSION))
       return fromStorage
     } catch { /* ignore */ }
-    return new Set(COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
+    return new Set(STATIC_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
   })
 
   useEffect(() => {
     localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...visibleColumns]))
   }, [visibleColumns])
+
+  // Statische + dynamische (pro Komponente) Spalten. Komponenten-Spalten
+  // sind defaultmäßig ausgeblendet — Diagnose-Werkzeug, Opt-in im Selektor.
+  const komponentenColumns = useMemo(() => buildKomponentenColumns(serien), [serien])
+  const allColumns = useMemo(() => [...STATIC_COLUMNS, ...komponentenColumns], [komponentenColumns])
 
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
@@ -236,7 +273,7 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
   }
 
   const toggleGroup = (group: ColumnGroupKey) => {
-    const groupCols = COLUMNS.filter(c => c.group === group)
+    const groupCols = allColumns.filter(c => c.group === group)
     const allVisible = groupCols.every(c => visibleColumns.has(c.key))
     setVisibleColumns(prev => {
       const next = new Set(prev)
@@ -245,14 +282,14 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
     })
   }
 
-  const activeColumns = useMemo(() => COLUMNS.filter(c => visibleColumns.has(c.key)), [visibleColumns])
+  const activeColumns = useMemo(() => allColumns.filter(c => visibleColumns.has(c.key)), [allColumns, visibleColumns])
 
   return (
     <>
       <div className="flex justify-end mb-3">
         <Button variant="secondary" size="sm" onClick={() => setShowColumnSelector(!showColumnSelector)}>
           <Columns className="h-4 w-4 mr-2" />
-          Spalten ({activeColumns.length}/{COLUMNS.length})
+          Spalten ({activeColumns.length}/{allColumns.length})
         </Button>
       </div>
 
@@ -278,7 +315,7 @@ function TageTabelleBody({ anlageId, daten, loading, error, jahr, monat, onReloa
           <div className="space-y-4">
             {(Object.keys(COLUMN_GROUPS) as ColumnGroupKey[]).map((groupKey) => {
               const group = COLUMN_GROUPS[groupKey]
-              const groupColumns = COLUMNS.filter(c => c.group === groupKey)
+              const groupColumns = allColumns.filter(c => c.group === groupKey)
               const visibleCount = groupColumns.filter(c => visibleColumns.has(c.key)).length
               return (
                 <div key={groupKey}>
@@ -354,7 +391,9 @@ function aggregate(values: (number | null)[], kind: AggKind): number | null {
 
 function cellBg(val: number | null, max: number, tone: ColorTone): string | undefined {
   if (val == null || tone == null || max <= 0) return undefined
-  const norm = Math.max(0, Math.min(1, val / max))
+  // Betrag — `max` (stats) ist bereits abs-basiert; so bekommen auch
+  // Verbraucher-Spalten (negative kWh) ein Heatmap-Coloring nach Magnitude.
+  const norm = Math.min(1, Math.abs(val) / max)
   if (norm < 0.05) return undefined
   // Subtile Sättigung: max 35% Alpha, damit Text lesbar bleibt
   return `rgba(${TONE_RGB[tone]}, ${(norm * 0.35).toFixed(2)})`
@@ -494,24 +533,32 @@ function DataTable({
   )
 }
 
-// Hook: Tagesdaten für (anlageId, jahr, monat) laden.
+// Hook: Tagesdaten + Komponenten-Serien für (anlageId, jahr, monat) laden.
 function useTagesdaten(anlageId: number, jahr: number | null, monat: number | null) {
   const [daten, setDaten] = useState<TagesZusammenfassung[]>([])
+  const [serien, setSerien] = useState<SerieInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!anlageId || jahr == null || monat == null) {
       setDaten([])
+      setSerien([])
       return
     }
     setLoading(true)
     setError(null)
     try {
       const { von, bis } = monatsBereich(jahr, monat)
-      const rows = await energieProfilApi.getTage(anlageId, von, bis)
+      // Serien-Load darf den Tabellen-Load nicht scheitern lassen — fehlende
+      // Label-Auflösung blendet nur die Komponenten-Spalten aus.
+      const [rows, serienRows] = await Promise.all([
+        energieProfilApi.getTage(anlageId, von, bis),
+        energieProfilApi.getKomponentenSerien(anlageId, von, bis).catch(() => [] as SerieInfo[]),
+      ])
       rows.sort((a, b) => b.datum.localeCompare(a.datum))
       setDaten(rows)
+      setSerien(serienRows)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden der Tagesdaten')
     } finally {
@@ -520,7 +567,7 @@ function useTagesdaten(anlageId: number, jahr: number | null, monat: number | nu
   }, [anlageId, jahr, monat])
 
   useEffect(() => { load() }, [load])
-  return { daten, loading, error, reload: load }
+  return { daten, serien, loading, error, reload: load }
 }
 
 interface Props {
@@ -539,11 +586,12 @@ interface EmbeddedProps {
  * Spaltenselektor + Tabelle, ohne Card-Hülle und ohne eigenen Monats-Selector.
  */
 export function EnergieprofilTageTabelleEmbedded({ anlageId, jahr, monat }: EmbeddedProps) {
-  const { daten, loading, error, reload } = useTagesdaten(anlageId, jahr, monat)
+  const { daten, serien, loading, error, reload } = useTagesdaten(anlageId, jahr, monat)
   return (
     <TageTabelleBody
       anlageId={anlageId}
       daten={daten}
+      serien={serien}
       loading={loading}
       error={error}
       jahr={jahr}
@@ -579,7 +627,7 @@ export default function EnergieprofilTageTabelle({ anlageId }: Props) {
     return () => { abgebrochen = true }
   }, [anlageId])
 
-  const { daten, loading, error, reload } = useTagesdaten(anlageId, jahr, monat)
+  const { daten, serien, loading, error, reload } = useTagesdaten(anlageId, jahr, monat)
 
   const jahrOptionen = useMemo(() => {
     return Array.from(new Set(verfuegbar.map(v => v.jahr))).sort((a, b) => b - a)
@@ -642,6 +690,7 @@ export default function EnergieprofilTageTabelle({ anlageId }: Props) {
         <TageTabelleBody
           anlageId={anlageId}
           daten={daten}
+          serien={serien}
           loading={loading}
           error={error}
           jahr={jahr}

@@ -116,6 +116,56 @@ async def get_tages_zusammenfassungen(
     ]
 
 
+@router.get("/{anlage_id}/komponenten-serien", response_model=list[SerieInfo])
+async def get_komponenten_serien(
+    anlage_id: int,
+    von: date = Query(..., description="Startdatum (inklusiv)"),
+    bis: date = Query(..., description="Enddatum (inklusiv)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Löst alle im Zeitraum vorkommenden `komponenten_kwh`-Keys zu SerieInfo
+    (Label/Kategorie/Seite) auf.
+
+    Dient der Tagestabelle, die pro Komponente eine eigene Diagnose-Spalte
+    mit echtem Investitions-Label statt Roh-Key anbietet.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+
+    if (bis - von).days > 366:
+        raise HTTPException(status_code=400, detail="Zeitraum darf maximal 366 Tage umfassen")
+
+    result = await db.execute(
+        select(TagesZusammenfassung.komponenten_kwh)
+        .where(and_(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum >= von,
+            TagesZusammenfassung.datum <= bis,
+        ))
+    )
+    alle_keys: set[str] = set()
+    for (komponenten_kwh,) in result.all():
+        if komponenten_kwh:
+            alle_keys.update(komponenten_kwh.keys())
+
+    # Investments für Label-Auflösung laden
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    inv_map: dict[int, Investition] = {
+        inv.id: inv for inv in inv_result.scalars().all()
+    }
+
+    serien: list[SerieInfo] = []
+    for key in sorted(alle_keys):
+        info = _key_to_serie_info(key, inv_map)
+        if info:
+            serien.append(SerieInfo(**info))
+    return serien
+
+
 @router.get("/{anlage_id}/stunden", response_model=StundenAntwort)
 async def get_stundenwerte(
     anlage_id: int,

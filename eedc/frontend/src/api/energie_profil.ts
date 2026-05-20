@@ -258,6 +258,9 @@ export const energieProfilApi = {
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
     api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
 
+  getKomponentenSerien: (anlageId: number, von: string, bis: string): Promise<SerieInfo[]> =>
+    api.get(`/energie-profil/${anlageId}/komponenten-serien?von=${von}&bis=${bis}`),
+
   getMonat: (anlageId: number, jahr: number, monat: number): Promise<MonatsAuswertung> =>
     api.get(`/energie-profil/${anlageId}/monat?jahr=${jahr}&monat=${monat}`),
 
