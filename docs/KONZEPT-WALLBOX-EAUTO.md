@@ -4,7 +4,9 @@
 
 ## Motivation
 
-Die aktuelle Architektur speichert Heimladung (PV/Netz-Split) am **E-Auto** und aggregiert im Wallbox-Dashboard alles in einen Pool. Das funktioniert bei 1 Wallbox + 1 E-Auto, bricht aber bei realistischen Szenarien:
+Die Feldzuordnung zwischen Wallbox und E-Auto ist **mehrdeutig**: `ladung_kwh`/`ladung_pv_kwh`/`ladung_netz_kwh` können auf beiden Investitionstypen liegen, und das Wallbox-Dashboard aggregiert sie über einen Pool, der raten muss, welche Quelle die Wahrheit ist. Diese Mehrdeutigkeit ist die eigentliche Schuld, die das Konzept abträgt — nicht (nur) ein fehlendes Multi-Fahrzeug-Feature.
+
+**Auch das 1-Wallbox-+-1-E-Auto-Setup bricht** — entgegen einer früheren Annahme dieses Konzepts: #260 (NongJoWo) und #262 (junky84) sind beide 1+1-Setups, in denen der Pool inkonsistente Werte lieferte (PV-Anteil > 100 %). Die Mehrdeutigkeit wird in komplexeren Szenarien nur *sichtbarer*:
 
 - Privatauto + Firmenwagen an derselben Wallbox (steuerlich trennbar)
 - Mehrere Wallboxen (Garage + Carport)
@@ -117,12 +119,19 @@ BMW i4
 - Ladevorgänge aus Wallbox-Monatsdaten lesen (nicht nur E-Auto)
 - Kein Datenmodell-Umbau nötig
 
-### Phase 2: Neue Felder am E-Auto (wenn Vehicle-Sensoren nachgefragt werden)
+### Phase 2a: Feldzuordnung geradeziehen (Schulden-getrieben)
+- Eindeutige Feld-Rollen: die Heimladungs-Trias (`ladung_kwh`/`pv`/`netz`) gehört kanonisch an die **Wallbox** (Infrastruktur misst den Stromfluss), das E-Auto trägt Nutzung + km. Read-Sites lesen die kanonische Quelle statt eines Pools.
+- Migration des bestehenden `verbrauch_daten`-JSON nötig — Daten-Reconnaissance vorher (siehe Daten-Checker-Warnung unten).
+- **Trigger: bereits gefeuert.** Der wiederkehrende evcc-Pool-Patch-Bedarf (#260, #262, ~8 Fix-Commits seit v3.31.0) ist das Symptom der Mehrdeutigkeit; jeder Read-seitige Heuristik-Fix (zuletzt `aggregiere_emob_ladung`) ist nur ein Aufschub. Profitiert auch das 1+1-Setup.
+
+### Phase 2b: Vehicle-Sensor-Mapping (Feature-getrieben)
 - `ladung_heim_kwh` und `ladung_heim_pv_kwh` als neue E-Auto-Felder
 - Sensor-Mapping erweitern für evcc Vehicle-Topics
-- Wallbox-Dashboard liest eigene Daten statt E-Auto-Pool
+- Wallbox-Dashboard liest eigene Daten, E-Auto die Vehicle-Sicht
 - Bestehende `ladung_pv_kwh`/`ladung_netz_kwh` am E-Auto bleiben als Fallback
-- **Daten-Checker-Warnung bei Pool-Pflege-Mismatch:** wenn EAuto + WB beide gepflegt sind und die Werte erkennbar ähnlich (≈ derselbe Stromfluss aus zwei Perspektiven) bzw. beide Felder voll sind aber `WB.ladung_pv_kwh > Σ EAuto.ladung_heim_pv_kwh` ist, INFO/WARNING ausgeben — lenkt den User auf eine bewusste Entscheidung, welche Quelle die Wahrheit liefert. Hintergrund: 2026-05-02 fielen bei Joachim und Gernot inkonsistente Pool-Werte auf (PV-Anteil > 100 %, doppelter `kWh/100km`); der Quick-Fix in v3.25.x machte Max-pro-Feld-Auswahl, was sich selbst als Drift-Quelle erwies und in v3.31.6 durch den Gewinner-Pool `aggregiere_emob_ladung` ersetzt wurde. Die Phase-2-Trennung beseitigt die Doppelzählung strukturell, der Daten-Checker bleibt für Altbestand und Pool-Mode. **Diese Warnung braucht kein neues Datenmodell und ist als eigenständiges Stück vor Phase 2 ziehbar** (siehe »Phase-2-Trigger«: junky84 #262 hatte ~3.300 kWh Streudaten auf der E-Auto-Investition, die der Daten-Checker proaktiv sichtbar gemacht hätte).
+- **Trigger: „wenn Vehicle-Sensoren nachgefragt werden"** — hier stimmt die ursprünglich notierte Bedingung (Power-User mit Per-Vehicle-Aufschlüsselung). Bislang nicht erfüllt.
+
+**Daten-Checker-Warnung bei Pool-Pflege-Mismatch:** wenn EAuto + WB beide gepflegt sind und die Werte erkennbar ähnlich (≈ derselbe Stromfluss aus zwei Perspektiven) bzw. beide Felder voll sind aber `WB.ladung_pv_kwh > Σ EAuto.ladung_heim_pv_kwh` ist, INFO/WARNING ausgeben — lenkt den User auf eine bewusste Entscheidung, welche Quelle die Wahrheit liefert. Hintergrund: 2026-05-02 fielen bei Joachim und Gernot inkonsistente Pool-Werte auf (PV-Anteil > 100 %, doppelter `kWh/100km`); der Quick-Fix in v3.25.x machte Max-pro-Feld-Auswahl, was sich selbst als Drift-Quelle erwies und in v3.31.6 durch den Gewinner-Pool `aggregiere_emob_ladung` ersetzt wurde. Die Phase-2-Trennung beseitigt die Doppelzählung strukturell, der Daten-Checker bleibt für Altbestand und Pool-Mode. **Diese Warnung braucht kein neues Datenmodell und ist als eigenständiges Stück vor Phase 2 ziehbar** (siehe »Phase-2-Trigger«: junky84 #262 hatte ~3.300 kWh Streudaten auf der E-Auto-Investition, die der Daten-Checker proaktiv sichtbar gemacht hätte).
 
 ### Phase 3: Aufschlüsselung im Wallbox-Dashboard (optional)
 - Wenn E-Autos Vehicle-Sensoren haben, kann das Wallbox-Dashboard
