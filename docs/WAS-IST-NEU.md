@@ -1,11 +1,37 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.31.5)
+> **Stand:** Mai 2026 (v3.31.6)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.31.6 — Bündel-Release: E-Mobilitäts-Zahlen konsistent, Saison-Vergleich, Daten-Checker (Mai 2026)
+
+### Was sich für dich ändert — E-Mobilität
+
+> Wenn dir bei Wallbox, E-Auto und Auswertungen unterschiedliche Lade-Zahlen aufgefallen sind: hier ist die Erklärung.
+
+- **Wallbox, E-Auto, Komponenten und Cockpit-Übersicht zeigen jetzt durchgängig dieselben Lade-Zahlen** (#262): Bisher konnte dieselbe Ladung in vier Menüs vier verschiedene Werte ergeben — beim evcc-Import war der Netz-Anteil im Wallbox-Dashboard und in *Auswertungen → Komponenten* zu hoch, in Extremfällen ergab sich ein PV-Anteil über 100 % (Komponenten zeigte z. B. 48 % PV + 85 % Netz). Ursache: die Sichten führten PV-, Netz- und Gesamt-Ladung getrennt zusammen, sodass die Anteile aus verschiedenen Quellen stammen konnten. Jetzt führen alle Sichten die Lade-Daten geschlossen aus einer Quelle zusammen — PV + Netz ergeben immer die Gesamtladung, und das *Cockpit → E-Auto* (das schon vorher stimmte) ist der gemeinsame Bezugswert. Mit Dank an junky84 für den genauen Re-Test mit Screenshots.
+
+### Was sich für dich ändert — Auswertung & Cockpit
+
+- **Wärmepumpe: Saison-Vergleich im Monatsvergleich** (#195): Im WP-Cockpit kannst du den Monatsvergleich jetzt auf Saison-Fenster umstellen — Winter (Nov–Feb), Heizperiode (Okt–Apr) oder Sommer (Jun–Aug) — statt nur einzelner Monate. So lassen sich Heizsaisons über mehrere Jahre direkt vergleichen.
+- **Vergleichsjahr als Absolutwert in der Auswertungs-Tabelle** (#195): Die Auswertungs-Tabelle zeigt das Vergleichsjahr jetzt zusätzlich als absoluten kWh-/€-Wert, nicht nur als Differenz zum aktuellen Jahr.
+- **Energieprofil-Tagestabelle: Komponenten-Spalten**: Die Tages-Tabelle im Energieprofil hat zusätzliche Spalten für die einzelnen Komponenten (Speicher, Wärmepumpe, E-Mobilität …).
+- **Label-Korrektur IST/SOLL**: Kleine Korrektur einer Spalten-Beschriftung, die SOLL und IST vertauscht hatte (rapahl-Hinweis).
+
+### Was sich für dich ändert — Daten-Checker
+
+- **Stillgelegte Investition wird nicht mehr als „Sensor fehlt in HA-Statistik" gemeldet** (#613): Der LTS-Check mahnte den kWh-Sensor einer stillgelegten Investition weiter an, obwohl sie ein Stilllegungs-Datum hat. Der Stilllegungs-Sweep aus v3.31.5 (#608) hatte diesen einen Prüf-Pfad übersehen. Behoben. Mit Dank an MartyBr für die Forum-Meldung.
+
+### Unter der Haube — für Mitwirkende
+
+- **Speicher-Wirtschaftlichkeit — Etappe C-Backend** (#264, stlorenz): Die Berechnung der Speicher-Netzladung nutzt jetzt den dynamischen Ladepreis aus den Stundenwerten (TEP) und einen SoC-korrigierten Wirkungsgrad statt eines Parameter-Durchschnitts. Die zugehörigen Cockpit-Kacheln folgen in einem Nachgang-Release.
+- **PVGIS-Systemverluste zentralisiert**: Die Systemverluste-Konstante (14 %) und ihre Auflösung aus dem anlagenspezifischen PVGIS-Setup waren über mehrere Dateien dupliziert — jetzt ein zentraler Helper. Rein intern, keine Verhaltensänderung.
 
 ---
 

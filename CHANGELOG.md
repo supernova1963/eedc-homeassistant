@@ -7,6 +7,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.6] - 2026-05-20 — Bündel-Release: E-Mobilitäts-Pool-Konsistenz + Saison-Vergleich + Daten-Checker
+
+> 🔌 **E-Mobilitäts-Sichten zeigen wieder dieselben Zahlen.** junky84 (#262) meldete nach v3.31.5 vier verschiedene Werte für dieselbe evcc-Ladung: Cockpit-E-Auto 4127 kWh / 48 % PV (korrekt), Wallbox-Dashboard 5278 / 38 %, Auswertungen-Komponenten 4130 mit PV 48 % + Netz 85 % = 133 % (mathematisch unmöglich). Ursache: vier Read-Sites poolten E-Auto- + Wallbox-IMD mit feldweisem `max(eauto_X, wb_X)` — drei unabhängige `max()`-Aufrufe für `gesamt`/`pv`/`netz` konnten die Felder aus verschiedenen Quellen mischen, das Tripel war intern inkonsistent. Nur das E-Auto-Dashboard war korrekt (poolt über `compute_emob_pool_attribution` eine ganze Quelle). **Fix:** SoT-Helper `aggregiere_emob_ladung` — die Quelle mit der größeren Heimladung gewinnt die komplette, in sich konsistente Trias (`pv + netz == ladung` garantiert); alle Sichten rufen ihn auf. Plus #195-Abschluss (Saison-Vergleich), #613-Daten-Checker-Fix und ein PVGIS-Systemverluste-Drift-Refactor.
+
+### Added
+
+- **Wärmepumpe: Saison-Toggle im Monatsvergleich** (#195 Punkt 2): Das WP-Cockpit kann den Monatsvergleich auf Saison-Fenster umstellen — neue `SAISON_FENSTER`-Konstante in `lib/constants.ts` (Winter Nov–Feb / Heizperiode Okt–Apr / Sommer Jun–Aug). Achsen-Toggle Monate/Saison + Fenster-Selektor, Saison-Instanzen auf der X-Achse, kein Jahresfilter (Cockpit-vs-Auswertung-Grenze).
+- **Auswertung: Vergleichsjahr-Absolutwert in der Tabelle** (#195 Punkt 1): Die Auswertungs-Tabelle zeigt das Vergleichsjahr zusätzlich als absoluten kWh-/€-Wert statt nur als Differenz zum aktuellen Jahr.
+- **Energieprofil-Tagestabelle: Komponenten-Spalten**: zusätzliche Spalten für die einzelnen Komponenten (Speicher, Wärmepumpe, E-Mobilität) in der Tages-Tabelle.
+- **Speicher-Wirtschaftlichkeit — Etappe C-Backend** (#264, PR [#278](https://github.com/supernova1963/eedc-homeassistant/pull/278) von stlorenz, maintainer-rebased + reviewt): dynamischer Ladepreis aus den TEP-Stundenwerten + SoC-korrigierter Wirkungsgrad statt Parameter-Durchschnitt. Die Frontend-KPIs (Etappe C-UI) folgen in einem Nachgang-Release. Zwei Review-Nits gefixt (Funktionen aus dem Import-Block geholt, stilles `except: pass` → `logger.warning`).
+
+### Changed
+
+- **E-Mobilitäts-Pool zentralisiert** (#262): neuer SoT-Helper `aggregiere_emob_ladung` in `services/eauto_wirtschaftlichkeit.py` ersetzt feldweises `max()` in vier Sichten (Wallbox-Dashboard, Komponenten-Zeitreihe, Cockpit-Übersicht, `aktueller_monat._collect_saved_data`). Die Quelle mit der größeren Heimladung gewinnt die komplette `(gesamt, pv, netz)`-Trias — `pv + netz == ladung` ist garantiert. Externe Ladung kommt paarweise (kWh, €) aus der Quelle mit den höheren Extern-Kosten. Das E-Auto-Dashboard bleibt unverändert (`compute_emob_pool_attribution`, selbe use-wb-pool-Entscheidung → konsistent). Netto −155 Zeilen duplizierte Pool-Logik. Neun neue Tests in `test_emob_pool_konsistenz.py`.
+- **PVGIS-Systemverluste zentralisiert**: `DEFAULT_SYSTEM_LOSSES = 0.14` war 5× definiert, die Auflöse-Zeile `pvgis.system_losses / 100 if … else …` stand 6× parallel. Zentralisiert in `services/pv_orientation.py` (`DEFAULT_SYSTEM_LOSSES` + `resolve_system_losses(pvgis)`). Verhaltenserhaltender Refactor, vier neue Unit-Tests. Memory-Linie `feedback_aggregations_drift`.
+- **PV-Prefix-Whitelist im Frontend konsolidiert**: die PV-Komponenten-Prefix-Liste wird im Frontend jetzt aus einer Stelle gelesen — Analogon zum Backend-Berechnungs-Layer (ADR-001).
+- **`docs/KONZEPT-WALLBOX-EAUTO.md` aktualisiert**: Pool-Konsolidierung dokumentiert; Phase 2 in **2a** (Feldzuordnung geradeziehen, schulden-getrieben — Trigger durch das evcc-Import-Churn gefeuert) und **2b** (Vehicle-Sensor-Mapping, feature-getrieben) gesplittet; neuer Abschnitt »Phase-2-Trigger«.
+
+### Fixed
+
+- **E-Mobilität: vier Sichten zeigten verschiedene Lade-Zahlen** (#262, junky84): siehe Intro — feldweises `max()` über getrennte E-Auto-/Wallbox-Töpfe erzeugte intern inkonsistente `(gesamt, pv, netz)`-Tripel, in Extremfällen PV-Anteil > 100 %. Behoben durch den `aggregiere_emob_ladung`-Gewinner-Pool.
+- **Daten-Checker: stillgelegte Investition im LTS-Check** (#613, MartyBr-Forum-Meldung): `_check_sensor_mapping_lts` flaggte den kWh-Sensor einer stillgelegten Investition weiter als „nicht in HA-LTS". Der #608-Stilllegungs-Sweep aus v3.31.5 hatte diesen Pfad übersehen, weil die Funktion das `sensor_mapping`-JSON-Dict iteriert statt `anlage.investitionen`. Fix + Akzeptanztest.
+- **UI: SOLL/IST → IST/SOLL Label-Korrektur** (rapahl-PN): vertauschte Spalten-Beschriftung korrigiert.
+
+---
+
 ## [3.31.5] - 2026-05-19 — Bündel-Release: BKW-Doppelzählung weg + Berechnungs-Layer (ADR-001) + Tester-Bündel
 
 > 🧮 **Strukturelle Antwort auf die BKW-Drift-Klasse.** Rainer-PN 2026-05-19 zeigte eine systematische IST-Über-Erfassung (~5-8 % Bias gegenüber Solcast) bei einer Anlage mit Balkonkraftwerk. Diagnose: `TV_SERIE_CONFIG["balkonkraftwerk"].kategorie = "pv"` ließ den Live-Tagesverlauf-Service den BKW-Wert unter `pv_<inv_id>` akkumulieren, der HA-LTS-Boundary-Aggregator nutzt aber `bkw_<inv_id>`. Bei Schema-Mismatch blieben beide Keys parallel in `komponenten_kwh`, alle Konsumenten mit Whitelist `("pv_", "bkw_")` zählten BKW doppelt. **Strukturelle Lösung statt Pflaster:** Live-Σ-Riemann-Akkumulation für `komponenten_kwh` ist im HA-Add-on-Modus jetzt komplett deaktiviert — `boundary_kwh` (HA-LTS) ist alleiniger Schreiber. Damit ist die ganze Bug-Klasse strukturell weg, nicht nur das eine Symptom. Plus: neuer Berechnungs-Layer `backend/core/berechnungen/` als SoT für Aggregat-Helper, Pytest-Konformitäts-Test blockiert künftige Whitelist-Duplikate, Pflicht-Invariante im Aggregator loggt Schreib-Drift sofort.
