@@ -24,7 +24,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
-from backend.core.field_definitions import get_emob_pv_netz_kwh
+from backend.core.field_definitions import (
+    get_eauto_ladung_kwh,
+    get_emob_pv_netz_kwh,
+)
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -230,3 +233,83 @@ def pick_emob_ref_parameter(investitionen: Iterable) -> Optional[dict]:
         return eauto.parameter
     wb = next((i for i in investitionen if i.typ == "wallbox"), None)
     return wb.parameter if wb is not None else None
+
+
+@dataclass
+class EmobLadungPool:
+    """Konsistentes E-Mobilitäts-Ladungs-Aggregat aus genau EINER Quelle.
+
+    Garantie: `pv_kwh + netz_kwh == ladung_kwh`. Anders als feldweises
+    `max()` über getrennte E-Auto- und Wallbox-Töpfe — das kann `pv` aus
+    Quelle A und `netz` aus Quelle B nehmen und einen PV-Anteil > 100 %
+    erzeugen (#262 junky84: Auswertungen → Komponenten zeigte PV 48 % +
+    Netz 85 % = 133 %, weil die drei Felder aus drei `max()`-Aufrufen
+    stammten). Die Heimladungs-Trias kommt hier immer geschlossen aus der
+    Quelle mit der größeren Heimladung.
+    """
+    ladung_kwh: float       # Heimladung gesamt = pv_kwh + netz_kwh
+    pv_kwh: float
+    netz_kwh: float
+    extern_kwh: float
+    extern_euro: float
+    ladevorgaenge: float
+    quelle: str             # "wallbox" | "e-auto" | "leer"
+
+
+def _summiere_emob_quelle(imd_data: Iterable[dict]) -> EmobLadungPool:
+    """Summiert eine Quelle (alle Wallbox- ODER alle E-Auto-IMD) zu einer in
+    sich konsistenten Trias. `netz` über den SoT-Helper `get_emob_pv_netz_kwh`
+    (liest `ladung_netz_kwh` direkt oder leitet `Total − PV` ab)."""
+    pv = netz = extern_kwh = extern_euro = ladevorgaenge = 0.0
+    for d in imd_data:
+        d = d or {}
+        p, n = get_emob_pv_netz_kwh(d, total_kwh=get_eauto_ladung_kwh(d))
+        pv += p
+        netz += n
+        extern_kwh += d.get("ladung_extern_kwh", 0) or 0
+        extern_euro += d.get("ladung_extern_euro", 0) or 0
+        ladevorgaenge += d.get("ladevorgaenge", 0) or 0
+    return EmobLadungPool(pv + netz, pv, netz, extern_kwh, extern_euro,
+                          ladevorgaenge, "")
+
+
+def aggregiere_emob_ladung(
+    *,
+    eauto_imd_data: Iterable[dict],
+    wallbox_imd_data: Iterable[dict],
+) -> EmobLadungPool:
+    """Poolt E-Auto- + Wallbox-Ladung zu EINER konsistenten Heimladungs-Trias.
+
+    Wallbox (Loadpoint-Sicht) und E-Auto (Vehicle-Sicht) messen oft denselben
+    Stromfluss aus zwei Perspektiven. Die Quelle mit der größeren Heimladung
+    (`pv + netz`) liefert die komplette Trias — nie feldweise gemischt. Selbe
+    use-wb-pool-Entscheidung wie `compute_emob_pool_attribution` /
+    EAutoDashboard, damit alle Sichten dieselbe Zahl zeigen.
+
+    Externe Ladung (öffentliche Ladesäulen) wird getrennt entschieden: das
+    Paar `(kWh, €)` kommt aus der Quelle mit den höheren externen Kosten —
+    extern wird oft nur an einer Investition gepflegt, unabhängig davon, wo
+    die Heimladung steht.
+
+    Aufrufer übergibt bereits gefilterte Iterables (nach `ist_aktiv_im_monat`
+    und `ist_dienstlich`).
+    """
+    wb = _summiere_emob_quelle(wallbox_imd_data)
+    ea = _summiere_emob_quelle(eauto_imd_data)
+
+    if wb.ladung_kwh >= ea.ladung_kwh:
+        heim, name = wb, ("wallbox" if wb.ladung_kwh > 0 else "leer")
+    else:
+        heim, name = ea, "e-auto"
+
+    extern = wb if wb.extern_euro >= ea.extern_euro else ea
+
+    return EmobLadungPool(
+        ladung_kwh=heim.ladung_kwh,
+        pv_kwh=heim.pv_kwh,
+        netz_kwh=heim.netz_kwh,
+        extern_kwh=extern.extern_kwh,
+        extern_euro=extern.extern_euro,
+        ladevorgaenge=max(wb.ladevorgaenge, ea.ladevorgaenge),
+        quelle=name,
+    )

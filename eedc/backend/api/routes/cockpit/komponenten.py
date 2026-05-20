@@ -16,14 +16,13 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
+from backend.services.eauto_wirtschaftlichkeit import aggregiere_emob_ladung
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
 from backend.core.field_definitions import (
-    get_eauto_ladung_kwh,
-    get_emob_pv_netz_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
     get_speicher_netzladung_kwh,
@@ -155,17 +154,14 @@ async def get_komponenten_zeitreihe(
             "speicher_arbitrage": 0, "speicher_arbitrage_preis_sum": 0, "speicher_arbitrage_count": 0,
             "wp_waerme": 0, "wp_strom": 0, "wp_heizung": 0, "wp_warmwasser": 0,
             "wp_strom_heizen": 0, "wp_strom_warmwasser": 0,
-            # E-Mobilität: getrennte Akkumulatoren pro Quelle für Pool-Max
-            # (analog aktueller_monat._aggregate Commit 7c0a077b + #231 NongJoWo).
-            # Wallbox-IMD und E-Auto-IMD messen oft denselben Stromfluss aus
-            # zwei Perspektiven → Sum würde doppeln. Beim Konsolidieren unten
-            # gewinnt pro Feld die größere Quelle.
-            "eauto_km": 0,
-            "eauto_ladung": 0, "eauto_pv_ladung": 0,
-            "eauto_netz_ladung": 0, "eauto_extern_ladung": 0, "eauto_extern_euro": 0,
-            "eauto_v2h": 0,
-            "wb_ladung": 0, "wb_pv_ladung": 0,
-            "wb_netz_ladung": 0, "wb_extern_ladung": 0, "wb_extern_euro": 0,
+            # E-Mobilität: rohe IMD-`verbrauch_daten` je Quelle sammeln, erst
+            # beim Konsolidieren unten via `aggregiere_emob_ladung` zu EINER
+            # konsistenten Trias poolen. Wallbox-IMD und E-Auto-IMD messen oft
+            # denselben Stromfluss aus zwei Perspektiven → feldweises max()
+            # über pv/netz konnte sie mischen (#262 junky84: PV-Anteil > 100 %).
+            # km + v2h kommen nur vom E-Auto.
+            "eauto_imds": [], "wb_imds": [],
+            "eauto_km": 0, "eauto_v2h": 0,
             "bkw_erzeugung": 0, "bkw_eigenverbrauch": 0, "bkw_speicher_ladung": 0, "bkw_speicher_entladung": 0,
             "sonstiges_erzeugung": 0, "sonstiges_verbrauch": 0,
             "sonderkosten": 0, "sonstige_ertraege": 0, "sonstige_ausgaben": 0,
@@ -230,27 +226,17 @@ async def get_komponenten_zeitreihe(
             # nicht in den E-Mobilitäts-Pool der eigenen Anlage.
             if ist_dienstlich(inv):
                 continue
-            # #262: PV/Netz via SoT-Helper — evcc-Import liefert nur Total + PV,
-            # Netz wird aus `Total − PV` abgeleitet wenn der Key fehlt.
-            total_kwh = get_eauto_ladung_kwh(data)
-            pv, netz = get_emob_pv_netz_kwh(data, total_kwh=total_kwh)
+            # Rohe IMD je Quelle sammeln — Pooling zentral via
+            # `aggregiere_emob_ladung` weiter unten. km + v2h nur vom E-Auto.
             if inv.typ == "e-auto":
+                d["eauto_imds"].append(data)
                 d["eauto_km"] += data.get("km_gefahren", 0) or 0
-                d["eauto_ladung"] += total_kwh
-                d["eauto_pv_ladung"] += pv
-                d["eauto_netz_ladung"] += netz
-                d["eauto_extern_ladung"] += data.get("ladung_extern_kwh", 0) or 0
-                d["eauto_extern_euro"] += data.get("ladung_extern_euro", 0) or 0
                 v2h = data.get("v2h_entladung_kwh", 0) or 0
                 if v2h > 0:
                     hat_v2h = True
                     d["eauto_v2h"] += v2h
             else:  # wallbox
-                d["wb_ladung"] += total_kwh
-                d["wb_pv_ladung"] += pv
-                d["wb_netz_ladung"] += netz
-                d["wb_extern_ladung"] += data.get("ladung_extern_kwh", 0) or 0
-                d["wb_extern_euro"] += data.get("ladung_extern_euro", 0) or 0
+                d["wb_imds"].append(data)
 
         elif inv.typ == "balkonkraftwerk":
             d["bkw_erzeugung"] += get_pv_erzeugung_kwh(data)
@@ -288,15 +274,18 @@ async def get_komponenten_zeitreihe(
         # für Erklärung — bei Split-Klimaanlagen kein Wärmemengenzähler).
         wp_cop = (d["wp_waerme"] / d["wp_strom"]) if d["wp_strom"] > 0 and d["wp_waerme"] > 0 else None
 
-        # E-Mobilitäts-Pool: pro Feld die größere Quelle gewinnt
-        # (analog aktueller_monat._aggregate + #231 NongJoWo).
-        # km kommt nur vom E-Auto — Wallbox kennt keine km. v2h ebenfalls
-        # nur E-Auto (Vehicle-to-Home-Sicht).
-        emob_ladung = max(d["eauto_ladung"], d["wb_ladung"])
-        emob_pv_ladung = max(d["eauto_pv_ladung"], d["wb_pv_ladung"])
-        emob_netz_ladung = max(d["eauto_netz_ladung"], d["wb_netz_ladung"])
-        emob_extern_ladung = max(d["eauto_extern_ladung"], d["wb_extern_ladung"])
-        emob_extern_euro = max(d["eauto_extern_euro"], d["wb_extern_euro"])
+        # E-Mobilitäts-Pool: EINE Quelle gewinnt die konsistente Trias
+        # (#262 — feldweises max() über pv/netz ergab PV-Anteil > 100 %).
+        # km + v2h kommen nur vom E-Auto (Vehicle-to-Home-Sicht).
+        emob_pool = aggregiere_emob_ladung(
+            eauto_imd_data=d["eauto_imds"],
+            wallbox_imd_data=d["wb_imds"],
+        )
+        emob_ladung = emob_pool.ladung_kwh
+        emob_pv_ladung = emob_pool.pv_kwh
+        emob_netz_ladung = emob_pool.netz_kwh
+        emob_extern_ladung = emob_pool.extern_kwh
+        emob_extern_euro = emob_pool.extern_euro
         emob_km = d["eauto_km"]
         emob_v2h = d["eauto_v2h"]
         emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None

@@ -37,6 +37,7 @@ from backend.core.investition_parameter import (
 )
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
+    aggregiere_emob_ladung,
     attribute_emob_pool_by_km,
     berechne_eauto_ersparnis,
     compute_emob_pool_attribution,
@@ -2098,23 +2099,14 @@ async def get_wallbox_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # E-Auto- und Wallbox-Aggregate getrennt erfassen — danach Pool-Max
-    # pro Feld (#262 junky84): evcc-Portal-Import schreibt die Ladedaten in
-    # die Wallbox-Investition (data_import.py:453), das Premium-Setup
-    # (separate E-Auto-Sensoren) befüllt sie aus E-Auto-Sicht. Vorher las
-    # das Dashboard nur die E-Auto-Sicht → bei evcc-Import zeigte das
-    # Wallbox-Dashboard "Noch keine Ladedaten". Pool-Max-Logik analog zu
-    # `cockpit/uebersicht.py:278-281` und `cockpit/komponenten.py:291-295`.
-    eauto_pv = 0
-    eauto_netz = 0
-    eauto_extern_kwh = 0
-    eauto_extern_euro = 0
-    eauto_ladevorgaenge = 0
-    wb_pv = 0
-    wb_netz = 0
-    wb_extern_kwh = 0
-    wb_extern_euro = 0
-    wb_ladevorgaenge = 0
+    # E-Auto- und Wallbox-IMD getrennt sammeln, dann via SoT-Helper zu EINER
+    # konsistenten Heimladungs-Trias poolen (#262 junky84): evcc-Portal-Import
+    # schreibt die Ladedaten in die Wallbox-Investition (data_import.py:453),
+    # das Premium-Setup (separate E-Auto-Sensoren) aus E-Auto-Sicht. Früher
+    # feldweises `max()` über pv/netz getrennt — das konnte pv aus der einen
+    # und netz aus der anderen Quelle nehmen → PV-Anteil > 100 %. Jetzt
+    # gewinnt die Quelle mit der größeren Heimladung die komplette Trias,
+    # identisch zu Cockpit-Übersicht, Komponenten und EAutoDashboard.
     monate_set = set()
 
     # Issue #153 / #155: Daten vor Anschaffungsdatum ignorieren
@@ -2130,36 +2122,29 @@ async def get_wallbox_dashboard(
 
     eauto_id_set = set(eauto_ids)
     wallbox_id_set = set(wallbox_ids)
+    eauto_imd_data: list[dict] = []
+    wb_imd_data: list[dict] = []
     for inv_id, md_list in md_by_inv.items():
         for md in md_list:
             if _nicht_aktiv_im_monat(inv_id, md.jahr, md.monat):
                 continue
             d = md.verbrauch_daten or {}
-            # #262: PV/Netz via SoT-Helper — evcc-Import liefert nur Total + PV,
-            # Netz wird aus `Total − PV` abgeleitet wenn der Key fehlt.
-            pv, netz = get_emob_pv_netz_kwh(d)
             if inv_id in eauto_id_set:
-                eauto_pv += pv
-                eauto_netz += netz
-                eauto_extern_kwh += d.get('ladung_extern_kwh', 0)
-                eauto_extern_euro += d.get('ladung_extern_euro', 0)
-                eauto_ladevorgaenge += d.get('ladevorgaenge', 0)
+                eauto_imd_data.append(d)
             elif inv_id in wallbox_id_set:
-                wb_pv += pv
-                wb_netz += netz
-                wb_extern_kwh += d.get('ladung_extern_kwh', 0)
-                wb_extern_euro += d.get('ladung_extern_euro', 0)
-                wb_ladevorgaenge += d.get('ladevorgaenge', 0)
+                wb_imd_data.append(d)
             monate_set.add((md.jahr, md.monat))
 
-    # Pool-Max pro Feld: größere Quelle gewinnt (Vehicle- vs. Loadpoint-Sicht).
-    gesamt_heim_pv = max(eauto_pv, wb_pv)
-    gesamt_heim_netz = max(eauto_netz, wb_netz)
-    gesamt_extern_kwh = max(eauto_extern_kwh, wb_extern_kwh)
-    gesamt_extern_euro = max(eauto_extern_euro, wb_extern_euro)
-    gesamt_ladevorgaenge = max(eauto_ladevorgaenge, wb_ladevorgaenge)
-
-    gesamt_heim_ladung = gesamt_heim_pv + gesamt_heim_netz
+    emob_pool = aggregiere_emob_ladung(
+        eauto_imd_data=eauto_imd_data,
+        wallbox_imd_data=wb_imd_data,
+    )
+    gesamt_heim_pv = emob_pool.pv_kwh
+    gesamt_heim_netz = emob_pool.netz_kwh
+    gesamt_extern_kwh = emob_pool.extern_kwh
+    gesamt_extern_euro = emob_pool.extern_euro
+    gesamt_ladevorgaenge = emob_pool.ladevorgaenge
+    gesamt_heim_ladung = emob_pool.ladung_kwh
     anzahl_monate = len(monate_set)
 
     # PV-Anteil der Heimladung
@@ -2206,7 +2191,7 @@ async def get_wallbox_dashboard(
             'ersparnis_vs_extern_euro': round(ersparnis_vs_extern, 2),
             # Wallbox-Info
             'leistung_kw': leistung_kw,
-            'gesamt_ladevorgaenge': gesamt_ladevorgaenge,
+            'gesamt_ladevorgaenge': int(gesamt_ladevorgaenge),
             'ladevorgaenge_pro_monat': round(gesamt_ladevorgaenge / anzahl_monate, 1) if anzahl_monate > 0 else 0,
             'anzahl_monate': anzahl_monate,
         }

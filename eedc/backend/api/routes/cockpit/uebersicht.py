@@ -35,6 +35,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
 )
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
+    aggregiere_emob_ladung,
     berechne_eauto_ersparnis,
     pick_emob_ref_parameter,
 )
@@ -185,20 +186,15 @@ async def get_cockpit_uebersicht(
     wp_strom = 0.0
     wp_heizung = 0.0
     wp_warmwasser = 0.0
-    # E-Mobilität: getrennt nach E-Auto (Vehicle-Sicht) und Wallbox (Loadpoint-
-    # Sicht) sammeln, danach pro Feld die größere Quelle als Wahrheit + PV ≤
-    # Gesamt erzwingen. Identische Logik wie in
-    # `aktueller_monat._collect_saved_data` (Commit 92d522a8); ohne diese
-    # Trennung würde 1 EAuto + 1 WB mit ähnlich gepflegten Werten doppelt
-    # zählen (Joachim/Gernot 2026-05-02). Saubere Trennung pro Fahrzeug folgt
-    # in Phase 2 des Wallbox/E-Auto-Konzepts.
-    eauto_ladung = 0.0
-    eauto_pv_ladung = 0.0
+    # E-Mobilität: rohe IMD je Quelle (E-Auto / Wallbox) sammeln, danach
+    # zentral via `aggregiere_emob_ladung` zu EINER konsistenten Heimladungs-
+    # Trias poolen. E-Auto- und Wallbox-IMD messen oft denselben Stromfluss
+    # aus zwei Perspektiven — der Helper wählt die Quelle mit der größeren
+    # Heimladung komplett (gleiche Logik wie Wallbox-Dashboard, Komponenten,
+    # aktueller_monat, EAutoDashboard). km kommt nur vom E-Auto.
+    eauto_imd_data: list[dict] = []
+    wb_imd_data: list[dict] = []
     eauto_km = 0.0
-    eauto_extern_euro = 0.0
-    wb_ladung = 0.0
-    wb_pv_ladung = 0.0
-    wb_extern_euro = 0.0
     bkw_erzeugung = 0.0
     bkw_eigenverbrauch = 0.0
     sonstiges_erzeugung = 0.0
@@ -249,17 +245,10 @@ async def get_cockpit_uebersicht(
                     pv_kwh * einspeise_verguetung_cent
                 ) / 100
             elif inv.typ == "e-auto":
-                eauto_ladung += (
-                    data.get("ladung_kwh", 0) or
-                    data.get("verbrauch_kwh", 0) or 0
-                )
-                eauto_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
+                eauto_imd_data.append(data)
                 eauto_km += data.get("km_gefahren", 0) or 0
-                eauto_extern_euro += data.get("ladung_extern_euro", 0) or 0
             else:  # wallbox (nicht-dienstlich)
-                wb_ladung += data.get("ladung_kwh", 0) or 0
-                wb_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
-                wb_extern_euro += data.get("ladung_extern_euro", 0) or 0
+                wb_imd_data.append(data)
 
         elif inv.typ == "balkonkraftwerk":
             bkw_kwh = get_pv_erzeugung_kwh(data)
@@ -281,19 +270,20 @@ async def get_cockpit_uebersicht(
 
     sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
 
-    # E-Mobilitäts-Pool: pro Feld die größere Quelle gewinnt (analog zu
-    # `aktueller_monat._collect_saved_data`). Wallbox liefert üblicherweise
-    # Loadpoint-Wahrheit, E-Auto die Vehicle-Sicht; ist nur eine gepflegt,
-    # gewinnt sie automatisch. PV ≤ Gesamt erzwingen.
-    emob_ladung = max(eauto_ladung, wb_ladung)
-    emob_pv_ladung = max(eauto_pv_ladung, wb_pv_ladung)
-    if emob_pv_ladung > emob_ladung:
-        emob_pv_ladung = emob_ladung
+    # E-Mobilitäts-Pool: EINE Quelle liefert die konsistente Heimladungs-
+    # Trias (pv + netz == ladung). Früher feldweises max() über pv/netz —
+    # das konnte pv aus der einen, netz aus der anderen Quelle nehmen und
+    # PV-Anteil > 100 % erzeugen (#262 junky84). Externe Lade-Kosten (#260)
+    # kommen paarweise aus der Quelle mit den höheren Extern-Kosten.
+    emob_pool = aggregiere_emob_ladung(
+        eauto_imd_data=eauto_imd_data,
+        wallbox_imd_data=wb_imd_data,
+    )
+    emob_ladung = emob_pool.ladung_kwh
+    emob_pv_ladung = emob_pool.pv_kwh
+    emob_netz_ladung = emob_pool.netz_kwh
     emob_km = eauto_km
-    # #260: externe Lade-Kosten poolen wie ladung_kwh — sonst rechnet die
-    # Cockpit-Übersicht externe Ladevorgänge als 0 € und liefert eine zu hohe
-    # E-Mob-Ersparnis im Vergleich zum E-Auto-Dashboard.
-    emob_extern_euro_total = max(eauto_extern_euro, wb_extern_euro)
+    emob_extern_euro_total = emob_pool.extern_euro
 
     # Monatsdaten NUR für Anlagen-Energiebilanz
     md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
@@ -471,7 +461,7 @@ async def get_cockpit_uebersicht(
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
     emob_result = berechne_eauto_ersparnis(
         km_gefahren=emob_km,
-        ladung_netz_kwh=emob_ladung - emob_pv_ladung,
+        ladung_netz_kwh=emob_netz_ladung,
         ladung_extern_euro=emob_extern_euro_total,
         wallbox_strompreis_cent=wallbox_preis_cent,
         eauto_parameter=pick_emob_ref_parameter(emob_invs),
@@ -573,7 +563,7 @@ async def get_cockpit_uebersicht(
     # CO2-Bilanz
     co2_pv = eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
     co2_wp = (wp_waerme / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH) - (wp_strom * CO2_FAKTOR_STROM_KG_KWH) if wp_waerme > 0 else 0
-    co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - ((emob_ladung - emob_pv_ladung) * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
+    co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - (emob_netz_ladung * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 
     # Zeitraum
