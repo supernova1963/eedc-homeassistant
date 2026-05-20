@@ -1379,11 +1379,20 @@ class DatenChecker:
             if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
                 kwh_sensors.append((m["sensor_id"], f"Basis: {key}"))
 
-        # Investitions-Bezeichnungen für aussagekräftige Labels
+        # Investitions-Bezeichnungen für aussagekräftige Labels + Lifecycle-Status
         inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
+        heute = date.today()
+        inv_aktiv = {str(i.id): i.ist_aktiv_an(heute) for i in (anlage.investitionen or [])}
 
         for inv_id, inv_data in (mapping.get("investitionen") or {}).items():
             if not isinstance(inv_data, dict):
+                continue
+            # Stillgelegte Investition überspringen (#613 MartyBr, #608-Folge):
+            # ein stillgelegter WR braucht seinen alten kWh-Sensor nicht mehr in
+            # HA-LTS. Den #608-Sweep (a209f084/1b95ffd8) hat dieser Pfad verpasst,
+            # weil er das sensor_mapping-Dict iteriert statt anlage.investitionen.
+            # Default True: verwaiste Mapping-Einträge (Inv. gelöscht) weiter melden.
+            if not inv_aktiv.get(str(inv_id), True):
                 continue
             felder = inv_data.get("felder") or {}
             for feld, m in felder.items():

@@ -1,6 +1,7 @@
 """
 Akzeptanztest: Daten-Checker respektiert `stilllegungsdatum` in der
-kWp-Σ und im Sensor-Mapping-Vollständigkeits-Check (#608 MartyBr).
+kWp-Σ, im Sensor-Mapping-Vollständigkeits-Check (#608 MartyBr) sowie
+im LTS-Verfügbarkeits-Check (#613 MartyBr).
 
 Hintergrund: Bei einer String-Verlegung zwischen Wechselrichtern wird der
 alte String stillgelegt (Stilllegungsdatum gesetzt, `aktiv` bleibt True
@@ -297,3 +298,69 @@ async def test_pv_erzeugung_map_filtert_post_stilllegung_imds(db):
     pv_map = checker._get_pv_erzeugung_map(anlage)
     assert pv_map.get((2024, 5)) == 500.0, f"Mai-IMD soll zählen, Karte: {pv_map}"
     assert (2024, 8) not in pv_map, f"August-IMD nach Stilllegung darf nicht zählen, Karte: {pv_map}"
+
+
+async def test_sensor_mapping_lts_ignoriert_stillgelegten_sensor(db, monkeypatch):
+    """#613 MartyBr: der LTS-Verfügbarkeits-Check mahnte den kWh-Sensor eines
+    stillgelegten Wechselrichters an. Nach Fix wird die stillgelegte
+    Investition übersprungen, bevor HA-LTS überhaupt befragt wird."""
+    from backend.services.daten_checker import DatenChecker
+    import backend.services.ha_statistics_service as ha_mod
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    anlage = await _seed(db, total_kwp=10.0)
+    gestern = date.today() - timedelta(days=30)
+    _add_module(db, anlage.id, "WR-A (Süd, aktiv)", 10.0,
+                anschaffungsdatum=date(2024, 1, 1))
+    _add_module(db, anlage.id, "WR-B (alt, stillgelegt)", 5.0,
+                anschaffungsdatum=date(2024, 1, 1), stilllegungsdatum=gestern)
+    await db.flush()
+
+    invs = {i.bezeichnung: i.id for i in (await db.execute(select(Investition))).scalars()}
+    anlage.sensor_mapping = {
+        "investitionen": {
+            str(invs["WR-A (Süd, aktiv)"]): {
+                "felder": {"pv_erzeugung_kwh": {
+                    "strategie": "sensor", "sensor_id": "sensor.wr_a_kwh"}},
+            },
+            str(invs["WR-B (alt, stillgelegt)"]): {
+                "felder": {"pv_erzeugung_kwh": {
+                    "strategie": "sensor", "sensor_id": "sensor.wr_b_alt_kwh"}},
+            },
+        },
+    }
+    await db.commit()
+
+    anlage = (await db.execute(
+        select(Anlage).options(selectinload(Anlage.investitionen)).where(Anlage.id == anlage.id)
+    )).scalar_one()
+
+    # HA-LTS mocken: aktiver Sensor vorhanden, der alte (stillgelegte) fehlt.
+    # Ohne den Fix würde der fehlende WR-B-Sensor ein WARNING auslösen.
+    class _FakeHaStats:
+        is_available = True
+
+        def filter_valid_sensor_ids(self, sids):
+            valid = [s for s in sids if s != "sensor.wr_b_alt_kwh"]
+            missing = [s for s in sids if s == "sensor.wr_b_alt_kwh"]
+            return valid, missing
+
+    monkeypatch.setattr(ha_mod, "get_ha_statistics_service", lambda: _FakeHaStats())
+
+    checker = DatenChecker(db)
+    ergebnisse = await checker._check_sensor_mapping_lts(anlage)
+
+    # Kein WARNING — der einzige "fehlende" Sensor gehört zur stillgelegten
+    # Investition und wird vor der HA-Abfrage übersprungen.
+    fehlt = [r for r in ergebnisse if "nicht in HA-Long-Term-Statistics" in r.meldung]
+    assert fehlt == [], (
+        f"Stillgelegter WR-Sensor darf nicht als LTS-fehlend gemeldet werden, "
+        f"fand: {[r.meldung for r in fehlt]}"
+    )
+    # Positiv: der aktive WR-A-Sensor wird weiterhin geprüft (OK-Meldung).
+    ok = [r for r in ergebnisse if "HA-Long-Term-Statistics verfügbar" in r.meldung]
+    assert len(ok) == 1, (
+        f"OK-Meldung für den aktiven WR-A-Sensor erwartet, fand: "
+        f"{[r.meldung for r in ergebnisse]}"
+    )
