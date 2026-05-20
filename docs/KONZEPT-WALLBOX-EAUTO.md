@@ -1,6 +1,6 @@
 # Konzept: Wallbox / E-Auto — Datenarchitektur
 
-> **Status (2026-05-19): Phase 1 (Pool-Bug Quick-Fix) vollständig.** Quick-Fix in v3.25.11 (getrennte Akkumulatoren EAuto/WB + Max-pro-Feld, siehe Memory `project_pool_fix_emob.md`) wurde in v3.31.5 zur SoT-Helper-Konsolidierung erweitert: `compute_emob_pool_attribution` + `attribute_emob_pool_by_km` + `pick_emob_ref_parameter` in `eedc/backend/services/eauto_wirtschaftlichkeit.py`. Cockpit-Übersicht, AktuellerMonat (Hauptwert + Komponenten-Loop) und EAutoDashboard sprechen jetzt dieselbe Pool-Logik — schließt die in v3.25.11 offen gelassenen Folge-Pfade. **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item.
+> **Status (2026-05-20): Phase 1 (Pool-Konsolidierung) vollständig.** Der ursprüngliche Quick-Fix (v3.25.11: getrennte Akkumulatoren EAuto/WB + **Max-pro-Feld**, siehe Memory `project_pool_fix_emob.md`) hat sich selbst als Drift-Quelle erwiesen: feldweises `max()` über `gesamt`/`pv`/`netz` als drei unabhängige Aufrufe konnte die Felder aus verschiedenen Quellen mischen und einen PV-Anteil > 100 % erzeugen (#262 junky84: Komponenten zeigte 48 % PV + 85 % Netz = 133 %). v3.31.6 ersetzt das Max-pro-Feld durch den SoT-Helper `aggregiere_emob_ladung` (`eedc/backend/services/eauto_wirtschaftlichkeit.py`): die Quelle mit der größeren Heimladung gewinnt die **komplette, in sich konsistente Trias** (`pv + netz == ladung` garantiert). **Alle fünf Read-Sites sprechen jetzt dieselbe Pool-Logik:** Wallbox-Dashboard, Komponenten-Zeitreihe, Cockpit-Übersicht und AktuellerMonat über `aggregiere_emob_ladung`, das E-Auto-Dashboard über `compute_emob_pool_attribution` + `attribute_emob_pool_by_km` (km-anteilige Verteilung, selbe use-wb-pool-Entscheidung). **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item; Trigger-Stand siehe Abschnitt »Phase-2-Trigger«.
 
 ## Motivation
 
@@ -122,7 +122,7 @@ BMW i4
 - Sensor-Mapping erweitern für evcc Vehicle-Topics
 - Wallbox-Dashboard liest eigene Daten statt E-Auto-Pool
 - Bestehende `ladung_pv_kwh`/`ladung_netz_kwh` am E-Auto bleiben als Fallback
-- **Daten-Checker-Warnung bei Pool-Pflege-Mismatch:** wenn EAuto + WB beide gepflegt sind und die Werte erkennbar ähnlich (≈ derselbe Stromfluss aus zwei Perspektiven) bzw. beide Felder voll sind aber `WB.ladung_pv_kwh > Σ EAuto.ladung_heim_pv_kwh` ist, INFO/WARNING ausgeben — lenkt den User auf eine bewusste Entscheidung, welche Quelle die Wahrheit liefert. Hintergrund: 2026-05-02 fielen bei Joachim und Gernot inkonsistente Pool-Werte auf (PV-Anteil > 100 %, doppelter `kWh/100km`), Quick-Fix in v3.25.x macht max-Auswahl statt Summe. Die Phase-2-Trennung beseitigt die Doppelzählung strukturell, der Daten-Checker bleibt für Altbestand und Pool-Mode.
+- **Daten-Checker-Warnung bei Pool-Pflege-Mismatch:** wenn EAuto + WB beide gepflegt sind und die Werte erkennbar ähnlich (≈ derselbe Stromfluss aus zwei Perspektiven) bzw. beide Felder voll sind aber `WB.ladung_pv_kwh > Σ EAuto.ladung_heim_pv_kwh` ist, INFO/WARNING ausgeben — lenkt den User auf eine bewusste Entscheidung, welche Quelle die Wahrheit liefert. Hintergrund: 2026-05-02 fielen bei Joachim und Gernot inkonsistente Pool-Werte auf (PV-Anteil > 100 %, doppelter `kWh/100km`); der Quick-Fix in v3.25.x machte Max-pro-Feld-Auswahl, was sich selbst als Drift-Quelle erwies und in v3.31.6 durch den Gewinner-Pool `aggregiere_emob_ladung` ersetzt wurde. Die Phase-2-Trennung beseitigt die Doppelzählung strukturell, der Daten-Checker bleibt für Altbestand und Pool-Mode. **Diese Warnung braucht kein neues Datenmodell und ist als eigenständiges Stück vor Phase 2 ziehbar** (siehe »Phase-2-Trigger«: junky84 #262 hatte ~3.300 kWh Streudaten auf der E-Auto-Investition, die der Daten-Checker proaktiv sichtbar gemacht hätte).
 
 ### Phase 3: Aufschlüsselung im Wallbox-Dashboard (optional)
 - Wenn E-Autos Vehicle-Sensoren haben, kann das Wallbox-Dashboard
@@ -133,6 +133,17 @@ BMW i4
 - Nutzer ohne evcc/RFID merken nichts — manuelle Eingabe funktioniert weiter
 - 1:1-Setups (eine WB, ein Auto) bleiben identisch
 - Pool-Aggregation bleibt Fallback wenn keine Vehicle-Sensoren gemappt sind
+
+## Phase-2-Trigger — Stand 2026-05-20
+
+Der dokumentierte Phase-2-Trigger lautet »wenn Vehicle-Sensoren nachgefragt werden«. Per-Vehicle-/Multi-Fahrzeug-Bedarf ist bislang **nicht** aufgetreten — junky84 (#262) und NongJoWo (#260) fahren beide 1 Wallbox + 1 E-Auto.
+
+Ein *anderes* Signal wird aber deutlich: der **evcc-Portal-Import erzeugt seit v3.31.0 anhaltenden Patch-Bedarf** — #262 (vier Fix-Runden), #260 (zwei Runden), EVCC-Parser DE/EN, insgesamt ~8 emob-Fix-Commits in zwei Wochen. Ursache ist strukturell: evcc schreibt die Heimladung architektonisch an die **Wallbox** (`data_import.py`), während Read-Seite und Datenmodell historisch E-Auto-zentriert sind (siehe »Motivation«). Jeder Fix legt eine weitere Heuristik auf den Pool. Der `aggregiere_emob_ladung`-Gewinner-Pool aus v3.31.6 ist die bestmögliche Heuristik, bleibt aber eine Heuristik — er wählt die falsche Quelle, wenn verirrte Streudaten die echte Quelle übertreffen (bei junky84 lagen ~3.300 kWh Streudaten auf der E-Auto-Investition; die Wallbox gewann nur, weil ihre Heimladung noch größer war).
+
+**Bewertung:**
+
+- **Phase 2 (neue Felder `ladung_heim_*` + Vehicle-Sensor-Mapping)** — der dokumentierte Trigger ist noch nicht erfüllt (kein Multi-Vehicle-Bedarf), aber das evcc-Import-Churn-Signal nähert sich dem Punkt, an dem die strukturelle Lösung günstiger ist als die nächste Heuristik-Runde. Maintainer-Entscheidung; bei der nächsten evcc-Pool-Meldung neu bewerten.
+- **Ohne Phase 2 vorziehbar:** die oben verortete »Daten-Checker-Warnung bei Pool-Pflege-Mismatch« braucht kein geändertes Datenmodell. Sie hätte junky84s Streudaten proaktiv sichtbar gemacht und ist ein kleines, eigenständiges Stück.
 
 ## Offene Fragen
 
