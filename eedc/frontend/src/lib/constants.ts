@@ -82,6 +82,19 @@ export const REGION_NAMEN: Record<string, string> = {
   XX: 'Unbekannt',
 }
 
+// ─── Komponenten-Aggregation ─────────────────────────────────────────────────
+
+/**
+ * Key-Prefixe in `TagesZusammenfassung.komponenten_kwh`, die zur PV-Tages-
+ * erzeugung beitragen (z. B. für die PV-Ertrag-Spalte der Energieprofil-
+ * Tagestabelle).
+ *
+ * Spiegel im Backend: `backend/core/berechnungen/energie.py:PV_KOMPONENTEN_PREFIXE`
+ * (Berechnungs-Layer, ADR-001). Ein neues PV-Prefix muss in BEIDEN Dateien
+ * ergänzt werden — sonst entsteht Drift wie bei der BKW-Doppelzählung.
+ */
+export const PV_KOMPONENTEN_PREFIXE = ['pv_', 'bkw_'] as const
+
 // ─── Sonstige Konstanten ─────────────────────────────────────────────────────
 
 /** CO2-Emissionsfaktor Strommix Deutschland (kg CO2 pro kWh). */

@@ -21,6 +21,9 @@ from typing import Optional
 # ergänzt werden — sonst zählen Daten-Checker, Drift-Check, Genauigkeits-
 # Tracking und Reparatur-Werkbank ihn nicht mit.
 #
+# Spiegel im Frontend: `frontend/src/lib/constants.ts:PV_KOMPONENTEN_PREFIXE`
+# (TypeScript kann nicht aus diesem Layer importieren) — dort ebenfalls ergänzen.
+#
 # Vor Hinzufügen eines neuen Präfixes prüfen:
 # - Wird der Boundary-Pfad (lts_aggregator.py:237+ oder snapshot/aggregator.py)
 #   diesen Präfix tatsächlich schreiben?

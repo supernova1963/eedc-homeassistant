@@ -4,7 +4,7 @@ import { Button, Card, Alert, EmptyState } from '../ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../ui'
 import { DataLoadingState } from '../common'
 import { energieProfilApi, type TagesZusammenfassung, type VerfuegbarerMonat, type SerieInfo } from '../../api/energie_profil'
-import { MONAT_KURZ } from '../../lib'
+import { MONAT_KURZ, PV_KOMPONENTEN_PREFIXE } from '../../lib'
 import ReaggregatePreviewModal from './ReaggregatePreviewModal'
 
 type ColumnGroupKey = 'peaks' | 'summen' | 'performance' | 'wetter' | 'preise' | 'komponenten'
@@ -90,7 +90,7 @@ const STATIC_COLUMNS: ColumnConfig[] = [
   { key: 'peak_netzbezug',    label: 'Peak Netzbezug',  group: 'peaks',       getValue: (t) => t.peak_netzbezug_kw,    format: 'kw', defaultVisible: true,  agg: 'max', tone: 'orange' },
   { key: 'peak_einspeisung',  label: 'Peak Einspeisung', group: 'peaks',      getValue: (t) => t.peak_einspeisung_kw,  format: 'kw', defaultVisible: true,  agg: 'max', tone: 'blue'   },
   // Tages-Summen
-  { key: 'pv_ertrag',         label: 'PV-Ertrag',       group: 'summen',      getValue: (t) => sumKomponentenKwhByPrefix(t, ['pv_', 'bkw_']), format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'green'  },
+  { key: 'pv_ertrag',         label: 'PV-Ertrag',       group: 'summen',      getValue: (t) => sumKomponentenKwhByPrefix(t, PV_KOMPONENTEN_PREFIXE), format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'green'  },
   { key: 'ueberschuss',       label: 'Überschuss',      group: 'summen',      getValue: (t) => t.ueberschuss_kwh,      format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'amber'  },
   { key: 'defizit',           label: 'Defizit',         group: 'summen',      getValue: (t) => t.defizit_kwh,          format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'red'    },
   // Performance
