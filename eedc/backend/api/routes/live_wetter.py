@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.core.config import settings
+from backend.core.berechnungen.energie import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -541,9 +542,6 @@ _MONAT_NAMEN = {
     9: "September", 10: "Oktober", 11: "November", 12: "Dezember",
 }
 
-# Schlüssel die keine PV-Erzeugung sind (Strompreis in ct, Netzbezug, Einspeisung)
-_NICHT_PV = {"strompreis", "netzbezug", "einspeisung"}
-
 # Cache-Key: (anlage_id, quelle) → (datum_str, LernfaktorResult)
 _lernfaktor_cache: dict[tuple[int, str], tuple[str, LernfaktorResult]] = {}
 
@@ -562,18 +560,19 @@ def _filtere_tage(tage: list, db_feld: str) -> list[tuple[date, float, float]]:
     Returns: Liste von (datum, ist_kwh, prognose_kwh).
     Tage mit Prognose ≤ 0.5 kWh oder IST ≤ 0.5 kWh werden ausgeschlossen
     (Nacht/Schlechtwetter ohne Aussagekraft, Sensor-Lücken).
+
+    IST = PV-Tages-Σ über den SoT-Helper `summe_pv_bkw_kwh` (Whitelist
+    `pv_`/`bkw_`). Vor 2026-05-21 summierte diese Funktion `komponenten_kwh`
+    über eine 3-Element-Blacklist — dadurch zählten Batterie-, WP-, Wallbox-
+    und `sonstige_`-Keys als PV-Erzeugung mit, der Lernfaktor wurde
+    systematisch zu hoch (Rainer-PN). Siehe core/berechnungen/energie.py.
     """
     out: list[tuple[date, float, float]] = []
     for tag in tage:
         prognose = getattr(tag, db_feld, None)
         if not prognose or prognose <= 0.5:
             continue
-        ist_kwh = 0.0
-        if tag.komponenten_kwh:
-            ist_kwh = sum(
-                v for k, v in tag.komponenten_kwh.items()
-                if v > 0 and k not in _NICHT_PV
-            )
+        ist_kwh = summe_pv_bkw_kwh(tag.komponenten_kwh)
         if ist_kwh > 0.5:
             out.append((tag.datum, float(ist_kwh), float(prognose)))
     return out
