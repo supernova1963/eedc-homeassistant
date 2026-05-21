@@ -64,3 +64,8 @@ htmlcov/
 # zusätzliche Backup-Targets oder Test-Snapshots automatisch mit greifen.
 eedc/data/*-wal
 eedc/data/*-shm
+
+# HA-Add-on-Backup-Begleitdatei der Anwender-DB (#280). Greift nicht über die
+# generischen *.db-Patterns — die Endung ist .bak. Bewusst breit, damit weitere
+# Backup-Targets oder Test-Snapshots in eedc/data/ automatisch mitgreifen.
+eedc/data/*.bak
