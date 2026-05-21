@@ -96,18 +96,27 @@ def _flatten_dict(d: dict, prefix: str = "") -> dict:
 def _build_sign_headers(
     access_key: str, secret_key: str, params: Optional[dict] = None
 ) -> dict:
-    """HTTP-Header mit HMAC-SHA256 Signatur erzeugen."""
+    """HTTP-Header mit HMAC-SHA256 Signatur erzeugen.
+
+    EcoFlow signiert ALLE Parameter gemeinsam: die Request-Parameter UND
+    accessKey/nonce/timestamp werden zusammen alphabetisch nach ASCII
+    sortiert — nicht „Request-Parameter sortiert, Auth-Triple angehängt".
+    Beispiel mit sn-Query-Parameter: `accessKey=…&nonce=…&sn=…&timestamp=…`.
+
+    Ein parameterloser Aufruf (z. B. device/list) ergibt in beiden
+    Konventionen denselben String und maskierte den Reihenfolge-Bug bis
+    zur Dirk-PN-Diagnose 2026-05-21 (device/quota/all mit sn → code 8521).
+    """
     nonce = str(random.randint(100000, 999999))
     timestamp = str(int(time.time() * 1000))
 
-    # Parameter sortiert als Query-String
-    if params:
-        flat = _flatten_dict(params)
-        sorted_parts = sorted(flat.items(), key=lambda x: x[0])
-        param_str = "&".join(f"{k}={v}" for k, v in sorted_parts)
-        sign_str = f"{param_str}&accessKey={access_key}&nonce={nonce}&timestamp={timestamp}"
-    else:
-        sign_str = f"accessKey={access_key}&nonce={nonce}&timestamp={timestamp}"
+    # Request-Parameter + Auth-Triple gemeinsam alphabetisch sortieren.
+    sign_params: dict = _flatten_dict(params) if params else {}
+    sign_params["accessKey"] = access_key
+    sign_params["nonce"] = nonce
+    sign_params["timestamp"] = timestamp
+    sorted_parts = sorted(sign_params.items(), key=lambda x: x[0])
+    sign_str = "&".join(f"{k}={v}" for k, v in sorted_parts)
 
     sign = _hmac_sha256(sign_str, secret_key)
 
