@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Edit, Trash2, Sun, MapPin, Download, FolderOpen } from 'lucide-react'
-import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert } from '../components/ui'
+import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert, DestructiveActionDialog } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import AnlageForm from '../components/forms/AnlageForm'
 import DokumentationsDialog from '../components/DokumentationsDialog'
@@ -181,30 +181,17 @@ export default function Anlagen() {
         )}
       </Modal>
 
-      {/* Delete Confirmation */}
-      <Modal
+      {/* Delete Confirmation mit Backup-Angebot */}
+      <DestructiveActionDialog
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
         title="Anlage löschen"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300">
-            Möchtest du die Anlage <strong>"{deleteConfirm?.anlagenname}"</strong> wirklich löschen?
-          </p>
-          <Alert type="warning">
-            Alle zugehörigen Monatsdaten, Investitionen und Strompreise werden ebenfalls gelöscht.
-          </Alert>
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>
-              Abbrechen
-            </Button>
-            <Button variant="danger" onClick={handleDelete}>
-              Löschen
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        itemLabel={<>Anlage „{deleteConfirm?.anlagenname}" wird unwiderruflich gelöscht.</>}
+        warningMessage="Alle zugehörigen Monatsdaten, Investitionen, Strompreise, Sensor-Mappings und Prognosen gehen verloren."
+        anlageId={deleteConfirm?.id}
+        anlageName={deleteConfirm?.anlagenname || ''}
+      />
 
       {/* Dokumente-Dialog (Phase 4 Beta) */}
       <DokumentationsDialog
