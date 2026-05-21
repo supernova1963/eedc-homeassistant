@@ -31,6 +31,25 @@ from backend.services.energie_profil._provenance_helpers import (
 logger = logging.getLogger(__name__)
 
 
+# Prognose-Felder, die der Wetter-Endpoint (`_speichere_prognose` in
+# api/routes/live_wetter.py) asynchron in TagesZusammenfassung schreibt.
+# `aggregate_day` macht ein Delete-and-Recreate der Tageszeile und MUSS
+# diese Felder daher explizit retten — die Liste MUSS alle Prognose-Felder
+# spiegeln, die `_speichere_prognose` schreibt. Sonst gehen sie still
+# verloren: `pv_prognose_stundenprofil` fehlte hier bis 2026-05-21, dadurch
+# wurde der Day-Ahead-Snapshot jede Nacht gelöscht und die Korrekturprofil-
+# Heatmap blieb dauerhaft leer (0 Bins).
+_PROGNOSE_FELDER_RETTEN: tuple[str, ...] = (
+    "pv_prognose_kwh",
+    "sfml_prognose_kwh",
+    "solcast_prognose_kwh",
+    "solcast_p10_kwh",
+    "solcast_p90_kwh",
+    "pv_prognose_stundenprofil",
+    "solcast_prognose_stundenprofil",
+)
+
+
 async def aggregate_day(
     anlage: Anlage,
     datum: date,
@@ -227,8 +246,8 @@ async def aggregate_day(
         )
 
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
-    # Prognose-Felder aus bestehender TagesZusammenfassung retten,
-    # da diese asynchron vom Wetter-Endpoint geschrieben werden.
+    # Prognose-Felder vor dem Delete-and-Recreate retten — sie werden
+    # asynchron vom Wetter-Endpoint geschrieben. Siehe _PROGNOSE_FELDER_RETTEN.
     existing_tz = await db.execute(
         select(TagesZusammenfassung).where(
             and_(
@@ -240,8 +259,7 @@ async def aggregate_day(
     existing_tz_row = existing_tz.scalar_one_or_none()
     preserved_prognose = {}
     if existing_tz_row:
-        for field in ("pv_prognose_kwh", "sfml_prognose_kwh",
-                       "solcast_prognose_kwh", "solcast_p10_kwh", "solcast_p90_kwh"):
+        for field in _PROGNOSE_FELDER_RETTEN:
             val = getattr(existing_tz_row, field, None)
             if val is not None:
                 preserved_prognose[field] = val
