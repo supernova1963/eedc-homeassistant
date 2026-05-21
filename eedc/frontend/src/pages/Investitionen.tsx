@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, ArrowRight, FileText, ChevronDown } from 'lucide-react'
-import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
+import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState, DestructiveActionDialog } from '../components/ui'
 import { useSelectedAnlage, useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
 import InvestitionForm from '../components/forms/InvestitionForm'
@@ -306,25 +306,25 @@ export default function Investitionen() {
         )}
       </Modal>
 
-      {/* Löschen bestätigen */}
-      <Modal
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        title="Investition löschen"
-        size="sm"
-      >
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          Möchtest du die Investition "{deleteConfirm?.bezeichnung}" wirklich löschen?
-        </p>
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>
-            Abbrechen
-          </Button>
-          <Button variant="danger" onClick={handleDelete}>
-            Löschen
-          </Button>
-        </div>
-      </Modal>
+      {/* Löschen bestätigen — mit Backup-Angebot */}
+      {(() => {
+        const anlage = anlagen.find(a => a.id === anlageId)
+        return (
+          <DestructiveActionDialog
+            isOpen={!!deleteConfirm}
+            onClose={() => setDeleteConfirm(null)}
+            onConfirm={handleDelete}
+            title="Komponente löschen"
+            itemLabel={<>Komponente „{deleteConfirm?.bezeichnung}" wird gelöscht.</>}
+            warningMessage="Alle hinterlegten Parameter, monatlichen Detail-Daten und Verknüpfungen zu Komponenten-Akten gehen verloren."
+            anlageId={anlageId ?? undefined}
+            anlageName={anlage?.anlagenname || ''}
+            backupHint={
+              <>Lädt einen vollständigen JSON-Export der gesamten Anlage <strong>„{anlage?.anlagenname}"</strong> herunter — daraus lässt sich die Komponente später wiederherstellen.</>
+            }
+          />
+        )
+      })()}
     </div>
   )
 }
