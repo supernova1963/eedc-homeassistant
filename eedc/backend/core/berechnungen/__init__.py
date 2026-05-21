@@ -29,7 +29,9 @@ from backend.core.berechnungen.energie import (
     summe_pv_bkw_kwh,
 )
 from backend.core.berechnungen.invarianten import (
+    assert_speicher_ladung_konsistent,
     assert_tep_tz_konsistent,
+    pruefe_speicher_ladung_konsistenz,
     pruefe_tep_tz_konsistenz,
 )
 
@@ -38,4 +40,6 @@ __all__ = [
     "summe_pv_bkw_kwh",
     "assert_tep_tz_konsistent",
     "pruefe_tep_tz_konsistenz",
+    "assert_speicher_ladung_konsistent",
+    "pruefe_speicher_ladung_konsistenz",
 ]

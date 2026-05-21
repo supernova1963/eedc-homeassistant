@@ -18,6 +18,8 @@ export interface FeldDefinition {
   placeholder?: string
   hint?: string
   bedingung?: string
+  // #281: konditionelles Label — trifft eine Bedingung zu, ersetzt sie `label`.
+  label_wenn?: Record<string, string>
 }
 
 // =============================================================================
@@ -37,7 +39,10 @@ export const BASIS_FELDER: FeldDefinition[] = [
 // =============================================================================
 
 const SPEICHER_FELDER: FeldDefinition[] = [
-  { feld: 'ladung_kwh',            label: 'Ladung',     einheit: 'kWh'    },
+  // #281: Mit Netzladung ist "Ladung" mehrdeutig — `ladung_kwh` ist die
+  // Gesamtladung (PV + Netz), `ladung_netz_kwh` ⊆ `ladung_kwh`.
+  { feld: 'ladung_kwh',            label: 'Ladung',     einheit: 'kWh',
+    label_wenn: { laedt_aus_netz: 'Ladung (gesamt, inkl. Netz)' } },
   { feld: 'entladung_kwh',         label: 'Entladung',  einheit: 'kWh'    },
   { feld: 'ladung_netz_kwh',       label: 'Netzladung', einheit: 'kWh',    bedingung: 'laedt_aus_netz' },
   { feld: 'speicher_ladepreis_cent', label: 'Ø Ladepreis', einheit: 'ct/kWh', bedingung: 'arbitrage_faehig' },
@@ -152,6 +157,15 @@ export function getFelderFuerInvestition(
   const v2h = Boolean(params.v2h_faehig || params.nutzt_v2h)
   const hatSpeicher = Boolean(params.hat_speicher)
 
+  // #281: konditionelles Label — dieselben Bedingungs-Keys wie `bedingung`.
+  const bedingungsWerte: Record<string, boolean> = {
+    getrennte_strommessung: getrennt,
+    arbitrage_faehig: arbitrage,
+    laedt_aus_netz: laedtAusNetz,
+    v2h_faehig: v2h,
+    hat_speicher: hatSpeicher,
+  }
+
   return allFields.filter(f => {
     if (!f.bedingung) return true
     if (f.bedingung === 'getrennte_strommessung')  return getrennt
@@ -161,7 +175,14 @@ export function getFelderFuerInvestition(
     if (f.bedingung === 'v2h_faehig')              return v2h
     if (f.bedingung === 'hat_speicher')            return hatSpeicher
     return true
-  }).map(({ bedingung: _, ...rest }) => rest)
+  }).map(({ bedingung: _b, label_wenn, ...rest }) => {
+    if (label_wenn) {
+      for (const [cond, altLabel] of Object.entries(label_wenn)) {
+        if (bedingungsWerte[cond]) return { ...rest, label: altLabel }
+      }
+    }
+    return rest
+  })
 }
 
 /**

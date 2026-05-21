@@ -24,6 +24,8 @@ from backend.models.strompreis import Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import ist_dienstlich
+from backend.core.berechnungen import pruefe_speicher_ladung_konsistenz
+from backend.core.field_definitions import get_speicher_netzladung_kwh
 
 
 # ─── Enums & Dataclasses ────────────────────────────────────────────────────
@@ -503,6 +505,24 @@ class DatenChecker:
                 ergebnisse.extend(self._check_investition_monatsdaten(
                     inv, name, "ladung_kwh", "Speicher-Ladung", CheckSeverity.WARNING, monatsdaten,
                 ))
+                # #281: Vertrag prüfen — Netzladung darf die Gesamtladung nicht
+                # übersteigen, sonst wäre der implizite PV-Anteil negativ.
+                # Monatsweise, da verbrauch_daten pro Monat gepflegt wird.
+                for imd in inv.monatsdaten:
+                    bericht = pruefe_speicher_ladung_konsistenz(
+                        (imd.verbrauch_daten or {}).get("ladung_kwh"),
+                        get_speicher_netzladung_kwh(imd.verbrauch_daten or {}),
+                    )
+                    if not bericht.konsistent:
+                        ergebnisse.append(CheckErgebnis(
+                            kategorie=kat, schwere=CheckSeverity.WARNING,
+                            meldung=(
+                                f"{name}: Netzladung übersteigt Gesamtladung "
+                                f"({imd.monat:02d}/{imd.jahr})"
+                            ),
+                            details=bericht.details,
+                            link="/einstellungen/monatsdaten",
+                        ))
 
             elif inv.typ == "e-auto":
                 # Dienstwagen: keine PV-Ladungs-/ROI-Checks (kein PV-Bezug, kein Invest)

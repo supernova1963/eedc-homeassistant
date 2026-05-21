@@ -100,3 +100,60 @@ def assert_tep_tz_konsistent(
     bericht = pruefe_tep_tz_konsistenz(tep_rows, tz_komponenten_kwh, toleranz_kwh)
     if not bericht.konsistent:
         raise AssertionError(str(bericht))
+
+
+def pruefe_speicher_ladung_konsistenz(
+    ladung_kwh: Optional[float],
+    ladung_netz_kwh: Optional[float],
+    toleranz_kwh: float = 0.1,
+) -> KonsistenzBericht:
+    """Prüft: ladung_netz_kwh ≤ ladung_kwh (Netzladung ist Teilmenge der Gesamtladung).
+
+    Vertrag aus Issue #281: `ladung_kwh` eines Speichers ist die Gesamt-
+    ladung (PV + Netz), `ladung_netz_kwh` der daraus stammende Netz-Anteil.
+    Der implizite PV-Anteil `ladung_kwh − ladung_netz_kwh` darf nie negativ
+    werden — sonst ist eine der beiden Zahlen falsch erfasst (z. B. Netz-
+    Counter in den Gesamt-Slot gemappt, oder `ladung_kwh` versehentlich als
+    reine PV-Ladung gepflegt).
+
+    Args:
+        ladung_kwh: Gesamtladung des Speichers in kWh (PV + Netz)
+        ladung_netz_kwh: Netz-Anteil der Ladung in kWh
+        toleranz_kwh: Akzeptierte Überschreitung (Default 0.1 kWh — Rundung)
+
+    `None` wird als 0.0 gewertet. Reine PV-Speicher (Netz = 0) sind immer
+    konsistent.
+    """
+    gesamt = float(ladung_kwh or 0.0)
+    netz = float(ladung_netz_kwh or 0.0)
+    konsistent = netz <= gesamt + toleranz_kwh
+
+    details = ""
+    if not konsistent:
+        details = (
+            f"Netzladung ({netz:.3f} kWh) übersteigt die Gesamtladung "
+            f"({gesamt:.3f} kWh) — der implizite PV-Anteil "
+            f"(ladung_kwh − ladung_netz_kwh) wäre negativ. Mögliche Ursache: "
+            "Netz-Sensor in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh` "
+            "als reine PV-Ladung statt Gesamtladung gepflegt (Issue #281)."
+        )
+
+    return KonsistenzBericht(
+        konsistent=konsistent,
+        name="ladung_netz_kwh ≤ ladung_kwh (Speicher: Netz ⊆ Gesamt)",
+        erwartet=gesamt,
+        tatsaechlich=netz,
+        toleranz_kwh=toleranz_kwh,
+        details=details,
+    )
+
+
+def assert_speicher_ladung_konsistent(
+    ladung_kwh: Optional[float],
+    ladung_netz_kwh: Optional[float],
+    toleranz_kwh: float = 0.1,
+) -> None:
+    """Wirft AssertionError wenn `pruefe_speicher_ladung_konsistenz` fehlschlägt."""
+    bericht = pruefe_speicher_ladung_konsistenz(ladung_kwh, ladung_netz_kwh, toleranz_kwh)
+    if not bericht.konsistent:
+        raise AssertionError(str(bericht))

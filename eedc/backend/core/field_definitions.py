@@ -20,6 +20,9 @@ Feld-Attribute:
   label         — Anzeigename (Wizard, Dropdown)
   einheit       — Einheit für Anzeige (kWh, km, €, ct/kWh, "")
   bedingung     — optionale Bedingung (Parameter-Key), z.B. "arbitrage_faehig"
+  label_wenn    — optionales konditionelles Label: {Bedingungs-Key: Alt-Label}.
+                  Trifft eine Bedingung zu, ersetzt sie das Default-`label`
+                  (#281 — z.B. "Ladung" → "Ladung (gesamt, inkl. Netz)").
   csv_suffix    — Spalten-Suffix in der personalisierten CSV, z.B. "Ladung_kWh"
                   Konvention: {SanitizedBezeichnung}_{csv_suffix}
   csv_suffix_alt— alternativer (Legacy-)Suffix für Rückwärtskompatibilität
@@ -125,6 +128,9 @@ INVESTITION_FELDER: dict = {
     "speicher": [
         {
             "feld": "ladung_kwh", "label": "Ladung", "einheit": "kWh",
+            # #281: Mit Netzladung ist "Ladung" mehrdeutig (Gesamt vs. PV-Anteil).
+            # `ladung_kwh` ist die Gesamtladung, `ladung_netz_kwh` ⊆ `ladung_kwh`.
+            "label_wenn": {"laedt_aus_netz": "Ladung (gesamt, inkl. Netz)"},
             "csv_suffix": "Ladung_kWh",
             "aggregiert_in": "batterie_ladung_sum",
         },
@@ -431,7 +437,16 @@ def get_felder_fuer_investition(
     v2h_faehig = bool(params.get("v2h_faehig") or params.get("nutzt_v2h"))
     hat_speicher = bool(params.get("hat_speicher"))
 
-    SKIP_KEYS = {"bedingung", "bedingung_anlage"}
+    SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn"}
+
+    # #281: konditionelles Label — nutzt dieselben Bedingungs-Keys wie `bedingung`.
+    bedingungs_werte = {
+        "getrennte_strommessung": getrennte_strommessung,
+        "arbitrage_faehig": arbitrage_faehig,
+        "laedt_aus_netz": laedt_aus_netz,
+        "v2h_faehig": v2h_faehig,
+        "hat_speicher": hat_speicher,
+    }
 
     for feld in alle_felder:
         bedingung = feld.get("bedingung")
@@ -458,7 +473,14 @@ def get_felder_fuer_investition(
         elif bedingung == "hat_speicher" and not hat_speicher:
             continue
 
-        result.append({k: v for k, v in feld.items() if k not in SKIP_KEYS})
+        aufgeloest = {k: v for k, v in feld.items() if k not in SKIP_KEYS}
+        label_wenn = feld.get("label_wenn")
+        if label_wenn:
+            for cond_key, alt_label in label_wenn.items():
+                if bedingungs_werte.get(cond_key):
+                    aufgeloest["label"] = alt_label
+                    break
+        result.append(aufgeloest)
 
     return result
 
