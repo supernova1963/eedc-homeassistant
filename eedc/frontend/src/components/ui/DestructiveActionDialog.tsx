@@ -36,6 +36,7 @@ export default function DestructiveActionDialog({
   const [backupError, setBackupError] = useState<string | null>(null)
   const [skipBackup, setSkipBackup] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -44,6 +45,7 @@ export default function DestructiveActionDialog({
       setBackupError(null)
       setSkipBackup(false)
       setDeleting(false)
+      setConfirmError(null)
     }
   }, [isOpen])
 
@@ -67,9 +69,13 @@ export default function DestructiveActionDialog({
   }
 
   const handleConfirm = async () => {
+    setConfirmError(null)
     setDeleting(true)
     try {
       await onConfirm()
+    } catch (e) {
+      // Fehler im Dialog zeigen statt hinter dem Modal — Dialog bleibt offen
+      setConfirmError(e instanceof Error ? e.message : 'Löschen fehlgeschlagen')
     } finally {
       setDeleting(false)
     }
@@ -153,6 +159,10 @@ export default function DestructiveActionDialog({
               </p>
             </div>
           </div>
+        )}
+
+        {confirmError && (
+          <Alert type="error">{confirmError}</Alert>
         )}
 
         {/* Aktionen */}

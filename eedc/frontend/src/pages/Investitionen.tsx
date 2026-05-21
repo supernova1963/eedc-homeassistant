@@ -114,12 +114,9 @@ export default function Investitionen() {
 
   const handleDelete = async () => {
     if (!deleteConfirm) return
-    try {
-      await deleteInvestition(deleteConfirm.id)
-      setDeleteConfirm(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Löschen')
-    }
+    // Fehler wird vom DestructiveActionDialog gefangen und im Dialog angezeigt
+    await deleteInvestition(deleteConfirm.id)
+    setDeleteConfirm(null)
   }
 
   if (anlagenLoading || loading) {
