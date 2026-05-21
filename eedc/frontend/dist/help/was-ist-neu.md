@@ -1,11 +1,36 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.31.6)
+> **Stand:** Mai 2026 (v3.31.7)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.31.7 — Bündel-Release: Prognose-Korrektur, klare Community-Fehlermeldungen, Backup-Abfrage (Mai 2026)
+
+### Was sich für dich ändert — Prognose
+
+- **Prognose-Korrektur überprüft und nachgezogen**: Der eedc-Korrekturfaktor (Lernfaktor) und die wetterabhängige Korrektur wurden im Code überprüft, analysiert und aktualisiert; zusätzliche automatische Tests sichern die Berechnung jetzt ab. Die eedc-Prognose-Werte sind dadurch zuverlässiger.
+
+### Was sich für dich ändert — Community & Teilen
+
+- **Klare Fehlermeldung statt nur „Fehler 422"** (#282): Schlägt das Teilen der Anlagendaten mit dem Community-Server fehl, zeigt eedc jetzt die konkrete Ursache an — welches Feld beanstandet wurde und warum — statt einer generischen Fehlernummer. Mit Dank an SlapJackNpNp für die Meldung.
+
+### Was sich für dich ändert — Bedienung
+
+- **Backup-Hinweis vor dem Löschen** (#283): Vor dem Löschen einer Anlage oder Komponente erscheint jetzt eine Sicherheitsabfrage mit Erinnerung an ein Backup. Schlägt das Löschen fehl, wird der Grund direkt im Dialog angezeigt. Mit Dank an stlorenz für den Beitrag.
+
+### Was sich für dich ändert — Auswertung & Speicher
+
+- **Speicher-Wirtschaftlichkeit: neue Kennzahlen sichtbar** (#264): Die in v3.31.6 angekündigten Cockpit-Kacheln zur Speicher-Netzladung — dynamischer Ladepreis und SoC-korrigierter Wirkungsgrad — sind jetzt im Speicher-Dashboard sichtbar.
+- **Speicher-Monatsabschluss: Label „Ladung" eindeutiger** (#281): Bei Speichern, die auch aus dem Netz laden, war die Beschriftung „Ladung" missverständlich — sie unterscheidet jetzt klar zwischen PV- und Netzladung.
+
+### Was sich für dich ändert — Daten-Checker
+
+- **Kleinere Korrekturen**: Ein „Beheben"-Link, der ins Leere führte, ist repariert. Ein Fehlalarm für Tage, die noch in der Zukunft liegen, entfällt.
 
 ---
 

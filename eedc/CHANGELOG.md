@@ -7,6 +7,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.31.7] - 2026-05-21 — Bündel-Release: Prognose-Korrektur + Community-Fehlermeldungen + Backup-Abfrage
+
+> 🔧 **Patch-Release.** Schwerpunkt: die Prognose-Korrektur (Lernfaktor + wetterabhängiges Korrekturprofil) wurde überprüft und auf den zentralen Berechnungs-Layer (ADR-001) gezogen. Dazu feldgenaue Fehlermeldungen beim Community-Teilen (#282), eine Backup-Abfrage vor dem Löschen (#283) und die Cockpit-Kacheln der Speicher-Wirtschaftlichkeit Etappe C (#264).
+
+### Added
+
+- **Speicher-Wirtschaftlichkeit — Etappe C-UI** (#264): die in v3.31.6 (C-Backend) angekündigten Cockpit-Kacheln — dynamischer Ladepreis aus TEP-Stundenwerten, SoC-korrigierter Wirkungsgrad — sind jetzt im Speicher-Dashboard sichtbar.
+- **Backup-Abfrage vor destruktiven Aktionen** (#283, PR von stlorenz): Bestätigungsdialog (`DestructiveActionDialog`) mit Backup-Erinnerung vor dem Löschen von Anlage/Komponente; Lösch-Fehler werden im Dialog sichtbar gemacht.
+
+### Changed
+
+- **Lernfaktor-IST über den Berechnungs-Layer** (`live_wetter._filtere_tage`): die IST-Ermittlung für den Lernfaktor nutzt jetzt den SoT-Helper `summe_pv_bkw_kwh` (Whitelist `pv_`/`bkw_`, `core/berechnungen/energie.py`) — dieselbe Quelle wie Daten-Checker und Genauigkeits-Tracking. +5 Akzeptanztests.
+- **Investitionen-Dashboards in eigenes Modul** (`api/routes/investitionen/dashboards.py`): verhaltenserhaltender Refactor.
+
+### Fixed
+
+- **Korrekturprofil: Day-Ahead-Stundenprofil bleibt über die Tagesaggregation erhalten** (`aggregate_day`): Das Delete-and-Recreate der `TagesZusammenfassung` rettete bisher nur die fünf Skalar-Prognosefelder — `pv_prognose_stundenprofil` / `solcast_prognose_stundenprofil` fehlten in der Rettungsliste und gingen jede Nacht verloren, die Korrekturprofil-Heatmap blieb dadurch leer. Rettungsliste jetzt als Konstante `_PROGNOSE_FELDER_RETTEN` (alle 7 Prognosefelder). Wirkt vorwärts. +3 Akzeptanztests.
+- **Community-Server: Fehler 422 mit Feld-Detail** (#282, SlapJackNpNp): das feldgenaue Pydantic-Detail wird jetzt lesbar in der UI angezeigt statt einer generischen Meldung.
+- **Daten-Checker: toter „Beheben"-Link + Zukunfts-Stub-Fehlalarm**: ein Reparatur-Link zeigte auf eine veraltete Route; Tage in der Zukunft wurden als Datenlücke fehlinterpretiert.
+- **Lösch-Fehler im `DestructiveActionDialog`** werden im Dialog angezeigt statt still verschluckt.
+
+---
+
 ## [3.31.6] - 2026-05-20 — Bündel-Release: E-Mobilitäts-Pool-Konsistenz + Saison-Vergleich + Daten-Checker
 
 > 🔌 **E-Mobilitäts-Sichten zeigen wieder dieselben Zahlen.** junky84 (#262) meldete nach v3.31.5 vier verschiedene Werte für dieselbe evcc-Ladung: Cockpit-E-Auto 4127 kWh / 48 % PV (korrekt), Wallbox-Dashboard 5278 / 38 %, Auswertungen-Komponenten 4130 mit PV 48 % + Netz 85 % = 133 % (mathematisch unmöglich). Ursache: vier Read-Sites poolten E-Auto- + Wallbox-IMD mit feldweisem `max(eauto_X, wb_X)` — drei unabhängige `max()`-Aufrufe für `gesamt`/`pv`/`netz` konnten die Felder aus verschiedenen Quellen mischen, das Tripel war intern inkonsistent. Nur das E-Auto-Dashboard war korrekt (poolt über `compute_emob_pool_attribution` eine ganze Quelle). **Fix:** SoT-Helper `aggregiere_emob_ladung` — die Quelle mit der größeren Heimladung gewinnt die komplette, in sich konsistente Trias (`pv + netz == ladung` garantiert); alle Sichten rufen ihn auf. Plus #195-Abschluss (Saison-Vergleich), #613-Daten-Checker-Fix und ein PVGIS-Systemverluste-Drift-Refactor.
