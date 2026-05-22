@@ -1,11 +1,34 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.31.8)
+> **Stand:** Mai 2026 (v3.32.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.32.0 — Victron-VRM-Cloud-Import + Fehlerbehebungen (Mai 2026)
+
+### Was sich für dich ändert — Cloud-Import
+
+- **Neu: Victron VRM Cloud-Import** (#255): eedc kann historische Energiedaten jetzt auch direkt aus dem Victron VRM Portal holen — praktisch, um Daten aus der Zeit vor der HA-Anbindung nachzutragen. Du brauchst nur einen Access-Token (im VRM-Portal unter Preferences → Integrations erstellt) und deine Installation-ID; kein Passwort, kein Admin-Recht. Der Live-Betrieb über Home Assistant bleibt davon unberührt. Hinweis: der neue Provider ist noch nicht final mit echten Konten getestet — Rückmeldungen sind willkommen. Mit Dank an kingcap1 und FrodoVDR für die Anregung.
+
+### Was sich für dich ändert — Cockpit & Speicher
+
+- **ROI-Dashboard öffnet wieder** (#285): das ROI-Dashboard zeigte „Ein Fehler ist aufgetreten" — derselbe Fehlertyp wie zuvor bei der Speicher-Rubrik. Behoben und mit automatischen Tests abgesichert. Mit Dank an Klausnn für die Meldung.
+- **Speicher-Effizienz realistischer dargestellt**: die Effizienz-Anzeige im Speicher-Dashboard konnte für einzelne Monate über 100 % springen. Sie zeigt jetzt einen gleitenden 12-Monats-Wert, der diesen Monatsgrenzen-Effekt herausrechnet. Mit Dank an Rainer für die Meldung.
+
+### Was sich für dich ändert — Daten-Checker
+
+- **Kein Fehlalarm mehr bei der Netzladung**: der Daten-Checker meldete „Netzladung übersteigt Gesamtladung", obwohl es nur eine harmlose Differenz an der Monatsgrenze war (z. B. Akku-Nachtladung über Mitternacht). Die Prüfung läuft jetzt über die gesamte Historie — echte Erfassungsfehler werden weiterhin erkannt. Mit Dank an Rainer für die Meldung.
+
+### Was sich für dich ändert — Monatsabschluss & weitere Korrekturen
+
+- **Sonstige Positionen wieder löschbar** (#286): im Monatsabschluss ließen sich sonstige Kostenpositionen nicht mehr entfernen — behoben. Mit Dank an rcmcronny für die Meldung.
+- **Nächtlicher Hintergrund-Job repariert** (#286): ein Job brach nachts mit einem Fehler ab — behoben.
+- **EcoFlow-Import: längere Zeiträume**: der Cloud-Import aus dem EcoFlow-Konto brach bei bestimmten Zeiträumen ab. eedc fragt die Daten jetzt in kleineren Blöcken ab; historische Daten beliebigen Alters lassen sich importieren. Mit Dank an Dirk für die Meldung.
 
 ---
 

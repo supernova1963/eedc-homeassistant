@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.32.0] - 2026-05-22 — Victron-VRM-Cloud-Import + Fix-Bündel
+
+> ✨ **Feature-Release.** Neu: ein Cloud-Import-Provider für das Victron VRM Portal. Dazu ein Bündel Fehlerbehebungen — ROI-Dashboard-Absturz, nächtlicher Scheduler-Crash, EcoFlow-History-Import und zwei Fehlalarme rund um Speicher-Kennzahlen.
+
+### Added
+
+- **Victron VRM Cloud-Import** (#255): neuer Cloud-Import-Provider holt historische Monatswerte (PV-Erzeugung, Einspeisung, Netzbezug, Batterie) direkt aus dem Victron VRM Portal — für das Nachholen von Daten aus der Zeit vor der HA-Anbindung. Anmeldung per Access-Token (im VRM-Portal unter Preferences → Integrations erzeugt), kein Passwort, kein Admin-Recht nötig. Der Live-Pfad (HA-Add-on + ha-victron-mqtt) bleibt unberührt. Der Provider ist noch nicht final mit echten Konten getestet (`getestet=False`).
+
+### Changed
+
+- **Speicher-Effizienz-Chart auf gleitende 12 Monate** (rapahl-PN): die Monats-Effizienz `Entladung/Ladung` konnte über 100 % anzeigen — pro Monat ist das durch den Ladestands-Übertrag legitim, als Kennzahl aber irreführend. Das Chart zeigt jetzt die gleitende 12-Monats-Effizienz (Carry-over-immun); eine neue Berechnungs-Invariante prüft `Σ Entladung ≤ Σ Ladung` kumulativ.
+
+### Fixed
+
+- **ROI-Dashboard-Absturz** (#285): das ROI-Dashboard zeigte „Ein Fehler ist aufgetreten" und ließ sich nicht öffnen — gleiche Fehlerklasse wie der Speicher-Cockpit-Absturz in v3.31.8 (`installationsdatum` statt `anschaffungsdatum`), an zwei weiteren Stellen. Behoben + Regressionstests. Mit Dank an Klausnn für die Meldung.
+- **Nächtlicher Scheduler-Crash** (#286): ein Hintergrund-Job brach nachts mit einem Fehler ab — Ursache war ein falsch genutzter Datenbank-Kontext an zwei Job-Stellen. Behoben. Mit Dank an rcmcronny für die Meldung.
+- **Monatsabschluss: sonstige Positionen wieder löschbar** (#286): sonstige Kostenpositionen ließen sich im Monatsabschluss nicht mehr entfernen. Behoben.
+- **EcoFlow History-Import** (Dirk-PN): der Cloud-Import scheiterte mit `time must be less than one week`. Die EcoFlow-API verlangt ein Abfragefenster von strikt weniger als einer Woche — eedc fragt jetzt in 6-Tage-Blöcken ab. Historische Daten beliebigen Alters lassen sich damit importieren.
+- **Daten-Checker: Netzladung-Fehlalarm** (rapahl-PN): der Daten-Checker meldete „Netzladung übersteigt Gesamtladung", obwohl die Differenz nur ein harmloser Effekt an der Monatsgrenze war (Akku-Nachtladung über Mitternacht). Die Prüfung erfolgt jetzt kumulativ über die gesamte Historie — ein echter Erfassungsfehler wird weiterhin erkannt.
+
+---
+
 ## [3.31.8] - 2026-05-22 — Bündel-Release: Speicher-Cockpit-Fix + EcoFlow-Import + WP-Saison-Politur
 
 > 🔧 **Patch-Release.** Behebt einen Absturz der Cockpit-Rubrik „Speicher" (Regression aus v3.31.7), repariert den EcoFlow-PowerOcean-Cloud-Import und setzt vier Feedback-Punkte zum WP-Saisonvergleich um (rapahl-PN).
