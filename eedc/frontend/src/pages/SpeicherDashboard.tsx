@@ -116,7 +116,7 @@ function PlaceholderHeader(props: SelectorProps) {
 }
 
 function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDashboardResponse } & SelectorProps) {
-  const { investition, monatsdaten, zusammenfassung } = dashboard
+  const { investition, monatsdaten, zusammenfassung, effizienz_verlauf } = dashboard
   const z = zusammenfassung
 
   // Etappe C (#264): TEP-basierte KPIs — fallen auf die bestehenden Werte
@@ -138,9 +138,15 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
       arbitrage,
       pvLadung: ladung - arbitrage,
       zyklen: z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0,
-      effizienz: ladung > 0 ? (entladung / ladung) * 100 : 0,
     }
   })
+
+  // Gleitende 12-Monats-Effizienz vom Backend — carry-over-immun. Eine naive
+  // Pro-Monats-Effizienz konnte durch den SoC-Übertrag >100 % zeigen.
+  const effizienzData = effizienz_verlauf.map(e => ({
+    name: `${MONAT_KURZ[e.monat]} ${e.jahr.toString().slice(2)}`,
+    effizienz: e.effizienz_prozent,
+  }))
 
   return (
     <div className="space-y-6">
@@ -222,6 +228,15 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
           Gemessener Wirkungsgrad ({istEta.toFixed(1)} %) liegt mehr als 5 Prozentpunkte
           unter dem Parameter-Wert ({z.param_wirkungsgrad_prozent.toFixed(1)} %) — möglicher
           Hinweis auf Speicher-Degradation. Wert prüfen, ggf. Parameter anpassen.
+        </Alert>
+      )}
+
+      {/* Invariante: kumulativ kann Entladung nie die Ladung übersteigen. */}
+      {z.durchsatz_inkonsistent && (
+        <Alert type="warning">
+          Die kumulierte Entladung übersteigt die kumulierte Ladung — über die
+          gesamte Historie physikalisch unmöglich. Bitte die erfassten Lade- und
+          Entlade-Werte prüfen (beim Datenübertrag leicht vertauscht).
         </Alert>
       )}
 
@@ -363,19 +378,20 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
         </div>
       </div>
 
-      {/* Effizienz Chart */}
+      {/* Effizienz Chart — gleitende 12-Monats-Effizienz (carry-over-immun).
+          Pro-Monat wäre der Wert durch den SoC-Übertrag verzerrt. */}
       <div>
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-          Effizienz pro Monat (%)
+          Effizienz — gleitende 12 Monate (%)
         </h3>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={monthlyData}>
+            <LineChart data={effizienzData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={45} />
+              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={55} />
               <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
-              <Line type="monotone" dataKey="effizienz" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Effizienz" />
+              <Line type="monotone" dataKey="effizienz" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -394,7 +410,6 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
                 <th className="text-right py-2 px-2">Ladung</th>
                 <th className="text-right py-2 px-2">Entladung</th>
                 <th className="text-right py-2 px-2">Zyklen</th>
-                <th className="text-right py-2 px-2">Effizienz</th>
               </tr>
             </thead>
             <tbody>
@@ -404,7 +419,6 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
                   <td className="text-right py-2 px-2 text-blue-600">{md.ladung.toFixed(1)}</td>
                   <td className="text-right py-2 px-2 text-green-600">{md.entladung.toFixed(1)}</td>
                   <td className="text-right py-2 px-2">{md.zyklen.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2">{md.effizienz.toFixed(1)}%</td>
                 </tr>
               ))}
             </tbody>

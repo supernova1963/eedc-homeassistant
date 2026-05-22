@@ -17,6 +17,7 @@ Regel (siehe `docs/ADR-001-BERECHNUNGS-LAYER.md`):
 Submodule:
 - `energie` — kWh-Aggregate aus komponenten_kwh, TagesEnergieProfil
 - `invarianten` — Konsistenz-Asserts (Σ Hourly == Daily, Σ pv == komponenten_pv etc.)
+- `speicher` — Speicher-Effizienz (gleitend, carry-over-immun)
 
 Geplant (step-by-step, wenn Konsumenten angefasst werden):
 - `counter` — Counter-Aggregate (WP-Starts, Vollzyklen)
@@ -29,10 +30,18 @@ from backend.core.berechnungen.energie import (
     summe_pv_bkw_kwh,
 )
 from backend.core.berechnungen.invarianten import (
+    assert_speicher_durchsatz_konsistent,
     assert_speicher_ladung_konsistent,
     assert_tep_tz_konsistent,
+    pruefe_speicher_durchsatz_konsistenz,
     pruefe_speicher_ladung_konsistenz,
     pruefe_tep_tz_konsistenz,
+)
+from backend.core.berechnungen.speicher import (
+    EFFIZIENZ_FENSTER_MONATE,
+    MonatsEffizienz,
+    gleitende_effizienz,
+    speicher_effizienz_prozent,
 )
 
 __all__ = [
@@ -42,4 +51,10 @@ __all__ = [
     "pruefe_tep_tz_konsistenz",
     "assert_speicher_ladung_konsistent",
     "pruefe_speicher_ladung_konsistenz",
+    "assert_speicher_durchsatz_konsistent",
+    "pruefe_speicher_durchsatz_konsistenz",
+    "EFFIZIENZ_FENSTER_MONATE",
+    "MonatsEffizienz",
+    "gleitende_effizienz",
+    "speicher_effizienz_prozent",
 ]

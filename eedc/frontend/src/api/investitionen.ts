@@ -184,7 +184,11 @@ export interface SpeicherDashboardResponse {
     wirkungsgrad_quelle?: string
     param_wirkungsgrad_prozent?: number
     eta_degradation_alarm?: boolean
+    // Invariante: Σentladung > Σladung kumulativ (physikalisch unmöglich).
+    durchsatz_inkonsistent?: boolean
   }
+  // Gleitende 12-Monats-Effizienz (carry-over-immun) — siehe SpeicherBlock.
+  effizienz_verlauf: { jahr: number; monat: number; effizienz_prozent: number | null; fenster_monate: number }[]
 }
 
 /** Speicher-spezifische Felder im ROI-`detail`/`detail_berechnung`-Dict (Etappe C, #264). */

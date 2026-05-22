@@ -157,3 +157,59 @@ def assert_speicher_ladung_konsistent(
     bericht = pruefe_speicher_ladung_konsistenz(ladung_kwh, ladung_netz_kwh, toleranz_kwh)
     if not bericht.konsistent:
         raise AssertionError(str(bericht))
+
+
+def pruefe_speicher_durchsatz_konsistenz(
+    ladung_kwh_gesamt: Optional[float],
+    entladung_kwh_gesamt: Optional[float],
+    toleranz_kwh: float = 0.1,
+) -> KonsistenzBericht:
+    """Prüft: Σentladung ≤ Σladung (kumulativ über die gesamte Historie).
+
+    Ein EINZELNER Monat darf legitim mehr ent- als laden — der SoC-Übertrag
+    aus dem Vormonat fließt ab (Carry-over, siehe `core/berechnungen/speicher`).
+    KUMULATIV über die gesamte Historie ist `Σentladung > Σladung` jedoch
+    physikalisch unmöglich: man kann nie insgesamt mehr entnehmen, als je
+    eingespeist wurde.
+
+    Verletzung deutet auf fehlerhaft erfasste oder importierte Monatswerte
+    (z. B. Lade-/Entlade-Spalte beim Übertrag aus dem HA-Energy-Dashboard
+    vertauscht).
+
+    `None` wird als 0.0 gewertet.
+    """
+    gesamt_ladung = float(ladung_kwh_gesamt or 0.0)
+    gesamt_entladung = float(entladung_kwh_gesamt or 0.0)
+    konsistent = gesamt_entladung <= gesamt_ladung + toleranz_kwh
+
+    details = ""
+    if not konsistent:
+        details = (
+            f"Kumulierte Entladung ({gesamt_entladung:.3f} kWh) übersteigt die "
+            f"kumulierte Ladung ({gesamt_ladung:.3f} kWh) — über die gesamte "
+            "Historie unmöglich. Ein einzelner Monat darf das (SoC-Übertrag), "
+            "die Summe nicht. Mögliche Ursache: Lade-/Entlade-Werte fehlerhaft "
+            "erfasst oder beim Datenübertrag vertauscht."
+        )
+
+    return KonsistenzBericht(
+        konsistent=konsistent,
+        name="Σentladung ≤ Σladung (Speicher: kumulativer Durchsatz)",
+        erwartet=gesamt_ladung,
+        tatsaechlich=gesamt_entladung,
+        toleranz_kwh=toleranz_kwh,
+        details=details,
+    )
+
+
+def assert_speicher_durchsatz_konsistent(
+    ladung_kwh_gesamt: Optional[float],
+    entladung_kwh_gesamt: Optional[float],
+    toleranz_kwh: float = 0.1,
+) -> None:
+    """Wirft AssertionError wenn `pruefe_speicher_durchsatz_konsistenz` fehlschlägt."""
+    bericht = pruefe_speicher_durchsatz_konsistenz(
+        ladung_kwh_gesamt, entladung_kwh_gesamt, toleranz_kwh
+    )
+    if not bericht.konsistent:
+        raise AssertionError(str(bericht))

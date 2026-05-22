@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
+from dataclasses import asdict
 from datetime import date
 import logging
 
@@ -57,6 +58,11 @@ from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
 )
 from backend.core.field_definitions import get_emob_pv_netz_kwh
+from backend.core.berechnungen import (
+    gleitende_effizienz,
+    pruefe_speicher_durchsatz_konsistenz,
+    speicher_effizienz_prozent,
+)
 from backend.api.routes.investitionen.crud import InvestitionResponse
 
 logger = logging.getLogger(__name__)
@@ -97,6 +103,9 @@ class SpeicherDashboardResponse(BaseModel):
     investition: InvestitionResponse
     monatsdaten: list[InvestitionMonatsdatenResponse]
     zusammenfassung: dict[str, Any]
+    # Gleitende 12-Monats-Effizienz (carry-over-immun) — ersetzt die naive
+    # Pro-Monats-Effizienz, die durch den SoC-Übertrag >100 % zappeln konnte.
+    effizienz_verlauf: list[dict[str, Any]] = []
 
 
 class WallboxDashboardResponse(BaseModel):
@@ -598,10 +607,14 @@ async def get_speicher_dashboard(
         arbitrage_preis_sum = 0
         arbitrage_count = 0
 
+        monats_reihe: list[tuple[int, int, float, float]] = []
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_ladung += d.get('ladung_kwh', 0)
-            gesamt_entladung += d.get('entladung_kwh', 0)
+            md_ladung = d.get('ladung_kwh', 0) or 0
+            md_entladung = d.get('entladung_kwh', 0) or 0
+            gesamt_ladung += md_ladung
+            gesamt_entladung += md_entladung
+            monats_reihe.append((md.jahr, md.monat, md_ladung, md_entladung))
             # Arbitrage (Netzladung zu günstigen Zeiten)
             netzladung = d.get('speicher_ladung_netz_kwh', 0) or 0
             if netzladung > 0:
@@ -616,8 +629,17 @@ async def get_speicher_dashboard(
                     arbitrage_preis_sum += preis * netzladung
                     arbitrage_count += netzladung
 
-        # Effizienz
-        effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
+        # Effizienz — Σentladung/Σladung über die gesamte Historie. Über ein
+        # langes Fenster mittelt sich der SoC-Übertrag aus (siehe
+        # core/berechnungen/speicher.py); pro Monat wäre der Wert verzerrt.
+        effizienz = speicher_effizienz_prozent(gesamt_ladung, gesamt_entladung) or 0
+        verlauf = gleitende_effizienz(monats_reihe)
+        durchsatz = pruefe_speicher_durchsatz_konsistenz(gesamt_ladung, gesamt_entladung)
+        if not durchsatz.konsistent:
+            logger.warning(
+                f"Speicher-Dashboard Anlage {anlage_id}, Speicher {speicher.id}: "
+                f"{durchsatz}"
+            )
 
         # Zyklen (basierend auf Kapazität)
         params = speicher.parameter or {}
@@ -673,6 +695,8 @@ async def get_speicher_dashboard(
             'arbitrage_kwh': round(gesamt_arbitrage_kwh, 1),
             'arbitrage_avg_preis_cent': round(arbitrage_avg_preis, 1) if arbitrage_avg_preis > 0 else None,
             'arbitrage_gewinn_euro': round(arbitrage_gewinn, 2),
+            # Invariante: Σentladung ≤ Σladung — kumulativ unmöglich zu verletzen.
+            'durchsatz_inkonsistent': not durchsatz.konsistent,
         }
 
         # Etappe C (#264): TEP-basierte KPIs fürs UI — effektiver Ladepreis
@@ -710,6 +734,7 @@ async def get_speicher_dashboard(
             investition=speicher,
             monatsdaten=monatsdaten,
             zusammenfassung=zusammenfassung,
+            effizienz_verlauf=[asdict(m) for m in verlauf],
         ))
 
     return dashboards
