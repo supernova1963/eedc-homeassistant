@@ -564,7 +564,7 @@ async def get_speicher_dashboard(
     # Periode = älteste Speicher-Installation bis heute (oder neueste
     # Stilllegung, wenn alle Speicher stillgelegt sind). Try/except-gekapselt:
     # das Dashboard darf nie an einem Helper sterben (analog aussichten.py).
-    installs = [s.installationsdatum for s in speicher_list if s.installationsdatum]
+    installs = [s.anschaffungsdatum for s in speicher_list if s.anschaffungsdatum]
     stilllegungen = [s.stilllegungsdatum for s in speicher_list if s.stilllegungsdatum]
     periode_von = min(installs) if installs else None
     periode_bis = (
