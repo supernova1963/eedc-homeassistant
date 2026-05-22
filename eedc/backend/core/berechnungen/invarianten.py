@@ -123,6 +123,11 @@ def pruefe_speicher_ladung_konsistenz(
 
     `None` wird als 0.0 gewertet. Reine PV-Speicher (Netz = 0) sind immer
     konsistent.
+
+    HINWEIS: gilt für in sich geschlossene Werte. Auf eine über Monate
+    HA-aggregierte Reihe NICHT pro Monat anwenden — dort ist ein kleiner
+    Überhang durch Zähler-Schnappschüsse an der Monatsgrenze legitim; nutze
+    dafür `pruefe_speicher_netzladung_kumulativ`.
     """
     gesamt = float(ladung_kwh or 0.0)
     netz = float(ladung_netz_kwh or 0.0)
@@ -155,6 +160,80 @@ def assert_speicher_ladung_konsistent(
 ) -> None:
     """Wirft AssertionError wenn `pruefe_speicher_ladung_konsistenz` fehlschlägt."""
     bericht = pruefe_speicher_ladung_konsistenz(ladung_kwh, ladung_netz_kwh, toleranz_kwh)
+    if not bericht.konsistent:
+        raise AssertionError(str(bericht))
+
+
+def pruefe_speicher_netzladung_kumulativ(
+    ladung_kwh_gesamt: Optional[float],
+    ladung_netz_kwh_gesamt: Optional[float],
+    toleranz_kwh: float = 0.1,
+    toleranz_relativ: float = 0.02,
+) -> KonsistenzBericht:
+    """Prüft: Σladung_netz ≤ Σladung_kwh (kumulativ über die gesamte Historie).
+
+    Wie bei `pruefe_speicher_ladung_konsistenz` ist `ladung_kwh` die Gesamt-
+    ladung (PV + Netz), `ladung_netz_kwh` der Netz-Anteil. Die strikte
+    Variante `ladung_netz ≤ ladung_kwh` gilt aber nur für in sich
+    geschlossene Werte — NICHT pro Monat einer HA-aggregierten Reihe:
+
+    Netz- und Gesamt-Ladungs-Zähler haben getrennte Monats-Schnappschüsse.
+    Ein Ladevorgang über die Monatsgrenze (z. B. Netzladung bei niedrigem
+    Tibber-Preis kurz nach Mitternacht) wird vom einen Zähler noch dem alten,
+    vom anderen schon dem neuen Monat zugeschlagen. Der Überhang im einen
+    Monat taucht im Nachbarmonat als Unterhang wieder auf — KUMULATIV gleicht
+    er sich aus. Betrifft typisch Dezember/Januar (rapahl-PN 2026-05-22).
+
+    Kumulativ ist `Σladung_netz > Σladung_kwh` daher ein echter Erfassungs-
+    fehler: Netz-Sensor in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh`
+    als reine PV-Ladung statt Gesamtladung gepflegt (Issue #281).
+
+    Args:
+        ladung_kwh_gesamt: Summe aller Monats-Gesamtladungen in kWh
+        ladung_netz_kwh_gesamt: Summe aller Monats-Netzladungen in kWh
+        toleranz_kwh: Akzeptierte absolute Überschreitung (Rundung)
+        toleranz_relativ: Akzeptierte relative Überschreitung (Default 2 %) —
+            deckt den einen, am Rand des Datenfensters noch nicht durch einen
+            Nachbarmonat ausgeglichenen Monatsübergang ab.
+
+    `None` wird als 0.0 gewertet.
+    """
+    gesamt = float(ladung_kwh_gesamt or 0.0)
+    netz = float(ladung_netz_kwh_gesamt or 0.0)
+    erlaubt = toleranz_kwh + toleranz_relativ * gesamt
+    konsistent = netz <= gesamt + erlaubt
+
+    details = ""
+    if not konsistent:
+        details = (
+            f"Kumulierte Netzladung ({netz:.3f} kWh) übersteigt die kumulierte "
+            f"Gesamtladung ({gesamt:.3f} kWh) — über die gesamte Historie "
+            "unmöglich. Ein einzelner Monat darf das (Zähler-Schnappschuss an "
+            "der Monatsgrenze), die Summe nicht. Mögliche Ursache: Netz-Sensor "
+            "in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh` als reine "
+            "PV-Ladung statt Gesamtladung gepflegt (Issue #281)."
+        )
+
+    return KonsistenzBericht(
+        konsistent=konsistent,
+        name="Σladung_netz ≤ Σladung_kwh (Speicher: Netz ⊆ Gesamt, kumulativ)",
+        erwartet=gesamt,
+        tatsaechlich=netz,
+        toleranz_kwh=erlaubt,
+        details=details,
+    )
+
+
+def assert_speicher_netzladung_kumulativ(
+    ladung_kwh_gesamt: Optional[float],
+    ladung_netz_kwh_gesamt: Optional[float],
+    toleranz_kwh: float = 0.1,
+    toleranz_relativ: float = 0.02,
+) -> None:
+    """Wirft AssertionError wenn `pruefe_speicher_netzladung_kumulativ` fehlschlägt."""
+    bericht = pruefe_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt, ladung_netz_kwh_gesamt, toleranz_kwh, toleranz_relativ
+    )
     if not bericht.konsistent:
         raise AssertionError(str(bericht))
 

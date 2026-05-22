@@ -1,7 +1,13 @@
 """Unit-Tests für die Konsistenz-Invarianten des Berechnungs-Layers.
 
-Aktuell: Speicher-Ladung-Konsistenz (#281) — `ladung_netz_kwh` ⊆ `ladung_kwh`.
+Speicher-Ladung-Konsistenz (#281) — `ladung_netz_kwh` ⊆ `ladung_kwh`.
 Der implizite PV-Anteil `ladung_kwh − ladung_netz_kwh` darf nie negativ werden.
+
+Zwei Varianten:
+- `pruefe_speicher_ladung_konsistenz` — strikt, für in sich geschlossene Werte.
+- `pruefe_speicher_netzladung_kumulativ` — kumulativ über die Historie; pro
+  Monat ist ein kleiner Überhang durch Zähler-Schnappschüsse an der Monats-
+  grenze legitim (rapahl-PN 2026-05-22).
 """
 
 from __future__ import annotations
@@ -10,7 +16,9 @@ import pytest
 
 from backend.core.berechnungen import (
     assert_speicher_ladung_konsistent,
+    assert_speicher_netzladung_kumulativ,
     pruefe_speicher_ladung_konsistenz,
+    pruefe_speicher_netzladung_kumulativ,
 )
 
 
@@ -65,3 +73,61 @@ def test_assert_wirft_bei_verstoss():
 def test_assert_schweigt_bei_konsistenz():
     # Kein Fehler bei gültigen Werten.
     assert_speicher_ladung_konsistent(ladung_kwh=100.0, ladung_netz_kwh=40.0)
+
+
+# --- Kumulative Netzladung-Konsistenz (rapahl-PN 2026-05-22) -----------------
+
+def test_kumulativ_netz_unter_gesamt_konsistent():
+    bericht = pruefe_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt=10000.0, ladung_netz_kwh_gesamt=4000.0
+    )
+    assert bericht.konsistent
+    assert bericht.details == ""
+
+
+def test_kumulativ_netz_gleich_gesamt_konsistent():
+    bericht = pruefe_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt=8000.0, ladung_netz_kwh_gesamt=8000.0
+    )
+    assert bericht.konsistent
+
+
+def test_kumulativ_carry_over_an_monatsgrenze_konsistent():
+    # rapahl-Fall: ein Ladevorgang über die Dez/Jan-Grenze lässt die
+    # kumulierte Netzladung minimal über der Gesamtladung liegen, weil der
+    # Nachbarmonat am Rand des Datenfensters den Überhang noch nicht
+    # ausgeglichen hat. Innerhalb der relativen Toleranz → konsistent.
+    bericht = pruefe_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt=10000.0, ladung_netz_kwh_gesamt=10001.0
+    )
+    assert bericht.konsistent
+
+
+def test_kumulativ_echter_erfassungsfehler_inkonsistent():
+    # `ladung_kwh` als reine PV-Ladung gepflegt: die kumulierte Netzladung
+    # übersteigt die Gesamtladung systematisch und weit über die Toleranz.
+    bericht = pruefe_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt=6000.0, ladung_netz_kwh_gesamt=9000.0
+    )
+    assert not bericht.konsistent
+    assert "#281" in bericht.details
+
+
+def test_kumulativ_beide_none_konsistent():
+    bericht = pruefe_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt=None, ladung_netz_kwh_gesamt=None
+    )
+    assert bericht.konsistent
+
+
+def test_assert_kumulativ_wirft_bei_verstoss():
+    with pytest.raises(AssertionError):
+        assert_speicher_netzladung_kumulativ(
+            ladung_kwh_gesamt=1000.0, ladung_netz_kwh_gesamt=5000.0
+        )
+
+
+def test_assert_kumulativ_schweigt_bei_konsistenz():
+    assert_speicher_netzladung_kumulativ(
+        ladung_kwh_gesamt=10000.0, ladung_netz_kwh_gesamt=3000.0
+    )
