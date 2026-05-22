@@ -749,7 +749,7 @@ async def korrekturprofil_aggregation_job() -> None:
 
         ok = 0
         skipped = 0
-        async for db in get_session():
+        async with get_session() as db:
             anlagen_result = await db.execute(
                 select(Anlage).where(
                     Anlage.latitude.isnot(None),
@@ -771,7 +771,6 @@ async def korrekturprofil_aggregation_job() -> None:
                         type(ex).__name__,
                         ex,
                     )
-            break
         logger.info(
             "Korrekturprofil-Aggregation: %d ok, %d übersprungen", ok, skipped
         )
@@ -912,7 +911,7 @@ async def kraftstoffpreis_job() -> None:
         )
         from sqlalchemy import select
 
-        async for db in get_session():
+        async with get_session() as db:
             result = await db.execute(select(Anlage))
             anlagen = result.scalars().all()
 

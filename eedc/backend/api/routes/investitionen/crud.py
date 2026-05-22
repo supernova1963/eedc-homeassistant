@@ -844,7 +844,7 @@ async def get_roi_dashboard(
 
         # Etappe C: TEP-Lookups einmalig pro Anlage. Periode = älteste
         # Speicher-Inbetriebnahme bis heute (oder neueste Stilllegung).
-        installs = [sp.installationsdatum for sp in speicher_invs_alle if sp.installationsdatum]
+        installs = [sp.anschaffungsdatum for sp in speicher_invs_alle if sp.anschaffungsdatum]
         stilllegungen = [sp.stilllegungsdatum for sp in speicher_invs_alle if sp.stilllegungsdatum]
         if installs:
             periode_von = min(installs)

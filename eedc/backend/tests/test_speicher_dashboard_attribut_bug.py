@@ -1,15 +1,16 @@
 """
-Regressionstest: `get_speicher_dashboard` stürzte mit HTTP 500 ab —
-`AttributeError: 'Investition' object has no attribute 'installationsdatum'`.
+Regressionstests für die Bug-Klasse `installationsdatum` auf `Investition`-
+Objekten → `AttributeError` → HTTP 500.
 
-Der #264-C-UI-Commit baute die TEP-Ladepreis-Periode über
-`s.installationsdatum` auf. Dieses Feld gibt es nur am `Anlage`-Model;
-das `Investition`-Model hat `anschaffungsdatum`. Jeder Aufruf der
-Cockpit-Rubrik "Speicher" mit mindestens einem Speicher warf den Fehler
-(rapahl-PN + lokal bestätigt 2026-05-22, v3.31.7).
+Der #264-C-UI-Code baut die TEP-Ladepreis-Periode über `sp.installationsdatum`
+auf. Dieses Feld gibt es nur am `Anlage`-Model; das `Investition`-Model hat
+`anschaffungsdatum`. `80041a7e` fixte das in `get_speicher_dashboard` — die
+Geschwister-Vorkommen in `get_roi_dashboard` und `get_finanz_prognose` blieben
+und ließen das ROI-Dashboard komplett mit "Ein Fehler ist aufgetreten"
+abstürzen (Klausnn-Issue #285, "ROI nicht mehr verfügbar", v3.31.8).
 
-Der Bug war ungetestet, weil bisher kein Akzeptanztest den Endpoint mit
-einer echten `Investition` aufrief — die C-Helfer hatten nur Unit-Tests.
+Der Bug rutschte durch, weil kein Akzeptanztest die Endpoints mit einer
+echten `Investition` aufrief. Diese Tests schließen die Lücke für alle drei.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from datetime import date
 
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.api.routes.investitionen.dashboards import get_speicher_dashboard
+from backend.api.routes.investitionen.crud import get_roi_dashboard
+from backend.api.routes.aussichten import get_finanz_prognose
 
 
 async def _seed_speicher(db, *, anschaffungsdatum: date | None = date(2023, 7, 1)) -> int:
@@ -71,3 +74,23 @@ async def test_speicher_dashboard_ohne_anschaffungsdatum(db):
         einspeiseverguetung_cent=None, db=db,
     )
     assert len(result) == 1
+
+
+async def test_roi_dashboard_laeuft_durch(db):
+    """`get_roi_dashboard` baute die TEP-Periode über `sp.installationsdatum`
+    auf — selbe Bug-Klasse, anderer Endpoint. Klausnn-Issue #285 ("ROI nicht
+    mehr verfügbar"): das ROI-Dashboard stürzte komplett ab."""
+    anlage_id = await _seed_speicher(db)
+    result = await get_roi_dashboard(
+        anlage_id=anlage_id, strompreis_cent=None, einspeiseverguetung_cent=None,
+        benzinpreis_euro=1.85, jahr=None, db=db,
+    )
+    assert result is not None
+
+
+async def test_finanz_prognose_laeuft_durch(db):
+    """`get_finanz_prognose` (Aussichten) hatte dasselbe `installationsdatum`-
+    Vorkommen — muss ohne AttributeError durchlaufen (#285)."""
+    anlage_id = await _seed_speicher(db)
+    result = await get_finanz_prognose(anlage_id=anlage_id, monate=12, db=db)
+    assert result is not None

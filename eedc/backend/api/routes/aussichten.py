@@ -1486,7 +1486,7 @@ async def get_finanz_prognose(
     # vorziehen — Tibber/aWATTar-Setups bekommen den echten gewichteten
     # Mittelwert über die Lade-Stunden statt User-Param-Schätzung.
     if speicher and arbitrage_speicher:
-        installs_c = [sp.installationsdatum for sp in speicher if sp.installationsdatum]
+        installs_c = [sp.anschaffungsdatum for sp in speicher if sp.anschaffungsdatum]
         if installs_c:
             try:
                 eff_ladepreis_c = await berechne_effektiver_ladepreis(
