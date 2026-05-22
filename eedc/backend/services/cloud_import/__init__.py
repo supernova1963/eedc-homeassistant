@@ -27,6 +27,7 @@ from . import ecoflow_powerstream  # noqa: F401
 from . import anker_solix  # noqa: F401
 from . import hoymiles_smiles  # noqa: F401
 from . import sungrow_isolarcloud  # noqa: F401
+from . import victron_vrm  # noqa: F401
 
 __all__ = [
     "CloudImportProvider",
