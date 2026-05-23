@@ -189,7 +189,17 @@ async def export_pdf(
                     InvestitionMonatsdaten.jahr == jahr
                 )
             )
-        all_imd = imd_result.scalars().all()
+        # Pre-Filter analog aussichten.py (Issue #236/#239 v3.29.0): IMD vor
+        # Anschaffungsdatum oder nach Stilllegungsdatum überspringen. Alle
+        # nachfolgenden Aggregations-Schleifen (PV-Erzeugung, Speicher,
+        # Wärmepumpe, E-Mobilität) sehen damit nur Daten aus der tatsächlichen
+        # Lebenszeit der Investition — Pre-Anschaffungs-Phantomdaten aus
+        # Custom-Imports zählen nicht mehr in den Jahresbericht.
+        all_imd = [
+            imd for imd in imd_result.scalars().all()
+            if (inv := inv_by_id.get(imd.investition_id)) is not None
+            and inv.ist_aktiv_im_monat(imd.jahr, imd.monat)
+        ]
 
     # ==========================================================================
     # 6. Monatsdaten laden
