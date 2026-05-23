@@ -1,11 +1,36 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.32.0)
+> **Stand:** Mai 2026 (v3.32.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.32.1 — Wirtschaftlichkeit bei mehreren Geräten + Tester-Fixes (Mai 2026)
+
+### Was sich für dich ändert — Wirtschaftlichkeits-Berechnungen
+
+- **Bei mehreren E-Autos oder Wärmepumpen jetzt mit jedem Gerät korrekt gerechnet**: Auf Anlagen mit zwei E-Autos (z. B. Klein-EV + SUV-EV) oder zwei Wärmepumpen (z. B. Gas-Ersatz + Öl-Ersatz) hat eedc bisher die gepflegten Parameter (Vergleichsverbrauch, Vergleichspreis, Wirkungsgrad, Energieträger) des **zuletzt eingetragenen** Geräts auf alle anderen angewendet. Aussichten, ROI-Dashboard, PDF-Jahresbericht und HA-Sensor-Export sind durchgängig auf eine geräte-spezifische Rechnung umgestellt. Bei Anlagen mit nur einem E-Auto bzw. einer WP ändert sich nichts.
+- **ROI-Dashboard schlägt den aktuellen Marktpreis vor**: Der Benzinpreis-Regler im ROI-Dashboard startete bisher fest bei 1,85 €/L und überschrieb damit den per-E-Auto gepflegten Wert. Jetzt: leer = pro E-Auto wird der gepflegte Wert bzw. der aktuelle Marktpreis aus den Monatsdaten verwendet; der Regler ist nur noch ein Override für Wenn-dann-Spiele.
+- **E-Auto-Dashboard nutzt monatliche Benzinpreise** (#260): Die „Ersparnis vs. Benziner"-Zahl im E-Auto-Dashboard zog bisher den festen 1,65 €/L heran und wich dadurch von der Cockpit-Übersicht ab (die längst mit den monatlichen Werten aus dem EU-Oil-Bulletin rechnet). Die beiden Sichten zeigen jetzt denselben Wert. Mit Dank an NongJoWo für die Meldung.
+
+### Was sich für dich ändert — Monatsabschluss
+
+- **Sonstige Positionen lassen sich auch über die Monatsdaten-Tabelle löschen** (#286): Der Fix in v3.32.0 hat nur den Monatsabschluss-Wizard erreicht — wenn du die Einträge stattdessen über die Monatsdaten-Tabelle bearbeitet hast, kamen sie nach dem Speichern wieder. Behoben — Lösch-Signale gehen in beiden Wegen sauber durch. Mit Dank an rcmcronny für die Hartnäckigkeit.
+- **0-€-Positionen werden gespeichert** (#286): Im Monatsabschluss verwarf eedc bisher Positionen mit Betrag 0 € stillschweigend — Workaround war „0,01 €". Jetzt zählt nur noch die Bezeichnung; 0 € und auch negative Beträge (für Korrekturen) gehen sauber durch. Mit Dank an Robert (rilmor-mhrs) für die Meldung.
+- **Wizard: kein doppeltes „Sonstiges" mehr**: Bei einer Sonstiges-Investition (z. B. „SmartGrid"-Heizstab) tauchte „Sonstiges" zweimal in der Schritt-Leiste auf — einmal als Investitionstyp, einmal als Sammel-Schritt für Sonderkosten und Notizen. Der hintere Schritt heißt jetzt „Allgemein"; bei genau einer Sonstiges-Investition wird deren Bezeichnung als Titel verwendet. Mit Dank an Rainer für den Hinweis.
+
+### Was sich für dich ändert — PDF-Jahresbericht & Auswertung
+
+- **Anschaffungs- und Stilllegungsdaten konsequent berücksichtigt**: Wer historische Energiedaten per Custom-Import vor das eedc-Anschaffungsdatum eingespielt hat, sah im PDF-Jahresbericht Pre-Anschaffungs-Phantomwerte (PV-Erzeugung, Speicher-Ladung, WP-Wärme, E-Mobilitäts-Aggregate). Das PDF rechnet jetzt — wie alle anderen Auswertungs-Sichten seit v3.29 — nur mit Daten aus der tatsächlichen Lebenszeit der Investition.
+
+### Was sich für dich ändert — Cloud-Import
+
+- **Victron VRM gegen die echte API**: Der Victron-VRM-Provider in v3.32.0 war ein erster Wurf — er ist jetzt gegen die offizielle VRM-API v2 mit korrekter Endpoint-Discovery und passender Datenfeld-Zuordnung neu gebaut. Erstes echtes Feedback ist willkommen. Mit Dank an kingcap1 und FrodoVDR.
+- **EcoFlow-Import: Diagnose-Log**: Wenn der EcoFlow-Cloud-Import keine Daten findet, schreibt eedc jetzt die tatsächlichen Feldnamen aus der API-Antwort ins Log — das macht die Zuordnung künftiger PowerOcean/PowerStream-Modelle einfacher. Mit Dank an Dirk.
 
 ---
 
