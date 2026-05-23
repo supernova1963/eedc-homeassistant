@@ -1187,7 +1187,7 @@ async def get_finanz_prognose(
     wp_monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == wp.id:
+            if inv_id == wp.id and wp.ist_aktiv_im_monat(jahr, monat):
                 heiz = daten.get("heizenergie_kwh", 0)
                 ww = daten.get("warmwasser_kwh", 0)
                 strom = get_wp_strom_kwh(daten, wp.parameter)
@@ -1222,7 +1222,7 @@ async def get_finanz_prognose(
     for ea in e_autos:
         agg = eauto_aggregate[ea.id]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id != ea.id:
+            if inv_id != ea.id or not ea.ist_aktiv_im_monat(jahr, monat):
                 continue
             km = daten.get("km_gefahren", 0) or 0
             netz = daten.get("ladung_netz_kwh", 0) or 0
@@ -1248,7 +1248,7 @@ async def get_finanz_prognose(
     bisherige_bkw_ersparnis = 0.0
     for bkw in balkonkraftwerke:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == bkw.id:
+            if inv_id == bkw.id and bkw.ist_aktiv_im_monat(jahr, monat):
                 bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
                 bisherige_bkw_ersparnis += bkw_ev * netzbezug_preis / 100
 
@@ -1256,7 +1256,7 @@ async def get_finanz_prognose(
     bisherige_sonstige_netto = 0.0
     for inv in alle_investitionen:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == inv.id:
+            if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
                 bisherige_sonstige_netto += berechne_sonstige_netto(daten)
 
     # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene Einspeisung)
@@ -1264,7 +1264,7 @@ async def get_finanz_prognose(
     for inv in alle_investitionen:
         if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
             for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-                if inv_id == inv.id:
+                if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
                     netz_kwh = daten.get("ladung_netz_kwh", 0) or 0
                     pv_kwh = daten.get("ladung_pv_kwh", 0) or 0
                     bisherige_dienstlich_ladekosten += (

@@ -208,3 +208,60 @@ async def test_einzelnes_eauto_keine_verhaltensaenderung(db):
     assert len(benzin_komponenten) == 1
     # Description muss den gepflegten Wert zeigen, nicht den globalen Default
     assert "7.5L/100km" in benzin_komponenten[0].beschreibung
+
+
+async def test_bisherige_ersparnis_filtert_nach_stilllegungsdatum(db):
+    """Active-Filter-Konsistenz: die bisherige-Ersparnis-Schleife muss
+    nur Monate zählen, in denen die Investition aktiv war.
+
+    Vorher filterte die erste Aggregation (für `gesamt_eauto_pv`/`gesamt_v2h`)
+    auf `ist_aktiv_im_monat`, die Ersparnis-Schleife aber nicht — Datenmüll
+    aus Monaten nach Stilllegung floss in `bisherige_eauto_ersparnis` ein.
+    """
+    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0, latitude=48.0)
+    db.add(anlage)
+    await db.flush()
+    for monat in range(1, 13):
+        db.add(Monatsdaten(
+            anlage_id=anlage.id, jahr=2025, monat=monat,
+            netzbezug_kwh=100.0, einspeisung_kwh=200.0, eigenverbrauch_kwh=50.0,
+        ))
+    # E-Auto: aktiv Jan–Jun 2025, stilllegung Juli
+    ea = Investition(
+        anlage_id=anlage.id, typ="e-auto", bezeichnung="Stilllegungs-EV",
+        anschaffungsdatum=date(2024, 1, 1),
+        stilllegungsdatum=date(2025, 6, 30),
+        anschaffungskosten_gesamt=30000.0,
+        parameter={
+            "jahresfahrleistung_km": 10000,
+            "verbrauch_kwh_100km": 18,
+            "pv_ladeanteil_prozent": 50,
+            "vergleich_verbrauch_l_100km": 7.5,
+            "benzinpreis_euro": 1.80,
+        },
+    )
+    db.add(ea)
+    await db.flush()
+    # IMD für alle 12 Monate (auch Juli–Dezember nach Stilllegung — Datenmüll)
+    for monat in range(1, 13):
+        db.add(InvestitionMonatsdaten(
+            investition_id=ea.id, jahr=2025, monat=monat,
+            verbrauch_daten={
+                "km_gefahren": 1000.0,
+                "ladung_netz_kwh": 50.0,
+                "ladung_pv_kwh": 50.0,
+            },
+        ))
+    await db.flush()
+
+    result = await get_finanz_prognose(anlage_id=anlage.id, monate=12, db=db)
+
+    # Mit Filter werden nur 6 Monate (Jan–Jun) gezählt: 6000 km × 7,5 L/100 ×
+    # 1,80 €/L ≈ 810 € Benzin-Alternative minus Netzstrom.
+    # Ohne Filter wären es 12 Monate ≈ 1620 € Benzin-Alternative.
+    # Schwelle 1200 € liegt sicher zwischen beiden Werten.
+    assert result.eauto_alternativ_ersparnis_euro < 1200, (
+        f"Stilllegungsdatum-Filter greift nicht: "
+        f"eauto_alternativ_ersparnis_euro = {result.eauto_alternativ_ersparnis_euro} "
+        f"(erwartet < 1200 € bei 6 aktiven Monaten, vorher ~1620 € bei 12)"
+    )
