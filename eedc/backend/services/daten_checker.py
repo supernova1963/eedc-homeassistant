@@ -77,6 +77,16 @@ class CheckKategorie(str, Enum):
     # (z. B. BKW-Sensor im WR-Smart-Meter schon enthalten + zusätzlich
     # gemappt). Diagnose statt stillem Cap — feedback_grenze_externe_daten_diagnose.
     PV_UEBER_ERFASSUNG = "pv_ueber_erfassung"
+    # Wallbox/E-Auto Phase 2a aus KONZEPT-WALLBOX-EAUTO.md: wenn EAuto-
+    # Investition UND Wallbox-Investition beide Heimladungs-Werte tragen,
+    # messen sie häufig denselben Stromfluss aus zwei Perspektiven. Der
+    # Pool-Helper `aggregiere_emob_ladung` (v3.31.6) ist eine Heuristik
+    # (Quelle mit der größeren Heimladung gewinnt komplett); bei verirrten
+    # Streudaten auf der falschen Quelle (junky84 #262: ~3.300 kWh auf der
+    # E-Auto-Investition) kann sie still falsch wählen. Diagnose-Eintrag
+    # lenkt den Anwender auf eine bewusste Entscheidung: nur eine Quelle
+    # pflegen.
+    EMOB_POOL_PFLEGE = "emob_pool_pflege"
 
 
 @dataclass
@@ -149,6 +159,16 @@ class DatenChecker:
     PR_PLAUSI_FENSTER_TAGE = 30
     SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP = 7.0
 
+    # E-Mob-Pool-Pflege (Wallbox + E-Auto parallel gepflegt). Schwellen aus
+    # dem Konzept KONZEPT-WALLBOX-EAUTO.md Phase 2a, justiert auf typische
+    # Setups (Krümel-Pflege durch evcc-Imports an einer der beiden Quellen
+    # darf keinen Fehlalarm auslösen).
+    EMOB_POOL_MIN_KWH_PRO_MONAT = 10.0   # unterhalb = Krümel, ignorieren
+    EMOB_POOL_AEHNLICHKEITS_RATIO = 0.3  # min/max ≥ 0.3 = beide nennenswert
+    EMOB_POOL_PV_INKONSISTENZ = 0.10     # |WB.pv − EA.pv| / max > 10 % auffällig
+    EMOB_POOL_MINDEST_MONATE = 3         # eine Monatslücke ist kein Pflege-Muster
+    EMOB_POOL_FENSTER_MONATE = 12        # Beobachtungsfenster
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self._abdeckung: Optional[MonatsdatenAbdeckung] = None
@@ -207,6 +227,7 @@ class DatenChecker:
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
         ergebnisse.extend(await self._check_datenquelle_drift(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
+        ergebnisse.extend(self._check_emob_pool_pflege(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
@@ -2162,5 +2183,158 @@ class DatenChecker:
                 "ob PR und Tagesertrag in den physikalischen Bereich zurückkommen."
             ),
         ))
+
+        return ergebnisse
+
+    def _check_emob_pool_pflege(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """E-Auto- + Wallbox-Investition parallel gepflegt → Pool-Heuristik wirkt.
+
+        Wallbox (Loadpoint-Sicht) und E-Auto (Vehicle-Sicht) messen häufig
+        denselben Stromfluss aus zwei Perspektiven. Heute löst der Pool-
+        Helper `aggregiere_emob_ladung` (v3.31.6) den Konflikt heuristisch
+        (Quelle mit der größeren Heimladung gewinnt komplett). Bei verirrten
+        Streudaten auf der falschen Quelle wählt die Heuristik still falsch.
+
+        Diese Diagnose erkennt das Pflege-Muster („beide Quellen über mehrere
+        Monate hinweg nennenswert befüllt") und lenkt den Anwender auf eine
+        bewusste Entscheidung — nur eine Quelle pflegen.
+
+        Severities:
+        - INFO: ≥ MINDEST_MONATE Monate mit Doppel-Pflege (Pool wirkt).
+        - WARNING: zusätzlich PV-Inkonsistenz (`|WB.pv − EA.pv| / max > 10 %`)
+          in mindestens einem dieser Monate — Indiz für *echte* Doppelung,
+          nicht nur zweifache Pflege identischer Werte.
+        """
+        from backend.core.field_definitions import (
+            get_eauto_ladung_kwh,
+            get_emob_pv_netz_kwh,
+        )
+        from backend.core.investition_parameter import ist_dienstlich
+
+        kat = CheckKategorie.EMOB_POOL_PFLEGE.value
+        ergebnisse: list[CheckErgebnis] = []
+
+        eautos = [
+            i for i in anlage.investitionen
+            if i.typ == "e-auto" and not ist_dienstlich(i)
+        ]
+        wallboxen = [
+            i for i in anlage.investitionen
+            if i.typ == "wallbox" and not ist_dienstlich(i)
+        ]
+        if not eautos or not wallboxen:
+            return ergebnisse  # Pflege-Konflikt unmöglich ohne beide Seiten.
+
+        # Beobachtungsfenster: die letzten N Monate, in denen mindestens eine
+        # Investition aktiv war.
+        from datetime import date
+
+        heute = date.today()
+        fenster_monate: list[tuple[int, int]] = []
+        for offset in range(self.EMOB_POOL_FENSTER_MONATE):
+            jahr = heute.year + ((heute.month - 1 - offset) // 12)
+            monat = ((heute.month - 1 - offset) % 12) + 1
+            fenster_monate.append((jahr, monat))
+
+        doppel_monate: list[tuple[int, int, float, float]] = []
+        inkonsistenz_monate: list[tuple[int, int, float, float]] = []
+
+        for jahr, monat in fenster_monate:
+            ea_ladung = ea_pv = 0.0
+            wb_ladung = wb_pv = 0.0
+            for inv in eautos:
+                if not inv.ist_aktiv_im_monat(jahr, monat):
+                    continue
+                for imd in inv.monatsdaten:
+                    if imd.jahr != jahr or imd.monat != monat:
+                        continue
+                    data = imd.verbrauch_daten or {}
+                    total = get_eauto_ladung_kwh(data)
+                    pv, _netz = get_emob_pv_netz_kwh(data, total_kwh=total)
+                    ea_ladung += total
+                    ea_pv += pv
+            for inv in wallboxen:
+                if not inv.ist_aktiv_im_monat(jahr, monat):
+                    continue
+                for imd in inv.monatsdaten:
+                    if imd.jahr != jahr or imd.monat != monat:
+                        continue
+                    data = imd.verbrauch_daten or {}
+                    total = get_eauto_ladung_kwh(data)
+                    pv, _netz = get_emob_pv_netz_kwh(data, total_kwh=total)
+                    wb_ladung += total
+                    wb_pv += pv
+
+            min_ladung = min(ea_ladung, wb_ladung)
+            max_ladung = max(ea_ladung, wb_ladung)
+            if min_ladung < self.EMOB_POOL_MIN_KWH_PRO_MONAT:
+                continue  # Krümel-Pflege auf einer Seite — kein Konflikt.
+            ratio = min_ladung / max_ladung if max_ladung > 0 else 0.0
+            if ratio < self.EMOB_POOL_AEHNLICHKEITS_RATIO:
+                continue  # eine Seite dominant — Pool-Heuristik wählt klar.
+
+            doppel_monate.append((jahr, monat, ea_ladung, wb_ladung))
+
+            # PV-Konsistenz: beide Sichten sollen denselben Stromfluss messen,
+            # also auch denselben PV-Anteil. Abweichung > 10 % ist Pflege-
+            # Konflikt, nicht nur Doppel-Pflege.
+            max_pv = max(ea_pv, wb_pv)
+            if max_pv > 0:
+                pv_diff = abs(ea_pv - wb_pv) / max_pv
+                if pv_diff > self.EMOB_POOL_PV_INKONSISTENZ:
+                    inkonsistenz_monate.append((jahr, monat, ea_pv, wb_pv))
+
+        if len(doppel_monate) < self.EMOB_POOL_MINDEST_MONATE:
+            return ergebnisse
+
+        beispiel_monate = ", ".join(
+            f"{m:02d}/{j} (EA {ea:.0f} kWh / WB {wb:.0f} kWh)"
+            for j, m, ea, wb in doppel_monate[:3]
+        )
+
+        if inkonsistenz_monate:
+            j, m, ea_pv, wb_pv = inkonsistenz_monate[0]
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat,
+                schwere=CheckSeverity.WARNING.value,
+                meldung=(
+                    "Pflege-Konflikt: E-Auto- und Wallbox-PV-Anteil "
+                    "weichen voneinander ab"
+                ),
+                details=(
+                    f"In {len(doppel_monate)} Monaten der letzten "
+                    f"{self.EMOB_POOL_FENSTER_MONATE} sind sowohl die "
+                    "E-Auto- als auch die Wallbox-Investition mit "
+                    "Heimladung gepflegt (Beispiele: "
+                    f"{beispiel_monate}). Im Monat {m:02d}/{j} liegt der "
+                    f"PV-Anteil bei EA={ea_pv:.0f} kWh, WB={wb_pv:.0f} kWh "
+                    f"— Abweichung > {int(self.EMOB_POOL_PV_INKONSISTENZ*100)} %, "
+                    "obwohl beide Sichten denselben Stromfluss messen "
+                    "sollten. eedc poolt aktuell heuristisch (Quelle mit "
+                    "der größeren Heimladung gewinnt) — bei Streudaten auf "
+                    "der falschen Quelle wählt die Heuristik still falsch. "
+                    "Empfehlung: entscheide bewusst, welche Quelle die "
+                    "Wahrheit liefert, und lasse die andere leer."
+                ),
+            ))
+        else:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat,
+                schwere=CheckSeverity.INFO.value,
+                meldung=(
+                    "E-Auto- und Wallbox-Investition werden parallel "
+                    "gepflegt — Pool-Heuristik aktiv"
+                ),
+                details=(
+                    f"In {len(doppel_monate)} Monaten der letzten "
+                    f"{self.EMOB_POOL_FENSTER_MONATE} sind beide Sichten "
+                    "mit Heimladung gepflegt (Beispiele: "
+                    f"{beispiel_monate}). Wallbox- und E-Auto-Investition "
+                    "messen oft denselben Stromfluss aus zwei Perspektiven; "
+                    "eedc nutzt für die Aggregation die Quelle mit der "
+                    "größeren Heimladung (Pool-Helper). Sauberer ist nur "
+                    "eine Quelle zu pflegen — die andere bleibt leer."
+                ),
+            ))
 
         return ergebnisse

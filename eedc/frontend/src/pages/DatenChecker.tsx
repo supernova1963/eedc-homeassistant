@@ -33,6 +33,8 @@ const kategorieLabels: Record<string, string> = {
   provenance_conflict: 'Daten-Quellen – Konflikte',
   datenquelle_status: 'Datenquelle – aktiver Pfad',
   datenquelle_drift: 'Datenquelle – Drift zu HA-Statistics',
+  pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
+  emob_pool_pflege: 'E-Mobilität – Pool-Pflege',
 }
 
 const kategorieReihenfolge = [
@@ -48,6 +50,8 @@ const kategorieReihenfolge = [
   'provenance_conflict',
   'datenquelle_status',
   'datenquelle_drift',
+  'pv_ueber_erfassung',
+  'emob_pool_pflege',
 ]
 
 function severityIcon(schwere: string) {
