@@ -291,6 +291,9 @@ async def export_pdf(
     # Attribut ist; Wallbox-IMD-Einträge mit km (evcc-Pool) werden für die
     # Aggregat-Gesamt-km (emob_km_total) weiter mitgezählt.
     ea_km_pro_inv: dict[int, float] = {}
+    # Per-WP-Wärmesumme für thermisch-gewichtete Mittelung der Vergleichs-
+    # parameter (Energieträger Gas/Öl + alter Preis) bei Multi-WP-Anlagen.
+    wp_waerme_pro_inv: dict[int, float] = {}
 
     # Investition-Monatsdaten fuer Gesamtsummen aggregieren
     for imd in all_imd:
@@ -307,6 +310,9 @@ async def export_pdf(
             ww = data.get("warmwasser_kwh", 0) or 0
             wp_heizung_total += heiz
             wp_warmwasser_total += ww
+            wp_waerme_pro_inv[inv.id] = wp_waerme_pro_inv.get(inv.id, 0.0) + (
+                data.get("waerme_kwh", 0) or (heiz + ww)
+            )
             wp_waerme_total += data.get("waerme_kwh", 0) or (heiz + ww)
             wp_strom_total += data.get("stromverbrauch_kwh", 0) or 0
         elif inv.typ in ("e-auto", "wallbox"):
@@ -443,19 +449,47 @@ async def export_pdf(
     wp_cop = (wp_waerme_total / wp_strom_total) if wp_strom_total > 0 and wp_waerme_total > 0 else None
     wp_ersparnis = 0.0
     if hat_waermepumpe and wp_waerme_total > 0:
-        wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
-        wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
-        wp_alternativ_zusatzkosten_jahr = 0.0
+        # thermisch-gewichtete Aggregat-Werte. Vorher las eine
+        # `for inv … break`-Schleife die Parameter aus der ERSTEN passenden
+        # WP-Investition mit `parameter` und nahm auch nur DEREN
+        # `alternativ_zusatzkosten_jahr` (die break-Linie überschrieb die
+        # Summierungslogik). Bei zwei WPs mit unterschiedlichen Energie-
+        # trägern (Gas + Öl) oder Zusatzkosten war der Jahresbericht falsch.
+        wp_param_per_inv: list[tuple[float, float, float, float]] = []
+        # (waerme, alter_preis_cent, alter_wirkungsgrad, zusatzkosten_jahr)
         for inv in investitionen:
-            if inv.typ == "waermepumpe" and inv.parameter:
-                wp_alter_preis_cent = inv.parameter.get(
-                    PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
-                    PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
-                )
-                if inv.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-                    wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT
-                wp_alternativ_zusatzkosten_jahr += inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
-                break
+            if inv.typ != "waermepumpe":
+                continue
+            wp_waerme = wp_waerme_pro_inv.get(inv.id, 0.0)
+            params = inv.parameter or {}
+            zusatzkosten = params.get(
+                PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0,
+            ) or 0
+            if wp_waerme <= 0 and zusatzkosten <= 0:
+                continue
+            wp_param_per_inv.append((
+                wp_waerme,
+                (
+                    params.get(
+                        PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
+                        PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
+                    ) or PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
+                ),
+                (
+                    WP_WIRKUNGSGRAD_OEL_DEFAULT
+                    if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel"
+                    else WP_WIRKUNGSGRAD_GAS_DEFAULT
+                ),
+                zusatzkosten,
+            ))
+        wp_alternativ_zusatzkosten_jahr = sum(z for _, _, _, z in wp_param_per_inv)
+        waerme_gewicht = sum(w for w, _, _, _ in wp_param_per_inv)
+        if waerme_gewicht > 0:
+            wp_alter_preis_cent = sum(w * p for w, p, _, _ in wp_param_per_inv) / waerme_gewicht
+            wp_alter_wirkungsgrad = sum(w * wg for w, _, wg, _ in wp_param_per_inv) / waerme_gewicht
+        else:
+            wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
+            wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
         # Durchschnitt der Monats-Gaspreise, Fallback auf statischen Parameter
         hist_gaspreise = [
             m.gaspreis_cent_kwh for m in monatsdaten_list

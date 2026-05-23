@@ -1122,21 +1122,36 @@ async def get_finanz_prognose(
     # ALTERNATIVKOSTEN-PARAMETER LADEN
     # =====================================================================
 
-    # Wärmepumpe: Alter Energieträger (Gas/Öl) Preis + fixe Zusatzkosten
-    # Bug #7 (v3.25.0): Default vereinheitlicht auf zentrale 12 ct/kWh aus PARAM_WAERMEPUMPE_DEFAULTS
-    # (vorher hier 10.0, andernorts 12.0 → User sah unterschiedliche Ersparnis je Tab).
-    wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
-    wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
-    wp_alternativ_zusatzkosten_jahr = 0.0  # Schornsteinfeger, Wartung, Grundpreis
+    # Wärmepumpe: per-WP-Parameter (Alter Energieträger Gas/Öl, Preis,
+    # fixe Zusatzkosten). Vorher: eine `for wp`-Schleife schrieb
+    # `wp_alter_preis_cent` und `wp_alter_wirkungsgrad` last-write-wins in
+    # globale Variablen — bei zwei WPs mit unterschiedlichen Energieträgern
+    # (Gas + Öl) wurde der Wirkungsgrad der letzten auf beide angewendet.
+    # Bug #7 (v3.25.0): Default vereinheitlicht auf zentrale 12 ct/kWh aus
+    # PARAM_WAERMEPUMPE_DEFAULTS (vorher hier 10.0, andernorts 12.0).
+    wp_aggregate: dict[int, dict] = {}
     for wp in waermepumpen:
-        if wp.parameter:
-            wp_alter_preis_cent = wp.parameter.get(
-                PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
-                PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
-            )
-            if wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-                wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT
-            wp_alternativ_zusatzkosten_jahr += wp.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
+        params = wp.parameter or {}
+        wp_aggregate[wp.id] = {
+            "alter_preis_cent": (
+                params.get(
+                    PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
+                    PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
+                ) or PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
+            ),
+            "alter_wirkungsgrad": (
+                WP_WIRKUNGSGRAD_OEL_DEFAULT
+                if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel"
+                else WP_WIRKUNGSGRAD_GAS_DEFAULT
+            ),
+            "zusatzkosten_jahr": params.get(
+                PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0,
+            ) or 0,
+            "thermisch_kwh": 0.0,
+        }
+    wp_alternativ_zusatzkosten_jahr = sum(
+        a["zusatzkosten_jahr"] for a in wp_aggregate.values()
+    )
 
     # E-Auto: Benzin-Vergleich.
     # Pro E-Auto: `benzinpreis_default` (Fallback wenn `kraftstoffpreis_euro`
@@ -1186,6 +1201,7 @@ async def get_finanz_prognose(
     gesamt_wp_thermisch = 0.0
     wp_monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
+        wp_agg = wp_aggregate[wp.id]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id and wp.ist_aktiv_im_monat(jahr, monat):
                 heiz = daten.get("heizenergie_kwh", 0)
@@ -1193,15 +1209,16 @@ async def get_finanz_prognose(
                 strom = get_wp_strom_kwh(daten, wp.parameter)
                 thermisch = heiz + ww
                 gesamt_wp_thermisch += thermisch
-                # Monatspreis: Monatsdaten.gaspreis_cent_kwh → Fallback statischer Parameter
+                wp_agg["thermisch_kwh"] += thermisch
+                # Monatspreis: Monatsdaten.gaspreis_cent_kwh → Fallback per-WP-Default
                 md = monatsdaten_dict.get((jahr, monat))
                 monats_gaspreis = (
                     md.gaspreis_cent_kwh
                     if md and md.gaspreis_cent_kwh is not None
-                    else wp_alter_preis_cent
+                    else wp_agg["alter_preis_cent"]
                 )
-                # Gas-Alternative: thermisch / Wirkungsgrad * Preis
-                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * monats_gaspreis / 100
+                # Gas-Alternative: thermisch / Wirkungsgrad * Preis — pro WP
+                gas_kosten = (thermisch / wp_agg["alter_wirkungsgrad"]) * monats_gaspreis / 100
                 # WP-Stromkosten (nur Netzanteil, PV-Anteil ist bereits in EV-Ersparnis)
                 # Konservative 50/50-Annahme — TODO: aus tatsächlichen Daten herleiten
                 wp_netz_anteil = 1.0 - WP_PV_ANTEIL_DEFAULT
@@ -1377,12 +1394,24 @@ async def get_finanz_prognose(
     # =====================================================================
 
     # Wärmepumpe: Ersparnis gegenüber Gas/Öl
-    # Durchschnittswerte aus historischen Daten hochrechnen
+    # Durchschnittswerte aus historischen Daten hochrechnen.
+    # Aggregat-Werte für die Saisonalprognose: thermisch-gewichteter
+    # Durchschnitt über die WPs. Bei genau einer WP = deren Wert (kein
+    # Verhaltens-Unterschied). Bei mehreren WPs mit unterschiedlichen
+    # Energieträgern (z. B. Gas + Öl) mathematisch saubere Mischung statt
+    # last-write-wins.
     jahres_wp_ersparnis = 0.0
     if waermepumpen and gesamt_wp_thermisch > 0 and anzahl_monate_hist > 0:
         # Thermische Energie pro Jahr (hochgerechnet)
         wp_thermisch_jahr = gesamt_wp_thermisch / anzahl_monate_hist * 12
-        # Prognose-Gaspreis: Ø der historischen Monatspreise, Fallback statisch
+        # thermisch-gewichtete Aggregat-Werte
+        wp_alter_preis_cent_agg = sum(
+            a["thermisch_kwh"] * a["alter_preis_cent"] for a in wp_aggregate.values()
+        ) / gesamt_wp_thermisch
+        wp_alter_wirkungsgrad_agg = sum(
+            a["thermisch_kwh"] * a["alter_wirkungsgrad"] for a in wp_aggregate.values()
+        ) / gesamt_wp_thermisch
+        # Prognose-Gaspreis: Ø der historischen Monatspreise, Fallback Aggregat
         hist_gaspreise = [
             md.gaspreis_cent_kwh for md in monatsdaten
             if md.gaspreis_cent_kwh is not None
@@ -1390,11 +1419,11 @@ async def get_finanz_prognose(
         prognose_gaspreis = (
             sum(hist_gaspreise) / len(hist_gaspreise)
             if hist_gaspreise
-            else wp_alter_preis_cent
+            else wp_alter_preis_cent_agg
         )
         # Was es mit Gas kosten würde (Energiepreis + fixe Zusatzkosten)
         gas_kosten_jahr = (
-            (wp_thermisch_jahr / wp_alter_wirkungsgrad) * prognose_gaspreis / 100
+            (wp_thermisch_jahr / wp_alter_wirkungsgrad_agg) * prognose_gaspreis / 100
             + wp_alternativ_zusatzkosten_jahr
         )
         # WP-Stromkosten pro Jahr (nur Netzanteil) — konservative 50/50-Annahme

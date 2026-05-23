@@ -263,19 +263,33 @@ async def calculate_anlage_sensors(
         strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
     )
 
-    # Bug #7 v3.25.0: Default vereinheitlicht aus PARAM_WAERMEPUMPE_DEFAULTS (vorher 10.0)
-    wp_alter_preis_cent = PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
-    wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_GAS_DEFAULT
-    wp_alternativ_zusatzkosten_jahr = 0.0
+    # Per-WP-Parameter (statt last-write-wins über waermepumpen).
+    # Bug #7 v3.25.0: Default vereinheitlicht aus PARAM_WAERMEPUMPE_DEFAULTS (vorher 10.0).
+    # Multi-WP-Drift: bei zwei WPs mit unterschiedlichen Energieträgern (Gas + Öl)
+    # wurde der Wirkungsgrad der letzten auf beide angewendet — die HA-Sensoren
+    # `jahres_ersparnis_euro`, `roi_prozent`, `amortisation_jahre` waren falsch.
+    wp_aggregate_anl: dict[int, dict] = {}
     for wp in waermepumpen:
-        if wp.parameter:
-            wp_alter_preis_cent = wp.parameter.get(
-                PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
-                PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
-            )
-            if wp.parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-                wp_alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT
-            wp_alternativ_zusatzkosten_jahr += wp.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
+        params = wp.parameter or {}
+        wp_aggregate_anl[wp.id] = {
+            "alter_preis_cent": (
+                params.get(
+                    PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
+                    PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
+                ) or PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
+            ),
+            "alter_wirkungsgrad": (
+                WP_WIRKUNGSGRAD_OEL_DEFAULT
+                if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel"
+                else WP_WIRKUNGSGRAD_GAS_DEFAULT
+            ),
+            "zusatzkosten_jahr": params.get(
+                PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0,
+            ) or 0,
+        }
+    wp_alternativ_zusatzkosten_jahr = sum(
+        a["zusatzkosten_jahr"] for a in wp_aggregate_anl.values()
+    )
 
     # Monatsdaten-Dict für Monats-Gaspreis
     md_by_periode = {(md.jahr, md.monat): md for md in monatsdaten}
@@ -283,6 +297,7 @@ async def calculate_anlage_sensors(
     bisherige_wp_ersparnis = 0.0
     wp_monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
+        wp_agg = wp_aggregate_anl[wp.id]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id:
                 thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
@@ -293,9 +308,9 @@ async def calculate_anlage_sensors(
                 monats_gaspreis = (
                     md.gaspreis_cent_kwh
                     if md and md.gaspreis_cent_kwh is not None
-                    else wp_alter_preis_cent
+                    else wp_agg["alter_preis_cent"]
                 )
-                gas_kosten = (thermisch / wp_alter_wirkungsgrad) * monats_gaspreis / 100
+                gas_kosten = (thermisch / wp_agg["alter_wirkungsgrad"]) * monats_gaspreis / 100
                 wp_stromkosten_netz = strom * (1.0 - WP_PV_ANTEIL_DEFAULT) * netzbezug_preis_cent / 100
                 bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
                 wp_monate_gezaehlt.add((jahr, monat))
