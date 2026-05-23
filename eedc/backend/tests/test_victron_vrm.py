@@ -43,7 +43,9 @@ def test_info_metadaten():
     info = VictronVRMProvider().info()
     assert info.id == "victron_vrm"
     assert info.hersteller == "Victron Energy"
-    assert info.getestet is False
+    # Seit 2026-05-23 verifiziert durch kingcap1 (#255, idSite=183075,
+    # vollständiger Import von 48 Monaten gegen die echte VRM-API).
+    assert info.getestet is True
     by_id = {f.id: f for f in info.credential_fields}
     assert set(by_id) == {"access_token", "installation_id"}
     # access_token: Pflicht + Password (treibt die Credential-Maskierung).

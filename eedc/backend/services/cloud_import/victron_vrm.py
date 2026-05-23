@@ -209,7 +209,11 @@ class VictronVRMProvider(CloudImportProvider):
                     required=False,
                 ),
             ],
-            getestet=False,
+            # Verifiziert 2026-05-23 (kingcap1, Issue #255):
+            # Vollständiger Import von 48 Monaten gegen idSite=183075 grün,
+            # Energiefluss-Matrix-Mapping (Pc/Pg/Pb/Gc/Gb/Bc/Bg → eedc-Felder)
+            # mit echten Account-Daten bestätigt.
+            getestet=True,
         )
 
     def _auth_headers(self, access_token: str) -> dict:
