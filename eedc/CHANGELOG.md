@@ -7,6 +7,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.32.2] - 2026-05-23 — Cloud-Import-Hardening + WP-Betriebsstunden + IA v4.0.0 Konzept
+
+> 🔧 **Patch-Release.** Schwerpunkt: drei Cloud-Import-Tester-Fixes (Sungrow #287, EcoFlow Dirk-PN, Victron-Verifizierung #255), neues WP-Betriebsstunden-Tracking (#238) und das IA v4.0.0 Konzept als gemeinsame Anlaufstelle für den größeren UX-/Menüstruktur-Refactor in der nächsten Major-Welle.
+
+### Added
+
+- **WP-Betriebsstunden-Sensor + KPIs** (#238 detLAN): optionaler `total_increasing`-Sensor pro WP-Investition, integriert in die `KUMULATIVE_COUNTER_FELDER`-Architektur. Tagesaggregat liefert Starts × Betriebsstunden + Ø Laufzeit pro Start; KPI-Kachel im Monatsbericht und im WP-Dashboard. Architektur analog v3.24.0 Kompressor-Starts.
+- **Daten-Checker: evcc-Pool-Pflege-Mismatch-Warnung** (Phase 2a): erkennt, wenn der zentrale evcc-Pool-Sensor nicht (mehr) zur Sensor-Zuordnung passt — z. B. nach Wallbox/E-Auto-Hinzufügen ohne Pool-Update. Diagnostischer Hinweis mit Reparatur-Link, kein Auto-Heal.
+
+### Changed
+
+- **§51 EEG Phase 2 — Erlös-Abzug in weiteren Read-Sites**: nach Phase 1 (Aussichten + Monatsabschluss) wird der Abzug bei negativen Börsenpreisen jetzt auch in Cockpit-Übersicht, ROI-Dashboard, PDF-Jahresbericht, HA-Sensor-Export, Auswertungen-Energie und Auswertungen-Finanzen konsistent angewendet. Single Source of Truth: `core/berechnungen/eeg.py:erloes_minus_eeg51`.
+- **Berechnungs-Layer PRIO-1-Migrationen**: `prognosen.py` und `repair.py` lesen IST-PV-Ertrag jetzt über den SoT-Helper `summe_pv_bkw_kwh` aus `core/berechnungen/energie.py` (Whitelist-konsistent zu Cockpit/Aussichten/HA-Export; ADR-001). Verhindert Drift-Klasse 2026-05-19 (BKW-Bug, Rainer-PN) in Genauigkeits- und Reparatur-Pfaden.
+
+### Fixed
+
+- **Cloud-Import Sungrow iSolarCloud: AppKey-Rotation entschärft** (#287 detlefh68): der mitgesendete App-Key war auf einem alten Stand und wurde von Sungrow mit „Illegal c-access-key" abgelehnt. Aktualisiert auf den aktuellen Default-Wert aus dem GoSungrow-Projekt. Plus optionales Feld „App-Key" im Setup, damit bei künftiger Key-Rotation der Anwender einen eigenen Wert eintragen kann, ohne auf ein eedc-Release warten zu müssen.
+- **Cloud-Import EcoFlow PowerOcean: echte indexName-Matrix** (Dirk-PN): die in v3.32.0 hinzugefügte Diagnose hat die echten `indexName`s im API-Response aus Dirks Log offengelegt. Mapping um die tatsächlich gelieferten Namen ergänzt — der Import liefert jetzt Werte statt leer zu bleiben.
+- **Investitionen löschen: stiller Disabled-Button** (#288 NongJoWo): der „Endgültig löschen"-Button im Backup-Bestätigungsdialog ist by design disabled, solange weder ein Backup erstellt noch „Ohne Backup fortfahren" geklickt wurde — der Grund war im Dialog nicht sichtbar. Jetzt: dezenter Hilfetext links neben den Aktions-Buttons („Bitte oben eine Backup-Option wählen") plus Tooltip am disabled Button.
+
+### Cloud-Import
+
+- **Victron VRM: `getestet=True`** (#255 kingcap1): nach erfolgreicher Verifizierung gegen ein echtes Konto wird der `getestet=False`-Banner entfernt. Der Provider ist damit vollständig produktiv.
+
+### Konzept
+
+- **IA v4.0.0 — Informationsarchitektur-Konzept veröffentlicht** ([#243](https://github.com/supernova1963/eedc-homeassistant/issues/243)): drei orthogonale Achsen (Zeit / Was / Wie) lösen die heutige Vermischung in der Top-Navigation auf. Cockpit wird zur Zeitachse (Live · Heute · Monatsbericht · Jahr · Aussicht), Komponenten bekommen einen eigenen Hub mit Status/Verlauf/Vergleich/Aussicht-Sektionen, Auswertungen wird auf analytische Schnitte konsolidiert. Drei Konzept-Dokumente in `docs/`: [`KONZEPT-IA-V4.md`](docs/KONZEPT-IA-V4.md), [`KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (mit Hell/Dunkel-Mode + Einstellbarkeits-Cap), [`KONZEPT-MOBILE.md`](docs/KONZEPT-MOBILE.md) (Hamburger-Top-Nav, Pflicht-Querschnittsregeln). Feedback und Ideen sind willkommen, zentral im Issue. Code-Umsetzung folgt in v4.0.0.
+
+---
+
 ## [3.32.1] - 2026-05-23 — Multi-Geräte-Drift-Hardening + Tester-Fixes
 
 > 🔧 **Patch-Release.** Schwerpunkt: Aggregations-Drift bei Anlagen mit mehreren E-Autos oder Wärmepumpen. Eine Schleife schrieb Vergleichsparameter (Vergleichsverbrauch, Vergleichspreis, Wirkungsgrad) last-write-wins in globale Variablen — alle Geräte wurden mit den Werten des LETZTEN gerechnet. Betroffen waren Aussichten, ROI-Dashboard, HA-Sensor-Export und der PDF-Jahresbericht. Plus zwei Folge-Fixes zu #286 (`MonatsdatenForm`-Pfad + 0-€-Positionen).
