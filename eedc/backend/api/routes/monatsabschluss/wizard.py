@@ -25,6 +25,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.activity_service import log_activity
+from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
 from backend.services.provenance import (
     write_json_subkey_with_provenance,
@@ -325,9 +326,11 @@ async def save_monatsabschluss(
         # Sonstige Positionen (Erträge & Ausgaben) — landen als ein Sub-Key
         # mit Listen-Wert, ebenfalls über den Resolver.
         if inv_werte.sonstige_positionen is not None:
+            # 0-€-Positionen mit Bezeichnung sind legitim (siehe
+            # ist_gueltige_position-Docstring + rilmor-mhrs #286).
             gueltige = [
                 p for p in inv_werte.sonstige_positionen
-                if isinstance(p, dict) and p.get("betrag", 0) > 0 and str(p.get("bezeichnung", "")).strip()
+                if ist_gueltige_position(p)
             ]
             res = await write_json_subkey_with_provenance(
                 db, imd, "verbrauch_daten", "sonstige_positionen", gueltige,

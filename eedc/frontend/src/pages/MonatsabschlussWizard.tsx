@@ -490,7 +490,13 @@ export default function MonatsabschlussWizard() {
         }
 
         const positionen = values.sonstigePositionen[inv.id] || []
-        const gueltigePositionen = positionen.filter(p => p.betrag > 0 && p.bezeichnung.trim())
+        // 0-€-Positionen mit Bezeichnung sind legitim (Platzhalter, „Reparatur
+        // 0 € unter Garantie", noch nicht bewilligte THG-Quote, etc.). Vor
+        // v3.32.1 hat das `> 0` solche Einträge stillschweigend verworfen —
+        // rilmor-mhrs auf #286 v3.32.0 musste deshalb 0,01 € als Workaround
+        // eintragen, weil 0 € einfach „nichts passierte". Dieselbe Regel
+        // gilt im Backend, Helper `ist_gueltige_position`.
+        const gueltigePositionen = positionen.filter(p => p.bezeichnung.trim())
         // Hatte die Investition beim Laden Positionen, sind jetzt aber keine
         // gültigen mehr da, muss eine leere Liste raus — sonst bleibt die alte
         // in der DB stehen und das Löschen verpufft (#286). `null` heißt

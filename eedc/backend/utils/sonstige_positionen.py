@@ -39,6 +39,25 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
+def ist_gueltige_position(p: Any) -> bool:
+    """Prüft, ob ein `sonstige_positionen`-Eintrag persistiert werden soll.
+
+    Kriterium: muss ein Dict mit nicht-leerer Bezeichnung sein. **Der Betrag
+    darf 0 sein** — eine 0-€-Position mit Bezeichnung ist ein legitimer
+    Datenpunkt (Platzhalter, „Reparatur 0 € unter Garantie", noch nicht
+    bewilligte THG-Quote, etc.).
+
+    Hintergrund: Ein früher hier und im Frontend-Wizard vorhandener
+    `betrag > 0`-Filter hat 0-€-Einträge stillschweigend verworfen — siehe
+    rilmor-mhrs auf #286 v3.32.0: das „Auf 0€ setzen" als Workaround zum
+    Löschen schlug ohne erkennbaren Grund fehl, weil sowohl Frontend als
+    auch Backend den Eintrag wegfilterten. Workaround damals: 0,01 €.
+    """
+    if not isinstance(p, dict):
+        return False
+    return bool(str(p.get("bezeichnung", "")).strip())
+
+
 def get_sonstige_positionen(verbrauch_daten: dict[str, Any] | None) -> list[dict]:
     """
     Liest sonstige_positionen aus verbrauch_daten.
