@@ -404,16 +404,21 @@ async def get_waermepumpe_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # Kompressor-Starts Tagesinkremente (Issue #169): Quelle
-    # TagesZusammenfassung.komponenten_starts ({"wp_starts_anzahl": {"<inv_id>": <int>}}).
-    # Wird hier nur noch für die Max/Tag-KPI gebraucht. Σ Lebensdauer kommt
-    # direkt aus dem Hersteller-Sensor (get_counter_lifetime).
+    # Counter-Tagesinkremente (Starts + Betriebsstunden, Issue #169 / #238):
+    # Quelle TagesZusammenfassung.komponenten_starts mit
+    # {"wp_starts_anzahl": {"<inv_id>": <int>},
+    #  "wp_betriebsstunden": {"<inv_id>": <float>}}.
+    # Wird hier für Max/Tag-KPI + Σ-Betriebsstunden-Aggregat gebraucht.
+    # Σ Lebensdauer-Starts kommt direkt aus dem Hersteller-Sensor
+    # (`get_counter_lifetime`), Σ-Betriebsstunden ebenfalls direkt aus dem
+    # Sensor — beide sind kumulative Counter, der Sensor ist die Wahrheit.
     tz_result = await db.execute(
         select(TagesZusammenfassung.komponenten_starts)
         .where(TagesZusammenfassung.anlage_id == anlage_id)
         .where(TagesZusammenfassung.komponenten_starts.is_not(None))
     )
     starts_by_inv: dict[int, list[int]] = {wid: [] for wid in wp_ids}
+    stunden_by_inv: dict[int, list[float]] = {wid: [] for wid in wp_ids}
     for (komp_starts,) in tz_result.all():
         wp_map = (komp_starts or {}).get("wp_starts_anzahl") or {}
         for inv_id_str, count in wp_map.items():
@@ -423,6 +428,14 @@ async def get_waermepumpe_dashboard(
                 continue
             if inv_id in starts_by_inv and isinstance(count, (int, float)) and count > 0:
                 starts_by_inv[inv_id].append(int(count))
+        stunden_map = (komp_starts or {}).get("wp_betriebsstunden") or {}
+        for inv_id_str, hours in stunden_map.items():
+            try:
+                inv_id = int(inv_id_str)
+            except (TypeError, ValueError):
+                continue
+            if inv_id in stunden_by_inv and isinstance(hours, (int, float)) and hours > 0:
+                stunden_by_inv[inv_id].append(float(hours))
 
     dashboards = []
     for wp in waermepumpen:
@@ -482,10 +495,41 @@ async def get_waermepumpe_dashboard(
         # wird im Daten-Checker sichtbar gemacht, nicht im Read-Pfad versteckt.
         # Max/Tag bleibt aus EEDC-Tagesinkrementen (echte Höchst-Tagessumme).
         wp_starts_list = starts_by_inv.get(wp.id, [])
-        kompressor_starts_gesamt = await get_counter_lifetime(
+        starts_lifetime = await get_counter_lifetime(
             db, anlage, wp, 'wp_starts_anzahl'
         )
+        kompressor_starts_gesamt = (
+            int(round(starts_lifetime)) if starts_lifetime is not None else None
+        )
         kompressor_starts_max_tag = max(wp_starts_list) if wp_starts_list else None
+
+        # Betriebsstunden (#238 detLAN): Σ Lebensdauer + Max/Tag analog zu den
+        # Starts. KPI „Ø Laufzeit pro Start" und „Starts pro Betriebsstunde"
+        # nur sichtbar wenn beide Werte für denselben Lebensdauer-Stand vorhanden
+        # sind — ansonsten wären sie Krücken, weil Starts- und Stunden-Sensor
+        # zu unterschiedlichen Zeitpunkten in Betrieb genommen worden sein
+        # können.
+        wp_stunden_list = stunden_by_inv.get(wp.id, [])
+        betriebsstunden_gesamt = await get_counter_lifetime(
+            db, anlage, wp, 'wp_betriebsstunden'
+        )
+        betriebsstunden_max_tag = (
+            round(max(wp_stunden_list), 1) if wp_stunden_list else None
+        )
+        oe_laufzeit_pro_start_h: Optional[float] = None
+        starts_pro_betriebsstunde: Optional[float] = None
+        if (
+            betriebsstunden_gesamt is not None
+            and kompressor_starts_gesamt is not None
+            and kompressor_starts_gesamt > 0
+            and betriebsstunden_gesamt > 0
+        ):
+            oe_laufzeit_pro_start_h = round(
+                betriebsstunden_gesamt / kompressor_starts_gesamt, 2
+            )
+            starts_pro_betriebsstunde = round(
+                kompressor_starts_gesamt / betriebsstunden_gesamt, 3
+            )
 
         zusammenfassung = {
             'gesamt_stromverbrauch_kwh': round(gesamt_strom, 1),
@@ -500,6 +544,13 @@ async def get_waermepumpe_dashboard(
             'anzahl_monate': len(monatsdaten),
             'kompressor_starts_gesamt': kompressor_starts_gesamt,
             'kompressor_starts_max_tag': kompressor_starts_max_tag,
+            'betriebsstunden_gesamt': (
+                round(betriebsstunden_gesamt, 1)
+                if betriebsstunden_gesamt is not None else None
+            ),
+            'betriebsstunden_max_tag': betriebsstunden_max_tag,
+            'oe_laufzeit_pro_start_h': oe_laufzeit_pro_start_h,
+            'starts_pro_betriebsstunde': starts_pro_betriebsstunde,
         }
 
         # Getrennte COP-Werte wenn separate Strommessung vorhanden

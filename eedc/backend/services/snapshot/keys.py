@@ -32,12 +32,17 @@ KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = {
     "sonstiges": ("verbrauch_kwh", "erzeugung_kwh"),
 }
 
-# Reine Counter (Anzahl-Zählwerte ohne kWh-Semantik, Issue #136).
+# Reine Counter (Anzahl-/Stunden-Zählwerte ohne kWh-Semantik, Issue #136).
 # Werden vom Snapshot-Job mit erfasst (gleiches Schema, gleiche Tabelle), aber
 # NICHT in die Energie-Bilanz von get_hourly_kwh_by_category einbezogen.
 # Aggregation als Tages-Differenz erfolgt separat in aggregate_day.
+#
+# `wp_betriebsstunden` ist analog zu `wp_starts_anzahl` (#238 detLAN, Forum 5/5).
+# Float-Counter — total_increasing in Stunden. Verhältnis Starts/Betriebsstunde
+# bzw. Ø Laufzeit pro Start ist der eigentliche Diagnose-Wert (10 Starts auf
+# 23 h sind ein Performance-Indikator, 10 Starts auf 4 h sind in Ordnung).
 KUMULATIVE_COUNTER_FELDER: dict[str, tuple[str, ...]] = {
-    "waermepumpe": ("wp_starts_anzahl",),
+    "waermepumpe": ("wp_starts_anzahl", "wp_betriebsstunden"),
 }
 
 BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug")

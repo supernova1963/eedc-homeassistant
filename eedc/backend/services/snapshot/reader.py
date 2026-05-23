@@ -200,10 +200,11 @@ async def get_counter_lifetime(
     anlage,
     inv,
     feld: str,
-) -> Optional[int]:
+) -> Optional[float]:
     """
     Liefert den aktuellen Lebensdauer-Stand eines kumulativen Counter-Sensors
-    direkt aus der Hersteller-Quelle (z.B. WP-Kompressor-Starts).
+    direkt aus der Hersteller-Quelle (z.B. WP-Kompressor-Starts oder
+    WP-Betriebsstunden).
 
     Read-Kaskade: HA-Live-State → HA-Statistics → jüngster SensorSnapshot.
     Keine Berechnung, keine Eichung, keine Drift-Möglichkeit — der Sensor
@@ -211,8 +212,10 @@ async def get_counter_lifetime(
     erfolgt im Daten-Checker, nicht im Read-Pfad.
 
     Returns:
-        Aktueller Counter-Stand (gerundet), oder None wenn weder Live-Read
-        noch Snapshot ermittelbar.
+        Aktueller Counter-Stand als Float (Stunden- und Anzahl-Counter
+        sind syntaktisch gleich), oder None wenn weder Live-Read noch
+        Snapshot ermittelbar. Konsument entscheidet, ob int-Cast für die
+        Anzeige sinnvoll ist (Starts: int, Betriebsstunden: 1 Nachkommastelle).
     """
     if feld not in KUMULATIVE_COUNTER_FELDER.get(inv.typ, ()):
         return None
@@ -256,4 +259,4 @@ async def get_counter_lifetime(
 
     if wert is None:
         return None
-    return int(round(wert))
+    return float(wert)

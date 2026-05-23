@@ -158,6 +158,13 @@ export interface WaermepumpeDashboardResponse {
     // Max/Tag aus eedc-Tagesinkrementen.
     kompressor_starts_gesamt?: number | null
     kompressor_starts_max_tag?: number | null
+    // Betriebsstunden (#238 detLAN): analog zu Starts, Σ Lebensdauer aus
+    // Hersteller-Sensor + Max/Tag aus Tagesinkrementen. Die zwei abgeleiteten
+    // KPIs setzen voraus, dass Starts UND Stunden gepflegt sind.
+    betriebsstunden_gesamt?: number | null
+    betriebsstunden_max_tag?: number | null
+    oe_laufzeit_pro_start_h?: number | null
+    starts_pro_betriebsstunde?: number | null
   }
 }
 

@@ -102,6 +102,19 @@ export default function WaermepumpeStep({
     },
   ]
 
+  const betriebsstundenOptionen: StrategieOption[] = [
+    {
+      value: 'sensor',
+      label: 'HA-Sensor',
+      description: 'Kumulativer Zähler (Total-Increasing) der Betriebsstunden',
+    },
+    {
+      value: 'keine',
+      label: 'Nicht erfassen',
+      description: 'Kein Betriebsstunden-Zähler verfügbar',
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <Alert type="info" title="JAZ-basierte Berechnung">
@@ -201,6 +214,22 @@ export default function WaermepumpeStep({
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
                 Optional. Kumulativer Anzahl-Zähler der Kompressor-Starts für Tages-/Monats-KPI (Verschleiß / Auslegung).
                 Sollte der Sensor das „ohne Statistik"-Badge aufweisen, beachte bitte die Anleitung zum Nachrüsten — siehe Hilfe → Sensor-Referenz → „ohne Statistik"-Badge.
+              </div>
+            </div>
+
+            {/* Betriebsstunden (optional, kumulativer Counter, #238 detLAN) */}
+            <div>
+              <FeldMappingInput
+                label="Betriebsstunden (kumulativ)"
+                einheit="h"
+                value={mappings[inv.id.toString()]?.wp_betriebsstunden || null}
+                onChange={mapping => onChange(inv.id, 'wp_betriebsstunden', mapping)}
+                availableSensors={availableSensors}
+                strategieOptionen={betriebsstundenOptionen}
+                defaultStrategie="keine"
+              />
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-1">
+                Optional. Kumulativer Zähler der Gesamt-Betriebsstunden. Kombiniert mit den Kompressor-Starts ergibt sich „Ø Laufzeit pro Start" — typisches Diagnose-Maß für die WP-Auslegung (10 Starts/Tag bei 23 h Betrieb ist deutlich schlechter als bei 4 h Betrieb).
               </div>
             </div>
 

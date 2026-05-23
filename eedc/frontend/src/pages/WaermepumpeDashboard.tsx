@@ -4,7 +4,7 @@
  */
 
 import { Fragment, useState, useEffect } from 'react'
-import { Flame, Zap, Leaf, TrendingUp, Thermometer, Power, PieChart as PieChartIcon, BarChart3, Calendar, Table } from 'lucide-react'
+import { Flame, Zap, Leaf, TrendingUp, Thermometer, Power, PieChart as PieChartIcon, BarChart3, Calendar, Table, Timer } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, SortableSection, OrderedSections } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useSectionOrder } from '../hooks'
@@ -345,21 +345,63 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         JAZ = Jahresarbeitszahl über die gesamte Laufzeit ({z.anzahl_monate} Monate). Jahresweise Auswertung unter Auswertungen → Komponenten.
       </p>
 
-      {/* Kompressor-Starts (nur wenn Counter-Sensor zugeordnet ist).
-          Σ Lebensdauer = Hersteller-Counter direkt. Drift gegenüber eedc-
-          erfassten Tagesinkrementen wird im Daten-Checker ausgewiesen. */}
-      {z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0 && (
+      {/* Kompressor-Starts + Betriebsstunden (nur wenn Counter-Sensoren
+          zugeordnet sind). Σ Lebensdauer = Hersteller-Counter direkt.
+          Drift gegenüber eedc-erfassten Tagesinkrementen wird im
+          Daten-Checker ausgewiesen. Die zwei abgeleiteten KPIs „Ø Laufzeit
+          pro Start" und „Starts pro Betriebsstunde" werden nur sichtbar,
+          wenn beide Sensoren gepflegt sind (#238 detLAN). */}
+      {((z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0) ||
+        (z.betriebsstunden_gesamt != null && z.betriebsstunden_gesamt > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <KPICard
-            title="Kompressor-Starts"
-            value={z.kompressor_starts_gesamt.toLocaleString('de-DE')}
-            icon={Power}
-            color="gray"
-            subtitle={z.kompressor_starts_max_tag != null ? `Max/Tag: ${z.kompressor_starts_max_tag}` : undefined}
-            formel="Aus Hersteller-Sensor (Lebensdauer-Counter)"
-            berechnung={`Höchste Tagessumme (eedc-erfasst): ${z.kompressor_starts_max_tag ?? '—'}`}
-            ergebnis={`= ${z.kompressor_starts_gesamt.toLocaleString('de-DE')} Starts`}
-          />
+          {z.kompressor_starts_gesamt != null && z.kompressor_starts_gesamt > 0 && (
+            <KPICard
+              title="Kompressor-Starts"
+              value={z.kompressor_starts_gesamt.toLocaleString('de-DE')}
+              icon={Power}
+              color="gray"
+              subtitle={z.kompressor_starts_max_tag != null ? `Max/Tag: ${z.kompressor_starts_max_tag}` : undefined}
+              formel="Aus Hersteller-Sensor (Lebensdauer-Counter)"
+              berechnung={`Höchste Tagessumme (eedc-erfasst): ${z.kompressor_starts_max_tag ?? '—'}`}
+              ergebnis={`= ${z.kompressor_starts_gesamt.toLocaleString('de-DE')} Starts`}
+            />
+          )}
+          {z.betriebsstunden_gesamt != null && z.betriebsstunden_gesamt > 0 && (
+            <KPICard
+              title="Betriebsstunden"
+              value={z.betriebsstunden_gesamt.toLocaleString('de-DE', { maximumFractionDigits: 0 })}
+              unit="h"
+              icon={Timer}
+              color="gray"
+              subtitle={z.betriebsstunden_max_tag != null ? `Max/Tag: ${z.betriebsstunden_max_tag} h` : undefined}
+              formel="Aus Hersteller-Sensor (Lebensdauer-Counter)"
+              berechnung={`Höchste Tagessumme (eedc-erfasst): ${z.betriebsstunden_max_tag ?? '—'} h`}
+              ergebnis={`= ${z.betriebsstunden_gesamt.toLocaleString('de-DE', { maximumFractionDigits: 0 })} h`}
+            />
+          )}
+          {z.oe_laufzeit_pro_start_h != null && (
+            <KPICard
+              title="Ø Laufzeit pro Start"
+              value={z.oe_laufzeit_pro_start_h.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+              unit="h"
+              icon={Timer}
+              color="blue"
+              formel="Betriebsstunden ÷ Kompressor-Starts"
+              berechnung={`${z.betriebsstunden_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 })} h ÷ ${z.kompressor_starts_gesamt?.toLocaleString('de-DE')}`}
+              ergebnis={`= ${z.oe_laufzeit_pro_start_h.toLocaleString('de-DE', { maximumFractionDigits: 2 })} h/Start`}
+            />
+          )}
+          {z.starts_pro_betriebsstunde != null && (
+            <KPICard
+              title="Starts pro Betriebsstunde"
+              value={z.starts_pro_betriebsstunde.toLocaleString('de-DE', { maximumFractionDigits: 3 })}
+              icon={Power}
+              color="blue"
+              formel="Kompressor-Starts ÷ Betriebsstunden"
+              berechnung={`${z.kompressor_starts_gesamt?.toLocaleString('de-DE')} ÷ ${z.betriebsstunden_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 })} h`}
+              ergebnis={`= ${z.starts_pro_betriebsstunde.toLocaleString('de-DE', { maximumFractionDigits: 3 })} / h`}
+            />
+          )}
         </div>
       )}
 
