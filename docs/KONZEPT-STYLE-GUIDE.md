@@ -1,27 +1,74 @@
 # eedc Style-Guide v4.0.0 (Konzept-Skelett)
 
-> **Status:** Wachsendes Konzept-Dokument. Wird pro Umsetzungs-Welle abschnittsweise befüllt — nicht im Voraus fertigschreiben.
+> **Status:** Wachsendes Konzept-Dokument **+ gezielter Schnitt** zur Version 4.0.0. Visuelle Sprache wächst pro Welle, **die Informationsarchitektur** wird mit v4.0.0 in einem zusammenhängenden Refactor neu gesetzt (siehe [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)). Die Skelett-Sektionen hier füllen sich pro Umsetzungs-Welle.
 >
 > **Eingangsperspektive:** Maintainer-konzipiert mit eigenen Designstandards. Anwender-Feedback aus Forum und Issues fließt als **Datenpunkt** ein, ist aber nicht der einzige Treiber. Jede Regel hat eine bewusste Designentscheidung dahinter, kein Aggregat einzelner Bug-/UX-Reports.
 >
 > **Ziel:** Konsistente, dokumentierte UI-Sprache für eedc. Marken-Wert für v4.0.0: „strukturell sauber + konsistent".
 >
-> **Mobile-Verhalten** wird in einem **eigenen Konzept-Dokument** behandelt: [`docs/KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md). Bei Bereichen mit Mobile-Bezug Querverweis statt Inline-Lösung.
+> **Mobile-Verhalten** wird in einem **eigenen Konzept-Dokument** behandelt: [`KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md). Bei Bereichen mit Mobile-Bezug Querverweis statt Inline-Lösung. **Pflicht-Querschnittsregeln** (Touch-Targets, Companion-App-Quirks) gelten generell — siehe Methodik unten.
+>
+> **Informationsarchitektur v4.0.0** → [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) (Top-Nav, Achsen, Cross-Linking, Migration). Der Style-Guide regelt das **Wie es aussieht**, die IA das **Wo es liegt**.
 
 ---
 
 ## Methodik
 
-- **Wachsend statt Big-Bang.** Pro Umsetzungs-Welle (typisch 1–2 Bereiche) werden die zugehörigen Abschnitte hier mit-geschrieben — fertige Regel + Vorher/Nachher-Screenshot aus dem ausgelieferten Code.
+- **Wachsend statt Big-Bang — mit einer Ausnahme.** Pro Umsetzungs-Welle (typisch 1–2 Bereiche) werden die zugehörigen Abschnitte hier mit-geschrieben — fertige Regel + Vorher/Nachher-Screenshot aus dem ausgelieferten Code. **Ausnahme:** der IA-Refactor zu v4.0.0 (siehe `KONZEPT-IA-V4.md`) wird als zusammenhängender Schnitt umgesetzt, weil die Achsen-Trennung nicht inkrementell migrierbar ist.
 - **Tester-Beobachtungen** (Issues, Forum-Posts) sind **Datenpunkte**. Pro Punkt bewusst entscheiden: übernehmen (weil zu unserer Linie passt) oder explizit anders (mit dokumentierter Begründung).
 - **Eigene Themen einplanen**, die nicht aus Tester-Backlog kommen — siehe Teil A.
 - Querverweise auf Memory-Linien (intern), nicht im Dokument.
+
+### Pflicht-Querschnittsregeln (gelten in jeder Welle, jeder neuen Seite, jedem Refactor)
+
+Diese Regeln werden **nicht** als eigene Wellen verfolgt, sondern in jeder Welle pflichtgemäß eingehalten. Aus Mobile-Konzept M4 + M5 hochgezogen, weil sie sonst nie zünden (Stakeholder-Trigger zu dünn).
+
+- **Touch-Targets ≥ 44 × 44 px** für jedes klickbare Element (Apple-/Google-Standard).
+- **Keine überlappenden Tap-Bereiche** (z. B. Sektion-Header + Aufklapp-Chevron als ein Target).
+- **Layout-Wrapper `h-dvh` statt `h-screen`** (iOS Safari + HA Companion-App).
+- **Datei-Downloads** über `lib/download.ts:downloadFile()`, nie `window.open` (Companion-App blockiert externe Tabs).
+- **Sticky-/Sub-Scroll-Container** mit `overscroll-contain`.
+- **`flex-1`/`min-h-0`** in Multi-Breakpoint-Layouts immer mit Breakpoint-Prefix konsistent zum Direction-Switch.
+
+### Einstellbarkeits-Cap für v4.0.0
+
+eedc bekommt **keine** umfangreichen Personalisierungs-Optionen. Bewusste Designentscheidung — einheitliche UX schlägt individuelle Anpassbarkeit, Solo-Maintainer-Modell verträgt keine sich vervielfachende Test-Matrix.
+
+**Erlaubt:**
+
+- **Hell/Dunkel-Mode-Toggle** (System-Default + manuelle Übersteuerung).
+- **Mobile-Reduce-Default-Override pro Sektion** via vorhandene `<CollapsibleSection>`-LocalStorage-Persistenz.
+
+**In v4.0.0 nicht enthalten:**
+
+- Theme-Editor, freie Akzentfarben-Wahl.
+- Dichte-Profile (kompakt / luftig).
+- Freie Card-Anordnung pro Seite.
+- Font-Größen-Schieber, Layout-Slider.
+
+Spätere Tester-Wünsche nach „mehr Optionen" verweisen auf diesen Cap. Begründung dokumentiert, kein Trägheits-Argument.
 
 ---
 
 ## Teil A — Visuelle Sprache (Querschnitt)
 
 Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten in Teil B aufsetzen.
+
+### A0 — Design-Tokens (Pflicht-Vorarbeit vor v4.0.0-IA-Refactor)
+
+> **Inhalt:** Konkrete Token-Werte für Typografie, Farben, Spacing, Schatten, Radius — als Tailwind-Theme-Extension + `lib/design-tokens.ts`.
+> **Scope:** Tokens + Theme. **Keine Komponenten-Refactors, keine sichtbare UI-Änderung.** Bestehende Klassen werden Schritt für Schritt in den Folge-Wellen auf die Tokens umgestellt.
+> **Warum vor dem IA-Refactor:** der v4.0.0-Schnitt (siehe [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)) bringt viele neue Seiten (Komponenten-Hub, Einstellungs-Kachel-Grid, Cockpit-Sub-Tabs). Ohne vorab fixierte Tokens improvisiert jeder neue View seine Werte → sofort Drift, kein Marken-Versprechen.
+
+**Liefer-Artefakt:**
+
+- `eedc/frontend/tailwind.config.js` mit konkreten Token-Werten in `theme.extend`.
+- `eedc/frontend/src/lib/design-tokens.ts` mit semantischen Aliasen für Stellen, die kein Tailwind nutzen können (z. B. Chart-Farben, dynamische Inline-Styles).
+- Dunkel-Mode-Linien-Logik definiert (Kontrast-Stufen, Schatten-Inversion).
+
+**Konkrete Tabellen** werden mit der Umsetzung in A1, A2, A4, C1 hier befüllt — A0 ist der Sammel-Marker, dass diese Sektionen **vor** dem IA-Refactor konkret sein müssen.
+
+---
 
 ### A1 — Typografie-System
 
@@ -106,8 +153,10 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### B3 — Navigation
 
-> **Hauptnav:** horizontale Reihe, definierte Reihenfolge. Reorganisation offen (#243 B2).
-> **Sub-Nav:** **Unterstrich + Icons** (`SubTabs.tsx`) als Standard. `PillTabs.tsx` wird deprecated und in den 3 letzten Verwendern (Aussichten, Auswertung, Community) migriert (#243 B1, detLAN-Klärung #216).
+> **Hauptnav:** Reihenfolge + Inhalte sind in [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) festgelegt (Cockpit / Komponenten / Auswertungen / Community / Einstellungen).
+> **Mobile:** Hamburger-Menü mit voller Liste (Standard-Pattern). Bottom-Tab-Bar bewusst nicht in v4.0.0.
+> **Sub-Nav:** **Unterstrich + Icons** (`SubTabs.tsx`) als Standard. `PillTabs.tsx` wird deprecated und in den 3 letzten Verwendern (Aussichten, Auswertung, Community) migriert (#243 B1, detLAN-Klärung #216) — als Vor-Schritt vor dem v4.0.0-IA-Refactor.
+> **Sub-Tab-Limit:** maximal 5 Sub-Tabs pro Top-Eintrag. Tab-Inflation (heute 8 in Auswertungen, 5 in Aussichten) wird durch die IA-Aufteilung gelöst und durch diese Regel verhindert.
 > **Sprungmarken** in langen Seiten (TOC-Pattern). *Offen.*
 
 **Betroffene Issues:** #243 B1+B2, #208, #209, #216.
@@ -170,8 +219,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ## Querverweise
 
-- **Mobile-Konzept** → [`docs/KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md)
-- **Aggregations- und Berechnungs-Themen** → [`docs/BERECHNUNGEN.md`](BERECHNUNGEN.md)
-- **Sensor-Themen** → [`docs/SENSOR-REFERENZ.md`](SENSOR-REFERENZ.md)
-- **Architektur-Überblick** → [`docs/ARCHITEKTUR.md`](ARCHITEKTUR.md)
+- **Informationsarchitektur v4.0.0** → [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)
+- **Mobile-Konzept** → [`KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md)
+- **Aggregations- und Berechnungs-Themen** → [`BERECHNUNGEN.md`](BERECHNUNGEN.md)
+- **Sensor-Themen** → [`SENSOR-REFERENZ.md`](SENSOR-REFERENZ.md)
+- **Architektur-Überblick** → [`ARCHITEKTUR.md`](ARCHITEKTUR.md)
 - **Konzept-Issue mit Sub-Trackern** → [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243)
