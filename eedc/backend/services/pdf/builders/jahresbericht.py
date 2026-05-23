@@ -15,6 +15,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen import einspeise_erloes_euro
+from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
@@ -209,9 +211,12 @@ async def build_jahresbericht_context(
 
     # ── 8. Monats-Tabelle aufbauen ──────────────────────────────────────
     monats_zeilen: list[dict] = []
+    # §51 EEG: Σ pro-Monat §51-bereinigte Erlöse, ersetzt am Jahresende
+    # `einsp_gesamt × verg_cent / 100`.
+    einsp_erloes_gesamt = 0.0
 
-    def _zeile_fuer(j: int, m: int) -> dict:
-        nonlocal pv_gesamt, einsp_gesamt, netz_gesamt, ev_gesamt
+    async def _zeile_fuer(j: int, m: int) -> dict:
+        nonlocal pv_gesamt, einsp_gesamt, netz_gesamt, ev_gesamt, einsp_erloes_gesamt
         md = md_by_year_month.get((j, m))
         pv = pv_by_year_month.get((j, m), 0)
         einsp = (md.einspeisung_kwh or 0) if md else 0
@@ -220,12 +225,19 @@ async def build_jahresbericht_context(
         gesamt = ev + netz
         autarkie = _safe_div(ev, gesamt) * 100
         spez = _safe_div(pv, anlage.leistung_kwp or 0)
-        einsp_eur = einsp * einspeise_cent / 100
+        m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, j, m)
+        m_erloes = einspeise_erloes_euro(
+            einspeisung_kwh=einsp,
+            neg_preis_kwh=m_neg,
+            verguetung_ct_kwh=einspeise_cent,
+        )
+        einsp_eur = m_erloes.erloes_euro
         ev_eur = ev * netzbezug_cent / 100
         pv_gesamt += pv
         einsp_gesamt += einsp
         netz_gesamt += netz
         ev_gesamt += ev
+        einsp_erloes_gesamt += einsp_eur
         return {
             "jahr": j,
             "monat": m,
@@ -246,10 +258,10 @@ async def build_jahresbericht_context(
         for j in alle_jahre:
             for m in range(1, 13):
                 if (j, m) in md_by_year_month or (j, m) in pv_by_year_month:
-                    monats_zeilen.append(_zeile_fuer(j, m))
+                    monats_zeilen.append(await _zeile_fuer(j, m))
     else:
         for m in range(1, 13):
-            monats_zeilen.append(_zeile_fuer(jahr, m))
+            monats_zeilen.append(await _zeile_fuer(jahr, m))
 
     # ── 9. Jahres-KPIs / Finanzen / CO₂ ─────────────────────────────────
     gesamtverbrauch = ev_gesamt + netz_gesamt
@@ -257,7 +269,7 @@ async def build_jahresbericht_context(
     ev_quote = _safe_div(ev_gesamt, pv_gesamt) * 100
     spez_ertrag_jahr = _safe_div(pv_gesamt, anlage.leistung_kwp or 0)
 
-    einspeise_erloes = einsp_gesamt * einspeise_cent / 100
+    einspeise_erloes = einsp_erloes_gesamt
     ev_ersparnis = ev_gesamt * netzbezug_cent / 100
     netto_ertrag = einspeise_erloes + ev_ersparnis
 

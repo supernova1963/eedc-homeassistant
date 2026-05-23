@@ -13,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
+from backend.core.berechnungen import einspeise_erloes_euro
+from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -330,6 +332,11 @@ async def export_pdf(
     # Bei Einzeljahr: Zeile pro Monat
     monats_daten: List[MonatsZeile] = []
 
+    # Einspeise-Erlös §51-bereinigt aggregieren — wird in Schleife pro Monat
+    # gepflegt, Jahres-Aggregat liest am Ende `einsp_erloes_gesamt` statt
+    # `einsp_gesamt * verg_cent / 100`.
+    einsp_erloes_gesamt = 0.0
+
     if ist_gesamtzeitraum:
         # Alle Monate chronologisch
         for j in alle_jahre:
@@ -343,7 +350,14 @@ async def export_pdf(
                     gesamtverbrauch = eigenverbrauch + netzbezug
                     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
                     spez_ertrag = (pv_kwh / anlage.leistung_kwp) if anlage.leistung_kwp > 0 else 0
-                    einsp_erloes = einspeisung * einspeise_verguetung_cent / 100
+                    m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, j, m)
+                    m_erloes = einspeise_erloes_euro(
+                        einspeisung_kwh=einspeisung,
+                        neg_preis_kwh=m_neg,
+                        verguetung_ct_kwh=einspeise_verguetung_cent,
+                    )
+                    einsp_erloes = m_erloes.erloes_euro
+                    einsp_erloes_gesamt += einsp_erloes
                     ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
 
                     zeile = MonatsZeile(
@@ -380,7 +394,14 @@ async def export_pdf(
             gesamtverbrauch = eigenverbrauch + netzbezug
             autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
             spez_ertrag = (pv_kwh / anlage.leistung_kwp) if anlage.leistung_kwp > 0 else 0
-            einsp_erloes = einspeisung * einspeise_verguetung_cent / 100
+            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)
+            m_erloes = einspeise_erloes_euro(
+                einspeisung_kwh=einspeisung,
+                neg_preis_kwh=m_neg,
+                verguetung_ct_kwh=einspeise_verguetung_cent,
+            )
+            einsp_erloes = m_erloes.erloes_euro
+            einsp_erloes_gesamt += einsp_erloes
             ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
 
             zeile = MonatsZeile(
@@ -416,7 +437,8 @@ async def export_pdf(
     ev_quote = (ev_gesamt / pv_gesamt * 100) if pv_gesamt > 0 else 0
     spez_ertrag_jahr = (pv_gesamt / anlage.leistung_kwp) if anlage.leistung_kwp > 0 else 0
 
-    einspeise_erloes = einsp_gesamt * einspeise_verguetung_cent / 100
+    # §51 EEG: Jahres-Aggregat ist Σ der pro-Monat §51-bereinigten Erlöse.
+    einspeise_erloes = einsp_erloes_gesamt
     ev_ersparnis_euro = ev_gesamt * netzbezug_preis_cent / 100
     netto_ertrag = einspeise_erloes + ev_ersparnis_euro
 

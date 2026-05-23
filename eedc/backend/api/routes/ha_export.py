@@ -15,6 +15,8 @@ from typing import Optional, Any
 import os
 
 from backend.api.deps import get_db
+from backend.core.berechnungen import einspeise_erloes_euro
+from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
@@ -212,11 +214,24 @@ async def calculate_anlage_sensors(
     ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
     spez_ertrag = (pv_erzeugung / anlage.leistung_kwp) if anlage.leistung_kwp else 0
 
-    # Finanzen
+    # Finanzen — Einspeise-Erlös §51-bereinigt pro Monat, summiert über alle
+    # Monatsdaten der Anlage. Anwender ohne Strompreis-Sensor (m_neg=None)
+    # sehen die alte ungekürzte Berechnung; bei vorhandenem Tages-Aggregat
+    # wird die in Negativpreis-Stunden eingespeiste kWh-Menge unvergütet.
     einspeise_erloes = 0
     ev_ersparnis = 0
     if strompreis:
-        einspeise_erloes = einspeisung * strompreis.einspeiseverguetung_cent_kwh / 100
+        verg_cent = strompreis.einspeiseverguetung_cent_kwh
+        for m in monatsdaten:
+            if not m.einspeisung_kwh:
+                continue
+            m_neg = await get_neg_preis_einspeisung_monat(db, anlage.id, m.jahr, m.monat)
+            m_erloes = einspeise_erloes_euro(
+                einspeisung_kwh=m.einspeisung_kwh,
+                neg_preis_kwh=m_neg,
+                verguetung_ct_kwh=verg_cent,
+            )
+            einspeise_erloes += m_erloes.erloes_euro
         ev_ersparnis = eigenverbrauch * strompreis.netzbezug_arbeitspreis_cent_kwh / 100
     netto_ertrag = einspeise_erloes + ev_ersparnis
 

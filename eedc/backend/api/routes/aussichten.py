@@ -23,6 +23,8 @@ from backend.models.pvgis_prognose import PVGISPrognose
 from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.core.berechnungen import einspeise_erloes_euro
+from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.calculations import berechne_ust_eigenverbrauch
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -1189,9 +1191,16 @@ async def get_finanz_prognose(
 
     for md in monatsdaten:
         md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis)
-        # Einspeise-Erlös
+        # Einspeise-Erlös §51-bereinigt — Anwender ohne Strompreis-Sensor
+        # (m_neg=None) sehen die alte ungekürzte Berechnung.
         if md.einspeisung_kwh:
-            bisherige_ertraege += md.einspeisung_kwh * einspeiseverguetung / 100
+            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, md.jahr, md.monat)
+            m_erloes = einspeise_erloes_euro(
+                einspeisung_kwh=md.einspeisung_kwh,
+                neg_preis_kwh=m_neg,
+                verguetung_ct_kwh=einspeiseverguetung,
+            )
+            bisherige_ertraege += m_erloes.erloes_euro
         # EV-Ersparnis (beinhaltet bereits Speicher + V2H)
         if md.eigenverbrauch_kwh:
             bisherige_ertraege += md.eigenverbrauch_kwh * md_preis / 100

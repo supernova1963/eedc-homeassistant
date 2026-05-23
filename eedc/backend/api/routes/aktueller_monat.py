@@ -24,6 +24,8 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
+from backend.core.berechnungen import einspeise_erloes_euro
+from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
     aggregiere_emob_ladung,
@@ -600,7 +602,17 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             if result.get("netzbezug_durchschnittspreis_cent"):
                 netz_preis = result["netzbezug_durchschnittspreis_cent"]
             if einsp > 0:
-                result["einspeise_erloes_euro"] = round(einsp * einsp_preis / 100, 2)
+                # §51 EEG: Einspeisung in Negativpreis-Stunden ist seit
+                # Solarpaket I unvergütet. Wenn das Tages-Aggregat fehlt
+                # (Anwender ohne Strompreis-Sensor), greift die alte
+                # Berechnung unverändert (None → kein Abzug).
+                m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, vj, monat)
+                m_erloes = einspeise_erloes_euro(
+                    einspeisung_kwh=einsp,
+                    neg_preis_kwh=m_neg,
+                    verguetung_ct_kwh=einsp_preis,
+                )
+                result["einspeise_erloes_euro"] = round(m_erloes.erloes_euro, 2)
             if netz > 0:
                 result["netzbezug_kosten_euro"] = round(netz * netz_preis / 100 + grundpreis, 2)
             if ev > 0:
@@ -847,7 +859,14 @@ async def get_aktueller_monat(
         # (wird nach dem Monatsdaten-Laden gesetzt, hier Platzhalter für spätere Überschreibung)
 
         if einspeisung is not None:
-            einspeise_erloes = round(einspeisung * einspeise_cent / 100, 2)
+            # §51 EEG: siehe `_load_vorjahr` für Begründung.
+            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)
+            m_erloes = einspeise_erloes_euro(
+                einspeisung_kwh=einspeisung,
+                neg_preis_kwh=m_neg,
+                verguetung_ct_kwh=einspeise_cent,
+            )
+            einspeise_erloes = round(m_erloes.erloes_euro, 2)
         if netzbezug is not None:
             grundpreis = allgemein_tarif.grundpreis_euro_monat or 0
             netzbezug_kosten = round(netzbezug * netzbezug_preis_cent / 100 + grundpreis, 2)

@@ -13,6 +13,8 @@ from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.core.berechnungen import einspeise_erloes_euro
+from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
@@ -308,7 +310,15 @@ async def get_komponenten_zeitreihe(
         if md:
             eff_preis = resolve_netzbezug_preis_cent(md, m_preis_cent)
             m_netzbezug_kosten = (md.netzbezug_kwh or 0) * eff_preis / 100 + m_grundpreis
-            m_einspeise_erloes = (md.einspeisung_kwh or 0) * m_einspeis_cent / 100
+            # §51 EEG: Einspeisung in Negativpreis-Stunden ist unvergütet.
+            # Ohne Tages-Aggregat (m_neg=None) greift alte Berechnung.
+            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)
+            m_erloes_calc = einspeise_erloes_euro(
+                einspeisung_kwh=md.einspeisung_kwh or 0,
+                neg_preis_kwh=m_neg,
+                verguetung_ct_kwh=m_einspeis_cent,
+            )
+            m_einspeise_erloes = m_erloes_calc.erloes_euro
         else:
             m_netzbezug_kosten = 0.0
             m_einspeise_erloes = 0.0
