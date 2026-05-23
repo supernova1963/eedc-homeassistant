@@ -302,27 +302,41 @@ async def calculate_anlage_sensors(
     # Fixe Zusatzkosten (Schornsteinfeger, Wartung, Grundpreis) pro erfassten Monat
     bisherige_wp_ersparnis += wp_alternativ_zusatzkosten_jahr * len(wp_monate_gezaehlt) / 12
 
-    eauto_benzinpreis = PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]
-    eauto_vergleich_l_100km = PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]
-    for ea in e_autos:
-        if ea.parameter:
-            eauto_benzinpreis = ea.parameter.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
-            eauto_vergleich_l_100km = ea.parameter.get(
-                PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
-                PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
-            )
-
+    # Per-E-Auto-Aufschlüsselung der bisherige-Ersparnis. Vorher las eine
+    # `for ea`-Schleife `benzinpreis_default` + `vergleich_l_100km` in zwei
+    # globale Variablen (last-write-wins). Bei zwei E-Autos mit
+    # unterschiedlichen Parametern wurden BEIDE mit den Werten des LETZTEN
+    # gerechnet → `jahres_ersparnis_euro`, `roi_prozent` und
+    # `amortisation_jahre`-HA-Sensoren waren falsch. Zusätzlich fehlte der
+    # `md.kraftstoffpreis_euro`-Monatspreis-Fallback (EU OB) — der Anlage-
+    # Sensor driftete deshalb auch gegen den per-Investition-Sensor
+    # `e_auto_ersparnis_vs_benzin_euro` (Zeile 583+, der hatte den Fallback).
     bisherige_eauto_ersparnis = 0.0
     for ea in e_autos:
-        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
-            if inv_id == ea.id:
-                km = daten.get("km_gefahren", 0) or 0
-                # #262: SoT-Helper konsolidiert den Netz-Read mit Fallback.
-                _, netz = get_emob_pv_netz_kwh(daten)
-                benzin_liter = km / 100 * eauto_vergleich_l_100km
-                bisherige_eauto_ersparnis += (
-                    benzin_liter * eauto_benzinpreis - netz * netzbezug_preis_cent / 100
-                )
+        params = ea.parameter or {}
+        ea_benzinpreis_default = params.get(
+            PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"],
+        ) or PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]
+        ea_vergleich_l_100km = params.get(
+            PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
+            PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
+        ) or PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]
+        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
+            if inv_id != ea.id:
+                continue
+            km = daten.get("km_gefahren", 0) or 0
+            # #262: SoT-Helper konsolidiert den Netz-Read mit Fallback.
+            _, netz = get_emob_pv_netz_kwh(daten)
+            md = md_by_periode.get((jahr, monat))
+            monats_benzinpreis = (
+                md.kraftstoffpreis_euro
+                if md and md.kraftstoffpreis_euro is not None
+                else ea_benzinpreis_default
+            )
+            benzin_liter = km / 100 * ea_vergleich_l_100km
+            bisherige_eauto_ersparnis += (
+                benzin_liter * monats_benzinpreis - netz * netzbezug_preis_cent / 100
+            )
 
     bisherige_bkw_ersparnis = 0.0
     for bkw in balkonkraftwerke:
