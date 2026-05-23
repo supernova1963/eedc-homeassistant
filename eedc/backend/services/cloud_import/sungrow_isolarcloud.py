@@ -43,8 +43,11 @@ API_HOSTS = {
     "hk": "https://gateway.isolarcloud.com.hk",
 }
 
-# Bekannter AppKey (Android App, kann sich ändern)
-DEFAULT_APPKEY = "ANDROIDE13EC118BD7892FE7AB5A3F20"
+# Default-AppKey aus reverse-engineerten Sungrow-Clients (Stand 2026-05, GoSungrow v3.0.7).
+# Sungrow rotiert den AppKey gelegentlich — bei `Illegal c-access-key` kann der Anwender
+# einen aktuellen Wert im optionalen Provider-Feld `appkey` eintragen (z. B. aus dem
+# GoSungrow-Repo oder via offiziellem Sungrow-Developer-Antrag).
+DEFAULT_APPKEY = "93D72E60331ABDCDC7B39ADC2D1F32B3"
 
 # API-Pfade
 LOGIN_PATH = "/v1/userService/login"
@@ -58,13 +61,19 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
-def _make_headers() -> dict:
+def _resolve_appkey(credentials: dict) -> str:
+    """Liefert den effektiven AppKey: Anwender-Wert (wenn gepflegt) oder Default."""
+    user_value = (credentials.get("appkey") or "").strip()
+    return user_value if user_value else DEFAULT_APPKEY
+
+
+def _make_headers(appkey: str) -> dict:
     """Standard-Header für iSolarCloud API."""
     return {
         "Content-Type": "application/json",
         "Accept": "application/json",
         "sys_code": "901",
-        "x-access-key": DEFAULT_APPKEY,
+        "x-access-key": appkey,
     }
 
 
@@ -252,6 +261,10 @@ class SungrowISolarCloudProvider(CloudImportProvider):
                 "3. Zugangsdaten (E-Mail/Account + Passwort) hier eingeben\n"
                 "4. Server-Region passend zum Account wählen "
                 "(EU für europäische Accounts)\n\n"
+                "Bei Fehlermeldung „Illegal c-access-key“: Sungrow rotiert den App-Key "
+                "gelegentlich. Im optionalen Feld „App-Key“ einen aktuellen Wert "
+                "eintragen — z. B. aus dem GoSungrow-Repo "
+                "(github.com/MickMake/GoSungrow, Default-Flag `--appkey`).\n\n"
                 "Unterstützte Geräte: SG-Serie (String-WR), SH-Serie (Hybrid-WR), "
                 "SBR-Serie (Speicher)."
             ),
@@ -282,6 +295,13 @@ class SungrowISolarCloudProvider(CloudImportProvider):
                         {"value": "hk", "label": "Hongkong"},
                     ],
                 ),
+                CredentialField(
+                    id="appkey",
+                    label="App-Key (optional)",
+                    type="text",
+                    placeholder="leer = eedc-Default; bei „Illegal c-access-key“ eigenen Wert eintragen",
+                    required=False,
+                ),
             ],
             getestet=False,
         )
@@ -299,16 +319,17 @@ class SungrowISolarCloudProvider(CloudImportProvider):
             )
 
         host = API_HOSTS.get(region, API_HOSTS["eu"])
+        appkey = _resolve_appkey(credentials)
 
         try:
             async with httpx.AsyncClient(
-                timeout=20, headers=_make_headers()
+                timeout=20, headers=_make_headers(appkey)
             ) as client:
                 token, user_id = await _login(
-                    client, host, DEFAULT_APPKEY, account, password,
+                    client, host, appkey, account, password,
                 )
                 plants = await _get_plant_list(
-                    client, host, token, DEFAULT_APPKEY,
+                    client, host, token, appkey,
                 )
 
             if not plants:
@@ -369,17 +390,18 @@ class SungrowISolarCloudProvider(CloudImportProvider):
         region = credentials.get("region", "eu")
 
         host = API_HOSTS.get(region, API_HOSTS["eu"])
+        appkey = _resolve_appkey(credentials)
         results: list[ParsedMonthData] = []
 
         async with httpx.AsyncClient(
-            timeout=20, headers=_make_headers()
+            timeout=20, headers=_make_headers(appkey)
         ) as client:
             token, user_id = await _login(
-                client, host, DEFAULT_APPKEY, account, password,
+                client, host, appkey, account, password,
             )
 
             plants = await _get_plant_list(
-                client, host, token, DEFAULT_APPKEY,
+                client, host, token, appkey,
             )
             if not plants:
                 logger.warning("Sungrow: Keine Anlage gefunden")
@@ -397,7 +419,7 @@ class SungrowISolarCloudProvider(CloudImportProvider):
 
                 try:
                     month_data = await self._fetch_single_month(
-                        client, host, token, DEFAULT_APPKEY, ps_id,
+                        client, host, token, appkey, ps_id,
                         current_year, current_month,
                     )
                     if month_data and month_data.has_data():
