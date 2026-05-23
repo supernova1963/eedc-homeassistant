@@ -174,6 +174,11 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const [investitionsDaten, setInvestitionsDaten] = useState<Record<string, Record<string, string>>>({})
   // Sonstige Positionen (Erträge & Ausgaben) pro Investition
   const [sonstigePositionen, setSonstigePositionen] = useState<Record<string, SonstigePosition[]>>({})
+  // Beim Laden gespeicherte Positionen — wenn der User alles löscht und
+  // `sonstigePositionen[invId]` damit leer ist, müssen wir trotzdem `[]`
+  // ans Backend senden (Löschsignal). Ohne diese Spur würde der Sub-Key
+  // ausgelassen und die alte Liste bliebe in der DB stehen (#286 rcmcronny).
+  const [initialHattePositionen, setInitialHattePositionen] = useState<Record<string, boolean>>({})
   const [loadingInvData, setLoadingInvData] = useState(false)
 
   // Initialisiere Investitions-Daten und lade vorhandene Daten beim Bearbeiten
@@ -308,6 +313,14 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       if (Object.keys(loadedPositionen).length > 0) {
         setSonstigePositionen(loadedPositionen)
       }
+      // Spur, welche Investitionen beim Laden bereits Positionen hatten —
+      // entscheidet beim Save, ob ein leeres Array als Löschsignal raus muss
+      // (siehe Submit-Logik: `hattePositionen || gueltigePositionen.length > 0`).
+      const hattePos: Record<string, boolean> = {}
+      Object.entries(loadedPositionen).forEach(([invId, positions]) => {
+        if (positions && positions.length > 0) hattePos[invId] = true
+      })
+      setInitialHattePositionen(hattePos)
     }
 
     initializeAndLoad()
@@ -440,14 +453,19 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           if (sh > 0 || sw > 0) (parsed as Record<string, number>).stromverbrauch_kwh = sh + sw
         }
 
-        // Sonstige Positionen (Erträge & Ausgaben) für alle Investitionstypen
-        const invPositionen = sonstigePositionen[String(inv.id)]
-        if (invPositionen && invPositionen.length > 0) {
-          // Nur Positionen mit Betrag > 0 und Bezeichnung speichern
-          const gueltigePositionen = invPositionen.filter(p => p.betrag > 0 && p.bezeichnung.trim())
-          if (gueltigePositionen.length > 0) {
-            (parsed as Record<string, unknown>).sonstige_positionen = gueltigePositionen
-          }
+        // Sonstige Positionen (Erträge & Ausgaben) für alle Investitionstypen.
+        // 0-€-Positionen mit Bezeichnung sind legitim (rilmor-mhrs #286 v3.32.1);
+        // Filter prüft nur die Bezeichnung. Hatte die Investition beim Laden
+        // Positionen und sind jetzt keine gültigen mehr da, muss eine leere
+        // Liste raus — sonst lässt `_save_investitionen_monatsdaten` den
+        // Sub-Key unangetastet und die alte Liste bleibt in der DB stehen
+        // (#286 rcmcronny: Löschen verpuffte trotz v3.32.0-Fix, weil
+        // MonatsdatenForm denselben Bug wie der MonatsabschlussWizard hatte).
+        const invPositionen = sonstigePositionen[String(inv.id)] || []
+        const gueltigePositionen = invPositionen.filter(p => p.bezeichnung.trim())
+        const hattePositionen = initialHattePositionen[String(inv.id)] === true
+        if (gueltigePositionen.length > 0 || hattePositionen) {
+          (parsed as Record<string, unknown>).sonstige_positionen = gueltigePositionen
         }
 
         if (Object.keys(parsed).length > 0) {
