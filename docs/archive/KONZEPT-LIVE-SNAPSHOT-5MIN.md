@@ -1,12 +1,6 @@
 # Konzept: Kaskadierte Live-Snapshots (5-Min heute, 1h historisch)
 
-> Status (2026-05-09): **Phase 1 Backend ausgeliefert** (v3.25.3–v3.25.6, validiert
-> 2026-05-02 nach Off-by-one-Fix state→sum). **Phase 1 Frontend offen** —
-> `live_tagesverlauf_service` auf 5-Min-Counter-Snapshots umstellen.
-> Phase 2 (`:55`-Preview entfernen, `live_verbrauchsprofil_service` umstellen)
-> noch nicht angefangen. Implementations-Details siehe
-> [project_live_snapshot_5min.md](../../../.claude/projects/-home-gernot-claude-eedc-homeassistant/memory/project_live_snapshot_5min.md)
-> in der Auto-Memory.
+> **ARCHIVIERT (2026-05-23)** — Phase 1 Backend ausgeliefert in **v3.25.3–v3.25.6** und bleibt als Tooling erhalten. Phase 1 Frontend wurde am 2026-05-22 re-skopt: statt 5-Min-`sensor_snapshots` speist sich die Live-Tagesverlauf-Kurve im Add-on-Modus aus HA `statistics_short_term` (5-Min-Granularität, gleiche SoT-Logik wie v3.31.0 HA-LTS). Das ursprüngliche Design stammt aus v3.25 — **vor** der HA-LTS-SoT-Entscheidung. Konsistenz-, kein Genauigkeitsfall — Winterborn zeigte den Power-Pfad praktisch deckungsgleich mit HA. Niedrige Priorität in [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110), einsortiert hinter #238.
 
 ## 1. Motivation
 
