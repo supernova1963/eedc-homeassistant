@@ -76,6 +76,55 @@ class BenzinpreisAufloesung:
     quelle: str  # "slider" | "parameter" | "monatsdaten" | "default"
 
 
+def km_gewichtete_eauto_params(
+    *,
+    eauto_params_und_km: Iterable[tuple[Optional[dict], float]],
+) -> tuple[float, float]:
+    """km-gewichtetes Mittel von `vergleich_verbrauch_l_100km` und
+    `benzinpreis_euro` über mehrere E-Autos.
+
+    Bei Anlagen mit nur einem E-Auto = dessen Wert (kein Verhaltens-
+    Unterschied). Bei mehreren E-Autos mit unterschiedlichen Parametern
+    gewichtet nach gefahrenen km. Ersetzt das verbreitete `for ea: …` mit
+    last-write-wins-Variable, das bei zwei E-Autos den letzten gewann.
+
+    Args:
+        eauto_params_und_km: Iterable von `(inv.parameter, km_im_zeitraum)`.
+            E-Autos mit `km <= 0` werden ignoriert. Bei leerer Eingabe oder
+            ausschließlich km-0-Einträgen liefert der Helper die kanonischen
+            Defaults zurück.
+
+    Returns:
+        `(vergleich_l_100km, benzinpreis_default_euro)` — beide km-gewichtet.
+    """
+    eintraege = [
+        (km, params or {})
+        for params, km in eauto_params_und_km
+        if km is not None and km > 0
+    ]
+    if not eintraege:
+        return (
+            float(PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]),
+            float(PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]),
+        )
+    km_sum = sum(km for km, _ in eintraege)
+    vergleich = sum(
+        km * (
+            p.get(PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"])
+            or PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"]
+        )
+        for km, p in eintraege
+    ) / km_sum
+    benzinpreis = sum(
+        km * (
+            p.get(PARAM_E_AUTO["BENZINPREIS_EURO"])
+            or PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]
+        )
+        for km, p in eintraege
+    ) / km_sum
+    return float(vergleich), float(benzinpreis)
+
+
 def resolve_eauto_benzinpreis(
     *,
     query_override: Optional[float],

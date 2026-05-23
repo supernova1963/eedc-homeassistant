@@ -28,6 +28,7 @@ from backend.services.pdf_service import (
     FinanzPrognose,
     StringVergleich,
 )
+from backend.services.eauto_wirtschaftlichkeit import km_gewichtete_eauto_params
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -274,6 +275,12 @@ async def export_pdf(
     emob_pv_total = 0.0
     emob_netz_total = 0.0
     emob_v2h_total = 0.0
+    # Per-E-Auto-km für die km-gewichtete Mittelung der Vergleichsparameter
+    # (Vergleichsverbrauch + Benzinpreis-Default) bei Multi-EA-Anlagen. Nur
+    # `e-auto`-Investitionen, weil `vergleich_verbrauch_l_100km` ein Vehicle-
+    # Attribut ist; Wallbox-IMD-Einträge mit km (evcc-Pool) werden für die
+    # Aggregat-Gesamt-km (emob_km_total) weiter mitgezählt.
+    ea_km_pro_inv: dict[int, float] = {}
 
     # Investition-Monatsdaten fuer Gesamtsummen aggregieren
     for imd in all_imd:
@@ -293,10 +300,13 @@ async def export_pdf(
             wp_waerme_total += data.get("waerme_kwh", 0) or (heiz + ww)
             wp_strom_total += data.get("stromverbrauch_kwh", 0) or 0
         elif inv.typ in ("e-auto", "wallbox"):
-            emob_km_total += data.get("km_gefahren", 0) or 0
+            km_this = data.get("km_gefahren", 0) or 0
+            emob_km_total += km_this
             emob_ladung_total += data.get("ladung_kwh", 0) or 0
             emob_pv_total += data.get("ladung_pv_kwh", 0) or 0
             emob_netz_total += data.get("ladung_netz_kwh", 0) or 0
+            if inv.typ == "e-auto":
+                ea_km_pro_inv[inv.id] = ea_km_pro_inv.get(inv.id, 0.0) + km_this
             emob_v2h_total += data.get("v2h_entladung_kwh", 0) or 0
 
     # Monatsdaten-Struktur erstellen
@@ -456,16 +466,20 @@ async def export_pdf(
     emob_pv_anteil = (emob_pv_total / emob_ladung_total * 100) if emob_ladung_total > 0 else None
     emob_ersparnis = 0.0
     if hat_emobilitaet and emob_km_total > 0:
-        emob_benzinpreis_fallback = 1.65
-        emob_vergleich_l_100km = 7.5
-        for inv in investitionen:
-            if inv.typ in ("e-auto", "wallbox") and inv.parameter:
-                emob_benzinpreis_fallback = inv.parameter.get(PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
-                emob_vergleich_l_100km = inv.parameter.get(
-                    PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
-                    PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
-                )
-                break
+        # km-gewichtetes Mittel über die E-Autos via SoT-Helper. Vorher las
+        # eine `for inv … break`-Schleife die Vergleichsparameter aus der
+        # ERSTEN passenden e-auto-ODER-wallbox-Investition — bei zwei E-Autos
+        # mit unterschiedlichen `vergleich_verbrauch_l_100km` wurde der zweite
+        # stillschweigend mit den Werten des ersten gerechnet. Bei einer EA +
+        # Wallbox vor der EA konnte zudem die Wallbox die Param-Quelle werden,
+        # obwohl `vergleich_l_100km` ein Vehicle-Attribut ist.
+        emob_vergleich_l_100km, emob_benzinpreis_fallback = km_gewichtete_eauto_params(
+            eauto_params_und_km=(
+                (inv.parameter, ea_km_pro_inv.get(inv.id, 0.0))
+                for inv in investitionen
+                if inv.typ == "e-auto"
+            ),
+        )
         # Durchschnitt der Monats-Kraftstoffpreise, Fallback auf statischen Parameter
         hist_kraftstoffpreise = [
             m.kraftstoffpreis_euro for m in monatsdaten_list

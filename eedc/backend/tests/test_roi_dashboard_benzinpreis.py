@@ -25,9 +25,95 @@ import pytest
 from backend.api.routes.investitionen.crud import get_roi_dashboard
 from backend.models import Anlage, Investition, Monatsdaten
 from backend.services.eauto_wirtschaftlichkeit import (
+    km_gewichtete_eauto_params,
     letzter_kraftstoffpreis_aus_lookup,
     resolve_eauto_benzinpreis,
 )
+
+
+# ============================================================================
+# Unit: km_gewichtete_eauto_params — Mehrfach-E-Auto-Aggregation
+# ============================================================================
+
+
+def test_km_gewichtet_einzelnes_eauto_keine_aenderung():
+    """Ein E-Auto: Aggregat = dessen Wert, keine Mittelung."""
+    vergleich, benzin = km_gewichtete_eauto_params(
+        eauto_params_und_km=[
+            ({"vergleich_verbrauch_l_100km": 7.5, "benzinpreis_euro": 1.85}, 10000),
+        ],
+    )
+    assert vergleich == pytest.approx(7.5)
+    assert benzin == pytest.approx(1.85)
+
+
+def test_km_gewichtet_zwei_eautos_gleiche_km():
+    """Zwei E-Autos, gleiche km: arithmetisches Mittel."""
+    vergleich, benzin = km_gewichtete_eauto_params(
+        eauto_params_und_km=[
+            ({"vergleich_verbrauch_l_100km": 6.0, "benzinpreis_euro": 1.80}, 10000),
+            ({"vergleich_verbrauch_l_100km": 10.0, "benzinpreis_euro": 2.00}, 10000),
+        ],
+    )
+    assert vergleich == pytest.approx(8.0)
+    assert benzin == pytest.approx(1.90)
+
+
+def test_km_gewichtet_unterschiedliche_km():
+    """Drei E-Autos, unterschiedliche km — km-Anteile gewichten korrekt."""
+    vergleich, benzin = km_gewichtete_eauto_params(
+        eauto_params_und_km=[
+            ({"vergleich_verbrauch_l_100km": 6.0, "benzinpreis_euro": 1.80}, 1000),
+            ({"vergleich_verbrauch_l_100km": 8.0, "benzinpreis_euro": 1.90}, 3000),
+            ({"vergleich_verbrauch_l_100km": 10.0, "benzinpreis_euro": 2.00}, 6000),
+        ],
+    )
+    # Vergleich: (1000×6 + 3000×8 + 6000×10) / 10000 = 9.0
+    # Benzin:    (1000×1.80 + 3000×1.90 + 6000×2.00) / 10000 = 1.95
+    assert vergleich == pytest.approx(9.0)
+    assert benzin == pytest.approx(1.95)
+
+
+def test_km_gewichtet_eauto_ohne_km_ignoriert():
+    """Ein E-Auto mit 0 km wird ignoriert — sonst würde dessen Param-Werte
+    das Mittel verzerren ohne tatsächliche Fahrleistung."""
+    vergleich, benzin = km_gewichtete_eauto_params(
+        eauto_params_und_km=[
+            ({"vergleich_verbrauch_l_100km": 6.0, "benzinpreis_euro": 1.80}, 10000),
+            ({"vergleich_verbrauch_l_100km": 99.0, "benzinpreis_euro": 99.0}, 0),
+        ],
+    )
+    assert vergleich == pytest.approx(6.0)
+    assert benzin == pytest.approx(1.80)
+
+
+def test_km_gewichtet_leere_eingabe_liefert_defaults():
+    """Bei leerer Iterable oder ausschließlich 0-km-Einträgen: Defaults."""
+    vergleich, benzin = km_gewichtete_eauto_params(eauto_params_und_km=[])
+    assert vergleich == pytest.approx(7.5)
+    assert benzin == pytest.approx(1.65)
+
+
+def test_km_gewichtet_param_none_faellt_auf_default():
+    """Wenn `vergleich_verbrauch_l_100km` oder `benzinpreis_euro` im Param-
+    Dict None ist, greift der kanonische Default — nicht ein None × km
+    in der Summe."""
+    vergleich, benzin = km_gewichtete_eauto_params(
+        eauto_params_und_km=[
+            ({"vergleich_verbrauch_l_100km": None, "benzinpreis_euro": None}, 1000),
+        ],
+    )
+    assert vergleich == pytest.approx(7.5)
+    assert benzin == pytest.approx(1.65)
+
+
+def test_km_gewichtet_param_dict_komplett_none():
+    """Komplett `None` als Param-Dict (kein parameter gepflegt) → Defaults."""
+    vergleich, benzin = km_gewichtete_eauto_params(
+        eauto_params_und_km=[(None, 1000)],
+    )
+    assert vergleich == pytest.approx(7.5)
+    assert benzin == pytest.approx(1.65)
 
 
 # ============================================================================
