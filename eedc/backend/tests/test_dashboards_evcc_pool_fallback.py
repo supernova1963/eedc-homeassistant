@@ -94,7 +94,7 @@ async def test_eauto_dashboard_evcc_setup_zeigt_ladedaten_anteilig(db):
     await _add_imd(db, ea.id, 2026, 4, {"km_gefahren": 1244})
     await db.commit()
 
-    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
+    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
     assert len(result) == 1
     z = result[0].zusammenfassung
     assert z["ladung_pv_kwh"] == 120.0, f"PV-Anteil 120, war {z['ladung_pv_kwh']}"
@@ -123,7 +123,7 @@ async def test_eauto_dashboard_premium_setup_unveraendert(db):
     })
     await db.commit()
 
-    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
+    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
     z = result[0].zusammenfassung
     # E-Auto-Werte bleiben (eauto_pool_summe > wb_pool_summe → use_wb_pool=False)
     assert z["ladung_pv_kwh"] == 150.0
@@ -148,7 +148,7 @@ async def test_eauto_dashboard_multi_eauto_km_anteilig(db):
     await _add_imd(db, ea2.id, 2026, 4, {"km_gefahren": 400})
     await db.commit()
 
-    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db)
+    result = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
     by_name = {r.investition.bezeichnung: r.zusammenfassung for r in result}
 
     # Auto A (60% km): PV 180, Netz 120
@@ -230,7 +230,7 @@ async def test_eauto_dashboard_evcc_ohne_netz_key(db):
     await db.commit()
 
     result = await get_eauto_dashboard(
-        anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65, db=db
+        anlage_id=anlage_id, strompreis_cent=30.0, db=db
     )
     z = result[0].zusammenfassung
     assert abs(z["ladung_pv_kwh"] - 65.97) < 0.1

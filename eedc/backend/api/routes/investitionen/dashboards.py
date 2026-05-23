@@ -39,6 +39,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     aggregiere_emob_ladung,
     attribute_emob_pool_by_km,
     berechne_eauto_ersparnis,
+    berechne_eauto_ersparnis_periode,
     compute_emob_pool_attribution,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -133,8 +134,7 @@ class SonstigesDashboardResponse(BaseModel):
 async def get_eauto_dashboard(
     anlage_id: int,
     strompreis_cent: Optional[float] = Query(None, description="Override: Strompreis (auto aus Wallbox-Tarif wenn leer)"),
-    benzinpreis_euro: float = Query(1.65),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     E-Auto Dashboard für eine Anlage.
@@ -200,6 +200,18 @@ async def get_eauto_dashboard(
         ],
     )
 
+    # #260 (NongJoWo): Benzinpreis pro Monat aus Anlage.monatsdaten (EU
+    # Weekly Oil Bulletin, seit v3.17.0) — vorher zog dieses Dashboard nur
+    # einen statischen Default 1.65 €/L und driftete damit gegen die
+    # Cockpit-Übersicht, die seit v3.17.0 monatlich rechnet.
+    anlage_md_result = await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+    )
+    benzinpreis_lookup: dict[tuple[int, int], Optional[float]] = {
+        (md.jahr, md.monat): md.kraftstoffpreis_euro
+        for md in anlage_md_result.scalars().all()
+    }
+
     dashboards = []
     for eauto in eautos:
         # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
@@ -216,10 +228,16 @@ async def get_eauto_dashboard(
         gesamt_extern_ladung = 0
         gesamt_extern_kosten = 0
         gesamt_v2h = 0
+        # #260: km pro Monat sammeln, damit berechne_eauto_ersparnis_periode
+        # mit dem jeweils gültigen Monats-Benzinpreis rechnen kann.
+        km_pro_monat: list[tuple[int, int, float]] = []
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
-            gesamt_km += d.get('km_gefahren', 0)
+            km_this = d.get('km_gefahren', 0) or 0
+            gesamt_km += km_this
+            if km_this > 0:
+                km_pro_monat.append((md.jahr, md.monat, km_this))
             gesamt_verbrauch += d.get('verbrauch_kwh', 0)
             # #262: PV/Netz via SoT-Helper (evcc-Import schreibt nur Total + PV).
             pv, netz = get_emob_pv_netz_kwh(d)
@@ -249,17 +267,17 @@ async def get_eauto_dashboard(
         # PV-Anteil auf Gesamt-Ladung
         pv_anteil_gesamt = (gesamt_pv_ladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
 
-        # E-Auto-Ersparnis vs. Verbrenner via SoT-Helper (Drift-Audit A2).
-        # `benzinpreis_euro` kommt als Query-Param explizit oder als Default — der
-        # Helper respektiert dies via `monats_benzinpreis_euro`-Override.
+        # E-Auto-Ersparnis über die Periode mit per-Monat-Benzinpreis
+        # (#260, NongJoWo): Σ km_monat × verbrauch × preis_monat aus dem
+        # benzinpreis_lookup, statt einmaliger Multiplikation mit Default.
         params = eauto.parameter or {}
-        eauto_result = berechne_eauto_ersparnis(
-            km_gefahren=gesamt_km,
-            ladung_netz_kwh=gesamt_netz_ladung,
-            ladung_extern_euro=gesamt_extern_kosten,
+        eauto_result = berechne_eauto_ersparnis_periode(
+            km_pro_monat=km_pro_monat,
+            ladung_netz_kwh_gesamt=gesamt_netz_ladung,
+            ladung_extern_euro_gesamt=gesamt_extern_kosten,
             wallbox_strompreis_cent=strompreis_cent,
             eauto_parameter=params,
-            monats_benzinpreis_euro=benzinpreis_euro,
+            monats_benzinpreis_lookup=benzinpreis_lookup,
         )
         benzin_kosten = eauto_result.benzin_kosten_euro
         heim_netz_kosten = gesamt_netz_ladung * strompreis_cent / 100

@@ -255,8 +255,7 @@ async def test_cross_view_konsistenz_wallbox_komponenten_eauto(db):
     wb_z = (await get_wallbox_dashboard(
         anlage_id=anlage_id, strompreis_cent=30.0, db=db))[0].zusammenfassung
     ea_z = (await get_eauto_dashboard(
-        anlage_id=anlage_id, strompreis_cent=30.0, benzinpreis_euro=1.65,
-        db=db))[0].zusammenfassung
+        anlage_id=anlage_id, strompreis_cent=30.0, db=db))[0].zusammenfassung
     komp = await get_komponenten_zeitreihe(anlage_id=anlage_id, jahr=None, db=db)
     komp_pv = sum(m.emob_ladung_pv_kwh for m in komp.monatswerte)
     komp_netz = sum(m.emob_ladung_netz_kwh for m in komp.monatswerte)

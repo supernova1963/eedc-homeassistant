@@ -123,6 +123,84 @@ def berechne_eauto_ersparnis(
     )
 
 
+def berechne_eauto_ersparnis_periode(
+    *,
+    km_pro_monat: Iterable[tuple[int, int, float]],
+    ladung_netz_kwh_gesamt: float,
+    ladung_extern_euro_gesamt: float,
+    wallbox_strompreis_cent: float,
+    eauto_parameter: Optional[dict] = None,
+    monats_benzinpreis_lookup: Optional[dict[tuple[int, int], Optional[float]]] = None,
+) -> EAutoErsparnisErgebnis:
+    """E-Auto-Ersparnis über eine Periode mit per-Monat-korrektem Benzinpreis.
+
+    Drift-Fix #260 (NongJoWo): das E-Auto-Dashboard summierte zuvor `km`
+    über die ganze Periode und rief `berechne_eauto_ersparnis` einmal mit
+    einem festen Default-Benzinpreis (1,65 €/L) auf. Die Cockpit-Übersicht
+    las hingegen pro Monat den dynamischen Preis aus
+    `Monatsdaten.kraftstoffpreis_euro` (EU Weekly Oil Bulletin, seit v3.17.0).
+    Ergebnis: zwei Sichten, zwei Ersparniszahlen, keine erkennbare Ursache.
+
+    Korrektur: `benzin_kosten = Σ (km_monat × verbrauch × preis_monat)` mit
+    Fallback-Kette pro Monat: Lookup → params.benzinpreis_euro → Default 1,65.
+
+    `ladung_netz_kwh_gesamt` und `ladung_extern_euro_gesamt` bleiben Gesamt-
+    Werte — der Wallbox-Pool-Anteil aus `attribute_emob_pool_by_km` wird
+    ebenfalls auf Gesamtbasis verteilt und nicht pro Monat.
+
+    Args:
+        km_pro_monat: Iterable von `(jahr, monat, km)`-Tupeln für die Periode.
+        ladung_netz_kwh_gesamt: Heim-Netzladung gesamt in kWh.
+        ladung_extern_euro_gesamt: tatsächliche Kosten externer Ladung in € (gesamt).
+        wallbox_strompreis_cent: Strompreis Heim-Netzladung in ct/kWh.
+        eauto_parameter: `Investition.parameter` für Vergleichsverbrauch + Default-Benzinpreis.
+        monats_benzinpreis_lookup: `{(jahr, monat): kraftstoffpreis_euro_oder_None}`
+            aus `Anlage.monatsdaten`. Einträge mit `None` werden wie fehlende
+            Monate behandelt (Fallback greift).
+
+    Returns:
+        EAutoErsparnisErgebnis. `verwendeter_benzinpreis_euro` ist der
+        km-gewichtete Durchschnitt der tatsächlich angewendeten Preise.
+    """
+    verbrauch_l_100km = _vergleich_verbrauch(eauto_parameter)
+    fallback_preis = _benzinpreis_default(eauto_parameter)
+    lookup = monats_benzinpreis_lookup or {}
+
+    gesamt_km = 0.0
+    gesamt_benzin = 0.0
+    summe_gewichteter_preis = 0.0
+
+    for jahr, monat, km in km_pro_monat:
+        if km is None or km <= 0:
+            continue
+        preis = lookup.get((jahr, monat))
+        if preis is None:
+            preis = fallback_preis
+        gesamt_km += km
+        gesamt_benzin += (km / 100) * verbrauch_l_100km * preis
+        summe_gewichteter_preis += km * preis
+
+    if gesamt_km <= 0:
+        return EAutoErsparnisErgebnis(
+            0.0, 0.0, 0.0,
+            verbrauch_l_100km, fallback_preis,
+        )
+
+    strom_kosten = (
+        max(0.0, ladung_netz_kwh_gesamt) * wallbox_strompreis_cent / 100
+        + ladung_extern_euro_gesamt
+    )
+    ersparnis = gesamt_benzin - strom_kosten
+
+    return EAutoErsparnisErgebnis(
+        ersparnis_euro=ersparnis,
+        benzin_kosten_euro=gesamt_benzin,
+        strom_kosten_euro=strom_kosten,
+        verwendeter_verbrauch_l_100km=verbrauch_l_100km,
+        verwendeter_benzinpreis_euro=summe_gewichteter_preis / gesamt_km,
+    )
+
+
 @dataclass
 class EmobPoolAttribution:
     """Pool-Aggregat über E-Auto- und Wallbox-IMDs für evcc-artige Setups.
