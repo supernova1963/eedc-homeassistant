@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.32.3] - 2026-05-23 — Doku-Nachreichung WAS-IST-NEU
+
+> 📝 **Reine Doku-Nachreichung.** Bei v3.32.2 war die WAS-IST-NEU-Seite noch auf v3.32.1-Stand — `sync-help.sh` läuft vor dem Frontend-Build, also wurde der alte Stand ins v3.32.2-Image gebacken. Anwender hätten den v3.32.2-Inhalt erst beim nächsten Release gesehen. Diese Version bringt den WAS-IST-NEU-Block für v3.32.2 in die In-App-Hilfe.
+
+### Changed
+
+- **WAS-IST-NEU.md (In-App-Hilfe „Was ist neu") für v3.32.2 nachgepflegt**: Sungrow-AppKey-Rotation, EcoFlow-indexNames, Victron-Freigabe, WP-Betriebsstunden, evcc-Pool-Mismatch-Warnung, §51 EEG Phase 2, Delete-Button-Hinweis und IA-v4.0.0-Konzept sind jetzt auch in der In-App-Hilfe sichtbar. Keine Code-Änderungen.
+
+---
+
 ## [3.32.2] - 2026-05-23 — Cloud-Import-Hardening + WP-Betriebsstunden + IA v4.0.0 Konzept
 
 > 🔧 **Patch-Release.** Schwerpunkt: drei Cloud-Import-Tester-Fixes (Sungrow #287, EcoFlow Dirk-PN, Victron-Verifizierung #255), neues WP-Betriebsstunden-Tracking (#238) und das IA v4.0.0 Konzept als gemeinsame Anlaufstelle für den größeren UX-/Menüstruktur-Refactor in der nächsten Major-Welle.

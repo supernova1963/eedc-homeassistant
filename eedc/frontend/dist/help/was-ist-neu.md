@@ -1,11 +1,48 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.32.1)
+> **Stand:** Mai 2026 (v3.32.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.32.3 — Doku-Nachreichung zu v3.32.2 (Mai 2026)
+
+Bei v3.32.2 wurde diese Seite versehentlich noch mit dem v3.32.1-Stand ausgeliefert — die Inhalte zu Sungrow, EcoFlow, Victron, WP-Betriebsstunden und IA-Konzept (siehe nächster Block unten) sind jetzt auch in der In-App-Hilfe sichtbar. Keine funktionalen Änderungen.
+
+---
+
+## v3.32.2 — Cloud-Import-Hardening + WP-Betriebsstunden + IA-Konzept (Mai 2026)
+
+### Was sich für dich ändert — Cloud-Import
+
+- **Sungrow iSolarCloud lädt wieder**: Sungrow hat den API-Schlüssel rotiert, dadurch lehnte der Cloud-Import mit „Illegal c-access-key" ab. Schlüssel ist aktualisiert — der Import läuft wieder durch. Zusätzlich gibt es ein neues optionales Feld „App-Key" in der Setup-Maske: falls Sungrow den Schlüssel künftig wieder rotiert, kannst du einen aktuellen Wert (z. B. aus dem GoSungrow-Projekt) selbst eintragen, ohne auf das nächste eedc-Release zu warten. Mit Dank an detlefh68 für die saubere Fehlermeldung.
+- **EcoFlow PowerOcean / PowerStream liefert wieder Werte**: Der Import blieb leer, weil EcoFlow andere `indexName`s in der Cloud-API verwendet, als eedc bisher kannte. Die Diagnose-Logs aus v3.32.0 haben die tatsächlichen Namen offengelegt — das Mapping ist jetzt vollständig. Mit Dank an Dirk für die Logs.
+- **Victron VRM ist freigegeben**: Nach erfolgreicher Verifizierung gegen ein echtes Konto fällt der „nicht getestet"-Banner weg. Der Provider ist damit vollständig produktiv. Mit Dank an kingcap1.
+
+### Was sich für dich ändert — Wärmepumpe
+
+- **Neue Auswertung: Betriebsstunden + Ø Laufzeit pro Start** (#238): Wenn deine Wärmepumpe einen Betriebsstunden-Zähler liefert, kannst du ihn jetzt in der Sensor-Zuordnung eintragen (`total_increasing`, in Stunden). Daraus berechnet eedc die Tages-Betriebsstunden, die durchschnittliche Laufzeit pro Start und kombiniert das mit dem schon vorhandenen Kompressor-Starts-Zähler. Aussagekräftiger als Starts allein — 10 Starts bei 23 h Laufzeit zeigen etwas anderes an als 10 Starts bei 4 h. Neue KPI-Kacheln im Monatsbericht und im WP-Dashboard. Mit Dank an detLAN.
+
+### Was sich für dich ändert — Daten-Qualität
+
+- **Daten-Checker erkennt evcc-Pool-Mismatch**: Wenn du Wallbox oder E-Auto hinzufügst, nachdem der zentrale evcc-Pool-Sensor schon eingerichtet ist, kann der Pool nicht-aktualisiert sein und Werte unvollständig liefern. Der Daten-Checker meldet das jetzt mit einem Hinweis und Link zur Reparatur. Kein Auto-Heal — der Fix bleibt bewusst beim Anwender, damit nichts überschrieben wird.
+
+### Was sich für dich ändert — Erlös bei negativen Börsenpreisen (§51 EEG)
+
+- **Abzug konsistent in mehr Sichten** (Phase 2): Nach Aussichten und Monatsabschluss in v3.31.x wird der §51-Abzug bei negativen Börsenpreisen jetzt auch in Cockpit-Übersicht, ROI-Dashboard, PDF-Jahresbericht, HA-Sensor-Export und in den Auswertungen-Tabs „Energie" und „Finanzen" durchgängig angewendet. Falls du Direktvermarktung mit Negativpreis-Klausel hast: alle Kennzahlen rechnen jetzt mit demselben Erlös-Wert.
+
+### Was sich für dich ändert — Bedienung
+
+- **Investitionen löschen: Hinweis wenn der Button blockiert ist** (#288): Im Lösch-Dialog ist der „Endgültig löschen"-Button bewusst gesperrt, bis du entweder ein Backup erstellt oder „Ohne Backup fortfahren" geklickt hast. Bisher war das nicht erkennbar — der Cursor zeigte nur „verboten", der Grund blieb verborgen. Jetzt steht links neben den Buttons „Bitte oben eine Backup-Option wählen" und ein Tooltip am Button erklärt es zusätzlich. Mit Dank an NongJoWo für die Meldung.
+
+### Konzept zur Diskussion — neue Menüstruktur für v4.0.0
+
+- **eedc bekommt mit der nächsten großen Version eine grundlegend neue Menüstruktur und ein modernes Designsystem.** Drei klare Achsen statt der heutigen Vermischung: Cockpit (Zeit — Live, Heute, Monatsbericht, Jahr, Aussicht), Komponenten (eine eigene Seite pro Speicher / Wärmepumpe / E-Auto / …), Auswertungen (Finanzen, CO₂, ROI, Tabelle, Prognose-vs-IST). Plus Hell/Dunkel-Mode und ein eigenes Mobile-Konzept für die HA-Companion-App.
+- **Die Konzept-Dokumente sind öffentlich** — [Menüstruktur](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-IA-V4.md), [Designsystem](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-STYLE-GUIDE.md), [Mobile-Konzept](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/KONZEPT-MOBILE.md) — und Feedback ist ausdrücklich willkommen, **bevor** die Umsetzung startet. Zentrale Anlaufstelle: [Issue #243](https://github.com/supernova1963/eedc-homeassistant/issues/243). Bekanntmachungen laufen parallel in den Foren ([simon42](https://community.simon42.com/t/eedc-energie-effizienz-data-center/77723/618), [community-smarthome.com](https://community-smarthome.com/t/eedc-energie-effizienz-data-center/10057/72)).
 
 ---
 
