@@ -2,25 +2,38 @@
 Victron VRM Cloud-Import-Provider.
 
 Holt historische Monats-Energiedaten aus dem Victron VRM Portal über die
-VRM API v2. Damit lassen sich auch Daten aus der Zeit vor der HA-Anbindung
-nachholen — der Live-Pfad (HA-Add-on + ha-victron-mqtt) bleibt davon
-unberührt (Issue #255).
+VRM API v2 (https://vrm-api-docs.victronenergy.com/). Damit lassen sich
+auch Daten aus der Zeit vor der HA-Anbindung nachholen — der Live-Pfad
+(HA-Add-on + ha-victron-mqtt) bleibt davon unberührt (Issue #255).
 
-Auth: Access-Token im Header `X-Authorization: Token <token>`. Der Token
-wird im VRM-Portal unter Preferences → Integrations → Access tokens erzeugt;
-es wird kein Passwort gespeichert.
+Auth: Access-Token im Header `x-authorization: Token <token>`. Wird im
+VRM-Portal unter Preferences → Integrations → Access tokens erzeugt; es
+wird kein Passwort gespeichert. (`Bearer`-Tokens sind in der VRM-API zum
+2026-06-01 deprecated — `Token` ist der richtige Weg.)
 
-Endpoints:
-  - GET /v2/installations/{idSite}/system-overview  → Verbindungstest
-  - GET /v2/installations/{idSite}/stats            → Monats-Energiedaten
+Discovery: idSite wird aus dem Token abgeleitet:
+  GET /users/me                       → user.id (idUser)
+  GET /users/{idUser}/installations   → Liste mit idSite/name/timezone/…
+Das credential_field `installation_id` ist **optional** und nur nötig,
+wenn der Account mehrere Anlagen verwaltet.
 
-HINWEIS: Dieser Provider ist NICHT mit echten Geräten getestet
-(getestet=False). Die VRM-Stats-Attributnamen in STATS_ATTR_MAPPING stammen
-aus der öffentlichen API-Doku und müssen mit echten Konto-Daten verifiziert
-werden — `_fetch_stats_block` loggt die tatsächlich gelieferten Record-Keys
-auf INFO-Level, damit eine Abweichung sofort sichtbar wird.
+Datenquelle:
+  GET /installations/{idSite}/stats?type=kwh&interval=months
+- Doku-Limit: max. 24 Monate pro Aufruf für interval=months
+  (`StatsCommand.yaml`); längere Zeiträume werden in 24-Monats-Fenstern
+  geblockt — ein Call deckt für die meisten Anwender den Gesamtzeitraum.
+- Response-Struktur: `records` ist
+  `{attribut: [[ts, mean, min?, max?], …] | False}` — `False` markiert
+  Attribute ohne Datenpunkt im Zeitraum, `mean` an Index 1.
 
-API-Dokumentation: https://vrm-api-docs.victronenergy.com/
+Mapping: VRM `type=kwh` liefert die **Energiefluss-Matrix** in 2-Buchstaben-
+Codes (Source × Target), siehe FELD_AUS_CODES. Verifiziert mit kingcap1s
+Log-Auszug 2026-05-22 in #255 (`Gb`, `Pc`, `Pb`, `Bc`, `Pg`, `Bg`, `Gc`,
+`kwh`). Pro eedc-Feld werden alle passenden Matrix-Zellen aufsummiert.
+
+Wenn ein Block antwortet, aber KEIN bekannter Code im Mapping greift,
+gibt der Provider eine WARNING mit der Liste der erhaltenen Keys aus —
+damit das Mapping ohne Raten punktgenau erweitert werden kann.
 """
 
 import logging
@@ -43,40 +56,43 @@ logger = logging.getLogger(__name__)
 
 API_BASE = "https://vrmapi.victronenergy.com/v2"
 
-# Mapping: VRM-Stats-Attribut (records-Key bei type=kwh) → ParsedMonthData-Feld.
-# WICHTIG: Diese Codes sind aus der öffentlichen VRM-API-Doku abgeleitet und
-# müssen mit echten Konto-Daten verifiziert werden. Pro Energieart sind
-# plausible Varianten hinterlegt; `_fetch_stats_block` loggt die echten Keys.
-STATS_ATTR_MAPPING = {
-    # PV-Erzeugung
-    "solar_yield": "pv_erzeugung_kwh",
-    "Pdc": "pv_erzeugung_kwh",
-    # Netzbezug (Netz → System)
-    "grid_history_from": "netzbezug_kwh",
-    "from_grid": "netzbezug_kwh",
-    # Einspeisung (System → Netz)
-    "grid_history_to": "einspeisung_kwh",
-    "to_grid": "einspeisung_kwh",
-    # Gesamtverbrauch
-    "consumption": "eigenverbrauch_kwh",
-    "total_consumption": "eigenverbrauch_kwh",
-    # Batterie
-    "battery_history_charged": "batterie_ladung_kwh",
-    "battery_charged_energy": "batterie_ladung_kwh",
-    "battery_history_discharged": "batterie_entladung_kwh",
-    "battery_discharged_energy": "batterie_entladung_kwh",
+# VRM stats: max. 24 Monate pro Aufruf für interval=months (StatsCommand.yaml).
+MAX_MONTHS_PER_CALL = 24
+
+# VRM-Energiefluss-Matrix (records-Keys bei type=kwh).
+#
+# Jede Zelle ist die kWh-Summe, die im Zeitraum von SOURCE → TARGET geflossen
+# ist. SOURCES: G=Grid, P=PV, B=Batterie. TARGETS: c=consumer, g=grid,
+# b=battery. Sieben physikalisch sinnvolle Zellen (Gg und Bb fallen weg).
+#
+# Mapping auf eedc-Felder: pro Feld werden ALLE passenden Matrix-Zellen
+# aufsummiert. Beispiel: pv_erzeugung_kwh = Pc + Pg + Pb (alles, was PV
+# erzeugt hat — egal wohin geflossen).
+FELD_AUS_CODES: dict[str, tuple[str, ...]] = {
+    "pv_erzeugung_kwh":       ("Pc", "Pg", "Pb"),  # PV nach Verbraucher/Netz/Batterie
+    "einspeisung_kwh":        ("Pg", "Bg"),         # alles, was ins Netz floss
+    "netzbezug_kwh":          ("Gc", "Gb"),         # alles, was aus dem Netz kam
+    "batterie_ladung_kwh":    ("Pb", "Gb"),         # Lade-Quellen
+    "batterie_entladung_kwh": ("Bc", "Bg"),         # Entlade-Ziele
+    "eigenverbrauch_kwh":     ("Pc", "Bc", "Gc"),   # alles, was Verbrauch erreichte
 }
+
+# Sammlung aller Matrix-Codes plus dokumentierte Begleit-Keys, die wir
+# bewusst nicht auf ein Feld mappen (z. B. `kwh` als Aggregat-Marker —
+# Wert nicht eindeutig, daher als bekannt-aber-ignoriert führen).
+_MATRIX_CODES: frozenset[str] = frozenset(
+    c for codes in FELD_AUS_CODES.values() for c in codes
+)
+BEKANNTE_CODES: frozenset[str] = _MATRIX_CODES | frozenset({"kwh"})
 
 
 def _ts_to_year_month(ts: float) -> tuple[int, int]:
-    """Rechnet einen VRM-Record-Zeitstempel auf (Jahr, Monat) um.
+    """VRM-Record-Zeitstempel → (Jahr, Monat).
 
-    VRM liefert Stats-Zeitstempel in Sekunden (ältere Endpunkte teils in
-    Millisekunden — wird erkannt). Für `interval=months` markiert der
-    Zeitstempel den Monatsanfang in der Anlagen-Zeitzone. Damit eine
-    Zeitzonen-Verschiebung (±14 h) den Wert nicht über die Monatsgrenze
-    in den Nachbarmonat schiebt, wird vor der Auswertung 15 Tage addiert —
-    das landet robust in der Monatsmitte.
+    Standard: Sekunden. Ältere Endpunkte gelegentlich Millisekunden — wird
+    am Größenvergleich erkannt. Für interval=months markiert der Zeitstempel
+    den Monatsanfang in der Anlagen-Zeitzone; ein 15-Tage-Puffer fängt die
+    ±14 h-Streuung sauber im Zielmonat ab.
     """
     if ts > 1e12:  # Millisekunden
         ts = ts / 1000.0
@@ -84,69 +100,74 @@ def _ts_to_year_month(ts: float) -> tuple[int, int]:
     return dt.year, dt.month
 
 
-def _records_to_monthly_data(records: dict) -> list[ParsedMonthData]:
+def _records_to_monthly_data(
+    records: dict,
+) -> tuple[list[ParsedMonthData], list[str]]:
     """Wandelt das VRM-`records`-Objekt (type=kwh) in ParsedMonthData um.
 
-    `records` ist ein Dict `attribut → [[zeitstempel, wert], …]`. Jede Serie
-    liefert pro Monat einen Wert; nicht gemappte Attribute werden ignoriert.
+    Liefert zusätzlich die Liste der erhaltenen Attribut-Keys, die NICHT
+    in BEKANNTE_CODES vorkommen — damit der Aufrufer diagnostizieren kann,
+    dass die API antwortet, aber das Mapping nicht trifft.
+
     Pure Funktion ohne Netzwerk — direkt testbar.
     """
+    # monats[(jahr, monat)][matrix_code] = kWh
     monats: dict[tuple[int, int], dict[str, float]] = {}
+    unbekannte_keys: list[str] = []
 
     for attr, serie in records.items():
-        feld = STATS_ATTR_MAPPING.get(attr)
-        if not feld or not isinstance(serie, list):
+        # VRM liefert `False`, wenn ein Attribut im Zeitraum keine Daten hat
+        # — nicht als Fehler werten, einfach überspringen.
+        if not isinstance(serie, list):
+            continue
+        if attr not in BEKANNTE_CODES:
+            unbekannte_keys.append(attr)
+            continue
+        if attr not in _MATRIX_CODES:
+            # bekannt, aber bewusst nicht gemappt (z. B. `kwh`-Aggregat).
             continue
         for punkt in serie:
             if not isinstance(punkt, (list, tuple)) or len(punkt) < 2:
                 continue
-            ts, wert = punkt[0], punkt[1]
-            if ts is None or wert is None:
+            ts, mean = punkt[0], punkt[1]
+            if ts is None or mean is None:
                 continue
             jahr, monat = _ts_to_year_month(float(ts))
-            # Jede (Monat, Attribut)-Kombination ist ein eigener Messwert —
-            # zuweisen, nicht summieren.
-            monats.setdefault((jahr, monat), {})[feld] = float(wert)
+            # Jede (Monat, Matrix-Code)-Kombination ist ein eigener Messwert —
+            # zuweisen, nicht summieren. Aggregation findet pro Feld statt.
+            monats.setdefault((jahr, monat), {})[attr] = float(mean)
 
     results: list[ParsedMonthData] = []
     for (jahr, monat) in sorted(monats.keys()):
-        werte = monats[(jahr, monat)]
+        code_werte = monats[(jahr, monat)]
 
-        pv = werte.get("pv_erzeugung_kwh")
-        einspeisung = werte.get("einspeisung_kwh")
-        verbrauch = werte.get("eigenverbrauch_kwh")
-
-        # Eigenverbrauch bevorzugt aus PV − Einspeisung (analog SolarEdge-
-        # Provider), sonst der gemeldete Gesamtverbrauch als Fallback.
-        eigenverbrauch = None
-        if pv is not None and einspeisung is not None:
-            eigenverbrauch = round(pv - einspeisung, 2)
-        elif verbrauch is not None:
-            eigenverbrauch = round(verbrauch, 2)
+        feld_werte: dict[str, Optional[float]] = {}
+        for feld, codes in FELD_AUS_CODES.items():
+            teile = [code_werte[c] for c in codes if c in code_werte]
+            feld_werte[feld] = round(sum(teile), 2) if teile else None
 
         month_data = ParsedMonthData(
             jahr=jahr,
             monat=monat,
-            pv_erzeugung_kwh=round(pv, 2) if pv is not None else None,
-            einspeisung_kwh=round(einspeisung, 2) if einspeisung is not None else None,
-            netzbezug_kwh=(
-                round(werte["netzbezug_kwh"], 2)
-                if werte.get("netzbezug_kwh") is not None else None
-            ),
-            batterie_ladung_kwh=(
-                round(werte["batterie_ladung_kwh"], 2)
-                if werte.get("batterie_ladung_kwh") is not None else None
-            ),
-            batterie_entladung_kwh=(
-                round(werte["batterie_entladung_kwh"], 2)
-                if werte.get("batterie_entladung_kwh") is not None else None
-            ),
-            eigenverbrauch_kwh=eigenverbrauch,
+            pv_erzeugung_kwh=feld_werte["pv_erzeugung_kwh"],
+            einspeisung_kwh=feld_werte["einspeisung_kwh"],
+            netzbezug_kwh=feld_werte["netzbezug_kwh"],
+            batterie_ladung_kwh=feld_werte["batterie_ladung_kwh"],
+            batterie_entladung_kwh=feld_werte["batterie_entladung_kwh"],
+            eigenverbrauch_kwh=feld_werte["eigenverbrauch_kwh"],
         )
         if month_data.has_data():
             results.append(month_data)
 
-    return results
+    return results, unbekannte_keys
+
+
+def _advance_months(dt: datetime, monate: int) -> datetime:
+    """`dt` um `monate` Monate nach vorne setzen (Monatsanfang bleibt)."""
+    gesamt = (dt.month - 1) + monate
+    return datetime(
+        dt.year + gesamt // 12, gesamt % 12 + 1, 1, tzinfo=dt.tzinfo,
+    )
 
 
 @register_provider
@@ -159,16 +180,18 @@ class VictronVRMProvider(CloudImportProvider):
             name="Victron VRM",
             hersteller="Victron Energy",
             beschreibung=(
-                "Importiert historische Energiedaten (PV-Erzeugung, Einspeisung, "
-                "Netzbezug, Batterie) aus dem Victron VRM Portal über die VRM API. "
-                "Für das Nachholen von Daten aus der Zeit vor der HA-Anbindung."
+                "Importiert historische Monats-Energiedaten (PV-Erzeugung, "
+                "Einspeisung, Netzbezug, Batterie) aus dem Victron VRM Portal "
+                "über die VRM API v2. Für das Nachholen von Daten aus der Zeit "
+                "vor der HA-Anbindung."
             ),
             anleitung=(
                 "1. Im VRM Portal einloggen (vrm.victronenergy.com)\n"
                 "2. Preferences → Integrations → Access tokens → neuen Token "
                 "erstellen und kopieren\n"
-                "3. Installation-ID (idSite) aus der Portal-URL ablesen "
-                "(Zahl nach /installation/)"
+                "3. Die Installation wird automatisch erkannt. Nur wenn dein "
+                "Account mehrere Anlagen verwaltet, bitte die Installation-ID "
+                "(Zahl nach /installation/ in der Portal-URL) eintragen."
             ),
             credential_fields=[
                 CredentialField(
@@ -180,100 +203,164 @@ class VictronVRMProvider(CloudImportProvider):
                 ),
                 CredentialField(
                     id="installation_id",
-                    label="Installation-ID (idSite)",
+                    label="Installation-ID (optional)",
                     type="text",
-                    placeholder="z.B. 123456",
-                    required=True,
+                    placeholder="leer lassen für automatische Erkennung",
+                    required=False,
                 ),
             ],
             getestet=False,
         )
 
     def _auth_headers(self, access_token: str) -> dict:
-        """Header für die VRM-API-Authentifizierung per Access-Token."""
-        return {"X-Authorization": f"Token {access_token}"}
+        # VRM-Doku schreibt `x-authorization` klein. HTTP-Header sind
+        # case-insensitive, httpx normalisiert ohnehin.
+        return {"x-authorization": f"Token {access_token}"}
+
+    async def _get_user_id(
+        self, client: httpx.AsyncClient, access_token: str,
+    ) -> Optional[int]:
+        """GET /users/me → user.id, oder None bei Fehler."""
+        resp = await client.get(
+            f"{API_BASE}/users/me", headers=self._auth_headers(access_token),
+        )
+        logger.info(
+            "VRM /users/me: http=%s, body=%s",
+            resp.status_code, resp.text[:300],
+        )
+        if resp.status_code != 200:
+            return None
+        try:
+            data = resp.json()
+        except Exception:
+            return None
+        if not data.get("success"):
+            return None
+        return (data.get("user") or {}).get("id")
+
+    async def _list_installations(
+        self, client: httpx.AsyncClient, access_token: str, id_user: int,
+    ) -> list[dict]:
+        """GET /users/{idUser}/installations → Liste."""
+        resp = await client.get(
+            f"{API_BASE}/users/{id_user}/installations",
+            headers=self._auth_headers(access_token),
+        )
+        if resp.status_code != 200:
+            return []
+        try:
+            data = resp.json()
+        except Exception:
+            return []
+        if not data.get("success"):
+            return []
+        return list(data.get("records") or [])
+
+    async def _resolve_site(
+        self,
+        client: httpx.AsyncClient,
+        access_token: str,
+        installation_id: str,
+    ) -> tuple[int, str, list[dict]]:
+        """Liefert (idSite, Name, Anlagen-Liste).
+
+        - `installation_id` gesetzt → muss in den Anlagen des Tokens sein
+          (sonst ValueError mit Liste der verfügbaren IDs).
+        - Leer + genau eine Anlage → Auto-Pick.
+        - Leer + mehrere Anlagen → ValueError mit Liste der verfügbaren IDs.
+        """
+        id_user = await self._get_user_id(client, access_token)
+        if id_user is None:
+            raise ValueError(
+                "Access Token wird vom VRM-Portal nicht akzeptiert "
+                "(`/users/me` lieferte keine User-ID)."
+            )
+
+        anlagen = await self._list_installations(client, access_token, id_user)
+        if not anlagen:
+            raise ValueError("Keine Anlagen für diesen Access Token gefunden.")
+
+        def _liste_fuer_fehler() -> str:
+            return ", ".join(
+                f"{a.get('idSite')} ({a.get('name') or '—'})" for a in anlagen
+            )
+
+        if installation_id:
+            try:
+                gewuenscht = int(installation_id)
+            except ValueError:
+                raise ValueError(
+                    f"Installation-ID `{installation_id}` ist keine Zahl."
+                )
+            for a in anlagen:
+                if a.get("idSite") == gewuenscht:
+                    return (
+                        gewuenscht,
+                        a.get("name") or f"Installation {gewuenscht}",
+                        anlagen,
+                    )
+            raise ValueError(
+                f"Installation-ID {gewuenscht} ist mit diesem Token nicht "
+                f"zugreifbar. Verfügbar: {_liste_fuer_fehler()}"
+            )
+
+        if len(anlagen) == 1:
+            a = anlagen[0]
+            id_site = a.get("idSite")
+            return id_site, a.get("name") or f"Installation {id_site}", anlagen
+
+        raise ValueError(
+            f"Dieser Account hat {len(anlagen)} Anlagen — bitte Installation-ID "
+            f"angeben. Verfügbar: {_liste_fuer_fehler()}"
+        )
 
     async def test_connection(self, credentials: dict) -> CloudConnectionTestResult:
-        """Testet die Verbindung zur VRM API über den system-overview-Endpoint."""
-        access_token = credentials.get("access_token", "")
-        site_id = credentials.get("installation_id", "")
+        access_token = (credentials.get("access_token") or "").strip()
+        installation_id = (credentials.get("installation_id") or "").strip()
 
-        if not access_token or not site_id:
+        if not access_token:
             return CloudConnectionTestResult(
-                erfolg=False,
-                fehler="Access Token und Installation-ID sind erforderlich.",
+                erfolg=False, fehler="Access Token ist erforderlich.",
             )
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.get(
-                    f"{API_BASE}/installations/{site_id}/system-overview",
-                    headers=self._auth_headers(access_token),
+                id_site, name, anlagen = await self._resolve_site(
+                    client, access_token, installation_id,
                 )
+                # Optional: system-overview für reichere UI-Info.
+                geraete = 0
+                try:
+                    sov = await client.get(
+                        f"{API_BASE}/installations/{id_site}/system-overview",
+                        headers=self._auth_headers(access_token),
+                    )
+                    if sov.status_code == 200:
+                        sov_data = sov.json()
+                        if sov_data.get("success"):
+                            geraete = len(
+                                (sov_data.get("records") or {}).get("devices") or []
+                            )
+                except Exception:
+                    # system-overview ist nur Bonus — Verbindung steht bereits.
+                    pass
 
-            # Diagnose-Logging: dieser Provider ist getestet=False, echte
-            # Fehler-Antworten der VRM-API gehören sichtbar in den Log.
-            logger.info(
-                "VRM Connection-Test: idSite=%s, http_status=%s, body=%s",
-                site_id, resp.status_code, resp.text[:500],
-            )
-
-            if resp.status_code == 401:
-                return CloudConnectionTestResult(
-                    erfolg=False,
-                    fehler="Access Token ungültig oder abgelaufen.",
-                )
-            if resp.status_code == 403:
-                return CloudConnectionTestResult(
-                    erfolg=False,
-                    fehler=f"Kein Zugriff auf Installation {site_id} mit diesem Token.",
-                )
-            if resp.status_code == 404:
-                return CloudConnectionTestResult(
-                    erfolg=False,
-                    fehler=f"Installation-ID {site_id} nicht gefunden.",
-                )
-            if resp.status_code != 200:
-                return CloudConnectionTestResult(
-                    erfolg=False,
-                    fehler=(
-                        f"VRM-API-Fehler: HTTP {resp.status_code}. "
-                        f"Antwort: {resp.text[:300] or '(leer)'}"
-                    ),
-                )
-
-            try:
-                data = resp.json()
-            except Exception as e:
-                return CloudConnectionTestResult(
-                    erfolg=False,
-                    fehler=(
-                        f"Antwort der VRM-API ist kein gültiges JSON "
-                        f"({type(e).__name__}). Body: {resp.text[:300]}"
-                    ),
-                )
-
-            if not data.get("success", False):
-                fehler_detail = data.get("errors") or data.get("error") or "Unbekannter Fehler"
-                return CloudConnectionTestResult(
-                    erfolg=False,
-                    fehler=f"VRM-API meldet einen Fehler: {fehler_detail}",
-                )
-
-            records = data.get("records", {})
-            geraete = records.get("devices", []) if isinstance(records, dict) else []
-            verfuegbar = f"Installation {site_id} erreichbar"
+            verfuegbar = f"Installation {id_site}"
             if geraete:
-                verfuegbar += f", {len(geraete)} Gerät(e)"
+                verfuegbar += f", {geraete} Gerät(e)"
+            if len(anlagen) > 1:
+                verfuegbar += f" (von {len(anlagen)} im Account)"
 
             return CloudConnectionTestResult(
                 erfolg=True,
-                geraet_name=f"Victron VRM Installation {site_id}",
+                geraet_name=name,
                 geraet_typ="Victron VRM",
-                seriennummer=str(site_id),
+                seriennummer=str(id_site),
                 verfuegbare_daten=verfuegbar,
             )
 
+        except ValueError as e:
+            return CloudConnectionTestResult(erfolg=False, fehler=str(e))
         except httpx.TimeoutException:
             return CloudConnectionTestResult(
                 erfolg=False,
@@ -282,8 +369,7 @@ class VictronVRMProvider(CloudImportProvider):
         except Exception as e:
             logger.exception("VRM API Verbindungstest fehlgeschlagen")
             return CloudConnectionTestResult(
-                erfolg=False,
-                fehler=f"Verbindungsfehler: {str(e)}",
+                erfolg=False, fehler=f"Verbindungsfehler: {str(e)}",
             )
 
     async def fetch_monthly_data(
@@ -296,76 +382,126 @@ class VictronVRMProvider(CloudImportProvider):
     ) -> list[ParsedMonthData]:
         """Holt historische Monatsdaten aus dem VRM Portal.
 
-        Der stats-Endpoint wird pro Kalenderjahr abgefragt (ein Request je
-        Jahr), die Monatswerte werden zusammengeführt.
+        Erst Discovery (Token → idSite), dann stats?type=kwh&interval=months
+        in 24-Monats-Fenstern. Wenn alle Calls erfolgreich antworten, aber
+        KEIN Attribut in der bekannten VRM-Matrix vorkommt, wird das mit
+        einer WARNING samt erhaltener Key-Liste sichtbar gemacht.
         """
-        access_token = credentials.get("access_token", "")
-        site_id = credentials.get("installation_id", "")
+        access_token = (credentials.get("access_token") or "").strip()
+        installation_id = (credentials.get("installation_id") or "").strip()
+        if not access_token:
+            return []
+
+        gesamt_start = datetime(start_year, start_month, 1, tzinfo=timezone.utc)
+        gesamt_end = _advance_months(
+            datetime(end_year, end_month, 1, tzinfo=timezone.utc), 1
+        )
 
         results: list[ParsedMonthData] = []
+        gesehene_keys: set[str] = set()
+        unbekannte_keys: set[str] = set()
+        id_site: Optional[int] = None
 
-        for jahr in range(start_year, end_year + 1):
-            erster_monat = start_month if jahr == start_year else 1
-            letzter_monat = end_month if jahr == end_year else 12
-
-            block_start = datetime(jahr, erster_monat, 1, tzinfo=timezone.utc)
-            if letzter_monat == 12:
-                block_end = datetime(jahr + 1, 1, 1, tzinfo=timezone.utc)
-            else:
-                block_end = datetime(jahr, letzter_monat + 1, 1, tzinfo=timezone.utc)
-
+        async with httpx.AsyncClient(timeout=30) as client:
             try:
-                block = await self._fetch_stats_block(
-                    access_token, site_id, block_start, block_end,
+                id_site, _, _ = await self._resolve_site(
+                    client, access_token, installation_id,
                 )
-                results.extend(block)
-            except Exception as e:
+            except ValueError as e:
                 logger.warning(
-                    f"VRM Stats-Block {jahr} (idSite={site_id}) fehlgeschlagen: {e}"
+                    f"VRM fetch_monthly_data: Discovery fehlgeschlagen: {e}"
                 )
+                return []
+
+            block_start = gesamt_start
+            while block_start < gesamt_end:
+                block_end = min(
+                    _advance_months(block_start, MAX_MONTHS_PER_CALL),
+                    gesamt_end,
+                )
+                try:
+                    block_results, keys_seen, keys_unknown = (
+                        await self._fetch_stats_block(
+                            client, access_token, id_site, block_start, block_end,
+                        )
+                    )
+                    results.extend(block_results)
+                    gesehene_keys.update(keys_seen)
+                    unbekannte_keys.update(keys_unknown)
+                except Exception as e:
+                    logger.warning(
+                        f"VRM Stats-Block {block_start:%Y-%m}–{block_end:%Y-%m} "
+                        f"(idSite={id_site}) fehlgeschlagen: {e}"
+                    )
+                block_start = block_end
+
+        # Lautes Scheitern, wenn die API antwortet, das Mapping aber leer
+        # ausgeht: dann hat diese Anlage andere Attribut-Codes als die
+        # bekannte VRM-Matrix.
+        if not results and gesehene_keys:
+            logger.warning(
+                "VRM-Import idSite=%s lieferte 0 verwertbare Monatswerte. "
+                "Erhaltene Attribut-Codes: %s. Davon nicht in der VRM-Matrix: %s. "
+                "Bitte FELD_AUS_CODES in victron_vrm.py um die echten Codes "
+                "erweitern (oder im Issue posten — der Log liegt damit vor).",
+                id_site, sorted(gesehene_keys), sorted(unbekannte_keys),
+            )
 
         return results
 
     async def _fetch_stats_block(
         self,
+        client: httpx.AsyncClient,
         access_token: str,
-        site_id: str,
+        id_site: int,
         block_start: datetime,
         block_end: datetime,
-    ) -> list[ParsedMonthData]:
-        """Holt einen Stats-Block (Monatswerte) vom VRM stats-Endpoint."""
+    ) -> tuple[list[ParsedMonthData], list[str], list[str]]:
+        """Holt einen Stats-Block.
+
+        Liefert (Monatswerte, alle Keys aus records, nicht-bekannte Keys).
+        """
         params = {
             "type": "kwh",
             "interval": "months",
             "start": int(block_start.timestamp()),
-            # Eine Sekunde vor dem Folgemonat → letzter angefragter Monat inklusive.
+            # Eine Sekunde vor Folgemonat → letzter Monat inklusive, ohne
+            # den darauffolgenden anzuziehen.
             "end": int(block_end.timestamp()) - 1,
         }
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(
-                f"{API_BASE}/installations/{site_id}/stats",
-                params=params,
-                headers=self._auth_headers(access_token),
-            )
+        resp = await client.get(
+            f"{API_BASE}/installations/{id_site}/stats",
+            params=params,
+            headers=self._auth_headers(access_token),
+        )
 
+        if resp.status_code == 401:
+            raise Exception("HTTP 401: Access Token ungültig oder abgelaufen.")
+        if resp.status_code == 403:
+            raise Exception(
+                f"HTTP 403: Kein Zugriff auf Installation {id_site}."
+            )
+        if resp.status_code == 429:
+            raise Exception("HTTP 429: VRM-Rate-Limit erreicht (~3 req/s).")
         if resp.status_code != 200:
             raise Exception(f"HTTP {resp.status_code}: {resp.text[:200]}")
 
         data = resp.json()
         if not data.get("success", False):
-            fehler_detail = data.get("errors") or data.get("error") or "Unbekannt"
-            raise Exception(f"VRM-API-Fehler: {fehler_detail}")
+            err = data.get("errors") or data.get("error") or "Unbekannt"
+            raise Exception(f"VRM-API-Fehler: {err}")
 
         records = data.get("records", {})
         if not isinstance(records, dict):
-            return []
+            return [], [], []
 
-        # Diagnose: tatsächliche Attribut-Keys loggen, damit eine Abweichung
-        # vom STATS_ATTR_MAPPING bei diesem getestet=False-Provider auffällt.
+        # Diagnose: tatsächliche Attribut-Keys auf INFO loggen.
+        alle_keys = list(records.keys())
         logger.info(
-            "VRM stats records keys (idSite=%s): %s",
-            site_id, list(records.keys()),
+            "VRM stats records keys (idSite=%s, %s–%s): %s",
+            id_site, block_start.date(), block_end.date(), alle_keys,
         )
 
-        return _records_to_monthly_data(records)
+        monthly, unbekannte = _records_to_monthly_data(records)
+        return monthly, alle_keys, unbekannte
