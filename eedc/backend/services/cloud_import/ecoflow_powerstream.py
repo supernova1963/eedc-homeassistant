@@ -217,15 +217,18 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
 
         host = _get_api_host(region)
         results: list[ParsedMonthData] = []
+        # Diagnose-Sammlung: alle indexNames quer über alle Monate.
+        seen_indexnames: set[str] = set()
 
         current_year = start_year
         current_month = start_month
 
         while (current_year, current_month) <= (end_year, end_month):
-            month_data = await self._fetch_single_month(
+            month_data, names = await self._fetch_single_month(
                 host, access_key, secret_key, serial_number,
                 current_year, current_month,
             )
+            seen_indexnames.update(names)
             if month_data and month_data.has_data():
                 results.append(month_data)
 
@@ -234,6 +237,19 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
                 current_month = 1
             else:
                 current_month += 1
+
+        # Lautes Scheitern bei stillem Mapping-Miss (siehe ecoflow_powerocean.py).
+        if not results and seen_indexnames:
+            unmapped = sorted(
+                n for n in seen_indexnames if n not in INDEX_NAME_MAPPING
+            )
+            logger.warning(
+                "EcoFlow PowerStream (sn=%s) lieferte 0 verwertbare Monatswerte. "
+                "Erhaltene indexNames: %s. Davon nicht im Mapping: %s. Bitte "
+                "INDEX_NAME_MAPPING in ecoflow_powerstream.py um die echten "
+                "Namen erweitern (oder im Issue posten — der Log liegt damit vor).",
+                serial_number, sorted(seen_indexnames), unmapped,
+            )
 
         return results
 
@@ -245,8 +261,12 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
         serial_number: str,
         year: int,
         month: int,
-    ) -> Optional[ParsedMonthData]:
-        """Holt Daten für einen einzelnen Monat (in Blöcken < 1 Woche)."""
+    ) -> tuple[Optional[ParsedMonthData], set[str]]:
+        """Holt Daten für einen einzelnen Monat (in Blöcken < 1 Woche).
+
+        Liefert zusätzlich die Menge der gesehenen indexNames für die
+        Mapping-Diagnose im Aufrufer.
+        """
         month_start = datetime(year, month, 1)
         if month == 12:
             month_end = datetime(year + 1, 1, 1)
@@ -255,11 +275,12 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
 
         now = datetime.now()
         if month_start > now:
-            return None
+            return None, set()
         if month_end > now:
             month_end = now
 
         aggregated: dict[str, float] = {}
+        seen_names: set[str] = set()
 
         # In Blöcken < 1 Woche abfragen (API verlangt < 7 Tage pro Request)
         block_start = month_start
@@ -273,6 +294,7 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
                 )
 
                 for index_name, index_value in block_data:
+                    seen_names.add(index_name)
                     field_name = INDEX_NAME_MAPPING.get(index_name)
                     if field_name and index_value is not None:
                         aggregated[field_name] = aggregated.get(field_name, 0) + index_value
@@ -286,7 +308,7 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
             block_start = block_end
 
         if not aggregated:
-            return None
+            return None, seen_names
 
         return ParsedMonthData(
             jahr=year,
@@ -297,7 +319,7 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
             batterie_ladung_kwh=round(aggregated.get("batterie_ladung_kwh", 0), 2) or None,
             batterie_entladung_kwh=round(aggregated.get("batterie_entladung_kwh", 0), 2) or None,
             eigenverbrauch_kwh=round(aggregated.get("eigenverbrauch_kwh", 0), 2) or None,
-        )
+        ), seen_names
 
     async def _fetch_history_block(
         self,
@@ -346,5 +368,14 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
             value = item.get("indexValue")
             if name:
                 result.append((name, value))
+
+        # Diagnose: echte indexNames pro Block sichtbar machen — bei einem
+        # `getestet=False`-Provider die einzige Brücke zwischen Hersteller-
+        # API und unserem INDEX_NAME_MAPPING.
+        logger.info(
+            "EcoFlow PowerStream history block (sn=%s, %s→%s) indexNames: %s",
+            serial_number, begin.date(), end.date(),
+            [n for n, _ in result],
+        )
 
         return result

@@ -320,16 +320,21 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
 
         host = _get_api_host(region)
         results: list[ParsedMonthData] = []
+        # Diagnose: alle indexName-Werte, die die API geliefert hat — quer
+        # über alle Monate. Wird unten zur WARNING genutzt, wenn die API
+        # antwortet, aber kein einziger Name im INDEX_NAME_MAPPING vorkommt.
+        seen_indexnames: set[str] = set()
 
         # Monate iterieren
         current_year = start_year
         current_month = start_month
 
         while (current_year, current_month) <= (end_year, end_month):
-            month_data = await self._fetch_single_month(
+            month_data, names = await self._fetch_single_month(
                 host, access_key, secret_key, serial_number,
                 current_year, current_month,
             )
+            seen_indexnames.update(names)
             if month_data and month_data.has_data():
                 results.append(month_data)
 
@@ -339,6 +344,22 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
                 current_month = 1
             else:
                 current_month += 1
+
+        # Lautes Scheitern bei stillem Mapping-Miss: API hat geantwortet,
+        # aber kein einziger indexName ist in INDEX_NAME_MAPPING enthalten.
+        # Dirk-PN-Klasse — ohne diesen Log konnte 2026-05-22 niemand sehen,
+        # WAS die EcoFlow-API überhaupt zurückgegeben hat.
+        if not results and seen_indexnames:
+            unmapped = sorted(
+                n for n in seen_indexnames if n not in INDEX_NAME_MAPPING
+            )
+            logger.warning(
+                "EcoFlow PowerOcean (sn=%s) lieferte 0 verwertbare Monatswerte. "
+                "Erhaltene indexNames: %s. Davon nicht im Mapping: %s. Bitte "
+                "INDEX_NAME_MAPPING in ecoflow_powerocean.py um die echten "
+                "Namen erweitern (oder im Issue posten — der Log liegt damit vor).",
+                serial_number, sorted(seen_indexnames), unmapped,
+            )
 
         return results
 
@@ -350,8 +371,13 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
         serial_number: str,
         year: int,
         month: int,
-    ) -> Optional[ParsedMonthData]:
-        """Holt Daten für einen einzelnen Monat (in Blöcken < 1 Woche)."""
+    ) -> tuple[Optional[ParsedMonthData], set[str]]:
+        """Holt Daten für einen einzelnen Monat (in Blöcken < 1 Woche).
+
+        Liefert zusätzlich die Menge aller indexName-Werte, die die API
+        in diesem Monat zurückgegeben hat — für die Mapping-Diagnose im
+        Aufrufer (`fetch_monthly_data`).
+        """
 
         # Monatsanfang und -ende bestimmen
         month_start = datetime(year, month, 1)
@@ -363,12 +389,13 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
         # Nicht in der Zukunft abfragen
         now = datetime.now()
         if month_start > now:
-            return None
+            return None, set()
         if month_end > now:
             month_end = now
 
-        # Aggregierte Werte für den Monat
+        # Aggregierte Werte für den Monat + alle gesehenen indexNames
         aggregated: dict[str, float] = {}
+        seen_names: set[str] = set()
 
         # In Blöcken < 1 Woche abfragen (API verlangt < 7 Tage pro Request)
         block_start = month_start
@@ -381,8 +408,10 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
                     block_start, block_end,
                 )
 
-                # Werte zum Monats-Aggregat addieren
+                # Werte zum Monats-Aggregat addieren + alle Namen für die
+                # Diagnose mitführen, auch unbekannte.
                 for index_name, index_value in block_data:
+                    seen_names.add(index_name)
                     field_name = INDEX_NAME_MAPPING.get(index_name)
                     if field_name and index_value is not None:
                         aggregated[field_name] = aggregated.get(field_name, 0) + index_value
@@ -396,7 +425,7 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
             block_start = block_end
 
         if not aggregated:
-            return None
+            return None, seen_names
 
         return ParsedMonthData(
             jahr=year,
@@ -407,7 +436,7 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
             batterie_ladung_kwh=round(aggregated.get("batterie_ladung_kwh", 0), 2) or None,
             batterie_entladung_kwh=round(aggregated.get("batterie_entladung_kwh", 0), 2) or None,
             eigenverbrauch_kwh=round(aggregated.get("eigenverbrauch_kwh", 0), 2) or None,
-        )
+        ), seen_names
 
     async def _fetch_history_block(
         self,
@@ -458,5 +487,15 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
             value = item.get("indexValue")
             if name:
                 result.append((name, value))
+
+        # Diagnose: echte indexNames pro Block sichtbar machen — bei einem
+        # `getestet=False`-Provider die einzige Brücke zwischen Hersteller-
+        # API und unserem INDEX_NAME_MAPPING. Ohne diesen Log konnten wir
+        # 2026-05-22 nicht sehen, was die EcoFlow-API überhaupt liefert.
+        logger.info(
+            "EcoFlow history block (sn=%s, %s→%s) indexNames: %s",
+            serial_number, begin.date(), end.date(),
+            [n for n, _ in result],
+        )
 
         return result
