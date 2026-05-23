@@ -30,6 +30,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
+from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services import repair_orchestrator as orch
@@ -187,14 +188,7 @@ async def _pv_tagessumme(
     tz = tz_result.scalar_one_or_none()
     if tz is None or not tz.komponenten_kwh:
         return None
-    return round(
-        sum(
-            float(v) for k, v in tz.komponenten_kwh.items()
-            if isinstance(v, (int, float))
-            and (k.startswith("pv_") or k.startswith("bkw_"))
-        ),
-        2,
-    )
+    return round(summe_pv_bkw_kwh(tz.komponenten_kwh), 2)
 
 
 @router.post("/{anlage_id}/reaggregate-bereich")

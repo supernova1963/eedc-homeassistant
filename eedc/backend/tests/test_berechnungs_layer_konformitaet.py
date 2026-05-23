@@ -39,10 +39,10 @@ ALLOWED_PV_PREFIXES_FILES = {
 # live_komponenten_builder.py) nutzen andere Schreibweisen (z.B. nur
 # `startswith("pv_")` oder generisches komponenten_kwh-Iteration) und werden
 # beim nächsten Touch separat migriert — siehe project_berechnungs_layer_offen.md.
-INLINE_PATTERN_GRANDFATHERED = {
+INLINE_PATTERN_GRANDFATHERED: dict[str, str] = {
     # Format: relativer Pfad → Begründung + ungefährer Migrations-Trigger
-    "api/routes/prognosen.py": "Genauigkeits-Tracking IST (Z.643 _PV_PREFIXES) — Migration bei nächstem Touch (PRIO 1)",
-    "api/routes/energie_profil/repair.py": "Repair-Werkbank PV-Tagessumme (Z.194 Inline-or) — Migration bei nächstem Touch (PRIO 1)",
+    # PRIO 1 (prognosen.py + repair.py) wurde 2026-05-23 migriert; die Liste
+    # bleibt als Andock-Punkt für zukünftige Schuld erhalten.
 }
 
 

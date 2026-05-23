@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.api.deps import get_db
+from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -633,23 +634,14 @@ async def get_prognosen_genauigkeit(
     eedc_signed = []
     sc_signed = []
 
-    # Prefix-Whitelist statt Negativliste (Rainer-PN 2026-05-16): die alte
-    # Negativliste `{strompreis, netzbezug, einspeisung}` ließ Batterie-Sub-Keys
-    # mit netto positiver Tages-Ladung als "IST-Erzeugung" durch — bei einer
-    # Anlage mit ~5 kWh Netto-Batterie-Ladung am Tag entstand 5 kWh künstliche
-    # Überschätzung des IST gegenüber PV-Ertrag. Genauigkeits-Tracking ist
-    # explizit PV-IST (vergleicht mit PV-Prognosen), also Whitelist auf
-    # die Erzeugungs-Komponenten — analog Frontend `EnergieprofilTageTabelle.tsx`,
-    # das exakt diesen Prefix-Filter für die Spalte "PV-Ertrag" verwendet.
-    _PV_PREFIXES = ("pv_", "bkw_")
-
+    # PV-IST über den SoT-Helper `summe_pv_bkw_kwh` — Whitelist und v>0-Filter
+    # gehören zentral nach `core/berechnungen/energie.py` (ADR-001, BKW-Drift-
+    # Klasse 2026-05-19, Rainer-PN). Frontend-Pendant: `PV_KOMPONENTEN_PREFIXE`
+    # in `frontend/src/lib/constants.ts`.
     for tz in tage_daten:
         ist_kwh = None
         if tz.komponenten_kwh:
-            ist_kwh = sum(
-                v for k, v in tz.komponenten_kwh.items()
-                if v > 0 and k.startswith(_PV_PREFIXES)
-            )
+            ist_kwh = summe_pv_bkw_kwh(tz.komponenten_kwh)
 
         # EEDC = OpenMeteo × Lernfaktor (historisch)
         eedc_kwh = None
