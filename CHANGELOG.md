@@ -7,6 +7,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.32.4] - 2026-05-24 — Database-Lock-Fix + Reaggregations-Hardening + Diagnose-Restore
+
+> 🔧 **Patch-Release.** Schwerpunkt: drei Tester-Fixes (#291 SQLite-Locks beim Cloud-Reimport, #290 detLAN Reaggregations-Anomalien und „0/24"-Diagnose-Fehlmeldung). Plus ein als Folgefund identifizierter **strukturierter LTS-Aggregator-Drift seit v3.31.0**, dessen vollständige Bereinigung mit Historien-Reaggregation in **v3.33.0** folgen wird (siehe unten).
+
+> ⚠️ **Bekannter Folge-Bug → v3.33.0 angekündigt.** Im Zuge der Diagnose von #290 wurde aufgedeckt, dass der seit v3.31.0 aktive HA-LTS-Aggregator-Pfad (`get_komponenten_tageskwh_lts`) bei Investitionen mit Multi-Sensor-Mappings die typenspezifischen Filter überspringt, die der Snapshot-Aggregator-Pfad anwendet. Folge: in `TagesZusammenfassung.komponenten_kwh` (sichtbar im Auswertungen→Energieprofil-„Tage"-Tab) sind die Spaltenwerte für Wärmepumpe (thermische Sensoren), Speicher (Arbitrage-Mapping mit `ladung_netz_kwh`), Wallbox (PV-/Netz-Split-Mapping), E-Auto (Multi-Sensor + Wallbox-misst-EA-Konstellation) und Sonstiges (bidirektionale Mappings) seit dem 16.5.2026 systematisch überhöht. v3.32.4 entschärft die zwei akut sichtbaren Folgen (heute-Spalte driftet gegen TD-Tab, „Tag neu aggregieren" verschlechtert statt verbessert die Werte) als Defense-in-Depth. **v3.33.0 bringt die strukturelle Lösung**: geteilter Helper für die Per-Typ-Logik (geometrisch garantierte Symmetrie zwischen beiden Aggregator-Varianten), Symmetrie-Tests pro Typ, erweiterte TEP↔TZ-Invariante auf alle Komponenten-Kategorien — plus eine **einmalige Historien-Migration**, die beim ersten Start nach Update alle TZ-Rows zwischen 16.5. und Release-Datum für jede betroffene Anlage automatisch korrekt reaggregiert. Persistente HA-Notification informiert den Anwender. Tester-Wiedervorlage geplant.
+
+### Fixed
+
+- **Datenbank-Locks beim Cloud-Re-Import** (#291 kingcap1): `database is locked` während Monatsabschluss-Speichern, wenn parallel ein Vollbackfill-/Cloud-Aggregator-Lauf seriell Tag-für-Tag in einer einzigen Schreibtransaktion lief und den SQLite-Writer-Lock über Minuten hielt. Fix: `backfill_range`, `backfill_from_statistics` und beide Scheduler-Jobs (`aggregate_today_all`, `aggregate_yesterday_all`) committen jetzt pro Tag bzw. pro Anlage — Lock immer nur ~15-20 s belegt. Sicherheitsnetz: `busy_timeout` von 10 s auf 30 s erhöht. Bei Restkollision sieht der Anwender statt SQL-Dump eine freundliche 503-Meldung „Datenbank gerade belegt, in 10-20 Sekunden erneut speichern".
+
+- **Reaggregations-Knopf „Tag neu aggregieren" verschlimmbessert nicht mehr** (#290 detLAN Punkt 4): Wenn HA-LTS für den gewählten Tag keine Statistik-Stunden liefert und keine validen Snapshots in der DB existieren, schrieb `aggregate_day` trotzdem eine neue TZ-Zeile mit (häufig falschen) selbst-geheilten Boundary-Werten und löschte die alte vorher. Fix: bei `datenquelle="manuell"` mit leerem Σ-Hourly werden `komponenten_kwh` und `komponenten_starts` aus der bestehenden TZ bewahrt statt durch Self-Heal-Müll ersetzt. Plus: Boundary-Diff wird bei manueller Reaggregation generell übersprungen — Σ-Hourly aus der Stunden-Schleife ist die verlässlichere Quelle.
+
+- **Reaggregations-Diagnose „0/24 Stunden mit Messdaten" auch bei Erfolg** (#290 detLAN Punkt 4 Folge): Beim Orchestrator-Refactor in Commit `17db2350` (v3.30.x) ging das Response-Feld `stunden_mit_messdaten` aus dem `POST /api/energie-profil/{id}/reaggregate-tag`-Endpoint verloren. Das Frontend wertet `> 0` aus — `undefined > 0` ist `false`, also wurde **immer** die Warnung „0/24 — keine Snapshots / HA-Statistics nicht erreichbar" angezeigt, auch bei erfolgreich aggregierten Tagen mit voller Datenlage. Field wiederhergestellt: Counter aller TEP-Stunden des Tages mit mindestens einem nicht-NULL-Leistungswert.
+
+- **Heute-Spalte im Energieprofil-„Tage"-Tab driftet nicht mehr ~5-10× gegen den „TD"-Tab** (#290 Punkt 3, Defense-in-Depth): Für `datum == today` ist `snap[Folgetag 00:00]` per Definition Zukunft. Das Self-Healing zog den nächstgelegenen verfügbaren Wert aus HA-history/MQTT — bei großzügigen Toleranzfenstern teils einen Wert nahe „jetzt", der semantisch nicht „Tagesende" entspricht. Fix: für den laufenden Tag wird die Boundary-Diff übersprungen, `komponenten_kwh` für heute kommt ausschließlich aus dem Σ-Hourly-Pfad (= gleiche Quelle wie TD-Tab, Live-Dashboard, Cockpit-Übersicht-heute).
+
+### Changed
+
+- **KPI-Karten auf dem Wärmepumpe-Dashboard tragen jetzt „(Lebensdauer)"-Suffix** (#290 detLAN Punkt 1+2): Die Karten „Kompressor-Starts" und „Betriebsstunden" zeigen by design die Lebensdauer-Werte aus dem Hersteller-Counter (Tooltip erläutert das). Der Bezug war bei flüchtigem Lesen leicht zu verwechseln mit einem Monatsaggregat, gerade weil andere KPIs der Seite auf das abgeschlossene Monatsfenster bezogen sind. Title-Suffix macht den Bezug auf einen Blick klar — keine Funktionsänderung.
+
+- **Spalten-Header im Energieprofil-„Tage"-Tab tragen jetzt die Einheit** (#290 detLAN Punkt 5): „kWh", „kW", „Starts", „Zyklen" etc. werden grau in Klammern hinter dem Spalten-Label angezeigt, statt nur im Tooltip. Konsistent zur „TD"-Tab-Konvention.
+
+- **Docstring `get_komponenten_tageskwh` korrigiert** (#290 Punkt B): Der Hinweis „Σ stromverbrauch+heizenergie+warmwasser" im Funktions-Docstring war Wunschdenken — der Code rechnete (korrekterweise) ausschließlich mit `stromverbrauch_kwh`. Docstring an Code angeglichen, plus expliziter Hinweis warum thermische Felder nicht in die Energie-Bilanz gehören (≈ Strom × COP). Cosmetic + Maintainer-Klarheit (genau dieser falsche Docstring hat zur Asymmetrie zwischen Snapshot- und LTS-Variante beigetragen, die in v3.33.0 strukturell bereinigt wird).
+
+---
+
 ## [3.32.3] - 2026-05-23 — Doku-Nachreichung WAS-IST-NEU
 
 > 📝 **Reine Doku-Nachreichung.** Bei v3.32.2 war die WAS-IST-NEU-Seite noch auf v3.32.1-Stand — `sync-help.sh` läuft vor dem Frontend-Build, also wurde der alte Stand ins v3.32.2-Image gebacken. Anwender hätten den v3.32.2-Inhalt erst beim nächsten Release gesehen. Diese Version bringt den WAS-IST-NEU-Block für v3.32.2 in die In-App-Hilfe.
