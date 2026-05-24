@@ -1,11 +1,28 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.32.4)
+> **Stand:** Mai 2026 (v3.34.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.34.0 — Drift-Erkennung scharf gestellt (Mai 2026, Vorarbeit)
+
+### Was sich für dich ändert
+
+- **Funktional nichts** — diese Version ist die erste Etappe des in v3.33.0 angekündigten Refactors von Energieprofil und Reparatur-Werkbank. Sie schärft hinter den Kulissen die Drift-Erkennung auf den Tageswerten, damit künftige Aggregat-Fehler durch automatische Tests auffallen, nicht durch Anwenderberichte. Bestehende Werte und Anzeigen ändern sich nicht.
+
+### Was wir für die nächsten Etappen ankündigen
+
+- **v3.34.1** — Konsolidierung des Vollbackfill-Pfads. Der Vollbackfill und der tägliche Aggregat-Lauf laufen heute auf zwei eigenständigen Code-Pfaden; sie werden auf einen gemeinsamen Pfad zusammengeführt. Stille Verbesserung als Nebeneffekt: für Tage, die du per Vollbackfill geschrieben hast, fehlen heute Peak-Werte, Strompreis-Stunden und Börsenpreis-Felder — diese werden bei erneuter Aggregation (Werkbank → „Tag(e) neu aggregieren" oder „Vollbackfill") nun automatisch befüllt. Bestehende Werte bleiben unverändert, bis du selbst re-aggregierst.
+- **v3.35.0** — Analoge strukturelle Auflösung für die Stunden-Aggregation (entspricht der in v3.33.0 für die Tages-Aggregation geleisteten Arbeit). Wenn dein E-Auto-Sensor mehrere Mess-Felder hat (`verbrauch_kwh` + `ladung_kwh`), waren Hourly-Werte bisher latent doppelt gezählt — das wird in v3.35 strukturell behoben. Vorab läuft ein Daten-Checker-Scan über Tester-Anlagen, ob das Muster überhaupt vorkommt; falls ja, gibt es eine 1-Tag-Vorlauf-Notification statt einer stillen Korrektur.
+
+### Mit Dank an
+
+- Alle, die die letzten Patch-Wellen geduldig begleitet haben — die jetzt eingebauten Drift-Tests sind das direkte Resultat aus den Lehren von #190, #290 und der Aggregator-Drift-Serie der letzten Wochen.
 
 ---
 

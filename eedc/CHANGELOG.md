@@ -7,6 +7,37 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.0] - 2026-05-24 — Drift-Erkennung für Aggregat-Felder verschärft (Phase A v3.34-Refactor)
+
+> 🔧 **Patch-Release, Vorarbeit.** Phase A des in v3.33.0 angekündigten Energieprofil-+-Werkbank-Refactors. Schärft die Drift-Erkennung auf der Daily-Schreibseite und entkoppelt einen Magic-String, der bisher gleichzeitig DB-Spalten-Wert UND Steuerungs-Trigger war. **Keine User-spürbare Funktionsänderung** — alle bestehenden DB-Werte (`TagesZusammenfassung.datenquelle`) und Provenance-Writer-Strings bleiben byte-identisch, keine Migration nötig.
+>
+> 📣 **Folge-Etappen angekündigt.** Phase B (Backfill-Konsolidierung — `backfill_from_statistics` wird zur dünnen Schleife über `aggregate_day`, stille Daten-Verbesserung für historische Tage) folgt als v3.34.1 nach einem normalen Tester-Zyklus. Phase C (Hourly-Helper-Migration analog zur in v3.33.0 sanierten Daily-Symmetrie, strukturelle Auflösung des E-Auto-Doppelmapping-Bugs) folgt als v3.35.0 mit eigenem Sichtungs- und Tester-Zyklus, weil sie anwender-sichtbar sein kann.
+
+### Added
+
+- **Konformitäts-Test K1 — Prognose-Felder-Listen-Sync** (`test_konformitaet_prognose_felder.py`): Koppelt drei real existierende Prognose-Rettungs-Listen über Subsystem-Grenzen hinweg ohne sie zu einer geteilten Konstante zu verschmelzen. Bei Drift in einer der drei Stellen (Aggregator `_PROGNOSE_FELDER_RETTEN`, Backfill `_PROGNOSE_FELDER_RETTEN_BACKFILL`, Wetter-Endpoint `_TZ_SCHREIBFELDER_PROGNOSE`) bricht der Test mit klarer Fehlermeldung. Vorfallsbezug: v3.31.7 (#190) hatte das Korrekturprofil dauerhaft leer gelassen, weil `pv_prognose_stundenprofil` zum Aggregator hinzugefügt, aber im Backfill vergessen wurde — heute strukturell durch `existing_dates`-Skip neutralisiert, latente Drift-Stelle ohne akuten Schaden. K1 fängt die nächste Drift-Iteration vorab.
+
+- **Konformitäts-Test K2 — TZ-Felder-Vollständigkeits-Check** (`test_konformitaet_tz_felder.py`): Jede `TagesZusammenfassung`-Spalte muss in genau einer von vier Klassifikationen stehen — vom Aggregator gesetzt, auf der Prognose-Rettungs-Liste, ORM/Identifier oder explizit "bleibt NULL" mit Begründung. Bei jeder neuen Spalte wird der Autor durch Test-Bruch zu einer expliziten Entscheidung gezwungen — kein stilles Vergessen mehr durch den Delete-and-Recreate-Pfad.
+
+- **Source-Marker als typsicheres Enum** (`backend.services.energie_profil.source.Source`): Der bisherige `datenquelle`-Magic-String hatte drei gleichzeitige Rollen — DB-Spalten-Wert, Provenance-Writer-Suffix und Verzweigungs-Trigger für die Preserve-Logik (Audit §8.12). Ein Tippfehler in einem Aufrufer hätte die Schutzlogik still ausgeschaltet. Das Enum hat drei Werte (`SCHEDULER`, `MONATSABSCHLUSS_BACKFILL`, `MANUAL_REPAIR`) und projiziert via `to_db_string()`/`to_writer()`/`is_manual_repair()` auf die heutigen Magic-Strings — DB- und Provenance-Output bleiben byte-identisch. `aggregate_day` nimmt das Enum als **Pflicht-Keyword-Parameter ohne Default**; ein Aufruf ohne `source=...` bricht zur Aufruf-Zeit mit `TypeError`. Alle bestehenden Aufrufer (Scheduler, Backfill, Repair-Orchestrator, v3.33.0-Migration **und alle Tests**) sind auf das Enum umgestellt — Plan §3 Phase A E4 sauber erfüllt, der Magic-String existiert nur noch als Output in DB-Spalte und Provenance-Writer-String, nicht mehr als Eingangs-Trigger im Aggregator.
+
+### Test
+
+- 2 K1-Konformitäts-Tests (Listen-Sync + Modell-Existenz)
+- 3 K2-Konformitäts-Tests (Vollständigkeit + Disjunktheit + Modell-Existenz)
+- 5 Source-Marker-Regressions-Tests (Projektions-Werte byte-identisch, Enum-Vollständigkeit, Signatur-Smoke-Test)
+- Suite: 553 grün (543 v3.33.0 + 10 neu)
+
+### Notes
+
+- **Asymmetrie-Klärung Scheduler-Preserve vs Manuell-Preserve** (Audit §4.2): Die heutige Asymmetrie (`is_manual_repair`-Trigger nur bei Reparatur-Werkbank, nicht beim Scheduler) ist eine **Pattern-Adaption aus dem Monatsdaten-Kontext**. Dort schützt das Preserve-Pattern manuell editierte Monatsdaten-Werte vor Überschreibung durch Scheduler-Läufe. In `TagesZusammenfassung` gibt es keine manuelle Werteingabe; „manuell" bedeutet hier „Werkbank-Trigger" (`Source.MANUAL_REPAIR`). Die Übertragung in den TZ-Aggregator erfolgte in v3.32.4 (#290) als defensive Maßnahme bei nicht erreichbarem HA-LTS plus inkonsistenten Snapshots. Damit ist die Asymmetrie weder reiner Tradeoff noch dokumentierter TZ-Vorfall — sondern eine vorsichtige Pattern-Adaption aus einem semantisch verwandten Bereich. Der Inline-Kommentar in [`aggregator.py:582`](eedc/backend/services/energie_profil/aggregator.py#L582) trägt diese Geschichte. Phase B / spätere Etappe sollte prüfen, ob die Adaption im TZ-Kontext weiterhin gerechtfertigt ist oder ob Snapshot-Self-Healing den Schutz heute überflüssig macht.
+
+- **Allowlist-Befund `kraftstoffpreis_euro`** (K2 Phase-A-Notiz): Wird heute extern via `kraftstoff_preis_service.fill_tagesdaten` befüllt und beim Aggregator-Delete-and-Recreate verworfen. Risiko-Klasse identisch zu den Prognose-Feldern, aber heute nicht durch eine Rettungs-Liste geschützt. Kein akuter Anwenderbericht (Symptom selten, weil Kraftstoffpreis-Backfill-Lauf typisch nach Re-Aggregation läuft). Folge-Diskussion offen — wird in einer Phase-B-Sichtung mitgedacht.
+
+- **Plan-Abweichung: `to_provenance_source(hourly_source: …)`-Methode nicht implementiert.** Der v3.34-Plan §3 Phase A.1 + das Handover-Doc fordern eine vierte Projektions-Methode am `Source`-Enum, die den TZ/TEP-Provenance-Source-String (`external:ha_statistics:hourly|daily` vs `auto:monatsabschluss`) je nach Hourly-Datenpfad zusammensetzt. Im heutigen Code hängt diese Verzweigung ([`aggregator.py:613-617`](eedc/backend/services/energie_profil/aggregator.py#L613)) ausschließlich vom **Daten-Pfad** (LTS-Aggregator-Ergebnis vs Snapshot-Fallback) ab, nicht vom Source-Enum. Eine Methode am Enum hätte einen `HourlySource`-Parameter gebraucht, der das Enum auf eine ihm fremde Konzept-Ebene zieht und zwei orthogonale Achsen kapselt. E4 (kein `datenquelle ==` als Verzweigung im Aggregator) ist trotzdem voll erfüllt, weil keine der drei aktiven Magic-String-Verzweigungen am `datenquelle`-String hing, die der Plan adressieren wollte. Die Methode lässt sich in Phase B nachrüsten, wenn der Backfill-Konsolidierungs-Schnitt den Source-String-Aufbau ohnehin neu strukturiert.
+
+---
+
 ## [3.33.0] - YYYY-MM-DD — LTS-Aggregator-Drift strukturell behoben + Reparatur-Werkbank wirksam + v3.34-Ankündigung
 
 > 🔧 **Patch-Release.** Strukturelle Bereinigung der in v3.32.4 angekündigten Aggregator-Drift. Plus: die in v3.32.4 als Übergangsschutz eingebaute Reparatur-Werkbank-Bremse (manueller Skip des Boundary-Diff) wird entfernt — sie war ein Symptompatch, mit dem strukturellen Fix funktioniert die Reparatur-Werkbank wieder für ihren eigentlichen Zweck. Einmalige Historien-Migration korrigiert alle betroffenen TZ-Rows automatisch beim ersten Start.
