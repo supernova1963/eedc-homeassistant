@@ -1,11 +1,39 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.32.3)
+> **Stand:** Mai 2026 (v3.32.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.32.4 — Reaggregations-Hardening + Datenbank-Locks behoben (Mai 2026)
+
+### Was sich für dich ändert — Stabilität & Datenqualität
+
+- **Datenbank-Locks beim Cloud-Re-Import behoben**: Beim großflächigen Re-Import vergangener Monate (z. B. Victron VRM) konnte das Speichern eines Monatsabschlusses parallel mit `database is locked` scheitern, weil der Hintergrund-Aggregator eine sehr lange Schreibtransaktion offen hielt. eedc committet jetzt pro Tag bzw. pro Anlage — das Lock-Fenster ist immer nur ~15-20 Sekunden offen, der Monatsabschluss kommt sauber dazwischen. Falls es trotz allem mal eng wird: statt eines SQL-Dumps siehst du eine kurze freundliche Meldung „Datenbank gerade belegt, bitte in 10-20 Sekunden erneut speichern". Mit Dank an kingcap1 für das saubere Log.
+- **„Tag neu aggregieren" verschlimmbessert keine Tage mehr**: Wenn HA-LTS für den gewählten Tag keine Daten mehr hat (z. B. weil HA-Recorder Lücken hat) und auch keine guten Snapshots in der eedc-DB stehen, schrieb der Reparatur-Knopf bisher trotzdem eine neue Tageszusammenfassung mit häufig falschen, selbst-geheilten Werten. Jetzt bleiben die alten Werte unverändert, wenn keine frischen Daten gefunden werden. Plus: die Diagnose-Meldung „X von 24 Stunden mit Messdaten" stimmt jetzt wieder — bisher zeigte sie wegen eines verlorenen Response-Feldes immer „0/24", auch bei erfolgreichen Reaggregationen.
+- **Wärmepumpe-Spalte im „Tage"-Tab driftet nicht mehr gegen den „TD"-Tab**: Für den laufenden Tag rechnete eedc die Tageswerte aus dem kumulativen Zähler hoch, wobei der Snapshot zur Tagesgrenze (= Mitternacht morgen) noch in der Zukunft lag — das Self-Healing zog dann einen unpassenden Ersatzwert. Im Ergebnis konnte die Wärmepumpe-Tagessumme im „Tage"-Tab um ein Vielfaches abweichen vom „TD"-Tab. eedc nutzt für heute jetzt dieselbe Stunden-Integration wie alle anderen Heute-Sichten — beide Tabs zeigen denselben Wert. Mit Dank an detLAN für die Drift-Reproduktion.
+
+### Was sich für dich ändert — Bedienung
+
+- **Wärmepumpe-Dashboard: KPI-Kacheln mit „(Lebensdauer)"-Suffix**: Die Karten „Kompressor-Starts" und „Betriebsstunden" zeigen die kumulativen Werte aus deinem Hersteller-Sensor (Lebensdauer-Counter), nicht ein Monatsaggregat. Der Bezug stand bisher nur im Tooltip — jetzt steht „(Lebensdauer)" auch im Kachel-Titel.
+- **Tage-Tabelle: Einheiten im Spalten-Header**: Die Spalten im „Tage"-Tab unter Daten → Energieprofil tragen jetzt sichtbar die Einheit hinter dem Label („kWh", „kW", „Starts" usw.) — konsistent zum „TD"-Tab.
+
+### Achtung — angekündigter Folge-Fix mit v3.33.0
+
+Im Zuge der detLAN-Diagnose ist eine **strukturelle Drift in den Tageswerten** aufgedeckt worden, die alle HA-Add-on-Anwender mit Multi-Sensor-Mappings seit Mitte Mai betrifft:
+
+- Wenn deine **Wärmepumpe** zusätzlich zum Strom-Sensor auch thermische Sensoren (`heizenergie_kwh`, `warmwasser_kwh`) gemappt hat, summiert eedc seit v3.31.0 alle drei unter der Wärmepumpe-Spalte — statt korrekt nur den Strom. Faktor ~5-10×.
+- Wenn dein **Speicher** für Arbitrage einen `ladung_netz_kwh`-Sensor gemappt hat, wird er doppelt zur Gesamtladung gezählt.
+- Wenn deine **Wallbox** oder dein **E-Auto** zusätzlich zum Gesamt-Ladezähler PV-/Netz-Split-Sensoren gemappt haben, werden diese Teilmengen nochmal addiert. Drift bis ca. +50-100 %.
+- Wenn eine **„Sonstige Position"** sowohl als Erzeuger als auch als Verbraucher gemappt ist, kann die Anzeige kippen.
+
+Sichtbar wird das vor allem in der „Tage"-Tabelle (Daten → Energieprofil) und der per-Monat-Komponenten-Aufschlüsselung (Auswertungen → Energieprofil). Cockpit-Übersicht, Live-Dashboard und ROI/Wirtschaftlichkeits-Berechnungen sind **nicht** betroffen — sie nutzen andere Datenquellen.
+
+v3.32.4 entschärft die zwei akut sichtbaren Folgen (heute-Drift, Reaggregations-Verschlimmbesserung) als Übergangsschutz. **Die vollständige strukturelle Bereinigung kommt mit v3.33.0** und beinhaltet auch eine einmalige automatische Reaggregation aller betroffenen Tage seit dem 16.5. — du brauchst danach nichts manuell anzuwerfen, und eine HA-Notification informiert dich über den Lauf.
 
 ---
 
