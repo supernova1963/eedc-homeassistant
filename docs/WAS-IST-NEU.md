@@ -9,6 +9,30 @@
 
 ---
 
+## v3.33.0 — Tageswerte-Korrektur + Reparatur-Werkbank wirksam (Mai 2026)
+
+### Was sich für dich ändert — automatische Korrektur deiner Tageswerte
+
+- **Die in v3.32.4 angekündigte Reaggregation läuft beim ersten Start automatisch**: alle Tageszusammenfassungen ab dem 16.5.2026 werden für jede Anlage mit Sensor-Mapping neu berechnet. Du brauchst nichts zu klicken. Im Activity-Log siehst du, wenn der Lauf startet und wenn er fertig ist. Für die Mehrzahl der Anwender dauert das wenige Sekunden bis Minuten, abhängig von der Anzahl betroffener Tage.
+- **Konkret betroffen sind die Spalten in der „Tage"-Tabelle (Daten → Energieprofil)** und die Komponenten-Aufschlüsselung pro Monat (Auswertungen → Energieprofil) — dort werden die Werte für Wärmepumpe, Speicher, Wallbox, E-Auto und Sonstiges für die genannten Tage kleiner und realistischer, wenn du eine der in v3.32.4 beschriebenen Mapping-Konstellationen hast. Cockpit-Übersicht, Live-Dashboard, ROI/Wirtschaftlichkeits-Berechnungen und der Monatsabschluss ändern sich nicht — sie lesen aus einer anderen Datenquelle.
+
+### Was sich für dich ändert — Reparatur-Werkbank
+
+- **„Tag neu aggregieren" wirkt jetzt wieder auf die Komponenten-Werte**: In v3.32.4 war der Knopf als Übergangsschutz so eingestellt, dass er die Komponenten-Tageswerte unverändert lässt (weil der damalige Aggregator falsche Werte geliefert hätte). Mit der strukturellen Korrektur in v3.33.0 läuft der Knopf wieder durch und korrigiert die Werte — er erfüllt also wieder seinen eigentlichen Zweck.
+- **Wenn du den Knopf in den letzten Tagen erfolglos getestet hast**: nach dem Update wird derselbe Klick die Werte tatsächlich aktualisieren. Das wirkt wie „die Zahlen springen wieder" — es ist die nachgeholte Korrektur, kein neuer Bug.
+
+### Was wir für v3.34 ankündigen
+
+- **Strukturelle Vereinfachung von Energieprofil und Reparatur-Werkbank**: Beide Bereiche sind über mehrere Releases organisch gewachsen, mit mehreren parallelen Datenpfaden, Übergangs-Patches und Sonderfällen für Einzel-Anwendungsfälle. Das hat in den letzten Wochen zu der Häufung von Korrekturen geführt, die du gesehen hast. Für v3.34 planen wir einen konsolidierten Aufbau: ein zentraler Datenpfad mit klar getrennten Quellen-Adaptern, die Per-Typ-Logik im zentralen Berechnungs-Layer, weniger Sonderfälle. Ziel ist weniger Wartungsaufwand für uns und eine vorhersagbarere Auswertungs-Sicht für dich.
+- **Während der Konzept- und Audit-Phase** sammeln wir neue Beobachtungen und Beiträge zu diesen Bereichen und adressieren sie im Zuge des Refactors, statt sie einzeln zu patchen. Der Cockpit-, Monatsabschluss- und Cloud-Import-Bereich ist davon nicht betroffen — Bug-Reports dort werden wie gewohnt zeitnah behandelt.
+- **Für das aktuelle v3.33.0 bleibt die Reparatur-Werkbank in der UI verfügbar.**
+
+### Mit Dank an
+
+- Alle geduldigen Testerinnen und Tester, die die letzten Patch-Wellen begleitet haben.
+
+---
+
 ## v3.32.4 — Reaggregations-Hardening + Datenbank-Locks behoben (Mai 2026)
 
 ### Was sich für dich ändert — Stabilität & Datenqualität

@@ -7,6 +7,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.33.0] - YYYY-MM-DD — LTS-Aggregator-Drift strukturell behoben + Reparatur-Werkbank wirksam + v3.34-Ankündigung
+
+> 🔧 **Patch-Release.** Strukturelle Bereinigung der in v3.32.4 angekündigten Aggregator-Drift. Plus: die in v3.32.4 als Übergangsschutz eingebaute Reparatur-Werkbank-Bremse (manueller Skip des Boundary-Diff) wird entfernt — sie war ein Symptompatch, mit dem strukturellen Fix funktioniert die Reparatur-Werkbank wieder für ihren eigentlichen Zweck. Einmalige Historien-Migration korrigiert alle betroffenen TZ-Rows automatisch beim ersten Start.
+
+> 📣 **Angekündigt: v3.34 strukturelle Vereinfachung Energieprofil + Reparatur-Werkbank.** Beide Subsysteme sind über mehrere Releases organisch gewachsen mit mehreren parallelen Schreib-/Lese-Pfaden und Übergangs-Patches. Für v3.34 ist eine konsolidierte Architektur mit einem zentralen Schreibpfad und dünnen Quellen-Adaptern geplant, alle Per-Typ-Aggregations-Logik wandert in den Berechnungs-Layer. Während der Konzept- und Audit-Phase werden neue Issues und Beiträge zu diesen Bereichen gesammelt und mit dem Refactor adressiert. Für das laufende v3.33.0 bleibt die Werkbank verfügbar.
+
+### Fixed
+
+- **LTS-Aggregator-Drift in `TagesZusammenfassung.komponenten_kwh` strukturell behoben** (#290): Per-Typ-Logik aus `services.snapshot.aggregator.get_komponenten_tageskwh` und `services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts` in einen geteilten Helper `services.snapshot.komponenten_beitraege` extrahiert. Beide Aggregator-Varianten konsumieren denselben Helper — eine asymmetrische Per-Typ-Implementierung wie zwischen v3.31.0 und v3.32.4 ist damit strukturell ausgeschlossen. Parametrisierter Symmetrie-Test deckt 17 Mapping-Konstellationen ab (PV/BKW/Speicher mit und ohne Arbitrage, WP mit und ohne getrennte Strommessung und mit thermischen Sensoren, Wallbox mit und ohne Split, E-Auto mit Either-Or und mit Wallbox-Parent, Sonstiges Verbraucher und Erzeuger).
+
+- **Reparatur-Werkbank schreibt wieder `komponenten_kwh`** (#290 Folge): Der in v3.32.4 als Übergangsschutz eingeführte generische Skip bei `datenquelle="manuell"` ist entfernt. Mit dem korrigierten Helper liefert der Boundary-Diff jetzt korrekte Per-Typ-Werte — die Reparatur-Werkbank kann ihren eigentlichen Zweck erfüllen und Tages-Komponentenwerte korrigieren. Der `datum >= today`-Skip bleibt (strukturell, nicht symptomatisch). Die Preserve-Logik (alte Werte behalten wenn alle Quellen leer) bleibt als defensiver Schutz.
+
+### Added
+
+- **Erweiterte TEP↔TZ-Invariante** (`core.berechnungen.invarianten.pruefe_tep_tz_komponenten_konsistenz`): Prüft Σ TEP-Stunden gegen Σ komponenten_kwh-Präfix für PV+BKW, Wärmepumpe, Wallbox+E-Auto, Batterie (netto) sowie Einspeisung und Netzbezug. Im `aggregate_day` aufgerufen — Drift wird im Log sichtbar, bevor ein Anwender sie meldet.
+
+- **Einmalige Historien-Migration** (`migrate_v3_33_0_lts_komponenten_kwh`): Reaggregiert beim ersten Start nach v3.33.0 alle `TagesZusammenfassung`-Rows ab dem 16.5.2026 für jede Anlage mit `sensor_mapping`. Idempotent über `migrations`-Tabelle. Activity-Log-Eintrag bei Start und Ende. Performance-optimiert: nur Tage mit existierender TZ-Zeile werden angefasst.
+
+### Test
+
+- 17 parametrisierte Symmetrie-Tests (`test_aggregator_symmetrie.py`)
+- 11 Snapshot-Aggregator-Regression-Tests (`test_snapshot_aggregator_regression.py`)
+- 18 Helper-Unit-Tests (`test_komponenten_beitraege.py`)
+- 11 Invariante-Tests (`test_invariante_komponenten_konsistenz.py`)
+- 3 Reparatur-Werkbank-Korrektur-Tests (`test_reparatur_werkbank_komponenten_korrektur.py`)
+- 4 Migrations-Tests (`test_migrate_v3_33_0_lts_komponenten_kwh.py`)
+- Suite: 543 grün
+
+---
+
 ## [3.32.4] - 2026-05-24 — Database-Lock-Fix + Reaggregations-Hardening + Diagnose-Restore
 
 > 🔧 **Patch-Release.** Schwerpunkt: drei Tester-Fixes (#291 SQLite-Locks beim Cloud-Reimport, #290 detLAN Reaggregations-Anomalien und „0/24"-Diagnose-Fehlmeldung). Plus ein als Folgefund identifizierter **strukturierter LTS-Aggregator-Drift seit v3.31.0**, dessen vollständige Bereinigung mit Historien-Reaggregation in **v3.33.0** folgen wird (siehe unten).
