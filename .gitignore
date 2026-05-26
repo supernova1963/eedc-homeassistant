@@ -69,3 +69,8 @@ eedc/data/*-shm
 # generischen *.db-Patterns — die Endung ist .bak. Bewusst breit, damit weitere
 # Backup-Targets oder Test-Snapshots in eedc/data/ automatisch mitgreifen.
 eedc/data/*.bak
+
+# Lokale Drafts: HANDOVER/AUDIT/PLAN/STAND-Files, die nur zwischen den beiden
+# Entwicklungsrechnern via scripts/sync-claude.sh ausgetauscht werden — nicht
+# nach GitHub. Verbleibende Verbreitung ausschließlich gernot-iMac14-1 ↔ gernot001.
+docs/drafts/

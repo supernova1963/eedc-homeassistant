@@ -2,8 +2,8 @@
 # =============================================================================
 # sync-claude.sh – Cross-Machine-Abgleich beim Rechnerwechsel
 #
-# Gleicht den Claude-Kontext (Memory + Plans) und beide Git-Repos zwischen
-# den zwei Entwicklungsrechnern ab (gernot001 <-> gernot-iMac14-1).
+# Gleicht den Claude-Kontext (Memory + Plans + lokale Drafts) und beide
+# Git-Repos zwischen den zwei Entwicklungsrechnern ab (gernot001 <-> gernot-iMac14-1).
 #
 # Verwendung:
 #   ./scripts/sync-claude.sh pull    # Session-START: Stände vom Peer holen (Default)
@@ -11,9 +11,25 @@
 #
 # Was passiert:
 #   pull  -> git pull --ff-only für eedc-homeassistant UND den eedc-Mirror,
-#            danach rsync Memory + Plans VOM Peer (--update: jüngere gewinnt)
-#   push  -> rsync Memory + Plans ZUM Peer
+#            danach rsync Memory + Plans + Drafts VOM Peer (--checksum: Peer
+#            gewinnt bei Inhaltsdrift, mtime ist irrelevant)
+#   push  -> rsync Memory + Plans + Drafts ZUM Peer
 #            (Git-Commits gehen per `git push` über GitHub, nicht hier)
+#
+# Drafts: docs/drafts/ ist via .gitignore von GitHub ausgenommen und wird
+# ausschließlich zwischen den beiden Rechnern hier synchronisiert. Wer
+# am Peer einen neuen Draft anlegt, schiebt ihn per `push`; der andere
+# zieht ihn per `pull`. Es gibt keine GitHub-Sicht auf diese Files.
+#
+# Warum --checksum statt --update: nach einem frischen `git pull` haben die
+# Repo-Dateien hier eine neuere mtime, aber den ÄLTEREN committed Inhalt.
+# `--update` würde dann den jüngeren uncommitted Stand vom Peer fälschlich
+# überspringen ("ältere mtime, also überspringen"). Mit `--checksum` zählt
+# nur der Inhalt — der Peer ist authoritativ.
+#
+# Konsequenz: wer `pull` macht, gibt seine lokalen Memory/Plans-Edits auf,
+# falls der Peer einen anderen Inhalt hat. Workflow-Disziplin:
+# zuletzt-bearbeitender-Rechner pusht, der andere pullt VOR der Arbeit.
 #
 # Hintergrund: der Abgleich war bisher eine Sammlung manueller rsync/git-
 # Befehle (Memory `reference_cross_machine_sync`). Dabei wurde der eedc-
@@ -42,6 +58,9 @@ HA_REPO="/home/gernot/claude/eedc-homeassistant"
 MIRROR_REPO="/home/gernot/claude/eedc"
 MEMORY_DIR="$HOME/.claude/projects/-home-gernot-claude-eedc-homeassistant/memory/"
 PLANS_DIR="$HOME/.claude/plans/"
+# Drafts liegen im Repo, sind aber via .gitignore von GitHub ausgenommen und
+# werden ausschließlich zwischen den beiden Rechnern ausgetauscht.
+DRAFTS_DIR="$HA_REPO/docs/drafts/"
 
 # --- Peer bestimmen ----------------------------------------------------------
 LOCAL_HOST=$(hostname)
@@ -86,17 +105,17 @@ pull_repo() {
     fi
 }
 
-# --- rsync Memory + Plans ----------------------------------------------------
+# --- rsync Memory + Plans + Drafts -------------------------------------------
 rsync_kontext() {
     local direction=$1   # "from" oder "to"
-    for paar in "Memory:$MEMORY_DIR" "Plans:$PLANS_DIR"; do
+    for paar in "Memory:$MEMORY_DIR" "Plans:$PLANS_DIR" "Drafts:$DRAFTS_DIR"; do
         local label="${paar%%:*}" dir="${paar#*:}"
         if [ "$direction" = "from" ]; then
             echo -e "${CYAN}  rsync $label  <- $PEER_NAME${NC}"
-            rsync -a --update "$SSH_USER@$PEER_IP:$dir" "$dir" 2>&1 | sed 's/^/    /' || FEHLER=1
+            rsync -a --checksum "$SSH_USER@$PEER_IP:$dir" "$dir" 2>&1 | sed 's/^/    /' || FEHLER=1
         else
             echo -e "${CYAN}  rsync $label  -> $PEER_NAME${NC}"
-            rsync -a --update "$dir" "$SSH_USER@$PEER_IP:$dir" 2>&1 | sed 's/^/    /' || FEHLER=1
+            rsync -a --checksum "$dir" "$SSH_USER@$PEER_IP:$dir" 2>&1 | sed 's/^/    /' || FEHLER=1
         fi
     done
 }
