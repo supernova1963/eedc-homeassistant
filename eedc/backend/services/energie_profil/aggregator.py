@@ -496,10 +496,35 @@ async def aggregate_day(
     # weder LTS noch Snapshot abdecken — z.B. WP-Suffix-Keys aus dem
     # Tagesverlauf-Service ohne separates Counter-Mapping.
     #
-    # #290 Bug B (strukturell): bei `datum >= today` existiert
-    # `snap[Folgetag 00:00]` noch nicht. Self-Healing fällt auf HA-history
-    # zurück und liefert den AKTUELLEN Counter-Stand statt einen sauberen
-    # Tagesgrenz-Wert → Drift gegen Σ-Hourly. Skip bleibt.
+    # Zukunfts-Tage (datum > today): SKIP bleibt — keine sinnvolle
+    # Aggregation möglich, weder LTS noch Snapshot haben Daten.
+    #
+    # Heutiger Tag (datum == today): seit B-clean v3.34.1 erlaubt für den
+    # LTS-Pfad (Audit §5.1.1 / MartyBr #620 simon42). Hintergrund: bis v3.34.0
+    # war der SKIP auf `datum >= today` formuliert und bildete im HA-Add-on
+    # zusammen mit vier weiteren Schutzmaßnahmen einen Dead-Spot —
+    # komponenten_kwh war strukturell None für den laufenden Tag, 641 Drift-
+    # Warnings/Tag im Daten-Checker. Die ursprüngliche Begründung (Self-
+    # Healing aus HA-history liefert für `snap[Folgetag 00:00]` den AKTUELLEN
+    # Counter-Stand statt sauberen Tagesgrenz-Wert) trifft NUR die Snapshot-
+    # Variante `get_komponenten_tageskwh` (Boundary-Diff `snap[Folgetag 00:00]
+    # - snap[Tag 00:00]`). Die LTS-Variante `get_komponenten_tageskwh_lts`
+    # ist slot-basiert: sie ruft `get_hourly_kwh_deltas_for_day` auf, das
+    # pro Stunden-Slot `boundary[h+1] - boundary[h]` aus HA-Statistics-Rows
+    # berechnet und für noch nicht geschriebene Boundaries `None` liefert.
+    # `get_komponenten_tageskwh_lts` summiert dann nur die valide-Slots —
+    # für `datum == today` ergibt sich eine saubere Teilsumme der schon
+    # abgelaufenen Stunden, kein Self-Heal-Inflationsrisiko. Edge-Case
+    # 00:05-Scheduler: noch keine Stunde des neuen Tages vorhanden →
+    # leeres Dict → komponenten_kwh = None (unverändertes Verhalten).
+    #
+    # Vier andere Schutzmaßnahmen aus Audit §5.1.1 bewusst UNANGETASTET:
+    #   1. BKW-Bug-Fix Live-Σ-Bypass (Z. 403) — schützt vor BKW-Schema-
+    #      Mismatch-Doppelzählung (Rainer-PN 2026-05-19).
+    #   2. Snapshot-Fallback bleibt an `datum < today` gekoppelt (Z. 531) —
+    #      #290 Bug B Schutz für die Snapshot-Variante bleibt aktiv.
+    #   3. `live_snapshot_if_missing` im HA-Add-on deaktiviert (#184).
+    #   4. LTS-Statistics-Lag (Stunde verfügbar ~5 min nach voller Stunde).
     #
     # #290 Bug A (Symptompatch v3.32.4, mit v3.33.0 OBSOLET): der frühere
     # generische Skip bei `datenquelle == "manuell"` war eine Notbremse
@@ -512,10 +537,10 @@ async def aggregate_day(
     # Schutz für die seltene Konstellation "HA-LTS weg + Snapshots korrupt"
     # bleibt über die preserve-Logik unten (greift wenn boundary leer).
     boundary_kwh: dict[str, float] = {}
-    if datum >= date.today():
+    if datum > date.today():
         logger.debug(
             f"Anlage {anlage.id}, {datum}: Boundary-Diff übersprungen für "
-            f"laufenden Tag — komponenten_kwh aus Σ-Hourly (#290 Bug B)."
+            f"Zukunfts-Tag — keine Daten verfügbar."
         )
     elif kwh_source_label == "external:ha_statistics:hourly":
         try:

@@ -7,6 +7,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.1] - 2026-05-26 — `komponenten_kwh` für laufenden Tag im HA-Add-on heilen (B-clean Hotfix)
+
+> 🔧 **Hotfix.** Chirurgischer Single-Purpose-Fix für den Befund von MartyBr (#620 simon42-Forum) — keine Bündelung mit anderen Themen. Phase B des v3.34-Refactors (Backfill-Konsolidierung, vorher für v3.34.1 vorgesehen) rückt durch diesen Hotfix auf v3.34.2; Phase C bleibt v3.35.0.
+
+### Fixed
+
+- **`TagesZusammenfassung.komponenten_kwh` für `datum == today` im HA-Add-on (#620 MartyBr simon42-Forum)** — im HA-Add-on-Modus war `komponenten_kwh` für den laufenden Tag strukturell leer (`None`), weil fünf unabhängig sinnvolle Schutzmaßnahmen dieselbe Schreib-Schicht erreichten und gemeinsam einen Dead-Spot bildeten (BKW-Bug-Fix-Live-Σ-Bypass + #290-Bug-B-Boundary-SKIP + Snapshot-Fallback-Tag-Bedingung + #184-Add-on-Live-Snapshot-Deaktivierung + LTS-Statistics-Lag — vollständige Anatomie in `docs/drafts/AUDIT-energieprofil-werkbank.md` §5.1.1). Resultat: rund 641 Drift-Warnings im Daten-Checker pro Tag, Cockpit- und Komponenten-Hub-Anzeige für „heute" lückenhaft. **Heilung:** die `datum >= today`-Bedingung des Boundary-SKIP wurde auf `datum > today` gelockert (nur Zukunft bleibt SKIP). Für `datum == today` läuft jetzt der LTS-Boundary-Pfad `get_komponenten_tageskwh_lts`, der slot-basiert pro Stunden-Slot `boundary[h+1] - boundary[h]` aus HA-Statistics summiert (`get_hourly_kwh_deltas_for_day`-Docstring) und für noch nicht geschriebene Slots `None` liefert — saubere Teilsumme der schon abgelaufenen Stunden, kein Self-Heal-Inflationsrisiko. Die ursprüngliche Begründung (`snap[Folgetag 00:00]` self-healt auf aktuellen Counter-Stand) trifft nur die Snapshot-Variante `get_komponenten_tageskwh` — deren SKIP bleibt über die `datum < today`-Bedingung des Fallback-Pfads (`aggregator.py:531`) erhalten. Edge-Case 00:05-Scheduler: noch keine Stunde des neuen Tages → leeres LTS-Dict → `komponenten_kwh = None` (Sentinel-Verhalten unverändert). Vier andere Schutzmaßnahmen aus §5.1.1 (BKW-Live-Σ-Bypass, Snapshot-Fallback-Tag-Bedingung, #184-Add-on-Live-Snapshot-Deaktivierung, LTS-Statistics-Lag) bleiben unangetastet.
+
+### Test
+
+- 6 neue Tests in `test_symmetrie_aggregator_today.py`: S0-Symmetrie über die vier Aggregator-Konstellationen aus Audit §3.6 (HA-Add-on historisch / heute / Standalone-MQTT historisch / Zukunfts-SKIP), Edge-Case 00:05-Scheduler (`komponenten_kwh` bleibt `None`, kein leeres Dict), BKW-Bug-Regressions-Schutz (Live-Σ-Bypass im LTS-Modus aktiv).
+- Bestehender Test `test_heute_ueberspringt_boundary_diff` mit präzisiertem Docstring (Snapshot-Variante bleibt vom SKIP betroffen, LTS-Variante nicht).
+- Suite: 559 grün (553 v3.34.0 + 6 neu).
+
+### Notes
+
+- **Pattern-Klasse §5.1.1 „Bypass-Kombi auf derselben Schreib-Schicht"** ist im Audit dokumentiert und in der Memory `feedback_bypass_kombi_schreib_schicht` als Reviewer-Disziplin festgehalten: bei jedem Symptompatch auf der `komponenten_summen`-Schicht muss die Wechselwirkung mit den anderen vier Maßnahmen explizit geprüft werden.
+- **Phase B verschoben:** Backfill-Konsolidierung kommt jetzt als v3.34.2 nach einem regulären Tester-Zyklus für v3.34.1.
+
+---
+
 ## [3.34.0] - 2026-05-24 — Drift-Erkennung für Aggregat-Felder verschärft (Phase A v3.34-Refactor)
 
 > 🔧 **Patch-Release, Vorarbeit.** Phase A des in v3.33.0 angekündigten Energieprofil-+-Werkbank-Refactors. Schärft die Drift-Erkennung auf der Daily-Schreibseite und entkoppelt einen Magic-String, der bisher gleichzeitig DB-Spalten-Wert UND Steuerungs-Trigger war. **Keine User-spürbare Funktionsänderung** — alle bestehenden DB-Werte (`TagesZusammenfassung.datenquelle`) und Provenance-Writer-Strings bleiben byte-identisch, keine Migration nötig.

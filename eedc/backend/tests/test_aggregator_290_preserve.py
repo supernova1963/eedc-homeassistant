@@ -7,7 +7,7 @@ von 6,3 auf 52,8 kWh. Ursache:
 
 1. `aggregate_day` löscht zuerst die alte TZ, dann baut neu — bei 0 Stunden
    blieb nur die (selbst-geheilte, falsche) Boundary-Diff übrig.
-2. Für `datum == today` lief Boundary-Diff trotz fehlendem
+2. Für `datum == today` lief die Snapshot-Boundary-Diff trotz fehlendem
    `snap[Folgetag 00:00]` weiter und lieferte "today-so-far aus dem
    kWh-Counter" statt einem sauberen Tagesgrenz-Wert → Drift gegen Σ-Hourly.
 
@@ -15,8 +15,15 @@ Diese Tests halten beide Schutzmechanismen fest:
 
 - **Preserve**: `source == Source.MANUAL_REPAIR` + `stunden_count == 0` →
   bestehende `komponenten_kwh` / `komponenten_starts` bleiben unverändert.
-- **Today-skip**: `datum == date.today()` → keine Boundary-Diff,
-  komponenten_kwh kommen ausschließlich aus der Σ-Hourly-Schleife.
+- **Snapshot-Today-skip**: `datum == date.today()` ohne aktiven LTS-Pfad →
+  Snapshot-`get_komponenten_tageskwh` wird NICHT aufgerufen (Snapshot-
+  Variante hat das `snap[Folgetag 00:00]`-Self-Heal-Problem).
+
+Hinweis: seit B-clean v3.34.1 (Audit §5.1.1 / #620 MartyBr) ist der
+Today-SKIP NUR noch auf die Snapshot-Variante beschränkt. Bei aktivem
+LTS-Pfad wird `get_komponenten_tageskwh_lts` für `datum == today` jetzt
+aufgerufen — die LTS-Variante ist slot-basiert und hat kein Self-Heal-
+Risiko. Verhalten geprüft in `test_symmetrie_aggregator_today.py`.
 """
 
 from __future__ import annotations
@@ -154,8 +161,12 @@ async def test_scheduler_0h_setzt_komponenten_kwh_auf_none(db) -> None:
 
 @pytest.mark.asyncio
 async def test_heute_ueberspringt_boundary_diff(db) -> None:
-    """Für `datum == today` darf Boundary-Diff nicht laufen — sonst liefert
-    Self-Healing aus HA-history einen Inflationswert (#290 detLAN 30,5 vs 3,57)."""
+    """Für `datum == today` darf die Snapshot-Boundary-Diff nicht laufen —
+    sonst liefert Self-Healing aus HA-history einen Inflationswert (#290
+    detLAN 30,5 vs 3,57). Seit B-clean v3.34.1 (Audit §5.1.1) gilt der
+    SKIP nur noch für die Snapshot-Variante; die LTS-Variante ist slot-
+    basiert und wird für today aufgerufen (Test:
+    `test_symmetrie_aggregator_today.py`)."""
     from backend.services.energie_profil.aggregator import aggregate_day
 
     anlage = Anlage(

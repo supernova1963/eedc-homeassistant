@@ -1,11 +1,27 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.34.0)
+> **Stand:** Mai 2026 (v3.34.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.34.1 — Wert für „heute" in der Komponenten-Aufschlüsselung wieder sichtbar (Mai 2026)
+
+### Was sich für dich ändert
+
+- **Komponenten-Tageswerte für den laufenden Tag werden im HA-Add-on wieder gefüllt** (Befund #620 MartyBr aus dem simon42-Forum). Bisher zeigten Cockpit und Komponenten-Hub für „heute" in der Komponenten-Aufschlüsselung (PV / Wärmepumpe / Wallbox / E-Auto / Batterie) Lücken, und der Daten-Checker meldete viele Drift-Warnings pro Tag. Ursache war eine strukturelle Lücke im Aggregator, die mehrere unabhängige Schutzmaßnahmen zusammen verursacht haben. Chirurgisch geheilt, ohne eine dieser Schutzmaßnahmen abzuschalten. Anwender mit dem Befund müssen nichts tun — neu aggregierte Tage füllen sich automatisch beim nächsten Scheduler-Lauf.
+
+### Was wir für v3.34.2 ankündigen
+
+- Phase B des v3.34-Refactors (Konsolidierung des Vollbackfill-Pfads, vorher für v3.34.1 vorgesehen) wandert durch diesen Hotfix auf v3.34.2 — die Inhalts-Beschreibung aus dem v3.34.0-Eintrag bleibt unverändert.
+
+### Mit Dank an
+
+- MartyBr für den klaren Bug-Report mit Screenshot.
 
 ---
 
