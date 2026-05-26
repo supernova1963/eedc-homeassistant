@@ -23,12 +23,12 @@ Jede Anwender-Frage hat genau **eine** kanonische Heimat. Cross-Links verbinden 
 ## Top-Nav v4.0.0
 
 ```
-Live-Indikator  ·  Cockpit  ·  Komponenten  ·  Auswertungen  ·  Community  |  Hilfe  Einstellungen
+Cockpit  ·  Komponenten  ·  Auswertungen  ·  Community  |  Hilfe  Einstellungen
 ```
 
-- **5 Inhalts-Einträge** plus Hilfe und Einstellungen — passt auf Desktop ohne Engpass.
+- **4 Inhalts-Einträge** plus Hilfe und Einstellungen — passt auf Desktop ohne Engpass.
 - **Mobile:** Hamburger-Menü mit voller Liste (Standard-Pattern). Bottom-Tab-Bar wäre Big-Bang-Mobile-Redesign — bewusst nicht v4.0.0.
-- **Standard-Landing:** `/` → `/cockpit/live`. Live bleibt Erstkontakt — es ist eedcs Highlight.
+- **Standard-Landing:** `/` → `/cockpit/live`. Klick auf „Cockpit" im Top-Menü landet ebenfalls auf `/cockpit/live`. Live bleibt Erstkontakt — es ist eedcs Highlight.
 
 ---
 
