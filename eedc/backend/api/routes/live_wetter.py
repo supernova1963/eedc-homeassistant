@@ -475,7 +475,7 @@ async def _fetch_multi_string_gti(
     latitude: float,
     longitude: float,
     gruppen: list[dict],
-) -> list:
+) -> tuple[list, bool]:
     """
     Berechnet gewichtete GTI-Werte für mehrere Orientierungsgruppen.
 
@@ -483,11 +483,19 @@ async def _fetch_multi_string_gti(
     Bei mehreren Gruppen: Parallele API-Calls, kWp-gewichtete Kombination.
 
     Returns:
-        Liste mit 24 kombinierten GTI-Werten (W/m²).
+        (kombiniert, vollstaendig):
+        - kombiniert: Liste mit 24 kombinierten GTI-Werten (W/m²).
+        - vollstaendig: False, wenn mindestens eine Orientierungsgruppe keinen
+          GTI lieferte (transienter OM-Aussetzer pro parallelem /forecast-Call).
+          In dem Fall fehlt das kWp-Gewicht der gescheiterten Gruppe in
+          `kombiniert` → ein gegen GT·kwp_gesamt gerechneter Tageswert
+          kollabiert auf die Solo-Produktion der Überlebenden (#306). Das Flag
+          erlaubt dem Aufrufer, einen solchen Wert nicht als Tagesprognose
+          einzufrieren („Diagnose statt stillem Cap").
     """
     kwp_gesamt = sum(g["kwp"] for g in gruppen)
     if kwp_gesamt <= 0:
-        return []
+        return [], True
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         tasks = [
@@ -499,9 +507,11 @@ async def _fetch_multi_string_gti(
     # kWp-gewichtete Kombination der GTI-Werte
     n_stunden = 24
     kombiniert = [0.0] * n_stunden
+    vollstaendig = True
 
     for gruppe, gti_values in zip(gruppen, ergebnisse):
         if not gti_values:
+            vollstaendig = False
             continue
         gewicht = gruppe["kwp"] / kwp_gesamt
         for i in range(min(n_stunden, len(gti_values))):
@@ -509,7 +519,14 @@ async def _fetch_multi_string_gti(
             if val is not None:
                 kombiniert[i] += val * gewicht
 
-    return kombiniert
+    if not vollstaendig:
+        logger.warning(
+            "Multi-String-GTI unvollständig: nicht alle %d Orientierungsgruppen "
+            "geliefert — kombinierter GTI ist untergewichtet (#306)",
+            len(gruppen),
+        )
+
+    return kombiniert, vollstaendig
 
 
 # ── Prognose-Quellen Registry ────────────────────────────────────────────────
@@ -862,10 +879,15 @@ async def _speichere_prognose(
                 # UPDATE-Pfad: pro Feld via Resolver mit eigener Source-Klasse,
                 # damit SFML/Solcast-spezifische Schreib-Pfade (Quellenwahl-
                 # Roadmap Schritt 4) sich später disjunkt einfügen können.
-                await write_with_provenance(
-                    db, tz, "pv_prognose_kwh", prognose_kwh,
-                    source=_OPENMETEO_SOURCE, writer=_OPENMETEO_WRITER,
-                )
+                # #306: prognose_kwh kann None sein, wenn der Aufrufer den
+                # OpenMeteo-Wert wegen unvollständigem Multi-String-Fan-out
+                # bewusst nicht einfriert (Solcast wird trotzdem persistiert) —
+                # dann den pv_prognose_kwh-Bestandswert NICHT überschreiben.
+                if prognose_kwh is not None:
+                    await write_with_provenance(
+                        db, tz, "pv_prognose_kwh", prognose_kwh,
+                        source=_OPENMETEO_SOURCE, writer=_OPENMETEO_WRITER,
+                    )
                 if sfml_kwh is not None:
                     await write_with_provenance(
                         db, tz, "sfml_prognose_kwh", sfml_kwh,
@@ -986,7 +1008,7 @@ async def get_live_wetter(
         cached_wetter = _cache_get(cache_key)
 
         if cached_wetter is not None:
-            data, multi_gti = cached_wetter
+            data, multi_gti, multi_vollstaendig = cached_wetter
         elif _error_cache_check(cache_key):
             logger.debug(f"Live-Wetter: Negative-Cache-Hit für Anlage {anlage_id}")
             return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
@@ -1025,9 +1047,10 @@ async def get_live_wetter(
                     gti_task = _fetch_multi_string_gti(
                         anlage.latitude, anlage.longitude, gruppen
                     )
-                    haupt_resp, multi_gti = await asyncio.gather(haupt_task, gti_task)
+                    haupt_resp, multi_result = await asyncio.gather(haupt_task, gti_task)
                     haupt_resp.raise_for_status()
                     data = haupt_resp.json()
+                    multi_gti, multi_vollstaendig = multi_result
                 else:
                     resp = await client.get(
                         f"{settings.open_meteo_api_url}/forecast", params=params
@@ -1035,8 +1058,9 @@ async def get_live_wetter(
                     resp.raise_for_status()
                     data = resp.json()
                     multi_gti = None
+                    multi_vollstaendig = True  # Single-String: kein Fan-out, kein Kollaps-Risiko
 
-            _cache_set(cache_key, (data, multi_gti), LIVE_WETTER_CACHE_TTL)
+            _cache_set(cache_key, (data, multi_gti, multi_vollstaendig), LIVE_WETTER_CACHE_TTL)
 
         hourly = data.get("hourly", {})
         times = hourly.get("time", [])
@@ -1264,15 +1288,24 @@ async def get_live_wetter(
         elif pq.ist_sfml and sfml_kwh is not None:
             pv_prognose_aktiv = sfml_kwh
 
-        # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget)
-        if pv_prognose is not None and pv_prognose > 0:
+        # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget).
+        # #306: Den OpenMeteo-Tageswert NICHT einfrieren, wenn der Multi-String-
+        # Fan-out unvollständig war — sonst klebt ein kollabierter Solo-String/
+        # BKW-Wert als Tagesprognose und verzerrt das Genauigkeits-Tracking +
+        # den Lernfaktor. Solcast (eigener, robuster Call) wird weiter persistiert.
+        om_unvollstaendig = hat_multi_string and not multi_vollstaendig
+        om_prognose = None if (om_unvollstaendig or pv_prognose is None or pv_prognose <= 0) else pv_prognose
+        # Das OpenMeteo-Stundenprofil stammt aus demselben (kollabierten) Profil —
+        # bei Unvollständigkeit ebenfalls nicht einfrieren (first-write-wins).
+        om_stundenprofil = None if om_unvollstaendig else pv_stundenprofil
+        if om_prognose is not None or solcast_kwh is not None:
             asyncio.create_task(
                 _speichere_prognose(
-                    anlage.id, date.today(), pv_prognose, sfml_kwh,
+                    anlage.id, date.today(), om_prognose, sfml_kwh,
                     solcast_kwh=solcast_kwh,
                     solcast_p10_kwh=solcast_p10,
                     solcast_p90_kwh=solcast_p90,
-                    pv_stundenprofil=pv_stundenprofil,
+                    pv_stundenprofil=om_stundenprofil,
                     solcast_stundenprofil=solcast_stundenprofil,
                 )
             )

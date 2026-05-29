@@ -173,6 +173,15 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
     # ── Heutige PV-Prognose in DB persistieren (für Lernfaktor) ──
     # Erster Result ist die 7-Tage-Prognose (single oder multi)
     pv_heute_kwh = _extract_heute_kwh(results[0], has_multi)
+    # #306: Bei Multi-String prüfen, ob alle Orientierungsgruppen geliefert
+    # haben. Ein unvollständiger Fan-out lieferte einen kollabierten Solo-
+    # String/BKW-Wert; den frieren wir NICHT als heutige OpenMeteo-Tages-
+    # prognose ein (Freeze über diesen Job verzerrte sonst Genauigkeits-
+    # Tracking + Lernfaktor). Solcast bleibt davon unberührt.
+    pv_heute_vollstaendig = (
+        results[0].get("vollstaendig", True)
+        if has_multi and isinstance(results[0], dict) else True
+    )
 
     # Solcast parallel holen (wenn verfügbar)
     solcast_kwh = None
@@ -188,11 +197,21 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
     except Exception as e:
         logger.debug(f"Prefetch Solcast für Anlage {anlage.id}: {e}")
 
-    if pv_heute_kwh is not None and pv_heute_kwh > 0:
+    om_heute_kwh = (
+        pv_heute_kwh
+        if (pv_heute_vollstaendig and pv_heute_kwh is not None and pv_heute_kwh > 0)
+        else None
+    )
+    if has_multi and not pv_heute_vollstaendig:
+        logger.info(
+            "Prefetch Anlage %s: Multi-String-Prognose unvollständig — "
+            "OpenMeteo-Tageswert nicht eingefroren (#306)", anlage.id,
+        )
+    if om_heute_kwh is not None or solcast_kwh is not None:
         try:
             from backend.api.routes.live_wetter import _speichere_prognose
             await _speichere_prognose(
-                anlage.id, date.today(), pv_heute_kwh,
+                anlage.id, date.today(), om_heute_kwh,
                 solcast_kwh=solcast_kwh,
                 solcast_p10_kwh=solcast_p10,
                 solcast_p90_kwh=solcast_p90,

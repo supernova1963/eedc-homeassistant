@@ -1,11 +1,24 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.34.4)
+> **Stand:** Mai 2026 (v3.34.5)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.34.5 — Verlässlichere PV-Tagesprognose bei mehreren Dachausrichtungen (Mai 2026)
+
+### Was sich für dich ändert
+
+- **Wenn deine Anlage mehrere Ausrichtungen hat (z. B. Ost/West-Dach oder Dach + Balkonkraftwerk), bleibt die Tagesprognose auch bei kurzen Wetterdienst-Aussetzern verlässlich.** Bisher konnte die OpenMeteo-Tagesprognose auf den Wert eines einzelnen Strings (oder nur des Balkonkraftwerks) zusammenfallen und dieser falsche Wert für den Tag „einfrieren" — sichtbar im Genauigkeits-Tracking als stark zu niedriger Wert, während Solcast korrekt blieb. Solche unvollständig abgerufenen Tage werden jetzt erkannt und **nicht** mehr als Tagesprognose gespeichert; ein bereits vorhandener guter Wert bleibt erhalten.
+- **Solcast ist davon unberührt** und wird weiter unabhängig gespeichert. Die Live-Seite kann während eines Aussetzers kurz einen reduzierten Wert zeigen, korrigiert sich aber beim nächsten vollständigen Abruf selbst.
+
+### Mit Dank an
+
+- Rainer (rapahl) für den Hinweis mit Screenshot aus dem Genauigkeits-Tracking.
 
 ---
 

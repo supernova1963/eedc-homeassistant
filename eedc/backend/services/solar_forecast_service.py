@@ -701,6 +701,21 @@ async def get_multi_string_prognose(
     if not string_prognosen:
         return None
 
+    # #306: Hat mindestens eine Orientierungsgruppe keinen Forecast geliefert
+    # (transienter OM-Aussetzer pro paralleler /forecast-Call), enthält
+    # `summe_kwh` nur die Absolut-Produktion der überlebenden Strings — ein
+    # kollabierter Solo-String/BKW-Wert. Statt das still zu verschlucken,
+    # markieren wir den Abruf als unvollständig; der Persist-Pfad friert einen
+    # solchen Tag dann nicht als OpenMeteo-Tageswert ein
+    # (Linie „Diagnose statt stillem Cap").
+    vollstaendig = len(string_prognosen) == len(strings)
+    if not vollstaendig:
+        logger.warning(
+            "Multi-String-Prognose unvollständig: nur %d von %d Orientierungs"
+            "gruppen geliefert — summe_kwh ist ein Teil-Wert (#306)",
+            len(string_prognosen), len(strings),
+        )
+
     # Durchschnitts-Neigung und -Ausrichtung (gewichtet nach kWp)
     avg_neigung = sum(s.neigung * s.kwp for s in strings) / gesamt_kwp
     avg_ausrichtung = sum(s.ausrichtung * s.kwp for s in strings) / gesamt_kwp
@@ -717,6 +732,7 @@ async def get_multi_string_prognose(
         "summe_kwh": round(gesamt_kwh, 1),
         "durchschnitt_kwh_tag": round(gesamt_kwh / days, 2),
         "string_prognosen": string_prognosen,
+        "vollstaendig": vollstaendig,
         "datenquelle": datenquelle_str,
         "abgerufen_am": datetime.now().isoformat(),
     }

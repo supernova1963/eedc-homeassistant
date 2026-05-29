@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.5] - 2026-05-29 — Multi-String/BKW-Tagesprognose: Kollaps bei OpenMeteo-Aussetzern verhindert (#306)
+
+> 🐛 **Robustheits-Fix im Forecast-Pfad.** Bei Anlagen mit mehreren Ausrichtungen (Multi-String, häufig + separates BKW) fragt eedc OpenMeteo **pro Orientierungsgruppe mit einem eigenen parallelen Call** ab. Schlug einer dieser Calls transient fehl, wurde die Gruppe **still übersprungen, ohne ihr kWp-Gewicht umzuverteilen** — die Tagesprognose kollabierte auf die Solo-Produktion der überlebenden Gruppe(n) (z. B. nur das BKW → 4.6 statt 64.7 kWh). Der Prefetch-Job fror diesen Wert als Tagesprognose ein und verzerrte Genauigkeits-Tracking + Lernfaktor. Gemeldet von Rainer (rapahl), zweites Vorkommen → systematisch, kein Einzelfall. Solcast (eigener, unabhängiger Call) blieb korrekt. Forecast-Pfad, **kein Aggregator-Schreibpfad**.
+
+### Fixed
+
+- **Gescheiterte Orientierungsgruppe wird nicht mehr still verschluckt.** Beide Multi-String-Fan-out-Funktionen melden jetzt Unvollständigkeit (`get_multi_string_prognose` → additives `vollstaendig`-Flag + Warn-Log; `_fetch_multi_string_gti` → `(gti, vollstaendig)`-Tupel). Linie „Diagnose statt stillem Cap".
+- **Unvollständige Tage werden nicht als OpenMeteo-Tagesprognose eingefroren.** Sowohl der Prefetch-Job (`prefetch_service.py` — der eigentliche Freeze-Pfad) als auch der Live-Endpoint (`live_wetter.py`) persistieren `pv_prognose_kwh` (+ Stundenprofil) nur, wenn **alle** Gruppen-Calls erfolgreich waren. Sonst bleibt ein bereits gespeicherter Wert stehen; **Solcast wird unabhängig weiter persistiert**. `_speichere_prognose` überschreibt einen Bestandswert nicht mehr, wenn der OpenMeteo-Wert als `None` übergeben wird (Source-Enum/Provenance-Writer unverändert).
+- **Lernfaktor automatisch geschützt:** da kollabierte Werte nicht mehr in die DB gelangen, sieht `_filtere_tage` sie nie — ohne neue Filter-Logik (per Regressionstest verankert).
+- **Live-Anzeige bleibt selbstheilend:** während eines OM-Aussetzers kann die Live-Seite transient einen reduzierten Wert zeigen, friert ihn aber nicht mehr ein; der nächste vollständige Abruf korrigiert.
+
+### Test
+
+- Neue Datei `test_multi_string_forecast_robustness_306.py` (5 Tests): Vollständigkeits-Flag beider Fan-out-Pfade (alle ok / eine Gruppe fällt aus, inkl. dokumentierter Untergewichtung) + `_speichere_prognose`-None-Guard (Bestandswert bleibt, Solcast wird geschrieben). Suite **572 grün** (567 + 5).
+
+---
+
 ## [3.34.4] - 2026-05-29 — Daten-Checker: Quellen-Konflikt-Hinweis ehrlich + PV-Doppelerfassungs-Text lesbar (#305)
 
 > 🐛 **UX/Wortlaut-Fix, kein Funktionswechsel.** Zwei unabhängige Daten-Checker-Befunde von Radiocarbonat (simon42-Forum #625). (1) Der „Daten-Quellen – Konflikte"-Hinweis bewarb per „Beheben →"-Button eine Auflösen-Aktion in der Reparatur-Werkbank, die es (noch) nicht gibt — dabei ist die Meldung rein diagnostisch: der Resolver hat bereits die höchstpriore Quelle gewählt, es gibt für den Anwender nichts zu tun. (2) Der PV-Doppelerfassungs-Verdacht war ein dichter, schwer lesbarer Fließtext-Block. Reines Display-/Wortlaut-Thema, kein Aggregator-Schreibpfad.
