@@ -1,11 +1,25 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.34.1)
+> **Stand:** Mai 2026 (v3.34.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.34.2 — Vollbackfill vervollständigt nachgefüllte Tage (Mai 2026)
+
+### Was sich für dich ändert
+
+- **Der Vollbackfill (Werkbank → „Vollbackfill" / „Tag(e) neu aggregieren") läuft jetzt über denselben Weg wie die tägliche Auswertung.** Für Tage, die per Vollbackfill aus den Home-Assistant-Langzeitstatistiken nachgefüllt werden, fehlten bisher die **Leistungsspitzen** (Peak PV / Netzbezug / Einspeisung) und die **Strompreis- bzw. Börsenpreis-Felder**. Diese werden jetzt automatisch mitgefüllt — der nachgefüllte Tag sieht damit genauso vollständig aus wie ein normal vom Scheduler ausgewerteter Tag.
+- **Bestehende Werte bleiben unverändert.** Die Verbesserung greift nur, wenn du einen Tag selbst neu aggregierst oder neu nachfüllst. Schon vorhandene Tage werden nicht angefasst (der Vollbackfill ist weiterhin rein additiv).
+- **Hintergrund (technisch, ohne Handlungsbedarf):** der bisher eigenständige Nachfüll-Pfad war eine Code-Kopie der täglichen Auswertung und lief ihr über die Zeit strukturell hinterher — eine wiederkehrende Quelle für kleine Abweichungen zwischen Tages- und Stundenwerten. Beide Pfade sind jetzt zu einem zusammengeführt.
+
+### Was wir für v3.35.0 ankündigen
+
+- Phase C des v3.34-Refactors: strukturelle Korrektur der Stunden-Auswertung bei E-Auto-Sensoren mit mehreren Mess-Feldern (analog zur in v3.33.0 sanierten Tages-Symmetrie). Eigener Sichtungs- und Tester-Zyklus.
 
 ---
 

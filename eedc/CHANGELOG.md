@@ -7,6 +7,38 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.2] - 2026-05-29 — Vollbackfill als dünne Schleife über den Tag-Aggregator (Phase B v3.34-Refactor)
+
+> 🔧 **Patch-Release, struktureller Schnitt + stille Datenverbesserung.** Phase B des Energieprofil-+-Werkbank-Refactors. `backfill_from_statistics` (Vollbackfill aus HA Long-Term Statistics) ist nicht länger eine eigenständige Code-Kopie der Tag-Aggregation, sondern eine **dünne Schleife über `aggregate_day`** — genau ein Top-Level-Schreibpfad auf `tages_energie_profil` + `tages_zusammenfassung` (Audit §6.1, Plan E1/E2). Damit fällt die parallele Pipeline weg, die in der Vergangenheit wiederholt Aggregations-Drift erzeugt hat.
+>
+> 📣 **Stille Datenverbesserung für per Vollbackfill geschriebene Tage.** Bestehende Werte bleiben unverändert (additiv, #190) — erst bei erneuter Aggregation (Werkbank → „Tag(e) neu aggregieren" / „Vollbackfill") werden die bisher fehlenden Felder befüllt. Phase C (Hourly-Helper-Migration) bleibt v3.35.0.
+
+### Changed
+
+- **`backfill_from_statistics` ist eine dünne Schleife über `aggregate_day`** (`source=Source.VOLLBACKFILL_FROM_LTS`). Der Backfill beschafft die historischen Stunden-Leistungen weiterhin gebündelt aus HA-LTS (`get_hourly_sensor_data` einmal pro Range — `get_tagesverlauf` reicht nur ~10 Tage zurück) und reicht sie pro fehlendem Tag als `prefetched_tagesverlauf` durch (Pflicht-Mitigation gegen Per-Tag-Read-Verlust, Plan §3 B.3). Die gesamte Aggregations-Logik (kategorisierte Stunden-kWh, Boundary-kWh, Peaks, Counter, SoC/Vollzyklen, Prognose-Rettung, Provenance, Konsistenz-Invariante) lebt nur noch in `aggregate_day`. Die Backfill-eigene Komponenten-Aggregation, Boundary-Logik und Prognose-Rettungsliste sind entfallen.
+- **Stille Datenverbesserung:** für neu nachgefüllte Tage setzt der Vollbackfill jetzt zusätzlich **Tages-Peaks** (aus HA-LTS-Min/Max statt nur W-Integration), **Strompreis-/Börsenpreis-Stunden** (`strompreis_cent`/`boersenpreis_cent` je Stunde) und die **Börsenpreis-Tagesfelder** (`boersenpreis_avg_cent`, `boersenpreis_min_cent`, `negative_preis_stunden`, `einspeisung_neg_preis_kwh`) — alle bisher beim eigenständigen Backfill leer. Die Tages-Komponenten-kWh kommt aus dem HA-LTS-Pfad (statt der Snapshot-Variante).
+- **Per-Tag-Aktiv-Filter `aktiv_am_tag(datum)`** als dritte Variante in `utils/investition_filter` (neben `aktiv_jetzt`/`aktiv_im_zeitraum`). `aggregate_day` lädt seine Investitionen jetzt per `aktiv_am_tag(datum)` statt „alle der Anlage" — für historische Tage mit zwischenzeitlich stillgelegter Investition liefern Scheduler- und Vollbackfill-Pfad damit dasselbe Ergebnis (Audit §6.4). Definiert als Null-Breiten-Range `aktiv_im_zeitraum(tag, tag)` und damit deckungsgleich mit `Investition.ist_aktiv_an` am Stilllegungstag. Für den Scheduler (heute/gestern) ein No-Op.
+- **Source-Enum erweitert:** `Source.VOLLBACKFILL_FROM_LTS = "ha_statistiken"`. `to_db_string()` liefert byte-identisch `"ha_statistiken"` (DB-Spalte `datenquelle` + UI unverändert). Der Provenance-**Writer** migriert von `ha_statistics_backfill` auf das einheitliche `energieprofil:ha_statistiken` (analog zu den drei in v3.34.0 eingeführten Enum-Schreibern). Reine Audit-Log-Markierung, kein UI- oder Funktions-Effekt — historische Backfill-Einträge bleiben unter dem alten String.
+
+### Test
+
+- **S1 (Symmetrie Scheduler ↔ Vollbackfill, Erfolgskriterium E2):** `aggregate_day` über `get_tagesverlauf` (Scheduler) vs. über `prefetched_tagesverlauf` (Vollbackfill) liefert für denselben historischen Tag bei identischer Datenlage identische TZ-Aggregate; einziger Unterschied ist die `datenquelle`-Spalte. Pflicht-Konstellation: zwischenzeitlich stillgelegte Investition.
+- **S2 (dokumentiertes Delta):** der konsolidierte Pfad füllt die zuvor leeren Felder (Peaks, Strompreis-/Börsenpreis-Felder) — als positive Liste verankert.
+- **`aktiv_am_tag`:** Stilllegungs-/Anschaffungs-Grenzen + Deckungsgleichheit mit `ist_aktiv_an` am Stilllegungstag.
+- **E1-Strukturwächter:** `backfill.py` konstruiert keine TEP/TZ-Rows mehr und ruft keine `seed_*_provenance` mehr auf.
+- **Werkbank-VOLLBACKFILL-Endpoint-Response-Schema** unverändert (Schema-Stabilitäts-Test).
+- **K1 auf zwei Listen reduziert:** die Backfill-Rettungsliste entfällt strukturell; K1 schützt nur noch die verbleibende Subsystem-Grenze (Aggregator ↔ Wetter-Endpoint).
+- Suite: 567 grün (559 v3.34.1 + 8 neu).
+
+### Notes
+
+- **Schatten-Vergleichs-Lauf (alt vs. neu, 30 Tage, synthetisch):** zwei strukturelle Diffs für **neu** geschriebene Tage (bestehende Tage unangetastet) — beide sind die beabsichtigte Angleichung an den täglichen Aggregat-Lauf:
+  1. `komponenten_kwh` enthält keinen `netz`-Schlüssel mehr. Der alte Backfill ließ den Live-Σ-Riemann immer laufen und schleppte das `netz`-Netto-Artefakt mit; der Scheduler unterdrückt es im HA-LTS-Modus (Live-Σ-Bypass). Der konsolidierte Vollbackfill verhält sich jetzt wie der Scheduler. `netz` ist kein echter Boundary-Komponenten-Schlüssel (Konsumenten nutzen `einspeisung`/`netzbezug`).
+  2. Provenance-Source `external:ha_statistics` → `external:ha_statistics:daily`/`:hourly` und Writer → `energieprofil:ha_statistiken` (s. oben). Keiner liest den alten Writer/Source-Prefix-Filter bricht nicht (`external:ha_statistics` bleibt Prefix).
+- **Performance:** synthetischer 30-Tage-Lauf mit gemockter I/O (= Plan-§3-B.4-Sanity „in Test-Umgebung") zeigt ~1,3–1,5× CPU-Overhead, absolut ~2–3 ms/Tag. Die reale Laufzeit ist von den HA-LTS-Reads dominiert: der konsolidierte Pfad macht pro Tag *mehr* Reads als der alte Backfill (zusätzlich Peaks/SoC/Strompreise — genau wie der Scheduler), als Preis der Vollständigkeits-Verbesserung. Ein langer Vollbackfill (z. B. 12 Monate) kann dadurch spürbar länger laufen; das ist Laufzeit, keine Korrektheit, und ein seltener additiver Hintergrund-Job. Die Pflicht-Mitigation (großer Roh-Leistungs-Bulk-Read bleibt einmal pro Range) ist umgesetzt. Reales Timing ist erst im Add-on (post-Release) messbar — bei Tester-Meldung über lange Laufzeit ist die Folge-Optimierung (auch LTS-Deltas/Peaks im Bulk vorholen) eine eigene spätere Etappe, kein Phase-B-Blocker.
+
+---
+
 ## [3.34.1] - 2026-05-26 — `komponenten_kwh` für laufenden Tag im HA-Add-on heilen (B-clean Hotfix)
 
 > 🔧 **Hotfix.** Chirurgischer Single-Purpose-Fix für den Befund von MartyBr (#620 simon42-Forum) — keine Bündelung mit anderen Themen. Phase B des v3.34-Refactors (Backfill-Konsolidierung, vorher für v3.34.1 vorgesehen) rückt durch diesen Hotfix auf v3.34.2; Phase C bleibt v3.35.0.
