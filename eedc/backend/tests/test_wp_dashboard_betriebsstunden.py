@@ -174,3 +174,58 @@ async def test_nur_stunden_kein_starts_kpis_bleiben_none(db):
     assert z["kompressor_starts_gesamt"] is None
     assert z["oe_laufzeit_pro_start_h"] is None
     assert z["starts_pro_betriebsstunde"] is None
+
+
+async def test_counter_summe_respektiert_anschaffungs_und_stilllegungsdatum(db):
+    """#308 (detLAN): Die Counter-Tagesinkremente dürfen nur Tage INNERHALB der
+    WP-Laufzeit summieren — symmetrisch zum Monatsdaten-Filter.
+
+    Regression: Ohne Anschaffungsdatum-Scope summierte `summe_erfasst` die
+    gesamte erfasste Sensor-Historie (Backfill-Tage vor Anschaffung inkl.) und
+    lief gegen den Lebensdauer-Zählerstand — `Σ seit Anschaffung > Lebensdauer`,
+    physikalisch unmöglich. Hier: ein Tag vor Anschaffung + ein Tag nach
+    Stilllegung tragen je einen Spuk-Wert bei, der NICHT in Summe/Max landen darf.
+    """
+    anlage, wp = await _seed_anlage_mit_wp(db)
+    # Laufzeit-Fenster der WP: 2024-01-01 .. 2026-04-30.
+    wp.stilllegungsdatum = date(2026, 4, 30)
+    await _set_snapshot(db, anlage.id, wp.id, "wp_starts_anzahl", 1000.0)
+    await _set_snapshot(db, anlage.id, wp.id, "wp_betriebsstunden", 2500.0)
+
+    # Spuk-Tag VOR Anschaffung (Backfill der Sensor-Historie) — muss raus.
+    db.add(TagesZusammenfassung(
+        anlage_id=anlage.id, datum=date(2023, 12, 15),
+        komponenten_starts={
+            "wp_starts_anzahl": {str(wp.id): 900},
+            "wp_betriebsstunden": {str(wp.id): 2400.0},
+        },
+    ))
+    # Zwei gültige Tage IM Fenster — nur diese zählen (Σ 20 Starts / 50 h).
+    for tag in (1, 2):
+        db.add(TagesZusammenfassung(
+            anlage_id=anlage.id, datum=date(2026, 4, tag),
+            komponenten_starts={
+                "wp_starts_anzahl": {str(wp.id): 10},
+                "wp_betriebsstunden": {str(wp.id): 25.0},
+            },
+        ))
+    # Spuk-Tag NACH Stilllegung — muss ebenfalls raus.
+    db.add(TagesZusammenfassung(
+        anlage_id=anlage.id, datum=date(2026, 5, 3),
+        komponenten_starts={
+            "wp_starts_anzahl": {str(wp.id): 30},
+            "wp_betriebsstunden": {str(wp.id): 24.0},
+        },
+    ))
+    await db.commit()
+
+    dashboards = await get_waermepumpe_dashboard(anlage_id=anlage.id, db=db)
+    z = dashboards[0].zusammenfassung
+    # Nur die zwei In-Fenster-Tage: Σ 20 Starts / 50 h, Max/Tag 10 / 25 h.
+    assert z["kompressor_starts_summe_erfasst"] == 20
+    assert z["betriebsstunden_summe_erfasst"] == 50.0
+    assert z["kompressor_starts_max_tag"] == 10
+    assert z["betriebsstunden_max_tag"] == 25.0
+    # Kern-Invariante: seit Anschaffung erfasst ≤ Lebensdauer-Zählerstand.
+    assert z["betriebsstunden_summe_erfasst"] <= z["betriebsstunden_gesamt"]
+    assert z["kompressor_starts_summe_erfasst"] <= z["kompressor_starts_gesamt"]

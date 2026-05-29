@@ -412,21 +412,36 @@ async def get_waermepumpe_dashboard(
     # Σ Lebensdauer-Starts kommt direkt aus dem Hersteller-Sensor
     # (`get_counter_lifetime`), Σ-Betriebsstunden ebenfalls direkt aus dem
     # Sensor — beide sind kumulative Counter, der Sensor ist die Wahrheit.
+    # #308 (detLAN): Die Counter-Tagesinkremente MÜSSEN auf die WP-Laufzeit
+    # (Anschaffung→Stilllegung) gefiltert werden — symmetrisch zum
+    # Monatsdaten-Filter unten (`ist_aktiv_im_monat`). Ohne diesen Filter
+    # summierte `summe_erfasst` die gesamte je erfasste Sensor-Historie
+    # (inkl. Backfill-Tagen vor Anschaffung) und lief gegen den vollen
+    # Lebensdauer-Zählerstand — physikalisch unmöglich (Σ seit Anschaffung
+    # > Lebensdauer). Der LTS-Abruf selbst ist korrekt; gefehlt hat der
+    # Anschaffungsdatum-Scope im Read-Pfad ([[feedback_anschaffungsdatum_grenze]]).
+    # `ist_aktiv_im_zeitraum(tag, tag)` statt `ist_aktiv_an`, damit das
+    # `aktiv`-Override-Flag ignoriert wird (gleiche historische Sicht wie
+    # der Monatsdaten-Filter — temporär pausierte WP behält ihre Historie).
+    wp_by_id = {w.id: w for w in waermepumpen}
     tz_result = await db.execute(
-        select(TagesZusammenfassung.komponenten_starts)
+        select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_starts)
         .where(TagesZusammenfassung.anlage_id == anlage_id)
         .where(TagesZusammenfassung.komponenten_starts.is_not(None))
     )
     starts_by_inv: dict[int, list[int]] = {wid: [] for wid in wp_ids}
     stunden_by_inv: dict[int, list[float]] = {wid: [] for wid in wp_ids}
-    for (komp_starts,) in tz_result.all():
+    for tz_datum, komp_starts in tz_result.all():
         wp_map = (komp_starts or {}).get("wp_starts_anzahl") or {}
         for inv_id_str, count in wp_map.items():
             try:
                 inv_id = int(inv_id_str)
             except (TypeError, ValueError):
                 continue
-            if inv_id in starts_by_inv and isinstance(count, (int, float)) and count > 0:
+            wp = wp_by_id.get(inv_id)
+            if wp is None or not wp.ist_aktiv_im_zeitraum(tz_datum, tz_datum):
+                continue
+            if isinstance(count, (int, float)) and count > 0:
                 starts_by_inv[inv_id].append(int(count))
         stunden_map = (komp_starts or {}).get("wp_betriebsstunden") or {}
         for inv_id_str, hours in stunden_map.items():
@@ -434,7 +449,10 @@ async def get_waermepumpe_dashboard(
                 inv_id = int(inv_id_str)
             except (TypeError, ValueError):
                 continue
-            if inv_id in stunden_by_inv and isinstance(hours, (int, float)) and hours > 0:
+            wp = wp_by_id.get(inv_id)
+            if wp is None or not wp.ist_aktiv_im_zeitraum(tz_datum, tz_datum):
+                continue
+            if isinstance(hours, (int, float)) and hours > 0:
                 stunden_by_inv[inv_id].append(float(hours))
 
     dashboards = []
