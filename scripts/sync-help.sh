@@ -38,6 +38,8 @@ ENTRIES=(
     "einstellungen|HANDBUCH_EINSTELLUNGEN.md|Teil III: Einstellungen & Sensormapping|Handbuch"
     "infothek|HANDBUCH_INFOTHEK.md|Teil IV: Infothek|Handbuch"
     "daten-checker|HANDBUCH_DATEN_CHECKER.md|Daten-Checker|Handbuch"
+    "energieprofil|HANDBUCH_ENERGIEPROFIL.md|Energieprofil|Handbuch"
+    "prognosen|HANDBUCH_PROGNOSEN.md|Prognosen|Handbuch"
     "berechnungen|BERECHNUNGEN.md|Berechnungen & Kennzahlen|Referenz"
     "sensor-referenz|SENSOR-REFERENZ.md|Sensor-Referenz|Referenz"
     "glossar|GLOSSAR.md|Glossar|Referenz"
