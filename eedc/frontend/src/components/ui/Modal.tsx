@@ -47,11 +47,11 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div
-          className={`relative w-full ${sizes[size]} bg-white dark:bg-gray-800 rounded-xl shadow-xl`}
+          className={`relative flex flex-col w-full ${sizes[size]} max-h-[90dvh] bg-white dark:bg-gray-800 rounded-xl shadow-xl`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {title}
             </h2>
@@ -65,7 +65,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
           </div>
 
           {/* Content */}
-          <div className="px-6 py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
             {children}
           </div>
         </div>

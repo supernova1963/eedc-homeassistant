@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.3] - 2026-05-29 — Modal-Dialoge scrollen intern; Speichern bei langen Formularen wieder erreichbar (#307)
+
+> 🐛 **UX-Fix, app-weit.** Bei Dialogen, die höher als das Browserfenster sind (z. B. „Monatsdaten bearbeiten" mit vielen PV-Modulen), war der untere Formularbereich samt **Speichern-/Abbrechen-Buttons** nicht erreichbar — die Modale wurde oben/unten abgeschnitten, ohne eigene Scroll-Möglichkeit. Gemeldet von Dirk (PV-Forum, PN). Kein Datenverlust, aber der Bearbeiten-Pfad war faktisch blockiert (Workaround nur über Browser-Zoom). Unabhängiger Bug, **keine v3.34-Regression** (`Modal.tsx` nicht im Phase-A/B-Diff); berührt den Aggregator-Schreibpfad nicht.
+
+### Fixed
+
+- **`Modal.tsx` (app-weit genutzte Dialog-Komponente):** Die Modal-Box ist jetzt auf `max-h-[90dvh]` begrenzt und als vertikale Flex-Spalte aufgebaut — der Header bleibt fix (`shrink-0`), der **Inhaltsbereich scrollt intern** (`flex-1 min-h-0 overflow-y-auto`), sodass die Buttons am Formular-Ende per Scroll immer erreichbar sind. Wirkt für alle Dialog-Verwender (Monatsdaten, Setup-Wizard, Investitionen, Community-Share u. a.) über den `ui`-Barrel. `dvh` statt `vh` wegen Mobile/HA-Companion-App. Kurze Dialoge (z. B. Lösch-Bestätigung) bleiben unverändert: `overflow-y-auto` zeigt nur bei tatsächlichem Überlauf einen Scrollbalken; die Box behält ihre natürliche Höhe.
+
+### Test
+
+- Dev-Server-QS über alle vier Modal-Größen (sm/md/lg/xl) × langer/kurzer Inhalt: lange Modals bleiben im Viewport (auf 90 % der Fensterhöhe gedeckelt, hier 720 px bei 800 px), scrollen intern, Speichern-Button per Scroll im Viewport; kurze Dialoge unverändert (kein Scrollbalken, natürliche Höhe 173 px). `tsc --noEmit` grün, Backend-Suite unverändert 567 grün (Frontend-only).
+
+---
+
 ## [3.34.2] - 2026-05-29 — Vollbackfill als dünne Schleife über den Tag-Aggregator (Phase B v3.34-Refactor)
 
 > 🔧 **Patch-Release, struktureller Schnitt + stille Datenverbesserung.** Phase B des Energieprofil-+-Werkbank-Refactors. `backfill_from_statistics` (Vollbackfill aus HA Long-Term Statistics) ist nicht länger eine eigenständige Code-Kopie der Tag-Aggregation, sondern eine **dünne Schleife über `aggregate_day`** — genau ein Top-Level-Schreibpfad auf `tages_energie_profil` + `tages_zusammenfassung` (Audit §6.1, Plan E1/E2). Damit fällt die parallele Pipeline weg, die in der Vergangenheit wiederholt Aggregations-Drift erzeugt hat.
