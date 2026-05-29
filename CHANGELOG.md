@@ -7,6 +7,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.4] - 2026-05-29 — Daten-Checker: Quellen-Konflikt-Hinweis ehrlich + PV-Doppelerfassungs-Text lesbar (#305)
+
+> 🐛 **UX/Wortlaut-Fix, kein Funktionswechsel.** Zwei unabhängige Daten-Checker-Befunde von Radiocarbonat (simon42-Forum #625). (1) Der „Daten-Quellen – Konflikte"-Hinweis bewarb per „Beheben →"-Button eine Auflösen-Aktion in der Reparatur-Werkbank, die es (noch) nicht gibt — dabei ist die Meldung rein diagnostisch: der Resolver hat bereits die höchstpriore Quelle gewählt, es gibt für den Anwender nichts zu tun. (2) Der PV-Doppelerfassungs-Verdacht war ein dichter, schwer lesbarer Fließtext-Block. Reines Display-/Wortlaut-Thema, kein Aggregator-Schreibpfad.
+
+### Fixed
+
+- **Quellen-Konflikt-Hinweis rein informativ statt Aktions-versprechend** (#305 Befund 1). An allen drei Stellen entschärft, die die nicht-existente „Daten-Quellen-Konflikte auflösen"-Aktion bewarben:
+  - `daten_checker.py` (`_check_provenance_conflicts`): Severity **WARNING → INFO**, neuer Wortlaut („der Resolver hat automatisch die höchstpriore Quelle gewählt … kein Handlungsbedarf"), **kein `link` mehr** — entfernt den irreführenden „Beheben →"-Button.
+  - `monatsabschluss/wizard.py` (Schreibschutz-Hinweis bei abgelehnter manueller Eingabe): erklärt die Quellen-Rangfolge, ohne eine Auflösen-Aktion zu versprechen.
+  - `MonatsabschlussWizard.tsx` (Fehler-Text + Folge-Kommentar): analog entschärft.
+  - Eine echte „Konflikte auflösen"-Aktion bleibt eine bewusste spätere Etappe (P4 / Option B des Issues, eigener Track) — erst wenn sie existiert, darf hier wieder ein Aktions-Link stehen.
+- **PV-Doppelerfassungs-Detailtext lesbar** (#305 Befund 2): Diagnose-Marker als Aufzählung, Ursache/Prüf-/Test-Schritt in eigenen Absätzen; der Daten-Checker rendert `details` jetzt mit `whitespace-pre-line`, sodass Zeilenumbrüche sichtbar werden (ein eingefügtes `<br>` würde von React escaped und wörtlich angezeigt).
+
+### Test
+
+- Volle Suite **567 grün** (PV-Doppelerfassungs-Test prüft Substrings + WARNING-Severity unverändert weiter), `tsc --noEmit` grün. `whitespace-pre-line` ist abwärtskompatibel: bestehende einzeilige `details` enthalten kein `\n` und rendern unverändert.
+
+---
+
 ## [3.34.3] - 2026-05-29 — Modal-Dialoge scrollen intern; Speichern bei langen Formularen wieder erreichbar (#307)
 
 > 🐛 **UX-Fix, app-weit.** Bei Dialogen, die höher als das Browserfenster sind (z. B. „Monatsdaten bearbeiten" mit vielen PV-Modulen), war der untere Formularbereich samt **Speichern-/Abbrechen-Buttons** nicht erreichbar — die Modale wurde oben/unten abgeschnitten, ohne eigene Scroll-Möglichkeit. Gemeldet von Dirk (PV-Forum, PN). Kein Datenverlust, aber der Bearbeiten-Pfad war faktisch blockiert (Workaround nur über Browser-Zoom). Unabhängiger Bug, **keine v3.34-Regression** (`Modal.tsx` nicht im Phase-A/B-Diff); berührt den Aggregator-Schreibpfad nicht.

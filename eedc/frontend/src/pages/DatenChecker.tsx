@@ -148,7 +148,7 @@ function KategorieSektion({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 dark:text-gray-200">{e.meldung}</p>
                   {e.details && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{e.details}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 whitespace-pre-line">{e.details}</p>
                   )}
                 </div>
                 {e.action_kind === 'reaggregate_day' && onReaggregate && actionAnlageId && actionDatum && (

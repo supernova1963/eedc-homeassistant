@@ -1787,8 +1787,11 @@ class DatenChecker:
         """Prüft das Audit-Log auf Felder mit ≥ 2 distinct sources im Zeitraum.
 
         Hinweis-Charakter (Memory-Linie feedback_daten_checker_kein_akzeptiert.md):
-        kein Quittier-Knopf, nur Diagnose. Reparatur-Pfad führt in P4 in die
-        Reparatur-Werkbank — bis dahin Hinweis ohne Aktions-Button.
+        kein Quittier-Knopf, nur Diagnose. Der Resolver hat den angezeigten Wert
+        bereits aus der höchstprioren Quelle gewählt — für den Anwender gibt es
+        nichts zu tun, daher INFO und kein Aktions-Link (#305 Befund 1). Eine
+        echte „Quellen-Konflikte auflösen"-Aktion bleibt eine eigene spätere
+        Etappe (P4); erst wenn sie existiert, darf hier wieder ein Link stehen.
         """
         from sqlalchemy import func
 
@@ -1850,14 +1853,14 @@ class DatenChecker:
         details = "; ".join(details_lines)
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            kategorie=kat, schwere=CheckSeverity.INFO.value,
             meldung=(
-                f"{len(konflikte)} Felder mit mehreren Quellen in den letzten "
-                f"{days} Tagen — der Resolver hat entschieden, die Reparatur-"
-                f"Werkbank kann sie aufdröseln."
+                f"{len(konflikte)} Felder hatten in den letzten {days} Tagen "
+                f"Werte aus mehreren Quellen — der Resolver hat automatisch die "
+                f"höchstpriore Quelle gewählt. Reiner Nachvollziehbarkeits-"
+                f"Hinweis, kein Handlungsbedarf."
             ),
             details=details,
-            link="/einstellungen/energieprofil",
         )]
 
     async def _check_datenquelle_status(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -2173,12 +2176,13 @@ class DatenChecker:
             schwere=CheckSeverity.WARNING.value,
             meldung="Verdacht auf PV-Doppelerfassung (PR > 1 oder spez. Ertrag zu hoch)",
             details=(
-                f"Diagnose-Marker aus den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen: "
-                + "; ".join(marker_zeilen) + ". "
-                "Häufige Ursache: WR-Smart-Meter misst AC-seitig nach dem "
+                f"Diagnose-Marker aus den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen:\n"
+                + "\n".join(f"• {zeile}" for zeile in marker_zeilen) + "\n\n"
+                "Häufige Ursache: Der WR-Smart-Meter misst AC-seitig nach dem "
                 "Einspeisepunkt eines Balkonkraftwerks — die BKW-Erzeugung ist "
-                "im WR-Wert enthalten, ein separates BKW-Mapping zählt sie "
-                "nochmal. Prüfen: Sensor-Mapping unter Investitionen → BKW. "
+                "im WR-Wert bereits enthalten, ein separates BKW-Mapping zählt "
+                "sie nochmal.\n\n"
+                "Prüfen: Sensor-Mapping unter Investitionen → BKW.\n"
                 "Test-Variante: BKW-Mapping temporär abklemmen und schauen, "
                 "ob PR und Tagesertrag in den physikalischen Bereich zurückkommen."
             ),

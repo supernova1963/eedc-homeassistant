@@ -1,11 +1,24 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.34.3)
+> **Stand:** Mai 2026 (v3.34.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.34.4 — Daten-Checker: klarere Hinweise (Mai 2026)
+
+### Was sich für dich ändert
+
+- **Der Hinweis „Daten-Quellen – Konflikte" ist jetzt ehrlich.** Bisher bot er einen „Beheben →"-Knopf an, der ins Energieprofil führte — dort gab es aber keine passende Aktion. Tatsächlich gibt es nichts zu tun: eedc hat automatisch die zuverlässigste Quelle gewählt, der Hinweis dient nur der Nachvollziehbarkeit. Er erscheint deshalb jetzt als neutrale Info (statt als Warnung) und ohne irreführenden Knopf.
+- **Der Text beim Verdacht auf PV-Doppelerfassung ist besser lesbar** — die Diagnose-Werte stehen als Aufzählung, Ursache und Prüf-Schritte in eigenen Absätzen statt in einem dichten Block.
+
+### Mit Dank an
+
+- Radiocarbonat für beide Hinweise aus dem simon42-Forum.
 
 ---
 

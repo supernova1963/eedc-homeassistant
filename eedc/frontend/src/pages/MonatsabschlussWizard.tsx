@@ -542,11 +542,12 @@ export default function MonatsabschlussWizard() {
             .join('\n')
           setError(
             `Einige Felder wurden nicht übernommen:\n${meldungen}\n\n` +
-            'Hinweis: Über Einstellungen → Daten → Energieprofil → Reparatur-Werkbank → ' +
-            '„Daten-Quellen-Konflikte auflösen" können konfliktierende Cloud-/Import-Quellen ' +
-            'zurückgesetzt werden, danach greift die manuelle Eingabe.',
+            'Hinweis: Diese Felder enthalten bereits einen Wert aus einer höherprioren Quelle. ' +
+            'Die vom Resolver vorgesehene Rangfolge überschreibt einen solchen Wert nicht durch ' +
+            'eine manuelle Eingabe.',
           )
-          // Bei Schreibschutz nicht weiter-navigieren — User soll Werkbank nutzen
+          // Bei Schreibschutz nicht weiter-navigieren — die betroffenen Felder
+          // sind durch die Quellen-Rangfolge bewusst geschützt.
         } else {
           setSuccess(result.message)
           // Community-Nudge: Anlage laden und prüfen ob Auto-Share aktiv
