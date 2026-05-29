@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.34.9)
+> **Stand:** Mai 2026 (v3.34.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,97 +9,21 @@
 
 ---
 
-## v3.34.9 — Wärmepumpen-Kacheln: Starts & Betriebsstunden „seit Anschaffung" (Mai 2026)
+## v3.34.3 — Sammelrelease: acht Verbesserungen aus dem Backlog (Mai 2026)
 
 ### Was sich für dich ändert
 
-- **Die WP-Kacheln „Kompressor-Starts" und „Betriebsstunden" zeigen jetzt den von eedc seit Anschaffung erfassten Wert** — nicht mehr den vollen Lebensdauer-Zählerstand des Hersteller-Sensors (der auch die Zeit vor der Erfassung in eedc enthielt und dadurch irreführend groß wirkte). Der vollständige Zählerstand bleibt im **Tooltip** der Kachel sichtbar. Auch „Ø Laufzeit pro Start" und „Starts pro Betriebsstunde" beziehen sich jetzt auf denselben Zeitraum.
+- **Lange Bearbeiten-Dialoge** (z. B. „Monatsdaten bearbeiten") lassen sich wieder vollständig bedienen — der Inhalt scrollt jetzt innerhalb des Fensters, die Speichern-Buttons sind immer erreichbar.
+- **Daten-Checker:** Der Hinweis „Daten-Quellen – Konflikte" ist jetzt ehrlich (neutrale Info statt Warnung, kein irreführender „Beheben"-Knopf), und der PV-Doppelerfassungs-Text ist lesbarer.
+- **PV-Tagesprognose bei mehreren Dachausrichtungen** (Multi-String / Balkonkraftwerk) bleibt auch bei kurzen Wetterdienst-Aussetzern verlässlich — kollabierte Werte werden nicht mehr als Tagesprognose eingefroren.
+- **Fronius Gen24:** Die PV-Erzeugung wird wieder gelesen, auch wenn der bisher genutzte Gesamtzähler auf neuerer Firmware leer bleibt. *(Auf echtem Gen24 noch nicht final gegengeprüft.)*
+- **HA-Export:** Die Eigenverbrauchsquote stimmt bei Setups mit Investitions-Monatsdaten wieder (vorher z. B. 2 % statt ~40 %).
+- **„Ersparnis vs. Benziner"** zeigt im Cockpit denselben Wert wie Monatsberichte und E-Auto-Dashboard — der echte monatliche Kraftstoffpreis wird verwendet.
+- **Wärmepumpen-Kacheln** (Kompressor-Starts / Betriebsstunden) zeigen den seit Anschaffung erfassten Wert; der volle Lebensdauer-Zählerstand steht im Tooltip.
 
 ### Mit Dank an
 
-- detLAN für die Diskussion und den gemeinsamen Kompromiss.
-
----
-
-## v3.34.8 — E-Auto-Ersparnis im Cockpit nutzt den echten Monats-Benzinpreis (Mai 2026)
-
-### Was sich für dich ändert
-
-- **„Ersparnis vs. Benziner" zeigt in allen Ansichten denselben Wert.** Bisher rechnete die Cockpit-Übersicht (E-Mobilität / E-Auto) mit einem festen Benzinpreis-Default, während Monatsberichte und E-Auto-Dashboard den tatsächlichen monatlichen Kraftstoffpreis (aus dem EU Weekly Oil Bulletin) verwendeten — daher unterschiedliche Ersparnis-Zahlen. Jetzt nutzen alle Ansichten denselben monatsgenauen Preis.
-- Tipp: Falls die monatlichen Kraftstoffpreise bei dir leer sind, kannst du sie über Einstellungen → Daten → Reparatur-Werkbank → „Kraftstoffpreis-Backfill" nachtragen.
-
-### Mit Dank an
-
-- NongJoWo fürs hartnäckige Nachrechnen, das die Fehlerquelle exakt eingegrenzt hat.
-
----
-
-## v3.34.7 — HA-Export: Eigenverbrauchsquote wieder korrekt (Mai 2026)
-
-### Was sich für dich ändert
-
-- **Wenn du die eedc-Kennzahlen als Home-Assistant-Sensoren exportierst:** Die Eigenverbrauchsquote (`eigenverbrauch_quote_prozent`) und der Gesamt-Eigenverbrauch zeigten bei Setups, deren PV-Daten aus den Investitions-Monatsdaten stammen (HA-Statistik / Connector / Aggregator), viel zu niedrige Werte (z. B. 2 % statt ~40 %). Ursache war ein veraltetes Datenfeld. Die Sensoren rechnen jetzt aus den korrekten Quellen — Quote, Eigenverbrauch, Autarkie und die daraus abgeleitete Ersparnis stimmen wieder.
-
-### Gut zu wissen
-
-- Dieselbe Ursache betrifft noch einzelne Werte in den Aussichten und im PDF-Bericht — die werden in einem eigenen Schritt nachgezogen.
-
----
-
-## v3.34.6 — Fronius Gen24: PV-Erzeugung wird wieder gelesen (Mai 2026)
-
-### Was sich für dich ändert
-
-- **Fronius-Solar-API-Connector an Gen24-Wechselrichtern (und neuerer Firmware):** Bisher konnte es passieren, dass nach dem Verbinden des Connectors zwar Netzbezug und Einspeisung ankamen, die **PV-Erzeugung aber fehlte** (Monatsbericht ohne PV-Ertrag). Ursache: Fronius hat das bisher genutzte Gesamtzähler-Feld auf neueren Geräten abgeschaltet. eedc liest die PV-Erzeugung jetzt zusätzlich direkt von den Wechselrichtern aus, wenn das alte Feld leer ist.
-- Die Korrektur wirkt **ab jetzt** — bereits ohne PV gespeicherte Monate füllen sich erst, wenn du sie neu erfasst/aggregierst.
-
-### Gut zu wissen
-
-- Auf einem echten Gen24 ist dieser Weg noch nicht final gegengeprüft. Wenn du ein Gen24 hast: ein kurzer Blick, ob die PV-kWh jetzt plausibel ankommen, hilft.
-
-### Mit Dank an
-
-- Safi105 für den Bug-Report mit Screenshots.
-
----
-
-## v3.34.5 — Verlässlichere PV-Tagesprognose bei mehreren Dachausrichtungen (Mai 2026)
-
-### Was sich für dich ändert
-
-- **Wenn deine Anlage mehrere Ausrichtungen hat (z. B. Ost/West-Dach oder Dach + Balkonkraftwerk), bleibt die Tagesprognose auch bei kurzen Wetterdienst-Aussetzern verlässlich.** Bisher konnte die OpenMeteo-Tagesprognose auf den Wert eines einzelnen Strings (oder nur des Balkonkraftwerks) zusammenfallen und dieser falsche Wert für den Tag „einfrieren" — sichtbar im Genauigkeits-Tracking als stark zu niedriger Wert, während Solcast korrekt blieb. Solche unvollständig abgerufenen Tage werden jetzt erkannt und **nicht** mehr als Tagesprognose gespeichert; ein bereits vorhandener guter Wert bleibt erhalten.
-- **Solcast ist davon unberührt** und wird weiter unabhängig gespeichert. Die Live-Seite kann während eines Aussetzers kurz einen reduzierten Wert zeigen, korrigiert sich aber beim nächsten vollständigen Abruf selbst.
-
-### Mit Dank an
-
-- Rainer (rapahl) für den Hinweis mit Screenshot aus dem Genauigkeits-Tracking.
-
----
-
-## v3.34.4 — Daten-Checker: klarere Hinweise (Mai 2026)
-
-### Was sich für dich ändert
-
-- **Der Hinweis „Daten-Quellen – Konflikte" ist jetzt ehrlich.** Bisher bot er einen „Beheben →"-Knopf an, der ins Energieprofil führte — dort gab es aber keine passende Aktion. Tatsächlich gibt es nichts zu tun: eedc hat automatisch die zuverlässigste Quelle gewählt, der Hinweis dient nur der Nachvollziehbarkeit. Er erscheint deshalb jetzt als neutrale Info (statt als Warnung) und ohne irreführenden Knopf.
-- **Der Text beim Verdacht auf PV-Doppelerfassung ist besser lesbar** — die Diagnose-Werte stehen als Aufzählung, Ursache und Prüf-Schritte in eigenen Absätzen statt in einem dichten Block.
-
-### Mit Dank an
-
-- Radiocarbonat für beide Hinweise aus dem simon42-Forum.
-
----
-
-## v3.34.3 — Lange Dialoge lassen sich wieder vollständig bedienen (Mai 2026)
-
-### Was sich für dich ändert
-
-- **Bearbeiten-Dialoge mit vielen Feldern (z. B. „Monatsdaten bearbeiten" bei vielen PV-Modulen) lassen sich jetzt komplett bedienen.** War ein Dialog höher als dein Browserfenster, war der untere Bereich mit den **Speichern-/Abbrechen-Buttons** bisher nicht erreichbar — du konntest nur über Browser-Zoom ausweichen. Jetzt bleibt jeder Dialog im sichtbaren Bereich und scrollt bei Bedarf innerhalb des Fensters; die Buttons sind immer erreichbar. Kurze Dialoge sehen unverändert aus.
-
-### Mit Dank an
-
-- Dirk für den Hinweis aus dem PV-Forum.
-
----
+- Dirk, Radiocarbonat, Rainer (rapahl), Safi105, NongJoWo und detLAN für die Bug-Reports, Re-Tests und Vorschläge.
 
 ## v3.34.2 — Vollbackfill vervollständigt nachgefüllte Tage (Mai 2026)
 

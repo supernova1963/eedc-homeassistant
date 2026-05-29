@@ -7,126 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [3.34.9] - 2026-05-29 — WP-Dashboard: Counter-Kacheln „seit Anschaffung", Lebensdauer-Zählerstand im Tooltip (#238/#290)
+## [3.34.3] - 2026-05-29 — Sammelrelease: acht Backlog-Fixes (UX, Forecast, Connector, Verbrauchs-/E-Auto-Kennzahlen)
 
-> 🎨 **UX-Kompromiss mit detLAN** (#238/#290). Die WP-Counter-Kacheln (Kompressor-Starts, Betriebsstunden + die abgeleiteten Ø Laufzeit/Start, Starts/Betriebsstunde) zeigten als Hauptwert den rohen **Lebensdauer-Zählerstand** des Hersteller-Sensors — inkl. Betrieb vor Anschaffung, was den Monatsbezug verfälschte. Jetzt limitiert die Anzeige konsequent auf das **ab Anschaffungsdatum von eedc Erfasste**; der Lebensdauer-Zählerstand bleibt der Vollständigkeit halber im Tooltip. Reiner Read-/Display-Pfad (`dashboards.py`), **kein Aggregator-Schreibpfad**.
-
-### Changed
-
-- **WP-Dashboard-Counter-Kacheln:** Hauptwert = Σ der von eedc erfassten Tagesinkremente **seit Anschaffung** statt Lebensdauer-Counter. Der rohe Zählerstand (Lebensdauer) steht jetzt im Kachel-Tooltip („Zählerstand (Lebensdauer): …"). Titel „(Lebensdauer)" → „(seit Anschaffung)".
-- **Abgeleitete KPIs** „Ø Laufzeit pro Start" + „Starts pro Betriebsstunde" rechnen mit den seit-Anschaffung erfassten Summen (gleicher Zeitraum für beide Counter), nicht mehr mit den zwei — ggf. unterschiedlich alten — Lebensdauer-Ständen.
-- Backend liefert dazu `kompressor_starts_summe_erfasst` + `betriebsstunden_summe_erfasst`; `*_gesamt` (Lebensdauer) bleibt für den Tooltip erhalten.
-
-### Test
-
-- `test_wp_dashboard_betriebsstunden.py` auf die neue Semantik angepasst (Hauptwert = Σ Tagesinkremente, Lebensdauer separat, Ratios aus den erfassten Summen). Suite **584 grün**, `tsc` grün.
-
----
-
-## [3.34.8] - 2026-05-29 — Cockpit-Übersicht: E-Auto-Ersparnis mit Monats-Benzinpreis (#260)
-
-> 🐛 **Letzter Drift-Fix zu #260 (NongJoWo).** Die Benzin-Ersparnis in der Cockpit-Übersicht (E-Mobilität- + E-Auto-Sektion) wurde mit dem **statischen Investitions-Parameter-Benzinpreis** (1,80 €-Default) gerechnet, während Monatsberichte und E-Auto-Dashboard den **pro Monat** aus dem EU Weekly Oil Bulletin gepflegten Preis (`Monatsdaten.kraftstoffpreis_euro`, seit v3.17.0) nutzen → zwei Sichten, zwei Zahlen. Read-Site-Drift, **kein Aggregator-Schreibpfad**.
-
-### Fixed
-
-- **Cockpit-Übersicht ruft `berechne_eauto_ersparnis_periode`** (den bereits fürs E-Auto-Dashboard eingeführten #260-Periode-Helper) mit km **pro Monat** + Monats-Benzinpreis-Lookup, statt des Skalar-Helpers mit Einmal-Param-Preis. `benzin_kosten = Σ (km_monat × Vergleichsverbrauch × Preis_monat)`, km-gewichtet; Fallback pro Monat auf Param-Preis → Default. Damit zeigen Übersicht, E-Auto-Dashboard und Monatsberichte denselben Wert. Der Dienstwagen-Filter (`ist_dienstlich`) bleibt vorgelagert.
-
-### Test
-
-- Neue Datei `test_cockpit_uebersicht_benzinpreis_260.py` (2 Tests): Monatspreis 1,50 € → Ersparnis 105 € (nicht 126 € aus Param-Default); ohne Monatspreis korrekter Param-Fallback. Suite **584 grün** (582 + 2).
-
----
-
-## [3.34.7] - 2026-05-29 — HA-Export: Eigenverbrauchsquote bei IMD-Setups korrekt (#304, Teil 1)
-
-> 🐛 **Fix des gemeldeten HA-Export-Symptoms** (Teil 1 von #304). Der HA-Export-Sensor `eigenverbrauch_quote_prozent` zeigte **2,2 % statt ~40 %** (und `eigenverbrauch_gesamt_kwh` 830 statt ~15.000). Ursache: HA-Export sourcte die PV-Erzeugung korrekt aus `InvestitionMonatsdaten`, las aber Eigen-/Direkt-/Gesamtverbrauch aus den **berechneten Legacy-Feldern** in `Monatsdaten` — die bei modernen IMD-basierten Setups leer bleiben (nur CSV/JSON-Import füllt sie). Reiner Read-/Berechnungs-Fix, **kein Aggregator-Schreibpfad**.
+> 🧰 **Gebündeltes Patch-Release** mit acht unabhängigen, single-purpose Fixes aus dem aufgelaufenen Issue-Backlog — parallel zum v3.34-Refactor abgearbeitet. **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad. 584 Tests grün, Frontend-Typecheck grün.
 
 ### Added
 
-- **`core/berechnungen/verbrauch.py` → `berechne_verbrauchs_kennzahlen`** als Single Source of Truth für die Eigenverbrauchs-/Autarkie-Formel (`direktverbrauch = max(0, PV − Einspeisung − Speicher-Ladung)`, `eigenverbrauch = + Speicher-Entladung`, `gesamtverbrauch = + Netzbezug`), deckungsgleich mit cockpit/uebersicht.py + daten_checker.py (ADR-001-Berechnungs-Layer).
+- **`core/berechnungen/verbrauch.py` → `berechne_verbrauchs_kennzahlen`** als Single Source of Truth für die Eigenverbrauchs-/Autarkie-Formel (ADR-001-Berechnungs-Layer), deckungsgleich mit cockpit/uebersicht.py + daten_checker.py.
 
 ### Fixed
 
-- **HA-Export** rechnet Eigen-/Direkt-/Gesamtverbrauch + Quoten jetzt über den SoT-Helper aus PV(IMD) + Speicher(IMD) + Zählerwerten (Einspeisung/Netzbezug aus `Monatsdaten`) statt aus leeren Legacy-Feldern. Betrifft die Sensoren `eigenverbrauch_quote_prozent`, `eigenverbrauch_gesamt_kwh`, `direktverbrauch_gesamt_kwh`, `gesamtverbrauch_kwh`, `autarkie_prozent` + die davon abhängige `eigenverbrauch_ersparnis_euro`.
+- **Modal-Dialoge scrollen intern; Speichern bei langen Formularen wieder erreichbar (#307):** `Modal.tsx` (app-weit) auf `max-h-[90dvh]` + interne Scroll-Spalte umgestellt — lange Dialoge (z. B. „Monatsdaten bearbeiten") bleiben im Viewport, Buttons per Scroll erreichbar; kurze Dialoge unverändert.
+- **Daten-Checker: ehrlicher Quellen-Konflikt-Hinweis + lesbarer PV-Doppelerfassungs-Text (#305):** der „Daten-Quellen-Konflikte"-Hinweis verspricht keine nicht-existente „Beheben"-Aktion mehr (WARNING → INFO, Link entfernt, an drei Stellen entschärft); PV-Doppelerfassungs-Detailtext mit Zeilenumbrüchen lesbar (`whitespace-pre-line`).
+- **Multi-String/BKW-Tagesprognose kollabiert nicht mehr bei OpenMeteo-Aussetzern (#306):** gescheiterte Orientierungsgruppen werden nicht mehr still verschluckt; ein unvollständiger Fan-out wird **nicht** als kollabierter Solo-String-/BKW-Tageswert eingefroren (Prefetch + Live-Endpoint), Solcast bleibt unabhängig. Schützt auch den Lernfaktor.
+- **Fronius-Connector: PV-Erzeugung auf Gen24/neuer Firmware (#300):** wenn `GetPowerFlowRealtimeData → Site.E_Total` leer ist, holt der Connector die PV-Summe als Fallback aus `GetInverterRealtimeData` (Σ `TOTAL_ENERGY` über alle Wechselrichter). *Noch nicht an echtem Gen24 verifiziert — Gegencheck offen.*
+- **HA-Export: Eigenverbrauchsquote bei IMD-Setups korrekt (#304, Teil 1):** Eigen-/Direkt-/Gesamtverbrauch + Quoten über den neuen SoT-Helper aus PV(IMD) + Speicher(IMD) + Zählerwerten statt aus leeren Legacy-Monatsdaten-Feldern (2,2 % → ~40 %). *#304 bleibt offen: Aussichten + PDF als eigene Etappe nach v3.34.*
+- **Cockpit-Übersicht: E-Auto-Ersparnis mit Monats-Benzinpreis (#260):** die E-Mobilitäts-/E-Auto-Ersparnis rechnet jetzt km-gewichtet mit dem per-Monat aus dem EU Weekly Oil Bulletin gepflegten Kraftstoffpreis (`berechne_eauto_ersparnis_periode`) statt mit dem statischen Investitions-Parameter — gleicher Wert wie E-Auto-Dashboard + Monatsberichte. Letzte offene Drift-Quelle aus #260.
 
-### Test
+### Changed
 
-- Neue Datei `test_ha_export_eigenverbrauch_imd_304.py` (5 Tests): Helper-Formel (mit/ohne Speicher, PV=0, 100 %-Deckel) + Integration (IMD-PV, Legacy-Felder leer → EV-Quote 40 % statt kollabiert). Suite **582 grün** (577 + 5).
-
-### Notes
-
-- **#304 bleibt offen.** Dieselbe Legacy-Read-Klasse betrifft auch **Aussichten** (EV-Quoten-Historie + Finanz-Ersparnis, pro Monat) und den **PDF-Bericht** (Monatsbericht nutzt zudem eine Formel **ohne** Batterie-Terme). Deren Umstellung auf den Helper ändert Geld-/KPI-Zahlen und ist als **eigene Etappe nach v3.34** vorgesehen (eigener Verifikations-/Tester-Zyklus, parallelisierbar mit #303). cockpit/daten_checker sind bereits korrekt (Referenz-Pattern).
-
----
-
-## [3.34.6] - 2026-05-29 — Fronius-Connector: PV-Erzeugung auf Gen24/neuer Firmware (E_Total-Fallback) (#300)
-
-> 🐛 **Connector-Fix (Root-Cause upstream im Adapter).** Der Fronius-Solar-API-Connector las die PV-Gesamterzeugung nur aus `GetPowerFlowRealtimeData → Site.E_Total`. Auf Gen24 / neuerer Firmware ist dieses Feld deprecatet und liefert `null` — Folge: Netzbezug/Einspeisung (Smart Meter) kamen rein, die **PV-Erzeugung fehlte komplett** (Safi105, Monatsbericht ohne PV-Ertrag). Der vorgesehene Fallback `GetInverterRealtimeData → TOTAL_ENERGY` war im Code angelegt (`INVERTER_DATA_URL`), aber nicht verdrahtet. Connector-/Cloud-Import-Pfad, **kein Aggregator-Schreibpfad**.
-
-### Fixed
-
-- **PV-Gesamterzeugung-Fallback verdrahtet:** ist `Site.E_Total` leer, holt der Connector die PV-Summe jetzt aus `GetInverterRealtimeData` (Scope=System, Summe `TOTAL_ENERGY` über alle Wechselrichter) — sowohl beim Lesen der Zählerstände (`_read_snapshot`) als auch in der Sensor-Liste des Verbindungstests. Bleiben beide Quellen leer, ist PV weiterhin `None` (kein 0-Artefakt).
-- Wirkt **vorwärts** (neue Snapshots/Aggregationen) — bereits ohne PV geschriebene Monate füllen sich erst bei erneuter Erfassung.
-
-### Test
-
-- Neue Datei `test_fronius_connector_gen24_pv_fallback_300.py` (5 Tests): Fallback greift bei `E_Total=null`, E_Total hat Vorrang wenn vorhanden, PV bleibt `None` wenn beide Quellen leer, Helper summiert / ignoriert `None`+unparsebar. Suite **577 grün** (572 + 5).
-
-### Notes
-
-- Per Fronius-Solar-API-V1-Doku umgesetzt, aber **noch nicht an einem echten Gen24 verifiziert** (kein Testgerät beim Maintainer) — Gegencheck durch Tester (Safi105) offen, ob `TOTAL_ENERGY` die erwarteten kWh liefert.
-
----
-
-## [3.34.5] - 2026-05-29 — Multi-String/BKW-Tagesprognose: Kollaps bei OpenMeteo-Aussetzern verhindert (#306)
-
-> 🐛 **Robustheits-Fix im Forecast-Pfad.** Bei Anlagen mit mehreren Ausrichtungen (Multi-String, häufig + separates BKW) fragt eedc OpenMeteo **pro Orientierungsgruppe mit einem eigenen parallelen Call** ab. Schlug einer dieser Calls transient fehl, wurde die Gruppe **still übersprungen, ohne ihr kWp-Gewicht umzuverteilen** — die Tagesprognose kollabierte auf die Solo-Produktion der überlebenden Gruppe(n) (z. B. nur das BKW → 4.6 statt 64.7 kWh). Der Prefetch-Job fror diesen Wert als Tagesprognose ein und verzerrte Genauigkeits-Tracking + Lernfaktor. Gemeldet von Rainer (rapahl), zweites Vorkommen → systematisch, kein Einzelfall. Solcast (eigener, unabhängiger Call) blieb korrekt. Forecast-Pfad, **kein Aggregator-Schreibpfad**.
-
-### Fixed
-
-- **Gescheiterte Orientierungsgruppe wird nicht mehr still verschluckt.** Beide Multi-String-Fan-out-Funktionen melden jetzt Unvollständigkeit (`get_multi_string_prognose` → additives `vollstaendig`-Flag + Warn-Log; `_fetch_multi_string_gti` → `(gti, vollstaendig)`-Tupel). Linie „Diagnose statt stillem Cap".
-- **Unvollständige Tage werden nicht als OpenMeteo-Tagesprognose eingefroren.** Sowohl der Prefetch-Job (`prefetch_service.py` — der eigentliche Freeze-Pfad) als auch der Live-Endpoint (`live_wetter.py`) persistieren `pv_prognose_kwh` (+ Stundenprofil) nur, wenn **alle** Gruppen-Calls erfolgreich waren. Sonst bleibt ein bereits gespeicherter Wert stehen; **Solcast wird unabhängig weiter persistiert**. `_speichere_prognose` überschreibt einen Bestandswert nicht mehr, wenn der OpenMeteo-Wert als `None` übergeben wird (Source-Enum/Provenance-Writer unverändert).
-- **Lernfaktor automatisch geschützt:** da kollabierte Werte nicht mehr in die DB gelangen, sieht `_filtere_tage` sie nie — ohne neue Filter-Logik (per Regressionstest verankert).
-- **Live-Anzeige bleibt selbstheilend:** während eines OM-Aussetzers kann die Live-Seite transient einen reduzierten Wert zeigen, friert ihn aber nicht mehr ein; der nächste vollständige Abruf korrigiert.
-
-### Test
-
-- Neue Datei `test_multi_string_forecast_robustness_306.py` (5 Tests): Vollständigkeits-Flag beider Fan-out-Pfade (alle ok / eine Gruppe fällt aus, inkl. dokumentierter Untergewichtung) + `_speichere_prognose`-None-Guard (Bestandswert bleibt, Solcast wird geschrieben). Suite **572 grün** (567 + 5).
-
----
-
-## [3.34.4] - 2026-05-29 — Daten-Checker: Quellen-Konflikt-Hinweis ehrlich + PV-Doppelerfassungs-Text lesbar (#305)
-
-> 🐛 **UX/Wortlaut-Fix, kein Funktionswechsel.** Zwei unabhängige Daten-Checker-Befunde von Radiocarbonat (simon42-Forum #625). (1) Der „Daten-Quellen – Konflikte"-Hinweis bewarb per „Beheben →"-Button eine Auflösen-Aktion in der Reparatur-Werkbank, die es (noch) nicht gibt — dabei ist die Meldung rein diagnostisch: der Resolver hat bereits die höchstpriore Quelle gewählt, es gibt für den Anwender nichts zu tun. (2) Der PV-Doppelerfassungs-Verdacht war ein dichter, schwer lesbarer Fließtext-Block. Reines Display-/Wortlaut-Thema, kein Aggregator-Schreibpfad.
-
-### Fixed
-
-- **Quellen-Konflikt-Hinweis rein informativ statt Aktions-versprechend** (#305 Befund 1). An allen drei Stellen entschärft, die die nicht-existente „Daten-Quellen-Konflikte auflösen"-Aktion bewarben:
-  - `daten_checker.py` (`_check_provenance_conflicts`): Severity **WARNING → INFO**, neuer Wortlaut („der Resolver hat automatisch die höchstpriore Quelle gewählt … kein Handlungsbedarf"), **kein `link` mehr** — entfernt den irreführenden „Beheben →"-Button.
-  - `monatsabschluss/wizard.py` (Schreibschutz-Hinweis bei abgelehnter manueller Eingabe): erklärt die Quellen-Rangfolge, ohne eine Auflösen-Aktion zu versprechen.
-  - `MonatsabschlussWizard.tsx` (Fehler-Text + Folge-Kommentar): analog entschärft.
-  - Eine echte „Konflikte auflösen"-Aktion bleibt eine bewusste spätere Etappe (P4 / Option B des Issues, eigener Track) — erst wenn sie existiert, darf hier wieder ein Aktions-Link stehen.
-- **PV-Doppelerfassungs-Detailtext lesbar** (#305 Befund 2): Diagnose-Marker als Aufzählung, Ursache/Prüf-/Test-Schritt in eigenen Absätzen; der Daten-Checker rendert `details` jetzt mit `whitespace-pre-line`, sodass Zeilenumbrüche sichtbar werden (ein eingefügtes `<br>` würde von React escaped und wörtlich angezeigt).
-
-### Test
-
-- Volle Suite **567 grün** (PV-Doppelerfassungs-Test prüft Substrings + WARNING-Severity unverändert weiter), `tsc --noEmit` grün. `whitespace-pre-line` ist abwärtskompatibel: bestehende einzeilige `details` enthalten kein `\n` und rendern unverändert.
-
----
-
-## [3.34.3] - 2026-05-29 — Modal-Dialoge scrollen intern; Speichern bei langen Formularen wieder erreichbar (#307)
-
-> 🐛 **UX-Fix, app-weit.** Bei Dialogen, die höher als das Browserfenster sind (z. B. „Monatsdaten bearbeiten" mit vielen PV-Modulen), war der untere Formularbereich samt **Speichern-/Abbrechen-Buttons** nicht erreichbar — die Modale wurde oben/unten abgeschnitten, ohne eigene Scroll-Möglichkeit. Gemeldet von Dirk (PV-Forum, PN). Kein Datenverlust, aber der Bearbeiten-Pfad war faktisch blockiert (Workaround nur über Browser-Zoom). Unabhängiger Bug, **keine v3.34-Regression** (`Modal.tsx` nicht im Phase-A/B-Diff); berührt den Aggregator-Schreibpfad nicht.
-
-### Fixed
-
-- **`Modal.tsx` (app-weit genutzte Dialog-Komponente):** Die Modal-Box ist jetzt auf `max-h-[90dvh]` begrenzt und als vertikale Flex-Spalte aufgebaut — der Header bleibt fix (`shrink-0`), der **Inhaltsbereich scrollt intern** (`flex-1 min-h-0 overflow-y-auto`), sodass die Buttons am Formular-Ende per Scroll immer erreichbar sind. Wirkt für alle Dialog-Verwender (Monatsdaten, Setup-Wizard, Investitionen, Community-Share u. a.) über den `ui`-Barrel. `dvh` statt `vh` wegen Mobile/HA-Companion-App. Kurze Dialoge (z. B. Lösch-Bestätigung) bleiben unverändert: `overflow-y-auto` zeigt nur bei tatsächlichem Überlauf einen Scrollbalken; die Box behält ihre natürliche Höhe.
-
-### Test
-
-- Dev-Server-QS über alle vier Modal-Größen (sm/md/lg/xl) × langer/kurzer Inhalt: lange Modals bleiben im Viewport (auf 90 % der Fensterhöhe gedeckelt, hier 720 px bei 800 px), scrollen intern, Speichern-Button per Scroll im Viewport; kurze Dialoge unverändert (kein Scrollbalken, natürliche Höhe 173 px). `tsc --noEmit` grün, Backend-Suite unverändert 567 grün (Frontend-only).
-
----
+- **WP-Dashboard: Counter-Kacheln „seit Anschaffung", Lebensdauer-Zählerstand im Tooltip (#238/#290):** Kompressor-Starts, Betriebsstunden + die abgeleiteten KPIs zeigen als Hauptwert das von eedc seit Anschaffung Erfasste (Anzeige ab Anschaffungsdatum limitiert); der rohe Lebensdauer-Zählerstand steht im Tooltip.
 
 ## [3.34.2] - 2026-05-29 — Vollbackfill als dünne Schleife über den Tag-Aggregator (Phase B v3.34-Refactor)
 
