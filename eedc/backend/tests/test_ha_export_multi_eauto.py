@@ -18,7 +18,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from backend.api.routes.ha_export import calculate_anlage_sensors
+from backend.api.routes.ha_export import (
+    calculate_anlage_sensors,
+    calculate_investition_sensors,
+)
 from backend.models import (
     Anlage,
     Investition,
@@ -120,3 +123,49 @@ async def test_jahres_ersparnis_summiert_pro_eauto_korrekt(db):
         f"jahres_ersparnis_euro zu hoch — wahrscheinlich last-write-wins-"
         f"Drift bei E-Auto-Params. Wert: {jahres_ersparnis_sensor.value} €"
     )
+
+
+async def test_investition_sensoren_respektieren_laufzeit(db):
+    """#308-Klasse: `calculate_investition_sensors` darf IMD-Monate VOR
+    Anschaffung / NACH Stilllegung nicht in die per-Investition-HA-Sensoren
+    summieren (symmetrisch zu `calculate_anlage_sensors`, #236).
+    """
+    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+
+    ea = Investition(
+        anlage_id=anlage.id, typ="e-auto", bezeichnung="EV",
+        anschaffungsdatum=date(2025, 1, 1),
+        stilllegungsdatum=date(2025, 12, 31),
+        anschaffungskosten_gesamt=30000.0,
+        parameter={"verbrauch_kwh_100km": 15},
+    )
+    db.add(ea)
+    await db.flush()
+
+    # 12 Monate IM Fenster: je 100 km → Σ 1.200 km.
+    for monat in range(1, 13):
+        db.add(InvestitionMonatsdaten(
+            investition_id=ea.id, jahr=2025, monat=monat,
+            verbrauch_daten={"km_gefahren": 100.0, "verbrauch_kwh": 15.0},
+        ))
+    # Spuk-Monat VOR Anschaffung (z.B. Phantom-Import) — muss raus.
+    db.add(InvestitionMonatsdaten(
+        investition_id=ea.id, jahr=2024, monat=12,
+        verbrauch_daten={"km_gefahren": 5000.0, "verbrauch_kwh": 750.0},
+    ))
+    # Spuk-Monat NACH Stilllegung — muss ebenfalls raus.
+    db.add(InvestitionMonatsdaten(
+        investition_id=ea.id, jahr=2026, monat=1,
+        verbrauch_daten={"km_gefahren": 5000.0, "verbrauch_kwh": 750.0},
+    ))
+    await db.flush()
+
+    sensors = await calculate_investition_sensors(db, ea, None)
+    km_sensor = next(
+        (s for s in sensors if s.definition.key == "e_auto_km_gesamt"), None,
+    )
+    assert km_sensor is not None
+    # Nur die 12 In-Fenster-Monate: 1.200 km — nicht 11.200 km.
+    assert km_sensor.value == 1200

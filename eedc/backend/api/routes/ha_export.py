@@ -590,7 +590,14 @@ async def calculate_investition_sensors(
         select(InvestitionMonatsdaten)
         .where(InvestitionMonatsdaten.investition_id == investition.id)
     )
-    monatsdaten = imd_result.scalars().all()
+    # #308: SoT-Filter auf die Laufzeit (Anschaffung→Stilllegung), symmetrisch
+    # zur Schwesterfunktion `calculate_anlage_sensors` (#236). Ohne ihn flossen
+    # IMD-Monate vor Anschaffung / nach Stilllegung in die per-Investition-
+    # HA-Sensoren (km, Verbrauch, PV-Anteil, Ersparnis) ein.
+    monatsdaten = [
+        md for md in imd_result.scalars().all()
+        if investition.ist_aktiv_im_monat(md.jahr, md.monat)
+    ]
 
     params = investition.parameter or {}
     netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0

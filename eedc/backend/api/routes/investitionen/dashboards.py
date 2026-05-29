@@ -1200,7 +1200,13 @@ async def get_sonstiges_dashboard(
             .where(InvestitionMonatsdaten.investition_id == inv.id)
             .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
         )
-        monatsdaten = md_result.scalars().all()
+        # #308: SoT-Filter auf die Laufzeit (Anschaffung→Stilllegung), wie bei
+        # den fünf anderen Dashboards in dieser Datei. Ohne ihn flossen Monate
+        # vor Anschaffung / nach Stilllegung in die gesamt_*-Summen.
+        monatsdaten = [
+            md for md in md_result.scalars().all()
+            if inv.ist_aktiv_im_monat(md.jahr, md.monat)
+        ]
 
         params = inv.parameter or {}
         kategorie = params.get('kategorie', 'erzeuger')
