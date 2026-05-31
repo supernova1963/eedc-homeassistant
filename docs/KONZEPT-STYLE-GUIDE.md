@@ -139,7 +139,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Prinzip:** Jede *abgeleitete/aggregierte* Kennzahl (KPI, ROI, Autarkie %, Ersparnis, Wirkungsgrad, Prognose) zeigt ihre Herleitung auf Abruf — Formel + eingesetzte Werte + Datenquelle/Zeitraum. Rohe Zählerwerte und triviale Summen bleiben tooltip-frei (kein Rauschen).
 > **Affordance:** konsistenter, dezenter Indikator (z. B. gepunktete Unterstreichung oder kleines ⓘ). Progressive Disclosure — versteckt bis Hover/Tap, daher **kein Profi-Modus** (dient gerade Einsteigern „woher kommt die Zahl?").
-> **Architektur (SoT):** Formel/Erklärung als Eigenschaft des Berechnungs-Layer-Helfers (`core/berechnungen/`, ADR-001) — Wert UND Erklärung aus *einer* Quelle, können nicht driften. Bestehend: `FormelTooltip` (ROIDashboard) als Vorbild, B1 nennt den Berechnung-Tooltip.
+> **Architektur (SoT):** Der Berechnungs-Layer-Helfer (`core/berechnungen/`, ADR-001) liefert **neben dem Wert eine strukturierte Herleitung** `{ wert, einheit, formel, eingesetzte_werte[], quelle, zeitraum }` — Wert UND Erklärung aus *einer* Quelle, können nicht driften. Vertrag in [KONZEPT-BERECHNUNGS-LAYER.md §6](KONZEPT-BERECHNUNGS-LAYER.md); dieselbe Herleitung speist perspektivisch PDF + Daten-Checker. Bestehend: `FormelTooltip` (ROIDashboard) als Vorbild, B1 nennt den Berechnung-Tooltip.
 > **A3-Kopplung:** der Tooltip erklärt auch, *warum* ein Wert `—`/`N/A`/`?` ist (Datenlücke vs. strukturell vs. Schätzung).
 > **Mobile:** kein Hover auf Touch → Tap/Long-press-Popover (Touch-Target ≥ 44 px, siehe Mobile M4).
 

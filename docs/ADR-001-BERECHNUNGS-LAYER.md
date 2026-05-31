@@ -40,6 +40,7 @@ Beim Migrieren:
 - `docs/archive/KONZEPT-DATENPIPELINE.md` Abschnitt 3.4 — „Zentraler Helper Pflicht"
 - `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` — Etappe-4-Auslöser, dessen unvollständiger Riemann-Pfad-Rückbau das Berechnungs-Layer-Konzept erst nötig gemacht hat
 - `docs/KONZEPT-COUNTER-DAILY-DRIFT.md` — analoge Drift-Klasse für Counter-Felder, wird Teil des Berechnungs-Layers (`counter`-Submodul) wenn die Stelle angefasst wird
+- `docs/KONZEPT-BERECHNUNGS-LAYER.md` §6 — Herleitungs-Transparenz: Kennzahl-Helfer liefern eine strukturierte Herleitung (Vertrag zur Style-Guide-Norm A6); Durchsetzung als separater Zukunfts-Punkt nach Projektabschluss
 
 ## Verbundene Memory-Einträge
 

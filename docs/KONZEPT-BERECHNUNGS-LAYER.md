@@ -83,11 +83,28 @@ Disziplin durch **Architektur**, nicht durch Sprint-Plan:
 | Memory `feedback_eigenen_code_zuerst` | Diagnose-Reflex beim nächsten Anwender-Drift | ✓ v3.31.5 |
 | Memory `feedback_step_by_step_berechnungs_layer` | Migrations-Disziplin in künftigen Sessions | ✓ v3.31.5 |
 
-## 6. Anwender-Kommunikation
+## 6. Herleitungs-Transparenz (Vertrag zu Style-Guide A6)
+
+Ein Layer-Helfer, der eine anwender-sichtbare Kennzahl liefert (KPI, ROI, Autarkie, Ersparnis, Wirkungsgrad, Prognose), gibt **neben dem Wert eine strukturierte Herleitung** zurück — nicht nur die Zahl. So hat die Erklärung dieselbe *eine* Quelle wie der Wert und kann nicht von ihm driften (gleiches SoT-Prinzip wie für die Berechnung selbst).
+
+**Form (Vorschlag, beim ersten Touch zu konkretisieren):**
+
+```
+Herleitung = { wert, einheit, formel, eingesetzte_werte[], quelle, zeitraum }
+```
+
+- **UI-Konsument:** Style-Guide-Norm A6 (Formel-Tooltip) rendert diese Struktur — dezenter Indikator → Hover/Tap zeigt Formel + eingesetzte Werte + Quelle/Zeitraum.
+- **Weitere Konsumenten:** dieselbe Herleitung speist perspektivisch PDF-Export + Daten-Checker (eine Quelle, mehrere Sichten).
+- **A3-Kopplung:** ist der Wert `—`/`N/A`/`?`, trägt die Herleitung den Grund (Datenlücke vs. strukturell vs. Schätzung).
+- **Scope:** nur abgeleitete/aggregierte Kennzahlen — rohe Zählerwerte/triviale Summen brauchen keine Herleitung.
+
+**Durchsetzung — separater Zukunfts-Punkt (nach Projektabschluss):** analog zu den Schutzmechanismen (Abschnitt 5) ist ein Konformitäts-Check denkbar (neuer Kennzahl-Helfer ohne Herleitungs-Feld → Test schlägt an). Bewusst NICHT jetzt umgesetzt — erst nach Abschluss des laufenden Umbaus als eigener Punkt bewerten. Bis dahin gilt die Erwartung dokumentarisch (dieser Abschnitt + Style-Guide A6).
+
+## 7. Anwender-Kommunikation
 
 Für v3.31.5-Release in WAS-IST-NEU/CHANGELOG: BKW-Doppelzählungs-Fix mit Dank an Rainer, Aggregator-Verhalten im HA-Add-on-Modus auf „HA-LTS exklusiv" konsolidiert (Etappe-4-Komplettierung). KEINE große Refactoring-Ankündigung — der Step-by-Step-Pfad läuft unter der Haube, Anwender sehen nur die Bugfixes.
 
-## 7. Was NICHT in diesem Konzept ist
+## 8. Was NICHT in diesem Konzept ist
 
 - Daten-Checker-Refactor (Achse A/B/C, eigenes [KONZEPT-DATENCHECKER-KONSISTENZ.md](KONZEPT-DATENCHECKER-KONSISTENZ.md)) — orthogonal, kann unabhängig laufen.
 - Migration der bestehenden alten `TagesZusammenfassung.komponenten_kwh`-JSONs mit dem BKW-Doppel-Bug — wird über die Reparatur-Werkbank gelöst (Anwender wählen Bereich und „Mehrere Tage neu berechnen"). Auto-Migration ist denkbar, aber bisher nicht implementiert; siehe Memory `project_berechnungs_layer_offen` falls Tester-Befunde dazu zwingen.
