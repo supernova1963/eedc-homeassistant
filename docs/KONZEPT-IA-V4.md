@@ -192,6 +192,15 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 - **B5** Mobile-Reduce-Etappen (M1 Reduce-Logik, M2 Sticky-Header auto-hide, M3 Tabellen-Swipe)
 - **B12** Single-Anlage-Selektor-Audit
 
+### Vorab-Sichtung — klickbare Vorschau (statt Design-Tool)
+
+Auf die wiederkehrende Tester-Frage „kann man vorher sehen, was sich ändert?" ist die Antwort eine **klickbare Vorschau aus echten Komponenten**, nicht ein Design-Tool (Figma/Penpot wäre Wegwerf-Arbeit parallel zum Bau). Da Phase 0 die Bausteine ohnehin liefert (A0-Tokens, B9-KPICard-SoT, neue Top-Nav/SubTabs-Schale), ist die Vorschau das Fundament, kein Zusatzaufwand. Sie adressiert direkt das #1-Risiko Findability — Tester versuchen eine echte Aufgabe („finde deine Aussicht") auf der neuen Struktur, **bevor** der Schnitt live geht.
+
+- **MVP:** Navigations-Skelett (neue Top-Nav + Sub-Tabs + Platzhalter-Komponenten-Hub) — beantwortet die Findability-Frage schon ohne realistische Daten. Wächst aus der bestehenden `/dev/design-preview`-Route.
+- **Ausbau:** statisch gehosteter Build mit Mock-Daten (kein Backend/HA nötig), öffentlicher Link in #243 für alle Interessierten — **Richtungs-Feedback zur Navigation, nicht Korrektheits-Test**.
+- **Companion-App-Spezifika** (Swipe/Sticky/`h-dvh`), die eine statische Vorschau nicht zeigt: später über einen Beta-Add-on-Kanal, sobald IA-V4 läuft.
+- **Leitplanken:** temporäre Wegwerf-Vorschau, **kein** dauerhafter In-App-Schalter (Einstellbarkeits-Cap); öffentlicher Link statt bilateralem Screenshot-Pakt; kein Termin-Versprechen unter Foren-Druck. Baubar erst nach Phase C (Komponenten müssen als echter Code existieren).
+
 ---
 
 ## URL-Redirect-Tabelle
@@ -233,7 +242,7 @@ Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.ts
 
 | Risiko | Gegenmaßnahme |
 |---|---|
-| Bestandstester sucht Aussichten als Top-Eintrag | Release-Notes prominent, Hilfe-Eintrag „Wo ist Aussichten hin?", evtl. einmaliger Toast „Aussichten findest du jetzt im Cockpit unter Aussicht" |
+| Bestandstester sucht Aussichten als Top-Eintrag | Release-Notes prominent, Hilfe-Eintrag „Wo ist Aussichten hin?", evtl. einmaliger Toast „Aussichten findest du jetzt im Cockpit unter Aussicht". **Vorgelagert: klickbare Vorab-Vorschau** (siehe Migrations-Plan) fängt Findability-Probleme ab, solange Umräumen billig ist |
 | Foren-Links brechen | Vollständige Redirect-Tabelle in `App.tsx`, automatischer Test der alten Pfade |
 | Komponenten-Hub-Seite zu lang auf Mobile | CollapsibleSections mit `defaultOpenMobile={false}` für Verlauf/Vergleich, Sektion „Aktueller Status" bleibt initial offen |
 | HA-Companion-App-Quirks (Sticky-Header, Downloads, `h-dvh`) | Querschnittsregeln aus Mobile-Konzept M4+M5 in Pflicht-Checkliste pro neuer Seite |
