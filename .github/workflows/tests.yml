@@ -1,0 +1,68 @@
+name: Backend Tests
+
+# Macht das v3.34-QS-Sicherheitsnetz maschinell durchsetzbar: bisher lief die
+# Backend-Suite nur lokal via scripts/smoke.sh vor jedem Release (release.sh).
+# Dieser Workflow spiegelt smoke.sh (App-Boot + Routen-Check + pytest) und
+# blockt PRs/Pushes auf main mit rotem Test — die Drift-Klasse, gegen die
+# Phase A/B/C absichern, fällt damit durch Test statt durch Inspektion.
+# Siehe docs/ADR-001-BERECHNUNGS-LAYER.md + Audit v3.34 (M6/§2).
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'eedc/backend/**'
+      - 'eedc/pytest.ini'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'eedc/backend/**'
+      - 'eedc/pytest.ini'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          # Gleiche Minor-Version wie das HA-Add-on-Dockerfile (python:3.11-slim),
+          # damit CI denselben Interpreter testet, der ausgeliefert wird.
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            eedc/backend/requirements.txt
+            eedc/backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: eedc
+        run: pip install -r backend/requirements-dev.txt
+
+      - name: App-Boot + Routen-Check (spiegelt smoke.sh Schritt 2)
+        working-directory: eedc
+        run: |
+          python -c "
+          import sys
+          from backend.main import app
+          EXPECTED_ROUTES = 217
+          n = len(app.routes)
+          print(f'Routes: {n}')
+          if n < EXPECTED_ROUTES:
+              print(f'FEHLER: erwartet >= {EXPECTED_ROUTES}, gefunden {n}', file=sys.stderr)
+              sys.exit(1)
+          "
+
+      - name: Akzeptanz-Tests (pytest)
+        working-directory: eedc
+        run: python -m pytest -q --no-header
