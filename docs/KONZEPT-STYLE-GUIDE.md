@@ -74,6 +74,8 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > 1. **Farb-Kanon — A2 ist normativ.** A0 migriert die ausgelieferte tailwind-`energy`-Palette an die A2-Semantik (Speicher→lila, Verbrauch→blau) und ergänzt die in A2 noch fehlenden Werte für Netzbezug/Einspeisung (Rot bleibt für Kosten reserviert). Der sichtbare Farbwechsel an den Energie-Charts ist als Preis für die saubere Semantik akzeptiert.
 > 2. **Spacing-SoT — `design-tokens.ts`.** Spacing geht im A0-Artefakt (Tailwind-Theme + `design-tokens.ts`) auf; `lib/spacing.ts` entfällt.
 
+> **A0-Grundsatz — vollenden, nicht abtippen:** „A2 normativ" (und analog A1/A4/C1) heißt, das semantische *System* ist die Quelle — **nicht** der heutige, teils lückenhafte Doc-Text. A0 baut das System **fertig**, statt einen unvollständigen Stand einzufrieren (das wäre wieder Flicken). Konkret für Farben: alle Energie-/Komponenten-Rollen (PV, Speicher, Verbrauch, Netzbezug, Einspeisung, Kosten, Umwelt) **und** die getrennte Status-Achse (OK/Warning/Error/Info) bekommen definierte Token-Werte; die tailwind-Palette **und** die heute duplizierten `KPICard`-/`komponentenStyle`-Farb-Enums werden daraus **abgeleitet** (eine Quelle), nicht parallel gepflegt. Dasselbe Prinzip gilt für Typo (A1), Animation (A4), Spacing (C1): die Token-Tabelle wird in A0 vollständig gemacht, nicht aus dem Ist-Stand zusammengeklaubt.
+
 ---
 
 ### A1 — Typografie-System
