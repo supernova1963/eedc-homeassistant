@@ -32,6 +32,7 @@ logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 # Uvicorn konfiguriert nur seine eigenen Logger; ohne basicConfig gehen
 # alle logger.info/debug() Aufrufe der App ins Leere.
 from backend.core.config import settings as _boot_settings
+
 _log_level = getattr(logging, _boot_settings.log_level.upper(), logging.INFO)
 logging.basicConfig(
     level=_log_level,
@@ -45,9 +46,47 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 
 from sqlalchemy import select, func
-from backend.core.config import settings, APP_VERSION, APP_NAME, APP_FULL_NAME, HA_INTEGRATION_AVAILABLE
+from backend.core.config import (
+    settings,
+    APP_VERSION,
+    APP_NAME,
+    APP_FULL_NAME,
+    HA_INTEGRATION_AVAILABLE,
+)
 from backend.core.database import init_db, get_session
-from backend.api.routes import anlagen, monatsdaten, investitionen, strompreise, import_export, pvgis, cockpit, wetter, aussichten, prognosen, solar_prognose, monatsabschluss, community, data_import, connector, cloud_import, custom_import, system_logs, daten_checker, diagnostics, aktueller_monat, live_dashboard, live_mqtt_inbound, live_wetter, energie_profil, mqtt_gateway, mqtt_presets, infothek, dokumentation, korrekturprofil, repair
+from backend.api.routes import (
+    anlagen,
+    monatsdaten,
+    investitionen,
+    strompreise,
+    import_export,
+    pvgis,
+    cockpit,
+    wetter,
+    aussichten,
+    prognosen,
+    solar_prognose,
+    monatsabschluss,
+    community,
+    data_import,
+    connector,
+    cloud_import,
+    custom_import,
+    system_logs,
+    daten_checker,
+    diagnostics,
+    aktueller_monat,
+    live_dashboard,
+    live_mqtt_inbound,
+    live_wetter,
+    energie_profil,
+    mqtt_gateway,
+    mqtt_presets,
+    infothek,
+    dokumentation,
+    korrekturprofil,
+    repair,
+)
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -58,13 +97,20 @@ from backend.services.scheduler import start_scheduler, stop_scheduler, get_sche
 
 # HA-spezifische Imports (nur wenn HA verfügbar)
 if HA_INTEGRATION_AVAILABLE:
-    from backend.api.routes import ha_integration, ha_export, ha_import, ha_statistics, sensor_mapping
+    from backend.api.routes import (
+        ha_integration,
+        ha_export,
+        ha_import,
+        ha_statistics,
+        sensor_mapping,
+    )
 
 
 async def _load_mqtt_config() -> dict | None:
     """Lädt MQTT-Config: DB-Settings (Priorität) → Env-Vars (Fallback)."""
     try:
         from backend.models.settings import Settings as SettingsModel
+
         async with get_session() as session:
             result = await session.execute(
                 select(SettingsModel).where(SettingsModel.key == "mqtt_inbound")
@@ -110,6 +156,7 @@ async def lifespan(app: FastAPI):
     try:
         from backend.services.wetter.cache import warmup_l1_from_l2
         import backend.services.wetter.cache as _wc
+
         _wc._loop_running = True
         count = await warmup_l1_from_l2()
         if count > 0:
@@ -123,6 +170,7 @@ async def lifespan(app: FastAPI):
     if _cache_cold:
         try:
             from backend.services.prefetch_service import prefetch_all_prognosen
+
             asyncio.create_task(prefetch_all_prognosen(skip_jitter=True))
             print("Cache kalt — Sofort-Prefetch gestartet.")
         except Exception as e:
@@ -134,61 +182,84 @@ async def lifespan(app: FastAPI):
         # Snapshot-Recovery für Restart-Edge-Case (verpasste :05/:55-Jobs)
         try:
             from backend.services.scheduler import sensor_snapshot_startup_recovery
+
             asyncio.create_task(sensor_snapshot_startup_recovery())
         except Exception as e:
             logger.debug(f"Snapshot-Recovery konnte nicht gestartet werden: {e}")
     else:
-        print("Scheduler konnte nicht gestartet werden (APScheduler nicht installiert?).")
+        print(
+            "Scheduler konnte nicht gestartet werden (APScheduler nicht installiert?)."
+        )
 
     # MQTT-Inbound starten (DB-Settings haben Vorrang vor Env-Vars)
     mqtt_inbound = None
     mqtt_cfg = await _load_mqtt_config()
     if mqtt_cfg and mqtt_cfg.get("enabled"):
         from backend.services.mqtt_inbound_service import init_mqtt_inbound_service
+
         host = mqtt_cfg["host"]
         port = mqtt_cfg["port"]
         mqtt_inbound = init_mqtt_inbound_service(
-            host=host, port=port,
+            host=host,
+            port=port,
             username=mqtt_cfg.get("username") or None,
             password=mqtt_cfg.get("password") or None,
         )
         if await mqtt_inbound.start():
             print(f"  MQTT-Inbound: aktiv ({host}:{port})")
+
             # Initialer Energy-Snapshot nach kurzem Delay (Cache braucht erste Nachrichten)
             async def _initial_snapshot():
                 import asyncio
+
                 await asyncio.sleep(10)
                 try:
-                    from backend.services.mqtt_energy_history_service import snapshot_energy_cache
+                    from backend.services.mqtt_energy_history_service import (
+                        snapshot_energy_cache,
+                    )
+
                     count = await snapshot_energy_cache()
                     if count > 0:
-                        logger.info(f"MQTT Energy: Initialer Snapshot ({count} Einträge)")
+                        logger.info(
+                            f"MQTT Energy: Initialer Snapshot ({count} Einträge)"
+                        )
                 except Exception as e:
                     logger.debug(f"Initialer MQTT Energy Snapshot fehlgeschlagen: {e}")
+
             asyncio.create_task(_initial_snapshot())
 
             # MQTT-Gateway starten (nutzt gleichen Broker)
             try:
-                from backend.services.mqtt_gateway_service import init_mqtt_gateway_service, GatewayMapping
+                from backend.services.mqtt_gateway_service import (
+                    init_mqtt_gateway_service,
+                    GatewayMapping,
+                )
                 from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
+
                 gateway = init_mqtt_gateway_service(
-                    host=host, port=port,
+                    host=host,
+                    port=port,
                     username=mqtt_cfg.get("username") or None,
                     password=mqtt_cfg.get("password") or None,
                 )
                 # Aktive Mappings aus DB laden
                 async with get_session() as session:
                     result = await session.execute(
-                        select(MqttGatewayMapping).where(MqttGatewayMapping.aktiv == True)
+                        select(MqttGatewayMapping).where(
+                            MqttGatewayMapping.aktiv == True
+                        )
                     )
                     db_mappings = result.scalars().all()
                     if db_mappings:
                         gw_mappings = [
                             GatewayMapping(
-                                id=m.id, anlage_id=m.anlage_id,
-                                quell_topic=m.quell_topic, ziel_key=m.ziel_key,
+                                id=m.id,
+                                anlage_id=m.anlage_id,
+                                quell_topic=m.quell_topic,
+                                ziel_key=m.ziel_key,
                                 payload_typ=m.payload_typ or "plain",
-                                json_pfad=m.json_pfad, array_index=m.array_index,
+                                json_pfad=m.json_pfad,
+                                array_index=m.array_index,
                                 faktor=m.faktor if m.faktor is not None else 1.0,
                                 offset=m.offset if m.offset is not None else 0.0,
                                 invertieren=bool(m.invertieren),
@@ -197,7 +268,9 @@ async def lifespan(app: FastAPI):
                         ]
                         gateway.load_mappings(gw_mappings)
                         if await gateway.start():
-                            print(f"  MQTT-Gateway: aktiv ({len(gw_mappings)} Mappings)")
+                            print(
+                                f"  MQTT-Gateway: aktiv ({len(gw_mappings)} Mappings)"
+                            )
                         else:
                             print("  MQTT-Gateway: konnte nicht gestartet werden")
                     else:
@@ -207,11 +280,15 @@ async def lifespan(app: FastAPI):
 
             # Connector → MQTT Bridge starten (pollt Geräte-Connectoren, publisht auf MQTT)
             try:
-                from backend.services.connector_mqtt_bridge import init_connector_mqtt_bridge, ConnectorTarget
+                from backend.services.connector_mqtt_bridge import (
+                    init_connector_mqtt_bridge,
+                    ConnectorTarget,
+                )
                 import base64
 
                 bridge = init_connector_mqtt_bridge(
-                    mqtt_host=host, mqtt_port=port,
+                    mqtt_host=host,
+                    mqtt_port=port,
                     mqtt_username=mqtt_cfg.get("username") or None,
                     mqtt_password=mqtt_cfg.get("password") or None,
                 )
@@ -222,21 +299,31 @@ async def lifespan(app: FastAPI):
                     anlagen = result.scalars().all()
                     for anlage in anlagen:
                         cfg = anlage.connector_config
-                        if not cfg or not cfg.get("connector_id") or not cfg.get("host"):
+                        if (
+                            not cfg
+                            or not cfg.get("connector_id")
+                            or not cfg.get("host")
+                        ):
                             continue
                         pw_encoded = cfg.get("password", "")
                         try:
-                            pw = base64.b64decode(pw_encoded.encode()).decode() if pw_encoded else ""
+                            pw = (
+                                base64.b64decode(pw_encoded.encode()).decode()
+                                if pw_encoded
+                                else ""
+                            )
                         except Exception:
                             pw = pw_encoded
-                        targets.append(ConnectorTarget(
-                            anlage_id=anlage.id,
-                            inv_id=None,  # TODO: Investition-Zuordnung aus Config
-                            connector_id=cfg["connector_id"],
-                            host=cfg["host"],
-                            username=cfg.get("username", ""),
-                            password=pw,
-                        ))
+                        targets.append(
+                            ConnectorTarget(
+                                anlage_id=anlage.id,
+                                inv_id=None,  # TODO: Investition-Zuordnung aus Config
+                                connector_id=cfg["connector_id"],
+                                host=cfg["host"],
+                                username=cfg.get("username", ""),
+                                password=pw,
+                            )
+                        )
                 if targets:
                     bridge.load_targets(targets)
                     if await bridge.start():
@@ -255,12 +342,14 @@ async def lifespan(app: FastAPI):
         await asyncio.sleep(30)
         try:
             from backend.services.prefetch_service import prefetch_all_prognosen
+
             results = await prefetch_all_prognosen()
             ok = sum(1 for r in results.values() if r.get("status") == "ok")
             if ok > 0:
                 logger.info(f"Initialer Prognose-Prefetch: {ok}/{len(results)} Anlagen")
         except Exception as e:
             logger.debug(f"Initialer Prognose-Prefetch fehlgeschlagen: {e}")
+
     asyncio.create_task(_initial_prefetch())
 
     yield
@@ -271,6 +360,7 @@ async def lifespan(app: FastAPI):
     # Gateway + Bridge stoppen
     try:
         from backend.services.mqtt_gateway_service import get_mqtt_gateway_service
+
         gw = get_mqtt_gateway_service()
         if gw:
             await gw.stop()
@@ -278,6 +368,7 @@ async def lifespan(app: FastAPI):
         pass
     try:
         from backend.services.connector_mqtt_bridge import get_connector_mqtt_bridge
+
         br = get_connector_mqtt_bridge()
         if br:
             await br.stop()
@@ -295,10 +386,10 @@ app = FastAPI(
     description=f"{APP_FULL_NAME} - API für PV-Anlagen Auswertung",
     version=APP_VERSION,
     lifespan=lifespan,
-    docs_url=None,             # Deaktiviert - eigene Route unten
-    redoc_url=None,            # Deaktiviert - eigene Route unten
+    docs_url=None,  # Deaktiviert - eigene Route unten
+    redoc_url=None,  # Deaktiviert - eigene Route unten
     openapi_url="/api/openapi.json",
-    root_path_in_servers=False
+    root_path_in_servers=False,
 )
 
 # CORS Middleware (für Development)
@@ -317,7 +408,9 @@ app.add_middleware(
 
 app.include_router(anlagen.router, prefix="/api/anlagen", tags=["Anlagen"])
 app.include_router(monatsdaten.router, prefix="/api/monatsdaten", tags=["Monatsdaten"])
-app.include_router(investitionen.router, prefix="/api/investitionen", tags=["Investitionen"])
+app.include_router(
+    investitionen.router, prefix="/api/investitionen", tags=["Investitionen"]
+)
 app.include_router(strompreise.router, prefix="/api/strompreise", tags=["Strompreise"])
 app.include_router(import_export.router, prefix="/api/import", tags=["Import/Export"])
 app.include_router(pvgis.router, prefix="/api/pvgis", tags=["PVGIS"])
@@ -325,26 +418,44 @@ app.include_router(cockpit.router, prefix="/api/cockpit", tags=["Cockpit"])
 app.include_router(wetter.router, prefix="/api/wetter", tags=["Wetter"])
 app.include_router(aussichten.router, prefix="/api/aussichten", tags=["Aussichten"])
 app.include_router(prognosen.router, prefix="/api/aussichten", tags=["Prognosen"])
-app.include_router(solar_prognose.router, prefix="/api/solar-prognose", tags=["Solar-Prognose"])
+app.include_router(
+    solar_prognose.router, prefix="/api/solar-prognose", tags=["Solar-Prognose"]
+)
 app.include_router(monatsabschluss.router, prefix="/api", tags=["Monatsabschluss"])
 app.include_router(community.router, prefix="/api", tags=["Community"])
-app.include_router(data_import.router, prefix="/api/portal-import", tags=["Portal-Import"])
+app.include_router(
+    data_import.router, prefix="/api/portal-import", tags=["Portal-Import"]
+)
 app.include_router(connector.router, prefix="/api/connectors", tags=["Connectors"])
-app.include_router(cloud_import.router, prefix="/api/cloud-import", tags=["Cloud-Import"])
-app.include_router(custom_import.router, prefix="/api/custom-import", tags=["Custom-Import"])
+app.include_router(
+    cloud_import.router, prefix="/api/cloud-import", tags=["Cloud-Import"]
+)
+app.include_router(
+    custom_import.router, prefix="/api/custom-import", tags=["Custom-Import"]
+)
 app.include_router(system_logs.router, prefix="/api/system", tags=["System"])
 app.include_router(daten_checker.router, prefix="/api/system", tags=["System"])
 app.include_router(diagnostics.router, prefix="/api/diagnostics", tags=["Diagnostics"])
-app.include_router(aktueller_monat.router, prefix="/api/aktueller-monat", tags=["Aktueller Monat"])
+app.include_router(
+    aktueller_monat.router, prefix="/api/aktueller-monat", tags=["Aktueller Monat"]
+)
 app.include_router(live_mqtt_inbound.router, prefix="/api/live", tags=["MQTT Inbound"])
 app.include_router(live_wetter.router, prefix="/api/live", tags=["Live Wetter"])
 app.include_router(live_dashboard.router, prefix="/api/live", tags=["Live Dashboard"])
 app.include_router(mqtt_gateway.router, prefix="/api/live", tags=["MQTT Gateway"])
-app.include_router(mqtt_presets.router, prefix="/api/live", tags=["MQTT Gateway Presets"])
-app.include_router(energie_profil.router, prefix="/api/energie-profil", tags=["Energie-Profil"])
+app.include_router(
+    mqtt_presets.router, prefix="/api/live", tags=["MQTT Gateway Presets"]
+)
+app.include_router(
+    energie_profil.router, prefix="/api/energie-profil", tags=["Energie-Profil"]
+)
 app.include_router(infothek.router, prefix="/api/infothek", tags=["Infothek"])
-app.include_router(dokumentation.router, prefix="/api/dokumentation", tags=["Dokumentation"])
-app.include_router(korrekturprofil.router, prefix="/api/korrekturprofil", tags=["Korrekturprofil"])
+app.include_router(
+    dokumentation.router, prefix="/api/dokumentation", tags=["Dokumentation"]
+)
+app.include_router(
+    korrekturprofil.router, prefix="/api/korrekturprofil", tags=["Korrekturprofil"]
+)
 app.include_router(repair.router, prefix="/api/repair", tags=["Reparatur-Werkbank"])
 
 # =============================================================================
@@ -355,16 +466,21 @@ if HA_INTEGRATION_AVAILABLE:
     app.include_router(ha_integration.router, prefix="/api/ha", tags=["Home Assistant"])
     app.include_router(ha_export.router, prefix="/api", tags=["HA Export"])
     app.include_router(ha_import.router, prefix="/api/ha-import", tags=["HA Import"])
-    app.include_router(sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"])
-    app.include_router(ha_statistics.router, prefix="/api/ha-statistics", tags=["HA Statistics"])
-    print(f"  HA-Integration: aktiv (SUPERVISOR_TOKEN gesetzt)")
+    app.include_router(
+        sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"]
+    )
+    app.include_router(
+        ha_statistics.router, prefix="/api/ha-statistics", tags=["HA Statistics"]
+    )
+    print("  HA-Integration: aktiv (SUPERVISOR_TOKEN gesetzt)")
 else:
-    print(f"  HA-Integration: nicht verfügbar (Standalone-Modus)")
+    print("  HA-Integration: nicht verfügbar (Standalone-Modus)")
 
 
 # =============================================================================
 # API Dokumentation (Custom für HA Ingress-Kompatibilität)
 # =============================================================================
+
 
 @app.get("/api/docs", include_in_schema=False)
 async def custom_swagger_ui(request: Request):
@@ -451,6 +567,7 @@ async def custom_redoc():
 # Health Check
 # =============================================================================
 
+
 @app.get("/api/health", tags=["System"])
 async def health_check():
     """
@@ -459,11 +576,7 @@ async def health_check():
     Returns:
         dict: Status und Version
     """
-    return {
-        "status": "healthy",
-        "version": APP_VERSION,
-        "database": "connected"
-    }
+    return {"status": "healthy", "version": APP_VERSION, "database": "connected"}
 
 
 @app.get("/api/settings", tags=["System"])
@@ -545,7 +658,10 @@ async def check_for_updates():
     now = time.time()
 
     # Cache prüfen
-    if _update_cache["result"] and (now - _update_cache["timestamp"]) < _UPDATE_CACHE_TTL:
+    if (
+        _update_cache["result"]
+        and (now - _update_cache["timestamp"]) < _UPDATE_CACHE_TTL
+    ):
         return _update_cache["result"]
 
     result = {
@@ -571,7 +687,9 @@ async def check_for_updates():
                             result["update_verfuegbar"] = True
                             result["neueste_version"] = latest
                             result["release_url"] = data.get("html_url", "")
-                            result["veroeffentlicht_am"] = (data.get("published_at") or "")[:10]
+                            result["veroeffentlicht_am"] = (
+                                data.get("published_at") or ""
+                            )[:10]
                     except (ValueError, TypeError):
                         pass
     except Exception:
@@ -597,15 +715,21 @@ async def get_database_stats():
         anlagen_count = anlagen_result.scalar() or 0
 
         # Monatsdaten zählen
-        monatsdaten_result = await session.execute(select(func.count()).select_from(Monatsdaten))
+        monatsdaten_result = await session.execute(
+            select(func.count()).select_from(Monatsdaten)
+        )
         monatsdaten_count = monatsdaten_result.scalar() or 0
 
         # Investitionen zählen
-        investitionen_result = await session.execute(select(func.count()).select_from(Investition))
+        investitionen_result = await session.execute(
+            select(func.count()).select_from(Investition)
+        )
         investitionen_count = investitionen_result.scalar() or 0
 
         # Strompreise zählen
-        strompreise_result = await session.execute(select(func.count()).select_from(Strompreis))
+        strompreise_result = await session.execute(
+            select(func.count()).select_from(Strompreis)
+        )
         strompreise_count = strompreise_result.scalar() or 0
 
         # Zusätzliche Infos
@@ -621,8 +745,9 @@ async def get_database_stats():
         gesamt_erzeugung = 0.0
         if pv_ids:
             imd_result = await session.execute(
-                select(InvestitionMonatsdaten)
-                .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
+                select(InvestitionMonatsdaten).where(
+                    InvestitionMonatsdaten.investition_id.in_(pv_ids)
+                )
             )
             for imd in imd_result.scalars().all():
                 data = imd.verbrauch_daten or {}
@@ -630,10 +755,7 @@ async def get_database_stats():
 
         # Zeitraum der Daten
         zeitraum_result = await session.execute(
-            select(
-                func.min(Monatsdaten.jahr),
-                func.max(Monatsdaten.jahr)
-            )
+            select(func.min(Monatsdaten.jahr), func.max(Monatsdaten.jahr))
         )
         zeitraum = zeitraum_result.one()
         min_jahr = zeitraum[0]
@@ -671,7 +793,9 @@ async def get_database_stats():
                     "bis": bis_datum.isoformat(),
                     "tage_mit_daten": tage_mit_daten,
                     "tage_gesamt": tage_gesamt,
-                    "abdeckung_prozent": round(tage_mit_daten / tage_gesamt * 100, 1) if tage_gesamt > 0 else 0,
+                    "abdeckung_prozent": round(tage_mit_daten / tage_gesamt * 100, 1)
+                    if tage_gesamt > 0
+                    else 0,
                 }
 
         # Wachstumsprognose: Zeilen pro Monat pro Anlage
@@ -684,10 +808,7 @@ async def get_database_stats():
         "investitionen": investitionen_count,
         "strompreise": strompreise_count,
         "gesamt_erzeugung_kwh": round(gesamt_erzeugung, 0) if gesamt_erzeugung else 0,
-        "daten_zeitraum": {
-            "von": min_jahr,
-            "bis": max_jahr
-        } if min_jahr else None,
+        "daten_zeitraum": {"von": min_jahr, "bis": max_jahr} if min_jahr else None,
         "database_path": str(settings.database_path),
         "profildaten": {
             "stundenwerte": profil_count,
@@ -726,14 +847,15 @@ if frontend_dist.exists():
         # Sonst index.html für SPA Routing — kein Cache damit Browser nach Updates neue Bundle-Hashes lädt
         return FileResponse(
             frontend_dist / "index.html",
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
         )
 else:
+
     @app.get("/")
     async def no_frontend():
         """Fallback wenn Frontend nicht gebaut wurde."""
         return {
             "message": "eedc API läuft. Frontend nicht gefunden.",
             "hint": "Bitte 'npm run build' im frontend/ Verzeichnis ausführen.",
-            "api_docs": "/api/docs"
+            "api_docs": "/api/docs",
         }
