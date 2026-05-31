@@ -37,7 +37,7 @@
 
 ### M1 — Reduce-Logik (welche Sektionen kollabieren/verschwinden)
 
-> **Mechanik:** `<CollapsibleSection>` mit neuem `defaultOpenMobile={false}`-Prop für datenreiche Sektionen (übersteuerbar — cap-konform), plus `<HideOnMobile>`-Wrapper für Sektionen, die auf Mobile ausgeblendet werden. **⚠️ Offene Entscheidung (2026-05-31):** blendet `<HideOnMobile>` **hart** aus (gegen den Einstellbarkeits-Cap, der nur einen übersteuerbaren Reduce-Default erlaubt) oder ist es als **feste Layout-Struktur** (kein Personalisierungs-Feature) zu begründen? Cap nicht brechen — klären.
+> **Mechanik:** EIN Mechanismus — `<CollapsibleSection>` mit neuem `defaultOpenMobile={false}`-Prop für datenreiche Sektionen (kollabiert, aber übersteuerbar/erreichbar — cap-konform). **✅ Entschieden (2026-05-31):** der `<HideOnMobile>`-Wrapper (hartes Ausblenden) **entfällt** — ein zweiter Reduce-Pfad widerspricht dem Aufräum-/Vereinheitlichungs-Ziel; nichts wird auf Mobile unerreichbar, nur de-priorisiert.
 > **Designregel (Konzept-Vorschlag):** Cockpit-Übersicht + Wichtigste KPIs „immer offen". Detail-Stunden, Prognosen-Spalten, Lernfaktor-Vergleich kollabiert oder versteckt.
 > **Konkrete Pro-Seite-Tabelle** wird beim Umsetzungs-Start gepflegt.
 >

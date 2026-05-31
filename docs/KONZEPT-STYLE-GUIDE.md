@@ -46,7 +46,7 @@ eedc bekommt **keine** umfangreichen Personalisierungs-Optionen. Bewusste Design
 - Freie Card-Anordnung pro Seite.
 - Font-Größen-Schieber, Layout-Slider.
 
-> **⚠️ Offene Entscheidung (Blocker, 2026-05-31):** Das Bestandsfeature `SortableSection`/`OrderedSections` (↑↓-Reorder + LocalStorage, live in WP-/PV-/Monatsabschluss-Dashboard, #175) ist faktisch „freie Card-Anordnung pro Seite" und streift damit diesen Cap. Vor dem v4.0.0-Schnitt zu entscheiden: (a) Cap präzisieren auf „keine NEUE Anordnung über das bestehende Reorder hinaus" (Bestandsschutz), (b) Reorder als bewussten Sonderfall dokumentieren, oder (c) Rückbau im Schnitt. Koppelt an den B6-Persistenz-SoT-Befund.
+> **✅ Entschieden (2026-05-31): Rückbau im v4.0.0-Schnitt.** Das Bestandsfeature `SortableSection`/`OrderedSections` (↑↓-Reorder + LocalStorage, live in WP-/PV-/Monatsabschluss-Dashboard, #175) wird entfernt — der Cap bleibt streng, „freie Card-Anordnung" gibt es auch nicht als Bestand. `CollapsibleSection` wird die einzige Sektions-Persistenz (siehe B6). detLAN (#175) per Release-Notes / „Wo ist X hin?" informieren. Prinzip: aufräumen + vereinheitlichen statt Sonderpfad konservieren.
 
 Spätere Tester-Wünsche nach „mehr Optionen" verweisen auf diesen Cap. Begründung dokumentiert, kein Trägheits-Argument.
 
@@ -70,9 +70,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 **Konkrete Tabellen** werden mit der Umsetzung in A1, A2, A4, C1 hier befüllt — A0 ist der Sammel-Marker, dass diese Sektionen **vor** dem IA-Refactor konkret sein müssen.
 
-> **⚠️ Offene Vorab-Entscheidungen vor dem ersten Token-Commit (2026-05-31):**
-> 1. **Farb-Kanon** — die ausgelieferte `tailwind.config.js`-`energy`-Palette widerspricht A2 (siehe A2-Drift-Befund). A0 fixiert die Werte → der Konflikt muss zuerst aufgelöst sein.
-> 2. **Spacing-SoT** — A0 (`design-tokens.ts` + Theme) vs. C1 (`lib/spacing.ts`): eine Heimat festlegen (beide Dateien existieren heute nicht).
+> **✅ Vorab-Entscheidungen (2026-05-31):**
+> 1. **Farb-Kanon — A2 ist normativ.** A0 migriert die ausgelieferte tailwind-`energy`-Palette an die A2-Semantik (Speicher→lila, Verbrauch→blau) und ergänzt die in A2 noch fehlenden Werte für Netzbezug/Einspeisung (Rot bleibt für Kosten reserviert). Der sichtbare Farbwechsel an den Energie-Charts ist als Preis für die saubere Semantik akzeptiert.
+> 2. **Spacing-SoT — `design-tokens.ts`.** Spacing geht im A0-Artefakt (Tailwind-Theme + `design-tokens.ts`) auf; `lib/spacing.ts` entfällt.
 
 ---
 
@@ -92,7 +92,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Semantik:** Datentyp → Farbe. PV/Energie = gelb, Kosten = rot/orange, Umwelt = grün, Verbrauch = blau, Speicher = lila. Status-Farben (OK/Warning/Error/Info) getrennt.
 > Dunkel- vs. Hell-Mode mit eigener Linien-Logik (Kontrast, Schatten, Saturation).
 
-> **⚠️ Drift-Befund + offene Entscheidung (2026-05-31):** Die ausgelieferte `tailwind.config.js:25-31`-`energy`-Palette weicht von dieser Semantik ab — `battery=#3b82f6 (blau)` und `consumption=#8b5cf6 (violett)` sind gegenüber „Verbrauch=blau / Speicher=lila" **vertauscht**, und `grid=#ef4444 (rot, Netzbezug)` kollidiert mit „Kosten=rot". Zusätzlich definieren `ui/KPICard.tsx` + `komponentenStyle.ts` die Farb-Enums dupliziert, nicht aus A2 abgeleitet. Vor A0 zu entscheiden: Code an A2 angleichen (visueller Bruch an allen Energie-Charts) oder A2 an den Ist-Stand anpassen. Die Datentyp-Achse bildet die 8-Wert-`COLOR_CLASSES` ab; die Status-Achse (OK/Warning/Error/Info) braucht noch eigene Token-Werte.
+> **⚠️ Drift-Befund + offene Entscheidung (2026-05-31):** Die ausgelieferte `tailwind.config.js:25-31`-`energy`-Palette weicht von dieser Semantik ab — `battery=#3b82f6 (blau)` und `consumption=#8b5cf6 (violett)` sind gegenüber „Verbrauch=blau / Speicher=lila" **vertauscht**, und `grid=#ef4444 (rot, Netzbezug)` kollidiert mit „Kosten=rot". Zusätzlich definieren `ui/KPICard.tsx` + `komponentenStyle.ts` die Farb-Enums dupliziert, nicht aus A2 abgeleitet. **✅ Entschieden (2026-05-31): A2 ist normativ** — A0 migriert den Code an diese Semantik (Speicher→lila, Verbrauch→blau), der visuelle Bruch an den Charts ist akzeptiert. **A0-To-do:** A2 ergänzt die noch fehlenden Werte für Netzbezug + Einspeisung (Rot bleibt Kosten vorbehalten). Die Datentyp-Achse bildet die 8-Wert-`COLOR_CLASSES` ab; die Status-Achse (OK/Warning/Error/Info) braucht noch eigene Token-Werte.
 
 *Konkrete Farbliste folgt mit der A0-Entscheidung.*
 
@@ -165,7 +165,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Hauptnav:** Reihenfolge + Inhalte sind in [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) festgelegt (Cockpit / Komponenten / Auswertungen / Community / Einstellungen).
 > **Mobile:** Hamburger-Menü mit voller Liste (Standard-Pattern). Bottom-Tab-Bar bewusst nicht in v4.0.0.
-> **Sub-Nav:** **Unterstrich + Icons** (`components/layout/SubTabs.tsx`) als Standard. `components/ui/PillTabs.tsx` wird deprecated und in seinen Verwendern migriert (#243 B1, detLAN-Klärung #216) — als Vor-Schritt vor dem v4.0.0-IA-Refactor. **Ist-Stand (2026-05-31, verifiziert):** PillTabs hat **vier** Verbraucher (Auswertung, Community, Aussichten, DesignPreview), nicht drei; EnergieprofilTab nutzt PillTabs **nicht** direkt. Achtung: **kein 1:1-Swap** — `SubTabs` ist route-/`NavLink`-getrieben, `PillTabs` state-getrieben (`onChange`/`activeKey` + `beta`-/`tooltip`-Props, die SubTabs fehlen). Migrationsweg ist eine offene Entscheidung (Sub-Tabs auf echte URL-Routen heben **vs.** SubTabs um eine controlled/State-Variante erweitern); davon hängt ab, ob B1 vor dem IA-Refactor isoliert testbar ist.
+> **Sub-Nav:** **Unterstrich + Icons** (`components/layout/SubTabs.tsx`) als Standard. `components/ui/PillTabs.tsx` wird deprecated und in seinen Verwendern migriert (#243 B1, detLAN-Klärung #216) — als Vor-Schritt vor dem v4.0.0-IA-Refactor. **Ist-Stand (2026-05-31, verifiziert):** PillTabs hat **vier** Verbraucher (Auswertung, Community, Aussichten, DesignPreview), nicht drei; EnergieprofilTab nutzt PillTabs **nicht** direkt. Achtung: **kein 1:1-Swap** — `SubTabs` ist route-/`NavLink`-getrieben, `PillTabs` state-getrieben (`onChange`/`activeKey` + `beta`-/`tooltip`-Props, die SubTabs fehlen). **✅ Entschieden (2026-05-31): Sub-Tabs auf echte URL-Routen heben** (zukunftssicher, teilbare Links, passt zur Redirect-Tabelle); die State-Features von PillTabs (beta-Badge, Tooltip) werden auf der route-getriebenen `SubTabs` nachgebaut. B1 ist damit gegen die Redirect-Tabelle isoliert testbar.
 > **Sub-Tab-Limit:** maximal 5 Sub-Tabs pro Top-Eintrag. Tab-Inflation (heute 8 in Auswertungen, 5 in Aussichten) wird durch die IA-Aufteilung gelöst und durch diese Regel verhindert.
 > **Sprungmarken** in langen Seiten (TOC-Pattern). *Offen.*
 
@@ -195,7 +195,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### B6 — Aufklapp-Verhalten (`CollapsibleSection`)
 
-> **Persistenz:** Aufklapp-Status pro Sektion in LocalStorage (etabliert für Monatsberichte/Energieprofil-Monat — Vorbild laut detLAN #258 P5). Konsistente Implementierung über alle Verwender. **Drift-Befund (2026-05-31):** `CollapsibleSection` (Key `eedc-collapse-${storageKey}`) und `SortableSection` (Key `${prefix}_section_${title}`) führen je eigene Open-State-Logik — die geforderte Konsistenz ist intern bereits gebrochen. SoT-Komponente festlegen (Vorschlag: `CollapsibleSection` kanonisch, `SortableSection` baut darauf auf); koppelt an die SortableSection-Cap-Entscheidung oben.
+> **Persistenz:** Aufklapp-Status pro Sektion in LocalStorage (etabliert für Monatsberichte/Energieprofil-Monat — Vorbild laut detLAN #258 P5). Konsistente Implementierung über alle Verwender. **Drift-Befund (2026-05-31):** `CollapsibleSection` (Key `eedc-collapse-${storageKey}`) und `SortableSection` (Key `${prefix}_section_${title}`) führen je eigene Open-State-Logik — die geforderte Konsistenz ist intern bereits gebrochen. **✅ Entschieden (2026-05-31): `CollapsibleSection` ist der alleinige Persistenz-SoT;** `SortableSection` wird im v4.0.0-Schnitt zurückgebaut (Cap-Entscheidung oben).
 > **Default-Open** pro Sektion definieren (datenreich → standardmäßig offen; sekundär → standardmäßig zu).
 > **Mobile-Default** abweichend siehe [KONZEPT-MOBILE.md M1](KONZEPT-MOBILE.md).
 
@@ -208,7 +208,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### C1 — Spacing-Standards
 
 > **Tokens:** `--page-padding-top` · `--nav-content-gap` · `--section-spacing` · `--card-padding` · `--card-gap`.
-> SoT: **offene Entscheidung (Blocker A0, 2026-05-31)** — Spacing geht entweder im A0-Artefakt (`design-tokens.ts` + Tailwind-Theme) auf **oder** bekommt ein eigenes `lib/spacing.ts`. Eine Heimat vor A0 festlegen (beide Dateien existieren heute nicht).
+> SoT: **✅ entschieden (2026-05-31)** — Spacing geht im A0-Artefakt (`design-tokens.ts` + Tailwind-Theme) auf; ein eigenes `lib/spacing.ts` entfällt.
 > Bestehende Spacings im Code auditieren und auf Tokens migrieren.
 
 **Betroffene Issues:** #243 B6, #209 P5.

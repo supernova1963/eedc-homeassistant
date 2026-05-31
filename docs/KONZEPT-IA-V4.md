@@ -59,10 +59,10 @@ Sub-Tabs in chronologischer Reihenfolge:
 Sub-Tabs pro Komponententyp:
 
 ```
-PV-Anlage  ·  Speicher  ·  Wärmepumpe  ·  E-Auto  ·  Wallbox  ·  BKW  ·  Sonstiges
+PV-Anlage  ·  Speicher  ·  Wärme/Klima  ·  E-Auto  ·  Wallbox  ·  BKW  ·  Sonstiges
 ```
 
-Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N/A → Tab ausgeblendet, vgl. Style-Guide A3 Datenzustand-Vokabular). Damit bleibt die Komponenten-Achse durch den Vorhandensein-Filter de facto bei ≤ 5 sichtbaren Tabs, obwohl bis zu 7 Typen möglich sind — das ≤5-Limit gilt strikt für die Zeit-/Wie-Achse (Cockpit/Auswertungen), wo die Tab-Inflation auftrat. **Offen (#263):** Tab-Benennung „Wärmepumpe" vs. „Wärme/Klima" (Split-Klimaanlagen) — Maintainer-Entscheidung.
+Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N/A → Tab ausgeblendet, vgl. Style-Guide A3 Datenzustand-Vokabular). Damit bleibt die Komponenten-Achse durch den Vorhandensein-Filter de facto bei ≤ 5 sichtbaren Tabs, obwohl bis zu 7 Typen möglich sind — das ≤5-Limit gilt strikt für die Zeit-/Wie-Achse (Cockpit/Auswertungen), wo die Tab-Inflation auftrat. **✅ Entschieden (2026-05-31):** Tab-Benennung **„Wärme/Klima"** (deckt Wärmepumpe + Split-Klimaanlagen #263 zukunftssicher ab).
 
 **Innenstruktur pro Komponenten-Seite (Variante C):**
 
@@ -171,7 +171,7 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 | Schritt | Inhalt |
 |---|---|
 | **A0** | Design-Tokens (Typo · Farben · Spacing · Schatten · Radius) als Tailwind-Theme + `lib/design-tokens.ts`. Keine sichtbare UI-Änderung. |
-| **B1** | PillTabs → SubTabs-Migration (4 Verbraucher inkl. DesignPreview, nicht 3). **Kein 1:1-Swap** — SubTabs route-getrieben, PillTabs state-getrieben (+ beta/tooltip); Migrationsweg (URL-Routen vs. controlled SubTabs) offen, bestimmt die isolierte Testbarkeit vor dem Schnitt. Vereinheitlicht die Sub-Nav-Komponente für Cockpit-Sub-Tabs + Komponenten-Hub. |
+| **B1** | PillTabs → SubTabs-Migration (4 Verbraucher inkl. DesignPreview). **Kein 1:1-Swap** — SubTabs route-getrieben, PillTabs state-getrieben (+ beta/tooltip). **✅ Entschieden:** auf **echte URL-Routen** heben (zukunftssicher, passt zur Redirect-Tabelle); beta/tooltip auf der Route-Variante nachbauen. Vereinheitlicht die Sub-Nav für Cockpit-Sub-Tabs + Komponenten-Hub. |
 | **B9-Vorbereitung** | KPICard-SoT-Komponente mit `size: 'sm' \| 'md' \| 'lg'` + Color-Enum. **Nicht drei, sondern fünf** echte KPICard-Versionen + drei `KpiCard`-Label-Helfer (= 8 Definitionen, ~26 referenzierende Dateien, Stand 2026-05-31) migrieren; die Community-Vergleichs-Variante bleibt ggf. eigener Sonderfall. Pflicht-Item, weil v4.0.0 saubere KPI-Strips überall braucht. |
 | **A5-Vorbereitung** | `lib/komponentenStyle.ts` auf E-Auto, BKW, Wallbox, Sonstiges, PV-Anlage erweitern (Disc #163). Vorbedingung für konsistente Komponenten-Seiten. |
 
@@ -247,7 +247,7 @@ Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.ts
 | Komponenten-Hub-Seite zu lang auf Mobile | CollapsibleSections mit `defaultOpenMobile={false}` für Verlauf/Vergleich, Sektion „Aktueller Status" bleibt initial offen |
 | HA-Companion-App-Quirks (Sticky-Header, Downloads, `h-dvh`) | Querschnittsregeln aus Mobile-Konzept M4+M5 in Pflicht-Checkliste pro neuer Seite |
 | Tab-Inflation kehrt zurück (Auswertungen hatte 8 Tabs) | Pro Top-Eintrag ≤ 5 Sub-Tabs als Designregel. Tab-Zuwachs braucht explizite Genehmigung in #243 |
-| Community-Top-Eintrag hat heute 6 Sub-Tabs (> 5) | **Offene Entscheidung (2026-05-31):** als genehmigte Ausnahme dokumentieren oder konsolidieren — bisher nirgends vermerkt |
+| Community-Top-Eintrag hat heute 6 Sub-Tabs (> 5) | **✅ Entschieden (2026-05-31): konsolidieren auf ≤ 5** (keine Ausnahme) — konkrete Zusammenlegung im Umsetzungs-Design |
 
 ---
 
