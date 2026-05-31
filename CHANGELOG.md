@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.5] - 2026-05-31 — MQTT-„Heute"-PV-Summierung + Setup-Wizard auf kleinen Monitoren
+
+> 🩹 **Patch-Release:** zwei unabhängige single-purpose Fixes. **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Phase-C-Counter unberührt). 592 Backend-Tests grün, Frontend-Typecheck grün.
+
+### Fixed
+
+- **Live-„Heute": PV-Erzeugung im MQTT-/Standalone-Modus aus mehreren Wechselrichtern (Dirk-PN):** die pro-Wechselrichter gelieferten PV-Werte (`inv/<id>/pv_erzeugung_kwh`) wurden — anders als im HA-Pfad — nicht zur Kategorie-Gesamt-PV summiert → die „Heute"-Kachel zeigte 0,0 kWh trotz ankommender Daten, und der daraus abgeleitete Eigen-/Hausverbrauch blieb ebenfalls leer. Jetzt werden Komponenten-PV (`pv_`/`bkw_`) über die SoT-Whitelist `summe_pv_bkw_kwh` auf die Kategorie aggregiert (anlagenweites `pv_gesamt_kwh`-Topic behält Vorrang, keine Doppelzählung). Reiner Live-/Lesepfad — der Tages-/Monats-/Korrekturprofil-Pfad war nicht betroffen.
+- **Setup-Wizard auf kleinen Monitoren skalieren (#309, PR stlorenz):** auf 1024×600-Netbooks, älteren Laptop-Displays und der HA-Companion-Sidebar lag der „Einrichtung starten"-Button weit unter dem Fold; kompaktere responsive Paddings + Wegfall des sticky-Headers sparen ~240px Vertikalplatz. Desktop-Layout unverändert.
+
 ## [3.34.4] - 2026-05-30 — Anschaffungsdatum als Grenze konsequent (WP-Counter, Sonstiges, HA-Export)
 
 > 🩹 **Patch-Release:** drei single-purpose Read-Pfad-Fixes derselben Bug-Klasse — per-Investition-Aggregationen respektieren jetzt durchgängig das Anschaffungs-/Stilllegungsdatum. **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Phase-C-Counter unberührt). 587 Tests grün, Frontend-Typecheck grün.
