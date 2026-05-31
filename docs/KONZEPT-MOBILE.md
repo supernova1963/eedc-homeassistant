@@ -14,6 +14,7 @@
 
 - **Wachsend** wie das Style-Guide-Dokument: pro Welle 1–2 Bereiche.
 - **Stakeholder-Trigger:** Umsetzungs-Welle für einen Bereich startet, wenn ≥ 2 Anwender konkrete Bedarfsmeldungen mit reproduzierbarem Setup liefern. Memory `feedback_smoketest_braucht_release.md` mahnt: Mobile-Test ohne lokales Setup ist Tester-Roulette, deshalb keine Big-Bang-Wellen.
+- **Trennung v4.0.0 vs. Mobile-Wellen (2026-05-31):** Die **neuen** v4.0.0-Seiten (Komponenten-Hub etc.) werden **ab Bau** mobiltauglich (Pflicht-Querschnittsregeln + `defaultOpenMobile`) — das ist Teil von Phase 1, nicht trigger-gebunden. Die dedizierten Reduce-/Sticky-/Swipe-Wellen **M1/M2/M3** bleiben am ≥2-Anwender-Trigger. So blockiert die dünne Stakeholder-Lage nicht die Mobiltauglichkeit der Neuseiten.
 - **Pro Bereich:** Designentscheidung, Pattern-Beispiel (Code/Mockup), Verlinkung auf entsprechende Style-Guide-Sektion.
 - **Pflicht-Querschnittsregeln** (Touch-Targets ≥ 44 px, `h-dvh`, `lib/download.ts:downloadFile()`, `overscroll-contain`, Multi-Breakpoint-Flex-Klassen) sind **aus diesem Dokument in den Style-Guide hochgezogen** (siehe Methodik dort) und gelten in **jeder** Welle, nicht nur in Mobile-Wellen. M4 + M5 hier bleiben als Referenz-Dokumentation für die Quirk-Hintergründe, **werden nicht als eigene Wellen verfolgt**.
 
@@ -36,7 +37,7 @@
 
 ### M1 — Reduce-Logik (welche Sektionen kollabieren/verschwinden)
 
-> **Mechanik:** `<CollapsibleSection>` mit neuem `defaultOpenMobile={false}`-Prop für datenreiche Sektionen, plus `<HideOnMobile>`-Wrapper für Sektionen die auf Mobile komplett ausgeblendet werden.
+> **Mechanik:** `<CollapsibleSection>` mit neuem `defaultOpenMobile={false}`-Prop für datenreiche Sektionen (übersteuerbar — cap-konform), plus `<HideOnMobile>`-Wrapper für Sektionen, die auf Mobile ausgeblendet werden. **⚠️ Offene Entscheidung (2026-05-31):** blendet `<HideOnMobile>` **hart** aus (gegen den Einstellbarkeits-Cap, der nur einen übersteuerbaren Reduce-Default erlaubt) oder ist es als **feste Layout-Struktur** (kein Personalisierungs-Feature) zu begründen? Cap nicht brechen — klären.
 > **Designregel (Konzept-Vorschlag):** Cockpit-Übersicht + Wichtigste KPIs „immer offen". Detail-Stunden, Prognosen-Spalten, Lernfaktor-Vergleich kollabiert oder versteckt.
 > **Konkrete Pro-Seite-Tabelle** wird beim Umsetzungs-Start gepflegt.
 >
@@ -49,7 +50,8 @@
 ### M2 — Sticky-Header + Scroll-Verhalten
 
 > **Designentscheidung:** Sticky-Header auf Mobile **verschiebbar** statt fixiert am Viewport. Damit verschwindet er beim Scrollen nach unten und kommt beim Scrollen nach oben zurück (Stichwort: „auto-hide on scroll down").
-> **HA-Companion-Bar** auf Mobile entfallen lassen (~48 px Gewinn; Swipe-from-left holt sie ohnehin).
+> **⚠️ Ausnahme (Cross-Concept, 2026-05-31):** der **Komponenten-Hub-Datums-Selektor** (IA-V4 Variante C, „sticky", dem alle Sektionen folgen) ist **von auto-hide ausgenommen** — sonst verschwindet die zentrale Zeit-Achsen-Kontrolle. Falls er auf schmalem Viewport stört: Klapp-Schublade-Fallback (unten), nicht auto-hide.
+> **HA-Companion-Bar** auf Mobile entfallen lassen (~48 px Gewinn; Swipe-from-left holt sie ohnehin). **⚠️ Zu verifizieren vor Umsetzung:** möglicher Gesten-Konflikt zwischen Companion-eigenem „Swipe-from-left" und dem Hamburger-Slide-in-from-left (M0) — braucht Companion-Umgebung (`feedback_smoketest_braucht_release`), kein Zwischen-Release im QS-Hold erzwingen.
 > **Floating-Selektoren** dürfen Mobile-Bildschirm nicht zusätzlich blockieren — falls Konflikt: Selektor wird auf Mobile zur Klapp-Schublade.
 >
 > Bezug: [Style-Guide B5 Selektoren](KONZEPT-STYLE-GUIDE.md#b5--selektoren).
@@ -108,4 +110,4 @@
 - **Informationsarchitektur v4.0.0** → [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)
 - **Desktop-Style-Guide** → [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md)
 - **Bekannte iOS/Companion-Stolperstellen** sind im Code bereits punktuell adressiert + in den Pflicht-Querschnittsregeln des Style-Guides verankert.
-- **Konzept-Issue #243** mit Bausteinen B5a–B5e als Sub-Tracker.
+- **Konzept-Issue #243** mit Bausteinen B5a–B5e als Sub-Tracker (M1/M2/M3 + Beobachtungs-Slots). **Namensraum-Hinweis:** B5a–B5e (Mobile-Tracker) ist nicht das Style-Guide-B5 (Selektoren/`FloatingSelector`).

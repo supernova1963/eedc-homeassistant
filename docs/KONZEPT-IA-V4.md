@@ -62,7 +62,7 @@ Sub-Tabs pro Komponententyp:
 PV-Anlage  ·  Speicher  ·  Wärmepumpe  ·  E-Auto  ·  Wallbox  ·  BKW  ·  Sonstiges
 ```
 
-Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N/A → Tab ausgeblendet, vgl. Style-Guide A3 Datenzustand-Vokabular).
+Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N/A → Tab ausgeblendet, vgl. Style-Guide A3 Datenzustand-Vokabular). Damit bleibt die Komponenten-Achse durch den Vorhandensein-Filter de facto bei ≤ 5 sichtbaren Tabs, obwohl bis zu 7 Typen möglich sind — das ≤5-Limit gilt strikt für die Zeit-/Wie-Achse (Cockpit/Auswertungen), wo die Tab-Inflation auftrat. **Offen (#263):** Tab-Benennung „Wärmepumpe" vs. „Wärme/Klima" (Split-Klimaanlagen) — Maintainer-Entscheidung.
 
 **Innenstruktur pro Komponenten-Seite (Variante C):**
 
@@ -91,7 +91,7 @@ Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N
 - **Datums-Selektor statt Sub-Sub-Tabs:** Eine Achsen-Kontrolle oben, alle Sektionen folgen dem Datum. Mobile-tauglich (kein Sub-Sub-Tab-Layout, keine doppelte Zeit-Achse zur Cockpit-Zeit-Achse).
 - **Lineare Sektion-Reihenfolge:** Status → Verlauf → Vergleich → Aussicht. Vier Sektionen sind genug und stabil über alle Komponententypen — keine komponentenspezifische Sondersortierung.
 - **Energieprofil verschwindet als eigenständige Seite:** Stündlicher Verlauf wird Teil der „Verlauf im Zeitraum"-Sektion, komponentenspezifisch (Strom-Profil bei PV-Anlage, Wärme-Profil bei Wärmepumpe).
-- **Komponentenspezifische KPIs** via `lib/komponentenStyle.ts` als SoT (Style-Guide A5 + B9). Erweiterung auf E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage ist Pflicht-Voraussetzung — heute nur WP+Speicher (Disc #163).
+- **Komponentenspezifische KPIs** via `lib/komponentenStyle.ts` als SoT (Style-Guide A5 + B9). Erweiterung auf E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage ist Pflicht-Voraussetzung — heute nur WP+Speicher (Disc #163). **Hinweis (2026-05-31):** der SoT wird heute nirgends real konsumiert (Dashboards hardcoden Stil) → A5 zuerst in WP/Speicher einziehen, dann erweitern (sonst toter Code), siehe Style-Guide A5.
 
 ---
 
@@ -171,8 +171,8 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 | Schritt | Inhalt |
 |---|---|
 | **A0** | Design-Tokens (Typo · Farben · Spacing · Schatten · Radius) als Tailwind-Theme + `lib/design-tokens.ts`. Keine sichtbare UI-Änderung. |
-| **B1** | PillTabs → SubTabs-Migration (3 Verwender: Aussichten, Auswertung, Community). Vereinheitlicht Sub-Nav-Komponente, die in Cockpit-Sub-Tabs + Komponenten-Hub gebraucht wird. |
-| **B9-Vorbereitung** | KPICard-SoT-Komponente mit `size: 'sm' \| 'md' \| 'lg'` + Color-Enum. Drei alte Versionen migrieren. Pflicht-Item, weil v4.0.0 saubere KPI-Strips überall braucht. |
+| **B1** | PillTabs → SubTabs-Migration (4 Verbraucher inkl. DesignPreview, nicht 3). **Kein 1:1-Swap** — SubTabs route-getrieben, PillTabs state-getrieben (+ beta/tooltip); Migrationsweg (URL-Routen vs. controlled SubTabs) offen, bestimmt die isolierte Testbarkeit vor dem Schnitt. Vereinheitlicht die Sub-Nav-Komponente für Cockpit-Sub-Tabs + Komponenten-Hub. |
+| **B9-Vorbereitung** | KPICard-SoT-Komponente mit `size: 'sm' \| 'md' \| 'lg'` + Color-Enum. **Nicht drei, sondern fünf** echte KPICard-Versionen + drei `KpiCard`-Label-Helfer (= 8 Definitionen, ~26 referenzierende Dateien, Stand 2026-05-31) migrieren; die Community-Vergleichs-Variante bleibt ggf. eigener Sonderfall. Pflicht-Item, weil v4.0.0 saubere KPI-Strips überall braucht. |
 | **A5-Vorbereitung** | `lib/komponentenStyle.ts` auf E-Auto, BKW, Wallbox, Sonstiges, PV-Anlage erweitern (Disc #163). Vorbedingung für konsistente Komponenten-Seiten. |
 
 ### Phase 1 — v4.0.0 IA-Refactor (ein Release)
@@ -238,6 +238,7 @@ Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.ts
 | Komponenten-Hub-Seite zu lang auf Mobile | CollapsibleSections mit `defaultOpenMobile={false}` für Verlauf/Vergleich, Sektion „Aktueller Status" bleibt initial offen |
 | HA-Companion-App-Quirks (Sticky-Header, Downloads, `h-dvh`) | Querschnittsregeln aus Mobile-Konzept M4+M5 in Pflicht-Checkliste pro neuer Seite |
 | Tab-Inflation kehrt zurück (Auswertungen hatte 8 Tabs) | Pro Top-Eintrag ≤ 5 Sub-Tabs als Designregel. Tab-Zuwachs braucht explizite Genehmigung in #243 |
+| Community-Top-Eintrag hat heute 6 Sub-Tabs (> 5) | **Offene Entscheidung (2026-05-31):** als genehmigte Ausnahme dokumentieren oder konsolidieren — bisher nirgends vermerkt |
 
 ---
 

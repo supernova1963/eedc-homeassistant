@@ -46,6 +46,8 @@ eedc bekommt **keine** umfangreichen Personalisierungs-Optionen. Bewusste Design
 - Freie Card-Anordnung pro Seite.
 - Font-Größen-Schieber, Layout-Slider.
 
+> **⚠️ Offene Entscheidung (Blocker, 2026-05-31):** Das Bestandsfeature `SortableSection`/`OrderedSections` (↑↓-Reorder + LocalStorage, live in WP-/PV-/Monatsabschluss-Dashboard, #175) ist faktisch „freie Card-Anordnung pro Seite" und streift damit diesen Cap. Vor dem v4.0.0-Schnitt zu entscheiden: (a) Cap präzisieren auf „keine NEUE Anordnung über das bestehende Reorder hinaus" (Bestandsschutz), (b) Reorder als bewussten Sonderfall dokumentieren, oder (c) Rückbau im Schnitt. Koppelt an den B6-Persistenz-SoT-Befund.
+
 Spätere Tester-Wünsche nach „mehr Optionen" verweisen auf diesen Cap. Begründung dokumentiert, kein Trägheits-Argument.
 
 ---
@@ -68,6 +70,10 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 **Konkrete Tabellen** werden mit der Umsetzung in A1, A2, A4, C1 hier befüllt — A0 ist der Sammel-Marker, dass diese Sektionen **vor** dem IA-Refactor konkret sein müssen.
 
+> **⚠️ Offene Vorab-Entscheidungen vor dem ersten Token-Commit (2026-05-31):**
+> 1. **Farb-Kanon** — die ausgelieferte `tailwind.config.js`-`energy`-Palette widerspricht A2 (siehe A2-Drift-Befund). A0 fixiert die Werte → der Konflikt muss zuerst aufgelöst sein.
+> 2. **Spacing-SoT** — A0 (`design-tokens.ts` + Theme) vs. C1 (`lib/spacing.ts`): eine Heimat festlegen (beide Dateien existieren heute nicht).
+
 ---
 
 ### A1 — Typografie-System
@@ -86,7 +92,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Semantik:** Datentyp → Farbe. PV/Energie = gelb, Kosten = rot/orange, Umwelt = grün, Verbrauch = blau, Speicher = lila. Status-Farben (OK/Warning/Error/Info) getrennt.
 > Dunkel- vs. Hell-Mode mit eigener Linien-Logik (Kontrast, Schatten, Saturation).
 
-*Konkrete Farbliste folgt.*
+> **⚠️ Drift-Befund + offene Entscheidung (2026-05-31):** Die ausgelieferte `tailwind.config.js:25-31`-`energy`-Palette weicht von dieser Semantik ab — `battery=#3b82f6 (blau)` und `consumption=#8b5cf6 (violett)` sind gegenüber „Verbrauch=blau / Speicher=lila" **vertauscht**, und `grid=#ef4444 (rot, Netzbezug)` kollidiert mit „Kosten=rot". Zusätzlich definieren `ui/KPICard.tsx` + `komponentenStyle.ts` die Farb-Enums dupliziert, nicht aus A2 abgeleitet. Vor A0 zu entscheiden: Code an A2 angleichen (visueller Bruch an allen Energie-Charts) oder A2 an den Ist-Stand anpassen. Die Datentyp-Achse bildet die 8-Wert-`COLOR_CLASSES` ab; die Status-Achse (OK/Warning/Error/Info) braucht noch eigene Token-Werte.
+
+*Konkrete Farbliste folgt mit der A0-Entscheidung.*
 
 **Betroffene Issues:** *(noch keine direkten)*
 
@@ -95,7 +103,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### A3 — Datenzustand-Vokabular
 
 > **Unterscheidung:** `—` (echte Datenlücke) · *N/A* (strukturell nicht zutreffend, z. B. Komponente nicht vorhanden) · `…` (in Berechnung) · `?` (unsicher / Schätzung).
-> Display-Token `—` bereits etabliert (v3.29.1 #239). Andere Zustände noch nicht systematisch.
+> Display-Token `—` bereits etabliert (v3.29.1 #239). **Ist-Stand (2026-05-31):** `fmtKpi`-Helfer existiert bereits in `lib/komponentenStyle.ts:49`, die `/dev/design-preview`-Galerie rendert alle vier Tokens. Offen ist nur die SoT-Heimat von `fmtKpi` (bleibt in `komponentenStyle.ts` oder zieht ins A0-`design-tokens.ts`/ein `fmt`-Modul) und die durchgängige Anwendung.
 
 **Betroffene Issues:** Disc #162 (`fmtKpi`-Helfer + Datenloch vs. strukturell N/A).
 
@@ -116,7 +124,8 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### A5 — Icons + Symbol-Konventionen
 
 > **Linien-Icons:** `lucide-react` als SoT.
-> **Komponenten-Typ-Icons:** via `lib/komponentenStyle.ts` (Memory: noch unvollständig — WP/Speicher ja, E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage offen, Disc #163).
+> **Komponenten-Typ-Icons:** via `lib/komponentenStyle.ts` (noch unvollständig — WP/Speicher ja, E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage offen, Disc #163).
+> **A5 in zwei Schritten (2026-05-31):** die vorhandenen `WP_KPI`/`SPEICHER_*`-Konstanten werden heute **nirgends real konsumiert** (Dashboards hardcoden title/icon/color) — also (a) zuerst WaermepumpeDashboard/SpeicherDashboard auf den SoT umstellen (SoT erstmals einziehen), (b) dann die fünf fehlenden Typen ergänzen. „PV-Anlage" ist dabei ein UI-Aggregat (pv-module/wechselrichter/balkonkraftwerk), kein eigener `InvestitionTyp`.
 > **Status-Icons:** konsistent (Check/Warning/Error/Info).
 > **Dekorative Icons** in Headern/Bannern vermeiden (Forum #206 P2-Linie).
 
@@ -133,21 +142,22 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Inhalts-Ausrichtung horizontal:** Werte aller Karten einer Reihe auf gleicher Baseline (#258 P2).
 > **Icon-Position:** alle Karten einer Sektion gleich, oder konsistent „ohne Icon" (#258 P3).
 >
-> **SoT-Komponente** statt drei parallelen Implementierungen (Memory: B9 KPICard-Konsolidierung als Pflicht-Item).
+> **SoT-Komponente** statt der heute parallelen Implementierungen (B9 KPICard-Konsolidierung als Pflicht-Item).
 
-**Vorbedingung:** Konsolidierung der drei aktuellen `KPICard`-Komponenten (B9 in #243).
+**Vorbedingung:** Konsolidierung der KPICard-Implementierungen (B9 in #243). **Ist-Stand (2026-05-31, verifiziert):** nicht drei, sondern **fünf** echte `KPICard` (`components/ui/`, `components/dashboard/`, `pages/auswertung/` + inline `ROIDashboard.tsx:710` + inline `community/KomponentenTab.tsx`) **plus drei `KpiCard`-Label-Helfer** (EnergieprofilPrognose/-Monat/-Tab) = 8 Definitionen, von ~26 Dateien referenziert. Die Community-Variante (`community_avg`/`invertColors` Vergleichs-KPI) ist **nicht** in einen reinen Size-Varianten-SoT mergebar und bleibt ggf. eigene Komponente.
 **Betroffene Issues:** #243 B9, #247 P1, #258 P1+P2+P3.
 
 ---
 
 ### B2 — Tabellen + Listen
 
-> **Spalten-Header:** Stil-Konvention folgt.
-> **Sortierung:** `INVESTITION_TYP_ORDER` aus `lib/constants.ts` als SoT (etabliert v3.27.1, in v3.29.2 weiter ausgerollt). Suffix-Typen-Sortierung über Präfix-Match.
+> **Spalten-Header:** Stil-Konvention folgt (Casing + Einheit im Header, siehe unten).
+> **Sortierung:** `INVESTITION_TYP_ORDER` aus `lib/constants.ts` als SoT (etabliert v3.27.1, in v3.29.2 weiter ausgerollt). Suffix-Typen-Sortierung über Präfix-Match. **Zeitreihen-Default aktuell→alt.**
 > **Leerwert-Darstellung:** `—` aus A3.
 > **Einheits-Anzeige:** Spalten-Header mit Einheit (z. B. „Strom (kWh)"), nicht pro Zelle (#237).
+> **Einheitliches Spalten-Auswahl-Pattern (#292):** Drop-Down mit „Standard wiederherstellen", Anzahl-Badge, konsistente CSV-Beschriftung — heute über mehrere Tabellen gedriftet (fünf belegte Befunde aus #292).
 
-**Betroffene Issues:** #243 B8, #210, #237.
+**Betroffene Issues:** #243 B8, #210, #237, #292.
 
 ---
 
@@ -155,7 +165,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Hauptnav:** Reihenfolge + Inhalte sind in [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) festgelegt (Cockpit / Komponenten / Auswertungen / Community / Einstellungen).
 > **Mobile:** Hamburger-Menü mit voller Liste (Standard-Pattern). Bottom-Tab-Bar bewusst nicht in v4.0.0.
-> **Sub-Nav:** **Unterstrich + Icons** (`SubTabs.tsx`) als Standard. `PillTabs.tsx` wird deprecated und in den 3 letzten Verwendern (Aussichten, Auswertung, Community) migriert (#243 B1, detLAN-Klärung #216) — als Vor-Schritt vor dem v4.0.0-IA-Refactor.
+> **Sub-Nav:** **Unterstrich + Icons** (`components/layout/SubTabs.tsx`) als Standard. `components/ui/PillTabs.tsx` wird deprecated und in seinen Verwendern migriert (#243 B1, detLAN-Klärung #216) — als Vor-Schritt vor dem v4.0.0-IA-Refactor. **Ist-Stand (2026-05-31, verifiziert):** PillTabs hat **vier** Verbraucher (Auswertung, Community, Aussichten, DesignPreview), nicht drei; EnergieprofilTab nutzt PillTabs **nicht** direkt. Achtung: **kein 1:1-Swap** — `SubTabs` ist route-/`NavLink`-getrieben, `PillTabs` state-getrieben (`onChange`/`activeKey` + `beta`-/`tooltip`-Props, die SubTabs fehlen). Migrationsweg ist eine offene Entscheidung (Sub-Tabs auf echte URL-Routen heben **vs.** SubTabs um eine controlled/State-Variante erweitern); davon hängt ab, ob B1 vor dem IA-Refactor isoliert testbar ist.
 > **Sub-Tab-Limit:** maximal 5 Sub-Tabs pro Top-Eintrag. Tab-Inflation (heute 8 in Auswertungen, 5 in Aussichten) wird durch die IA-Aufteilung gelöst und durch diese Regel verhindert.
 > **Sprungmarken** in langen Seiten (TOC-Pattern). *Offen.*
 
@@ -175,7 +185,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### B5 — Selektoren
 
-> **Schwebend** auf langen Scroll-Seiten (Sticky `top: 0` mit Backdrop-Blur). Reusable `<FloatingSelector>` (#243 B3).
+> **Schwebend** auf langen Scroll-Seiten (Sticky `top: 0` mit Backdrop-Blur). Reusable `<FloatingSelector>` (#243 B3) — **existiert noch nicht (zu bauen, 2026-05-31)**, Phase-Zuordnung (Phase-0-Vorarbeit vs. Teil des v4.0.0-Schnitts) offen. **Namensraum-Hinweis:** dieses B5 (Selektoren) ist nicht der Mobile-Tracker B5a–B5e (#243-Sub-Tracker für M1/M2/M3).
 > **Single-Anlage-Selektor:** ausblenden wenn ohne Auswahl-Sinn (#243 B12 — Audit).
 > Mobile-Sticky-Verhalten in [KONZEPT-MOBILE.md M2](KONZEPT-MOBILE.md).
 
@@ -185,7 +195,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### B6 — Aufklapp-Verhalten (`CollapsibleSection`)
 
-> **Persistenz:** Aufklapp-Status pro Sektion in LocalStorage (etabliert für Monatsberichte/Energieprofil-Monat — Vorbild laut detLAN #258 P5). Konsistente Implementierung über alle Verwender.
+> **Persistenz:** Aufklapp-Status pro Sektion in LocalStorage (etabliert für Monatsberichte/Energieprofil-Monat — Vorbild laut detLAN #258 P5). Konsistente Implementierung über alle Verwender. **Drift-Befund (2026-05-31):** `CollapsibleSection` (Key `eedc-collapse-${storageKey}`) und `SortableSection` (Key `${prefix}_section_${title}`) führen je eigene Open-State-Logik — die geforderte Konsistenz ist intern bereits gebrochen. SoT-Komponente festlegen (Vorschlag: `CollapsibleSection` kanonisch, `SortableSection` baut darauf auf); koppelt an die SortableSection-Cap-Entscheidung oben.
 > **Default-Open** pro Sektion definieren (datenreich → standardmäßig offen; sekundär → standardmäßig zu).
 > **Mobile-Default** abweichend siehe [KONZEPT-MOBILE.md M1](KONZEPT-MOBILE.md).
 
@@ -198,7 +208,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### C1 — Spacing-Standards
 
 > **Tokens:** `--page-padding-top` · `--nav-content-gap` · `--section-spacing` · `--card-padding` · `--card-gap`.
-> SoT: `lib/spacing.ts` (oder Tailwind-Custom-Theme).
+> SoT: **offene Entscheidung (Blocker A0, 2026-05-31)** — Spacing geht entweder im A0-Artefakt (`design-tokens.ts` + Tailwind-Theme) auf **oder** bekommt ein eigenes `lib/spacing.ts`. Eine Heimat vor A0 festlegen (beide Dateien existieren heute nicht).
 > Bestehende Spacings im Code auditieren und auf Tokens migrieren.
 
 **Betroffene Issues:** #243 B6, #209 P5.
