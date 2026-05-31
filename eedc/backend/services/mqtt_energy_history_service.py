@@ -15,6 +15,7 @@ from typing import Optional
 
 from sqlalchemy import delete, func, select
 
+from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
@@ -300,5 +301,18 @@ def _compute_deltas(
             target_key = key
 
         result[target_key] = round(delta, 2)
+
+    # Pro-Wechselrichter-PV (pv_<id>/bkw_<id>) auf die Kategorie `pv` aggregieren —
+    # analog HA-Pfad (live_history_service.py:372-383). Im MQTT-Modus liefert
+    # mancher Nutzer PV nur pro Wechselrichter (inv/<id>/pv_erzeugung_kwh); ohne
+    # diese Summierung blieb die „Heute"-PV-Kachel 0,0 kWh und der daraus
+    # abgeleitete Eigen-/Hausverbrauch leer (Dirk-PN 2026-05-31).
+    # Vorrang hat das anlagenweite Basis-Topic `pv_gesamt_kwh` (→ `pv` bereits
+    # gesetzt); dann NICHT zusätzlich aus Komponenten summieren (Doppelzählung).
+    # Whitelist via core/berechnungen statt Inline-Summe (ADR-001).
+    if result.get("pv") is None:
+        pv_summe = summe_pv_bkw_kwh(result)
+        if pv_summe > 0:
+            result["pv"] = round(pv_summe, 1)
 
     return result
