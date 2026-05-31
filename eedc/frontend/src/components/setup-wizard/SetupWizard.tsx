@@ -69,16 +69,16 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* Header */}
-      <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img src={eedcIcon} alt="eedc" className="w-10 h-10" />
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+      <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-2 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <img src={eedcIcon} alt="eedc" className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
                   eedc Einrichtung
                 </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="hidden sm:block text-xs text-gray-500 dark:text-gray-400">
                   Energie Effizienz Data Center
                 </p>
               </div>
@@ -86,8 +86,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
             {/* Fortschritt */}
             {showProgress && (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                Schritt {currentStepIndex + 1} von {STEPS_CONFIG.length}
+              <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
+                <span className="hidden sm:inline">Schritt </span>{currentStepIndex + 1}<span className="hidden sm:inline"> von</span><span className="sm:hidden">/</span>{STEPS_CONFIG.length}
               </div>
             )}
           </div>
@@ -97,7 +97,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       {/* Fortschrittsbalken */}
       {showProgress && (
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="max-w-4xl mx-auto px-4">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4">
             {/* Desktop: Alle Schritte */}
             <div className="hidden md:flex items-center py-4">
               {STEPS_CONFIG.map((stepConfig, index) => {
@@ -178,8 +178,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       )}
 
       {/* Content */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           {/* Schritt-Inhalt */}
           {wizard.step === 'welcome' && (
             <WelcomeStep
@@ -250,7 +250,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-6 text-sm text-gray-400 dark:text-gray-500">
+      <footer className="text-center py-3 sm:py-6 text-xs sm:text-sm text-gray-400 dark:text-gray-500">
         eedc – Energie Effizienz Data Center
       </footer>
     </div>
