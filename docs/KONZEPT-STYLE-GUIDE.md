@@ -135,6 +135,29 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ---
 
+### A6 — Berechnungs-Transparenz (Formel-Tooltip)
+
+> **Prinzip:** Jede *abgeleitete/aggregierte* Kennzahl (KPI, ROI, Autarkie %, Ersparnis, Wirkungsgrad, Prognose) zeigt ihre Herleitung auf Abruf — Formel + eingesetzte Werte + Datenquelle/Zeitraum. Rohe Zählerwerte und triviale Summen bleiben tooltip-frei (kein Rauschen).
+> **Affordance:** konsistenter, dezenter Indikator (z. B. gepunktete Unterstreichung oder kleines ⓘ). Progressive Disclosure — versteckt bis Hover/Tap, daher **kein Profi-Modus** (dient gerade Einsteigern „woher kommt die Zahl?").
+> **Architektur (SoT):** Formel/Erklärung als Eigenschaft des Berechnungs-Layer-Helfers (`core/berechnungen/`, ADR-001) — Wert UND Erklärung aus *einer* Quelle, können nicht driften. Bestehend: `FormelTooltip` (ROIDashboard) als Vorbild, B1 nennt den Berechnung-Tooltip.
+> **A3-Kopplung:** der Tooltip erklärt auch, *warum* ein Wert `—`/`N/A`/`?` ist (Datenlücke vs. strukturell vs. Schätzung).
+> **Mobile:** kein Hover auf Touch → Tap/Long-press-Popover (Touch-Target ≥ 44 px, siehe Mobile M4).
+
+**Betroffene Issues:** #243 B9 (FormelTooltip-Konsolidierung), Disc #162 (fmtKpi/Datenzustand).
+
+---
+
+### A7 — Daten-Aktualität & Quelle
+
+> **Prinzip:** Jede Datensicht zeigt konsistent **Stand** (Zeitstempel „Stand: TT.MM.JJJJ HH:MM" bzw. „Live") und **Quelle** der Werte — der Nutzer muss erkennen, wie frisch und woher eine Zahl ist.
+> **Quellen-Vokabular:** HA-LTS · Live-Snapshot · Custom-/Cloud-Import · Prognose-Quelle (OpenMeteo / eedc / Solcast). Konsistente Kurzlabels/Icons.
+> **Live vs. LTS:** Live-Werte (5-Min/Power) sichtbar von aggregierten LTS-Tageswerten unterscheidbar machen — die Frische-Differenz ist ein wiederkehrender Verwechslungs-Punkt.
+> **Platzierung:** dezent am Sektions-/Karten-Header oder via A6-Tooltip, nicht pro Zelle.
+
+**Betroffene Issues:** Daten-Provenance-/Daten-Checker-Linie, Live-vs-LTS-Konsistenz (#135-Folge).
+
+---
+
 ## Teil B — Komponenten
 
 ### B1 — KPI-Karten
@@ -205,6 +228,29 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ---
 
+### B7 — Diagramme / Charts
+
+> **Achsen + Legende:** beschriftete Achsen mit Einheit (siehe C3), Legende konsistent platziert; Zeitachse nach der etablierten Slot-Konvention (backward).
+> **Farb-Mapping:** Serien-Farben **aus den A2-Tokens** (PV = gelb, Speicher = lila, Verbrauch = blau, …) — nicht ad-hoc pro Chart. Eine Datenrolle = überall dieselbe Farbe.
+> **Hover/Tap-Tooltip:** Wert + Einheit + Zeitpunkt am Datenpunkt; auf Touch tap-bar (Mobile M4).
+> **Chart-Typ pro Datenart:** Verlauf → Linie/Fläche, Zusammensetzung → gestapelt, Vergleich → Balken, Anteil → Donut. Konvention, nicht Seiten-Einzelfall.
+> **Leerzustand:** keine Daten → klare Leer-Darstellung (siehe B8), keine leeren Achsenkreuze.
+
+**Betroffene Issues:** neue Norm; eedc ist chart-dicht, bislang ungeregelt.
+
+---
+
+### B8 — Leer- / Lade- / Fehler-Zustände
+
+> **Laden:** Skeleton-Platzhalter in Karten-/Chart-/Tabellen-Form (kein Layout-Sprung beim Nachladen), kein nackter Vollseiten-Spinner.
+> **Leer (echte Datenlücke):** erklärender Leerzustand mit **CTA** („Noch keine Daten — jetzt einrichten/importieren"), nicht nur `—`. Abgrenzung: A3 ist *wert*-level, B8 ist *sektions-/seiten*-level.
+> **Strukturell N/A:** Sektion ausblenden statt leer zeigen (Komponente nicht vorhanden), vgl. A3 + IA-V4-Tab-Filter.
+> **Fehler:** einheitlicher Fehlerzustand (was ist schief, was tun) statt stiller Leere oder roher Exception; Retry-Affordance wo sinnvoll.
+
+**Betroffene Issues:** neue Norm; heute behandelt jede Seite Leer/Laden/Fehler eigen.
+
+---
+
 ## Teil C — Layout + Texte
 
 ### C1 — Spacing-Standards
@@ -226,6 +272,18 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Display-Token `—`** als einheitliches Leerwert-Zeichen (etabliert v3.29.1).
 
 **Betroffene Issues:** #243 B7, #258 P6.
+
+---
+
+### C3 — Einheiten & Präzision
+
+> **Einheit immer präsent:** kein nackter Zahlenwert ohne Einheit; im Tabellen-Header (siehe B2), nicht pro Zelle.
+> **Größen-Umschaltung:** kWh ↔ MWh (bzw. W ↔ kW) ab definierter Schwelle einheitlich, nicht gemischt in derselben Sicht.
+> **Nachkommastellen pro Größe:** kWh 1, € 2, % 1 (Vorschlag) — pro Größenart fix, nicht ad-hoc.
+> **`%` mit Leerzeichen** („84,2 %", aus C2), deutsches Komma + Tausender-Punkt.
+> **kW ≠ kWh:** Leistung vs. Energie nie vermischen (#200-Linie) — die Einheit folgt der Größe.
+
+**Betroffene Issues:** #237 (Einheiten-Header), #200 (kW/kWh), #258 P6 (%-Drift).
 
 ---
 
