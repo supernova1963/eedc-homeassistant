@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.6] - 2026-06-01 — Setup-Startseite auf Handy/Tablet scrollbar
+
+> 🩹 **Patch-Release:** ein single-purpose Frontend-Fix (Folge zu #309). **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Phase-C-Counter unberührt). Frontend-Typecheck grün.
+
+### Fixed
+
+- **Setup-Wizard: Startseite ließ sich auf Handy/Tablet nicht scrollen (simon42 #628–632):** Der globale Scroll-Owner-Mechanismus (`html,body{overflow-hidden}`, eingeführt mit #161 gegen iOS-Companion-Overscroll) macht den Dokument-Body bewusst nicht-scrollbar — einziger Scroll-Container ist der `h-dvh`-Layout-Wrapper. Der Setup-Wizard hielt sich nicht daran (`min-h-screen` ohne eigenen Scroll-Container) und wird zudem außerhalb des Haupt-Layouts gerendert. Auf kleinen Bildschirmen war der Willkommens-Schritt höher als der Viewport → der „Einrichtung starten"-Button und alles darunter waren unerreichbar; Drehen ins Querformat und App-Neuinstallation halfen nicht. Der Wizard-Root ist jetzt selbst Scroll-Owner (`h-dvh overflow-y-auto overscroll-contain`). #309 (v3.34.5) hatte nur Paddings verkleinert, dem Wizard aber keinen Scroll-Container gegeben — auf kleinen Handys reichte das nicht. Dank an Sabrina.
+
 ## [3.34.5] - 2026-05-31 — MQTT-„Heute"-PV-Summierung + Setup-Wizard auf kleinen Monitoren
 
 > 🩹 **Patch-Release:** zwei unabhängige single-purpose Fixes. **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Phase-C-Counter unberührt). 592 Backend-Tests grün, Frontend-Typecheck grün.

@@ -199,6 +199,15 @@ Diese Seite kombiniert PVGIS-Langfristprognose mit Wetter-Provider-Einstellungen
 - **TMY-Daten**: Typical Meteorological Year als Referenz
 - **Optimale Ausrichtung**: Berechnet optimale Neigung/Azimut für deinen Standort
 
+**Horizontprofil (Verschattung):**
+
+Das Horizontprofil beschreibt, wie hoch Berge, Gebäude oder Bäume den Horizont in jeder Himmelsrichtung verdecken — eedc zieht das bei der PVGIS-Langfristprognose ab. Ohne eigenes Profil nutzt PVGIS automatisch Geländedaten (~90 m Auflösung). Im Abschnitt **Horizontprofil** auf der Solarprognose-Seite gibt es zwei Wege:
+
+- **Geländeprofil von PVGIS abrufen**: holt das Horizontprofil aus den PVGIS-Geländedaten für deinen Standort — erfasst Berge und Geländekanten, aber keine Gebäude oder Bäume.
+- **Eigene Datei**: lädt ein selbst erstelltes Horizontprofil als Textdatei hoch (Format wie bei PVGIS). Pro Zeile **Azimut** und **Elevation** in Grad, durch Leerzeichen getrennt; Zeilen mit `#` sind Kommentare. Azimut 0–360°, Elevation 0–90°, mindestens 4 Punkte. So lassen sich auch feste Hindernisse wie Dachkanten oder Nachbargebäude abbilden, die die automatischen Geländedaten nicht kennen.
+
+Ist ein Profil hinterlegt, zeigt die Karte Datenpunkte sowie minimale und maximale Elevation; **Löschen** entfernt es wieder (PVGIS fällt dann auf die automatischen Geländedaten zurück). Hinweis: Das Horizontprofil bildet **feste** Hindernisse ab — eine jahreszeitlich wechselnde Verschattung (z. B. Laubbäume) ändert sich damit nicht mit.
+
 **Wetter-Provider:**
 - Zeigt verfügbare Wetter-Datenquellen für deinen Standort
 - Der aktuelle Provider wird in den Anlagen-Stammdaten eingestellt

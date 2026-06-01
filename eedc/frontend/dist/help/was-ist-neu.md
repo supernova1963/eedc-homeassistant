@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Mai 2026 (v3.34.5)
+> **Stand:** Juni 2026 (v3.34.6)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -8,6 +8,12 @@
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
 
 ---
+
+## v3.34.6 — Einrichtung am Handy und Tablet (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Die Setup-Startseite lässt sich am Handy und Tablet wieder scrollen.** Wer eedc neu einrichtet — oder die Anlage gelöscht hat und von vorne beginnt — kam am Smartphone teils nicht weiter: Die Willkommensseite ließ sich nicht scrollen, sodass der Button „Einrichtung starten" außerhalb des sichtbaren Bereichs lag. Drehen ins Querformat oder die App neu zu installieren half nicht. Das ist behoben — die Seite scrollt jetzt auf allen Bildschirmgrößen. Danke an Sabrina.
 
 ## v3.34.5 — MQTT-„Heute"-PV + Setup auf kleinen Bildschirmen (Mai 2026)
 
