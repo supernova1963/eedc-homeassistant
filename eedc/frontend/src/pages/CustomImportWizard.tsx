@@ -835,7 +835,10 @@ export default function CustomImportWizard() {
                         onClick={() => toggleMonth(key)}
                       >
                         <td className="px-4 py-2.5">
-                          <label className="flex items-center gap-2 cursor-pointer">
+                          {/* stopPropagation: sonst feuert zusätzlich der onClick der <tr>
+                              und das Toggle hebt sich auf → einzelne Monate ließen sich
+                              nicht abwählen (#72). */}
+                          <label className="flex items-center gap-2 cursor-pointer" onClick={e => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={selected}
