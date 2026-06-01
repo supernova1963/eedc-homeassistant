@@ -617,6 +617,41 @@ async def get_roi_dashboard(
         else float(PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"])
     )
 
+    # Sonstige Erträge & Ausgaben (manuell pro Investition/Monat gepflegt) —
+    # #310 rilmor-mhrs: get_roi_dashboard hat diese realisierten Beträge nie
+    # eingerechnet, während Cockpit-Monatsbericht und Aussichten-Finanzprognose
+    # sie längst über `berechne_sonstige_netto` berücksichtigen. Reiner Read-
+    # Pfad, SoT-Helper `utils/sonstige_positionen`.
+    from backend.utils.sonstige_positionen import berechne_sonstige_netto
+    inv_ids_alle = [inv.id for inv in investitionen]
+    sonstige_netto_by_inv: dict[int, float] = {}
+    if inv_ids_alle:
+        smd_query = select(InvestitionMonatsdaten).where(
+            InvestitionMonatsdaten.investition_id.in_(inv_ids_alle)
+        )
+        if jahr is not None:
+            smd_query = smd_query.where(InvestitionMonatsdaten.jahr == jahr)
+        smd_result = await db.execute(smd_query)
+        for imd in smd_result.scalars().all():
+            netto = berechne_sonstige_netto(imd.verbrauch_daten)
+            if netto:
+                sonstige_netto_by_inv[imd.investition_id] = (
+                    sonstige_netto_by_inv.get(imd.investition_id, 0.0) + netto
+                )
+
+    # Bei jahr=None sind die Jahres-Einsparungen Jahresdurchschnitte → die
+    # (über alle Jahre summierten) sonstigen Netto-Beträge auf dieselbe
+    # Jahresbasis bringen. Divisor = Anzahl Jahre mit Monatsdaten (gleiche
+    # Basis wie die PV-Einsparungs-Mittelung), mind. 1.
+    _md_jahre = {j for (j, _m) in benzinpreis_lookup.keys()}
+    _sonstige_divisor = max(len(_md_jahre), 1) if jahr is None else 1
+
+    def _sonstige_jahr_fuer(inv_ids: list[int]) -> float:
+        """Sonstige Netto-€/Jahr für eine Gruppe von Investitionen (eine
+        Investition gehört zu genau einer ROI-Berechnung → kein Doppelzählen)."""
+        summe = sum(sonstige_netto_by_inv.get(i, 0.0) for i in inv_ids)
+        return summe / _sonstige_divisor
+
     # ==========================================================================
     # Phase 1: Gruppiere Investitionen nach PV-Systemen und Standalone
     # ==========================================================================
@@ -1077,6 +1112,12 @@ async def get_roi_dashboard(
             ))
 
         # System-ROI berechnen
+        # #310: manuell gepflegte sonstige Erträge/Ausgaben des Systems
+        # (WR + PV-Module + DC-Speicher) einrechnen.
+        system_sonstige = _sonstige_jahr_fuer(
+            [wr.id, *(m.id for m in pv_module), *(s.id for s in dc_speicher)]
+        )
+        system_einsparung += system_sonstige
         system_relevante = system_kosten - system_alternativ
         system_netto_einsparung = system_einsparung - system_betriebskosten
         roi_result = berechne_roi(system_kosten, system_einsparung, system_alternativ, system_betriebskosten)
@@ -1096,6 +1137,7 @@ async def get_roi_dashboard(
                 **pv_detail,
                 'komponenten_count': len(komponenten),
                 'system_kwp': system_kwp,
+                'sonstige_netto_euro': round(system_sonstige, 2),
             },
             komponenten=komponenten,
         ))
@@ -1124,6 +1166,9 @@ async def get_roi_dashboard(
             jahres_einsparung = 0
             co2_einsparung = 0
 
+        # #310: sonstige Erträge/Ausgaben des Moduls einrechnen.
+        orphan_sonstige = _sonstige_jahr_fuer([inv.id])
+        jahres_einsparung += orphan_sonstige
         betriebskosten = inv.betriebskosten_jahr or 0
         netto_einsparung = jahres_einsparung - betriebskosten
         roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)
@@ -1143,6 +1188,7 @@ async def get_roi_dashboard(
                 **pv_detail,
                 'hinweis': 'PV-Modul ohne Wechselrichter-Zuordnung - bitte zuordnen',
                 'anteil_prozent': round(anteil * 100, 1) if gesamt_kwp > 0 else 0,
+                'sonstige_netto_euro': round(orphan_sonstige, 2),
             },
         ))
 
@@ -1386,6 +1432,11 @@ async def get_roi_dashboard(
             co2_einsparung = inv.co2_einsparung_prognose_kg or 0
             detail = {'hinweis': 'Manuelle Prognose verwendet'}
 
+        # #310: manuell gepflegte sonstige Erträge/Ausgaben einrechnen.
+        inv_sonstige = _sonstige_jahr_fuer([inv.id])
+        jahres_einsparung += inv_sonstige
+        if isinstance(detail, dict):
+            detail['sonstige_netto_euro'] = round(inv_sonstige, 2)
         betriebskosten = inv.betriebskosten_jahr or 0
         netto_einsparung = jahres_einsparung - betriebskosten
         roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)
