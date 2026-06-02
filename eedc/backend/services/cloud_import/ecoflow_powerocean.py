@@ -48,6 +48,55 @@ HISTORY_CODE = "JT303_Dashboard_Overview_Summary_Week"
 # "time must be less than one week" (Dirk-PN 2026-05-22). Daher 6-Tage-Blöcke.
 MAX_BLOCK_DAYS = 6
 
+
+def iter_history_blocks(
+    year: int, month: int, now: Optional[datetime] = None
+) -> list[tuple[datetime, datetime]]:
+    """Zerlegt einen Monat in überlappungsfreie Abfrage-Blöcke (< 1 Woche).
+
+    Die `…Summary_Week`-API behandelt das Fenster [beginTime, endTime] TAG-
+    INKLUSIV an BEIDEN Enden (Dirk-PN 2026-06-02: Mai-Import lag ~15–22 %
+    zu hoch). Zwei Konsequenzen, die früher zu Überzählung führten:
+
+    1. Teilten sich zwei Blöcke ihren Grenztag (`block_start = block_end`),
+       wurde dieser Tag in beiden Blöcken gezählt — bei 6 Blöcken pro Monat
+       fünf doppelte Grenztage ≈ +16 %.
+    2. Ein `endTime` am 1. des Folgemonats (00:00) zog diesen Tag mit in den
+       Monat — der 1. Juni leckte in den Mai.
+
+    Daher hier: Blöcke teilen sich KEINEN Tag (nächster `begin` = Vortag + 1),
+    `endTime` ist der jeweilige Block-Letzttag 23:59:59, und der Monat endet
+    am Monatsletzten — der laufende Monat wird auf „heute" (inkl.) geklemmt.
+    Jeder Block deckt höchstens MAX_BLOCK_DAYS Kalendertage und bleibt damit
+    strikt unter einer Woche.
+    """
+    if now is None:
+        now = datetime.now()
+
+    month_first = datetime(year, month, 1)
+    if month_first > now:
+        return []
+
+    next_month_first = (
+        datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+    )
+    last_day = next_month_first - timedelta(days=1)  # Monatsletzter, 00:00
+    today = datetime(now.year, now.month, now.day)  # heute, 00:00
+    if last_day > today:  # laufender Monat: nicht in die Zukunft abfragen
+        last_day = today
+    if last_day < month_first:
+        return []
+
+    blocks: list[tuple[datetime, datetime]] = []
+    block_start = month_first
+    while block_start <= last_day:
+        block_last = min(block_start + timedelta(days=MAX_BLOCK_DAYS - 1), last_day)
+        begin = block_start  # Tag 00:00:00
+        end = block_last + timedelta(hours=23, minutes=59, seconds=59)
+        blocks.append((begin, end))
+        block_start = block_last + timedelta(days=1)
+    return blocks
+
 # Mapping: indexName aus EcoFlow API → ParsedMonthData Felder.
 #
 # Die EcoFlow PowerOcean API liefert eine Energiefluss-Matrix mit „From X" /
@@ -397,29 +446,13 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
         Aufrufer (`fetch_monthly_data`).
         """
 
-        # Monatsanfang und -ende bestimmen
-        month_start = datetime(year, month, 1)
-        if month == 12:
-            month_end = datetime(year + 1, 1, 1)
-        else:
-            month_end = datetime(year, month + 1, 1)
-
-        # Nicht in der Zukunft abfragen
-        now = datetime.now()
-        if month_start > now:
-            return None, set()
-        if month_end > now:
-            month_end = now
-
         # Aggregierte Werte für den Monat + alle gesehenen indexNames
         aggregated: dict[str, float] = {}
         seen_names: set[str] = set()
 
-        # In Blöcken < 1 Woche abfragen (API verlangt < 7 Tage pro Request)
-        block_start = month_start
-        while block_start < month_end:
-            block_end = min(block_start + timedelta(days=MAX_BLOCK_DAYS), month_end)
-
+        # In überlappungsfreie Blöcke < 1 Woche zerlegen (siehe
+        # iter_history_blocks — tag-inklusive API, kein geteilter Grenztag).
+        for block_start, block_end in iter_history_blocks(year, month):
             try:
                 block_data = await self._fetch_history_block(
                     host, access_key, secret_key, serial_number,
@@ -439,8 +472,6 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
                     f"EcoFlow History-Block {block_start.date()} - {block_end.date()} "
                     f"fehlgeschlagen: {e}"
                 )
-
-            block_start = block_end
 
         if not aggregated:
             return None, seen_names

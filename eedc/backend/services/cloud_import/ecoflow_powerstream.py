@@ -12,7 +12,7 @@ HINWEIS: Dieser Provider ist NICHT mit echten Geräten getestet (getestet=False)
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -27,9 +27,9 @@ from .base import (
 )
 from .ecoflow_powerocean import (
     API_HOSTS,
-    MAX_BLOCK_DAYS,
     _build_sign_headers,
     _get_api_host,
+    iter_history_blocks,
 )
 from .registry import register_provider
 
@@ -267,26 +267,12 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
         Liefert zusätzlich die Menge der gesehenen indexNames für die
         Mapping-Diagnose im Aufrufer.
         """
-        month_start = datetime(year, month, 1)
-        if month == 12:
-            month_end = datetime(year + 1, 1, 1)
-        else:
-            month_end = datetime(year, month + 1, 1)
-
-        now = datetime.now()
-        if month_start > now:
-            return None, set()
-        if month_end > now:
-            month_end = now
-
         aggregated: dict[str, float] = {}
         seen_names: set[str] = set()
 
-        # In Blöcken < 1 Woche abfragen (API verlangt < 7 Tage pro Request)
-        block_start = month_start
-        while block_start < month_end:
-            block_end = min(block_start + timedelta(days=MAX_BLOCK_DAYS), month_end)
-
+        # In überlappungsfreie Blöcke < 1 Woche zerlegen (siehe
+        # iter_history_blocks — tag-inklusive API, kein geteilter Grenztag).
+        for block_start, block_end in iter_history_blocks(year, month):
             try:
                 block_data = await self._fetch_history_block(
                     host, access_key, secret_key, serial_number,
@@ -304,8 +290,6 @@ class EcoFlowPowerStreamProvider(CloudImportProvider):
                     f"EcoFlow PowerStream History-Block "
                     f"{block_start.date()} - {block_end.date()} fehlgeschlagen: {e}"
                 )
-
-            block_start = block_end
 
         if not aggregated:
             return None, seen_names
