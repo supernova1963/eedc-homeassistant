@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.7] - 2026-06-02 — EcoFlow-Import überlappungsfrei + E-Auto-Monatstabelle mit Wallbox-Pool
+
+> 🩹 **Patch-Release:** zwei unabhängige single-purpose Fixes (Read- bzw. Import-Pfad). **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Hourly-`_categorize_counter`, Phase-C-Counter unberührt). Je Fix Regressionstest grün, Frontend-Typecheck grün.
+
+### Fixed
+
+- **E-Auto-Dashboard: „Monatsdaten anzeigen" poolt die Wallbox-Ladung pro Monat (#262, junky84):** Cockpit → E-Auto → „Monatsdaten anzeigen" gab bei evcc-Setups nur die rohen E-Auto-Zeilen (km) zurück, während die Ladung auf der Wallbox-Investition liegt — die Ladespalten blieben leer. Jede Zeile wird jetzt km-anteilig mit dem Wallbox-Pool angereichert (PV/Netz/Total), nach derselben `use_wb_pool`-Entscheidung wie die KPI-Kacheln. Premium-Setups (E-Auto pflegt eigene Ladung) bleiben roh. Reiner Read-Pfad.
+- **Cloud-Import: EcoFlow-History-Blöcke überlappungsfrei (Dirk-PN):** die `Summary_Week`-API ist an beiden Enden tag-inklusiv — geteilte Block-Grenztage wurden doppelt gezählt und der 1. des Folgemonats leckte in den Monat, wodurch Dirks Mai-Import ~15–22 % über den EcoFlow-Webseiten-Werten lag. Die Block-Iteration erzeugt jetzt überlappungsfreie Blöcke (Block-Letzttag 23:59:59, Monatsende = Monatsletzter, laufender Monat auf heute geklemmt); PowerOcean + PowerStream nutzen denselben Helper. Regressionstest deckt jeden Tag genau einmal ab.
+
+### Konzept (intern, nicht anwender-sichtbar)
+
+- **IA-V4 Werte/Tabelle-SoT parametrisiert:** eine Metrik-Registry + granularitäts-agnostische `<WerteTabelle>`, gestaffelte Konsolidierung der heute drei parallelen Tabellen, read-only Embeds. Konzept-Phase, kein Code-Change.
+
 ## [3.34.6] - 2026-06-01 — Setup-Startseite auf Handy/Tablet scrollbar
 
 > 🩹 **Patch-Release:** ein single-purpose Frontend-Fix (Folge zu #309). **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Phase-C-Counter unberührt). Frontend-Typecheck grün.
