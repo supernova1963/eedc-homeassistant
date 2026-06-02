@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.34.6)
+> **Stand:** Juni 2026 (v3.34.7)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -8,6 +8,13 @@
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
 
 ---
+
+## v3.34.7 — E-Auto-Monatstabelle + EcoFlow-Import (Juni 2026)
+
+### Was sich für dich ändert
+
+- **E-Auto „Monatsdaten anzeigen": die geladene Energie pro Monat erscheint wieder.** Wer das Laden über eine Wallbox (z. B. mit evcc) erfasst, sah in der E-Auto-Monatstabelle bisher nur die gefahrenen Kilometer — die Ladespalten blieben leer, weil die Lademenge auf der Wallbox liegt. eedc rechnet jetzt für jeden Monat den passenden Anteil aus dem Wallbox-Pool (PV/Netz/gesamt) in die Tabelle, genau wie es die Kacheln schon tun. Danke an junky84 (#262).
+- **EcoFlow-Cloud-Import: Monatswerte stimmen wieder.** Beim Import aus dem EcoFlow-Portal wurden Tage an Monats-/Block-Grenzen doppelt gezählt — die Monatssummen lagen spürbar über den Werten der EcoFlow-Webseite. Das ist behoben: jeder Tag zählt jetzt genau einmal. Danke an Dirk.
 
 ## v3.34.6 — Einrichtung am Handy und Tablet (Juni 2026)
 
