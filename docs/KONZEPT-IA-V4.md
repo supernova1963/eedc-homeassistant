@@ -77,6 +77,22 @@ Bewusste Schärfung gegenüber „3–4 Zahlen": die testerseitig bewährten **5
 
 **Werte/Tabelle-Sektion (numerischer Zwilling):** Jede Zeit-Sicht trägt zusätzlich eine **verschiebbare, klappbare „Werte/Tabelle"-Sektion** — der numerische Zwilling des Verlaufs (gleiche Unter-Einheiten als Zeilen: Tag→Stunden, Monat→Tage, Jahr→Monate), mit der Vergleichslogik `[Zeitraum | Vergleichszeitraum | Δ]`. Es ist **dieselbe** Tabellen-Komponente wie in Auswertungen/Tabelle, nur kontext-skaliert (**eine SoT**, kein zweiter Tabellen-Code — wie KPICard B9). **Auswertungen/Tabelle bleibt die volle Werkbank** (alle Komponenten, voller Spalten-Picker, kanonischer CSV); die eingebetteten Sektionen sind scoped Lese-Ausschnitte + Cross-Link „alle Werte / Export →". **Grenze:** ein Vergleichszeitraum wählbar + Spalten-Picker — **keine** freie Mehrfachauswahl beliebiger Jahre/Monate (in #195 verworfen), kein eigener „Vergleich"-Tab. *(Bedient den durchgängigen Wunsch nach Auswertungs-Tabellen im Kontext, aus dem Forum / #195.)*
 
+**Werte/Tabelle-SoT — Parametrisierung (✅ entschieden 2026-06-02):** Heute existieren **drei parallele** Tabellen mit je eigener Spalten-Definition (`TabelleTab` 27 Spalten/Monate · `EnergieprofilTageTabelle` 15+dyn./Tage · Stunden-Tagesdetail 13/Stunden) — überlappende Metriken, drei localStorage-Keys, kein geteilter Code. Die SoT konsolidiert das in **eine Metrik-Registry** + **eine `<WerteTabelle>`**:
+
+- **Eine Metrik-Registry** je Metrik (`key·label·unit·format·agg·higherIsBetter·gruppe·scope`) mit **pro-Granularität-Accessor** (`get.monat/tag/stunde`) — die Komponente ist granularitäts-agnostisch, ein dünner **Granularitäts-Adapter** normalisiert die (gewollt verschiedenen) Backend-Quellen pro Sicht. **Logik-Wiederverwendung aus `TabelleTab`, kein Neubau** der Vergleichs-/CSV-/Footer-Rechnung.
+- **`<WerteTabelle>`-Parameter:** `granularitaet` (stunde/tag/monat/saison/jahr) · `scope` (alle / Komponententyp, filtert die Registry über das `gruppe`-Tag) · `vergleich` (genau **ein** Zeitraum, Einheit = Zeilen-Granularität) · `modus`.
+- **Zwei Modi:** **`werkbank`** (Auswertungen/Tabelle) = voller Picker + Reorder + kanonischer CSV + Vergleich; **`embed`** (Cockpit-Sichten, Komponenten-Hub) = **fix + read-only** — fester scoped Default-Spaltensatz, **kein** Picker, **kein** eigener CSV, genau ein Cross-Link „alle Werte / Export →" (vorgewählt auf denselben Scope + Zeitraum). Mobile-Embed: noch weniger Spalten, default eingeklappt.
+
+| Kontext | Granularität | Scope | Vergleich | Modus |
+|---|---|---|---|---|
+| Cockpit/Tag | Stunden | alle | Vergleichstag | embed |
+| Cockpit/Monat | Tage | alle | Vergleichsmonat | embed |
+| Cockpit/Jahr-Gesamt | Monate / Saison | alle | Vorjahr (Gesamt: —) | embed |
+| Komponenten/`<typ>` | Monate | `<typ>` | Vergleichsjahr | embed (Tabellen-Hälfte des Diagramm⇄Tabelle-Toggle) |
+| Auswertungen/Tabelle | Monate → Tag/Saison/Jahr (gestaffelt) | alle (voller Picker) | ein Zeitraum | werkbank |
+
+**Staffelung (v4.0.0):** Registry + `<WerteTabelle>` ersetzen `TabelleTab` und werden als **Monats-granulare** Embeds in Cockpit/Monat·Jahr + Komponenten/`<typ>` eingebettet (gleiche Quelle `AggregierteMonatsdaten` → **kein neuer Datenpfad**). `get.tag`/`get.stunde` + die Migration der Energieprofil-Tabellen ziehen **mit Cockpit/Tag** nach (das ohnehin in Phase 1 den `/tage`+`/stunden`-Pfad baut). Saison-Granularität + HDD bleiben **data-gated, post-v4.0.0**, sind aber vorbereitet (`granularitaet='saison'`). Die **pro-Tag-Reaggregation** ist Pflege → wandert nach Einstellungen/Daten/Energieprofil-Pflege; die Anzeige-Embeds bleiben read-only, behalten aber eine dezente Cross-Link-Row-Action „→ reaggregieren", damit der Reparatur-Pfad nicht verloren geht.
+
 **Aussicht-Konsolidierung (✅ Mapping entschieden 2026-06-02):** Die heutigen 5 Aussichten-Sub-Tabs werden im Cockpit/Aussicht-Tab zu **einer linearen Seite** mit **Horizont-Selektor (7 Tage · 14 Tage · 12 Monate · Mehrjahr)** — der Selektor blendet die passenden Sektionen ein.
 
 | Heute | → Aussicht-Sektion (Horizont) | Anmerkung |
