@@ -62,9 +62,32 @@ Sub-Tabs in chronologischer Reihenfolge:
 
 > **✅ Entschieden (2026-06-01): Hauptblock = zwei Linsen.** Löst den Konflikt „Energiefluss vs. Verlauf" auf — beide leben als Umschalter im selben Slot statt sich auszuschließen. Revidiert die frühere „EnergyFlow-only"-Festlegung (Inventur unten).
 
+**KPI-Strip-Belegung je Zeit-Sicht (✅ entschieden 2026-06-02):** Tag/Monat/Jahr tragen **denselben** anlage-weiten Strip — nur Zeitraum + Vergleichsbasis ändern sich (genau das macht die aufgelöste Übersicht überflüssig). Live ist der Sonderfall (Leistung statt Energie, siehe Live-Spezifik).
+
+| Sicht | KPI-Strip (anlage-weit) | Vergleichsbasis | Auflösung |
+|---|---|---|---|
+| **Live** | PV-Leistung · Hausverbrauch · Netz ± · SoC — zugleich die kWh des laufenden Tages (heutige „Heute"-Kacheln) | Gestern | kW live + kWh heute |
+| **Tag** | PV · Autarkie · Eigenverbrauch · Einspeisung · Netzbezug | Vergleichstag | kWh/Tag |
+| **Monat** | dieselben 5 **+ Netto-Ertrag (€)** | Vormonat / Vorjahr / Ø-Monat | kWh/Monat |
+| **Jahr/Gesamt** | dieselben 5 + Netto-Ertrag **+ spez. Ertrag (kWh/kWp)** | Vorjahr (Gesamt: —) | kWh / MWh |
+
+Bewusste Schärfung gegenüber „3–4 Zahlen": die testerseitig bewährten **5 Energie-Cards** des Monatsberichts sind der Kanon; der **Finanz-KPI** (Netto-Ertrag, F2-a) kommt als kompakter Teaser **ab Monat** dazu (Tag bleibt strikt IST-Energie — Tages-Finanz wäre verrauscht), **spez. Ertrag** erst auf Jahres-Ebene (Jahres-Effizienzmaß). Mobile: Finanz-Card zuerst einklappbar.
+
+**Live-Spezifik (✅ 2026-06-02):** Live behält bewusst sein heutiges, reiches Layout (Echtzeit-Erstkontakt, eedcs Highlight) und wird nur **lose** ins Skelett eingepasst — kein Neubau: **Hauptblock** = Energiefluss (Fluss-Linse, Default) ⇄ **Tagesverlauf in kW** als Verlauf-Linse-Toggle (nicht als separater Expander); die **„Heute"-Kacheln** (PV/EV/Netzbezug/Einspeisung in kWh + Autarkie/EV-Quote) sind der Live-KPI-Strip und tragen die kWh des laufenden Tages; **Ladezustand (SoC), Temperaturen, Wetter heute/Sonnentags-Fortschritt, 3-Tage-Solar-Vorschau** werden die klapp-/sortierbaren Sektionen (gleiches Sortier-Muster wie die übrigen Zeit-Sichten).
+
 **Werte/Tabelle-Sektion (numerischer Zwilling):** Jede Zeit-Sicht trägt zusätzlich eine **verschiebbare, klappbare „Werte/Tabelle"-Sektion** — der numerische Zwilling des Verlaufs (gleiche Unter-Einheiten als Zeilen: Tag→Stunden, Monat→Tage, Jahr→Monate), mit der Vergleichslogik `[Zeitraum | Vergleichszeitraum | Δ]`. Es ist **dieselbe** Tabellen-Komponente wie in Auswertungen/Tabelle, nur kontext-skaliert (**eine SoT**, kein zweiter Tabellen-Code — wie KPICard B9). **Auswertungen/Tabelle bleibt die volle Werkbank** (alle Komponenten, voller Spalten-Picker, kanonischer CSV); die eingebetteten Sektionen sind scoped Lese-Ausschnitte + Cross-Link „alle Werte / Export →". **Grenze:** ein Vergleichszeitraum wählbar + Spalten-Picker — **keine** freie Mehrfachauswahl beliebiger Jahre/Monate (in #195 verworfen), kein eigener „Vergleich"-Tab. *(Bedient den durchgängigen Wunsch nach Auswertungs-Tabellen im Kontext, aus dem Forum / #195.)*
 
-**Aussicht-Konsolidierung:** Die heutigen Aussichten-Sub-Tabs (Kurzfristig / Prognosen / Langfristig / Trend / Finanzen) werden im Cockpit/Aussicht-Tab zu einer linearen Seite mit Zeit-Horizont-Selektor (7 Tage / 14 Tage / Monat / Jahr) und Sektionen. „Finanzen-Prognose" wandert nach Auswertungen/Finanzen — analytischer Schnitt, gehört dort hin.
+**Aussicht-Konsolidierung (✅ Mapping entschieden 2026-06-02):** Die heutigen 5 Aussichten-Sub-Tabs werden im Cockpit/Aussicht-Tab zu **einer linearen Seite** mit **Horizont-Selektor (7 Tage · 14 Tage · 12 Monate · Mehrjahr)** — der Selektor blendet die passenden Sektionen ein.
+
+| Heute | → Aussicht-Sektion (Horizont) | Anmerkung |
+|---|---|---|
+| **Kurzfristig** | Wetter + PV-Ertragsprognose (7/14 Tage) | direkt |
+| **Prognosen** | Forward-Quellen-Vergleich heute/morgen (kurz) | bleibt in Aussicht |
+| **Langfristig** | Monatsprognose PVGIS + Saison (12 Monate) | direkt |
+| **Trend** | Degradations-*Prognose* (Mehrjahr) | nur der Vorwärts-Teil |
+| **Finanzen** | → **Auswertungen/Finanzen** | raus (F2-a-Linie) |
+
+**Trennlinie (pragmatisch entschieden):** Aussicht = vorwärtsgewandt, aber der **Forward-Quellenvergleich** aus „Prognosen" (inkl. kurzem Genauigkeits-Kontext) bleibt hier — weniger Klick-Sprünge für den Nutzer. Das **vollständige** Genauigkeits-Tracking (MAE/MBE, Wetter-Stratifizierung) bleibt zusätzlich in **Auswertungen/Prognose-vs-IST** (seine kanonische Heimat). Der **historische Rückblick** aus „Trend" (Jahres-/PR-/Degradations-*Analyse* der Vergangenheit) wandert nach **Cockpit/Jahr** bzw. **Auswertungen/Tabelle**; nur die Degradations-*Prognose* bleibt in Aussicht. „Finanzen-Prognose" → **Auswertungen/Finanzen** (analytischer Schnitt).
 
 ### Auflösung der Übersichts-Seite — Inventur-Mapping (2026-06-01)
 
@@ -132,6 +155,22 @@ Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N
 - **Vergleich-Sektion (Saison + Werte):** Die „Vergleich"-Sektion trägt einen **Diagramm ⇄ Tabelle-Umschalter** — *Diagramm* mit Saison-Toggle (Winter/Heizperiode/Sommer) und Wetternormalisierung (Heizgradtage, fairer Mehrjahresvergleich; #195 Punkt 3, primär Wärme/Klima), *Tabelle* = die komponenten-scoped Werte (numerischer Zwilling, eine Tabellen-SoT, siehe Cockpit). Saisonale Mehrjahres-Muster (#110) sind die datengebundene Ausbaustufe.
 - **Energieprofil verschwindet als eigenständige Seite — dreifacher Zielort:** der *anlage-weite* Tagesüberblick → **Cockpit/Tag**; der *komponentenspezifische* Stundenverlauf → „Verlauf im Zeitraum"-Sektion (Strom-Profil PV, Wärme-Profil WP); die *Rohtabelle* → Auswertungen/Tabelle; die **Pflege** (Vollbackfill, Löschen, Reaggregation) → Einstellungen/Daten/Energieprofil-Pflege. **Anzeige ≠ Pflege.**
 - **Komponentenspezifische KPIs** via `lib/komponentenStyle.ts` als SoT (Style-Guide A5 + B9). Erweiterung auf E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage ist Pflicht-Voraussetzung — heute nur WP+Speicher (Disc #163). **Hinweis (2026-05-31):** der SoT wird heute nirgends real konsumiert (Dashboards hardcoden Stil) → A5 zuerst in WP/Speicher einziehen, dann erweitern (sonst toter Code), siehe Style-Guide A5.
+
+**Status-KPIs pro Komponententyp (✅ entschieden 2026-06-02 — Kanon für A5):** Ratifiziert die heute prominenten KPIs je Typ als Soll-Satz für die „Aktueller Status"-Sektion; `komponentenStyle.ts` bekommt die passenden Stil-Records.
+
+| Typ | KPI 1 | KPI 2 | KPI 3 | KPI 4 |
+|---|---|---|---|---|
+| **PV-Anlage** | Anlagenleistung (kWp) | Gesamterzeugung (MWh) | Spez. Ertrag (kWh/kWp) | Eigenverbrauch (%) |
+| **Speicher** | Vollzyklen | Wirkungsgrad η (%) | Durchsatz (MWh) | Ersparnis (€) |
+| **Wärme/Klima** | JAZ | Wärme erzeugt (MWh) | Strom verbraucht (MWh) | Ersparnis vs. Gas (€) |
+| **E-Auto** | Gefahren (km) | Verbrauch (kWh/100km) | PV-Anteil (%) | Ersparnis vs. Benzin (€) |
+| **Wallbox** | Heimladung (MWh) | PV-Anteil (%) | Ladevorgänge | Ersparnis vs. Extern (€) |
+| **BKW** | Erzeugung (kWh) | Eigenverbrauch (%) | Ersparnis (€) | **Spez. Ertrag (kWh/kWp)** |
+| **Sonstiges** | *3 Varianten:* Erzeuger (Erzeugung · EV-Quote · Ersparnis · CO₂→Cross-Link) / Verbraucher (Verbrauch · PV-Anteil · Netzkosten · PV-Ersparnis) / Speicher (Ladung · Entladung · Effizienz · Ersparnis) | | | |
+
+- **BKW achsenrein (2026-06-02):** das heutige CO₂-KPI wird durch **spez. Ertrag** ersetzt — CO₂ ist Wie-Achse und lebt in Auswertungen/CO₂ (Cross-Link bleibt). Pro-Komponente-**Geld**werte (Ersparnis) bleiben als Teaser zulässig (F2-a-Konsequenz 3), nur anlage-weite Finanzen/CO₂ wandern.
+- **Status ≠ Live:** Die Status-KPIs sind **zeitraum-skaliert** (folgen dem Datums-Selektor der Komponenten-Seite). Echte Live-Werte (SoC etc.) erscheinen nur dort, wo Live-Daten existieren.
+- **A5-Umfang:** heute nur WP + Speicher in `komponentenStyle.ts` → **5 Typen + 3 Sonstiges-Varianten** ergänzen.
 
 ---
 
@@ -292,7 +331,7 @@ Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.ts
 | Komponenten-Hub-Seite zu lang auf Mobile | CollapsibleSections mit `defaultOpenMobile={false}` für Verlauf/Vergleich, Sektion „Aktueller Status" bleibt initial offen |
 | HA-Companion-App-Quirks (Sticky-Header, Downloads, `h-dvh`) | Querschnittsregeln aus Mobile-Konzept M4+M5 in Pflicht-Checkliste pro neuer Seite |
 | Tab-Inflation kehrt zurück (Auswertungen hatte 8 Tabs) | Pro Top-Eintrag ≤ 5 Sub-Tabs als Designregel. Tab-Zuwachs braucht explizite Genehmigung in #243 |
-| Community-Top-Eintrag hat heute 6 Sub-Tabs (> 5) | **✅ Entschieden (2026-05-31): konsolidieren auf ≤ 5** (keine Ausnahme) — konkrete Zusammenlegung im Umsetzungs-Design |
+| Community-Top-Eintrag hat heute 6 Sub-Tabs (> 5) | **✅ Entschieden (2026-06-02): „Übersicht" + „Statistiken" zusammenlegen** (beide = globale Community-Kennzahlen + eigene Position) → 5 Tabs: **Übersicht · PV-Ertrag · Komponenten · Regional · Trends**. (2026-05-31: konsolidieren auf ≤ 5, keine Ausnahme.) |
 | Tester sucht das Finanz-T-Konto im Monatsbericht (F2-a verlagert es) | Prominenter Cross-Link aus jeder Zeit-Sicht + „Wo ist X hin?"-Eintrag; Finanz-KPI (Netto-Ertrag, Ersparnis) bleibt im KPI-Strip sichtbar |
 
 ---
