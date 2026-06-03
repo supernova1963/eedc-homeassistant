@@ -724,6 +724,7 @@ async def aggregate_day(
     # Wir loggen Warning + speichern trotzdem — Drift soll sichtbar werden,
     # aber kein Tag soll wegen einer Invariante verloren gehen.
     from backend.core.berechnungen import (
+        pruefe_tep_komponenten_intern_konsistenz,
         pruefe_tep_tz_komponenten_konsistenz,
         pruefe_tep_tz_konsistenz,
     )
@@ -753,6 +754,15 @@ async def aggregate_day(
         if not bericht.konsistent:
             logger.warning(
                 f"Anlage {anlage.id}, {datum}: Komponenten-Drift — {bericht}"
+            )
+    # Achse 2 (#315): Leistungspfad (TEP.komponenten-JSON) vs Zählerpfad
+    # (TEP.*_kw-Spalten) derselben Stunden. Im HA-LTS-Modus ist das die einzige
+    # Prüfung des Leistungs-JSON; im Standalone redundant zur TZ-Prüfung oben.
+    # Warning-level — Step-Integrations-Drift sichtbar machen, kein Tag-Verlust.
+    for bericht in pruefe_tep_komponenten_intern_konsistenz(tep_rows):
+        if not bericht.konsistent:
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Achse-2-Komponenten-Drift — {bericht}"
             )
 
     logger.info(

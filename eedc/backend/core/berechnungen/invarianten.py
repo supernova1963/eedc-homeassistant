@@ -20,6 +20,10 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from backend.core.berechnungen.energie import (
+    BATTERIE_KOMPONENTEN_PREFIXE,
+    PV_KOMPONENTEN_PREFIXE,
+    WAERMEPUMPE_KOMPONENTEN_PREFIXE,
+    WALLBOX_KOMPONENTEN_PREFIXE,
     summe_batterie_netto_kwh,
     summe_pv_bkw_kwh,
     summe_waermepumpe_kwh,
@@ -228,6 +232,123 @@ def assert_tep_tz_komponenten_konsistent(
         tep_rows, tz_komponenten_kwh, toleranz_kwh
     )
     failed = [b for b in berichte if not b.konsistent]
+    if failed:
+        raise AssertionError("\n".join(str(b) for b in failed))
+
+
+# ─── Achse-2-Invariante: TEP-intern Leistungs- vs Zähler-Pfad (Issue #315) ──
+
+
+# Kategorien, deren *_kw-Zählerspalte ein komponenten-JSON-Prefix-Gegenstück hat.
+# `summe_fn` spiegelt EXAKT die Σ-Semantik der TZ-Invariante (PV nur-positiv,
+# Rest signed), damit die Standalone-Redundanz mit `pruefe_tep_tz_komponenten_
+# konsistenz` Bit für Bit gilt. `prefixe` dient nur dem Vorhandensein-Test.
+# Basis (einspeisung/netzbezug) bewusst NICHT enthalten: der Leistungspfad führt
+# Netz als kombinierten, vorzeichenbehafteten `netz`-Key, der Boundary-Pfad als
+# Split einspeisung/netzbezug — diese Konventions-Frage ist Achse 3 (#316), nicht
+# Achse 2, und gehört nicht in diese Prüfung.
+_ACHSE2_KATEGORIEN: tuple[tuple[str, str, tuple[str, ...], callable], ...] = (
+    ("PV+BKW", "pv_kw", PV_KOMPONENTEN_PREFIXE, summe_pv_bkw_kwh),
+    ("Wärmepumpe", "waermepumpe_kw", WAERMEPUMPE_KOMPONENTEN_PREFIXE,
+     summe_waermepumpe_kwh),
+    ("Wallbox+E-Auto", "wallbox_kw", WALLBOX_KOMPONENTEN_PREFIXE,
+     summe_wallbox_eauto_kwh),
+    ("Batterie (netto)", "batterie_kw", BATTERIE_KOMPONENTEN_PREFIXE,
+     summe_batterie_netto_kwh),
+)
+
+
+def _aggregiere_tep_komponenten(tep_rows: Iterable) -> dict[str, float]:
+    """Σ aller stündlichen ``TagesEnergieProfil.komponenten``-Dicts (Leistungs-
+    pfad) zu einem Tages-Dict — Gegenstück zu ``komponenten_kwh`` aus dem
+    Zähler-/Boundary-Pfad, aber aus der W-Integration gespeist."""
+    agg: dict[str, float] = {}
+    for row in tep_rows:
+        komp = getattr(row, "komponenten", None)
+        if not komp:
+            continue
+        for k, v in komp.items():
+            if isinstance(v, (int, float)):
+                agg[k] = agg.get(k, 0.0) + float(v)
+    return agg
+
+
+def pruefe_tep_komponenten_intern_konsistenz(
+    tep_rows: Iterable,
+    toleranz_kwh: float = 0.5,
+) -> list[KonsistenzBericht]:
+    """Achse-2-Drift-Check (Issue #315): pro Tag werden in ``aggregate_day``
+    zwei parallele Stunden-Repräsentationen geschrieben —
+
+    - die typisierten ``*_kw``-Spalten aus den Zähler-Snapshots (Boundary-/
+      Zählerpfad, in v3.35.0/#298 saniert),
+    - das ``komponenten``-JSON aus der W-Integration des Tagesverlaufs
+      (Leistungspfad, nur für die „Sonstiges"-Serien gelesen).
+
+    Im Standalone-Modus deckt die bestehende TZ-Invariante
+    (``pruefe_tep_tz_komponenten_konsistenz``) diese Achse implizit ab, weil
+    ``komponenten_kwh`` dort = Σ Leistungspfad ist. Im HA-LTS-Modus ist
+    ``komponenten_kwh`` = Boundary-Zähler, und das ``komponenten``-JSON wird
+    gegen nichts geprüft — genau diese Lücke schließt diese Invariante
+    (Step-Integrations-Spikes im Leistungspfad würden sonst still bleiben).
+
+    Skip-Semantik: eine Kategorie wird NUR verglichen, wenn **beide** Seiten
+    einen Beitrag haben (``*_kw`` gesetzt UND mindestens ein passender
+    ``komponenten``-Key vorhanden). Sonst gäbe eine nur per Zähler — aber nicht
+    per Leistungs-Serie — gemappte Kategorie ein Falsch-Positiv „Drift gegen 0".
+
+    Diagnose-Invariante (warning-level im Aggregator), keine harte Sperre:
+    Leistungs- und Zählerpfad messen prinzipiell verschieden, die Toleranz
+    fängt Riemann-/Rundungsdrift, größere Abweichung soll sichtbar werden.
+    """
+    tep_rows = list(tep_rows)
+    agg = _aggregiere_tep_komponenten(tep_rows)
+    berichte: list[KonsistenzBericht] = []
+
+    for label, tep_feld, prefixe, summe_fn in _ACHSE2_KATEGORIEN:
+        summe_tep, any_tep = _summe_tep_field(tep_rows, tep_feld)
+        hat_komp_key = any(
+            any(str(k).startswith(p) for p in prefixe) for k in agg
+        )
+        # Nur prüfen, wenn beide Pfade die Kategorie führen (s. Skip-Semantik).
+        if not any_tep or not hat_komp_key:
+            continue
+        summe_komp = summe_fn(agg)
+        abweichung = abs(summe_tep - summe_komp)
+        konsistent = abweichung <= toleranz_kwh
+        berichte.append(
+            KonsistenzBericht(
+                konsistent=konsistent,
+                name=(
+                    f"[Achse2] Σ TagesEnergieProfil.{tep_feld} (Zähler) == "
+                    f"Σ TagesEnergieProfil.komponenten[{label}] (Leistung)"
+                ),
+                erwartet=summe_tep,
+                tatsaechlich=summe_komp,
+                toleranz_kwh=toleranz_kwh,
+                details=(
+                    ""
+                    if konsistent
+                    else "Drift zwischen Zähler-Spalten und Leistungs-JSON "
+                    "derselben Stunden (Achse 2, #315). Mögliche Ursache: "
+                    "Step-Integrations-Spike im Leistungspfad oder Schema-"
+                    "Mismatch (siehe Memory feedback_aggregations_drift)."
+                ),
+            )
+        )
+
+    return berichte
+
+
+def assert_tep_komponenten_intern_konsistent(
+    tep_rows: Iterable,
+    toleranz_kwh: float = 0.5,
+) -> None:
+    """Wirft AssertionError sobald eine Achse-2-Kategorie driftet (für Tests/CI)."""
+    failed = [
+        b for b in pruefe_tep_komponenten_intern_konsistenz(tep_rows, toleranz_kwh)
+        if not b.konsistent
+    ]
     if failed:
         raise AssertionError("\n".join(str(b) for b in failed))
 
