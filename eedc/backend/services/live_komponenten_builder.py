@@ -52,12 +52,33 @@ def build_komponenten(
     # Wallbox-Keys sammeln für E-Auto → Wallbox Zuordnung
     wallbox_keys: list[str] = []
 
-    # Entity-IDs tracken um Duplikate zu erkennen
+    # Entity-IDs tracken um Duplikate zu erkennen. WICHTIG: deterministische
+    # Wallbox-Priorität (analog Tagesverlauf #318: prioritaet wallbox<eauto).
+    # Teilen Wallbox + E-Auto dieselbe `leistung_w`-Entity (gleicher Stromfluss
+    # aus zwei Perspektiven), muss die Wallbox die Entity zuerst beanspruchen —
+    # sonst hing der Dedup an der Dict-Reihenfolge und ein E-Auto-vor-Wallbox-
+    # Setup zählte beide (#314-Folge, Pool-Asymmetrie-Klasse #290/#298/#318).
+    def _dedup_prio(iid: str) -> int:
+        inv = investitionen.get(iid)
+        t = inv.typ if inv else None
+        return 0 if t == "wallbox" else (1 if t == "e-auto" else 2)
+
     used_leistung_eids: dict[str, str] = {}
-    for inv_id, live in inv_live_map.items():
-        eid = live.get("leistung_w")
+    for inv_id in sorted(inv_live_map, key=_dedup_prio):
+        eid = inv_live_map[inv_id].get("leistung_w")
         if eid and eid not in used_leistung_eids:
             used_leistung_eids[eid] = inv_id
+
+    # Gibt es eine Wallbox mit Live-Leistung? Dann werden E-Autos als deren
+    # Kinder gepoolt (parent_key unten) — und genau dann (und nur dann) darf das
+    # E-Auto NICHT separat in summe_verbrauch zählen. Ohne Wallbox (Schuko/
+    # Steckerlader) ist das E-Auto ein eigenständiger Verbraucher und MUSS
+    # gezählt werden, sonst untererfasst summe_verbrauch (086cf70f-Prinzip).
+    hat_wallbox = any(
+        (investitionen.get(iid) and investitionen.get(iid).typ == "wallbox"
+         and vals.get("leistung_w") is not None)
+        for iid, vals in inv_values.items()
+    )
 
     # Per-Investition Komponenten
     for inv_id, values in inv_values.items():
@@ -172,7 +193,11 @@ def build_komponenten(
             })
             if typ == "wallbox":
                 wallbox_keys.append(komp_key)
-            if typ != "e-auto":
+            # E-Auto nur ausschließen, wenn es tatsächlich unter eine Wallbox
+            # gepoolt wird (hat_wallbox → parent_key unten). Ohne Wallbox ist es
+            # ein realer Verbraucher und zählt normal (konsistent mit gesamt_senken,
+            # das nur parent_key-Kinder ausschließt) — #314-Folge.
+            if not (typ == "e-auto" and hat_wallbox):
                 summe_verbrauch += kw
 
         # SoC-Gauge pro Investition
