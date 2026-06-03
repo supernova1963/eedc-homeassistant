@@ -7,6 +7,7 @@ Monatsdaten-Vollständigkeit, Monatsdaten-Plausibilität.
 """
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import Enum
@@ -122,6 +123,28 @@ class DatenCheckResult:
 
 
 # ─── Konstanten ──────────────────────────────────────────────────────────────
+
+# Sprechende Kurz-Labels für Provenance-Quellen (Daten-Checker Detail-Zeile,
+# Safi105 #301). Die technischen Source-Strings aus core/source_priority.py
+# (z. B. "manual:form", "external:cloud_import:fronius_solarweb") sollen dem
+# Anwender als „manuell" / „Cloud-Import (Fronius)" begegnen.
+def _quelle_label(source: str) -> str:
+    s = (source or "").strip()
+    if not s:
+        return ""
+    if s == "repair":
+        return "Reparatur"
+    if s.startswith("manual:"):
+        return "manuell"
+    if s.startswith("external:ha_statistics"):
+        return "HA-Statistik"
+    if s.startswith("external:cloud_import:"):
+        provider = s.split(":")[-1].split("_")[0].capitalize()
+        return f"Cloud-Import ({provider})"
+    if s.startswith("external:"):
+        return s.split(":", 1)[1].replace("_", " ")
+    return s
+
 
 # Theoretisches PV-Maximum pro kWp und Monat (kWh) für Mitteleuropa
 # Großzügig bemessen um False Positives zu vermeiden – obere Grenze
@@ -1820,6 +1843,7 @@ class DatenChecker:
                 DataProvenanceLog.row_pk_json,
                 DataProvenanceLog.field_name,
                 func.count(func.distinct(DataProvenanceLog.source)).label("n_sources"),
+                func.group_concat(DataProvenanceLog.source.distinct()).label("sources"),
             )
             .where(
                 DataProvenanceLog.written_at >= cutoff,
@@ -1841,16 +1865,57 @@ class DatenChecker:
                 meldung=f"Keine Quellen-Konflikte in den letzten {days} Tagen",
             )]
 
-        # Konflikte gruppieren nach Tabelle für die Meldung
-        per_table: dict[str, int] = {}
-        for table_name, _, _, _ in konflikte:
-            per_table[table_name] = per_table.get(table_name, 0) + 1
+        # Detail-Zeile nennt künftig „Feld X im Zeitraum Y (Quelle ↔ Quelle)"
+        # statt nur „1× in monatsdaten" — Safi105 #301: der Anwender will den
+        # konkreten Treffer sehen, um in Einstellungen → Daten gezielt
+        # nachzusehen. row_pk_json trägt den Natural Key (jahr/monat bzw. datum),
+        # group_concat(sources) die beteiligten Schreiber.
+        inv_label = {
+            inv.id: f"{inv.bezeichnung}" for inv in anlage.investitionen
+        }
 
-        details_lines = [
-            f"{count}× in {table_name}"
-            for table_name, count in sorted(per_table.items())
-        ]
-        details = "; ".join(details_lines)
+        def _zeitraum(pk_raw: str) -> str:
+            try:
+                pk = json.loads(pk_raw)
+            except (TypeError, ValueError):
+                return ""
+            if "datum" in pk:
+                stunde = pk.get("stunde")
+                return f"{pk['datum']} {stunde:02d}:00" if stunde is not None else str(pk["datum"])
+            if "jahr" in pk and "monat" in pk:
+                return f"{pk['jahr']}-{pk['monat']:02d}"
+            return ""
+
+        def _kontext(table_name: str, pk_raw: str) -> str:
+            # investition_monatsdaten: Komponenten-Name statt anonymer Tabelle
+            if table_name == "investition_monatsdaten":
+                try:
+                    iid = json.loads(pk_raw).get("investition_id")
+                except (TypeError, ValueError):
+                    iid = None
+                return inv_label.get(iid, "Komponente")
+            return "Monatsdaten" if table_name == "monatsdaten" else "Tagesdaten"
+
+        details_lines = []
+        for table_name, pk_raw, field_name, _n, sources in konflikte:
+            zeitraum = _zeitraum(pk_raw)
+            quellen = " ↔ ".join(
+                _quelle_label(s) for s in sorted((sources or "").split(",")) if s
+            )
+            teile = [_kontext(table_name, pk_raw), field_name]
+            if zeitraum:
+                teile.append(zeitraum)
+            zeile = " · ".join(teile)
+            if quellen:
+                zeile += f" ({quellen})"
+            details_lines.append(zeile)
+
+        # Bei vielen Treffern Liste kürzen, damit der Hinweis lesbar bleibt.
+        MAX_ZEILEN = 15
+        if len(details_lines) > MAX_ZEILEN:
+            rest = len(details_lines) - MAX_ZEILEN
+            details_lines = details_lines[:MAX_ZEILEN] + [f"… und {rest} weitere"]
+        details = "\n".join(details_lines)
 
         return [CheckErgebnis(
             kategorie=kat, schwere=CheckSeverity.INFO.value,
