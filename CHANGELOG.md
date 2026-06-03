@@ -7,6 +7,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.35.1] - 2026-06-03 — QS-Härtung: Abschluss der v3.34/v3.35-Aggregator-Maßnahme
+
+> 🧱 **QS-Sammelrelease.** Schließt die sieben deferred Restarbeiten der v3.34/v3.35-Aggregator-Refactor-Gesamtmaßnahme ab (PLAN §8.1, Issues #315–#319 + zwei interne Befunde) — direkte Audit-Befunde derselben Symmetrie-/Drift-Klasse, bewusst nicht in die Phasen A–C gebündelt. Überwiegend latent oder verhaltensneutral; die anwender-sichtbaren Korrekturen unten betreffen Nischen-Setups. Daily-/Monats-Werte waren durchgehend nicht betroffen. 677 Backend-Tests grün (+39 neu: Achse-2-Invariante, netz-Split-Auflösung, MQTT-Either-Or, M1-Serien-Symmetrie, ADR-001-Erlös-Wächter, kraftstoffpreis-Rettung).
+
+### Fixed
+
+- **Energieprofil-Geräteliste: Netz-Zeile auch bei neuer Netz-Konvention sichtbar (#316, Achse 3):** Seit v3.34.2 schreibt eedc Netzbezug/Einspeisung getrennt (`netzbezug`/`einspeisung`) statt als kombinierten, vorzeichenbehafteten `netz`-Wert. Die Geräteliste + Diagnose-Serien im Energieprofil kannten nur die alte Schreibweise — für Tage seit Phase B fehlte der „Stromnetz"-Eintrag still (bei gemischten Zeiträumen unvollständig). Beide Konventionen werden jetzt konsistent als Netz aufgelöst. Die KPI-Werte (Autarkie, Einspeisung, Netzbezug, Eigenverbrauch) waren nie betroffen — sie kommen aus den typisierten Stundenspalten, nicht aus diesem JSON-Feld.
+- **MQTT-/Standalone-Betrieb: E-Auto-Doppelmapping in der Stunden-Bilanz behoben (#317):** dieselbe Korrektur wie v3.35.0 (#298), jetzt auch für den MQTT-/Docker-Pfad. Ein E-Auto, das über MQTT sowohl `ladung_kwh` als auch `verbrauch_kwh` publiziert (evcc-Bridge), wurde in der Stunden-Bilanz doppelt gezählt. Der MQTT-Pfad nutzt jetzt dieselbe Einmal-Auswahl wie der HA-Pfad — inklusive des bisher fehlenden „E-Auto wird von der Wallbox gemessen"-Skips (`parent_investition_id`). Betrifft nur MQTT-Standalone-Setups mit doppelt publiziertem E-Auto-Zähler; kein Anwenderbericht, vorbeugend.
+
+### Intern (QS, nicht anwender-sichtbar)
+
+- **`kraftstoffpreis_euro` überlebt die Aggregator-Reaggregation (#319):** das extern befüllte Kraftstoffpreis-Feld fiel beim Delete-and-Recreate eines Tages heraus (bis zum nächsten Preis-Lauf). Jetzt über eine eigene Rettungs-Liste geschützt — dieselbe Mechanik wie die Prognose-Felder, bewusst getrennt vom Wetter-Endpoint-Vertrag (K1).
+- **Achse-2-Drift-Invariante (#315):** neue Diagnose-Invariante macht eine etwaige Drift zwischen dem Leistungs-JSON (`TEP.komponenten`) und den Zähler-Spalten (`TEP.*_kw`) derselben Stunden im HA-LTS-Modus sichtbar (Warning-Level, kein Tag-Verlust). Im Standalone bereits implizit abgedeckt.
+- **Geteilte Tagesverlauf-Serien-Quelle backfill ↔ live (#318, M1):** der Serien-Aufbau (inkl. Pool-Dedup #227) lag zweimal parallel vor; der Pool-Dedup lief nur im Live-Pfad. Damit konnte derselbe Tag je nach Trigger (Scheduler vs. Backfill) leicht abweichende Komponenten-/Peak-Werte erzeugen. Beide laufen jetzt über eine gemeinsame Quelle, abgesichert durch Symmetrie-Test + Re-Divergenz-Wächter.
+- **Einspeise-Erlös durchgängig über die Single-Source (M3, ADR-001):** fünf Stellen rechneten den Erlös inline (`einspeisung × vergütung / 100`) und umgingen damit den §51-Negativpreis-Abzug; alle auf `einspeise_erloes_euro()` migriert (verhaltensneutral — Projektionen ohne Negativpreis-Kontext). Ein Konformitäts-Test blockiert künftige Inline-Duplikate.
+- **Preserve-Logik-Verifikation:** geprüft, ob das v3.33.0-Snapshot-Self-Healing den Reaggregations-Schutz im TZ-Aggregator überflüssig macht — Ergebnis nein (Self-Healing braucht HA-Erreichbarkeit, die in der geschützten Konstellation fehlt). Begründung im Code gehärtet, keine Verhaltensänderung.
+
 ## [3.35.0] - 2026-06-03 — Stunden-Aggregation: E-Auto-Doppelmapping strukturell behoben (Phase C)
 
 > 🧱 **QS-Refactor (Phase C des v3.34-Refactors, Issue #298).** Strukturelle Auflösung einer latenten Doppelzählung in der **Stunden**-Energiebilanz — die letzte offene Achse der in v3.33.0/v3.34.x sanierten Aggregator-Symmetrie. Anwender-sichtbare Korrektur **nur** für E-Auto-Setups mit doppelt gemapptem Gesamt-Zähler (siehe unten). Daily-/Monats-Werte waren nie betroffen. 639 Backend-Tests grün (+32 neu: S3-Symmetrie, K3-Konformität, Reload-Vorschau).
