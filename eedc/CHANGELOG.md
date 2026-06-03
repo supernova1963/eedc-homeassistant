@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.35.0] - 2026-06-03 — Stunden-Aggregation: E-Auto-Doppelmapping strukturell behoben (Phase C)
+
+> 🧱 **QS-Refactor (Phase C des v3.34-Refactors, Issue #298).** Strukturelle Auflösung einer latenten Doppelzählung in der **Stunden**-Energiebilanz — die letzte offene Achse der in v3.33.0/v3.34.x sanierten Aggregator-Symmetrie. Anwender-sichtbare Korrektur **nur** für E-Auto-Setups mit doppelt gemapptem Gesamt-Zähler (siehe unten). Daily-/Monats-Werte waren nie betroffen. 639 Backend-Tests grün (+32 neu: S3-Symmetrie, K3-Konformität, Reload-Vorschau).
+
+### Fixed
+
+- **E-Auto-Doppelmapping in der Stunden-Aggregation strukturell behoben (#298, Anlass #262 junky84/evcc):** Misst dein E-Auto-Sensor den Gesamtverbrauch über **zwei** Felder gleichzeitig (`verbrauch_kwh` **und** `ladung_kwh`, typisch bei evcc-Importen), wurden die Stunden-Werte des E-Autos bisher **doppelt** gezählt — die Stundentab-/Heatmap-Sicht und der daraus abgeleitete Stunden-Eigenverbrauch lagen für diese Anlagen zu hoch. Der **Tages-/Monats**-Pfad war seit v3.33.0 korrekt (Either-Or-Auswahl), nur die Stunden-Lese-Pfade riefen den Kategorisierer noch roh pro Feld auf. Alle **drei** Roh-Konsumenten (beide Stunden-Aggregatoren + die Reload-Vorschau „Tag neu berechnen") konsumieren jetzt **dieselbe** Normalisierung wie der Tagespfad (`komponenten_beitraege`) — doppelt gemappte Zähler werden einmalig zentral aufgelöst, inklusive des bisher im Stundenpfad fehlenden „E-Auto wird von der Wallbox gemessen"-Skips (`parent_investition_id`). Betroffene Anlagen sehen ihre Stunden-Werte beim nächsten Aggregat-Lauf korrigiert (Halbierung der verdoppelten E-Auto-Werte); die Reload-Vorschau zeigt jetzt denselben (korrekten) Wert wie das Reload-Ergebnis.
+
+### Intern (QS, nicht anwender-sichtbar)
+
+- **Eine Either-Or-Auflösung für alle drei Stunden-Counter-Konsumenten:** die Tages-Ebenen-Auflösung (pro `fallback_gruppe` gewinnt der erste Sensor mit Tagesdaten) liegt jetzt in einem geteilten Helfer (`resolve_either_or_eintraege`) statt dreimal inline — kein Drift-Vektor zwischen den parallelen Pfaden mehr.
+- **Symmetrie-Test S3 + Konformitäts-Test K3 (ADR-001-Pflicht):** S3 prüft parametrisiert über alle Per-Typ-Konstellationen, dass die Summe der 24 Stunden-Slots dem Tages-Boundary entspricht (deckt neben dem #298-Doppelmapping auch den parent-Skip und die Sonstiges-Either-Or-Symmetrie ab — alle vier brachen ohne die Migration) plus eine DB-gestützte Reload-Vorschau-Probe. K3 pinnt strukturell, dass die Stunden-Normalisierung eine faithful projection des Tages-SoT ist und kein Sensor zweimal kategorisiert wird. Damit kann der Stundenpfad nicht erneut gegen den Tagespfad driften.
+- **Realdaten-Validierung (Stufe-1-Harness, Winterborn-HA-LTS):** synthetisches Doppelmapping auf zwei reale kWh-Counter zeigt im echten Lesepfad Σ Hourly 69 → 39 kWh (== Tages-Boundary) vor/nach der Migration.
+
 ## [3.34.7] - 2026-06-02 — EcoFlow-Import überlappungsfrei + E-Auto-Monatstabelle mit Wallbox-Pool
 
 > 🩹 **Patch-Release:** zwei unabhängige single-purpose Fixes (Read- bzw. Import-Pfad). **Kein** Fix berührt den v3.34-Aggregator-Schreibpfad (Hourly-`_categorize_counter`, Phase-C-Counter unberührt). Je Fix Regressionstest grün, Frontend-Typecheck grün.
