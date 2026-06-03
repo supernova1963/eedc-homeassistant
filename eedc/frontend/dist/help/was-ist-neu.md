@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.35.0)
+> **Stand:** Juni 2026 (v3.35.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -8,6 +8,14 @@
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
 
 ---
+
+## v3.35.1 — Qualitäts-Härtung (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Stabilitäts-Release ohne neue Funktionen.** Diese Version schließt eine Reihe interner Aufräum- und Absicherungsarbeiten ab, die hinter den letzten Aggregator-Verbesserungen noch offen waren. Für die allermeisten Anlagen ändert sich nichts Sichtbares — die Werte bleiben gleich, nur abgesichert gegen seltene Drift-Fälle.
+- **Energieprofil-Geräteliste: „Stromnetz" erscheint wieder zuverlässig.** Auf der Energieprofil-Seite konnte die Netz-Zeile in der Geräte-/Diagnoseliste für neuere Tage fehlen (seit der Umstellung auf getrennten Netzbezug/Einspeisung). Sie wird jetzt für alte und neue Tage einheitlich angezeigt. Die Kennzahlen oben (Autarkie, Einspeisung, Netzbezug) waren nie betroffen.
+- **MQTT-/Standalone-Betrieb: E-Auto-Doppelzählung in der Stunden-Ansicht behoben.** Die in v3.35.0 für HA-Setups behobene E-Auto-Doppelzählung (Zähler über zwei Felder) greift jetzt auch im MQTT-/Docker-Betrieb. Betrifft nur diese spezielle Doppel-Konfiguration.
 
 ## v3.35.0 — E-Auto-Stundenwerte bei doppelt erfasstem Zähler korrigiert (Juni 2026)
 
