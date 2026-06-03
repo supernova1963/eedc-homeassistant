@@ -17,7 +17,7 @@
 
 ## Was ist eedc?
 
-**eedc** (Energie Effizienz Data Center) ist eine lokale Anwendung zur umfassenden Auswertung und Wirtschaftlichkeitsanalyse von Photovoltaik-Anlagen. Die Software läuft standalone oder als Home Assistant Add-on und speichert alle Daten lokal.
+**eedc** (Energie Effizienz Data Center) ist eine lokale Anwendung zur umfassenden Auswertung und Wirtschaftlichkeitsanalyse von Photovoltaik-Anlagen. Die Software läuft standalone oder als Home Assistant App und speichert alle Daten lokal.
 
 ### Warum eedc?
 
@@ -54,7 +54,7 @@ eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachs
 
 ### MQTT-Gateway – Geräte direkt anbinden
 
-- **Topic-Translator** – Eigene MQTT-Topics von Shelly, OpenDTU, Tasmota und Co. auf EEDC-Felder mappen
+- **Topic-Translator** – Eigene MQTT-Topics von Shelly, OpenDTU, Tasmota und Co. auf eedc-Felder mappen
 - **Geräte-Presets** – Vordefinierte Mappings für gängige Geräte (Shelly, OpenDTU, Tasmota, ...)
 - **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota, EcoFlow
 
@@ -84,11 +84,11 @@ eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachs
 
 - **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
 - **Kurzfrist-Prognose** mit Wetter-Daten (Open-Meteo) und mehreren Wettermodellen (MeteoSwiss ICON-CH2, ICON-D2, ICON-EU, ECMWF IFS, auto)
-- **Solar Forecast ML (SFML)** – KI-basierter Ertragsprognose-Vergleich: EEDC vs. SFML vs. IST
+- **Solar Forecast ML (SFML)** – KI-basierter Ertragsprognose-Vergleich: eedc vs. SFML vs. IST
 - **Langfrist-Prognose** mit PVGIS-Daten und Performance-Ratio
 - **Trend-Analyse** mit Degradationsberechnung und saisonalen Mustern
 
-### Datenerfassung – Viele Wege führen nach EEDC
+### Datenerfassung – Viele Wege führen nach eedc
 
 - **HA-Statistik** – Direkt aus der HA Recorder-Langzeitstatistik (SQLite **und MariaDB/MySQL**)
 - **Cloud-Import** – SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow PowerOcean
@@ -135,7 +135,7 @@ eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachs
    ```
    https://github.com/supernova1963/eedc-homeassistant
    ```
-2. Add-on "EEDC" installieren und starten
+2. Add-on "eedc" installieren und starten
 3. Über die Sidebar öffnen
 
 ### Option 2: Standalone mit Docker
@@ -235,11 +235,11 @@ Detaillierte Analysen in 7 Kategorien:
 
 ## Home Assistant Integration
 
-EEDC bietet flexible Home Assistant Integration mit mehreren Ansätzen:
+eedc bietet flexible Home Assistant Integration mit mehreren Ansätzen:
 
 ### Sensor-Mapping (Empfohlen)
 
-Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den EEDC-Feldern zu:
+Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den eedc-Feldern zu:
 - Basis-Sensoren: PV-Erzeugung, Einspeisung, Netzbezug, Außentemperatur
 - PV-Module: Pro String oder kWp-Verteilung
 - Speicher: Ladung, Entladung, Netz-Ladung
