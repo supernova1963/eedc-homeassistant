@@ -24,10 +24,14 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 from backend.services.ha_statistics_service import get_ha_statistics_service
 
 from backend.services.snapshot.keys import (
-    BASIS_ZAEHLER_FELDER,
     KUMULATIVE_COUNTER_FELDER,
     _categorize_counter,
     _mqtt_key_to_sensor_key,
+)
+from backend.services.snapshot.komponenten_beitraege import (
+    basis_hourly_eintraege,
+    investition_hourly_eintraege,
+    resolve_either_or_eintraege,
 )
 from backend.services.snapshot.writer import snapshot_anlage, snapshot_anlage_5min
 
@@ -78,21 +82,25 @@ async def get_reaggregate_preview(
     """
     sensor_mapping = anlage.sensor_mapping or {}
 
-    # Counter-Entries sammeln (gleiche Logik wie get_hourly_kwh_by_category)
-    eintraege: list[tuple[str, Optional[str], str]] = []
+    # Counter-Entries sammeln — Feld-Auswahl (Whitelist + Either-Or +
+    # parent-Skip) über DIESELBE Normalisierung wie die beiden Hourly-
+    # Aggregatoren (Issue #298, Audit-§6.2, Pattern-Klasse
+    # [[feedback_aggregator_symmetrie]]). Die Vorschau-Tabelle zeigte vorher für
+    # doppelt gemappte E-Autos (`verbrauch_kwh` + `ladung_kwh`, evcc/#262)
+    # verdoppelte Tagesummen — die Either-Or-Auflösung unten räumt das pro
+    # Spalte (alt/neu) auf, deckungsgleich mit dem späteren Reload-Schreibwert.
+    eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
     seen_keys: set[str] = set()
 
     basis = sensor_mapping.get("basis", {}) or {}
-    for feld in BASIS_ZAEHLER_FELDER:
-        config = basis.get(feld)
-        if isinstance(config, dict) and config.get("strategie") == "sensor":
-            eid = config.get("sensor_id")
+    for he in basis_hourly_eintraege(sensor_mapping):
+        cfg = basis.get(he.feld)
+        if isinstance(cfg, dict):
+            eid = cfg.get("sensor_id")
             if eid:
-                kat = _categorize_counter(feld, None, None)
-                if kat:
-                    sk = f"basis:{feld}"
-                    eintraege.append((sk, eid, kat))
-                    seen_keys.add(sk)
+                sk = f"basis:{he.feld}"
+                eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
+                seen_keys.add(sk)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -102,17 +110,14 @@ async def get_reaggregate_preview(
         if inv is None:
             continue
         felder = inv_data.get("felder", {}) or {}
-        for feld, config in felder.items():
-            if not isinstance(config, dict) or config.get("strategie") != "sensor":
-                continue
-            eid = config.get("sensor_id")
-            if not eid:
-                continue
-            kat = _categorize_counter(feld, inv.typ, inv.parameter)
-            if kat:
-                sk = f"inv:{inv_id_str}:{feld}"
-                eintraege.append((sk, eid, kat))
-                seen_keys.add(sk)
+        for he in investition_hourly_eintraege(inv, inv_data):
+            cfg = felder.get(he.feld)
+            if isinstance(cfg, dict):
+                eid = cfg.get("sensor_id")
+                if eid:
+                    sk = f"inv:{inv_id_str}:{he.feld}"
+                    eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
+                    seen_keys.add(sk)
 
     cutoff = datetime.now() - timedelta(days=7)
     mqtt_keys_result = await db.execute(
@@ -141,7 +146,9 @@ async def get_reaggregate_preview(
         else:
             continue
         if kat:
-            eintraege.append((sk, None, kat))
+            # MQTT-Standalone hat keinen Either-Or-Partner (gruppe=None) — gleiche
+            # bewusste Restklasse wie im Snapshot-Hourly-Pfad (Anti-Bündelung).
+            eintraege.append((sk, None, kat, None))
             seen_keys.add(sk)
 
     ha_svc = get_ha_statistics_service()
@@ -154,10 +161,10 @@ async def get_reaggregate_preview(
     # h=-1 ist Vortag 23:00 (Slot-0-Boundary), h=24 ist Folgetag 00:00 (für etwaige
     # Folgetags-Slot-0-Berechnung — aber primär brauchen wir h=-1..23 für Slot 0..23).
     # Wir liefern 25 Boundaries (h=-1..23), das deckt Slot 0..23 ab.
-    snap_alt: dict[str, dict[int, Optional[float]]] = {sk: {} for sk, _, _ in eintraege}
-    snap_neu: dict[str, dict[int, Optional[float]]] = {sk: {} for sk, _, _ in eintraege}
+    snap_alt: dict[str, dict[int, Optional[float]]] = {sk: {} for sk, _, _, _ in eintraege}
+    snap_neu: dict[str, dict[int, Optional[float]]] = {sk: {} for sk, _, _, _ in eintraege}
 
-    for sensor_key, entity_id, kat in eintraege:
+    for sensor_key, entity_id, kat, _grp in eintraege:
         for h in range(-1, 24):
             zp = tag_0 + timedelta(hours=h)
             # alt: DB-Lookup (toleranz 5min)
@@ -193,19 +200,38 @@ async def get_reaggregate_preview(
                 "neu_kwh": neu,
             })
 
+    # Either-Or-Auflösung pro Spalte (alt/neu) auf Tages-Ebene (Issue #298):
+    # ein doppelt gemappter Zähler (E-Auto `verbrauch_kwh` + `ladung_kwh`,
+    # Sonstiges-Hybrid) zählt sonst doppelt in die Tagesumme. Alt und neu
+    # werden getrennt aufgelöst, weil ihre Sensor-Verfügbarkeit unterschiedlich
+    # sein kann; jede Spalte ist damit deckungsgleich mit dem späteren Reload-
+    # Schreibwert (aggregate_day nutzt dieselbe Normalisierung). Die per-Sensor
+    # `boundaries`-Detailliste oben bleibt vollständig (Diagnose).
+    def _hat_tagesdaten(snaps: dict, sk: str) -> bool:
+        s = snaps.get(sk, {})
+        return any(
+            s.get(h - 1) is not None and s.get(h) is not None for h in range(24)
+        )
+
+    eintraege_alt = resolve_either_or_eintraege(
+        eintraege, lambda e: e[3], lambda e: _hat_tagesdaten(snap_alt, e[0]))
+    eintraege_neu = resolve_either_or_eintraege(
+        eintraege, lambda e: e[3], lambda e: _hat_tagesdaten(snap_neu, e[0]))
+
     # Slot-Deltas aggregieren pro Kategorie (alt und neu getrennt)
     slot_deltas: list[dict] = []
     tagesumme_alt: dict[str, Optional[float]] = {}
     tagesumme_neu: dict[str, Optional[float]] = {}
 
-    # alle Kategorien sammeln, die in eintraege vorkommen
-    alle_kategorien = sorted({kat for _, _, kat in eintraege})
+    # alle Kategorien, die nach der Either-Or-Auflösung tatsächlich vorkommen
+    alle_kategorien = sorted(
+        {kat for _, _, kat, _ in eintraege_alt} | {kat for _, _, kat, _ in eintraege_neu}
+    )
 
     for h in range(24):
         per_kat_alt: dict[str, Optional[float]] = {}
         per_kat_neu: dict[str, Optional[float]] = {}
-        for sensor_key, _eid, kat in eintraege:
-            # alt-Delta
+        for sensor_key, _eid, kat, _grp in eintraege_alt:
             a0 = snap_alt[sensor_key].get(h - 1)
             a1 = snap_alt[sensor_key].get(h)
             if a0 is not None and a1 is not None:
@@ -215,7 +241,7 @@ async def get_reaggregate_preview(
                 if d >= -0.01:
                     d = max(0.0, d)
                     per_kat_alt[kat] = (per_kat_alt.get(kat) or 0.0) + d
-            # neu-Delta
+        for sensor_key, _eid, kat, _grp in eintraege_neu:
             n0 = snap_neu[sensor_key].get(h - 1)
             n1 = snap_neu[sensor_key].get(h)
             if n0 is not None and n1 is not None:

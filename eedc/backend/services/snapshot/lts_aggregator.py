@@ -27,13 +27,12 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.ha_statistics_service import get_ha_statistics_service
-from backend.services.snapshot.keys import (
-    BASIS_ZAEHLER_FELDER,
-    _categorize_counter,
-)
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
+    basis_hourly_eintraege,
     investition_beitraege,
+    investition_hourly_eintraege,
+    resolve_either_or_eintraege,
 )
 from backend.services.snapshot.plausibility import (
     cap_pv_einspeisung_stunde,
@@ -69,20 +68,23 @@ async def get_hourly_kwh_by_category_lts(
 
     sensor_mapping = anlage.sensor_mapping or {}
 
-    # Sensor-Mapping durchgehen: (entity_id, kategorie) pro Counter-Feld.
-    # Anders als bei der Snapshot-Variante: HA-LTS hat keine MQTT-Zähler,
-    # also nur HA-gemappte Sensoren.
-    eintraege: list[tuple[str, str]] = []  # (entity_id, kategorie)
+    # Sensor-Mapping durchgehen: (entity_id, kategorie, fallback_gruppe) pro
+    # Counter-Feld. Die Feld-Auswahl (Whitelist + Either-Or + parent-Skip)
+    # kommt aus DERSELBEN Normalisierung wie der Daily-Pfad
+    # (`investition_hourly_eintraege`/`basis_hourly_eintraege`), nicht mehr aus
+    # rohen `_categorize_counter`-Aufrufen pro Feld — Issue #298 (Audit-§6.2,
+    # Pattern-Klasse [[feedback_aggregator_symmetrie]]). Anders als bei der
+    # Snapshot-Variante: HA-LTS hat keine MQTT-Zähler, also nur HA-gemappte
+    # Sensoren.
+    eintraege: list[tuple[str, str, Optional[str]]] = []  # (entity_id, kategorie, gruppe)
 
     basis = sensor_mapping.get("basis", {}) or {}
-    for feld in BASIS_ZAEHLER_FELDER:
-        config = basis.get(feld)
-        if isinstance(config, dict) and config.get("strategie") == "sensor":
-            eid = config.get("sensor_id")
+    for he in basis_hourly_eintraege(sensor_mapping):
+        cfg = basis.get(he.feld)
+        if isinstance(cfg, dict):
+            eid = cfg.get("sensor_id")
             if eid:
-                kat = _categorize_counter(feld, None, None)
-                if kat:
-                    eintraege.append((eid, kat))
+                eintraege.append((eid, he.kategorie, he.fallback_gruppe))
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -92,15 +94,12 @@ async def get_hourly_kwh_by_category_lts(
         if inv is None:
             continue
         felder = inv_data.get("felder", {}) or {}
-        for feld, config in felder.items():
-            if not isinstance(config, dict) or config.get("strategie") != "sensor":
-                continue
-            eid = config.get("sensor_id")
-            if not eid:
-                continue
-            kat = _categorize_counter(feld, inv.typ, inv.parameter)
-            if kat:
-                eintraege.append((eid, kat))
+        for he in investition_hourly_eintraege(inv, inv_data):
+            cfg = felder.get(he.feld)
+            if isinstance(cfg, dict):
+                eid = cfg.get("sensor_id")
+                if eid:
+                    eintraege.append((eid, he.kategorie, he.fallback_gruppe))
 
     if not eintraege:
         return {}
@@ -109,17 +108,32 @@ async def get_hourly_kwh_by_category_lts(
     # `ha_svc.get_hourly_kwh_deltas_for_day` ist synchron (SQL-Engine ist
     # connection-pool-basiert); im async-Kontext akzeptabel als Inline-Call,
     # weil es eine kurze Read-Operation ist.
-    sensor_ids = list({eid for eid, _kat in eintraege})
+    sensor_ids = list({eid for eid, _kat, _grp in eintraege})
     deltas = ha_svc.get_hourly_kwh_deltas_for_day(sensor_ids, datum)
 
     if not deltas:
         return {}
 
+    # Either-Or-Auflösung auf TAGES-Ebene (vor der Stunden-Summierung), damit
+    # Σ Hourly == Tages-Boundary bleibt: pro fallback_gruppe gewinnt der erste
+    # Eintrag, dessen Sensor überhaupt Tagesdaten hat — identisch zu
+    # `get_komponenten_tageskwh_lts` (Z. 284-292). Stunden-weise Auflösung
+    # würde die Symmetrie brechen, wenn der primäre Sensor nur zeitweise misst.
+    def _hat_tagesdaten(eid: str) -> bool:
+        slots = deltas.get(eid)
+        return bool(slots) and any(v is not None for v in slots.values())
+
+    eintraege = resolve_either_or_eintraege(
+        eintraege,
+        gruppe_fn=lambda e: e[2],            # (eid, kat, gruppe)
+        hat_tagesdaten_fn=lambda e: _hat_tagesdaten(e[0]),
+    )
+
     # Per-Stunde-Kategorie-Aggregation
     result_kat: dict[int, dict[str, Optional[float]]] = {h: {} for h in range(24)}
     for h in range(24):
         per_kat: dict[str, Optional[float]] = {}
-        for eid, kat in eintraege:
+        for eid, kat, _grp in eintraege:
             slot_delta = deltas.get(eid, {}).get(h)
             if slot_delta is None:
                 continue

@@ -291,6 +291,32 @@ def _setup_eauto_fallback_verbrauch():
     return sm, invs, deltas, sk_map
 
 
+def _setup_eauto_verbrauch_und_ladung():
+    """#298 (junky84/evcc): E-Auto mit BEIDEN Gesamt-Zählern `ladung_kwh` UND
+    `verbrauch_kwh` gemappt. Beide mappt `_categorize_counter` auf
+    `verbrauch_eauto` → der alte rohe Hourly-Pfad summierte sie doppelt,
+    während der Daily-Pfad via Either-Or nur `ladung_kwh` (primary) nahm.
+    Energie nur in Stunden 0..22 (h23=0), damit Σ über die Backward-Slots des
+    Snapshot-Pfads window-deckungsgleich mit dem Daily-Total ist (S3-Snapshot).
+    """
+    sm = {"basis": {}, "investitionen": {
+        "1": {"felder": {
+            "ladung_kwh": _sensor("sensor.ea_ladung"),
+            "verbrauch_kwh": _sensor("sensor.ea_verbrauch"),
+        }},
+    }}
+    invs = {"1": _make_inv(1, "e-auto")}
+    deltas = {
+        "sensor.ea_ladung": {h: (1.0 if h < 23 else 0.0) for h in range(24)},      # 23.0 primary
+        "sensor.ea_verbrauch": {h: (0.9 if h < 23 else 0.0) for h in range(24)},   # 20.7 darf NICHT addiert
+    }
+    sk_map = {
+        _sensor_key_for_feld("ladung_kwh", "1"): "sensor.ea_ladung",
+        _sensor_key_for_feld("verbrauch_kwh", "1"): "sensor.ea_verbrauch",
+    }
+    return sm, invs, deltas, sk_map
+
+
 def _setup_sonstiges_verbraucher_doppelt():
     """Hybridgerät: erzeugung + verbrauch gemappt — nur primary zählt."""
     sm = {"basis": {}, "investitionen": {
@@ -395,6 +421,7 @@ SETUPS = {
     "eauto_mit_split": _setup_eauto_mit_split,
     "eauto_mit_parent_wallbox": _setup_eauto_mit_parent_wallbox,
     "eauto_fallback_verbrauch": _setup_eauto_fallback_verbrauch,
+    "eauto_verbrauch_und_ladung": _setup_eauto_verbrauch_und_ladung,
     "sonstiges_verbraucher_doppelt": _setup_sonstiges_verbraucher_doppelt,
     "sonstiges_erzeuger_doppelt": _setup_sonstiges_erzeuger_doppelt,
     "sonstiges_erzeuger_nur_fallback": _setup_sonstiges_erzeuger_nur_fallback,

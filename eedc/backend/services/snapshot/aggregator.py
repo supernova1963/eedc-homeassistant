@@ -26,14 +26,16 @@ from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 
 from backend.services.snapshot.boundary_range import BoundaryRange
 from backend.services.snapshot.keys import (
-    BASIS_ZAEHLER_FELDER,
     KUMULATIVE_COUNTER_FELDER,
     _categorize_counter,
     _mqtt_key_to_sensor_key,
 )
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
+    basis_hourly_eintraege,
     investition_beitraege,
+    investition_hourly_eintraege,
+    resolve_either_or_eintraege,
 )
 from backend.services.snapshot.plausibility import (
     cap_pv_einspeisung_stunde,
@@ -101,23 +103,27 @@ async def get_hourly_kwh_by_category(
     sensor_mapping = anlage.sensor_mapping or {}
 
     # 1. Zähler-Entities sammeln mit Kategorien
-    # (sensor_key, entity_id | None, kategorie)
+    # (sensor_key, entity_id | None, kategorie, fallback_gruppe)
     # entity_id=None bei reinen MQTT-Quellen (Standalone/Docker-Modus)
-    eintraege: list[tuple[str, Optional[str], str]] = []
+    eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
     seen_keys: set[str] = set()
 
-    # 1a. HA-gemappte Zähler aus sensor_mapping
+    # 1a. HA-gemappte Zähler aus sensor_mapping — Feld-Auswahl (Whitelist +
+    # Either-Or + parent-Skip) über DIESELBE Normalisierung wie der Daily-Pfad
+    # (`*_hourly_eintraege`), nicht mehr über rohe `_categorize_counter`-
+    # Aufrufe. Issue #298 (Audit-§6.2, Pattern-Klasse
+    # [[feedback_aggregator_symmetrie]]): ein doppelt gemappter E-Auto-Zähler
+    # (`verbrauch_kwh` + `ladung_kwh`) wird in der Either-Or-Gruppe aufgelöst
+    # statt doppelt summiert.
     basis = sensor_mapping.get("basis", {}) or {}
-    for feld in BASIS_ZAEHLER_FELDER:
-        config = basis.get(feld)
-        if isinstance(config, dict) and config.get("strategie") == "sensor":
-            eid = config.get("sensor_id")
+    for he in basis_hourly_eintraege(sensor_mapping):
+        cfg = basis.get(he.feld)
+        if isinstance(cfg, dict):
+            eid = cfg.get("sensor_id")
             if eid:
-                kat = _categorize_counter(feld, None, None)
-                if kat:
-                    sk = f"basis:{feld}"
-                    eintraege.append((sk, eid, kat))
-                    seen_keys.add(sk)
+                sk = f"basis:{he.feld}"
+                eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
+                seen_keys.add(sk)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -127,17 +133,14 @@ async def get_hourly_kwh_by_category(
         if inv is None:
             continue
         felder = inv_data.get("felder", {}) or {}
-        for feld, config in felder.items():
-            if not isinstance(config, dict) or config.get("strategie") != "sensor":
-                continue
-            eid = config.get("sensor_id")
-            if not eid:
-                continue
-            kat = _categorize_counter(feld, inv.typ, inv.parameter)
-            if kat:
-                sk = f"inv:{inv_id_str}:{feld}"
-                eintraege.append((sk, eid, kat))
-                seen_keys.add(sk)
+        for he in investition_hourly_eintraege(inv, inv_data):
+            cfg = felder.get(he.feld)
+            if isinstance(cfg, dict):
+                eid = cfg.get("sensor_id")
+                if eid:
+                    sk = f"inv:{inv_id_str}:{he.feld}"
+                    eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
+                    seen_keys.add(sk)
 
     # 1b. MQTT-gespeiste Zähler (Standalone/Docker-Modus ohne HA-Integration).
     # Enumeriert Keys die in mqtt_energy_snapshots für diese Anlage vorkommen
@@ -157,7 +160,12 @@ async def get_hourly_kwh_by_category(
         sk = _mqtt_key_to_sensor_key(mqtt_key)
         if not sk or sk in seen_keys:
             continue
-        # Kategorie herleiten: für basis-Keys direkt, für inv-Keys via typ-Lookup
+        # Kategorie herleiten: für basis-Keys direkt, für inv-Keys via typ-Lookup.
+        # MQTT-Standalone hat keinen Daily-Symmetrie-Partner (get_komponenten_
+        # tageskwh deckt nur sensor-Strategie ab) → bewusst KEINE Either-Or-
+        # Normalisierung hier (Anti-Bündelung [[feedback_release_bundling]]);
+        # die #298-Doppelmapping-Auflösung greift im HA-gemappten Pfad oben.
+        # MQTT-Doppelmapping als latente Restklasse separat getrackt.
         if sk.startswith("basis:"):
             feld = sk.split(":", 1)[1]
             kat = _categorize_counter(feld, None, None)
@@ -170,7 +178,7 @@ async def get_hourly_kwh_by_category(
         else:
             continue
         if kat:
-            eintraege.append((sk, None, kat))  # entity_id=None → MQTT-Fallback
+            eintraege.append((sk, None, kat, None))  # entity_id=None → MQTT-Fallback
             seen_keys.add(sk)
 
     if not eintraege:
@@ -186,7 +194,7 @@ async def get_hourly_kwh_by_category(
 
     # pro sensor_key: {boundary_offset: wert}
     snaps: dict[str, dict[int, Optional[float]]] = {}
-    for sensor_key, entity_id, _kat in eintraege:
+    for sensor_key, entity_id, _kat, _grp in eintraege:
         snaps[sensor_key] = {}
         for offset in rng.boundary_offsets:
             ts = rng.boundary_at(offset)
@@ -203,11 +211,30 @@ async def get_hourly_kwh_by_category(
     for sensor_key in snaps:
         _fill_gaps_linear(snaps[sensor_key])
 
+    # 2c. Either-Or-Auflösung auf TAGES-Ebene (Issue #298): pro fallback_gruppe
+    # gewinnt der erste Eintrag, dessen Sensor an irgendeinem Slot ein
+    # vollständiges Delta-Paar liefert — identisch zur Daily-Auflösung in
+    # `get_komponenten_tageskwh._apply_beitraege`. Tages-Ebene (nicht pro
+    # Stunde), damit die Wahl über alle 24 Stunden stabil bleibt. MQTT-Einträge
+    # (fallback_gruppe=None) bleiben unberührt.
+    def _hat_tagesdaten(sensor_key: str) -> bool:
+        s = snaps.get(sensor_key, {})
+        return any(
+            s.get(prev_off) is not None and s.get(curr_off) is not None
+            for _slot, prev_off, curr_off in rng.slot_pairs
+        )
+
+    eintraege = resolve_either_or_eintraege(
+        eintraege,
+        gruppe_fn=lambda e: e[3],            # (sensor_key, eid, kat, gruppe)
+        hat_tagesdaten_fn=lambda e: _hat_tagesdaten(e[0]),
+    )
+
     # 3. Deltas pro Stunde und Kategorie summieren (Backward-Konvention).
     # Slot h = snap[curr=h] - snap[prev=h-1] → Energie [h-1, h).
     for slot_idx, prev_off, curr_off in rng.slot_pairs:
         per_kat: dict[str, Optional[float]] = {}
-        for sensor_key, _eid, kat in eintraege:
+        for sensor_key, _eid, kat, _grp in eintraege:
             s0 = snaps[sensor_key][prev_off]
             s1 = snaps[sensor_key][curr_off]
             if s0 is None or s1 is None:

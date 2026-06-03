@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.34.7)
+> **Stand:** Juni 2026 (v3.35.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -8,6 +8,12 @@
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
 
 ---
+
+## v3.35.0 — E-Auto-Stundenwerte bei doppelt erfasstem Zähler korrigiert (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Stunden-Ansicht: E-Auto-Werte werden nicht mehr doppelt gezählt.** Wenn dein E-Auto-Ladezähler über **zwei** Felder gleichzeitig ankommt (`Ladung` *und* `Verbrauch` — typisch bei evcc-Importen), waren die **stündlichen** Werte deines E-Autos bisher zu hoch: die Stundentabelle und Heatmap zeigten die Lademenge doppelt, und der daraus abgeleitete stündliche Eigenverbrauch lag entsprechend daneben. Die **Tages- und Monatswerte waren nie betroffen** — nur die Stunden-Sicht. Das ist jetzt strukturell behoben (es zählt genau ein Feld). Betroffene Anlagen sehen ihre Stunden-Werte beim nächsten Aggregat-Lauf korrigiert; auch die Reload-Vorschau („Tag neu berechnen") zeigt jetzt direkt den richtigen Wert. Anlass: junky84 (#262).
 
 ## v3.34.7 — E-Auto-Monatstabelle + EcoFlow-Import (Juni 2026)
 

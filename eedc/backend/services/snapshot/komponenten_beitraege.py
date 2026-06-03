@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from backend.services.snapshot.keys import _categorize_counter
+
 
 # Investitions-Typ → Komponenten-Key-Präfix in komponenten_kwh.
 # Spiegel zu PV_KOMPONENTEN_PREFIXE in core/berechnungen/energie.py +
@@ -182,3 +184,113 @@ def investition_beitraege(
         _add(secondary, fallback_gruppe=gruppe)
 
     return beitraege
+
+
+# ── Hourly-Normalisierung (Phase C v3.35.0, Issue #298) ─────────────────────
+#
+# Pattern-Klasse: Aggregator-Drift bei parallelen Pfaden ([[feedback_aggregator_symmetrie]],
+# Audit-§6.2). Vor v3.35.0 sammelten die beiden Hourly-Aggregatoren
+# (`snapshot.aggregator.get_hourly_kwh_by_category` +
+# `snapshot.lts_aggregator.get_hourly_kwh_by_category_lts`) ihre Counter-
+# Einträge, indem sie `keys._categorize_counter` ROH pro gemapptem Feld
+# aufriefen. Das umging die Either-Or- + parent-Skip-Whitelist, die der Daily-
+# Pfad seit v3.33.0 über `investition_beitraege` zentral hat — Folge: ein
+# E-Auto mit BEIDEN Gesamt-Zählern (`verbrauch_kwh` UND `ladung_kwh`, evcc-
+# Muster, #262 junky84) wurde in der Stunden-Bilanz doppelt gezählt
+# (`_categorize_counter` mappt beide auf `verbrauch_eauto`), während der Daily-
+# Pfad nur einen nahm.
+#
+# Variante 2 (PLAN §3 C.1): NICHT `_categorize_counter` patchen (sechster
+# Schutz), sondern die Feld-Auswahl strukturell durch DIESELBE Normalisierung
+# wie der Daily-Pfad routen — `investition_beitraege`/`basis_beitraege` sind
+# damit die einzige Whitelist+Either-Or+parent-Skip-Quelle für Daily UND
+# Hourly. `_categorize_counter` ist hier auf seine reine Aufgabe reduziert:
+# Feld → Energiefluss-Kategorie (kein Whitelist-Gatekeeper mehr).
+
+
+@dataclass(frozen=True)
+class HourlyEintrag:
+    """Ein normalisierter Counter-Eintrag für die Hourly-Aggregation.
+
+    - `feld`: das Mapping-Feld (z. B. `ladung_kwh`) — zum Auflösen der
+      `sensor_id`/`entity_id` aus dem jeweiligen Mapping-Dict.
+    - `kategorie`: Energiefluss-Kategorie (`_categorize_counter`-Rückgabe,
+      z. B. `verbrauch_eauto`, `ladung_batterie`).
+    - `fallback_gruppe`: optionale Either-Or-Markierung (identisch zur
+      `KomponentenBeitrag.fallback_gruppe` des Daily-Pfads). Der Aggregator
+      nimmt pro Gruppe nur den ersten Eintrag mit Tages-Sensordaten — exakt
+      wie `get_komponenten_tageskwh{,_lts}`.
+    """
+
+    feld: str
+    kategorie: str
+    fallback_gruppe: Optional[str] = None
+
+
+def basis_hourly_eintraege(sensor_mapping: dict) -> list[HourlyEintrag]:
+    """Hourly-Einträge der Basis-Zähler (Einspeisung/Netzbezug).
+
+    Spiegelt `basis_beitraege` auf die Energiefluss-Kategorie-Ebene.
+    """
+    out: list[HourlyEintrag] = []
+    for b in basis_beitraege(sensor_mapping):
+        kat = _categorize_counter(b.feld, None, None)
+        if kat:
+            out.append(HourlyEintrag(feld=b.feld, kategorie=kat,
+                                     fallback_gruppe=b.fallback_gruppe))
+    return out
+
+
+def investition_hourly_eintraege(inv, sensor_mapping_for_inv: dict) -> list[HourlyEintrag]:
+    """Hourly-Einträge einer Investition — Whitelist + Either-Or + parent-Skip
+    aus `investition_beitraege` (Daily-SoT), gemappt auf die Energiefluss-
+    Kategorie via `_categorize_counter`.
+
+    Dadurch konsumieren Daily- und Hourly-Pfad dieselbe einzige Auflösungs-
+    Quelle (Issue #298 / Audit-§6.2). Felder, deren Kategorie `None` ist,
+    werden weggelassen (defensiv; `investition_beitraege` emittiert ohnehin nur
+    Felder mit gültiger Kategorie).
+    """
+    typ = getattr(inv, "typ", None)
+    parameter = getattr(inv, "parameter", None)
+    out: list[HourlyEintrag] = []
+    for b in investition_beitraege(inv, sensor_mapping_for_inv):
+        kat = _categorize_counter(b.feld, typ, parameter)
+        if kat:
+            out.append(HourlyEintrag(feld=b.feld, kategorie=kat,
+                                     fallback_gruppe=b.fallback_gruppe))
+    return out
+
+
+def resolve_either_or_eintraege(eintraege, gruppe_fn, hat_tagesdaten_fn):
+    """Either-Or-Auflösung auf TAGES-Ebene — single source für alle drei
+    Hourly-Counter-Konsumenten (snapshot-/lts-Aggregator + reaggregator-
+    Vorschau), Issue #298.
+
+    Pro `fallback_gruppe` überlebt der ERSTE Eintrag, dessen Sensor an diesem
+    Tag überhaupt Daten liefert (`hat_tagesdaten_fn(eintrag) -> bool`); die
+    übrigen Gruppen-Mitglieder fallen raus. Einträge ohne Gruppe
+    (`gruppe_fn(eintrag)` falsy — z. B. MQTT-Quellen) bleiben unberührt.
+
+    Spiegelt exakt die Daily-Auflösung (`get_komponenten_tageskwh{,_lts}`):
+    Tages-Ebene statt pro Stunde, damit die Sensor-Wahl über alle 24 Slots
+    stabil bleibt und Σ Hourly == Tages-Boundary gilt. Reihenfolge-erhaltend
+    (primärer Beitrag zuerst — z. B. E-Auto `ladung_kwh` vor `verbrauch_kwh`).
+
+    Args:
+        eintraege: beliebige Eintrags-Sequenz (Tupel/Objekte).
+        gruppe_fn: extrahiert die `fallback_gruppe` eines Eintrags (oder None).
+        hat_tagesdaten_fn: Tages-Verfügbarkeit des Sensors eines Eintrags.
+    """
+    out = []
+    genommen: set[str] = set()
+    for e in eintraege:
+        grp = gruppe_fn(e)
+        if grp and grp in genommen:
+            continue
+        if grp:
+            if not hat_tagesdaten_fn(e):
+                continue
+            genommen.add(grp)
+        out.append(e)
+    return out
