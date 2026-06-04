@@ -596,12 +596,14 @@ export default function EnergieFluss({
           <text
             x={CX} y={CY - HAUS_R - 8}
             textAnchor="middle"
-            style={{ fontSize: `${dims.socFontSize}px` }}
+            // Hervorgehoben (Issue #314, kingcap1): fett + leicht größer +
+            // kräftigere, besser lesbare PV-Farbe als die übrigen Labels.
+            style={{ fontSize: `${dims.socFontSize + 1}px`, fontWeight: 700 }}
             className={bgVariant === 'sunset'
-              ? 'fill-amber-800 dark:fill-yellow-400'
+              ? 'fill-amber-900 dark:fill-yellow-300'
               : bgVariant === 'alps'
-                ? 'fill-blue-800 dark:fill-blue-300'
-                : 'fill-yellow-500 dark:fill-yellow-400'}
+                ? 'fill-blue-900 dark:fill-blue-200'
+                : 'fill-amber-600 dark:fill-yellow-300'}
           data-title="Summe aller PV-Erzeuger (ohne Batterie/Netz)"
           >
             <title>Summe aller PV-Erzeuger (ohne Batterie/Netz)</title>
@@ -610,7 +612,7 @@ export default function EnergieFluss({
         )}
         {pvSollKw != null && pvSollKw > 0 && (
           <text
-            x={CX} y={CY - HAUS_R - 8 - (summePv > 0 && pvCount > 1 ? dims.socFontSize + 2 : 0)}
+            x={CX} y={CY - HAUS_R - 8 - (summePv > 0 && pvCount > 1 ? dims.socFontSize + 4 : 0)}
             textAnchor="middle"
             style={{ fontSize: `${dims.socFontSize - 1}px` }}
             className={bgVariant === 'sunset'
