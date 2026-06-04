@@ -120,6 +120,7 @@ export interface EAutoDashboardResponse {
     v2h_ersparnis_euro: number
     // Kosten-Vergleich
     benzin_kosten_alternativ_euro: number
+    verwendeter_benzinpreis_euro: number
     strom_kosten_heim_euro: number
     strom_kosten_extern_euro: number
     strom_kosten_gesamt_euro: number

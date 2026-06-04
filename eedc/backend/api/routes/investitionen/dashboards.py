@@ -354,6 +354,10 @@ async def get_eauto_dashboard(
             'v2h_ersparnis_euro': round(v2h_ersparnis, 2),
             # Kosten-Vergleich
             'benzin_kosten_alternativ_euro': round(benzin_kosten, 2),
+            # #260 NongJoWo: tatsächlich verwendeter (km-gewichteter) Benzinpreis
+            # für den Ersparnis-Tooltip — monatlich-dynamisch (EU Oil Bulletin)
+            # mit Fallback auf Investitions-Parameter/Default.
+            'verwendeter_benzinpreis_euro': round(eauto_result.verwendeter_benzinpreis_euro, 2),
             'strom_kosten_heim_euro': round(heim_netz_kosten, 2),
             'strom_kosten_extern_euro': round(gesamt_extern_kosten, 2),
             'strom_kosten_gesamt_euro': round(strom_kosten_gesamt, 2),

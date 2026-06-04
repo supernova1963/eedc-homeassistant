@@ -204,7 +204,7 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
           color="green"
           trend={(z.ersparnis_vs_benzin_euro || 0) > 0 ? 'up' : undefined}
           formel="Ersparnis = Benzinkosten − Stromkosten"
-          berechnung={`${(z.benzin_kosten_alternativ_euro || 0).toFixed(0)} € − ${(z.strom_kosten_gesamt_euro || 0).toFixed(0)} €`}
+          berechnung={`Ø Benzinpreis ${(z.verwendeter_benzinpreis_euro || 0).toFixed(2)} €/L · ${(z.benzin_kosten_alternativ_euro || 0).toFixed(0)} € − ${(z.strom_kosten_gesamt_euro || 0).toFixed(0)} €`}
           ergebnis={`= ${(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €`}
         />
       </div>
