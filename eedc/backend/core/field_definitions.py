@@ -199,11 +199,16 @@ INVESTITION_FELDER: dict = {
             "feld": "ladung_pv_kwh", "label": "Heim: PV", "einheit": "kWh",
             "placeholder": "z.B. 130",
             "csv_suffix": "Ladung_PV_kWh",
+            # Phase 2a: existiert eine Wallbox-Investition, ist SIE die kanonische
+            # Quelle der Heimladung — dann nicht zusätzlich am E-Auto erfassen
+            # (sonst Dual-Daten / Doppelzählung, siehe docs/KONZEPT-WALLBOX-EAUTO.md).
+            "bedingung_anlage": "keine_wallbox",
         },
         {
             "feld": "ladung_netz_kwh", "label": "Heim: Netz", "einheit": "kWh",
             "placeholder": "z.B. 50",
             "csv_suffix": "Ladung_Netz_kWh",
+            "bedingung_anlage": "keine_wallbox",  # s. ladung_pv_kwh (Phase 2a)
         },
         {
             "feld": "ladung_extern_kwh", "label": "Extern", "einheit": "kWh",
@@ -456,6 +461,8 @@ def get_felder_fuer_investition(
         if bedingung_anlage and anlage_investitionen is not None:
             if bedingung_anlage == "keine_pv_module" and "pv-module" in anlage_typen:
                 continue  # Feld ausblenden: PV-Module separat erfasst
+            if bedingung_anlage == "keine_wallbox" and "wallbox" in anlage_typen:
+                continue  # Feld ausblenden: Wallbox ist kanonische Heimladungs-Quelle
 
         # ── Investment-Parameter-Bedingung ───────────────────────────────────
         if bedingung is None:
