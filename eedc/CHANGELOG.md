@@ -7,6 +7,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.36.0] - 2026-06-04 — Heimladung kanonisch an der Wallbox + Stundenversatz-Fix + UX-Bündel
+
+> 🧱 **Minor-Sammelrelease.** Kern ist die Wallbox/E-Auto-**Phase 2a**: die Heimladung (gesamt / aus PV / aus Netz) lebt jetzt **kanonisch an der Wallbox** statt konkurrierend an Wallbox *und* E-Auto — inkl. einmaliger Daten-Migration und Daten-Checker-Hinweis für nicht eindeutig zusammenführbare Fälle. Dazu ein zentraler Prognosequellen-Adapter-Layer (intern) und mehrere anwender-sichtbare Korrekturen: HA-LTS-Stundenversatz im Prognosen-Vergleich, Speicher-Bearbeitung/Setup-Wizard (#636), Finanzen-Netto-Ertrag (#310), Monatsbericht-Einspeisung (#325), Energiefluss-Hervorhebung (#314). Tages-/Monatswerte durchgehend unberührt. 737 Backend-Tests grün.
+
+### Added
+
+- **Wallbox/E-Auto Phase 2a — kanonische Heimladungs-Quelle:** Die zu Hause geladene Energie wird jetzt eindeutig an der **Wallbox** geführt; das E-Auto trägt nur noch Fahrzeug-Eigenes (km, Verbrauch, externe Ladung unterwegs, V2H). Beim Update werden bestehende Heimladungs-Werte einmalig vom E-Auto in den Wallbox-Slot migriert (pro Monat gewinnt der vollständigere Wert); nicht eindeutig zusammenführbare Fälle bleiben unverändert stehen und erscheinen im Daten-Checker als Pflege-Hinweis. Ohne Wallbox bleibt die Erfassung am E-Auto. Das E-Auto-Formular blendet die Heim-Felder aus, sobald eine Wallbox vorhanden ist.
+- **PV-Solarleistung im Live-Energiefluss hervorgehoben (#314):** Bei mehreren PV-Strings wird die Solarleistung im Energiefluss-Diagramm optisch betont (fett, größer, kräftigere Farbe). Anlass: kingcap1.
+
+### Fixed
+
+- **Prognosen-Vergleich: IST-Stundenwerte lagen bei HA-Add-on-Nutzern eine Stunde zu früh:** Der HA-LTS-Stundenpfad (`get_hourly_kwh_deltas_for_day`) sortierte den gemessenen Ist-Ertrag forward ein (`Slot h = [h, h+1)`), während Prognosen und Snapshot-Pfad backward sind (`[h-1, h)`) — im „Stundenvergleich heute" begann der IST-Verlauf dadurch eine Stunde vor den Prognosen. Beide IST-Pfade liefern jetzt dasselbe Backward-Raster (empirisch gegen Live-HA verifiziert: `state/sum @ start_ts=H` = Zähler am Perioden-Ende H+1). Neuer SoT-Helper `lts_boundary_index`; der #297-Symmetrie-Test deckt jetzt alle vier Reihen ab (vorher nur den Snapshot-Pfad — Parallelpfad-Loch). Tages-/Monatssummen waren nie betroffen; historische Stunden lassen sich über „Mehrere Tage neu aggregieren" nachziehen. Anlass: rapahl/Gernot.
+- **Komponenten-Bearbeitung: Dezimalwerte ließen sich nicht speichern (#636):** Zahlenfelder (z. B. Speicher-Kapazität) akzeptierten nur grobe Schrittweiten — ein Wert wie 5,12 kWh wurde vom Browser still als ungültig abgewiesen und „Speichern" tat nichts. Die betroffenen Felder akzeptieren jetzt beliebige Werte (`step="any"`). Anlass: Sabrina.
+- **Setup-Wizard: kryptische Fehlermeldung beim Leeren des Bezeichnungs-Felds (#636):** Beim Leeren eines Pflicht-Namens erschien ein roher Validierungs-Text (JSON) und der alte Wert sprang zurück. Leere Pflichtfelder lösen jetzt keinen vorzeitigen Speicherversuch mehr aus, und Server-Validierungsfehler werden lesbar angezeigt. Anlass: Sabrina.
+- **Finanzen: „Netto-Ertrag" rechnet Sonstige Erträge mit ein (#310):** Die KPI zog nur Sonstige Ausgaben ab, addierte Sonstige Erträge aber nicht. Anlass: rilmor.
+- **Monatsbericht: abgeschlossener Monat zeigte Einspeisung 0 (#325):** Ein Connector ohne Einspeise-Messung überschrieb rückwirkend gespeicherte Monatswerte mit 0; gespeicherte Werte werden jetzt nicht mehr vom Connector übersteuert (der #118-Schutz galt bisher nur für die HA-Statistik). Die Daten waren korrekt, nur die Anzeige. Anlass: detlefh68.
+
+### Intern (nicht anwender-sichtbar)
+
+- **Zentraler Prognosequellen-Adapter-Layer (Stufe 2+3):** OpenMeteo/Solcast/IST werden über eine gemeinsame Adapter-Schicht aufbereitet (Drift-Vorsorge, gemeinsame Slot-Konvention).
+- **emob Phase 2a Read-/Write-Seite + Migration + Daten-Checker:** kanonischer Heimladungs-Helper, Read-Sites + Write-Side umgestellt, Magnitude-Heuristik entfernt, Daten-Migration auf die strukturelle Quelle; Hilfe-Texte angepasst.
+
 ## [3.35.2] - 2026-06-04 — Live-Energiefluss schärfen + Prognose-Slot-Absicherung + Branding
 
 > 🧱 **Sammelrelease.** Bündelt mehrere fertige, voneinander unabhängige Arbeiten: Schärfung des Live-Energiefluss-Diagramms (#314), zwei Tooltip-/Detail-Erweiterungen (#260, #301), die Branding-/Landing-Page-Pflege (#320/#321/#323), einen Scheduler-Fix (#322) und die Absicherung der PV-Prognose-Slot-Konvention (#297). Daily-/Monats-Werte sind durchgehend unberührt. 699 Backend-Tests grün (+7 neu: Slot-Konventions-Symmetrie über alle Quellen).

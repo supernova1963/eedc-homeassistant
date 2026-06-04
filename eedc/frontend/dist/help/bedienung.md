@@ -282,6 +282,11 @@ Innerhalb des Tabs zusätzlich: JAZ-Heizen / JAZ-Warmwasser, Monatsvergleichs-To
 - **Kostenersparnis** vs. Benziner/Diesel — basiert seit v3.17.0 auf echten **monatlichen Benzinpreisen** aus dem EU Weekly Oil Bulletin (Fallback: statischer Investitions-Parameter)
 - **V2H-Entladung** (wenn aktiviert)
 
+> **Wo wird die Heimladung erfasst? (Wallbox vs. E-Auto)**
+> Wenn du eine **Wallbox** als Investition angelegt hast, ist sie die alleinige Quelle für die zu Hause geladene Energie (gesamt / aus PV / aus Netz) — die Wallbox misst den Stromfluss am Ladepunkt. Das E-Auto trägt dann nur noch **fahrzeugspezifische** Werte: gefahrene km, Verbrauch, externe Ladung (kWh + €) und V2H. Das E-Auto-Dashboard zeigt die Ladequellen-Aufteilung trotzdem — die Zahlen stammen jetzt nur eindeutig aus der Wallbox, nicht mehr aus zwei konkurrierenden Quellen.
+>
+> **Ohne Wallbox** (z. B. Steckerlader/Schuko) bleibt das E-Auto selbst die Quelle der Heimladung — dann erfasst du „Heim: PV"/„Heim: Netz" weiterhin direkt am E-Auto. Mehr dazu unter [Einstellungen §2.1 (Manuelles Formular)](HANDBUCH_EINSTELLUNGEN.md#21-manuelles-formular) und [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
+
 ### 3.9 Sonstiges
 
 Eigener Tab für sonstige Erzeuger (BHKW etc.) und sonstige Verbraucher mit komponentenspezifischen KPIs.

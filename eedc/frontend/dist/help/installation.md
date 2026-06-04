@@ -189,6 +189,7 @@ Hier konfigurierst du alle Komponenten deiner Anlage:
 - Optional: V2H-fähig (Vehicle-to-Home)
 - Optional: Nutzt V2H aktiv
 - Optional: Dienstfahrzeug – bei dienstlichen Fahrzeugen wird die ROI-Berechnung auf AG-Erstattung statt Benzinvergleich umgestellt
+- **Heimladung:** Wenn du auch eine Wallbox anlegst, wird die zu Hause geladene Energie an der Wallbox geführt — das E-Auto trägt dann nur km, Verbrauch, externe Ladung und V2H. Ohne Wallbox (Steckerlader) bleibt das E-Auto die Quelle der Heimladung.
 
 #### Wärmepumpe
 - **Berechnungsmodus:** Wähle zwischen drei Effizienz-Modi:

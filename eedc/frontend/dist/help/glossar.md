@@ -60,6 +60,8 @@
 | **Vollzyklen** | Batterie-Lade-/Entladezyklen, normiert: `Σ |ΔSoC| / 200` (0→100→0 = 200 % = 1 Vollzyklus). Werden seit v3.22.0 ausschließlich aus stationären Speicher-SoCs berechnet — E-Auto-SoC ist ausgeschlossen. |
 | **Performance Ratio** | Verhältnis IST-Ertrag zu theoretisch möglichem Ertrag (`PV_kWh / (GTI × kWp)`). Qualitätskennzahl der Anlage. Plausible Werte 0.7–0.95. |
 | **V2H** | Vehicle-to-Home — E-Auto speist Strom ins Haus zurück |
+| **Heimladung** | Zu Hause geladene Energie eines E-Autos (gesamt / aus PV / aus Netz), im Gegensatz zur externen Ladung unterwegs. Ab Phase 2a kanonisch an der **Wallbox** geführt, sofern eine existiert; ohne Wallbox (Steckerlader/Schuko) am E-Auto. |
+| **Kanonische Quelle** | Die eine, strukturell festgelegte Investition, aus der eedc einen Wert liest, wenn ihn mehrere Komponenten messen könnten. Für die Heimladung: Wallbox vorhanden → Wallbox, sonst E-Auto. Ersetzt das frühere magnitudenabhängige „Poolen" (größerer Wert gewinnt), das bei Streudaten falsch wählen konnte. |
 | **Arbitrage** | Speicher-Strategie: Bei günstigem Netzstrom laden, bei teurem Strom entladen |
 | **BKW** | Balkonkraftwerk — kleine steckfertige PV-Anlage (auch: Steckersolaranlage) |
 | **Anschaffungsdatum / Stilllegungsdatum** | Lebenszyklus-Marker pro Investition. Aggregate ignorieren Monatsdaten vor dem Anschaffungsdatum bzw. ab dem Stilllegungsdatum — verhindert Verfälschung bei Erfassungs-Migration oder ausgemusterten Komponenten. |

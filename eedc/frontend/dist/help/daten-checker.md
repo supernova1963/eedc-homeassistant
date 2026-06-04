@@ -185,7 +185,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Fahrleistung/Verbrauch fehlt** | ℹ️ INFO | Weder `km_jahr` noch `verbrauch_kwh_100km` gesetzt. Einsparungs-Berechnung gegenüber Verbrenner ist nicht möglich. | Investition öffnen, Jahres-Fahrleistung und/oder Verbrauch eintragen. |
 | **\[Name\]: Alternativkosten (Verbrenner) fehlen** | ⚠️ WARNING | `anschaffungskosten_alternativ` fehlt. ROI gegenüber Verbrenner-Alternative wird ohne diesen Wert nicht berechnet. | Investition öffnen, geschätzte Anschaffungskosten eines vergleichbaren Verbrenners eintragen. |
 | **\[Name\]: V2H aktiv, aber Entladepreis fehlt** | ℹ️ INFO | `nutzt_v2h` ist gesetzt, aber `v2h_entlade_preis_cent` fehlt. V2H-Einsparung wird nicht berechnet. | Vermiedenen Entladepreis eintragen (analog Speicher-Arbitrage). |
-| **\[Name\]: Ladung PV fehlt in N Monat(en)** | ℹ️ INFO | `ladung_pv_kwh` fehlt — Anteil PV-Ladung am Gesamt-Ladestrom unbekannt. Geringere Severity als andere Pflichtfelder, weil V2H/Wallbox-Aufschlüsselung optional ist. | Monatsabschluss nachholen, oder im Live-Betrieb über Wallbox-/EV-Sensor automatisch erfassen lassen. |
+| **\[Name\]: Ladung PV fehlt in N Monat(en)** | ℹ️ INFO | `ladung_pv_kwh` fehlt — Anteil PV-Ladung am Gesamt-Ladestrom unbekannt. Geringere Severity als andere Pflichtfelder, weil V2H/Wallbox-Aufschlüsselung optional ist. **Hinweis (ab Phase 2a):** Bei vorhandener Wallbox liegt die Heimladung kanonisch dort — die Heim-Felder am E-Auto sind dann erwartungsgemäß leer und kein Mangel. | Ohne Wallbox: Monatsabschluss nachholen. Mit Wallbox: an der Wallbox erfassen (Loadpoint-Sensor), nicht am E-Auto. |
 
 #### 4.3.5 Wallbox
 
@@ -223,6 +223,15 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Anschaffungskosten fehlen** | ℹ️ INFO | `anschaffungskosten_gesamt` fehlt. ROI- und Amortisations-Berechnung greift mit 0 €. | Investition öffnen, Brutto-Anschaffungskosten eintragen. |
 | **\[Name\]: Monatsdaten vollständig (N Monate)** | ✅ OK | Alle Pflicht-Monatsfelder ab Anschaffungsdatum sind erfasst. | – |
 | **Keine aktiven Investitionen vorhanden** | ℹ️ INFO | Anlage hat keine aktive Investition. Cockpit, ROI und Aufschlüsselungen sind leer. | Einstellungen → Investitionen → mindestens PV-Module oder Balkonkraftwerk anlegen. |
+
+#### 4.3.9 E-Auto + Wallbox – Heimladungs-Pflegekonflikt
+
+> Greift nur, wenn **sowohl** eine (private) E-Auto- **als auch** eine Wallbox-Investition existiert. Seit Phase 2a ist die Heimladung kanonisch an der Wallbox geführt; die Migration verschiebt bestehende E-Auto-Heimladung automatisch dorthin. Diese Prüfung flaggt die **Reste**, die nicht verlustfrei auflösbar waren — also Monate, in denen beide Seiten weiterhin Heimladung tragen.
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **E-Auto- und Wallbox-Investition werden parallel gepflegt** | ℹ️ INFO | In mehreren der letzten Monate tragen sowohl E-Auto als auch Wallbox nennenswerte, ähnlich große Heimladung. Beide messen meist denselben Stromfluss aus zwei Perspektiven — die doppelte Pflege ist überflüssig. | Nur **eine** Quelle pflegen: bei vorhandener Wallbox die Wallbox; die Heim-Felder am E-Auto leer lassen. |
+| **Pflege-Konflikt: E-Auto- und Wallbox-PV-Anteil weichen voneinander ab** | ⚠️ WARNING | Zusätzlich weicht der PV-Anteil beider Seiten um mehr als 10 % ab, obwohl sie denselben Stromfluss messen sollten. Indiz für echte Doppelzählung bzw. widersprüchliche Daten (z. B. verirrte Streudaten auf der falschen Investition). | Bewusst entscheiden, welche Quelle die Wahrheit liefert (in der Regel die Wallbox), und die andere Seite leeren. |
 
 ---
 

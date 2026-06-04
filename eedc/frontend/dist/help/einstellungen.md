@@ -284,12 +284,14 @@ Das Formular zeigt dynamisch die relevanten Felder. Seit v3.17.1 (Phase E des Re
 **Komponenten-Felder (je nach Investitionen):**
 - PV-Module: Erzeugung pro Modul/String
 - Speicher: Ladung, Entladung, Netz-Ladung (Arbitrage)
-- E-Auto: km, Verbrauch, Ladung (PV/Netz/Extern), V2H-Entladung, **Kraftstoffpreis €/L** (ab v3.17.0)
+- E-Auto: km, Verbrauch, externe Ladung (kWh + €), V2H-Entladung, **Kraftstoffpreis €/L** (ab v3.17.0). Die Heimladungs-Felder „Heim: PV"/„Heim: Netz" erscheinen hier **nur, wenn keine Wallbox-Investition** existiert (Steckerlader/Schuko) — sonst werden sie an der Wallbox erfasst (siehe Hinweis unten).
 - Wärmepumpe: Strom, Heizung, Warmwasser, **Gaspreis ct/kWh** (ab v3.21.0)
-- Wallbox: Ladung, Ladevorgänge
+- Wallbox: Ladung gesamt, Ladung PV, Ladevorgänge
 - Balkonkraftwerk: Erzeugung, Eigenverbrauch (Einspeisung wird automatisch berechnet)
 - Sonstiges: Felder je nach Kategorie (Erzeugung/Verbrauch/Ladung)
 - Sonstige Erträge & Ausgaben: Versicherung, Wartung, Einspeisebonus etc.
+
+> **Heimladung gehört an die Wallbox (ab Phase 2a).** Die zu Hause geladene Energie (gesamt / PV / Netz) wird kanonisch an der **Wallbox** geführt — sie misst den Stromfluss am Ladepunkt. Hast du eine Wallbox angelegt, blendet das E-Auto-Formular die Felder „Heim: PV"/„Heim: Netz" automatisch aus; du trägst dort nur noch km, Verbrauch, externe Ladung und V2H ein. **Ohne Wallbox** (Steckerlader/Schuko) bleibt das E-Auto die Quelle und zeigt die Heimladungs-Felder weiter. So kann derselbe Stromfluss nicht mehr aus zwei Quellen widersprüchlich gepflegt werden (kein „PV-Anteil > 100 %" mehr). Pflegst du beide Seiten parallel, weist der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#434-e-auto-privat) darauf hin.
 
 **Wetter-Auto-Fill:**
 - Klicke auf „Wetter abrufen"
@@ -565,6 +567,8 @@ Optionaler kumulativer Anzahl-Zähler für den Wärmepumpen-Kompressor — z. B.
 **EV-Quote Strategie:**
 Berechnet PV-Ladung basierend auf der Eigenverbrauchsquote:
 `Ladung PV = Gesamt-Ladung × Eigenverbrauchsquote`
+
+> **Heimladung am E-Auto oder an der Wallbox?** Die Lade-Felder „Ladung PV"/„Ladung Netz" am E-Auto sind für **Setups ohne Wallbox** gedacht (Steckerlader/Schuko). Wenn du eine Wallbox als Investition hast, mappe die geladene Energie dort (Wallbox-Loadpoint-Sensor); das E-Auto braucht dann nur km, optional Verbrauch und V2H. Die Aufschlüsselung auf mehrere Fahrzeuge übernimmt eedc rechnerisch (km-anteilig). Hintergrund siehe [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit).
 
 #### Schritt 6: Zusammenfassung
 

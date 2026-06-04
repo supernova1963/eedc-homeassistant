@@ -143,12 +143,14 @@
 
 ## 5. E-Auto
 
+> **Heimladung gehört kanonisch an die Wallbox (ab Phase 2a).** Existiert eine Wallbox-Investition, ist sie die Quelle der Heimladung — die folgenden Felder `ladung_pv_kwh`/`ladung_netz_kwh` werden dann am E-Auto **nicht** erfasst (das Formular blendet sie aus). Sie gelten nur für Setups **ohne** Wallbox (Steckerlader/Schuko). Km-, Verbrauchs-, Extern- und V2H-Felder bleiben in jedem Fall am E-Auto.
+
 ### Monatserfassung
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
 |------|-------|---------|-----------|-------------|
-| `ladung_pv_kwh` | Ladung PV | kWh | Kumulativ oder Tagessensor | Zu Hause aus PV geladene Energie. Kann via EV-Quote aus Gesamt-Ladung berechnet werden. |
-| `ladung_netz_kwh` | Ladung Netz | kWh | Kumulativ oder Tagessensor | Zu Hause aus Netz geladene Energie. Kann via EV-Quote berechnet werden. |
+| `ladung_pv_kwh` | Heim: PV | kWh | Kumulativ oder Tagessensor | Zu Hause aus PV geladene Energie. **Nur ohne Wallbox** (sonst an der Wallbox). Kann via EV-Quote aus Gesamt-Ladung berechnet werden. |
+| `ladung_netz_kwh` | Heim: Netz | kWh | Kumulativ oder Tagessensor | Zu Hause aus Netz geladene Energie. **Nur ohne Wallbox.** Kann via EV-Quote berechnet werden. |
 | `ladung_extern_kwh` | Externe Ladung | kWh | — | Extern geladene Energie (Autobahn, Arbeit). Manuell erfassen. Optional. |
 | `ladung_extern_euro` | Externe Ladekosten | € | — | Kosten der externen Ladung. Manuell. Optional. |
 | `verbrauch_kwh` | Verbrauch gesamt | kWh | Kumulativ oder Tagessensor | Gesamtstromverbrauch des E-Autos. Optional — wird sonst aus Ladung berechnet. |
@@ -174,6 +176,8 @@
 ---
 
 ## 6. Wallbox
+
+> **Wallbox = kanonische Heimladungs-Quelle (ab Phase 2a).** Ist eine Wallbox angelegt, liefert sie die zu Hause geladene Energie (gesamt/PV/Netz) für alle Auswertungen; die km-anteilige Aufteilung auf ein oder mehrere Fahrzeuge berechnet eedc daraus. Mehrere Wallboxen werden summiert (jeder Ladepunkt zählt). Mappe den Loadpoint-/Wallbox-Energiesensor daher hier, nicht am E-Auto.
 
 ### Monatserfassung
 

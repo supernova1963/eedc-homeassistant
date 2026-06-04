@@ -206,6 +206,8 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 
 **Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten fließen als kalkulatorische Ausgaben in `sonstige_ausgaben_gesamt`.
 
+**Kanonische Heimladungs-Quelle (ab Phase 2a):** `Ladung_gesamt` und `Ladung_PV` der Heimladung kommen strukturell aus **genau einer** Quelle: existiert eine Wallbox-Investition mit Heimladung, ist sie die Quelle (Infrastruktur misst den Stromfluss am Ladepunkt); ohne Wallbox (Steckerlader/Schuko) liefert das E-Auto die Werte. Bei mehreren Wallboxen ist die Heimladung die **Summe** aller Wallbox-Ladepunkte. Diese Regel ist deterministisch (existiert eine Wallbox?), nicht magnitudenabhängig — der frühere Pool-/„größere Heimladung gewinnt"-Mechanismus entfällt. Die km-anteilige Aufteilung auf mehrere Fahrzeuge (Attribution) bleibt unverändert. Zentraler Helper: `get_emob_heimladung_canonical()`.
+
 **Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In **Aussichten**, **HA-Sensor-Export** und **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Investition wenn kein Monatswert vorhanden.
 
 #### Investitionskosten (Mehrkosten-Ansatz)
@@ -300,7 +302,7 @@ Für jeden historischen Monat:
   Benzinpreis = Monatsdaten.kraftstoffpreis_euro       (wenn vorhanden)
               ∨ Investition.parameter.benzinpreis_euro  (Fallback statisch)
   Benzin_Kosten_Monat = km_gefahren / 100 * Vergleich_L_100km * Benzinpreis
-  Strom_Kosten_Monat  = ladung_netz_kwh * Netzbezug_Preis / 100
+  Strom_Kosten_Monat  = ladung_netz_kwh * Netzbezug_Preis / 100   # kanonische Heimladungs-Quelle (Wallbox bzw. E-Auto), s. §3.2
 
 Für Jahresprognose:
   Prognose_Benzinpreis = Ø(Monatsdaten.kraftstoffpreis_euro)  (historischer Durchschnitt)
