@@ -645,6 +645,18 @@ async def _run_data_migrations() -> None:
             migrate_lts_komponenten_kwh_bug,
         )
 
+        # Phase 2a Etappe 4 (#262 u. a.): E-Mob-Heimladung in den kanonischen
+        # Wallbox-Slot konsolidieren, damit der strukturelle Read (Etappe 2)
+        # un-migrierte Dual-Daten nicht unterzählt. MUSS mit der Read-/Write-
+        # Umstellung (Etappe 2+3) zusammen ausgeliefert werden.
+        from backend.services.migrations.migrate_emob_canonical_source import (
+            migrate_emob_canonical_source,
+        )
+        await _apply_once(
+            "phase_2a_emob_canonical_source",
+            migrate_emob_canonical_source,
+        )
+
 
 async def init_db():
     """
