@@ -690,7 +690,19 @@ async def get_aktueller_monat(
     resolved.update(saved)
 
     connector = await _collect_connector_data(anlage, jahr, monat)
-    resolved.update(connector)
+    if ist_aktueller_monat:
+        # Laufender Monat: Connector (Konfidenz 90 %) ist frischer als die
+        # gespeicherten Werte und darf sie überschreiben (Vorschau).
+        resolved.update(connector)
+    else:
+        # Abgeschlossener Monat: gespeicherte Monatsdaten sind authoritativ
+        # (analog HA-Stats unten, #118). Der Connector darf gespeicherte/manuell
+        # gepflegte Werte NICHT rückwirkend überschreiben — sonst überschreibt
+        # z. B. ein Sungrow-Connector ohne separate Einspeisungs-Messung den
+        # gespeicherten Einspeisungs-Wert mit 0 (#325, detlefh68). Nur Felder
+        # füllen, die noch fehlen.
+        for k, v in connector.items():
+            resolved.setdefault(k, v)
 
     mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen) if ist_aktueller_monat else {}
     resolved.update(mqtt_energy)
