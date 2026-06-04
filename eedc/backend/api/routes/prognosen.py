@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
+from backend.core.berechnungen.slot_konvention import openmeteo_preceding_hour_slot
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -394,9 +395,13 @@ async def get_prognosen_vergleich(
         hourly = gti_data.get("hourly", {})
         gti_values = hourly.get("global_tilted_irradiance", [])
         temps = hourly.get("temperature_2m", [])
+        # OpenMeteo-GTI ist preceding-hour-Mittel: der Wert am Stunden-Index h
+        # deckt [h-1, h) ab = bereits Backward-Slot h (Issue #297, KEIN Shift —
+        # siehe core/berechnungen/slot_konvention.py). Solcast/IST nutzen dasselbe
+        # Slot-Raster, daher liegen alle Quellen im Vergleich deckungsgleich.
         for i in range(min(72, len(gti_values))):
             tag_idx = i // 24  # 0=heute, 1=morgen, 2=übermorgen
-            h = i % 24
+            h = openmeteo_preceding_hour_slot(i % 24)
             gti = gti_values[i] or 0
             if gti > 0 and anlagenleistung_kwp > 0:
                 pv_kw = gti * anlagenleistung_kwp * (1 - system_losses) / 1000

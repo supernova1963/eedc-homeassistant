@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.35.2] - 2026-06-04 — Live-Energiefluss schärfen + Prognose-Slot-Absicherung + Branding
+
+> 🧱 **Sammelrelease.** Bündelt mehrere fertige, voneinander unabhängige Arbeiten: Schärfung des Live-Energiefluss-Diagramms (#314), zwei Tooltip-/Detail-Erweiterungen (#260, #301), die Branding-/Landing-Page-Pflege (#320/#321/#323), einen Scheduler-Fix (#322) und die Absicherung der PV-Prognose-Slot-Konvention (#297). Daily-/Monats-Werte sind durchgehend unberührt. 699 Backend-Tests grün (+7 neu: Slot-Konventions-Symmetrie über alle Quellen).
+
+### Added
+
+- **E-Auto-Ersparnis-Tooltip nennt den verwendeten Benzinpreis (#260):** Der Tooltip zur Kraftstoff-Ersparnis zeigt jetzt den konkret zugrunde gelegten Ø-Benzinpreis des Zeitraums, statt die Zahl unkommentiert zu lassen. Anlass: NongJoWo.
+- **Daten-Checker: Quellen-Konflikt nennt Feld, Zeitraum und Quellen (#301):** Wenn zwei Datenquellen denselben Wert konkurrierend befüllen, nennt die Warnung jetzt das betroffene Feld, den Zeitraum und die beteiligten Quellen — statt nur „Konflikt erkannt". Anlass: Safi105.
+
+### Fixed
+
+- **Live-Energiefluss: Mitte zeigt das Residual statt der Verbraucher-Summe (#314):** Das Energiefluss-Diagramm im Live-Dashboard stellte in der Mitte fälschlich die Summe aller Verbraucher dar; jetzt erscheint dort das tatsächliche Haus-Residual (Gesamtverbrauch minus separat ausgewiesene Verbraucher). Zugehörig: Der Energiefluss-Tooltip überschreibt nicht mehr den „Gesamtverbrauch"-Eintrag, und die E-Auto-Deduplizierung ist deterministisch + parent-bewusst (`summe_verbrauch` respektiert die Wallbox-Zuordnung).
+- **Daten-Checker warnt bei gleicher Sensor-Entity an Wallbox und E-Auto (#314-Folge):** Wird derselbe HA-Sensor sowohl der Wallbox als auch dem E-Auto zugeordnet, weist der Daten-Checker jetzt aktiv darauf hin (häufige Doppelmapping-Quelle).
+- **MQTT-Snapshot-Jobs laufen nur bei aktivem MQTT-Inbound (#322):** Der Scheduler legte die :05/:55-Snapshot-Jobs auch dann an, wenn kein MQTT-Inbound konfiguriert ist — unnötige Leerläufe. Jetzt an den aktiven Inbound gekoppelt.
+
+### Intern (QS / Doku, nicht anwender-sichtbar)
+
+- **PV-Prognose-Slot-Konvention zentral abgesichert (#297):** Das Audit zur gemeldeten „Stundenversatz"-Vermutung ergab, dass alle Prognosequellen bereits korrekt der Backward-Konvention folgen (Slot `h` = `[h-1, h)`). OpenMeteos Strahlung ist ein **preceding-hour-Mittel** (Wert@`h` = `[h-1, h)`) und damit bereits Backward — ein „+1-Shift" hätte den Versatz erst erzeugt (empirisch verifiziert: OpenMeteo-API, v3.20.0-Changelog, Live-HA-Repro mit Solcast/IST/Realerzeugung; alle Quellen für `[05:00,06:00)` deckungsgleich in Slot 6). Neuer zentraler Helper `core/berechnungen/slot_konvention.py` kapselt die Konvention (`openmeteo_preceding_hour_slot` = Identität mit „kein Shift"-Vertrag; Solcasts `period_start`/`period_end`-Marker); Solcast-Service nutzt ihn jetzt an einer Stelle. Neuer Symmetrie-/Tagessummen-Test nagelt fest, dass OpenMeteo, Solcast und IST dasselbe Slot-Raster liefern.
+- **Branding-/Landing-Page-Pflege (#320, #321, #323):** eedc-Schreibweise und der Hinweis auf die Home-Assistant-App auf der Landing-Page vereinheitlicht; die HA-App rendert die Root-README statt der Standalone-README (separate `README.standalone.md` mit LAN-Security-Hinweis für den Mirror).
+
 ## [3.35.1] - 2026-06-03 — QS-Härtung: Abschluss der v3.34/v3.35-Aggregator-Maßnahme
 
 > 🧱 **QS-Sammelrelease.** Schließt die sieben deferred Restarbeiten der v3.34/v3.35-Aggregator-Refactor-Gesamtmaßnahme ab (PLAN §8.1, Issues #315–#319 + zwei interne Befunde) — direkte Audit-Befunde derselben Symmetrie-/Drift-Klasse, bewusst nicht in die Phasen A–C gebündelt. Überwiegend latent oder verhaltensneutral; die anwender-sichtbaren Korrekturen unten betreffen Nischen-Setups. Daily-/Monats-Werte waren durchgehend nicht betroffen. 677 Backend-Tests grün (+39 neu: Achse-2-Invariante, netz-Split-Auflösung, MQTT-Either-Or, M1-Serien-Symmetrie, ADR-001-Erlös-Wächter, kraftstoffpreis-Rettung).

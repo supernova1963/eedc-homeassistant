@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.35.1)
+> **Stand:** Juni 2026 (v3.35.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -8,6 +8,14 @@
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
 
 ---
+
+## v3.35.2 — Live-Energiefluss schärfer + kleine Tooltip-Verbesserungen (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Live-Energiefluss-Diagramm zeigt in der Mitte das richtige Haus-Residual.** Im Live-Dashboard stand in der Mitte des Energieflusses bisher die Summe aller Verbraucher — jetzt erscheint dort der tatsächliche Haus-Rest (Gesamtverbrauch abzüglich der separat ausgewiesenen Verbraucher wie Wärmepumpe, Wallbox, E-Auto). Auch der Tooltip überschreibt den „Gesamtverbrauch" nicht mehr. Anlass: #314.
+- **E-Auto-Ersparnis: der verwendete Benzinpreis steht jetzt im Tooltip.** Beim Tooltip zur Kraftstoff-Ersparnis siehst du jetzt, welcher durchschnittliche Benzinpreis des Zeitraums der Rechnung zugrunde liegt. Danke an NongJoWo.
+- **Daten-Checker erklärt Quellen-Konflikte konkreter.** Wenn zwei Datenquellen denselben Wert befüllen, nennt die Warnung jetzt das betroffene Feld, den Zeitraum und die beteiligten Quellen — statt nur „Konflikt erkannt". Außerdem warnt der Daten-Checker, wenn derselbe HA-Sensor versehentlich Wallbox **und** E-Auto zugeordnet ist. Anlass: Safi105, #314.
 
 ## v3.35.1 — Qualitäts-Härtung (Juni 2026)
 

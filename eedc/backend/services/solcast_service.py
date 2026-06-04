@@ -19,6 +19,10 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from backend.core.berechnungen.slot_konvention import (
+    backward_slot_aus_period_end,
+    backward_slot_aus_period_start,
+)
 from backend.core.config import settings
 from backend.services.wetter.cache import (
     _cache_get, _cache_set, _error_cache_check, _error_cache_set,
@@ -242,18 +246,12 @@ async def _fetch_solcast_api(
                     period_hours = period_minutes / 60
 
                     # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
-                    # Solcast liefert 30-Min-Buckets mit period_end.
-                    #   period_end = N:00 → Bucket [N-0:30, N:00) → Slot N
-                    #   period_end = N:30 → Bucket [N:00, N:30)   → Slot N+1
+                    # Solcast-API liefert Buckets mit period_end; die Abbildung
+                    # auf den Backward-Slot ist zentral in core/berechnungen/
+                    # slot_konvention.py gekapselt (Symmetrie zu OpenMeteo/IST).
                     # Am Tagesübergang (period_end=23:30) wandert der Bucket
-                    # in Slot 0 des Folgetags — slot_date/slot_hour nehmen das
-                    # korrekt ab, statt fälschlich dem heutigen Slot 0 aufzustocken.
-                    if period_end.minute == 0:
-                        slot_marker = period_end
-                    else:
-                        slot_marker = period_end.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-                    slot_date = slot_marker.date()
-                    slot_hour = slot_marker.hour
+                    # korrekt in Slot 0 des Folgetags.
+                    slot_date, slot_hour = backward_slot_aus_period_end(period_end)
                     datum_str = slot_date.isoformat()
 
                     # Stundenwerte für heute aggregieren (kW × 0.5h = kWh)
@@ -538,16 +536,10 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
             pv_p90 = entry.get("pv_estimate90", 0) or 0
 
             # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
-            # HA-Sensor liefert 30-Min-Buckets mit period_start (nicht period_end
-            # wie die API). Für einen Bucket [period_start, period_start+30min)
-            # ist der zugehörige Backward-Slot = ceil(period_start + 30min) als
-            # Stunde:
-            #   period_start = N:00 → Bucket [N:00, N:30) → Slot N+1
-            #   period_start = N:30 → Bucket [N:30, N+1:00) → Slot N+1
-            # → slot_marker = period_start auf volle Stunde abgerundet + 1h.
-            slot_marker = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-            slot_date = slot_marker.date()
-            slot_hour = slot_marker.hour
+            # HA-Sensor liefert periodenbeginnende 30-Min-Buckets (period_start,
+            # nicht period_end wie die API). Die Abbildung auf den Backward-Slot
+            # ist zentral in core/berechnungen/slot_konvention.py gekapselt.
+            slot_date, slot_hour = backward_slot_aus_period_start(dt)
 
             # Stundenwerte für heute
             if slot_date == heute:

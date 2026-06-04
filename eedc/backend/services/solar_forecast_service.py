@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from backend.core.berechnungen.slot_konvention import openmeteo_preceding_hour_slot
 from backend.core.config import settings
 from backend.services.pv_orientation import DEFAULT_SYSTEM_LOSSES
 
@@ -512,10 +513,14 @@ def _build_prognose(
                 schnee_cm=snow
             )
             day["ertrag_sum_kwh"] += stunden_ertrag
-            # Stündliche kW-Werte sammeln
+            # Stündliche kW-Werte sammeln.
+            # OpenMeteo-GTI ist preceding-hour-Mittel: Wert@stunde deckt [stunde-1,
+            # stunde) ab = bereits Backward-Slot stunde. KEIN Shift (Issue #297),
+            # siehe core/berechnungen/slot_konvention.py.
             stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else 12
             if 0 <= stunde < 24:
-                day["stunden_kw"][stunde] += stunden_ertrag
+                slot = openmeteo_preceding_hour_slot(stunde)
+                day["stunden_kw"][slot] += stunden_ertrag
             # Vor-/Nachmittag-Split an Solar Noon (proportional)
             noon = solar_noon_cache.get(tag, 12.4)
             noon_hour = int(noon)
