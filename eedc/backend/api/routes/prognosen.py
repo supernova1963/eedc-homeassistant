@@ -21,7 +21,6 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
-from backend.core.berechnungen.slot_konvention import openmeteo_preceding_hour_slot
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -35,11 +34,17 @@ from backend.services.solcast_service import get_solcast_forecast, get_solcast_s
 from backend.services.solar_forecast_service import fetch_gti_forecast, _solar_noon_hour
 from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 from backend.services.pv_orientation import resolve_system_losses
+from backend.services.prognose_adapter import (
+    StundenProfil,
+    ist_profil,
+    openmeteo_gti_profil,
+    solcast_profil,
+)
 
 logger = logging.getLogger(__name__)
 
 # DEFAULT_SYSTEM_LOSSES: zentral in services/pv_orientation.py
-TEMP_COEFFICIENT = 0.004
+# TEMP_COEFFICIENT: in den Prognose-Adapter (services/prognose_adapter) gewandert.
 
 router = APIRouter()
 
@@ -252,6 +257,25 @@ async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
 # Endpoints
 # =============================================================================
 
+def _profil_zu_eintraegen(p: StundenProfil) -> list[StundenProfilEintrag]:
+    """Kanonisches ``StundenProfil`` (Adapter-Layer) → API-Schema-Liste.
+
+    Gibt nur die ``present_stunden`` aus (in deren Reihenfolge) — so bleibt die
+    variabel lange Ausgabe des Vergleich-Tabs erhalten (IST: nur abgelaufene
+    Stunden; OpenMeteo: nur Indizes mit GTI-Wert). p10/p90 nur, wenn die Quelle
+    ein Band trägt (Solcast).
+    """
+    return [
+        StundenProfilEintrag(
+            stunde=h,
+            kw=p.slots_kw[h],
+            p10_kw=p.p10_kw[h] if p.p10_kw is not None else None,
+            p90_kw=p.p90_kw[h] if p.p90_kw is not None else None,
+        )
+        for h in p.present_stunden
+    ]
+
+
 @router.get("/prognosen/{anlage_id}", response_model=PrognosenVergleichResponse)
 async def get_prognosen_vergleich(
     anlage_id: int,
@@ -387,38 +411,28 @@ async def get_prognosen_vergleich(
     openmeteo_morgen_kwh = openmeteo_tage[1].pv_prognose_kwh if len(openmeteo_tage) >= 2 else None
     openmeteo_uebermorgen_kwh = openmeteo_tage[2].pv_prognose_kwh if len(openmeteo_tage) >= 3 else None
 
-    # ── OpenMeteo GTI-Stundenprofile (3 Tage) ──
-    # gti_data enthält bis zu 72 Stundenwerte (3×24h)
+    # ── OpenMeteo GTI-Stundenprofile (3 Tage, zentraler Adapter) ──
+    # gti_data enthält bis zu 72 Stundenwerte (3×24h). OpenMeteo-GTI ist
+    # preceding-hour-Mittel: Wert@Index h deckt [h-1, h) ab = bereits Backward-
+    # Slot h (Issue #297, KEIN Shift — slot_konvention). Solcast/IST nutzen
+    # dasselbe Raster, daher liegen alle Quellen im Vergleich deckungsgleich.
+    # Formel + Temperatur-Korrektur in prognose_adapter.openmeteo_gti_profil.
     openmeteo_stundenprofil = []  # Heute (erste 24h)
     openmeteo_tagesprofile: list[list[StundenProfilEintrag]] = [[], [], []]  # [heute, morgen, übermorgen]
     if gti_data:
         hourly = gti_data.get("hourly", {})
         gti_values = hourly.get("global_tilted_irradiance", [])
         temps = hourly.get("temperature_2m", [])
-        # OpenMeteo-GTI ist preceding-hour-Mittel: der Wert am Stunden-Index h
-        # deckt [h-1, h) ab = bereits Backward-Slot h (Issue #297, KEIN Shift —
-        # siehe core/berechnungen/slot_konvention.py). Solcast/IST nutzen dasselbe
-        # Slot-Raster, daher liegen alle Quellen im Vergleich deckungsgleich.
-        for i in range(min(72, len(gti_values))):
-            tag_idx = i // 24  # 0=heute, 1=morgen, 2=übermorgen
-            h = openmeteo_preceding_hour_slot(i % 24)
-            gti = gti_values[i] or 0
-            if gti > 0 and anlagenleistung_kwp > 0:
-                pv_kw = gti * anlagenleistung_kwp * (1 - system_losses) / 1000
-                temp = temps[i] if i < len(temps) and temps[i] is not None else None
-                if temp is not None:
-                    aufheizung = min(25, gti / 40)
-                    modul_temp = temp + aufheizung
-                    if modul_temp > 25:
-                        pv_kw *= (1 - (modul_temp - 25) * TEMP_COEFFICIENT)
-                pv_kw = max(0, pv_kw)
-            else:
-                pv_kw = 0
-            entry = StundenProfilEintrag(stunde=h, kw=round(pv_kw, 2))
-            if tag_idx < 3:
-                openmeteo_tagesprofile[tag_idx].append(entry)
+        for tag_idx in range(3):
+            profil = openmeteo_gti_profil(
+                gti_values, temps, tag_idx,
+                kwp=anlagenleistung_kwp, system_losses=system_losses,
+                datum=heute + timedelta(days=tag_idx),
+            )
+            eintraege = _profil_zu_eintraegen(profil)
+            openmeteo_tagesprofile[tag_idx] = eintraege
             if tag_idx == 0:
-                openmeteo_stundenprofil.append(entry)
+                openmeteo_stundenprofil = eintraege
 
     # ── EEDC = OpenMeteo × Lernfaktor (MOS-Kaskade: saisonal → quartal → gesamt) ──
     # EEDC nutzt immer OpenMeteo als Basis — Solcast/SFML sind eigene Quellen.
@@ -445,28 +459,16 @@ async def get_prognosen_vergleich(
         eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None else None
         eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None else None
 
-    # ── IST-Ertrag heute ──
-    # Issue #135: pv_kw kann None sein (kein Zähler gemappt / Datenlücke).
-    # None-Stunden fließen NICHT in die Summe ein und werden im Stundenprofil
-    # als Lücke markiert (kw=None). Frontend zeigt ist_unvollstaendig=True an.
-    ist_stundenprofil = []
-    ist_heute_kwh = 0.0
-    ist_unvollstaendig = False
-    jetzt_stunde = now.hour
-    for row in ist_rows:
-        if row.pv_kw is None:
-            # Slot der gerade-eben-abgeschlossenen Stunde (= jetzt_stunde) wird
-            # nicht geflaggt: HA Statistics schreibt die Hourly-Row erst am Ende
-            # der Stunde, der :55-Preview-Job überbrückt das nicht immer
-            # zuverlässig (HA-Restart, Sensor-Glitch). Erst Slots, die mindestens
-            # eine volle Folgestunde alt sind, gelten als echtes Datenloch.
-            if row.stunde < jetzt_stunde:
-                ist_unvollstaendig = True
-            ist_stundenprofil.append(StundenProfilEintrag(stunde=row.stunde, kw=None))
-            continue
-        kw = row.pv_kw
-        ist_stundenprofil.append(StundenProfilEintrag(stunde=row.stunde, kw=round(kw, 2)))
-        ist_heute_kwh += kw
+    # ── IST-Ertrag heute (zentraler Adapter) ──
+    # Issue #135: pv_kw kann None sein (kein Zähler gemappt / Datenlücke). None-
+    # Stunden fließen NICHT in die Summe ein und bleiben im Profil als Lücke
+    # (kw=None). Eine Lücke in einer bereits abgelaufenen Stunde setzt
+    # unvollstaendig=True; die gerade abgeschlossene Stunde bewusst nicht (HA
+    # schreibt die Hourly-Row erst am Stundenende). Logik in prognose_adapter.
+    ist_p = ist_profil(ist_rows, jetzt_stunde=now.hour, datum=heute)
+    ist_stundenprofil = _profil_zu_eintraegen(ist_p)
+    ist_heute_kwh = ist_p.tageswert_kwh  # roh/ungerundet — für verbleibend-Rechnung
+    ist_unvollstaendig = ist_p.unvollstaendig
 
     # ── Verbleibend ──
     aktuelle_stunde = now.hour
@@ -498,13 +500,8 @@ async def get_prognosen_vergleich(
     solcast_uebermorgen_kwh = None
 
     if solcast:
-        for h in range(24):
-            solcast_stundenprofil.append(StundenProfilEintrag(
-                stunde=h,
-                kw=solcast.hourly_kw[h] if h < len(solcast.hourly_kw) else 0,
-                p10_kw=solcast.hourly_p10_kw[h] if h < len(solcast.hourly_p10_kw) else 0,
-                p90_kw=solcast.hourly_p90_kw[h] if h < len(solcast.hourly_p90_kw) else 0,
-            ))
+        # Zentraler Adapter: 24-Slot-Profil + p10/p90-Band, fehlende Slots → 0.
+        solcast_stundenprofil = _profil_zu_eintraegen(solcast_profil(solcast, datum=heute))
         solcast_tage = [SolcastTagSchema(**t) for t in solcast.tage_voraus]
         morgen_str = (heute + timedelta(days=1)).isoformat()
         uebermorgen_str = (heute + timedelta(days=2)).isoformat()
