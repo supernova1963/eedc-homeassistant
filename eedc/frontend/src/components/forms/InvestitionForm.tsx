@@ -615,7 +615,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Batteriekapazität (kWh)"
               name="param_batteriekapazitaet_kwh"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.batteriekapazitaet_kwh as string}
               onChange={onChange}
@@ -624,7 +624,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Verbrauch (kWh/100km)"
               name="param_verbrauch_kwh_100km"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.verbrauch_kwh_100km as string}
               onChange={onChange}
@@ -633,7 +633,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Jahresfahrleistung (km)"
               name="param_jahresfahrleistung_km"
               type="number"
-              step="100"
+              step="any"
               min="0"
               value={paramData.jahresfahrleistung_km as string}
               onChange={onChange}
@@ -656,7 +656,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Verbrenner-Verbrauch (L/100km)"
               name="param_vergleich_verbrauch_l_100km"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.vergleich_verbrauch_l_100km as string}
               onChange={onChange}
@@ -688,7 +688,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="V2H Entladeleistung (kW)"
               name="param_v2h_entladeleistung_kw"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.v2h_entladeleistung_kw as string}
               onChange={onChange}
@@ -722,7 +722,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Kapazität (kWh)"
               name="param_kapazitaet_kwh"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.kapazitaet_kwh as string}
               onChange={onChange}
@@ -731,7 +731,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Nutzbare Kapazität (kWh)"
               name="param_nutzbare_kapazitaet_kwh"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.nutzbare_kapazitaet_kwh as string}
               onChange={onChange}
@@ -741,7 +741,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Max. Ladeleistung (kW)"
               name="param_max_ladeleistung_kw"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.max_ladeleistung_kw as string}
               onChange={onChange}
@@ -750,7 +750,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Max. Entladeleistung (kW)"
               name="param_max_entladeleistung_kw"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.max_entladeleistung_kw as string}
               onChange={onChange}
@@ -759,7 +759,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Wirkungsgrad (%)"
               name="param_wirkungsgrad_prozent"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               max="100"
               value={paramData.wirkungsgrad_prozent as string}
@@ -892,7 +892,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Nennleistung (kW)"
               name="param_leistung_kw"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.leistung_kw as string}
               onChange={onChange}
@@ -905,7 +905,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                 label="Jahresarbeitszahl (JAZ)"
                 name="param_jaz"
                 type="number"
-                step="0.1"
+                step="any"
                 min="1"
                 max="10"
                 value={paramData.jaz as string}
@@ -922,7 +922,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                   label="SCOP Heizung"
                   name="param_scop_heizung"
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="1"
                   max="10"
                   value={paramData.scop_heizung as string}
@@ -934,7 +934,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                   label="SCOP Warmwasser"
                   name="param_scop_warmwasser"
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="1"
                   max="10"
                   value={paramData.scop_warmwasser as string}
@@ -968,7 +968,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                   label="COP Heizung"
                   name="param_cop_heizung"
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="1"
                   max="10"
                   value={paramData.cop_heizung as string}
@@ -980,7 +980,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
                   label="COP Warmwasser"
                   name="param_cop_warmwasser"
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="1"
                   max="10"
                   value={paramData.cop_warmwasser as string}
@@ -1013,7 +1013,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Heizwärmebedarf (kWh/Jahr)"
               name="param_heizwaermebedarf_kwh"
               type="number"
-              step="100"
+              step="any"
               min="0"
               value={paramData.heizwaermebedarf_kwh as string}
               onChange={onChange}
@@ -1023,7 +1023,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Warmwasserbedarf (kWh/Jahr)"
               name="param_warmwasserbedarf_kwh"
               type="number"
-              step="100"
+              step="any"
               min="0"
               value={paramData.warmwasserbedarf_kwh as string}
               onChange={onChange}
@@ -1055,7 +1055,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Alter Preis (ct/kWh)"
               name="param_alter_preis_cent_kwh"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.alter_preis_cent_kwh as string}
               onChange={onChange}
@@ -1107,7 +1107,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Max. Ladeleistung (kW)"
               name="param_max_ladeleistung_kw"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.max_ladeleistung_kw as string}
               onChange={onChange}
@@ -1165,7 +1165,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Max. Leistung (kW)"
               name="param_max_leistung_kw"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               value={paramData.max_leistung_kw as string}
               onChange={onChange}
@@ -1174,7 +1174,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               label="Wirkungsgrad (%)"
               name="param_wirkungsgrad_prozent"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               max="100"
               value={paramData.wirkungsgrad_prozent as string}

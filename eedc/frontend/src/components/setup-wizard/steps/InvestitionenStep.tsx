@@ -185,7 +185,7 @@ function InvestitionForm({
                 onChange={(e) => onUpdate({ anschaffungskosten_gesamt: parseFloat(e.target.value) || 0 })}
                 placeholder="z.B. 5000"
                 min="0"
-                step="100"
+                step="any"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               />
             </div>
@@ -265,7 +265,7 @@ function InvestitionForm({
                   onChange={(e) => updateParam(PARAM_WECHSELRICHTER.MAX_LEISTUNG_KW, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 10"
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -339,7 +339,7 @@ function InvestitionForm({
                   onChange={(e) => updateParam(PARAM_SPEICHER.KAPAZITAET_KWH, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 10"
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -372,7 +372,7 @@ function InvestitionForm({
                   onChange={(e) => updateParam(PARAM_WALLBOX.MAX_LADELEISTUNG_KW, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 11"
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -405,7 +405,7 @@ function InvestitionForm({
                   onChange={(e) => updateParam(PARAM_E_AUTO.BATTERIE_KAPAZITAET_KWH, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 66"
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -419,7 +419,7 @@ function InvestitionForm({
                   onChange={(e) => updateParam(PARAM_E_AUTO.VERBRAUCH_KWH_100KM, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 15"
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -452,7 +452,7 @@ function InvestitionForm({
                   onChange={(e) => updateParam(PARAM_WAERMEPUMPE.LEISTUNG_KW, parseFloat(e.target.value) || undefined)}
                   placeholder="z.B. 9"
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -476,7 +476,7 @@ function InvestitionForm({
                   placeholder="z.B. 3.5"
                   min="1"
                   max="10"
-                  step="0.1"
+                  step="any"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
@@ -496,7 +496,7 @@ function InvestitionForm({
                     onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP, parseFloat(e.target.value) || undefined)}
                     placeholder="z.B. 400"
                     min="0"
-                    step="10"
+                    step="any"
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
                 </div>
@@ -578,7 +578,7 @@ function InvestitionForm({
                       onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.SPEICHER_KAPAZITAET_WH, parseFloat(e.target.value) || undefined)}
                       placeholder="z.B. 1600"
                       min="0"
-                      step="100"
+                      step="any"
                       className="w-full max-w-xs px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">

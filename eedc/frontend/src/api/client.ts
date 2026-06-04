@@ -49,6 +49,16 @@ class ApiClient {
         const data = await response.json()
         if (typeof data.detail === 'string') {
           detail = data.detail
+        } else if (Array.isArray(data.detail)) {
+          // FastAPI/Pydantic-Validierungsfehler: lesbare Meldung statt rohem JSON.
+          // Jeder Eintrag hat msg + loc (z. B. ["body", "bezeichnung"]).
+          const msgs = data.detail
+            .map((err: { msg?: string; loc?: (string | number)[] }) => {
+              const field = Array.isArray(err.loc) ? err.loc[err.loc.length - 1] : undefined
+              return field && field !== 'body' ? `${field}: ${err.msg}` : err.msg
+            })
+            .filter(Boolean)
+          detail = msgs.length > 0 ? msgs.join('; ') : 'Eingabe ungültig'
         } else if (data.detail) {
           detail = JSON.stringify(data.detail)
         }

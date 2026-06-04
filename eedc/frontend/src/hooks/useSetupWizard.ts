@@ -382,6 +382,13 @@ export function useSetupWizard(): UseSetupWizardReturn {
     // 4. Neuen Timer setzen (500ms Debounce für API-Call)
     const timer = setTimeout(async () => {
       pendingUpdatesRef.current.delete(id)
+      // Pflichtfeld bezeichnung: leeres Feld NICHT speichern. Sonst lehnt das
+      // Backend mit min_length-422 ab und refreshInvestitionen() holt den alten
+      // Wert zurück (wirkt wie "füllt sich von selbst"). Lokaler State bleibt leer,
+      // bis der Nutzer wieder etwas eintippt; finale Validierung beim Wizard-Submit.
+      if ('bezeichnung' in mergedData && !(mergedData.bezeichnung ?? '').trim()) {
+        return
+      }
       try {
         await investitionenApi.update(id, mergedData)
         // Nicht sofort refreshen - nur bei Fehlern
