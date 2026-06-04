@@ -10,10 +10,19 @@ Industriestandard (HA Energy Dashboard, SolarEdge, SMA, Fronius, Tibber).
 
 Dieses Modul ist die **Single Source of Truth** dafür, wie die verschiedenen
 Prognosequellen ihre Roh-Zeitmarker auf Backward-Slots abbilden. Die IST-Seite
-(Snapshot-Diffs) lebt bewusst in ``services/snapshot/boundary_range.py``
-(``BoundaryRange.for_hourly_slots`` → Slot ``h = snap[h] − snap[h-1]``); beide
-müssen dasselbe Slot-Raster liefern (Symmetrie-Test
-``tests/test_slot_konvention_quellen.py``).
+hat **zwei** Pfade, die beide dasselbe Backward-Raster liefern müssen:
+  - Snapshot-Diffs: ``services/snapshot/boundary_range.py``
+    (``BoundaryRange.for_hourly_slots`` → Slot ``h = snap[h] − snap[h-1]``).
+  - HA-LTS direkt: ``ha_statistics_service.get_hourly_kwh_deltas_for_day`` via
+    ``lts_boundary_index`` (siehe unten).
+Alle vier (OpenMeteo, Solcast, IST-Snapshot, IST-LTS) müssen ein und dasselbe
+physische Intervall in denselben Slot legen — Symmetrie-Test
+``tests/test_slot_konvention_quellen.py``.
+
+⚠️ Historie: der LTS-Pfad labelte bis v3.3x FORWARD (Slot ``h = [h, h+1)``),
+während alle anderen backward waren → IST erschien im Stundenvergleich
+1 h zu früh (Rainer/Gernot, 2026-06-04). Der Symmetrie-Test deckte damals nur
+den Snapshot-Pfad ab und blieb grün — Lehre: jeden Parallelpfad pinnen.
 
 ----------------------------------------------------------------------------
 ⚠️  OpenMeteo wird NICHT verschoben — und das ist KEIN Bug (Issue #297).
@@ -50,6 +59,35 @@ def openmeteo_preceding_hour_slot(stunde: int) -> int:
     sichtbar und im Symmetrie-Test prüfbar ist (Issue #297).
     """
     return stunde
+
+
+def lts_boundary_index(start_ts_dt: datetime, datum: date) -> int:
+    """HA-LTS-Statistics-Row ``start_ts`` → Backward-Boundary-Index.
+
+    HA legt bei ``start_ts=H`` den Counter-Stand am **Ende** der Periode ab,
+    also ``Zähler(H+1):00`` (empirisch belegt 2026-06-04 gegen Live-HA:
+    ``state@start_ts=H`` = Zählerstand um ``H+1``). Mit ``Zähler(k)`` := Counter
+    um ``k:00`` ist ``Zähler(k) = sum @ start_ts=(k-1)``.
+
+    Diese Funktion liefert für eine Statistics-Row den Boundary-Index ``k``
+    (Stunden-Offset ab ``00:00`` des ``datum``), unter dem ihr Counter-Wert als
+    ``Zähler(k)`` einzusortieren ist:
+
+      ``start_ts = 22:00 Vortag`` → ``Zähler(23:00 Vortag)`` → ``k = -1``
+      ``start_ts = 23:00 Vortag`` → ``Zähler(00:00 heute)``  → ``k =  0``
+      ``start_ts = 05:00 heute``  → ``Zähler(06:00 heute)``  → ``k =  6``
+      ``start_ts = 22:00 heute``  → ``Zähler(23:00 heute)``  → ``k = 23``
+
+    Der Backward-Slot ``h`` (Energie ``[h-1, h)``) ist dann
+    ``Zähler(h) − Zähler(h-1) = boundary[h] − boundary[h-1]`` — dasselbe
+    Slot-Raster wie ``BoundaryRange.for_hourly_slots`` und die Prognosequellen
+    (Symmetrie-Test ``tests/test_slot_konvention_quellen.py``).
+
+    Wall-clock-Arithmetik (Tag-Offset × 24 + Stunde) statt Sekunden-Differenz —
+    DST-robust an den Umstellungstagen.
+    """
+    boundary_dt = start_ts_dt + timedelta(hours=1)
+    return (boundary_dt.date() - datum).days * 24 + boundary_dt.hour
 
 
 def backward_slot_aus_period_start(period_start: datetime) -> tuple[date, int]:

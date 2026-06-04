@@ -17,7 +17,8 @@ Testet:
   5. Unbekannte Entity-ID → fehlt im Result (kein Crash)
 
 Tricky: HA-Statistics-Konvention `start_ts=H` enthält Counter am Ende der
-Periode (H+1). Slot h (Energie [H, H+1)) = state(start_ts=H) − state(start_ts=H-1).
+Periode (H+1) = Zähler(H+1). Backward-Slots (#144/#297): Slot h = Energie
+[h-1, h) = Zähler(h) − Zähler(h-1). Boundary-Index via lts_boundary_index.
 """
 
 from __future__ import annotations
@@ -94,12 +95,14 @@ def test_glatter_tag_24_slots():
     mid = _seed_sensor(svc, "sensor.pv_energy", "kWh")
 
     datum = date(2026, 5, 15)
-    base = 1000.0  # Counter-Wert bei 00:00 datum (= state at start_ts=23:00 vortag)
-    # 25 Boundaries: start_ts=23:00 vortag bis start_ts=23:00 heute
+    base = 1000.0  # Zähler(-1) = 23:00 vortag (= sum at start_ts=22:00 vortag)
+    # 25 Boundaries Zähler(-1..23): Rows start_ts=22:00 vortag bis 22:00 heute.
+    # Backward: Slot h = Zähler(h) − Zähler(h-1); Slot 0 braucht Zähler(-1).
     boundary_starts = [
-        datetime(2026, 5, 14, 23, 0),  # → 00:00 heute (b_idx=0)
+        datetime(2026, 5, 14, 22, 0),  # → Zähler(-1) = 23:00 vortag (b_idx=-1)
+        datetime(2026, 5, 14, 23, 0),  # → Zähler(0)  = 00:00 heute  (b_idx=0)
     ] + [
-        datetime(2026, 5, 15, h, 0) for h in range(24)  # → 01:00..00:00 folgetag (b_idx=1..24)
+        datetime(2026, 5, 15, h, 0) for h in range(23)  # → Zähler(1..23)
     ]
     for i, when in enumerate(boundary_starts):
         _seed_hourly_value(svc, mid, when, base + i * 5.0)
@@ -118,8 +121,8 @@ def test_einheit_wh_wird_skaliert():
 
     datum = date(2026, 5, 15)
     # 5000 Wh pro Stunde = 5.0 kWh
-    boundary_starts = [datetime(2026, 5, 14, 23, 0)] + [
-        datetime(2026, 5, 15, h, 0) for h in range(24)
+    boundary_starts = [datetime(2026, 5, 14, 22, 0), datetime(2026, 5, 14, 23, 0)] + [
+        datetime(2026, 5, 15, h, 0) for h in range(23)
     ]
     for i, when in enumerate(boundary_starts):
         _seed_hourly_value(svc, mid, when, 1_000_000.0 + i * 5000.0)
@@ -136,10 +139,10 @@ def test_luecke_in_der_mitte_einzelne_slots_none():
     mid = _seed_sensor(svc, "sensor.pv_energy", "kWh")
 
     datum = date(2026, 5, 15)
-    boundary_starts = [datetime(2026, 5, 14, 23, 0)] + [
-        datetime(2026, 5, 15, h, 0) for h in range(24)
+    boundary_starts = [datetime(2026, 5, 14, 22, 0), datetime(2026, 5, 14, 23, 0)] + [
+        datetime(2026, 5, 15, h, 0) for h in range(23)
     ]
-    # b_idx=12 = state at start_ts=11:00 → Slot 11 (end) + Slot 12 (start) betroffen
+    # start_ts=11:00 → Zähler(12) fehlt → Backward Slot 12 (end) + Slot 13 (start).
     skip_when = datetime(2026, 5, 15, 11, 0)
     for i, when in enumerate(boundary_starts):
         if when == skip_when:
@@ -148,8 +151,8 @@ def test_luecke_in_der_mitte_einzelne_slots_none():
 
     result = svc.get_hourly_kwh_deltas_for_day(["sensor.pv_energy"], datum)
     slots = result["sensor.pv_energy"]
-    assert slots.get(11) is None, f"Slot 11 muss None sein (end-Boundary fehlt): {slots.get(11)}"
-    assert slots.get(12) is None, f"Slot 12 muss None sein (start-Boundary fehlt): {slots.get(12)}"
+    assert slots.get(12) is None, f"Slot 12 muss None sein (end-Boundary fehlt): {slots.get(12)}"
+    assert slots.get(13) is None, f"Slot 13 muss None sein (start-Boundary fehlt): {slots.get(13)}"
     assert slots.get(0) == 5.0
     assert slots.get(23) == 5.0
 
@@ -164,8 +167,8 @@ def test_mehrere_sensoren_in_einem_aufruf():
     }
 
     datum = date(2026, 5, 15)
-    boundary_starts = [datetime(2026, 5, 14, 23, 0)] + [
-        datetime(2026, 5, 15, h, 0) for h in range(24)
+    boundary_starts = [datetime(2026, 5, 14, 22, 0), datetime(2026, 5, 14, 23, 0)] + [
+        datetime(2026, 5, 15, h, 0) for h in range(23)
     ]
     for sid, mid in mids.items():
         base = {"sensor.pv": 1000.0, "sensor.einspeisung": 500.0, "sensor.netzbezug": 800.0}[sid]
@@ -187,8 +190,8 @@ def test_unbekannter_sensor_fehlt_im_result():
     mid_pv = _seed_sensor(svc, "sensor.pv", "kWh")
 
     datum = date(2026, 5, 15)
-    boundary_starts = [datetime(2026, 5, 14, 23, 0)] + [
-        datetime(2026, 5, 15, h, 0) for h in range(24)
+    boundary_starts = [datetime(2026, 5, 14, 22, 0), datetime(2026, 5, 14, 23, 0)] + [
+        datetime(2026, 5, 15, h, 0) for h in range(23)
     ]
     for i, when in enumerate(boundary_starts):
         _seed_hourly_value(svc, mid_pv, when, 1000.0 + i * 5.0)

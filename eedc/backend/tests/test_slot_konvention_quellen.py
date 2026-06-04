@@ -24,6 +24,7 @@ import pytest
 from backend.core.berechnungen.slot_konvention import (
     backward_slot_aus_period_end,
     backward_slot_aus_period_start,
+    lts_boundary_index,
     openmeteo_preceding_hour_slot,
 )
 from backend.services.snapshot.boundary_range import BoundaryRange
@@ -69,11 +70,29 @@ def test_tagesuebergang_wandert_in_folgetag_slot_0():
 
 
 def test_ist_boundary_range_slot_6_ist_intervall_05_06():
-    """IST-Slot 6 = snap[6] − snap[5] = Energie [05:00, 06:00)."""
+    """IST-Slot 6 (Snapshot-Pfad) = snap[6] − snap[5] = Energie [05:00, 06:00)."""
     rng = BoundaryRange.for_hourly_slots(date(2026, 6, 4))
     slot6 = next(p for p in rng.slot_pairs if p[0] == 6)
     slot_idx, prev_off, curr_off = slot6
     assert (prev_off, curr_off) == (5, 6)  # [05:00, 06:00)
+
+
+def test_ist_lts_pfad_intervall_05_06_landet_in_slot_6():
+    """IST-LTS-Pfad: [05:00, 06:00) = Zähler(6) − Zähler(5) → Backward-Slot 6.
+
+    Regression für den Forward-Bug (Rainer/Gernot 2026-06-04): die HA-LTS-Row
+    `start_ts=05:00` trägt Zähler@06:00 → Boundary-Index 6; Row `start_ts=04:00`
+    trägt Zähler@05:00 → Index 5. Slot 6 = boundary[6] − boundary[5] = [05,06).
+    Früher landete dieselbe Energie in Slot 5 (Forward) → IST 1 h zu früh.
+    """
+    d = date(2026, 6, 4)
+    assert lts_boundary_index(datetime(2026, 6, 4, 5, 0), d) == 6
+    assert lts_boundary_index(datetime(2026, 6, 4, 4, 0), d) == 5
+    # Tagesübergang: Row 22:00 Vortag trägt Zähler@23:00 Vortag → Index -1
+    # (für Slot 0 = [23:00 Vortag, 00:00 heute)); Row 23:00 Vortag → Index 0.
+    assert lts_boundary_index(datetime(2026, 6, 3, 22, 0), d) == -1
+    assert lts_boundary_index(datetime(2026, 6, 3, 23, 0), d) == 0
+    assert lts_boundary_index(datetime(2026, 6, 4, 22, 0), d) == 23
 
 
 # ─── Symmetrie: dasselbe Intervall → derselbe Slot über alle Quellen ───────
@@ -125,11 +144,15 @@ def test_symmetrie_alle_quellen_intervall_05_06_in_slot_6():
     _, sc_start_slot = backward_slot_aus_period_start(datetime(2026, 6, 4, 5, 0))
     _, sc_end_slot = backward_slot_aus_period_end(datetime(2026, 6, 4, 6, 0))
 
-    # IST (Snapshot-Diff): Slot 6 deckt [05:00, 06:00) ab.
+    # IST Snapshot-Diff: Slot 6 deckt [05:00, 06:00) ab.
     rng = BoundaryRange.for_hourly_slots(date(2026, 6, 4))
     ist_slot = next(p[0] for p in rng.slot_pairs if (p[1], p[2]) == (5, 6))
 
-    assert sc_start_slot == sc_end_slot == ist_slot == 6, \
+    # IST HA-LTS: [05:00, 06:00) = Zähler(6) − Zähler(5) → Slot 6.
+    # (Row start_ts=05:00 → Boundary-Index 6; früher Forward → Slot 5.)
+    ist_lts_slot = lts_boundary_index(datetime(2026, 6, 4, 5, 0), date(2026, 6, 4))
+
+    assert sc_start_slot == sc_end_slot == ist_slot == ist_lts_slot == 6, \
         "Quellen-Asymmetrie: [05,06) landet nicht überall in Slot 6"
 
 

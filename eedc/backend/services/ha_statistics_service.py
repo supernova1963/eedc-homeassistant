@@ -22,6 +22,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from backend.core.config import settings
+from backend.core.berechnungen.slot_konvention import lts_boundary_index
 
 logger = logging.getLogger(__name__)
 
@@ -907,21 +908,28 @@ class HAStatisticsService:
         Etappe 4 (v3.31.0): Liest stündliche kWh-Deltas direkt aus
         HA-LTS-Statistics für einen Tag — ohne sensor_snapshots-Zwischenschritt.
 
-        Pro Sensor 24 Stunden-Deltas: Slot h = Energie zwischen H:00 und
-        (H+1):00, berechnet als Counter-Differenz nach HA-Statistics-Konvention.
+        Pro Sensor 24 Stunden-Deltas in **Backward-Konvention** (#144/#297):
+        Slot h = Energie im Intervall [h-1, h) — dasselbe Slot-Raster wie
+        BoundaryRange.for_hourly_slots (Snapshot-Pfad) und die Prognosequellen.
+        Symmetrie über alle Pfade: tests/test_slot_konvention_quellen.py.
 
-        HA-Statistics-Konvention (siehe get_value_at-Docstring): state/sum bei
-        start_ts=H ist der Counter-Stand AM ENDE der Periode (H+1). Für
-        Slot h (Energie im Intervall [H, H+1)) gilt damit:
-            end   = state at start_ts=H        (= Counter um H+1:00)
-            start = state at start_ts=(H-1)    (= Counter um H:00)
+        HA-Statistics-Konvention (empirisch belegt 2026-06-04 gegen Live-HA):
+        state/sum bei start_ts=H ist der Counter-Stand AM ENDE der Periode,
+        also Zähler um (H+1):00. Mit Zähler(k) := Counter um k:00 gilt
+        Zähler(k) = sum @ start_ts=(k-1); der Boundary-Index kommt aus
+        `lts_boundary_index` (slot_konvention.py). Für Slot h (Energie [h-1, h)):
+            end   = Zähler(h)    = sum @ start_ts=(h-1)
+            start = Zähler(h-1)  = sum @ start_ts=(h-2)
             delta = end - start
 
         Boundary-Spezialfälle:
-            - Slot 0: end = state at start_ts=00:00 heute,
-                      start = state at start_ts=23:00 vortag
-            - Slot 23: end = state at start_ts=23:00 heute,
-                       start = state at start_ts=22:00 heute
+            - Slot 0:  [23:00 Vortag, 00:00 heute)  → Zähler(0) − Zähler(-1)
+            - Slot 23: [22:00 heute, 23:00 heute)   → Zähler(23) − Zähler(22)
+
+        HISTORIE: Bis v3.3x labelte dieser Pfad FORWARD (Slot h = [h, h+1)),
+        während Prognosen + Snapshot-Pfad backward waren → IST erschien im
+        Stundenvergleich 1 h zu früh (Rainer/Gernot, 2026-06-04). Der
+        Symmetrie-Test deckte nur den Snapshot-Pfad ab und blieb grün.
 
         Verwendet die `sum`-Spalte (HA-recompile-bereinigte Lifetime-Summe,
         reset-tolerant). Fallback auf `state` nur für Sensoren ohne has_sum
@@ -948,11 +956,14 @@ class HAStatisticsService:
 
         import time as time_module
 
-        # Wir brauchen 25 Boundaries: start_ts=23:00 vortag bis start_ts=23:00 heute.
-        # SQL-Range: ein 5-Min-Sicherheitspolster auf beiden Seiten gegen
-        # Boundary-Drift (manche HA-Versionen haben start_ts=H:00:01 statt H:00:00).
-        boundary_start = datetime.combine(datum - timedelta(days=1), datetime.min.time()).replace(hour=23)
-        boundary_end = datetime.combine(datum, datetime.min.time()).replace(hour=23)
+        # Backward (#144): Slot h = Zähler(h) − Zähler(h-1) = Energie [h-1, h).
+        # Wir brauchen Zählerstände an den Stunden -1..23 (23:00 Vortag … 23:00
+        # heute). Zähler(k) = sum @ start_ts=(k-1) → die Rows reichen von
+        # start_ts=22:00 Vortag bis 22:00 heute. (Vor dem Backward-Fix lag das
+        # Fenster eine Stunde später, was die Forward-Fehlbeschriftung zementierte.)
+        # 5-Min-Polster gegen Boundary-Drift (start_ts=H:00:01 statt H:00:00).
+        boundary_start = datetime.combine(datum - timedelta(days=1), datetime.min.time()).replace(hour=22)
+        boundary_end = datetime.combine(datum, datetime.min.time()).replace(hour=22)
         ts_von = time_module.mktime((boundary_start - timedelta(minutes=5)).timetuple())
         ts_bis = time_module.mktime((boundary_end + timedelta(minutes=5)).timetuple())
 
@@ -962,8 +973,9 @@ class HAStatisticsService:
         params["ts_bis"] = ts_bis
 
         # Per-Sensor: {boundary_hour_index: counter_value_in_kwh}
-        # boundary_hour_index: 0 = 00:00 heute (= state at start_ts=23:00 vortag),
-        # 1 = 01:00 heute (= state at start_ts=00:00 heute), ..., 24 = 00:00 folgetag (= state at start_ts=23:00 heute)
+        # boundary_hour_index = Zähler(k):00, k = Stunden-Offset ab 00:00 heute:
+        #  -1 = 23:00 Vortag (= sum @ start_ts=22:00 Vortag), 0 = 00:00 heute,
+        #  …, 23 = 23:00 heute. Index via lts_boundary_index (SoT/Symmetrie-Test).
         per_sensor_boundaries: dict[str, dict[int, float]] = {sid: {} for sid in sensor_ids}
 
         try:
@@ -1017,21 +1029,12 @@ class HAStatisticsService:
                     faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
                     wert_kwh = raw * faktor
 
-                    # start_ts=H → Counter am Ende von H = (H+1):00.
-                    # Mappe auf Boundary-Hour-Index 0..24 (0 = 00:00 heute).
+                    # start_ts=H → Counter am Ende von H = Zähler(H+1):00.
+                    # Boundary-Index (Stunden-Offset ab 00:00 heute, -1..24) aus
+                    # der SoT-Helper-Funktion — DST-robust, Symmetrie-getestet.
                     dt = datetime.fromtimestamp(start_ts)
-                    boundary_dt = dt + timedelta(hours=1)
-                    if boundary_dt.date() == datum:
-                        b_idx = boundary_dt.hour  # 1..23
-                    elif boundary_dt.date() == datum + timedelta(days=1) and boundary_dt.hour == 0:
-                        b_idx = 24
-                    elif boundary_dt.date() == datum and boundary_dt.hour == 0:
-                        b_idx = 0
-                    elif boundary_dt.date() == datum - timedelta(days=1) and boundary_dt.hour == 23:
-                        # Vortag-Stunde 23 → Boundary am Ende = 00:00 heute, das ist b_idx=0
-                        # Aber durch die +1h-Logik kommt das eigentlich nie hier rein
-                        continue
-                    else:
+                    b_idx = lts_boundary_index(dt, datum)
+                    if b_idx < -1 or b_idx > 24:
                         continue  # Außerhalb relevanter Boundary-Range
                     per_sensor_boundaries[sid][b_idx] = wert_kwh
 
@@ -1039,15 +1042,16 @@ class HAStatisticsService:
             logger.warning(f"get_hourly_kwh_deltas_for_day Fehler: {type(e).__name__}: {e}")
             return {}
 
-        # Stunden-Deltas berechnen: Slot h = boundary[h+1] - boundary[h]
+        # Backward (#144): Slot h = Zähler(h) − Zähler(h-1) = Energie [h-1, h).
+        # Slot 0 = [23:00 Vortag, 00:00 heute) → boundary[0] − boundary[-1].
         result: dict[str, dict[int, Optional[float]]] = {}
         for sid, boundaries in per_sensor_boundaries.items():
             if not boundaries:
                 continue  # Sensor hatte keine Daten — wird im Aufrufer als Lücke behandelt
             slots: dict[int, Optional[float]] = {}
             for h in range(24):
-                start = boundaries.get(h)
-                end = boundaries.get(h + 1)
+                start = boundaries.get(h - 1)
+                end = boundaries.get(h)
                 if start is None or end is None:
                     slots[h] = None
                 else:
