@@ -176,13 +176,18 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
         />
         <KPICard
           title="Verbrauch"
-          value={(z.durchschnitt_verbrauch_kwh_100km || 0).toFixed(1)}
+          value={z.durchschnitt_verbrauch_kwh_100km != null ? z.durchschnitt_verbrauch_kwh_100km.toFixed(1) : '—'}
           unit="kWh/100km"
           icon={Zap}
           color="yellow"
-          formel="Verbrauch = kWh ÷ km × 100"
-          berechnung={`${(z.gesamt_verbrauch_kwh || 0).toFixed(0)} kWh ÷ ${z.gesamt_km || 0} km × 100`}
-          ergebnis={`= ${(z.durchschnitt_verbrauch_kwh_100km || 0).toFixed(1)} kWh/100km`}
+          subtitle={z.verbrauch_quelle === 'ladung' ? '≈ aus Ladung (inkl. Ladeverluste)' : undefined}
+          formel={z.verbrauch_quelle === 'ladung' ? '≈ Ladung ÷ km × 100' : 'Verbrauch = kWh ÷ km × 100'}
+          berechnung={z.durchschnitt_verbrauch_kwh_100km == null
+            ? 'keine Verbrauchs-/Ladedaten'
+            : `${((z.verbrauch_quelle === 'ladung' ? z.gesamt_ladung_kwh : z.gesamt_verbrauch_kwh) || 0).toFixed(0)} kWh ÷ ${z.gesamt_km || 0} km × 100`}
+          ergebnis={z.durchschnitt_verbrauch_kwh_100km != null
+            ? `= ${z.durchschnitt_verbrauch_kwh_100km.toFixed(1)} kWh/100km`
+            : '= —'}
         />
         <KPICard
           title="PV-Anteil (Heim)"

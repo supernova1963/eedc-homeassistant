@@ -30,6 +30,13 @@ from backend.core.berechnungen.einspeise_erloes import (
     EinspeiseErloes,
     einspeise_erloes_euro,
 )
+from backend.core.berechnungen.emob import (
+    QUELLE_GEMESSEN,
+    QUELLE_KEINE,
+    QUELLE_LADUNG,
+    EffizienzWert,
+    eauto_effizienz_100km,
+)
 from backend.core.berechnungen.energie import (
     BATTERIE_KOMPONENTEN_PREFIXE,
     PV_KOMPONENTEN_PREFIXE,
@@ -69,6 +76,11 @@ from backend.core.berechnungen.verbrauch import (
 __all__ = [
     "EinspeiseErloes",
     "einspeise_erloes_euro",
+    "QUELLE_GEMESSEN",
+    "QUELLE_LADUNG",
+    "QUELLE_KEINE",
+    "EffizienzWert",
+    "eauto_effizienz_100km",
     "PV_KOMPONENTEN_PREFIXE",
     "WAERMEPUMPE_KOMPONENTEN_PREFIXE",
     "WALLBOX_KOMPONENTEN_PREFIXE",

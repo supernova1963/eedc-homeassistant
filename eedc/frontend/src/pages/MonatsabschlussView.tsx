@@ -1416,10 +1416,12 @@ export default function MonatsabschlussView() {
                     formel="PV-Ladung ÷ Gesamt-Ladung × 100" />
                   <KPICard title="Kilometer" value={fmt(d.emob_km, 0)} unit="km" icon={Car} color="blue"
                     subtitle={vm?.eauto_km != null ? `VM: ${fmt(vm.eauto_km, 0)} km` : undefined} />
-                  <KPICard title="Verbrauch" value={d.emob_km && d.emob_ladung_kwh && d.emob_km > 0
-                    ? fmtCalc(d.emob_ladung_kwh / d.emob_km * 100, 1) : '—'} unit="kWh/100km"
+                  <KPICard title="Verbrauch" value={d.emob_verbrauch_100km != null
+                    ? fmtCalc(d.emob_verbrauch_100km, 1) : '—'} unit="kWh/100km"
                     icon={Gauge} color="gray"
-                    formel="Ladung ÷ km × 100" />
+                    formel={d.emob_verbrauch_quelle === 'ladung'
+                      ? '≈ Ladung ÷ km × 100 (inkl. Ladeverluste)'
+                      : 'Verbrauch ÷ km × 100'} />
                 </div>
                 <div className="mt-3">
                   <VglZeile label="Ladung gesamt"    aktuell={d.emob_ladung_kwh}       vm={vm ? (vm.eauto_ladung_kwh ?? 0) + (vm.wallbox_ladung_kwh ?? 0) : null} vj={vj?.emob_ladung_kwh}  unit="kWh" />

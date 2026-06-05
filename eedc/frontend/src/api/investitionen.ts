@@ -104,7 +104,10 @@ export interface EAutoDashboardResponse {
   zusammenfassung: {
     gesamt_km: number
     gesamt_verbrauch_kwh: number
-    durchschnitt_verbrauch_kwh_100km: number
+    // Ø Verbrauch (kWh/100 km) — null wenn keine Basis (nie 0,0 erfinden).
+    durchschnitt_verbrauch_kwh_100km: number | null
+    // Herkunft der Berechnung: 'gemessen' (verbrauch_kwh) | 'ladung' (Näherung) | 'keine'
+    verbrauch_quelle: 'gemessen' | 'ladung' | 'keine'
     // Ladung aufgeschlüsselt
     gesamt_ladung_kwh: number
     ladung_heim_kwh: number

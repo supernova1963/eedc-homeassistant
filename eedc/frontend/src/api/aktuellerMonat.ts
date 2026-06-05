@@ -78,6 +78,8 @@ export interface AktuellerMonatResponse {
   // Komponenten — E-Mobilität
   emob_ladung_kwh: number | null
   emob_km: number | null
+  emob_verbrauch_100km: number | null
+  emob_verbrauch_quelle: 'gemessen' | 'ladung' | 'keine'
   emob_ladung_pv_kwh: number | null
   emob_ladung_netz_kwh: number | null
   emob_ladung_extern_kwh: number | null

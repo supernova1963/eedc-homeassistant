@@ -24,7 +24,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
-from backend.core.berechnungen import einspeise_erloes_euro
+from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
@@ -144,6 +144,9 @@ class AktuellerMonatResponse(BaseModel):
     # Komponenten — E-Mobilität
     emob_ladung_kwh: Optional[float] = None
     emob_km: Optional[float] = None
+    # Ø Verbrauch (kWh/100 km) zentral via core/berechnungen/emob.py (gemessen > Ladung).
+    emob_verbrauch_100km: Optional[float] = None
+    emob_verbrauch_quelle: str = "keine"
     emob_ladung_pv_kwh: Optional[float] = None       # PV-Anteil der Ladung
     emob_ladung_netz_kwh: Optional[float] = None     # Netz-Anteil
     emob_ladung_extern_kwh: Optional[float] = None   # Extern (Ladesäule o.ä.)
@@ -355,6 +358,7 @@ async def _collect_saved_data(
         eauto_imd_data: list[dict] = []
         wb_imd_data: list[dict] = []
         eauto_km_total = 0.0
+        eauto_verbrauch_total = 0.0  # gemessener Fahrverbrauch (Vorrang vor Ladung)
         bkw_erzeugung_total = 0.0
         bkw_eigenverbrauch_total = 0.0
 
@@ -385,6 +389,7 @@ async def _collect_saved_data(
                 if not ist_dienstlich(inv):
                     eauto_imd_data.append(data)
                     eauto_km_total += data.get("km_gefahren", 0) or 0
+                    eauto_verbrauch_total += data.get("verbrauch_kwh", 0) or 0
             elif inv.typ == "wallbox":
                 if not ist_dienstlich(inv):
                     wb_imd_data.append(data)
@@ -426,6 +431,8 @@ async def _collect_saved_data(
             resolved["emob_ladung_kwh"] = (emob_ladung_total, quelle)
         if emob_km_total > 0:
             resolved["emob_km"] = (emob_km_total, quelle)
+        if eauto_verbrauch_total > 0:
+            resolved["emob_verbrauch_kwh"] = (eauto_verbrauch_total, quelle)
         if emob_pv_ladung_total > 0:
             resolved["emob_pv_ladung_kwh"] = (emob_pv_ladung_total, quelle)
         if emob_extern_euro_total > 0:
@@ -1496,6 +1503,14 @@ async def get_aktueller_monat(
                     sonstige_ausgaben_euro=inv_sonstige_ausgaben,
                 ))
 
+    # Ø Verbrauch (kWh/100 km) via zentralem Helper aus den FINALEN (ggf. connector-
+    # überschriebenen) Werten — gemessener Fahrverbrauch hat Vorrang vor Ladung.
+    emob_eff = eauto_effizienz_100km(
+        get_val("emob_verbrauch_kwh") or 0,
+        get_val("emob_ladung_kwh") or 0,
+        get_val("emob_km") or 0,
+    )
+
     return AktuellerMonatResponse(
         anlage_id=anlage.id,
         anlage_name=anlage.anlagenname,
@@ -1536,6 +1551,8 @@ async def get_aktueller_monat(
         # Komponenten — E-Mobilität
         emob_ladung_kwh=get_val("emob_ladung_kwh"),
         emob_km=get_val("emob_km"),
+        emob_verbrauch_100km=round(emob_eff.wert, 1) if emob_eff.wert is not None else None,
+        emob_verbrauch_quelle=emob_eff.quelle,
         emob_ladung_pv_kwh=emob_pv if emob_pv else None,
         emob_ladung_netz_kwh=emob_ladung_netz,
         emob_ladung_extern_kwh=emob_ladung_extern,

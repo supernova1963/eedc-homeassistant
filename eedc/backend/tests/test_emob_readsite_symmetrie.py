@@ -23,6 +23,12 @@ from datetime import date
 
 import pytest
 
+from backend.core.berechnungen import (
+    QUELLE_GEMESSEN,
+    QUELLE_KEINE,
+    QUELLE_LADUNG,
+    eauto_effizienz_100km,
+)
 from backend.models import Anlage, Investition, InvestitionMonatsdaten
 from backend.services.eauto_wirtschaftlichkeit import (
     attribute_emob_pool_by_km,
@@ -180,3 +186,56 @@ async def test_cross_endpoint_heimladung_symmetrisch(db):
     assert abs(am.emob_ladung_kwh - 500.0) < 0.2
     assert abs(am.emob_ladung_pv_kwh - 300.0) < 0.2
     assert abs(am.emob_ladung_netz_kwh - 200.0) < 0.2
+
+
+# ── C. Ø Verbrauch (kWh/100 km) — Helper-Unit + Read-Site-Symmetrie ─────────
+
+@pytest.mark.parametrize("verbrauch,ladung,km,erw_wert,erw_quelle", [
+    (4000.0, 5000.0, 20000.0, 20.0, QUELLE_GEMESSEN),   # gemessen hat Vorrang
+    (0.0, 5276.8, 24416.0, 21.6, QUELLE_LADUNG),        # leer → Ladungs-Näherung (Gernot)
+    (0.0, 0.0, 24416.0, None, QUELLE_KEINE),            # keine Energie-Basis
+    (0.0, 5000.0, 0.0, None, QUELLE_KEINE),             # km = 0 → nie 0,0 erfinden
+])
+def test_eauto_effizienz_helper(verbrauch, ladung, km, erw_wert, erw_quelle):
+    """Helper-Kontrakt: gemessener Fahrverbrauch > Ladungs-Näherung > keine Basis."""
+    eff = eauto_effizienz_100km(verbrauch, ladung, km)
+    assert eff.quelle == erw_quelle
+    if erw_wert is None:
+        assert eff.wert is None
+    else:
+        assert eff.wert == pytest.approx(erw_wert, abs=0.05)
+
+
+async def test_cross_endpoint_verbrauch_100km_symmetrisch(db):
+    """Ohne Verbrauchssensor (verbrauch_kwh leer) liefern E-Auto-Dashboard,
+    aktueller_monat, Komponenten-Aggregat UND Cockpit-Übersicht denselben
+    Ø Verbrauch aus der Ladungs-Näherung — kein 0,0 mehr im E-Auto-Dashboard
+    (Anlass 2026-06-05: drei Karten, zwei Formeln). km=1000, Ladung=500 →
+    50,0 kWh/100 km, Quelle 'ladung' in allen vier Read-Sites."""
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+    from backend.api.routes.cockpit.komponenten import get_komponenten_zeitreihe
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+    from backend.api.routes.investitionen import get_eauto_dashboard
+
+    anlage_id = await _seed_evcc_anlage(db)
+
+    # E-Auto-Dashboard: jede Auto-Karte fällt auf Σ Ladung / Σ km zurück (= 50)
+    ea_dash = await get_eauto_dashboard(anlage_id=anlage_id, strompreis_cent=30.0, db=db)
+    for r in ea_dash:
+        assert r.zusammenfassung["verbrauch_quelle"] == "ladung"
+        assert r.zusammenfassung["durchschnitt_verbrauch_kwh_100km"] == pytest.approx(50.0, abs=0.2)
+
+    # aktueller_monat (Monatsbericht-Quelle)
+    am = await get_aktueller_monat(anlage_id=anlage_id, jahr=2026, monat=4, db=db)
+    assert am.emob_verbrauch_quelle == "ladung"
+    assert am.emob_verbrauch_100km == pytest.approx(50.0, abs=0.2)
+
+    # Komponenten-Aggregat (Auswertungen → Komponenten)
+    komp = await get_komponenten_zeitreihe(anlage_id=anlage_id, jahr=None, db=db)
+    assert komp.emob_verbrauch_quelle_gesamt == "ladung"
+    assert komp.emob_verbrauch_100km_gesamt == pytest.approx(50.0, abs=0.2)
+
+    # Cockpit-Übersicht
+    ueb = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
+    assert ueb.emob_verbrauch_quelle == "ladung"
+    assert ueb.emob_verbrauch_100km == pytest.approx(50.0, abs=0.2)

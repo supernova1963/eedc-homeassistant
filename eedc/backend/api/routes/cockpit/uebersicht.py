@@ -15,7 +15,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
-from backend.core.berechnungen import einspeise_erloes_euro
+from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
@@ -85,6 +85,9 @@ class CockpitUebersichtResponse(BaseModel):
     emob_ladung_kwh: float
     emob_pv_anteil_prozent: Optional[float]
     emob_ersparnis_euro: float
+    # Ø Verbrauch (kWh/100 km) zentral via core/berechnungen/emob.py (gemessen > Ladung).
+    emob_verbrauch_100km: Optional[float] = None
+    emob_verbrauch_quelle: str = "keine"
     hat_emobilitaet: bool
 
     # Balkonkraftwerk aggregiert
@@ -203,6 +206,7 @@ async def get_cockpit_uebersicht(
     eauto_imd_data: list[dict] = []
     wb_imd_data: list[dict] = []
     eauto_km = 0.0
+    eauto_verbrauch = 0.0  # gemessener Fahrverbrauch (Vorrang vor Ladungs-Näherung)
     # #260: km pro (jahr, monat) für die per-Monat-korrekte Benzinpreis-
     # Gewichtung (EU-OB-Monatspreis aus Monatsdaten statt statischem Param).
     eauto_km_pro_monat: dict[tuple[int, int], float] = {}
@@ -259,6 +263,7 @@ async def get_cockpit_uebersicht(
                 eauto_imd_data.append(data)
                 km_monat = data.get("km_gefahren", 0) or 0
                 eauto_km += km_monat
+                eauto_verbrauch += data.get("verbrauch_kwh", 0) or 0
                 if km_monat:
                     eauto_km_pro_monat[(imd.jahr, imd.monat)] = (
                         eauto_km_pro_monat.get((imd.jahr, imd.monat), 0.0) + km_monat
@@ -299,6 +304,9 @@ async def get_cockpit_uebersicht(
     emob_pv_ladung = emob_pool.pv_kwh
     emob_netz_ladung = emob_pool.netz_kwh
     emob_km = eauto_km
+    # Ø Verbrauch (kWh/100 km) via zentralem Helper — gemessener Fahrverbrauch hat
+    # Vorrang, sonst Ladungs-Näherung; konsistent zu E-Auto-Dashboard + Komponenten.
+    emob_eff = eauto_effizienz_100km(eauto_verbrauch, emob_ladung, emob_km)
     emob_extern_euro_total = emob_pool.extern_euro
 
     # Monatsdaten NUR für Anlagen-Energiebilanz
@@ -657,6 +665,8 @@ async def get_cockpit_uebersicht(
         emob_ladung_kwh=round(emob_ladung, 1),
         emob_pv_anteil_prozent=round(emob_pv_anteil, 1) if emob_pv_anteil else None,
         emob_ersparnis_euro=round(emob_ersparnis, 2),
+        emob_verbrauch_100km=round(emob_eff.wert, 1) if emob_eff.wert is not None else None,
+        emob_verbrauch_quelle=emob_eff.quelle,
         hat_emobilitaet=hat_emobilitaet,
         bkw_erzeugung_kwh=round(bkw_erzeugung, 1),
         bkw_eigenverbrauch_kwh=round(bkw_eigenverbrauch, 1),

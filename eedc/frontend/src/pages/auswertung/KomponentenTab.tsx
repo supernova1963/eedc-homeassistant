@@ -109,18 +109,19 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
 
   const emobSummen = useMemo(() => {
     if (!chartData.length) return {
-      km: 0, ladung: 0, pvAnteil: null,
+      km: 0, ladung: 0, verbrauch: 0, pvAnteil: null,
       pvLadung: 0, netzLadung: 0, externLadung: 0, externEuro: 0, v2h: 0
     }
     const km = chartData.reduce((sum, z) => sum + z.emob_km, 0)
     const ladung = chartData.reduce((sum, z) => sum + z.emob_ladung_kwh, 0)
+    const verbrauch = chartData.reduce((sum, z) => sum + (z.emob_verbrauch_kwh || 0), 0)
     const pvLadung = chartData.reduce((sum, z) => sum + z.emob_ladung_pv_kwh, 0)
     const netzLadung = chartData.reduce((sum, z) => sum + z.emob_ladung_netz_kwh, 0)
     const externLadung = chartData.reduce((sum, z) => sum + z.emob_ladung_extern_kwh, 0)
     const externEuro = chartData.reduce((sum, z) => sum + z.emob_ladung_extern_euro, 0)
     const v2h = chartData.reduce((sum, z) => sum + z.emob_v2h_kwh, 0)
     const pvAnteil = ladung > 0 ? (pvLadung / ladung) * 100 : null
-    return { km, ladung, pvAnteil, pvLadung, netzLadung, externLadung, externEuro, v2h }
+    return { km, ladung, verbrauch, pvAnteil, pvLadung, netzLadung, externLadung, externEuro, v2h }
   }, [chartData])
 
   const bkwSummen = useMemo(() => {
@@ -532,14 +533,16 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
             />
             <KPICard
               title="Verbrauch"
-              value={emobSummen.km > 0 ? (emobSummen.ladung / emobSummen.km * 100).toFixed(1) : '—'}
+              value={komponenten?.emob_verbrauch_100km_gesamt != null ? komponenten.emob_verbrauch_100km_gesamt.toFixed(1) : '—'}
               unit="kWh/100km"
               icon={Car}
               color="text-amber-500"
               bgColor="bg-amber-50 dark:bg-amber-900/20"
-              formel="Ladung ÷ km × 100"
-              berechnung={`${fmtCalc(emobSummen.ladung, 0)} kWh ÷ ${fmtCalc(emobSummen.km, 0)} km × 100`}
-              ergebnis={emobSummen.km > 0 ? `= ${fmtCalc(emobSummen.ladung / emobSummen.km * 100, 1)} kWh/100km` : '—'}
+              formel={komponenten?.emob_verbrauch_quelle_gesamt === 'ladung'
+                ? '≈ Ladung ÷ km × 100 (inkl. Ladeverluste)'
+                : 'Verbrauch ÷ km × 100'}
+              berechnung={`${fmtCalc(komponenten?.emob_verbrauch_quelle_gesamt === 'ladung' ? emobSummen.ladung : emobSummen.verbrauch, 0)} kWh ÷ ${fmtCalc(emobSummen.km, 0)} km × 100`}
+              ergebnis={komponenten?.emob_verbrauch_100km_gesamt != null ? `= ${komponenten.emob_verbrauch_100km_gesamt.toFixed(1)} kWh/100km` : '—'}
             />
           </div>
 
