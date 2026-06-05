@@ -255,6 +255,8 @@ export interface PVStringsResponse {
   anlage_id: number
   jahr: number
   hat_prognose: boolean
+  /** Diagnose-Hinweis bei stale/oversize PVGIS-Prognose (null = plausibel) */
+  prognose_warnung: string | null
   anlagen_leistung_kwp: number
 
   // Gesamt-Summen
@@ -317,6 +319,8 @@ export interface PVStringGesamtlaufzeit {
 export interface PVStringsGesamtlaufzeitResponse {
   anlage_id: number
   hat_prognose: boolean
+  /** Diagnose-Hinweis bei stale/oversize PVGIS-Prognose (null = plausibel) */
+  prognose_warnung: string | null
   anlagen_leistung_kwp: number
 
   // Zeitraum

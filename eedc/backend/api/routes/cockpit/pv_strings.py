@@ -18,6 +18,44 @@ from backend.api.routes.cockpit._shared import MONATSNAMEN
 router = APIRouter()
 
 
+def _pruefe_prognose_plausibilitaet(prognose, gesamt_kwp: float) -> Optional[str]:
+    """Diagnose-Wächter für eine stale/oversize PVGIS-Prognose.
+
+    Die SOLL-Werte stammen aus der zuletzt gespeicherten PVGIS-Prognose. Wird die
+    Anlagenleistung (z.B. kWp einer Investition korrigiert) geändert, ohne die
+    Prognose neu abzurufen, verteilt sich der alte Jahresertrag über die neue,
+    kleinere kWp-Basis — die SOLL kann massiv driften (Sabrina #638: 357 MWh
+    SOLL für ein 2,4-kWp-BKW, weil die Prognose für ~357 kWp gerechnet war).
+
+    Bewusst KEIN stilles Capping/Skalieren der Werte: wir geben nur einen
+    Hinweis-Text zurück, der Nutzer ruft die Prognose neu ab. Diagnose statt
+    stillem Eingriff (feedback_grenze_externe_daten_diagnose).
+
+    Rückgabe: Hinweis-Text bei grober kWp-Abweichung (>20 %), sonst None.
+    """
+    if not prognose or gesamt_kwp <= 0:
+        return None
+
+    # kWp, für die die Prognose gerechnet wurde. Ältere Prognosen ohne
+    # gespeicherte gesamt_leistung_kwp aus Jahresertrag / spez. Ertrag ableiten.
+    prognose_kwp = prognose.gesamt_leistung_kwp
+    if not prognose_kwp and prognose.spezifischer_ertrag_kwh_kwp:
+        prognose_kwp = prognose.jahresertrag_kwh / prognose.spezifischer_ertrag_kwh_kwp
+    if not prognose_kwp or prognose_kwp <= 0:
+        return None
+
+    verhaeltnis = prognose_kwp / gesamt_kwp
+    if 0.8 <= verhaeltnis <= 1.2:
+        return None
+
+    return (
+        f"Die gespeicherte PVGIS-Prognose wurde für {prognose_kwp:.1f} kWp berechnet, "
+        f"die Anlage hat aktuell {gesamt_kwp:.1f} kWp. Dadurch passen die SOLL-Werte "
+        f"nicht zur Anlage. Bitte die PVGIS-Prognose neu abrufen "
+        f"(Einstellungen → PVGIS), damit SOLL und IST wieder zusammenpassen."
+    )
+
+
 class PVStringMonat(BaseModel):
     monat: int
     monat_name: str
@@ -49,6 +87,8 @@ class PVStringsResponse(BaseModel):
     anlage_id: int
     jahr: int
     hat_prognose: bool
+    # Diagnose-Hinweis bei stale/oversize PVGIS-Prognose (None = plausibel)
+    prognose_warnung: Optional[str] = None
     anlagen_leistung_kwp: float
     prognose_gesamt_kwh: float
     ist_gesamt_kwh: float
@@ -95,6 +135,8 @@ class PVStringGesamtlaufzeit(BaseModel):
 class PVStringsGesamtlaufzeitResponse(BaseModel):
     anlage_id: int
     hat_prognose: bool
+    # Diagnose-Hinweis bei stale/oversize PVGIS-Prognose (None = plausibel)
+    prognose_warnung: Optional[str] = None
     anlagen_leistung_kwp: float
     erstes_jahr: int
     letztes_jahr: int
@@ -266,6 +308,7 @@ async def get_pv_strings(
 
     return PVStringsResponse(
         anlage_id=anlage_id, jahr=jahr, hat_prognose=hat_prognose,
+        prognose_warnung=_pruefe_prognose_plausibilitaet(prognose, gesamt_kwp),
         anlagen_leistung_kwp=gesamt_kwp,
         prognose_gesamt_kwh=round(prognose_gesamt, 1),
         ist_gesamt_kwh=round(ist_gesamt, 1),
@@ -475,6 +518,7 @@ async def get_pv_strings_gesamtlaufzeit(
 
     return PVStringsGesamtlaufzeitResponse(
         anlage_id=anlage_id, hat_prognose=hat_prognose,
+        prognose_warnung=_pruefe_prognose_plausibilitaet(prognose, gesamt_kwp),
         anlagen_leistung_kwp=gesamt_kwp,
         erstes_jahr=erstes_jahr, letztes_jahr=letztes_jahr,
         anzahl_jahre=anzahl_jahre, anzahl_monate=len(alle_monatsdaten),

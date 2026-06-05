@@ -819,11 +819,14 @@ async def get_roi_dashboard(
 
                 if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
                     pvgis_monatswerte = pvgis_prognose.monatswerte
-                    pvgis_jahres_summe = sum(m.get('E_m', 0) for m in pvgis_monatswerte)
+                    # Gespeicherte Keys sind 'e_m'/'monat' (siehe pvgis.py); zuvor
+                    # las dieser Pfad 'E_m'/'month' → Summe immer 0 → PVGIS-Gewichtung
+                    # griff nie, stiller Fallback auf lineare Hochrechnung.
+                    pvgis_jahres_summe = sum(m.get('e_m', 0) for m in pvgis_monatswerte)
                     if pvgis_jahres_summe > 0:
                         pvgis_vorhandene_summe = sum(
-                            m.get('E_m', 0) for m in pvgis_monatswerte
-                            if m.get('month', 0) in vorhandene_monate
+                            m.get('e_m', 0) for m in pvgis_monatswerte
+                            if m.get('monat', 0) in vorhandene_monate
                         )
                         if pvgis_vorhandene_summe > 0:
                             faktor = 1.0 / (pvgis_vorhandene_summe / pvgis_jahres_summe)

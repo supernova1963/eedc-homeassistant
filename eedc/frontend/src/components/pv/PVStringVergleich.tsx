@@ -180,6 +180,16 @@ export function PVStringVergleich({ anlageId }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Diagnose-Hinweis: stale/oversize PVGIS-Prognose (passt nicht zur kWp) */}
+      {data.prognose_warnung && (
+        <Alert type="warning">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>{data.prognose_warnung}</span>
+          </div>
+        </Alert>
+      )}
+
       {/* KPI Übersicht */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
