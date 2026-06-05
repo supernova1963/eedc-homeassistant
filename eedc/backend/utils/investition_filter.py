@@ -1,18 +1,20 @@
 """
 Stilllegungsdatum-aware Filter-Helper für Investitionen (Issue #123).
 
+Gemeinsame Regel: `aktiv=False` = wie gelöscht (ohne zu löschen) → nirgends in
+Auswertungen, auch nicht historisch, bis reaktiviert wird (Gernot 2026-06-05).
+ALLE Filter prüfen daher das `aktiv`-Flag; sie unterscheiden sich nur im
+Datums-Fenster. Endgültiges Entfernen = Hard-Delete.
+
 Unterscheidung:
-- `aktiv_jetzt()` — SQL-Filter für Live/Current-State-Queries (Prognose, Live-Dashboard,
-  Sensor-Mapping). Respektiert sowohl `aktiv`-Flag (manueller Override) als auch
-  `stilllegungsdatum` (finaler End-Marker).
-- `aktiv_im_zeitraum(start, end)` — SQL-Filter für historische Aggregate
-  (Monatsdaten-Aggregation, Cockpit-Historie, PDF-Jahresbericht). Ignoriert
-  `aktiv`-Flag bewusst, weil vergangene Daten auch nach manuellem Pausieren
-  erhalten bleiben müssen. Nur `stilllegungsdatum` und `anschaffungsdatum`
-  begrenzen den Einsatzzeitraum.
-- `aktiv_am_tag(tag)` — SQL-Filter für die Per-Tag-Aggregation eines einzelnen
-  Tages (`energie_profil.aggregator.aggregate_day`). Per-Tag-Variante von
-  `aktiv_im_zeitraum`; ignoriert `aktiv`-Flag genauso.
+- `aktiv_jetzt()` — Live/Current-State-Queries (Prognose, Live-Dashboard,
+  Sensor-Mapping): `aktiv` + heute innerhalb des Lebensdauer-Fensters.
+- `aktiv_im_zeitraum(start, end)` — historische Aggregate (Monatsdaten-Aggregation,
+  Cockpit-Historie, PDF-Jahresbericht): `aktiv` + Lebensdauer-Fenster überlappt
+  [start, end] (`anschaffungsdatum`/`stilllegungsdatum`).
+- `aktiv_am_tag(tag)` — Per-Tag-Aggregation eines einzelnen Tages
+  (`energie_profil.aggregator.aggregate_day`): Per-Tag-Variante von
+  `aktiv_im_zeitraum`.
 
 Für In-Memory-Checks (wenn Investitionen bereits geladen sind und pro Monat
 gefiltert werden müssen): siehe Model-Methoden `Investition.ist_aktiv_an()`,
@@ -77,12 +79,16 @@ def aktiv_jetzt():
 
 
 def aktiv_im_zeitraum(start: date, end: date):
-    """SQL-Filter: Investition war irgendwann im Zeitraum [start, end] aktiv (historisch).
+    """SQL-Filter: Investition ist im Zeitraum [start, end] sichtbar/aktiv.
 
-    Ignoriert `aktiv`-Flag bewusst — historische InvestitionMonatsdaten bleiben
-    auch nach manuellem Pausieren gültig.
+    `aktiv=False` = wie gelöscht (ohne zu löschen): nirgends in Auswertungen
+    anzeigen — auch nicht historisch — bis reaktiviert wird. Daher prüft auch
+    dieser historische Filter das `aktiv`-Flag (Gernot 2026-06-05,
+    [[feedback_anschaffungsdatum_grenze]]); `anschaffungsdatum`/`stilllegungsdatum`
+    begrenzen zusätzlich das Lebensdauer-Fenster. Endgültig weg = Hard-Delete.
     """
     return and_(
+        Investition.aktiv.is_(True),
         or_(
             Investition.anschaffungsdatum.is_(None),
             Investition.anschaffungsdatum <= end,
@@ -112,9 +118,9 @@ def aktiv_am_tag(tag: date):
     (`stilllegungsdatum < tag` → inaktiv). Diese Übereinstimmung ist wichtig:
     der Vollbackfill filtert seine Serien per `ist_aktiv_an(current)`, während
     `aggregate_day` die Inv-Last per `aktiv_am_tag(datum)` zieht — beide müssen
-    am Stilllegungstag dasselbe Ergebnis liefern. Wie `aktiv_im_zeitraum`
-    ignoriert der Filter das `aktiv`-Flag (manuelles Pausieren betrifft die
-    Live-Sicht, nicht die historische Wahrheit eines vergangenen Tages).
+    am Stilllegungstag dasselbe Ergebnis liefern. Wie `aktiv_im_zeitraum` prüft
+    der Filter auch das `aktiv`-Flag (aktiv=False = wie gelöscht → nirgends, bis
+    reaktiviert; konsistent mit `ist_aktiv_an`, das `aktiv` ebenfalls prüft).
     """
     return aktiv_im_zeitraum(tag, tag)
 

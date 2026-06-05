@@ -81,8 +81,10 @@ async def test_aktiv_am_tag_filtert_stilllegung_und_anschaffung(db) -> None:
     )
     assert "stillgelegt_vorher" not in aktiv
     assert "erst_spaeter" not in aktiv
-    # `aktiv`-Flag wird bewusst ignoriert (historische Wahrheit ≠ Live-Pause).
-    assert "pausiert" in aktiv
+    # aktiv=False = wie gelöscht (ohne zu löschen) → nirgends, auch nicht
+    # historisch, bis reaktiviert wird (Gernot 2026-06-05). Daten bleiben in der
+    # DB; Hard-Delete wäre endgültig. Verwaltungsliste zeigt es weiter.
+    assert "pausiert" not in aktiv
 
 
 def test_aktiv_am_tag_matcht_ist_aktiv_an_am_stilllegungstag() -> None:

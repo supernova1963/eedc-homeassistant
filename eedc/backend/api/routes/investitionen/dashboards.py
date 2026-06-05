@@ -480,9 +480,9 @@ async def get_waermepumpe_dashboard(
     # Lebensdauer-Zählerstand — physikalisch unmöglich (Σ seit Anschaffung
     # > Lebensdauer). Der LTS-Abruf selbst ist korrekt; gefehlt hat der
     # Anschaffungsdatum-Scope im Read-Pfad ([[feedback_anschaffungsdatum_grenze]]).
-    # `ist_aktiv_im_zeitraum(tag, tag)` statt `ist_aktiv_an`, damit das
-    # `aktiv`-Override-Flag ignoriert wird (gleiche historische Sicht wie
-    # der Monatsdaten-Filter — temporär pausierte WP behält ihre Historie).
+    # `ist_aktiv_im_zeitraum(tag, tag)` prüft Laufzeit-Fenster UND `aktiv`-Flag
+    # (aktiv=False = wie gelöscht → nirgends, bis reaktiviert; Gernot 2026-06-05).
+    # Symmetrisch zum Monatsdaten-Filter, der dieselbe Sichtbarkeitsregel nutzt.
     wp_by_id = {w.id: w for w in waermepumpen}
     tz_result = await db.execute(
         select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_starts)

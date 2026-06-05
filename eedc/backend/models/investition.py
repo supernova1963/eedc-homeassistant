@@ -104,9 +104,11 @@ class Investition(Base):
     def ist_aktiv_an(self, tag: date) -> bool:
         """True, wenn die Investition an einem konkreten Tag aktiv war.
 
-        `aktiv` ist manueller Override (temporär aus), `stilllegungsdatum` finaler End-Marker.
+        `aktiv` ist manueller Override (aktiv=False = wie gelöscht → nirgends, bis
+        reaktiviert), `stilllegungsdatum` finaler End-Marker. `is False`: nicht-
+        persistierte Objekte (aktiv=None, Default greift erst beim Insert) = aktiv.
         """
-        if not self.aktiv:
+        if self.aktiv is False:
             return False
         if self.anschaffungsdatum and self.anschaffungsdatum > tag:
             return False
@@ -115,12 +117,20 @@ class Investition(Base):
         return True
 
     def ist_aktiv_im_zeitraum(self, start: date, end: date) -> bool:
-        """True, wenn die Investition irgendwann im Zeitraum [start, end] aktiv war.
+        """True, wenn die Investition im Zeitraum [start, end] sichtbar/aktiv war.
 
-        Historische Sicht — ignoriert `aktiv`-Flag bewusst, weil vergangene Daten
-        ("Einsatz in H1/2024") auch nach manuellem Pausieren gültig bleiben sollen.
-        Nur `stilllegungsdatum` begrenzt die Lebensspanne endgültig.
+        `aktiv=False` = wie gelöscht (ohne zu löschen): nirgends in Auswertungen
+        anzeigen — auch nicht historisch — bis reaktiviert wird (Gernot 2026-06-05,
+        [[feedback_anschaffungsdatum_grenze]]). Daher prüft auch die historische
+        Sicht das `aktiv`-Flag; `anschaffungsdatum`/`stilllegungsdatum` begrenzen
+        zusätzlich das Lebensdauer-Fenster. (Endgültiges Entfernen = Hard-Delete.)
+
+        `is False` (nicht `not self.aktiv`): nur explizit deaktiviert blendet aus —
+        ein frisch konstruiertes, noch nicht persistiertes Objekt hat `aktiv=None`
+        (Spalten-Default `True` greift erst beim Insert) und gilt als aktiv.
         """
+        if self.aktiv is False:
+            return False
         if self.anschaffungsdatum and self.anschaffungsdatum > end:
             return False
         if self.stilllegungsdatum and self.stilllegungsdatum < start:

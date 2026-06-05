@@ -96,6 +96,23 @@ def test_ist_aktiv_im_monat_kombiniert():
     assert inv.ist_aktiv_im_monat(2026, 3) is False
 
 
+def test_ist_aktiv_respektiert_aktiv_flag():
+    """`aktiv=False` = wie gelöscht (ohne zu löschen) → nirgends, auch nicht
+    historisch (Gernot 2026-06-05). `aktiv=None` (frisch konstruiert, Spalten-
+    Default True greift erst beim Insert) gilt als aktiv — nur explizit False
+    blendet aus. Gilt für die historische (`im_monat`) UND die Live-Sicht (`an`)."""
+    inaktiv = Investition(anschaffungsdatum=date(2020, 1, 1), aktiv=False)
+    assert inaktiv.ist_aktiv_im_monat(2026, 3) is False, "inaktiv: auch historisch nirgends"
+    assert inaktiv.ist_aktiv_an(date(2026, 3, 15)) is False
+
+    default_none = Investition(anschaffungsdatum=date(2020, 1, 1))  # aktiv=None
+    assert default_none.ist_aktiv_im_monat(2026, 3) is True, "None = Default-aktiv"
+    assert default_none.ist_aktiv_an(date(2026, 3, 15)) is True
+
+    explizit = Investition(anschaffungsdatum=date(2020, 1, 1), aktiv=True)
+    assert explizit.ist_aktiv_im_monat(2026, 3) is True
+
+
 # ── Integration: /aggregiert/{anlage_id} respektiert Anschaffungsdatum ──────
 
 

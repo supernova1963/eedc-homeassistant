@@ -255,8 +255,10 @@ async def aggregate_day(
     # Phase B, Audit §6.4). Vorher lud aggregate_day ALLE Investitionen der
     # Anlage; für historische Tage mit zwischenzeitlich stillgelegter
     # Investition wich das vom Vollbackfill-Pfad (`aktiv_im_zeitraum`) ab.
-    # `aktiv_am_tag` ist die per-Tag-Variante und ignoriert das `aktiv`-Flag
-    # genau wie `aktiv_im_zeitraum` (historische Wahrheit ≠ Live-Pausierung).
+    # `aktiv_am_tag` ist die per-Tag-Variante und prüft auch das `aktiv`-Flag
+    # (aktiv=False = wie gelöscht → nirgends, auch historisch, bis reaktiviert;
+    # Gernot 2026-06-05). Bereits aggregierte Tage einer danach deaktivierten
+    # Komponente per Werkbank neu rechnen, damit sie aus den Tagessummen fallen.
     # Für den Scheduler (heute/gestern) praktisch ein No-Op: am laufenden Tag
     # aktive Investitionen erfüllen den Filter ohnehin.
     inv_result = await db.execute(
