@@ -7,6 +7,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.36.1] - 2026-06-05 — QS-Nachzug: Finanzen-Sonstige, aktiv-Sichtbarkeit, Live-Wetter, Wizard-Hilfen
+
+> 🩹 **Patch-Sammelrelease** nach v3.36.0. Schwerpunkt: Aggregations- und Sichtbarkeits-Korrekturen aus der Tester-Runde (rilmor #310, rapahl Live-Wetter, Sabrina Prognose) plus zwei UX-Verbesserungen (Feld-Hinweise im Wizard, einheitlicher E-Auto-Ø-Verbrauch). 761 Backend-Tests grün.
+
+### Fixed
+
+- **Finanzen-Auswertung: Sonstige Erträge an PV-/Wechselrichter-Komponenten zählen jetzt mit (#310).** Der v3.36.0-Fix saß in der KPI-Formel, aber die Datenquelle dahinter (Komponenten-Zeitreihe) ließ Sonstige-Positionen weg, die an einer PV-Modul-/Wechselrichter-Investition gepflegt sind — also genau dort, wo Anwender Einspeise-Erträge eines zweiten Zählers eintragen. Ursache war eine Aggregator-Drift: Sonstige wurden im typ-gefilterten Energie-Loop summiert (ohne PV/WR). Jetzt zentral über einen SoT-Helper, symmetrisch zum Monatsbericht (Pflicht-Symmetrie-Test). Anlass: rilmor.
+- **Live-Wetter blieb bis zu 60 Minuten auf „Keine Wetterdaten verfügbar".** Der stündliche Wetter-Prefetch legte den Cache in einem Format ab, das die Live-Seite nicht lesen konnte → Folgeaufruf scheiterte und „vergiftete" den Cache bis zum Ablauf. Behoben (3er-Tupel-Vertrag, Regressionstest). Anlass: rapahl.
+- **Live-Wetter: ehrliche Meldung bei Abruf-Störung.** Bei einem fehlgeschlagenen OpenMeteo-Abruf zeigte die Live-Ansicht fälschlich „Standort-Koordinaten in den Stammdaten hinterlegen" — auch wenn die Koordinaten gesetzt waren. Jetzt unterscheidet eedc: echte Koordinaten-Lücke vs. „Wetterdaten momentan nicht verfügbar — wird automatisch erneut versucht".
+- **PVGIS-Prognose: Stale-Wächter + Schutz gegen stille 0-Werte** in der Hochrechnung (vermeidet driftende SOLL-Werte bei kWp-Änderung). Anlass: Sabrina.
+- **Monatsdaten: freier „Monat einfügen"-Pfad** (nicht mehr auf vorhandene Dropdown-Einträge beschränkt) + Dropdown-Bug behoben.
+
+### Changed
+
+- **Auf „inaktiv" gesetzte Komponenten (aktiv=False) werden konsequent in keiner Auswertung mehr angezeigt** — auch nicht rückwirkend/historisch —, bis sie wieder aktiviert werden. Bisher blieben sie in historischen Aggregaten sichtbar. Die Daten bleiben erhalten (reversibel); endgültiges Entfernen weiterhin per Löschen. Drei getrennte Begriffe: **inaktiv** (ausgeblendet, reversibel) ≠ **Stilllegungsdatum** (Lebensende) ≠ **Löschen** (endgültig).
+
+### Added
+
+- **Feld-Hinweise im Sensor-Zuordnungs-Wizard.** Jedes Feld erklärt jetzt kurz, welcher Wert/Sensortyp erwartet wird — zentral aus dem Backend gepflegt (eine Quelle für Wizard, künftigen MQTT-Inbound-Wizard und Doku).
+- **E-Auto Ø Verbrauch (kWh/100 km) einheitlich über alle Sichten.** E-Auto-Dashboard, Monatsbericht und Komponenten-Auswertung zeigen jetzt denselben Wert (gemessener Verbrauch vor Ladungs-Näherung; ehrlich gelabelt; kein irreführendes „0,0" mehr, wenn kein Verbrauchssensor gemappt ist).
+
+### Intern (nicht anwender-sichtbar)
+
+- Zentraler Sichtbarkeits-Filter (`aktiv` + Laufzeit-Fenster) in den Investitions-Helfern vereinheitlicht; Sonstige-Read-Site-Aggregation auf einen SoT-Helper konsolidiert; emob-Schwächen (verbrauch_kwh-Überladung, Zähler-Abdeckung) dokumentiert.
+
 ## [3.36.0] - 2026-06-04 — Heimladung kanonisch an der Wallbox + Stundenversatz-Fix + UX-Bündel
 
 > 🧱 **Minor-Sammelrelease.** Kern ist die Wallbox/E-Auto-**Phase 2a**: die Heimladung (gesamt / aus PV / aus Netz) lebt jetzt **kanonisch an der Wallbox** statt konkurrierend an Wallbox *und* E-Auto — inkl. einmaliger Daten-Migration und Daten-Checker-Hinweis für nicht eindeutig zusammenführbare Fälle. Dazu ein zentraler Prognosequellen-Adapter-Layer (intern) und mehrere anwender-sichtbare Korrekturen: HA-LTS-Stundenversatz im Prognosen-Vergleich, Speicher-Bearbeitung/Setup-Wizard (#636), Finanzen-Netto-Ertrag (#310), Monatsbericht-Einspeisung (#325), Energiefluss-Hervorhebung (#314). Tages-/Monatswerte durchgehend unberührt. 737 Backend-Tests grün.

@@ -1,11 +1,28 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.36.0)
+> **Stand:** Juni 2026 (v3.36.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.36.1 — Sonstige Erträge, Sichtbarkeit & Live-Wetter (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Sonstige Erträge fließen jetzt überall in die Finanzen ein — auch wenn sie am Wechselrichter oder PV-Modul gepflegt sind.** Wer z. B. den Einspeise-Ertrag eines zweiten Zählers als „Sonstige Position" an seiner PV-/Wechselrichter-Komponente einträgt, sieht ihn jetzt korrekt im **Netto-Ertrag** der Auswertung „Finanzen" — vorher fehlte er dort. Danke an rilmor.
+- **„Inaktiv" bedeutet jetzt wirklich „überall ausgeblendet".** Setzt du eine Komponente auf **inaktiv**, verschwindet sie ab sofort aus **allen** Auswertungen — auch aus der Vergangenheit —, bis du sie wieder aktivierst. Bisher tauchte sie in historischen Auswertungen noch auf. **Deine Daten gehen dabei nicht verloren** (es ist nur ausgeblendet, jederzeit umkehrbar). Zur Einordnung der drei Wege: **inaktiv** = vorübergehend ausblenden (reversibel) · **Stilllegungsdatum** = Komponente ist ab dann ausgemustert · **Löschen** = endgültig weg.
+- **E-Auto-Verbrauch (kWh/100 km) ist überall gleich.** E-Auto-Dashboard, Monatsbericht und Komponenten-Auswertung zeigen jetzt denselben Ø-Verbrauch. Liegt ein gemessener Verbrauch vor, wird er genutzt; sonst nähert eedc den Wert ehrlich aus der geladenen Energie an (und sagt das dazu). Das frühere irreführende „0,0 kWh/100 km" ohne Verbrauchssensor entfällt.
+
+### Außerdem in dieser Version
+
+- **Sensor-Zuordnung mit Erklärungen:** Im Zuordnungs-Assistenten steht jetzt unter jedem Feld ein kurzer Hinweis, welcher Wert bzw. Sensortyp dort erwartet wird.
+- **Live-Wetter zeigt wieder zuverlässig Daten.** Es konnte vorkommen, dass die Live-Wetteransicht bis zu einer Stunde „Keine Wetterdaten verfügbar" zeigte, obwohl alles korrekt eingerichtet war — ein interner Zwischenspeicher-Fehler. Behoben. Und falls der Wetterdienst mal kurz nicht erreichbar ist, steht jetzt ehrlich „momentan nicht verfügbar — wird automatisch erneut versucht" statt einer falschen Aufforderung, Koordinaten zu hinterlegen. Danke an rapahl.
+- **PV-Prognose: kein Festhängen an veralteten Werten mehr.** Nach einer Änderung der Anlagengröße konnte die Jahresprognose auf einem alten Stand „kleben". Ein Wächter erkennt das jetzt; im Zweifel hilft „Prognose neu abrufen" im PVGIS-Abschnitt. Danke an Sabrina.
+- **„Monat einfügen" ist freier geworden:** Du kannst einen Monat auch dann nachtragen, wenn er nicht in der Auswahlliste steht.
 
 ---
 

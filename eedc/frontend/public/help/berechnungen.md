@@ -208,6 +208,16 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 
 **Kanonische Heimladungs-Quelle (ab Phase 2a):** `Ladung_gesamt` und `Ladung_PV` der Heimladung kommen strukturell aus **genau einer** Quelle: existiert eine Wallbox-Investition mit Heimladung, ist sie die Quelle (Infrastruktur misst den Stromfluss am Ladepunkt); ohne Wallbox (Steckerlader/Schuko) liefert das E-Auto die Werte. Bei mehreren Wallboxen ist die Heimladung die **Summe** aller Wallbox-Ladepunkte. Diese Regel ist deterministisch (existiert eine Wallbox?), nicht magnitudenabhängig — der frühere Pool-/„größere Heimladung gewinnt"-Mechanismus entfällt. Die km-anteilige Aufteilung auf mehrere Fahrzeuge (Attribution) bleibt unverändert. Zentraler Helper: `get_emob_heimladung_canonical()`.
 
+**Ø Verbrauch (kWh/100 km) — Quellen-Vorrang:** Die Effizienz-KPI in E-Auto-Dashboard, Monatsbericht und Komponenten-Auswertung kommt aus **einem** Helper (`core/berechnungen/emob.py`, `eauto_effizienz_100km`):
+
+```
+1. gemessener Fahrverbrauch:  verbrauch_kwh ÷ km × 100     (Vorrang, exakt)
+2. sonst Näherung aus Ladung: Ladung_gesamt ÷ km × 100     (Fallback)
+3. sonst:                     —   (nie 0,0 erfinden)
+```
+
+Die Ladungs-Näherung **überschätzt** den echten Fahrverbrauch (AC-Ladung an der Wallbox enthält Ladeverluste ~10–15 %, blendet SoC-Drift + nicht erfasste Fremdladung aus) — in der UI als „≈ aus Ladung (inkl. Ladeverluste)" gelabelt. Vorteil: funktioniert auch ohne Verbrauchssensor (den die wenigsten Fahrzeuge liefern). Alle Read-Sites zeigen denselben Wert; das Aggregat rechnet über die **Summen** (Σverbrauch / Σladung / Σkm), nicht über das Mittel der Monats-Prozente. Symmetrie abgesichert durch `test_emob_readsite_symmetrie.py`.
+
 **Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In **Aussichten**, **HA-Sensor-Export** und **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Investition wenn kein Monatswert vorhanden.
 
 #### Investitionskosten (Mehrkosten-Ansatz)
