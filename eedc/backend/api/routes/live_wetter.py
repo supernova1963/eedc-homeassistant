@@ -104,6 +104,11 @@ class VerbrauchsStunde(BaseModel):
 class LiveWetterResponse(BaseModel):
     anlage_id: int
     verfuegbar: bool
+    # Grund, WENN nicht verfügbar — damit das Frontend die richtige (nicht
+    # schuld-umkehrende) Meldung zeigt: "keine_koordinaten" (echte Stammdaten-
+    # Lücke) vs. "abruf_fehlgeschlagen" (Koordinaten da, OpenMeteo-Abruf/Cache
+    # vorübergehend down — kein User-Fehler). None, wenn verfügbar.
+    grund: Optional[str] = None
     aktuell: Optional[WetterStunde] = None
     stunden: list[WetterStunde] = []
     temperatur_min_c: Optional[float] = None
@@ -988,7 +993,7 @@ async def get_live_wetter(
         return data
 
     if not anlage.latitude or not anlage.longitude:
-        return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
+        return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "keine_koordinaten", "stunden": []}
 
     # Haupt-Wetter-Request (Wetterdaten + GHI)
     # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen
@@ -1011,7 +1016,7 @@ async def get_live_wetter(
             data, multi_gti, multi_vollstaendig = cached_wetter
         elif _error_cache_check(cache_key):
             logger.debug(f"Live-Wetter: Negative-Cache-Hit für Anlage {anlage_id}")
-            return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
+            return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "abruf_fehlgeschlagen", "stunden": []}
         else:
             hourly_vars = [
                 "temperature_2m", "weather_code", "cloud_cover",
@@ -1341,11 +1346,11 @@ async def get_live_wetter(
         ttl = ERROR_TTL_RATE_LIMIT if status == 429 else ERROR_TTL_SERVER_ERROR
         logger.warning(f"Live-Wetter Fehler: HTTP {status}")
         _error_cache_set(cache_key, ttl)
-        return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
+        return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "abruf_fehlgeschlagen", "stunden": []}
     except Exception as e:
         logger.warning(f"Live-Wetter Fehler: {type(e).__name__}: {e}")
         _error_cache_set(cache_key, ERROR_TTL_NETWORK)
-        return {"anlage_id": anlage.id, "verfuegbar": False, "stunden": []}
+        return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "abruf_fehlgeschlagen", "stunden": []}
 
 
 # ── MQTT-Inbound Status ─────────────────────────────────────────────────────

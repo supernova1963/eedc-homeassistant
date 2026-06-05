@@ -71,6 +71,9 @@ export interface VerbrauchsStunde {
 export interface LiveWetterResponse {
   anlage_id: number
   verfuegbar: boolean
+  // Grund bei !verfuegbar: 'keine_koordinaten' (Stammdaten-Lücke) | 'abruf_fehlgeschlagen'
+  // (Koordinaten da, OpenMeteo-Abruf/Cache vorübergehend down — kein User-Fehler).
+  grund?: 'keine_koordinaten' | 'abruf_fehlgeschlagen' | null
   aktuell: WetterStunde | null
   stunden: WetterStunde[]
   temperatur_min_c: number | null

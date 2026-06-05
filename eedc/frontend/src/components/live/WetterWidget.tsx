@@ -300,14 +300,20 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   }
 
   if (!wetter?.verfuegbar) {
+    // Nicht reflexhaft Konfigurations-Schuld zuweisen: nur bei echter Koordinaten-
+    // Lücke zum Hinterlegen auffordern. Bei 'abruf_fehlgeschlagen' (Koordinaten da,
+    // OpenMeteo/Cache vorübergehend down) ehrlich als temporär kennzeichnen.
+    const istKoordinatenLuecke = wetter?.grund === 'keine_koordinaten'
     return (
       <div className="text-center py-6">
         <Cloud className="h-8 w-8 text-gray-400 mx-auto mb-2" />
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Keine Wetterdaten verfügbar
+          {istKoordinatenLuecke ? 'Keine Wetterdaten verfügbar' : 'Wetterdaten momentan nicht verfügbar'}
         </p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-          Standort-Koordinaten in den Stammdaten hinterlegen
+          {istKoordinatenLuecke
+            ? 'Standort-Koordinaten in den Stammdaten hinterlegen'
+            : 'Abruf vorübergehend gestört – wird automatisch erneut versucht.'}
         </p>
       </div>
     )
