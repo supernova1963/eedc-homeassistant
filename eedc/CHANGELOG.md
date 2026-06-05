@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.36.2] - 2026-06-05 — Live-Wetter: vergifteter Zwischenspeicher nach Upgrade
+
+> 🩹 **Patch.** Nachzug zu v3.36.1: Der dortige Live-Wetter-Fix korrigierte nur den **Schreiber** des Wetter-Zwischenspeichers. Ein bereits aus der Vorversion im **persistenten** Cache (überlebt Neustarts) liegender Eintrag im alten Format wurde dadurch nicht geheilt — und vom Prefetch-Skip-Guard nie überschrieben. Die Live-Wetteransicht blieb deshalb bei betroffenen Anlagen weiter auf „Keine Wetterdaten verfügbar". Jetzt verwirft der **Leser** jeden Cache-Eintrag falscher Struktur wie einen Cache-Miss und ruft frisch ab (selbstheilend, robust gegen künftige Format-Wechsel über Updates).
+
+### Fixed
+
+- **Live-Wetter blieb auch nach v3.36.1 auf „Keine Wetterdaten verfügbar" (Anlass: rapahl).** Der v3.36.1-Fix setzte nur am Schreib-Pfad des Wetter-Caches an; ein aus der Vorversion bereits persistierter Eintrag im falschen Format überlebte den Neustart (L2-Cache, `api_cache`), wurde nach dem Warmup wieder in den RAM-Cache geladen und vom stündlichen Prefetch nicht ersetzt (Skip-Guard „nicht überschreiben wenn vorhanden"). Der Live-Abruf entpackte ihn weiter stur und scheiterte → Negativ-Cache. Der Endpoint behandelt einen Cache-Eintrag falscher Arität jetzt wie einen Cache-Miss (verwerfen + Neu-Abruf); der frische Abruf überschreibt den Alt-Eintrag. Regressionstest ergänzt.
+
 ## [3.36.1] - 2026-06-05 — QS-Nachzug: Finanzen-Sonstige, aktiv-Sichtbarkeit, Live-Wetter, Wizard-Hilfen
 
 > 🩹 **Patch-Sammelrelease** nach v3.36.0. Schwerpunkt: Aggregations- und Sichtbarkeits-Korrekturen aus der Tester-Runde (rilmor #310, rapahl Live-Wetter, Sabrina Prognose) plus zwei UX-Verbesserungen (Feld-Hinweise im Wizard, einheitlicher E-Auto-Ø-Verbrauch). 761 Backend-Tests grün.

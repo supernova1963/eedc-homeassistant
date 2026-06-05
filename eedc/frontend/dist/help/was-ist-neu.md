@@ -1,11 +1,19 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.36.1)
+> **Stand:** Juni 2026 (v3.36.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.36.2 — Live-Wetter endgültig behoben (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Live-Wetter zeigt jetzt zuverlässig Daten — auch direkt nach dem Update.** Der Fix aus v3.36.1 griff bei manchen Anlagen erst nach bis zu einer Stunde, weil ein veralteter interner Zwischenspeicher-Eintrag aus der Vorversion das Neuladen blockierte. eedc erkennt solche Alt-Einträge jetzt und ruft das Wetter sofort frisch ab. Danke an rapahl.
 
 ---
 
