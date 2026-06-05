@@ -542,7 +542,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             value={formData.jahr}
             onChange={handleChange}
             required
-            disabled={!!monatsdaten || !!haVorausfuellung}
+            disabled={!!monatsdaten}
           />
           <Select
             label="Monat"
@@ -551,7 +551,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onChange={handleChange}
             options={monatOptions}
             required
-            disabled={!!monatsdaten || !!haVorausfuellung}
+            disabled={!!monatsdaten}
           />
         </div>
       </div>

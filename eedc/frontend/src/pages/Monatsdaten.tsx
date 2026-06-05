@@ -485,11 +485,19 @@ export default function MonatsdatenPage() {
           </Button>
         )}
         <Button
+          variant="secondary"
           onClick={() => selectedAnlageId && navigate(`/monatsabschluss/${selectedAnlageId}`)}
           disabled={!selectedAnlageId}
         >
+          <Calendar className="h-5 w-5 mr-2" />
+          Monatsabschluss
+        </Button>
+        <Button
+          onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}
+          disabled={!selectedAnlageId}
+        >
           <Plus className="h-5 w-5 mr-2" />
-          Neuer Monat
+          Monat einfügen
         </Button>
       </div>
 
@@ -519,8 +527,16 @@ export default function MonatsdatenPage() {
             title="Keine Monatsdaten vorhanden"
             description="Erfasse deine ersten Monatsdaten manuell oder importiere eine CSV-Datei."
             action={
-              <div className="flex gap-4">
+              <div className="flex gap-4 flex-wrap justify-center">
                 <Button
+                  onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}
+                  disabled={!selectedAnlageId}
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Monat einfügen
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={() => selectedAnlageId && navigate(`/monatsabschluss/${selectedAnlageId}`)}
                   disabled={!selectedAnlageId}
                 >
