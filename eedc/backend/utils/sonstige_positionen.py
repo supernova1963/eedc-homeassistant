@@ -111,3 +111,37 @@ def berechne_sonstige_summen(verbrauch_daten: dict[str, Any] | None) -> dict:
 def berechne_sonstige_netto(verbrauch_daten: dict[str, Any] | None) -> float:
     """Shorthand: gibt ertraege - ausgaben zurück."""
     return berechne_sonstige_summen(verbrauch_daten)["netto_euro"]
+
+
+def aggregiere_sonstige_je_monat(imd_rows: Any) -> dict[tuple[int, int], dict[str, float]]:
+    """Summiert Sonstige Erträge/Ausgaben/Netto je ``(jahr, monat)`` über IMD-Rows.
+
+    **Single Source of Truth für die Read-Site-Aggregation** der manuell
+    gepflegten ``sonstige_positionen`` (Monatsbericht ⟺ Komponenten-Zeitreihe;
+    der ROI-Pfad nutzt dieselben Per-Record-Helfer). Erwartet Objekte mit
+    ``.jahr``, ``.monat`` und ``.verbrauch_daten`` (ORM-``InvestitionMonatsdaten``).
+
+    **Reine Summierung — der Helper kennt keine Investition und filtert NICHT.**
+    Die Sichtbarkeitsregel (``aktiv`` + Laufzeit-Fenster Anschaffung→Stilllegung,
+    detLAN/#236/#308) gilt für Sonstige genauso wie für alles andere — Finanz-
+    positionen sind KEINE Ausnahme. Der **Caller** muss deshalb nur Rows von
+    sichtbaren Investitions-Monaten hereingeben (``inv.aktiv`` und
+    ``inv.ist_aktiv_im_monat(jahr, monat)``). #310 war ein TYP-Ausschluss
+    (PV/WR fehlten im Aggregat), kein Laufzeit-Thema.
+
+    Monate ohne Sonstige tauchen NICHT im Ergebnis auf (Caller behandelt fehlende
+    Keys als 0).
+    """
+    out: dict[tuple[int, int], dict[str, float]] = {}
+    for imd in imd_rows:
+        summen = berechne_sonstige_summen(getattr(imd, "verbrauch_daten", None) or {})
+        if not (summen["ertraege_euro"] or summen["ausgaben_euro"]):
+            continue
+        key = (imd.jahr, imd.monat)
+        agg = out.setdefault(
+            key, {"ertraege_euro": 0.0, "ausgaben_euro": 0.0, "netto_euro": 0.0}
+        )
+        agg["ertraege_euro"] = round(agg["ertraege_euro"] + summen["ertraege_euro"], 2)
+        agg["ausgaben_euro"] = round(agg["ausgaben_euro"] + summen["ausgaben_euro"], 2)
+        agg["netto_euro"] = round(agg["netto_euro"] + summen["netto_euro"], 2)
+    return out

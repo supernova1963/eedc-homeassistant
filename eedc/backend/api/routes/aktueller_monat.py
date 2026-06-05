@@ -45,7 +45,7 @@ from backend.core.field_definitions import (
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
-from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.utils.sonstige_positionen import berechne_sonstige_summen, aggregiere_sonstige_je_monat
 from backend.core.investition_parameter import ist_dienstlich
 
 logger = logging.getLogger(__name__)
@@ -981,15 +981,21 @@ async def get_aktueller_monat(
             InvestitionMonatsdaten.monat == monat,
         )
     ) if investitionen else None
-    sonstige_ertraege_total = 0.0
-    sonstige_ausgaben_total = 0.0
-    if sonstige_inv_imd_result is not None:
-        for imd_row in sonstige_inv_imd_result.scalars().all():
-            s = berechne_sonstige_summen(imd_row.verbrauch_daten or {})
-            sonstige_ertraege_total += s["ertraege_euro"]
-            sonstige_ausgaben_total += s["ausgaben_euro"]
-    sonstige_ertraege_total = round(sonstige_ertraege_total, 2)
-    sonstige_ausgaben_total = round(sonstige_ausgaben_total, 2)
+    # Sonstige Erträge/Ausgaben des Monats — zentraler SoT-Helper, identisch zur
+    # Komponenten-Zeitreihe (Symmetrie: test_sonstige_readsite_symmetrie). Gleiche
+    # Sichtbarkeitsregel wie überall: `investitionen` ist bereits aktiv-gefiltert
+    # (aktiv=False = wie gelöscht), zusätzlich nur innerhalb der Laufzeit
+    # Anschaffung→Stilllegung (detLAN [[feedback_anschaffungsdatum_grenze]],
+    # #236/#308) — Finanzpositionen sind keine Ausnahme.
+    _inv_by_id_s = {i.id: i for i in investitionen}
+    _sonstige_rows = [
+        imd for imd in (sonstige_inv_imd_result.scalars().all()
+                        if sonstige_inv_imd_result is not None else [])
+        if _inv_by_id_s[imd.investition_id].ist_aktiv_im_monat(imd.jahr, imd.monat)
+    ]
+    _sonstige_agg = aggregiere_sonstige_je_monat(_sonstige_rows).get((jahr, monat), {})
+    sonstige_ertraege_total = round(_sonstige_agg.get("ertraege_euro", 0.0), 2)
+    sonstige_ausgaben_total = round(_sonstige_agg.get("ausgaben_euro", 0.0), 2)
     sonstige_netto_total = round(sonstige_ertraege_total - sonstige_ausgaben_total, 2)
 
     # ── Gesamtnettoertrag = Erlöse + Einsparungen − Kosten ──

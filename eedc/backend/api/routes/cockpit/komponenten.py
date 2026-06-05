@@ -15,7 +15,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.utils.sonstige_positionen import aggregiere_sonstige_je_monat
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
@@ -132,7 +132,11 @@ async def get_komponenten_zeitreihe(
     hat_balkonkraftwerk = len(bkw_ids) > 0
     hat_sonstiges = len(sonstiges_ids) > 0
 
-    if not all_inv_ids:
+    # Early-Return nur bei GAR keiner Investition. Bei reinen PV-/WR-Anlagen
+    # (all_inv_ids leer, aber investitionen vorhanden) NICHT abbrechen — sonst
+    # gingen am PV-Modul/Wechselrichter gepflegte Sonstige-Positionen verloren
+    # (#310). Der Energie-Loop bleibt dann leer, die Sonstige-Aggregation läuft.
+    if not investitionen:
         return KomponentenZeitreiheResponse(
             anlage_id=anlage_id,
             hat_speicher=False, hat_waermepumpe=False, hat_emobilitaet=False,
@@ -200,11 +204,10 @@ async def get_komponenten_zeitreihe(
         data = imd.verbrauch_daten or {}
         d = inv_data_by_month[key]
 
-        summen = berechne_sonstige_summen(data)
-        d["sonderkosten"] += summen["ausgaben_euro"]
-        d["sonstige_ertraege"] += summen["ertraege_euro"]
-        d["sonstige_ausgaben"] += summen["ausgaben_euro"]
-
+        # Sonstige Erträge/Ausgaben NICHT hier — dieser Loop ist typ-gefiltert
+        # (all_inv_ids ohne PV/WR) und laufzeit-gefiltert (ist_aktiv_im_monat).
+        # Finanzpositionen werden unten entkoppelt über ALLE Investitionen
+        # aggregiert (#310). Siehe `aggregiere_sonstige_je_monat`.
         if inv.typ == "speicher":
             d["speicher_ladung"] += data.get("ladung_kwh", 0) or 0
             d["speicher_entladung"] += data.get("entladung_kwh", 0) or 0
@@ -277,6 +280,33 @@ async def get_komponenten_zeitreihe(
     agg_emob_ladung = 0.0
     agg_emob_km = 0.0
     _tarif_cache_kz: dict[date, dict] = {}
+
+    # Sonstige Erträge/Ausgaben (#310 rilmor-mhrs) — entkoppelt vom TYP-gefilterten
+    # Energie-Loop (der `all_inv_ids` ohne PV-Modul/Wechselrichter kennt): über
+    # ALLE Investitionstypen, sonst zählt diese Sicht einen am Wechselrichter
+    # gepflegten Ertrag NICHT mit, obwohl der Monatsbericht ihn zeigt.
+    # ABER: dieselbe Sichtbarkeitsregel wie überall (detLAN [[feedback_anschaffungsdatum_grenze]],
+    # #236/#308) — nur `aktiv` (aktiv=False = wie gelöscht) und nur innerhalb der
+    # Laufzeit Anschaffung→Stilllegung. Finanzpositionen sind KEINE Ausnahme.
+    # Symmetrie zum Monatsbericht: test_sonstige_readsite_symmetrie.
+    aktive_inv_ids = [i.id for i in investitionen if i.aktiv]
+    if aktive_inv_ids:
+        sonstige_query = select(InvestitionMonatsdaten).where(
+            InvestitionMonatsdaten.investition_id.in_(aktive_inv_ids)
+        )
+        if jahr is not None:
+            sonstige_query = sonstige_query.where(InvestitionMonatsdaten.jahr == jahr)
+        sonstige_rows = [
+            imd for imd in (await db.execute(sonstige_query)).scalars().all()
+            if inv_by_id[imd.investition_id].ist_aktiv_im_monat(imd.jahr, imd.monat)
+        ]
+        for (s_jahr, s_monat), summen in aggregiere_sonstige_je_monat(sonstige_rows).items():
+            # Monat muss in der Response existieren, auch wenn er KEINE
+            # Komponenten-Energiedaten hat (reiner Sonstige-Monat).
+            d = inv_data_by_month.setdefault((s_jahr, s_monat), empty_month_data())
+            d["sonstige_ertraege"] = summen["ertraege_euro"]
+            d["sonstige_ausgaben"] = summen["ausgaben_euro"]
+            d["sonderkosten"] = summen["ausgaben_euro"]
 
     for key in sorted(inv_data_by_month.keys()):
         jahr, monat = key
