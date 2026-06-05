@@ -11,6 +11,7 @@ import { Battery } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface SpeicherStepProps {
   investitionen: InvestitionInfo[]
@@ -33,6 +34,7 @@ export default function SpeicherStep({
   liveInvertMappings = {},
   onLiveInvertChange,
 }: SpeicherStepProps) {
+  const hinweise = useFeldHinweise()
   const basisOptionen: StrategieOption[] = [
     {
       value: 'sensor',
@@ -85,6 +87,7 @@ export default function SpeicherStep({
             <FeldMappingInput
               label="Ladung"
               einheit="kWh"
+              hint={hinweise.speicher?.ladung_kwh}
               value={mappings[inv.id.toString()]?.ladung_kwh || null}
               onChange={mapping => onChange(inv.id, 'ladung_kwh', mapping)}
               availableSensors={availableSensors}
@@ -94,6 +97,7 @@ export default function SpeicherStep({
             <FeldMappingInput
               label="Entladung"
               einheit="kWh"
+              hint={hinweise.speicher?.entladung_kwh}
               value={mappings[inv.id.toString()]?.entladung_kwh || null}
               onChange={mapping => onChange(inv.id, 'entladung_kwh', mapping)}
               availableSensors={availableSensors}
@@ -103,15 +107,13 @@ export default function SpeicherStep({
             <FeldMappingInput
               label="Netzladung"
               einheit="kWh"
+              hint={hinweise.speicher?.ladung_netz_kwh}
               value={mappings[inv.id.toString()]?.ladung_netz_kwh || null}
               onChange={mapping => onChange(inv.id, 'ladung_netz_kwh', mapping)}
               availableSensors={availableSensors}
               strategieOptionen={netzladungOptionen}
               defaultStrategie="keine"
             />
-            <p className="text-xs text-gray-500 -mt-2 ml-1">
-              Netzladung wird für Arbitrage-Auswertung (Speicher aus Netz laden) benötigt.
-            </p>
 
             {/* Live-Sensoren */}
             {onLiveChange && (

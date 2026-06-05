@@ -13,6 +13,7 @@ import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/senso
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface WaermepumpeStepProps {
   investitionen: InvestitionInfo[]
@@ -35,6 +36,7 @@ export default function WaermepumpeStep({
   liveInvertMappings = {},
   onLiveInvertChange,
 }: WaermepumpeStepProps) {
+  const hinweise = useFeldHinweise()
   const stromOptionen: StrategieOption[] = [
     {
       value: 'sensor',
@@ -151,6 +153,7 @@ export default function WaermepumpeStep({
                 <FeldMappingInput
                   label="Strom Heizen"
                   einheit="kWh"
+                  hint={hinweise.waermepumpe?.strom_heizen_kwh}
                   value={mappings[inv.id.toString()]?.strom_heizen_kwh || null}
                   onChange={mapping => onChange(inv.id, 'strom_heizen_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -159,6 +162,7 @@ export default function WaermepumpeStep({
                 <FeldMappingInput
                   label="Strom Warmwasser"
                   einheit="kWh"
+                  hint={hinweise.waermepumpe?.strom_warmwasser_kwh}
                   value={mappings[inv.id.toString()]?.strom_warmwasser_kwh || null}
                   onChange={mapping => onChange(inv.id, 'strom_warmwasser_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -169,6 +173,7 @@ export default function WaermepumpeStep({
               <FeldMappingInput
                 label="Stromverbrauch"
                 einheit="kWh"
+                hint={hinweise.waermepumpe?.stromverbrauch_kwh}
                 value={mappings[inv.id.toString()]?.stromverbrauch_kwh || null}
                 onChange={mapping => onChange(inv.id, 'stromverbrauch_kwh', mapping)}
                 availableSensors={availableSensors}
@@ -181,6 +186,7 @@ export default function WaermepumpeStep({
             <FeldMappingInput
               label="Heizwärme"
               einheit="kWh"
+              hint={hinweise.waermepumpe?.heizenergie_kwh}
               value={mappings[inv.id.toString()]?.heizenergie_kwh || null}
               onChange={mapping => onChange(inv.id, 'heizenergie_kwh', mapping)}
               availableSensors={availableSensors}
@@ -192,6 +198,7 @@ export default function WaermepumpeStep({
             <FeldMappingInput
               label="Warmwasser"
               einheit="kWh"
+              hint={hinweise.waermepumpe?.warmwasser_kwh}
               value={mappings[inv.id.toString()]?.warmwasser_kwh || null}
               onChange={mapping => onChange(inv.id, 'warmwasser_kwh', mapping)}
               availableSensors={availableSensors}

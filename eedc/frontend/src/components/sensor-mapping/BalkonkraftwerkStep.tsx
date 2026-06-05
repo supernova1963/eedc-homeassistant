@@ -13,6 +13,7 @@ import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/senso
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface BalkonkraftwerkStepProps {
   investitionen: InvestitionInfo[]
@@ -35,6 +36,7 @@ export default function BalkonkraftwerkStep({
   liveInvertMappings = {},
   onLiveInvertChange,
 }: BalkonkraftwerkStepProps) {
+  const hinweise = useFeldHinweise()
   const erzeugungOptionen: StrategieOption[] = [
     {
       value: 'sensor',
@@ -110,6 +112,7 @@ export default function BalkonkraftwerkStep({
             <FeldMappingInput
               label="PV-Erzeugung"
               einheit="kWh"
+              hint={hinweise.balkonkraftwerk?.pv_erzeugung_kwh}
               value={mappings[inv.id.toString()]?.pv_erzeugung_kwh || null}
               onChange={mapping => onChange(inv.id, 'pv_erzeugung_kwh', mapping)}
               availableSensors={availableSensors}
@@ -119,6 +122,7 @@ export default function BalkonkraftwerkStep({
             <FeldMappingInput
               label="Eigenverbrauch"
               einheit="kWh"
+              hint={hinweise.balkonkraftwerk?.eigenverbrauch_kwh}
               value={mappings[inv.id.toString()]?.eigenverbrauch_kwh || null}
               onChange={mapping => onChange(inv.id, 'eigenverbrauch_kwh', mapping)}
               availableSensors={availableSensors}
@@ -129,6 +133,7 @@ export default function BalkonkraftwerkStep({
             <FeldMappingInput
               label="Speicher Ladung"
               einheit="kWh"
+              hint={hinweise.balkonkraftwerk?.speicher_ladung_kwh}
               value={mappings[inv.id.toString()]?.speicher_ladung_kwh || null}
               onChange={mapping => onChange(inv.id, 'speicher_ladung_kwh', mapping)}
               availableSensors={availableSensors}
@@ -139,6 +144,7 @@ export default function BalkonkraftwerkStep({
             <FeldMappingInput
               label="Speicher Entladung"
               einheit="kWh"
+              hint={hinweise.balkonkraftwerk?.speicher_entladung_kwh}
               value={mappings[inv.id.toString()]?.speicher_entladung_kwh || null}
               onChange={mapping => onChange(inv.id, 'speicher_entladung_kwh', mapping)}
               availableSensors={availableSensors}

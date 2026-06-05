@@ -15,6 +15,7 @@ import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface BasisSensorenStepProps {
   value: {
@@ -52,6 +53,7 @@ export default function BasisSensorenStep({
   solcastResourceIds = [],
   onSolcastResourceIdsChange,
 }: BasisSensorenStepProps) {
+  const hinweise = useFeldHinweise()
   const basisOptionen = [
     {
       value: 'sensor' as const,
@@ -94,6 +96,7 @@ export default function BasisSensorenStep({
           <FeldMappingInput
             label="Einspeisung"
             einheit="kWh"
+            hint={hinweise.basis?.einspeisung}
             value={value.einspeisung}
             onChange={mapping => onChange('einspeisung', mapping)}
             availableSensors={availableSensors}
@@ -111,6 +114,7 @@ export default function BasisSensorenStep({
           <FeldMappingInput
             label="Netzbezug"
             einheit="kWh"
+            hint={hinweise.basis?.netzbezug}
             value={value.netzbezug}
             onChange={mapping => onChange('netzbezug', mapping)}
             availableSensors={availableSensors}

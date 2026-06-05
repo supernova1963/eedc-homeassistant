@@ -119,12 +119,28 @@ export interface HAEnergySuggestResponse {
 // API Client
 // =============================================================================
 
+/**
+ * Feld-Hilfetexte: { kontext: { schluessel: hinweis } }.
+ * kontext = Investitionstyp (keyed by Feld), "basis" (keyed by mapping_key) oder
+ * "sonstiges:<kategorie>". Single Source of Truth = Backend field_definitions.
+ */
+export type FeldHinweise = Record<string, Record<string, string>>
+
 export const sensorMappingApi = {
   /**
    * Sensor-Mapping und Investitionen einer Anlage abrufen
    */
   async getMapping(anlageId: number): Promise<SensorMappingResponse> {
     return api.get<SensorMappingResponse>(`/sensor-mapping/${anlageId}`)
+  },
+
+  /**
+   * Feld-Hilfetexte (statisch, kein Anlage-Bezug, immer verfügbar — auch
+   * Standalone). Gleiche Quelle für HA-Sensor-Zuordnungs-, künftigen
+   * MQTT-Inbound-Wizard und manuelle Monatsdaten-Eingabe.
+   */
+  async getFeldHinweise(): Promise<FeldHinweise> {
+    return api.get<FeldHinweise>(`/monatsdaten/feld-hinweise`)
   },
 
   /**

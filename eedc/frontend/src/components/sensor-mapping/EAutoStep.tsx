@@ -20,6 +20,7 @@ import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/senso
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface EAutoStepProps {
   investitionen: InvestitionInfo[]
@@ -42,6 +43,7 @@ export default function EAutoStep({
   liveInvertMappings = {},
   onLiveInvertChange,
 }: EAutoStepProps) {
+  const hinweise = useFeldHinweise()
   const eAutos = investitionen.filter(i => i.typ === 'e-auto')
   const wallboxen = investitionen.filter(i => i.typ === 'wallbox')
 
@@ -190,6 +192,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Ladung Gesamt"
                   einheit="kWh"
+                  hint={hinweise.wallbox?.ladung_kwh}
                   value={mappings[inv.id.toString()]?.ladung_kwh || null}
                   onChange={mapping => onChange(inv.id, 'ladung_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -199,6 +202,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Ladung PV"
                   einheit="kWh"
+                  hint={hinweise.wallbox?.ladung_pv_kwh}
                   value={mappings[inv.id.toString()]?.ladung_pv_kwh || null}
                   onChange={mapping => onChange(inv.id, 'ladung_pv_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -209,6 +213,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Ladevorgänge"
                   einheit="Anzahl"
+                  hint={hinweise.wallbox?.ladevorgaenge}
                   value={mappings[inv.id.toString()]?.ladevorgaenge || null}
                   onChange={mapping => onChange(inv.id, 'ladevorgaenge', mapping)}
                   availableSensors={availableSensors}
@@ -261,6 +266,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Ladung PV"
                   einheit="kWh"
+                  hint={hinweise['e-auto']?.ladung_pv_kwh}
                   value={mappings[inv.id.toString()]?.ladung_pv_kwh || null}
                   onChange={mapping => onChange(inv.id, 'ladung_pv_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -270,6 +276,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Ladung Netz"
                   einheit="kWh"
+                  hint={hinweise['e-auto']?.ladung_netz_kwh}
                   value={mappings[inv.id.toString()]?.ladung_netz_kwh || null}
                   onChange={mapping => onChange(inv.id, 'ladung_netz_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -279,6 +286,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Gefahrene Kilometer"
                   einheit="km"
+                  hint={hinweise['e-auto']?.km_gefahren}
                   value={mappings[inv.id.toString()]?.km_gefahren || null}
                   onChange={mapping => onChange(inv.id, 'km_gefahren', mapping)}
                   availableSensors={availableSensors}
@@ -289,6 +297,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="V2H Entladung"
                   einheit="kWh"
+                  hint={hinweise['e-auto']?.v2h_entladung_kwh}
                   value={mappings[inv.id.toString()]?.v2h_entladung_kwh || null}
                   onChange={mapping => onChange(inv.id, 'v2h_entladung_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -299,6 +308,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Verbrauch gesamt"
                   einheit="kWh"
+                  hint={hinweise['e-auto']?.verbrauch_kwh}
                   value={mappings[inv.id.toString()]?.verbrauch_kwh || null}
                   onChange={mapping => onChange(inv.id, 'verbrauch_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -309,6 +319,7 @@ export default function EAutoStep({
                 <FeldMappingInput
                   label="Ladung Extern"
                   einheit="kWh"
+                  hint={hinweise['e-auto']?.ladung_extern_kwh}
                   value={mappings[inv.id.toString()]?.ladung_extern_kwh || null}
                   onChange={mapping => onChange(inv.id, 'ladung_extern_kwh', mapping)}
                   availableSensors={availableSensors}

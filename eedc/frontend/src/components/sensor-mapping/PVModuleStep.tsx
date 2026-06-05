@@ -11,6 +11,7 @@ import { Sun, Activity } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete, type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface PVModuleStepProps {
   investitionen: InvestitionInfo[]
@@ -37,6 +38,7 @@ export default function PVModuleStep({
   liveInvertMappings = {},
   onLiveInvertChange,
 }: PVModuleStepProps) {
+  const hinweise = useFeldHinweise()
   const hasPvGesamtSensor = basisPvGesamt?.strategie === 'sensor' && basisPvGesamt?.sensor_id
 
   return (
@@ -102,6 +104,7 @@ export default function PVModuleStep({
               <FeldMappingInput
                 label="PV-Erzeugung"
                 einheit="kWh"
+                hint={hinweise['pv-module']?.pv_erzeugung_kwh}
                 value={mappings[inv.id.toString()]?.pv_erzeugung_kwh || null}
                 onChange={mapping => onChange(inv.id, 'pv_erzeugung_kwh', mapping)}
                 availableSensors={availableSensors}

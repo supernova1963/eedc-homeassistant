@@ -11,6 +11,7 @@ import { Wrench } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
+import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 
 interface SonstigesStepProps {
   investitionen: InvestitionInfo[]
@@ -39,11 +40,13 @@ export default function SonstigesStep({
   liveInvertMappings = {},
   onLiveInvertChange,
 }: SonstigesStepProps) {
+  const hinweise = useFeldHinweise()
   return (
     <div className="space-y-6">
       {investitionen.map(inv => {
         const kat: string = (inv.parameter?.kategorie as string) || 'verbraucher'
         const invMappings = mappings[inv.id.toString()] || {}
+        const katHinweise = hinweise[`sonstiges:${kat}`] || {}
 
         return (
           <div key={inv.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
@@ -64,6 +67,7 @@ export default function SonstigesStep({
                 <FeldMappingInput
                   label={kat === 'speicher' ? 'Verbrauch / Ladung' : 'Verbrauch'}
                   einheit="kWh"
+                  hint={katHinweise.verbrauch_sonstig_kwh}
                   value={invMappings.verbrauch_sonstig_kwh || null}
                   onChange={mapping => onChange(inv.id, 'verbrauch_sonstig_kwh', mapping)}
                   availableSensors={availableSensors}
@@ -75,6 +79,7 @@ export default function SonstigesStep({
                 <FeldMappingInput
                   label={kat === 'speicher' ? 'Erzeugung / Entladung' : 'Erzeugung'}
                   einheit="kWh"
+                  hint={katHinweise.erzeugung_kwh}
                   value={invMappings.erzeugung_kwh || null}
                   onChange={mapping => onChange(inv.id, 'erzeugung_kwh', mapping)}
                   availableSensors={availableSensors}

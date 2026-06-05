@@ -16,7 +16,7 @@ from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
-from backend.core.field_definitions import get_pv_erzeugung_kwh, get_wp_strom_kwh
+from backend.core.field_definitions import get_pv_erzeugung_kwh, get_wp_strom_kwh, get_feld_hinweise
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
 from backend.services.provenance import (
     log_delete,
@@ -391,6 +391,19 @@ async def list_monatsdaten(
 
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get("/feld-hinweise")
+async def get_feld_hinweise_endpoint():
+    """Feld-Hilfetexte als ``{kontext: {schluessel: hinweis}}``.
+
+    Statisch (kein Anlage-/DB-Bezug), immer verfügbar (auch Standalone) — Single
+    Source of Truth aus ``field_definitions``. Konsumiert vom Sensor-Zuordnungs-,
+    vom künftigen MQTT-Inbound-Wizard und (perspektivisch) von der manuellen
+    Monatsdaten-Eingabe, damit alle Kanäle identische Hilfetexte zeigen. Muss VOR
+    ``/{monatsdaten_id}`` stehen, sonst als ID interpretiert (422).
+    """
+    return get_feld_hinweise()
 
 
 @router.get("/{monatsdaten_id}", response_model=MonatsdatenMitKennzahlen)

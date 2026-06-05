@@ -30,6 +30,9 @@ interface StrategieOption {
 interface FeldMappingInputProps {
   label: string
   einheit: string
+  /** Optionaler Hinweistext unter dem Label: erklärt, welchen Wert/Sensortyp das Feld erwartet.
+   *  Quelle: Backend-SoT field_definitions (via /monatsdaten/feld-hinweise). */
+  hint?: string
   value: FeldMapping | null
   onChange: (mapping: FeldMapping | null) => void
   availableSensors: HASensorInfo[]
@@ -240,6 +243,7 @@ function UnitMismatchHint({ einheit, sensorId, sensors }: UnitMismatchHintProps)
 export default function FeldMappingInput({
   label,
   einheit,
+  hint,
   value,
   onChange,
   availableSensors,
@@ -292,10 +296,13 @@ export default function FeldMappingInput({
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-start justify-between mb-3">
         <div>
           <span className="font-medium text-gray-900 dark:text-white">{label}</span>
           <span className="ml-2 text-sm text-gray-500">({einheit})</span>
+          {hint && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-prose">{hint}</p>
+          )}
         </div>
       </div>
 

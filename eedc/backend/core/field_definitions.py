@@ -30,6 +30,11 @@ Feld-Attribute:
                   "pv_sum", "batterie_ladung_sum", "batterie_entladung_sum"
   typ           — Datentyp für Import-Parsing: "float" (default) | "int"
   placeholder   — optionaler Platzhalter für Eingabefeld
+  hinweis       — kurze Feld-Erklärung (welcher Wert/Sensortyp erwartet wird).
+                  Universelle Single Source of Truth für Hilfetexte: gerendert im
+                  Sensor-Zuordnungs-Wizard, im MQTT-Inbound-Wizard und in der
+                  manuellen Monatsdaten-Eingabe. Sensor-Felder konsistent zu
+                  docs/SENSOR-REFERENZ.md halten.
 """
 
 from typing import Optional
@@ -40,11 +45,16 @@ from typing import Optional
 # =============================================================================
 
 BASIS_FELDER = [
-    {"feld": "einspeisung_kwh",        "label": "Einspeisung",     "einheit": "kWh",    "mapping_key": "einspeisung",    "gruppe": "zaehler"},
-    {"feld": "netzbezug_kwh",          "label": "Netzbezug",       "einheit": "kWh",    "mapping_key": "netzbezug",      "gruppe": "zaehler"},
-    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung","gruppe": "wetter"},
-    {"feld": "sonnenstunden",          "label": "Sonnenstunden",   "einheit": "h",      "mapping_key": "sonnenstunden",  "gruppe": "wetter"},
-    {"feld": "durchschnittstemperatur","label": "Ø Temperatur",    "einheit": "°C",     "mapping_key": "temperatur",     "gruppe": "wetter"},
+    {"feld": "einspeisung_kwh",        "label": "Einspeisung",     "einheit": "kWh",    "mapping_key": "einspeisung",    "gruppe": "zaehler",
+     "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor mit 0:00-Reset) der ins Netz eingespeisten Energie. Immer ≥ 0; bei Zweirichtungszähler nur den Einspeise-Anteil."},
+    {"feld": "netzbezug_kwh",          "label": "Netzbezug",       "einheit": "kWh",    "mapping_key": "netzbezug",      "gruppe": "zaehler",
+     "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor mit 0:00-Reset) der aus dem Netz bezogenen Energie. Immer ≥ 0; bei Zweirichtungszähler nur den Bezugs-Anteil."},
+    {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung","gruppe": "wetter",
+     "hinweis": "Globalstrahlung im Monat (kWh/m²). Wird automatisch von Open-Meteo geholt, wenn nicht manuell gepflegt."},
+    {"feld": "sonnenstunden",          "label": "Sonnenstunden",   "einheit": "h",      "mapping_key": "sonnenstunden",  "gruppe": "wetter",
+     "hinweis": "Sonnenstunden im Monat (h). Wird automatisch von Open-Meteo geholt."},
+    {"feld": "durchschnittstemperatur","label": "Ø Temperatur",    "einheit": "°C",     "mapping_key": "temperatur",     "gruppe": "wetter",
+     "hinweis": "Monatsdurchschnittstemperatur (°C). Wird automatisch von Open-Meteo geholt."},
 ]
 
 # =============================================================================
@@ -67,6 +77,7 @@ BEDINGTE_BASIS_FELDER = [
         "bedingung_basis": "dynamischer_tarif",
         "mapping_key": "strompreis",
         "gruppe": "preise",
+        "hinweis": "Verbrauchsgewichteter Ø-Arbeitspreis des Monats (ct/kWh). Bei dynamischem Tarif sonst automatisch aus dem Strompreis-Sensor (Tibber/aWATTar/EPEX) berechnet.",
     },
     {
         "feld": "kraftstoffpreis_euro",
@@ -74,6 +85,7 @@ BEDINGTE_BASIS_FELDER = [
         "einheit": "€/L",
         "bedingung_basis": "hat_eauto",
         "gruppe": "preise",
+        "hinweis": "Ø Kraftstoffpreis des Monats (€/L) für den E-Auto-vs-Verbrenner-Vergleich. Wird sonst automatisch aus dem EU Weekly Oil Bulletin geholt.",
     },
     {
         "feld": "gaspreis_cent_kwh",
@@ -81,6 +93,7 @@ BEDINGTE_BASIS_FELDER = [
         "einheit": "ct/kWh",
         "bedingung_basis": "hat_waermepumpe",
         "gruppe": "preise",
+        "hinweis": "Ø Gas-/Ölpreis des Monats (ct/kWh) für den Wärmepumpe-vs-fossile-Heizung-Vergleich.",
     },
 ]
 
@@ -89,9 +102,12 @@ BEDINGTE_BASIS_FELDER = [
 # =============================================================================
 
 OPTIONALE_FELDER = [
-    {"feld": "sonderkosten_euro",        "label": "Sonderkosten",  "einheit": "€",  "typ": "number"},
-    {"feld": "sonderkosten_beschreibung","label": "Beschreibung",  "einheit": "",   "typ": "text"},
-    {"feld": "notizen",                  "label": "Notizen",       "einheit": "",   "typ": "text"},
+    {"feld": "sonderkosten_euro",        "label": "Sonderkosten",  "einheit": "€",  "typ": "number",
+     "hinweis": "Einmalige Sonderkosten des Monats (€), z. B. Wartung oder Reparatur. Optional."},
+    {"feld": "sonderkosten_beschreibung","label": "Beschreibung",  "einheit": "",   "typ": "text",
+     "hinweis": "Kurzbeschreibung der Sonderkosten (Freitext). Optional."},
+    {"feld": "notizen",                  "label": "Notizen",       "einheit": "",   "typ": "text",
+     "hinweis": "Freie Notizen zum Monat (Freitext). Optional."},
 ]
 
 # =============================================================================
@@ -111,6 +127,7 @@ INVESTITION_FELDER: dict = {
             "feld": "pv_erzeugung_kwh", "label": "PV-Erzeugung", "einheit": "kWh",
             "csv_suffix": "kWh",
             "aggregiert_in": "pv_erzeugung_sum",
+            "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor) der erzeugten Energie dieses PV-Strings. Immer ≥ 0. Alternativ anteilig per kWp aus dem PV-Gesamt-Sensor verteilt.",
         },
     ],
 
@@ -122,6 +139,7 @@ INVESTITION_FELDER: dict = {
             # Nur anzeigen wenn keine separaten PV-Modul-Investments existieren.
             # Sonst wird die Erzeugung bei den einzelnen PV-Modul-Segmenten erfasst.
             "bedingung_anlage": "keine_pv_module",
+            "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor) der gesamten PV-Erzeugung am Wechselrichter. Nur nötig, wenn keine separaten PV-Modul-Investitionen erfasst werden.",
         },
     ],
 
@@ -133,23 +151,27 @@ INVESTITION_FELDER: dict = {
             "label_wenn": {"laedt_aus_netz": "Ladung (gesamt, inkl. Netz)"},
             "csv_suffix": "Ladung_kWh",
             "aggregiert_in": "batterie_ladung_sum",
+            "hinweis": "Gesamte in den Speicher geladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0.",
         },
         {
             "feld": "entladung_kwh", "label": "Entladung", "einheit": "kWh",
             "csv_suffix": "Entladung_kWh",
             "aggregiert_in": "batterie_entladung_sum",
+            "hinweis": "Gesamte aus dem Speicher entladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0.",
         },
         # Konditionell — nur wenn laedt_aus_netz=true (arbitrage_faehig impliziert das):
         {
             "feld": "ladung_netz_kwh", "label": "Netzladung", "einheit": "kWh",
             "bedingung": "laedt_aus_netz",
             "csv_suffix": "Netzladung_kWh",
+            "hinweis": "Anteil der Ladung aus dem Netz (Arbitrage), in kWh. Optional, muss ≤ Ladung sein. Nur via HA-Sensor oder manuell — kein MQTT-Topic.",
         },
         # Ladepreis nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis.
         {
             "feld": "speicher_ladepreis_cent", "label": "Ø Ladepreis", "einheit": "ct/kWh",
             "bedingung": "arbitrage_faehig",
             "csv_suffix": "Ladepreis_Cent",
+            "hinweis": "Ø Preis der Netzladung (ct/kWh). Nur bei echter Arbitrage relevant; Backup-/Notladung läuft zum Bezugspreis. Manuell.",
         },
     ],
 
@@ -159,17 +181,20 @@ INVESTITION_FELDER: dict = {
             "feld": "stromverbrauch_kwh", "label": "Stromverbrauch", "einheit": "kWh",
             "bedingung": "!getrennte_strommessung",
             "csv_suffix": "Strom_kWh",
+            "hinweis": "Gesamter elektrischer Energieverbrauch der WP (kWh, kumulativ oder Tagessensor). Bei getrennter Messung: Summe aus Heizen + Warmwasser.",
         },
         # Getrennte-Strommessung-Modus (getrennte_strommessung=true):
         {
             "feld": "strom_heizen_kwh", "label": "Strom Heizen", "einheit": "kWh",
             "bedingung": "getrennte_strommessung",
             "csv_suffix": "Strom_Heizen_kWh",
+            "hinweis": "Elektrische Energie für den Heizbetrieb (kWh, kumulativ oder Tagessensor). Nur bei getrennter Strommessung.",
         },
         {
             "feld": "strom_warmwasser_kwh", "label": "Strom Warmwasser", "einheit": "kWh",
             "bedingung": "getrennte_strommessung",
             "csv_suffix": "Strom_Warmwasser_kWh",
+            "hinweis": "Elektrische Energie für die Warmwasserbereitung (kWh, kumulativ oder Tagessensor). Nur bei getrennter Strommessung.",
         },
         # Immer vorhanden:
         # #120: Wording-Schaerfung — abgegebene thermische Waerme, nicht Strom.
@@ -177,10 +202,12 @@ INVESTITION_FELDER: dict = {
         {
             "feld": "heizenergie_kwh", "label": "Heizwärme", "einheit": "kWh",
             "csv_suffix": "Heizung_kWh",
+            "hinweis": "Abgegebene Heizwärme (thermisch, NICHT Strom!) in kWh, kumulativ oder Tagessensor. Ohne Wärmemengenzähler aus Stromverbrauch × JAZ berechnet.",
         },
         {
             "feld": "warmwasser_kwh", "label": "Warmwasser", "einheit": "kWh",
             "csv_suffix": "Warmwasser_kWh",
+            "hinweis": "Abgegebene Warmwasser-Wärme (thermisch) in kWh, kumulativ oder Tagessensor. Optional — sonst in der Heizwärme enthalten.",
         },
     ],
 
@@ -189,11 +216,13 @@ INVESTITION_FELDER: dict = {
             "feld": "km_gefahren", "label": "Gefahrene km", "einheit": "km",
             "placeholder": "z.B. 1200",
             "csv_suffix": "km",
+            "hinweis": "Gefahrene Kilometer im Monat — kumulativer km-Zähler (Auto-Integration/OBD) oder Tagessensor, sonst manuell.",
         },
         {
             "feld": "verbrauch_kwh", "label": "Verbrauch", "einheit": "kWh",
             "placeholder": "z.B. 216",
             "csv_suffix": "Verbrauch_kWh",
+            "hinweis": "Kumulativer kWh-Zähler des gefahrenen Energieverbrauchs (zählt fortlaufend hoch, Tagessensor geht auch) — der reine Fahrverbrauch, NICHT pro Fahrt und NICHT kWh/100 km. eedc errechnet daraus mit den km die Effizienz. Optional: fehlt der Wert, nähert eedc die kWh/100 km aus der geladenen Energie an (inkl. Ladeverluste).",
         },
         {
             "feld": "ladung_pv_kwh", "label": "Heim: PV", "einheit": "kWh",
@@ -203,22 +232,26 @@ INVESTITION_FELDER: dict = {
             # Quelle der Heimladung — dann nicht zusätzlich am E-Auto erfassen
             # (sonst Dual-Daten / Doppelzählung, siehe docs/KONZEPT-WALLBOX-EAUTO.md).
             "bedingung_anlage": "keine_wallbox",
+            "hinweis": "Zu Hause aus PV geladene Energie (kWh, kumulativ oder Tagessensor). Nur ohne Wallbox — mit Wallbox wird die Heimladung dort erfasst. Alternativ per EV-Quote aus der Gesamt-Ladung berechnet.",
         },
         {
             "feld": "ladung_netz_kwh", "label": "Heim: Netz", "einheit": "kWh",
             "placeholder": "z.B. 50",
             "csv_suffix": "Ladung_Netz_kWh",
             "bedingung_anlage": "keine_wallbox",  # s. ladung_pv_kwh (Phase 2a)
+            "hinweis": "Zu Hause aus dem Netz geladene Energie (kWh, kumulativ oder Tagessensor). Nur ohne Wallbox. Alternativ per EV-Quote berechnet.",
         },
         {
             "feld": "ladung_extern_kwh", "label": "Extern", "einheit": "kWh",
             "placeholder": "z.B. 36",
             "csv_suffix": "Ladung_Extern_kWh",
+            "hinweis": "Unterwegs geladene Energie (Autobahn, Arbeit) in kWh. Meist manuell im Monatsabschluss. Optional.",
         },
         {
             "feld": "ladung_extern_euro", "label": "Extern Kosten", "einheit": "€",
             "placeholder": "z.B. 18.00",
             "csv_suffix": "Ladung_Extern_Euro",
+            "hinweis": "Kosten der externen Ladung (€). Manuell. Optional.",
         },
         # Konditionell — nur wenn v2h_faehig=true oder nutzt_v2h=true:
         {
@@ -226,6 +259,7 @@ INVESTITION_FELDER: dict = {
             "bedingung": "v2h_faehig",
             "placeholder": "z.B. 25",
             "csv_suffix": "V2H_kWh",
+            "hinweis": "Vehicle-to-Home zurück ins Haus gespeiste Energie (kWh, kumulativ oder Tagessensor). Nur bei V2H-fähigem Fahrzeug. Optional.",
         },
     ],
 
@@ -234,17 +268,20 @@ INVESTITION_FELDER: dict = {
             "feld": "ladung_kwh", "label": "Ladung gesamt", "einheit": "kWh",
             "placeholder": "z.B. 200",
             "csv_suffix": "Ladung_kWh",
+            "hinweis": "Gesamte von der Wallbox abgegebene Ladeenergie (kWh, kumulativer Zähler oder Tagessensor). Kanonische Heimladungs-Quelle (Phase 2a) — hier mappen, nicht am E-Auto.",
         },
         {
             "feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh",
             "placeholder": "z.B. 80",
             "csv_suffix": "Ladung_PV_kWh",
+            "hinweis": "PV-Anteil der Wallbox-Ladung (kWh, kumulativ oder Tagessensor). Optional — manche Wallboxen (z. B. go-e) messen das separat.",
         },
         {
             "feld": "ladevorgaenge", "label": "Ladevorgänge", "einheit": "",
             "placeholder": "z.B. 12",
             "csv_suffix": "Ladevorgaenge",
             "typ": "int",
+            "hinweis": "Anzahl der Ladevorgänge (kumulativer Zähler oder Tagessensor). Optional.",
         },
     ],
 
@@ -254,10 +291,12 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Erzeugung_kWh",
             "csv_suffix_alt": "kWh",  # Rückwärtskompatibilität
             "aggregiert_in": "pv_erzeugung_sum",
+            "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor) der BKW-Erzeugung vom Wechselrichter. Immer ≥ 0.",
         },
         {
             "feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh",
             "csv_suffix": "Eigenverbrauch_kWh",
+            "hinweis": "Direkt im Haushalt verbrauchte BKW-Erzeugung (kWh, kumulativ oder Tagessensor). Optional — sonst aus Erzeugung − Einspeisung berechnet.",
         },
         # Konditionell — nur wenn hat_speicher=true:
         {
@@ -265,12 +304,14 @@ INVESTITION_FELDER: dict = {
             "bedingung": "hat_speicher",
             "csv_suffix": "Speicher_Ladung_kWh",
             "aggregiert_in": "batterie_ladung_sum",
+            "hinweis": "In den BKW-Akku geladene Energie (kWh, kumulativ oder Tagessensor). Nur bei BKW mit Speicher.",
         },
         {
             "feld": "speicher_entladung_kwh", "label": "Speicher Entladung", "einheit": "kWh",
             "bedingung": "hat_speicher",
             "csv_suffix": "Speicher_Entladung_kWh",
             "aggregiert_in": "batterie_entladung_sum",
+            "hinweis": "Aus dem BKW-Akku entladene Energie (kWh, kumulativ oder Tagessensor). Nur bei BKW mit Speicher.",
         },
     ],
 
@@ -281,28 +322,34 @@ INVESTITION_FELDER: dict = {
                 "feld": "erzeugung_kwh", "label": "Erzeugung", "einheit": "kWh",
                 "csv_suffix": "Erzeugung_kWh",
                 "aggregiert_in": "pv_erzeugung_sum",
+                "hinweis": "Erzeugte Energie (z. B. BHKW, Windrad) in kWh, kumulativer Zähler oder Tagessensor.",
             },
             {
                 "feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh",
                 "csv_suffix": "Eigenverbrauch_kWh",
+                "hinweis": "Direkt selbst verbrauchter Anteil der Erzeugung (kWh, kumulativ oder Tagessensor). Optional.",
             },
             {
                 "feld": "einspeisung_kwh", "label": "Einspeisung", "einheit": "kWh",
                 "csv_suffix": "Einspeisung_kWh",
+                "hinweis": "Ins Netz eingespeister Anteil der Erzeugung (kWh, kumulativ oder Tagessensor). Optional.",
             },
         ],
         "verbraucher": [
             {
                 "feld": "verbrauch_sonstig_kwh", "label": "Verbrauch", "einheit": "kWh",
                 "csv_suffix": "Verbrauch_kWh",
+                "hinweis": "Verbrauchte Energie (z. B. Sauna, Pool) in kWh, kumulativer Zähler oder Tagessensor.",
             },
             {
                 "feld": "bezug_pv_kwh", "label": "davon PV", "einheit": "kWh",
                 "csv_suffix": "Bezug_PV_kWh",
+                "hinweis": "PV-gedeckter Anteil des Verbrauchs (kWh, kumulativ oder Tagessensor). Optional.",
             },
             {
                 "feld": "bezug_netz_kwh", "label": "davon Netz", "einheit": "kWh",
                 "csv_suffix": "Bezug_Netz_kWh",
+                "hinweis": "Netz-gedeckter Anteil des Verbrauchs (kWh, kumulativ oder Tagessensor). Optional.",
             },
         ],
         "speicher": [
@@ -312,11 +359,13 @@ INVESTITION_FELDER: dict = {
                 "feld": "erzeugung_kwh", "label": "Erzeugung/Entladung", "einheit": "kWh",
                 "csv_suffix": "Erzeugung_kWh",
                 "aggregiert_in": "batterie_entladung_sum",
+                "hinweis": "Aus dem Speicher entladene Energie (kWh, kumulativer Zähler oder Tagessensor).",
             },
             {
                 "feld": "verbrauch_sonstig_kwh", "label": "Verbrauch/Ladung", "einheit": "kWh",
                 "csv_suffix": "Verbrauch_kWh",
                 "aggregiert_in": "batterie_ladung_sum",
+                "hinweis": "In den Speicher geladene Energie (kWh, kumulativer Zähler oder Tagessensor).",
             },
         ],
     },
@@ -396,6 +445,42 @@ IMPORT_SUMMEN_KEYS = ("pv_erzeugung_sum", "batterie_ladung_sum", "batterie_entla
 # =============================================================================
 # Hilfsfunktionen
 # =============================================================================
+
+def get_feld_hinweise() -> dict[str, dict[str, str]]:
+    """Liefert die Feld-Hilfetexte als ``{kontext: {schluessel: hinweis}}``.
+
+    Single Source of Truth für alle Hilfetexte (Sensor-Zuordnungs-Wizard,
+    künftiger MQTT-Inbound-Wizard, manuelle Monatsdaten-Eingabe). Speist sich
+    ausschließlich aus den ``hinweis``-Attributen der Felddefinitionen.
+
+    Kontext-Schlüssel:
+      - ``"basis"``            → keyed by ``mapping_key`` (so adressiert der
+                                 BasisSensorenStep, z. B. ``"einspeisung"``)
+      - Investitionstyp        → keyed by ``feld`` (z. B. ``"e-auto"``)
+      - ``"sonstiges:<kat>"``  → keyed by ``feld``, je Sonstiges-Kategorie
+                                 (Feldname allein ist mehrdeutig: Verbraucher
+                                 vs. Speicher)
+    """
+    result: dict[str, dict[str, str]] = {}
+
+    basis: dict[str, str] = {}
+    for e in (*BASIS_FELDER, *BEDINGTE_BASIS_FELDER):
+        mk, hinweis = e.get("mapping_key"), e.get("hinweis")
+        if mk and hinweis:
+            basis[mk] = hinweis
+    result["basis"] = basis
+
+    for typ, val in INVESTITION_FELDER.items():
+        if isinstance(val, dict):  # sonstiges → nach Kategorie aufgeschlüsselt
+            for kat, felder in val.items():
+                result[f"sonstiges:{kat}"] = {
+                    e["feld"]: e["hinweis"] for e in felder if e.get("hinweis")
+                }
+        else:
+            result[typ] = {e["feld"]: e["hinweis"] for e in val if e.get("hinweis")}
+
+    return result
+
 
 def get_felder_fuer_investition(
     typ: str,
