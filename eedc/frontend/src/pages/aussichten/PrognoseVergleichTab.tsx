@@ -881,6 +881,9 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               </>
             )}
           </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            MAE/Bias oben über {genauigkeit.anzahl_tage} Tage · Tabelle unten: letzte 7 Tage
+          </div>
           <DatendichtFallback>
           <div className="overflow-x-auto">
             <table className="w-full text-sm table-fixed">
