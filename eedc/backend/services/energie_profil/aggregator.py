@@ -310,7 +310,7 @@ async def aggregate_day(
             db, anlage, invs_by_id, datum, "wp_starts_anzahl",
         )
         wp_betriebsstunden_pro_stunde = await get_hourly_counter_sum_by_feld(
-            db, anlage, invs_by_id, datum, "wp_betriebsstunden", as_float=True,
+            db, anlage, invs_by_id, datum, "wp_betriebsstunden",
         )
     except Exception as e:
         logger.warning(

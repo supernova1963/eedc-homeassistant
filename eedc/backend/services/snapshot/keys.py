@@ -45,6 +45,13 @@ KUMULATIVE_COUNTER_FELDER: dict[str, tuple[str, ...]] = {
     "waermepumpe": ("wp_starts_anzahl", "wp_betriebsstunden"),
 }
 
+# Counter-Felder, deren Tages-/Stunden-Delta GEBROCHEN ist (Stunden statt
+# Zählwerte). Diese dürfen NICHT int-gerundet werden — sonst gehen Teil-
+# Laufzeiten verloren und Tages- vs. Stunden-Aggregation driften auseinander
+# (Forum-Befund Martin 2026-05-11 zur Counter-Drift). Starts bleiben ganzzahlig.
+# Eine Quelle der Wahrheit für daily- + hourly-Aggregator (#238).
+FLOAT_COUNTER_FELDER: frozenset[str] = frozenset({"wp_betriebsstunden"})
+
 BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug")
 
 

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import Anlage, Investition  # noqa: F401
 from backend.models.sensor_snapshot import SensorSnapshot
 from backend.services.snapshot import (
+    get_daily_counter_deltas_by_inv,
     get_hourly_counter_sum_by_feld,
     get_komponenten_tageskwh,
 )
@@ -225,3 +226,44 @@ async def test_hourly_counter_normal_werte_passieren(db):
     # Jeder Slot = 5
     for h in range(24):
         assert result[h] == 5, f"Slot {h} = {result[h]} (expected 5)"
+
+
+async def test_betriebsstunden_bleiben_gebrochen_starts_ganzzahlig(db):
+    """#238: Float-Counter (Betriebsstunden) dürfen NICHT int-gerundet werden,
+    Zähl-Counter (Starts) schon — und beide Aggregator-Pfade (Tag + Stunde)
+    müssen dieselbe Entscheidung treffen (FLOAT_COUNTER_FELDER als SoT). Ohne
+    das verlieren Betriebsstunden 0,5 h/Stunde und Tages- vs. Stundensicht
+    driften auseinander."""
+    anlage, inv = await _make_anlage_with_wp(db, getrennte_strommessung=False)
+    # Betriebsstunden-Zähler zusätzlich mappen (Fixture mappt nur Starts).
+    anlage.sensor_mapping["investitionen"][str(inv.id)]["felder"]["wp_betriebsstunden"] = {
+        "strategie": "sensor", "sensor_id": "sensor.wp_stunden",
+    }
+    await db.flush()
+
+    datum = date(2026, 5, 9)
+    stunden_key = f"inv:{inv.id}:wp_betriebsstunden"
+    starts_key = f"inv:{inv.id}:wp_starts_anzahl"
+    # Je Stunde +0,5 h Laufzeit und +3 Starts. 25 Snapshots (Vortag-23 .. Folgetag-0).
+    for h in range(26):
+        ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=h - 1)
+        await _put_snapshot(db, anlage.id, stunden_key, ts, 1000.0 + 0.5 * h)
+        await _put_snapshot(db, anlage.id, starts_key, ts, 500.0 + 3 * h)
+    await db.commit()
+
+    invs = {str(inv.id): inv}
+    stunden_hourly = await get_hourly_counter_sum_by_feld(
+        db, anlage, invs, datum, "wp_betriebsstunden",
+    )
+    starts_hourly = await get_hourly_counter_sum_by_feld(
+        db, anlage, invs, datum, "wp_starts_anzahl",
+    )
+    daily = await get_daily_counter_deltas_by_inv(db, anlage, invs, datum)
+
+    # Stunden-Pfad: Betriebsstunden gebrochen (0,5), Starts ganzzahlig (3).
+    assert stunden_hourly[5] == 0.5, f"Stunden-Slot gebrochen erwartet, war {stunden_hourly[5]}"
+    assert starts_hourly[5] == 3 and isinstance(starts_hourly[5], int)
+    # Tages-Pfad: Betriebsstunden gebrochen (24×0,5 = 12,0), Starts int (24×3 = 72).
+    assert daily["wp_betriebsstunden"][str(inv.id)] == 12.0
+    assert daily["wp_starts_anzahl"][str(inv.id)] == 72
+    assert isinstance(daily["wp_starts_anzahl"][str(inv.id)], int)
