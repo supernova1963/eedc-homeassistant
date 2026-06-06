@@ -331,6 +331,8 @@ export interface GenauigkeitsEintrag {
   // Repräsentatives Tages-Wettersymbol (aus Stundenprofil aggregiert, #296 #2)
   wetter_symbol?: string | null
   temperatur_max_c?: number | null
+  // Tag mit großer Abweichung — markiert, nie still weggerechnet (#296 #9)
+  ist_ausreisser?: boolean
 }
 
 export interface AsymmetrieEintrag {
@@ -352,6 +354,8 @@ export interface GenauigkeitsResponse {
   solcast_mbe_prozent: number | null
   solcast_asymmetrie: AsymmetrieEintrag | null
   anzahl_tage: number
+  anzahl_ausreisser?: number
+  ausreisser_schwelle_prozent?: number
 }
 
 // =============================================================================
@@ -404,7 +408,7 @@ export const aussichtenApi = {
   /**
    * Holt das Genauigkeits-Tracking (Prognose vs. IST).
    */
-  async getPrognosenGenauigkeit(anlageId: number, tage: number = 30): Promise<GenauigkeitsResponse> {
-    return api.get<GenauigkeitsResponse>(`/aussichten/prognosen/${anlageId}/genauigkeit?tage=${tage}`)
+  async getPrognosenGenauigkeit(anlageId: number, tage: number = 30, ausreisserAusblenden: boolean = false): Promise<GenauigkeitsResponse> {
+    return api.get<GenauigkeitsResponse>(`/aussichten/prognosen/${anlageId}/genauigkeit?tage=${tage}&ausreisser_ausblenden=${ausreisserAusblenden}`)
   },
 }

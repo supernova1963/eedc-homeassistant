@@ -199,6 +199,8 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   const [genauigkeitsModus, setGenauigkeitsModus] = useState<'kompakt' | 'diagnostisch'>('kompakt')
   // Zeitfenster fürs Genauigkeits-Tracking (Backend: 7–90). Default 10 (#296 #8/#9).
   const [genauigkeitsTage, setGenauigkeitsTage] = useState(10)
+  // Ausreißer-Tage aus MAE/MBE ausschließen — Default AUS (#296 #9, kein stiller Cap).
+  const [ausreisserAusblenden, setAusreisserAusblenden] = useState(false)
   // Wetter-Backfill für Stratifizierung
   const [backfillRunning, setBackfillRunning] = useState(false)
   const [backfillResult, setBackfillResult] = useState<string | null>(null)
@@ -255,11 +257,11 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
   // ohne die teuren Prognose-/Wetter-Abrufe neu auszulösen.
   useEffect(() => {
     let cancelled = false
-    aussichtenApi.getPrognosenGenauigkeit(anlageId, genauigkeitsTage)
+    aussichtenApi.getPrognosenGenauigkeit(anlageId, genauigkeitsTage, ausreisserAusblenden)
       .then(acc => { if (!cancelled) setGenauigkeit(acc) })
       .catch(() => { if (!cancelled) setGenauigkeit(null) })
     return () => { cancelled = true }
-  }, [anlageId, genauigkeitsTage, reloadTick])
+  }, [anlageId, genauigkeitsTage, ausreisserAusblenden, reloadTick])
 
   if (loading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>
   if (error) return <Alert type="error">{error}</Alert>
@@ -910,6 +912,19 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 Diagnostisch
               </button>
             </div>
+            <SimpleTooltip text={`Ausreißer = Tage, an denen eine Quelle > ${(genauigkeit.ausreisser_schwelle_prozent ?? 50).toFixed(0)} % daneben lag (z. B. Sensor-Aussetzer). Standardmäßig bleiben sie in der Statistik — gerade Schlechtprognose-Tage haben Erkenntniswert. Hier optional ausblenden.`}>
+              <label className={`flex items-center gap-1.5 text-xs cursor-pointer select-none ${(genauigkeit.anzahl_ausreisser ?? 0) === 0 ? 'opacity-50' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={ausreisserAusblenden}
+                  onChange={e => setAusreisserAusblenden(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-gray-600 dark:text-gray-400">
+                  Ausreißer ausblenden{(genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (${genauigkeit.anzahl_ausreisser})` : ''}
+                </span>
+              </label>
+            </SimpleTooltip>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
@@ -934,7 +949,11 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             )}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            MAE/Bias oben über {genauigkeit.anzahl_tage} Tage · Tabelle unten: letzte 7 Tage
+            MAE/Bias oben über {genauigkeit.anzahl_tage} Tage
+            {ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0
+              ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)`
+              : ''}
+            {' '}· Tabelle unten: letzte 7 Tage
           </div>
           <DatendichtFallback>
           <div className="overflow-x-auto">
@@ -960,15 +979,32 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {genauigkeit.tage.slice(-7).reverse().map((tag) => (
-                  <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
-                    <td className="py-2 px-3 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
+                {genauigkeit.tage.slice(-7).reverse().map((tag) => {
+                  const ausgeschlossen = ausreisserAusblenden && tag.ist_ausreisser
+                  return (
+                  <tr
+                    key={tag.datum}
+                    className={`border-b border-gray-100 dark:border-gray-800 ${
+                      tag.ist_ausreisser ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''
+                    } ${ausgeschlossen ? 'opacity-40' : ''}`}
+                  >
+                    <td className="py-2 px-3 text-gray-900 dark:text-white">
+                      {formatDatum(tag.datum)}
+                      {tag.ist_ausreisser && (
+                        <SimpleTooltip text={ausgeschlossen
+                          ? 'Ausreißer — aus MAE/MBE ausgeschlossen'
+                          : 'Ausreißer — große Abweichung, bleibt in der Statistik'}>
+                          <span className="ml-1 text-amber-500 text-[10px]">⚠</span>
+                        </SimpleTooltip>
+                      )}
+                    </td>
                     <td className="py-2 px-3 text-right font-mono">{tag.openmeteo_kwh !== null ? <AbweichungCell prognose={tag.openmeteo_kwh} ist={tag.ist_kwh} /> : '—'}</td>
                     <td className="py-2 px-3 text-right font-mono">{tag.eedc_kwh !== null ? <AbweichungCell prognose={tag.eedc_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400">—</span>}</td>
                     <td className="py-2 px-3 text-right font-mono">{tag.solcast_kwh !== null ? <AbweichungCell prognose={tag.solcast_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400">—</span>}</td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{tag.ist_kwh !== null ? tag.ist_kwh.toFixed(1) : '—'}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

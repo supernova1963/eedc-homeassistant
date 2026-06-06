@@ -171,6 +171,10 @@ class GenauigkeitsEintrag(BaseModel):
     # Repräsentatives Tages-Wettersymbol (aus Stundenprofil aggregiert, #296 #2)
     wetter_symbol: Optional[str] = None
     temperatur_max_c: Optional[float] = None
+    # Tag mit großer Abweichung (max |Prognose−IST| über alle Quellen > Schwelle).
+    # Wird NIE still weggerechnet (#296 #9) — nur markiert; Ausschluss aus MAE/MBE
+    # nur auf ausdrücklichen Wunsch (ausreisser_ausblenden=True).
+    ist_ausreisser: bool = False
 
 
 class AsymmetrieEintrag(BaseModel):
@@ -204,6 +208,10 @@ class GenauigkeitsResponse(BaseModel):
     solcast_mbe_prozent: Optional[float] = None
     solcast_asymmetrie: Optional[AsymmetrieEintrag] = None
     anzahl_tage: int = 0
+    # Anzahl als Ausreißer markierter Tage (>Schwelle Abweichung), #296 #9
+    anzahl_ausreisser: int = 0
+    # Schwelle in % (für UI-Text)
+    ausreisser_schwelle_prozent: float = 50.0
 
 
 # =============================================================================
@@ -725,6 +733,10 @@ async def get_prognosen_vergleich(
 async def get_prognosen_genauigkeit(
     anlage_id: int,
     tage: int = Query(default=30, ge=7, le=90, description="Anzahl Tage für Genauigkeit"),
+    ausreisser_ausblenden: bool = Query(
+        default=False,
+        description="Ausreißer-Tage (große Abweichung) aus MAE/MBE ausschließen (#296 #9, Default aus)",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -787,6 +799,12 @@ async def get_prognosen_genauigkeit(
     om_signed = []  # vorzeichenbehaftete relative Fehler (Prognose - IST) / IST * 100
     eedc_signed = []
     sc_signed = []
+    # Ausreißer-Schwelle: ein Tag, an dem irgendeine Quelle > 50 % daneben lag,
+    # gilt als Ausreißer (Sensor-Aussetzer, Datenlücke …). Bewusst KEIN stiller
+    # Cap (#296 #9) — die Tage bleiben sichtbar, MAE/MBE schließt sie nur auf
+    # Wunsch aus.
+    AUSREISSER_SCHWELLE = 50.0
+    anzahl_ausreisser = 0
 
     # PV-IST über den SoT-Helper `summe_pv_bkw_kwh` — Whitelist und v>0-Filter
     # gehören zentral nach `core/berechnungen/energie.py` (ADR-001, BKW-Drift-
@@ -802,6 +820,21 @@ async def get_prognosen_genauigkeit(
         if lernfaktor is not None and tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
             eedc_kwh = tz.pv_prognose_kwh * lernfaktor
 
+        # Vorzeichenbehaftete relative Tagesfehler je Quelle (nur bei brauchbarem IST)
+        om_err = eedc_err = sc_err = None
+        if ist_kwh is not None and ist_kwh > 0.5:
+            if tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
+                om_err = (tz.pv_prognose_kwh - ist_kwh) / ist_kwh * 100
+            if eedc_kwh is not None and eedc_kwh > 0:
+                eedc_err = (eedc_kwh - ist_kwh) / ist_kwh * 100
+            if tz.solcast_prognose_kwh and tz.solcast_prognose_kwh > 0:
+                sc_err = (tz.solcast_prognose_kwh - ist_kwh) / ist_kwh * 100
+
+        abweichungen = [abs(e) for e in (om_err, eedc_err, sc_err) if e is not None]
+        ist_ausreisser = bool(abweichungen) and max(abweichungen) > AUSREISSER_SCHWELLE
+        if ist_ausreisser:
+            anzahl_ausreisser += 1
+
         eintraege.append(GenauigkeitsEintrag(
             datum=tz.datum.isoformat(),
             openmeteo_kwh=round(tz.pv_prognose_kwh, 1) if tz.pv_prognose_kwh is not None else None,
@@ -810,15 +843,18 @@ async def get_prognosen_genauigkeit(
             ist_kwh=round(ist_kwh, 1) if ist_kwh is not None else None,
             wetter_symbol=wetter_pro_tag.get(tz.datum),
             temperatur_max_c=round(tz.temperatur_max_c) if tz.temperatur_max_c is not None else None,
+            ist_ausreisser=ist_ausreisser,
         ))
 
-        if ist_kwh is not None and ist_kwh > 0.5:
-            if tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
-                om_signed.append((tz.pv_prognose_kwh - ist_kwh) / ist_kwh * 100)
-            if eedc_kwh is not None and eedc_kwh > 0:
-                eedc_signed.append((eedc_kwh - ist_kwh) / ist_kwh * 100)
-            if tz.solcast_prognose_kwh and tz.solcast_prognose_kwh > 0:
-                sc_signed.append((tz.solcast_prognose_kwh - ist_kwh) / ist_kwh * 100)
+        # Auf Wunsch Ausreißer-Tage aus der MAE/MBE-Aggregation ausschließen (#296 #9).
+        if ausreisser_ausblenden and ist_ausreisser:
+            continue
+        if om_err is not None:
+            om_signed.append(om_err)
+        if eedc_err is not None:
+            eedc_signed.append(eedc_err)
+        if sc_err is not None:
+            sc_signed.append(sc_err)
 
     def _mae(xs):
         return round(sum(abs(x) for x in xs) / len(xs), 1) if xs else None
@@ -849,4 +885,6 @@ async def get_prognosen_genauigkeit(
         solcast_mbe_prozent=_mbe(sc_signed),
         solcast_asymmetrie=_asymmetrie(sc_signed),
         anzahl_tage=len(eintraege),
+        anzahl_ausreisser=anzahl_ausreisser,
+        ausreisser_schwelle_prozent=AUSREISSER_SCHWELLE,
     )
