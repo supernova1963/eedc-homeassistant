@@ -270,6 +270,39 @@ async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
 # Endpoints
 # =============================================================================
 
+def _eintraege_zu_array(eintraege: list[StundenProfilEintrag]) -> list[float]:
+    """Variabel langes Stundenprofil → 24-Slot-kW-Array (fehlende Slots = 0).
+
+    NULL-Slots (IST-Lücken ohne Zähler, Issue #135) zählen als 0.
+    """
+    arr = [0.0] * 24
+    for s in eintraege:
+        if s.kw is not None and 0 <= s.stunde < 24:
+            arr[s.stunde] = s.kw
+    return arr
+
+
+def _tagesprojektion(
+    ist_kwh: float,
+    stunden_kw: Optional[list[float]],
+    aktuelle_stunde: int,
+) -> Optional[float]:
+    """Tagesprojektion = IST bisher + Σ Prognose-Slots der Stunden > aktuelle_stunde.
+
+    Einheitliches „Verbleibend"-Verfahren für alle Quellen-Spalten (#296):
+    funktioniert auch bei ``ist_kwh == 0`` (liefert dann die volle Restprognose).
+    Gibt ``None`` zurück, wenn die Quelle kein Stundenprofil hat.
+    """
+    if not stunden_kw:
+        return None
+    rest = sum(
+        stunden_kw[h]
+        for h in range(aktuelle_stunde + 1, 24)
+        if h < len(stunden_kw) and stunden_kw[h] is not None
+    )
+    return round(ist_kwh + rest, 1)
+
+
 def _profil_zu_eintraegen(p: StundenProfil) -> list[StundenProfilEintrag]:
     """Kanonisches ``StundenProfil`` (Adapter-Layer) → API-Schema-Liste.
 
@@ -524,31 +557,45 @@ async def get_prognosen_vergleich(
     ist_heute_kwh = ist_p.tageswert_kwh  # roh/ungerundet — für verbleibend-Rechnung
     ist_unvollstaendig = ist_p.unvollstaendig
 
-    # ── Verbleibend ──
+    # ── Verbleibend = Tagesprojektion (IST bisher + Reststunden der Quelle) ──
+    # Einheitliches Verfahren für ALLE Spalten (#296 #3/#5/#6):
+    #   • #6: nicht mehr „Tagesprognose − IST" je Quelle vs. „IST + Reststunden"
+    #     gesamt, sondern durchgängig IST + Σ Reststunden-Slots der Quelle.
+    #   • #3: die Gesamtspalte konsumiert die in den Einstellungen aktive Quelle
+    #     (pq.quelle), nicht mehr hardcodiert Solcast→OpenMeteo.
+    #   • #5: IST + Rest funktioniert auch bei ist_heute_kwh==0 (frühmorgens) —
+    #     keine „—"-Lücke mehr in den Pro-Quellen-Spalten.
     aktuelle_stunde = now.hour
-    verbleibend_kwh = None
-    verbleibend_om_kwh = None
-    verbleibend_eedc_kwh = None
-    verbleibend_solcast_kwh = None
-    if ist_heute_kwh > 0 or openmeteo_stundenprofil:
-        rest_prognose = 0.0
-        for h in range(aktuelle_stunde + 1, 24):
-            # Bei gewählter SFML-Quelle SFMLs eigene Reststunden konsumieren,
-            # sonst Solcast→OpenMeteo wie bisher (#110 „A").
-            if pq.ist_sfml and sfml_verfuegbar and h < len(sfml_tagesprofile[0]):
-                rest_prognose += sfml_tagesprofile[0][h]
-            elif solcast and h < len(solcast.hourly_kw):
-                rest_prognose += solcast.hourly_kw[h]
-            elif h < len(openmeteo_stundenprofil):
-                rest_prognose += openmeteo_stundenprofil[h].kw
-        verbleibend_kwh = round(ist_heute_kwh + rest_prognose, 1)
-    # Pro Quelle: Tagesprognose - bisheriger IST
-    if openmeteo_heute_kwh is not None and ist_heute_kwh > 0:
-        verbleibend_om_kwh = round(max(0, openmeteo_heute_kwh - ist_heute_kwh), 1)
-    if eedc_heute_kwh is not None and ist_heute_kwh > 0:
-        verbleibend_eedc_kwh = round(max(0, eedc_heute_kwh - ist_heute_kwh), 1)
-    if solcast and solcast.daily_kwh is not None and ist_heute_kwh > 0:
-        verbleibend_solcast_kwh = round(max(0, solcast.daily_kwh - ist_heute_kwh), 1)
+
+    def _projektion(arr: Optional[list[float]]) -> Optional[float]:
+        return _tagesprojektion(ist_heute_kwh, arr, aktuelle_stunde)
+
+    om_arr = _eintraege_zu_array(openmeteo_stundenprofil)
+    eedc_arr = _eintraege_zu_array(eedc_stundenprofil)
+    sc_arr = list(solcast.hourly_kw) if solcast else None
+    sfml_arr = list(sfml_tagesprofile[0]) if sfml_verfuegbar else None
+
+    verbleibend_om_kwh = _projektion(om_arr) if openmeteo_stundenprofil else None
+    verbleibend_eedc_kwh = _projektion(eedc_arr) if eedc_stundenprofil else None
+    verbleibend_solcast_kwh = _projektion(sc_arr)
+
+    # Gesamtspalte: gewählte Quelle (#3) mit Fallback-Kaskade.
+    if pq.ist_sfml and sfml_arr:
+        verbleibend_kwh = _projektion(sfml_arr)
+    elif pq.ist_solcast and verbleibend_solcast_kwh is not None:
+        verbleibend_kwh = verbleibend_solcast_kwh
+    elif pq.ist_eedc and verbleibend_eedc_kwh is not None:
+        verbleibend_kwh = verbleibend_eedc_kwh
+    else:
+        # Fallback wenn die gewählte Quelle keine Daten hat: Solcast (feinste
+        # Auflösung) → eedc → OpenMeteo.
+        verbleibend_kwh = (
+            verbleibend_solcast_kwh
+            if verbleibend_solcast_kwh is not None
+            else verbleibend_eedc_kwh
+            if verbleibend_eedc_kwh is not None
+            else verbleibend_om_kwh
+        )
 
     # ── Solcast aufbereiten ──
     solcast_stundenprofil = []
