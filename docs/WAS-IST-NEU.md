@@ -1,11 +1,28 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.37.0)
+> **Stand:** Juni 2026 (v3.37.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.37.1 — Prognosen-Seite, WP-Betriebsstunden & SFML-Stundenprofil (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Wählst du „Solar Forecast ML" (SFML) als Prognosequelle, zeigt eedc jetzt dessen echtes Stundenprofil über drei Tage.** Bisher wurde nur SFMLs Tagessumme auf die OpenMeteo-Kurve verteilt — jetzt nutzt eedc die anlagengelernte Stundenform direkt (auch für „Speicher voll um …" und den Verbleibend-Wert).
+- **Wärmepumpen-Betriebsstunden sind jetzt überall sichtbar.** Neben den Kompressor-Starts erscheinen die Betriebsstunden im Monatsbericht (Kachel), im Energieprofil (zuschaltbare Spalte in Tages- und Stunden-Tabelle), im PDF-Jahresbericht und beim HA-Sensor-Export. Erst das Verhältnis von Starts zu Betriebsstunden zeigt, ob die WP gut eingestellt ist.
+- **Jahresbericht: Jahr wählbar.** Im Dokumente-Dialog kannst du beim Jahresbericht jetzt ein einzelnes Jahr oder den Gesamtzeitraum auswählen.
+- **Prognosen-Seite überarbeitet:** Der heutige Tag steht jetzt mit in der 7-Tage-Tabelle, vergangene Tage zeigen ihr Wettersymbol, und beim Genauigkeits-Tracking kannst du den Zeitraum (7/10/30 Tage) wählen. Der „Verbleibend"-Wert rechnet jetzt einheitlich und passend zur gewählten Quelle.
+- **Ausreißer-Tage werden markiert statt versteckt.** Ein Tag mit großer Prognose-Abweichung wird im Genauigkeits-Tracking gekennzeichnet (und ist auf Wunsch ausblendbar) — er verschwindet nicht still aus der Statistik, denn gerade solche Tage sind aufschlussreich.
+
+### Gut zu wissen
+
+- **WeasyPrint ist jetzt auch im Home-Assistant-Add-on die Standard-Engine für PDF-Berichte** (bei Neuinstallationen). Bestehende Installationen behalten ihre Einstellung; die alte Engine bleibt als Rückfalloption.
+- Kleinere Korrekturen: „Sonstige Erträge & Ausgaben" fließen jetzt in die Netto-Ertrag-Kachel im Cockpit ein; die Eigenverbrauchsquote stimmt in weiteren Auswertungen (inkl. V2H).
 
 ---
 
