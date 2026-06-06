@@ -7,6 +7,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.37.0] - 2026-06-06 — Jahresbericht-PDF neu (WeasyPrint, ohne matplotlib) + einheitlicher Eigenverbrauch
+
+> ✨ **Minor-Release.** Der PDF-Jahresbericht ist auf das WeasyPrint-Design der übrigen Berichte umgestellt und kommt komplett ohne matplotlib/numpy aus — damit läuft er auch auf Proxmox-VMs mit CPU-Typ `kvm64`, auf denen die alte Diagramm-Bibliothek abstürzte. WeasyPrint ist jetzt die Standard-PDF-Engine. Dazu rechnen Eigenverbrauch und Autarkie über alle Auswertungen hinweg einheitlich (inkl. Speicher und V2H) — das behebt mehrere Ungenauigkeiten in Community-Vergleich, Finanz-Prognose und Jahresbericht. 776 Backend-Tests grün.
+
+### Added
+
+- **PV-Jahresbericht im neuen WeasyPrint-Design**, einheitlich mit Anlagendokumentation, Finanz- und Infothek-Bericht. Die Diagramme (PV-Erzeugung, Energiefluss, Autarkie) werden jetzt vektorbasiert als SVG gerendert.
+
+### Changed
+
+- **WeasyPrint ist die Standard-PDF-Engine** (vorher reportlab). Die bisherige Engine bleibt über `PDF_ENGINE=reportlab` als Fallback erhalten.
+- **matplotlib/numpy aus dem PDF-Pflichtpfad entfernt (#303).** Behebt den Absturz des Jahresberichts auf Proxmox-VMs mit `kvm64`-CPU (`NumPy was built with baseline optimizations (X86_V2)`). Der Jahresbericht war der letzte Bericht, der noch matplotlib nutzte — damit ist die PDF-Migration (#121-Folge) abgeschlossen.
+- **Eigenverbrauch/Autarkie einheitlich inkl. V2H** über Cockpit, HA-Sensor-Export, Finanz-Prognose und Jahresbericht: Vehicle-to-Home (E-Auto entlädt ins Haus) zählt jetzt überall als Eigenverbrauch — wie die stationäre Speicher-Entladung. Zentrale Berechnung über einen Helper, keine Drift mehr zwischen den Sichten (die zuvor in cockpit/uebersicht.py duplizierte Formel nutzt jetzt denselben Helper, ADR-001).
+- **Jahresbericht-Überschrift** zeigt im Gesamtzeitraum „Gesamt-Kennzahlen" statt „Jahres-Kennzahlen" (#302).
+
+### Fixed
+
+- **Community-Vergleich: Autarkie bei Speicher-Anlagen korrekt (#294).** Die beim Hochladen berechnete Autarkie ignorierte den Speicher (Eigenverbrauch = PV − Einspeisung) und lag dadurch für Anlagen mit Batterie — besonders mit Netzladung (Arbitrage/Backup) — systematisch zu niedrig. Jetzt deckungsgleich mit der Cockpit-Berechnung (Symmetrie-Test). Historische Übertragungen korrigieren sich mit dem nächsten Monats-Upload; eine separate Server-Korrektur ist nicht möglich (Rohdaten liegen dort nicht). Anlass: kingcap1.
+- **Finanz-Prognose („Aussichten"): Eigenverbrauchsquote bei IMD-basierten Setups korrekt (#304 Teil 2).** Bei Anlagen, deren Daten aus den Investitions-Monatsdaten stammen (statt aus dem Alt-Gesamtfeld `Monatsdaten.eigenverbrauch_kwh`), brach die historische Eigenverbrauchsquote zusammen und die Prognose fiel auf einen 30-%-Standardwert zurück. Jetzt über dieselbe zentrale Verbrauchsformel wie Cockpit/HA-Export (inkl. Speicher + V2H). Damit ist #304 vollständig (Teil 1 HA-Export v3.34.3, Teil 2 Aussichten + PDF jetzt).
+- **PDF-Jahresbericht: Eigenverbrauch rechnet den Speicher mit ein** (vorher vereinfachte Formel ohne Batterie-Anteil).
+
+### Intern (nicht anwender-sichtbar)
+
+- `services/pdf/charts.py` von matplotlib auf handgefertigtes inline-SVG umgebaut (gleiche Signaturen, Rückgabe weiter als data-URI). Zentraler Verbrauchs-Helper `core/berechnungen/verbrauch.py` um Parameter `v2h_entladung_kwh` erweitert (addiert wie Speicher-Entladung in Zähler + Nenner) und in allen vier Read-Sites genutzt. `matplotlib` aus `requirements.txt` entfernt. Neue Tests: PDF-Rendering durch WeasyPrint + SVG-Charts, Aussichten-EV-aus-IMD, Community-Autarkie-Speicher-Symmetrie, V2H-Uniform (Helper + Cockpit). 776 Backend-Tests grün.
+
 ## [3.36.2] - 2026-06-05 — Live-Wetter: vergifteter Zwischenspeicher nach Upgrade
 
 > 🩹 **Patch.** Nachzug zu v3.36.1: Der dortige Live-Wetter-Fix korrigierte nur den **Schreiber** des Wetter-Zwischenspeichers. Ein bereits aus der Vorversion im **persistenten** Cache (überlebt Neustarts) liegender Eintrag im alten Format wurde dadurch nicht geheilt — und vom Prefetch-Skip-Guard nie überschrieben. Die Live-Wetteransicht blieb deshalb bei betroffenen Anlagen weiter auf „Keine Wetterdaten verfügbar". Jetzt verwirft der **Leser** jeden Cache-Eintrag falscher Struktur wie einen Cache-Miss und ruft frisch ab (selbstheilend, robust gegen künftige Format-Wechsel über Updates).
