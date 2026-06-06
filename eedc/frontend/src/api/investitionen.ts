@@ -22,6 +22,7 @@ export interface InvestitionCreate {
   ausrichtung?: string
   neigung_grad?: number
   ha_entity_id?: string  // Home Assistant Sensor für String-Daten
+  graue_last_kg?: number  // #284: Override graue Herstellungs-Last (CO2)
 }
 
 export interface InvestitionUpdate {
@@ -39,6 +40,7 @@ export interface InvestitionUpdate {
   ausrichtung?: string
   neigung_grad?: number
   ha_entity_id?: string
+  graue_last_kg?: number  // #284: Override graue Herstellungs-Last (CO2)
 }
 
 /**
@@ -85,6 +87,20 @@ export interface ROIDashboardResponse {
   // Bulletin) oder Default. Bei E-Auto-Berechnungen löst das Backend pro
   // Investition auf (Slider → per-Inv-Param → Monatsdaten → Default).
   benzinpreis_hinweis_euro: number | null
+}
+
+// CO2-Amortisation (#284) — graue Herstellungs-Last
+export interface GraueLastPosten {
+  investition_id: number | null
+  typ: string
+  bezeichnung: string
+  graue_last_kg: number
+  quelle: string  // override | default | fehlt | kein_default
+}
+
+export interface CO2AmortisationResponse {
+  graue_last_gesamt_kg: number
+  posten: GraueLastPosten[]
 }
 
 // Investitions-Dashboard Types
@@ -368,6 +384,13 @@ export const investitionenApi = {
     if (jahr && jahr !== 'all') params.append('jahr', jahr.toString())
     const query = params.toString()
     return api.get<ROIDashboardResponse>(`/investitionen/roi/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * CO2-Amortisation: Σ graue Herstellungs-Last (CO2) der Anlage (#284)
+   */
+  async getCO2Amortisation(anlageId: number): Promise<CO2AmortisationResponse> {
+    return api.get<CO2AmortisationResponse>(`/investitionen/co2-amortisation/${anlageId}`)
   },
 
   /**

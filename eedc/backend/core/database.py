@@ -392,6 +392,9 @@ async def run_migrations(conn):
                 # v3.14.0: Stilllegungsdatum (Issue #123) — historische Aggregate
                 # blenden Investitionen nicht mehr rückwirkend aus
                 ('stilllegungsdatum', 'DATE'),
+                # #284: Graue Herstellungs-Last (CO2) — optionales Override für die
+                # CO2-Amortisation; leer = Default-Richtwert nach Typ/Größe.
+                ('graue_last_kg', 'FLOAT'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

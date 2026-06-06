@@ -68,6 +68,7 @@ from backend.core.berechnungen import (
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
     speicher_effizienz_prozent,
+    summe_graue_last,
 )
 from backend.api.routes.investitionen.crud import InvestitionResponse
 
@@ -1383,3 +1384,60 @@ async def get_sonstiges_dashboard(
         ))
 
     return dashboards
+
+
+# ============================================================================
+# CO2-Amortisation (#284) — graue Herstellungs-Last je Anlage
+# ============================================================================
+
+class GraueLastPostenResponse(BaseModel):
+    """Graue Herstellungs-Last (CO2) einer einzelnen Investition."""
+    investition_id: Optional[int]
+    typ: str
+    bezeichnung: str
+    graue_last_kg: float
+    quelle: str  # override | default | fehlt | kein_default
+
+
+class CO2AmortisationResponse(BaseModel):
+    """Σ der grauen Herstellungs-Last (CO2) einer Anlage für die CO2-Amortisation.
+
+    Das Frontend zeichnet `graue_last_gesamt_kg` als horizontale Linie in die
+    kumulierte CO2-Einsparungskurve (CO2Tab) und markiert den Schnittpunkt
+    „ab wann klimapositiv".
+    """
+    graue_last_gesamt_kg: float
+    posten: list[GraueLastPostenResponse]
+
+
+@router.get("/co2-amortisation/{anlage_id}", response_model=CO2AmortisationResponse)
+async def get_co2_amortisation(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Σ der grauen Herstellungs-Last (CO2) über die Investitionen einer Anlage.
+
+    Verwendet den SoT-Helper `core/berechnungen.summe_graue_last` (ADR-001):
+    Override (`graue_last_kg`) ∨ Default-Richtwert nach Typ/Größe, Dienstwagen
+    ausgeschlossen, inaktive Investitionen raus.
+    """
+    result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    investitionen = result.scalars().all()
+
+    bericht = summe_graue_last(investitionen)
+
+    return CO2AmortisationResponse(
+        graue_last_gesamt_kg=bericht.gesamt_kg,
+        posten=[
+            GraueLastPostenResponse(
+                investition_id=p.investition_id,
+                typ=p.typ,
+                bezeichnung=p.bezeichnung,
+                graue_last_kg=p.graue_last_kg,
+                quelle=p.quelle,
+            )
+            for p in bericht.posten
+        ],
+    )

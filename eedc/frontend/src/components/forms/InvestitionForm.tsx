@@ -105,6 +105,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     anschaffungskosten_gesamt: investition?.anschaffungskosten_gesamt?.toString() || '',
     anschaffungskosten_alternativ: investition?.anschaffungskosten_alternativ?.toString() || '',
     betriebskosten_jahr: investition?.betriebskosten_jahr?.toString() || '',
+    graue_last_kg: investition?.graue_last_kg?.toString() || '',
     aktiv: investition?.aktiv ?? true,
     parent_investition_id: investition?.parent_investition_id?.toString() || '',
     // PV-Module direkte Felder
@@ -329,6 +330,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         anschaffungskosten_gesamt: formData.anschaffungskosten_gesamt ? parseFloat(formData.anschaffungskosten_gesamt) : undefined,
         anschaffungskosten_alternativ: formData.anschaffungskosten_alternativ ? parseFloat(formData.anschaffungskosten_alternativ) : undefined,
         betriebskosten_jahr: formData.betriebskosten_jahr ? parseFloat(formData.betriebskosten_jahr) : undefined,
+        graue_last_kg: formData.graue_last_kg ? parseFloat(formData.graue_last_kg) : undefined,
         aktiv: formData.aktiv,
         // Wizard-only-Keys (von sensor_mapping.py oder anderen Pfaden in parameter
         // geschrieben) mit existing parameter mergen — sonst löscht jeder Form-Save
@@ -424,6 +426,16 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             value={formData.betriebskosten_jahr}
             onChange={handleChange}
             hint="Wartung, Versicherung, etc."
+          />
+          <Input
+            label="Graue CO2-Last (kg)"
+            name="graue_last_kg"
+            type="number"
+            step="1"
+            min="0"
+            value={formData.graue_last_kg}
+            onChange={handleChange}
+            hint="Herstellungs-CO2 (Datenblatt). Leer = Richtwert nach Typ/Größe (PV 1000 kg/kWp, Speicher 85 kg/kWh, WP 1100 kg, E-Auto 5000 kg)."
           />
         </div>
         <label className="flex items-center gap-2 text-sm">

@@ -176,6 +176,7 @@ export interface Investition {
   ausrichtung?: string
   neigung_grad?: number
   ha_entity_id?: string  // Home Assistant Sensor für String-Daten
+  graue_last_kg?: number  // #284: Override graue Herstellungs-Last (CO2)
 }
 
 // Strompreise

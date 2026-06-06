@@ -21,6 +21,18 @@ CO2_FAKTOR_OEL_KG_KWH = 0.266  # kg CO2 pro kWh Heizöl
 
 SPEICHER_ZYKLEN_PRO_JAHR = 250  # Typische Vollzyklen pro Jahr
 
+# Graue Herstellungs-Last (CO2) je Investitionstyp — Default-Richtwerte (#284,
+# Mittelwerte der Discussion-#284-Tabelle, mit Safi105 abgestimmt). Werden für die
+# CO2-Amortisation gegen die kumulierte Betriebs-Einsparung gerechnet. Pro Investition
+# über das optionale Feld `graue_last_kg` (Herstellerdatenblatt) übersteuerbar.
+# PV/Speicher: voller Herstellungs-Aufwand. WP/E-Auto: nur die DIFFERENZ zur ohnehin
+# nötigen Alternative (Gas-/Öl-Heizung bzw. Verbrenner) — sonst amortisiert sich das
+# Gerät klimatisch nie, obwohl es ohnehin angeschafft worden wäre.
+GRAUE_LAST_PV_KG_PRO_KWP = 1000.0       # × leistung_kwp (inkl. Montage/WR)
+GRAUE_LAST_SPEICHER_KG_PRO_KWH = 85.0   # × kapazitaet_kwh (LiFePO4)
+GRAUE_LAST_WAERMEPUMPE_KG = 1100.0      # flat/Gerät, Differenz zu Gas/Öl
+GRAUE_LAST_EAUTO_KG = 5000.0            # flat/Fahrzeug, Differenz zu Verbrenner
+
 
 # =============================================================================
 # Datenklassen für Ergebnisse

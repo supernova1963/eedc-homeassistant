@@ -171,7 +171,7 @@ export default function Auswertung() {
           <FinanzenTab data={filteredData} stats={filteredStats} strompreis={strompreis} alleTarife={alleTarife} anlageId={anlageId} zeitraumLabel={zeitraumLabel} />
         )}
         {activeTab === 'co2' && (
-          <CO2Tab data={filteredData} stats={filteredStats} zeitraumLabel={zeitraumLabel} />
+          <CO2Tab data={filteredData} stats={filteredStats} zeitraumLabel={zeitraumLabel} anlageId={anlageId} />
         )}
         {activeTab === 'investitionen' && anlageId && (
           <InvestitionenTab anlageId={anlageId} strompreis={strompreis} selectedYear={selectedYear} zeitraumLabel={zeitraumLabel} />

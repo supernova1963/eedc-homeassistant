@@ -80,6 +80,11 @@ class Investition(Base):
     einsparung_prognose_jahr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     co2_einsparung_prognose_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Graue Herstellungs-Last (CO2) für die CO2-Amortisation (#284). Optionales
+    # Override aus dem Herstellerdatenblatt; leer = Default-Richtwert nach Typ/Größe
+    # (GRAUE_LAST_* in core/calculations.py).
+    graue_last_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Status
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True)
 

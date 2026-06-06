@@ -27,6 +27,16 @@ Geplant (step-by-step, wenn Konsumenten angefasst werden):
 - `kennzahlen` — Eigenverbrauch, Autarkie, spez. Tagesertrag (Migration aus calculations.py)
 """
 
+from backend.core.berechnungen.co2_amortisation import (
+    QUELLE_DEFAULT,
+    QUELLE_FEHLT,
+    QUELLE_KEIN_DEFAULT,
+    QUELLE_OVERRIDE,
+    GraueLastBericht,
+    GraueLastPosten,
+    graue_last_einzeln,
+    summe_graue_last,
+)
 from backend.core.berechnungen.counter import (
     CounterKonsistenzBericht,
     assert_counter_konsistent,
@@ -81,6 +91,14 @@ from backend.core.berechnungen.verbrauch import (
 )
 
 __all__ = [
+    "QUELLE_OVERRIDE",
+    "QUELLE_DEFAULT",
+    "QUELLE_FEHLT",
+    "QUELLE_KEIN_DEFAULT",
+    "GraueLastBericht",
+    "GraueLastPosten",
+    "graue_last_einzeln",
+    "summe_graue_last",
     "CounterKonsistenzBericht",
     "assert_counter_konsistent",
     "pruefe_counter_konsistent",

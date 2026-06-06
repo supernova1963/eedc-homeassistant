@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **CO₂-Amortisation: „ab wann klimapositiv" (#284).** Der CO2-Tab der Auswertung stellt der kumulierten CO2-Betriebs-Einsparung jetzt die graue Herstellungs-Last der Investitionen gegenüber und zeigt den Schnittpunkt, ab dem die Anlage klimapositiv ist (erreicht oder hochgerechnet). Richtwerte: PV 1000 kg CO₂/kWp, Speicher 85 kg/kWh, Wärmepumpe 1100 kg (Differenz zu Gas/Öl), E-Auto 5000 kg (Differenz zum Verbrenner) — Dienstwagen ausgenommen. Pro Investition über das neue Feld **„Graue CO2-Last (kg)"** (Herstellerdatenblatt) übersteuerbar; leer = Richtwert nach Typ/Größe. Die Σ wird über den SoT-Helper `core/berechnungen/co2_amortisation.py` (ADR-001) gerechnet.
+
+---
+
 ## [3.37.1] - 2026-06-06 — Prognosen-Seite rundum + WP-Betriebsstunden überall + SFML-Stundenprofil
 
 > 🩹 **Patch mit Funktions-Nachzügen.** Sammelrelease über mehrere Bausteine: die Prognosen-Seite (#296) ist komplett überarbeitet, die Wärmepumpen-Betriebsstunden (#238) sind an allen Auswertungs-Oberflächen sichtbar, und wer SFML als Prognosequelle wählt, bekommt jetzt dessen echtes Stundenprofil statt einer angenäherten Kurve. Dazu mehrere Korrekturen (Cockpit „Sonstige", PDF-Komponentenliste, Eigenverbrauch über alle Sichten). 813 Backend-Tests grün.

@@ -1,13 +1,15 @@
 // CO2 Tab - Monatszeitreihen für CO2-Einsparungen
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   BarChart, Bar, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts'
-import { Leaf, Download } from 'lucide-react'
+import { Leaf, Download, Sprout } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
+import { TYP_LABELS } from '../../lib/constants'
+import { investitionenApi, type CO2AmortisationResponse } from '../../api/investitionen'
 import { KPICard } from './KPICard'
 import { TabProps, createMonatsZeitreihe } from './types'
 
@@ -17,14 +19,28 @@ interface CO2TabProps {
   data: TabProps['data']
   stats: TabProps['stats']
   zeitraumLabel?: string
+  anlageId?: number | null
 }
 
-export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
+export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
   // Monatszeitreihen erstellen
   const zeitreihe = useMemo(
     () => createMonatsZeitreihe(data),
     [data]
   )
+
+  // Graue Herstellungs-Last (#284) — Σ über die Investitionen der Anlage
+  const [co2Amort, setCo2Amort] = useState<CO2AmortisationResponse | null>(null)
+  useEffect(() => {
+    if (!anlageId) { setCo2Amort(null); return }
+    let aktiv = true
+    investitionenApi.getCO2Amortisation(anlageId)
+      .then(r => { if (aktiv) setCo2Amort(r) })
+      .catch(() => { if (aktiv) setCo2Amort(null) })
+    return () => { aktiv = false }
+  }, [anlageId])
+
+  const graueLast = co2Amort?.graue_last_gesamt_kg ?? 0
 
   // Kumulierte CO2-Einsparung
   const chartDataWithKumuliert = useMemo(() => {
@@ -37,6 +53,24 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
       }
     })
   }, [zeitreihe])
+
+  // Schnittpunkt „ab wann klimapositiv": erster Monat, in dem die kumulierte
+  // Betriebs-Einsparung die graue Herstellungs-Last übersteigt. Ist sie im
+  // Zeitraum noch nicht erreicht, wird linear über den Ø-Monatswert hochgerechnet.
+  const klimapositiv = useMemo(() => {
+    if (graueLast <= 0) return { status: 'keine' as const }
+    const idx = chartDataWithKumuliert.findIndex(z => z.kumuliert_co2 >= graueLast)
+    if (idx >= 0) {
+      return { status: 'erreicht' as const, label: chartDataWithKumuliert[idx].name }
+    }
+    const letzte = chartDataWithKumuliert[chartDataWithKumuliert.length - 1]
+    const avgPerMonth = stats.anzahlMonate > 0
+      ? (stats.gesamtErzeugung * CO2_FAKTOR) / stats.anzahlMonate
+      : 0
+    const fehlend = graueLast - (letzte?.kumuliert_co2 ?? 0)
+    const monateNoch = avgPerMonth > 0 ? Math.ceil(fehlend / avgPerMonth) : null
+    return { status: 'prognose' as const, monateNoch }
+  }, [graueLast, chartDataWithKumuliert, stats.anzahlMonate, stats.gesamtErzeugung])
 
   // Gesamt-Werte
   const gesamtCO2 = stats.gesamtErzeugung * CO2_FAKTOR
@@ -158,6 +192,19 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
                 fill="#10b981"
                 fillOpacity={0.3}
               />
+              {graueLast > 0 && (
+                <ReferenceLine
+                  y={graueLast}
+                  stroke="#f59e0b"
+                  strokeDasharray="6 4"
+                  label={{
+                    value: `Graue Last ${(graueLast / 1000).toFixed(1)} t`,
+                    position: 'insideTopLeft',
+                    fontSize: 11,
+                    fill: '#b45309',
+                  }}
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -168,6 +215,90 @@ export function CO2Tab({ data, stats, zeitraumLabel }: CO2TabProps) {
           </span>
         </div>
       </Card>
+
+      {/* CO2-Amortisation (#284): Schnittpunkt graue Last × Betriebs-Einsparung */}
+      {graueLast > 0 && (
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Sprout className="h-5 w-5 text-amber-500" />
+            CO2-Amortisation
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+            <KPICard
+              title="Graue Herstellungs-Last"
+              value={(graueLast / 1000).toFixed(2)}
+              unit="t CO2"
+              subtitle="einmalig bei Anschaffung"
+              icon={Sprout}
+              color="text-amber-600"
+              bgColor="bg-amber-50 dark:bg-amber-900/20"
+              formel="Σ Investitionen (Override ∨ Richtwert)"
+              berechnung={`${fmtCalc(graueLast, 0)} kg CO2`}
+              ergebnis={`= ${fmtCalc(graueLast / 1000, 2)} t`}
+            />
+            <KPICard
+              title="Bereits ausgeglichen"
+              value={Math.min(100, (gesamtCO2 / graueLast) * 100).toFixed(0)}
+              unit="%"
+              subtitle={`${(gesamtCO2 / 1000).toFixed(1)} t von ${(graueLast / 1000).toFixed(1)} t`}
+              icon={Leaf}
+              color="text-green-600"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="kumulierte Einsparung ÷ graue Last"
+              berechnung={`${fmtCalc(gesamtCO2, 0)} kg ÷ ${fmtCalc(graueLast, 0)} kg`}
+              ergebnis={`= ${fmtCalc(Math.min(100, (gesamtCO2 / graueLast) * 100), 0)} %`}
+            />
+            <KPICard
+              title="Klimapositiv"
+              value={
+                klimapositiv.status === 'erreicht'
+                  ? (klimapositiv.label ?? '—')
+                  : klimapositiv.status === 'prognose'
+                    ? (klimapositiv.monateNoch != null ? `~${klimapositiv.monateNoch}` : '—')
+                    : '—'
+              }
+              unit={klimapositiv.status === 'prognose' && klimapositiv.monateNoch != null ? 'Monate' : ''}
+              subtitle={
+                klimapositiv.status === 'erreicht'
+                  ? 'erreicht — graue Last gedeckt'
+                  : klimapositiv.status === 'prognose'
+                    ? 'hochgerechnet bis Deckung'
+                    : 'keine Einsparung erfasst'
+              }
+              icon={Sprout}
+              color="text-emerald-600"
+              bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+            />
+          </div>
+
+          {/* Aufschlüsselung der grauen Last je Investition */}
+          {co2Amort && co2Amort.posten.length > 0 && (
+            <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Graue Last je Komponente</p>
+              <div className="space-y-1 text-sm">
+                {co2Amort.posten.map((p) => (
+                  <div key={`${p.investition_id}-${p.bezeichnung}`} className="flex items-center justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {p.bezeichnung}
+                      <span className="text-gray-400 dark:text-gray-500"> · {TYP_LABELS[p.typ] ?? p.typ}</span>
+                      {p.quelle === 'override' && <span className="ml-1 text-xs text-amber-600">(Datenblatt)</span>}
+                      {p.quelle === 'fehlt' && <span className="ml-1 text-xs text-red-500">(Größe fehlt)</span>}
+                    </span>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">{fmtCalc(p.graue_last_kg, 0)} kg</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+            Die kumulierte Einsparung oben basiert auf der vermiedenen Netz-CO2 der PV-Stromerzeugung
+            ({CO2_FAKTOR * 1000} g/kWh). Graue Last für PV/Speicher = voller Herstellungs-Aufwand,
+            für Wärmepumpe/E-Auto = Differenz zur Alternative (Gas/Öl bzw. Verbrenner). Richtwerte,
+            pro Investition per Datenblatt-Wert übersteuerbar.
+          </p>
+        </Card>
+      )}
 
       {/* Info-Karte */}
       <Card>

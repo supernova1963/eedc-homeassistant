@@ -118,6 +118,9 @@ class InvestitionBase(BaseModel):
     ausrichtung: Optional[str] = Field(None, max_length=50, description="Ausrichtung (Süd, Ost, West, etc.)")
     neigung_grad: Optional[float] = Field(None, ge=0, le=90, description="Modulneigung in Grad")
     ha_entity_id: Optional[str] = Field(None, max_length=255, description="Home Assistant Entity-ID für String-Daten")
+    # #284: optionales Override der grauen Herstellungs-Last (CO2) für die
+    # CO2-Amortisation; leer = Default-Richtwert nach Typ/Größe.
+    graue_last_kg: Optional[float] = Field(None, ge=0, description="Graue Herstellungs-Last in kg CO2 (leer = Default nach Typ/Größe)")
 
 
 class InvestitionCreate(InvestitionBase):
@@ -141,6 +144,7 @@ class InvestitionUpdate(BaseModel):
     ausrichtung: Optional[str] = Field(None, max_length=50)
     neigung_grad: Optional[float] = Field(None, ge=0, le=90)
     ha_entity_id: Optional[str] = Field(None, max_length=255)
+    graue_last_kg: Optional[float] = Field(None, ge=0)
 
 
 class InvestitionResponse(InvestitionBase):
