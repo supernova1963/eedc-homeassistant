@@ -10,6 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Anlage, Monatsdaten, Investition, InvestitionMonatsdaten
+from backend.core.berechnungen import berechne_verbrauchs_kennzahlen
 from backend.core.config import settings
 from backend.core.investition_parameter import (
     PARAM_SPEICHER,
@@ -362,14 +363,27 @@ async def prepare_community_data(
                 for inv_md, typ, _params in month_inv_data if typ == "sonstiges"
             )
 
-            # Autarkie und Eigenverbrauch berechnen
+            # Autarkie und Eigenverbrauch berechnen — #294: kanonische SoT-Formel
+            # (inkl. Speicher), deckungsgleich mit Cockpit/HA-Export
+            # (core/berechnungen/verbrauch.py, ADR-001). Vorher ignorierte der
+            # Submit-Pfad den Speicher (EV = PV − Einspeisung) und lieferte für
+            # Speicher-Anlagen — besonders mit Netzladung — systematisch zu
+            # niedrige Community-Autarkie (kingcap1 #294, 12 % statt real ~).
             einspeisung = md.einspeisung_kwh or 0
             netzbezug = md.netzbezug_kwh or 0
-            eigenverbrauch = pv_erzeugung - einspeisung if pv_erzeugung > 0 else 0
-            gesamtverbrauch = eigenverbrauch + netzbezug
-
-            autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else None
-            ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else None
+            kennzahlen = berechne_verbrauchs_kennzahlen(
+                pv_erzeugung_kwh=pv_erzeugung,
+                einspeisung_kwh=einspeisung,
+                netzbezug_kwh=netzbezug,
+                speicher_ladung_kwh=speicher_ladung,
+                speicher_entladung_kwh=speicher_entladung,
+            )
+            autarkie = (
+                kennzahlen.autarkie_prozent
+                if kennzahlen.gesamtverbrauch_kwh > 0
+                else None
+            )
+            ev_quote = kennzahlen.eigenverbrauchsquote_prozent if pv_erzeugung > 0 else None
 
             if pv_erzeugung > 0:
                 monatswert_data = {
