@@ -1041,8 +1041,9 @@ async def get_finanz_prognose(
             netzbezug_kwh=md.netzbezug_kwh or 0,
             speicher_ladung_kwh=speicher_ladung_pro_monat.get(key, 0),
             speicher_entladung_kwh=speicher_entladung_pro_monat.get(key, 0),
+            v2h_entladung_kwh=v2h_pro_monat.get(key, 0),
         )
-        eigenverbrauch_pro_monat[key] = kennzahlen.eigenverbrauch_kwh + v2h_pro_monat.get(key, 0)
+        eigenverbrauch_pro_monat[key] = kennzahlen.eigenverbrauch_kwh
 
     gesamt_ev = sum(eigenverbrauch_pro_monat.values())
 

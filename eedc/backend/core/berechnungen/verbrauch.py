@@ -10,8 +10,13 @@ IMD-basierten Setups leer bleiben, weil moderne Quellen in
 
 Definition (deckungsgleich mit cockpit/uebersicht.py + daten_checker.py):
     direktverbrauch = max(0, PV − Einspeisung − Speicher-Ladung)   [nur wenn PV>0]
-    eigenverbrauch  = direktverbrauch + Speicher-Entladung
+    eigenverbrauch  = direktverbrauch + Speicher-Entladung + V2H-Entladung
     gesamtverbrauch = eigenverbrauch + Netzbezug
+
+V2H (Vehicle-to-Home, E-Auto entlädt ins Haus) wird wie eine zweite Batterie
+behandelt — voll als Eigenverbrauch gezählt, analog zur stationären
+Speicher-Entladung (unabhängig von der Ladequelle). So bleibt die Autobatterie
+gleichgestellt mit der Hausbatterie (#304-Definitionsentscheidung). Default 0.
 
 WICHTIG: Diese Funktion rechnet nur die Formel. Das *Sourcing* (PV + Speicher
 IMD-first aus `InvestitionMonatsdaten`, Einspeisung/Netzbezug als Zählerwerte
@@ -45,20 +50,23 @@ def berechne_verbrauchs_kennzahlen(
     netzbezug_kwh: float,
     speicher_ladung_kwh: float = 0.0,
     speicher_entladung_kwh: float = 0.0,
+    v2h_entladung_kwh: float = 0.0,
 ) -> VerbrauchsKennzahlen:
     """Berechnet die kanonischen Verbrauchs-Kennzahlen aus Energiemengen (kWh).
 
     Alle Eingaben in kWh; None-tolerant (wird als 0 behandelt). Die
     Eigenverbrauchsquote wird auf 100 % gedeckelt (Mess-Toleranz).
+    ``v2h_entladung_kwh`` (E-Auto → Haus) wird wie Speicher-Entladung behandelt.
     """
     pv = pv_erzeugung_kwh or 0.0
     einspeisung = einspeisung_kwh or 0.0
     netzbezug = netzbezug_kwh or 0.0
     speicher_ladung = speicher_ladung_kwh or 0.0
     speicher_entladung = speicher_entladung_kwh or 0.0
+    v2h_entladung = v2h_entladung_kwh or 0.0
 
     direktverbrauch = max(0.0, pv - einspeisung - speicher_ladung) if pv > 0 else 0.0
-    eigenverbrauch = direktverbrauch + speicher_entladung
+    eigenverbrauch = direktverbrauch + speicher_entladung + v2h_entladung
     gesamtverbrauch = eigenverbrauch + netzbezug
 
     autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0.0

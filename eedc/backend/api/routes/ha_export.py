@@ -295,16 +295,31 @@ async def calculate_anlage_sensors(
         batterie_ladung = sum(m.batterie_ladung_kwh or 0 for m in monatsdaten)
         batterie_entladung = sum(m.batterie_entladung_kwh or 0 for m in monatsdaten)
 
+    # V2H (E-Auto → Haus) wird wie Speicher-Entladung als Eigenverbrauch gezählt
+    eauto_ids = [inv.id for inv in investitionen if inv.typ == "e-auto"]
+    v2h_entladung = 0.0
+    if eauto_ids:
+        ea_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(eauto_ids))
+        )
+        for imd in ea_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
+            v2h_entladung += (imd.verbrauch_daten or {}).get("v2h_entladung_kwh", 0) or 0
+
     # #304: Eigenverbrauch/Direktverbrauch/Gesamtverbrauch + Quoten zentral über
-    # den SoT-Helper aus IMD-gesourcten Energiemengen (PV + Speicher) und den
-    # Zählerwerten (Einspeisung/Netzbezug) — kanonische Formel, deckungsgleich
-    # mit cockpit/uebersicht.py.
+    # den SoT-Helper aus IMD-gesourcten Energiemengen (PV + Speicher + V2H) und
+    # den Zählerwerten (Einspeisung/Netzbezug) — kanonische Formel, deckungs-
+    # gleich mit cockpit/uebersicht.py.
     kennzahlen = berechne_verbrauchs_kennzahlen(
         pv_erzeugung_kwh=pv_erzeugung,
         einspeisung_kwh=einspeisung,
         netzbezug_kwh=netzbezug,
         speicher_ladung_kwh=batterie_ladung,
         speicher_entladung_kwh=batterie_entladung,
+        v2h_entladung_kwh=v2h_entladung,
     )
     direktverbrauch = kennzahlen.direktverbrauch_kwh
     eigenverbrauch = kennzahlen.eigenverbrauch_kwh

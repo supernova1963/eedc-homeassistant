@@ -245,10 +245,9 @@ async def build_jahresbericht_context(
         pv = pv_by_year_month.get((j, m), 0)
         einsp = (md.einspeisung_kwh or 0) if md else 0
         netz = (md.netzbezug_kwh or 0) if md else 0
-        # #304: Eigenverbrauch über den SoT-Helper (PV + Speicher) statt der
-        # naiven Formel PV − Einspeisung, die den Speicher ignorierte —
-        # deckungsgleich mit Cockpit/HA-Export/Aussichten. V2H additiv (wie
-        # Aussichten), da der Helper nur PV+Speicher kennt.
+        # #304: Eigenverbrauch über den SoT-Helper (PV + Speicher + V2H) statt
+        # der naiven Formel PV − Einspeisung, die den Speicher ignorierte —
+        # deckungsgleich mit Cockpit/HA-Export/Aussichten.
         key = (j, m)
         kennzahlen = berechne_verbrauchs_kennzahlen(
             pv_erzeugung_kwh=pv,
@@ -256,8 +255,9 @@ async def build_jahresbericht_context(
             netzbezug_kwh=netz,
             speicher_ladung_kwh=speicher_ladung_by_ym.get(key, 0),
             speicher_entladung_kwh=speicher_entladung_by_ym.get(key, 0),
+            v2h_entladung_kwh=v2h_by_ym.get(key, 0),
         )
-        ev = kennzahlen.eigenverbrauch_kwh + v2h_by_ym.get(key, 0)
+        ev = kennzahlen.eigenverbrauch_kwh
         gesamt = ev + netz
         autarkie = _safe_div(ev, gesamt) * 100
         spez = _safe_div(pv, anlage.leistung_kwp or 0)

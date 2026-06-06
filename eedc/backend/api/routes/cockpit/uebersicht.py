@@ -15,7 +15,11 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
-from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro
+from backend.core.berechnungen import (
+    berechne_verbrauchs_kennzahlen,
+    eauto_effizienz_100km,
+    einspeise_erloes_euro,
+)
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
@@ -207,6 +211,7 @@ async def get_cockpit_uebersicht(
     wb_imd_data: list[dict] = []
     eauto_km = 0.0
     eauto_verbrauch = 0.0  # gemessener Fahrverbrauch (Vorrang vor Ladungs-Näherung)
+    v2h_entladung = 0.0  # E-Auto → Haus, zählt wie Speicher-Entladung als Eigenverbrauch
     # #260: km pro (jahr, monat) für die per-Monat-korrekte Benzinpreis-
     # Gewichtung (EU-OB-Monatspreis aus Monatsdaten statt statischem Param).
     eauto_km_pro_monat: dict[tuple[int, int], float] = {}
@@ -264,6 +269,7 @@ async def get_cockpit_uebersicht(
                 km_monat = data.get("km_gefahren", 0) or 0
                 eauto_km += km_monat
                 eauto_verbrauch += data.get("verbrauch_kwh", 0) or 0
+                v2h_entladung += data.get("v2h_entladung_kwh", 0) or 0
                 if km_monat:
                     eauto_km_pro_monat[(imd.jahr, imd.monat)] = (
                         eauto_km_pro_monat.get((imd.jahr, imd.monat), 0.0) + km_monat
@@ -324,13 +330,23 @@ async def get_cockpit_uebersicht(
     pv_erzeugung_md = sum(m.pv_erzeugung_kwh or 0 for m in monatsdaten_list)
     pv_erzeugung = pv_erzeugung_inv if pv_erzeugung_inv > 0 else pv_erzeugung_md
 
-    direktverbrauch = max(0, pv_erzeugung - einspeisung - speicher_ladung) if pv_erzeugung > 0 else 0
-    eigenverbrauch = direktverbrauch + speicher_entladung
-    gesamtverbrauch = eigenverbrauch + netzbezug
-
-    autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-    ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
-    dv_quote = (direktverbrauch / pv_erzeugung * 100) if pv_erzeugung > 0 else 0
+    # Kanonische Verbrauchs-Kennzahlen über den SoT-Helper (ADR-001) statt der
+    # früher hier duplizierten Inline-Formel — inkl. V2H (E-Auto → Haus) als
+    # Eigenverbrauch, einheitlich mit HA-Export/Aussichten/Jahresbericht.
+    _kz = berechne_verbrauchs_kennzahlen(
+        pv_erzeugung_kwh=pv_erzeugung,
+        einspeisung_kwh=einspeisung,
+        netzbezug_kwh=netzbezug,
+        speicher_ladung_kwh=speicher_ladung,
+        speicher_entladung_kwh=speicher_entladung,
+        v2h_entladung_kwh=v2h_entladung,
+    )
+    direktverbrauch = _kz.direktverbrauch_kwh
+    eigenverbrauch = _kz.eigenverbrauch_kwh
+    gesamtverbrauch = _kz.gesamtverbrauch_kwh
+    autarkie = _kz.autarkie_prozent
+    ev_quote = _kz.eigenverbrauchsquote_prozent
+    dv_quote = _kz.direktverbrauchsquote_prozent
 
     # Anlagenleistung aus Investitionen (nur aktive — stillgelegte nicht mitzählen)
     today = date.today()
