@@ -1,5 +1,12 @@
 # Konzept: Counter-Daily-Drift — `wp_starts_anzahl` vs `komponenten_starts`
 
+> **✅ GESCHLOSSEN 2026-06-06 — Variante 2-light umgesetzt (Tier-1-Quick-Win, im Bündel, noch nicht released).** Fix gebaut:
+> - Neuer Layer-Helper [`core/berechnungen/counter.py`](../eedc/backend/core/berechnungen/counter.py): `verteile_counter_auf_stunden` leitet die Stunden-Σ aus dem Tages-Boundary-Diff ab (eine Quelle/Tag), `pruefe_counter_konsistent`/`assert_counter_konsistent` als Pflicht-Invariante (analog kWh-Pfad, ADR-001).
+> - [`energie_profil/aggregator.py`](../eedc/backend/services/energie_profil/aggregator.py): `komponenten_starts` (Boundary-Diff) wird vor der Stunden-Schleife geholt; `wp_starts_anzahl`/`wp_betriebsstunden` werden daraus abgeleitet; Invariante am Schreib-Ende. Greift nur bei NULL-Slots/Lücken — bei sauberen Daten verhaltensneutral.
+> - Tests: `test_counter_daily_drift_2light.py` (Helper + echter NULL-Slot via Snapshots; Invariante feuert bei künstlicher Drift).
+>
+> Variante 3 verworfen (Symptompatch ohne Drift-Abbau). Memory [[project_counter_daily_drift]]. **Doc bleibt als Referenz; kann nach Release archiviert werden.** Das folgende Konzept ist historischer Stand.
+
 > **Status (2026-05-19, aktualisiert):** Sub-Konzept des Berechnungs-Layers ([`KONZEPT-BERECHNUNGS-LAYER.md`](KONZEPT-BERECHNUNGS-LAYER.md), [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)). Beim Touch des betroffenen Counter-Codes wird der Fix in `backend/core/berechnungen/counter.py` umgesetzt und die Pflicht-Invariante `pruefe_counter_konsistent` ergänzt — analog zum kWh-Pfad. Klein-Konzept, Spin-off aus dem 3C-Re-Audit (archivierte Haupt-Doc unter [`docs/archive/KONZEPT-ENERGIEPROFIL-3C.md`](archive/KONZEPT-ENERGIEPROFIL-3C.md)).
 >
 > **Priorität:** niedrig — Etappe 4 hat die kWh-Drift bereits geschlossen (Berechnungs-Layer-Akut-Fix 2026-05-19 hat die strukturelle Wurzel zusätzlich entfernt), die hier verbleibende Counter-Drift greift nur bei NULL-Slots / Snapshot-Lücken. Anlassbezogen mitnehmen, wenn der WP-Sprint sowieso angefasst wird (#238 detLAN WP-Betriebszeiten ist plausibler Trigger, weil dort das Counter-Pattern erweitert wird).

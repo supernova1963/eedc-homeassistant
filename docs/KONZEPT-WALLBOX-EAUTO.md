@@ -1,5 +1,7 @@
 # Konzept: Wallbox / E-Auto — Datenarchitektur
 
+> **✅ Update 2026-06-06 (Koordinator-Abgleich):** Phase 1 + **Phase 2a komplett RELEASED in v3.36.0** (kanonische Heimladungs-Quelle, Migration, Read-/Write-Kanonisierung). Phase 2b/3 (Vehicle-Sensor-Mapping, Multi-Fahrzeug) Trigger weiter **nicht** erfüllt → geparkt. **Einzig offen:** die zwei Live-Check-Fehlalarme aus Abschnitt »Bekannte Schwächen« (A: `verbrauch_kwh`-Legacy-Fallback in `get_eauto_ladung_kwh`; B: Zähler-Abdeckungs-Check verlangt E-Auto-Zähler trotz Wallbox-Deckung) — beide im Code v3.37.1 noch präsent. Tier 1 in `docs/drafts/UEBERBLICK-20260606.md`, Memory [[project_wallbox_eauto_konzept]].
+
 > **Status (2026-05-20): Phase 1 (Pool-Konsolidierung) vollständig.** Der ursprüngliche Quick-Fix (v3.25.11: getrennte Akkumulatoren EAuto/WB + **Max-pro-Feld**, siehe Memory `project_pool_fix_emob.md`) hat sich selbst als Drift-Quelle erwiesen: feldweises `max()` über `gesamt`/`pv`/`netz` als drei unabhängige Aufrufe konnte die Felder aus verschiedenen Quellen mischen und einen PV-Anteil > 100 % erzeugen (#262 junky84: Komponenten zeigte 48 % PV + 85 % Netz = 133 %). v3.31.6 ersetzt das Max-pro-Feld durch den SoT-Helper `aggregiere_emob_ladung` (`eedc/backend/services/eauto_wirtschaftlichkeit.py`): die Quelle mit der größeren Heimladung gewinnt die **komplette, in sich konsistente Trias** (`pv + netz == ladung` garantiert). **Alle fünf Read-Sites sprechen jetzt dieselbe Pool-Logik:** Wallbox-Dashboard, Komponenten-Zeitreihe, Cockpit-Übersicht und AktuellerMonat über `aggregiere_emob_ladung`, das E-Auto-Dashboard über `compute_emob_pool_attribution` + `attribute_emob_pool_by_km` (km-anteilige Verteilung, selbe use-wb-pool-Entscheidung). **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item; Trigger-Stand siehe Abschnitt »Phase-2-Trigger«.
 >
 > **Update 2026-06-02:** **Phase 2a (kanonische Quelle) ist jetzt mit getroffenen Entscheidungen ausspezifiziert** — siehe Abschnitt »Phase 2a — Umsetzungsplan«. Das ist der beschlossene strukturelle Ausweg aus dem Read-seitigen Heuristik-Flickwerk (zuletzt #262 als 5. Read-Site). Die zwei Daten-Checker-Warnungen, die das Konzept als Brücke vorsah, sind **bereits live** (`_check_emob_pool_pflege` + `_check_sensor_mapping_lts`, `services/daten_checker.py`). **Single Source of Truth für dieses Thema ist dieses Dokument** — keine verstreuten Folgenotizen mehr.
@@ -210,6 +212,14 @@ Vehicle-Sensor-Mapping (`ladung_heim_*`) + Multi-Fahrzeug-Aufschlüsselung — T
 3. Braucht das Monatsabschluss-Formular ein geändertes Layout für die neuen Felder?
 
 ## Bekannte Schwächen — Phase-2a-Fehlalarme bei Wallbox+E-Auto (Live-Check 2026-06-04)
+
+> **✅ Behoben (Tier-1-Quick-Win, im Bündel, noch nicht released):** Beide Fehlalarme A+B sind gefixt.
+> A — `_check_emob_pool_pflege` liest die E-Auto-Heimladung jetzt nur aus dem
+> expliziten `ladung_kwh` (kein `verbrauch_kwh`-Fahrverbrauch-Fallback mehr).
+> B — `_check_energieprofil_abdeckung` überspringt den E-Auto-kWh-Zähler-Bedarf,
+> wenn eine aktive Wallbox mit gemapptem `ladung_kwh`-Zähler die Ladeenergie
+> deckt. Tests: `test_daten_checker_wallbox_schwaeche_ab.py`. Die folgenden
+> Abschnitte dokumentieren den Befund (historisch).
 
 ### A) `verbrauch_kwh` überladen → False-Positive-Pflege-Konflikt
 

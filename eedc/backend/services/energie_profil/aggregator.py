@@ -319,6 +319,46 @@ async def aggregate_day(
             f"{type(e).__name__}: {e}"
         )
 
+    # ── Counter-Tagesdifferenzen (Issue #136: WP-Kompressor-Starts) ──────
+    # Boundary-Diff über das Tagesfenster. Wird hier — vor der Stunden-Schleife —
+    # geholt, weil die Stunden-Σ aus diesem Tageswert ABGELEITET wird (Counter-
+    # Daily-Drift Variante 2-light, KONZEPT-COUNTER-DAILY-DRIFT.md): eine Quelle
+    # pro Tag. {feld: {inv_id: wert}}, z.B. {"wp_starts_anzahl": {"5": 12}}.
+    komponenten_starts: dict = {}
+    try:
+        from backend.services.sensor_snapshot_service import get_daily_counter_deltas_by_inv
+        komponenten_starts = await get_daily_counter_deltas_by_inv(
+            db, anlage, invs_by_id, datum,
+        )
+    except Exception as e:
+        logger.warning(
+            f"Anlage {anlage.id}, {datum}: Counter-Aggregation fehlgeschlagen: "
+            f"{type(e).__name__}: {e}"
+        )
+
+    # Stunden-Σ aus dem Boundary-Diff ableiten (SoT pro Tag). Bei sauberen
+    # Snapshots verhaltensneutral; bei NULL-Slots/Lücken wird die Stunden-Σ so
+    # reskaliert, dass Σ_h == Σ_inv komponenten_starts gilt. Nur wenn der
+    # Boundary-Diff für das Feld einen Wert lieferte — sonst bleibt die
+    # eigenständig gerechnete Stunden-Σ als Fallback erhalten (kein Datenverlust,
+    # wenn ausgerechnet die Tages-Boundary-Snapshots fehlen).
+    from backend.core.berechnungen import verteile_counter_auf_stunden
+
+    def _counter_aus_boundary(feld: str, stunden: dict, *, as_float: bool) -> dict:
+        je_inv = komponenten_starts.get(feld)
+        if not je_inv:
+            return stunden
+        return verteile_counter_auf_stunden(
+            stunden, float(sum(je_inv.values())), as_float=as_float
+        )
+
+    wp_starts_pro_stunde = _counter_aus_boundary(
+        "wp_starts_anzahl", wp_starts_pro_stunde, as_float=False
+    )
+    wp_betriebsstunden_pro_stunde = _counter_aus_boundary(
+        "wp_betriebsstunden", wp_betriebsstunden_pro_stunde, as_float=True
+    )
+
     # ── Alte Daten für diesen Tag löschen (Upsert) ────────────────────────
     # Extern befüllte Felder vor dem Delete-and-Recreate retten — sie werden
     # nicht vom Aggregator gesetzt, sondern asynchron/additiv von anderen
@@ -542,20 +582,9 @@ async def aggregate_day(
         if theoretisch_kwh > 0:
             performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)
 
-    # ── Counter-Tagesdifferenzen (Issue #136: WP-Kompressor-Starts) ──────
-    # Werte aus reinen Counter-Sensoren (KUMULATIVE_COUNTER_FELDER), die NICHT
-    # in die Energie-Bilanz fließen, sondern als KPI pro Tag gespeichert werden.
-    komponenten_starts: dict = {}
-    try:
-        from backend.services.sensor_snapshot_service import get_daily_counter_deltas_by_inv
-        komponenten_starts = await get_daily_counter_deltas_by_inv(
-            db, anlage, invs_by_id, datum,
-        )
-    except Exception as e:
-        logger.warning(
-            f"Anlage {anlage.id}, {datum}: Counter-Aggregation fehlgeschlagen: "
-            f"{type(e).__name__}: {e}"
-        )
+    # Counter-Tagesdifferenzen (`komponenten_starts`) wurden bereits vor der
+    # Stunden-Schleife geholt — die Stunden-Σ wird daraus abgeleitet (Counter-
+    # Daily-Drift Variante 2-light). Hier nur noch weiterverwenden.
 
     # ── Tagesgesamt pro Komponente (Etappe 3c P3 + Etappe 4 v3.31.0) ─────
     # Etappe 4: wenn der Stunden-Pfad aus HA-LTS gespeist wurde, nutzen wir
@@ -784,6 +813,28 @@ async def aggregate_day(
         if not bericht.konsistent:
             logger.warning(
                 f"Anlage {anlage.id}, {datum}: Achse-2-Komponenten-Drift — {bericht}"
+            )
+
+    # Counter-Daily-Drift (Variante 2-light, KONZEPT-COUNTER-DAILY-DRIFT.md):
+    # Σ_h TagesEnergieProfil.<feld> muss dem Tages-Boundary-Diff
+    # (TagesZusammenfassung.komponenten_starts) entsprechen. Die Stunden-Σ wird
+    # oben aus dem Boundary-Diff abgeleitet — diese Invariante macht eine
+    # verbleibende Drift sichtbar (analog kWh-Pfad, ADR-001). Warning, kein
+    # Tag-Verlust.
+    from backend.core.berechnungen import pruefe_counter_konsistent
+
+    for feld in ("wp_starts_anzahl", "wp_betriebsstunden"):
+        je_inv = (zusammenfassung.komponenten_starts or {}).get(feld)
+        if not je_inv:
+            continue
+        stunden_map = {r.stunde: getattr(r, feld, None) for r in tep_rows}
+        bericht = pruefe_counter_konsistent(
+            stunden_map, float(sum(je_inv.values())),
+            name=f"counter:{feld}", toleranz=0.5,
+        )
+        if not bericht.konsistent:
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Counter-Drift — {bericht}"
             )
 
     logger.info(
