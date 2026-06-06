@@ -15,7 +15,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen import einspeise_erloes_euro
+from backend.core.berechnungen import einspeise_erloes_euro, berechne_verbrauchs_kennzahlen
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
@@ -181,6 +181,10 @@ async def build_jahresbericht_context(
 
     speicher_ladung = 0.0
     speicher_entladung = 0.0
+    # #304: Speicher/V2H pro Monat für die SoT-Eigenverbrauchsformel (s.u.)
+    speicher_ladung_by_ym: dict[tuple[int, int], float] = {}
+    speicher_entladung_by_ym: dict[tuple[int, int], float] = {}
+    v2h_by_ym: dict[tuple[int, int], float] = {}
     wp_waerme = wp_heizung = wp_warmwasser = wp_strom = 0.0
     emob_km = emob_v2h = 0.0
     # E-Mob-Heimladung: rohe IMD je Quelle sammeln, danach EINE kanonische
@@ -197,8 +201,13 @@ async def build_jahresbericht_context(
             continue
         d = imd.verbrauch_daten or {}
         if inv.typ == "speicher":
-            speicher_ladung += d.get("ladung_kwh", 0) or 0
-            speicher_entladung += d.get("entladung_kwh", 0) or 0
+            lad = d.get("ladung_kwh", 0) or 0
+            entl = d.get("entladung_kwh", 0) or 0
+            speicher_ladung += lad
+            speicher_entladung += entl
+            key = (imd.jahr, imd.monat)
+            speicher_ladung_by_ym[key] = speicher_ladung_by_ym.get(key, 0) + lad
+            speicher_entladung_by_ym[key] = speicher_entladung_by_ym.get(key, 0) + entl
         elif inv.typ == "waermepumpe":
             heiz = d.get("heizenergie_kwh", 0) or d.get("heizung_kwh", 0) or 0
             ww = d.get("warmwasser_kwh", 0) or 0
@@ -209,7 +218,10 @@ async def build_jahresbericht_context(
         elif inv.typ == "e-auto":
             eauto_imd_data.append(d)
             emob_km += d.get("km_gefahren", 0) or 0
-            emob_v2h += d.get("v2h_entladung_kwh", 0) or 0
+            v2h = d.get("v2h_entladung_kwh", 0) or 0
+            emob_v2h += v2h
+            key = (imd.jahr, imd.monat)
+            v2h_by_ym[key] = v2h_by_ym.get(key, 0) + v2h
         elif inv.typ == "wallbox":
             wb_imd_data.append(d)
 
@@ -233,7 +245,19 @@ async def build_jahresbericht_context(
         pv = pv_by_year_month.get((j, m), 0)
         einsp = (md.einspeisung_kwh or 0) if md else 0
         netz = (md.netzbezug_kwh or 0) if md else 0
-        ev = max(0.0, pv - einsp) if pv > 0 else 0.0
+        # #304: Eigenverbrauch über den SoT-Helper (PV + Speicher) statt der
+        # naiven Formel PV − Einspeisung, die den Speicher ignorierte —
+        # deckungsgleich mit Cockpit/HA-Export/Aussichten. V2H additiv (wie
+        # Aussichten), da der Helper nur PV+Speicher kennt.
+        key = (j, m)
+        kennzahlen = berechne_verbrauchs_kennzahlen(
+            pv_erzeugung_kwh=pv,
+            einspeisung_kwh=einsp,
+            netzbezug_kwh=netz,
+            speicher_ladung_kwh=speicher_ladung_by_ym.get(key, 0),
+            speicher_entladung_kwh=speicher_entladung_by_ym.get(key, 0),
+        )
+        ev = kennzahlen.eigenverbrauch_kwh + v2h_by_ym.get(key, 0)
         gesamt = ev + netz
         autarkie = _safe_div(ev, gesamt) * 100
         spez = _safe_div(pv, anlage.leistung_kwp or 0)

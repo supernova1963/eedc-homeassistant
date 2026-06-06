@@ -55,7 +55,7 @@
   </tbody>
 </table>
 
-<h2>Jahres-Kennzahlen</h2>
+<h2>{% if ist_gesamtzeitraum %}Gesamt-Kennzahlen{% else %}Jahres-Kennzahlen{% endif %}</h2>
 <div>
   <span class="kpi"><span class="label">PV-Erzeugung</span><span class="value">{{ fmt_kwh(kpis.pv_erzeugung_kwh) }}</span></span>
   <span class="kpi"><span class="label">Eigenverbrauch</span><span class="value">{{ fmt_kwh(kpis.eigenverbrauch_kwh) }}</span></span>

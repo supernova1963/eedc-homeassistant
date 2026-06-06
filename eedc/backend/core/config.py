@@ -99,10 +99,11 @@ class Settings(BaseSettings):
     # Solcast PV Forecast API
     solcast_api_url: str = "https://api.solcast.com.au"
 
-    # PDF-Engine: "reportlab" (alt) oder "weasyprint" (neu).
-    # Während der Migration (Issue #121) parallel — Default bleibt reportlab,
-    # bis Phase 2/3 die Bestands-Endpoints umgestellt haben.
-    pdf_engine: str = os.environ.get("PDF_ENGINE", "reportlab")
+    # PDF-Engine: "weasyprint" (Default, HTML/CSS + SVG-Charts) oder "reportlab"
+    # (Fallback). Seit #303 ist auch der Jahresbericht matplotlib-frei unter
+    # WeasyPrint — damit ist der Default-Switch (#121-Abschluss) eingelöst.
+    # reportlab bleibt per PDF_ENGINE=reportlab erreichbar bis Phase-5-Aufräumen.
+    pdf_engine: str = os.environ.get("PDF_ENGINE", "weasyprint")
 
     # Live-Snapshot 5-Min (Phase 1, KONZEPT-LIVE-SNAPSHOT-5MIN.md).
     # Wenn an: zusätzlicher Cron-Job alle 5 Min schreibt Counter-Snapshots
