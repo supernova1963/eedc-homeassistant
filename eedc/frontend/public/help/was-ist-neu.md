@@ -1,11 +1,27 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.36.2)
+> **Stand:** Juni 2026 (v3.37.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.37.0 — Jahresbericht-PDF rundum erneuert (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Der PDF-Jahresbericht sieht jetzt aus wie die anderen Berichte** (Anlagendokumentation, Finanzbericht, Infothek) — einheitliches Layout, klar lesbare Diagramme zu PV-Erzeugung, Energiefluss und Autarkie.
+- **Der Jahresbericht läuft jetzt auch auf Home Assistant in Proxmox-VMs mit CPU-Typ `kvm64`.** Dort konnte die PDF-Erstellung bisher abstürzen — wegen der alten Diagramm-Bibliothek. Die ist ersetzt; die Diagramme werden jetzt gestochen scharf (vektorbasiert) und ohne diese Abhängigkeit erzeugt.
+- **Community-Vergleich: Autarkie bei Speicher-Anlagen stimmt jetzt.** Wenn du einen Batteriespeicher hast, war dein im Community-Vergleich gezeigter Autarkiegrad bisher zu niedrig — der Speicher wurde beim Hochladen nicht mitgerechnet (besonders bei Netzladung). Das ist behoben; deine **Cockpit-Werte waren immer korrekt**. Mit deinem nächsten Monats-Upload korrigieren sich auch die bereits hochgeladenen Werte. Danke an kingcap1.
+- **Finanz-Prognose: Eigenverbrauchsquote stimmt bei modernen Datenquellen.** Bei Anlagen, deren Werte je Komponente erfasst werden, konnte die Prognose-Seite („Aussichten") eine zu niedrige Eigenverbrauchsquote zeigen (sie fiel auf einen Standardwert von ~30 % zurück). Jetzt rechnet sie mit denselben Werten wie das Cockpit.
+- **Eigenverbrauch und Autarkie zählen V2H jetzt überall mit.** Speist dein E-Auto ins Haus zurück (Vehicle-to-Home), wird diese Energie nun in allen Auswertungen als Eigenverbrauch gewertet — genau wie die Entladung eines Hausspeichers. Vorher war das je nach Ansicht uneinheitlich.
+
+### Gut zu wissen
+
+- **WeasyPrint ist jetzt die Standard-Engine für PDF-Berichte.** Damit nutzen alle vier Berichte dasselbe moderne Layout. Die bisherige PDF-Engine bleibt als Rückfalloption erhalten.
 
 ---
 
