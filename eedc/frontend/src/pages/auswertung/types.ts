@@ -133,14 +133,18 @@ export function createMonatsZeitreihe(
 
     // Finanzen: historisch korrekter Tarif pro Monat, Fallback auf aktuellen
     const tarif = (tarifeDesc.length > 0 ? findGueltigerTarif(tarifeDesc, md.jahr, md.monat) : null) || strompreis
+    // Netzbezugspreis: bei Flex-Tarif den aufgezeichneten Monats-Ø nutzen,
+    // sonst den statischen Tarif — gleiche SoT-Quelle wie das Cockpit
+    // (resolve_netzbezug_preis_cent), sonst driften die €-Werte auseinander (#326).
+    const netzPreisCent = md.netzbezug_durchschnittspreis_cent ?? (tarif ? tarif.netzbezug_arbeitspreis_cent_kwh : null)
     const einspeise_erloes = tarif
       ? md.einspeisung_kwh * tarif.einspeiseverguetung_cent_kwh / 100
       : 0
-    const ev_ersparnis = tarif
-      ? eigenverbrauch * tarif.netzbezug_arbeitspreis_cent_kwh / 100
+    const ev_ersparnis = netzPreisCent != null
+      ? eigenverbrauch * netzPreisCent / 100
       : 0
-    const netzbezug_kosten = tarif
-      ? md.netzbezug_kwh * tarif.netzbezug_arbeitspreis_cent_kwh / 100 + (tarif.grundpreis_euro_monat || 0)
+    const netzbezug_kosten = netzPreisCent != null
+      ? md.netzbezug_kwh * netzPreisCent / 100 + (tarif?.grundpreis_euro_monat || 0)
       : 0
     const netto_ertrag = einspeise_erloes + ev_ersparnis
     const netto_bilanz = einspeise_erloes + ev_ersparnis - netzbezug_kosten

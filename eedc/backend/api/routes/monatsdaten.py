@@ -149,6 +149,10 @@ class AggregierteMonatsdatenResponse(BaseModel):
     netzbezug_kwh: float
     globalstrahlung_kwh_m2: Optional[float]
     sonnenstunden: Optional[float]
+    # Dynamischer Monats-Ø-Netzbezugspreis (Flex-Tarif, Tibber/aWATTar/EPEX).
+    # None = kein Flex-Wert gepflegt → Frontend fällt auf den statischen Tarif
+    # zurück (gleiche Quelle wie Cockpit via resolve_netzbezug_preis_cent, #326).
+    netzbezug_durchschnittspreis_cent: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - PV
     pv_erzeugung_kwh: Optional[float]  # Summe PV-Module + BKW
     # Aggregiert aus InvestitionMonatsdaten - Speicher
@@ -352,6 +356,7 @@ async def list_monatsdaten_aggregiert(
             netzbezug_kwh=round(netzbezug, 1),
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
             sonnenstunden=md.sonnenstunden,
+            netzbezug_durchschnittspreis_cent=md.netzbezug_durchschnittspreis_cent,
             # Komponenten-Aggregate: None wenn keine aktive IMD beigetragen
             # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
             # Sommer 0 kWh Heizung).

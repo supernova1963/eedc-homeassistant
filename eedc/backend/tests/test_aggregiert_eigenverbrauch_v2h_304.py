@@ -64,6 +64,28 @@ async def test_aggregiert_eigenverbrauch_enthaelt_v2h(db):
     )
 
 
+async def test_aggregiert_liefert_flex_netzpreis_326(db):
+    """Der Flex-Tarif-Monats-Ø muss im `/aggregiert`-Response auftauchen, sonst
+    rechnet die Auswertungen-Finanzen zwangsweise mit dem statischen Tarif und
+    driftet gegen das Cockpit (#326)."""
+    anlage = Anlage(anlagenname="Flex", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    # Mai: Flex-Ø gepflegt; Juni: kein Flex-Wert → None (Frontend-Fallback)
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=100.0, netzbezug_kwh=50.0,
+                       netzbezug_durchschnittspreis_cent=24.5))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=6,
+                       einspeisung_kwh=100.0, netzbezug_kwh=50.0))
+    await db.commit()
+
+    rows = await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db)
+    mai = next(r for r in rows if r.monat == 5)
+    juni = next(r for r in rows if r.monat == 6)
+    assert mai.netzbezug_durchschnittspreis_cent == pytest.approx(24.5)
+    assert juni.netzbezug_durchschnittspreis_cent is None
+
+
 async def test_aggregiert_deckungsgleich_mit_sot_helper(db):
     """Alle Kern-Kennzahlen des Stats-Pfads = SoT-Helper (Symmetrie-Pflicht)."""
     anlage_id = await _seed_mit_v2h(db)

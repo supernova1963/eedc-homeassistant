@@ -58,6 +58,9 @@ export interface AggregierteMonatsdaten {
   netzbezug_kwh: number
   globalstrahlung_kwh_m2: number | null
   sonnenstunden: number | null
+  // Dynamischer Monats-Ø-Netzbezugspreis (Flex-Tarif). null = kein Flex-Wert
+  // → Fallback auf statischen Tarif, gleiche Quelle wie Cockpit (#326).
+  netzbezug_durchschnittspreis_cent?: number | null
   // Komponenten-Aggregate: null = "in dem Monat keine aktive Komponente
   // dieses Typs" (vor Anschaffung / nach Stilllegung / Anlage hat den Typ
   // nicht). 0 = "Komponente aktiv, IMD vorhanden, Wert echt 0" (z.B.
