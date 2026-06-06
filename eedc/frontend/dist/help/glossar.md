@@ -57,6 +57,8 @@
 | **COP** | Coefficient of Performance — momentane Effizienz der Wärmepumpe (Wärme / Strom). In eedc reserviert für mathematisch-technische Berechnungs-Variablen. |
 | **SCOP** | Seasonal COP — saisonale Effizienz vom EU-Energielabel, standortunabhängig |
 | **JAZ** | Jahresarbeitszahl — gemessene Effizienz der Wärmepumpe am eigenen Standort über ein Jahr. eedc zeigt Periodenkennzahlen (Cockpit, Auswertung, Monatsabschluss) seit v3.23.4 konsistent als JAZ, nicht COP. |
+| **Kompressor-Starts** | Wie oft der WP-Kompressor anläuft (optionaler Total-Increasing-Zähler pro Wärmepumpe). **Verschleiß-Indikator:** viele Starts = häufiges Takten, mechanisch belastend. Allein wenig aussagekräftig — erst im Verhältnis zu den Betriebsstunden (siehe dort). |
+| **Betriebsstunden** | Wie lange die Wärmepumpe tatsächlich läuft (optionaler Total-Increasing-Zähler pro WP, Stunden). **Auslegungs-Indikator:** 10 Starts bei 23 h Laufzeit/Tag sind harmloser als 10 Starts bei nur 4 h. Erst Starts ÷ Betriebsstunden („Takte pro Stunde") bzw. Betriebsstunden ÷ Starts („Ø Laufzeit pro Start") zeigen, ob die Heizkurve/Hysterese passt. Sichtbar im WP-Dashboard, Monatsbericht, Energieprofil und PDF-Jahresbericht (#238). |
 | **Vollzyklen** | Batterie-Lade-/Entladezyklen, normiert: `Σ |ΔSoC| / 200` (0→100→0 = 200 % = 1 Vollzyklus). Werden seit v3.22.0 ausschließlich aus stationären Speicher-SoCs berechnet — E-Auto-SoC ist ausgeschlossen. |
 | **Performance Ratio** | Verhältnis IST-Ertrag zu theoretisch möglichem Ertrag (`PV_kWh / (GTI × kWp)`). Qualitätskennzahl der Anlage. Plausible Werte 0.7–0.95. |
 | **V2H** | Vehicle-to-Home — E-Auto speist Strom ins Haus zurück |

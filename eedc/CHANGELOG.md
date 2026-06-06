@@ -7,6 +7,35 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.37.1] - 2026-06-06 — Prognosen-Seite rundum + WP-Betriebsstunden überall + SFML-Stundenprofil
+
+> 🩹 **Patch mit Funktions-Nachzügen.** Sammelrelease über mehrere Bausteine: die Prognosen-Seite (#296) ist komplett überarbeitet, die Wärmepumpen-Betriebsstunden (#238) sind an allen Auswertungs-Oberflächen sichtbar, und wer SFML als Prognosequelle wählt, bekommt jetzt dessen echtes Stundenprofil statt einer angenäherten Kurve. Dazu mehrere Korrekturen (Cockpit „Sonstige", PDF-Komponentenliste, Eigenverbrauch über alle Sichten). 813 Backend-Tests grün.
+
+### Added
+
+- **SFML-Stundenprofil als gewählte Quelle (#110).** Wer „Solar Forecast ML" als Prognosequelle wählt, sieht jetzt dessen eigenes, anlagengelerntes Stundenprofil über drei Tage — statt wie bisher die SFML-Tagessumme über die OpenMeteo-Kurvenform verteilt zu bekommen. Treue Anzeige der gewählten Quelle, inkl. „Speicher voll um"-Vorhersage und Verbleibend-Wert.
+- **WP-Betriebsstunden an allen Sicht-Oberflächen (#238).** Die Betriebsstunden (analog zu den Kompressor-Starts) erscheinen jetzt im Monatsbericht (KPI-Kachel), im Energieprofil (Tages- und Stunden-Tabelle als zuschaltbare Spalte), im PDF-Jahresbericht und im HA-Sensor-Export. Glossar um „Kompressor-Starts" (Verschleiß) und „Betriebsstunden" (Auslegung) ergänzt.
+- **Jahresauswahl-Dropdown für den Jahresbericht (#302)** im Dokumente-Dialog: ein einzelnes Jahr oder den Gesamtzeitraum wählen.
+- **Prognosen-Tabelle: Heute-Zeile + Wettersymbole für Vergangenheitstage (#296).** Der laufende Tag steht jetzt mit in der 7-Tage-Tabelle; vergangene Tage zeigen ihr Wettersymbol.
+- **Genauigkeits-Tracking: Zeitraum-Selektor 7 / 10 / 30 Tage (#296).**
+- **Ausreißer-Tage werden markiert statt still weggerechnet (#296)** — optional ausblendbar (Standard: sichtbar), damit Schlechtprognose-Tage als Erkenntnis sichtbar bleiben.
+
+### Changed
+
+- **WeasyPrint ist jetzt auch im HA-Add-on die Standard-PDF-Engine (#121/#303);** reportlab bleibt nur noch als Notausgang über `PDF_ENGINE=reportlab`. (Bei Neuinstallationen; bestehende Installationen behalten ihre eingestellte Engine.)
+- **„Verbleibend"-Anzeige einheitlich als IST-bisher + Restprognose und respektiert die gewählte Prognosequelle (#296);** Tooltip entsprechend angepasst.
+- **Genauigkeits-Tracking-Überschrift trennt Statistik-Zeitraum von der 7-Tage-Tabelle (#296).**
+
+### Fixed
+
+- **Cockpit/Übersicht: „Sonstige Erträge & Ausgaben" fließen in die Netto-Ertrag-Kachel ein (#326).**
+- **Finanz-/Statistik-Auswertung `/aggregiert`: Eigenverbrauch über den zentralen Helper inkl. V2H** (Schwester-Fix zu #304).
+- **PDF-Jahresbericht: Komponenten-Auflistung im WeasyPrint-Bericht korrigiert (#303).**
+
+### Intern (nicht anwender-sichtbar)
+
+- SFML-Ingestion: Discovery liest jetzt das Stundenprofil-Attribut (`evcc_solar_prognose`), neuer Parser (Wh→kWh, Backward-Slot-Konvention #144, mehrtägig), neue Spalte `TagesZusammenfassung.sfml_prognose_stundenprofil`. WP-Betriebsstunden als Float-Counter (`FLOAT_COUNTER_FELDER`) konsistent in Tages- und Stunden-Aggregation. 813 Backend-Tests grün.
+
 ## [3.37.0] - 2026-06-06 — Jahresbericht-PDF neu (WeasyPrint, ohne matplotlib) + einheitlicher Eigenverbrauch
 
 > ✨ **Minor-Release.** Der PDF-Jahresbericht ist auf das WeasyPrint-Design der übrigen Berichte umgestellt und kommt komplett ohne matplotlib/numpy aus — damit läuft er auch auf Proxmox-VMs mit CPU-Typ `kvm64`, auf denen die alte Diagramm-Bibliothek abstürzte. WeasyPrint ist jetzt die Standard-PDF-Engine. Dazu rechnen Eigenverbrauch und Autarkie über alle Auswertungen hinweg einheitlich (inkl. Speicher und V2H) — das behebt mehrere Ungenauigkeiten in Community-Vergleich, Finanz-Prognose und Jahresbericht. 776 Backend-Tests grün.

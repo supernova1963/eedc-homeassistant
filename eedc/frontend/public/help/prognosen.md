@@ -77,6 +77,8 @@ Als operative Prognosequelle stehen zur Wahl:
 
 **SFML erscheint absichtlich *nicht* in der Vier-Spalten-Vergleichsmatrix.** eedc positioniert sich bewusst nicht vergleichend gegen eine spezialisierte Profi-Prognosequelle. SFML wirkt also als *aktive* Quelle (treibt deine operative Prognose), wird aber nicht Spalte an Spalte gegen OpenMeteo/eedc/Solcast gestellt. Das ist so gewollt — kein Fehler.
 
+> **Echte Stundenauflösung:** Ist SFML als Quelle gewählt, nutzt eedc SFMLs **eigenes Stundenprofil** (bis zu 3 Tage, stündlich — aus dem evcc-Prognose-Sensor `…_evcc_solar_prognose`). Die SFML-Kurve im Tagesverlauf zeigt also SFMLs eigene Form, nicht die über die OpenMeteo-Strahlungskurve „verschmierte" Tagessumme. Fehlt dieser Sensor, fällt eedc auf das Tagesprofil `prognose_heute` (24 h) und notfalls auf die alte GTI-Verteilung zurück. (Das ist reine Treue zur selbstgewählten Quelle, **kein** Genauigkeits-Vergleich.)
+
 - **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil der Vier-Spalten-Matrix.
 
 ---
