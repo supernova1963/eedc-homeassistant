@@ -30,6 +30,7 @@ from backend.models.pvgis_prognose import PVGISPrognose
 from backend.models.strompreis import Strompreis
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
+from .finanzbericht import TYP_LABELS as _INV_TYP_LABELS
 
 MONATSNAMEN = [
     "", "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -526,12 +527,23 @@ async def build_jahresbericht_context(
         "investitionen": [
             {
                 "typ": i.typ,
+                "typ_label": _INV_TYP_LABELS.get(i.typ, i.typ),
                 "bezeichnung": i.bezeichnung,
                 "anschaffungsdatum": i.anschaffungsdatum,
                 "leistung_kwp": i.leistung_kwp,
                 "ausrichtung": i.ausrichtung,
                 "neigung_grad": i.neigung_grad,
                 "parameter": i.parameter or {},
+                # #303 (kingcap1): Komponenten-Auflistung im WeasyPrint-Bericht
+                # mit denselben Feldern wie der reportlab-Pfad — sonst fehlt z. B.
+                # der Speicher als Komponente.
+                "kosten_euro": i.anschaffungskosten_gesamt,
+                "alternativkosten_euro": i.anschaffungskosten_alternativ,
+                "parent_bezeichnung": (
+                    inv_by_id.get(i.parent_investition_id).bezeichnung
+                    if i.parent_investition_id and i.parent_investition_id in inv_by_id
+                    else None
+                ),
             }
             for i in investitionen
         ],

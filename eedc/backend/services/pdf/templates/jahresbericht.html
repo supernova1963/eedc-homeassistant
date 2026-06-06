@@ -26,6 +26,17 @@
   </p>
 {% endblock %}
 
+{% macro komponenten_detail(i) -%}
+  {%- if i.leistung_kwp -%}
+    {%- if i.typ == "speicher" %}{{ fmt_num(i.leistung_kwp, 1) }} kWh
+    {%- elif i.typ == "wechselrichter" %}{{ fmt_num(i.leistung_kwp, 1) }} kW (AC)
+    {%- else %}{{ fmt_num(i.leistung_kwp, 2) }} kWp{% endif -%}
+  {%- endif -%}
+  {%- if i.ausrichtung %} · {{ i.ausrichtung }}{% endif -%}
+  {%- if i.neigung_grad is not none %} · {{ fmt_num(i.neigung_grad, 0) }}°{% endif -%}
+  {%- if i.parent_bezeichnung %} · WR: {{ i.parent_bezeichnung }}{% endif -%}
+{%- endmacro %}
+
 {% block content %}
 
 <h2>Anlagen-Übersicht</h2>
@@ -54,6 +65,32 @@
     {% endif %}
   </tbody>
 </table>
+
+{% if investitionen %}
+<h2>Investitionen &amp; Komponenten</h2>
+<table>
+  <thead>
+    <tr><th>Komponente</th><th>Technische Daten</th><th>Anschaffung</th><th style="text-align:right">Kosten</th></tr>
+  </thead>
+  <tbody>
+    {% set ns = namespace(kosten=0.0, mehrkosten=0.0) %}
+    {% for i in investitionen %}
+    {% set ns.kosten = ns.kosten + (i.kosten_euro or 0) %}
+    {% set ns.mehrkosten = ns.mehrkosten + ((i.kosten_euro or 0) - i.alternativkosten_euro if i.alternativkosten_euro is not none else (i.kosten_euro or 0)) %}
+    <tr>
+      <td><b>{{ i.typ_label }}</b><br><span class="muted">{{ i.bezeichnung }}</span></td>
+      <td>{{ komponenten_detail(i) }}</td>
+      <td>{% if i.anschaffungsdatum %}{{ i.anschaffungsdatum.strftime("%d.%m.%Y") }}{% else %}–{% endif %}</td>
+      <td style="text-align:right">{{ fmt_eur(i.kosten_euro) }}</td>
+    </tr>
+    {% endfor %}
+    <tr style="font-weight:bold; background:#f5f7fa;">
+      <td colspan="3">Gesamtkosten · ROI-Basis (Mehrkosten): {{ fmt_eur(ns.mehrkosten) }}</td>
+      <td style="text-align:right">{{ fmt_eur(ns.kosten) }}</td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
 
 <h2>{% if ist_gesamtzeitraum %}Gesamt-Kennzahlen{% else %}Jahres-Kennzahlen{% endif %}</h2>
 <div>

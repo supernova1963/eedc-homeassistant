@@ -137,3 +137,36 @@ async def test_jahresbericht_pdf_rendert_durch_weasyprint(db):
     pdf = render_document("jahresbericht.html", ctx)
     assert pdf[:5] == b"%PDF-"
     assert len(pdf) > 2000  # echtes Dokument, kein leerer Stub
+
+
+# ── #303 Gegencheck kingcap1: Speicher in der Komponenten-Auflistung ─────────
+
+async def test_jahresbericht_context_investitionen_felder(db):
+    """Die Komponenten-Liste trägt die Felder, die die WeasyPrint-Auflistung
+    braucht (typ_label, Kosten) — Parität zum reportlab-Pfad."""
+    anlage_id = await _seed(db)
+    ctx = await build_jahresbericht_context(db, anlage_id, jahr=2025)
+    speicher = next(i for i in ctx["investitionen"] if i["typ"] == "speicher")
+    assert speicher["typ_label"] == "Batteriespeicher"
+    assert speicher["bezeichnung"] == "Akku"
+    assert speicher["kosten_euro"] == pytest.approx(8000.0)
+
+
+async def test_jahresbericht_html_listet_speicher_als_komponente(db):
+    """kingcap1 (#303): Der Speicher fehlte komplett im WeasyPrint-Bericht, weil
+    das Template keine Komponenten-Auflistung hatte. Jetzt taucht er in der
+    Sektion „Investitionen & Komponenten" auf (HTML-Render, vor PDF)."""
+    from backend.services.pdf.engine import _env, _STATIC_DIR
+
+    anlage_id = await _seed(db)
+    ctx = await build_jahresbericht_context(db, anlage_id, jahr=2025)
+    html = _env.get_template("jahresbericht.html").render(
+        **ctx, static_dir=str(_STATIC_DIR)
+    )
+    assert "Investitionen &amp; Komponenten" in html or "Investitionen & Komponenten" in html
+    # Speicher als eigene Komponentenzeile (Label + Bezeichnung), nicht nur die
+    # Energie-Sektion „Batteriespeicher".
+    assert "Akku" in html
+    assert html.count("Batteriespeicher") >= 1
+    # Kosten der Komponente werden ausgewiesen (8.000,00 €).
+    assert "8.000,00" in html
