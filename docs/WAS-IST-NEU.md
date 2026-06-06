@@ -1,11 +1,26 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.37.1)
+> **Stand:** Juni 2026 (v3.38.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.38.0 — CO₂-Amortisation, String-Verteilung & Negativpreise (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Neu: „Ab wann ist meine Anlage klimapositiv?"** Der CO2-Tab der Auswertung stellt deiner laufenden CO₂-Einsparung jetzt die graue Herstellungs-Last deiner Komponenten gegenüber und zeigt den Punkt, ab dem sich beides ausgleicht — erreicht oder hochgerechnet. Für PV und Speicher zählt die volle Herstellungs-Last, für Wärmepumpe und E-Auto nur die Differenz zur Alternative (Gasheizung bzw. Verbrenner), weil eedc auch die laufende Einsparung schon als Differenz rechnet. Die Richtwerte (z. B. 1000 kg CO₂/kWp PV) kannst du pro Investition mit einem Herstellerwert übersteuern.
+- **Multi-String-Anlagen mit nur einem PV-Sensor: Auswertung je Dachseite funktioniert jetzt.** Wenn du mehrere Strings (z. B. Ost + West) hast, aber nur einen Gesamt-PV-Zähler, verteilt eedc die Erzeugung jetzt anteilig nach kWp auf die einzelnen Strings. Damit greifen Per-String-Auswertungen, die vorher leer blieben. Im Daten-Checker siehst du, ob ein String **gemessen** (eigener Sensor) oder **verteilt** (nach kWp) ist.
+- **Negative Börsenpreise werden korrekt behandelt.** Hast du einen Einspeise-Tarif mit Börsenpreis-Bezug, wird Einspeisung in Stunden mit negativem Preis jetzt nicht mehr als Erlös gezählt — in allen Auswertungen (Cockpit, Aussichten, ROI, PDF).
+- **Flex-Stromtarif: Auswertung und Cockpit zeigen jetzt denselben Wert.** Bei dynamischem Tarif (z. B. Tibber) nutzt die Finanz-Auswertung jetzt deinen aufgezeichneten Monats-Durchschnittspreis — vorher konnte die Eigenverbrauchs-Ersparnis dort vom Cockpit abweichen. Danke an rilmor.
+
+### Gut zu wissen
+
+- **Daten-Checker meckert weniger zu Unrecht:** Komponenten, die du per CSV-/Custom-Import oder manuell pflegst (ohne Sensor-Mapping), gelten jetzt als in Ordnung mit Quellen-Hinweis. Und bei Wallbox + E-Auto verschwinden zwei Fehlalarme (Pflege-Konflikt bzw. „E-Auto-Zähler fehlt", obwohl die Wallbox die Ladeenergie schon misst).
 
 ---
 
