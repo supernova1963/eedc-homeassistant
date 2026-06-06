@@ -7,6 +7,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+---
+
+## [3.38.0] - 2026-06-06 — CO₂-Amortisation, kWp-String-Verteilung & §51-Negativpreise
+
+> ✨ **Minor mit drei Features + Daten-Checker-Schliff.** Sammelrelease: die CO₂-Amortisation zeigt, ab wann eine Anlage klimapositiv ist; Multi-String-PV-Anlagen mit nur einem Gesamt-Sensor bekommen ihre Erzeugung anteilig nach kWp auf die Strings verteilt; bei negativen Börsenpreisen wird die nicht vergütete Einspeisung korrekt vom Erlös abgezogen. Dazu mehrere Korrekturen am Daten-Checker und an der Finanz-Auswertung bei Flex-Tarifen. 868 Backend-Tests grün.
+
+### Added
+
+- **CO₂-Amortisation: „ab wann klimapositiv" (#284).** Der CO2-Tab der Auswertung stellt der kumulierten CO2-Betriebs-Einsparung jetzt die graue Herstellungs-Last der Investitionen gegenüber und zeigt den Schnittpunkt, ab dem die Anlage klimapositiv ist (erreicht oder hochgerechnet). Richtwerte: PV 1000 kg CO₂/kWp, Speicher 85 kg/kWh, Wärmepumpe 1100 kg (Differenz zu Gas/Öl), E-Auto 5000 kg (Differenz zum Verbrenner) — Dienstwagen ausgenommen. Pro Investition über das neue Feld **„Graue CO2-Last (kg)"** (Herstellerdatenblatt) übersteuerbar; leer = Richtwert nach Typ/Größe. Die Σ wird über den SoT-Helper `core/berechnungen/co2_amortisation.py` (ADR-001) gerechnet.
+- **PV-Erzeugung anteilig nach kWp auf mehrere Strings verteilt (#289/#651).** Multi-String-Anlagen mit nur **einem** Gesamt-PV-Sensor (kein Sensor je Dachseite) bekommen die Erzeugung jetzt anteilig nach kWp auf die einzelnen Strings/Investitionen aufgeschlüsselt — Voraussetzung dafür, dass Per-String-Auswertungen für diese verbreitete Hardware (Fronius Symo/Primo, SMA Tripower, Kostal, Sungrow/GoodWe/Huawei) überhaupt greifen. Die Verteilung passiert **read-time** (das Feld wird nur gelesen, nie programmatisch gefüllt) über den SoT-Helper `core/berechnungen/pv_verteilung.py` (ADR-001, Σ über Strings == Gesamt exakt). Der Daten-Checker meldet jetzt anlagenweit: gemessen = OK · verteilt = Hinweis · Teil-Lücke = Warnung · keine Quelle = Fehler.
+- **§51 EEG: Abzug bei negativen Börsenpreisen.** Stunden mit negativem Börsenpreis werden im Einspeise-Erlös nicht mehr vergütet — die nicht vergütete Einspeisung (`einspeisung_neg_preis_kwh`) wird über alle Auswertungen hinweg (Cockpit, Aussichten, ROI-Dashboard, HA-Export, PDF) zentral abgezogen. Datenbasis war bereits vorhanden, jetzt in der Erlös-Berechnung verwertet.
+
+### Fixed
+
+- **Flex-Tarif: Eigenverbrauchs-Ersparnis in der Auswertung stimmt jetzt mit dem Cockpit überein (#326).** Die Finanz-Auswertung nutzt bei dynamischem Stromtarif jetzt denselben aufgezeichneten Monats-Durchschnittspreis (`netzbezug_durchschnittspreis_cent`) wie das Cockpit, statt nur des statischen Tarifs — vorher klafften bei Flex-Tarif-Anlagen die €-Werte auseinander.
+- **Daten-Checker: Custom-Import/CSV/manuell befüllte Komponenten gelten als gültige Quelle.** Eine Komponente ohne Sensor-Mapping, aber mit manuell/per Import gepflegten Daten, wird jetzt als OK mit Quellen-Hinweis gewertet statt fälschlich als „kein Mapping"-Warnung.
+- **Daten-Checker: zwei Wallbox/E-Auto-Fehlalarme beseitigt.** (A) Der Pflege-Konflikt feuert nicht mehr fälschlich, wenn ein E-Auto seinen Fahrverbrauch pflegt und eine Wallbox die Heimladung deckt; (B) ein E-Auto-kWh-Zähler wird nicht mehr eingefordert, wenn eine aktive Wallbox die Ladeenergie bereits misst.
+
+### Intern (nicht anwender-sichtbar)
+
+- **Counter-Drift WP-Starts/Betriebsstunden geschlossen (Variante 2-light, ADR-001).** Neuer Layer-Helper `core/berechnungen/counter.py` leitet die Stundenwerte aus dem Tages-Boundary-Diff ab (eine Quelle pro Tag) + Pflicht-Invariante `pruefe_counter_konsistent` — keine zwei abweichenden „Tages-Starts"-Werte mehr bei Snapshot-Lücken. Verhaltensneutral bei sauberen Daten.
+- 868 Backend-Tests grün; Konformitäts-Test (ADR-001) grün.
+
+---
+
 ## [3.37.1] - 2026-06-06 — Prognosen-Seite rundum + WP-Betriebsstunden überall + SFML-Stundenprofil
 
 > 🩹 **Patch mit Funktions-Nachzügen.** Sammelrelease über mehrere Bausteine: die Prognosen-Seite (#296) ist komplett überarbeitet, die Wärmepumpen-Betriebsstunden (#238) sind an allen Auswertungs-Oberflächen sichtbar, und wer SFML als Prognosequelle wählt, bekommt jetzt dessen echtes Stundenprofil statt einer angenäherten Kurve. Dazu mehrere Korrekturen (Cockpit „Sonstige", PDF-Komponentenliste, Eigenverbrauch über alle Sichten). 813 Backend-Tests grün.
