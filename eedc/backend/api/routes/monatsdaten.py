@@ -16,6 +16,7 @@ from backend.models.anlage import Anlage
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
+from backend.core.berechnungen import berechne_verbrauchs_kennzahlen
 from backend.core.field_definitions import get_pv_erzeugung_kwh, get_wp_strom_kwh, get_feld_hinweise
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
 from backend.services.provenance import (
@@ -258,6 +259,7 @@ async def list_monatsdaten_aggregiert(
         wp_warmwasser = 0.0
         eauto_ladung = 0.0
         eauto_km = 0.0
+        v2h_entladung = 0.0  # E-Auto → Haus, zählt wie Speicher-Entladung als Eigenverbrauch
         wallbox_ladung = 0.0
         wallbox_ladung_pv = 0.0
 
@@ -296,6 +298,7 @@ async def list_monatsdaten_aggregiert(
                 hat_eauto_imd = True
                 eauto_ladung += (data.get("ladung_pv_kwh", 0) or 0) + (data.get("ladung_netz_kwh", 0) or 0)
                 eauto_km += data.get("km_gefahren", 0) or 0
+                v2h_entladung += data.get("v2h_entladung_kwh", 0) or 0
             elif inv.typ == "wallbox":
                 hat_wallbox_imd = True
                 wallbox_ladung += data.get("ladung_kwh", 0) or 0
@@ -305,12 +308,23 @@ async def list_monatsdaten_aggregiert(
         einspeisung = md.einspeisung_kwh or 0
         netzbezug = md.netzbezug_kwh or 0
 
-        direktverbrauch = max(0, pv_erzeugung - einspeisung - speicher_ladung)
-        eigenverbrauch = direktverbrauch + speicher_entladung
-        gesamtverbrauch = eigenverbrauch + netzbezug
-
-        autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-        ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
+        # #304-Bruder: kanonische Verbrauchs-Kennzahlen über den SoT-Helper —
+        # zuvor rechnete dieser Stats-Pfad eigenverbrauch von Hand und ließ V2H
+        # weg (E-Auto→Haus), während Cockpit/Aussichten/HA-Export/PDF V2H bereits
+        # als Eigenverbrauch zählen. Deckungsgleich mit `berechne_verbrauchs_kennzahlen`.
+        _kz = berechne_verbrauchs_kennzahlen(
+            pv_erzeugung_kwh=pv_erzeugung,
+            einspeisung_kwh=einspeisung,
+            netzbezug_kwh=netzbezug,
+            speicher_ladung_kwh=speicher_ladung,
+            speicher_entladung_kwh=speicher_entladung,
+            v2h_entladung_kwh=v2h_entladung,
+        )
+        direktverbrauch = _kz.direktverbrauch_kwh
+        eigenverbrauch = _kz.eigenverbrauch_kwh
+        gesamtverbrauch = _kz.gesamtverbrauch_kwh
+        autarkie = _kz.autarkie_prozent
+        ev_quote = _kz.eigenverbrauchsquote_prozent
 
         # Legacy-Daten prüfen - nur warnen wenn:
         # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)
