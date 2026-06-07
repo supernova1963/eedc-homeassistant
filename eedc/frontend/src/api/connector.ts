@@ -21,7 +21,11 @@ export interface MeterSnapshot {
   netzbezug_kwh: number | null
   batterie_ladung_kwh: number | null
   batterie_entladung_kwh: number | null
+  wallbox_ladung_kwh?: number | null
 }
+
+/** Kategorie → zugeordnete Investitions-ID (Grid bleibt anlagenweit). */
+export type FieldInvMap = Partial<Record<'pv' | 'speicher' | 'wallbox', number | null>>
 
 export interface ConnectionTestResult {
   erfolg: boolean
@@ -47,6 +51,7 @@ export interface ConnectorStatus {
   last_fetch?: string
   snapshot_count?: number
   latest_snapshot?: MeterSnapshot | null
+  field_inv_map?: FieldInvMap
 }
 
 export interface SetupResult {
@@ -149,6 +154,28 @@ export const connectorApi = {
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.detail || 'Ablesung fehlgeschlagen')
+    }
+
+    return response.json()
+  },
+
+  /**
+   * Mess-Kategorien des Connectors Investitionen zuordnen.
+   * Wert `null` entfernt die Zuordnung der Kategorie.
+   */
+  async saveMapping(
+    anlageId: number,
+    fieldInvMap: FieldInvMap
+  ): Promise<{ erfolg: boolean; field_inv_map: FieldInvMap }> {
+    const response = await fetch(`${API_BASE}/connectors/mapping/${anlageId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field_inv_map: fieldInvMap }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Zuordnung fehlgeschlagen')
     }
 
     return response.json()

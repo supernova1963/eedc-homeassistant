@@ -51,6 +51,24 @@ class ConnectorSetupRequest(BaseModel):
     password: str
 
 
+class ConnectorMappingRequest(BaseModel):
+    """Request zum Zuordnen der Mess-Kategorien zu Investitionen.
+
+    `field_inv_map`: {"pv": inv_id, "speicher": inv_id, "wallbox": inv_id}.
+    Ein Wert von `null` entfernt die Zuordnung der Kategorie. Grid
+    (Einspeisung/Netzbezug) ist anlagenweit und nicht zuordenbar.
+    """
+    field_inv_map: dict[str, Optional[int]]
+
+
+# Mess-Kategorie → erlaubte Investitions-Typen (Validierung der Zuordnung).
+_KATEGORIE_TYPEN = {
+    "pv": {"pv-module", "balkonkraftwerk"},
+    "speicher": {"speicher"},
+    "wallbox": {"wallbox"},
+}
+
+
 # =============================================================================
 # Helper
 # =============================================================================
@@ -279,7 +297,95 @@ async def get_connector_status(
         "last_fetch": config.get("last_fetch"),
         "snapshot_count": len(snapshots),
         "latest_snapshot": _get_latest_snapshot(snapshots),
+        "field_inv_map": config.get("field_inv_map", {}),
     }
+
+
+@router.put("/mapping/{anlage_id}")
+async def set_connector_mapping(
+    anlage_id: int,
+    req: ConnectorMappingRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Ordnet die Mess-Kategorien des Connectors Investitionen zu.
+
+    Speichert `field_inv_map` in der `connector_config` und lädt die
+    Connector-Bridge heiß neu, damit die Energie-Schleife sofort
+    per-Investition publisht.
+    """
+    result = await db.execute(
+        select(Anlage)
+        .options(selectinload(Anlage.investitionen))
+        .where(Anlage.id == anlage_id)
+    )
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    config = anlage.connector_config
+    if not config:
+        raise HTTPException(status_code=400, detail="Kein Connector konfiguriert")
+
+    inv_by_id = {inv.id: inv for inv in anlage.investitionen}
+    clean_map: dict[str, int] = {}
+    for kategorie, inv_id in req.field_inv_map.items():
+        if kategorie not in _KATEGORIE_TYPEN:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unbekannte Kategorie: {kategorie}",
+            )
+        if inv_id is None:
+            continue  # Zuordnung entfernen
+        inv = inv_by_id.get(inv_id)
+        if not inv:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Investition {inv_id} gehört nicht zu dieser Anlage",
+            )
+        if inv.typ not in _KATEGORIE_TYPEN[kategorie]:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Investition {inv_id} ({inv.typ}) passt nicht zur "
+                    f"Kategorie '{kategorie}'"
+                ),
+            )
+        clean_map[kategorie] = inv_id
+
+    config["field_inv_map"] = clean_map
+    anlage.connector_config = config
+    flag_modified(anlage, "connector_config")
+    await db.commit()
+
+    # Bridge heiß neu laden, damit die neue Zuordnung sofort greift
+    await _reload_bridge(db)
+
+    await log_activity(
+        kategorie="connector_setup",
+        aktion="Connector-Zuordnung gespeichert",
+        erfolg=True,
+        details_json=clean_map,
+        anlage_id=anlage_id,
+    )
+
+    return {"erfolg": True, "field_inv_map": clean_map}
+
+
+async def _reload_bridge(db: AsyncSession) -> None:
+    """Lädt die Connector-Bridge mit aktuellen Targets neu (falls aktiv)."""
+    try:
+        from backend.services.connector_mqtt_bridge import (
+            get_connector_mqtt_bridge,
+            build_targets_from_db,
+        )
+
+        bridge = get_connector_mqtt_bridge()
+        if not bridge:
+            return
+        targets = await build_targets_from_db(db)
+        await bridge.reload(targets)
+    except Exception as e:
+        logger.warning("Connector-Bridge Reload nach Mapping-Änderung fehlgeschlagen: %s", e)
 
 
 @router.post("/fetch/{anlage_id}")
@@ -419,6 +525,11 @@ async def get_connector_monatswerte(
             "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn nötig."
         )
 
+    # Explizite Kategorie→Investition-Zuordnung (gleiche SoT wie die MQTT-Bridge).
+    # Ist eine Kategorie zugeordnet, geht der ganze Wert auf diese eine
+    # Investition — sonst greift die proportionale kWp-/Kapazitäts-Verteilung.
+    field_inv_map = config.get("field_inv_map") or {}
+
     # System-Level-Werte auf Investitionen verteilen
     basis_felder = []
     investitionen_felder = []
@@ -441,7 +552,9 @@ async def get_connector_monatswerte(
     if pv_kwh is not None and pv_kwh > 0:
         pv_module = [i for i in anlage.investitionen if i.typ == "pv-module"]
         if pv_module:
-            verteilung = _distribute_by_param(pv_module, pv_kwh, "leistung_kwp")
+            verteilung = _mapped_or_distribute(
+                field_inv_map, "pv", pv_module, pv_kwh, "leistung_kwp"
+            )
             for inv, anteil in verteilung:
                 investitionen_felder.append({
                     "investition_id": inv.id,
@@ -458,13 +571,13 @@ async def get_connector_monatswerte(
         if speicher:
             felder_per_speicher: dict[int, list] = {}
             if bat_ladung is not None and bat_ladung > 0:
-                for inv, anteil in _distribute_by_param(speicher, bat_ladung, "kapazitaet_kwh"):
+                for inv, anteil in _mapped_or_distribute(field_inv_map, "speicher", speicher, bat_ladung, "kapazitaet_kwh"):
                     felder_per_speicher.setdefault(inv.id, {"inv": inv, "felder": []})
                     felder_per_speicher[inv.id]["felder"].append(
                         {"feld": "ladung_kwh", "label": "Ladung", "wert": anteil, "einheit": "kWh"}
                     )
             if bat_entladung is not None and bat_entladung > 0:
-                for inv, anteil in _distribute_by_param(speicher, bat_entladung, "kapazitaet_kwh"):
+                for inv, anteil in _mapped_or_distribute(field_inv_map, "speicher", speicher, bat_entladung, "kapazitaet_kwh"):
                     felder_per_speicher.setdefault(inv.id, {"inv": inv, "felder": []})
                     felder_per_speicher[inv.id]["felder"].append(
                         {"feld": "entladung_kwh", "label": "Entladung", "wert": anteil, "einheit": "kWh"}
@@ -509,6 +622,7 @@ def _calc_difference(prev: dict, current: dict) -> dict:
         "netzbezug_kwh",
         "batterie_ladung_kwh",
         "batterie_entladung_kwh",
+        "wallbox_ladung_kwh",
     ]
     diff: dict = {}
     for field in fields:
@@ -571,6 +685,28 @@ def _calc_month_delta(snapshots: dict, jahr: int, monat: int) -> Optional[dict]:
         return None
 
     return _calc_difference(start_snap, end_snap)
+
+
+def _mapped_or_distribute(
+    field_inv_map: dict,
+    kategorie: str,
+    candidates: list,
+    total: float,
+    param_key: str,
+) -> list[tuple]:
+    """Verteilt `total` — respektiert die explizite Kategorie-Zuordnung.
+
+    Ist `kategorie` in `field_inv_map` einer Investition aus `candidates`
+    zugeordnet, geht der ganze Wert auf diese eine Investition (gleiche
+    Zuordnungs-SoT wie die MQTT-Energie-Bridge). Sonst proportionale
+    Verteilung nach `param_key` (kWp / Kapazität).
+    """
+    mapped_id = field_inv_map.get(kategorie)
+    if mapped_id is not None:
+        target = next((i for i in candidates if i.id == mapped_id), None)
+        if target is not None:
+            return [(target, round(total, 2))]
+    return _distribute_by_param(candidates, total, param_key)
 
 
 def _distribute_by_param(

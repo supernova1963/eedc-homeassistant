@@ -292,9 +292,8 @@ async def lifespan(app: FastAPI):
             try:
                 from backend.services.connector_mqtt_bridge import (
                     init_connector_mqtt_bridge,
-                    ConnectorTarget,
+                    build_targets_from_db,
                 )
-                import base64
 
                 bridge = init_connector_mqtt_bridge(
                     mqtt_host=host,
@@ -302,38 +301,9 @@ async def lifespan(app: FastAPI):
                     mqtt_username=mqtt_cfg.get("username") or None,
                     mqtt_password=mqtt_cfg.get("password") or None,
                 )
-                # Anlagen mit Connector-Config aus DB laden
-                targets: list[ConnectorTarget] = []
+                # Anlagen mit Connector-Config aus DB laden (inkl. field_inv_map)
                 async with get_session() as session:
-                    result = await session.execute(select(Anlage))
-                    anlagen = result.scalars().all()
-                    for anlage in anlagen:
-                        cfg = anlage.connector_config
-                        if (
-                            not cfg
-                            or not cfg.get("connector_id")
-                            or not cfg.get("host")
-                        ):
-                            continue
-                        pw_encoded = cfg.get("password", "")
-                        try:
-                            pw = (
-                                base64.b64decode(pw_encoded.encode()).decode()
-                                if pw_encoded
-                                else ""
-                            )
-                        except Exception:
-                            pw = pw_encoded
-                        targets.append(
-                            ConnectorTarget(
-                                anlage_id=anlage.id,
-                                inv_id=None,  # TODO: Investition-Zuordnung aus Config
-                                connector_id=cfg["connector_id"],
-                                host=cfg["host"],
-                                username=cfg.get("username", ""),
-                                password=pw,
-                            )
-                        )
+                    targets = await build_targets_from_db(session)
                 if targets:
                     bridge.load_targets(targets)
                     if await bridge.start():
