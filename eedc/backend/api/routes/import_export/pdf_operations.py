@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.berechnungen import einspeise_erloes_euro
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
@@ -96,7 +97,7 @@ async def export_pdf(
         try:
             pdf_bytes = await _render_jahresbericht_weasyprint(db, anlage_id, jahr)
         except LookupError:
-            raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+            raise not_found("Anlage")
         except Exception as exc:
             logger.exception("WeasyPrint-Render fehlgeschlagen: %s", exc)
             raise HTTPException(status_code=500, detail=f"PDF-Render-Fehler: {exc}")
@@ -125,7 +126,7 @@ async def export_pdf(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Wenn kein Jahr angegeben, ermittle Zeitraum aus vorhandenen Daten
     ist_gesamtzeitraum = jahr is None

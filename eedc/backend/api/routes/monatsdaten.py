@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
@@ -485,7 +486,7 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
     md = result.scalar_one_or_none()
 
     if not md:
-        raise HTTPException(status_code=404, detail="Monatsdaten nicht gefunden")
+        raise not_found("Monatsdaten")
 
     # Anlage und Strompreis laden für Kennzahlen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == md.anlage_id))
@@ -537,7 +538,7 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == data.anlage_id))
     if not anlage_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Duplikat prüfen
     existing = await db.execute(
@@ -680,7 +681,7 @@ async def update_monatsdaten(
     md = result.scalar_one_or_none()
 
     if not md:
-        raise HTTPException(status_code=404, detail="Monatsdaten nicht gefunden")
+        raise not_found("Monatsdaten")
 
     # investitionen_daten separat behandeln
     investitionen_daten = data.investitionen_daten
@@ -740,7 +741,7 @@ async def delete_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get
     md = result.scalar_one_or_none()
 
     if not md:
-        raise HTTPException(status_code=404, detail="Monatsdaten nicht gefunden")
+        raise not_found("Monatsdaten")
 
     # Audit-Log VOR dem Delete (sonst sind die Natural-Keys nicht mehr lesbar).
     log_delete(db, md, source="manual:form", writer=_MANUAL_WRITER)

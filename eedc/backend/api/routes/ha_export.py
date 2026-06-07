@@ -15,6 +15,7 @@ from typing import Optional, Any
 from dataclasses import dataclass
 import os
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.berechnungen import einspeise_erloes_euro, berechne_verbrauchs_kennzahlen
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
@@ -1058,7 +1059,7 @@ async def get_anlage_sensors(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     sensor_values = await calculate_anlage_sensors(db, anlage)
 
@@ -1102,7 +1103,7 @@ async def get_ha_yaml_snippet(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     sensor_values = await calculate_anlage_sensors(db, anlage)
 
@@ -1202,7 +1203,7 @@ async def publish_sensors_mqtt(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Broker-Config: Override-Felder aus dem Request, sonst ENV (#655).
     mqtt_config = resolve_mqtt_config(
@@ -1266,7 +1267,7 @@ async def remove_sensors_mqtt(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # MQTT Client konfigurieren
     mqtt_config = MQTTConfig(

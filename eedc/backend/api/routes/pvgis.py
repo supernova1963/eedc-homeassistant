@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 import httpx
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
@@ -340,10 +341,7 @@ async def get_pvgis_prognose(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     # Koordinaten prüfen
     if not anlage.latitude or not anlage.longitude:
@@ -470,10 +468,7 @@ async def get_pvgis_modul_prognose(
     modul = result.scalar_one_or_none()
 
     if not modul:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Investition mit ID {investition_id} nicht gefunden"
-        )
+        raise not_found("Investition", investition_id)
 
     if modul.typ != InvestitionTyp.PV_MODULE.value:
         raise HTTPException(
@@ -560,10 +555,7 @@ async def get_pvgis_optimum(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     if not anlage.latitude or not anlage.longitude:
         raise HTTPException(
@@ -825,10 +817,7 @@ async def aktiviere_prognose(
     prognose = result.scalar_one_or_none()
 
     if not prognose:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prognose mit ID {prognose_id} nicht gefunden"
-        )
+        raise not_found("Prognose", prognose_id)
 
     # Andere Prognosen der Anlage deaktivieren
     result = await db.execute(
@@ -859,10 +848,7 @@ async def loesche_prognose(
     prognose = result.scalar_one_or_none()
 
     if not prognose:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prognose mit ID {prognose_id} nicht gefunden"
-        )
+        raise not_found("Prognose", prognose_id)
 
     await db.delete(prognose)
     return {"message": "Prognose gelöscht", "id": prognose_id}
@@ -931,7 +917,7 @@ async def get_horizont(
     """Gibt den Horizont-Status einer Anlage zurück."""
     anlage = await db.get(Anlage, anlage_id)
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
     return _horizont_status(anlage.horizont_daten)
 
 
@@ -948,7 +934,7 @@ async def upload_horizont_datei(
     """
     anlage = await db.get(Anlage, anlage_id)
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     try:
         content = (await file.read()).decode("utf-8")
@@ -978,7 +964,7 @@ async def abrufe_horizont_von_pvgis(
     """
     anlage = await db.get(Anlage, anlage_id)
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not anlage.latitude or not anlage.longitude:
         raise HTTPException(status_code=400, detail="Anlage hat keine Geokoordinaten")
@@ -1023,7 +1009,7 @@ async def loesche_horizont(
     """Löscht das benutzerdefinierte Horizont-Profil einer Anlage."""
     anlage = await db.get(Anlage, anlage_id)
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     anlage.horizont_daten = None
     await db.commit()

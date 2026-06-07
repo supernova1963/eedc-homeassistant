@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.config import APP_VERSION
 from backend.services.activity_service import log_activity
@@ -267,7 +268,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Anlage-Daten exportieren
     anlage_export = AnlageExport(

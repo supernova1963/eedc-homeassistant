@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -302,7 +303,7 @@ async def _lade_anlage_mit_pv(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if require_coords and (not anlage.latitude or not anlage.longitude):
         raise HTTPException(
@@ -456,7 +457,7 @@ async def get_langfrist_prognose(
     anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
 
     if anlagenleistung_kwp <= 0:
-        raise HTTPException(status_code=400, detail="Keine PV-Leistung konfiguriert")
+        raise bad_request("Keine PV-Leistung konfiguriert")
 
     # PVGIS-Prognose (mit limit(1) falls mehrere aktiv)
     result = await db.execute(
@@ -811,10 +812,10 @@ async def get_wetter_vorhersage(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not anlage.latitude or not anlage.longitude:
-        raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten")
+        raise bad_request("Anlage hat keine Koordinaten")
 
     # Wettervorhersage (Wettermodell der Anlage berücksichtigen)
     wetter_modell = anlage.wetter_modell or "auto"
@@ -882,7 +883,7 @@ async def get_finanz_prognose(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Tarife laden (allgemein + Spezialtarife)
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)

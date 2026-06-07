@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models import Anlage
 from backend.services.activity_service import log_activity
@@ -64,7 +65,7 @@ async def get_share_preview(
     preview = await get_community_preview(db, anlage_id)
 
     if not preview:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Prüfen ob bereits geteilt
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -94,7 +95,7 @@ async def share_to_community(
     data = await prepare_community_data(db, anlage_id)
 
     if not data:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not data.get("monatswerte"):
         raise HTTPException(
@@ -243,7 +244,7 @@ async def delete_from_community(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not anlage.community_hash:
         raise HTTPException(
@@ -353,7 +354,7 @@ async def get_community_benchmark(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not anlage.community_hash:
         raise HTTPException(
@@ -469,7 +470,7 @@ async def get_regional_details(region: str):
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Region nicht gefunden")
+                raise not_found("Region")
             raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
     except httpx.RequestError as e:
         raise HTTPException(status_code=503, detail=str(e))

@@ -17,6 +17,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.core.exceptions import not_found
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.core.database import get_db
@@ -147,7 +148,7 @@ async def get_monatsabschluss(
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     vorschlag_service = VorschlagService(db)
     sensor_mapping = anlage.sensor_mapping or {}
@@ -549,7 +550,7 @@ async def fetch_cloud_monatswerte(
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     config = (anlage.connector_config or {}).get("cloud_import", {})
     provider_id = config.get("provider_id")
@@ -657,7 +658,7 @@ async def get_naechster_monat(
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     heute = date.today()
 

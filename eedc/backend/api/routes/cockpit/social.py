@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
@@ -64,7 +65,7 @@ async def get_share_text(
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # KEIN aktiv-Filter (Issue #123): historischer Monatstext.
     inv_result = await db.execute(

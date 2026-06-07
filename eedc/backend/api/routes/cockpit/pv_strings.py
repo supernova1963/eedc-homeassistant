@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -165,7 +166,7 @@ async def get_pv_strings(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     # KEIN aktiv-Filter (Issue #123): historische PV-String-Auswertung darf
     # später stillgelegte Strings nicht aus Vergangenheits-Vergleichen ausblenden.
@@ -327,7 +328,7 @@ async def get_pv_strings_gesamtlaufzeit(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     # KEIN aktiv-Filter (Issue #123): historische PV-String-Auswertung darf
     # später stillgelegte Strings nicht aus Vergangenheits-Vergleichen ausblenden.

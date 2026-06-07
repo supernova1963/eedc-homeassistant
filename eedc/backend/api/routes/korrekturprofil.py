@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.core.database import get_db
 from backend.models.anlage import Anlage
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
@@ -78,7 +79,7 @@ async def wetter_backfill_endpoint(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     return await wetter_backfill_anlage(anlage, db, max_tage=max_tage)
 
@@ -159,7 +160,7 @@ async def stratifizierung_endpoint(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     heute = date.today()
     von = heute - timedelta(days=tage)
@@ -311,7 +312,7 @@ async def aggregate_endpoint(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     return await aggregiere_korrekturprofil_anlage(
         anlage, db, lookback_tage=lookback_tage

@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
@@ -73,11 +74,11 @@ async def get_tages_zusammenfassungen(
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     # Maximal 366 Tage (ein Jahr)
     if (bis - von).days > 366:
-        raise HTTPException(status_code=400, detail="Zeitraum darf maximal 366 Tage umfassen")
+        raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
 
     # Tageszusammenfassungen laden
     result = await db.execute(
@@ -133,10 +134,10 @@ async def get_komponenten_serien(
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     if (bis - von).days > 366:
-        raise HTTPException(status_code=400, detail="Zeitraum darf maximal 366 Tage umfassen")
+        raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
 
     result = await db.execute(
         select(TagesZusammenfassung.komponenten_kwh)
@@ -182,7 +183,7 @@ async def get_stundenwerte(
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     result = await db.execute(
         select(TagesEnergieProfil)
@@ -260,10 +261,10 @@ async def get_wochenmuster(
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     if (bis - von).days > 366:
-        raise HTTPException(status_code=400, detail="Zeitraum darf maximal 366 Tage umfassen")
+        raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
 
     result = await db.execute(
         select(TagesEnergieProfil)
@@ -325,7 +326,7 @@ async def get_monatsauswertung(
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     tage_im_monat = calendar.monthrange(jahr, monat)[1]
     von = date(jahr, monat, 1)
@@ -643,7 +644,7 @@ async def get_debug_rohdaten(
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     start = date.today() - timedelta(days=tage)
 
@@ -698,7 +699,7 @@ async def verfuegbare_monate(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     jahr = func.extract("year", TagesZusammenfassung.datum)
     monat = func.extract("month", TagesZusammenfassung.datum)
@@ -732,7 +733,7 @@ async def get_anlage_stats(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     stundenwerte = await db.scalar(
         select(func.count(TagesEnergieProfil.id)).where(TagesEnergieProfil.anlage_id == anlage_id)
@@ -797,7 +798,7 @@ async def reaggregate_tag_preview(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     inv_result = await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id)
@@ -861,7 +862,7 @@ async def kraftstoffpreis_status(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     tages_offen = await db.scalar(
         select(func.count(TagesZusammenfassung.id)).where(
@@ -909,7 +910,7 @@ async def get_tagesprognose(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     if not anlage.latitude or not anlage.longitude:
         raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten konfiguriert")

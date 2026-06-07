@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from datetime import date
 
 from backend.api.deps import get_db
+from backend.core.exceptions import not_found
 from backend.models.anlage import Anlage, AnlageFoto
 from backend.services.infothek_datei_service import verarbeite_bild, validiere_dateityp, ist_bild
 
@@ -170,10 +171,7 @@ async def get_anlage(anlage_id: int, db: AsyncSession = Depends(get_db)):
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     return anlage
 
@@ -215,10 +213,7 @@ async def update_anlage(anlage_id: int, data: AnlageUpdate, db: AsyncSession = D
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     # Nur übergebene Felder aktualisieren
     update_data = data.model_dump(exclude_unset=True)
@@ -245,10 +240,7 @@ async def delete_anlage(anlage_id: int, db: AsyncSession = Depends(get_db)):
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     await db.delete(anlage)
 
@@ -268,10 +260,7 @@ async def get_sensor_config(anlage_id: int, db: AsyncSession = Depends(get_db)):
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     return SensorConfigResponse(
         pv_erzeugung=anlage.ha_sensor_pv_erzeugung,
@@ -302,10 +291,7 @@ async def update_sensor_config(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     # Sensor-Felder aktualisieren
     if data.pv_erzeugung is not None:
@@ -415,7 +401,7 @@ async def upload_anlagenfoto(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     mime_type = datei.content_type or "application/octet-stream"
     if not ist_bild(mime_type):

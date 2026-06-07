@@ -12,6 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel, Field
 from datetime import date
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_jahr
@@ -286,7 +287,7 @@ async def get_investition(investition_id: int, db: AsyncSession = Depends(get_db
     inv = result.scalar_one_or_none()
 
     if not inv:
-        raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+        raise not_found("Investition")
 
     return inv
 
@@ -309,7 +310,7 @@ async def create_investition(data: InvestitionCreate, db: AsyncSession = Depends
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == data.anlage_id))
     if not anlage_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Typ validieren
     valid_types = [t.value for t in InvestitionTyp]
@@ -369,7 +370,7 @@ async def _validate_parent_child(
         )
         parent = parent_result.scalar_one_or_none()
         if not parent:
-            raise HTTPException(status_code=404, detail="Parent-Investition nicht gefunden")
+            raise not_found("Parent-Investition")
         if parent.typ != InvestitionTyp.WECHSELRICHTER.value:
             raise HTTPException(
                 status_code=400,
@@ -389,7 +390,7 @@ async def _validate_parent_child(
             )
             parent = parent_result.scalar_one_or_none()
             if not parent:
-                raise HTTPException(status_code=404, detail="Parent-Investition nicht gefunden")
+                raise not_found("Parent-Investition")
             erlaubte_parent_typen = {
                 InvestitionTyp.WECHSELRICHTER.value,
                 InvestitionTyp.BALKONKRAFTWERK.value,
@@ -437,7 +438,7 @@ async def update_investition(
     inv = result.scalar_one_or_none()
 
     if not inv:
-        raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+        raise not_found("Investition")
 
     update_data = data.model_dump(exclude_unset=True)
 
@@ -474,7 +475,7 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
     inv = result.scalar_one_or_none()
 
     if not inv:
-        raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+        raise not_found("Investition")
 
     # sensor_mapping der Anlage aufräumen (verwaiste Einträge vermeiden)
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == inv.anlage_id))
@@ -578,7 +579,7 @@ async def get_roi_dashboard(
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Tarife laden (allgemein + Spezialtarife)
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -597,7 +598,7 @@ async def delete_demo_data(db: AsyncSession = Depends(get_db)):
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Demo-Anlage nicht gefunden")
+        raise not_found("Demo-Anlage")
 
     await db.delete(anlage)
     await db.commit()

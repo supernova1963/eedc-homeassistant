@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.infothek import InfothekEintrag, InfothekDatei, InfothekInvestition
 from backend.models.anlage import Anlage
@@ -458,7 +459,7 @@ async def get_eintrag(
     )
     eintrag = result.scalar_one_or_none()
     if not eintrag:
-        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+        raise not_found("Eintrag")
     inv_ids = await _get_investition_ids(db, eintrag.id)
     return _eintrag_to_response(eintrag, inv_ids)
 
@@ -500,7 +501,7 @@ async def update_eintrag(
     )
     db_item = result.scalar_one_or_none()
     if not db_item:
-        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+        raise not_found("Eintrag")
 
     update_data = item.model_dump(exclude_unset=True)
 
@@ -541,7 +542,7 @@ async def delete_eintrag(
     )
     db_item = result.scalar_one_or_none()
     if not db_item:
-        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+        raise not_found("Eintrag")
     await db.delete(db_item)
     await db.commit()
 
@@ -669,7 +670,7 @@ async def update_verknuepfung(
     )
     eintrag = result.scalar_one_or_none()
     if not eintrag:
-        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+        raise not_found("Eintrag")
 
     # N:M Body hat Vorrang, Fallback auf Legacy Query-Param
     if body and body.investition_ids:
@@ -725,7 +726,7 @@ async def export_pdf(
         try:
             ctx = await build_infothek_context(db, anlage_id, kategorie)
         except LookupError:
-            raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+            raise not_found("Anlage")
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         try:
@@ -748,7 +749,7 @@ async def export_pdf(
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Einträge laden (nur aktive)
     query = (
@@ -862,7 +863,7 @@ async def upload_datei(
     )
     eintrag = result.scalar_one_or_none()
     if not eintrag:
-        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+        raise not_found("Eintrag")
 
     # Anzahl prüfen
     count_result = await db.execute(
@@ -947,7 +948,7 @@ async def get_datei(
     )
     datei = result.scalar_one_or_none()
     if not datei:
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+        raise not_found("Datei")
 
     return Response(
         content=datei.daten,
@@ -971,7 +972,7 @@ async def get_thumbnail(
     )
     datei = result.scalar_one_or_none()
     if not datei:
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+        raise not_found("Datei")
 
     if datei.thumbnail is None:
         raise HTTPException(status_code=404, detail="Kein Thumbnail vorhanden (PDF)")
@@ -997,6 +998,6 @@ async def delete_datei(
     )
     datei = result.scalar_one_or_none()
     if not datei:
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+        raise not_found("Datei")
     await db.delete(datei)
     await db.commit()

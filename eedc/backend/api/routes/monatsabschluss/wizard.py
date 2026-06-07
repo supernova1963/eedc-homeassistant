@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.core.database import async_session_maker, get_db
 from backend.core.field_definitions import ALLE_MONATSDATEN_FELDNAMEN
 from backend.models.anlage import Anlage
@@ -224,7 +225,7 @@ async def save_monatsabschluss(
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     vorschlag_service = VorschlagService(db)
     alle_warnungen: list[WarnungResponse] = []

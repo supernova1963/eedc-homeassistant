@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
@@ -180,7 +181,7 @@ async def get_investitionen_mit_feldern(
     # Anlage prüfen
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     # Aktive Investitionen laden
     result = await db.execute(

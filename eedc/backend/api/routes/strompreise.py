@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 from datetime import date
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.strompreis import Strompreis
 from backend.models.anlage import Anlage
@@ -273,7 +274,7 @@ async def get_strompreis(strompreis_id: int, db: AsyncSession = Depends(get_db))
     preis = result.scalar_one_or_none()
 
     if not preis:
-        raise HTTPException(status_code=404, detail="Strompreis nicht gefunden")
+        raise not_found("Strompreis")
 
     return preis
 
@@ -295,7 +296,7 @@ async def create_strompreis(data: StrompreisCreate, db: AsyncSession = Depends(g
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == data.anlage_id))
     if not anlage_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     preis = Strompreis(**data.model_dump())
     db.add(preis)
@@ -327,7 +328,7 @@ async def update_strompreis(
     preis = result.scalar_one_or_none()
 
     if not preis:
-        raise HTTPException(status_code=404, detail="Strompreis nicht gefunden")
+        raise not_found("Strompreis")
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -353,6 +354,6 @@ async def delete_strompreis(strompreis_id: int, db: AsyncSession = Depends(get_d
     preis = result.scalar_one_or_none()
 
     if not preis:
-        raise HTTPException(status_code=404, detail="Strompreis nicht gefunden")
+        raise not_found("Strompreis")
 
     await db.delete(preis)

@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
@@ -684,7 +685,7 @@ async def get_aktueller_monat(
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     now = datetime.now()
     if jahr is None:

@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
@@ -257,9 +258,9 @@ async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
     if not anlage.latitude or not anlage.longitude:
-        raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten")
+        raise bad_request("Anlage hat keine Koordinaten")
 
     result = await db.execute(
         select(Investition).where(
@@ -347,7 +348,7 @@ async def get_prognosen_vergleich(
     anlage, pv_module, _, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
 
     if anlagenleistung_kwp <= 0:
-        raise HTTPException(status_code=400, detail="Keine PV-Leistung konfiguriert")
+        raise bad_request("Keine PV-Leistung konfiguriert")
 
     # Systemverluste aus PVGIS
     result = await db.execute(
@@ -749,7 +750,7 @@ async def get_prognosen_genauigkeit(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     von = date.today() - timedelta(days=tage)
     result = await db.execute(

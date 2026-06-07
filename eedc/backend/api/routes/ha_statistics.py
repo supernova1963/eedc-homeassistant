@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel
 
+from backend.core.exceptions import bad_request, ha_db_unavailable, not_found
 from backend.api.deps import get_db
 from backend.services.activity_service import log_activity
 from backend.core.field_definitions import FELD_LABELS as _FELD_LABELS_REGISTRY
@@ -134,7 +135,7 @@ async def get_anlage_with_mapping(db: AsyncSession, anlage_id: int) -> Anlage:
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
 
     if not anlage.sensor_mapping:
         raise HTTPException(
@@ -306,14 +307,11 @@ async def get_monatswerte(
         Monatswerte für alle gemappten Sensoren
     """
     if monat < 1 or monat > 12:
-        raise HTTPException(status_code=400, detail="Monat muss zwischen 1 und 12 liegen")
+        raise bad_request("Monat muss zwischen 1 und 12 liegen")
 
     service = get_ha_statistics_service()
     if not service.is_available:
-        raise HTTPException(
-            status_code=503,
-            detail="HA-Datenbank nicht verfügbar. Diese Funktion ist nur im HA-Addon nutzbar."
-        )
+        raise ha_db_unavailable()
 
     anlage = await get_anlage_with_mapping(db, anlage_id)
     sensor_ids = extract_sensor_ids_from_mapping(anlage.sensor_mapping)
@@ -377,10 +375,7 @@ async def get_verfuegbare_monate(
     """
     service = get_ha_statistics_service()
     if not service.is_available:
-        raise HTTPException(
-            status_code=503,
-            detail="HA-Datenbank nicht verfügbar. Diese Funktion ist nur im HA-Addon nutzbar."
-        )
+        raise ha_db_unavailable()
 
     anlage = await get_anlage_with_mapping(db, anlage_id)
     sensor_ids = extract_sensor_ids_from_mapping(anlage.sensor_mapping)
@@ -440,10 +435,7 @@ async def get_alle_monatswerte(
     """
     service = get_ha_statistics_service()
     if not service.is_available:
-        raise HTTPException(
-            status_code=503,
-            detail="HA-Datenbank nicht verfügbar. Diese Funktion ist nur im HA-Addon nutzbar."
-        )
+        raise ha_db_unavailable()
 
     anlage = await get_anlage_with_mapping(db, anlage_id)
     sensor_ids = extract_sensor_ids_from_mapping(anlage.sensor_mapping)
@@ -516,14 +508,11 @@ async def get_monatsanfang_werte(
         Dict mit Zählerständen pro Sensor
     """
     if monat < 1 or monat > 12:
-        raise HTTPException(status_code=400, detail="Monat muss zwischen 1 und 12 liegen")
+        raise bad_request("Monat muss zwischen 1 und 12 liegen")
 
     service = get_ha_statistics_service()
     if not service.is_available:
-        raise HTTPException(
-            status_code=503,
-            detail="HA-Datenbank nicht verfügbar. Diese Funktion ist nur im HA-Addon nutzbar."
-        )
+        raise ha_db_unavailable()
 
     anlage = await get_anlage_with_mapping(db, anlage_id)
     sensor_ids = extract_sensor_ids_from_mapping(anlage.sensor_mapping)
@@ -627,10 +616,7 @@ async def get_import_vorschau(
     """
     service = get_ha_statistics_service()
     if not service.is_available:
-        raise HTTPException(
-            status_code=503,
-            detail="HA-Datenbank nicht verfügbar. Diese Funktion ist nur im HA-Addon nutzbar."
-        )
+        raise ha_db_unavailable()
 
     anlage = await get_anlage_with_mapping(db, anlage_id)
     sensor_ids = extract_sensor_ids_from_mapping(anlage.sensor_mapping)
@@ -872,10 +858,7 @@ async def import_ha_statistics(
     """
     service = get_ha_statistics_service()
     if not service.is_available:
-        raise HTTPException(
-            status_code=503,
-            detail="HA-Datenbank nicht verfügbar."
-        )
+        raise ha_db_unavailable()
 
     anlage = await get_anlage_with_mapping(db, anlage_id)
     sensor_mapping = anlage.sensor_mapping

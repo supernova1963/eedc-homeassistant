@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 import httpx
 
+from backend.core.exceptions import ha_supervisor_unavailable, not_found
 from backend.core.database import get_session
 from backend.core.config import settings
 from backend.core.field_definitions import get_felder_fuer_investition
@@ -169,7 +170,7 @@ async def _get_anlage(anlage_id: int, session: AsyncSession) -> Anlage:
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail=f"Anlage {anlage_id} nicht gefunden")
+        raise not_found("Anlage", anlage_id)
     return anlage
 
 
@@ -258,10 +259,7 @@ async def get_available_sensors(
         await _get_anlage(anlage_id, session)
 
     if not settings.supervisor_token:
-        raise HTTPException(
-            status_code=503,
-            detail="Keine Verbindung zu Home Assistant (kein Supervisor Token)"
-        )
+        raise ha_supervisor_unavailable()
 
     try:
         async with httpx.AsyncClient() as client:

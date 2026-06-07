@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -48,7 +49,7 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not anlage_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Basis-Spalten (nur Zählerwerte!)
     spalten = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
@@ -194,7 +195,7 @@ async def import_csv(
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Investitionen laden
     inv_result = await db.execute(
@@ -567,7 +568,7 @@ async def export_csv(
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     # Monatsdaten laden
     query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)

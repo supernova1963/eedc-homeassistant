@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import httpx
 
+from backend.core.exceptions import ha_supervisor_unavailable
 from backend.core.config import settings
 
 
@@ -101,10 +102,7 @@ async def list_energy_sensors():
         list[HASensor]: Liste der Sensoren, sortiert nach entity_id
     """
     if not settings.supervisor_token:
-        raise HTTPException(
-            status_code=503,
-            detail="Keine Verbindung zu Home Assistant (kein Supervisor Token)"
-        )
+        raise ha_supervisor_unavailable()
 
     try:
         async with httpx.AsyncClient() as client:

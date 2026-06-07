@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
@@ -94,7 +95,7 @@ async def delete_rohdaten(
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     del_stunden = await db.execute(
         delete(TagesEnergieProfil).where(TagesEnergieProfil.anlage_id == anlage_id)

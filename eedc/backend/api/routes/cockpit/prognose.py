@@ -8,6 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -168,7 +169,7 @@ async def get_prognose_vergleich(
 
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not anlage_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     tz_result = await db.execute(
         select(TagesZusammenfassung)

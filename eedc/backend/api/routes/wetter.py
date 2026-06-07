@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.services.wetter.orchestrator import (
@@ -160,10 +161,7 @@ async def get_wetter_monat(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Anlage mit ID {anlage_id} nicht gefunden"
-        )
+        raise not_found("Anlage", anlage_id)
 
     if not anlage.latitude or not anlage.longitude:
         raise HTTPException(
@@ -265,7 +263,7 @@ async def get_wetter_provider(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not anlage.latitude or not anlage.longitude:
         raise HTTPException(
@@ -324,10 +322,10 @@ async def get_wetter_vergleich(
     anlage = result.scalar_one_or_none()
 
     if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+        raise not_found("Anlage")
 
     if not anlage.latitude or not anlage.longitude:
-        raise HTTPException(status_code=400, detail="Anlage hat keine Koordinaten")
+        raise bad_request("Anlage hat keine Koordinaten")
 
     comparison = await get_provider_comparison(
         anlage.latitude, anlage.longitude, jahr, monat
