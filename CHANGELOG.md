@@ -16,6 +16,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Intern (nicht anwender-sichtbar)
 
 - `StrategieTyp`-Enum (Backend + Frontend) auf `sensor`/`keine` reduziert; idempotente Startup-Migration `_migrate_sensor_mapping_strategien_clear` schreibt Dead-Strategie-Werte im `sensor_mapping`-JSON auf `keine` um (Hard-Precondition vor der Enum-Reduktion, da `FeldMapping.strategie` Pydantic-validiert ist). 7 Migrations-Tests. [[project_datenchecker_konsistenz]] Achse A.
+- **Daten-Checker in ein Package aufgeteilt (Achse C).** Das 2729-Zeilen-Einzelmodul `services/daten_checker.py` ist jetzt das Package `services/daten_checker/` mit thematischen Mixin-Klassen (`kategorien`, `_helpers`, `stammdaten`, `monatsdaten`, `energieprofil`, `sensoren`, `emob`, `datenquelle`); `DatenChecker` komponiert die Mixins, Orchestrator `check_anlage` + `__init__` bleiben in `__init__.py`. Reiner Move, keine Funktionsänderung — die Checks bleiben `self`-Methoden mit geteiltem Instanz-State, die Public API (`from backend.services.daten_checker import DatenChecker`) ist unverändert. Bestehende Tests laufen unverändert grün. [[project_datenchecker_konsistenz]] Achse C.
 
 ---
 
