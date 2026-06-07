@@ -1,11 +1,25 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.38.0)
+> **Stand:** Juni 2026 (v3.39.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.39.0 — Connector liefert kWh, Amortisation ab Anschaffungsdatum (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Geräte-Connector erfasst jetzt auch die Energiewerte (kWh) automatisch.** Bisher zeigte der Connector nur die Live-Leistung in Watt — „Heute" und die Monatswerte blieben leer, obwohl die Kachel „Automatische Zählerstandserfassung" das versprach. Jetzt liest eedc alle 5 Minuten die Zählerstände aus und füllt damit Tagesverlauf und Monatsabschluss. **Neu im Connector-Setup:** die Karte „Zuordnung zu Investitionen" — ordne pro gemessener Kategorie (PV, Speicher, Wallbox …) die passende Komponente zu, dann landen die Werte am richtigen Ort (z. B. ein EcoFlow, der PV **und** Speicher misst).
+- **Amortisation und ROI rechnen jetzt erst ab dem Anschaffungsdatum.** Bisher wurde der PV-Ertrag über alle vorhandenen Monate summiert — auch über Zeiträume vor der Anschaffung deiner Anlage. Dadurch sah die Amortisation etwas zu günstig aus. Jetzt zählen nur die Monate, in denen deine PV tatsächlich in Betrieb war. (Greift nur, wenn ein Anschaffungsdatum gesetzt ist.)
+- **Setup-Wizard: Sensor-Zuordnung übersichtlicher.** Jedes Feld bietet nur noch „HA-Sensor" oder „Kein Sensor". Die früheren Optionen „kWp-Verteilung", „EV-Quote", „COP-Berechnung", „Manuell" waren eine Falle — sie sahen wählbar aus, lieferten aber nie Daten. Diese Logik passiert ohnehin automatisch in der Auswertung. Bestehende Einstellungen werden beim Update automatisch umgestellt.
+
+### Gut zu wissen
+
+- Interne Aufräumarbeiten am Daten-Checker (Modul-Struktur, ein maskierter Fehler im Drift-Check behoben) — keine sichtbare Änderung, aber wartbarer und robuster.
 
 ---
 

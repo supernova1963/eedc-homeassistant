@@ -9,12 +9,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+---
+
+## [3.39.0] - 2026-06-07 — Connector-kWh-Bridge, Amortisations-Grenze & Daten-Checker-Aufräumung
+
+> ✨ **Minor-Sammelrelease.** Der Geräte-Connector liefert jetzt auch die **Energiewerte (kWh)** automatisch — nicht mehr nur Live-Leistung. Amortisation und ROI rechnen jetzt erst **ab dem Anschaffungsdatum** (vorher leicht zu günstig). Dazu die Daten-Checker-Aufräumung abgeschlossen (Wizard auf zwei klare Optionen, internes Modul-Refactor). 886 Backend-Tests grün.
+
+### Added
+
+- **Geräte-Connector erfasst Zählerstände (kWh) automatisch über MQTT.** Bisher lieferte der Connector nur Live-Leistung (Watt) — „Heute" und Monatswerte blieben leer, obwohl die Kachel „Automatische Zählerstandserfassung" versprach. Jetzt pollt eine zweite Schleife (5 min) die kumulativen Zählerstände und speist sie **pro zugeordneter Komponente** in dieselbe Pipeline wie Node-RED/ioBroker. Neue Wizard-Karte **„Zuordnung zu Investitionen"**: pro gemessener Kategorie (PV, Speicher, Wallbox …) die passende Investition wählen — dann landen die Werte im richtigen Komponenten-Slot statt pauschal auf Anlagenebene. Anlass: EcoFlow-+-Node-RED-Setup (Dirk).
+
 ### Changed
 
 - **Setup-Wizard: Sensor-Zuordnung auf zwei klare Optionen reduziert (Daten-Checker-Achse A1).** Jedes Feld bietet jetzt nur noch **„HA-Sensor"** oder **„Kein Sensor"** (manuell im Monatsabschluss erfassen / bewusst leer). Die früheren Auswahlen „kWp-Verteilung", „EV-Quote berechnen", „JAZ-/COP-Berechnung" und „Manuell eingeben" waren eine Falle: der Wizard bot sie an, aber nur ein echter HA-Sensor lieferte je Daten — der Rest blieb wirkungslos. Die jeweilige Logik passiert weiterhin automatisch zur Auswertung (z. B. PV-Gesamterzeugung wird anteilig nach kWp auf die Strings verteilt, Heizwärme aus Stromverbrauch × JAZ geschätzt), ohne dass im Wizard eine Strategie gewählt werden muss. Bestehende Zuordnungen mit einer der alten Optionen werden beim Update automatisch auf „Kein Sensor" umgestellt.
 
 ### Fixed
 
+- **Amortisation/ROI respektieren das Anschaffungsdatum (#651/#561).** Die kumulierte Amortisation (Aussichten) sowie Energiebilanz + ROI (Cockpit) summierten den PV-Ertrag bisher ungefiltert über alle Monate — auch über Zeiträume **vor** dem Anschaffungsdatum der Anlage, wodurch die Amortisation zu günstig ausfiel. Jetzt zählen Ertrag und Ersparnis nur über Monate, in denen eine PV-Quelle (PV-Module/Balkonkraftwerk) tatsächlich aktiv war (respektiert Anschaffungs- und Stilllegungsdatum). Ohne gesetztes Anschaffungsdatum oder ohne registrierte PV-Quelle bleibt alles unverändert.
 - **Daten-Checker: maskierter Fehler im Datenquelle-Drift-Check.** Im `except`-Zweig von `_check_datenquelle_drift` zeigte ein fehlgeschlagener HA-LTS-Read auf ein undefiniertes `logger` → der eigentliche Fehler wurde durch einen `NameError` verdeckt. Jetzt wird der HA-LTS-Read-Fehler korrekt geloggt (DEBUG) und der Tag übersprungen, statt den echten Fehler zu maskieren. [[feedback_silent_except_logs]]
 
 ### Intern (nicht anwender-sichtbar)
