@@ -11,6 +11,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.1] - 2026-06-07 — §51-Schalter pro Anlage & MQTT-Outbound-Konsolidierung
+
+> 🔧 **Patch.** Zwei Korrekturen: Der §51-Negativpreis-Abzug galt bisher automatisch für **jede** Anlage mit Börsenpreis-Daten — auch für Bestandsanlagen, die §51 EEG gar nicht unterliegen; jetzt ein **manueller Schalter pro Anlage**, Default aus. Zudem werden **MQTT-Sensoren** wieder zuverlässig nach Home Assistant geschrieben (ein konsolidierter Outbound-Pfad statt zwei, echte Fehlermeldungen im Log). 893 Backend-Tests grün.
+
+### Fixed
+
+- **§51 EEG wird nicht mehr pauschal auf alle Anlagen angewandt.** Der Wegfall der Einspeisevergütung in Stunden mit negativem Börsenpreis (§51 EEG) gilt rechtlich nur für **Neuanlagen** (Solarpaket I, Inbetriebnahme i. d. R. ab 25.02.2025), gestaffelt nach Datum und Größe. Bisher zog eedc den §51-Verlust aber immer ab, sobald Negativpreis-Einspeisung in den Tagesaggregaten stand — und weil der integrierte aWATTar-Börsenpreis-Fallback (ohne eigenen Tibber-/aWATTar-Sensor) diese Daten für nahezu jede Anlage liefert, traf der Abzug faktisch auch Alt-Anlagen, die volle Vergütung erhalten. Anlass: rapahl + Gernot.
+- **MQTT-Sensoren werden wieder zuverlässig nach Home Assistant geschrieben (#655).** Bei JayJayX wurden die MQTT-Sensoren in HA nicht aktualisiert, das Log meldete trotzdem „erfolgreich, keine Fehler". Ursache waren zwei Bugs: (1) ein **Broker-Mismatch** — ein leeres Frontend-Config-Objekt zog den Default `core-mosquitto` statt des `MQTT_HOST` aus der Umgebung, sodass automatischer und manueller Publish auf verschiedene Broker zielen konnten; (2) Scheduler und Route lasen einen **nie existierenden Ergebnis-Schlüssel** und meldeten deshalb immer „0 Sensoren, erfolg=True". Beide behoben: ein konsolidierter Outbound-Pfad (Auto-Publish, manuelle Route und Test nutzen dieselbe Broker-Auflösung Override → ENV → Default), echte `success`/`failed`-Zahlen und konkrete Fehlergründe im Activity-Log. Live am Broker verifiziert (Fehlergrund wie „Connection refused" erscheint jetzt sichtbar). Separat noch offen (#329): einzelne `mwd_*`-Sensoren bleiben „unknown".
+
+### Changed
+
+- **Neuer Schalter „Anlage unterliegt §51 EEG" in den Anlagen-Stammdaten** (unter *Steuerliche Behandlung*), Default **aus**. Nur wenn aktiviert, weist eedc den „§51-Verlust" im Cockpit aus und kürzt den Einspeise-Erlös in allen Auswertungen (Cockpit, Aussichten, ROI, PDF, HA-Export). Bestandsanlagen bleiben damit nach dem Update unverändert, bis der Schalter bewusst gesetzt wird. Bewusst manuell statt automatisch aus dem Inbetriebnahmedatum hergeleitet — der gesetzliche Stichtag samt Staffelung ist zu komplex für eine robuste Automatik.
+
+### Intern (nicht anwender-sichtbar)
+
+- Neues Feld `Anlage.unterliegt_eeg_51` (Bool, Default False, Startup-Migration). Der §51-Gate sitzt an genau einer Stelle — dem zentralen Aggregat-Service `services/einspeise_erloes_service` (`get_neg_preis_einspeisung_monat`/`_jahr` liefern bei nicht gesetztem Flag `None`); alle Read-Sites gehen über diesen Service, daher kein Per-Site-Patch. Regressionstest „Flag aus + Börsenpreis-Daten → kein Abzug" in beiden §51-Testdateien.
+
+---
+
 ## [3.39.0] - 2026-06-07 — Connector-kWh-Bridge, Amortisations-Grenze & Daten-Checker-Aufräumung
 
 > ✨ **Minor-Sammelrelease.** Der Geräte-Connector liefert jetzt auch die **Energiewerte (kWh)** automatisch — nicht mehr nur Live-Leistung. Amortisation und ROI rechnen jetzt erst **ab dem Anschaffungsdatum** (vorher leicht zu günstig). Dazu die Daten-Checker-Aufräumung abgeschlossen (Wizard auf zwei klare Optionen, internes Modul-Refactor). 886 Backend-Tests grün.

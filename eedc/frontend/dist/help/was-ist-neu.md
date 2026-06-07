@@ -1,11 +1,20 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.39.0)
+> **Stand:** Juni 2026 (v3.39.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.39.1 — §51-Schalter pro Anlage & MQTT-Sensoren nach HA (Juni 2026)
+
+### Was sich für dich ändert
+
+- **§51 EEG ist jetzt ein Schalter pro Anlage.** Der „§51-Verlust" (entgangener Erlös, wenn du bei negativem Börsenpreis einspeist) wurde bisher automatisch für jede Anlage berechnet, sobald Börsenpreis-Daten vorlagen — auch wenn deine Anlage §51 gar nicht unterliegt. §51 EEG gilt rechtlich nur für **Neuanlagen** (ab Solarpaket I, Inbetriebnahme i. d. R. ab dem 25.02.2025). Neu gibt es deshalb in den **Anlagen-Stammdaten** (unter *Steuerliche Behandlung*) die Checkbox **„Anlage unterliegt §51 EEG"**. Sie ist **standardmäßig aus** — der §51-Verlust erscheint nur, wenn du sie aktiv setzt. Bestehende Anlagen ändern sich also nach dem Update nicht, bis du den Haken bewusst setzt. Anlass: rapahl.
+- **MQTT-Sensoren landen wieder zuverlässig in Home Assistant.** Wenn du eedc-Werte per MQTT an HA schickst, konnten die Sensoren stehenbleiben, während das Log „erfolgreich, keine Fehler" meldete. Zwei Ursachen sind behoben: ein Broker-Mismatch (automatischer und manueller Versand konnten auf verschiedene Broker zielen) und eine geschönte Erfolgsmeldung. Jetzt nutzen automatischer Versand, manuelle Schaltfläche und Test denselben Weg, und das Log zeigt echte Zahlen und konkrete Fehlergründe (z. B. „Connection refused"). Danke an JayJayX.
 
 ---
 
