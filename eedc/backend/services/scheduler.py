@@ -848,25 +848,13 @@ async def mqtt_auto_publish_job() -> None:
     try:
         from backend.core.database import get_session
         from backend.models.anlage import Anlage
-        from backend.api.routes.ha_export import calculate_anlage_sensors
-        from backend.services.mqtt_client import MQTTClient, MQTTConfig
-        import os
+        from backend.services.ha_mqtt_sync import publish_anlage_sensors
         from sqlalchemy import select
 
-        mqtt_config = MQTTConfig(
-            host=os.environ.get("MQTT_HOST", "core-mosquitto"),
-            port=int(os.environ.get("MQTT_PORT", "1883")),
-            username=os.environ.get("MQTT_USER") or None,
-            password=os.environ.get("MQTT_PASSWORD") or None,
-        )
-        client = MQTTClient(mqtt_config)
-
-        if not client.is_available:
-            logger.warning("MQTT Auto-Publish: aiomqtt nicht verfügbar")
-            return
-
         published_total = 0
+        failed_total = 0
         anlagen_count = 0
+        fehler_beispiele: list[str] = []
 
         async with get_session() as db:
             result = await db.execute(select(Anlage))
@@ -874,23 +862,31 @@ async def mqtt_auto_publish_job() -> None:
 
             for anlage in anlagen:
                 try:
-                    sensor_values = await calculate_anlage_sensors(db, anlage)
-                    if not sensor_values:
+                    # Zentraler Outbound-Pfad (#655): liefert echte success/failed-Zahlen.
+                    pub = await publish_anlage_sensors(db, anlage)
+                    if not pub["available"]:
+                        logger.warning("MQTT Auto-Publish: aiomqtt nicht verfügbar")
+                        return
+                    if pub["no_data"]:
                         continue
-                    pub_result = await client.publish_all_sensors(
-                        sensor_values, anlage.id, anlage.anlagenname
-                    )
-                    published_total += pub_result.get("published", 0)
+                    published_total += pub["success"]
+                    failed_total += pub["failed"]
                     anlagen_count += 1
+                    for e in pub.get("errors", []):
+                        if len(fehler_beispiele) < 3:
+                            fehler_beispiele.append(f"Anlage {anlage.id} {e}")
                 except Exception as e:
                     logger.warning(f"MQTT Auto-Publish Anlage {anlage.id}: {type(e).__name__}: {e}")
 
-        logger.info(f"MQTT Auto-Publish: {published_total} Sensoren für {anlagen_count} Anlagen")
+        fehl = f", {failed_total} fehlgeschlagen" if failed_total else ""
+        # Fehlergründe mitloggen — sonst ist „X fehlgeschlagen" wieder nichtssagend (#655).
+        grund = f" — z. B. {'; '.join(fehler_beispiele)}" if fehler_beispiele else ""
+        logger.info(f"MQTT Auto-Publish: {published_total} Sensoren für {anlagen_count} Anlagen{fehl}{grund}")
         await log_activity(
             kategorie="ha_export",
             aktion="MQTT Auto-Publish",
-            erfolg=True,
-            details=f"{published_total} Sensoren für {anlagen_count} Anlagen",
+            erfolg=failed_total == 0,
+            details=f"{published_total} Sensoren für {anlagen_count} Anlagen{fehl}{grund}",
         )
     except Exception as e:
         logger.error(f"MQTT Auto-Publish fehlgeschlagen: {type(e).__name__}: {e}")

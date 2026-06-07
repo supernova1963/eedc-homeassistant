@@ -12,6 +12,7 @@ MQTT Discovery Format:
 
 import json
 import asyncio
+import logging
 from typing import Optional, Any
 from dataclasses import dataclass
 
@@ -22,6 +23,8 @@ except ImportError:
     MQTT_AVAILABLE = False
 
 from backend.services.ha_sensors_export import SensorDefinition, SensorValue
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,7 +78,7 @@ class MQTTClient:
                 self._connected = True
                 return True
         except Exception as e:
-            print(f"[MQTT] Verbindungsfehler: {e}")
+            logger.warning("[MQTT] Verbindungsfehler: %s: %s", type(e).__name__, e)
             self._connected = False
             return False
 
@@ -225,22 +228,20 @@ class MQTTClient:
             sensor, anlage_id, anlage_name, investition_id, investition_name
         )
 
-        try:
-            async with aiomqtt.Client(
-                hostname=self.config.host,
-                port=self.config.port,
-                username=self.config.username,
-                password=self.config.password,
-            ) as client:
-                await client.publish(
-                    config_topic,
-                    json.dumps(payload),
-                    retain=True
-                )
-                return True
-        except Exception as e:
-            print(f"[MQTT] Fehler beim Publizieren von {sensor.key}: {e}")
-            return False
+        # Bewusst KEIN try/except: Fehler (z. B. Broker nicht erreichbar/Auth)
+        # propagieren an publish_all_sensors, das sie mit Grund einsammelt/loggt.
+        async with aiomqtt.Client(
+            hostname=self.config.host,
+            port=self.config.port,
+            username=self.config.username,
+            password=self.config.password,
+        ) as client:
+            await client.publish(
+                config_topic,
+                json.dumps(payload),
+                retain=True
+            )
+            return True
 
     async def publish_sensor_value(
         self,
@@ -282,37 +283,34 @@ class MQTTClient:
             attributes["berechnung"] = sensor_value.berechnung
         attributes.update(sensor_value.zusatz_attribute)
 
-        try:
-            async with aiomqtt.Client(
-                hostname=self.config.host,
-                port=self.config.port,
-                username=self.config.username,
-                password=self.config.password,
-            ) as client:
-                # Wert publizieren
-                value = sensor_value.value
-                if value is None:
-                    value = "unknown"
-                elif isinstance(value, float):
-                    value = round(value, 2)
+        # Bewusst KEIN try/except: Fehler propagieren an publish_all_sensors.
+        async with aiomqtt.Client(
+            hostname=self.config.host,
+            port=self.config.port,
+            username=self.config.username,
+            password=self.config.password,
+        ) as client:
+            # Wert publizieren
+            value = sensor_value.value
+            if value is None:
+                value = "unknown"
+            elif isinstance(value, float):
+                value = round(value, 2)
 
-                await client.publish(
-                    state_topic,
-                    str(value),
-                    retain=True
-                )
+            await client.publish(
+                state_topic,
+                str(value),
+                retain=True
+            )
 
-                # Attribute publizieren
-                await client.publish(
-                    attributes_topic,
-                    json.dumps(attributes),
-                    retain=True
-                )
+            # Attribute publizieren
+            await client.publish(
+                attributes_topic,
+                json.dumps(attributes),
+                retain=True
+            )
 
-                return True
-        except Exception as e:
-            print(f"[MQTT] Fehler beim Publizieren von {sensor.key}: {e}")
-            return False
+            return True
 
     async def remove_sensor(
         self,
@@ -350,7 +348,7 @@ class MQTTClient:
                 await client.publish(config_topic, "", retain=True)
                 return True
         except Exception as e:
-            print(f"[MQTT] Fehler beim Entfernen von {sensor.key}: {e}")
+            logger.warning("[MQTT] Fehler beim Entfernen von %s: %s: %s", sensor.key, type(e).__name__, e)
             return False
 
     async def publish_all_sensors(
@@ -376,28 +374,31 @@ class MQTTClient:
         """
         success = 0
         failed = 0
+        errors: list[str] = []
 
         for sv in sensor_values:
-            # Discovery Config publizieren
-            disc_ok = await self.publish_sensor_discovery(
-                sv.definition, anlage_id, anlage_name,
-                investition_id, investition_name
-            )
-
-            # Wert publizieren
-            value_ok = await self.publish_sensor_value(
-                sv, anlage_id, investition_id
-            )
-
-            if disc_ok and value_ok:
+            try:
+                # Discovery Config + Wert publizieren
+                await self.publish_sensor_discovery(
+                    sv.definition, anlage_id, anlage_name,
+                    investition_id, investition_name
+                )
+                await self.publish_sensor_value(
+                    sv, anlage_id, investition_id
+                )
                 success += 1
-            else:
+            except Exception as e:
                 failed += 1
+                msg = f"{sv.definition.key}: {type(e).__name__}: {e}"
+                logger.warning("[MQTT] Publizieren fehlgeschlagen — %s", msg)
+                if len(errors) < 3:  # Stichprobe für den Aufrufer (Log/Activity)
+                    errors.append(msg)
 
         return {
             "total": len(sensor_values),
             "success": success,
-            "failed": failed
+            "failed": failed,
+            "errors": errors,
         }
 
     async def publish_monatsdaten(
@@ -440,5 +441,5 @@ class MQTTClient:
                 )
                 return True
         except Exception as e:
-            print(f"[MQTT] Fehler beim Publizieren von Monatsdaten {jahr}/{monat}: {e}")
+            logger.warning("[MQTT] Fehler beim Publizieren von Monatsdaten %s/%s: %s: %s", jahr, monat, type(e).__name__, e)
             return False

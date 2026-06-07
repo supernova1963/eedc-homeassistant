@@ -37,6 +37,7 @@ from backend.services.ha_sensors_export import (
     get_all_sensor_definitions
 )
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
+from backend.services.ha_mqtt_sync import resolve_mqtt_config, publish_anlage_sensors
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -60,9 +61,14 @@ router = APIRouter(prefix="/ha/export", tags=["HA Export"])
 # =============================================================================
 
 class MQTTConfigRequest(BaseModel):
-    """MQTT-Broker Konfiguration."""
-    host: str = "core-mosquitto"
-    port: int = 1883
+    """MQTT-Broker Konfiguration (Override; None-Felder fallen auf ENV zurück).
+
+    Felder defaulten bewusst auf None statt `core-mosquitto`/1883: das Frontend
+    sendet `config || {}`, ein leeres Objekt soll auf die ENV-Konfiguration
+    zurückfallen — nicht auf einen festen Broker zielen (#655 Broker-Mismatch).
+    """
+    host: Optional[str] = None
+    port: Optional[int] = None
     username: Optional[str] = None
     password: Optional[str] = None
 
@@ -1164,11 +1170,11 @@ async def get_sensor_definitions():
 @router.post("/mqtt/test")
 async def test_mqtt_connection(config: Optional[MQTTConfigRequest] = None):
     """Testet die MQTT-Verbindung zum Broker."""
-    mqtt_config = MQTTConfig(
-        host=config.host if config else os.environ.get("MQTT_HOST", "core-mosquitto"),
-        port=config.port if config else int(os.environ.get("MQTT_PORT", "1883")),
-        username=config.username if config else os.environ.get("MQTT_USER"),
-        password=config.password if config else os.environ.get("MQTT_PASSWORD"),
+    mqtt_config = resolve_mqtt_config(
+        config.host if config else None,
+        config.port if config else None,
+        config.username if config else None,
+        config.password if config else None,
     )
 
     client = MQTTClient(mqtt_config)
@@ -1198,50 +1204,46 @@ async def publish_sensors_mqtt(
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
-    # MQTT Client konfigurieren
-    mqtt_config = MQTTConfig(
-        host=config.host if config else os.environ.get("MQTT_HOST", "core-mosquitto"),
-        port=config.port if config else int(os.environ.get("MQTT_PORT", "1883")),
-        username=config.username if config else os.environ.get("MQTT_USER"),
-        password=config.password if config else os.environ.get("MQTT_PASSWORD"),
+    # Broker-Config: Override-Felder aus dem Request, sonst ENV (#655).
+    mqtt_config = resolve_mqtt_config(
+        config.host if config else None,
+        config.port if config else None,
+        config.username if config else None,
+        config.password if config else None,
     )
 
-    client = MQTTClient(mqtt_config)
+    # Zentraler Outbound-Pfad — identisch zum Auto-Publish (#655).
+    pub = await publish_anlage_sensors(db, anlage, mqtt_config)
 
-    if not client.is_available:
+    if not pub["available"]:
         raise HTTPException(
             status_code=503,
             detail="MQTT nicht verfügbar. Bitte aiomqtt installieren: pip install aiomqtt"
         )
-
-    # Sensoren berechnen
-    sensor_values = await calculate_anlage_sensors(db, anlage)
-
-    if not sensor_values:
+    if pub["no_data"]:
         raise HTTPException(
             status_code=404,
             detail="Keine Monatsdaten vorhanden"
         )
 
-    # Via MQTT publizieren
-    result = await client.publish_all_sensors(
-        sensor_values,
-        anlage.id,
-        anlage.anlagenname
-    )
-
+    fehl = f", {pub['failed']} fehlgeschlagen" if pub["failed"] else ""
+    # Fehlergründe in die Activity aufnehmen (#655: „X fehlgeschlagen" ohne Grund hilft nicht).
+    grund = f" — z. B. {'; '.join(pub['errors'])}" if pub.get("errors") else ""
     await log_activity(
         kategorie="ha_export",
         aktion="MQTT-Sensoren publiziert",
-        erfolg=True,
-        details=f"{result.get('published', 0)} Sensoren für {anlage.anlagenname}",
+        erfolg=pub["failed"] == 0,
+        details=f"{pub['success']}/{pub['total']} Sensoren für {anlage.anlagenname}{fehl}{grund}",
         anlage_id=anlage.id,
     )
 
     return {
         "message": f"Sensoren für {anlage.anlagenname} publiziert",
         "anlage_id": anlage.id,
-        **result
+        "total": pub["total"],
+        "success": pub["success"],
+        "failed": pub["failed"],
+        "errors": pub["errors"],
     }
 
 
