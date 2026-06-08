@@ -20,6 +20,7 @@ from typing import Optional
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.source_priority import SOURCE_LABELS
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
@@ -28,6 +29,7 @@ from backend.services.energie_profil._provenance_helpers import (
     seed_tz_provenance,
 )
 from backend.services.energie_profil.source import Source
+from backend.services.provenance import write_with_provenance
 from backend.utils.investition_filter import aktiv_am_tag
 
 logger = logging.getLogger(__name__)
@@ -375,6 +377,12 @@ async def aggregate_day(
     )
     existing_tz_row = existing_tz.scalar_one_or_none()
     preserved_felder = {}
+    # #299: pro gerettetem Feld die Ursprungsquelle aus der alten Row-Provenance
+    # mitnehmen, damit der Restore-Schreiber unten das Audit-Log mit der echten
+    # Herkunft (external:openmeteo / external:fuel_price / …) statt mit einem
+    # generischen Aggregator-Label füllt. Wert hier einfrieren, bevor der
+    # Delete-and-Recreate die alte Row aus der Session entfernt.
+    preserved_quellen: dict[str, str] = {}
     # #290 detLAN: bei manueller Reaggregation ohne Stunden-Daten retten wir
     # zusätzlich Komponenten-Aggregate, damit bestehende gute Werte nicht
     # durch eine evtl. falsche Snapshot-Boundary-Diff überschrieben werden
@@ -389,10 +397,14 @@ async def aggregate_day(
         if existing_tz_row and existing_tz_row.komponenten_starts else None
     )
     if existing_tz_row:
+        alte_provenance = existing_tz_row.source_provenance or {}
         for field in (*_PROGNOSE_FELDER_RETTEN, *_EXTERN_BEFUELLT_FELDER_RETTEN):
             val = getattr(existing_tz_row, field, None)
             if val is not None:
                 preserved_felder[field] = val
+                quelle = (alte_provenance.get(field) or {}).get("source")
+                if quelle in SOURCE_LABELS:
+                    preserved_quellen[field] = quelle
 
     await db.execute(
         delete(TagesEnergieProfil).where(
@@ -750,9 +762,6 @@ async def aggregate_day(
             )
         ),
     )
-    # Gerettete extern-befüllte Felder wiederherstellen (Prognose + Kraftstoffpreis)
-    for field, val in preserved_felder.items():
-        setattr(zusammenfassung, field, val)
 
     # Etappe 4: TagesZusammenfassung-Source spiegelt die Hauptquelle der
     # Daily-Werte. Wenn die Stunden aus HA-LTS kamen, ist auch die
@@ -764,6 +773,30 @@ async def aggregate_day(
     )
     db.add(zusammenfassung)
     seed_tz_provenance(zusammenfassung, writer=auto_writer, source=tz_source_label)
+
+    # Gerettete extern-befüllte Felder wiederherstellen (Prognose + Kraftstoffpreis).
+    # #299: bewusst NACH seed_tz_provenance und über write_with_provenance statt
+    # per setattr — so entsteht ein Audit-Log-Eintrag pro Restore und die
+    # Provenance trägt die echte Ursprungsquelle statt des Aggregator-Labels.
+    # Die Felder sind beim Seed noch None (frische Row → der Seed-Loop überspringt
+    # sie), also greift hier kein Hierarchie-Konflikt; der Restore wird angewandt.
+    for field, val in preserved_felder.items():
+        restore_source = preserved_quellen.get(field, "auto:preserve_restore")
+        ergebnis = await write_with_provenance(
+            db, zusammenfassung, field, val,
+            source=restore_source, writer="aggregator-preserve",
+        )
+        if not ergebnis.applied:
+            # Darf nicht passieren (frische Row, existing=None) — wenn doch,
+            # ginge der gerettete Wert still verloren. Sichtbar machen statt
+            # schlucken (feedback_silent_except_logs).
+            logger.warning(
+                f"Anlage {anlage.id}, {datum}: Restore von '{field}' "
+                f"nicht angewandt ({ergebnis.decision}: {ergebnis.reason}) — "
+                f"geretteter Wert ginge verloren."
+            )
+            setattr(zusammenfassung, field, val)
+
     await db.flush()
 
     # Pflicht-Invariante (ADR-001 Berechnungs-Layer):

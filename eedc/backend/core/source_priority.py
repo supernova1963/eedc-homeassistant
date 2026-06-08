@@ -122,6 +122,15 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # Auto-Aggregation — Monatsabschluss-Roll-up aus Tageswerten
     # (routes/monatsabschluss.py — wird in P3 in Service-Schicht ausgelagert)
     "auto:monatsabschluss":  SourcePriority.AUTO_AGGREGATION,
+    # Aggregator-Preserve-Restore (#299): der Delete-and-Recreate-Pfad in
+    # `aggregate_day` rettet extern-additiv befüllte TZ-Felder (Prognose +
+    # Kraftstoffpreis) und schreibt sie über write_with_provenance zurück.
+    # Wenn die Ursprungsquelle aus `source_provenance` bekannt ist, wird DIESE
+    # übernommen; nur wenn sie fehlt (Legacy-Row ohne Provenance-Eintrag),
+    # greift dieses ehrliche Fallback-Label — „der Aggregator hat einen Wert
+    # unbekannter Herkunft bewahrt". AUTO_AGGREGATION-Klasse: ein späterer
+    # echter externer Schreiber (Wetter/Fuel, EXTERNAL_AUTHORITATIVE) gewinnt.
+    "auto:preserve_restore": SourcePriority.AUTO_AGGREGATION,
     # P2-Erweiterung: Demo-Daten-Loader für Standalone-Erstinstallation.
     # AUTO_AGGREGATION-Klasse, damit nachträgliche manuelle Bearbeitung
     # die Demo-Werte sauber schlägt.
