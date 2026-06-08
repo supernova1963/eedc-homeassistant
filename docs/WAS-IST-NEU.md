@@ -1,11 +1,19 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.39.1)
+> **Stand:** Juni 2026 (v3.39.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.39.2 — Internes Aufräumen (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Für dich ändert sich praktisch nichts** — diese Version ist eine interne Aufräum-Runde vor dem nächsten größeren Umbau: einheitlichere Fehler-Antworten im Hintergrund, eine korrigierte Daten-Herkunfts-Spur (Diagnose) und aktualisierte Bau-Werkzeuge. Einzig sichtbar: einige Fehlermeldungen sind im Wortlaut leicht vereinheitlicht (z. B. „Anlage 5 nicht gefunden" statt „Anlage mit ID 5 nicht gefunden"). Keine Funktion ändert ihr Verhalten.
 
 ---
 

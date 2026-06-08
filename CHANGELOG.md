@@ -11,6 +11,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.2] - 2026-06-08 — Interne Aufräum-Runde: Exception-Factory, Provenance-Fix & CI
+
+> 🔧 **Patch / Aufräumen.** Überwiegend interne Hygiene vor dem nächsten größeren Umbau: einheitliche Fehler-Antworten (Exception-Factory), eine korrigierte Daten-Herkunfts-Spur (#299) und aktualisierte CI-Actions. Einzige anwender-sichtbare Änderung: leicht vereinheitlichte Wortlaute einiger Fehlermeldungen. 906 Backend-Tests grün.
+
+### Changed
+
+- **Vereinheitlichte Wortlaute einiger 404-/503-Fehlermeldungen.** „… mit ID {id} nicht gefunden" → „… {id} nicht gefunden" (Anlage, Investition, Prognose u. a.) sowie eine kürzere, kanonische Meldung bei nicht verfügbarer HA-Statistik. Rein kosmetisch, keine Verhaltensänderung.
+
+### Fixed
+
+- **Daten-Herkunft (Provenance) bei Aggregator-Wiederherstellung korrekt (#299).** Beim Neu-Aggregieren eines Tages wurden gerettete extern-befüllte Werte (PV-Prognose, Kraftstoffpreis) zuvor (a) nicht ins Audit-Log geschrieben und (b) fälschlich mit `auto:monatsabschluss` statt ihrer echten Quelle gestempelt. Jetzt laufen diese Wiederherstellungen über den zentralen Provenance-Pfad — gleiche Werte, korrekte Herkunfts-Spur. Reine Diagnose-Hygiene, kein Wert ändert sich.
+
+### Intern (nicht anwender-sichtbar)
+
+- **Zentrale Exception-Factory `core/exceptions.py`** (4 Return-Pattern-Helfer): 117 byte-identische `raise HTTPException`-Stellen über 33 Dateien auf die Helfer umgestellt (netto −24 Zeilen); dynamische/Security-Wortlaute bewusst unverändert gelassen. Keine Verhaltensänderung außer der oben genannten Wortlaut-Normalisierung. 12 neue Helper-Tests.
+- **GitHub-Actions auf Node-24-Runtime** gebumpt (eedc-homeassistant, eedc-Standalone, eedc-community) — Deprecation-Warnung in den CI-Läufen weg. Neues Provenance-Label `auto:preserve_restore` (Fallback für Legacy-Rows ohne Herkunfts-Eintrag).
+
+---
+
 ## [3.39.1] - 2026-06-07 — §51-Schalter pro Anlage & MQTT-Outbound-Konsolidierung
 
 > 🔧 **Patch.** Zwei Korrekturen: Der §51-Negativpreis-Abzug galt bisher automatisch für **jede** Anlage mit Börsenpreis-Daten — auch für Bestandsanlagen, die §51 EEG gar nicht unterliegen; jetzt ein **manueller Schalter pro Anlage**, Default aus. Zudem werden **MQTT-Sensoren** wieder zuverlässig nach Home Assistant geschrieben (ein konsolidierter Outbound-Pfad statt zwei, echte Fehlermeldungen im Log). 893 Backend-Tests grün.
