@@ -296,6 +296,75 @@ def _migrate_sensor_mapping_strategien_clear(connection) -> None:
             )
 
 
+def _migrate_connector_field_inv_map_backfill(connection) -> None:
+    """Fall B (#300): vor v3.39.0 angelegte `connector_config` hat keine
+    `field_inv_map`. Der automatische Energy-Poll (`e4471ca2`/v3.39.0) publisht
+    PV dann nur aufs Fallback-Topic `pv_gesamt_kwh` und Speicher/Wallbox gar
+    nicht — die Werte aktualisieren sich nicht automatisch, nur der manuelle
+    `/fetch` füllt sie. Diese Migration leitet die `field_inv_map` einmalig aus
+    den Investitionen der Anlage ab — gleiche Typ-Regeln wie der
+    `/connectors/mapping`-Endpoint, aber NUR bei eindeutiger Zuordnung (genau
+    eine aktive Investition des passenden Typs). Mehrdeutige Kategorien bleiben
+    offen, der Nutzer ordnet sie im UI zu (kein erfundener Default).
+
+    Idempotent: bestehende nicht-leere `field_inv_map` → No-Op. Konnte nichts
+    abgeleitet werden, bleibt das Feld absent und ein späterer Boot versucht es
+    erneut (z. B. nachdem die passende Investition angelegt wurde).
+    [[project_connector_mqtt_energie]]
+    """
+    import json
+    from sqlalchemy import text as _text
+
+    # Spiegelt _KATEGORIE_TYPEN aus api/routes/connector.py
+    KATEGORIE_TYPEN = {
+        "pv": {"pv-module", "balkonkraftwerk"},
+        "speicher": {"speicher"},
+        "wallbox": {"wallbox"},
+    }
+
+    rows = connection.execute(_text(
+        "SELECT id, connector_config FROM anlagen WHERE connector_config IS NOT NULL"
+    )).fetchall()
+    if not rows:
+        return
+
+    for anlage_id, cfg_raw in rows:
+        if not cfg_raw:
+            continue
+        try:
+            cfg = json.loads(cfg_raw) if isinstance(cfg_raw, str) else dict(cfg_raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        # Nur konfigurierte Connectoren ohne (sinnvolle) Zuordnung
+        if not cfg.get("connector_id") or not cfg.get("host"):
+            continue
+        if cfg.get("field_inv_map"):  # bereits gesetzt (nicht-leer) → No-Op
+            continue
+
+        # Aktive Investitionen der Anlage (aktiv != False) nach Typ
+        inv_rows = connection.execute(_text(
+            "SELECT id, typ FROM investitionen "
+            "WHERE anlage_id = :aid AND (aktiv IS NULL OR aktiv != 0)"
+        ), {"aid": anlage_id}).fetchall()
+
+        derived: dict[str, int] = {}
+        for kategorie, typen in KATEGORIE_TYPEN.items():
+            matches = [inv_id for inv_id, typ in inv_rows if typ in typen]
+            if len(matches) == 1:  # nur Eindeutiges automatisch zuordnen
+                derived[kategorie] = matches[0]
+
+        if not derived:
+            continue
+
+        cfg["field_inv_map"] = derived
+        connection.execute(
+            _text("UPDATE anlagen SET connector_config = :c WHERE id = :id"),
+            {"c": json.dumps(cfg), "id": anlage_id},
+        )
+
+
 def _migrate_verbrauch_daten_keys_v326(connection) -> None:
     """
     v3.25.8 Migration: Drift-Pairs in verbrauch_daten-JSON konsolidieren.
@@ -470,6 +539,13 @@ async def run_migrations(conn):
             # vor der StrategieTyp-Enum-Reduktion (Pydantic-validiert).
             # Idempotent. [[project_datenchecker_konsistenz]]
             _migrate_sensor_mapping_strategien_clear(connection)
+
+            # Fall B (#300): vor v3.39.0 angelegte connector_config ohne
+            # field_inv_map nachrüsten — der automatische Energy-Poll publisht
+            # sonst PV nur aufs Fallback-Topic und Speicher/Wallbox gar nicht.
+            # Leitet die Zuordnung eindeutig aus den Investitionen ab. Idempotent.
+            # [[project_connector_mqtt_energie]]
+            _migrate_connector_field_inv_map_backfill(connection)
 
         # v1.1.0: Neue Spalten zur monatsdaten Tabelle
         if 'monatsdaten' in inspector.get_table_names():
