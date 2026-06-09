@@ -18,7 +18,7 @@ import asyncio
 import logging
 import random
 from datetime import date, datetime
-from math import radians, sin, cos
+from math import acos, cos, degrees, radians, sin, tan
 from typing import Optional, List
 
 from backend.services.wetter.utils import wetter_symbol_aus_tag
@@ -85,6 +85,39 @@ def _solar_noon_hour(datum: str, longitude: float) -> float:
     solar_noon = 12.0 - EoT_minutes / 60 + (timezone_meridian - longitude) / 15
 
     return solar_noon
+
+
+def sonnenauf_unter_stunde(
+    datum: str, latitude: float, longitude: float
+) -> tuple[float, float]:
+    """Sonnenauf- und -untergang als lokale Stunde (Europe/Berlin, float).
+
+    Konsistent zu :func:`_solar_noon_hour` (gleiche Solar-Noon-Basis). Der halbe
+    Tagbogen folgt aus dem Stundenwinkel ``H = arccos(-tan φ · tan δ)`` mit der
+    Sonnendeklination δ (Cooper, 1969). Damit wandert das Tag-Fenster
+    saisonal — ohne externen Abruf, rein deterministisch.
+
+    Polarnähe: geht die Sonne nicht auf, sind beide Werte = Solar Noon (kein
+    Tag-Fenster); geht sie nicht unter, ist das Fenster (0, 24).
+
+    Args:
+        datum: ISO-Datum (YYYY-MM-DD).
+        latitude: Breitengrad des Standorts.
+        longitude: Längengrad des Standorts.
+
+    Returns:
+        (sonnenaufgang_stunde, sonnenuntergang_stunde) als float.
+    """
+    d = date.fromisoformat(datum)
+    noon = _solar_noon_hour(datum, longitude)
+    decl = radians(23.45) * sin(radians(360 / 365 * (d.timetuple().tm_yday - 81)))
+    cos_h = -tan(radians(latitude)) * tan(decl)
+    if cos_h >= 1.0:   # Polarnacht — Sonne bleibt unter dem Horizont
+        return (noon, noon)
+    if cos_h <= -1.0:  # Polartag — Sonne bleibt über dem Horizont
+        return (0.0, 24.0)
+    halber_tagbogen_h = degrees(acos(cos_h)) / 15.0
+    return (noon - halber_tagbogen_h, noon + halber_tagbogen_h)
 
 
 @dataclass

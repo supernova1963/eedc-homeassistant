@@ -94,6 +94,12 @@ from backend.core.berechnungen.pv_verteilung import (
     resolve_pv_je_modul,
     verteile_basis_kwh_nach_kwp,
 )
+from backend.core.berechnungen.preis_rang import (
+    GUENSTIG_TOP_N,
+    RANG_TEUER,
+    PreisRangErgebnis,
+    berechne_preis_rang,
+)
 from backend.core.berechnungen.speicher import (
     EFFIZIENZ_FENSTER_MONATE,
     MonatsEffizienz,
@@ -150,6 +156,10 @@ __all__ = [
     "pruefe_speicher_netzladung_kumulativ",
     "assert_speicher_durchsatz_konsistent",
     "pruefe_speicher_durchsatz_konsistenz",
+    "GUENSTIG_TOP_N",
+    "RANG_TEUER",
+    "PreisRangErgebnis",
+    "berechne_preis_rang",
     "SpeicherSimErgebnis",
     "simuliere_speicher_tag",
     "EFFIZIENZ_FENSTER_MONATE",

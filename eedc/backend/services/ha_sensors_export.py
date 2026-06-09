@@ -26,6 +26,7 @@ class SensorCategory(str, Enum):
     WALLBOX = "wallbox"         # Wallbox spezifisch
     STATUS = "status"           # Status-Informationen (letzter Import, etc.)
     PROGNOSE = "prognose"       # PV-Prognose (eedc-eigen, Vorausschau)
+    PREIS = "preis"             # Börsenpreis-Trigger (dynamische Tarife)
 
 
 @dataclass
@@ -438,6 +439,30 @@ PROGNOSE_SENSOREN = [
 ]
 
 # =============================================================================
+# SENSOR-DEFINITIONEN - Börsenpreis-Trigger (dynamische Tarife) — Issue #150 B
+# =============================================================================
+PREIS_SENSOREN = [
+    SensorDefinition(
+        key="eedc_preis_rang",
+        name="Börsenpreis-Rang",
+        unit="",
+        icon="mdi:sort-numeric-ascending",
+        category=SensorCategory.PREIS,
+        formel="Rang der aktuellen Stunde je Tag-/Nacht-Fenster (1=billigste … 5, 99=teuer/Rest)",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_preis_guenstige_stunden_anzahl",
+        name="Günstige Stunden",
+        unit="",
+        icon="mdi:counter",
+        category=SensorCategory.PREIS,
+        formel="Anzahl als günstig markierter Stunden (Rang 1–5) heute",
+        state_class="measurement",
+    ),
+]
+
+# =============================================================================
 # ALLE SENSOREN ZUSAMMENGEFASST
 # =============================================================================
 ALL_SENSOR_DEFINITIONS = {
@@ -448,6 +473,7 @@ ALL_SENSOR_DEFINITIONS = {
     "speicher": SPEICHER_SENSOREN,
     "status": LETZTER_IMPORT_SENSOREN,
     "prognose": PROGNOSE_SENSOREN,
+    "preis": PREIS_SENSOREN,
 }
 
 

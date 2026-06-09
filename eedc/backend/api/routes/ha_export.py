@@ -35,10 +35,11 @@ from backend.services.ha_sensors_export import (
     SensorDefinition, SensorValue, SensorCategory,
     ANLAGE_SENSOREN, INVESTITION_SENSOREN, E_AUTO_SENSOREN,
     WAERMEPUMPE_SENSOREN, SPEICHER_SENSOREN, LETZTER_IMPORT_SENSOREN,
-    PROGNOSE_SENSOREN,
+    PROGNOSE_SENSOREN, PREIS_SENSOREN,
     get_all_sensor_definitions
 )
 from backend.services.ha_export_prognose import berechne_prognose_export
+from backend.services.ha_export_preis import berechne_preis_export
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
 from backend.services.ha_mqtt_sync import resolve_mqtt_config, publish_anlage_sensors
 from backend.core.investition_parameter import (
@@ -726,6 +727,24 @@ async def calculate_anlage_sensors(
                     definition=sensor, value=value, zusatz_attribute=zusatz
                 ))
 
+    # #150 B: Börsenpreis-Trigger (Rang je Tag-/Nacht-Fenster) — Rang-Profil als Attribut.
+    preis = await berechne_preis_export(db, anlage)
+    if preis:
+        for sensor in PREIS_SENSOREN:
+            value = None
+            zusatz = {}
+            if sensor.key == "eedc_preis_rang":
+                value = preis["preis_rang"]
+                if preis.get("rang_profil"):
+                    zusatz = {"rang_profil": preis["rang_profil"]}
+            elif sensor.key == "eedc_preis_guenstige_stunden_anzahl":
+                value = preis["guenstige_stunden_anzahl"]
+
+            if value is not None:
+                sensor_values.append(SensorValue(
+                    definition=sensor, value=value, zusatz_attribute=zusatz
+                ))
+
     return sensor_values
 
 
@@ -1313,9 +1332,9 @@ async def remove_sensors_mqtt(
             detail="MQTT nicht verfügbar"
         )
 
-    # Alle Anlage-Sensoren entfernen (inkl. #150-Prognose-Sensoren)
+    # Alle Anlage-Sensoren entfernen (inkl. #150-Prognose-/Preis-Sensoren)
     removed = 0
-    for sensor in ANLAGE_SENSOREN + PROGNOSE_SENSOREN:
+    for sensor in ANLAGE_SENSOREN + PROGNOSE_SENSOREN + PREIS_SENSOREN:
         if await client.remove_sensor(sensor, anlage.id):
             removed += 1
 
