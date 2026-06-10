@@ -284,6 +284,7 @@ class AggregateResponse(BaseModel):
     grund: Optional[str] = None
     tage_eingegangen: Optional[int] = None
     bins_sonnenstand_wetter: Optional[int] = None
+    bins_stunde: Optional[int] = None
     bins_sonnenstand: Optional[int] = None
     skalar: Optional[float] = None
 
@@ -304,8 +305,9 @@ async def aggregate_endpoint(
 ) -> dict:
     """Aggregiert das Korrekturprofil aus historischen Daten neu.
 
-    Schreibt drei Profil-Stufen pro Anlage:
+    Schreibt vier Profil-Stufen pro Anlage:
     - `sonnenstand_wetter` (primär)
+    - `stunde` (Saisonbin × Stunde, Variante A)
     - `sonnenstand` (Fallback ohne Wetter)
     - `skalar` (O1+O2 als letzter Fallback)
     """
@@ -345,8 +347,8 @@ async def profile_endpoint(
 ) -> ProfilResponse:
     """Liefert alle gespeicherten Korrekturprofile einer Anlage.
 
-    Reihenfolge: Kaskaden-Reihenfolge (sonnenstand_wetter, sonnenstand,
-    stunde, skalar). Profile, die noch nie aggregiert wurden, fehlen.
+    Reihenfolge: Kaskaden-Reihenfolge (sonnenstand_wetter, stunde,
+    sonnenstand, skalar). Profile, die noch nie aggregiert wurden, fehlen.
     """
     result = await db.execute(
         select(Korrekturprofil).where(

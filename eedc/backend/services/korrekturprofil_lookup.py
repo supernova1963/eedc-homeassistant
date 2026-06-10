@@ -4,10 +4,15 @@ Korrekturprofil-Lookup für den Live-Pfad.
 Lädt pro Anlage die Korrekturprofile aus der DB (Cache, TTL 1h) und liefert
 pro stündlichem GTI-Wert den Korrekturfaktor mit Fallback-Kaskade:
 
-    sonnenstand_wetter (≥10 Datenpunkte) →
-    sonnenstand        (≥15 Datenpunkte) →
+    sonnenstand_wetter (≥10 Datenpunkte pro Bin) →
+    stunde             (≥50 Stunden Saisonbin-Belegung, Variante A) →
+    sonnenstand        (≥15 Datenpunkte pro Bin) →
     skalar             (≥7 Tage eingegangen) →
     None (Caller fällt auf den klassischen `_get_lernfaktor` zurück)
+
+`stunde` steht VOR `sonnenstand`: das Saisonbin-Profil trennt saisonale
+Verschattung (belaubt vs. kahl), die das saisonblinde Sonnenstand-Profil
+wegmittelt.
 
 Cache wird per `invalidate_cache(anlage_id)` vom Aggregator nach Re-Build
 geleert.
@@ -29,6 +34,7 @@ from backend.models.korrekturprofil import (
     PROFIL_TYP_SKALAR,
     PROFIL_TYP_SONNENSTAND,
     PROFIL_TYP_SONNENSTAND_WETTER,
+    PROFIL_TYP_STUNDE,
     Korrekturprofil,
 )
 from backend.services.wetter.solar_position import (
@@ -43,6 +49,12 @@ logger = logging.getLogger(__name__)
 MIN_DATENPUNKTE_SONNENSTAND_WETTER = 10
 MIN_DATENPUNKTE_SONNENSTAND = 15
 MIN_TAGE_SKALAR = 7
+# stunde-Stufe: Mindestbelegung pro Saisonbin (Σ Stunden-Datenpunkte über
+# alle Zellen des Monats). Konservativ höher als die Bin-Stufen, damit das
+# Saisonprofil das bewährte Sonnenstand-Profil erst bei solider Datenlage
+# übersteuert; die Zell-Qualität selbst sichert die Aggregator-Kaskade
+# (Monat ≥15 Tage → Quartal ≥15 → Gesamt ≥7).
+MIN_STUNDEN_STUNDE_SAISONBIN = 50
 
 # Cache-TTL — Aggregator läuft nightly, 1h-TTL ist großzügig genug
 CACHE_TTL_SECONDS = 3600
@@ -61,6 +73,13 @@ class _ProfilCacheEintrag:
     s_datenpunkte: dict[str, int]
     s_aufloesung_az: int
     s_aufloesung_el: int
+
+    # stunde (Variante A): faktoren = {monat: {stunde: faktor}},
+    # datenpunkte = {"monat_stunde": tage}, summen = Σ pro Monat (vorberechnet
+    # für das Mindestbelegungs-Gate).
+    st_faktoren: dict[str, dict[str, float]]
+    st_datenpunkte: dict[str, int]
+    st_saisonbin_summen: dict[str, int]
 
     skalar: Optional[float]
     skalar_tage: int
@@ -95,8 +114,15 @@ async def _lade_profile(db: AsyncSession, anlage_id: int) -> _ProfilCacheEintrag
     by_typ = {p.profil_typ: p for p in result.scalars().all()}
 
     sw = by_typ.get(PROFIL_TYP_SONNENSTAND_WETTER)
+    st = by_typ.get(PROFIL_TYP_STUNDE)
     s = by_typ.get(PROFIL_TYP_SONNENSTAND)
     sk = by_typ.get(PROFIL_TYP_SKALAR)
+
+    st_datenpunkte: dict[str, int] = (st.datenpunkte_pro_bin if st else {}) or {}
+    st_saisonbin_summen: dict[str, int] = {}
+    for key, anzahl in st_datenpunkte.items():
+        monat_key = key.split("_", 1)[0]
+        st_saisonbin_summen[monat_key] = st_saisonbin_summen.get(monat_key, 0) + int(anzahl)
 
     return _ProfilCacheEintrag(
         sw_faktoren=(sw.faktoren if sw else {}) or {},
@@ -107,6 +133,9 @@ async def _lade_profile(db: AsyncSession, anlage_id: int) -> _ProfilCacheEintrag
         s_datenpunkte=(s.datenpunkte_pro_bin if s else {}) or {},
         s_aufloesung_az=int((s.bin_definition or {}).get("azimut_aufloesung", 10)) if s else 10,
         s_aufloesung_el=int((s.bin_definition or {}).get("elevation_aufloesung", 10)) if s else 10,
+        st_faktoren=(st.faktoren if st else {}) or {},
+        st_datenpunkte=st_datenpunkte,
+        st_saisonbin_summen=st_saisonbin_summen,
         skalar=(sk.faktor_skalar if sk else None),
         skalar_tage=(sk.tage_eingegangen if sk else 0),
         geladen_am=time.monotonic(),
@@ -129,7 +158,7 @@ async def _get_eintrag(db: AsyncSession, anlage_id: int) -> _ProfilCacheEintrag:
 @dataclass
 class KorrekturfaktorResult:
     faktor: float
-    stufe: str  # "sonnenstand_wetter" | "sonnenstand" | "skalar" | "miss"
+    stufe: str  # "sonnenstand_wetter" | "stunde" | "sonnenstand" | "skalar" | "miss"
     bin_key: Optional[str] = None
     datenpunkte: Optional[int] = None
 
@@ -171,7 +200,21 @@ async def lookup_korrekturfaktor(
                     datenpunkte=n,
                 )
 
-    # Stufe 2: sonnenstand
+    # Stufe 2: stunde (Variante A — Saisonbin × Stunde, vor sonnenstand:
+    # trennt saisonale Verschattung, die die Sonnenstand-Bins wegmitteln)
+    monat_key = str(datum.month)
+    if eintrag.st_saisonbin_summen.get(monat_key, 0) >= MIN_STUNDEN_STUNDE_SAISONBIN:
+        faktor = (eintrag.st_faktoren.get(monat_key) or {}).get(str(stunde))
+        if faktor is not None:
+            zell_key = f"{monat_key}_{stunde}"
+            return KorrekturfaktorResult(
+                faktor=faktor,
+                stufe=PROFIL_TYP_STUNDE,
+                bin_key=zell_key,
+                datenpunkte=eintrag.st_datenpunkte.get(zell_key),
+            )
+
+    # Stufe 3: sonnenstand
     if bk_s is not None:
         n = eintrag.s_datenpunkte.get(bk_s, 0)
         if n >= MIN_DATENPUNKTE_SONNENSTAND:
@@ -184,7 +227,7 @@ async def lookup_korrekturfaktor(
                     datenpunkte=n,
                 )
 
-    # Stufe 3: Skalar aus Korrekturprofil-Tabelle
+    # Stufe 4: Skalar aus Korrekturprofil-Tabelle
     if eintrag.skalar is not None and eintrag.skalar_tage >= MIN_TAGE_SKALAR:
         return KorrekturfaktorResult(
             faktor=eintrag.skalar,

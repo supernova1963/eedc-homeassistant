@@ -99,6 +99,7 @@ export interface AggregateResponse {
   grund?: string | null
   tage_eingegangen?: number | null
   bins_sonnenstand_wetter?: number | null
+  bins_stunde?: number | null
   bins_sonnenstand?: number | null
   skalar?: number | null
 }

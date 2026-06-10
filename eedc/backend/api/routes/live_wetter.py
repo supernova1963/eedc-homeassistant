@@ -1125,7 +1125,7 @@ async def get_live_wetter(
 
             # Korrekturfaktor auf GTI anwenden (skaliert die Strahlung, nicht den Ertrag,
             # damit Temperaturkorrektur weiterhin korrekt greift). Pro-Stunde-Lookup mit
-            # Fallback-Kaskade (sonnenstand_wetter -> sonnenstand -> Skalar -> Legacy).
+            # Fallback-Kaskade (sonnenstand_wetter -> stunde -> sonnenstand -> Skalar -> Legacy).
             if gti is not None and pq.ist_eedc:
                 klasse_h = klassifiziere_stunde(bewoelkung_h, niederschlag_h, code)
                 forecast_datum = date.fromisoformat(t[:10])

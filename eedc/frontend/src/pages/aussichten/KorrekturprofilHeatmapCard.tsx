@@ -4,7 +4,8 @@
  * Zeigt das mehrdimensionale Korrekturprofil pro Anlage als Heatmap
  * (Azimut × Elevation, eine Kachel pro Sonnenstand-Bin). Pro Wetterklasse
  * (klar / diffus / wechselhaft) wählbar; zusätzlich „Alle" als Fallback-
- * Sicht über die `sonnenstand`-Stufe.
+ * Sicht über die `sonnenstand`-Stufe und „Saison" (Monat × Stunde) über
+ * die `stunde`-Stufe (Variante A — saisonale Verschattung).
  *
  * Empty-State, wenn noch nie aggregiert: Button stößt eine Aggregation an.
  *
@@ -24,13 +25,14 @@ interface Props {
   anlageId: number
 }
 
-type Sicht = Wetterklasse | 'alle'
+type Sicht = Wetterklasse | 'alle' | 'saison'
 
 const KLASSEN: { key: Sicht; label: string }[] = [
   { key: 'klar', label: 'Klar' },
   { key: 'diffus', label: 'Diffus' },
   { key: 'wechselhaft', label: 'Wechselhaft' },
   { key: 'alle', label: 'Alle (Fallback)' },
+  { key: 'saison', label: 'Saison (Monat × Std.)' },
 ]
 
 // Sichtbare Bin-Range — Tageslicht-relevant
@@ -39,6 +41,15 @@ const AZIMUT_MAX = 290
 const ELEVATION_MIN = 0
 const ELEVATION_MAX = 80
 const STEP = 10
+
+// Saison-Sicht: sichtbare Stunden-Slots (Backward: Slot h = [h-1, h) Uhr)
+const SAISON_STUNDE_MIN = 5
+const SAISON_STUNDE_MAX = 21
+
+const MONAT_KURZ = [
+  '', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez',
+]
 
 function faktorFarbe(f: number | null): string {
   if (f == null) return 'transparent'
@@ -111,6 +122,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
         setAggregateMsg(
           `${res.tage_eingegangen ?? 0} Tage, ` +
           `${res.bins_sonnenstand_wetter ?? 0} Bins (mit Wetter), ` +
+          `${res.bins_stunde ?? 0} Zellen (Saison), ` +
           `${res.bins_sonnenstand ?? 0} Bins (Sonnenstand), ` +
           `Skalar ${res.skalar?.toFixed(3) ?? '—'}`
         )
@@ -128,12 +140,37 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
 
   const sw = profile?.find(p => p.profil_typ === 'sonnenstand_wetter')
   const son = profile?.find(p => p.profil_typ === 'sonnenstand')
+  const stundeP = profile?.find(p => p.profil_typ === 'stunde')
   const skalar = profile?.find(p => p.profil_typ === 'skalar')
 
-  // Heatmap-Daten für aktive Sicht aufbauen
+  // Saison-Sicht (stunde-Profil): Monat × Stunde
+  const saisonHeat = useMemo(() => {
+    type Cell = { faktor: number | null; n: number }
+    const matrix: Record<number, Record<number, Cell>> = {}
+    const f = (stundeP?.faktoren as Record<string, Record<string, number>>) ?? {}
+    const n = (stundeP?.datenpunkte_pro_bin as Record<string, number>) ?? {}
+    for (const monatKey of Object.keys(f)) {
+      const monat = Number(monatKey)
+      if (!Number.isInteger(monat) || monat < 1 || monat > 12) continue
+      for (const stundeKey of Object.keys(f[monatKey] ?? {})) {
+        const stunde = Number(stundeKey)
+        matrix[monat] ??= {}
+        matrix[monat][stunde] = {
+          faktor: f[monatKey][stundeKey],
+          n: n[`${monatKey}_${stundeKey}`] ?? 0,
+        }
+      }
+    }
+    return matrix
+  }, [stundeP])
+
+  // Heatmap-Daten für aktive Sonnenstand-Sicht aufbauen
   const heat = useMemo(() => {
     type Cell = { faktor: number | null; n: number }
     const matrix: Record<number, Record<number, Cell>> = {}
+    if (sicht === 'saison') {
+      return matrix // eigene Render-Branch über saisonHeat
+    }
     if (sicht === 'alle') {
       const f = (son?.faktoren as Record<string, number>) ?? {}
       const n = (son?.datenpunkte_pro_bin as Record<string, number>) ?? {}
@@ -164,11 +201,18 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
   for (let a = AZIMUT_MIN; a <= AZIMUT_MAX; a += STEP) azimute.push(a)
   const elevationen: number[] = []
   for (let e = ELEVATION_MAX; e >= ELEVATION_MIN; e -= STEP) elevationen.push(e)
+  const saisonStunden: number[] = []
+  for (let h = SAISON_STUNDE_MIN; h <= SAISON_STUNDE_MAX; h += 1) saisonStunden.push(h)
+  const monate = Array.from({ length: 12 }, (_, i) => i + 1)
 
   const isEmpty = !loading && (!profile || profile.length === 0)
   const swFaktoren = (sw?.faktoren as Record<string, number>) ?? {}
   const sFaktoren = (son?.faktoren as Record<string, number>) ?? {}
-  const hatBins = Object.keys(swFaktoren).length > 0 || Object.keys(sFaktoren).length > 0
+  const stZellen = (stundeP?.datenpunkte_pro_bin as Record<string, number>) ?? {}
+  const hatBins =
+    Object.keys(swFaktoren).length > 0 ||
+    Object.keys(sFaktoren).length > 0 ||
+    Object.keys(stZellen).length > 0
   const nurSkalar = !loading && !isEmpty && !hatBins && skalar?.faktor_skalar != null
 
   return (
@@ -192,8 +236,10 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
 
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Pro Sonnenstand-Bin (10° Azimut × 10° Elevation) und Wetterklasse der
-        Korrekturfaktor IST/Prognose. Live-Lookup nutzt die Fallback-Kaskade
-        sonnenstand × wetter → sonnenstand → Skalar. Datenbasis:
+        Korrekturfaktor IST/Prognose; die Saison-Sicht zeigt das Profil
+        Monat × Stunde (saisonale Verschattung, z. B. belaubte Bäume).
+        Live-Lookup nutzt die Fallback-Kaskade sonnenstand × wetter →
+        Saison-Stunde → sonnenstand → Skalar. Datenbasis:
         Day-Ahead-Snapshots + stündliche Wetter-Historie.
       </div>
 
@@ -241,57 +287,111 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
           </div>
 
           {/* Heatmap */}
-          <div className="overflow-x-auto">
-            <table className="text-[10px] border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-right pr-1 font-medium text-gray-400 sticky left-0 bg-white dark:bg-gray-900">
-                    Elev↓ \ Az→
-                  </th>
-                  {azimute.map(az => (
-                    <th key={az} className="px-0.5 py-0.5 font-normal text-gray-400 text-center" style={{ minWidth: 22 }}>
-                      {az}
+          {sicht !== 'saison' ? (
+            <div className="overflow-x-auto">
+              <table className="text-[10px] border-collapse">
+                <thead>
+                  <tr>
+                    <th className="text-right pr-1 font-medium text-gray-400 sticky left-0 bg-white dark:bg-gray-900">
+                      Elev↓ \ Az→
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {elevationen.map(el => (
-                  <tr key={el}>
-                    <td className="text-right pr-1 text-gray-400 font-mono sticky left-0 bg-white dark:bg-gray-900">
-                      {el}°
-                    </td>
-                    {azimute.map(az => {
-                      const cell = heat[el]?.[az]
-                      const f = cell?.faktor ?? null
-                      const n = cell?.n ?? 0
-                      const bg = faktorFarbe(f)
-                      return (
-                        <td
-                          key={az}
-                          className="text-center align-middle font-mono text-[9px]"
-                          style={{
-                            backgroundColor: bg,
-                            color: f != null ? 'rgba(0,0,0,0.78)' : 'transparent',
-                            minWidth: 22,
-                            height: 18,
-                            border: '1px solid rgba(255,255,255,0.4)',
-                          }}
-                          title={
-                            f != null
-                              ? `Az ${az}-${az + STEP}°, El ${el}-${el + STEP}°: ×${f.toFixed(2)} (n=${n})`
-                              : ''
-                          }
-                        >
-                          {f != null ? f.toFixed(2) : ''}
-                        </td>
-                      )
-                    })}
+                    {azimute.map(az => (
+                      <th key={az} className="px-0.5 py-0.5 font-normal text-gray-400 text-center" style={{ minWidth: 22 }}>
+                        {az}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {elevationen.map(el => (
+                    <tr key={el}>
+                      <td className="text-right pr-1 text-gray-400 font-mono sticky left-0 bg-white dark:bg-gray-900">
+                        {el}°
+                      </td>
+                      {azimute.map(az => {
+                        const cell = heat[el]?.[az]
+                        const f = cell?.faktor ?? null
+                        const n = cell?.n ?? 0
+                        const bg = faktorFarbe(f)
+                        return (
+                          <td
+                            key={az}
+                            className="text-center align-middle font-mono text-[9px]"
+                            style={{
+                              backgroundColor: bg,
+                              color: f != null ? 'rgba(0,0,0,0.78)' : 'transparent',
+                              minWidth: 22,
+                              height: 18,
+                              border: '1px solid rgba(255,255,255,0.4)',
+                            }}
+                            title={
+                              f != null
+                                ? `Az ${az}-${az + STEP}°, El ${el}-${el + STEP}°: ×${f.toFixed(2)} (n=${n})`
+                                : ''
+                            }
+                          >
+                            {f != null ? f.toFixed(2) : ''}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="text-[10px] border-collapse">
+                <thead>
+                  <tr>
+                    <th className="text-right pr-1 font-medium text-gray-400 sticky left-0 bg-white dark:bg-gray-900">
+                      Monat \ Slot→
+                    </th>
+                    {saisonStunden.map(h => (
+                      <th key={h} className="px-0.5 py-0.5 font-normal text-gray-400 text-center" style={{ minWidth: 22 }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {monate.map(m => (
+                    <tr key={m}>
+                      <td className="text-right pr-1 text-gray-400 font-mono sticky left-0 bg-white dark:bg-gray-900">
+                        {MONAT_KURZ[m]}
+                      </td>
+                      {saisonStunden.map(h => {
+                        const cell = saisonHeat[m]?.[h]
+                        const f = cell?.faktor ?? null
+                        const n = cell?.n ?? 0
+                        const bg = faktorFarbe(f)
+                        return (
+                          <td
+                            key={h}
+                            className="text-center align-middle font-mono text-[9px]"
+                            style={{
+                              backgroundColor: bg,
+                              color: f != null ? 'rgba(0,0,0,0.78)' : 'transparent',
+                              minWidth: 22,
+                              height: 18,
+                              border: '1px solid rgba(255,255,255,0.4)',
+                            }}
+                            title={
+                              f != null
+                                ? `${MONAT_KURZ[m]}, Slot ${h} (${h - 1}–${h} Uhr): ×${f.toFixed(2)} (n=${n})`
+                                : ''
+                            }
+                          >
+                            {f != null ? f.toFixed(2) : ''}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Legende */}
           <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-500">
@@ -307,7 +407,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
           </div>
 
           {/* Stats */}
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-gray-600 dark:text-gray-400">
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] text-gray-600 dark:text-gray-400">
             <div>
               <div className="text-gray-400">Tage eingegangen</div>
               <div className="font-mono">{sw?.tage_eingegangen ?? 0}</div>
@@ -315,6 +415,10 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
             <div>
               <div className="text-gray-400">Bins (×Wetter)</div>
               <div className="font-mono">{Object.keys(sw?.faktoren ?? {}).length}</div>
+            </div>
+            <div>
+              <div className="text-gray-400">Zellen (Saison)</div>
+              <div className="font-mono">{Object.keys(stZellen).length}</div>
             </div>
             <div>
               <div className="text-gray-400">Bins (Sonnenstand)</div>
@@ -329,7 +433,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
           </div>
 
           <div className="mt-2 text-[10px] text-gray-400">
-            Aktualisiert: {formatDatum(sw?.aktualisiert_am ?? son?.aktualisiert_am ?? skalar?.aktualisiert_am)}
+            Aktualisiert: {formatDatum(sw?.aktualisiert_am ?? stundeP?.aktualisiert_am ?? son?.aktualisiert_am ?? skalar?.aktualisiert_am)}
           </div>
         </>
       )}

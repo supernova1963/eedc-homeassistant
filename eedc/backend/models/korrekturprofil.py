@@ -35,10 +35,14 @@ PROFIL_TYP_SONNENSTAND = "sonnenstand"
 PROFIL_TYP_STUNDE = "stunde"  # Saisonbin × Stunde (klassische Variante-A-Logik)
 PROFIL_TYP_SKALAR = "skalar"  # Skalar-Lernfaktor mit O1+O2
 
+# Lookup-Kaskade: `stunde` steht VOR `sonnenstand` — das Saisonbin-Profil
+# trennt saisonale Verschattung (belaubt vs. kahl), die das saisonblinde
+# Sonnenstand-Profil prinzipbedingt wegmittelt. `sonnenstand_wetter` bleibt
+# vorn (wetterstratifiziert, feinste Physik).
 PROFIL_TYP_KASKADE = (
     PROFIL_TYP_SONNENSTAND_WETTER,
-    PROFIL_TYP_SONNENSTAND,
     PROFIL_TYP_STUNDE,
+    PROFIL_TYP_SONNENSTAND,
     PROFIL_TYP_SKALAR,
 )
 
@@ -80,19 +84,25 @@ class Korrekturprofil(Base):
     #   {"azimut_aufloesung": 10, "elevation_aufloesung": 10,
     #    "wetterklassen": ["klar", "diffus", "wechselhaft"]}
     # sonnenstand: {"azimut_aufloesung": 10, "elevation_aufloesung": 10}
-    # stunde: {"saisonbin": "monat" | "quartal" | "gesamt"}
+    # stunde: {"saisonbin": "monat", "min_tage_monat": 15,
+    #          "min_tage_quartal": 15, "min_tage_gesamt": 7,
+    #          "gesamt_fenster_tage": 30}
+    #   — Schlüsselraum immer Monat (1-12); die Saisonbin-Kaskade
+    #   Monat → Quartal → Gesamt (rollierend) ist zur Aggregationszeit
+    #   pro Zelle aufgelöst.
     # skalar: {"variante": "legacy" | "o12"}
     bin_definition: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # Korrektur-Faktoren pro Bin.
     # sonnenstand_wetter: {"110_30_klar": 0.72, "110_30_diffus": 0.95, ...}
     # sonnenstand: {"110_30": 0.80, ...}
-    # stunde: {"4": {"7": 0.85, ...}, ...}  (Saisonbin → Stunde → Faktor)
+    # stunde: {"4": {"7": 0.85, ...}, ...}  (Monat → Stunde → Faktor)
     # skalar: {"value": 1.01}
     faktoren: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # Datenpunkte pro Bin — Basis für Fallback-Kaskade
     # ({bin_key: anzahl_stunden}). Bei Skalar: {"value": gesamt_tage}.
+    # Bei stunde: {"4_7": tage_im_aufgeloesten_pool, ...} (Monat_Stunde).
     datenpunkte_pro_bin: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # Aggregator-Metadaten

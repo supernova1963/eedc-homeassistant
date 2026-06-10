@@ -1,12 +1,14 @@
 """
 Korrekturprofil-Aggregator.
 
-Berechnet pro Anlage drei Lernfaktor-Profile (siehe
+Berechnet pro Anlage vier Lernfaktor-Profile (siehe
 docs/KONZEPT-KORREKTURPROFIL.md):
 
 1. `sonnenstand_wetter` — Faktor pro `(azimut_bin, elevation_bin, wetterklasse)`
-2. `sonnenstand` — Faktor pro `(azimut_bin, elevation_bin)` als Fallback
-3. `skalar` — O1+O2-Skalar als letzter Fallback
+2. `stunde` — Faktor pro `(saisonbin, stunde)` (Variante A); trennt saisonale
+   Verschattung (belaubt vs. kahl), die die Sonnenstand-Bins wegmitteln
+3. `sonnenstand` — Faktor pro `(azimut_bin, elevation_bin)` als Fallback
+4. `skalar` — O1+O2-Skalar als letzter Fallback
 
 Datenquelle:
 - Tages-Day-Ahead-Snapshot `TagesZusammenfassung.pv_prognose_stundenprofil`
@@ -37,6 +39,7 @@ from backend.models.korrekturprofil import (
     PROFIL_TYP_SKALAR,
     PROFIL_TYP_SONNENSTAND,
     PROFIL_TYP_SONNENSTAND_WETTER,
+    PROFIL_TYP_STUNDE,
     Korrekturprofil,
 )
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
@@ -62,9 +65,21 @@ DEFAULT_LOOKBACK_TAGE = 730
 FAKTOR_CLAMP_MIN = 0.5
 FAKTOR_CLAMP_MAX = 1.3
 
+# Saisonbin-Kaskade der stunde-Stufe (Variante A) — analog Skalar-Kaskade:
+# Monat (gleicher Kalendermonat alle Jahre) → Quartal → Gesamt (letzte
+# 30 Tage rollierend). Schwellen in Tagen pro (Saisonbin, Stunde)-Zelle.
+ST_MIN_TAGE_MONAT = 15
+ST_MIN_TAGE_QUARTAL = 15
+ST_MIN_TAGE_GESAMT = 7
+ST_GESAMT_FENSTER_TAGE = 30
+
 
 def _clamp(faktor: float) -> float:
     return max(FAKTOR_CLAMP_MIN, min(FAKTOR_CLAMP_MAX, faktor))
+
+
+def _quartal_von_monat(monat: int) -> int:
+    return (monat - 1) // 3 + 1
 
 
 def _produktionsgewichtet(sum_ist: float, sum_prog: float) -> Optional[float]:
@@ -268,11 +283,15 @@ async def aggregiere_korrekturprofil_anlage(
     lookback_tage: int = DEFAULT_LOOKBACK_TAGE,
     azimut_breite: int = AZIMUT_BIN_BREITE_DEFAULT,
     elevation_breite: int = ELEVATION_BIN_BREITE_DEFAULT,
+    heute: Optional[date] = None,
 ) -> dict:
-    """Aggregiert die drei Korrekturprofil-Stufen für eine Anlage.
+    """Aggregiert die vier Korrekturprofil-Stufen für eine Anlage.
 
     Idempotent: bestehende Profile derselben `(anlage_id, NULL,
     quelle, profil_typ)`-Kombination werden überschrieben.
+
+    `heute` dient als Stichtag für Lookback und Gesamt-Fenster
+    (Default: heutiges Datum; injizierbar für deterministische Tests).
 
     Liefert ein Status-Dict (für Logging und Endpoint-Response).
     """
@@ -282,7 +301,8 @@ async def aggregiere_korrekturprofil_anlage(
             "grund": "Anlage hat keine Koordinaten — Sonnenstand nicht berechenbar",
         }
 
-    heute = date.today()
+    if heute is None:
+        heute = date.today()
     von = heute - timedelta(days=lookback_tage)
 
     prog_pro_tag = await _lade_tagesprognose(db, anlage.id, von, heute)
@@ -291,6 +311,14 @@ async def aggregiere_korrekturprofil_anlage(
     sw_acc: dict[str, _BinAccumulator] = {}  # sonnenstand_wetter
     s_acc: dict[str, _BinAccumulator] = {}  # sonnenstand only
     tage_genutzt: set[date] = set()
+
+    # stunde-Stufe (Variante A): drei Pool-Granularitäten parallel füllen,
+    # die Saisonbin-Kaskade wird nach dem Loop pro Zelle aufgelöst.
+    st_monat_acc: dict[tuple[int, int], _BinAccumulator] = {}    # (monat, stunde)
+    st_quartal_acc: dict[tuple[int, int], _BinAccumulator] = {}  # (quartal, stunde)
+    st_gesamt_acc: dict[int, _BinAccumulator] = {}               # stunde
+    st_tage: set[date] = set()
+    st_gesamt_von = heute - timedelta(days=ST_GESAMT_FENSTER_TAGE)
 
     if not prog_pro_tag:
         # Kein Day-Ahead-Snapshot im Zeitraum — die Bin-Stufen bleiben leer,
@@ -325,6 +353,16 @@ async def aggregiere_korrekturprofil_anlage(
         prog = prog_profil[stunde] if 0 <= stunde < 24 else None
         if prog is None or prog < MIN_LEISTUNG_KW:
             continue
+
+        # stunde-Stufe: braucht keinen Sonnenstand — vor dem bin_key-Filter
+        # akkumulieren, damit auch Dämmerungs-Slots einfließen (wie Skalar).
+        st_monat_acc.setdefault((datum.month, stunde), _BinAccumulator()).add(pv_kw, prog)
+        st_quartal_acc.setdefault(
+            (_quartal_von_monat(datum.month), stunde), _BinAccumulator()
+        ).add(pv_kw, prog)
+        if datum >= st_gesamt_von:
+            st_gesamt_acc.setdefault(stunde, _BinAccumulator()).add(pv_kw, prog)
+        st_tage.add(datum)
 
         sp = solar_position_lokal(anlage.latitude, anlage.longitude, datum, stunde)
         bk = bin_key(sp.azimut, sp.elevation, azimut_breite, elevation_breite)
@@ -364,6 +402,44 @@ async def aggregiere_korrekturprofil_anlage(
         faktoren=sw_faktoren,
         datenpunkte_pro_bin=sw_datenpunkte,
         tage_eingegangen=len(tage_genutzt),
+    )
+
+    # ── stunde (Variante A: Saisonbin × Stunde) ───────────────────────────
+    # Pro Zelle (monat, stunde) die feinste ausreichend belegte Granularität
+    # wählen: Monat → Quartal → Gesamt (rollierend). Der Schlüsselraum bleibt
+    # dadurch immer Monat 1-12, der Lookup braucht keine Pool-Logik mehr.
+    st_faktoren: dict[str, dict[str, float]] = {}
+    st_datenpunkte: dict[str, int] = {}
+    for monat in range(1, 13):
+        quartal = _quartal_von_monat(monat)
+        for h in range(24):
+            acc = st_monat_acc.get((monat, h))
+            if acc is None or acc.anzahl < ST_MIN_TAGE_MONAT:
+                acc = st_quartal_acc.get((quartal, h))
+                if acc is None or acc.anzahl < ST_MIN_TAGE_QUARTAL:
+                    acc = st_gesamt_acc.get(h)
+                    if acc is None or acc.anzahl < ST_MIN_TAGE_GESAMT:
+                        continue
+            raw = _produktionsgewichtet(acc.sum_ist, acc.sum_prog)
+            if raw is None:
+                continue
+            st_faktoren.setdefault(str(monat), {})[str(h)] = round(_clamp(raw), 3)
+            st_datenpunkte[f"{monat}_{h}"] = acc.anzahl
+
+    await _upsert_profil(
+        db,
+        anlage_id=anlage.id,
+        profil_typ=PROFIL_TYP_STUNDE,
+        bin_definition={
+            "saisonbin": "monat",
+            "min_tage_monat": ST_MIN_TAGE_MONAT,
+            "min_tage_quartal": ST_MIN_TAGE_QUARTAL,
+            "min_tage_gesamt": ST_MIN_TAGE_GESAMT,
+            "gesamt_fenster_tage": ST_GESAMT_FENSTER_TAGE,
+        },
+        faktoren=st_faktoren,
+        datenpunkte_pro_bin=st_datenpunkte,
+        tage_eingegangen=len(st_tage),
     )
 
     # ── sonnenstand (Fallback) ────────────────────────────────────────────
@@ -415,7 +491,12 @@ async def aggregiere_korrekturprofil_anlage(
     invalidate_cache(anlage.id)
 
     # Falls weder Bins noch Skalar berechenbar waren → Skipped
-    if not sw_faktoren and not s_faktoren and skalar_faktor is None:
+    if (
+        not sw_faktoren
+        and not st_faktoren
+        and not s_faktoren
+        and skalar_faktor is None
+    ):
         return {
             "status": "skipped",
             "grund": "Keine Tagesdaten (weder pv_prognose_kwh noch IST verfügbar)",
@@ -427,10 +508,11 @@ async def aggregiere_korrekturprofil_anlage(
 
     logger.info(
         "Korrekturprofil Anlage %s: %d Tage, %d sonnenstand_wetter-Bins, "
-        "%d sonnenstand-Bins, Skalar=%s (n=%d)",
+        "%d stunde-Zellen, %d sonnenstand-Bins, Skalar=%s (n=%d)",
         anlage.id,
         tage_aussagekraft,
         len(sw_faktoren),
+        len(st_datenpunkte),
         len(s_faktoren),
         skalar_faktor,
         n_skalar,
@@ -440,6 +522,7 @@ async def aggregiere_korrekturprofil_anlage(
         "status": "ok",
         "tage_eingegangen": tage_aussagekraft,
         "bins_sonnenstand_wetter": len(sw_faktoren),
+        "bins_stunde": len(st_datenpunkte),
         "bins_sonnenstand": len(s_faktoren),
         "skalar": skalar_faktor,
     }
