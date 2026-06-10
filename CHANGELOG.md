@@ -11,6 +11,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **Saisonal aufgelöste Prognose-Korrektur (Verschattung).** Das Korrekturprofil lernt jetzt zusätzlich einen Faktor pro **Monat × Stunde** — für saisonale Verschattung (z. B. belaubte Bäume), die das Sonnenstand-Profil prinzipbedingt nicht trennen kann (gleicher Sonnenstand im belaubten Spätsommer und im kahlen Frühjahr wurde gemittelt). Neue Stufe in der Korrektur-Kaskade (Sonnenstand×Wetter → **Saison-Stunde** → Sonnenstand → Skalar), aktiv ab ≥50 Stunden-Datenpunkten je Monats-Bin; dünn belegte Monate fallen auf Quartal bzw. rollierende 30 Tage zurück (bewusst nicht all-time — sonst würden nie gesehene Monate mit saisonfremden Faktoren gefüllt). Diagnose: neuer Tab „Saison (Monat × Std.)" in der Korrekturprofil-Heatmap. Gilt nur für die eedc-Prognose (Solcast/SFML bleiben pur), Day-Ahead-Linie unverändert, keine DB-Migration. Anlass: Dirk (PN 2026-05-31).
 - **Dokumente: mehrere Berichte als ein ZIP herunterladen (#121-Rest).** In Einstellungen → Stammdaten → Anlage → Dokumente lassen sich die PDF-Berichte jetzt per Checkbox auswählen und ab zwei Stück gesammelt als ZIP laden (Dateinamen wie die Einzel-Downloads, inkl. Jahres-Auswahl). Schlägt ein Bericht fehl, gibt es kein halbes ZIP — die Fehlermeldung benennt den betroffenen Bericht.
 
 ### Changed
