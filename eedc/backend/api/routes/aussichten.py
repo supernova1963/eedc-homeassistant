@@ -1335,7 +1335,9 @@ async def get_finanz_prognose(
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == bkw.id and bkw.ist_aktiv_im_monat(jahr, monat):
                 bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
-                bisherige_bkw_ersparnis += bkw_ev * netzbezug_preis / 100
+                md = monatsdaten_dict.get((jahr, monat))
+                md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis) if md else netzbezug_preis
+                bisherige_bkw_ersparnis += bkw_ev * md_preis / 100
 
     # Sonstige Positionen für ALLE Investitionstypen (Wallbox-Erstattungen, THG-Quote, BHKW etc.)
     bisherige_sonstige_netto = 0.0
