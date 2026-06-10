@@ -22,6 +22,7 @@ try:
 except ImportError:
     MQTT_AVAILABLE = False
 
+from backend.core.config import APP_VERSION
 from backend.services.ha_sensors_export import SensorDefinition, SensorValue
 
 logger = logging.getLogger(__name__)
@@ -115,16 +116,6 @@ class MQTTClient:
                 "error": str(e)
             }
 
-    def _build_device_info(self, anlage_id: int, anlage_name: str) -> dict:
-        """Baut die Device-Info für MQTT Discovery."""
-        return {
-            "identifiers": [f"eedc_anlage_{anlage_id}"],
-            "name": f"eedc - {anlage_name}",
-            "manufacturer": "eedc",
-            "model": "PV-Auswertung",
-            "sw_version": "1.0.0",
-        }
-
     def _build_discovery_payload(
         self,
         sensor: SensorDefinition,
@@ -180,7 +171,7 @@ class MQTTClient:
             "name": device_name,
             "manufacturer": "eedc",
             "model": "PV-Auswertung",
-            "sw_version": "0.9.2",
+            "sw_version": APP_VERSION,
         }
 
         return payload
