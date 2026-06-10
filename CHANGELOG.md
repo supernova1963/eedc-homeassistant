@@ -12,10 +12,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Added
 
 - **Geräte-Connector: täglicher automatischer Zählerstand-Abruf (#300).** Neuer Scheduler-Job `connector_daily_poll` (täglich 03:30) liest die kWh-Zählerstände aller Anlagen mit konfiguriertem Connector und speichert sie als Snapshot — **unabhängig vom MQTT-Inbound**. Bisher pollte nur die Connector-MQTT-Bridge automatisch, und die startet nur mit aktivem MQTT-Inbound; ohne MQTT füllte sich der Monatsabschluss-Vorschlag nur über manuelles „Aktuelle Daten anfordern" (Safi105, Fronius Gen24). Ein Snapshot pro Tag genügt, weil Monatsabschluss und `/connectors/monatswerte` die Monats-Differenz read-seitig aus den Snapshot-Randwerten berechnen.
+- **Jahresbericht: eigene Batteriespeicher-Sektion (#303).** Der Jahres-/Anlagenbericht weist den Speicher jetzt vollständig aus — Kapazität, Ladung/Entladung, Vollzyklen und Wirkungsgrad. Bisher fehlte der Speicher im WeasyPrint-Bericht (kingcap1).
 
 ### Changed
 
 - **PDF-Erzeugung: reportlab vollständig entfernt (Phase 5, #303).** WeasyPrint ist die einzige PDF-Engine. Der seit v3.37.0 standardmäßig nie mehr erreichte reportlab-Notausgang (Jahresbericht + Infothek-Dossier) ist abgebaut, ebenso die Add-on-Option `pdf_engine` (bestehende Konfigurationen mit gesetzter Option bleiben gültig, der Wert wird ignoriert). Der alte Notausgang trug noch die #326-Altlast (EV-Ersparnis × statischer Tarifpreis, Eigenverbrauch ohne Speicher/V2H) — die WeasyPrint-Berichte rechnen durchgängig über die SoT-Helper.
+
+### Fixed
+
+- **Durchgängig konsistente Finanzwerte bei dynamischen Stromtarifen (#326).** Cockpit, Jahresbericht-PDF und HA-Export rechneten Eigenverbrauchs-Ersparnis, Netto-Ertrag und ROI jeweils selbst — teils Gesamt-Eigenverbrauch × Durchschnittspreis statt Monat für Monat × Monatspreis, teils ohne Speicher-/V2H-Anteil oder ohne „Sonstige Erträge & Ausgaben". Bei Flex-Tarifen (Tibber/aWATTar/EPEX) liefen die Sichten dadurch auseinander (rilmor-mhrs, #326). Jetzt rechnen alle aggregierenden Read-Sites über den gemeinsamen SoT-Helper `core/berechnungen/finanz_aggregat.py` (per-Monat-Flexpreis, §51-Einspeise-Erlös, Sonstige Positionen) — identische Werte in allen Sichten; ein Symmetrie-Test sichert Cockpit == PDF == HA-Export ab.
 
 ### Intern (nicht anwender-sichtbar)
 

@@ -1,11 +1,25 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.40.0)
+> **Stand:** Juni 2026 (v3.41.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.41.0 — Überall dieselben Finanzwerte & täglicher Connector-Abruf (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Cockpit, Auswertungen und Anlagenbericht zeigen jetzt dieselben Finanzwerte.** Bei dynamischen Stromtarifen (Tibber, aWATTar, EPEX) konnten Eigenverbrauchs-Ersparnis, Netto-Ertrag und Amortisation je nach Ansicht unterschiedlich ausfallen, weil jede Sicht ihre eigene Rechnung hatte. Jetzt rechnen alle über **eine gemeinsame Berechnung** — Monat für Monat mit dem jeweiligen Monatspreis, inklusive Speicher-/V2H-Anteil und deiner „Sonstigen Erträge & Ausgaben". Was du im Cockpit siehst, steht genauso im PDF und im HA-Export.
+- **Der Geräte-Connector holt deine Zählerstände jetzt einmal täglich automatisch** — auch ohne aktivierten MQTT-Inbound. Bisher füllte sich der Monatsabschluss-Vorschlag ohne MQTT nur, wenn du manuell „Aktuelle Daten anfordern" geklickt hast.
+- **Anlagenbericht: Batteriespeicher jetzt in der Analyse.** Der Bericht enthält eine eigene Speicher-Sektion mit Kapazität, Ladung/Entladung, Vollzyklen und Wirkungsgrad.
+
+### Gut zu wissen
+
+- **Die alte PDF-Engine (reportlab) ist entfernt** — alle Berichte kommen jetzt aus derselben Engine (WeasyPrint), die seit v3.37.0 ohnehin der Standard war. Die Add-on-Option `pdf_engine` ist damit ohne Funktion; bestehende Konfigurationen bleiben gültig, der Wert wird einfach ignoriert.
 
 ---
 
