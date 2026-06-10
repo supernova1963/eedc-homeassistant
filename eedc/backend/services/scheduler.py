@@ -97,6 +97,10 @@ class EEDCScheduler:
                     id="mqtt_auto_publish",
                     name=f"MQTT Auto-Publish (alle {interval} Min)",
                     replace_existing=True,
+                    # Start-Publish: IntervalTrigger feuert sonst erst nach einem
+                    # vollen Intervall — neue Sensor-Definitionen wären nach einem
+                    # Add-on-Update bis zu 60 min unsichtbar (Rainer/Gernot 2026-06-10).
+                    next_run_time=datetime.now() + timedelta(minutes=2),
                 )
                 logger.info(f"MQTT Auto-Publish aktiviert: alle {interval} Minuten")
 

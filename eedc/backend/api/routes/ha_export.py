@@ -7,7 +7,7 @@ Unterstützt zwei Methoden:
 2. MQTT Discovery - Native HA-Entitäten via MQTT Auto-Discovery
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -1190,6 +1190,8 @@ async def get_anlage_sensors(
 @router.get("/yaml/{anlage_id}", response_model=HAYamlSnippet)
 async def get_ha_yaml_snippet(
     anlage_id: int,
+    request: Request,
+    host: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1208,13 +1210,39 @@ async def get_ha_yaml_snippet(
 
     sensor_values = await calculate_anlage_sensors(db, anlage)
 
+    # Erreichbaren Host bestimmen: expliziter ?host=-Override → Request-Host
+    # (direkter Aufruf, z. B. 192.168.1.10:8099) → Platzhalter. Hinter
+    # HA-Ingress zeigt der Request-Host auf den HA-Proxy — der ist für die
+    # rest-Integration nicht nutzbar, dort bleibt nur der Platzhalter.
+    # HA wertet in `rest: resource:` KEINE Templates aus; das frühere
+    # `{{ eedc_addon_host }}` erzeugte 1:1 eingefügt eine ungültige URL und
+    # damit gar keine Entitäten (rapahl 2026-06-10).
+    ist_ingress = "x-ingress-path" in request.headers
+    request_host = request.headers.get("host", "")
+    if host:
+        eedc_host = host if ":" in host else f"{host}:8099"
+    elif request_host and not ist_ingress:
+        eedc_host = request_host
+    else:
+        eedc_host = "<EEDC-IP>:8099"
+    host_ist_platzhalter = eedc_host.startswith("<")
+
     # YAML generieren
     yaml_lines = [
-        "# eedc Sensoren für Home Assistant",
-        "# Füge dies in deine configuration.yaml ein",
+        "# eedc Sensoren für Home Assistant (REST-Integration)",
+        "# Füge dies in deine configuration.yaml ein und starte Home Assistant neu.",
+    ]
+    if host_ist_platzhalter:
+        yaml_lines += [
+            "# WICHTIG: <EEDC-IP> unten durch die Adresse ersetzen, unter der dein",
+            "#          eedc direkt erreichbar ist (z. B. 192.168.1.10:8099).",
+        ]
+    yaml_lines += [
+        "# Add-on-Hinweis: Port 8099 muss in den Add-on-Netzwerkeinstellungen",
+        "# freigegeben sein, sonst kann Home Assistant diesen Endpunkt nicht erreichen.",
         "",
         "rest:",
-        f'  - resource: "http://{{{{ eedc_addon_host }}}}:8099/api/ha/export/sensors/{anlage_id}"',
+        f'  - resource: "http://{eedc_host}/api/ha/export/sensors/{anlage_id}"',
         "    scan_interval: 3600  # Alle Stunde aktualisieren",
         "    sensor:",
     ]
@@ -1225,7 +1253,8 @@ async def get_ha_yaml_snippet(
         yaml_lines.append(f'      - name: "eedc {safe_name}"')
         yaml_lines.append(f'        unique_id: "eedc_{anlage_id}_{sensor.key}"')
         yaml_lines.append(f'        value_template: "{{{{ value_json.sensors | selectattr(\'key\', \'eq\', \'{sensor.key}\') | map(attribute=\'value\') | first }}}}"')
-        yaml_lines.append(f'        unit_of_measurement: "{sensor.unit}"')
+        if sensor.unit:
+            yaml_lines.append(f'        unit_of_measurement: "{sensor.unit}"')
         if sensor.device_class:
             yaml_lines.append(f'        device_class: "{sensor.device_class}"')
         if sensor.state_class:
@@ -1234,10 +1263,21 @@ async def get_ha_yaml_snippet(
 
     yaml = "\n".join(yaml_lines)
 
+    if host_ist_platzhalter:
+        hinweis = (
+            "eedc läuft hinter Ingress: Bitte <EEDC-IP> durch die direkte Adresse "
+            "ersetzen und im HA-Add-on Port 8099 in den Netzwerk-Einstellungen freigeben."
+        )
+    else:
+        hinweis = (
+            f"Host {eedc_host} wurde aus deiner Aufruf-Adresse übernommen. "
+            "Im HA-Add-on muss Port 8099 in den Netzwerk-Einstellungen freigegeben sein."
+        )
+
     return HAYamlSnippet(
         yaml=yaml,
         sensor_count=len(sensor_values),
-        hinweis="Ersetze {{ eedc_addon_host }} mit der IP deines HA oder nutze 'homeassistant.local'"
+        hinweis=hinweis
     )
 
 
