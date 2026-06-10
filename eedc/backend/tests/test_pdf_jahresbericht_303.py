@@ -195,7 +195,10 @@ async def test_jahresbericht_summary_ist_summe_der_monats_zeilen(db):
     Pro Monat: EV = max(0, 1000−400−300) + 250 = 550 kWh, Flexpreis 20+m ct.
     EV-Ersparnis = Σ 550 × (20+m)/100 = 5,5 × 318 = 1.749,00 €
     Einspeise    = 12 × 400 × 0,082 (Fallback-Vergütung) = 393,60 €
-    Sonstige     = +200 − 150 = +50 € (nur Summary, nicht in den Monats-Zeilen)
+    Sonstige     = +200 − 150 = +50 € — in der Sonstige-Monatszeile UND im
+                   Summary (#326-Folge rilmor-mhrs: die Monats-Ertragsspalte
+                   muss die Sonstigen enthalten, sonst geht sie nicht auf den
+                   Summary auf und ein negativer Monat erscheint positiv).
     Netto        = 393,60 + 1.749,00 + 50 = 2.192,60 €
     """
     anlage_id = await _seed(db, mit_flex_und_sonstige=True)
@@ -208,9 +211,21 @@ async def test_jahresbericht_summary_ist_summe_der_monats_zeilen(db):
         sum(z["einsp_erloes_euro"] for z in zeilen), abs=0.01)
     assert kpis["ev_ersparnis_euro"] == pytest.approx(
         sum(z["ev_ersparnis_euro"] for z in zeilen), abs=0.01)
+    # #326: Sonstige stecken jetzt pro Monat in `netto_ertrag_euro` der Zeile —
+    # die Monatsspalte summiert sich direkt (ohne Sonder-Aufschlag) auf den
+    # Summary-Netto.
+    assert kpis["sonstige_netto_euro"] == pytest.approx(
+        sum(z["sonstige_netto_euro"] for z in zeilen), abs=0.01)
     assert kpis["netto_ertrag_euro"] == pytest.approx(
-        sum(z["netto_ertrag_euro"] for z in zeilen) + kpis["sonstige_netto_euro"],
-        abs=0.01)
+        sum(z["netto_ertrag_euro"] for z in zeilen), abs=0.01)
+
+    # #326 rilmor-mhrs: die Sonstige-Position (Monat 5) wird der richtigen
+    # Monatszeile zugeordnet — nicht über alle Monate verschmiert.
+    mai = next(z for z in zeilen if z["monat"] == 5)
+    assert mai["sonstige_netto_euro"] == pytest.approx(50.0)
+    assert all(
+        z["sonstige_netto_euro"] == 0 for z in zeilen if z["monat"] != 5
+    )
 
     # Absolutwerte (fangen symmetrische Fehler auf beiden Seiten)
     assert kpis["ev_ersparnis_euro"] == pytest.approx(1749.0, abs=0.05)

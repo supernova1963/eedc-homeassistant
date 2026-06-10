@@ -180,6 +180,18 @@ async def build_jahresbericht_context(
             key = (imd.jahr, imd.monat)
             pv_by_year_month[key] = pv_by_year_month.get(key, 0) + pv
 
+    # #326: Sonstige Erträge/Ausgaben pro Jahr/Monat — damit die Monats-
+    # Ertragsspalte deckungsgleich mit dem Jahres-Netto ist (rilmor-mhrs:
+    # Dez 2022 musste negativ werden, Monatszeilen müssen auf den Summary
+    # aufgehen). Σ dieser Werte == `sonstige_netto_gesamt` (jedes IMD hat
+    # genau ein (jahr, monat)).
+    sonstige_by_ym: dict[tuple[int, int], float] = {}
+    for imd in all_imd:
+        netto = berechne_sonstige_netto(imd.verbrauch_daten)
+        if netto:
+            key = (imd.jahr, imd.monat)
+            sonstige_by_ym[key] = sonstige_by_ym.get(key, 0) + netto
+
     # ── 7. Aggregate Wärmepumpe / E-Mob / Speicher ──────────────────────
     pv_gesamt = 0.0
     einsp_gesamt = 0.0
@@ -283,6 +295,7 @@ async def build_jahresbericht_context(
         m_preis = resolve_netzbezug_preis_cent(md, netzbezug_cent)
         einsp_eur = m_erloes.erloes_euro
         ev_eur = ev * m_preis / 100
+        sonstige_eur = sonstige_by_ym.get((j, m), 0)
         finanz_zeilen.append(FinanzMonatsZeile(
             einspeisung_kwh=einsp,
             netzbezug_kwh=netz,
@@ -311,13 +324,18 @@ async def build_jahresbericht_context(
             "spezifischer_ertrag": spez,
             "einsp_erloes_euro": einsp_eur,
             "ev_ersparnis_euro": ev_eur,
-            "netto_ertrag_euro": einsp_eur + ev_eur,
+            "sonstige_netto_euro": sonstige_eur,
+            "netto_ertrag_euro": einsp_eur + ev_eur + sonstige_eur,
         }
 
     if ist_gesamtzeitraum:
         for j in alle_jahre:
             for m in range(1, 13):
-                if (j, m) in md_by_year_month or (j, m) in pv_by_year_month:
+                if (
+                    (j, m) in md_by_year_month
+                    or (j, m) in pv_by_year_month
+                    or (j, m) in sonstige_by_ym
+                ):
                     monats_zeilen.append(await _zeile_fuer(j, m))
     else:
         for m in range(1, 13):

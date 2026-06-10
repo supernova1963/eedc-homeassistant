@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Anlagen-/Jahresbericht (PDF): „Sonstige Erträge & Ausgaben" durchgängig (#326-Folge, rilmor-mhrs).** Cockpit und Auswertung berücksichtigten die manuell gepflegten sonstigen Positionen bereits, der PDF-Bericht aber nur unvollständig: die Monats-Ertragsspalte rechnete sie nicht ein, weshalb ein per saldo negativer Monat (z. B. größere Sonderausgabe im Dezember) positiv erschien und die Monatszeilen sich **nicht** auf den ausgewiesenen Jahres-Netto-Ertrag summierten. Jetzt steckt die Sonstige-Position pro Monat in der jeweiligen Ertragszeile (richtige Monatszuordnung, negative Monate werden negativ) und die Finanz-Übersicht weist „Sonstige Erträge/Ausgaben" als eigene Zeile aus, sofern vorhanden. Symmetrie-Test erweitert: Σ Monats-Netto == Summary-Netto inkl. Sonstiger.
+
 ### Intern (nicht anwender-sichtbar)
 
 - **Live-Tagesverlauf konsistent mit HA-LTS-SoT (#135-Folge):** Im Add-on-Modus speist die Butterfly-Kurve ihre Slots jetzt aus `statistics_short_term` (5-Min) statt der rohen Power-History — dieselbe SoT-Familie wie die Heute-kWh-Kacheln (`safe_get_tages_kwh`). Pro Serie: kWh-Zähler → 5-Min-`sum`-Deltas → Leistung (deckungsgleich mit der Kachel, Σ Slot-Energie == Tages-Zähler-Delta exakt); reine Power-Sensoren → `short_term.mean`. Daten-getriebener Fallback je Serie auf die rohe History (kein Feature-Flag); Standalone/MQTT-Pfad und Response-Format unverändert (kein Frontend-Touch). Neue Aggregat-Logik im Berechnungs-Layer (`core/berechnungen/live_tagesverlauf_5min.py` + `ha_statistics_service.get_short_term_5min_for_day`, ADR-001), Konsistenz-/Reset-/Fallback-Tests. Letzter Slice vor IA-V4 Phase 0.
