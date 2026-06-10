@@ -831,6 +831,8 @@ Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
 
 > **Komponenten-Beiträge in MQTT-Sensoren (v3.19.1):** `jahres_ersparnis_euro`, `roi_prozent` und `amortisation_jahre` rechnen die Alternativkosten-Ersparnisse von Wärmepumpe (vs. Gas/Öl), E-Auto (vs. Benzin) und Balkonkraftwerk mit ein — analog zu Aussichten → Finanzen. Vorher kam bei Anlagen mit WP/E-Auto eine absurd lange Amortisation heraus (z. B. 188,6 Jahre, weil nur PV-Netto-Ertrag gezählt wurde).
 
+> **Sonstige Erträge & Ausgaben (#326):** Der exportierte Netto-Ertrag enthält jetzt auch die manuell gepflegten „Sonstige Erträge & Ausgaben" — deckungsgleich mit Cockpit, Auswertungen und Jahresbericht. Beachte: `jahres_ersparnis_euro`/`roi_prozent` werden **annualisiert** (auf 12 Monate hochgerechnet); eine **einmalige** Sonstige-Position (z. B. THG-Quote) wird dabei wie ein wiederkehrender Betrag aufs Jahr projiziert. Die Cockpit-ROI rechnet Sonstige dagegen nur kumulativ — die beiden ROI-Werte können bei Einmal-Positionen daher leicht abweichen, obwohl der Netto-Ertrag-Sensor identisch ist.
+
 ### 5.7 Alternative: REST API
 
 Statt MQTT kannst du auch die REST API nutzen:
