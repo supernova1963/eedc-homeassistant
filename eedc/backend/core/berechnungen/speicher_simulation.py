@@ -20,6 +20,25 @@ from typing import Optional, Sequence
 
 
 @dataclass
+class StundenBilanz:
+    """Energie-Bilanz einer simulierten Stunde (kWh; SoC in %).
+
+    `netzbezug_kwh`/`einspeisung_kwh` ergeben sich als Rest nach der Batterie:
+    Überschuss, der nicht mehr in den Speicher passt → Einspeisung; Defizit, das
+    der Speicher nicht mehr deckt → Netzbezug. Ohne Speicher (``soc_prozent``
+    None) ist es die direkte Bilanz (Überschuss = Einspeisung, Defizit = Bezug).
+    """
+
+    stunde: int
+    pv_kwh: float
+    verbrauch_kwh: float
+    netto_kwh: float
+    netzbezug_kwh: float
+    einspeisung_kwh: float
+    soc_prozent: Optional[float]   # None wenn kein Speicher vorhanden
+
+
+@dataclass
 class SpeicherSimErgebnis:
     """Ergebnis der SoC-Tagessimulation."""
 
@@ -27,6 +46,7 @@ class SpeicherSimErgebnis:
     speicher_leer_um: Optional[str]   # "HH:00" — erste Stunde (≥12 Uhr) mit SoC ≤ 2 %, sonst None
     end_soc_prozent: float            # SoC am Ende der Simulation
     soc_pro_stunde: dict[int, float] = field(default_factory=dict)
+    stunden_bilanz: list[StundenBilanz] = field(default_factory=list)  # Pro simulierte Stunde
 
 
 def simuliere_speicher_tag(
@@ -57,30 +77,52 @@ def simuliere_speicher_tag(
     voll: Optional[str] = None
     leer: Optional[str] = None
     soc_pro_stunde: dict[int, float] = {}
-
-    if speicher_kap_kwh <= 0:
-        return SpeicherSimErgebnis(None, None, round(soc, 1), {})
+    stunden_bilanz: list[StundenBilanz] = []
+    hat_speicher = speicher_kap_kwh > 0
 
     for h in range(max(0, start_stunde), 24):
         pv = (pv_stunden[h] if h < len(pv_stunden) else 0.0) or 0.0
         vb = (verbrauch_stunden[h] if h < len(verbrauch_stunden) else 0.0) or 0.0
         netto = pv - vb
+        netzbezug = 0.0
+        einspeisung = 0.0
+        soc_h: Optional[float] = None
 
-        if netto > 0:
-            lade_kapazitaet = (100.0 - soc) / 100.0 * speicher_kap_kwh
-            ladung = min(netto, lade_kapazitaet)
-            soc += (ladung / speicher_kap_kwh) * 100.0
-            soc = min(soc, 100.0)
+        if hat_speicher:
+            if netto > 0:
+                lade_kapazitaet = (100.0 - soc) / 100.0 * speicher_kap_kwh
+                ladung = min(netto, lade_kapazitaet)
+                soc += (ladung / speicher_kap_kwh) * 100.0
+                soc = min(soc, 100.0)
+                einspeisung = netto - ladung
+            else:
+                entlade_kapazitaet = soc / 100.0 * speicher_kap_kwh
+                entladung = min(abs(netto), entlade_kapazitaet)
+                soc -= (entladung / speicher_kap_kwh) * 100.0
+                soc = max(soc, 0.0)
+                netzbezug = abs(netto) - entladung
+
+            soc_h = round(soc, 1)
+            soc_pro_stunde[h] = soc_h
+            if soc >= 98.0 and voll is None:
+                voll = f"{h:02d}:00"
+            if soc <= 2.0 and leer is None and h >= 12:
+                leer = f"{h:02d}:00"
         else:
-            entlade_kapazitaet = soc / 100.0 * speicher_kap_kwh
-            entladung = min(abs(netto), entlade_kapazitaet)
-            soc -= (entladung / speicher_kap_kwh) * 100.0
-            soc = max(soc, 0.0)
+            # Ohne Batterie: direkte Bilanz.
+            if netto > 0:
+                einspeisung = netto
+            else:
+                netzbezug = abs(netto)
 
-        soc_pro_stunde[h] = round(soc, 1)
-        if soc >= 98.0 and voll is None:
-            voll = f"{h:02d}:00"
-        if soc <= 2.0 and leer is None and h >= 12:
-            leer = f"{h:02d}:00"
+        stunden_bilanz.append(StundenBilanz(
+            stunde=h,
+            pv_kwh=pv,
+            verbrauch_kwh=vb,
+            netto_kwh=netto,
+            netzbezug_kwh=netzbezug,
+            einspeisung_kwh=einspeisung,
+            soc_prozent=soc_h,
+        ))
 
-    return SpeicherSimErgebnis(voll, leer, round(soc, 1), soc_pro_stunde)
+    return SpeicherSimErgebnis(voll, leer, round(soc, 1), soc_pro_stunde, stunden_bilanz)

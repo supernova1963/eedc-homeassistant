@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -1063,70 +1064,40 @@ async def get_tagesprognose(
             start_soc = sum(soc_werte) / len(soc_werte)
 
     # ── 4. Stündliche Bilanz + Batterie-Simulation ──
-    stunden: list[StundenPrognose] = []
-    soc = start_soc
-    speicher_voll_um = None
-    speicher_leer_um = None
+    # SoC-State-Machine + Bilanz-Rest liegen im Berechnungs-Layer (ADR-001).
+    # Diese deskriptive Ganztags-Vorschau simuliert ab Mitternacht (start_soc =
+    # 7-Tage-Mittel, start_stunde=0) — bewusst anders parametrisiert als der
+    # HA-Export (ab aktuellem SoC), daher kein Symmetrie-Paar.
+    sim = simuliere_speicher_tag(
+        pv_stunden=pv_stunden,
+        verbrauch_stunden=verbrauch_stunden,
+        speicher_kap_kwh=speicher_kap,
+        start_soc_prozent=start_soc,
+        start_stunde=0,
+    )
+    speicher_voll_um = sim.speicher_voll_um
+    speicher_leer_um = sim.speicher_leer_um
 
+    stunden: list[StundenPrognose] = []
     sum_pv = 0.0
     sum_verbrauch = 0.0
     sum_netzbezug = 0.0
     sum_einspeisung = 0.0
 
-    for h in range(24):
-        pv = pv_stunden[h] if h < len(pv_stunden) else 0.0
-        vb = verbrauch_stunden[h] if h < len(verbrauch_stunden) else 0.0
-        netto = pv - vb  # positiv = Überschuss
-
-        netzbezug = 0.0
-        einspeisung = 0.0
-        soc_h: Optional[float] = None
-
-        if speicher_kap > 0:
-            if netto > 0:
-                # Überschuss → Batterie laden
-                lade_kapazitaet = (100.0 - soc) / 100.0 * speicher_kap
-                ladung = min(netto, lade_kapazitaet)  # kWh (1h Intervall)
-                soc += (ladung / speicher_kap) * 100.0
-                soc = min(soc, 100.0)
-                rest_ueberschuss = netto - ladung
-                einspeisung = rest_ueberschuss
-            else:
-                # Defizit → Batterie entladen
-                defizit = abs(netto)
-                entlade_kapazitaet = soc / 100.0 * speicher_kap
-                entladung = min(defizit, entlade_kapazitaet)
-                soc -= (entladung / speicher_kap) * 100.0
-                soc = max(soc, 0.0)
-                rest_defizit = defizit - entladung
-                netzbezug = rest_defizit
-
-            soc_h = round(soc, 1)
-
-            if soc >= 98.0 and speicher_voll_um is None:
-                speicher_voll_um = f"{h:02d}:00"
-            if soc <= 2.0 and speicher_leer_um is None and h >= 12:
-                speicher_leer_um = f"{h:02d}:00"
-        else:
-            # Ohne Batterie: direkte Bilanz
-            if netto > 0:
-                einspeisung = netto
-            else:
-                netzbezug = abs(netto)
-
-        sum_pv += pv
-        sum_verbrauch += vb
-        sum_netzbezug += netzbezug
-        sum_einspeisung += einspeisung
+    for b in sim.stunden_bilanz:
+        sum_pv += b.pv_kwh
+        sum_verbrauch += b.verbrauch_kwh
+        sum_netzbezug += b.netzbezug_kwh
+        sum_einspeisung += b.einspeisung_kwh
 
         stunden.append(StundenPrognose(
-            stunde=h,
-            pv_kw=round(pv, 3),
-            verbrauch_kw=round(vb, 3),
-            netto_kw=round(netto, 3),
-            netzbezug_kw=round(netzbezug, 3),
-            einspeisung_kw=round(einspeisung, 3),
-            soc_prozent=soc_h,
+            stunde=b.stunde,
+            pv_kw=round(b.pv_kwh, 3),
+            verbrauch_kw=round(b.verbrauch_kwh, 3),
+            netto_kw=round(b.netto_kwh, 3),
+            netzbezug_kw=round(b.netzbezug_kwh, 3),
+            einspeisung_kw=round(b.einspeisung_kwh, 3),
+            soc_prozent=b.soc_prozent,
         ))
 
     eigenverbrauch = sum_pv - sum_einspeisung

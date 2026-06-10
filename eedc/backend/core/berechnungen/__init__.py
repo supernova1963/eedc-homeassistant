@@ -113,6 +113,7 @@ from backend.core.berechnungen.speicher import (
 )
 from backend.core.berechnungen.speicher_simulation import (
     SpeicherSimErgebnis,
+    StundenBilanz,
     simuliere_speicher_tag,
 )
 from backend.core.berechnungen.verbrauch import (
@@ -169,6 +170,7 @@ __all__ = [
     "PreisRangErgebnis",
     "berechne_preis_rang",
     "SpeicherSimErgebnis",
+    "StundenBilanz",
     "simuliere_speicher_tag",
     "EFFIZIENZ_FENSTER_MONATE",
     "MonatsEffizienz",
