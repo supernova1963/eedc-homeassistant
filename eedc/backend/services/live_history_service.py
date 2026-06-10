@@ -21,6 +21,7 @@ from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
+from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.services.live_sensor_config import (
     UNIT_TO_W,
     ERZEUGER_TYPEN,
@@ -373,7 +374,14 @@ async def get_tages_kwh(
             pv_total = 0.0
             pv_has_kwh = False
             for comp_key, kwh_eid in separate_kwh_sensors.items():
-                if comp_key.startswith("pv_") and kwh_eid in history:
+                # Erzeuger (PV-Module + Balkonkraftwerk) werden in diesem
+                # Live-Keyspace einheitlich mit `pv_`-Präfix abgelegt; die
+                # Prefix-Quelle kommt zentral aus dem Berechnungs-Layer
+                # (ADR-001), damit kein eigenes Literal driftet.
+                if (
+                    any(comp_key.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)
+                    and kwh_eid in history
+                ):
                     kwh = _energy_delta(kwh_eid, history, sensor_units, start, end)
                     if kwh is not None:
                         pv_total += kwh

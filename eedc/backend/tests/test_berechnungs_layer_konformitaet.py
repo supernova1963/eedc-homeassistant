@@ -182,6 +182,48 @@ def test_grandfathered_dateien_existieren_und_enthalten_pattern():
     )
 
 
+# Pattern: bare `.startswith("pv_")`-Literal (ohne zentralen Prefix-Import).
+# Die Live-Keyspace-Konsumenten (live_history_service, live_komponenten_builder)
+# legen Erzeuger einheitlich unter `pv_` ab; sie müssen die Prefix-Quelle aus
+# `PV_KOMPONENTEN_PREFIXE` beziehen statt das Literal selbst zu führen
+# (Slice A des Pre-IA-V4-Sweeps, ADR-001).
+_BARE_PV_STARTSWITH = re.compile(r'''\.startswith\(\s*["']pv_["']\s*\)''')
+
+# Live-Keyspace-Module, die nach Slice-A-Migration NUR noch über die zentrale
+# Prefix-Liste auf PV-Komponenten prüfen dürfen.
+PV_PREFIX_ZENTRALISIERTE_MODULE = (
+    "services/live_history_service.py",
+    "services/live_komponenten_builder.py",
+)
+
+
+def test_live_keyspace_module_nutzen_zentrale_pv_prefix_liste():
+    """Die migrierten Live-Module dürfen kein bare `startswith("pv_")`-Literal
+    mehr führen, sondern müssen `PV_KOMPONENTEN_PREFIXE` importieren (Slice A)."""
+    verstoesse: list[str] = []
+    for rel in PV_PREFIX_ZENTRALISIERTE_MODULE:
+        path = _BACKEND_ROOT / rel
+        text = path.read_text(encoding="utf-8")
+        if "PV_KOMPONENTEN_PREFIXE" not in text:
+            verstoesse.append(
+                f"{rel}: importiert PV_KOMPONENTEN_PREFIXE nicht mehr"
+            )
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if _BARE_PV_STARTSWITH.search(line):
+                verstoesse.append(
+                    f"{rel}:{line_no}: bare startswith(\"pv_\") — "
+                    f"über PV_KOMPONENTEN_PREFIXE zentralisieren"
+                )
+
+    assert not verstoesse, (
+        "Live-Keyspace-PV-Prefix-Zentralisierung verletzt:\n"
+        + "\n".join(f"  - {v}" for v in verstoesse)
+        + "\n\nMigration:\n"
+        "  from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE\n"
+        "  any(key.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)"
+    )
+
+
 def _format_verstoesse_meldung(
     verstoesse: list[tuple[str, int, str]], regel: str
 ) -> str:

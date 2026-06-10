@@ -10,6 +10,7 @@ from typing import Optional
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.core.investition_parameter import PARAM_E_AUTO
+from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.services.live_sensor_config import (
     TYP_ICON,
     ERZEUGER_TYPEN,
@@ -221,11 +222,15 @@ def build_komponenten(
                 komp["parent_key"] = wallbox_keys[wb_idx % len(wallbox_keys)]
                 wb_idx += 1
 
-    # PV Gesamt aus Basis (wenn kein individueller PV-Sensor vorhanden)
-    has_individual_pv = any(
-        k.key.startswith("pv_") if hasattr(k, 'key') else k.get("key", "").startswith("pv_")
-        for k in komponenten
-    )
+    # PV Gesamt aus Basis (wenn kein individueller PV-Sensor vorhanden).
+    # Erzeuger (PV-Module + Balkonkraftwerk) tragen in diesem Live-Keyspace
+    # einheitlich den `pv_`-Präfix; die Prefix-Quelle kommt zentral aus dem
+    # Berechnungs-Layer (ADR-001) statt als eigenes Literal.
+    def _ist_pv_komponente(k) -> bool:
+        key = k.key if hasattr(k, "key") else k.get("key", "")
+        return any(key.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)
+
+    has_individual_pv = any(_ist_pv_komponente(k) for k in komponenten)
     pv_gesamt_w_val = basis_values.get("pv_gesamt_w")
     if pv_gesamt_w_val is not None and not has_individual_pv:
         kw = pv_gesamt_w_val / 1000
